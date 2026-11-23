@@ -1,6 +1,7 @@
 // The parts of the Transfer page that Modules mode and Samples mode share: the two columns with their headers, the list row with its
 // progress bar or verified/failed chip, the breadcrumb, and the two-click Delete button.
-import { For, Show, createEffect, createSignal, type JSX } from 'solid-js';
+import { For, Show, createEffect, createSignal, createUniqueId, onCleanup, onMount, type JSX } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import TargetSelect from './TargetSelect';
 import { useTransferApp } from '../../src/transfer/app-context';
 import { fmtRate } from '../../src/transfer/rate-core';
@@ -9,8 +10,6 @@ import type { PaneSelect } from '../../src/transfer/pane-select';
 import { dragKind, selectState, toggleAll } from '../../src/transfer/select-core';
 import { linkHint, linkTag } from '../../src/transfer/link-core';
 import { deleteLabel, freeLine, tickCountText, writing, type RowTag } from '../../src/transfer/transfer-core';
-import { formatBytes } from '../../src/modules/backend';
-import type { ServiceRef } from '../../src/modules/services';
 
 /** What the page gives each mode: the one busy action, and the error line. */
 export interface PageCtx {
@@ -126,6 +125,8 @@ export interface ListRowProps {
   dropPath?: string;
   /** Small labels after the name; only what says something (a usual state has none). */
   tags?: RowTag[];
+  /** A focusable badge for a module's service dependencies. */
+  dependencies?: { text: string; lines: string[] };
   /** The version (modules), a dim column before the size. */
   version?: string;
   /** The size, right-aligned. */
@@ -201,6 +202,7 @@ export function ListRow(props: ListRowProps): JSX.Element {
         <span class="nm" classList={{ dir: !!props.folder }} title={props.title}>
           {props.folder ? `${props.name}/` : props.name}
         </span>
+        <Show when={props.dependencies}>{(badge) => <DependencyBadge {...badge()} />}</Show>
         <For each={props.tags ?? []}>{(t) => <Tag tag={t} />}</For>
       </span>
       <Show when={props.action}>
@@ -219,25 +221,75 @@ export function ListRow(props: ListRowProps): JSX.Element {
   );
 }
 
-/** A service under the module that needs it: read-only (no tick, no selection), its state as a tag. */
-export function ServiceSubRow(props: { service: ServiceRef; selected?: boolean }): JSX.Element {
-  const tag = (): RowTag => ({
-    text: props.service.state,
-    title: `${props.service.label} is installed with the module that needs it`,
-    tone: props.service.state === 'on device' ? 'ok' : props.service.state === 'differs' ? 'warn' : 'dim',
+function DependencyBadge(props: { text: string; lines: string[] }): JSX.Element {
+  const id = `dependency-${createUniqueId()}`;
+  const [hovered, setHovered] = createSignal(false);
+  const [focused, setFocused] = createSignal(false);
+  const [dismissed, setDismissed] = createSignal(false);
+  const open = () => !dismissed() && (hovered() || focused());
+  let badge!: HTMLButtonElement;
+  return (
+    <>
+      <button
+        type="button"
+        class="rtag dep-badge"
+        ref={badge}
+        aria-describedby={id}
+        onMouseEnter={() => {
+          setDismissed(false);
+          setHovered(true);
+        }}
+        onMouseLeave={() => setHovered(false)}
+        onFocus={() => {
+          setDismissed(false);
+          setFocused(true);
+        }}
+        onBlur={() => setFocused(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && open()) {
+            setDismissed(true);
+            e.stopPropagation();
+          }
+        }}
+      >
+        {props.text}
+      </button>
+      <span id={id} hidden>
+        {props.lines.join('\n')}
+      </span>
+      <Show when={open()}>
+        <Portal>
+          <DependencyTooltip anchor={badge} lines={props.lines} />
+        </Portal>
+      </Show>
+    </>
+  );
+}
+
+/** The portal lets the tooltip extend beyond the scrollable pane and truncated row. */
+function DependencyTooltip(props: { anchor: HTMLElement; lines: string[] }): JSX.Element {
+  let tip!: HTMLSpanElement;
+  const place = () => {
+    const anchor = props.anchor.getBoundingClientRect();
+    const { width, height } = tip.getBoundingClientRect();
+    const bottom = anchor.bottom + 6;
+    const y = bottom + height <= window.innerHeight - 8 ? bottom : Math.max(8, anchor.top - height - 6);
+    tip.style.left = `${Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8))}px`;
+    tip.style.top = `${y}px`;
+  };
+  onMount(() => {
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    onCleanup(() => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    });
   });
   return (
-    <li class="sub" classList={{ sel: !!props.selected }}>
-      <span class="tree">└</span>
-      <span class="name">
-        <span class="nm" title={props.service.stem}>
-          {props.service.label}
-        </span>
-        <Tag tag={tag()} />
-      </span>
-      <span class="vers">{`${props.service.version >>> 16}.${(props.service.version >>> 8) & 0xff}`}</span>
-      <span class="size">{formatBytes(props.service.size)}</span>
-    </li>
+    <span class="transfer-dependency-tooltip" role="tooltip" aria-hidden="true" ref={tip}>
+      <For each={props.lines}>{(line) => <span>{line}</span>}</For>
+    </span>
   );
 }
 

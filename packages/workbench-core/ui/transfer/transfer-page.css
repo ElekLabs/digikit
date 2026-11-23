@@ -276,16 +276,33 @@
   color: var(--status-caution);
   background: var(--status-warning-fill);
 }
-/* a service under the module that needs it: indented, read-only */
-.transfer-page .rows li.sub {
-  padding-left: 30px;
-  min-height: 22px;
-  font-size: 12px;
-  color: var(--ink-2);
+.transfer-page .dep-badge {
+  border: 0;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: help;
 }
-.transfer-page .rows li.sub .tree {
-  flex: none;
-  color: var(--ink-3);
+.transfer-page .dep-badge:hover,
+.transfer-page .dep-badge:focus-visible {
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.transfer-dependency-tooltip {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 6px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--ink);
+  box-shadow: 0 6px 18px var(--tooltip-shadow);
+  font: 12px/1.4 var(--font-mono);
+  overflow-wrap: anywhere;
+  pointer-events: none;
 }
 .transfer-page .rtag.dim {
   color: var(--ink-3);
