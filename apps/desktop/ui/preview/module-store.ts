@@ -12,7 +12,7 @@ import {
 } from '@digi/dk-session';
 import { CAP, MAX_CHUNK, PROTO_VERSION } from '@digi/dk-session/gen_proto';
 import type { DeviceProfile } from '@digi/workbench-core/data/device-profiles.ts';
-import { headerInfo, modulePath } from '@digi/workbench-core/modules/dktransfer.ts';
+import { headerInfo, modulePath, portPath, servicePath } from '@digi/workbench-core/modules/dktransfer.ts';
 import { fakeDkm } from '@digi/workbench-core/target-ops/fake-store.ts';
 import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
 import type { PreviewLibrary } from './module-library';
@@ -98,11 +98,14 @@ async function serviceAbi(library: PreviewLibrary, device: string) {
   return null;
 }
 
-async function seedStore(library: PreviewLibrary, device: string) {
+async function seedStore(library: PreviewLibrary, profile: DeviceProfile) {
+  const device = profile.short;
   const files = new Map<string, Uint8Array>();
   const selected = new Map<string, Uint8Array | undefined>();
   if (sim.dev !== 'empty') {
-    const [outdated, installed] = library.modules(device);
+    const modules = library.modules(device);
+    const outdated = modules.find((m) => m.id === 'digikit/pluck');
+    const installed = modules.find((m) => m.id === 'digikit/shot');
     for (const { id, pack } of [installed, outdated].filter((m) => m !== undefined)) {
       const bytes = new Uint8Array(await library.library.read(device, pack.file));
       const header = headerInfo(bytes);
@@ -116,6 +119,17 @@ async function seedStore(library: PreviewLibrary, device: string) {
       }
       files.set(path, bytes);
       selected.set(path, old ? bytes : undefined);
+    }
+    // Seed the real providers alongside the two demo modules, so Transfer and Files see the same card.
+    if (outdated || installed) {
+      const providers = [servicePath('machines')];
+      if (installed) providers.push(servicePath('samples'));
+      const firmware = profile.firmware.at(-1);
+      if (firmware) providers.push(portPath(`${device}-${firmware.version}`));
+      for (const path of providers) {
+        const filename = path.slice(path.lastIndexOf('/') + 1);
+        files.set(path, new Uint8Array(await library.library.read(device, `${device}/${filename}`)));
+      }
     }
     files.set('modules/tool/old-experiment.dkm', fakeDkm({ name: 'old/experiment', size: 5 * KiB }));
     if (outdated) files.set(`data/${outdated.id}/settings.bin`, Uint8Array.of(0, 1, 0, 8));
@@ -135,7 +149,7 @@ export function createPreviewStores(library: PreviewLibrary) {
     const store = () => {
       const current = stores.get(key);
       if (current?.revision === deviceRevision) return current.store;
-      const next = seedStore(library, profile.short);
+      const next = seedStore(library, profile);
       stores.set(key, { revision: deviceRevision, store: next });
       void next.catch(() => {
         if (stores.get(key)?.store === next) stores.delete(key);

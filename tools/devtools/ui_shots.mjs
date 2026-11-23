@@ -578,6 +578,24 @@ const SCENES = [
       await p.until(`!(${installed}) && (${ready})`, 'The deleted module is still on the card');
     },
   },
+  ...['device', 'emulator'].map((target) => ({
+    name: `modules-${target}-deps`,
+    q: target === 'emulator' ? 'page=emulator' : 'page=transfer',
+    size: WIDE,
+    steps: async (p) => {
+      if (target === 'emulator') await p.click('Transfer');
+      const badge = 'li:has(input[aria-label="Delete shot"]) .dep-badge';
+      await p.until(
+        `document.querySelector(${JSON.stringify(badge)})?.innerText === '2 deps'`,
+        'Missing shot dependencies',
+      );
+      await p.hover(badge);
+      await p.until(
+        `['machines', 'samples'].every(name => document.querySelector('.transfer-dependency-tooltip')?.innerText.includes(name + ' service · on device'))`,
+        'The installed shot services are missing from the destination tooltip',
+      );
+    },
+  })),
   { name: 'modules', q: 'mode=modules', size: WIDE, steps: modulesReady },
   {
     name: 'modules-select-partial',

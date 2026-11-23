@@ -151,6 +151,8 @@ Fixture URLs seed specific states for development and screenshots, including `?p
 
 The appearance presets live in `packages/workbench-core/ui/styles/themes/digikit.css` and `violet-slate.css`. Each declares its complete palette and typography. Put a preset’s distinctive component treatments in that same file. Shared component CSS owns layout and consumes role tokens such as `--action`, `--status-ok` and `--meter-machine`. Physical controls take their colors from the device artwork. Both hosts load the presets through `ui/styles/site.css`; the desktop preference keeps its original storage ID across display-name changes.
 
+In the preview’s Transfer page, hover or focus **2 deps** beside **shot** in the destination pane to see the installed machines and samples services. Run `node tools/devtools/ui_shots.mjs modules-emulator-deps modules-device-deps` against the preview to check both targets and capture their tooltips.
+
 To check an install across Transfer and Files, run `node tools/devtools/ui_shots.mjs workbench-card-roundtrip` against the preview. It checks the new file and removes the module through Transfer.
 
 To check the desktop target switch with fake devices, start the UI preview and run `node tools/devtools/ui_shots.mjs run-target-switch`. The scene opens Remote during an emulator boot, visits Files, and opens the selected device’s Metrics from the footer. It checks the readings and writes a screenshot under `out/runs/ui-shots/`.
