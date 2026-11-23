@@ -39,9 +39,12 @@ test('a mirror or fresh session does not claim the cached run dir', async () => 
     const real = await original<typeof import('../runtime/devices.ts')>();
     return { ...real, cachedRunDir: claim };
   });
-  const { liveOptions: fresh } = await import('../runtime/live-options.ts');
-  fresh(device, { mirror: true });
-  fresh(device, { fresh: true });
-  expect(claim).not.toHaveBeenCalled();
-  vi.doUnmock('../runtime/devices.ts');
+  try {
+    const { liveOptions: fresh } = await import('../runtime/live-options.ts');
+    fresh(device, { mirror: true });
+    fresh(device, { fresh: true });
+    expect(claim).not.toHaveBeenCalled();
+  } finally {
+    vi.doUnmock('../runtime/devices.ts');
+  }
 });
