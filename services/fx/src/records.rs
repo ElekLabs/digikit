@@ -14,17 +14,15 @@ use dkrt_sdk::*;
 /// The fx service; every method works over the core it is given.
 pub struct Fx;
 
-impl Fx {
-    /// The rule for the effect records of one module (`validate::effects`); a kind other than the effect record is accepted. `Service::validate_records` is this function,
-    /// and a host tool that has no core (`patchkit records --check`) calls it directly.
-    pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
-        crate::validate::effects(kind, bodies, report)
-    }
+/// The rule for the effect records of one module (`validate::effects`); a kind other than the effect record is accepted. The service's `validate_records` is this function,
+/// and a host tool that has no core (`patchkit records --check`) calls it directly.
+pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+    crate::validate::effects(kind, bodies, report)
 }
 
 impl<C: CoreApi> Service<C> for Fx {
     fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
-        Fx::validate(kind, bodies, report)
+        validate(kind, bodies, report)
     }
 
     // An effect module is torn down like any other: the loader's `dsp_clear` (the row's pc to "free" first, so the chain skips it at once: the master chain passes the

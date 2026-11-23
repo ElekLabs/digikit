@@ -123,17 +123,15 @@ pub fn module_info<C: CoreApi>(core: &C, owner: u8) -> ModuleMachines {
     }
 }
 
-impl Machines {
-    /// The rule for the parameter, machine, page and action records of one module (`validate::Acc`); a native page kind and a kind of another service are accepted.
-    /// `Service::validate_records` is this function, and a host tool that has no core (`patchkit records --check`) calls it directly.
-    pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
-        crate::validate::records(kind, bodies, report)
-    }
+/// The rule for the parameter, machine, page and action records of one module (`validate::Acc`); a native page kind and a kind of another service are accepted.
+/// The service's `validate_records` is this function, and a host tool that has no core (`patchkit records --check`) calls it directly.
+pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+    crate::validate::records(kind, bodies, report)
 }
 
 impl<C: CoreApi> Service<C> for Machines {
     fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
-        Machines::validate(kind, bodies, report)
+        validate(kind, bodies, report)
     }
 
     dkrt_abi::accepts_teardown!();
@@ -1285,7 +1283,7 @@ mod tests {
                 .filter(|r| r.0 == kind)
                 .map(|r| &r.1[..])
                 .collect();
-            Machines::validate(kind, &bodies, &mut |_| problems += 1);
+            validate(kind, &bodies, &mut |_| problems += 1);
         }
         (problems > 0, check(ck_counts, recs, true) != OK)
     }
@@ -1602,7 +1600,7 @@ mod tests {
         short.1.pop();
         let bodies = [&short.1[..]];
         let mut n = 0;
-        Machines::validate(KIND_PARAM, &bodies, &mut |_| n += 1);
+        validate(KIND_PARAM, &bodies, &mut |_| n += 1);
         assert_eq!(n, 1);
     }
 

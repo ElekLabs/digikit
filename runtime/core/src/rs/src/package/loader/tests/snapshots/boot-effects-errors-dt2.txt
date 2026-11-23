@@ -9,8 +9,8 @@ installer calls
   flush freed:blk1+0 188
   flush freed:blk1+0 188
   flush freed:blk1+4 184
-  flush freed:blk4+0 21876
-  flush freed:blk4+0 21876
+  flush freed:blk4+0 21860
+  flush freed:blk4+0 21860
   mask
   write 0x4013986c 6
   write 0x401394dc 6

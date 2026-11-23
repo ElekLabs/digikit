@@ -25,6 +25,21 @@ mod stubs {
     ) -> i32 {
         0
     }
+    /// The row and the instance of the last `dk_provider_declare_row` (addresses), and how many times it was called.
+    pub static DECLARED: [core::sync::atomic::AtomicUsize; 3] =
+        [const { core::sync::atomic::AtomicUsize::new(0) }; 3];
+    #[no_mangle]
+    extern "C" fn dk_provider_declare_row(
+        _: *mut u8,
+        row: *const dkrt_abi::provider::ProviderRow,
+        instance: *mut u8,
+    ) -> i32 {
+        use core::sync::atomic::Ordering::SeqCst;
+        DECLARED[0].store(row as usize, SeqCst);
+        DECLARED[1].store(instance as usize, SeqCst);
+        DECLARED[2].fetch_add(1, SeqCst);
+        0
+    }
     #[no_mangle]
     extern "C" fn dkc_device_id() -> u32 {
         0
@@ -95,4 +110,144 @@ fn the_module_record_is_four_words_and_a_missing_entry_is_zero() {
     };
     let words: [usize; 4] = unsafe { core::mem::transmute(none) };
     assert_eq!(words, [0; 4]);
+}
+
+/// A provider file: an owner object that counts its ticks and adopts the Tick and Query parts; its hook reaches the instance through `DK_SVC_OWNER`.
+mod provided {
+    use core::sync::atomic::{AtomicU32, Ordering::SeqCst};
+    use dkrt_abi::provider::{Provider, Query, Status, Ticker};
+
+    pub static STARTS: AtomicU32 = AtomicU32::new(0);
+    pub static STOPS: AtomicU32 = AtomicU32::new(0);
+
+    pub struct S {
+        pub id: u32,
+        pub ticks: u32,
+    }
+    impl Provider<crate::ImportCore> for S {
+        fn start(_: &crate::ImportCore) -> Result<S, Status> {
+            Ok(S {
+                id: 100 + STARTS.fetch_add(1, SeqCst),
+                ticks: 0,
+            })
+        }
+        fn stop(self, _: &crate::ImportCore) {
+            STOPS.fetch_add(1, SeqCst);
+        }
+    }
+    impl Ticker<crate::ImportCore> for S {
+        fn tick(&mut self, _: &crate::ImportCore, _: u32) {
+            self.ticks += 1;
+        }
+    }
+    impl Query for S {
+        fn query(&self, op: u32, _: &[u8], reply: &mut [u8]) -> Result<usize, Status> {
+            reply[0] = (self.id + op) as u8;
+            Ok(1)
+        }
+    }
+    /// What a hook of the file does: reads the instance `start` made.
+    pub fn hook() -> Option<(u32, u32)> {
+        DK_SVC_OWNER.with(|s| (s.id, s.ticks))
+    }
+    crate::service!(
+        S,
+        "provided",
+        &[],
+        parts = [Tick, Query],
+        hooks = [],
+        fills = [],
+        exports = []
+    );
+    pub unsafe fn init(ctx: *mut u8) -> i32 {
+        dk_svc_init(ctx)
+    }
+    pub unsafe fn fini(ctx: *mut u8) {
+        (dk_module.fini.unwrap())(ctx)
+    }
+    pub fn row() -> &'static dkrt_abi::provider::ProviderRow {
+        &DK_SVC_ROW
+    }
+}
+
+fn whole() -> core::ops::Range<usize> {
+    0..usize::MAX
+}
+
+#[test]
+fn the_macro_emits_exactly_the_adopted_parts_and_the_lifecycle() {
+    use dkrt_abi::provider::*;
+    // SAFETY: the row and its tables are statics of this binary.
+    let row = unsafe { check(provided::row(), whole()) }.unwrap();
+    assert_eq!(row.name(), name_hash("provided"));
+    for (tag, newest, adopted) in [
+        (PART_LIFECYCLE, LIFECYCLE_NEWEST, true),
+        (PART_TICK, TICK_NEWEST, true),
+        (PART_QUERY, QUERY_NEWEST, true),
+        (PART_RECORDS, RECORDS_NEWEST, false),
+        (PART_DSP, DSP_NEWEST, false),
+        (PART_DESCRIBE, DESCRIBE_NEWEST, false),
+    ] {
+        let found = matches!(row.part(tag, newest), PartLookup::Found { .. });
+        assert_eq!(found, adopted, "part {tag}");
+    }
+    // a file that adopts no optional part has the lifecycle part alone
+    assert!(provided::dk_module.fini.is_some());
+    assert!(ticked::dk_module.fini.is_none(), "the old form has no fini");
+}
+
+#[test]
+fn init_starts_the_instance_before_the_row_and_a_hook_and_the_parts_reach_that_instance() {
+    use core::sync::atomic::Ordering::SeqCst;
+    use dkrt_abi::provider::ProviderHandle;
+    assert_eq!(provided::hook(), None, "nothing before start");
+    let before = stubs::DECLARED[2].load(SeqCst);
+    assert_eq!(unsafe { provided::init(0x1234 as *mut u8) }, 0);
+    assert_eq!(init_ctx() as usize, 0x1234);
+    assert_eq!(stubs::DECLARED[2].load(SeqCst), before + 1);
+    let (row, instance) = (
+        stubs::DECLARED[0].load(SeqCst) as *const dkrt_abi::provider::ProviderRow,
+        stubs::DECLARED[1].load(SeqCst) as *mut u8,
+    );
+    assert!(core::ptr::eq(row, provided::row()));
+    let (id, ticks) = provided::hook().expect("the hook finds the instance start made");
+    assert!((100..).contains(&id) && ticks == 0);
+
+    // the runtime resolves the declared row with the declared instance and calls the parts through it
+    let handle =
+        unsafe { ProviderHandle::resolve(&*row, whole(), instance as *mut core::ffi::c_void) }
+            .unwrap();
+    let core = &ImportCore as *const ImportCore as *const core::ffi::c_void;
+    unsafe {
+        handle.tick(core, 0);
+        handle.tick(core, 1);
+    }
+    assert_eq!(
+        provided::hook(),
+        Some((id, 2)),
+        "the part functions work on the instance the hook sees"
+    );
+    let mut reply = [0u8; 4];
+    assert_eq!(unsafe { handle.query(5, &[], &mut reply) }, 1);
+    assert_eq!(reply[0], (id + 5) as u8);
+
+    // a second init is refused and makes no second instance
+    let starts = provided::STARTS.load(SeqCst);
+    assert_eq!(
+        unsafe { provided::init(0x1234 as *mut u8) },
+        dkrt_sdk::E_LOADED
+    );
+    assert_eq!(provided::STARTS.load(SeqCst), starts);
+
+    // fini stops the instance once
+    let stops = provided::STOPS.load(SeqCst);
+    unsafe { provided::fini(0x1234 as *mut u8) };
+    assert_eq!(provided::STOPS.load(SeqCst), stops + 1);
+    assert_eq!(provided::hook(), None, "nothing after stop");
+    unsafe { provided::fini(0x1234 as *mut u8) };
+    assert_eq!(
+        provided::STOPS.load(SeqCst),
+        stops + 1,
+        "a second fini stops nothing"
+    );
 }

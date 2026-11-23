@@ -1,8 +1,9 @@
 //! What a service file declares to the runtime in `init`: its record kinds, its row, its hook sites, slot fills and exports (the `dk_service_declare_*` imports of
 //! `sdk.toml`), and the module context `init` was called with.
-use crate::import_core::sys::dk_service_declare_row;
+use crate::import_core::sys::{dk_provider_declare_row, dk_service_declare_row};
 use crate::import_core::ImportCore;
 use dkrt_abi::core_api::CoreApi;
+use dkrt_abi::provider::ProviderRow;
 use dkrt_abi::service::ServiceRow;
 
 extern "C" {
@@ -25,18 +26,7 @@ const _: dkrt_sdk::api::DkServiceDeclareHookFn = dk_service_declare_hook;
 const _: dkrt_sdk::api::DkServiceDeclareSlotFn = dk_service_declare_slot;
 const _: dkrt_sdk::api::DkServiceDeclareExportFn = dk_service_declare_export;
 
-/// `name_hash` of a name (FNV-1a 32, as `dkneeds::keys::name_hash`): the identity of a hook site in `HOOKS`.
-pub const fn name_hash(s: &str) -> u32 {
-    let b = s.as_bytes();
-    let mut h: u32 = 0x811c_9dc5;
-    let mut i = 0;
-    while i < b.len() {
-        h ^= b[i] as u32;
-        h = h.wrapping_mul(0x0100_0193);
-        i += 1;
-    }
-    h
-}
+pub use dkrt_abi::provider::name_hash;
 
 /// The `[digikit] id` of a device in the form `service!` takes for the device filter of a hook (`dt2`, `dn2`; no filter: 0, every device).
 #[doc(hidden)]
@@ -78,6 +68,48 @@ pub unsafe fn declare(
     if r != 0 {
         return r;
     }
+    declare_entries(ctx, device, hooks, fills, exports)
+}
+
+/// The declarations of a file that provides a `ProviderRow` (`service!` with `parts =`): each record kind in `kinds` (the same as `init`), the row with the
+/// instance `Provider::start` made, then the hooks, fills and exports as `declare`. `instance` is null before `start` (the host test of the assembly replays the
+/// declarations without one; the runtime refuses such a row at the commit).
+///
+/// # Safety
+/// As `declare`; `row` stays valid as long as the file is loaded and `instance` as long as the row is.
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn declare_provider(
+    ctx: *mut u8,
+    kinds: &'static [(u32, u32)],
+    row: &'static ProviderRow,
+    instance: *mut u8,
+    handler: *const u8,
+    device: fn() -> u32,
+    hooks: &[(u32, *const u8, u32)],
+    fills: &[(u32, *const u8, u32)],
+    exports: &[(u32, *const u8)],
+) -> i32 {
+    for &(kind, len) in kinds {
+        let r = dk_service_declare_kind(ctx, kind, len, handler);
+        if r != 0 {
+            return r;
+        }
+    }
+    let r = dk_provider_declare_row(ctx, row, instance);
+    if r != 0 {
+        return r;
+    }
+    declare_entries(ctx, device, hooks, fills, exports)
+}
+
+#[inline(always)]
+unsafe fn declare_entries(
+    ctx: *mut u8,
+    device: fn() -> u32,
+    hooks: &[(u32, *const u8, u32)],
+    fills: &[(u32, *const u8, u32)],
+    exports: &[(u32, *const u8)],
+) -> i32 {
     // the device is asked for only when an entry has a filter to compare with
     let device = if hooks.is_empty() && fills.is_empty() {
         0
@@ -140,4 +172,24 @@ pub unsafe fn declare_resident_query(ctx: *mut u8, entry: dkrt_sdk::ResidentQuer
         name_hash(dkrt_sdk::RESIDENT_QUERY_ENTRY),
         entry as *const u8,
     )
+}
+
+/// Whether `parts` (the names `service!` was given in `parts = [...]`) lists `part`: the const check that a service with record kinds adopts the `Records` part.
+#[doc(hidden)]
+pub const fn parts_adopt(parts: &[&str], part: &str) -> bool {
+    let mut i = 0;
+    while i < parts.len() {
+        let (a, b) = (parts[i].as_bytes(), part.as_bytes());
+        if a.len() == b.len() {
+            let mut k = 0;
+            while k < a.len() && a[k] == b[k] {
+                k += 1;
+            }
+            if k == a.len() {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
 }

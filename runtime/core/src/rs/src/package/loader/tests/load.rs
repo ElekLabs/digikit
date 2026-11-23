@@ -299,13 +299,13 @@ fn the_real_registry_puts_the_row_into_the_service_table_and_takes_it_out() {
         let fixed = crate::package::gen_services::STATIC + 1;
         assert_eq!(services().rows.len(), fixed);
         assert_eq!(r.add(0, None, None), OK);
-        assert_eq!(r.add(2, Some(&TEST_ROW), None), OK);
+        assert_eq!(r.add(2, Some((&TEST_ROW).into()), None), OK);
         let t = services();
         assert_eq!(t.rows.len(), fixed + 1);
-        assert!(core::ptr::eq(t.rows[fixed], &TEST_ROW));
+        assert!(matches!(t.rows[fixed], dkrt_abi::service::Row::Service(p) if core::ptr::eq(p, &TEST_ROW)));
         // the in-crate prefix and its failed mask are as before, and one row has one owner
         assert_eq!(t.failed, services().failed);
-        assert_eq!(r.add(3, Some(&TEST_ROW), None), E_PLAN_OWNER);
+        assert_eq!(r.add(3, Some((&TEST_ROW).into()), None), E_PLAN_OWNER);
         // (`RealRegistry::remove` also runs the registry's own remove, which the cleanup tests count: the row part alone here)
         crate::package::svc_rows::remove(3);
         assert_eq!(services().rows.len(), fixed + 1);

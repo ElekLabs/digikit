@@ -405,7 +405,7 @@ mod table {
         assert_eq!(T.len(1), Some(8));
         assert_eq!(T.len(2), Some(12));
         assert_eq!(T.len(3), None);
-        assert_eq!(T.owner(2).map(|r| r.name()), Some("b"));
+        assert_eq!(T.owner(2).map(|r| unsafe { r.name_hash() }), Some(dkneeds::keys::name_hash("b")));
         assert!(T.owner(9).is_none());
         unsafe {
             assert!(!T.dsp_clear(0));

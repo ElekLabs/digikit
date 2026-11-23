@@ -197,7 +197,7 @@ pub mod shims {
     }
 
     /// The row a service file declares in `init` (the declarations of the collection).
-    pub use crate::package::collect::dk_service_declare_row;
+    pub use crate::package::collect::{dk_provider_declare_row, dk_service_declare_row};
 
     /// A service panicked: the runtime's panic (crash capture, safe mode on the next boot).
     #[cfg_attr(test, no_mangle)]

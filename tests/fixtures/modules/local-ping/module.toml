@@ -20,6 +20,9 @@ conflicts = []
 [[export]]
 name = "local_ping_value"
 
+[[export]]
+name = "dk_service_query_v1"
+
 [[object]]
 path = "build/local-ping.dko.json"
 sources = ["Cargo.toml"]

@@ -18,6 +18,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-fit",
+ "dkrt-fixture-local-ping",
  "dkrt-lifecycle",
  "dkrt-link",
  "dkrt-sdk",
@@ -49,6 +50,13 @@ version = "0.1.0"
 dependencies = [
  "dkneeds",
  "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-fixture-local-ping"
+version = "0.1.0"
+dependencies = [
+ "dkrt-svc-rt",
 ]
 
 [[package]]

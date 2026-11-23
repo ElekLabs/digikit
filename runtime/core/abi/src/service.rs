@@ -327,6 +327,10 @@ impl Declare {
     /// The `ServiceRow` a service file declares (`dk_service_declare_row`): the row's address, low word in `a` and (a 64-bit host) high word in `b`. The header
     /// table has no such entry: `same_as` leaves it out when it compares the declarations with the table.
     pub const ROW: u16 = 9;
+    /// The `ProviderRow` a service file declares (`dk_provider_declare_row`): the row's address in `a` and `b` (low and high word) and the instance's address in `c` and
+    /// the next item (`PROVIDER_INSTANCE`, the same form). The header table has no such entry, as for `ROW`.
+    pub const PROVIDER_ROW: u16 = 10;
+    pub const PROVIDER_INSTANCE: u16 = 11;
 
     pub const fn new() -> Declare {
         Declare {
@@ -365,6 +369,29 @@ impl Declare {
         let at = row as usize as u64;
         self.add(Declare::ROW, at as u32, (at >> 32) as u32, 0);
     }
+    /// The provider file's row and its instance.
+    pub fn provider_row(&mut self, row: *const crate::provider::ProviderRow, instance: *mut u8) {
+        let at = row as usize as u64;
+        self.add(Declare::PROVIDER_ROW, at as u32, (at >> 32) as u32, 0);
+        let at = instance as usize as u64;
+        self.add(Declare::PROVIDER_INSTANCE, at as u32, (at >> 32) as u32, 0);
+    }
+    /// The row and instance of the `PROVIDER_ROW` and `PROVIDER_INSTANCE` items, if a provider row was declared.
+    pub fn provider_row_ptr(&self) -> Option<(*const crate::provider::ProviderRow, *mut u8)> {
+        let (mut row, mut instance) = (None, None);
+        let mut i = 0;
+        while i < self.n {
+            let DeclItem { tag, a, b, .. } = self.items[i];
+            let at = (((b as u64) << 32 | a as u64) as usize) as *mut u8;
+            if tag == Declare::PROVIDER_ROW {
+                row = Some(at as *const crate::provider::ProviderRow);
+            } else if tag == Declare::PROVIDER_INSTANCE {
+                instance = Some(at);
+            }
+            i += 1;
+        }
+        Some((row?, instance?))
+    }
     /// The row of the `ROW` item, if one was declared.
     pub fn row_ptr(&self) -> Option<*const ServiceRow> {
         let mut i = 0;
@@ -377,14 +404,18 @@ impl Declare {
         }
         None
     }
+    /// Whether `tag` is one of the items that carry a file's row (`ROW`, `PROVIDER_ROW`, `PROVIDER_INSTANCE`): the header table has none.
+    const fn is_row_item(tag: u16) -> bool {
+        tag == Declare::ROW || tag == Declare::PROVIDER_ROW || tag == Declare::PROVIDER_INSTANCE
+    }
     /// Whether `other` holds the same items (in any order): what a module declared in `init` against what its header table says.
     ///
-    /// The `ROW` item of `self` (a service file's own row) has no entry in a header table and is left out.
+    /// The row items of `self` (a service file's own row and instance) have no entry in a header table and are left out.
     pub fn same_as(&self, other: &Declare) -> bool {
         let mut rows = 0;
         let mut r = 0;
         while r < self.n {
-            if self.items[r].tag == Declare::ROW {
+            if Declare::is_row_item(self.items[r].tag) {
                 rows += 1;
             }
             r += 1;
@@ -404,7 +435,7 @@ impl Declare {
         };
         let mut i = 0;
         while i < self.n {
-            if self.items[i].tag != Declare::ROW && !has(other, self.items[i]) {
+            if !Declare::is_row_item(self.items[i].tag) && !has(other, self.items[i]) {
                 return false;
             }
             i += 1;
@@ -711,30 +742,34 @@ pub struct ServiceRow {
     /// `[records.kinds]`.
     pub kinds: *const (u32, u32),
     pub nkinds: u32,
-    declare: unsafe extern "C" fn(*const c_void, *mut Declare),
-    check: unsafe extern "C" fn(*const c_void, u32, *const CheckCtx) -> i32,
-    apply: unsafe extern "C" fn(*const c_void, *const ApplyCtx) -> i32,
-    apply_record: unsafe extern "C" fn(*const c_void, u32, *const u8, *const ApplyCtx) -> i32,
-    remove: unsafe extern "C" fn(*const c_void, u8),
-    cap: unsafe extern "C" fn(*const c_void, u8, *mut u32) -> bool,
-    attribute: unsafe extern "C" fn(*const c_void, u32, u32, *mut usize) -> bool,
-    diag: unsafe extern "C" fn(*const c_void, *const u32),
-    table_check: unsafe extern "C" fn(*const c_void, u32, *mut TableFault) -> u32,
-    on_loaded: unsafe extern "C" fn(*const c_void, usize),
-    settle: unsafe extern "C" fn(*const c_void, *const SettleCtx),
-    teardown_refusal: unsafe extern "C" fn(*const c_void, u8) -> i32,
-    live_done: unsafe extern "C" fn(*const c_void),
-    module_begin: unsafe extern "C" fn(*const c_void, usize),
-    module_commit: unsafe extern "C" fn(*const c_void, usize, *const ModuleCommitCtx) -> i32,
-    tick: unsafe extern "C" fn(*const c_void, u32),
-    dsp_check_sections: unsafe extern "C" fn(*const c_void, *const DspSec, *mut Job) -> i32,
-    dsp_check_rows: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
-    dsp_check_types: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
-    dsp_admit: unsafe extern "C" fn(*const c_void, *const Job) -> i32,
-    dsp_claim: unsafe extern "C" fn(*const c_void, *mut Claim),
-    dsp_release: unsafe extern "C" fn(*const c_void, usize),
-    dsp_clear: unsafe extern "C" fn(*const c_void, usize) -> bool,
-    dsp_row_step: unsafe extern "C" fn(*const c_void, usize, *mut u32, bool, *mut RowWrite) -> bool,
+    pub(crate) declare: unsafe extern "C" fn(*const c_void, *mut Declare),
+    pub(crate) check: unsafe extern "C" fn(*const c_void, u32, *const CheckCtx) -> i32,
+    pub(crate) apply: unsafe extern "C" fn(*const c_void, *const ApplyCtx) -> i32,
+    pub(crate) apply_record:
+        unsafe extern "C" fn(*const c_void, u32, *const u8, *const ApplyCtx) -> i32,
+    pub(crate) remove: unsafe extern "C" fn(*const c_void, u8),
+    pub(crate) cap: unsafe extern "C" fn(*const c_void, u8, *mut u32) -> bool,
+    pub(crate) attribute: unsafe extern "C" fn(*const c_void, u32, u32, *mut usize) -> bool,
+    pub(crate) diag: unsafe extern "C" fn(*const c_void, *const u32),
+    pub(crate) table_check: unsafe extern "C" fn(*const c_void, u32, *mut TableFault) -> u32,
+    pub(crate) on_loaded: unsafe extern "C" fn(*const c_void, usize),
+    pub(crate) settle: unsafe extern "C" fn(*const c_void, *const SettleCtx),
+    pub(crate) teardown_refusal: unsafe extern "C" fn(*const c_void, u8) -> i32,
+    pub(crate) live_done: unsafe extern "C" fn(*const c_void),
+    pub(crate) module_begin: unsafe extern "C" fn(*const c_void, usize),
+    pub(crate) module_commit:
+        unsafe extern "C" fn(*const c_void, usize, *const ModuleCommitCtx) -> i32,
+    pub(crate) tick: unsafe extern "C" fn(*const c_void, u32),
+    pub(crate) dsp_check_sections:
+        unsafe extern "C" fn(*const c_void, *const DspSec, *mut Job) -> i32,
+    pub(crate) dsp_check_rows: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
+    pub(crate) dsp_check_types: unsafe extern "C" fn(*const c_void, *const DspSec) -> i32,
+    pub(crate) dsp_admit: unsafe extern "C" fn(*const c_void, *const Job) -> i32,
+    pub(crate) dsp_claim: unsafe extern "C" fn(*const c_void, *mut Claim),
+    pub(crate) dsp_release: unsafe extern "C" fn(*const c_void, usize),
+    pub(crate) dsp_clear: unsafe extern "C" fn(*const c_void, usize) -> bool,
+    pub(crate) dsp_row_step:
+        unsafe extern "C" fn(*const c_void, usize, *mut u32, bool, *mut RowWrite) -> bool,
 }
 
 // A row is built from constants and never written.
@@ -961,388 +996,7 @@ impl ServiceRow {
     }
 }
 
-/// The row pointers of a table, in a static (a raw pointer is not `Sync`; the rows are read-only).
-#[repr(transparent)]
-pub struct RowPtrs<const N: usize>(pub [*const ServiceRow; N]);
-
-unsafe impl<const N: usize> Sync for RowPtrs<N> {}
-
-impl<const N: usize> RowPtrs<N> {
-    /// The pointers to `rows`, in order.
-    pub const fn of(rows: &'static [ServiceRow; N]) -> RowPtrs<N> {
-        let mut a = [core::ptr::null::<ServiceRow>(); N];
-        let mut i = 0;
-        while i < N {
-            a[i] = &rows[i] as *const ServiceRow;
-            i += 1;
-        }
-        RowPtrs(a)
-    }
-}
-
-/// The pointers to `rows` followed by null pointers up to `M` entries (`M >= N`): the table of a core that adds the rows of loaded service files after its own.
-pub const fn rows_with_tail<const N: usize, const M: usize>(
-    rows: &'static [ServiceRow; N],
-) -> [*const ServiceRow; M] {
-    let mut a = [core::ptr::null::<ServiceRow>(); M];
-    let mut i = 0;
-    while i < N {
-        a[i] = &rows[i] as *const ServiceRow;
-        i += 1;
-    }
-    a
-}
-
-/// The table of services, in the order the core calls them: the walks below run the rows in table order (removal runs the other way). It is the
-/// same type for every core; `core` is the `&C` that each row's thunks cast back.
-#[derive(Clone, Copy)]
-pub struct ServiceTable {
-    pub rows: &'static [*const ServiceRow],
-    /// Bit `i` set: row `i` FAILED its declare check (`check_declarations`); its kinds are unknown to `owner` and `len`.
-    pub failed: u32,
-    /// The core every call passes to the service (`&REAL_CORE` in the runtime's generated table).
-    pub core: *const c_void,
-}
-
-// A table is read-only data (`rows` and `core` point at statics).
-unsafe impl Sync for ServiceTable {}
-
-impl ServiceTable {
-    /// A table over `rows` that passes `core` to every method.
-    #[inline]
-    pub const fn new<C: CoreApi + 'static>(
-        rows: &'static [*const ServiceRow],
-        core: &'static C,
-    ) -> ServiceTable {
-        ServiceTable {
-            rows,
-            failed: 0,
-            core: core as *const C as *const c_void,
-        }
-    }
-    #[inline(always)]
-    fn row(&self, i: usize) -> &'static ServiceRow {
-        unsafe { &*self.rows[i] }
-    }
-    /// Declare-check-commit of the in-crate services: each row's `declare` against its table (the generated static `kinds`). Returns the mask of the
-    /// rows whose declarations differ (bit `i`: row `i`); the caller keeps it in the table it hands out (`failed`).
-    #[inline]
-    pub unsafe fn check_declarations(&self) -> u32 {
-        let mut failed = 0u32;
-        let mut i = 0;
-        while i < self.rows.len() && i < 32 {
-            let mut d = Declare::new();
-            (self.row(i).declare)(self.core, &mut d);
-            if !d.matches_kinds(self.row(i).kinds()) {
-                failed |= 1 << i;
-            }
-            i += 1;
-        }
-        failed
-    }
-    /// The row that owns record kind `kind`.
-    #[inline]
-    pub fn owner(&self, kind: u32) -> Option<&'static ServiceRow> {
-        let mut i = 0;
-        while i < self.rows.len() {
-            if i < 32 && self.failed & (1 << i) != 0 {
-                i += 1;
-                continue;
-            }
-            let kinds = self.row(i).kinds();
-            let mut k = 0;
-            while k < kinds.len() {
-                if kinds[k].0 == kind {
-                    return Some(self.row(i));
-                }
-                k += 1;
-            }
-            i += 1;
-        }
-        None
-    }
-    /// The length of a record of `kind` (the whole record, header included); `None` when no service owns the kind.
-    #[inline]
-    pub fn len(&self, kind: u32) -> Option<u32> {
-        let mut i = 0;
-        while i < self.rows.len() {
-            if i < 32 && self.failed & (1 << i) != 0 {
-                i += 1;
-                continue;
-            }
-            let kinds = self.row(i).kinds();
-            let mut k = 0;
-            while k < kinds.len() {
-                if kinds[k].0 == kind {
-                    return Some(kinds[k].1);
-                }
-                k += 1;
-            }
-            i += 1;
-        }
-        None
-    }
-    #[inline]
-    pub unsafe fn check(&self, step: u32, c: &CheckCtx) -> i32 {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let r = (self.row(i).check)(self.core, step, c);
-            if r != OK {
-                return r;
-            }
-            i += 1;
-        }
-        OK
-    }
-    #[inline]
-    pub unsafe fn apply(&self, c: &ApplyCtx) -> i32 {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let r = (self.row(i).apply)(self.core, c);
-            if r != OK {
-                return r;
-            }
-            i += 1;
-        }
-        OK
-    }
-    #[inline]
-    pub unsafe fn apply_record(&self, kind: u32, body: *const u8, c: &ApplyCtx) -> i32 {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let r = (self.row(i).apply_record)(self.core, kind, body, c);
-            if r != OK {
-                return r;
-            }
-            i += 1;
-        }
-        OK
-    }
-    /// Last service first.
-    #[inline]
-    pub unsafe fn remove(&self, owner: u8) {
-        let mut i = self.rows.len();
-        while i > 0 {
-            i -= 1;
-            (self.row(i).remove)(self.core, owner);
-        }
-    }
-    /// `(limit, used)` of capacity kind `kind`: the sum of the counts of the services that count it; `None` when none does.
-    #[inline]
-    pub unsafe fn cap(&self, kind: u8) -> Option<(u32, u32)> {
-        let mut r: Option<(u32, u32)> = None;
-        let mut i = 0;
-        while i < self.rows.len() {
-            let mut lu = [0u32; 2];
-            if (self.row(i).cap)(self.core, kind, lu.as_mut_ptr()) {
-                let (l, u) = (lu[0], lu[1]);
-                r = Some(match r {
-                    Some((a, b)) => (a + l, b + u),
-                    None => (l, u),
-                });
-            }
-            i += 1;
-        }
-        r
-    }
-    #[inline]
-    pub unsafe fn attribute(&self, site: u32, id: u32) -> Option<usize> {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let mut m = 0usize;
-            if (self.row(i).attribute)(self.core, site, id, &mut m) {
-                return Some(m);
-            }
-            i += 1;
-        }
-        None
-    }
-    /// `Service::diag` on every row, in table order.
-    #[inline]
-    pub unsafe fn diag(&self, words: &[u32; DIAG_WORDS]) {
-        let mut i = 0;
-        while i < self.rows.len() {
-            (self.row(i).diag)(self.core, words.as_ptr());
-            i += 1;
-        }
-    }
-    /// `Service::table_check` over the rows in table order: the first number that is not 0 (the mismatch is in `out`), else 0.
-    #[inline]
-    pub unsafe fn table_check(&self, used: u32, out: &mut TableFault) -> u32 {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let r = (self.row(i).table_check)(self.core, used, out);
-            if r != 0 {
-                return r;
-            }
-            i += 1;
-        }
-        0
-    }
-    #[inline]
-    pub unsafe fn on_loaded(&self, rec: usize) {
-        let mut i = 0;
-        while i < self.rows.len() {
-            (self.row(i).on_loaded)(self.core, rec);
-            i += 1;
-        }
-    }
-    /// `Service::settle` on every row, in table order.
-    #[inline]
-    pub unsafe fn settle(&self, s: &SettleCtx) {
-        let mut i = 0;
-        while i < self.rows.len() {
-            (self.row(i).settle)(self.core, s);
-            i += 1;
-        }
-    }
-    /// `Service::teardown_refusal` on every row, in table order: the first status that is not `OK`, else `OK`.
-    #[inline]
-    pub unsafe fn teardown_refusal(&self, owner: u8) -> i32 {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let r = (self.row(i).teardown_refusal)(self.core, owner);
-            if r != OK {
-                return r;
-            }
-            i += 1;
-        }
-        OK
-    }
-    /// `Service::live_done` on every row, in table order.
-    #[inline]
-    pub unsafe fn live_done(&self) {
-        let mut i = 0;
-        while i < self.rows.len() {
-            (self.row(i).live_done)(self.core);
-            i += 1;
-        }
-    }
-    /// `Service::module_begin` on every row, in table order.
-    #[inline]
-    pub unsafe fn module_begin(&self, rec: usize) {
-        let mut i = 0;
-        while i < self.rows.len() {
-            (self.row(i).module_begin)(self.core, rec);
-            i += 1;
-        }
-    }
-    /// `Service::module_commit` over the rows in table order; the first refusal stops the walk and is the result.
-    #[inline]
-    pub unsafe fn module_commit(&self, rec: usize, c: &ModuleCommitCtx) -> i32 {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let r = (self.row(i).module_commit)(self.core, rec, c);
-            if r != OK {
-                return r;
-            }
-            i += 1;
-        }
-        OK
-    }
-    #[inline]
-    pub unsafe fn tick(&self, phase: u32) {
-        let mut i = 0;
-        while i < self.rows.len() {
-            (self.row(i).tick)(self.core, phase);
-            i += 1;
-        }
-    }
-    #[inline]
-    pub unsafe fn dsp_check_sections(&self, sec: &DspSec, job: &mut Job) -> i32 {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let r = (self.row(i).dsp_check_sections)(self.core, sec, job);
-            if r != OK {
-                return r;
-            }
-            i += 1;
-        }
-        OK
-    }
-    #[inline]
-    pub unsafe fn dsp_check_rows(&self, sec: &DspSec) -> i32 {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let r = (self.row(i).dsp_check_rows)(self.core, sec);
-            if r != OK {
-                return r;
-            }
-            i += 1;
-        }
-        OK
-    }
-    #[inline]
-    pub unsafe fn dsp_check_types(&self, sec: &DspSec) -> i32 {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let r = (self.row(i).dsp_check_types)(self.core, sec);
-            if r != OK {
-                return r;
-            }
-            i += 1;
-        }
-        OK
-    }
-    #[inline]
-    pub unsafe fn dsp_admit(&self, job: &Job) -> i32 {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let r = (self.row(i).dsp_admit)(self.core, job);
-            if r != OK {
-                return r;
-            }
-            i += 1;
-        }
-        OK
-    }
-    #[inline]
-    pub unsafe fn dsp_claim(&self, c: &mut Claim) {
-        let mut i = 0;
-        while i < self.rows.len() {
-            (self.row(i).dsp_claim)(self.core, c);
-            i += 1;
-        }
-    }
-    #[inline]
-    pub unsafe fn dsp_release(&self, rec: usize) {
-        let mut i = 0;
-        while i < self.rows.len() {
-            (self.row(i).dsp_release)(self.core, rec);
-            i += 1;
-        }
-    }
-    #[inline]
-    pub unsafe fn dsp_clear(&self, rec: usize) -> bool {
-        let mut ok = true;
-        let mut i = 0;
-        while i < self.rows.len() {
-            ok = (self.row(i).dsp_clear)(self.core, rec) && ok;
-            i += 1;
-        }
-        ok
-    }
-    #[inline]
-    pub unsafe fn dsp_row_step(&self, rec: usize, want: &mut u32, write: bool) -> Option<RowWrite> {
-        let mut i = 0;
-        while i < self.rows.len() {
-            let mut w = RowWrite {
-                win: 0,
-                word: 0,
-                value: 0,
-                published: None,
-                last: false,
-                has_undo: false,
-                undo: 0,
-            };
-            if (self.row(i).dsp_row_step)(self.core, rec, want, write, &mut w) {
-                return Some(w);
-            }
-            i += 1;
-        }
-        None
-    }
-}
+pub use crate::service_table::{rows_with_tail, Row, RowPtrs, ServiceTable};
 
 #[cfg(test)]
 mod tests {

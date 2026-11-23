@@ -52,7 +52,7 @@ impl CoreApis {
             c.n += 1;
         }
         for row in &crate::package::svc_rows::rows()[..crate::package::gen_services::STATIC] {
-            c.apis[c.n] = Api::new(dkneeds::keys::name_hash(unsafe { (**row).name() }), version);
+            c.apis[c.n] = Api::new(unsafe { row.name_hash() }, version);
             c.n += 1;
         }
         c
@@ -178,7 +178,7 @@ mod tests {
         assert_eq!(refused_with(&core, "fx", 0, true), Some(E_MISSING));
         // a loaded service row is no API of the core: a need of it is not met without its provider
         let rows = crate::package::handlers::services();
-        assert!(rows.rows.iter().any(|r| unsafe { (**r).name() } == "machines"));
+        assert!(rows.rows.iter().any(|r| unsafe { r.name_hash() } == dkneeds::keys::name_hash("machines")));
         assert!(!has("machines"));
         assert_eq!(refused_with(&core, "machines", 0, true), Some(E_MISSING));
         // the one rule of the core's names: the boot's search and the admission ask `is_runtime_service`, the graph asks these APIs

@@ -567,7 +567,7 @@ fn records_consts(sdk: &Sdk, indent: &str) -> String {
 /// `runtime/core/src/rs/src/package/gen_services.rs`: the static table of the in-crate services (`[[service]]`).
 fn rust_services(sdk: &Sdk) -> String {
     let mut s = format!("// {HEADER}\n\n");
-    s.push_str("use crate::package::core_api::{RealCore, REAL_CORE};\nuse dkrt_abi::service::{rows_with_tail, RowPtrs, ServiceRow, ServiceTable};\n\n");
+    s.push_str("use crate::package::core_api::{RealCore, REAL_CORE};\nuse dkrt_abi::service::{rows_with_tail, Row, RowPtrs, ServiceRow, ServiceTable};\n\n");
     s.push_str("/// The in-crate services in the order the core calls them (`[[service]]` of sdk/sdk.toml), each with the record kinds it owns.\n");
     let rows: Vec<(&ServiceDecl, &String)> = sdk
         .service
@@ -603,7 +603,7 @@ fn rust_services(sdk: &Sdk) -> String {
     };
     let _ = write!(
         s,
-        "/// The length of the row table: the in-crate rows, then room for `PROVIDER_MAX` rows of loaded service files.\npub const ROWS_LEN: usize = STATIC + dkrt_sdk::PROVIDER_MAX;\n\n/// The row table: the in-crate rows first, then the loaded ones (written by `svc_rows.rs` only; the null tail is not part of any table).\npub static mut ROWS: [*const ServiceRow; ROWS_LEN] = rows_with_tail(&SERVICES);\n\n{head}/// The table of the in-crate rows alone (the declare check and `is_runtime_service`).\npub const TABLE: ServiceTable = {table};\n"
+        "/// The length of the row table: the in-crate rows, then room for `PROVIDER_MAX` rows of loaded service files.\npub const ROWS_LEN: usize = STATIC + dkrt_sdk::PROVIDER_MAX;\n\n/// The row table: the in-crate rows first, then the loaded ones (written by `svc_rows.rs` only; the empty tail is not part of any table).\npub static mut ROWS: [Row; ROWS_LEN] = rows_with_tail(&SERVICES);\n\n{head}/// The table of the in-crate rows alone (the declare check and `is_runtime_service`).\npub const TABLE: ServiceTable = {table};\n"
     );
     s
 }

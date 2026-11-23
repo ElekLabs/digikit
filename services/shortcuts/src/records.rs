@@ -44,13 +44,11 @@ pub fn on_key<C: CoreApi>(core: &C, code: u32, flags: u32) -> Verdict {
 /// The shortcuts service.
 pub struct ShortcutsService;
 
-impl ShortcutsService {
-    /// The rule for the shortcut records of one module (`validate::check_set`); a kind other than SHORTCUT is accepted. `Service::validate_records` is this function, and a host tool
-    /// that has no core (`patchkit records --check`) calls it directly.
-    pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
-        if kind == KIND_SHORTCUT {
-            crate::validate::check_set(bodies, report);
-        }
+/// The rule for the shortcut records of one module (`validate::check_set`); a kind other than SHORTCUT is accepted. The service's `validate_records` is this function, and a host tool
+/// that has no core (`patchkit records --check`) calls it directly.
+pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+    if kind == KIND_SHORTCUT {
+        crate::validate::check_set(bodies, report);
     }
 }
 
@@ -76,7 +74,7 @@ fn callback(base: u32, offset: u32) -> Option<Callback> {
 
 impl<C: CoreApi> Service<C> for ShortcutsService {
     fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
-        ShortcutsService::validate(kind, bodies, report)
+        validate(kind, bodies, report)
     }
 
     dkrt_abi::accepts_teardown!();

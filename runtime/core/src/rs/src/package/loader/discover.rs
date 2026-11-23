@@ -26,7 +26,7 @@ pub(crate) fn is_runtime_service(h: u32, services: &ServiceTable) -> bool {
     // the static prefix only: the rows after it are loaded services
     let n = if services.rows.len() < crate::package::gen_services::STATIC { services.rows.len() } else { crate::package::gen_services::STATIC };
     while i < n {
-        if name_hash(unsafe { &*services.rows[i] }.name()) == h {
+        if unsafe { services.rows[i].name_hash() } == h {
             return true;
         }
         i += 1;

@@ -258,11 +258,18 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             return Ok(());
         }
         let (reg, size) = self.reg_block[rec];
-        if size == 0 {
-            return Ok(());
-        }
         let base = records::module(rec).base;
         let table = ServiceTable { rows: crate::package::svc_rows::walk_rows(services), ..crate::package::handlers::services() };
+        if size == 0 {
+            // no records: an old row has nothing to apply, but a provider hears every consumer that comes up (`Provider::attach`)
+            let c = dkrt_abi::service::ApplyCtx { owner: rec as u8 + 1, reg: core::ptr::null(), base };
+            let r = table.attach_providers(&c);
+            if r != OK {
+                crate::package::registry::remove_with(table, rec as u8 + 1);
+                return Err(r);
+            }
+            return Ok(());
+        }
         // a record whose kind a loaded service owns that the module does not need is refused before anything is applied (the module's needs and its builder imports are the same data: a
         // module whose file says otherwise is not one the packer made)
         let mut unowned = false;

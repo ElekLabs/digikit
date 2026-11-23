@@ -49,6 +49,7 @@ pub mod registry;
 pub mod resident;
 pub mod runtime_state;
 pub mod service;
+mod service_table;
 pub mod sha256;
 pub mod state;
 pub mod storage;

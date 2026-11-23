@@ -62,6 +62,7 @@ enum Ev {
     Add(usize),
     /// `add` with the service row of a file.
     AddRow(usize, *const dkrt_abi::service::ServiceRow),
+    AddProvider(usize, *const dkrt_abi::provider::ProviderRow, *mut u8),
     Remove(usize),
     AbiOk(u32),
 }
@@ -264,10 +265,11 @@ impl Registry for FakeRegistry {
         self.asked.borrow_mut().push(Ev::AbiOk(fingerprint));
         self.abi
     }
-    unsafe fn add(&mut self, rec: usize, row: Option<&dkrt_abi::service::ServiceRow>, _order: Option<u32>) -> i32 {
+    unsafe fn add(&mut self, rec: usize, row: Option<crate::package::svc_rows::RowSource<'_>>, _order: Option<u32>) -> i32 {
         self.log.push(match row {
             None => Ev::Add(rec),
-            Some(r) => Ev::AddRow(rec, r as *const _),
+            Some(crate::package::svc_rows::RowSource::Service(r)) => Ev::AddRow(rec, r as *const _),
+            Some(crate::package::svc_rows::RowSource::Provider { row, instance, .. }) => Ev::AddProvider(rec, row as *const _, instance),
         });
         self.add_result
     }

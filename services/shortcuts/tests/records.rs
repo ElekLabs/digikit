@@ -421,7 +421,7 @@ fn the_rule_reports_each_fault_of_a_record_and_judges_only_this_kind() {
     assert_eq!(faults(&[&bad]), 1, "a label with no room for the NUL");
     // other kinds are not this service's to judge
     let mut n = 0;
-    Svc::validate(KIND_SHORTCUT + 1, &[&[0u8; 3]], &mut |_| n += 1);
+    dkrt_svc_shortcuts::records::validate(KIND_SHORTCUT + 1, &[&[0u8; 3]], &mut |_| n += 1);
     assert_eq!(n, 0);
 }
 

@@ -1,0 +1,244 @@
+extern crate std;
+
+use super::*;
+use crate::provider::{PartRef, ProviderRow};
+use core::sync::atomic::{AtomicU32, Ordering};
+use std::boxed::Box;
+use std::vec::Vec;
+
+/// The lifecycle functions of a hand-built table: each adds a distinct bit to `CALLS` and the instance's first byte says which instance was used.
+static CALLS: AtomicU32 = AtomicU32::new(0);
+unsafe extern "C" fn attach(i: *mut c_void, _: *const c_void, c: *const ApplyCtx) -> i32 {
+    CALLS.fetch_or(
+        1 | (*(i as *mut u8) as u32) << 8 | ((*c).owner as u32) << 16,
+        Ordering::SeqCst,
+    );
+    7
+}
+unsafe extern "C" fn detach(_: *mut c_void, _: *const c_void, owner: u8) {
+    CALLS.fetch_or(2 | (owner as u32) << 16, Ordering::SeqCst);
+}
+unsafe extern "C" fn can_stop(_: *mut c_void, _: *const c_void) -> i32 {
+    -3
+}
+unsafe extern "C" fn settle(_: *mut c_void, _: *const c_void, _: *const SettleCtx) {}
+unsafe extern "C" fn reload_done(_: *mut c_void, _: *const c_void) {}
+
+fn lifecycle() -> &'static LifecycleV1 {
+    Box::leak(Box::new(LifecycleV1 {
+        attach,
+        detach,
+        can_stop,
+        settle,
+        reload_done,
+    }))
+}
+
+unsafe extern "C" fn begin(_: *mut c_void, _: *const c_void, _: usize) {}
+unsafe extern "C" fn commit(
+    _: *mut c_void,
+    _: *const c_void,
+    _: usize,
+    _: *const ModuleCommitCtx,
+) -> i32 {
+    0
+}
+unsafe extern "C" fn check_step(
+    _: *mut c_void,
+    _: *const c_void,
+    step: u32,
+    _: *const CheckCtx,
+) -> i32 {
+    -(step as i32)
+}
+/// Returns the body length: the handle passes the length its kinds table gives, less the 8-byte header.
+static APPLIED: AtomicU32 = AtomicU32::new(0);
+unsafe extern "C" fn apply(
+    _: *mut c_void,
+    _: *const c_void,
+    _: u32,
+    _: *const u8,
+    len: u32,
+    _: *const ApplyCtx,
+) -> i32 {
+    APPLIED.fetch_add(1, Ordering::SeqCst);
+    len as i32
+}
+
+static KINDS: [(u32, u32); 2] = [(30, 24), (31, 8)];
+
+fn records() -> &'static RecordsV1 {
+    Box::leak(Box::new(RecordsV1 {
+        kinds: KINDS.as_ptr(),
+        nkinds: 2,
+        begin,
+        commit,
+        check: check_step,
+        apply,
+    }))
+}
+
+fn part<T>(tag: u32, version: u16, table: &'static T) -> PartRef {
+    PartRef::new(tag, version, table as *const T as *const ())
+}
+
+fn row(parts: Vec<PartRef>) -> &'static ProviderRow {
+    let parts: &'static [PartRef] = Box::leak(parts.into_boxed_slice());
+    Box::leak(Box::new(ProviderRow::new(0xabcd, parts)))
+}
+
+fn check_ctx() -> CheckCtx {
+    CheckCtx {
+        reg: core::ptr::null(),
+        image_size: 0,
+    }
+}
+
+fn no_records() -> ApplyCtx {
+    ApplyCtx {
+        owner: 1,
+        reg: core::ptr::null(),
+        base: 0,
+    }
+}
+
+fn whole() -> Range<usize> {
+    0..usize::MAX
+}
+
+fn instance(first: u8) -> *mut c_void {
+    Box::leak(Box::new([first; 4])).as_mut_ptr() as *mut c_void
+}
+
+fn resolve(r: &'static ProviderRow, inst: *mut c_void) -> Result<ProviderHandle, Status> {
+    // SAFETY: the host test's row and tables are leaked boxes.
+    unsafe { ProviderHandle::resolve(r, whole(), inst) }
+}
+
+#[test]
+fn a_part_that_was_not_adopted_answers_with_the_old_default() {
+    let h = resolve(
+        row(std::vec![part(PART_LIFECYCLE, 1, lifecycle())]),
+        instance(0),
+    )
+    .unwrap();
+    let core = core::ptr::null();
+    unsafe {
+        assert_eq!(h.name(), 0xabcd);
+        assert!(h.kinds().is_empty());
+        h.module_begin(core, 3);
+        assert_eq!(h.check(core, 4, &check_ctx()), OK);
+        assert_eq!(
+            h.apply_record(core, 30, core::ptr::null(), &no_records()),
+            OK
+        );
+        assert!(h.dsp_clear(core, 0));
+        assert_eq!(h.cap(core, 1), None);
+        assert_eq!(h.table_check(core, 0, &mut TableFault::default()), 0);
+        assert_eq!(h.attribute(core, 1, 2), None);
+        assert_eq!(h.query(1, &[], &mut []), dkrt_sdk::E_MISSING);
+        let mut want = 0;
+        assert!(h.dsp_row_step(core, 0, &mut want, true).is_none());
+    }
+}
+
+#[test]
+fn the_lifecycle_functions_get_the_instance_and_the_consumer() {
+    let inst = instance(5);
+    let h = resolve(row(std::vec![part(PART_LIFECYCLE, 1, lifecycle())]), inst).unwrap();
+    assert_eq!(h.instance(), inst);
+    let ctx = ApplyCtx {
+        owner: 9,
+        reg: core::ptr::null(),
+        base: 0x4000,
+    };
+    CALLS.store(0, Ordering::SeqCst);
+    unsafe {
+        assert_eq!(h.attach(core::ptr::null(), &ctx), 7);
+        assert_eq!(h.can_stop(core::ptr::null()), -3);
+    }
+    assert_eq!(CALLS.load(Ordering::SeqCst), 1 | 5 << 8 | 9 << 16);
+    unsafe { h.detach(core::ptr::null(), 4) };
+    assert_eq!(CALLS.load(Ordering::SeqCst) & 2, 2);
+}
+
+#[test]
+fn a_record_of_a_kind_the_service_owns_gets_its_body_length_and_another_kind_is_not_passed() {
+    let h = resolve(
+        row(std::vec![
+            part(PART_LIFECYCLE, 1, lifecycle()),
+            part(PART_RECORDS, 1, records()),
+        ]),
+        instance(0),
+    )
+    .unwrap();
+    let ctx = ApplyCtx {
+        owner: 1,
+        reg: core::ptr::null(),
+        base: 0,
+    };
+    unsafe {
+        assert_eq!(h.kinds(), &KINDS[..]);
+        // the body is the record's whole length less its header: 24 - 8 and 8 - 8
+        assert_eq!(
+            h.apply_record(core::ptr::null(), 30, core::ptr::null(), &ctx),
+            16
+        );
+        assert_eq!(
+            h.apply_record(core::ptr::null(), 31, core::ptr::null(), &ctx),
+            0
+        );
+        assert_eq!(APPLIED.load(Ordering::SeqCst), 2);
+        // a kind of another service: the part is not called
+        assert_eq!(
+            h.apply_record(core::ptr::null(), 99, core::ptr::null(), &ctx),
+            OK
+        );
+        assert_eq!(APPLIED.load(Ordering::SeqCst), 2);
+        assert_eq!(h.check(core::ptr::null(), 6, &check_ctx()), -6);
+    }
+}
+
+#[test]
+fn a_part_version_newer_than_the_core_knows_is_refused_with_the_abi_status() {
+    let table = lifecycle() as *const LifecycleV1 as *const ();
+    // the lifecycle part itself, and an optional part
+    let newer_lifecycle = row(std::vec![PartRef::new(
+        PART_LIFECYCLE,
+        LIFECYCLE_NEWEST + 1,
+        table
+    )]);
+    assert_eq!(resolve(newer_lifecycle, instance(0)).err(), Some(E_SVC_ABI));
+    let newer_records = row(std::vec![
+        part(PART_LIFECYCLE, 1, lifecycle()),
+        PartRef::new(
+            PART_RECORDS,
+            RECORDS_NEWEST + 1,
+            records() as *const _ as *const ()
+        ),
+    ]);
+    assert_eq!(resolve(newer_records, instance(0)).err(), Some(E_SVC_ABI));
+    // the newest version the core knows is accepted
+    let newest = row(std::vec![
+        part(PART_LIFECYCLE, LIFECYCLE_NEWEST, lifecycle()),
+        part(PART_RECORDS, RECORDS_NEWEST, records()),
+    ]);
+    assert!(resolve(newest, instance(0)).is_ok());
+}
+
+#[test]
+fn a_table_outside_the_package_a_null_instance_and_a_misaligned_table_are_refused() {
+    let r = row(std::vec![part(PART_LIFECYCLE, 1, lifecycle())]);
+    assert_eq!(resolve(r, core::ptr::null_mut()).err(), Some(E_FORMAT));
+    // an extent that holds the row and its part list but not the table
+    let at = r as *const ProviderRow as usize;
+    let extent = at..at + size_of::<ProviderRow>();
+    let h = unsafe { ProviderHandle::resolve(r, extent, instance(0)) };
+    assert_eq!(h.err(), Some(E_FORMAT));
+    let odd = row(std::vec![PartRef::new(
+        PART_LIFECYCLE,
+        1,
+        (lifecycle() as *const LifecycleV1 as usize + 1) as *const ()
+    )]);
+    assert_eq!(resolve(odd, instance(0)).err(), Some(E_FORMAT));
+}

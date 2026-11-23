@@ -4,7 +4,9 @@
 //! `core/dsp-link`. It lives in a crate of its own, below the services and the runtime, so a service crate tests against it without naming the runtime.
 extern crate std;
 pub mod contract;
+mod driver;
 mod pool;
+mod provider_driver;
 pub mod routes;
 mod storage;
 use core::cell::{Cell, RefCell};
@@ -15,6 +17,10 @@ use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use dkrt_link::fake::{link, FakeLink};
 use dkrt_link::Link;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
+pub use driver::{Driver, OldService, Subject};
+pub use provider_driver::{
+    provider_contract, Provided, ProviderDriver, Recipe, RowBuilder, Started,
+};
 use std::boxed::Box;
 use std::string::String;
 use std::vec::Vec;

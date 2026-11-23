@@ -414,19 +414,17 @@ fn provided(at: u32, key: u32) -> bool {
 /// The lfo service.
 pub struct Lfo;
 
-impl Lfo {
-    /// The rule for the shape records of one module (`validate::check_set`); a kind other than the shape record is accepted. `Service::validate_records` is this function,
-    /// and a host tool that has no core (`patchkit records --check`) calls it directly.
-    pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
-        if kind == KIND_LFO_SHAPE {
-            crate::validate::check_set(bodies, report);
-        }
+/// The rule for the shape records of one module (`validate::check_set`); a kind other than the shape record is accepted. The service's `validate_records` is this function,
+/// and a host tool that has no core (`patchkit records --check`) calls it directly.
+pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
+    if kind == KIND_LFO_SHAPE {
+        crate::validate::check_set(bodies, report);
     }
 }
 
 impl<C: CoreApi> Service<C> for Lfo {
     fn validate_records(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
-        Lfo::validate(kind, bodies, report)
+        validate(kind, bodies, report)
     }
 
     dkrt_abi::accepts_teardown!();

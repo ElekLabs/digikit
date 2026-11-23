@@ -1,5 +1,6 @@
 //! The commit of a loaded file: its declarations, the services' records and the DSP rows (`Loader::commit`).
 use super::*;
+use crate::package::svc_rows::RowSource;
 
 impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
 
@@ -13,15 +14,25 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             self.decl_diff = d;
             return E_DECL_KIND;
         }
-        // a service file declares its row in `init` (`dk_service_declare_row`); a module declares none. `fail` takes whatever was added down again
-        let row = c.decl.row_ptr().map(|p| &*p);
+        // a service file declares its row in `init` (`dk_service_declare_row`, or `dk_provider_declare_row` with the instance); a module declares none. `fail` takes whatever was
+        // added down again
+        let extent = self.m.image_extent(base, image_size);
+        let row = match (c.decl.row_ptr(), c.decl.provider_row_ptr()) {
+            (Some(p), _) => Some(RowSource::Service(&*p)),
+            (None, Some((row, instance))) => Some(RowSource::Provider { row: &*row, instance, extent }),
+            (None, None) => None,
+        };
         let mut order = None;
-        if let Some(row) = row {
+        if let Some(row) = &row {
             if rec < MAX_MODULES {
                 return E_DECL_KIND;
             }
             let provider = &self.provs[rec - MAX_MODULES];
-            if provider.provides.map(|p| p.0) != Some(dkneeds::keys::name_hash(row.name())) {
+            let name = match row.name_hash() {
+                Ok(name) => name,
+                Err(e) => return e,
+            };
+            if provider.provides.map(|p| p.0) != Some(name) {
                 return E_DECL_KIND;
             }
             order = provider.callback_order;

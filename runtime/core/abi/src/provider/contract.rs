@@ -1,21 +1,25 @@
 use super::{Consumer, ConsumerId, Declarations, Status};
 use crate::core_api::CoreApi;
+use crate::service::SettleCtx;
 
-/// One service: an owner object. The `service!` macro (RC3) holds the one instance in a static cell and passes `&mut self`; a host test constructs it
-/// directly over a fake core. Optional parts are separate traits (`provider::parts`) the service adopts by name.
+/// One service: an owner object. The `service!` macro holds the one instance in a cell (`Owner<T>` of `dkrt-svc-rt`), starts it in the file's `init` and stops it in
+/// `fini`; a host test constructs it directly over a fake core. Optional parts are separate traits (`provider::parts`) the service adopts by name.
+///
+/// This is the lifecycle part (tag 1, version 1; table `tables::LifecycleV1`). `start` and `stop` are not in the table: the file's own entry points run them.
 pub trait Provider<C: CoreApi>: Sized {
     /// Declarations the core checks against the packed header: resources with an "init" limit, entries.
     fn declare(&self, _d: &mut Declarations) {}
 
-    /// After placement and linking. Allocate state; no consumer is attached yet.
+    /// The file's `init`, before the declarations. Allocate state; no consumer is attached yet.
     fn start(core: &C) -> Result<Self, Status>;
 
-    /// A consumer came up. Its records for this service arrive here.
+    /// A consumer came up: every provider it needs hears it once, in table order, also when the module has no records. The records of the service's kinds follow, one
+    /// `Records::apply` each. A refusal is undone with `detach` for the same consumer.
     fn attach(&mut self, _core: &C, _consumer: &Consumer<'_>) -> Result<(), Status> {
         Ok(())
     }
 
-    /// A consumer goes down. Free everything it owns here: rows, objects, routes.
+    /// A consumer goes down (also one that was not attached, or only in part: it is idempotent). Free everything it owns here: rows, objects, routes.
     fn detach(&mut self, _core: &C, _consumer: ConsumerId) {}
 
     /// Whether this service and its consumers may go down now (for example not while the transport plays).
@@ -23,6 +27,14 @@ pub trait Provider<C: CoreApi>: Sized {
         Ok(())
     }
 
-    /// Last call before the core restores entries and frees the package.
+    /// The file's `fini`: last call before the core restores entries and frees the package.
     fn stop(self, _core: &C) {}
+
+    /// The boot has loaded every service its selection needs and loads no module yet; `s` has the keys of each selected module. Once per boot. A service that keeps
+    /// state across boots plans and saves it here.
+    fn settle(&mut self, _core: &C, _s: &SettleCtx) {}
+
+    /// A reload of a module ended, with the new version loaded or not: give back what this service kept for the module during the reload that the new version did not
+    /// take over. Once per reload.
+    fn reload_done(&mut self, _core: &C) {}
 }

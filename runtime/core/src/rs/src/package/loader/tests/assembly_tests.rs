@@ -147,7 +147,7 @@ impl Registry for DeviceRegistry {
     fn abi_ok(&self, fingerprint: u32) -> bool {
         fingerprint == 0 || self.runtime.contains(&std::format!("0c80{fingerprint:08x}"))
     }
-    unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>, order: Option<u32>) -> i32 {
+    unsafe fn add(&mut self, rec: usize, row: Option<crate::package::svc_rows::RowSource<'_>>, order: Option<u32>) -> i32 {
         RealRegistry.add(rec, row, order)
     }
     unsafe fn remove(&mut self, rec: usize) {
@@ -316,6 +316,20 @@ impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Nothing {
     dkrt_abi::accepts_teardown!();
 }
 
+/// The row of the provider fixture with a tick part one version newer than the core knows.
+fn newer_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
+    use dkrt_abi::provider::{LifecycleV1, PartRef, ProviderRow, TickV1, LIFECYCLE_NEWEST, PART_LIFECYCLE, PART_TICK, TICK_NEWEST};
+    use crate::package::core_api::RealCore;
+    static LIFE: LifecycleV1 = LifecycleV1::of::<dkrt_fixture_local_ping::LocalPing, RealCore>();
+    static TICK: TickV1 = TickV1::of::<dkrt_fixture_local_ping::LocalPing, RealCore>();
+    static PARTS: [PartRef; 2] = [
+        PartRef::new(PART_LIFECYCLE, LIFECYCLE_NEWEST, &LIFE as *const _ as *const ()),
+        PartRef::new(PART_TICK, TICK_NEWEST + 1, &TICK as *const _ as *const ()),
+    ];
+    static ROW: ProviderRow = ProviderRow::new(dkrt_abi::provider::name_hash("local-ping"), &PARTS);
+    &ROW
+}
+
 /// The store and the arena of a card: every import resolves against the runtime's own tables (`RealImages`); `init` of a service file replays what its header
 /// table declares (no ColdFire code runs on the host).
 pub(super) struct Card {
@@ -336,6 +350,11 @@ pub(super) struct Card {
     pub(super) skew_kind_handler: bool,
     /// The `init` and `fini` the loader entered, in order: `(is_fini, record)`.
     pub(super) hooks: Vec<(bool, usize)>,
+    /// The records whose service file provides a `ProviderRow` (the fixture `local-ping`, linked into the test binary): their `fini` stops the instance.
+    provider_recs: Vec<usize>,
+    /// The provider fixture declares a row whose tick part is a version newer than this core knows (a thin variant of the fixture: the host runs no file code, so the row is the
+    /// test's).
+    pub(super) newer_parts: bool,
     /// The device addresses of the runtime's functions that the imports of a service file name (`svc_import_addr`).
     imports: crate::fake_platform::address_map::AddressMap,
 }
@@ -372,6 +391,8 @@ impl Card {
             real_rows: false,
             skew_kind_handler: false,
             hooks: Vec::new(),
+            provider_recs: Vec::new(),
+            newer_parts: false,
             imports: crate::fake_platform::address_map::AddressMap::new(),
         }
     }
@@ -507,6 +528,15 @@ impl Images for Card {
         // the row: the name of the file, the kinds of its table
         let stem = String::from_utf8(self.staged_path.clone()).unwrap();
         let stem = stem.trim_start_matches("services/").trim_end_matches(".dks").to_string();
+        if stem == "local-ping" {
+            // the file provides a `ProviderRow` over an owner object: the fixture's own row and instance (`dk_svc_start` is what its `init` does before the declarations)
+            // a card load is a fresh file: an instance that an earlier case left (a boot that ended without the unload) is not this file's
+            dkrt_fixture_local_ping::dk_svc_stop();
+            let instance = dkrt_fixture_local_ping::dk_svc_start().expect("the instance of local-ping starts");
+            self.provider_recs.push(rec);
+            let row = if self.newer_parts { newer_ping_row() } else { dkrt_fixture_local_ping::dk_svc_row() };
+            return crate::package::collect::dk_provider_declare_row(ctx, row, instance);
+        }
         let name: &'static str = Box::leak(stem.into_boxed_str());
         let kinds: &'static [(u32, u32)] = Box::leak(kinds.into_boxed_slice());
         let row: &'static ServiceRow = if self.real_rows && name == "fx" {
@@ -518,8 +548,16 @@ impl Images for Card {
         };
         crate::package::collect::dk_service_declare_row(ctx, row)
     }
+    fn image_extent(&mut self, _: u32, _: u32) -> core::ops::Range<usize> {
+        // the rows of a host test are statics of the test binary, in no package image
+        0..usize::MAX
+    }
     unsafe fn enter_fini(&mut self, rec: usize, _: u32, _: *const Ctx) {
         self.hooks.push((true, rec));
+        if let Some(at) = self.provider_recs.iter().position(|r| *r == rec) {
+            self.provider_recs.remove(at);
+            dkrt_fixture_local_ping::dk_svc_stop();
+        }
     }
 }
 
@@ -541,6 +579,8 @@ pub(super) fn clean() -> Clean {
         *dsp::ds() = core::mem::zeroed();
         dsp::init_once();
         CALLED_NEED = [0; NEEDS_LEN];
+        // a case that ended early left the instance of the provider fixture started
+        dkrt_fixture_local_ping::dk_svc_stop();
         // the link script is a static: a test with no DSP part never calls `script_link`, and would see the strict tick drop of the initial value or the state of
         // whichever test ran before it
         crate::package::cleanup_tests::lenient_tick_drop();
@@ -862,9 +902,8 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
         );
     }
     // the rows the files declared are in the table of the services
-    let rows: Vec<&str> = crate::package::svc_rows::rows().iter().map(|r| unsafe { (**r).name() }).collect();
     for w in want {
-        assert!(rows.contains(w), "{what}: no row {w} in {rows:?}");
+        assert!(crate::package::svc_rows::has(w), "{what}: no row {w} in the table");
     }
     // the hook sites of the files: one `jmp` written for each hook of a service file that the port lists as present, at its address, under one mask
     let binds = binds_of(dev, &l, &plan);
@@ -920,13 +959,13 @@ fn a_selected_consumer_loads_a_service_declared_outside_the_sdk() {
             let different_major = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], false);
             assert_eq!(different_major.verdict(0), Verdict::Refused(Reason::NeedVersion));
             // a module the graph refuses brings up none of its services
-            assert!(!crate::package::svc_rows::rows().iter().any(|row| (**row).name() == "local-ping"));
+            assert!(!crate::package::svc_rows::has("local-ping"));
 
             l.capture(0, &packed(dev, LOCAL_PING_USER.leaf, "dkm", LOCAL_PING_USER.nx));
             let run = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], false);
             assert_eq!(run.verdict(0), Verdict::Accepted);
             assert!(run.is_up(PackageId(MAX_MODULES as u8)));
-            assert!(crate::package::svc_rows::rows().iter().any(|row| (**row).name() == "local-ping"));
+            assert!(crate::package::svc_rows::has("local-ping"));
             assert!(run.is_up(PackageId(0)), "the consumer loads against the provider: {:?}", run.refusal(0));
         }
         clean_state();
@@ -2227,8 +2266,7 @@ pub(super) fn without_dsp(dev: Dev, m: &Fixture) -> Vec<u8> {
 unsafe fn nothing_left(l: &Boot, what: &str) {
     assert!(l.m.live.is_empty(), "{what}: arena blocks are live");
     assert_eq!((st().modules[0].used, st().loads), (0, 0), "{what}: a module record is used");
-    let rows: Vec<&str> = crate::package::svc_rows::rows().iter().map(|r| (**r).name()).collect();
-    assert!(!rows.iter().any(|n| ["fx", "machines", "lfo"].contains(n)), "{what}: service rows are left: {rows:?}");
+    assert!(!["fx", "machines", "lfo"].iter().any(|n| crate::package::svc_rows::has(n)), "{what}: service rows are left");
 }
 
 /// E_DECL_ID through the real path: the packed module goes through the loader and the real effects service (its builder and its commit check); `init` declares the effect
