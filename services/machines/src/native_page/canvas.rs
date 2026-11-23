@@ -10,9 +10,9 @@ pub const MASK_WORDS: usize = WIDE_WIDTH as usize * 2;
 
 /// The two working planes of the clipped bitmap. Plane 1 is the write mask of the blit: it starts opaque and keeps the rounded-up band transparent.
 pub struct Clipped {
-    pub width: u32,
-    pub plane0: [u32; PLANE_WORDS],
-    pub plane1: [u32; PLANE_WORDS],
+    width: u32,
+    plane0: [u32; PLANE_WORDS],
+    plane1: [u32; PLANE_WORDS],
 }
 impl Clipped {
     pub fn new(width: u32) -> Self {
@@ -26,6 +26,20 @@ impl Clipped {
             c.plane1[2 * x + 1] = u32::MAX << (64 - HEIGHT as u32);
         }
         c
+    }
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+    pub fn plane0(&self) -> &[u32; PLANE_WORDS] {
+        &self.plane0
+    }
+    pub fn plane1(&self) -> &[u32; PLANE_WORDS] {
+        &self.plane1
+    }
+    /// An overlay page composites only what it filled: the mask replaces the write mask of the blit.
+    pub(super) fn use_mask(&mut self, mask: &[u32; MASK_WORDS]) {
+        let n = self.width as usize * 2;
+        self.plane1[..n].copy_from_slice(&mask[..n]);
     }
 }
 
@@ -43,12 +57,25 @@ pub fn mask_rect(mask: &mut [u32], width: i32, height: i32, x0: i32, y0: i32, x1
 
 /// What the content callback draws on: top-origin local coordinates, clipped to the page canvas, drawn into the bitmap bottom-origin.
 pub struct Canvas<'a, S: Surface> {
-    pub(super) surface: &'a mut S,
-    pub(super) width: u32,
-    pub(super) overlay: bool,
-    pub(super) mask: &'a mut [u32; MASK_WORDS],
+    surface: &'a mut S,
+    width: u32,
+    overlay: bool,
+    mask: &'a mut [u32; MASK_WORDS],
 }
-impl<S: Surface> Canvas<'_, S> {
+impl<'a, S: Surface> Canvas<'a, S> {
+    pub(super) fn new(
+        surface: &'a mut S,
+        width: u32,
+        overlay: bool,
+        mask: &'a mut [u32; MASK_WORDS],
+    ) -> Self {
+        Canvas {
+            surface,
+            width,
+            overlay,
+            mask,
+        }
+    }
     pub fn width(&self) -> u32 {
         self.width
     }
@@ -87,3 +114,6 @@ impl<S: Surface> Canvas<'_, S> {
         );
     }
 }
+
+#[cfg(test)]
+mod tests;

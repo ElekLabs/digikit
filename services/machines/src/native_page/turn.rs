@@ -24,7 +24,7 @@ pub fn turn<S: Surface>(
     if encoder >= 8 {
         return 0;
     }
-    for b in page.bindings.iter() {
+    for b in page.bindings().iter() {
         if b[0] != 0 && b[2] == encoder {
             if b[0] == 1 {
                 return 0;
@@ -36,3 +36,6 @@ pub fn turn<S: Surface>(
     }
     1
 }
+
+#[cfg(test)]
+mod tests;

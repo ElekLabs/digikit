@@ -1,7 +1,7 @@
 use super::canvas::Canvas;
 use super::frame::Frame;
+use super::page::NativePage;
 use super::surface::Surface;
-use super::table::NativePage;
 
 /// The firmware view as the page logic needs it. The service implements it over the view's fields (`+0x90` page index, `+0x68`, `+0x74`, `+0x78`) and its
 /// vtable (`+0x54` value reader, invalidate).

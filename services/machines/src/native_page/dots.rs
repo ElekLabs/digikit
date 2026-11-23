@@ -12,3 +12,6 @@ pub fn dots(page: u32, mut rect: impl FnMut(i32, i32, i32, i32, i32)) {
         _ => {}
     }
 }
+
+#[cfg(test)]
+mod tests;
