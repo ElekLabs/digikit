@@ -26,7 +26,7 @@ pub(crate) struct Shape {
     /// the shape is unipolar: no sample is negative
     pub(crate) unipolar: bool,
     pub(crate) name: [u8; NAME_LEN],
-    /// the delta table, built by `apply_record` from the record's samples
+    /// the delta table, built by `Records::apply` from the record's samples
     pub(crate) cells: [Cell; SAMPLES],
 }
 
@@ -80,7 +80,7 @@ pub fn name_of(number: u32) -> Option<[u8; NAME_LEN]> {
 
 /// The highest wave number a loaded shape has (0 when none is loaded).
 ///
-/// Not read under the interrupt mask, and no torn read is possible: `owner` is one byte, and the only writers (`apply_record`, `remove`) change a whole entry under the interrupt
+/// Not read under the interrupt mask, and no torn read is possible: `owner` is one byte, and the only writers (`Records::apply`, `Provider::detach`) change a whole entry under the interrupt
 /// mask, so a reader at task level sees each entry before or after a change, never half of one. A change that lands during the loop gives a number that held at some point
 /// of the call; the callers (the WAVE maximum and the name formatter, both in the UI task) tolerate that.
 pub fn highest() -> u32 {

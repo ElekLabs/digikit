@@ -114,7 +114,7 @@ unsafe fn at(i: usize) -> *mut Graph {
 /// Builds the graph of the shape in slot `i` and publishes it (the tile store and handshake are `dkrt_svc_bitmap::publish`).
 ///
 /// # Safety
-/// `i < MAX_SHAPES`; one writer at a time (the service's apply and remove).
+/// `i < MAX_SHAPES`; one writer at a time (`Records::apply` and `Provider::detach`).
 pub unsafe fn publish(i: usize, samples: &[i16; SAMPLES], unipolar: bool) {
     let g = at(i);
     bitmap::retract(g);

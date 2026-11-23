@@ -168,7 +168,7 @@ fn fixture(device: u32) -> Fixture {
             ("settings", "a load writes no setting"),
         ],
         bad: module(2, &[(KIND_LFO_SHAPE, &[SHAPE_BAD])], bad),
-        // none: `check` refuses a table that is too full or an id kept already, and `apply_record` has no other limit
+        // none: `check` refuses a table that is too full or an id kept already, and `Records::apply` has no other limit
         bad_late: None,
         rules: true,
         parked_knobs: None,

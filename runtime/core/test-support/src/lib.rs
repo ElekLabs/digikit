@@ -62,12 +62,13 @@ pub enum Call {
 }
 
 /// The platform facts of a `FakeCore` (`SampleHost`): the sample files in a `FakeStorage`, whether the pool adapter is in the image and whether the
-/// samples are files of the store (a DN2) or of the firmware's file system (a DT2). The interrupt mask is a counter: `masked` says how many masks are open.
+/// samples are files of the store (a DN2) or of the firmware's file system (a DT2). The interrupt mask is a counter: `masked` says how many masks are open, `masks_taken` how many were opened in all.
 pub struct FakeHost {
     pub storage: FakeStorage,
     pub pool: Cell<bool>,
     pub in_store: Cell<bool>,
     pub masked: Cell<u32>,
+    pub masks_taken: Cell<u32>,
 }
 
 impl FakeHost {
@@ -77,6 +78,7 @@ impl FakeHost {
             pool: Cell::new(true),
             in_store: Cell::new(false),
             masked: Cell::new(0),
+            masks_taken: Cell::new(0),
         }
     }
 }
@@ -91,6 +93,7 @@ impl FakeHost {
     /// Mask interrupts (a counter: `masked` says how many masks are open); the old status register.
     pub fn mask_irq(&self) -> u32 {
         self.masked.set(self.masked.get() + 1);
+        self.masks_taken.set(self.masks_taken.get() + 1);
         0x2700
     }
     pub fn restore_irq(&self, _sr: u32) {

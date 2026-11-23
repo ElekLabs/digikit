@@ -129,7 +129,7 @@ fn a_shape_gets_a_number_goes_through_check_apply_and_remove() {
         ),
         OK
     );
-    let s = shape(7).expect("apply_record kept the shape");
+    let s = shape(7).expect("Records::apply kept the shape");
     assert_eq!((s[0], s[1], s[31]), (-1000, -900, 2100));
     assert_eq!((owner_of(7), used()), (1, 1));
     assert_eq!(name_of(7), Some(*b"RAMP"));
@@ -350,17 +350,48 @@ fn a_record_of_another_service_and_the_other_check_steps_are_not_its_business() 
 }
 
 #[test]
-fn the_writes_to_the_table_leave_the_interrupt_mask_released() {
+fn each_write_to_the_table_takes_the_interrupt_mask_once_and_releases_it() {
     let (_g, core, mut lfo) = fresh();
     settle(&mut lfo, &core, &[&[KEY_A]]);
     core.boot_index.set(0);
+    let before = core.host.masks_taken.get();
     assert_eq!(
         apply(&mut lfo, &core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", 0)),
         OK
     );
+    assert_eq!(
+        core.host.masks_taken.get(),
+        before + 1,
+        "the shape is stored under the mask"
+    );
     assert_eq!(core.host.masked.get(), 0);
     detach(&mut lfo, &core, 1);
+    assert_eq!(
+        core.host.masks_taken.get(),
+        before + 2,
+        "the slot is freed under the mask"
+    );
     assert_eq!(core.host.masked.get(), 0);
+}
+
+#[test]
+fn a_body_shorter_than_a_shape_record_is_refused_as_a_format_error() {
+    // `check` fixes the length first, so this is defence in depth: no real boot reaches it
+    let (_g, core, mut lfo) = fresh();
+    settle(&mut lfo, &core, &[&[KEY_A]]);
+    core.boot_index.set(0);
+    let short = body(KEY_A, b"RAMP", 0);
+    assert_eq!(
+        apply(
+            &mut lfo,
+            &core,
+            1,
+            KIND_LFO_SHAPE,
+            &short[..short.len() - 1]
+        ),
+        E_FORMAT
+    );
+    assert_eq!(used(), 0);
 }
 
 /// `name_into` for the WAVE value `value` with a buffer of `width + 1` bytes filled with 0xaa: (characters written, the buffer).
