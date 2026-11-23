@@ -8,97 +8,27 @@
 import { Match, Show, Switch, batch, createEffect, createMemo, createSignal, on, onMount, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import Segmented from '../components/Segmented';
-import { isCancelled, isNoRuntime, isTimeout } from '../../src/modules/backend';
-import { readTransfer } from '../../src/transfer/read-transfer';
-import { noteActivity } from '../../src/transfer/activity';
 import AutoRefresh from './AutoRefresh';
 import ConnectionBadge from './ConnectionBadge';
-import type { TransferApp } from '../../src/transfer/app';
 import { useTransferApp } from '../../src/transfer/app-context';
 import ModulesMode from './ModulesMode';
 import SourcePanel from './SourcePanel';
 import TransferBar from './TransferBar';
 import { MODES, modulesBar, parseMode } from '../../src/transfer/transfer-core';
-import { targetLabel } from '../../src/transfer/target';
-import { writing, type CancelledRun, type PageCtx } from './TransferParts';
-import { failureLine } from '../../src/transfer/wait-core';
+import { cancellable, cancelJob, runTransfer } from '../../src/transfer/run-transfer';
+import { writing, type PageCtx } from './TransferParts';
 import './transfer-page.css';
-
-const haltOn = (app: TransferApp, e: unknown): void => {
-  app.state.setHalted(isTimeout(e) || isNoRuntime(e));
-  app.state.setNoRuntime(isNoRuntime(e));
-};
-
-/** The one busy action. It is not made by the page: a job goes on when the page is left, and the old and the new page share it. */
-const run = async (app: TransferApp, what: string, f: () => Promise<void | CancelledRun>) => {
-  const { target } = app.target;
-  const { activeMode, beginJob, endJob, error, log, progress, setError, setHalted, setNoRuntime } = app.state;
-  if (!beginJob(what, cancellable(what) ? () => cancelJob(app) : undefined)) return;
-  noteActivity();
-  setError('');
-  // after a cancel or a "no reply" the device is not asked again at once (that would wait the whole time a second time)
-  let skipRead = false;
-  // a read is not logged (the page reads by itself); every other run is, with its result
-  const logRun = (failure?: unknown, cancelled?: string) => {
-    if (what === 'Reading') return;
-    const modules = activeMode() === 'modules';
-    app.env.logRun({
-      what,
-      target: targetLabel(target()),
-      lines: modules ? log() : (app.env.extras?.samples?.lines?.() ?? []),
-      message: modules ? progress()?.message : undefined,
-      ...(failure === undefined
-        ? cancelled === undefined
-          ? {}
-          : { cancelled: true, counts: cancelled }
-        : { error: failureLine(failure, targetLabel(target())), cancelled: isCancelled(failure) }),
-    });
-  };
-  try {
-    // a job that the user stopped is not a failure: no error line, the log says so, and both sides are read again
-    const result = await f();
-    setHalted(false);
-    setNoRuntime(false);
-    logRun(undefined, result ? result.cancelled : undefined);
-  } catch (e) {
-    skipRead = isCancelled(e) || isTimeout(e) || isNoRuntime(e);
-    haltOn(app, e);
-    setError(failureLine(e, targetLabel(target())));
-    logRun(e);
-  } finally {
-    if (!skipRead) {
-      app.state.beginReadback();
-      try {
-        await readTransfer(app);
-      } catch (e) {
-        haltOn(app, e);
-        if (!error()) setError(failureLine(e, targetLabel(target())));
-      }
-    }
-    if (endJob()) void run(app, 'Reading', async () => {});
-    app.env.extras?.onJobEnd?.();
-  }
-};
-
-/** The jobs whose Cancel is safe: a file is atomic on the card (the store changes at END only, and a cut-off upload is ABORTed), so a cancel
- * leaves the files that were verified and none half done. Delete and Restart are short and have nothing to stop in the middle. */
-const cancellable = (what: string): boolean => what === 'Uploading' || what === 'Installing';
-
-/** Stop the running job: no later file starts, and every request that waits on the session ends as cancelled. */
-const cancelJob = (app: TransferApp): void => {
-  app.state.askStop();
-  app.target.cancelPending();
-};
 
 /** `onFlash`: starts the one-click Flash flow from a service refusal (the host gives it: the desktop opens its Firmware page, the site links to its own). */
 export default function TransferPage(props: { onFlash?: () => void }): JSX.Element {
   const app = useTransferApp();
   const { env } = app;
-  const { target, rescanTargets } = app.target;
+  const { target, rescanTargets, switching } = app.target;
   const { connection } = app.connection;
   const {
     activeMode,
     busy,
+    deviceInfo,
     error,
     halted,
     jobProgress,
@@ -114,10 +44,10 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
   } = app.state;
   const [reload, setReload] = createSignal(0);
 
-  const ctx: PageCtx = { busy, run: (what, f) => run(app, what, f), setError, reload };
+  const ctx: PageCtx = { busy, run: (what, f) => runTransfer(app, what, f), setError, reload };
   const readNow = () => {
     setHalted(false);
-    void run(app, 'Reading', async () => {});
+    void runTransfer(app, 'Reading', async () => {});
   };
   const autoRead = () => {
     if (!halted()) readNow();
@@ -142,30 +72,35 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
     ),
   );
 
-  // back on the page during a job: that job's end reads; a read now would only wait behind it
+  // A write reads at its end. An unfinished first Samples listing may have been interrupted while away.
   onMount(() => {
-    if (!busy()) void run(app, 'Reading', async () => {});
+    const job = busy();
+    if (
+      !job ||
+      (job === 'Reading' && activeMode() === 'samples' && !deviceInfo() && env.extras?.samples?.readInterrupted())
+    )
+      void runTransfer(app, 'Reading', async () => {});
   });
-  // another target: what was read from the old one is not shown; read the new one
+  // Read a new target, or recover a first Samples listing interrupted by a failed switch.
   createEffect(
-    on(
-      target,
-      () => {
-        setHalted(false);
+    on([target, switching], ([selected, changing], previous) => {
+      if (!previous || changing) return;
+      const [priorTarget, wasChanging] = previous;
+      if (selected !== priorTarget) {
         setDeviceInfo(undefined);
         setDelTicks(new Set<string>());
-        env.extras?.samples?.reset();
-        void run(app, 'Reading', async () => {});
-      },
-      { defer: true },
-    ),
+        readNow();
+      } else if (wasChanging && activeMode() === 'samples' && !deviceInfo()) {
+        readNow();
+      }
+    }),
   );
   // another mode: the device line is the mode's own (its free space), so read it again
   const changeMode = (value: string) => {
     setMode(parseMode(value));
     setError('');
     setDeviceInfo(undefined);
-    void run(app, 'Reading', async () => {});
+    void runTransfer(app, 'Reading', async () => {});
   };
 
   // the bar along the bottom, for the install, delete or restart of Modules and the upload of Samples
@@ -197,7 +132,7 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
   // the status bar shows the same fraction and line
   createEffect(() => {
     const b = bar();
-    if (b?.running) jobProgress(b.info.fraction, b.info.message);
+    if (activeMode() === 'modules' && b?.running) jobProgress(b.info.fraction, b.info.message);
   });
 
   return (

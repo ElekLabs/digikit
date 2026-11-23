@@ -41,6 +41,6 @@ Request has no payload. Reply: NUL-terminated strings `"00"`, `"79"`, `"1.16"` o
 - packages/dk-session/src/identify.ts holds `RPC_PING`, `RPC_SOFTWARE_VERSION`, `parsePing`, `parseSoftwareVersion` and `identifyDevice`. connection-core.ts (packages/workbench-core/src/transfer) re-exports them.
 - `identifyDevice` sends Ping first and takes the model name from the reply. It matches the name with the registry. Then it sends SoftwareVersion for the OS version. Then it sends one INFO with a 2.5 s timeout and one retry; E_BUSY is retried. Only a lost INFO reply means "no runtime".
 - When Ping is silent, the id comes from the `port` field of the INFO reply. When Ping is silent and INFO is lost too, `identifyDevice` throws.
-- The desktop samples backend (apps/desktop/ui/src/samples-backend.ts) and tools/devtools/wb.mjs identify devices with `identifyDevice`.
+- The [desktop Samples session](../../apps/desktop/ui/src/samples/device-session.ts) and tools/devtools/wb.mjs identify devices with `identifyDevice`.
 - `askSession` (firmware-ask.ts) and `osVersion` / `probeInfo` (transfer-backend.ts) use `parseSoftwareVersion` for the OS only. The Firmware page's `askDevice` returns `model` only from INFO (`info.port`), so it names no stock device.
 - `RpcPort.rpc(type, payload, timeoutMs)` carries the Ping request unchanged.

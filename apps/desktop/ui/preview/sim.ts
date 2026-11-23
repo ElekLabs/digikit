@@ -1,3 +1,4 @@
+import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 // The fake world of the UI preview: a device (modules and a samples tree), a samples folder on the computer, and how fast and how well the
 // device answers. The state can be set from the address (`?dev=empty&folder=files&speed=1.5`, see PARAMS) and while the page runs
 // (`window.__sim.set({ dev: 'noreply' })`), so a screenshot script (tools/devtools/ui_shots.mjs) reaches each state without clicking.
@@ -63,11 +64,11 @@ export const sim: SimState = {
 export const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** What a read of the device costs and whether it works: the states of the wait notice and the error line. */
-export async function deviceRead(): Promise<void> {
+export async function deviceRead(session: TargetBinding['session']): Promise<void> {
   switch (sim.dev) {
     case 'noreply': {
       // a real session over the mocked emulator capture, which never answers: the request waits, Cancel works, a timeout follows
-      await (await simApp.app!.target.session()).info();
+      await (await session()).info();
       return;
     }
     case 'error':

@@ -7,7 +7,8 @@ import { createPreviewSymbols } from './symbols-mock';
 import { createDesktopApps } from '../src/desktop-app';
 import { createTauriHost } from '../src/host/tauri-host';
 import type { WorkbenchEnvironment } from '../src/workbench-environment';
-import { setLocalFolder } from '../src/samples-state';
+import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
+import { SAMPLE_FOLDER_KEY } from '../src/samples/source';
 import { createPreviewAnalyzer } from './analyzer-mock';
 import { previewFirmware } from './default-modules-mock';
 import { createPreviewLibrary } from './module-library';
@@ -40,7 +41,10 @@ export function createWorkbenchEnvironment(): WorkbenchEnvironment {
     analyzer: createPreviewAnalyzer(),
     symbols: createPreviewSymbols(),
   };
-  const apps = createDesktopApps(host, undefined, previewSessions(stores, emulator.hasRuntime));
+  const storage = localStorageKeyValue();
+  if (sim.folder === 'none') storage.remove(SAMPLE_FOLDER_KEY);
+  else storage.set(SAMPLE_FOLDER_KEY, SAMPLES_ROOT);
+  const apps = createDesktopApps(host, storage, previewSessions(stores, emulator.hasRuntime));
   bindSimApp(apps.app);
   if (page === 'firmware') {
     apps.app.target.startOn({ kind: 'midi', port: firmwarePort });
@@ -53,7 +57,6 @@ export function createWorkbenchEnvironment(): WorkbenchEnvironment {
     apps.app.target.startOn({ kind: 'emulator' });
   }
   if (query.has('mode')) apps.app.state.setMode(sim.mode);
-  setLocalFolder(sim.folder === 'none' ? '' : SAMPLES_ROOT);
   (window as unknown as { __sim: typeof control }).__sim = control;
   if (page === 'log') apps.drawer.select('Log');
 

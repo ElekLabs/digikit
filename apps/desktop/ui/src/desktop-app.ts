@@ -4,6 +4,9 @@ import { DkSession } from '@digi/dk-session';
 import { createFirmwareApp, type FirmwareApp } from '@digi/workbench-core/firmware/app.ts';
 import { localStorageKeyValue, type KeyValue } from '@digi/workbench-core/storage.ts';
 import { createTransferApp, type TransferApp } from '@digi/workbench-core/transfer/app.ts';
+import { runTransfer } from '@digi/workbench-core/transfer/run-transfer.ts';
+import { createSamplesApp } from './samples/app';
+import { createSamplesSlot } from './samples/slot';
 import { createSessionHub } from '@digi/workbench-core/transfer/session-core.ts';
 import { createEmulatorActions } from './emulator-actions';
 import { createDesktopEnv } from './desktop-env';
@@ -29,10 +32,21 @@ export function createDesktopApps(
   const emulatorActions = createEmulatorActions();
   let app!: TransferApp;
   const getApp = () => app;
-  app = createTransferApp(createDesktopEnv(host, getApp, tools.logWriter, emulatorActions.reloadWithRuntime), {
+  const samples = createSamplesApp({
+    fs: host.fs,
+    firmware: host.firmware,
     storage,
-    sessions,
+    getTarget: () => getApp().target,
+    getState: () => getApp().state,
+    getConnection: () => getApp().connection,
+    getBulk: () => getApp().env.bulk,
+    run: (what, job) => runTransfer(getApp(), what, job),
+    writer: tools.logWriter,
   });
+  app = createTransferApp(
+    createDesktopEnv(host, getApp, tools.logWriter, createSamplesSlot(samples), emulatorActions.reloadWithRuntime),
+    { storage, sessions },
+  );
   return {
     ...tools,
     emulatorActions,

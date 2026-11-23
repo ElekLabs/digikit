@@ -4,12 +4,15 @@ import { For, Show, createEffect, createSignal, createUniqueId, onCleanup, onMou
 import { Portal } from 'solid-js/web';
 import TargetSelect from './TargetSelect';
 import { useTransferApp } from '../../src/transfer/app-context';
+import type { CancelledRun } from '../../src/transfer/run-transfer';
 import { fmtRate } from '../../src/transfer/rate-core';
 import { createCheckingHint } from '../../src/transfer/checking-hint';
 import type { PaneSelect } from '../../src/transfer/pane-select';
 import { dragKind, selectState, toggleAll } from '../../src/transfer/select-core';
 import { linkHint, linkTag } from '../../src/transfer/link-core';
 import { deleteLabel, freeLine, tickCountText, writing, type RowTag } from '../../src/transfer/transfer-core';
+
+export type { CancelledRun } from '../../src/transfer/run-transfer';
 
 /** What the page gives each mode: the one busy action, and the error line. */
 export interface PageCtx {
@@ -19,11 +22,6 @@ export interface PageCtx {
   setError: (m: string) => void;
   /** Changes when the page reads by itself (the target selector reads the MIDI ports again). */
   reload: () => number;
-}
-
-/** What a job that the user stopped returns (it is not a failure): what it did, as the log says it (`87 of 357 uploaded, 270 not sent`). */
-export interface CancelledRun {
-  cancelled: string;
 }
 
 /** What the page shows beside a file while it is sent: a bar, or a chip; `message` is the tooltip of the chip. */

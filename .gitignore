@@ -40,6 +40,7 @@ tools/sharc_dev/sharcspec/ghidra/SHARC_VISA/
 samples/
 # the samples service crate is code
 !services/samples/
+!apps/desktop/ui/src/samples/
 # Local folder of user sample audio; never committed
 sample-test/
 plus_drive/

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { readSamplePanes } from '../src/samples-read.ts';
+import { readSamplePanes } from '../src/samples/read.ts';
 
 test('the local pane loads while the device read is still waiting', async () => {
   let finishDevice!: () => void;

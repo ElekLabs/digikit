@@ -91,10 +91,10 @@ export interface SamplesSlot {
   Mode: (props: { ctx: PageCtx }) => JSX.Element;
   /** Read both sides of the mode (throws when either fails). */
   read(): Promise<void>;
+  /** The current read has lost its target binding or started while the target was switching. */
+  readInterrupted(): boolean;
   /** Refresh only local files, without contacting the target. */
   readLocal(): Promise<void>;
-  /** Another target: forget what was read. */
-  reset(): void;
   /** The bar along the bottom for a running or finished upload. */
   bar(busy: string): { info: BarInfo; running: boolean } | undefined;
   /** One line per file of the last upload run, for the Log. */
