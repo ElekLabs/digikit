@@ -126,7 +126,7 @@ export async function providerBlocks(
 }
 
 /**
- * The block the core placed the system package in (its image, relocation table and bss), at the top of the arena. The core publishes it in the host directory
+ * The block the core placed the system package in (its image, relocation table and bss) in `DKRT_PKG`, apart from the arena. The core publishes it in the host directory
  * (`PACKAGE_LO`, `PACKAGE_HI`). The package is the runtime's own code, so its stores are allowed, and its statics lie in the block, which is not a stray target.
  */
 export async function packageBlock(

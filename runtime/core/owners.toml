@@ -26,7 +26,7 @@ shared = [
   "dkrt::package::handlers",
   "dkrt::resident_query",
   "dkrt::resident",    # the resident table: the thunks the package calls
-  "dkrt::stage1",      # stage 1: loads the system package from the card, places it at the arena top and starts it
+  "dkrt::stage1",      # stage 1: loads the system package from the card, places it in the package block and starts it
   "dkrt::boot_env",    # the boot's steps on the device: stage 1, the package start and the block given back
   "dkrt::host_dir",    # the host directory `DKRT_HOST_DIR` (tools find the package statics through it)
   "dkrt::package::resident", # the package's facade over it

@@ -111,7 +111,7 @@ pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> 
 }
 
 // The system package (docs/plans/resident-core-and-system-package.md) is its own artifact: the second object of this crate, built with `--features package-image` and packed
-// by `patchkit syspkg build` into digikit/system.dksp. Its entry is `package/image.rs`. The resident object holds no package code; stage 1 places the card file at the arena top.
+// by `patchkit syspkg build` into digikit/system.dksp. Its entry is `package/image.rs`. The resident object holds no package code; stage 1 places the card file in the package block (`DKRT_PKG`).
 // Host tests compile the package into their binary.
 #[cfg(any(test, feature = "package-image"))]
 mod package;
