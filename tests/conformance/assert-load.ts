@@ -46,7 +46,7 @@ export async function expectModuleLoad(
     'only the uploaded module and the debug module are registered',
   ).toEqual(names);
   expect((await session.status()).epoch, 'protocol restart boots another epoch').toBeGreaterThan(epoch);
-  const entries = await dk.list();
+  const entries = withoutSystemPackage(await dk.list());
   record(artifacts, 'store', entries);
   expect(entries.find((entry) => entry.path === storePath)).toEqual({
     path: storePath,
