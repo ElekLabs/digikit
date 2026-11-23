@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, test } from 'vitest';
-import { cardCacheRoot, repoRoot, type Device } from '@digi/test-support';
+import { cardCacheRoot, hasDsp, noDspDaemon, repoRoot, type Device } from '@digi/test-support';
 import { claimDir, newestFirst, pruneKeyDirs, type RunDirClaim } from './run-claim.ts';
 
 /** What a file without `devices` runs on: the devices with a ready snapshot. A device with a cold boot only (`st`) is named by the file. */
@@ -124,23 +124,12 @@ export function claimRunDir(device: Device): RunDirClaim | undefined {
   return claim;
 }
 
-/**
- * The daemon of a device that boots cold (no ready snapshot, so no entry in `dist/daemons.json`): the no-core build of `digi-control:daemon-nodsp`
- * (`dist/bin/digi-emud-nodsp`), which Nx builds for the halves of the devices with `[capabilities] dsp = "none"`.
- */
-function coldDaemon(device: Device): string {
-  const binary = path.join(repoRoot(), 'dist/bin/digi-emud-nodsp');
-  if (!fs.existsSync(binary))
-    throw new Error(`the ${device} daemon ${binary} is missing: run pnpm nx:pilot run digi-control:daemon-nodsp`);
-  return binary;
-}
-
 /** The device daemon: `DIGI_EMUD_<DEV>`, else the same key in `dist/daemons.json` (written by `digi-control:daemons`). */
 export function daemonBinary(device: Device): string {
   const key = `DIGI_EMUD_${device.toUpperCase()}`;
   const fromEnv = process.env[key];
   if (fromEnv) return fromEnv;
-  if (!ALL_DEVICES.includes(device)) return coldDaemon(device);
+  if (!hasDsp(device)) return noDspDaemon(device);
   const file = path.join(repoRoot(), 'dist/daemons.json');
   if (fs.existsSync(file)) {
     const value = (JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>)[key];

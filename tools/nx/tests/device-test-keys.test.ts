@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, matchesGlob } from 'node:path';
 import { afterAll, expect, it } from 'vitest';
 import { OTHER_DEVICE_FILES, deviceInputs, forDevice, subjectInputs, withoutDriver } from '../device-test-keys.mjs';
-import { cellShorts, filesOf } from '../device-files.mjs';
+import { cellShorts, filesOf, noDspShorts } from '../device-files.mjs';
 import { conformanceTarget } from '../device-tests.mjs';
 import { testSourceGlobs } from '../test-source.mjs';
 
@@ -77,6 +77,20 @@ it('a narrow key follows the built bytes of its device and leaves the built sour
   expect(outputGlobs(inputs)).toEqual(
     expect.arrayContaining(['dist/bytes/images-{device}.sha256', 'dist/bytes/daemon-test-{device}.key']),
   );
+});
+
+it('every key kind of a no-DSP half holds the no-DSP daemon hash, a DSP half keeps its daemon', () => {
+  const noDsp = noDspShorts()[0];
+  const dsp = cellShorts().find((s) => !noDspShorts().includes(s))!;
+  for (const opts of [{ merge: true }, { narrow: true }, {}]) {
+    const inputs = keyOf(opts);
+    const mine = outputGlobs(forDevice(inputs, noDsp));
+    expect(mine).toContain('dist/bytes/daemon-nodsp.sha256');
+    expect(mine).not.toContain('dist/daemons.json');
+    expect(mine.filter((g) => g.includes('daemon-test'))).toEqual([]);
+    expect(outputGlobs(forDevice(inputs, dsp))).not.toContain('dist/bytes/daemon-nodsp.sha256');
+  }
+  expect(outputGlobs(forDevice(keyOf({}), dsp))).toContain('dist/daemons.json');
 });
 
 const MERGE_BYTES = ['dist/bytes/images-*.sha256', 'dist/bytes/daemon-test-*.key'];
