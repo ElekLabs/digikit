@@ -201,7 +201,7 @@ fn the_appended_groups_are_the_last_ones_so_an_older_package_is_a_prefix() {
 }
 
 /// `PackageState.package_bytes` was appended to a shared view (RC2s-3): a view layout change is a major bump (`resident.rs`, "Shared views"), so the major is 2. A package built
-/// for major 2 refuses a core of major 1 (which has the shorter `PackageState`) with the version reason, and a package of major 1 refuses this core: no package reads a view
+/// for major 2 is refused by a core of major 1 (which has the shorter `PackageState`) and by a core of a later major, with the version reason: no package reads a view
 /// laid out for another major.
 #[test]
 fn a_change_of_a_shared_view_layout_is_a_major_version() {
