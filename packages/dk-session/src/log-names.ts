@@ -7,6 +7,7 @@ import type { AddrMapJson, DkProf, LoadTableJson } from './dkprof.ts';
 import type { AddrNamer } from './runtime-log.ts';
 import { DkError } from './dkupload-core.ts';
 import { CAP } from './gen_proto.ts';
+import { HOST_DIR_SYMBOL, hostAddress } from './host-directory.ts';
 
 /** What the controller answers to `runtime.maps` (docs/CONTROL.md). */
 export interface RuntimeMaps {
@@ -56,14 +57,23 @@ export async function readLoadTable(
   symbols: Record<string, number>,
   peek: Peek,
 ): Promise<LoadTableJson> {
-  const { reads } = prof.loadTable({ maps: [ship] }) as { reads: { symbol: string; len: number }[] };
-  const snapshot: Record<string, string> = {};
-  for (const { symbol, len } of reads) {
-    const base = symbols[symbol];
+  const { reads } = prof.loadTable({ maps: [ship] }) as { reads: { symbol: string; len: number; host_id?: number }[] };
+  const snapshot: Record<string, Uint8Array> = {};
+  for (const { symbol, len, host_id } of reads) {
+    // a resident symbol is in the image; a static of the system package is found through the host directory, which is read before it (`DKRT_HOST_DIR`)
+    let base: number | undefined;
+    if (host_id === undefined) base = symbols[symbol];
+    else base = hostAddress(snapshot[HOST_DIR_SYMBOL] ?? new Uint8Array(), host_id);
     if (base === undefined) throw new Error(`the image has no symbol ${symbol}`);
-    snapshot[symbol] = Array.from(await peek(base, len), (b) => b.toString(16).padStart(2, '0')).join('');
+    snapshot[symbol] = await peek(base, len);
   }
-  return prof.loadTable({ maps: [ship], snapshot }) as LoadTableJson;
+  const hex = Object.fromEntries(
+    Object.entries(snapshot).map(([symbol, bytes]) => [
+      symbol,
+      Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(''),
+    ]),
+  );
+  return prof.loadTable({ maps: [ship], snapshot: hex }) as LoadTableJson;
 }
 
 /** The ship map of the image a session talks to, with the addresses of its load-table symbols. */

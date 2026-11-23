@@ -32,10 +32,10 @@ runtimeTests('the workbench names addresses of the runtime and of a module throu
   const wasm = path.join(path.dirname(new URL(import.meta.url).pathname), '../../../apps/web/public/dkprof.wasm');
   expect(fs.existsSync(wasm), `${wasm}: run nx run dkprof:wasm`).toBe(true);
   const prof = await DkProf.create(new Uint8Array(fs.readFileSync(wasm)));
-  // the symbols the load table reads, as the ship map names them, and DKRT_STATE for the module record below
-  const { reads } = prof.loadTable({ maps: [JSON.parse(fs.readFileSync(shipMap, 'utf8'))] }) as { reads: { symbol: string }[] };
+  // the resident symbols the load table reads, as the ship map names them (a read with a host_id is a package static: the names find it through the host directory), and DKRT_STATE for the module record below
+  const { reads } = prof.loadTable({ maps: [JSON.parse(fs.readFileSync(shipMap, 'utf8'))] }) as { reads: { symbol: string; host_id?: number }[] };
   const symbols = Object.fromEntries(
-    [...new Set(['DKRT_STATE', ...reads.map((r) => r.symbol)])].map((name) => [name, planSymbol(plan, name)]),
+    [...new Set(['DKRT_STATE', ...reads.filter((r) => r.host_id === undefined).map((r) => r.symbol)])].map((name) => [name, planSymbol(plan, name)]),
   );
   const names = createLogNames({
     prof: async () => prof,

@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./gen_proto": "./src/gen_proto.ts",
+    "./host-directory": "./src/host-directory.ts",
     "./dksample": "./src/dksample.ts",
     "./dkprof": "./src/dkprof.ts",
     "./log-names": "./src/log-names.ts",

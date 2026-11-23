@@ -297,6 +297,8 @@ export const DRIVER_ROOTS = ['packages/dk-session/', 'packages/test-support/', '
 export const DRIVER_SUBJECT_FILES = [
   'packages/dk-session/src/gen_proto.ts',
   'packages/dk-session/src/gen_bulk.ts',
+  'packages/dk-session/src/gen_host_dir.ts',
+  'packages/dk-session/src/host-directory.ts',
   'packages/dk-session/src/runtime-log.ts',
   'packages/dk-session/src/log-names.ts',
   'packages/dk-session/src/runtime-events.ts',

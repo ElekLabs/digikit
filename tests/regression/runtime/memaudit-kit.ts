@@ -13,7 +13,7 @@ import {
   sweepMachineList,
   type PanelMachine,
 } from './project-kit.ts';
-import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
+import { packageSymbol, planSymbol, type RuntimePlan } from './runtime-plan.ts';
 
 /**
  * The ColdFire memory audit (port of tools/patchkit/pk_digikit_memaudit.py).
@@ -106,7 +106,7 @@ export async function providerBlocks(
   session: Session,
   plan: RuntimePlan,
 ): Promise<Pick<DkModule, 'name' | 'cf_base' | 'cf_size'>[]> {
-  const table = planSymbol(plan, 'DKRT_PROVIDERS');
+  const table = await packageSymbol(session, plan, 'PROVIDERS');
   const RECORD = 52; // bytes of one `Module` record
   const out: Pick<DkModule, 'name' | 'cf_base' | 'cf_size'>[] = [];
   for (let j = 0; j < PROVIDER_MAX; j++) {

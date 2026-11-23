@@ -110,7 +110,7 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
         });
         const base = {
           roots: [...RT, 'core/digikit-menu'],
-          symbols: [...CARD_SYMBOLS, 'DKRT_ARENA', 'DKRT_PROVIDERS', '_dl_area'],
+          symbols: [...CARD_SYMBOLS, 'DKRT_ARENA', 'DKRT_HOST_DIR', '_dl_area'],
           // a run-time machine needs machines.dks, a service with a DSP part: only a coupled session installs it (service-files.ts)
           dsp: spec.machines?.length ? ('sharc' as const) : ('zero' as const),
         };

@@ -11,7 +11,7 @@ import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { dynType } from '@digi/regression/runtime/project-kit.ts';
 import { moduleRingEvents } from '@digi/regression/runtime/runtime-menu.ts';
-import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
+import { packageSymbol, planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { LOADED } from '@digi/regression/runtime/synth.ts';
 import { bootEntries, COUPLED_ROOTS, SYMBOLS, type Entry } from './capacity-helpers.ts';
 
@@ -85,7 +85,7 @@ async function expectNothing(rig: CardRig, got: Awaited<ReturnType<typeof bootEn
   ).toEqual([0, 0, 0]);
   expect(cap.DSP_AREA!.used, 'and holds no DSP range').toBe(0);
   expect(cap.ARENA!.used, 'and no arena block: the services started for it went down with it').toBe(0);
-  expect((await word(rt.session, planSymbol(rig.plan, 'DKRT_TABLE_BAD'))) >>> 24, 'the firmware tables are intact').toBe(0);
+  expect((await word(rt.session, await packageSymbol(rt.session, rig.plan, 'TABLE_BAD'))) >>> 24, 'the firmware tables are intact').toBe(0);
   expect(await moduleRingEvents(rt.session, rig.plan, 'MODULE_COMMIT'), 'a refused commit logs no MODULE_COMMIT').toHaveLength(0);
 }
 

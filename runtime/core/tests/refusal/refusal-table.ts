@@ -27,19 +27,19 @@ const REFUSAL = 'runtime/core/tests/refusal/refusal.device.test.ts';
 const CAPACITY = 'runtime/core/tests/capacity/capacity.device.test.ts';
 const COMMIT = 'runtime/core/tests/capacity/commit.device.test.ts';
 const NEEDS = 'runtime/apps/digikit-menu/tests/needs.device.test.ts';
-const ASSEMBLY = 'runtime/core/src/rs/src/loader/tests/assembly_tests.rs';
-const IMAGE_RS = 'runtime/core/src/rs/src/loader/image.rs';
+const ASSEMBLY = 'runtime/core/src/rs/src/package/loader/tests/assembly_tests.rs';
+const IMAGE_RS = 'runtime/core/abi/src/image.rs';
 const SAFE = 'runtime/core/tests/safe-mode.device.test.ts';
-const COLLECT = 'runtime/core/src/rs/src/collect/tests.rs';
+const COLLECT = 'runtime/core/src/rs/src/package/collect/tests.rs';
 const MACHINES_BUILD = 'services/machines/tests/build.rs';
 const CAP_RS = 'runtime/core/sdk/src/capacity/tests.rs';
 const STORE_RS = 'runtime/core/sdk/src/store/tests.rs';
-const CLEANUP = 'runtime/core/src/rs/src/cleanup_tests.rs';
+const CLEANUP = 'runtime/core/src/rs/src/package/cleanup_tests.rs';
 const CONTRACT = 'runtime/core/src/rs/src/contract_tests.rs';
 const LFO_DEVICE = 'runtime/core/tests/lfo/lfo.device.test.ts';
 const SAMPLES_RS = 'runtime/core/sdk/src/sample_tracks/tests.rs';
 
-const RELOAD_TESTS = 'runtime/core/src/rs/src/reload/tests';
+const RELOAD_TESTS = 'runtime/core/src/rs/src/package/reload/tests';
 const RELOAD_REFUSALS = `${RELOAD_TESTS}/refusals.rs`;
 const RELOAD_UNLOAD = `${RELOAD_TESTS}/unload.rs`;
 const RELOAD_RELOAD = `${RELOAD_TESTS}/reload.rs`;
@@ -99,7 +99,7 @@ export const ROWS: Record<string, Row> = {
     reason: 'a SELECT result, and a live load that finds no free selection index',
     covered: [
       { file: CAP_RS, test: 'E_SEL_COUNT' },
-      { file: 'runtime/core/src/rs/src/boot.rs', test: 'a_live_load_takes_the_index_its_path_had_at_the_boot' },
+      { file: 'runtime/core/abi/src/boot_path/tests.rs', test: 'a_live_load_takes_the_index_its_path_had_at_the_boot' },
     ],
   },
   E_SEL_WRITE: { kind: 'open', reason: 'the block write of the selection record fails: needs a card that refuses writes' },

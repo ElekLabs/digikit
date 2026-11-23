@@ -3,7 +3,7 @@ import { bootInfo, E_LOADING } from '@digi/regression/runtime/card-kit.ts';
 import { CARD_SYMBOLS, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { word } from '@digi/regression/runtime/fx-live.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
-import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
+import { packageSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { LOADED, type Geometry, type Want } from '@digi/regression/runtime/synth.ts';
 import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 import { stateName, statesFor } from '@digi/regression/runtime/load-states.ts';
@@ -15,7 +15,7 @@ export interface Entry {
   want: Want;
 }
 
-export const SYMBOLS = [...CARD_SYMBOLS, 'DKRT_ARENA', '_dl_area', 'DKRT_TABLE_BAD'];
+export const SYMBOLS = [...CARD_SYMBOLS, 'DKRT_ARENA', '_dl_area', 'DKRT_HOST_DIR'];
 export const popcount = (n: number) => n.toString(2).replace(/0/g, '').length;
 const resultOk = (got: number, want: Want) => (want === LOADED ? got === 0 || got === E_LOADING : got === want);
 
@@ -94,7 +94,7 @@ export async function expectBoot(
     g.paramRows,
     g.pageRows,
   ]);
-  const bad = (await word(rt.session, planSymbol(rig.plan, 'DKRT_TABLE_BAD'))) >>> 24;
+  const bad = (await word(rt.session, await packageSymbol(rt.session, rig.plan, 'TABLE_BAD'))) >>> 24;
   expect(
     [bad, (await ringEvents(rt.session, rig.plan, 'TABLE_BAD')).length],
     'the table check never failed: a refused module left nothing behind',

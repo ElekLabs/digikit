@@ -332,7 +332,7 @@ export async function bootInfo(session: Session, plan: RuntimePlan) {
   };
 }
 
-/** The offset of `DkrtBootInfo.states` (after the 10 words before `results`, the results, dsp_wait, stable and `needs`; asserted by `abi.toml`'s layout check). */
+/** The offset of `DkrtBootInfo.states` (after the 10 words before `results`, the results, core_cause, stable and `needs`; asserted by `abi.toml`'s layout check). */
 const BI_STATES_AT = 176;
 
 /**

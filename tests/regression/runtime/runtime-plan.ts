@@ -8,7 +8,9 @@ import {
   type SessionOptions,
   type PreparedRuntimeImage,
 } from '@digi/test-support';
+import { HOST_DIR_SYMBOL, readHostAddress, type HostName } from '@digi/dk-session';
 import { rootSets } from './image-roots.ts';
+import { word } from './guest-access.ts';
 import { patchkitCovered } from './patchkit-exec.ts';
 
 export interface RuntimePlan {
@@ -46,6 +48,20 @@ export function planSymbol(plan: RuntimePlan, name: string): number {
   );
   if (addresses.size !== 1) throw new Error(`symbol ${name}: ${addresses.size} addresses in the plan`);
   return [...addresses][0]!;
+}
+
+/**
+ * The address of a static of the system package (`DKRT_PROVIDERS` is `PROVIDERS`). The package is a card file placed at a different address each boot, so the plan has no
+ * symbol for it: the resident core's host directory (`DKRT_HOST_DIR`, a plan symbol) holds it, and the package fills it at its entry. Throws "no package loaded" for an empty
+ * entry (a core-only boot, or no package file). Read it after the boot; a reload that restarts the runtime places the package again.
+ */
+export async function packageSymbol(session: Session, plan: RuntimePlan, name: HostName): Promise<number> {
+  const peek = async (addr: number, len: number) => {
+    const bytes = Buffer.alloc(Math.ceil(len / 4) * 4);
+    for (let i = 0; i < bytes.length; i += 4) bytes.writeUInt32BE(await word(session, addr + i), i);
+    return bytes.subarray(0, len);
+  };
+  return readHostAddress(peek, planSymbol(plan, HOST_DIR_SYMBOL), name);
 }
 
 export function validateRuntimePlan(
