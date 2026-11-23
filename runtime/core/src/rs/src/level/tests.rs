@@ -258,9 +258,10 @@ fn only_a_normal_boot_or_one_the_counter_caused_counts_itself() {
 }
 
 #[test]
-fn only_a_core_only_boot_caused_by_crashes_keeps_the_counter() {
-    assert!(Level::CoreOnly(CoreOnlyReason::Crashes).keeps_counter());
-    assert!(!Level::CoreOnly(CoreOnlyReason::PackageMissing).keeps_counter());
+fn every_core_only_boot_keeps_the_counter() {
+    for reason in [CoreOnlyReason::Crashes, CoreOnlyReason::PackageMissing, CoreOnlyReason::PackageIncompatible, CoreOnlyReason::PackageDamaged, CoreOnlyReason::PackageUnreadable] {
+        assert!(Level::CoreOnly(reason).keeps_counter(), "{reason:?}");
+    }
     assert!(!Level::Safe(SafeReason::Counter).keeps_counter());
     assert!(!Level::Normal.keeps_counter());
 }

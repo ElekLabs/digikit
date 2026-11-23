@@ -368,7 +368,7 @@ fn a_package_that_cannot_run_makes_a_core_only_boot_that_is_not_a_crash() {
             let r = held(&f).unwrap();
             assert_eq!((r.boot_counter, r.seq), (1, seq), "{status:?}: the boot was not counted");
             stable_period(&f);
-            assert_eq!(counter(&f), 0, "{status:?}: a card state is no crash: the stable period clears the counter as in any boot");
+            assert_eq!(counter(&f), 1, "{status:?}: a card state adds no count, and a core-only boot clears none: the stable period leaves the counter");
             assert!(boot(&f, End::Early).loaded, "{status:?}: the next boot with a good package runs it");
         }
     }
@@ -474,8 +474,8 @@ fn a_fault_in_the_package_entry_counts_toward_safe_mode_and_core_only() {
     }
 }
 
-/// A package that was placed and accepted but gives no hooks cannot run on this core: the boot is core-only with `CORE_INCOMPATIBLE` (nothing crashed, so the counter
-/// is cleared by the stable period as for any package refusal), the block goes back and the host directory is empty.
+/// A package that was placed and accepted but gives no hooks cannot run on this core: the boot is core-only with `CORE_INCOMPATIBLE` (the boot stays counted, and
+/// its stable period does not clear the counter), the block goes back and the host directory is empty.
 #[test]
 fn a_package_that_gives_no_hooks_makes_a_core_only_boot_that_is_incompatible() {
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
@@ -489,7 +489,7 @@ fn a_package_that_gives_no_hooks_makes_a_core_only_boot_that_is_incompatible() {
             let steps = env.steps.borrow().clone();
             assert!(steps.contains(&"package") && steps.contains(&"abandon") && !steps.contains(&"load"), "{steps:?}");
             assert!(!hooks::installed(), "no hooks were installed");
-            assert_eq!(counter(&f), 0, "the stable period of a core-only boot that no crash caused clears the count");
+            assert_eq!(counter(&f), 1, "the start counted this boot, and the stable period of a core-only boot does not clear it");
             assert!((0..dkrt_sdk::HOST_COUNT as u32).all(|id| (*core::ptr::addr_of!(crate::host_dir::DKRT_HOST_DIR)).get(id).is_none()));
         });
     }
@@ -580,11 +580,11 @@ fn a_start_failure_clears_what_the_core_filled_before_it() {
     }
 }
 
-/// The counter of a package that fails to start, over the real boot. The boot is counted before the package's entry runs (a fault there must count), and a failure that
-/// returns is no crash: the stable period of its core-only boot clears the count, as for a package refused on the card. A boot that ends early leaves the count, so a package that
-/// fails and then crashes the boot works its way up the same ladder as any crash: safe boots, then core-only by crashes, which keeps the counter until the package is written or RETRY runs.
+/// The counter of a package that fails to start, over the real boot. The boot is counted before the package's entry runs (package code ran, so a failure counts like a
+/// crash), and a core-only boot never clears the counter, stable period or not: repeated start failures climb to CORE_ONLY_AFTER and core-only by crashes. Only the package
+/// file written or RETRY clears it.
 #[test]
-fn a_start_failure_counts_its_boot_until_the_stable_period_and_retry_clears_the_ladder() {
+fn a_start_failure_counts_its_boot_and_only_the_package_file_or_retry_clears_the_ladder() {
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let failing = |f: &FakePlatform, end: End| {
@@ -596,28 +596,25 @@ fn a_start_failure_counts_its_boot_until_the_stable_period_and_retry_clears_the_
                 (b, started)
             })
         };
-        // a failure whose boot reaches the stable period: counted during the boot, cleared by the period; the next boot with a good package is normal
+        // one failure whose boot reaches the stable period: counted during the boot, and the period leaves the count
         let f = fresh_card();
         let (b, started) = failing(&f, End::FirstPass);
         assert_eq!((b.core_only, b.cause, started), (true, CORE_INCOMPATIBLE, true));
         assert_eq!(counter(&f), 1, "counted before the package started");
         stable_period(&f);
-        assert_eq!(counter(&f), 0, "no crash: the stable period of the core-only boot clears the count");
-        let b = boot(&f, End::Stable);
-        assert_eq!((b.safe, b.loaded), (false, true));
-        assert_eq!(counter(&f), 0);
+        assert_eq!(counter(&f), 1, "a core-only boot proves nothing: the stable period does not clear the count");
 
-        // failures whose boots end early (a crash behind each): the counter climbs, safe boots count themselves, and at CORE_ONLY_AFTER the package is not started any more
+        // repeated start failures, each with a stable period: the counter climbs, and at CORE_ONLY_AFTER the package is not started any more
         let f = fresh_card();
         for want in 1..=CORE_ONLY_AFTER {
-            let (b, started) = failing(&f, End::Early);
+            let (b, started) = failing(&f, End::Stable);
             assert_eq!((b.core_only, b.cause, started), (true, CORE_INCOMPATIBLE, true), "boot {want}");
-            assert_eq!(counter(&f), want, "boot {want}: the boot counts itself, whatever level the failure then gives");
+            assert_eq!(counter(&f), want, "boot {want}: the boot counts itself and its stable period clears nothing");
         }
-        let (b, started) = failing(&f, End::Early);
+        let (b, started) = failing(&f, End::Stable);
         assert_eq!((b.core_only, b.cause, started), (true, CORE_CRASHES, false), "from the fourth count the package is not tried");
-        assert_eq!(counter(&f), CORE_ONLY_AFTER, "core-only by crashes keeps the counter");
-        // RETRY (or writing the package) clears it: the next boot runs the package, normal and counted from zero
+        assert_eq!(counter(&f), CORE_ONLY_AFTER, "core-only by crashes keeps the counter, stable period or not");
+        // the package file written (or RETRY, `package_counter_tests`) clears it: the next boot runs the package, normal and counted from zero
         new_boot();
         package_written_with(&f);
         assert_eq!(counter(&f), 0);
@@ -626,4 +623,3 @@ fn a_start_failure_counts_its_boot_until_the_stable_period_and_retry_clears_the_
         assert_eq!(counter(&f), 0);
     }
 }
-

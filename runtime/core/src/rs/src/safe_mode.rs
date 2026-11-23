@@ -1,5 +1,5 @@
 //! Safe mode and the stable period: the safe-mode key, and the UI-loop pass that clears the boot counter once the session has been stable
-//! (`DKRT_STABLE_BLOCKS` DSP blocks, in a safe boot too). A core-only boot that crashes caused leaves the counter as it is (`KEEP_COUNTER`).
+//! (`DKRT_STABLE_BLOCKS` DSP blocks, in a safe boot too). A core-only boot never clears it (`KEEP_COUNTER`).
 
 use crate::boot::{info, INFO_MAGIC};
 use crate::dlog;
@@ -23,8 +23,7 @@ pub static mut DKRT_UI_START: Knob = Knob(0);
 static mut UI_PASSES: u32 = 0;
 /// The boot counter a stable session leaves behind: 1 after a boot that found the crash record of a session that had been stable, else 0.
 pub(crate) static mut LATE_FLOOR: u32 = 0;
-/// This boot is core-only because crashes went on (`Level::keeps_counter`): the stable period does not clear the counter, so the next boot is core-only
-/// again. Writing the system package file or RETRY clears it (`clear_counter_with`).
+/// This boot is core-only, whatever the cause (`Level::keeps_counter`): the stable period does not clear the counter. Writing the system package file or RETRY clears it (`clear_counter_with`).
 pub(crate) static mut KEEP_COUNTER: bool = false;
 /// UI-loop passes after which a block counter that has not moved at all is taken for dead and the counter is cleared as in the first
 /// pass of old (the UI loop runs 30 to 120 times a second: 1800 passes are 15 s to a minute).
@@ -78,7 +77,7 @@ pub(crate) unsafe fn ui_pass_with<P: Platform>(p: &P) {
     if elapsed >= period || dead {
         b.stable = 1;
         // A boot that followed a crash in a stable session leaves one bad boot counted (`LATE_FLOOR`), so that a second such crash leads to safe mode.
-        // With SAFE_READ the record is unknown: the counter stays as it is. A core-only boot that crashes caused keeps it (`KEEP_COUNTER`).
+        // With SAFE_READ the record is unknown: the counter stays as it is. A core-only boot keeps it (`KEEP_COUNTER`).
         let floor = LATE_FLOOR;
         if !KEEP_COUNTER {
             clear_counter_with(p, floor, b.reason == SAFE_READ);

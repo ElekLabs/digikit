@@ -215,7 +215,7 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
             crate::host_dir::complete();
         } else {
             // the package was placed and its table accepted, yet it gave no hooks (or there is no block to audit): it cannot run on this core. The boot stays counted: the package's
-            // entry ran, and a fault in it would have counted (the stable period of this core-only boot clears the count, as for any core-only boot no crash caused)
+            // entry ran, and a fault in it would have counted. Like every core-only boot, its stable period does not clear the count: repeated start failures climb to CORE_ONLY_AFTER
             env.abandon_package();
             crate::host_dir::clear();
             level = Level::CoreOnly(CoreOnlyReason::PackageIncompatible);
