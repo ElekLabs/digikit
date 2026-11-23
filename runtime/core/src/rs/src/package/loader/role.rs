@@ -103,6 +103,10 @@ unsafe fn hook_items<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<
     let mut i = 0;
     while let Some((hash, entry, _)) = keys.words(tag::HOOKS, i) {
         i += 1;
+        // the entry of another device (one name may have an entry for each of disjoint devices)
+        if !dkneeds::keys::hook_for_device(entry, l.p.device_id()) {
+            continue;
+        }
         let entry = entry & dkneeds::keys::HOOK_ENTRY_MASK;
         let site = match l.port_keys() {
             Some((port, ..)) => port.find_site(hash),
@@ -173,7 +177,7 @@ unsafe fn service_check<P: PackagePlatform, M: Images, R: Registry>(l: &mut Load
 
 /// What `init` of a service file declares is compared with the file's header table. The table's `HOOKS` items carry a device mask in the top byte of the entry and list
 /// the hooks of every device; this device's declarations hold the bare entry and only the hooks the firmware has. The copy of the table that is compared is made to
-/// match: the mask is dropped, and so is each hook that the port file lists as absent (a hook that it does not list stays, and the later `E_IMPORT` names it). A `SLOTS` item
+/// match: an item for another device is dropped with its mask cleared, and so is each hook that the port file lists as absent (a hook that it does not list stays, and the later `E_IMPORT` names it). A `SLOTS` item
 /// carries a device mask too (bits 16 to 23 of its flags): an item for another device is dropped, and the mask of the others is cleared (`init` declares flags without it).
 #[inline(never)]
 pub(super) unsafe fn filter_hooks<P: PackagePlatform, M: Images, R: Registry>(l: &Loader<P, M, R>, keys: &mut crate::package::collect::KeysCopy) {
@@ -193,6 +197,9 @@ pub(super) unsafe fn filter_hooks<P: PackagePlatform, M: Images, R: Registry>(l:
             it.b &= !dkneeds::keys::SLOT_DEVICES_MASK;
         }
         if it.tag == tag::HOOKS {
+            if !dkneeds::keys::hook_for_device(it.b, l.p.device_id()) {
+                continue;
+            }
             it.b &= dkneeds::keys::HOOK_ENTRY_MASK;
             let gone = match &port {
                 Some((p, ..)) => matches!(p.find_site(it.a), Some(s) if s.flags & FLAG_ABSENT != 0),

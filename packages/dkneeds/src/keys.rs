@@ -79,9 +79,17 @@ pub mod tag {
 /// Bytes of one `FWNAMES` item and of one `SITES` item.
 pub const NAME_BYTES: usize = 12;
 pub const SITE_BYTES: usize = 20;
-/// The low 24 bits of a `HOOKS` entry of a service file are the image offset of the entry; the top byte is the device mask the packer wrote (the port file's `absent`
-/// flag does the work of the mask at run time, so the loader drops it).
+/// The low 24 bits of a `HOOKS` entry of a service file are the image offset of the entry; the top byte is the device mask the packer wrote: bit `id - 1` is the device
+/// whose runtime id (`[digikit] id` of its device file) is `id`, no bit is every device. One hook name may have an entry for each of disjoint devices (the port file of a
+/// device gives the site); the loader takes the items for its own device ([`hook_for_device`]) and drops the mask.
 pub const HOOK_ENTRY_MASK: u32 = 0x00ff_ffff;
+pub const HOOK_DEVICES_SHIFT: u32 = 24;
+
+/// Whether a `HOOKS` item with entry word `entry` is for the device with runtime id `device_id` (1 to 8).
+pub fn hook_for_device(entry: u32, device_id: u32) -> bool {
+    let mask = entry >> HOOK_DEVICES_SHIFT;
+    mask == 0 || (1..=8).contains(&device_id) && mask & (1 << (device_id - 1)) != 0
+}
 /// Bit 31 of an `EXPORTS` entry limits it to consumers that specify its provider.
 pub const EXPORT_BOUND: u32 = 1 << 31;
 /// Bit 30 explicitly identifies the resident query facet, never a card import.
@@ -1124,6 +1132,17 @@ mod tests {
         assert!(slot_for_device(first, 1) && !slot_for_device(first, 2));
         assert!(slot_for_device(first | second | SLOT_DSP, 2) && !slot_for_device(second, 1));
         assert!(!slot_for_device(first, 0) && !slot_for_device(first, 9));
+    }
+
+    #[test]
+    fn a_hook_device_mask_selects_devices_by_runtime_id_and_none_means_all() {
+        let entry = 0x1234;
+        assert!(hook_for_device(entry, 1) && hook_for_device(entry, 2));
+        assert!(hook_for_device(entry | 1 << HOOK_DEVICES_SHIFT, 1));
+        assert!(!hook_for_device(entry | 1 << HOOK_DEVICES_SHIFT, 2));
+        assert!(hook_for_device(entry | 3 << HOOK_DEVICES_SHIFT, 2));
+        assert!(!hook_for_device(entry | 2 << HOOK_DEVICES_SHIFT, 0));
+        assert!(!hook_for_device(entry | 2 << HOOK_DEVICES_SHIFT, 9));
     }
 
     fn table_with(groups: &[(u32, &[u32])]) -> Vec<u8> {

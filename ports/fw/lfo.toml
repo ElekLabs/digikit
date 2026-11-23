@@ -114,7 +114,7 @@ users = ["core/services/lfo"]
 doc = "DT2 0x4013946a, DN2 0x40137852: the second reader: the clear of the start phase for RAND (the target of the beq at `read_start`)."
 
 [[hook]]
-name = "cf.lfo.hook.tick_call_dt2"
+name = "cf.lfo.hook.tick_call"
 site = "cf.lfo.site.tick_call"
 cpu = "cf"
 mode = "replace"
@@ -126,7 +126,7 @@ users = ["core/services/lfo"]
 doc = "The LFO tick, the compare of the clamped wave D3 with 6 before the call of the wave function table (interrupt context). exit.1 is the RAND code, exit.2 the code after the call (the result in d0); the end of the site is the table call of the stock waves. DT2 0x40139804: `moveq 6,D7; cmp.l D3,D7; beq 0x40139832`. Dead at the RAND code (0x40139832): D0 and the flags (strict); at the code after the call (0x4013989e): D2, D3, D5, D7 and the flags, D1 is live (the stock call path keeps it in its frame, the routine saves it); A0 and A1 are not proven dead there (strict), so the routine saves them too. The block is A3 (wave byte at 2(a3))."
 
 [[hook]]
-name = "cf.lfo.hook.tick_call_dn2"
+name = "cf.lfo.hook.tick_call"
 site = "cf.lfo.site.tick_call"
 cpu = "cf"
 mode = "replace"
@@ -138,7 +138,7 @@ users = ["core/services/lfo"]
 doc = "The LFO tick, the compare of the clamped wave D3 with 6 before the call of the wave function table (interrupt context). exit.1 is the RAND code, exit.2 the code after the call (the result in d0); the end of the site is the table call of the stock waves. DN2 0x40137cc6: `moveq 6,D0; cmp.l D3,D0; beq 0x40137cec`. Dead at the RAND code (0x40137cec): D0 and the flags; at the code after the call (0x40137d52): D1, D2 and the flags (the DN2 stock call path keeps no register in its frame, so the routine saves no D1); A0 and A1 are not proven dead there (strict), so the routine saves them. The block is A4 (wave byte at 0x4c(a4))."
 
 [[hook]]
-name = "cf.lfo.hook.tick_slew_dt2"
+name = "cf.lfo.hook.tick_slew"
 site = "cf.lfo.site.tick_slew"
 cpu = "cf"
 mode = "replace"
@@ -150,7 +150,7 @@ users = ["core/services/lfo"]
 doc = "The LFO tick, the compare of D3 with 6 before the slew code of RAND (interrupt context). exit.1 skips the slew code; the end of the site is the slew code. DT2 0x4013986c: `moveq 6,D2; cmp.l D3,D2; bne 0x4013989e`. Dead where the stock fall-through (the slew code, 0x40139872) continues: D0, D2, D3, D5, D7, A0, A1 and N Z V C; at 0x4013989e: D2, D3, D5, D7 and the flags. D0 (the table result) and D1 are live."
 
 [[hook]]
-name = "cf.lfo.hook.tick_slew_dn2"
+name = "cf.lfo.hook.tick_slew"
 site = "cf.lfo.site.tick_slew"
 cpu = "cf"
 mode = "replace"
@@ -162,7 +162,7 @@ users = ["core/services/lfo"]
 doc = "The LFO tick, the compare of D3 with 6 before the slew code of RAND (interrupt context). exit.1 skips the slew code; the end of the site is the slew code. DN2 0x40137d1e: `moveq 6,D1; cmp.l D3,D1; bne 0x40137d52`. Dead where the stock fall-through (the slew code, 0x40137d24) continues: D0, D1, D2, A0, A1 and N Z V C; at 0x40137d52: D1, D2 and the flags. D0 (the table result) is live."
 
 [[hook]]
-name = "cf.lfo.hook.tick_start_dt2"
+name = "cf.lfo.hook.tick_start"
 site = "cf.lfo.site.tick_start"
 cpu = "cf"
 mode = "replace"
@@ -174,7 +174,7 @@ users = ["core/services/lfo"]
 doc = "The LFO tick, the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger (interrupt context). exit.1 is the clear; the end of the site is the SPH-based phase. DT2 0x4013977e: `moveq 6,D0; cmp.l D3,D0; beq 0x4013979a`. Dead at the clear (0x4013979a): D1, D2, D7 and N Z V C; at the SPH phase code (0x40139784): D0, D1, D2, D7 and N Z V C."
 
 [[hook]]
-name = "cf.lfo.hook.tick_start_dn2"
+name = "cf.lfo.hook.tick_start"
 site = "cf.lfo.site.tick_start"
 cpu = "cf"
 mode = "replace"
@@ -186,7 +186,7 @@ users = ["core/services/lfo"]
 doc = "The LFO tick, the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger (interrupt context). exit.1 is the clear; the end of the site is the SPH-based phase. DN2 0x40137c40: `moveq 6,D0; cmp.l D3,D0; beq 0x40137c5c`. Dead at the clear (0x40137c5c): D1, D2, D7 and N Z V C; at the SPH phase code (0x40137c46): D0, D1, D2, D7 and N Z V C."
 
 [[hook]]
-name = "cf.lfo.hook.read_call_dt2"
+name = "cf.lfo.hook.read_call"
 site = "cf.lfo.site.read_call"
 cpu = "cf"
 mode = "replace"
@@ -198,7 +198,7 @@ users = ["core/services/lfo"]
 doc = "The second reader of the LFO tables, the compare of D3 with 6 before the call of the wave function table (interrupt context; d7 is live). exit.1 is the RAND code, exit.2 the code after the call. DT2 0x401394dc: `moveq 6,D0; cmp.l D3,D0; beq 0x40139512`. Dead at the RAND code (0x40139512): D0 and the flags; at the code after the call (0x4013957a): D2, D3, A6 and the flags, D1 and D0 are live. The stock fall-through needs the upper bits of D0 clear (`move.b #0x32,D0b` after the moveq): the routine sets D0 itself. The block is A4 (wave byte at 0x2a(a4))."
 
 [[hook]]
-name = "cf.lfo.hook.read_call_dn2"
+name = "cf.lfo.hook.read_call"
 site = "cf.lfo.site.read_call"
 cpu = "cf"
 mode = "replace"
@@ -210,7 +210,7 @@ users = ["core/services/lfo"]
 doc = "The second reader of the LFO tables, the compare of D3 with 6 before the call of the wave function table (interrupt context; d7 is live). exit.1 is the RAND code, exit.2 the code after the call. DN2 0x401378c4: `moveq 6,D0; cmp.l D3,D0; beq 0x401378fa`. Dead at the RAND code (0x401378fa): D0 and the flags; at the code after the call (0x40137962): D2, D3, A6 and the flags, D1 and D0 are live. The stock fall-through needs the upper bits of D0 clear (`move.b #0x32,D0b` after the moveq): the routine sets D0 itself. The block is A4 (wave byte at 0x2a(a4))."
 
 [[hook]]
-name = "cf.lfo.hook.read_slew_dt2"
+name = "cf.lfo.hook.read_slew"
 site = "cf.lfo.site.read_slew"
 cpu = "cf"
 mode = "replace"
@@ -222,7 +222,7 @@ users = ["core/services/lfo"]
 doc = "The second reader, the compare of D3 with 6 before the slew code (interrupt context). exit.1 skips the slew code. DT2 0x4013954a: `moveq 6,D2; cmp.l D3,D2; bne 0x4013957a`. Dead where the stock fall-through (0x40139550) continues: D0, D2, D3, A1, A6 and N Z V C; at 0x4013957a: D2, D3, A6 and the flags."
 
 [[hook]]
-name = "cf.lfo.hook.read_slew_dn2"
+name = "cf.lfo.hook.read_slew"
 site = "cf.lfo.site.read_slew"
 cpu = "cf"
 mode = "replace"
@@ -234,7 +234,7 @@ users = ["core/services/lfo"]
 doc = "The second reader, the compare of D3 with 6 before the slew code (interrupt context). exit.1 skips the slew code. DN2 0x40137932: `moveq 6,D2; cmp.l D3,D2; bne 0x40137962`. Dead where the stock fall-through (0x40137938) continues: D0, D2, D3, A1, A6 and N Z V C; at 0x40137962: D2, D3, A6 and the flags."
 
 [[hook]]
-name = "cf.lfo.hook.read_start_dt2"
+name = "cf.lfo.hook.read_start"
 site = "cf.lfo.site.read_start"
 cpu = "cf"
 mode = "replace"
@@ -246,7 +246,7 @@ users = ["core/services/lfo"]
 doc = "The second reader, the compare of D3 with 6 that gives RAND a start phase of 0 (interrupt context). exit.1 is the clear. DT2 0x4013944e: `moveq 6,D2; cmp.l D3,D2; beq 0x4013946a`. Dead at the clear (0x4013946a): D2, D6 and N Z V C; at the SPH phase code (0x40139454): D0, D2, D6 and N Z V C."
 
 [[hook]]
-name = "cf.lfo.hook.read_start_dn2"
+name = "cf.lfo.hook.read_start"
 site = "cf.lfo.site.read_start"
 cpu = "cf"
 mode = "replace"

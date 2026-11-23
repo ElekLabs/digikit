@@ -123,7 +123,7 @@ These extend [sdk.md](../plans/sdk.md) section 10.
 | SDK contract | `dk_<group>_<verb>`, `dk_<thing>`, `DK_<GROUP>_<NAME>` |
 | Runtime core | C API `dkrt_<noun>_<verb>`, statics `DKRT_<NAME>`, crates `dkrt-<part>` |
 | Shipped service | crate `dkrt-svc-<x>`, file `<x>.dks`, id `core/services/<x>`, core-only exports `dk_<x>_<what>` with `internal = true` |
-| Image module | id `core/<name>`; symbols with the module's short prefix; slots `<service>_<site>` (after port step 3 the device part goes: `lfo_dt2_tick_call` becomes `lfo_tick_call`) |
+| Image module | id `core/<name>`; symbols with the module's short prefix; slots `<service>_<site>` (the device part is not in a name: one hook name has an entry for each of disjoint `devices`) |
 | Port | anchors `cf.<area>.<class>.<name>`; imports `dk_fw_`, `dk_exit_`, `dk_ret_`, `dk_stock_`, `dk_tail_`; routines `port_<service>_<hook>`; callbacks into a service `dk_<service>_<verb>` in a declared group |
 
 A local service package may use a different ID prefix. The last component of its ID must match the `service` name in `[module]` and the stem of its `.dks` file. The [local-ping fixture](../../tests/fixtures/modules/local-ping/module.toml) uses ID `test/local-ping` for service `local-ping`.

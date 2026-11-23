@@ -505,6 +505,9 @@ impl Images for Card {
         for i in 0..keys.decl.n {
             let mut d = keys.decl.items[i];
             if d.tag == Declare::HOOK {
+                if !dkneeds::keys::hook_for_device(d.b, self.device) {
+                    continue;
+                }
                 d.b &= dkneeds::keys::HOOK_ENTRY_MASK;
                 if port.as_ref().is_some_and(|p| p.find_site(d.a).is_some_and(|x| x.flags & dkneeds::keys::FLAG_ABSENT != 0)) {
                     continue;
@@ -800,7 +803,11 @@ fn binds_of(dev: Dev, l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
         let t = table_of(file);
         let keys = Keys::parse(&t).unwrap();
         for i in 0..keys.count(tag::HOOKS) {
-            let hash = keys.words(tag::HOOKS, i).unwrap().0;
+            let (hash, entry, _) = keys.words(tag::HOOKS, i).unwrap();
+            // the entry of another device (one name may have an entry for each device)
+            if !dkneeds::keys::hook_for_device(entry, dev.profile.id) {
+                continue;
+            }
             let site = port.find_site(hash).expect("the port file lists the hook");
             if site.flags & dkneeds::keys::FLAG_ABSENT == 0 {
                 out.push((hash, site.addr));
@@ -1057,8 +1064,8 @@ fn an_lfo_loads_with_the_lfo_service_file() {
         let stock = stock_sites(*dev);
         let mut got = Vec::new();
         for i in 0..keys.count(tag::HOOKS) {
-            let hash = keys.words(tag::HOOKS, i).unwrap().0;
-            if port.find_site(hash).is_some_and(|s| s.flags & dkneeds::keys::FLAG_ABSENT == 0) {
+            let (hash, entry, _) = keys.words(tag::HOOKS, i).unwrap();
+            if dkneeds::keys::hook_for_device(entry, dev.profile.id) && port.find_site(hash).is_some_and(|s| s.flags & dkneeds::keys::FLAG_ABSENT == 0) {
                 got.push((hash, stock[&hash].1.clone()));
             }
         }
@@ -1066,7 +1073,7 @@ fn an_lfo_loads_with_the_lfo_service_file() {
         let mut want: Vec<(u32, Vec<u8>)> = LFO_TICK_SITES
             .iter()
             .filter(|s| s.0 == dev.name)
-            .map(|s| (name(std::format!("{}_{}", s.1, dev.name).as_str()), s.2.to_vec()))
+            .map(|s| (name(s.1), s.2.to_vec()))
             .collect();
         want.extend(std::vec![
             (name("wave_name"), std::vec![0x4e, 0x56, 0xff, 0xe4, 0x70, 0x06]),
@@ -1117,7 +1124,7 @@ fn the_lfo_tick_hooks_patch_their_stock_sites_and_the_unload_restores_them() {
             let sites: Vec<(u32, [u8; 6])> = LFO_TICK_SITES
                 .iter()
                 .filter(|s| s.0 == dev.name)
-                .map(|s| (stock[&name_hash(std::format!("cf.lfo.hook.{}_{}", s.1, dev.name).as_str())].0, s.2))
+                .map(|s| (stock[&name_hash(std::format!("cf.lfo.hook.{}", s.1).as_str())].0, s.2))
                 .collect();
             assert_eq!(sites.len(), 6, "{}", dev.name);
             let read = |l: &Boot, addr: u32| {
@@ -1149,7 +1156,7 @@ fn lfo_sites_are_stock(dev: Dev, l: &Boot) {
     let stock = stock_sites(dev);
     let mut n = 0;
     for s in LFO_TICK_SITES.iter().filter(|s| s.0 == dev.name) {
-        let (addr, _) = stock[&name_hash(std::format!("cf.lfo.hook.{}_{}", s.1, dev.name).as_str())];
+        let (addr, _) = stock[&name_hash(std::format!("cf.lfo.hook.{}", s.1).as_str())];
         let mut b = [0u8; 6];
         unsafe { l.p.read_code(addr, &mut b) };
         assert_eq!(b, s.2, "{}: {addr:#x} is not stock", dev.name);
@@ -2055,6 +2062,7 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
                     let d = header.items[*i];
                     // a slot fill of another device's image is skipped by the loader
                     !(d.tag == Declare::HOOK && port.find_site(d.a).is_some_and(|x| x.flags & dkneeds::keys::FLAG_ABSENT != 0))
+                        && !(d.tag == Declare::HOOK && !dkneeds::keys::hook_for_device(d.b, dev.profile.id))
                         && !(d.tag == Declare::SLOT && !dkneeds::keys::slot_for_device(d.b, dev.profile.id))
                 })
                 .map(|i| plain(header.items[i].tag, header.items[i].a, header.items[i].b & !dkneeds::keys::SLOT_DEVICES_MASK))

@@ -277,9 +277,15 @@ impl Manifest {
                     "{id}: [[hook]] needs a `name` and an `entry`, both not empty"
                 ));
             }
-            if hooks.iter().any(|(n, _, _)| *n == h.name) {
+            // one name may be declared once for each of disjoint devices (an entry without `devices` is for every device)
+            if hooks.iter().any(|(n, _, d)| {
+                *n == h.name
+                    && (d.is_empty()
+                        || h.devices.is_empty()
+                        || d.iter().any(|x| h.devices.contains(x)))
+            }) {
                 return Err(err!(
-                    "{id}: [[hook]] {:?} is declared twice (one name has one entry, so a hook for two devices is one entry without `devices`)",
+                    "{id}: [[hook]] {:?} is declared twice for a common device (one name has one entry for each device, `devices` apart)",
                     h.name
                 ));
             }

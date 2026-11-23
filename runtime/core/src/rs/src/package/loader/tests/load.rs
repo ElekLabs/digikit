@@ -655,14 +655,15 @@ fn an_export_name_another_provider_published_undoes_the_load_and_keeps_the_other
     }
 }
 
-/// The packer writes a device mask in the top byte of a `HOOKS` entry: the loader ignores it (the port file's `absent` flag does its work), compares the bare entry
-/// with what `init` declares and jumps to the bare entry.
+/// The packer writes a device mask in the top byte of a `HOOKS` entry (bit `id - 1` for the runtime id): the loader takes the item for its device, compares the bare
+/// entry with what `init` declares and jumps to the bare entry.
 #[test]
 fn the_device_mask_in_a_hooks_entry_is_dropped() {
-    use dkneeds::keys::{name_hash, Pair, Table};
+    use dkneeds::keys::{name_hash, Pair, Table, HOOK_DEVICES_SHIFT};
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let hooks = [Pair { a: name_hash("hook.a"), b: 4 | 0x02 << 24 }];
+        let me = provider_loader(service_file(&svc_table(), 0), svc_init()).p.device_id();
+        let hooks = [Pair { a: name_hash("hook.a"), b: 4 | (1 << (me - 1)) << HOOK_DEVICES_SHIFT }];
         let table = Table { hooks: &hooks, ..svc_table() };
         let mut l = provider_loader(service_file(&table, 0), svc_init());
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
@@ -671,6 +672,37 @@ fn the_device_mask_in_a_hooks_entry_is_dropped() {
     }
 }
 
+/// One hook name with an entry for each device (disjoint masks): the loader installs the entry of its own device at the site of its port file, whichever order the items
+/// have, and `init` declares only that entry. A name whose only item is for another device is skipped (the firmware of this device has no such site).
+#[test]
+fn one_hook_name_with_an_entry_for_each_device_installs_the_entry_of_the_running_device() {
+    use dkneeds::keys::{name_hash, Pair, Table, HOOK_DEVICES_SHIFT};
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let me = provider_loader(service_file(&svc_table(), 0), svc_init()).p.device_id();
+        let other = if me == 1 { 2 } else { 1 };
+        let bit = |id: u32| (1u32 << (id - 1)) << HOOK_DEVICES_SHIFT;
+        for mine_first in [true, false] {
+            // this device's entry is 4 (what svc_init declares), the other's is 12
+            let mut hooks = vec![Pair { a: name_hash("hook.a"), b: 4 | bit(me) }, Pair { a: name_hash("hook.a"), b: 12 | bit(other) }];
+            if !mine_first {
+                hooks.reverse();
+            }
+            let hooks: &'static [Pair] = Box::leak(hooks.into_boxed_slice());
+            let table = Table { hooks, ..svc_table() };
+            let mut l = provider_loader(service_file(&table, 0), svc_init());
+            assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK, "mine first: {mine_first}");
+            let t = records::module(MAX_MODULES).base + 4;
+            assert_eq!(site_bytes(&l, 6), [0x4e, 0xf9, (t >> 24) as u8, (t >> 16) as u8, (t >> 8) as u8, t as u8], "mine first: {mine_first}");
+        }
+        // the only item is for the other device: no site is taken, and `init` (which declares `hook.a`) disagrees with the table
+        let hooks: &'static [Pair] = Box::leak(Box::new([Pair { a: name_hash("hook.a"), b: 4 | bit(other) }]));
+        let table = Table { hooks, ..svc_table() };
+        let mut l = provider_loader(service_file(&table, 0), Init::Declare(Box::leak(Box::new([(dkrt_abi::service::Declare::EXPORT, name_hash("dk_svctest_ping"), 8)]))));
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
+        assert_eq!(site_bytes(&l, 6), STOCK[..6], "the site stays stock");
+    }
+}
 
 #[test]
 fn the_name_of_a_module_event_is_the_part_of_the_id_after_the_slash_cut_to_the_log_width() {
