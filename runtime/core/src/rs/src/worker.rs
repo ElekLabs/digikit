@@ -176,6 +176,12 @@ unsafe fn submit() -> bool {
     true
 }
 
+/// The jobs of record `rec` that are still in the table, for a test.
+#[cfg(test)]
+pub unsafe fn jobs_of(rec: usize) -> usize {
+    (*addr_of_mut!(TABLE)).iter().filter(|j| j.state != FREE && j.owner == rec as u8 + 1).count()
+}
+
 /// Call `done` of a freed entry in the UI task with the module's source set.
 unsafe fn deliver(job: Job, status: i32) {
     if job.quiet {

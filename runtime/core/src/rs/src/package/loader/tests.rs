@@ -82,6 +82,12 @@ enum Init {
     Declare(&'static [(u16, u32, u32)]),
     /// A service file: declares `TEST_ROW`.
     DeclaresRow,
+    /// Posts a worker job and adds a poll function at its own address, as the file's code would (`dk_job_post`, `dkrt_poll_add`), and returns `OK`.
+    PostsJobAndPoll,
+}
+
+unsafe extern "C" fn probe_step(_: *mut u8) -> i32 {
+    0
 }
 
 struct Nothing;
@@ -195,6 +201,11 @@ impl Images for FakeImages {
             // (`ctx` is the context address as a u32: not a host pointer)
             Init::DeclaresRow => crate::package::collect::dk_service_declare_row(core::ptr::addr_of_mut!(crate::package::entry::DKRT_CTXS[rec]) as *mut u8, &TEST_ROW),
             Init::Fails(e) => e,
+            Init::PostsJobAndPoll => {
+                assert!(crate::worker::post(rec as u8 + 1, Some(probe_step), None, core::ptr::null_mut()) > 0);
+                assert_eq!(crate::api::dkrt_poll_add(init as usize), OK);
+                OK
+            }
             Init::NeedsUsbBulk => {
                 stub_missing("core/usb-bulk");
                 E_MISSING

@@ -500,7 +500,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// repeatable), and the DSP rows are cleared (`dsp::quiesce`, which `unload_body` repeats). The live job asks before it takes a module down, so that a busy module still gets its tick back.
     pub(crate) unsafe fn package_retire_ready(&mut self, id: PackageId) -> bool {
         let rec = record_of(id);
-        crate::package::files::retire(rec) && crate::package::resident::worker::retire(rec) && retire_sdk(rec) && dsp::quiesce(rec)
+        retire_jobs(rec) && dsp::quiesce(rec)
     }
 
     /// Set the loader's phase for the duration of a bring-up that the package manager drives: the services read it (`resident_query` is for after the boot).

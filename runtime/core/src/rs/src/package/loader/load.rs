@@ -268,9 +268,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             crate::package::resident::intro::discard(rec);
             crate::package::module_ui::withdraw(rec);
         }
-        let held = !crate::package::files::retire(rec) | !retire_sdk(rec);
-        crate::package::module_cmds::release_cmds(rec as u8 + 1);
-        crate::package::resident::dlog::release_sinks(rec);
+        let held = !retire_jobs(rec);
+        let m: &Module = records::module(rec);
+        drop_registrations(rec, m.base, m.size);
         (RoleSteps::<P, M, R>::of(self.roles[rec] as u32).undo)(self, rec);
         self.r.remove(rec);
         if module && !dsp::release(rec) || held {
@@ -281,6 +281,6 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
 
     /// A file or I/O step of the record still runs, or the DSP loader keeps a module's rows: the record must not be freed yet.
     pub(super) unsafe fn cannot_retire(&mut self, rec: usize) -> bool {
-        (rec < MAX_MODULES && dsp::retained()) || !crate::package::files::retire(rec) || !retire_sdk(rec)
+        (rec < MAX_MODULES && dsp::retained()) || !retire_jobs(rec)
     }
 }

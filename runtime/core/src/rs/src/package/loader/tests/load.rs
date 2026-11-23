@@ -675,3 +675,27 @@ fn the_name_of_a_module_event_is_the_part_of_the_id_after_the_slash_cut_to_the_l
     assert_eq!(super::name_part(&field(b"")), want(b""));
 }
 
+
+/// What a file's `init` leaves in the resident tables (a worker job, a poll function) is gone when the load is refused after `init`, for a provider and for a content
+/// module: the block is freed then, and a queued job or poll slot would call freed code.
+#[test]
+fn a_refused_commit_after_init_leaves_no_job_and_no_poll_of_the_file() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let polls = |lo: u32, hi: u32| (*core::ptr::addr_of!(crate::state::DKRT_POLLS)).iter().filter(|&&f| f >= lo as usize && f < hi as usize).count();
+        // a provider: init declares nothing, so the commit refuses (E_DECL_KIND)
+        let mut l = provider_loader(service_file(&svc_table(), 0), Init::PostsJobAndPoll);
+        let rec = MAX_MODULES;
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_DECL_KIND);
+        let m = records::module(rec);
+        assert_eq!((crate::worker::jobs_of(rec), polls(m.base, m.base + m.size)), (0, 0), "provider");
+        assert!(l.m.live.is_empty());
+        // a content module: the registry refuses the row
+        let mut l = loader(Init::PostsJobAndPoll);
+        l.r.add_result = E_NO_REGISTRY;
+        assert_eq!(l.load(PATH.as_ptr()), E_NO_REGISTRY);
+        let m = records::module(0);
+        assert_eq!((crate::worker::jobs_of(0), polls(m.base, m.base + m.size)), (0, 0), "module");
+        assert!(l.m.live.is_empty());
+    }
+}

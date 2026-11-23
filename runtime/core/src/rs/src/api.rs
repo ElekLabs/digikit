@@ -174,8 +174,16 @@ unsafe fn poll_owner(f: usize) -> u8 {
     POLL_OWNER_RUNTIME
 }
 
-/// Free the poll slots whose function lies in `[base, base + size)` (a module that is released).
+/// Free the poll slots and the unload-observer slots whose function lies in `[base, base + size)` (a file that is released, or whose load was refused after its `init`).
 pub(crate) unsafe extern "C" fn poll_drop_range(base: u32, size: u32) {
+    let obs = &mut *addr_of_mut!(DKRT_UNLOAD_OBSERVERS);
+    let mut j = 0;
+    while j < OBSERVERS {
+        if obs[j] != 0 && (obs[j] as u64).wrapping_sub(base as u64) < size as u64 {
+            obs[j] = 0;
+        }
+        j += 1;
+    }
     let t = &mut *addr_of_mut!(DKRT_POLLS);
     let mut i = 0;
     while i < POLLS {
