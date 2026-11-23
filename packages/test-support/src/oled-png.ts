@@ -1,12 +1,10 @@
 import { crc32, deflateSync } from 'node:zlib';
 
-export const OLED_WIDTH = 128;
-export const OLED_HEIGHT = 64;
+import { OLED_FRAME_BYTES, OLED_HEIGHT, OLED_WIDTH, oledPixel } from '@digi/workbench-core/oled-frame.ts';
 
-/** A grayscale PNG of the 128x64 OLED from its 1024 decoded bytes (pixel (x, y) is bit y%8 of byte (7 - y/8) + 8*x), each pixel `scale` times. */
+/** A grayscale PNG of the OLED from its 1024 decoded bytes (layout: workbench-core `oled-frame.ts`), each pixel `scale` times. */
 export function oledPng(frame: Uint8Array, scale = 4): Buffer {
-  if (frame.length !== (OLED_WIDTH * OLED_HEIGHT) / 8)
-    throw new Error(`OLED frame is ${frame.length} bytes, expected 1024`);
+  if (frame.length !== OLED_FRAME_BYTES) throw new Error(`OLED frame is ${frame.length} bytes, expected 1024`);
   const w = OLED_WIDTH * scale;
   const h = OLED_HEIGHT * scale;
   const raw = Buffer.alloc((w + 1) * h);
@@ -15,7 +13,7 @@ export function oledPng(frame: Uint8Array, scale = 4): Buffer {
     const row = y * (w + 1);
     for (let x = 0; x < w; x++) {
       const sx = Math.floor(x / scale);
-      raw[row + 1 + x] = (frame[7 - (sy >> 3) + 8 * sx]! >> (sy & 7)) & 1 ? 255 : 0;
+      raw[row + 1 + x] = oledPixel(frame, sx, sy) ? 255 : 0;
     }
   }
   const chunk = (type: string, body: Buffer): Buffer => {
