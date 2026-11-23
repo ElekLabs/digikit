@@ -12,7 +12,7 @@
 use crate::fxsend::{self, Effect, Route};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::MAX_FX;
-use dkrt_sdk::{E_BUSY, LIVE_RELOAD};
+use dkrt_sdk::{E_BUSY, E_RELOAD_PLAYING, LIVE_RELOAD, OK};
 
 /// The popup a step shows next: its `done` callback calls the matching step.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,6 +45,9 @@ pub const LIST_MAX: usize = MAX_FX;
 pub const NAME_MAX: usize = 12;
 /// Bytes of a line, the NUL included (`DK_UI_ROW` and `DK_UI_TOAST` of <dk/platform/ui.h> are not longer).
 pub const LINE_MAX: usize = 32;
+
+/// What follows the route in the toast of a reload that waits for the transport to stop.
+const ON_STOP: &[u8] = b" ON STOP";
 
 /// The route texts, indexed by `Route::byte` (0 master, 1 send): the one copy of each.
 const ROUTE_TEXT: [&[u8]; 2] = [b"MASTER", b"SEND"];
@@ -123,6 +126,16 @@ pub struct Routing {
     row: usize,
     offered: [Route; 2],
     offered_len: usize,
+    /// The reload of the last pick is queued: the module id, its route and whether the toast of its end is due.
+    waiting: Option<Waiting>,
+}
+
+/// The pick whose reload job the service waits for.
+#[derive(Clone, Copy)]
+struct Waiting {
+    id: [u8; 32],
+    id_len: usize,
+    route: Route,
 }
 
 impl Routing {
@@ -133,6 +146,7 @@ impl Routing {
             row: 0,
             offered: [Route::Send; 2],
             offered_len: 0,
+            waiting: None,
         }
     }
 
@@ -203,8 +217,8 @@ impl Routing {
     }
 
     /// Route `index` of the second popup was chosen. A change saves the route first (a failed save queues nothing), then queues the reload of the effect's module; the job runs
-    /// later from the UI loop and reads the key. A busy job refuses the reload: the old route is written back, so the same pick can be made again. A reload the runtime refuses
-    /// leaves the saved route for the next boot.
+    /// later from the UI loop and reads the key. A busy job refuses the reload: the old route is written back, so the same pick can be made again. The toast of a queued
+    /// reload comes from `poll_job`, when the job has ended.
     pub fn pick_route<C: CoreApi, U: Ui>(&mut self, core: &C, ui: &mut U, index: usize) {
         if index >= self.offered_len {
             return;
@@ -231,12 +245,44 @@ impl Routing {
                 ui.toast(&Line::of("BUSY: TRY AGAIN"));
                 return;
             }
-            if queued != 0 {
+            if queued != OK {
                 ui.toast(line.put(b"RESTART TO APPLY"));
                 return;
             }
+            // the job may still refuse (the transport plays, a menu is open): its end decides the toast (`poll_job`)
+            self.waiting = Some(Waiting {
+                id: effect.id,
+                id_len: effect.id_len,
+                route,
+            });
+            return;
         }
         ui.toast(line.put(route_text(route)));
+    }
+
+    /// Once per UI pass: the end of the reload a pick queued. Success is the route's toast; a transport that plays defers the reload to its stop (`reload_when_possible`: the runtime
+    /// retries until then) and says so; any other refusal leaves the saved route for the next boot.
+    pub fn poll_job<C: CoreApi, U: Ui>(&mut self, core: &C, ui: &mut U) {
+        let Some(w) = self.waiting else { return };
+        // SAFETY: the UI task runs the tick
+        let job = unsafe { core.live_state() };
+        if job.phase != 2 || job.op != LIVE_RELOAD as u32 {
+            return;
+        }
+        self.waiting = None;
+        let id = &w.id[..w.id_len];
+        let mut line = Line::new();
+        line.put(name_of(id)).put(b": ");
+        if job.result == OK {
+            line.put(route_text(w.route));
+        } else if job.result == E_RELOAD_PLAYING {
+            // SAFETY: as above
+            unsafe { core.reload_when_possible(id) };
+            line.put(route_text(w.route)).put(ON_STOP);
+        } else {
+            line.put(b"RESTART TO APPLY");
+        }
+        ui.toast(&line);
     }
 
     /// The effect of list row `index`, when it still is the one that was listed.
@@ -248,31 +294,39 @@ impl Routing {
     }
 }
 
-/// Run `event` with the UI of `handle` (the `ui` of the owner): nothing for no UI. A host build has none.
+/// The UI of core/ui for the owner's `Reentry::apply` and tick: the functions of the service file (`dks/src/ui.rs`), linked with this crate. A host build has none.
+#[cfg(target_arch = "m68k")]
+mod handle {
+    use super::{Line, Step, Ui};
+    extern "C" {
+        fn dk_fx_ui_choice(
+            ui: usize,
+            title: *const Line,
+            items: *const Line,
+            n: usize,
+            step: u32,
+        ) -> bool;
+        fn dk_fx_ui_toast(ui: usize, text: *const Line);
+    }
+    pub struct HandleUi(pub usize);
+    impl Ui for HandleUi {
+        fn choice(&mut self, title: &Line, items: &[Line], step: Step) -> bool {
+            // SAFETY: the pointers are live for the call
+            unsafe { dk_fx_ui_choice(self.0, title, items.as_ptr(), items.len(), step as u32) }
+        }
+        fn toast(&mut self, text: &Line) {
+            // SAFETY: as above
+            unsafe { dk_fx_ui_toast(self.0, text) }
+        }
+    }
+}
+#[cfg(target_arch = "m68k")]
+use handle::HandleUi;
+
+/// Run `event` with the UI of `handle` (the `ui` of the owner): nothing for no UI.
 pub(crate) fn apply<C: CoreApi>(routing: &mut Routing, core: &C, handle: usize, event: Event) {
     #[cfg(target_arch = "m68k")]
     {
-        extern "C" {
-            fn dk_fx_ui_choice(
-                ui: usize,
-                title: *const Line,
-                items: *const Line,
-                n: usize,
-                step: u32,
-            ) -> bool;
-            fn dk_fx_ui_toast(ui: usize, text: *const Line);
-        }
-        struct HandleUi(usize);
-        impl Ui for HandleUi {
-            fn choice(&mut self, title: &Line, items: &[Line], step: Step) -> bool {
-                // SAFETY: functions of the service file (`dks/src/ui.rs`), linked with this crate; the pointers are live for the call
-                unsafe { dk_fx_ui_choice(self.0, title, items.as_ptr(), items.len(), step as u32) }
-            }
-            fn toast(&mut self, text: &Line) {
-                // SAFETY: as above
-                unsafe { dk_fx_ui_toast(self.0, text) }
-            }
-        }
         if handle != 0 {
             routing.run(core, &mut HandleUi(handle), event);
         }
@@ -280,6 +334,20 @@ pub(crate) fn apply<C: CoreApi>(routing: &mut Routing, core: &C, handle: usize, 
     #[cfg(not(target_arch = "m68k"))]
     {
         let _ = (routing, core, handle, event);
+    }
+}
+
+/// `Routing::poll_job` with the UI of `handle`; nothing for no UI.
+pub(crate) fn poll<C: CoreApi>(routing: &mut Routing, core: &C, handle: usize) {
+    #[cfg(target_arch = "m68k")]
+    {
+        if handle != 0 {
+            routing.poll_job(core, &mut HandleUi(handle));
+        }
+    }
+    #[cfg(not(target_arch = "m68k"))]
+    {
+        let _ = (routing, core, handle);
     }
 }
 

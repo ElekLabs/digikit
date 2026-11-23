@@ -225,7 +225,8 @@ fn a_changed_route_is_saved_and_the_effects_module_is_reloaded() {
         *a.core.live_calls.borrow(),
         [(LIVE_RELOAD, b"modules/fx/freqshift.dkm".to_vec())]
     );
-    assert_eq!(ui.toasts, ["FREQSHIFT: SEND"]);
+    // the reload is only queued: the toast follows its end
+    assert!(ui.toasts.is_empty());
 }
 
 #[test]
@@ -270,7 +271,7 @@ fn a_running_job_saves_nothing_so_the_pick_can_be_made_again() {
     let mut ui = FakeUi::default();
     pick(&a, &mut ui, 0, 1);
     assert_eq!(a.setting("fx/freqshift"), Some(std::vec![0]));
-    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER"]);
+    assert!(ui.toasts.is_empty());
 }
 
 #[test]
@@ -315,7 +316,7 @@ fn the_events_of_the_ui_callbacks_run_the_steps() {
     routing.run(&a.core, &mut ui, Event::Effect(0));
     routing.run(&a.core, &mut ui, Event::Route(0));
     assert_eq!(ui.choices.len(), 2);
-    assert_eq!(ui.toasts, ["FREQSHIFT: SEND"]);
+    assert_eq!(a.core.live_calls.borrow().len(), 1);
 }
 
 #[test]
@@ -323,4 +324,79 @@ fn a_name_that_is_not_ascii_shows_as_question_marks() {
     let mut line = Line::new();
     line.put("caf\u{e9}".as_bytes());
     assert_eq!(line.as_str(), "CAF??");
+}
+
+/// A pick of MASTER for the effect saved as SEND, its reload queued; `routing` waits for the job.
+fn queued_pick(a: &Arena, ui: &mut FakeUi) -> Routing {
+    let mut routing = Routing::new();
+    routing.list(&a.core, ui);
+    routing.pick_effect(&a.core, ui, 0);
+    routing.pick_route(&a.core, ui, 1);
+    routing
+}
+
+const E_PLAYING: i32 = dkrt_sdk::E_RELOAD_PLAYING;
+
+#[test]
+fn the_success_toast_waits_for_the_end_of_the_reload_job() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(1));
+    let mut ui = FakeUi::default();
+    let mut routing = queued_pick(&a, &mut ui);
+    // queued or running: nothing yet
+    a.core.live_job.set([1, 0, 2, 0, LIVE_RELOAD]);
+    routing.poll_job(&a.core, &mut ui);
+    assert!(ui.toasts.is_empty());
+    a.core.live_job.set([2, 0, 6, 0, LIVE_RELOAD]);
+    routing.poll_job(&a.core, &mut ui);
+    routing.poll_job(&a.core, &mut ui);
+    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER"], "once");
+    assert!(a.core.reload_when_possible.borrow().is_empty());
+}
+
+#[test]
+fn a_reload_refused_by_the_playing_transport_is_deferred_to_stop() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/freqshift", BOTH, Some(1));
+    let mut ui = FakeUi::default();
+    let mut routing = queued_pick(&a, &mut ui);
+    a.core
+        .live_job
+        .set([2, E_PLAYING as u32, 6, 0, LIVE_RELOAD]);
+    routing.poll_job(&a.core, &mut ui);
+    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER ON STOP"]);
+    assert_eq!(
+        *a.core.reload_when_possible.borrow(),
+        [b"fx/freqshift".to_vec()]
+    );
+    assert_eq!(
+        a.setting("fx/freqshift"),
+        Some(std::vec![0]),
+        "the key stays saved"
+    );
+}
+
+#[test]
+fn a_reload_the_job_refuses_for_another_reason_is_no_success() {
+    for refusal in [E_RELOAD_RETAINED, dkrt_sdk::E_RELOAD_MENUS] {
+        let a = Arena::new(2);
+        a.effect(0, "fx/freqshift", BOTH, Some(1));
+        let mut ui = FakeUi::default();
+        let mut routing = queued_pick(&a, &mut ui);
+        a.core.live_job.set([2, refusal as u32, 1, 0, LIVE_RELOAD]);
+        routing.poll_job(&a.core, &mut ui);
+        assert_eq!(ui.toasts, ["FREQSHIFT: RESTART TO APPLY"]);
+        assert!(a.core.reload_when_possible.borrow().is_empty());
+    }
+}
+
+#[test]
+fn the_longest_toast_fits_the_line() {
+    // a 12 character name, the longest route, the deferred text
+    let mut line = Line::new();
+    line.put(b"abcdefghijkl")
+        .put(b": ")
+        .put(route_text(Route::Master))
+        .put(ON_STOP);
+    assert_eq!(line.as_str(), "ABCDEFGHIJKL: MASTER ON STOP");
 }

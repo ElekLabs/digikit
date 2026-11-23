@@ -177,6 +177,8 @@ pub struct FakeCore {
     pub settings_overlay: Cell<*const dkrt_abi::service::SettingsOverlay>,
     /// The module ids `CoreApi::settings_changed` named, in order.
     pub settings_changed: RefCell<Vec<Vec<u8>>>,
+    /// The module ids `CoreApi::reload_when_possible` named, in order.
+    pub reload_when_possible: RefCell<Vec<Vec<u8>>>,
     /// The live jobs asked for (`CoreApi::live`): the op and the path without its NUL, in order.
     pub live_calls: RefCell<Vec<(u32, Vec<u8>)>>,
     /// What `CoreApi::live` answers; `OK` is a queued job: the state reads phase 1 until a test sets `live_job`.
@@ -267,6 +269,7 @@ impl FakeCore {
             host: FakeHost::new(),
             settings_overlay: Cell::new(core::ptr::null()),
             settings_changed: RefCell::new(Vec::new()),
+            reload_when_possible: RefCell::new(Vec::new()),
             live_calls: RefCell::new(Vec::new()),
             live_result: Cell::new(0),
             live_job: Cell::new([0; 5]),
@@ -474,6 +477,9 @@ impl CoreApi for FakeCore {
     }
     unsafe fn settings_overlay_set(&self, overlay: *const dkrt_abi::service::SettingsOverlay) {
         self.settings_overlay.set(overlay);
+    }
+    unsafe fn reload_when_possible(&self, id: &[u8]) {
+        self.reload_when_possible.borrow_mut().push(id.to_vec());
     }
     unsafe fn settings_changed(&self, id: &[u8]) {
         self.settings_changed.borrow_mut().push(id.to_vec());

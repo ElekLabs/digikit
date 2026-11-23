@@ -129,6 +129,9 @@ impl CoreApi for ImportCore {
     unsafe fn settings_changed(&self, id: &[u8]) {
         dkc_settings_changed(id.as_ptr(), id.len() as u32)
     }
+    unsafe fn reload_when_possible(&self, id: &[u8]) {
+        dkc_reload_when_possible(id.as_ptr(), id.len() as u32)
+    }
     unsafe fn live(&self, op: u32, path: *const u8) -> i32 {
         dkc_live(op, path)
     }

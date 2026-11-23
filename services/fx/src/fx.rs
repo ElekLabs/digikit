@@ -82,6 +82,8 @@ impl<C: CoreApi> Ticker<C> for Fx {
         if phase == tick_phase::LATE {
             // SAFETY: the UI task runs the tick; the pages and the send cells are this crate's tables
             unsafe { fxpage::tick(core) };
+            // the end of the reload a pick queued
+            routing::poll(&mut self.routing, core, self.ui);
         }
     }
 }
