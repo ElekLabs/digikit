@@ -306,8 +306,10 @@ const defaultGit = (root, ...args) => {
 };
 
 // Why a `--base` selection must not run, or '': nothing changed since the base. A change that selects no device test is no problem
-// (a host-only change runs none); the smoke set and the skipped list say what the gate did.
-export const baseProblem = ({ base, changed }) => (base && !changed.length ? `no file changed since ${base}.` : '');
+// (a host-only change runs none); the smoke set and the skipped list say what the gate did. For the merge gate (`gate`) an empty
+// change is no problem either: there is nothing to run.
+export const baseProblem = ({ base, changed, gate = false }) =>
+  base && !changed.length && !gate ? `no file changed since ${base}.` : '';
 
 const vocabulary = () => [
   ...SERVICES.map((s) => `S:${s}`),
@@ -372,7 +374,11 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       changed: [],
     };
   const { tests, unknown, mapped, wide, wideAll, wideDevices } = selection;
-  const problem = baseProblem({ base, changed: selection.changed });
+  const problem = baseProblem({ base, changed: selection.changed, gate });
+  if (gate && base && !selection.changed.length) {
+    console.log(`test:subset: no file changed since ${base}: no device tests to run.`);
+    process.exit(0);
+  }
   if (problem) {
     console.error(`test:subset: ${problem}`);
     process.exit(2);
