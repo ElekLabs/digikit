@@ -50,15 +50,23 @@ What goes where (copy this split):
 
 Re-entry (every service):
 
-- Every call into the owner runs under its busy state: the part functions of the tables (through the `Enter` guard that `service!` gives them, `Owner::run`), `DK_SVC_OWNER.with`
-  and `DK_SVC_OWNER.post`. While one runs, a second `&mut` to the object is never formed: a nested `with` or part call is refused (`None`, or the part's refusal such as `E_BUSY`;
-  counted in `DK_SVC_OWNER.refused()`).
-- A callback that must still reach the object (a pool event fired inside `tick`, say) is an event. The service adopts the part `Reentry` (`parts = [.., Reentry]`): `type Event: Copy`,
-  `const QUEUE: usize` (how many wait) and `fn apply(&mut self, event)`. The callback calls `DK_SVC_OWNER.post(event)`: idle, it runs at once; busy, it is queued and `Owner` runs it
-  after the outer call returns, in order, in the same task, before the owner is idle. A full queue is `Post::Full`, counted in `refused()`, never silent. No heap: the queue is
-  `N` slots in the cell. A service with no such callback adopts nothing and pays one flag.
-- The busy flag belongs to the UI task. The I/O task and interrupts never go through the owner (they have no way to wait); a job that runs there works on state it owns apart
-  from the object, or its service says why its access is safe.
+- Every call into the owner runs under its busy state: the part functions of the tables (through the `Enter` guard that `service!` gives them, `Owner::enter` and `Owner::leave`),
+  `DK_SVC_OWNER.with`, `DK_SVC_OWNER.post` and `DK_SVC_OWNER.with_or_post`. While one runs, a second `&mut` to the object is never formed: a nested `with` or part call is refused
+  (`None`, or the part's refusal such as `E_BUSY`; counted in `DK_SVC_OWNER.refused()`). The test of the flag and every change of the queue happen with interrupts masked
+  (`dkc_irq_mask`, the import `lfo` uses for its shape table), so a task switch or an interrupt cannot fall between the test and the set.
+- A callback that must still reach the object (a pool event fired by a foreign call, a key that reaches the hook while a call runs) is an event. The service adopts the part
+  `Reentry` (`parts = [.., Reentry]`): `type Event: Copy`, `const QUEUE: usize` (how many wait) and `fn apply(&mut self, core, event)`. The callback calls
+  `DK_SVC_OWNER.post(event)`: idle, it runs at once; busy, it is queued and `Owner` runs it after the outer call returns, in order, in the same task, before the owner is idle. A hook
+  that wants the answer of the call when it can have it uses `with_or_post(event, f)`: idle it runs `f` and answers; busy the event is queued and the hook answers its neutral value.
+  A full queue is `Post::Full`, counted in `refused()`, never silent. No heap: the queue is `N` slots in the cell. A service with no such callback adopts nothing and pays one flag.
+  The shortcuts key hook is one: a key that arrives inside a call of the service passes to the stock walker and is taken by the owner after the call, so a held key or a release is
+  never lost (its verdict cannot swallow that key, the stock walker has it already).
+- A foreign call that fires callbacks into the owner is made before the owner is entered: `Ticker::pre_tick(core, phase)` (no `&mut self`) runs first in the table's tick function, so
+  the events it posts run at once, in order, ahead of the tick that depends on them.
+- The busy flag is for calls into the object. Another task's work (the I/O or job task) never goes through the owner: a job works on state of its own in a static of the file
+  (a cell outside the owner) with a one-word phase handoff (`Idle`, `Posted`, `Running`, `Done`: the UI task touches it in `Idle` and `Done`, the job task in `Posted` and `Running`),
+  and its end reaches the owner as an event or not at all (`services/project`: `StoreJob`; `services/samples`: `PeakJob`).
+- A service file's wiring is checked by `dkrt_test_support::contract::row_is_guarded`: a part call through the file's row while a hook holds `DK_SVC_OWNER.with` is refused and counted.
 
 Steps for a new service:
 

@@ -203,3 +203,17 @@ fn the_lfo_service_passes_the_contract_on_every_device_with_a_dsp() {
         provider_contract::<LfoRecipe>(&fixture(p.id));
     }
 }
+
+#[test]
+fn the_row_reaches_the_object_through_the_owner_guard() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    file::dk_svc_start().expect("start");
+    dkrt_test_support::contract::row_is_guarded(
+        file::dk_svc_row(),
+        &|f| {
+            DK_SVC_OWNER.with(|_| f());
+        },
+        &|| DK_SVC_OWNER.refused(),
+    );
+    file::dk_svc_stop();
+}

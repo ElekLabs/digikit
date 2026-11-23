@@ -21,10 +21,13 @@ pub extern "C" fn shortcuts_key_hook() {}
 #[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_shortcuts_key(code: u32, flags: u32) -> u32 {
-    use dkrt_svc_shortcuts::shortcuts::Verdict;
-    // no owner (before `init` or after `fini`): the stock walker runs
-    match crate::DK_SVC_OWNER.with(|s| s.dispatch(&dkrt_svc_rt::ImportCore, code, flags)) {
-        Some(Verdict::Swallow) => 1,
+    use dkrt_svc_shortcuts::shortcuts::{KeyEvent, Verdict};
+    // no owner (before `init` or after `fini`): the stock walker runs. Inside a call of the service (a module's callback that reaches the key walker, an interrupt) the key is queued
+    // for the owner and the stock walker runs: the key is taken after that call, never lost.
+    match crate::DK_SVC_OWNER.with_or_post(KeyEvent { code, flags }, |s| {
+        s.dispatch(&dkrt_svc_rt::ImportCore, code, flags)
+    }) {
+        Ok(Verdict::Swallow) => 1,
         _ => 0,
     }
 }

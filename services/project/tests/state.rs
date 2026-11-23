@@ -2,7 +2,7 @@
 //! `open` leaves the core untouched.
 use core::mem::MaybeUninit;
 use dkrt_abi::provider::Provider;
-use dkrt_svc_project::engine::{Pending, ProjectService};
+use dkrt_svc_project::engine::{Pending, ProjectService, StoreJob};
 use dkrt_svc_project::project::Project;
 use dkrt_test_support::FakeCore;
 
@@ -20,6 +20,7 @@ fn a_zeroed_engine_acts_as_a_new_one() {
     let zeroed = unsafe { zeroed.assume_init_mut() };
     let mut fresh = Box::new(ProjectService::new());
     let mut env = TestHost;
+    let (job_zeroed, job_fresh) = (StoreJob::new(), StoreJob::new());
     // the tick takes the record and clears it: one record for each engine
     let change = || Pending {
         slot_val: 3,
@@ -32,8 +33,8 @@ fn a_zeroed_engine_acts_as_a_new_one() {
         } else {
             (Pending::new(), Pending::new())
         };
-        zeroed.tick(&mut env, &for_zeroed);
-        fresh.tick(&mut env, &for_fresh);
+        zeroed.tick(&mut env, &for_zeroed, &job_zeroed);
+        fresh.tick(&mut env, &for_fresh, &job_fresh);
         assert_eq!(zeroed.slot(), fresh.slot(), "slot at step {step}");
         assert_eq!(zeroed.status(), fresh.status(), "status at step {step}");
         assert_eq!(zeroed.current(), fresh.current(), "current at step {step}");

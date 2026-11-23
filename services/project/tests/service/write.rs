@@ -256,7 +256,7 @@ fn a_put_after_the_freeze_keeps_the_image_dirty_for_the_next_save() {
     r.hook_save(12);
     // up to the post of the job (list, probe), then a put before the job ends
     for _ in 0..4 {
-        r.p.tick(&mut r.f, &r.pend);
+        r.p.tick(&mut r.f, &r.pend, &r.job);
         if r.f.posted {
             break;
         }

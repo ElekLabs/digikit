@@ -11,6 +11,9 @@ use dkrt_svc_samples::pool::{self, Pool};
 use dkrt_svc_samples::samples::Samples;
 use dkrt_test_support::FakeCore;
 
+// the core imports of the owner cell's guard (no runtime is linked)
+mod stubs;
+
 /// The 32-byte track-table record of a DSP section (little-endian words): kind 2, the module's local id, the offsets of its records and control sets.
 fn bank(local: u32) -> [u8; 32] {
     let mut b = [0u8; 32];
@@ -111,23 +114,37 @@ unsafe extern "C" fn counting_tick() {
 }
 
 #[test]
-fn the_tick_is_early_only_and_needs_the_pool_adapter() {
-    let core = FakeCore::new();
+fn the_adapter_tick_is_early_only_and_needs_the_pool_adapter() {
     ADAPTER_TICKS.with(|n| n.set(0));
     let ticks = || ADAPTER_TICKS.with(|n| n.get());
     // no sample-pool adapter in the image: nothing runs
+    Samples::pre_tick_with(&Pool::none(), tick_phase::EARLY);
+    assert_eq!(ticks(), 0);
+    // with the adapter: the early phase runs the adapter's tick, a late pass is not the service's
+    let pool = Pool::new(Some(pool::PoolFns {
+        tick: counting_tick,
+        ..pool::refusing()
+    }));
+    Samples::pre_tick_with(&pool, tick_phase::LATE);
+    assert_eq!(ticks(), 0);
+    Samples::pre_tick_with(&pool, tick_phase::EARLY);
+    assert_eq!(ticks(), 1);
+}
+
+#[test]
+fn the_tick_needs_the_pool_adapter_and_runs_no_adapter_call_itself() {
+    let core = FakeCore::new();
+    ADAPTER_TICKS.with(|n| n.set(0));
     let mut s = Samples::new(Pool::none());
     Ticker::<FakeCore>::tick(&mut s, &core, tick_phase::EARLY);
-    assert_eq!(ticks(), 0);
-    // with the adapter: the early phase steps the tracks (the adapter's tick first), a late tick is not the service's
+    // with the adapter the tick steps the tracks, and the adapter's own tick is the pre-tick step's (before the owner is entered), not this call's
     let mut s = Samples::new(Pool::new(Some(pool::PoolFns {
         tick: counting_tick,
         ..pool::refusing()
     })));
-    Ticker::<FakeCore>::tick(&mut s, &core, tick_phase::LATE);
-    assert_eq!(ticks(), 0);
     Ticker::<FakeCore>::tick(&mut s, &core, tick_phase::EARLY);
-    assert_eq!(ticks(), 1);
+    Ticker::<FakeCore>::tick(&mut s, &core, tick_phase::LATE);
+    assert_eq!(ADAPTER_TICKS.with(|n| n.get()), 0);
     // with no track table a pass writes nothing to the DSP
     assert!(core.calls().is_empty());
     assert!(core.link.borrow().t.wire.is_empty());
@@ -171,39 +188,41 @@ impl Events<Samples> for TestEvents {
 }
 
 unsafe extern "C" fn losing_tick() {
-    // SAFETY: the test keeps the owner cell alive across the tick; it mirrors the slots `pool_done` and `pool_lost` of the service file
+    // SAFETY: the test keeps the owner cell alive across the call; it mirrors the slots `pool_done` and `pool_lost` of the service file
     let cell = unsafe { &*OWNER.with(|o| o.get()) };
-    assert_eq!(
-        cell.post(PoolEvent::Done { req: 9, result: 0 }),
-        Post::Queued
-    );
-    assert_eq!(cell.post(PoolEvent::Lost), Post::Queued);
+    // the adapter's tick runs before the owner is entered: with the owner idle both events run at once, in the order they fire
+    assert_eq!(cell.post(PoolEvent::Done { req: 9, result: 0 }), Post::Ran);
+    assert_eq!(cell.post(PoolEvent::Lost), Post::Ran);
 }
 
 #[test]
-fn the_adapter_may_post_the_pool_events_from_inside_the_tick() {
+fn the_adapters_events_apply_before_the_tick_of_the_pass() {
     let core = FakeCore::new();
     let cell: Cell = Owner::new();
     CORE.with(|c| c.set(&core as *const FakeCore));
+    let pool = Pool::new(Some(pool::PoolFns {
+        tick: losing_tick,
+        ..pool::refusing()
+    }));
     cell.start(|slot| {
-        slot.write(Samples::new(Pool::new(Some(pool::PoolFns {
-            tick: losing_tick,
-            ..pool::refusing()
-        }))));
+        slot.write(Samples::new(pool));
         Ok(())
     })
     .unwrap();
     OWNER.with(|o| o.set(&cell as *const Cell));
-    // the part call runs under the owner's busy state, as the file's tables do
+    // the pre-tick step, as the table's tick function calls it outside the guard
+    Samples::pre_tick_with(&pool, tick_phase::EARLY);
+    assert_eq!(
+        core.calls().len(),
+        1,
+        "the lost-pool event applied (and was logged) before the tick began"
+    );
+    assert_eq!(cell.refused(), 0);
+    // the tick of the same pass then runs with those events behind it
     cell.run((), |s| {
         Ticker::<FakeCore>::tick(s, &core, tick_phase::EARLY)
     });
     assert_eq!(cell.refused(), 0);
-    assert_eq!(
-        core.calls().len(),
-        1,
-        "the lost-pool event is logged once, after the tick"
-    );
     let table = bank(1);
     cell.with(|s| {
         claim(s, &core, 4, &job(Some(&table)));

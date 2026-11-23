@@ -396,9 +396,7 @@ impl Tracks {
         if !pool.present() {
             return;
         }
-        // Optional on its own: the adapter delivers completions and finds a stock reset here, before the runtime steps the tracks.
-        // SAFETY: the adapter's call (`dkpool_tick`). It posts `pool_done` and `pool_lost` to the owner as events (`events.rs`); the owner is busy, so they run after this tick returns.
-        unsafe { pool.tick() };
+        // (the adapter's `dkpool_tick` ran before the owner was entered: `Samples::pre_tick`)
         // SAFETY: the core's link calls
         unsafe { self.writes.pump(core) };
         self.core.tick(&mut Device {

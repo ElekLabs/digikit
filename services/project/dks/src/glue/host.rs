@@ -1,6 +1,6 @@
 //! `DkHost`: the host state of the owner (`dkrt_svc_project::project::Host`): the handles `open` makes, the pass count and the listing in progress. It is a field of the owner
 //! in the file's cell, not a static. All-zero bytes are its initial state.
-use super::files::DkFiles;
+use super::files::set_client;
 use super::scope::SCOPE;
 use super::sdk_imports as sys;
 use dkrt_abi::provider::Status;
@@ -34,8 +34,6 @@ impl DkHost {
 
 // SAFETY: integers, null pointers and a byte array: all-zero bytes are the initial state.
 unsafe impl Host for DkHost {
-    type Files = DkFiles;
-
     /// The listing client that this file's `init` is the only place to open, and core/ui (optional: without it the result is a failure and the handle stays null).
     fn open(&mut self) -> Result<(), Status> {
         let ctx = dkrt_svc_rt::init_ctx();
@@ -46,18 +44,13 @@ unsafe impl Host for DkHost {
             return Err(r);
         }
         self.files = f;
+        set_client(f);
         let mut ui: *mut u8 = core::ptr::null_mut();
         // SAFETY: as above.
         if unsafe { sys::dk_ui_open(ctx, &mut ui) } == 0 {
             self.ui = ui;
         }
         Ok(())
-    }
-
-    unsafe fn files(this: *const Self) -> DkFiles {
-        DkFiles {
-            handle: core::ptr::read_volatile(core::ptr::addr_of!((*this).files)),
-        }
     }
 
     fn begin_pass(&mut self) {

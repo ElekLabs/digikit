@@ -5,7 +5,7 @@
 //! It implements `Provider` (start), `DspPart` (the track-table record of a module's DSP section: `check_sections`, `admit`, `claim`, `loaded`, `release`) and `Ticker` (one
 //! step of every track in the early phase of the UI pass). It owns no record kind of the `register` section.
 use crate::dsp;
-use crate::peakwin::PeakWindows;
+use crate::peakwin::{PeakJob, PeakJobs, PeakWindows};
 use crate::pool::Pool;
 use crate::tracks::Tracks;
 use core::mem::MaybeUninit;
@@ -14,6 +14,7 @@ use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::{DspSec, Job};
 use dkrt_abi::provider::{DspPart, Provider, Status, Ticker};
 use dkrt_abi::service::{tick_phase, Claim};
+use dkrt_sdk::api::JobDoneFn;
 
 pub struct Samples {
     tracks: Tracks,
@@ -122,7 +123,7 @@ impl Samples {
             .peaks(&self.pool, handle, index, token, out, capacity)
     }
 
-    /// `dk_sample_pool_peaks_window`.
+    /// `dk_sample_pool_peaks_window`. `jobs` is the cells of the peak-window jobs and `done` the job-end entry that posts the end to the owner (both the file's).
     ///
     /// # Safety
     /// `out` is null or writable for `capacity` bytes.
@@ -130,6 +131,8 @@ impl Samples {
     pub unsafe fn peaks_window<C: CoreApi>(
         &mut self,
         core: &C,
+        jobs: &PeakJobs,
+        done: JobDoneFn,
         handle: u32,
         index: u32,
         token: u32,
@@ -141,6 +144,8 @@ impl Samples {
     ) -> i32 {
         self.peaks.window(
             core,
+            jobs,
+            done,
             &self.tracks,
             &self.pool,
             handle,
@@ -157,6 +162,12 @@ impl Samples {
     /// The pool event `pool_done` (applied by `Reentry::apply`, after the call it arrived in): load `req` finished (`result` 0, E_POOL, E_READ or E_FORMAT).
     pub(crate) fn pool_done(&mut self, req: u32, result: i32) {
         self.tracks.pool_done(req, result);
+    }
+
+    /// The pool event `PeakDone` (applied by `Reentry::apply`): a peak-window job ended; its window takes the result or starts the newer request.
+    pub(crate) fn peak_done<C: CoreApi>(&mut self, core: &C, job: &PeakJob) {
+        self.peaks
+            .finish(core, self.tracks.core(), job, self.pool.window_step());
     }
 
     /// The pool event `pool_lost` (applied by `Reentry::apply`): the backing was lost, all handles are invalid.
@@ -216,7 +227,25 @@ impl<C: CoreApi> DspPart<C> for Samples {
     }
 }
 
+impl Samples {
+    /// The adapter's `dkpool_tick` of one pass, over `pool`: in the early phase only. The adapter delivers completions and finds a stock reset here, before the tracks step. It fires
+    /// `pool_done` and `pool_lost`, which reach the owner as events (`events.rs`).
+    pub fn pre_tick_with(pool: &Pool, phase: u32) {
+        if phase == tick_phase::EARLY {
+            // SAFETY: the adapter's call
+            unsafe { pool.tick() };
+        }
+    }
+}
+
 impl<C: CoreApi> Ticker<C> for Samples {
+    /// The adapter's tick runs before the owner is entered (the table's tick function calls this first, outside the guard), so its events run at once, with the owner idle, and apply
+    /// before the writes pump and the track step of this pass, as before the owner had a guard. The adapter comes from the image's table (`sample_pool_info`), as at `start`.
+    fn pre_tick(core: &C, phase: u32) {
+        // SAFETY: the table of the image holds the addresses of the adapter's functions
+        Self::pre_tick_with(&unsafe { Pool::from_info(core) }, phase)
+    }
+
     fn tick(&mut self, core: &C, phase: u32) {
         if phase == tick_phase::EARLY {
             self.tracks.tick(core, &self.pool);

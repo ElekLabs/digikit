@@ -20,7 +20,7 @@ extern crate std;
 pub mod dsp;
 pub mod events;
 mod files;
-mod peakwin;
+pub mod peakwin;
 pub mod pool;
 pub mod samples;
 mod tracks;

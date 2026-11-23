@@ -1,6 +1,8 @@
 //! `Owner<T>`: the one cell of a service file that holds its owner object (`Provider`), made by `start` in the file's `init` and taken back by `stop` in `fini`.
+use crate::ImportCore;
 use core::cell::{Cell, UnsafeCell};
 use core::mem::MaybeUninit;
+use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::Status;
 use dkrt_sdk::E_LOADED;
 
@@ -40,22 +42,35 @@ pub enum Post {
     NoOwner,
 }
 
+/// What `Owner::admit` decided for one call, taken in one masked step.
+enum Admit<T> {
+    /// The owner was idle and is busy now: the object's address.
+    Enter(*mut T),
+    /// There is no live object (before `start`, after `stop`, during a transition).
+    NoOwner,
+    /// The owner was inside a call and the event is queued.
+    Queued,
+    /// The owner was inside a call and there was no room (the event) or the call was not an event (counted in `refused`).
+    Refused,
+}
+
 /// The cell. A file is one service and has one; `service!` declares it as `DK_SVC_OWNER`, so the file's hooks reach the instance with [`Owner::with`] and the part
-/// functions through the guard `service!` gives their tables ([`Owner::run`]). Every call runs in the UI task (or in an interrupt that the service guards itself), never
-/// concurrently; the I/O task and interrupts never go through the owner.
+/// functions through the guard `service!` gives their tables ([`Owner::enter`], [`Owner::leave`]). The UI task, the job task and interrupts may all call in.
 ///
-/// Re-entry: every call into the object (`with`, `run`, `post`) marks the owner busy until it returns. A call that arrives meanwhile (a callback of the same service,
-/// fired by a call the object made) never forms a second `&mut T`: `with` and `run` refuse it, and [`Owner::post`] queues a typed event (`A::Event`, at most `N`
-/// waiting, no heap) that runs through `A::apply` right after the outer call returns, in the same task, before the owner is idle. A refused call or a full queue is
-/// counted in [`Owner::refused`], never dropped silently.
+/// Re-entry: every call into the object (`with`, `run`, `post`) marks the owner busy until it returns. The test of the busy flag and its change, and every change of the queue,
+/// are made with interrupts masked (`dkc_irq_mask`, the import `lfo` uses for its shape table), so a task switch or an interrupt cannot fall between the test and the set: two
+/// calls never both find the owner idle. A call that arrives meanwhile (a callback of the same service, a hook in an interrupt, the other task) never forms a second `&mut T`:
+/// `with` and `run` refuse it, and [`Owner::post`] queues a typed event (`A::Event`, at most `N` waiting, no heap) that runs through `A::apply` right after the outer call
+/// returns, before the owner is idle. A hook that must not lose its input uses [`Owner::with_or_post`]. A refused call or a full queue is counted in [`Owner::refused`],
+/// never dropped silently. The object itself is never shared: state that a job in another task reads or writes lives in a cell of its own, outside `T`.
 pub struct Owner<T, A: Events<T> = NoEvents, const N: usize = 0> {
     /// The state, uninitialised until `start`: all-zero bytes, so the cell is `.bss` and costs no file bytes.
     cell: UnsafeCell<MaybeUninit<T>>,
     /// Whether `cell` holds a live `T`.
     live: Cell<bool>,
-    /// Set while `with` runs a closure: a nested `with` (a hook that fires inside a part function of the same owner) finds nothing, instead of a second `&mut T`.
+    /// Set while a call into the object runs; tested and set only with interrupts masked.
     busy: Cell<bool>,
-    /// Set for the whole of `start`'s `init` and of `stop`'s `f` and drop: `start`, `stop` and `with` refuse meanwhile, and `live` changes only when the transition ends well.
+    /// Set for the whole of `start`'s `init` and of `stop`'s `f` and drop: `start`, `stop` and every call refuse meanwhile, and `live` changes only when the transition ends well.
     transition: Cell<bool>,
     /// The events that arrived while busy, oldest at `head`; all-zero bytes at the start.
     queue: UnsafeCell<[MaybeUninit<A::Event>; N]>,
@@ -65,8 +80,17 @@ pub struct Owner<T, A: Events<T> = NoEvents, const N: usize = 0> {
     refused: Cell<u32>,
 }
 
-// One task owns the cell at a time (see above).
+// The cells are changed only with interrupts masked (the flags and the queue) or by the one call that holds the busy flag (the object).
 unsafe impl<T, A: Events<T>, const N: usize> Sync for Owner<T, A, N> {}
+
+/// Run `f` with interrupts masked (a single core: nothing else runs meanwhile).
+#[inline(always)]
+fn masked<R>(f: impl FnOnce() -> R) -> R {
+    let sr = ImportCore.irq_mask();
+    let r = f();
+    ImportCore.irq_restore(sr);
+    r
+}
 
 impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
     pub const fn new() -> Owner<T, A, N> {
@@ -94,12 +118,12 @@ impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
         &self,
         init: impl FnOnce(&mut MaybeUninit<T>) -> Result<(), Status>,
     ) -> Result<*mut T, Status> {
-        if self.live.get() || self.transition.replace(true) {
+        if masked(|| self.live.get() || self.transition.replace(true)) {
             return Err(E_LOADED);
         }
-        // SAFETY: the cell is used by one task at a time; no reference into it is alive here (`with` refuses to nest, and the cell holds no live value).
+        // SAFETY: the cell holds no live value and `transition` keeps every call out, so no reference into it is alive here.
         let r = init(unsafe { &mut *self.cell.get() });
-        self.transition.set(false);
+        masked(|| self.transition.set(false));
         r?;
         self.live.set(true);
         Ok(self.cell.get() as *mut T)
@@ -111,72 +135,110 @@ impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
     }
 
     /// `f` on the instance as one call: the owner is busy until it returns, then the events that arrived meanwhile run, in order. `refused` is the answer, and `f` is
-    /// not called, before `start`, after `stop` and inside another call into the same owner (the latter counted in `refused()`). The tables of a service file reach
-    /// the object through this (`Enter`).
+    /// not called, before `start`, after `stop` and inside another call into the same owner (the latter counted in `refused()`).
     pub fn run<R>(&self, refused: R, f: impl FnOnce(&mut T) -> R) -> R {
-        let at = self.begin();
+        let at = self.enter();
         if at.is_null() {
             return refused;
         }
-        // SAFETY: `begin` made the owner busy, so this is the only reference, and `live` says the cell holds a value.
+        // SAFETY: `enter` made the owner busy, so this is the only reference, and `live` says the cell holds a value.
         let r = f(unsafe { &mut *at });
         self.leave();
         r
     }
 
-    /// Start of a call: the object's address and the owner is busy, or null (and nothing changes but the count) when there is no live object or a call runs already. One copy
-    /// for every `run`, so the checks are not repeated in each part function's guard.
+    /// `f` on the instance when the owner is idle; inside a call, `event` is queued instead (it runs when that call returns) and the answer says what became of it. For a hook
+    /// that may fire while the service is inside a call, in the same task or from an interrupt, and whose input must not be lost.
+    pub fn with_or_post<R>(&self, event: A::Event, f: impl FnOnce(&mut T) -> R) -> Result<R, Post> {
+        match self.admit(Some(event)) {
+            Admit::Enter(at) => {
+                // SAFETY: as in `run`.
+                let r = f(unsafe { &mut *at });
+                self.leave();
+                Ok(r)
+            }
+            Admit::NoOwner => Err(Post::NoOwner),
+            Admit::Queued => Err(Post::Queued),
+            Admit::Refused => Err(Post::Full),
+        }
+    }
+
+    /// The one decision of every call, with interrupts masked: an idle owner becomes busy; a busy one queues `event` (when there is one, and room) or counts a refusal.
     #[inline(never)]
-    fn begin(&self) -> *mut T {
-        if !self.live.get() || self.transition.get() {
-            return core::ptr::null_mut();
-        }
-        if self.busy.replace(true) {
+    fn admit(&self, event: Option<A::Event>) -> Admit<T> {
+        masked(|| {
+            if !self.live.get() || self.transition.get() {
+                return Admit::NoOwner;
+            }
+            if !self.busy.get() {
+                self.busy.set(true);
+                return Admit::Enter(self.cell.get() as *mut T);
+            }
+            if let Some(event) = event {
+                let len = self.len.get();
+                if len < N {
+                    // SAFETY: the slot is free (`len < N`); the queue changes only with interrupts masked.
+                    unsafe { (*self.queue.get())[(self.head.get() + len) % N].write(event) };
+                    self.len.set(len + 1);
+                    return Admit::Queued;
+                }
+            }
             self.refused.set(self.refused.get() + 1);
-            return core::ptr::null_mut();
+            Admit::Refused
+        })
+    }
+
+    /// Start of a call (the guard of the part functions of a table): the object's address and the owner is busy, or null (nothing changes but the count) when there is no live
+    /// object or a call runs already. One copy for every part function; the caller gives the refusal answer and calls [`Owner::leave`] when the call ends.
+    #[inline(never)]
+    pub fn enter(&self) -> *mut T {
+        match self.admit(None) {
+            Admit::Enter(at) => at,
+            _ => core::ptr::null_mut(),
         }
-        self.cell.get() as *mut T
     }
 
     /// Hand `event` to the object. When the owner is idle it runs at once; inside a call it is queued, to run right after that call returns (see the type).
     pub fn post(&self, event: A::Event) -> Post {
-        if !self.live.get() || self.transition.get() {
-            return Post::NoOwner;
-        }
-        if self.busy.get() {
-            let len = self.len.get();
-            if len == N {
-                self.refused.set(self.refused.get() + 1);
-                return Post::Full;
+        match self.admit(Some(event)) {
+            Admit::Enter(at) => {
+                // SAFETY: as in `run`.
+                A::apply(unsafe { &mut *at }, event);
+                self.leave();
+                Post::Ran
             }
-            // SAFETY: the slot is free (`len < N`) and only this task touches the queue.
-            unsafe { (*self.queue.get())[(self.head.get() + len) % N].write(event) };
-            self.len.set(len + 1);
-            return Post::Queued;
+            Admit::NoOwner => Post::NoOwner,
+            Admit::Queued => Post::Queued,
+            Admit::Refused => Post::Full,
         }
-        self.busy.set(true);
-        // SAFETY: as in `run`.
-        A::apply(unsafe { &mut *(self.cell.get() as *mut T) }, event);
-        self.leave();
-        Post::Ran
     }
 
-    /// End of a call: run the queued events in order (each may queue more), then the owner is idle.
+    /// End of a call: run the queued events in order (each may queue more), then the owner is idle. The last pop and the clearing of the busy flag are one masked step, so an
+    /// event that arrives after the queue was found empty finds the owner idle and runs itself.
     #[inline(never)]
-    fn leave(&self) {
-        while self.len.get() > 0 {
-            let at = self.head.get();
-            // SAFETY: the slot at `head` was written by `post` (`len > 0`).
-            let event = unsafe { (*self.queue.get())[at].assume_init_read() };
-            self.head.set((at + 1) % N);
-            self.len.set(self.len.get() - 1);
-            // SAFETY: as in `run`: still busy, so no other reference exists.
+    pub fn leave(&self) {
+        loop {
+            let next = masked(|| {
+                let len = self.len.get();
+                if len == 0 {
+                    self.busy.set(false);
+                    return None;
+                }
+                let at = self.head.get();
+                // SAFETY: the slot at `head` was written by `admit` (`len > 0`).
+                let event = unsafe { (*self.queue.get())[at].assume_init_read() };
+                self.head.set((at + 1) % N);
+                self.len.set(len - 1);
+                Some(event)
+            });
+            let Some(event) = next else { return };
+            // SAFETY: still busy, so no other reference exists.
             A::apply(unsafe { &mut *(self.cell.get() as *mut T) }, event);
         }
-        self.busy.set(false);
     }
 
-    /// The pointer to the instance, null when there is none (`ProviderHandle` takes it as the instance of the row).
+    /// The address of the instance, null when there is none. It is for the row's instance word and for the check that an owner is live: nothing may form a reference through it
+    /// (a call goes through [`Owner::run`] or [`Owner::enter`], which refuse a second `&mut T`).
     pub fn instance(&self) -> *mut T {
         if self.live.get() && !self.transition.get() {
             self.cell.get() as *mut T
@@ -186,13 +248,13 @@ impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
     }
 
     /// End the instance: `f` works on it in place (the file's `fini` gives it `Provider::stop`), then it is dropped in place. A hook that fires inside `f` finds none
-    /// (`with` and `instance` refuse during the transition) and cannot start or stop. `false` when there was none, and while a `with` closure runs (it holds `&mut T`: the state stays intact).
+    /// (every call refuses during the transition) and cannot start or stop. `false` when there was none, and while a call runs (it holds `&mut T`: the state stays intact).
     pub fn stop(&self, f: impl FnOnce(&mut T)) -> bool {
-        if self.busy.get() || !self.live.get() || self.transition.replace(true) {
+        if masked(|| self.busy.get() || !self.live.get() || self.transition.replace(true)) {
             return false;
         }
         let at = self.cell.get() as *mut T;
-        // SAFETY: `live` was set, so the cell holds a value; `transition` keeps `start`, `stop` and `with` out until it is dropped, once.
+        // SAFETY: `live` was set, so the cell holds a value; `transition` keeps `start`, `stop` and every call out until it is dropped, once.
         unsafe {
             f(&mut *at);
             core::ptr::drop_in_place(at);

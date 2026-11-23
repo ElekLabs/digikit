@@ -1,11 +1,11 @@
 //! `DkFiles`: the engine's `Files` over the SDK's file calls, and the write job's entries (I/O task and UI task).
 use super::c_strings::cpath;
-use super::host::Owner;
 use super::sdk_imports as sys;
 use super::sdk_imports::{REPLACE, STORE};
-use dkrt_svc_project::engine::Files;
+use core::cell::UnsafeCell;
+use dkrt_svc_project::engine::{Files, StoreJob};
 
-/// The file calls of the write job: the listing client's handle, which the I/O task reads.
+/// The file calls of the write job: the listing client's handle, which the I/O task reads from `CLIENT`.
 #[derive(Clone, Copy)]
 pub struct DkFiles {
     pub(super) handle: *mut u8,
@@ -47,21 +47,33 @@ impl Files for DkFiles {
     }
 }
 
-/// The write job's step, in the I/O task (`dk_io_post`). It reaches the owner by its pointer, not through `with`: the UI task may be inside the owner (`tick`) while the I/O
-/// task runs the step. The step forms references to the writer, the file buffer and the file client only (`Project::io_step`), no `&mut` to the whole owner; the UI task must leave
-/// those alone while a job runs.
-pub unsafe extern "C" fn io_step(_arg: *mut u8) -> i32 {
-    let project = crate::DK_SVC_OWNER.instance();
-    if project.is_null() {
-        return dkrt_sdk::E_NOT_FOUND;
-    }
-    Owner::io_step(project)
+/// The write job's cell: its data is the I/O task's while a job runs, so it is a static of this file and not a field of the owner (`StoreJob`: the phase word hands it between the
+/// tasks). The tick passes it to the engine; the two entries below are its I/O-task and UI-task ends.
+pub static DK_JOB: StoreJob = StoreJob::new();
+
+/// The listing client's handle for the I/O task, set once in `init` (`DkHost::open`) before any job is posted; the owner keeps its own copy for the UI task.
+struct Client(UnsafeCell<*mut u8>);
+
+// SAFETY: one aligned word, written before the first job is posted and read by the I/O task only while a job runs
+unsafe impl Sync for Client {}
+
+static CLIENT: Client = Client(UnsafeCell::new(core::ptr::null_mut()));
+
+/// Keep the handle the I/O task's file calls use (`DkHost::open`).
+pub(super) fn set_client(handle: *mut u8) {
+    // SAFETY: see `Client`
+    unsafe { core::ptr::write_volatile(CLIENT.0.get(), handle) }
 }
 
-/// The end of the write job, in the UI task.
+/// The write job's step, in the I/O task (`dk_io_post`). It reaches the job's cell and the client handle, both statics of this file, and never the owner: the UI task may be inside
+/// the owner (`tick`) while the I/O task runs the step.
+pub unsafe extern "C" fn io_step(_arg: *mut u8) -> i32 {
+    // SAFETY: see `Client`
+    let handle = core::ptr::read_volatile(CLIENT.0.get());
+    DK_JOB.io_step(&mut DkFiles { handle })
+}
+
+/// The end of the write job, in the UI task: the cell takes the status and the UI task owns its data again.
 pub unsafe extern "C" fn io_done(_arg: *mut u8, status: i32) {
-    let project = crate::DK_SVC_OWNER.instance();
-    if !project.is_null() {
-        (*project).io_done(status)
-    }
+    DK_JOB.done(status)
 }

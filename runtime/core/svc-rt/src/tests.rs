@@ -292,3 +292,69 @@ fn the_provider_form_without_exports_declares_the_hooks_and_fills_and_no_export(
     assert_eq!(after[1] - before[1], 1, "fills as declared");
     assert_eq!(after[2] - before[2], 0, "no export table");
 }
+
+/// A provider file whose pre-tick step posts an event to the owner, as a foreign call that fires a callback does.
+mod pretick {
+    use core::sync::atomic::{AtomicU32, Ordering::SeqCst};
+    use dkrt_abi::provider::{Provider, Reentry, Status, Ticker};
+
+    /// The order the owner saw: 1 for a pre-tick event, 2 for the tick.
+    pub static ORDER: AtomicU32 = AtomicU32::new(0);
+
+    pub struct S;
+    impl Provider<crate::ImportCore> for S {
+        fn start(_: &crate::ImportCore) -> Result<S, Status> {
+            Ok(S)
+        }
+    }
+    impl Reentry<crate::ImportCore> for S {
+        type Event = u32;
+        const QUEUE: usize = 1;
+        fn apply(&mut self, _: &crate::ImportCore, event: u32) {
+            ORDER.store(ORDER.load(SeqCst) * 10 + event, SeqCst);
+        }
+    }
+    impl Ticker<crate::ImportCore> for S {
+        fn tick(&mut self, _: &crate::ImportCore, _: u32) {
+            ORDER.store(ORDER.load(SeqCst) * 10 + 2, SeqCst);
+        }
+        fn pre_tick(_: &crate::ImportCore, _: u32) {
+            // the callback of the foreign call: with the owner idle the event runs at once
+            assert_eq!(DK_SVC_OWNER.post(1), crate::Post::Ran);
+        }
+    }
+    crate::service!(
+        S,
+        "pretick",
+        &[],
+        parts = [Tick, Reentry],
+        hooks = [],
+        fills = [],
+        exports = []
+    );
+    pub unsafe fn start() {
+        assert_eq!(dk_svc_init(0x1234 as *mut u8), 0);
+    }
+    pub fn row() -> &'static dkrt_abi::provider::ProviderRow {
+        &DK_SVC_ROW
+    }
+}
+
+#[test]
+fn the_pre_tick_step_runs_before_the_owner_is_entered_so_its_events_come_before_the_tick() {
+    use core::sync::atomic::Ordering::SeqCst;
+    use dkrt_abi::provider::ProviderHandle;
+    unsafe { pretick::start() };
+    let handle = unsafe {
+        ProviderHandle::resolve(pretick::row(), whole(), 0x1234 as *mut core::ffi::c_void)
+    }
+    .unwrap();
+    unsafe {
+        handle.tick(
+            &ImportCore as *const ImportCore as *const core::ffi::c_void,
+            0,
+        )
+    };
+    assert_eq!(pretick::ORDER.load(SeqCst), 12, "the event, then the tick");
+    assert_eq!(pretick::DK_SVC_OWNER.refused(), 0);
+}

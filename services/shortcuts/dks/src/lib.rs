@@ -16,7 +16,7 @@ dkrt_svc_rt::service!(
     Shortcuts,
     "shortcuts",
     &KINDS_SHORTCUTS,
-    parts = [Records, Tick],
+    parts = [Records, Tick, Reentry],
     hooks = [("cf.input.hook.key_event", hooks::shortcuts_key_hook)],
     fills = [],
     exports = gen_exports::exports()

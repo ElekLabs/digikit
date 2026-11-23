@@ -25,15 +25,14 @@ Differences from the shortcuts template:
   `parts = []`. The module-record `tick = glue::tick` stays: it runs once per UI pass, in the place the old file ran it.
 - The statics that stay, each read by name or by an interrupt: `DKRT_PROJECT_PENDING` (`dks/src/hooks.rs`; written by `hooks.s`, taken by the tick) and `SCOPE` (`glue/scope.rs`; the
   table the runtime forwards the settings calls to). Nothing else is static.
-- The write job's entries `io_step` (I/O task) and `io_done` reach the owner with `DK_SVC_OWNER.instance()`, not `with`: the I/O task must not find the cell busy while the UI task is in
-  `tick`. Everything else uses `with` and answers "no service" on `None` (`E_SET_NOKEY` for a get, `E_SET_OFF` for a put or remove, `E_NOT_FOUND` for `dk_project_current`).
+- The write job is not in the owner. Its data (the writer's steps and the file buffer) is `DK_JOB`, a static of the file (`engine/job.rs`, `StoreJob`), and the listing client's handle for
+  the I/O task is a word beside it. The entries `io_step` (I/O task) and `io_done` (UI task) work on those two statics and never reach the owner. A phase word hands the data over:
+  `Idle`, `Posted`, `Running`, `Done`; the UI task touches it only in `Idle` and `Done`, the I/O task only in `Posted` and `Running`, and each phase is one aligned word store.
+  `tick` gets `DK_JOB` as an argument. Everything else uses `with` and answers "no service" on `None` (`E_SET_NOKEY` for a get, `E_SET_OFF` for a put or remove, `E_NOT_FOUND` for `dk_project_current`).
 - Nesting: every call into the owner runs under its busy state (`Owner::run`, see "re-entry" in `services/shortcuts/README.md`): the exports and the overlay table answer "no service"
   inside another call, the refusal is counted (`DK_SVC_OWNER.refused()`), and a second `&mut` is never formed. The tick is the only code that runs inside `with` for long, and
   nothing in it calls `dk_project_status`, `dk_project_current` or the overlay table synchronously: a module's settings change only queues a reload (`dkc_settings_changed`),
   which the runtime runs outside the tick. `tests/file.rs` pins the refusal. The service takes no events (no `Reentry` part).
-- The I/O task is not re-entry: it is another task, and the busy flag is the UI task's. The step forms references to the engine's writer and file buffer and to the host's file
-  client only (`Project::io_step`, `ProjectService::io_step_at`, `Host::files` take raw pointers), so the I/O task forms no `&mut` to the whole owner and does not go through
-  the owner. It still overlaps, in the abstract aliasing model, the `&mut` the UI task holds in `tick`; soundness rests on the UI task leaving the writer and the buffer alone while
-  a job runs, which nothing enforces. Removing the overlap means moving the writer's job and the file buffer out of the owner into memory the UI task reaches by raw pointer only;
-  that is a change of the engine's layout, not of the contract. Every host write test drives this path with a real posted job.
+- Re-entry and the I/O task are two cases: re-entry (a call that arrives while the owner is in a call) is refused by the busy state; the I/O task never needs the owner, because the
+  state it works on is not in it. Every host write test drives the job cell with a real posted job (`tests/job.rs` pins the phases).
 - `service-check` still reports `src/records.rs` missing: the service has no record kind, and the check requires the file.

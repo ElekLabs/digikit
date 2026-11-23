@@ -159,8 +159,11 @@ macro_rules! service {
         /// The way the tables of this file reach the object: through the owner's busy state, so a part function never runs inside another call into the object.
         struct DkSvcEnter;
         impl $crate::dkrt_abi::provider::Enter<$svc> for DkSvcEnter {
-            unsafe fn enter<R>(_inst: *mut core::ffi::c_void, refused: R, f: impl FnOnce(&mut $svc) -> R) -> R {
-                DK_SVC_OWNER.run(refused, f)
+            unsafe fn begin(_inst: *mut core::ffi::c_void) -> *mut $svc {
+                DK_SVC_OWNER.enter()
+            }
+            unsafe fn end(_inst: *mut core::ffi::c_void) {
+                DK_SVC_OWNER.leave()
             }
         }
 

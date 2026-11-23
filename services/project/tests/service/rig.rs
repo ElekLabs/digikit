@@ -5,6 +5,7 @@ use dkrt_svc_project::engine::*;
 /// The service, its hooks' record and the fake: `tick` and the I/O task by hand.
 pub(crate) struct Rig {
     pub(crate) p: Box<ProjectService>,
+    pub(crate) job: Box<StoreJob>,
     pub(crate) pend: Pending,
     pub(crate) f: Fake,
 }
@@ -22,6 +23,7 @@ impl Rig {
         );
         Rig {
             p: Box::new(ProjectService::new()),
+            job: Box::new(StoreJob::new()),
             pend: Pending::new(),
             f,
         }
@@ -51,7 +53,7 @@ impl Rig {
     }
     /// One UI pass, then the I/O task runs the job that was posted.
     pub(crate) fn pass(&mut self) {
-        self.p.tick(&mut self.f, &self.pend);
+        self.p.tick(&mut self.f, &self.pend, &self.job);
         self.pump();
         self.f.runtime_step();
     }
@@ -60,8 +62,8 @@ impl Rig {
             self.f.posted = false;
             let mut n = 0;
             let st = loop {
-                // SAFETY: the box is live and `tick` is not running: the pointer path of the I/O task, with a real posted job
-                let r = unsafe { ProjectService::io_step_at(&mut *self.p, &mut self.f) };
+                // the I/O task: the step works on the job's cell and the fake's files only
+                let r = self.job.io_step(&mut self.f);
                 if r != IO_MORE {
                     break r;
                 }
@@ -71,18 +73,18 @@ impl Rig {
             if self.f.cut_before_close {
                 return;
             }
-            self.p.io_done(st);
+            self.job.done(st);
         }
     }
     /// Passes until the service has nothing to do (time does not pass).
     pub(crate) fn settle(&mut self) {
         for _ in 0..200 {
             self.pass();
-            if !self.p.busy() && !self.f.posted {
+            if !self.p.busy(&self.job) && !self.f.posted {
                 // one more pass to take what a hook left
-                self.p.tick(&mut self.f, &self.pend);
+                self.p.tick(&mut self.f, &self.pend, &self.job);
                 self.pump();
-                if !self.p.busy() {
+                if !self.p.busy(&self.job) {
                     return;
                 }
             }

@@ -92,6 +92,11 @@ pub trait DspPart<C: CoreApi>: Sized {
 /// Work in the UI-loop tick; `phase` is one of `service::tick_phase`.
 pub trait Ticker<C: CoreApi> {
     fn tick(&mut self, core: &C, phase: u32);
+
+    /// Work of the same pass that must run before the owner is entered: the table's tick function calls it first, outside the owner's guard (no `&mut self`, so nothing forms a
+    /// reference to the object). It is for a call into foreign code that delivers events to the owner (`Owner::post` runs them at once, with the owner idle, in the order the
+    /// callbacks fire) ahead of the tick that depends on them. The default does nothing.
+    fn pre_tick(_core: &C, _phase: u32) {}
 }
 
 /// A synchronous request from a resident app, in the UI task. The service owns operation numbers and layouts.

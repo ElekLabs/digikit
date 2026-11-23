@@ -34,5 +34,7 @@ unsafe extern "C" fn tick<C: CoreApi, P: Provider<C> + Ticker<C>, G: Enter<P>>(
     core: *const c_void,
     phase: u32,
 ) {
+    // before the guard: the owner is idle here, so the events this step posts run at once and the tick below sees their effect
+    P::pre_tick(&*(core as *const C), phase);
     G::enter(inst, (), |p: &mut P| p.tick(&*(core as *const C), phase))
 }

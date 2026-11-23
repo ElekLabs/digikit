@@ -65,3 +65,33 @@ fn the_exports_reach_the_started_owner_and_a_stopped_one_is_gone() {
     // SAFETY: as above
     assert_eq!(unsafe { dk_sample_pool_status(1 as *mut u8, 0) }, E_CONTEXT);
 }
+
+#[test]
+fn the_row_reaches_the_object_through_the_owner_guard() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    dk_svc_start().expect("start");
+    dkrt_test_support::contract::row_is_guarded(
+        file::dk_svc_row(),
+        &|f| {
+            DK_SVC_OWNER.with(|_| f());
+        },
+        &|| DK_SVC_OWNER.refused(),
+    );
+    dk_svc_stop();
+}
+
+#[test]
+fn the_end_of_a_peak_job_inside_a_call_of_the_service_is_queued_and_applied_after_it() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    dk_svc_start().expect("start");
+    // the job task's end entry fires while the UI task is inside the owner: the end waits, it is not refused and not applied beside the call
+    let ctx = &file::glue::DK_PEAK_JOBS as *const _ as *mut u8;
+    let seen = DK_SVC_OWNER.run(None, |_| {
+        // SAFETY: the file's own entry, with the cell it was posted with
+        unsafe { file::glue::peak_done(ctx, 0) };
+        Some(DK_SVC_OWNER.refused())
+    });
+    assert_eq!(seen, Some(0), "queued, not refused");
+    assert_eq!(DK_SVC_OWNER.refused(), 0);
+    dk_svc_stop();
+}

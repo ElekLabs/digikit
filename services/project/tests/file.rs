@@ -105,3 +105,17 @@ fn an_export_called_inside_the_owner_answers_neutrally_and_changes_nothing() {
     assert_eq!(passes(), Some(0));
     dk_svc_stop();
 }
+
+#[test]
+fn the_row_reaches_the_object_through_the_owner_guard() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    dk_svc_start().expect("start");
+    dkrt_test_support::contract::row_is_guarded(
+        file::dk_svc_row(),
+        &|f| {
+            DK_SVC_OWNER.with(|_| f());
+        },
+        &|| DK_SVC_OWNER.refused(),
+    );
+    dk_svc_stop();
+}

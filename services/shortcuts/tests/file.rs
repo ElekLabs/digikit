@@ -89,3 +89,47 @@ fn the_export_reaches_the_started_owner_and_the_hook_swallows_a_completed_bindin
         "after fini the stock walker runs"
     );
 }
+
+#[test]
+fn a_key_that_arrives_inside_a_call_of_the_service_is_queued_not_dropped() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let p = ALL
+        .iter()
+        .find(|p| p.key_code(TRK) != 0 && p.key_code(YES) != 0)
+        .expect("a profile with TRK and YES");
+    DEVICE.store(p.id, SeqCst);
+    dk_svc_start().expect("start");
+    DK_SVC_OWNER.with(|s: &mut Shortcuts| {
+        let mut b = Binding::free();
+        b.owner = 1;
+        b.keys = [TRK as u8, YES as u8];
+        b.on = None;
+        s.table_mut().add(b)
+    });
+    let (trk, yes) = (p.key_code(TRK), p.key_code(YES));
+    let press = 1u32 << p.key_flags.press;
+    // the hook fires inside a part call (the service ticks, a module's callback reaches the key walker): the stock walker sees the key, the service takes it afterwards
+    let inside = DK_SVC_OWNER.run(u32::MAX, |_| unsafe { dk_shortcuts_key(trk, press) });
+    assert_eq!(inside, 0, "the key passes to the stock walker");
+    assert_eq!(DK_SVC_OWNER.refused(), 0, "queued, not refused");
+    assert_eq!(
+        unsafe { dk_shortcuts_key(yes, press) },
+        1,
+        "the queued first key counted: the second key completes the binding"
+    );
+    dk_svc_stop();
+}
+
+#[test]
+fn the_row_reaches_the_object_through_the_owner_guard() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    dk_svc_start().expect("start");
+    dkrt_test_support::contract::row_is_guarded(
+        file::dk_svc_row(),
+        &|f| {
+            DK_SVC_OWNER.with(|_| f());
+        },
+        &|| DK_SVC_OWNER.refused(),
+    );
+    dk_svc_stop();
+}

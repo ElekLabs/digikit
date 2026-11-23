@@ -2010,5 +2010,42 @@ fn a_refusal_during_apply_leaves_nothing<S: Subject>(f: &Fixture) {
     }
 }
 
+/// The wiring of a real service file: the functions of its row (`dk_svc_row()`) reach the object through the owner's guard, so a part call that arrives while a hook of the same
+/// file holds the object is refused (`E_BUSY`) and counted, and the object is not entered a second time. A file that wired a table to the plain pointer would run the call
+/// beside the hook's `&mut`. Every ported service runs it in its own test, over its own file's row and cell.
+///
+/// The owner is started (the file's `dk_svc_start`). `hold` runs its argument inside `DK_SVC_OWNER.with` (the hook), `refused` reads `DK_SVC_OWNER.refused()`.
+pub fn row_is_guarded(
+    row: &'static dkrt_abi::provider::ProviderRow,
+    hold: &dyn Fn(&mut dyn FnMut()),
+    refused: &dyn Fn() -> u32,
+) {
+    use dkrt_abi::provider::ProviderHandle;
+    let core = FakeCore::new();
+    let core_ptr = &core as *const FakeCore as *const core::ffi::c_void;
+    // the table functions of a guarded file ignore the instance word; it only has to be non-null for the handle
+    let mut inst = 0u32;
+    // SAFETY: the row is a static of the test binary, so the whole address space is its extent; the handle is dropped before the end of the call.
+    let handle = unsafe {
+        ProviderHandle::resolve(
+            row,
+            0..usize::MAX,
+            &mut inst as *mut u32 as *mut core::ffi::c_void,
+        )
+    }
+    .expect("a valid row");
+    let before = refused();
+    let mut inside = OK;
+    hold(&mut || {
+        // SAFETY: `core_ptr` is the live FakeCore; the guard refuses before any part function runs
+        inside = unsafe { handle.can_stop(core_ptr) };
+    });
+    assert_eq!(
+        inside, E_BUSY,
+        "a part call inside a hook of the same file is refused"
+    );
+    assert_eq!(refused(), before + 1, "and counted once");
+}
+
 #[cfg(test)]
 mod tests;

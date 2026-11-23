@@ -12,6 +12,8 @@ use dkrt_svc_project::project::Host;
 std::thread_local! {
     /// The next `open` fails with this status (a test sets it before `start`).
     pub static OPEN_FAILS: Cell<Status> = const { Cell::new(0) };
+    /// What `post` answers: a negative status is a full job table.
+    pub static POST_STATUS: Cell<i32> = const { Cell::new(0) };
 }
 
 /// A host with one project in the firmware list and no store: enough to make a project current, and no SDK. All-zero bytes are its initial state (it has none).
@@ -46,7 +48,7 @@ impl Env for TestHost {
         dkrt_sdk::E_NOT_FOUND
     }
     fn post(&mut self) -> i32 {
-        dkrt_sdk::OK
+        POST_STATUS.with(|s| s.get())
     }
     fn log(&mut self, _: u16, _: [u32; 5]) {}
     fn toast(&mut self, _: u32) {}
@@ -116,15 +118,11 @@ pub static TABLE: SettingsOverlay = SettingsOverlay {
 
 // SAFETY: a zero-sized type.
 unsafe impl Host for TestHost {
-    type Files = NoFiles;
     fn open(&mut self) -> Result<(), Status> {
         match OPEN_FAILS.with(|f| f.get()) {
             0 => Ok(()),
             status => Err(status),
         }
-    }
-    unsafe fn files(_: *const Self) -> NoFiles {
-        NoFiles
     }
     fn begin_pass(&mut self) {}
     fn overlay() -> *const SettingsOverlay {

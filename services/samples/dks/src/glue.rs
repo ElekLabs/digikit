@@ -4,9 +4,21 @@ use dkrt_abi::core_api::CoreApi;
 use dkrt_sdk::{E_CONTEXT, E_CONTRACT, E_NOT_FOUND, OK};
 use dkrt_svc_rt::ImportCore;
 use dkrt_svc_samples::events::PoolEvent;
+use dkrt_svc_samples::peakwin::{PeakJob, PeakJobs};
 use dkrt_svc_samples::samples::Samples;
 
 const CORE: ImportCore = ImportCore;
+
+/// The data of the peak-window jobs: the worker task works on it while the UI task may be inside the owner, so it is a static of the file and not a field of the owner (`PeakJob`: a
+/// phase word hands each cell between the tasks).
+pub static DK_PEAK_JOBS: PeakJobs = PeakJobs::new();
+
+/// The job-end entry of a peak-window job (the runtime calls it in the UI task): the cell takes the status, and the end goes to the owner as an event, so the window changes under the
+/// owner's guard (idle: at once; inside a call: after it).
+pub unsafe extern "C" fn peak_done(ctx: *mut u8, status: i32) {
+    let event = PeakJob::end(ctx, status);
+    let _ = crate::DK_SVC_OWNER.post(event);
+}
 
 fn client(h: *mut u8) -> u32 {
     h as usize as u32
@@ -90,6 +102,8 @@ pub unsafe extern "C" fn dk_sample_pool_peaks_window(
     owner(|s| {
         s.peaks_window(
             &CORE,
+            &DK_PEAK_JOBS,
+            peak_done,
             client(p),
             index,
             token,

@@ -87,3 +87,16 @@ fn the_exports_reach_the_started_owner_and_the_resident_query_is_its_part() {
     drop(started);
     assert!(DK_SVC_OWNER.with(|_| ()).is_none());
 }
+
+#[test]
+fn the_row_reaches_the_object_through_the_owner_guard() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let _started = Started::new();
+    dkrt_test_support::contract::row_is_guarded(
+        file::dk_svc_row(),
+        &|f| {
+            DK_SVC_OWNER.with(|_| f());
+        },
+        &|| DK_SVC_OWNER.refused(),
+    );
+}

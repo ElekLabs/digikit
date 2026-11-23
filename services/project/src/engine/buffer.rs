@@ -1,49 +1,23 @@
-//! The one file-sized buffer of the service and the rule of who may use it when.
+//! The one file-sized buffer of the service.
 use crate::dkp::Image;
 
-/// Who holds the buffer.
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[repr(u8)] // zero first: the service is a bss static
-enum Holder {
-    /// The UI task may lend it.
-    Nobody,
-    /// A write job reads it in the I/O task, from the post to the end of the job.
-    WriteJob,
-}
-
-/// Owns the buffer that holds a file's bytes: the scratch of a listing probe, of a load and of an archive or copy read, and the bytes that a write job writes. Held by
-/// `ProjectService`, which lends it to the owner that needs it for one call. Rule: the UI task lends it only while no write job holds it (`lend` asserts that in a debug
-/// build); the I/O task reads it through `job_bytes` while the job holds it.
+/// Owns the buffer that holds a file's bytes: the scratch of a listing probe, of a load and of an archive or copy read, and the bytes that a write job writes. It lives in the
+/// [`StoreJob`](super::StoreJob) cell, outside the service's owner, because the I/O task reads it while a job runs. Rule (kept by the cell's phase): the UI task uses it only while
+/// no job is posted, and the I/O task only while one is.
 pub struct FileBuffer {
     image: Image,
-    holder: Holder,
 }
 
 impl FileBuffer {
     pub const fn new() -> FileBuffer {
         FileBuffer {
             image: Image::new(),
-            holder: Holder::Nobody,
         }
     }
 
     /// Lend the buffer for one call of the UI task. Its content is whatever the last user left.
     pub fn lend(&mut self) -> &mut Image {
-        debug_assert!(
-            self.holder == Holder::Nobody,
-            "the write job holds the buffer"
-        );
         &mut self.image
-    }
-
-    /// A write job was posted: it reads the buffer until it ends.
-    pub fn give_to_job(&mut self) {
-        self.holder = Holder::WriteJob;
-    }
-
-    /// The write job ended: the UI task may lend the buffer again.
-    pub fn take_back(&mut self) {
-        self.holder = Holder::Nobody;
     }
 
     /// The first `len` bytes, for the write job (I/O task).
