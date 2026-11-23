@@ -65,6 +65,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     delTicks,
     lastView,
     progress,
+    readingAfterJob,
     setBrowseDevice,
     setDelTicks,
     setLog,
@@ -462,7 +463,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
             </>
           }
         >
-          <WaitNotice active={!!busy()} cancel={busy() !== 'Installing'} />
+          <WaitNotice active={!!busy()} cancel={busy() !== 'Installing' && !readingAfterJob()} />
           <Show when={lastView()}>
             <Show
               when={deviceRows().length}

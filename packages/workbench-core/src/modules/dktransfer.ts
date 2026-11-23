@@ -795,12 +795,25 @@ export async function buildView(
   s: DkSession,
   library: LibraryModule[],
   deps?: InstallDeps,
-  readLoaded = readLoadedModules,
+  options: {
+    info?: DkInfoFull;
+    readLoaded?: typeof readLoadedModules;
+    showModules?: (view: TransferView) => void;
+  } = {},
 ): Promise<TransferView> {
-  const info = await s.info();
+  const info = options.info ?? (await s.info());
   requireRuntime(info);
-  const card = [...(await listModules(s, info)), ...(await listServices(s, info)), ...(await listPorts(s, info))];
+  const modules = await listModules(s, info);
+  const readLoaded = options.readLoaded ?? readLoadedModules;
   const loaded = (await readLoaded(s, info)).map((m) => m.name);
+  const identity = { device: info.port, runtime: fmtVersion(info.runtime), loaded };
+  options.showModules?.({
+    ...identity,
+    free_bytes: storeFree(info, null).free,
+    capacity: null,
+    ...mergeView(library, modules, loaded, null, {}),
+  });
+  const card = [...modules, ...(await listServices(s, info)), ...(await listPorts(s, info))];
   const cap = hasCap(info, 'CAPACITY') ? await s.capacity() : null;
   const states = hasCap(info, 'LOADS') ? await s.loadStates() : [];
   const mine = new Set(library.map((m) => m.path));
@@ -850,10 +863,8 @@ export async function buildView(
     if (row) row.service_refusal = r;
   }
   return {
-    device: info.port,
-    runtime: fmtVersion(info.runtime),
+    ...identity,
     free_bytes: storeFree(info, cap).free,
-    loaded,
     capacity: cap,
     ...merged,
     ...(incompleteCardNeeds ? { incomplete_card_needs: true } : {}),

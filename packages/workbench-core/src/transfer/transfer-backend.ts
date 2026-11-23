@@ -219,28 +219,38 @@ export function createTransferBackend({
 
   const transferBackend = {
     /** The merged list: the library folder and what the device holds (INFO, LIST, MODULES, CAPACITY, READ). */
-    async list(device: string, showLibrary: (view: TransferView) => void): Promise<TransferView> {
+    async list(
+      device: string,
+      showLibrary: (view: TransferView) => void,
+      showModules: (view: TransferView) => void,
+    ): Promise<TransferView> {
       const selected = target();
-      const [local, remote] = await Promise.allSettled([
-        env.library.scan(device).then(async (files) => {
-          const library = await loadLibrary(device, files);
-          showLibrary(libraryView(device, library));
-          return { files, library };
-        }),
-        opened(),
-      ]);
-      if (remote.status === 'rejected') throw remote.reason;
-      const { s, info } = remote.value;
+      let actualDevice: string | undefined;
+      const local = env.library.scan(device).then(async (files) => {
+        const library = await loadLibrary(device, files);
+        if (!actualDevice || actualDevice === device) showLibrary(libraryView(device, library));
+        return { files, library };
+      });
+      // The provisional library can fail, or belong to a different device. Only the selected device's library is required.
+      void local.catch(() => {});
+      let remote: Awaited<ReturnType<typeof opened>>;
+      try {
+        remote = await opened();
+      } catch (error) {
+        await local.catch(() => {});
+        throw error;
+      }
+      const { s, info } = remote;
+      actualDevice = info.port;
       if (target() !== selected) throw new Error('The selected target changed.');
       const readLoaded = inventory.reader();
-      if (local.status === 'rejected' && info.port === device) throw local.reason;
-      const same = local.status === 'fulfilled' && info.port === device ? local.value : undefined;
+      const same = info.port === device ? await local : undefined;
       const files = same?.files ?? (await env.library.scan(info.port));
       const library = same?.library ?? (await loadLibrary(info.port, files));
       if (!same) showLibrary(libraryView(info.port, library));
       const deps = await installDeps(info.port, files);
       if (target() !== selected) throw new Error('The selected target changed.');
-      return asked(() => buildView(s, library, deps, readLoaded));
+      return asked(() => buildView(s, library, deps, { info, readLoaded, showModules }));
     },
     /** The library alone, for a device id: nothing is read from a device. */
     async listLibrary(device: string): Promise<TransferView> {

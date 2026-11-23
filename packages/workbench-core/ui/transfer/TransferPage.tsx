@@ -66,13 +66,15 @@ const run = async (app: TransferApp, what: string, f: () => Promise<void | Cance
     setError(failureLine(e, targetLabel(target())));
     logRun(e);
   } finally {
-    if (!skipRead)
+    if (!skipRead) {
+      app.state.beginReadback();
       try {
         await readTransfer(app);
       } catch (e) {
         haltOn(app, e);
         if (!error()) setError(failureLine(e, targetLabel(target())));
       }
+    }
     if (endJob()) void run(app, 'Reading', async () => {});
     app.env.extras?.onJobEnd?.();
   }
@@ -103,6 +105,7 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
     log,
     noRuntime,
     progress,
+    readingAfterJob,
     setDelTicks,
     setDeviceInfo,
     setError,
@@ -213,7 +216,7 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
         <span class="sp" />
         <ConnectionBadge />
         <Show when={busy() === 'Reading'}>
-          <span class="meta">reading…</span>
+          <span class="meta">{readingAfterJob() ? 'refreshing…' : 'reading…'}</span>
         </Show>
       </header>
       <AutoRefresh

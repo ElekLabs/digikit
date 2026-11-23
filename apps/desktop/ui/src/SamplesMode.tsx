@@ -85,7 +85,7 @@ import {
 
 export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBackendApi }): JSX.Element {
   const app = useTransferApp();
-  const { askStop, deviceInfo, stopWasAsked } = app.state;
+  const { askStop, deviceInfo, readingAfterJob, stopWasAsked } = app.state;
   const { busy, run, setError } = props.ctx;
   const { openDeviceSamples, listLocalAt, pickFolder, readLocal, readLocalFile } = props.backend;
   const [note, setNote] = createSignal('');
@@ -501,7 +501,7 @@ export default function SamplesMode(props: { ctx: PageCtx; backend: SamplesBacke
           </>
         }
       >
-        <WaitNotice active={!!busy()} cancel={busy() !== 'Uploading'} />
+        <WaitNotice active={!!busy()} cancel={busy() !== 'Uploading' && !readingAfterJob()} />
         <Show when={deviceInfo()?.apply === 'restart'}>
           <p class="empty note" role="status">
             <span>

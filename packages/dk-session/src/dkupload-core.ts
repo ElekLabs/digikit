@@ -1265,7 +1265,6 @@ export class DkSession {
   private async needFileHash(): Promise<void> {
     if (this.fileHashOk) return;
     if (!hasCap(await this.info(), 'FILEHASH')) throw new DkError({ error: OLD_STORE, kind: 'request' });
-    this.fileHashOk = true;
   }
 
   /** `quick`: one INFO with a short timeout and no retries (a probe for a device that may not run the runtime). */
@@ -1324,7 +1323,7 @@ export class DkSession {
         }
       }
     }
-    return {
+    const info: DkInfoFull = {
       protocol,
       runtime_version: u16(b, 2),
       runtime,
@@ -1344,6 +1343,8 @@ export class DkSession {
       log_sink: (flags & 8) !== 0,
       fault_found: (flags & 16) !== 0,
     };
+    this.fileHashOk = hasCap(info, 'FILEHASH');
+    return info;
   }
 
   /**

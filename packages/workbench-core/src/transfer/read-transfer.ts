@@ -1,3 +1,4 @@
+import { batch } from 'solid-js';
 import { isDeviceId, runtimeDeviceIds } from '../data/device-profiles';
 import type { TransferApp } from './app';
 import { rowKey, storageLine, type TransferView } from './transfer-core';
@@ -31,6 +32,13 @@ export async function readTransfer(app: TransferApp): Promise<void> {
     setDeviceInfo(undefined);
     applyPendingAdd(app, library);
   };
+  const showCard = (view: TransferView) => {
+    batch(() => {
+      setLastView(view);
+      setBrowsing(false);
+      applyPendingAdd(app, view);
+    });
+  };
   if (offline) {
     const library = await app.backend.listLibrary(browseDevice());
     if (current()) showLocal(library);
@@ -38,22 +46,26 @@ export async function readTransfer(app: TransferApp): Promise<void> {
   }
   let v: TransferView;
   try {
-    v = await app.backend.list(browseDevice(), (library) => {
-      if (!current()) return;
-      local = library;
-      app.state.rememberLibrary(library);
-      // Keep the previous device rows during a refresh; only a first read needs the library-only view.
-      if (current() && (!lastView() || browsing())) showLocal(library);
-    });
+    v = await app.backend.list(
+      browseDevice(),
+      (library) => {
+        if (!current()) return;
+        local = library;
+        // Keep the previous device rows during a refresh; only a first read needs the library-only view.
+        if (!lastView() || browsing()) showLocal(library);
+        else app.state.rememberLibrary(library);
+      },
+      (view) => {
+        if (current() && (!lastView() || browsing())) showCard(view);
+      },
+    );
   } catch (e) {
     if (current() && local) showLocal(local);
     throw e;
   }
   if (!current()) return;
-  setBrowsing(false);
   setBrowseDevice(isDeviceId(v.device) ? v.device : ((env.libraryDevices ?? runtimeDeviceIds)[0] ?? ''));
-  setLastView(v);
-  applyPendingAdd(app, v);
+  showCard(v);
   const name = await env.deviceName(v.device);
   if (current()) setDeviceInfo({ name, runtime: v.runtime, storage: storageLine(v) });
 }

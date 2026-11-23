@@ -593,9 +593,13 @@ export default function Console(
       watchHealth({ halted: a?.halted ?? null });
       const produced = a?.source_audio_seconds,
         wall = a?.session_wall_seconds;
-      if (produced === undefined || wall === undefined) return;
-      if (lastAudio && produced < lastAudio.produced) lastAudio = undefined;
-      if (lastAudio && wall > lastAudio.wall) setRate((produced - lastAudio.produced) / (wall - lastAudio.wall));
+      if (produced === undefined || wall === undefined || wall <= 0) {
+        lastAudio = undefined;
+        setRate(undefined);
+        return;
+      }
+      if (!lastAudio || produced < lastAudio.produced || wall < lastAudio.wall) setRate(undefined);
+      else if (wall > lastAudio.wall) setRate((produced - lastAudio.produced) / (wall - lastAudio.wall));
       lastAudio = { produced, wall };
     } catch {
       /* a replaced session has no audio status */
@@ -1490,6 +1494,9 @@ export default function Console(
               <Icon d={SPEAKER} />
               {audio()!.output_device}
             </span>
+          </Show>
+          <Show when={isEmulator() && status() && dspHere() && info()?.dsp?.enabled === false}>
+            <span title="Emulated audio speed is available when the DSP is running.">DSP off</span>
           </Show>
           <Show when={isEmulator() && rate() !== undefined}>
             <span title="Emulated audio seconds per wall second">

@@ -1,6 +1,6 @@
 // The Transfer page's state (Modules mode and the mode), kept for the life of the app: closing the page and opening it again shows the last list at once
 // (it is refreshed behind it), and an install's verify results stay until the next restart. One `TransferState` per app (createTransferApp).
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
 import { isDeviceId, runtimeDeviceIds } from '../data/device-profiles';
 import type { JobsApp } from '../jobs/jobs';
 import { addJob, removeJob, updateJob } from '../jobs/jobs-core';
@@ -87,6 +87,7 @@ export function createTransferState({
   /** The page's one busy action ('' when none) and its error line. They live here, not in the page: leaving the page unmounts it while a job
    * goes on, and the page that comes back must see the job (the buttons stay off, no second job, no read) and show its error. */
   const [reading, setReading] = createSignal(false);
+  const [readingAfterJob, setReadingAfterJob] = createSignal(false);
   const busy = (): string => jobs.jobs().list.find((j) => j.group === 'target')?.label ?? (reading() ? 'Reading' : '');
   const [error, setError] = createSignal('');
   let readAgain = false;
@@ -123,8 +124,21 @@ export function createTransferState({
   };
   const stopWasAsked = (): boolean => stopAsked;
 
+  /** The write finished. Hold the page's read lock while its inventory refreshes. */
+  function beginReadback(): void {
+    if (jobId === undefined) return;
+    const id = jobId;
+    jobId = undefined;
+    batch(() => {
+      setReading(true);
+      setReadingAfterJob(true);
+      jobs.setJobs((s) => removeJob(s, id));
+    });
+  }
+
   /** End the busy action; true when a read was asked for during it. */
   function endJob(): boolean {
+    setReadingAfterJob(false);
     setReading(false);
     if (jobId !== undefined) {
       const id = jobId;
@@ -182,6 +196,8 @@ export function createTransferState({
     jobProgress,
     askStop,
     stopWasAsked,
+    beginReadback,
+    readingAfterJob,
     endJob,
     halted,
     setHalted,

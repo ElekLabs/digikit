@@ -514,6 +514,24 @@ test('a write job is a target job in the shared store, a read is not', () => {
   endJob();
 });
 
+test('a completed install stops offering Cancel while its inventory refresh is still in flight', () => {
+  const app = createFakeTransferApp();
+  const { beginJob, beginReadback, busy, endJob, readingAfterJob } = app.state;
+  assert.equal(
+    beginJob('Installing', () => {}),
+    true,
+  );
+  assert.equal(typeof app.jobs.jobs().list[0]?.cancel, 'function');
+  beginReadback();
+  assert.equal(busy(), 'Reading');
+  assert.equal(readingAfterJob(), true);
+  assert.equal(app.jobs.jobs().list.length, 0);
+  assert.equal(beginJob('Deleting'), false);
+  assert.equal(endJob(), false);
+  assert.equal(readingAfterJob(), false);
+  assert.equal(busy(), '');
+});
+
 test('the bar of a resumed upload: files on the device are done at once, but add nothing to the bytes behind the speed and the time left', () => {
   const ev = (u: Uploads, e: UploadEventWithoutFolder) => applyUpload(u, { folder: 'd', ...e });
   let u: Uploads = {};
