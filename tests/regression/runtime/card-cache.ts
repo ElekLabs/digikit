@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cardCacheRoot, repoRoot, type Device } from '@digi/test-support';
 import { plusdriveBinary } from './card-kit.ts';
+import { systemPackageFile } from './system-package.ts';
 
 /**
  * Content-named card images. The daemon's boot snapshot key holds the card's content id (the text of `card.key` next to the image), its
@@ -67,8 +68,8 @@ function canonical(value: unknown): string {
   });
 }
 
-/** Card cache inputs include the plusdrive binary, device data and firmware port data. */
-function toolIdentity(): { plusdrive: string; profiles: Record<string, string> } {
+/** Card cache inputs include the plusdrive binary, the system package, device data and firmware port data. */
+function toolIdentity(): { plusdrive: string; systemPackage: string; profiles: Record<string, string> } {
   const profiles: Record<string, string> = {};
   for (const tree of ['devices', 'ports']) {
     const dir = path.join(repoRoot(), tree);
@@ -77,7 +78,13 @@ function toolIdentity(): { plusdrive: string; profiles: Record<string, string> }
         profiles[path.join(tree, name)] = fileSha(path.join(dir, name));
       }
   }
-  return { plusdrive: fileSha(plusdriveBinary()), profiles };
+  // the package every card carries: a changed package re-keys every card, so no snapshot of the old one is found
+  const pkg = systemPackageFile();
+  return {
+    plusdrive: fileSha(plusdriveBinary()),
+    systemPackage: fs.existsSync(pkg) ? fileSha(pkg) : 'absent',
+    profiles,
+  };
 }
 
 /**
@@ -92,6 +99,7 @@ const BUILDER_SOURCES = [
   'fx-session.ts',
   'fx-live.ts',
   'service-files.ts',
+  'system-package.ts',
   'service-symbols.ts',
   'runtime-plan.ts',
   'write-safety.ts',

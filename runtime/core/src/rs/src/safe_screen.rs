@@ -260,12 +260,22 @@ mod tests {
         }
     }
 
-    /// The device tests compare the intro framebuffer with these files (`tests/fixtures/safe-*.bin`). `DK_BLESS=1` rewrites them.
+    /// The device tests compare the intro framebuffer with these files (`tests/fixtures/{safe,core}-*.bin`). `DK_BLESS=1` rewrites them.
     #[test]
     fn fixtures_match_the_renderer() {
-        for (name, reason) in [("safe-key.bin", SAFE_KEY), ("safe-counter.bin", SAFE_COUNTER)] {
+        let core = |reason| {
+            let mut b = [0; FRAME_BYTES];
+            render_core_only(reason, &mut b);
+            b
+        };
+        let cases = [
+            ("safe-key.bin", frame(SAFE_KEY)),
+            ("safe-counter.bin", frame(SAFE_COUNTER)),
+            ("core-crashes.bin", core(CoreOnlyReason::Crashes)),
+            ("core-missing.bin", core(CoreOnlyReason::PackageMissing)),
+        ];
+        for (name, want) in cases {
             let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/").to_string() + name;
-            let want = frame(reason);
             if std::env::var("DK_BLESS").is_ok() {
                 std::fs::write(&path, want).unwrap();
             }

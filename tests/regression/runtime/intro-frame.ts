@@ -21,6 +21,12 @@ export function safeFrame(name: 'key' | 'counter'): Buffer {
   return introFramebuffer(fs.readFileSync(file));
 }
 
+/** The core-only frame of a cause as the same host test checks it in (`core-<name>.bin`), in framebuffer layout. */
+export function coreFrame(name: 'crashes' | 'missing'): Buffer {
+  const file = new URL(`../../../runtime/core/tests/fixtures/core-${name}.bin`, import.meta.url);
+  return introFramebuffer(fs.readFileSync(file));
+}
+
 /** The intro's own framebuffer: the last frame the intro drew. */
 export async function introNow(session: Session): Promise<Buffer> {
   const got = await session.client.framebufferGet({ source: 'intro', data: true, hash: true });

@@ -10,6 +10,7 @@ import { aggregate, withReusablePatchedSession, type PatchedSession } from '../s
 import { record } from './artifacts.ts';
 import { cachedCard, cardKey, fileSha } from './card-cache.ts';
 import { plusdriveBinary } from './card-kit.ts';
+import { installSystemPackage } from './system-package.ts';
 import { FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
 import { neededServices, portFile } from './service-files.ts';
@@ -306,6 +307,7 @@ export function withPreparedFxSession(device: Device, scope: string, config: Pre
             const seed = path.join(work, 'card', 'seed');
             const destination = path.join(seed, 'digikit', 'modules');
             fs.mkdirSync(destination, { recursive: true });
+            installSystemPackage(seed);
             for (const f of files) fs.copyFileSync(f.file, path.join(destination, f.name));
             const serviceDir = path.join(seed, 'digikit', 'services');
             fs.mkdirSync(serviceDir, { recursive: true });

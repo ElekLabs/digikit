@@ -21,6 +21,7 @@ import {
   storeHeader,
   suiteName,
 } from './settings-support.ts';
+import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
 
 /** The settings store, part 3 (see settings.device.test.ts): a store that overlaps the settings area, and a card with the older header B. */
 
@@ -100,7 +101,7 @@ for (const device of DEVICES) {
       expect(ev[0]!.args[0], 'the settings store is on (no valid copy yet)').toBe(0);
       expect(cap.SETTINGS!.limit).toBe(8192);
       expect(
-        (await usb((dk) => dk.list())).map((e) => e.path),
+        withoutSystemPackage(await usb((dk) => dk.list())).map((e) => e.path),
         'the store reports its file',
       ).toEqual([mod.name]);
       await settingsMailbox(session, kit.plan).put(ROUTE, byte(1));
@@ -121,7 +122,7 @@ for (const device of DEVICES) {
       const ha = sectorOf(after, first);
       expect(hb.subarray(0, 4).toString(), 'header B at the new place').toBe('DKST');
       expect(hb.subarray(24, 28).equals(ha.subarray(24, 28)), 'a header of the same seq as A').toBe(true);
-      expect((await usb((dk) => dk.list())).map((e) => e.path).sort(), 'the store lists both files').toEqual(
+      expect(withoutSystemPackage(await usb((dk) => dk.list())).map((e) => e.path).sort(), 'the store lists both files').toEqual(
         [mod.name, 't.bin'].sort(),
       );
       const d = await dumpJson(after);

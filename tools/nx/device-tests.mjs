@@ -23,6 +23,8 @@ export const DEVICE_BYTES = 'patchkit:device-bytes';
 export const DEVICE_IMAGES = 'patchkit:device-images';
 // Writes the `needs` verdict of the packs in tests/regression/runtime/needs-packs.json (tools/nx/pack-verdicts.mjs).
 export const PACK_VERDICTS = 'patchkit:pack-verdicts';
+// The system package every harness card carries (tests/regression/runtime/system-package.ts).
+export const SYSTEM_PACKAGE = 'core/runtime:package';
 // The host assembly tests of the runtime (runtime/core): the seams between the real packed outputs. No device task starts while they fail.
 export const TEST_ASSEMBLY = 'core/runtime:test-assembly';
 // Tasks every device task depends on: the patchkit binary, the daemons and the runtime assembly tests. Their projects are the
@@ -56,7 +58,7 @@ export const deviceTarget = (
   uploadable = false,
   opts = {},
 ) => {
-  const dependsOn = [...SHARED_TASKS, IMAGE_BUILD, DEVICE_BYTES, DEVICE_IMAGES, PACK_VERDICTS];
+  const dependsOn = [...SHARED_TASKS, IMAGE_BUILD, DEVICE_BYTES, DEVICE_IMAGES, PACK_VERDICTS, SYSTEM_PACKAGE];
   if (uploadable) dependsOn.push('pack');
   for (const rec of recs) {
     for (const id of rec.modules ?? []) {
@@ -274,6 +276,7 @@ export const conformanceTarget = (workspaceRoot, root, m, f, importInputs, full 
       DEVICE_BYTES,
       DEVICE_IMAGES,
       TEST_ASSEMBLY,
+      SYSTEM_PACKAGE,
     ],
     outputs: [],
     options: {

@@ -82,17 +82,6 @@ export function portFile(device: Device): { name: string; file: string } {
   return { name: `ports/${leaf}`, file };
 }
 
-/**
- * The system package as a card file (`digikit/system.dksp`, the store key stage 1 reads; `dist/syspkg/runtime/system.dksp`, written by the Nx target `core/runtime:package`).
- * Stage 1 of the resident core places it at boot; a card without it boots core-only. RC2s-2 step d puts it on the cards `card-rig` builds; step e makes it a card
- * option of its own (also for a folder card) and a key part.
- */
-export function systemPackage(): { name: string; file: string } {
-  const file = path.join(repoRoot(), 'dist/syspkg/runtime/system.dksp');
-  if (!fs.existsSync(file)) throw new Error(`missing ${file}: run nx run core/runtime:package`);
-  return { name: 'digikit/system.dksp', file };
-}
-
 /** The address map of the packed service file (`dist/modules/<device>/<name>.addrmap.json`, the Nx pack target writes it): the file loads as packed, so its offsets are the map's. */
 export const serviceMapPath = (device: Device, name: string) =>
   path.join(process.env.DIGI_RUNTIME_MODULES ?? path.join(repoRoot(), 'dist/modules'), device, `${name}.addrmap.json`);

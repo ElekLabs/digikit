@@ -37,6 +37,7 @@ import {
   usbSend,
   usbTake,
 } from '@digi/regression/runtime/upload-kit.ts';
+import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
 
 /** Python tools/patchkit/pk_digikit_upload.py: the `quick`, `ops`, `folders`, `stock`, `txfull` and `screenshot` parts. */
 
@@ -103,7 +104,7 @@ async function readChecks(rig: CardRig, file: string, data: Buffer): Promise<voi
 }
 
 async function ops(rig: CardRig, quick: boolean): Promise<void> {
-  const dk = await rig.pausedBoot(await rig.card({ name: 'ops' }));
+  const dk = await rig.pausedBoot(await rig.card({ name: 'ops', systemPackage: false }));
   // The boot counts itself in the selection record (this card has none): the record read here is the boot counter's own (seq 1, counter 1, or seq 2 and
   // counter 0 when the stable period has already cleared it). The uploads below must leave it alone.
   const atBoot = currentRecord(await rig.records());
@@ -121,7 +122,7 @@ async function ops(rig: CardRig, quick: boolean): Promise<void> {
       !info.upload_open,
     JSON.stringify(info),
   );
-  check('LIST of a card with no store: empty', (await dk.list()).length === 0);
+  check('LIST of a card with no store: empty', withoutSystemPackage(await dk.list()).length === 0);
 
   const a = blob(70_000, 1); // three chunks, the last partial
   files['modules/a.dkm'] = a;
@@ -277,7 +278,7 @@ uploadTests('upload-ops: the commands, errors and CLEAR', (rig) => ops(rig, fals
 /** Folders, LIST by prefix, MKDIR, CAPACITY's STORE entry, a streamed upload of several MiB, a delete that frees its space for the next file, and LIST paging. */
 async function folders(rig: CardRig): Promise<void> {
   const mib = 6;
-  const dk = await rig.pausedBoot(await rig.card({ name: 'folders' }));
+  const dk = await rig.pausedBoot(await rig.card({ name: 'folders', systemPackage: false }));
   await rig.applyCap();
   const files: Files = {};
   const zeroHash = '0'.repeat(64);
@@ -295,7 +296,7 @@ async function folders(rig: CardRig): Promise<void> {
   /** LIST and the card after the guest's writes list the files sent and the folders with nothing in them; returns the first sectors. */
   const verify = async (label: string, dirs: string[]): Promise<Record<string, number>> => {
     const store = await rig.ls(`fold-${++step}`);
-    const listed = await dk.list();
+    const listed = withoutSystemPackage(await dk.list());
     const isFolder = (e: { size: number; hash: string }) => e.size === 0 && e.hash === zeroHash;
     expect(
       Object.fromEntries(listed.filter((e) => !isFolder(e)).map((e) => [e.path, [e.size, e.hash]])),
@@ -553,7 +554,7 @@ uploadTests(
   'upload-txfull: replies are dropped while the TX ring is full',
   async (rig) => {
     const { session, device } = rig;
-    const dk = await rig.pausedBoot(await rig.card({ name: 'txfull' }));
+    const dk = await rig.pausedBoot(await rig.card({ name: 'txfull', systemPackage: false }));
     const symbol = (name: string) => planSymbol(rig.plan, name);
     // the 4-byte address literal of the code anchor (not word aligned: read as bytes)
     const anchor = portFile(device, FIRMWARE[device]).anchor?.find((a) => a.name === 'cf.midi.site.tx_inflight_lit');

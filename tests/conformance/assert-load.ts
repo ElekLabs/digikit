@@ -9,6 +9,7 @@ import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { DEBUG_MODULE, installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
 import { neededServices, portFile, servicePath } from '@digi/regression/runtime/service-files.ts';
+import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
 import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 import type { RuntimeModule } from './manifests.ts';
 
@@ -34,7 +35,7 @@ export async function expectModuleLoad(
   fs.mkdirSync(artifacts, { recursive: true });
 
   await expectRuntimeReady(session);
-  expect(await dk.list(), 'fresh daemon has an empty store').toEqual([]);
+  expect(withoutSystemPackage(await dk.list()), 'fresh daemon has an empty store').toEqual([]);
   expect(await dk.modules(), 'fresh runtime has no uploaded modules').toEqual([]);
   const epoch = (await session.status()).epoch;
   if (typeof epoch !== 'number') throw new Error('daemon status must report a numeric epoch');

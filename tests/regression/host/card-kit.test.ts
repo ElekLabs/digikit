@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,8 +13,10 @@ import {
   readSectors,
   recordsIn,
 } from '../runtime/card-kit.ts';
+import { SYSTEM_PACKAGE_STORE_PATH, systemPackageFile } from '../runtime/system-package.ts';
 import { cardAfter, encodeOverlay, linkCard } from '../runtime/write-safety.ts';
 
+const device = 'dn2';
 const directories: string[] = [];
 const tmp = () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-card-kit-'));
@@ -53,7 +56,6 @@ describe('selection record', () => {
 });
 
 describe('card sectors', () => {
-  const device = 'dn2';
   const { selA, selB } = cardStore(device);
 
   test('buildCard over a base places the copies, a torn copy and foreign sectors; the overlay wins over the image', async () => {
@@ -147,4 +149,36 @@ describe('card content id of a linked card', () => {
     const card = linkCard(base(), dir, Buffer.from('writes'));
     expect(fs.existsSync(path.join(path.dirname(card), 'card.key'))).toBe(false);
   });
+});
+
+describe('system package on the card', () => {
+  const ready = fs.existsSync(plusdriveBinary()) && fs.existsSync(systemPackageFile());
+  /** The store paths of a card as `plusdrive store ls` lists them (the harness's `storeList` hides the package). */
+  const storePaths = (card: string) =>
+    execFileSync(plusdriveBinary(), ['store', 'ls', card, '--device', device], { encoding: 'utf8' })
+      .trim()
+      .split('\n')
+      .slice(1)
+      .map((line) => line.split('\t')[0]);
+
+  test.skipIf(!ready)(
+    'a built card holds the package at its store path, with modules or from a folder, and not when left off',
+    async () => {
+      const dir = tmp();
+      const file = path.join(dir, 'a.dkm');
+      fs.writeFileSync(file, Buffer.alloc(64));
+      const withModule = await buildCard(device, { dir, name: 'm', modules: [{ name: 'modules/a.dkm', file }] });
+      expect(storePaths(withModule)).toEqual(expect.arrayContaining(['modules/a.dkm', SYSTEM_PACKAGE_STORE_PATH]));
+
+      const folder = path.join(dir, 'folder');
+      fs.mkdirSync(folder);
+      fs.writeFileSync(path.join(folder, 'note.txt'), 'x');
+      const fromFolder = await buildCard(device, { dir, name: 'f', folder });
+      expect(storePaths(fromFolder)).toContain(SYSTEM_PACKAGE_STORE_PATH);
+      expect(fs.readdirSync(folder), "the caller's folder is left as it was").toEqual(['note.txt']);
+
+      const without = await buildCard(device, { dir, name: 'n', systemPackage: false });
+      expect(() => storePaths(without), 'no file, so no store at all').toThrow('no module store');
+    },
+  );
 });

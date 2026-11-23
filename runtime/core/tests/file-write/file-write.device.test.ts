@@ -8,6 +8,7 @@ import { SETTLE, word } from '@digi/regression/runtime/fx-live.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
+import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
 
 /**
  * Store file writes from a module (api 1.10: <dk/platform/file.h>, <dk/platform/io.h>, <dk/platform/hash32.h>). The fixture test/file-write starts an I/O job from a service
@@ -90,7 +91,7 @@ for (const device of DEVICES) {
     };
     /** The store's files besides the module itself. */
     const files = async (rt: TestRuntime) =>
-      new Map((await usb(rt, (dk) => dk.list())).filter((e) => !spec.selection.includes(e.path)).map((e) => [e.path, e]));
+      new Map(withoutSystemPackage(await usb(rt, (dk) => dk.list())).filter((e) => !spec.selection.includes(e.path)).map((e) => [e.path, e]));
     const boot = async (tag: string) => {
       const rt = await kit.load(tag, spec);
       expect((await bootInfo(rt.session, kit.plan)).results, 'both modules load').toEqual([0, 0]);

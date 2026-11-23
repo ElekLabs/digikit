@@ -5,6 +5,7 @@ import { DkError, DkSession, EmuUsbTransport, fileHashHex, parseReply, type DkTr
 import { expect } from 'vitest';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
 import { uploadTests } from '@digi/regression/runtime/upload-kit.ts';
+import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
 
 /**
  * `DkSession.put` with two DATA requests in flight (finding 43, "Two requests in flight"), against the runtime on the emulated USB, on the digikit
@@ -63,7 +64,7 @@ class Link implements DkTransport {
 }
 
 uploadTests('upload-depth: two DATA requests in flight on the digikit store', async (rig) => {
-  await rig.pausedBoot(await rig.card({ name: 'depth' }));
+  await rig.pausedBoot(await rig.card({ name: 'depth', systemPackage: false }));
   await rig.applyCap();
   const call = (method: string, params?: Record<string, unknown>) => rig.session.client.call(method, params);
   // Wall-time wait: this test uses its own stepping link.
@@ -87,7 +88,7 @@ uploadTests('upload-depth: two DATA requests in flight on the digikit store', as
   check('two DATA requests were in flight', link.maxOutstanding === 2, String(link.maxOutstanding));
   check('every request was answered', link.outstanding === 0, String(link.outstanding));
   await put('depth/empty', Buffer.alloc(0));
-  const listed = Object.fromEntries((await dk.list()).map((e) => [e.path, e.size]));
+  const listed = Object.fromEntries(withoutSystemPackage(await dk.list()).map((e) => [e.path, e.size]));
   expect(listed, 'LIST holds the files sent').toEqual(Object.fromEntries(Object.entries(sent).map(([p, d]) => [p, d.length])));
   const view = await rig.view('depth-ok');
   expect(

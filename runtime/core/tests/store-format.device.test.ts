@@ -28,6 +28,7 @@ import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
 import { installDefaults, type DefaultOps } from '../../../packages/workbench-core/src/firmware/default-modules-core.ts';
 import { deleteFiles, install, libraryModule } from '../../../packages/workbench-core/src/modules/dktransfer.ts';
 import { nameHash, portFileOf, serviceFileOf } from '../../../packages/workbench-core/src/modules/services.ts';
+import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
 
 /**
  * The store's file hash (version 4: the +Drive content hash in the table's 32-byte slot) and what a store of another version is. Both devices.
@@ -151,7 +152,7 @@ cardRigs(
         facts.boot = boot;
         expect(boot, 'the boot goes on, nothing is loaded, no safe mode').toMatchObject({ safe: 0, loaded: 0, uiReached: 1 });
         expect((await cardInfo(rt.session, h.plan)).stateName, 'the card is ours').toBe('ours');
-        expect(await h.usb(rt, (dk) => dk.list()), 'LIST is empty').toEqual([]);
+        expect(withoutSystemPackage(await h.usb(rt, (dk) => dk.list())), 'LIST is empty').toEqual([]);
         expect(await names(rt)).toEqual([]);
         const quiet = await h.after('v3-boot');
         facts.selectionAfterBoot = (await h.records()).map((r: SelRecord | null) => r && r.paths);
@@ -163,7 +164,7 @@ cardRigs(
 
         // the first upload makes a version 4 store
         expect(await statusOf(() => h.usb(rt, (dk) => dk.put(MOD_PATH, file))), 'the upload works').toBe(0);
-        const listed = await h.usb(rt, (dk) => dk.list());
+        const listed = withoutSystemPackage(await h.usb(rt, (dk) => dk.list()));
         expect(listed.map((e) => [e.path, e.size, e.hash])).toEqual([[MOD_PATH, file.length, fileHashHex(file)]]);
         let view = await h.view('v4-first');
         expect(view.head, 'the card holds a version 4 store').toContain('version=4');
@@ -224,7 +225,7 @@ cardRigs(
         ]);
         expect(events.filter((e) => e.event === 'verify').every((e) => e.ok), 'every file verifies').toBe(true);
         expect(
-          (await h.usb(rt, (dk) => dk.list())).map((e) => e.path).sort(),
+          withoutSystemPackage(await h.usb(rt, (dk) => dk.list())).map((e) => e.path).sort(),
           'the card holds the port file, the service and both modules',
         ).toEqual([...library.map((m) => m.path), port.path, 'services/svc-test.dks'].sort());
         const again: typeof events = [];
