@@ -18,7 +18,7 @@ use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use dkrt_link::fake::{link, FakeLink};
 use dkrt_link::Link;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
-pub use driver::{Driver, OldService, Subject};
+pub use driver::{Driver, Subject};
 pub use provider_driver::{
     provider_contract, Provided, ProviderDriver, Recipe, RowBuilder, Started,
 };

@@ -37,7 +37,7 @@ static LIFECYCLE: LifecycleV1 = LifecycleV1 {
     reload_done,
 };
 
-fn provider(refuses: bool) -> Row {
+fn provider(refuses: bool) -> ProviderHandle {
     let parts: &'static [PartRef] = Box::leak(Box::new([PartRef::new(
         PART_LIFECYCLE,
         1,
@@ -46,12 +46,12 @@ fn provider(refuses: bool) -> Row {
     let row: &'static ProviderRow = Box::leak(Box::new(ProviderRow::new(7, parts)));
     let inst = Box::leak(Box::new([refuses as u8; 4])).as_mut_ptr() as *mut c_void;
     // SAFETY: the row and its tables are leaked; the extent is the whole address space.
-    Row::Provider(unsafe { ProviderHandle::resolve(row, 0..usize::MAX, inst) }.unwrap())
+    unsafe { ProviderHandle::resolve(row, 0..usize::MAX, inst) }.unwrap()
 }
 
 #[test]
 fn a_refused_attach_detaches_only_the_providers_that_attached() {
-    let rows: &'static [Row] = Box::leak(
+    let rows: &'static [ProviderHandle] = Box::leak(
         Vec::from([
             provider(false),
             provider(false),
@@ -62,7 +62,6 @@ fn a_refused_attach_detaches_only_the_providers_that_attached() {
     );
     let table = ServiceTable {
         rows,
-        failed: 0,
         core: core::ptr::null(),
     };
     let c = ApplyCtx {

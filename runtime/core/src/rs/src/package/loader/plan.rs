@@ -52,7 +52,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         let mut want = [0u32; WANT_MAX];
         let nw = unmet_needs(&mods[..n], &mut want);
         if nw != 0 {
-            discover::find(&mut self.m, &services(), &want[..nw], dkrt_abi::fw_id::image_fw_id(&self.p), &mut self.found);
+            discover::find(&mut self.m, &want[..nw], dkrt_abi::fw_id::image_fw_id(&self.p), &mut self.found);
             // a limit of the search was passed: a need may be unmet for that reason, not for a missing file; each cause has its own name word (`(tab`, `(fil`, `(nee`) and its `TRUNC_*` bit as the hash word, which `loadFailureText` of runtime-log.ts turns into text
             let t = self.found.truncated;
             if t & discover::TRUNC_TABLE != 0 {
@@ -272,7 +272,7 @@ pub(super) fn unmet_needs(mods: &[Option<Keys>], out: &mut [u32; WANT_MAX]) -> u
             let mut i = 0;
             while let Some(w) = t.words(dkneeds::keys::tag::NEEDS, i) {
                 i += 1;
-                if w.2 & 1 == 0 || discover::is_runtime_service(w.0, &services()) {
+                if w.2 & 1 == 0 || discover::is_runtime_service(w.0) {
                     continue;
                 }
                 let mut seen = false;

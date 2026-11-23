@@ -56,7 +56,7 @@ shared = [
   "dkrt::image",     # the parse and checks of a `.dkm` image (stage 1 reads it too)
   "dkrt::package::reload",   # the reload job, its refusals and the placeholder phase (docs/plans/extension-model.md E5)
   "dkrt::package::settings_reload",
-  "dkrt::package::svc_rows",
+  "dkrt::package::provider_rows",
   "dkrt::package::admission", # owner, key and fit verdicts of a boot or a live load
   "dkrt::package::lifecycle", # the runtime's seams of the package manager
   "dkrt_lifecycle",  # package graph and package manager (runtime/core/lifecycle)

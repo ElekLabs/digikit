@@ -24,13 +24,6 @@ mod stubs {
         COUNTS[2].fetch_add(1, core::sync::atomic::Ordering::SeqCst);
         0
     }
-    #[no_mangle]
-    extern "C" fn dk_service_declare_row(
-        _: *mut u8,
-        _: *const dkrt_abi::service::ServiceRow,
-    ) -> i32 {
-        0
-    }
     /// The row and the instance of the last `dk_provider_declare_row` (addresses), and how many times it was called.
     pub static DECLARED: [core::sync::atomic::AtomicUsize; 3] =
         [const { core::sync::atomic::AtomicUsize::new(0) }; 3];
@@ -54,10 +47,14 @@ mod stubs {
 
 // a file with `tick =` has the entry in the record and the context `init` was called with; one without has a zero word
 mod ticked {
+    use dkrt_abi::provider::{Provider, Status};
+
     pub struct S;
-    impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for S {
-        dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_teardown!();
+    impl Provider<crate::ImportCore> for S {
+        fn start(_: &crate::ImportCore) -> Result<S, Status> {
+            assert_eq!(crate::init_ctx() as usize, 0x1234);
+            Ok(S)
+        }
     }
     pub static TICKS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
     pub unsafe extern "C" fn tick(ctx: *mut u8) {
@@ -67,36 +64,35 @@ mod ticked {
         S,
         "ticked",
         &[],
-        setup = setup,
+        parts = [],
         hooks = [],
         fills = [],
         exports = [],
         tick = tick
     );
-    unsafe fn setup(_: &crate::ImportCore) -> i32 {
-        assert_eq!(crate::init_ctx() as usize, 0x1234);
-        0
-    }
     pub unsafe fn init(ctx: *mut u8) -> i32 {
         dk_svc_init(ctx)
     }
 }
 mod unticked {
+    use dkrt_abi::provider::{Provider, Status};
+
     pub struct S;
-    impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for S {
-        dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_teardown!();
+    impl Provider<crate::ImportCore> for S {
+        fn start(_: &crate::ImportCore) -> Result<S, Status> {
+            Ok(S)
+        }
     }
-    crate::service!(S, "unticked", &[]);
+    crate::service!(S, "unticked", &[], parts = []);
 }
 
 #[test]
-fn tick_puts_the_entry_in_the_module_record_and_the_context_reaches_setup() {
+fn tick_puts_the_entry_in_the_module_record_and_the_context_reaches_start() {
     let t = ticked::dk_module.tick.expect("tick = f sets the entry");
     unsafe { t(5 as *mut u8) };
     assert_eq!(ticked::TICKS.load(core::sync::atomic::Ordering::Relaxed), 5);
     assert!(unticked::dk_module.tick.is_none());
-    // `init` stores the context before `setup` runs (the assert in `setup`)
+    // `init` stores the context before `start` runs (the assert in `start`)
     assert_eq!(unsafe { ticked::init(0x1234 as *mut u8) }, 0);
     assert_eq!(init_ctx() as usize, 0x1234);
 }
@@ -197,9 +193,9 @@ fn the_macro_emits_exactly_the_adopted_parts_and_the_lifecycle() {
         let found = matches!(row.part(tag, newest), PartLookup::Found { .. });
         assert_eq!(found, adopted, "part {tag}");
     }
-    // a file that adopts no optional part has the lifecycle part alone
+    // every file stops its owner in `fini`, whatever parts it adopts
     assert!(provided::dk_module.fini.is_some());
-    assert!(ticked::dk_module.fini.is_none(), "the old form has no fini");
+    assert!(ticked::dk_module.fini.is_some());
 }
 
 #[test]

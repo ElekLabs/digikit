@@ -16,8 +16,7 @@ use dkrt_lifecycle::{PackageId, PackageManager};
 /// The attach and detach counters of the provider fixture, asked through the query part of its row in the runtime's table.
 fn ping_counters() -> (u32, u32) {
     let hash = dkneeds::keys::name_hash("local-ping");
-    let row = crate::package::svc_rows::rows().iter().find(|r| unsafe { r.name_hash() } == hash).expect("the row of local-ping is in the table");
-    let dkrt_abi::service::Row::Provider(h) = row else { panic!("local-ping provides a ProviderRow") };
+    let h = crate::package::provider_rows::rows().iter().find(|r| r.name() == hash).expect("the row of local-ping is in the table");
     let mut reply = [0u8; dkrt_fixture_local_ping::COUNTERS_LEN];
     assert_eq!(unsafe { h.query(dkrt_fixture_local_ping::OP_COUNTERS, &[], &mut reply) }, reply.len() as i32);
     let word = |i: usize| u32::from_be_bytes([reply[i * 4], reply[i * 4 + 1], reply[i * 4 + 2], reply[i * 4 + 3]]);
@@ -55,7 +54,7 @@ fn the_manager_brings_up_the_packed_local_ping_fixtures_and_takes_them_down_with
             let hash = dkneeds::keys::name_hash("local_ping_value");
             assert!(l.exports.resolve(hash).is_none(), "the export is bound to its consumers, not global");
             assert!(l.exports.owned(hash).is_some(), "{}: the service published its export", dev.name);
-            assert!(crate::package::svc_rows::has("local-ping"), "{}: its row is in the table", dev.name);
+            assert!(crate::package::provider_rows::has("local-ping"), "{}: its row is in the table", dev.name);
             assert_eq!([st().modules[0].used, st().modules[1].used, records::module(MAX_MODULES).used], [1, 1, 1]);
             assert_eq!(st().loads, 2, "two modules are loaded");
             // the provider heard both consumers come up (`Provider::attach`, also without records) and nothing has gone; its query answers the counters
@@ -80,7 +79,7 @@ fn the_manager_brings_up_the_packed_local_ping_fixtures_and_takes_them_down_with
             assert!(!s.retained(user) && !s.retained(user_b) && !s.retained(service));
             assert_eq!([st().modules[0].used, st().modules[1].used, records::module(MAX_MODULES).used], [0, 0, 0]);
             assert_eq!(l.exports.count(), 0, "the export is withdrawn");
-            assert!(!crate::package::svc_rows::has("local-ping"), "its row is gone");
+            assert!(!crate::package::provider_rows::has("local-ping"), "its row is gone");
             assert!(l.m.live.is_empty(), "{}: every block of the arena is back", dev.name);
             assert_eq!(l.installer.count(), 0);
             assert_eq!(*l.p.code.borrow(), stock, "{}: the firmware is as it was", dev.name);
@@ -151,7 +150,7 @@ fn a_provider_row_with_a_part_newer_than_the_core_knows_is_refused_and_leaves_no
                 dev.name,
                 report.refused().iter().map(|r| r.reason).collect::<Vec<_>>()
             );
-            assert!(!crate::package::svc_rows::has("local-ping"), "{}: no row stays", dev.name);
+            assert!(!crate::package::provider_rows::has("local-ping"), "{}: no row stays", dev.name);
             assert!(l.m.live.is_empty(), "{}: every block of the arena is back", dev.name);
             assert_provider_stopped(&l, dev.name);
         }
@@ -183,7 +182,7 @@ fn a_provider_row_that_names_another_service_is_refused_and_its_owner_is_stopped
             let report = pm.boot(&[id(0)]).unwrap();
             assert!(report.brought_up().is_empty(), "{}", dev.name);
             assert!(!report.refused().is_empty(), "{}", dev.name);
-            assert!(!crate::package::svc_rows::has("local-ping"), "{}: no row stays", dev.name);
+            assert!(!crate::package::provider_rows::has("local-ping"), "{}: no row stays", dev.name);
             assert_provider_stopped(&l, dev.name);
         }
         clean_state();

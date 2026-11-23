@@ -1,10 +1,9 @@
 //! What a service file declares to the runtime in `init`: its record kinds, its row, its hook sites, slot fills and exports (the `dk_service_declare_*` imports of
 //! `sdk.toml`), and the module context `init` was called with.
-use crate::import_core::sys::{dk_provider_declare_row, dk_service_declare_row};
+use crate::import_core::sys::dk_provider_declare_row;
 use crate::import_core::ImportCore;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::ProviderRow;
-use dkrt_abi::service::ServiceRow;
 
 extern "C" {
     /// An import of every module (`dk_service_declare_kind` of sdk.toml): one record kind this service owns, with its length and handler entry.
@@ -34,49 +33,11 @@ pub const DEVICE_DT2: u32 = dkrt_abi::profiles::DT2.id;
 #[doc(hidden)]
 pub const DEVICE_DN2: u32 = dkrt_abi::profiles::DN2.id;
 
-/// The `init` of `service!`: declare each record kind the row owns (its handler entry is `handler`, an address of the file, which the header table records as
-/// an image offset) and then the row. The first refusal is the result.
-///
-/// # Safety
-/// `ctx` is the module context `init` was called with; `row` stays valid as long as the file is loaded.
-pub unsafe fn init(ctx: *mut u8, row: &'static ServiceRow, handler: *const u8) -> i32 {
-    for &(kind, len) in row.kinds() {
-        let r = dk_service_declare_kind(ctx, kind, len, handler);
-        if r != 0 {
-            return r;
-        }
-    }
-    dk_service_declare_row(ctx, row)
-}
-
-/// The declarations of `service!` after `init` (kinds and row): one `dk_service_declare_hook` for each `(site hash, entry, device)` that is for `device` (0: every
-/// device), one `dk_service_declare_slot` for each `(slot hash, entry, device)` of `fills` likewise, then one `dk_service_declare_export` for each `(name hash,
-/// entry)`. The first refusal is the result. `device` is the `[digikit] id` of the running device.
-///
-/// # Safety
-/// As `init`; each entry is the address of a function of the file.
-pub unsafe fn declare(
-    ctx: *mut u8,
-    row: &'static ServiceRow,
-    handler: *const u8,
-    device: fn() -> u32,
-    hooks: &[(u32, *const u8, u32)],
-    fills: &[(u32, *const u8, u32)],
-    exports: &[(u32, *const u8)],
-) -> i32 {
-    let r = init(ctx, row, handler);
-    if r != 0 {
-        return r;
-    }
-    declare_entries(ctx, device, hooks, fills, exports)
-}
-
-/// The declarations of a file that provides a `ProviderRow` (`service!` with `parts =`): each record kind in `kinds` (the same as `init`), the row with the
-/// instance `Provider::start` made, then the hooks, fills and exports as `declare`. `instance` is null before `start` (the host test of the assembly replays the
+/// The declarations of a service file (`service!`): each record kind in `kinds`, the row with the instance `Provider::start` made, then the hooks, fills and exports. `instance` is null before `start` (the host test of the assembly replays the
 /// declarations without one; the runtime refuses such a row at the commit).
 ///
 /// # Safety
-/// As `declare`; `row` stays valid as long as the file is loaded and `instance` as long as the row is.
+/// `ctx` is the module context `init` was called with; each entry is the address of a function of the file; `row` stays valid as long as the file is loaded and `instance` as long as the row is.
 #[allow(clippy::too_many_arguments)]
 pub unsafe fn declare_provider(
     ctx: *mut u8,

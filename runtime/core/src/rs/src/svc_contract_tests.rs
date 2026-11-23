@@ -5,7 +5,8 @@ use crate::package::core_api::{CoreApi, REAL_CORE};
 use crate::test_lock::LOCK;
 use dkrt_abi::core_api::LOG_INFO;
 use dkrt_abi::link::{Owner, Slot, Stream};
-use dkrt_abi::service::{Declare, Service, SVC_ABI};
+use dkrt_abi::provider::{Provider, Records, Status};
+use dkrt_abi::service::{Declare, SVC_ABI};
 use dkrt_svc_rt::ImportCore;
 
 fn lock() -> std::sync::MutexGuard<'static, ()> {
@@ -85,19 +86,21 @@ fn the_link_and_the_job_queue_answer_over_the_c_shape() {
     }
 }
 
-/// A service that declares nothing: only the row and the glue are looked at.
+/// A service that does nothing: only the row and the glue are looked at.
 struct Nothing;
-impl<C: CoreApi> Service<C> for Nothing {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
+impl<C: CoreApi> Provider<C> for Nothing {
+    fn start(_core: &C) -> Result<Nothing, Status> {
+        Ok(Nothing)
+    }
 }
+impl<C: CoreApi> Records<C> for Nothing {}
 
 mod glue {
     // `dk_module`, `dk_svc_abi` and the row, as a service file's crate gets them
-    dkrt_svc_rt::service!(super::Nothing, "nothing", &[(90, 24), (91, 32)]);
+    dkrt_svc_rt::service!(super::Nothing, "nothing", &[(90, 24), (91, 32)], parts = [Records]);
 
-    pub fn row() -> &'static dkrt_abi::service::ServiceRow {
-        &DK_SVC_ROW
+    pub fn row() -> &'static dkrt_abi::provider::ProviderRow {
+        dk_svc_row()
     }
     pub fn module() -> &'static dkrt_svc_rt::ModuleDef {
         &dk_module
@@ -116,8 +119,8 @@ fn the_service_macro_gives_the_fingerprint_and_an_init_that_declares_kinds_and_r
     assert_eq!(glue::abi(), SVC_ABI);
     assert_ne!(SVC_ABI, 0);
     let m = glue::module();
-    assert!(m.init.is_some() && m.fini.is_none() && m.tick.is_none() && m.menu.is_none());
-    assert_eq!(glue::row().name(), "nothing");
+    assert!(m.init.is_some() && m.fini.is_some() && m.tick.is_none() && m.menu.is_none());
+    assert_eq!(glue::row().name(), dkrt_abi::provider::name_hash("nothing"));
     unsafe {
         let mut col = std::boxed::Box::new(crate::package::collect::Collect::new());
         crate::package::collect::begin(&mut *col);
@@ -126,15 +129,18 @@ fn the_service_macro_gives_the_fingerprint_and_an_init_that_declares_kinds_and_r
         crate::package::collect::end();
         crate::package::entry::unbind(0);
         assert_eq!(r, 0);
-        // two kinds with the handler the macro passes (the address of init, a function of the file), then the row
+        // two kinds with the handler the macro passes (the address of init, a function of the file), then the row and the instance `start` made
         let d = &col.decl;
-        assert_eq!(d.n, 3);
+        assert_eq!(d.n, 4);
         assert_eq!((d.items[0].tag, d.items[0].a, d.items[0].b), (Declare::KIND, 90, 24));
         assert_eq!((d.items[1].tag, d.items[1].a, d.items[1].b), (Declare::KIND, 91, 32));
         assert_ne!(d.items[0].c, 0);
         assert_eq!(d.items[0].c, d.items[1].c);
-        assert!(core::ptr::eq(d.row_ptr().unwrap(), glue::row()));
-        // outside init the declaration is refused
+        let (row, instance) = d.provider_row_ptr().unwrap();
+        assert!(core::ptr::eq(row, glue::row()));
+        assert!(!instance.is_null());
+        // `fini` stops the owner; outside init the declaration is refused
+        (m.fini.unwrap())(core::ptr::null_mut());
         assert_eq!((m.init.unwrap())(core::ptr::null_mut()), dkrt_sdk::E_CONTEXT);
     }
 }

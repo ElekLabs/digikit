@@ -1,5 +1,5 @@
 //! The function tables of the six parts, version 1 (`row::PART_*`). A table is a `repr(C)` list of `extern "C"` functions whose first argument is the instance (the
-//! owner object) and, for most, the second the core. `of::<P, C>()` builds the table of an owner object with generic thunks, as `ServiceRow::of` builds its thunks;
+//! owner object) and, for most, the second the core. `of::<P, C>()` builds the table of an owner object with generic thunks;
 //! a service file builds it in its own object, so the table has the same layout for every service and every core. A new callback is a new version of one part.
 mod describe;
 mod dsp;

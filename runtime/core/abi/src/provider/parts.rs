@@ -1,5 +1,5 @@
 //! The optional parts of the service contract. Each one is a separate tagged table in the packed row (`row::PART_*`; the tables are in `tables/`); a service adopts
-//! only the parts it needs. In version 1 every callback of the old `Service` trait is a method of exactly one part, with the same meaning and the same place in a walk.
+//! only the parts it needs. In version 1 every callback is a method of exactly one part.
 use super::{Consumer, ConsumerId, Status, WordSink};
 use crate::core_api::CoreApi;
 use crate::dsp::{DspSec, Job};

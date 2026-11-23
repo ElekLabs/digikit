@@ -13,7 +13,7 @@ pub fn fx_row() -> &'static dkrt_abi::provider::ProviderRow {
 }
 
 /// The owner of the fx file in its cell, made as the file's `init` makes it before the declarations, except that no table of the effect pages is bound: a host test binds it
-/// when it first needs it (`fxpage::info`), as the old row did. `E_LOADED` when the cell holds one.
+/// when it first needs it (`fxpage::info`), as the file's own code does. `E_LOADED` when the cell holds one.
 pub fn fx_start() -> Result<*mut u8, i32> {
     dkrt_svc_fx_dks::DK_SVC_OWNER
         .start(|slot| {
@@ -62,8 +62,8 @@ pub fn machines_stop() {
 }
 
 /// The row of the machines file as a loaded service file has it, over its owner (started when no one is).
-pub fn machines_source() -> crate::package::svc_rows::RowSource<'static> {
-    crate::package::svc_rows::RowSource::Provider { row: machines_file_row(), instance: machines_start(), extent: 0..usize::MAX }
+pub fn machines_source() -> crate::package::provider_rows::RowSource<'static> {
+    crate::package::provider_rows::RowSource { row: machines_file_row(), instance: machines_start(), extent: 0..usize::MAX }
 }
 
 /// The builder call `dk_module_ctx_add_machine` of the file, for the module whose context is `ctx`: the export that a module's `init` calls (the owner is started when no one is).

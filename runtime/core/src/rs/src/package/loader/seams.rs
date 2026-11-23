@@ -3,7 +3,7 @@
 
 use dkrt_abi::module::Ctx;
 use dkrt_abi::dev_addr::DevAddr;
-use crate::package::svc_rows::RowSource;
+use crate::package::provider_rows::RowSource;
 use dkrt_abi::service::ModuleCommitCtx;
 
 /// A staged file: `size` bytes at `ptr`, valid until the next `stage`.
@@ -29,7 +29,7 @@ pub trait Images {
     unsafe fn free(&mut self, addr: DevAddr);
     /// The address of the import `name` (NUL-terminated), 0 when the runtime has none (`import_addr`).
     unsafe fn import_addr(&mut self, name: *const u8) -> u32;
-    /// The address of the service-only import `name` (`SVC_IMPORTS`: the `dkc_*` of interface C, `dk_service_declare_row`, `dkc_panic`), 0 when there is none. The loader
+    /// The address of the service-only import `name` (`SVC_IMPORTS`: the `dkc_*` of interface C, `dk_provider_declare_row`, `dkc_panic`), 0 when there is none. The loader
     /// asks only for a file of role 1, after `import_addr`.
     unsafe fn svc_import_addr(&mut self, _name: *const u8) -> u32 {
         0
@@ -52,7 +52,7 @@ pub trait Images {
 pub trait Registry {
     /// Does the runtime accept a service file with this ABI fingerprint (header word 0x3c)? 0: the file uses neither interface B nor C.
     fn abi_ok(&self, fingerprint: u32) -> bool;
-    /// Publish the service row that `init` of record `rec` declared (`None`: it declared none, as every module today): an old `ServiceRow`, or a `ProviderRow` that is resolved
+    /// Publish the service row that `init` of record `rec` declared (`None`: it declared none, as every module today): a `ProviderRow` that is resolved
     /// against the part versions this core knows (`E_SVC_ABI` for a newer one).
     unsafe fn add(&mut self, rec: usize, row: Option<RowSource<'_>>, order: Option<u32>) -> i32;
     /// Take everything record `rec` published down (idempotent).
@@ -139,7 +139,7 @@ impl Images for RealImages {
     }
 }
 
-/// The runtime's own registry: the machine, parameter and page rows of a module's records, and the service row of a service file (`svc_rows.rs`).
+/// The runtime's own registry: the machine, parameter and page rows of a module's records, and the service row of a service file (`provider_rows.rs`).
 pub struct RealRegistry;
 
 impl Registry for RealRegistry {
@@ -149,7 +149,7 @@ impl Registry for RealRegistry {
     unsafe fn add(&mut self, rec: usize, row: Option<RowSource<'_>>, order: Option<u32>) -> i32 {
         match row {
             None => dkrt_sdk::OK,
-            Some(row) => crate::package::svc_rows::add(rec, row, order),
+            Some(row) => crate::package::provider_rows::add(rec, row, order),
         }
     }
     unsafe fn remove(&mut self, rec: usize) {
@@ -160,7 +160,7 @@ impl Registry for RealRegistry {
             #[cfg(not(test))]
             crate::package::registry::remove(rec as u8 + 1);
         }
-        crate::package::svc_rows::remove(rec);
+        crate::package::provider_rows::remove(rec);
     }
     unsafe fn module_begin(&mut self, rec: usize) {
         crate::package::handlers::services().module_begin(rec)

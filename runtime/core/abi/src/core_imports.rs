@@ -1,5 +1,5 @@
 //! Interface C as the imports of a service file (docs/plans/runtime-and-services.md section 13.2): one `extern "C" fn dkc_*` per `CoreApi` method, in C shape, and
-//! the imports only a service file makes (`dk_service_declare_row`, `dk_provider_declare_row`, `dkc_panic`). The list is one macro; two crates expand it:
+//! the imports only a service file makes (`dk_provider_declare_row`, `dkc_panic`). The list is one macro; two crates expand it:
 //!
 //! - `dkrt-svc-rt` declares the names in an `extern "C"` block and implements `CoreApi` over them (`ImportCore`);
 //! - the runtime checks one function of its own for each entry against the declared type and builds its second import table `SVC_IMPORTS` from the names.
@@ -12,7 +12,7 @@
 pub use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 pub use dkrt_sdk::DkrtLive;
 
-/// Invoke `$m! { fn name(arg: Ty, ...) -> Ret; ... }` with the imports of a service file: the `dkc_*` of `CoreApi`, then `dk_service_declare_row`, `dk_provider_declare_row` and `dkc_panic`.
+/// Invoke `$m! { fn name(arg: Ty, ...) -> Ret; ... }` with the imports of a service file: the `dkc_*` of `CoreApi`, then `dk_provider_declare_row` and `dkc_panic`.
 #[macro_export]
 macro_rules! core_imports {
     ($m:ident) => {
@@ -76,8 +76,6 @@ macro_rules! core_imports {
             // The store path of the file `name` under `dir`: its length (the path NUL padded in the 64 bytes at `out`) or a negative code.
             fn dkc_store_find(dir: *const u8, dir_len: u32, name: *const u8, name_len: u32, out: *mut u8) -> i32;
             // ---- only a service file: its row, and a panic
-            // Called in `init`: the `ServiceRow` this file provides (`ctx` is the module context). A status.
-            fn dk_service_declare_row(ctx: *mut u8, row: *const $crate::service::ServiceRow) -> i32;
             // Called in `init` after `Provider::start`: the `ProviderRow` this file provides and the instance (the owner object) its part functions work on. A status.
             fn dk_provider_declare_row(ctx: *mut u8, row: *const $crate::provider::ProviderRow, instance: *mut u8) -> i32;
             // A service panicked: the runtime's panic (crash capture, safe mode on the next boot). Never returns.

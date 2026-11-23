@@ -28,7 +28,7 @@ use dkrt_abi::regcheck::check_layout;
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{
     check_step, commit_phase, ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, RecordSink,
-    Service, SettleCtx, TableFault,
+    SettleCtx, TableFault,
 };
 use dkrt_abi::MAX_MODULES;
 use dkrt_sdk::*;
@@ -199,7 +199,7 @@ pub struct Fixture {
     /// A module the service refuses while it applies the records, after the rows of earlier records were written (`None`: the service has no such path; its
     /// `check` covers every limit its `apply` has).
     pub bad_late: Option<Late>,
-    /// The service's `validate_records` refuses some records (it is not `accepts_records!()`): case 1b then also checks that it refuses a fixture record whose body is one byte short.
+    /// The service's `validate_records` refuses some records (its `Records::validate` is not the default): case 1b then also checks that it refuses a fixture record whose body is one byte short.
     pub rules: bool,
     /// The values the user turned on the module's rows, which the service keeps while the module is gone (`None`: the service keeps none). Case 13.
     pub parked_knobs: Option<ParkedKnobs>,
@@ -872,7 +872,7 @@ impl<'f, S: Subject> Lifecycle<'f, S> {
                 return Err(r);
             }
         } else {
-            // a consumer without records: a provider is told, an old row was not
+            // a consumer without records: a provider is told
             self.applied.set(0);
             self.driver.attach_without_records(core, rec as u8 + 1);
         }
@@ -1093,12 +1093,7 @@ pub fn locked() -> MutexGuard<'static, ()> {
     SUITE.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// The cases of the contract (docs/plans/extension-model.md 3.5) for the old service `S` on the profile of `f`.
-pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
-    run::<S>(f)
-}
-
-/// The cases of the contract for the subject `S` on the profile of `f`: one body for the old trait and the provider parts.
+/// The cases of the contract (docs/plans/extension-model.md 3.5) for the subject `S` on the profile of `f`.
 pub fn run<S: Subject>(f: &Fixture) {
     let _g = locked();
     declares_its_kinds::<S>(f);

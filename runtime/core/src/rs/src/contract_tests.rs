@@ -105,7 +105,7 @@ struct MachinesBack(bool);
 impl Drop for MachinesBack {
     fn drop(&mut self) {
         if self.0 {
-            unsafe { crate::package::svc_rows::add(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200)) };
+            unsafe { crate::package::provider_rows::add(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200)) };
         }
     }
 }
@@ -116,7 +116,7 @@ fn check_with(f: &[u8], device: u32, fx: bool, machines: bool) -> (i32, Job) {
     let _ = crate::package::handlers::services(); // the first call adds the machines row of the host tests
     let _back = MachinesBack(!machines);
     if !machines {
-        unsafe { crate::package::svc_rows::remove(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1) };
+        unsafe { crate::package::provider_rows::remove(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1) };
     }
     // an effect module's DSP section is checked by the fx service, a file of the card
     let _fx = fx.then(crate::package::handlers::fx_fixture::LoadedFx::new);
@@ -339,23 +339,12 @@ fn a_machine_voice_with_a_bad_entry_is_refused() {
 // The test-only service `svc-test` (`.dks`) and its user (`.dkm`): the role word, the find and the plan on the packed files.
 mod service_fixtures {
     use super::*;
-    use crate::package::core_api::{CoreApi, REAL_CORE};
     use crate::fake_storage::FakeStorage;
     use crate::package::loader::discover::{find, Found};
-    use crate::package::handlers::ServiceTable;
     use crate::package::loader::role::{role_of, role_ok};
     use dkneeds::keys::name_hash;
     use dkrt_abi::plan::{Reason, Verdict};
-    use dkrt_abi::service::{Service, ServiceRow};
     use dkrt_abi::storage::{Storage, ROOT_STORE};
-
-    struct S;
-    impl<C: CoreApi> Service<C> for S {
-        dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_teardown!();
-    }
-    static ROWS: [ServiceRow; 1] = [ServiceRow::of::<S, crate::package::core_api::RealCore>("machines", &[])];
-    static ROWS_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ROWS);
 
     #[repr(C, align(16))]
     struct Block([u8; 1024]);
@@ -395,9 +384,8 @@ mod service_fixtures {
     fn found(dev: &str) -> (Vec<u8>, Found) {
         let svc = packed(dev, "svc-test");
         let mut fs = crate::package::loader::discover::fake::cards(vec![("services/svc-test.dks".into(), svc.clone())]);
-        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let mut out = Found::new();
-        unsafe { find(&mut fs, &services, &[name_hash("svc-test")], None, &mut out) };
+        unsafe { find(&mut fs, &[name_hash("svc-test")], None, &mut out) };
         (svc, out)
     }
 

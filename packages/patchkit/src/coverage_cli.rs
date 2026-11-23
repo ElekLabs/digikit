@@ -238,7 +238,7 @@ const SERVICE_LINK_PREFIXES: &[&str] = &[
     "dk_stock_", // stock firmware routines, from the port file
 ];
 /// The one import only a service file makes besides the prefixed families (`SVC_IMPORTS`).
-const SERVICE_LINK_NAMES: &[&str] = &["dk_service_declare_row"];
+const SERVICE_LINK_NAMES: &[&str] = &["dk_provider_declare_row"];
 
 fn is_service_link_name(n: &str) -> bool {
     SERVICE_LINK_PREFIXES.iter().any(|p| n.starts_with(p)) || SERVICE_LINK_NAMES.contains(&n)

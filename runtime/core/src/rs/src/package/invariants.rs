@@ -144,7 +144,7 @@ mod tests {
     fn a_placeholder_voice_row_has_no_record_and_is_consistent_and_another_owner_of_a_free_record_is_not() {
         let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
-            crate::package::svc_rows::test_machines();
+            crate::package::provider_rows::test_machines();
             *st() = core::mem::zeroed();
             *dsp::ds() = core::mem::zeroed();
             crate::package::handlers::fx_fixture::reset_rows();

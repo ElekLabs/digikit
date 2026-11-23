@@ -9,7 +9,7 @@ use dkrt_lifecycle::{Api, Entry, Manifest};
 
 /// The header tables of the selected packages and of the services they need, as the loader keeps them: the module at each selection index (`Loader::capture`), the
 /// provider the search found (`discover::find`). The tables stay where the loader holds them; the manifest holds views of them, so the loader's tables must not change while
-/// the manager lives. The core's APIs are the runtime floor and the services of the image (`HANDLE_SERVICES`, the in-crate rows), all at the runtime's version.
+/// the manager lives. The core's APIs are the runtime floor and the services of the image (`HANDLE_SERVICES`), all at the runtime's version.
 ///
 /// Today's headers pack no pools and no claims, so the manifest has none (RC3 packs them). `admit` is the rules of the core (`admission.rs`) over the loader's tables. The entries of a package are those its start derived (`Session`), and are valid
 /// from the start of that package to the start of the next, which is when the manager installs them.
@@ -34,10 +34,10 @@ fn empty_table() -> &'static [u8] {
     }
 }
 
-/// The most APIs of the core: the names of `HANDLE_SERVICES` and of the in-crate rows.
+/// The most APIs of the core: the names of `HANDLE_SERVICES`.
 const CORE_MAX: usize = 16;
 
-/// The APIs the core provides without a package: the services of the image (`HANDLE_SERVICES`, `runtime` among them) and the in-crate rows, all at the runtime's version.
+/// The APIs the core provides without a package: the services of the image (`HANDLE_SERVICES`, `runtime` among them), all at the runtime's version.
 pub struct CoreApis {
     apis: [Api; CORE_MAX],
     n: usize,
@@ -49,10 +49,6 @@ impl CoreApis {
         let version = dkrt_sdk::RUNTIME_VERSION;
         for name in dkrt_sdk::records::HANDLE_SERVICES {
             c.apis[c.n] = Api::new(dkneeds::keys::name_hash(name), version);
-            c.n += 1;
-        }
-        for row in &crate::package::svc_rows::rows()[..crate::package::gen_services::STATIC] {
-            c.apis[c.n] = Api::new(unsafe { row.name_hash() }, version);
             c.n += 1;
         }
         c
@@ -169,7 +165,7 @@ mod tests {
     fn a_service_file_or_a_loaded_row_is_never_the_cores_and_the_runtime_floor_follows_the_old_rule() {
         let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         // `machines` is a loaded row in the host tests, as it is a `.dks` on the device
-        crate::package::svc_rows::test_machines();
+        crate::package::provider_rows::test_machines();
         let core = CoreApis::new();
         let has = |n: &str| core.as_slice().iter().any(|a| a.name() == name_hash(n));
         assert!(has("runtime") && has("ui"));
@@ -178,12 +174,12 @@ mod tests {
         assert_eq!(refused_with(&core, "fx", 0, true), Some(E_MISSING));
         // a loaded service row is no API of the core: a need of it is not met without its provider
         let rows = crate::package::handlers::services();
-        assert!(rows.rows.iter().any(|r| unsafe { r.name_hash() } == dkneeds::keys::name_hash("machines")));
+        assert!(rows.rows.iter().any(|r| r.name() == dkneeds::keys::name_hash("machines")));
         assert!(!has("machines"));
         assert_eq!(refused_with(&core, "machines", 0, true), Some(E_MISSING));
         // the one rule of the core's names: the boot's search and the admission ask `is_runtime_service`, the graph asks these APIs
         for name in ["runtime", "ui", "fx", "machines", "nothing-like-it"] {
-            assert_eq!(is_runtime_service(name_hash(name), &rows), has(name), "{name}");
+            assert_eq!(is_runtime_service(name_hash(name)), has(name), "{name}");
         }
         // the floor: a need of 0 or of an older runtime is met, a newer one refuses the module (`E_CONTRACT`) when hard and nothing when soft
         let v = dkrt_sdk::RUNTIME_VERSION;

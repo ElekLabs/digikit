@@ -925,7 +925,7 @@ the table that `core/params` makes (every reference of the stock table points in
 apart from the default read in `ParameterPageView::vfunc_2`, which the write does not touch (finding 149, "Direct readers of the parameter table"). The write
 is made at run time, never at patch time, so with no shape loaded the maximum stays 0x600 (RAND).
 
-- No new `Service` method, record kind, `CoreApi` call or `SVC_ABI` change. The shared library crate `dkrt-svc-params` has the helper: `set_stock_range` sets the
+- No new `Service` method, record kind, `CoreApi` call or `SVC_ABI` change. The shared library crate `dkrt-svc-rows` has the helper: `set_stock_range` sets the
   (min, max) of a stock row of the copy and returns the pair it held, `stock_range` reads it; both refuse a row at or above `P_FIRST` (not a stock row), a row off the
   row grid and a null table. The copy's base is `P_TABLE` of `dynreg_info`; the row's place is `row - table` of the stock addresses.
 - The rows are named by anchors, not by numbers in the service: `cf.lfo.data.wave_row.1` to `.3` in `devices/fw/lfo.toml` (a `cf_words` signature of each row) and

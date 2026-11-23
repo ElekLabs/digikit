@@ -278,9 +278,11 @@ fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
     };
     // a pure wrapper is written, a hand-written function is named by its module, the list keeps the order of sdk.toml
     let machines = get("services/machines/dks/src/gen_exports.rs");
-    assert!(machines.contains("pub unsafe extern \"C\" fn dk_machine_add_page("));
-    assert!(machines.contains("build::machine_add_page(&ImportCore, m, name, short_name)"));
-    assert!(machines.contains("build::add_machine(&ImportCore,"));
+    assert!(
+        machines
+            .contains("const _: api::DkMachineAddPageFn = crate::builder::dk_machine_add_page;")
+    );
+    assert!(machines.contains("crate::builder::dk_module_ctx_add_machine as *const u8"));
     assert!(!machines.contains("fn dk_param_get"));
     assert!(machines.contains("const _: api::DkParamGetFn = crate::fw::dk_param_get;"));
     assert!(machines.contains("const _: api::DkPageCanvasFn = crate::builder::dk_page_canvas;"));
@@ -350,11 +352,24 @@ fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
 #[test]
 fn a_bad_wrapper_is_refused() {
     let text = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
-    // a pure wrapper cannot convert a callback: the function must name its hand-written module
-    let bad = text.replacen("wrapper = \"builder\"\n", "", 1);
-    assert_ne!(bad, text);
-    let e = sdkgen::render(&bad).unwrap_err().0;
-    assert!(e.contains("pure wrapper cannot take the callback"), "{e}");
+    // a pure wrapper cannot convert a callback: the function must name its hand-written module (`wrapper = "builder"` on a callback import, dropped)
+    let marks = text.matches("wrapper = \"builder\"\n").count();
+    let refused = (0..marks).any(|k| {
+        let at = text
+            .match_indices("wrapper = \"builder\"\n")
+            .nth(k)
+            .unwrap()
+            .0;
+        let bad = format!(
+            "{}{}",
+            &text[..at],
+            &text[at + "wrapper = \"builder\"\n".len()..]
+        );
+        sdkgen::render(&bad)
+            .err()
+            .is_some_and(|e| e.0.contains("pure wrapper cannot take the callback"))
+    });
+    assert!(refused);
     // `wrapper` goes with `provided`
     let bad = text.replacen(
         "name = \"dk_debug_poll\"\n",

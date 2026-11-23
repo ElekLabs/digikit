@@ -140,33 +140,12 @@ unsafe fn declare(ctx: *mut u8, tag: u16, a: u32, b: u32, c: u32) -> i32 {
         _ => E_CONTEXT,
     }
 }
-/// `dk_service_declare_row` (a service file's `init`, `SVC_IMPORTS` only): the `ServiceRow` the file provides. One row per file; the commit hands it to the
-/// registry (`Registry::add`).
-#[cfg_attr(test, no_mangle)]
-pub unsafe extern "C" fn dk_service_declare_row(ctx: *mut u8, row: *const dkrt_abi::service::ServiceRow) -> i32 {
-    match active() {
-        Some(col) if crate::package::entry::is_ctx(ctx) => {
-            if row.is_null() || col.decl.row_ptr().is_some() || col.decl.provider_row_ptr().is_some() {
-                col.fail(E_DECL_KIND);
-                return E_DECL_KIND;
-            }
-            if col.decl.n >= Declare::MAX {
-                col.fail(E_DECL_FULL);
-                return E_DECL_FULL;
-            }
-            col.decl.row(row);
-            OK
-        }
-        _ => E_CONTEXT,
-    }
-}
-/// `dk_provider_declare_row` (a service file's `init`, `SVC_IMPORTS` only): the `ProviderRow` the file provides and the instance `Provider::start` made. One row per file,
-/// either this or `dk_service_declare_row`; the commit hands it to the registry (`Registry::add`), which resolves it against the part versions this core knows.
+/// `dk_provider_declare_row` (a service file's `init`, `SVC_IMPORTS` only): the `ProviderRow` the file provides and the instance `Provider::start` made. One row per file; the commit hands it to the registry (`Registry::add`), which resolves it against the part versions this core knows.
 #[cfg_attr(test, no_mangle)]
 pub unsafe extern "C" fn dk_provider_declare_row(ctx: *mut u8, row: *const dkrt_abi::provider::ProviderRow, instance: *mut u8) -> i32 {
     match active() {
         Some(col) if crate::package::entry::is_ctx(ctx) => {
-            if row.is_null() || col.decl.row_ptr().is_some() || col.decl.provider_row_ptr().is_some() {
+            if row.is_null() || col.decl.provider_row_ptr().is_some() {
                 col.fail(E_DECL_KIND);
                 return E_DECL_KIND;
             }
@@ -247,7 +226,7 @@ pub fn decl_matches(c: &Collect, keys: &KeysCopy, base: u32) -> bool {
     declared_offsets(c, base).same_as(&keys.decl)
 }
 
-/// The first item that `a` and `b` do not both hold (the `ROW` item of `a` is left out, as in `Declare::same_as`): the item, and whether it is `a`'s (else it is `b`'s).
+/// The first item that `a` and `b` do not both hold (the row items of `a` are left out, as in `Declare::same_as`): the item, and whether it is `a`'s (else it is `b`'s).
 fn first_unmatched(a: &Declare, b: &Declare) -> Option<(DeclItem, bool)> {
     let has = |d: &Declare, x: DeclItem| {
         let mut k = 0;
@@ -261,7 +240,7 @@ fn first_unmatched(a: &Declare, b: &Declare) -> Option<(DeclItem, bool)> {
     };
     let mut i = 0;
     while i < a.n {
-        if a.items[i].tag != Declare::ROW && !has(b, a.items[i]) {
+        if a.items[i].tag != Declare::PROVIDER_ROW && a.items[i].tag != Declare::PROVIDER_INSTANCE && !has(b, a.items[i]) {
             return Some((a.items[i], true));
         }
         i += 1;

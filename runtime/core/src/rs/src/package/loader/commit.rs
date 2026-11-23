@@ -1,6 +1,6 @@
 //! The commit of a loaded file: its declarations, the services' records and the DSP rows (`Loader::commit`).
 use super::*;
-use crate::package::svc_rows::RowSource;
+use crate::package::provider_rows::RowSource;
 
 impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
 
@@ -14,14 +14,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             self.decl_diff = d;
             return E_DECL_KIND;
         }
-        // a service file declares its row in `init` (`dk_service_declare_row`, or `dk_provider_declare_row` with the instance); a module declares none. `fail` takes whatever was
+        // a service file declares its row in `init` (`dk_provider_declare_row`, with the instance); a module declares none. `fail` takes whatever was
         // added down again
         let extent = self.m.image_extent(base, image_size);
-        let row = match (c.decl.row_ptr(), c.decl.provider_row_ptr()) {
-            (Some(p), _) => Some(RowSource::Service(&*p)),
-            (None, Some((row, instance))) => Some(RowSource::Provider { row: &*row, instance, extent }),
-            (None, None) => None,
-        };
+        let row = c.decl.provider_row_ptr().map(|(row, instance)| RowSource { row: &*row, instance, extent });
         let mut order = None;
         if let Some(row) = &row {
             if rec < MAX_MODULES {

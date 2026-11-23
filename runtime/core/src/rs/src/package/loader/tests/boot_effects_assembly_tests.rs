@@ -91,22 +91,17 @@ impl Phases {
         let g = &mut self.golden;
         g.line(std::format!("installed sites {}", l.installer.count()));
         g.line("service rows");
-        for row in crate::package::svc_rows::rows() {
-            match row {
-                dkrt_abi::service::Row::Service(p) => g.line(std::format!("  {} kinds {:?}", (**p).name(), (**p).kinds())),
-                // a provider row has the hash of its name: the name is the stem of the service file on the card with that hash
-                provider => {
-                    let hash = provider.name_hash();
-                    let name = l
-                        .m
-                        .files
-                        .iter()
-                        .filter_map(|(n, _)| std::str::from_utf8(n).ok()?.strip_prefix("services/")?.strip_suffix(".dks").map(|s| s.to_string()))
-                        .find(|stem| dkneeds::keys::name_hash(stem) == hash)
-                        .unwrap_or_else(|| std::format!("{hash:#010x}"));
-                    g.line(std::format!("  {} kinds {:?}", name, provider.kinds()))
-                }
-            }
+        for provider in crate::package::provider_rows::rows() {
+            // a row has the hash of its name: the name is the stem of the service file on the card with that hash
+            let hash = provider.name();
+            let name = l
+                .m
+                .files
+                .iter()
+                .filter_map(|(n, _)| std::str::from_utf8(n).ok()?.strip_prefix("services/")?.strip_suffix(".dks").map(|s| s.to_string()))
+                .find(|stem| dkneeds::keys::name_hash(stem) == hash)
+                .unwrap_or_else(|| std::format!("{hash:#010x}"));
+            g.line(std::format!("  {} kinds {:?}", name, provider.kinds()))
         }
         g.line("arena blocks");
         for (addr, mem) in &l.m.live {

@@ -4,7 +4,9 @@
 use super::*;
 use crate::package::lifecycle::{RtManifest, Session};
 use dkneeds::keys::{name_hash, name_hash_bytes, Need, Pair, Table};
-use dkrt_abi::service::{Service, ServiceRow, ServiceTable};
+use crate::package::fixture_provider::Fixture;
+use dkrt_abi::provider::{Consumer, ConsumerId, Provider, Records};
+use dkrt_abi::service::ServiceTable;
 use dkrt_lifecycle::{Cpu, Entry, Linker, Manifest, PackageManager, Placer, ProviderHost, SiteRef};
 
 fn id(n: usize) -> PackageId {
@@ -154,24 +156,18 @@ fn a_module_starts_with_init_and_stops_with_fini_and_a_failed_start_is_freed() {
 }
 
 struct Recorder;
-impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Recorder {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
-    unsafe fn remove(_: &C, owner: u8) {
-        REMOVED.lock().unwrap_or_else(|e| e.into_inner()).push(owner);
+impl<C: dkrt_abi::core_api::CoreApi> Provider<C> for Recorder {
+    fn start(_: &C) -> Result<Recorder, i32> {
+        Ok(Recorder)
     }
-    unsafe fn apply_record(_: &C, kind: u32, _body: *const u8, c: &dkrt_abi::service::ApplyCtx) -> i32 {
-        APPLIED.lock().unwrap_or_else(|e| e.into_inner()).push((c.owner, kind));
-        if kind == 99 {
-            E_INIT
-        } else {
-            OK
-        }
+    fn detach(&mut self, _: &C, consumer: ConsumerId) {
+        REMOVED.lock().unwrap_or_else(|e| e.into_inner()).push(consumer.get());
     }
 }
-static APPLIED: std::sync::Mutex<Vec<(u8, u32)>> = std::sync::Mutex::new(Vec::new());
 static REMOVED: std::sync::Mutex<Vec<u8>> = std::sync::Mutex::new(Vec::new());
-static RECORDER: ServiceRow = ServiceRow::of::<Recorder, crate::package::core_api::RealCore>("recorder", &[]);
+fn recorder() -> crate::package::provider_rows::RowSource<'static> {
+    Fixture::of::<Recorder>("recorder").source()
+}
 
 #[test]
 fn detach_calls_the_remove_of_the_rows_of_the_services_it_names_for_a_module_consumer() {
@@ -181,14 +177,14 @@ fn detach_calls_the_remove_of_the_rows_of_the_services_it_names_for_a_module_con
         let mut s = shared(&mut l);
         let (.., mut host) = s.seams();
         let service = MAX_MODULES + 2;
-        assert_eq!(crate::package::svc_rows::add(service, &RECORDER, None), OK);
+        assert_eq!(crate::package::provider_rows::add(service, recorder(), None), OK);
         REMOVED.lock().unwrap_or_else(|e| e.into_inner()).clear();
         host.detach(id(3), &[id(service)]);
         // a service that is not named, a package without a row, and a consumer that is no module, call nothing
         host.detach(id(3), &[]);
         host.detach(id(3), &[id(service + 1)]);
         host.detach(id(MAX_MODULES), &[id(service)]);
-        crate::package::svc_rows::remove(service);
+        crate::package::provider_rows::remove(service);
         assert_eq!(*REMOVED.lock().unwrap_or_else(|e| e.into_inner()), [4], "the owner id is the record plus one, and only the rows of the named services are called");
     }
 }
@@ -387,35 +383,39 @@ fn registry_block(kinds: &[u32]) -> Vec<u8> {
 
 /// A service that owns the kinds of one parity (`T` = 1: odd, 2: even) and logs each call with its tag; a record of kind 99 is refused.
 struct Tag<const T: u32>;
-impl<const T: u32, C: dkrt_abi::core_api::CoreApi> Service<C> for Tag<T> {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
-    unsafe fn apply(c: &C, _: &dkrt_abi::service::ApplyCtx) -> i32 {
+impl<const T: u32, C: dkrt_abi::core_api::CoreApi> Provider<C> for Tag<T> {
+    fn start(_: &C) -> Result<Tag<T>, i32> {
+        Ok(Tag)
+    }
+    fn attach(&mut self, c: &C, _: &Consumer<'_>) -> Result<(), i32> {
         WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, 0));
         BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()).push(("apply", c.boot_index()));
-        OK
+        Ok(())
     }
-    unsafe fn apply_record(_: &C, kind: u32, _body: *const u8, _: &dkrt_abi::service::ApplyCtx) -> i32 {
-        if kind % 2 != T % 2 {
-            return OK;
-        }
-        WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, kind));
-        if kind == 99 {
-            E_INIT
-        } else {
-            OK
-        }
-    }
-    unsafe fn remove(c: &C, owner: u8) {
-        WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, 1000 + owner as u32));
+    fn detach(&mut self, c: &C, consumer: ConsumerId) {
+        WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, 1000 + consumer.get() as u32));
         BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()).push(("remove", c.boot_index()));
     }
 }
-/// The selection index a `Tag` row read in each of its `apply` and `remove` calls.
+impl<const T: u32, C: dkrt_abi::core_api::CoreApi> Records<C> for Tag<T> {
+    fn apply(&mut self, _: &C, kind: u32, _body: &[u8], _: &Consumer<'_>) -> Result<(), i32> {
+        WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, kind));
+        if kind == 99 {
+            Err(E_INIT)
+        } else {
+            Ok(())
+        }
+    }
+}
+/// The selection index a `Tag` row read in each of its `attach` and `detach` calls.
 static BOOT_SEEN: std::sync::Mutex<Vec<(&str, u32)>> = std::sync::Mutex::new(Vec::new());
 static WALKED: std::sync::Mutex<Vec<(u32, u32)>> = std::sync::Mutex::new(Vec::new());
-static ODD: ServiceRow = ServiceRow::of::<Tag<1>, crate::package::core_api::RealCore>("odd", &[(3, 12), (5, 12), (99, 12)]);
-static EVEN: ServiceRow = ServiceRow::of::<Tag<2>, crate::package::core_api::RealCore>("even", &[(2, 12), (4, 12)]);
+fn odd() -> crate::package::provider_rows::RowSource<'static> {
+    Fixture::of::<Tag<1>>("odd").records::<Tag<1>>(&[(3, 12), (5, 12), (99, 12)]).source()
+}
+fn even() -> crate::package::provider_rows::RowSource<'static> {
+    Fixture::of::<Tag<2>>("even").records::<Tag<2>>(&[(2, 12), (4, 12)]).source()
+}
 
 fn walked() -> Vec<(u32, u32)> {
     core::mem::take(&mut *WALKED.lock().unwrap_or_else(|e| e.into_inner()))
@@ -427,13 +427,13 @@ fn the_rows_read_the_consumers_record_as_the_boot_index_in_apply_and_remove_duri
     unsafe {
         let _ = crate::package::handlers::services();
         let machines = MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1;
-        crate::package::svc_rows::remove(machines);
+        crate::package::provider_rows::remove(machines);
         let mut l = loader_of(Init::Ok, module_file());
         let mut s = shared(&mut l);
         let (.., mut host) = s.seams();
         let (odd, even) = (MAX_MODULES, MAX_MODULES + 1);
-        assert_eq!(crate::package::svc_rows::add(odd, &ODD, Some(10)), OK);
-        assert_eq!(crate::package::svc_rows::add(even, &EVEN, Some(20)), OK);
+        assert_eq!(crate::package::provider_rows::add(odd, self::odd(), Some(10)), OK);
+        assert_eq!(crate::package::provider_rows::add(even, self::even(), Some(20)), OK);
         let block = registry_block(&[4, 3]);
         l.reg_block[3] = (block.as_ptr(), block.len() as u32);
         let idx = || crate::package::boot_idx::get();
@@ -445,9 +445,9 @@ fn the_rows_read_the_consumers_record_as_the_boot_index_in_apply_and_remove_duri
         host.detach(id(3), &[id(odd), id(even)]);
         assert_eq!(*BOOT_SEEN.lock().unwrap_or_else(|e| e.into_inner()), [("remove", 3), ("remove", 3)], "remove reads the consumer's record");
         assert_eq!(idx(), u32::MAX, "the index is as it was");
-        crate::package::svc_rows::remove(odd);
-        crate::package::svc_rows::remove(even);
-        crate::package::svc_rows::add(machines, crate::package::handlers::exports::machines_row(), Some(200));
+        crate::package::provider_rows::remove(odd);
+        crate::package::provider_rows::remove(even);
+        crate::package::provider_rows::add(machines, crate::package::handlers::exports::machines_row(), Some(200));
     }
 }
 
@@ -458,25 +458,25 @@ fn attach_walks_every_apply_then_the_records_in_file_order_across_the_services_a
         let _ = crate::package::handlers::services(); // the first call adds the test row of the machines service, at the last provider record
         // the walk is over the rows of this test alone: the machines row takes the place of its record again at the end
         let machines = MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1;
-        crate::package::svc_rows::remove(machines);
+        crate::package::provider_rows::remove(machines);
         let mut l = loader_of(Init::Ok, module_file());
         let mut s = shared(&mut l);
         let (.., mut host) = s.seams();
         let (odd, even) = (MAX_MODULES, MAX_MODULES + 1);
         // the callback order: odd, then even; the records interleave as in the file (kinds of both services, the shared rows are numbered in this order)
-        assert_eq!(crate::package::svc_rows::add(odd, &ODD, Some(10)), OK);
-        assert_eq!(crate::package::svc_rows::add(even, &EVEN, Some(20)), OK);
+        assert_eq!(crate::package::provider_rows::add(odd, self::odd(), Some(10)), OK);
+        assert_eq!(crate::package::provider_rows::add(even, self::even(), Some(20)), OK);
         let block = registry_block(&[4, 3, 2, 5]);
         l.reg_block[3] = (block.as_ptr(), block.len() as u32);
         walked();
-        // the old walk was over the whole table of services (the rows loaded from the files)
+        // the walk over the whole table of services (the rows loaded from the files)
         let table = crate::package::handlers::services();
         assert_eq!(crate::package::registry::apply_with(table, 4, block.as_ptr(), block.len() as u32, 0), OK);
-        let old = walked();
-        assert_eq!(old, [(1, 0), (2, 0), (2, 4), (1, 3), (2, 2), (1, 5)], "the old walk: every apply, then the records in file order");
+        let all = walked();
+        assert_eq!(all, [(1, 0), (2, 0), (2, 4), (1, 3), (2, 2), (1, 5)], "every attach, then the records in file order");
         // a consumer that needs every loaded service, in any order, gets the same walk
         host.attach(id(3), &[id(even), id(odd)]).unwrap();
-        assert_eq!(walked(), old, "one attach over the services walks as the old registry apply did");
+        assert_eq!(walked(), all, "one attach over the services walks as the registry apply does");
         // a service the module does not need is not called, and the records it owns are not applied
         let even_only = registry_block(&[4, 2]);
         l.reg_block[3] = (even_only.as_ptr(), even_only.len() as u32);
@@ -489,8 +489,9 @@ fn attach_walks_every_apply_then_the_records_in_file_order_across_the_services_a
         // a service with no row owns no kind: the module's records are refused (and none is applied)
         assert_eq!(host.attach(id(3), &[id(even + 1)]), Err(E_MISSING));
         assert_eq!(walked(), []);
-        // a module with no records and a consumer that is no module apply nothing
+        // a module with no records still comes up to every provider it needs (`attach`, no record); a consumer that is no module comes up to none
         host.attach(id(2), &[id(odd), id(even)]).unwrap();
+        assert_eq!(walked(), [(1, 0), (2, 0)]);
         host.attach(id(MAX_MODULES), &[id(odd), id(even)]).unwrap();
         assert_eq!(walked(), []);
         // the first refusal stops the walk and is the answer; the walk then undid what it wrote (`remove` for the owner on the same rows, the last first), so no detach follows
@@ -498,40 +499,39 @@ fn attach_walks_every_apply_then_the_records_in_file_order_across_the_services_a
         l.reg_block[3] = (bad.as_ptr(), bad.len() as u32);
         assert_eq!(host.attach(id(3), &[id(odd), id(even)]), Err(E_INIT));
         assert_eq!(walked(), [(1, 0), (2, 0), (1, 3), (1, 99), (2, 1004), (1, 1004)]);
-        crate::package::svc_rows::remove(odd);
-        crate::package::svc_rows::remove(even);
-        crate::package::svc_rows::add(machines, crate::package::handlers::exports::machines_row(), Some(200));
+        crate::package::provider_rows::remove(odd);
+        crate::package::provider_rows::remove(even);
+        crate::package::provider_rows::add(machines, crate::package::handlers::exports::machines_row(), Some(200));
     }
 }
 
-/// A service that refuses the take-down of module owner 2 only (the module of record 1).
+/// A service that refuses every take-down (`Provider::can_stop`): a routed effect is on its bus.
 struct Refuser;
-impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Refuser {
-    dkrt_abi::accepts_records!();
-    unsafe fn teardown_refusal(_core: &C, owner: u8) -> i32 {
-        if owner == 2 {
-            E_RELOAD_ROUTED
-        } else {
-            OK
-        }
+impl<C: dkrt_abi::core_api::CoreApi> Provider<C> for Refuser {
+    fn start(_: &C) -> Result<Refuser, i32> {
+        Ok(Refuser)
+    }
+    fn can_stop(&self, _: &C) -> Result<(), i32> {
+        Err(E_RELOAD_ROUTED)
     }
 }
-static REFUSER: ServiceRow = ServiceRow::of::<Refuser, crate::package::core_api::RealCore>("refuser", &[]);
 
 #[test]
-fn can_stop_of_a_module_asks_the_services_about_that_module_only_and_a_service_is_not_asked() {
+fn can_stop_of_a_module_asks_every_loaded_service_and_a_service_is_not_asked() {
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let _ = crate::package::handlers::services();
         let rec = MAX_MODULES + 1;
-        assert_eq!(crate::package::svc_rows::add(rec, &REFUSER, None), OK);
         let mut l = loader_of(Init::Ok, module_file());
         let mut s = shared(&mut l);
         let (.., mut host) = s.seams();
-        assert_eq!(host.can_stop(id(0)), Ok(()));
-        assert_eq!(host.can_stop(id(1)), Err(E_RELOAD_ROUTED), "the module of owner 2");
+        assert_eq!(host.can_stop(id(0)), Ok(()), "no service refuses");
+        assert_eq!(crate::package::provider_rows::add(rec, Fixture::of::<Refuser>("refuser").source(), None), OK);
+        assert_eq!(host.can_stop(id(0)), Err(E_RELOAD_ROUTED));
+        assert_eq!(host.can_stop(id(1)), Err(E_RELOAD_ROUTED), "any module: a provider's `can_stop` names no consumer");
         assert_eq!(host.can_stop(id(rec)), Ok(()), "a service is asked nothing: its consumers are");
-        crate::package::svc_rows::remove(rec);
+        crate::package::provider_rows::remove(rec);
+        assert_eq!(host.can_stop(id(1)), Ok(()), "back to no refusal once the service is gone");
     }
 }
 

@@ -268,7 +268,7 @@ fn the_row_a_service_file_declares_is_added_at_the_commit() {
         let rec = MAX_MODULES;
         let mut l = loader_of(Init::DeclaresRow, row_service_file());
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
-        assert_eq!(l.r.log, vec![Ev::AddRow(rec, &TEST_ROW)]);
+        assert_eq!(l.r.log, vec![Ev::AddProvider(rec, test_row(), test_instance())]);
         // (a provider record has no run-time unload: its row goes with a failed load, below)
         // a module declares no row: `init` cannot, the import is not in its table
         let mut l = loader(Init::Ok);
@@ -286,7 +286,7 @@ fn a_row_the_registry_refuses_undoes_the_load() {
         l.r.add_result = E_PLAN_OWNER;
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_PLAN_OWNER);
         assert!(l.m.live.is_empty());
-        assert_eq!(l.r.log, vec![Ev::AddRow(rec, &TEST_ROW), Ev::Remove(rec)]);
+        assert_eq!(l.r.log, vec![Ev::AddProvider(rec, test_row(), test_instance()), Ev::Remove(rec)]);
     }
 }
 
@@ -295,21 +295,21 @@ fn the_real_registry_puts_the_row_into_the_service_table_and_takes_it_out() {
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut r = RealRegistry;
-        // the host tests of the runtime run with the machines row loaded (`svc_rows::test_machines`): the loaded rows start at one
-        let fixed = crate::package::gen_services::STATIC + 1;
+        // the host tests of the runtime run with the machines row loaded (`provider_rows::test_machines`): the loaded rows start at one
+        let fixed = 1;
         assert_eq!(services().rows.len(), fixed);
         assert_eq!(r.add(0, None, None), OK);
-        assert_eq!(r.add(2, Some((&TEST_ROW).into()), None), OK);
+        let source = || crate::package::provider_rows::RowSource { row: test_row(), instance: test_instance(), extent: 0..usize::MAX };
+        assert_eq!(r.add(2, Some(source()), None), OK);
         let t = services();
         assert_eq!(t.rows.len(), fixed + 1);
-        assert!(matches!(t.rows[fixed], dkrt_abi::service::Row::Service(p) if core::ptr::eq(p, &TEST_ROW)));
-        // the in-crate prefix and its failed mask are as before, and one row has one owner
-        assert_eq!(t.failed, services().failed);
-        assert_eq!(r.add(3, Some((&TEST_ROW).into()), None), E_PLAN_OWNER);
+        assert_eq!(t.rows[fixed].name(), dkneeds::keys::name_hash("svc-test"));
+        // one row has one owner
+        assert_eq!(r.add(3, Some(source()), None), E_PLAN_OWNER);
         // (`RealRegistry::remove` also runs the registry's own remove, which the cleanup tests count: the row part alone here)
-        crate::package::svc_rows::remove(3);
+        crate::package::provider_rows::remove(3);
         assert_eq!(services().rows.len(), fixed + 1);
-        crate::package::svc_rows::remove(2);
+        crate::package::provider_rows::remove(2);
         assert_eq!(services().rows.len(), fixed);
     }
 }

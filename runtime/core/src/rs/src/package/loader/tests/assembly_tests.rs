@@ -21,7 +21,7 @@ use dkrt_lifecycle::{LifecycleError, PackageId, Report, State};
 use dkneeds::keys::{name_hash, tag, Keys};
 use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::profiles;
-use dkrt_abi::service::{Declare, Service, ServiceRow};
+use dkrt_abi::service::Declare;
 use dkrt_sdk::proto::*;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -147,12 +147,12 @@ impl Registry for DeviceRegistry {
     fn abi_ok(&self, fingerprint: u32) -> bool {
         fingerprint == 0 || self.runtime.contains(&std::format!("0c80{fingerprint:08x}"))
     }
-    unsafe fn add(&mut self, rec: usize, row: Option<crate::package::svc_rows::RowSource<'_>>, order: Option<u32>) -> i32 {
+    unsafe fn add(&mut self, rec: usize, row: Option<crate::package::provider_rows::RowSource<'_>>, order: Option<u32>) -> i32 {
         RealRegistry.add(rec, row, order)
     }
     unsafe fn remove(&mut self, rec: usize) {
         // a module's registry rows are the scripted cleanup tests' (`registry_remove` asserts their event order); a provider's row is real
-        crate::package::svc_rows::remove(rec)
+        crate::package::provider_rows::remove(rec)
     }
     unsafe fn module_begin(&mut self, rec: usize) {
         RealRegistry.module_begin(rec)
@@ -309,12 +309,6 @@ pub(super) unsafe fn capacity(p: &FakePlatform) -> Vec<DkrtCap> {
 }
 
 // ---- the loader over a card ---------------------------------------------------------------------------------------------------
-
-struct Nothing;
-impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Nothing {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
-}
 
 /// The row of the provider fixture with a tick part one version newer than the core knows.
 fn newer_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
@@ -564,10 +558,8 @@ impl Images for Card {
             self.provider_recs.push(rec);
             return crate::package::collect::dk_provider_declare_row(ctx, crate::package::handlers::dks_decls::machines_file_row(), instance);
         }
-        let row: &'static ServiceRow = {
-            Box::leak(Box::new(ServiceRow::of::<Nothing, crate::package::core_api::RealCore>(name, kinds)))
-        };
-        crate::package::collect::dk_service_declare_row(ctx, row)
+        // any other file: a provider that owns the kinds of its table and does nothing with them
+        crate::package::collect::dk_provider_declare_row(ctx, crate::package::fixture_provider::Nothing::owning(name, kinds).row(), crate::package::fixture_provider::instance())
     }
     fn image_extent(&mut self, _: u32, _: u32) -> core::ops::Range<usize> {
         // the rows of a host test are statics of the test binary, in no package image
@@ -587,7 +579,7 @@ impl Images for Card {
 pub(super) type Boot = Loader<FakePlatform, Card, DeviceRegistry>;
 
 /// The runtime tables of the host tests as a device has them before the boot loads anything: no loaded service (the other tests of the runtime run with the
-/// machines row of `svc_rows::test_machines`; it is put back when the guard goes), no module, no DSP load.
+/// machines row of `provider_rows::test_machines`; it is put back when the guard goes), no module, no DSP load.
 pub(super) struct Clean(std::sync::MutexGuard<'static, ()>);
 
 pub(super) fn clean() -> Clean {
@@ -595,7 +587,7 @@ pub(super) fn clean() -> Clean {
     unsafe {
         let _ = crate::package::handlers::services(); // the first call adds the test row
         for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
-            crate::package::svc_rows::remove(rec);
+            crate::package::provider_rows::remove(rec);
         }
         *st() = core::mem::zeroed();
         records::reset();
@@ -617,9 +609,9 @@ impl Drop for Clean {
     fn drop(&mut self) {
         unsafe {
             for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
-                crate::package::svc_rows::remove(rec);
+                crate::package::provider_rows::remove(rec);
             }
-            crate::package::svc_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200));
+            crate::package::provider_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200));
         }
     }
 }
@@ -928,7 +920,7 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
     }
     // the rows the files declared are in the table of the services
     for w in want {
-        assert!(crate::package::svc_rows::has(w), "{what}: no row {w} in the table");
+        assert!(crate::package::provider_rows::has(w), "{what}: no row {w} in the table");
     }
     // the hook sites of the files: one `jmp` written for each hook of a service file that the port lists as present, at its address, under one mask
     let binds = binds_of(dev, &l, &plan);
@@ -984,13 +976,13 @@ fn a_selected_consumer_loads_a_service_declared_outside_the_sdk() {
             let different_major = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], false);
             assert_eq!(different_major.verdict(0), Verdict::Refused(Reason::NeedVersion));
             // a module the graph refuses brings up none of its services
-            assert!(!crate::package::svc_rows::has("local-ping"));
+            assert!(!crate::package::provider_rows::has("local-ping"));
 
             l.capture(0, &packed(dev, LOCAL_PING_USER.leaf, "dkm", LOCAL_PING_USER.nx));
             let run = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], false);
             assert_eq!(run.verdict(0), Verdict::Accepted);
             assert!(run.is_up(PackageId(MAX_MODULES as u8)));
-            assert!(crate::package::svc_rows::has("local-ping"));
+            assert!(crate::package::provider_rows::has("local-ping"));
             assert!(run.is_up(PackageId(0)), "the consumer loads against the provider: {:?}", run.refusal(0));
         }
         clean_state();
@@ -2078,8 +2070,8 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
                 assert_eq!(r, OK, "{} {}: init refused its own declarations", dev.name, s.leaf);
                 for i in 0..col.decl.n {
                     let d = col.decl.items[i];
-                    // the row (of either form) and the provider's instance are the core's own, not entries of the header table
-                    if d.tag != Declare::ROW && d.tag != Declare::PROVIDER_ROW && d.tag != Declare::PROVIDER_INSTANCE {
+                    // the row and the provider's instance are the core's own, not entries of the header table
+                    if d.tag != Declare::PROVIDER_ROW && d.tag != Declare::PROVIDER_INSTANCE {
                         got.push(plain(d.tag, d.a, d.b));
                     }
                 }
@@ -2105,7 +2097,7 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
 pub(super) fn clean_state() {
     unsafe {
         for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
-            crate::package::svc_rows::remove(rec);
+            crate::package::provider_rows::remove(rec);
         }
         *st() = core::mem::zeroed();
         records::reset();
@@ -2296,7 +2288,7 @@ pub(super) fn without_dsp(dev: Dev, m: &Fixture) -> Vec<u8> {
 unsafe fn nothing_left(l: &Boot, what: &str) {
     assert!(l.m.live.is_empty(), "{what}: arena blocks are live");
     assert_eq!((st().modules[0].used, st().loads), (0, 0), "{what}: a module record is used");
-    assert!(!["fx", "machines", "lfo"].iter().any(|n| crate::package::svc_rows::has(n)), "{what}: service rows are left");
+    assert!(!["fx", "machines", "lfo"].iter().any(|n| crate::package::provider_rows::has(n)), "{what}: service rows are left");
 }
 
 /// E_DECL_ID through the real path: the packed module goes through the loader and the real effects service (its builder and its commit check); `init` declares the effect

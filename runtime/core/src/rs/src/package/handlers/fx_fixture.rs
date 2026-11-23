@@ -2,7 +2,7 @@
 //! an effect needs its row: this adds it to the table as `Registry::add` does at the commit of the loaded file, and takes it out as `Registry::remove` does at the unload.
 //! Take the test lock first (`test_lock::LOCK`): the row table is a static.
 use crate::package::handlers::dks_decls;
-use crate::package::svc_rows::{self, RowSource};
+use crate::package::provider_rows::{self, RowSource};
 use dkrt_sdk::OK;
 
 /// The module record of the service file in these tests.
@@ -32,15 +32,15 @@ impl LoadedFx {
         // an owner that an earlier case left is not this file's
         dks_decls::fx_stop();
         let instance = dks_decls::fx_start().expect("the owner of the fx file starts");
-        let row = RowSource::Provider { row: dks_decls::fx_row(), instance, extent: 0..usize::MAX };
-        assert_eq!(unsafe { svc_rows::add(FILE_REC, row, None) }, OK);
+        let row = RowSource { row: dks_decls::fx_row(), instance, extent: 0..usize::MAX };
+        assert_eq!(unsafe { provider_rows::add(FILE_REC, row, None) }, OK);
         LoadedFx
     }
 }
 
 impl Drop for LoadedFx {
     fn drop(&mut self) {
-        unsafe { svc_rows::remove(FILE_REC) };
+        unsafe { provider_rows::remove(FILE_REC) };
         dks_decls::fx_stop();
     }
 }

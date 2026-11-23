@@ -116,9 +116,9 @@ fn what_init_declared_must_be_what_the_header_table_carries() {
     // a module with no table entries and no declarations passes
     let none = KeysCopy::empty();
     assert!(decl_matches(&Collect::new(), &none, base));
-    // the row of a service file is no entry of the table: it does not count against it
+    // the row and the instance of a service file are no entries of the table: they do not count against it
     let mut d = declared();
-    d.decl.row(&ROW);
+    d.decl.provider_row(crate::package::fixture_provider::Nothing::named("nothing").row(), 0x10 as *mut u8);
     assert!(decl_matches(&d, &keys, base));
     // outside init the imports refuse
     unsafe {
@@ -129,33 +129,31 @@ fn what_init_declared_must_be_what_the_header_table_carries() {
 
 #[test]
 fn a_service_file_declares_one_row_in_init_and_only_there() {
+    use crate::package::fixture_provider::Nothing;
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    let row = Nothing::named("nothing").row();
+    let mut instance = 0u64;
+    let instance = &mut instance as *mut u64 as *mut u8;
     unsafe {
         // outside init
         end();
-        assert_eq!(dk_service_declare_row(core::ptr::null_mut(), &ROW), E_CONTEXT);
+        assert_eq!(dk_provider_declare_row(core::ptr::null_mut(), row, instance), E_CONTEXT);
         // inside init the context must be live; a null row and a second row are refused and kept as the load's error
         let mut b = Box::new(Collect::new());
         begin(&mut *b);
         let ctx = crate::package::entry::bind(0) as *mut u8;
-        assert_eq!(dk_service_declare_row(ctx, core::ptr::null()), E_DECL_KIND);
+        assert_eq!(dk_provider_declare_row(ctx, core::ptr::null(), instance), E_DECL_KIND);
         assert_eq!(b.err, E_DECL_KIND);
         b.err = 0;
-        assert_eq!(dk_service_declare_row(core::ptr::null_mut(), &ROW), E_CONTEXT);
-        assert_eq!(dk_service_declare_row(ctx, &ROW), OK);
-        assert!(core::ptr::eq(b.decl.row_ptr().unwrap(), &ROW));
-        assert_eq!(dk_service_declare_row(ctx, &ROW), E_DECL_KIND);
+        assert_eq!(dk_provider_declare_row(core::ptr::null_mut(), row, instance), E_CONTEXT);
+        assert_eq!(dk_provider_declare_row(ctx, row, instance), OK);
+        let (declared, kept) = b.decl.provider_row_ptr().unwrap();
+        assert!(core::ptr::eq(declared, row) && kept == instance);
+        assert_eq!(dk_provider_declare_row(ctx, row, instance), E_DECL_KIND);
         end();
         crate::package::entry::unbind(0);
-        assert_eq!(b.decl.n, 1);
+        assert_eq!(b.decl.n, 2, "the row and its instance");
     }
-}
-
-static ROW: dkrt_abi::service::ServiceRow = dkrt_abi::service::ServiceRow::of::<Nothing, crate::package::core_api::RealCore>("nothing", &[]);
-struct Nothing;
-impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for Nothing {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
 }
 
 #[test]

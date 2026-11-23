@@ -1,11 +1,12 @@
-//! `FakeService`: a `Service` that records what the core calls (record kind, owner, bytes of `check`, `apply` and `remove`; the
-//! declarations, attributions and `on_loaded`), and host tests of the core's walkers over it (docs/ARCHITECTURE.md "Boundaries and tests").
+//! `Fake<N>`: a provider that records what the core calls (record kind, owner, bytes of `check`, `apply` and `detach`; the attributions and `loaded`), and host tests of the
+//! core's walkers over it (docs/ARCHITECTURE.md "Boundaries and tests").
 use super::*;
 use dkrt_sdk::*;
 use crate::package::registry::{apply_with, check_with, each, remove_with};
 use dkrt_sdk::proto::CAPK_FX_SLOTS;
-use crate::package::core_api::{CoreApi, REAL_CORE};
-use dkrt_abi::service::ServiceRow;
+use crate::package::core_api::CoreApi;
+use crate::package::fixture_provider::{table, Fixture};
+use dkrt_abi::provider::{Consumer, ConsumerId, Describe, DspPart, Provider, Records, Status, Ticker};
 use std::vec::Vec;
 
 /// Serializes the tests that use the fake's log and the registry's state.
@@ -49,54 +50,59 @@ unsafe fn body(reg: *const u8, kind: u32, b: *const u8) -> Vec<u8> {
     core::slice::from_raw_parts(b, 4 * (kind as usize - 100)).to_vec()
 }
 
-impl<const N: u8, C: CoreApi> Service<C> for Fake<N> {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
+impl<const N: u8, C: CoreApi> Provider<C> for Fake<N> {
+    fn start(_: &C) -> Result<Self, Status> {
+        Ok(Fake)
+    }
 
+    /// The rows a service writes before the per-record pass.
+    fn attach(&mut self, _: &C, consumer: &Consumer<'_>) -> Result<(), Status> {
+        log().push(Call::Bulk { svc: N, owner: consumer.id().get() });
+        Ok(())
+    }
+
+    fn detach(&mut self, _: &C, consumer: ConsumerId) {
+        log().push(Call::Remove { svc: N, owner: consumer.get() });
+    }
+}
+
+impl<const N: u8, C: CoreApi> Records<C> for Fake<N> {
     /// Service 1 checks its records at the step of native pages, service 2 at the step of effects: the order of the old body.
-    unsafe fn check(_: &C, step: u32, c: &CheckCtx) -> i32 {
+    fn check(&mut self, _: &C, step: u32, c: &CheckCtx) -> Result<(), Status> {
         let mine = if N == 1 { check_step::NATIVE } else { check_step::EFFECTS };
         let mut r = OK;
         if step != mine {
-            return r;
+            return Ok(());
         }
-        each(c.reg, |kind, b| {
-            if kind == kind_of(N) && r == OK {
-                log().push(Call::Check { svc: N, step, kind, body: body(c.reg, kind, b) });
-                if REFUSE == (N, kind) {
-                    r = E_FORMAT;
+        unsafe {
+            each(c.reg, |kind, b| {
+                if kind == kind_of(N) && r == OK {
+                    log().push(Call::Check { svc: N, step, kind, body: body(c.reg, kind, b) });
+                    if REFUSE == (N, kind) {
+                        r = E_FORMAT;
+                    }
                 }
-            }
-        });
-        r
-    }
-
-    unsafe fn apply(_: &C, c: &ApplyCtx) -> i32 {
-        log().push(Call::Bulk { svc: N, owner: c.owner });
-        OK
-    }
-
-    unsafe fn apply_record(_: &C, kind: u32, b: *const u8, c: &ApplyCtx) -> i32 {
-        if kind != kind_of(N) {
-            return OK;
+            });
         }
-        log().push(Call::Apply { svc: N, owner: c.owner, kind, body: body(c.reg, kind, b) });
-        if FAIL_APPLY == (N, kind) {
-            E_FORMAT
+        if r == OK {
+            Ok(())
         } else {
-            OK
+            Err(r)
         }
     }
 
-    unsafe fn remove(_: &C, owner: u8) {
-        log().push(Call::Remove { svc: N, owner });
+    fn apply(&mut self, _: &C, kind: u32, b: &[u8], consumer: &Consumer<'_>) -> Result<(), Status> {
+        log().push(Call::Apply { svc: N, owner: consumer.id().get(), kind, body: b.to_vec() });
+        if unsafe { FAIL_APPLY } == (N, kind) {
+            Err(E_FORMAT)
+        } else {
+            Ok(())
+        }
     }
+}
 
-    unsafe fn cap(_: &C, kind: u8) -> Option<(u32, u32)> {
-        (kind == CAPK_FX_SLOTS).then_some((10 * N as u32, N as u32))
-    }
-
-    unsafe fn attribute(_: &C, site: u32, id: u32) -> Option<usize> {
+impl<const N: u8, C: CoreApi> DspPart<C> for Fake<N> {
+    fn attribute(&mut self, _: &C, site: u32, id: u32) -> Option<usize> {
         log().push(Call::Attribute { svc: N, site, id });
         if site == N as u32 {
             Some(id as usize + 100 * N as usize)
@@ -105,21 +111,29 @@ impl<const N: u8, C: CoreApi> Service<C> for Fake<N> {
         }
     }
 
-    unsafe fn on_loaded(_: &C, rec: usize) {
+    fn loaded(&mut self, _: &C, rec: usize) {
         log().push(Call::OnLoaded { svc: N, rec });
     }
 
-    unsafe fn tick(_: &C, phase: u32) {
-        log().push(Call::Tick { svc: N, phase });
-    }
-
-    unsafe fn diag(_: &C, words: &[u32; dkrt_sdk::fault::DIAG_WORDS]) {
+    fn diag(&mut self, _: &C, words: &[u32; dkrt_sdk::fault::DIAG_WORDS]) {
         log().push(Call::Diag { svc: N, first: words[0] });
     }
+}
 
-    unsafe fn table_check(_: &C, used: u32, out: &mut dkrt_abi::service::TableFault) -> u32 {
+impl<const N: u8, C: CoreApi> Ticker<C> for Fake<N> {
+    fn tick(&mut self, _: &C, phase: u32) {
+        log().push(Call::Tick { svc: N, phase });
+    }
+}
+
+impl<const N: u8, C: CoreApi> Describe<C> for Fake<N> {
+    fn cap(&self, _: &C, kind: u8) -> Option<(u32, u32)> {
+        (kind == CAPK_FX_SLOTS).then_some((10 * N as u32, N as u32))
+    }
+
+    fn table_check(&self, _: &C, used: u32, out: &mut dkrt_abi::service::TableFault) -> u32 {
         log().push(Call::TableCheck { svc: N, used });
-        if BAD_TABLE == N {
+        if unsafe { BAD_TABLE } == N {
             *out = dkrt_abi::service::TableFault { module: N as u32, a: 7, b: used };
             return 1;
         }
@@ -130,9 +144,15 @@ impl<const N: u8, C: CoreApi> Service<C> for Fake<N> {
 /// Fake service `N` owns record kind `100 + N`, a record of `8 + 4 * N` bytes.
 static KINDS_1: [(u32, u32); 1] = [(101, 12)];
 static KINDS_2: [(u32, u32); 1] = [(102, 16)];
-static TWO_ROWS: [ServiceRow; 2] = [ServiceRow::of::<Fake<1>, crate::package::core_api::RealCore>("fake1", &KINDS_1), ServiceRow::of::<Fake<2>, crate::package::core_api::RealCore>("fake2", &KINDS_2)];
-static TWO_ROWS_P: dkrt_abi::service::RowPtrs<2> = dkrt_abi::service::RowPtrs::of(&TWO_ROWS);
-pub(crate) const TWO: ServiceTable = ServiceTable::new(&TWO_ROWS_P.0, &REAL_CORE);
+
+fn fake<const N: u8>(name: &'static str, kinds: &'static [(u32, u32)]) -> dkrt_abi::provider::ProviderHandle {
+    Fixture::of::<Fake<N>>(name).records::<Fake<N>>(kinds).dsp::<Fake<N>>().tick::<Fake<N>>().describe::<Fake<N>>().handle()
+}
+
+/// The table of the two fakes, service 1 before service 2.
+pub(crate) fn two() -> ServiceTable {
+    table(std::vec![fake::<1>("fake1", &KINDS_1), fake::<2>("fake2", &KINDS_2)])
+}
 
 /// A `register` section of the given records `(kind, 4 * (kind - 100) body bytes filled with the record number)`.
 fn section(kinds: &[u32]) -> Vec<u8> {
@@ -168,9 +188,9 @@ fn a_mixed_file_checks_in_step_order_applies_in_file_order_and_removes_in_revers
         reset();
         // mixed kinds: service 1, 2, 1
         let sec = section(&[kind_of(1), kind_of(2), kind_of(1)]);
-        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0, 1), OK);
-        assert_eq!(apply_with(TWO, 5, sec.as_ptr(), sec.len() as u32, 0x1000), OK);
-        remove_with(TWO, 5);
+        assert_eq!(check_with(two(), sec.as_ptr(), sec.len() as u32, 0, 1), OK);
+        assert_eq!(apply_with(two(), 5, sec.as_ptr(), sec.len() as u32, 0x1000), OK);
+        remove_with(two(), 5);
         let (k1, b1) = rec(1, 1);
         let (k1b, b1b) = rec(1, 3);
         let (k2, b2) = rec(2, 2);
@@ -205,18 +225,18 @@ fn the_first_fault_is_the_first_step_that_finds_one_and_a_failed_apply_stops_the
         // an effect-step fault precedes nothing: the native step runs first, as in the old body, wherever the records sit in the file
         let sec = section(&[kind_of(2), kind_of(1), kind_of(2)]);
         REFUSE = (2, kind_of(2));
-        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0, 1), E_FORMAT);
+        assert_eq!(check_with(two(), sec.as_ptr(), sec.len() as u32, 0, 1), E_FORMAT);
         assert_eq!(log().len(), 2); // service 1's record, then service 2's first (refused) record; the second is not looked at
         assert!(matches!(log()[0], Call::Check { svc: 1, .. }));
         reset();
         REFUSE = (1, kind_of(1));
-        assert_eq!(check_with(TWO, sec.as_ptr(), sec.len() as u32, 0, 1), E_FORMAT);
+        assert_eq!(check_with(two(), sec.as_ptr(), sec.len() as u32, 0, 1), E_FORMAT);
         assert_eq!(log().len(), 1, "service 1 refused at its step, so service 2's step never ran");
 
         // apply stops at the first failing record in file order; later records of any kind are not applied
         reset();
         FAIL_APPLY = (1, kind_of(1));
-        assert_eq!(apply_with(TWO, 5, sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
+        assert_eq!(apply_with(two(), 5, sec.as_ptr(), sec.len() as u32, 0), E_FORMAT);
         let applied: Vec<_> = log().iter().filter(|c| matches!(c, Call::Apply { .. })).collect();
         assert_eq!(applied.len(), 2, "the effect record before the failing one was applied, the one after was not");
     }
@@ -232,11 +252,11 @@ fn the_walker_refuses_a_kind_no_service_declared_and_a_wrong_length() {
         bad[12..16].copy_from_slice(&2u32.to_be_bytes());
         bad.extend_from_slice(&99u32.to_be_bytes());
         bad.extend_from_slice(&8u32.to_be_bytes());
-        assert_eq!(check_with(TWO, bad.as_ptr(), bad.len() as u32, 0, 1), E_FORMAT);
+        assert_eq!(check_with(two(), bad.as_ptr(), bad.len() as u32, 0, 1), E_FORMAT);
         assert!(log().is_empty());
         let mut wrong = section(&[kind_of(2)]);
         wrong[20..24].copy_from_slice(&12u32.to_be_bytes()); // the record's length word: a kind-1 length
-        assert_eq!(check_with(TWO, wrong.as_ptr(), wrong.len() as u32, 0, 1), E_FORMAT);
+        assert_eq!(check_with(two(), wrong.as_ptr(), wrong.len() as u32, 0, 1), E_FORMAT);
         assert!(log().is_empty());
     }
 }
@@ -245,8 +265,8 @@ fn the_walker_refuses_a_kind_no_service_declared_and_a_wrong_length() {
 fn capacity_sums_the_declared_counts() {
     unsafe {
         // 10 + 20 slots, 1 + 2 used: two services declare the same kind
-        assert_eq!(TWO.cap(CAPK_FX_SLOTS), Some((30, 3)));
-        assert_eq!(TWO.cap(CAPK_FX_SLOTS + 1), None);
+        assert_eq!(two().cap(CAPK_FX_SLOTS), Some((30, 3)));
+        assert_eq!(two().cap(CAPK_FX_SLOTS + 1), None);
     }
 }
 
@@ -255,12 +275,12 @@ fn attribution_asks_the_services_in_order_until_one_answers() {
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset();
-        assert_eq!(TWO.attribute(2, 7), Some(207));
+        assert_eq!(two().attribute(2, 7), Some(207));
         assert_eq!(
             *log(),
             vec![Call::Attribute { svc: 1, site: 2, id: 7 }, Call::Attribute { svc: 2, site: 2, id: 7 }]
         );
-        assert_eq!(TWO.attribute(9, 7), None);
+        assert_eq!(two().attribute(9, 7), None);
     }
 }
 
@@ -271,7 +291,7 @@ fn the_diagnostics_block_reaches_every_service_in_list_order() {
         reset();
         let mut words = [0u32; dkrt_sdk::fault::DIAG_WORDS];
         words[0] = 0xd1a6;
-        TWO.diag(&words);
+        two().diag(&words);
         assert_eq!(*log(), vec![Call::Diag { svc: 1, first: 0xd1a6 }, Call::Diag { svc: 2, first: 0xd1a6 }]);
     }
 }
@@ -283,12 +303,12 @@ fn the_table_check_stops_at_the_first_service_that_reports_and_gives_its_numbers
     unsafe {
         reset();
         let mut out = TableFault::default();
-        assert_eq!(TWO.table_check(0b101, &mut out), 0, "tables that agree");
+        assert_eq!(two().table_check(0b101, &mut out), 0, "tables that agree");
         assert_eq!(out, TableFault::default());
         assert_eq!(*log(), vec![Call::TableCheck { svc: 1, used: 5 }, Call::TableCheck { svc: 2, used: 5 }]);
         log().clear();
         BAD_TABLE = 1;
-        assert_eq!(TWO.table_check(0b101, &mut out), 1);
+        assert_eq!(two().table_check(0b101, &mut out), 1);
         assert_eq!(out, TableFault { module: 1, a: 7, b: 5 });
         assert_eq!(*log(), vec![Call::TableCheck { svc: 1, used: 5 }], "the walk ends at the first report");
     }
@@ -299,8 +319,8 @@ fn a_tick_phase_reaches_every_service_in_list_order() {
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         reset();
-        TWO.tick(tick_phase::EARLY);
-        TWO.tick(tick_phase::LATE);
+        two().tick(tick_phase::EARLY);
+        two().tick(tick_phase::LATE);
         assert_eq!(
             *log(),
             vec![
@@ -313,107 +333,57 @@ fn a_tick_phase_reaches_every_service_in_list_order() {
     }
 }
 
-/// A service that declares a kind its table does not carry, one that declares a wrong length, and one that matches.
-struct Good;
-impl<C: CoreApi> Service<C> for Good {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
-
-    unsafe fn declare(d: &mut Declare) {
-        d.kind(70, 16);
-    }
-}
-struct WrongLen;
-impl<C: CoreApi> Service<C> for WrongLen {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
-
-    unsafe fn declare(d: &mut Declare) {
-        d.kind(71, 20);
-    }
-}
-struct Extra;
-impl<C: CoreApi> Service<C> for Extra {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
-
-    unsafe fn declare(d: &mut Declare) {
-        d.kind(72, 8);
-        d.slot(1, 0, 0);
-    }
-}
-struct Silent;
-impl<C: CoreApi> Service<C> for Silent {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
-}
-
-static DECL_ROWS: [ServiceRow; 4] = [
-    ServiceRow::of::<Good, crate::package::core_api::RealCore>("good", &[(70, 16)]),
-    ServiceRow::of::<WrongLen, crate::package::core_api::RealCore>("wronglen", &[(71, 16)]),
-    ServiceRow::of::<Extra, crate::package::core_api::RealCore>("extra", &[(72, 8)]),
-    ServiceRow::of::<Silent, crate::package::core_api::RealCore>("silent", &[(73, 8)]),
-];
-static DECL_ROWS_P: dkrt_abi::service::RowPtrs<4> = dkrt_abi::service::RowPtrs::of(&DECL_ROWS);
-
-#[test]
-fn a_service_whose_declarations_differ_from_its_table_is_failed_and_its_kinds_are_unknown() {
-    let t = ServiceTable::new(&DECL_ROWS_P.0, &REAL_CORE);
-    let failed = unsafe { t.check_declarations() };
-    assert_eq!(failed, 0b1110, "the matching service passes; a wrong length, an extra item and a missing declaration fail");
-    let t = ServiceTable { failed, ..t };
-    assert_eq!(t.len(70), Some(16));
-    for kind in [71, 72, 73] {
-        assert_eq!(t.len(kind), None);
-        assert!(t.owner(kind).is_none());
-    }
-}
-
-#[test]
-fn the_in_crate_services_declare_what_the_generated_table_carries() {
-    // the real rows: samples owns none, machines six kinds, fx one
-    assert_eq!(unsafe { crate::package::gen_services::TABLE.check_declarations() }, 0);
-}
-
 mod table {
     use super::*;
+    use core::sync::atomic::{AtomicU32, Ordering::SeqCst};
+    use dkrt_abi::provider::ProviderHandle;
 
     struct A;
-    impl<C: CoreApi> Service<C> for A {
-        dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_teardown!();
+    impl<C: CoreApi> Provider<C> for A {
+        fn start(_: &C) -> Result<Self, Status> {
+            Ok(A)
+        }
     }
+    impl<C: CoreApi> Records<C> for A {}
+    impl<C: CoreApi> DspPart<C> for A {}
     struct B;
-    impl<C: CoreApi> Service<C> for B {
-        dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_teardown!();
-
-        unsafe fn dsp_clear(_: &C, _: usize) -> bool {
+    impl<C: CoreApi> Provider<C> for B {
+        fn start(_: &C) -> Result<Self, Status> {
+            Ok(B)
+        }
+    }
+    impl<C: CoreApi> Records<C> for B {}
+    impl<C: CoreApi> DspPart<C> for B {
+        fn clear(&mut self, _: &C, _: usize) -> bool {
             false
         }
-        unsafe fn cap(_: &C, kind: u8) -> Option<(u32, u32)> {
+    }
+    impl<C: CoreApi> Describe<C> for B {
+        fn cap(&self, _: &C, kind: u8) -> Option<(u32, u32)> {
             (kind == 3).then_some((6, 1))
         }
     }
 
-    static ROWS: [ServiceRow; 2] = [ServiceRow::of::<A, crate::package::core_api::RealCore>("a", &[(1, 8)]), ServiceRow::of::<B, crate::package::core_api::RealCore>("b", &[(2, 12)])];
-    static ROWS_P: dkrt_abi::service::RowPtrs<2> = dkrt_abi::service::RowPtrs::of(&ROWS);
-    const T: ServiceTable = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
+    fn a() -> ProviderHandle {
+        Fixture::of::<A>("a").records::<A>(&[(1, 8)]).dsp::<A>().handle()
+    }
+    fn b(name: &'static str, kinds: &'static [(u32, u32)]) -> ProviderHandle {
+        Fixture::of::<B>(name).records::<B>(kinds).dsp::<B>().describe::<B>().handle()
+    }
 
     #[test]
     fn a_table_asks_each_service_and_ands_the_clears() {
-        assert_eq!(T.len(1), Some(8));
-        assert_eq!(T.len(2), Some(12));
-        assert_eq!(T.len(3), None);
-        assert_eq!(T.owner(2).map(|r| unsafe { r.name_hash() }), Some(dkneeds::keys::name_hash("b")));
-        assert!(T.owner(9).is_none());
+        let t = table(std::vec![a(), b("b", &[(2, 12)])]);
+        assert_eq!(t.len(1), Some(8));
+        assert_eq!(t.len(2), Some(12));
+        assert_eq!(t.len(3), None);
+        assert_eq!(t.owner(2).map(|r| r.name()), Some(dkneeds::keys::name_hash("b")));
+        assert!(t.owner(9).is_none());
         unsafe {
-            assert!(!T.dsp_clear(0));
-            assert!(ServiceTable { rows: &ROWS_P.0[..1], ..T }.dsp_clear(0));
+            assert!(!t.dsp_clear(0));
+            assert!(table(std::vec![a()]).dsp_clear(0));
         }
     }
-
-    use core::sync::atomic::{AtomicU32, Ordering::SeqCst};
 
     /// What each service of the abort case did: the number of `dsp_clear` calls it saw, and (the first) how many calls still fail.
     static FAILS_LEFT: AtomicU32 = AtomicU32::new(0);
@@ -422,10 +392,13 @@ mod table {
     macro_rules! counting {
         ($name:ident, $slot:expr, $fails:expr) => {
             struct $name;
-            impl<C: CoreApi> Service<C> for $name {
-                dkrt_abi::accepts_records!();
-                dkrt_abi::accepts_teardown!();
-                unsafe fn dsp_clear(_: &C, _: usize) -> bool {
+            impl<C: CoreApi> Provider<C> for $name {
+                fn start(_: &C) -> Result<Self, Status> {
+                    Ok($name)
+                }
+            }
+            impl<C: CoreApi> DspPart<C> for $name {
+                fn clear(&mut self, _: &C, _: usize) -> bool {
                     CLEARS[$slot].fetch_add(1, SeqCst);
                     if $fails && FAILS_LEFT.load(SeqCst) > 0 {
                         FAILS_LEFT.fetch_sub(1, SeqCst);
@@ -445,13 +418,11 @@ mod table {
     /// back (`reload_abort`); the next try clears every service again and succeeds.
     #[test]
     fn the_dsp_clear_reaches_every_service_when_one_fails_and_a_second_try_after_the_abort_clears_all_again() {
-        static MULTI: [ServiceRow; 3] = [
-            ServiceRow::of::<First, crate::package::core_api::RealCore>("first", &[]),
-            ServiceRow::of::<Failing, crate::package::core_api::RealCore>("failing", &[]),
-            ServiceRow::of::<Last, crate::package::core_api::RealCore>("last", &[]),
-        ];
-        static MULTI_P: dkrt_abi::service::RowPtrs<3> = dkrt_abi::service::RowPtrs::of(&MULTI);
-        let t = ServiceTable { rows: &MULTI_P.0, ..T };
+        let t = table(std::vec![
+            Fixture::of::<First>("first").dsp::<First>().handle(),
+            Fixture::of::<Failing>("failing").dsp::<Failing>().handle(),
+            Fixture::of::<Last>("last").dsp::<Last>().handle(),
+        ]);
         FAILS_LEFT.store(1, SeqCst);
         for c in &CLEARS {
             c.store(0, SeqCst);
@@ -467,12 +438,12 @@ mod table {
 
     #[test]
     fn a_kind_two_services_count_is_the_sum_of_their_counts() {
-        static TWO_B: [ServiceRow; 2] = [ServiceRow::of::<B, crate::package::core_api::RealCore>("b1", &[]), ServiceRow::of::<B, crate::package::core_api::RealCore>("b2", &[])];
-        static TWO_B_P: dkrt_abi::service::RowPtrs<2> = dkrt_abi::service::RowPtrs::of(&TWO_B);
+        let two_b = table(std::vec![b("b1", &[]), b("b2", &[])]);
+        let one_b = table(std::vec![a(), b("b", &[(2, 12)])]);
         unsafe {
-            assert_eq!(ServiceTable { rows: &TWO_B_P.0, ..T }.cap(3), Some((12, 2)));
-            assert_eq!(T.cap(3), Some((6, 1)));
-            assert_eq!(T.cap(4), None);
+            assert_eq!(two_b.cap(3), Some((12, 2)));
+            assert_eq!(one_b.cap(3), Some((6, 1)));
+            assert_eq!(one_b.cap(4), None);
         }
     }
 }

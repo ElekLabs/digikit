@@ -13,8 +13,7 @@ use dkrt_sdk::fault::DIAG_WORDS;
 use dkrt_sdk::{E_FORMAT, E_SVC_ABI, OK};
 
 /// A service row the core read from a file, resolved against the part versions it knows, with the instance its functions work on: what the core keeps for one loaded
-/// provider and calls through. The calls are the walks of the old `ServiceTable` for one row: a part the service did not adopt answers with the default of the old
-/// `Service` method (accept, nothing). The pointers stay valid from link until the package is freed: the owner of the handle drops it first.
+/// provider and calls through. A part the service did not adopt answers with its default (accept, nothing). The pointers stay valid from link until the package is freed: the owner of the handle drops it first.
 #[derive(Clone, Copy)]
 pub struct ProviderHandle {
     name: u32,
@@ -45,6 +44,18 @@ fn table_of<T>(found: PartLookup, extent: &Range<usize>) -> Result<*const T, Sta
 }
 
 impl ProviderHandle {
+    /// The handle of no service: the filler of the unused cells of a row table. Nothing walks it (a walk covers the filled prefix), and a call through it would fault.
+    pub const EMPTY: ProviderHandle = ProviderHandle {
+        name: 0,
+        instance: core::ptr::null_mut(),
+        lifecycle: core::ptr::null(),
+        records: core::ptr::null(),
+        dsp: core::ptr::null(),
+        tick: core::ptr::null(),
+        query: core::ptr::null(),
+        describe: core::ptr::null(),
+    };
+
     /// Resolve `row` (read from a package that lies in `extent`) for `instance`. `E_FORMAT` for a row, a table or a record kinds array outside `extent` or a null instance, `E_SVC_ABI` for a
     /// part whose version is newer than this core knows.
     ///

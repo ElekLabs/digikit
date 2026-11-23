@@ -7,7 +7,7 @@ use crate::package::admission::Admission;
 use crate::package::registry;
 use dkneeds::keys::{write_table, KeyGroup, Keys, Table};
 use crate::package::core_api::RealCore;
-use crate::package::svc_rows::{self, RowSource};
+use crate::package::provider_rows::{self, RowSource};
 use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::provider::Provider;
 use dkrt_abi::service::{RecordSink, SettleCtx};
@@ -59,15 +59,15 @@ const FILE_REC: usize = 0;
 impl Loaded {
     pub(crate) fn new() -> Loaded {
         let instance = dk_svc_start().expect("the owner starts");
-        let row = RowSource::Provider { row: dk_svc_row(), instance, extent: 0..usize::MAX };
-        assert_eq!(unsafe { svc_rows::add(FILE_REC, row, None) }, OK);
+        let row = RowSource { row: dk_svc_row(), instance, extent: 0..usize::MAX };
+        assert_eq!(unsafe { provider_rows::add(FILE_REC, row, None) }, OK);
         Loaded
     }
 }
 
 impl Drop for Loaded {
     fn drop(&mut self) {
-        unsafe { svc_rows::remove(FILE_REC) };
+        unsafe { provider_rows::remove(FILE_REC) };
         dk_svc_stop();
     }
 }
