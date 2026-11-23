@@ -138,15 +138,15 @@ description = "Cheap preflight only: affected lint, format, types, host tests an
 
 [test]
 run = "node tools/nx/gate.mjs --tier merge"
-description = "Default affected verification and merge gate against DIGI_GATE_BASE (default main); the Nx launcher sets a CPU budget from the machine, DIGI_BUDGET overrides it"
+description = "Default affected verification and merge gate against DIGI_GATE_BASE (default main): affected targets, then the device tests of the changed areas plus the smoke set (-- --all-affected: every affected device test); the Nx launcher sets a CPU budget from the machine, DIGI_BUDGET overrides it"
 
 ["test:plan"]
 run = "node tools/nx/gate.mjs --tier merge --explain"
-description = "Explain the default test selection; runs nothing. DIGI_GATE_BASE sets the shared comparison base"
+description = "Explain the default test selection (affected plan, then the area device selection with its skipped list); runs nothing. DIGI_GATE_BASE sets the shared comparison base"
 
 ["test:subset"]
 run = "node tools/nx/test-subset.mjs"
-description = "Device tests of record tags (S:fx C:loading ...) plus gate-smoke and gate-pins: prints the Nx targets; add --run to run them (DIGI_EMU_SLOTS honoured). For a change that reaches device tests only through shared inputs"
+description = "Device tests of record tags (S:fx C:loading ...) and, with --base REF, of the areas of the changed paths plus gate-device-smoke; gate-smoke and gate-pins when affected selects them: prints the Nx targets; add --run to run them (DIGI_EMU_SLOTS honoured)"
 
 ["test:full"]
 run = "node tools/nx/gate.mjs --tier full"

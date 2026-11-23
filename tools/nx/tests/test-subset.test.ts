@@ -6,14 +6,24 @@ import { join, resolve } from 'node:path';
 import { parse } from 'smol-toml';
 import { tagProblem } from '../acceptance-tags.mjs';
 import { nonCellGlobs } from '../device-files.mjs';
+import { parseOwners } from '../area-paths.mjs';
+import { TIERS, deviceByArea } from '../gate.mjs';
 import {
+  DEVICES,
+  DEVICE_SMOKE,
   affectedFixed,
+  areaSelection,
   baseProblem,
   changedFiles,
+  deviceHalves,
   invocations,
+  projectsWithTarget,
   resolveSubset,
   selectionPairs,
   sharedInput,
+  skipText,
+  skippedHalves,
+  smokeHalves,
   whyText,
 } from '../test-subset.mjs';
 
@@ -146,7 +156,7 @@ it('errors on a module id that is no project', () => {
   expect(() => resolveSubset([], bad, { changed: ['x'] })).toThrow(/no\/such .* is no Nx project/);
 });
 
-it('reports a shared input, and refuses an empty or shared selection without tags', () => {
+it('reports a shared input', () => {
   expect(sharedInput('sdk/sdk.toml', graph)).toMatch(/shared key input/);
   expect(sharedInput('packages/patchkit/src/main.rs', graph)).toBe('the source of patchkit');
   expect(sharedInput('modules/c/src/x.c', graph)).toBe('');
@@ -160,16 +170,6 @@ it('reports a shared input, and refuses an empty or shared selection without tag
   if (!cell) throw new Error('no device with an acceptance cell in devices/*.toml');
   expect(sharedInput(nonCell, graph)).toBe('');
   expect(sharedInput(cell, graph)).not.toBe('');
-  const sharedOf = (f: string) => sharedInput(f, graph);
-  const run = (changed: string[], tags: string[] = []) => {
-    const got = resolveSubset(tags, graph, { changed, sharedOf });
-    return baseProblem({ tags, base: 'B', changed, tests: got.tests, shared: got.shared });
-  };
-  expect(run(['packages/patchkit/src/main.rs', 'modules/b/src/x.c'])).toMatch(/source of patchkit.*name tags/i);
-  expect(run(['docs/x.md'])).toMatch(/select no device test record.*name tags/i);
-  expect(run([])).toMatch(/no file changed/);
-  expect(run(['modules/b/src/x.c'])).toBe('');
-  expect(run(['docs/x.md'], ['C:boot'])).toBe('');
 });
 
 it('counts an untracked file as changed', () => {
@@ -218,4 +218,147 @@ it('says per selected file which given tags and which changed files selected it'
   ]);
   const long = whyText({ tags: [], changed: ['a', 'b', 'c', 'd', 'e'] });
   expect(long).toBe('changed a, changed b, changed c, 2 more changed');
+});
+
+const [d1, d2] = DEVICES;
+// The area gate: changed paths name areas, the tests of those areas run, the smoke set is fixed, the rest is skipped.
+const areaGraph = [
+  { ...project('core/runtime', [], []), root: 'runtime/core' },
+  {
+    ...project(
+      'core/rt-tests',
+      [
+        `test-device--boot--${d1}`,
+        `test-device--boot--${d2}`,
+        `test-device--storage--${d1}`,
+        `test-device--storage--${d2}`,
+      ],
+      [
+        { files: ['boot.device.test.ts'], tags: ['C:boot'] },
+        { files: ['storage.device.test.ts'], tags: ['C:storage'] },
+      ],
+    ),
+    root: 'runtime/core/tests',
+    subjects: ['core/runtime'],
+  },
+  {
+    ...project('core/m', [`test-device--${d1}`], [{ files: ['tests/m.device.test.ts'], tags: ['C:state'] }]),
+    root: 'modules/m',
+  },
+  { ...project('gate-device-smoke', ['device'], []), root: 'tools/gate/device-smoke' },
+];
+const areaCtx = {
+  owners: parseOwners('shared = ["dkrt::entry"]\n"C:boot" = ["dkrt::boot"]\n"C:storage" = ["dkrt::storage"]'),
+  serviceTags: new Set<string>(),
+  crateOf: (file: string) =>
+    file.startsWith('runtime/core/src/rs/') ? { name: 'dkrt', dir: 'runtime/core/src/rs' } : undefined,
+};
+const selected = (changed: string[], tags: string[] = [], closureOf?: (r: string, f: string) => string[]) => {
+  const got = areaSelection(tags, areaGraph, { changed, ctx: areaCtx, closureOf });
+  return {
+    got,
+    pairs: selectionPairs(got.tests, areaGraph, [DEVICE_SMOKE]).map((p) => `${p.project}:${p.target}`),
+  };
+};
+
+it('selects the tests of the area of a runtime-only change, not of every record that depends on the runtime', () => {
+  const { got, pairs } = selected(['runtime/core/src/rs/src/boot.rs']);
+  expect(got.mapped).toEqual([{ file: 'runtime/core/src/rs/src/boot.rs', areas: ['C:boot'] }]);
+  expect(pairs).toEqual([
+    `core/rt-tests:test-device--boot--${d1}`,
+    `core/rt-tests:test-device--boot--${d2}`,
+    'gate-device-smoke:device',
+  ]);
+});
+
+it('selects the smoke set alone for a shared runtime module, and names the file', () => {
+  const { got, pairs } = selected(['runtime/core/src/rs/src/entry.rs']);
+  expect(got.noArea).toEqual(['runtime/core/src/rs/src/entry.rs']);
+  expect(pairs).toEqual(['gate-device-smoke:device']);
+});
+
+it('selects the records of a changed module and the smoke set', () => {
+  const { got, pairs } = selected(['modules/m/src/a.c']);
+  expect(got.mapped).toEqual([]);
+  expect(pairs).toEqual([`core/m:test-device--${d1}`, 'gate-device-smoke:device']);
+});
+
+it('selects the tests that import a changed harness file, and no others', () => {
+  const closureOf = (root: string, file: string) => [`${root}/${file}`, ...(root === 'modules/m' ? ['h/kit.ts'] : [])];
+  expect(selected(['h/kit.ts'], [], closureOf).pairs).toEqual([
+    `core/m:test-device--${d1}`,
+    'gate-device-smoke:device',
+  ]);
+});
+
+it('adds the tests of the given tags to the tests of the changed paths', () => {
+  const { pairs } = selected(['runtime/core/src/rs/src/boot.rs'], ['C:storage']);
+  expect(pairs).toContain(`core/rt-tests:test-device--storage--${d2}`);
+  expect(pairs).toContain(`core/rt-tests:test-device--boot--${d1}`);
+  expect(selected([], ['C:state']).pairs).toEqual([`core/m:test-device--${d1}`, 'gate-device-smoke:device']);
+  expect(selected([], ['S:fx']).got.unknown).toEqual(['S:fx']);
+  // a tag no record carries that a path derives is no error
+  expect(
+    areaSelection([], [areaGraph[3]!], { changed: ['runtime/core/src/rs/src/boot.rs'], ctx: areaCtx }).unknown,
+  ).toEqual([]);
+});
+
+it('runs the smoke set in one call with the area tests', () => {
+  const { pairs } = selected(['runtime/core/src/rs/src/boot.rs']);
+  const calls = invocations(
+    pairs.map((p) => ({ project: p.split(':')[0]!, target: p.split(':')[1]! })),
+    areaGraph,
+  );
+  expect(calls.flat().join(' ')).toContain('gate-device-smoke');
+});
+
+it('reports the device halves that affected selects and the area gate leaves out', () => {
+  const affected = new Set([
+    'core/rt-tests:test-device',
+    `core/rt-tests:test-device--boot--${d1}`,
+    `core/rt-tests:test-device--storage--${d1}`,
+    `core/m:test-device--${d1}`,
+    'core/m:pack',
+  ]);
+  expect(deviceHalves(affected)).toEqual([
+    `core/rt-tests:test-device--boot--${d1}`,
+    `core/rt-tests:test-device--storage--${d1}`,
+    `core/m:test-device--${d1}`,
+  ]);
+  const skipped = skippedHalves(
+    affected,
+    [{ project: 'core/rt-tests', target: `test-device--boot--${d1}` }],
+    [`core/m:test-device--${d1}`],
+  );
+  expect(skipped).toEqual([`core/rt-tests:test-device--storage--${d1}`]);
+  expect(skipText(skipped)).toBe('1 device halves of 1 projects: core/rt-tests 1');
+});
+
+it('names gate-smoke and gate-pins as affected when only a dependency selects their task', () => {
+  // `nx show projects --affected` misses these; the task graph of `nx affected` has them
+  const tasks = new Set(['gate-smoke:smoke', 'digi-control:daemons']);
+  expect(
+    affectedFixed('B', (_b: string, target: string) => projectsWithTarget(tasks, target)).map((f) => f.project),
+  ).toEqual(['gate-smoke']);
+});
+
+it('lists the smoke halves from the dependencies of the smoke target', () => {
+  const smoke = {
+    name: 'gate-device-smoke',
+    targetDeps: { device: [{ projects: ['core/x'], target: `test-device--a--${d1}` }] },
+  };
+  expect(smokeHalves([smoke])).toEqual([`core/x:test-device--a--${d1}`]);
+});
+
+it('refuses only a base with no changed file', () => {
+  expect(baseProblem({ base: 'B', changed: [] })).toMatch(/no file changed/);
+  expect(baseProblem({ base: 'B', changed: ['docs/x.md'] })).toBe('');
+  expect(baseProblem({ changed: [] })).toBe('');
+});
+
+it('makes the merge tier select device tests by area unless all affected is asked for', () => {
+  expect(deviceByArea(TIERS.merge, false)).toBe(true);
+  expect(deviceByArea(TIERS.merge, true)).toBe(false);
+  expect(deviceByArea(TIERS.full, false)).toBe(false);
+  expect(deviceByArea(TIERS.changed, false)).toBe(false);
 });
