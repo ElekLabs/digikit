@@ -1833,7 +1833,7 @@ fn the_fx_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher() {
         let query = name_hash(dkrt_sdk::RESIDENT_QUERY_ENTRY);
         let export = keys.exports().find(|e| e.a == query).expect("fx has a query entry");
         assert_eq!(export.b & dkneeds::keys::EXPORT_FLAGS, dkneeds::keys::EXPORT_FLAGS);
-        assert_eq!(be(&file, dkneeds::H_RUNTIME) & 0x00ff_ffff, 0x000b02);
+        assert_eq!(be(&file, dkneeds::H_RUNTIME) & 0x00ff_ffff, 0x000c02);
         let fx_version = keys.words(tag::PROVIDES, 0).unwrap().1;
         unsafe {
             let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);

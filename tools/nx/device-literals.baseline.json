@@ -370,7 +370,7 @@
   "packages/patchkit/src/build/sharc_legal.rs": 2,
   "packages/patchkit/src/devdata.rs": 47,
   "packages/patchkit/src/devgen.rs": 36,
-  "packages/patchkit/src/dkm.rs": 7,
+  "packages/patchkit/src/dkm.rs": 4,
   "packages/patchkit/src/dkmdsp.rs": 2,
   "packages/patchkit/src/dkmsynth.rs": 17,
   "packages/patchkit/src/dspscan.rs": 5,

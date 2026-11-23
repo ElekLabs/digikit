@@ -1682,6 +1682,58 @@ mod manifest_tests {
     }
 
     #[test]
+    fn one_hook_name_is_declared_once_for_each_of_disjoint_devices() {
+        let shorts: Vec<String> = crate::devdata::all()
+            .iter()
+            .filter(|d| d.digikit_id.is_some())
+            .map(|d| d.short.clone())
+            .collect();
+        assert!(shorts.len() >= 2, "two runtime devices");
+        let hook = |entry: &str, devices: &[&str]| {
+            let list: Vec<String> = devices.iter().map(|d| format!("{d:?}")).collect();
+            let on = if devices.is_empty() {
+                String::new()
+            } else {
+                format!("devices = [{}]\n", list.join(", "))
+            };
+            format!("[[hook]]\nname = \"cf.a.hook.x\"\nentry = \"{entry}\"\n{on}")
+        };
+        let (a, b) = (shorts[0].as_str(), shorts[1].as_str());
+        // disjoint device sets: accepted
+        let ok = format!("{}{}", hook("e1", &[a]), hook("e2", &[b]));
+        assert!(load_service(&ok).is_ok());
+        // the same device twice, an entry for every device with one for a device (either order), or every device twice: refused
+        for (what, extra) in [
+            (
+                "same device",
+                format!("{}{}", hook("e1", &[a]), hook("e2", &[a])),
+            ),
+            (
+                "a shared device",
+                format!("{}{}", hook("e1", &[a, b]), hook("e2", &[b])),
+            ),
+            (
+                "all then one",
+                format!("{}{}", hook("e1", &[]), hook("e2", &[b])),
+            ),
+            (
+                "one then all",
+                format!("{}{}", hook("e1", &[a]), hook("e2", &[])),
+            ),
+            (
+                "all twice",
+                format!("{}{}", hook("e1", &[]), hook("e2", &[])),
+            ),
+        ] {
+            let e = load_service(&extra).unwrap_err();
+            assert!(
+                e.to_string().contains("declared twice for a common device"),
+                "{what}: {e}"
+            );
+        }
+    }
+
+    #[test]
     fn a_record_has_a_local_id_and_no_key_field() {
         let e = load("[[record]]\nkind = \"lfo_shape\"\nkey = 7\n").unwrap_err();
         assert!(e.to_string().contains("unknown field"), "{e}");

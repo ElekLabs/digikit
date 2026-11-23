@@ -704,6 +704,30 @@ fn one_hook_name_with_an_entry_for_each_device_installs_the_entry_of_the_running
     }
 }
 
+/// A hand-built file with two `HOOKS` items of one name for the same device (two entries of that device, or an entry for every device and one for this device) is
+/// `E_FORMAT` before the installer takes a site: the packer never writes it, and which entry would win is not defined.
+#[test]
+fn two_hook_items_of_one_name_for_the_same_device_are_refused_before_a_site_is_taken() {
+    use dkneeds::keys::{name_hash, Pair, Table, HOOK_DEVICES_SHIFT};
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let me = provider_loader(service_file(&svc_table(), 0), svc_init()).p.device_id();
+        let bit = |id: u32| (1u32 << (id - 1)) << HOOK_DEVICES_SHIFT;
+        let a = name_hash("hook.a");
+        for (what, hooks) in [
+            ("two for this device", vec![Pair { a, b: 4 | bit(me) }, Pair { a, b: 12 | bit(me) }]),
+            ("every device and this device", vec![Pair { a, b: 4 }, Pair { a, b: 12 | bit(me) }]),
+            ("every device twice", vec![Pair { a, b: 4 }, Pair { a, b: 12 }]),
+        ] {
+            let hooks: &'static [Pair] = Box::leak(hooks.into_boxed_slice());
+            let table = Table { hooks, ..svc_table() };
+            let mut l = provider_loader(service_file(&table, 0), svc_init());
+            assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT, "{what}");
+            assert_eq!(site_bytes(&l, 6), STOCK[..6], "{what}: the site stays stock");
+        }
+    }
+}
+
 #[test]
 fn the_name_of_a_module_event_is_the_part_of_the_id_after_the_slash_cut_to_the_log_width() {
     let field = |id: &[u8]| {

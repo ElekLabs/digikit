@@ -107,6 +107,16 @@ unsafe fn hook_items<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<
         if !dkneeds::keys::hook_for_device(entry, l.p.device_id()) {
             continue;
         }
+        // a name has one entry for this device (the packer never writes two): which would win is not defined, so the file is malformed
+        let mut j = 0;
+        while j + 1 < i {
+            if let Some((h, e, _)) = keys.words(tag::HOOKS, j) {
+                if h == hash && dkneeds::keys::hook_for_device(e, l.p.device_id()) {
+                    return Err(E_FORMAT);
+                }
+            }
+            j += 1;
+        }
         let entry = entry & dkneeds::keys::HOOK_ENTRY_MASK;
         let site = match l.port_keys() {
             Some((port, ..)) => port.find_site(hash),

@@ -374,20 +374,21 @@ pub const HOOK_ENTRY_MASK: u32 = dkneeds::keys::HOOK_ENTRY_MASK;
 /// The device mask of a hook: bit `id - 1` for each device with runtime id `id` (`[digikit] id`, the mask of a `SLOTS` item without its shift); no device is mask 0, which means
 /// every device. The packer writes it in the top byte of the hook's `HOOKS` entry; the loader takes the items of its device and drops it.
 pub fn hook_device_mask(devices: &[String]) -> Result<u32> {
-    for d in devices {
-        if crate::devdata::by_short(d).is_none() {
-            return Err(err!(
-                "hook device {d:?} is not one of {}",
-                crate::devdata::short_list()
-            ));
-        }
-    }
-    Ok(slot_device_flags(devices)? >> dkneeds::keys::SLOT_DEVICES_SHIFT)
+    runtime_id_mask(crate::devdata::all(), devices, "hook")
 }
 
 /// The device mask of a `SLOTS` item, in place in the flags word: bit `id - 1` for each device with runtime id `id` (`[digikit] id`); no device is 0 (every device).
 pub fn slot_device_flags(devices: &[String]) -> Result<u32> {
-    let all = crate::devdata::all();
+    Ok(runtime_id_mask(crate::devdata::all(), devices, "slot")?
+        << dkneeds::keys::SLOT_DEVICES_SHIFT)
+}
+
+/// Bit `id - 1` for each of `devices` (short names of `all`) by its runtime id; `what` names the item in the refusal.
+fn runtime_id_mask(
+    all: &[crate::devdata::DeviceInfo],
+    devices: &[String],
+    what: &str,
+) -> Result<u32> {
     let mut mask = 0u32;
     for d in devices {
         let id = all
@@ -396,16 +397,18 @@ pub fn slot_device_flags(devices: &[String]) -> Result<u32> {
             .and_then(|x| x.digikit_id)
             .ok_or_else(|| {
                 err!(
-                    "slot device {d:?} is not a device the runtime runs on ({})",
+                    "{what} device {d:?} is not a device the runtime runs on ({})",
                     crate::devdata::short_list()
                 )
             })?;
         if !(1..=8).contains(&id) {
-            return Err(err!("slot device {d:?}: the runtime id {id} is not 1 to 8"));
+            return Err(err!(
+                "{what} device {d:?}: the runtime id {id} is not 1 to 8"
+            ));
         }
         mask |= 1 << (id - 1);
     }
-    Ok(mask << dkneeds::keys::SLOT_DEVICES_SHIFT)
+    Ok(mask)
 }
 
 /// What a service file provides: the service name (`[module] service`) and the functions it exports (`[[export]]`), each a global function of the object.
@@ -2008,6 +2011,23 @@ mod tests {
     }
 
     #[test]
+    fn a_device_without_a_runtime_id_is_refused_under_the_name_of_the_item() {
+        let mut none = crate::devdata::all()[0].clone();
+        none.short = "noid".into();
+        none.digikit_id = None;
+        let all = [none];
+        let devices = ["noid".to_string()];
+        let hook = runtime_id_mask(&all, &devices, "hook")
+            .unwrap_err()
+            .to_string();
+        assert!(hook.contains("hook device \"noid\""), "{hook}");
+        let slot = runtime_id_mask(&all, &devices, "slot")
+            .unwrap_err()
+            .to_string();
+        assert!(slot.contains("slot device \"noid\""), "{slot}");
+    }
+
+    #[test]
     fn one_hook_name_for_disjoint_devices_packs_one_entry_for_each_under_the_runtime_id_mask() {
         let o = object();
         let dev =
@@ -2057,19 +2077,28 @@ mod tests {
         };
         assert!(e(twice).contains("hooks hook.a twice"));
         // one name for the same device twice, or for every device and one: refused
+        let shorts: Vec<String> = crate::devdata::all()
+            .iter()
+            .filter(|d| d.digikit_id.is_some())
+            .map(|d| d.short.clone())
+            .collect();
+        assert!(shorts.len() >= 2, "two runtime devices");
         let dev = |name: &str, entry: &str, d: &str| {
             (name.to_string(), entry.to_string(), vec![d.to_string()])
         };
         let overlap = Provided {
             hooks: vec![
-                dev("hook.a", "tick_fn", "dt2"),
-                dev("hook.a", "init_fn", "dt2"),
+                dev("hook.a", "tick_fn", &shorts[0]),
+                dev("hook.a", "init_fn", &shorts[0]),
             ],
             ..provided()
         };
         assert!(e(overlap).contains("hooks hook.a twice"));
         let overlap = Provided {
-            hooks: vec![hook("hook.a", "tick_fn"), dev("hook.a", "init_fn", "dn2")],
+            hooks: vec![
+                hook("hook.a", "tick_fn"),
+                dev("hook.a", "init_fn", &shorts[1]),
+            ],
             ..provided()
         };
         assert!(e(overlap).contains("hooks hook.a twice"));
@@ -2105,7 +2134,11 @@ mod tests {
             hooks: vec![("hook.a".into(), "tick_fn".into(), vec!["zz9".into()])],
             ..provided()
         };
-        assert!(e(bad_device).contains("is not one of"));
+        let bad = e(bad_device);
+        assert!(
+            bad.contains("hook device") && !bad.contains("slot"),
+            "{bad}"
+        );
         // the same functions once each pack
         let ok = Provided {
             exports: vec!["tick_fn".into()],

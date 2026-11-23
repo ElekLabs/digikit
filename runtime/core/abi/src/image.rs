@@ -316,6 +316,16 @@ mod tests {
         }
     }
 
+    /// 0.11.3 was the last runtime that read the device mask of a `HOOKS` entry as an index in the order of the device files; since 0.12.0 it is the runtime id. A service file
+    /// packed for 0.11 (its need word names that minor) is E_CONTRACT, not a file whose hooks bind the wrong device.
+    #[test]
+    fn a_file_packed_for_the_runtime_before_the_hook_mask_changed_is_refused() {
+        assert!(dkrt_sdk::RUNTIME_VERSION >= 0x000c00);
+        for old in [0x000b00, 0x000b01, 0x000b02, 0x000b03] {
+            refuses(dkneeds::H_RUNTIME, old, E_CONTRACT);
+        }
+    }
+
     #[test]
     fn refuses_bad_name() {
         let mut v = good();
