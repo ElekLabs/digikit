@@ -11,6 +11,8 @@ use dkrt_test_support::contract::{Dsp, Fixture, Init, Module, Rows};
 use dkrt_test_support::{provider_contract, subject, FakeCore, Recipe, RowBuilder};
 
 // the core imports of the file's code (no runtime is linked)
+// the core imports (`dkc_*`) of the service file, as host functions (this test links no runtime)
+#[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
 mod stubs;
 
 // the service file's source: its `service!` call is the one place that lists the parts

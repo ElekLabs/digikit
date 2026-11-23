@@ -12,6 +12,8 @@ use file::glue::{
 use file::{dk_svc_start, dk_svc_stop};
 pub use file::{glue, DK_SVC_OWNER};
 
+// the core imports (`dkc_*`) of the service file, as host functions (this test links no runtime)
+#[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
 mod stubs;
 use stubs::RUNNING;
 

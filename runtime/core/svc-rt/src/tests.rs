@@ -300,6 +300,8 @@ mod pretick {
 
     /// The order the owner saw: 1 for a pre-tick event, 2 for the tick.
     pub static ORDER: AtomicU32 = AtomicU32::new(0);
+    /// What the pre-tick step's `post` answered last (`Post` as a number: 0 ran, 3 no owner).
+    pub static POSTED: AtomicU32 = AtomicU32::new(99);
 
     pub struct S;
     impl Provider<crate::ImportCore> for S {
@@ -320,7 +322,8 @@ mod pretick {
         }
         fn pre_tick(_: &crate::ImportCore, _: u32) {
             // the callback of the foreign call: with the owner idle the event runs at once
-            assert_eq!(DK_SVC_OWNER.post(1), crate::Post::Ran);
+            let post = DK_SVC_OWNER.post(1);
+            POSTED.store(post as u32, SeqCst);
         }
     }
     crate::service!(
@@ -334,6 +337,9 @@ mod pretick {
     );
     pub unsafe fn start() {
         assert_eq!(dk_svc_init(0x1234 as *mut u8), 0);
+    }
+    pub fn stop() {
+        dk_svc_stop();
     }
     pub fn row() -> &'static dkrt_abi::provider::ProviderRow {
         &DK_SVC_ROW
@@ -356,5 +362,22 @@ fn the_pre_tick_step_runs_before_the_owner_is_entered_so_its_events_come_before_
         )
     };
     assert_eq!(pretick::ORDER.load(SeqCst), 12, "the event, then the tick");
+    assert_eq!(pretick::POSTED.load(SeqCst), crate::Post::Ran as u32);
     assert_eq!(pretick::DK_SVC_OWNER.refused(), 0);
+    // after `stop` the table's tick still runs the pre-tick step (it is outside the guard): its event meets no owner and is dropped, and the tick itself is refused
+    pretick::stop();
+    pretick::ORDER.store(0, SeqCst);
+    unsafe {
+        handle.tick(
+            &ImportCore as *const ImportCore as *const core::ffi::c_void,
+            0,
+        )
+    };
+    assert_eq!(pretick::POSTED.load(SeqCst), crate::Post::NoOwner as u32);
+    assert_eq!(pretick::ORDER.load(SeqCst), 0, "no event, no tick");
+    assert_eq!(
+        pretick::DK_SVC_OWNER.refused(),
+        0,
+        "a dead owner counts nothing"
+    );
 }

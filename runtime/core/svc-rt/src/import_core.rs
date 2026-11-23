@@ -79,10 +79,33 @@ impl CoreApi for ImportCore {
         Ok((w.stat(), r as usize))
     }
     fn irq_mask(&self) -> u32 {
-        unsafe { dkc_irq_mask() }
+        #[cfg(target_arch = "m68k")]
+        {
+            unsafe { dkc_irq_mask() }
+        }
+        // a host build links no runtime: nothing preempts a host test, so masking is nothing (the unit tests of `Owner` count masks and deliver interrupts at them)
+        #[cfg(all(not(target_arch = "m68k"), test))]
+        {
+            crate::owner::test_irq_mask()
+        }
+        #[cfg(all(not(target_arch = "m68k"), not(test)))]
+        {
+            0
+        }
     }
     fn irq_restore(&self, sr: u32) {
-        unsafe { dkc_irq_restore(sr) }
+        #[cfg(target_arch = "m68k")]
+        {
+            unsafe { dkc_irq_restore(sr) }
+        }
+        #[cfg(all(not(target_arch = "m68k"), test))]
+        {
+            crate::owner::test_irq_restore(sr)
+        }
+        #[cfg(all(not(target_arch = "m68k"), not(test)))]
+        {
+            let _ = sr;
+        }
     }
     unsafe fn settings_get(&self, key: &[u8], out: &mut [u8]) -> i32 {
         dkc_settings_get(
@@ -187,4 +210,13 @@ impl CoreApi for ImportCore {
     unsafe fn link_run(&self, owner: Owner, seq: &Sequence) -> bool {
         dkc_link_run(owner, seq)
     }
+}
+
+/// Run `f` with interrupts masked (a single core: nothing else runs meanwhile).
+#[inline(always)]
+pub(crate) fn masked<R>(f: impl FnOnce() -> R) -> R {
+    let sr = ImportCore.irq_mask();
+    let r = f();
+    ImportCore.irq_restore(sr);
+    r
 }

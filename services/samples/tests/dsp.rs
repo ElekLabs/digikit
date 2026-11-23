@@ -12,7 +12,6 @@ use dkrt_svc_samples::samples::Samples;
 use dkrt_test_support::FakeCore;
 
 // the core imports of the owner cell's guard (no runtime is linked)
-mod stubs;
 
 /// The 32-byte track-table record of a DSP section (little-endian words): kind 2, the module's local id, the offsets of its records and control sets.
 fn bank(local: u32) -> [u8; 32] {

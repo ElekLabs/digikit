@@ -307,16 +307,15 @@ std::thread_local! {
     static RESTORES: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
 }
 
-/// The imports `Owner` masks with, as the host's counters (the runtime links the real ones).
-#[no_mangle]
-extern "C" fn dkc_irq_mask() -> u32 {
+/// What `ImportCore::irq_mask` does in this crate's host tests: the counters (the runtime links the real import).
+pub(crate) fn irq_mask() -> u32 {
     MASK_DEPTH.with(|d| d.set(d.get() + 1));
     MASKS_TAKEN.with(|n| n.set(n.get() + 1));
     0x2700
 }
 
-#[no_mangle]
-extern "C" fn dkc_irq_restore(_sr: u32) {
+/// `ImportCore::irq_restore` in this crate's host tests: the point where an unmasked CPU takes a pending interrupt.
+pub(crate) fn irq_restore(_sr: u32) {
     let depth = MASK_DEPTH.with(|d| {
         d.set(d.get() - 1);
         d.get()
@@ -372,9 +371,6 @@ fn every_call_decides_and_ends_with_interrupts_masked() {
         }),
         ("post", &|| {
             let _ = o.post(1);
-        }),
-        ("with_or_post", &|| {
-            let _ = o.with_or_post(1, |_| ());
         }),
     ] {
         let before = masks_taken();
@@ -493,28 +489,4 @@ fn an_event_that_arrives_while_the_queue_drains_is_not_lost() {
         "idle after the queue was found empty: it runs at once"
     );
     o.with(|f| assert_eq!(&f.ran[..f.count], &[1, 9]));
-}
-
-#[test]
-fn with_or_post_runs_when_idle_and_queues_when_busy() {
-    let o = fake();
-    assert_eq!(
-        o.with_or_post(5, |f| f.count),
-        Ok(0),
-        "idle: the closure ran, the event did not"
-    );
-    let inner = o.run(Err(Post::NoOwner), |_| {
-        o.with_or_post(6, |_| unreachable!())
-    });
-    assert_eq!(inner, Err(Post::Queued));
-    o.with(|f| assert_eq!(&f.ran[..f.count], &[6]));
-    assert_eq!(o.refused(), 0, "a queued event is not a refusal");
-    // a full queue is counted
-    o.run((), |_| {
-        assert_eq!(o.with_or_post(1, |_| ()), Err(Post::Queued));
-        assert_eq!(o.with_or_post(2, |_| ()), Err(Post::Queued));
-        assert_eq!(o.with_or_post(3, |_| ()), Err(Post::Full));
-    });
-    assert_eq!(o.refused(), 1);
-    assert_eq!(FakeOwner::new().with_or_post(1, |_| ()), Err(Post::NoOwner));
 }

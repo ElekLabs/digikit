@@ -15,7 +15,7 @@
 //! Idle --start (UI)--> Posted --first step (worker)--> Running --end of the job (UI)--> Done --start (UI)--> Posted ...
 //! ```
 //!
-//! The UI task touches a cell only in `Idle` and `Done`, the worker task only in `Posted` and `Running`; each phase is one aligned word store (a volatile `u32`). A new key while a
+//! The UI task touches a cell only in `Idle` and `Done`, the worker task only in `Posted` and `Running`; each phase is one aligned word store through a [`Handoff`] (a volatile `u32` with a release fence before the store and an acquire fence after a read). A new key while a
 //! job runs goes to `next`; the old job is cancelled and, when its end arrives as a `PeakDone` event (`Samples::peak_done`), the job for `next` starts. So a window never has two jobs.
 use crate::events::PoolEvent;
 use crate::pool::{Pool, WindowStepFn};
@@ -24,6 +24,7 @@ use core::cell::UnsafeCell;
 use core::mem::MaybeUninit;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::core_api::{CoreApi, JOB_E_CANCELLED};
+use dkrt_abi::handoff::Handoff;
 use dkrt_sdk::api::JobDoneFn;
 use dkrt_sdk::sample_tracks::{Handle, PATH};
 use dkrt_sdk::{E_CONTRACT, E_RANGE};
@@ -135,7 +136,7 @@ struct JobData {
 
 /// The data of one window's job and the phase word that hands it between the UI task and the worker task. All-zero bytes are the idle cell (`.bss`).
 pub struct PeakJob {
-    phase: UnsafeCell<u32>,
+    phase: Handoff,
     data: UnsafeCell<JobData>,
 }
 
@@ -145,7 +146,7 @@ unsafe impl Sync for PeakJob {}
 impl PeakJob {
     const fn new() -> PeakJob {
         PeakJob {
-            phase: UnsafeCell::new(IDLE),
+            phase: Handoff::new(),
             data: UnsafeCell::new(JobData {
                 client: 0,
                 key: KEY0,
@@ -160,16 +161,6 @@ impl PeakJob {
         }
     }
 
-    fn phase(&self) -> u32 {
-        // SAFETY: an aligned word of the cell, written by one store
-        unsafe { read_volatile(self.phase.get()) }
-    }
-
-    fn publish(&self, phase: u32) {
-        // SAFETY: as above
-        unsafe { write_volatile(self.phase.get(), phase) }
-    }
-
     /// The job ended (the runtime calls the job-end entry in the UI task): the status is kept, the UI task owns the cell again, and the event that carries the end to the owner is
     /// returned. The file's entry posts it to its cell (`Owner::post`), so the window changes under the owner's guard.
     ///
@@ -179,7 +170,7 @@ impl PeakJob {
         let job = &*(ctx as *const PeakJob);
         // the job ended, so the worker does not touch the data any more
         write_volatile(addr_of_mut!((*job.data.get()).status), status);
-        job.publish(DONE);
+        job.phase.publish(DONE);
         PoolEvent::PeakDone {
             job: job as *const PeakJob,
         }
@@ -188,7 +179,7 @@ impl PeakJob {
     /// Test support: the phase.
     #[cfg(test)]
     pub(crate) fn phase_of(&self) -> u32 {
-        self.phase()
+        self.phase.phase()
     }
 }
 
@@ -214,8 +205,8 @@ impl Default for PeakJobs {
 /// Worker task. Calls the adapter for one chunk and returns its value (1: more). It touches only the cell, and only while the phase is Posted or Running.
 unsafe extern "C" fn step(ctx: *mut u8) -> i32 {
     let job = &*(ctx as *const PeakJob);
-    match job.phase() {
-        POSTED => job.publish(RUNNING),
+    match job.phase.phase() {
+        POSTED => job.phase.publish(RUNNING),
         RUNNING => {}
         _ => return E_CONTRACT,
     }
@@ -267,7 +258,7 @@ pub(crate) struct Link {
 /// Zero the result, set the cursor and post the job for `req`. 0, or the error of `job_post` (the state is Idle then).
 fn start<C: CoreApi>(core: &C, cell: &PeakJob, w: &mut Window, req: &Req, link: Link) -> i32 {
     debug_assert!(
-        matches!(cell.phase(), IDLE | DONE),
+        matches!(cell.phase.phase(), IDLE | DONE),
         "a job runs in this cell"
     );
     w.cur = req.key;
@@ -288,7 +279,7 @@ fn start<C: CoreApi>(core: &C, cell: &PeakJob, w: &mut Window, req: &Req, link: 
         write_volatile(addr_of_mut!((*d).cursor), req.key.first);
     }
     // the worker may run the step as soon as the runtime has the job: the phase goes first
-    cell.publish(POSTED);
+    cell.phase.publish(POSTED);
     // SAFETY: the core's job call; the cell is a static of the file that outlives the job
     let id = unsafe {
         core.job_post(
@@ -303,7 +294,7 @@ fn start<C: CoreApi>(core: &C, cell: &PeakJob, w: &mut Window, req: &Req, link: 
         w.job = id as u32;
         0
     } else {
-        cell.publish(IDLE);
+        cell.phase.publish(IDLE);
         w.state = State::Idle;
         id
     }
@@ -399,6 +390,10 @@ impl PeakWindows {
         cell: &PeakJob,
         hook: Option<WindowStepFn>,
     ) {
+        // the phase first: only in `DONE` is the cell the UI task's
+        if cell.phase.phase() != DONE {
+            return;
+        }
         // SAFETY: the job ended (`DONE`): the cell is the UI task's
         let (client, status, done) = unsafe {
             let d = cell.data.get();
@@ -408,7 +403,7 @@ impl PeakWindows {
                 read_volatile(addr_of!((*d).done)),
             )
         };
-        if client >= CLIENTS || cell.phase() != DONE {
+        if client >= CLIENTS {
             return;
         }
         let w = &mut self.win[client];

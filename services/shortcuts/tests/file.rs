@@ -18,6 +18,8 @@ use file::hooks::dk_shortcuts_key;
 pub use file::{builder, DK_SVC_OWNER};
 use file::{dk_svc_start, dk_svc_stop};
 
+// the core imports (`dkc_*`) of the service file, as host functions (this test links no runtime)
+#[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
 mod stubs;
 use stubs::{DEVICE, RUNNING};
 
@@ -91,7 +93,7 @@ fn the_export_reaches_the_started_owner_and_the_hook_swallows_a_completed_bindin
 }
 
 #[test]
-fn a_key_that_arrives_inside_a_call_of_the_service_is_queued_not_dropped() {
+fn a_key_that_arrives_inside_a_call_of_the_service_is_refused_and_counted() {
     let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
     let p = ALL
         .iter()
@@ -108,14 +110,15 @@ fn a_key_that_arrives_inside_a_call_of_the_service_is_queued_not_dropped() {
     });
     let (trk, yes) = (p.key_code(TRK), p.key_code(YES));
     let press = 1u32 << p.key_flags.press;
-    // the hook fires inside a part call (the service ticks, a module's callback reaches the key walker): the stock walker sees the key, the service takes it afterwards
+    // the hook fires inside a part call (a module's callback reaches the key walker): the stock walker runs and the service never sees the key
+    let before = DK_SVC_OWNER.refused();
     let inside = DK_SVC_OWNER.run(u32::MAX, |_| unsafe { dk_shortcuts_key(trk, press) });
     assert_eq!(inside, 0, "the key passes to the stock walker");
-    assert_eq!(DK_SVC_OWNER.refused(), 0, "queued, not refused");
+    assert_eq!(DK_SVC_OWNER.refused(), before + 1, "refused and counted");
     assert_eq!(
         unsafe { dk_shortcuts_key(yes, press) },
-        1,
-        "the queued first key counted: the second key completes the binding"
+        0,
+        "the refused first key was not seen: the second key alone completes nothing"
     );
     dk_svc_stop();
 }

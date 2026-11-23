@@ -423,7 +423,21 @@
   },
   {
    "addend": 0,
-   "offset": 102,
+   "offset": 76,
+   "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E4stopNCNvB1J_11dk_svc_stop0EB1J_",
+   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi8irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 98,
+   "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E4stopNCNvB1J_11dk_svc_stop0EB1J_",
+   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 118,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E4stopNCNvB1J_11dk_svc_stop0EB1J_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
@@ -864,7 +878,7 @@
    "addend": 0,
    "offset": 286,
    "section": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin5startNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": "_RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob7publish",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
    "type": "cf.32"
   },
   {
@@ -885,26 +899,26 @@
    "addend": 0,
    "offset": 356,
    "section": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin5startNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": "_RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob7publish",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 54,
+   "offset": 12,
    "section": ".text._RINvMs2_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB6_11PeakWindows6finishNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": "_RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob5phase",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 156,
+   "offset": 146,
    "section": ".text._RINvMs2_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB6_11PeakWindows6finishNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 206,
+   "offset": 194,
    "section": ".text._RINvMs2_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB6_11PeakWindows6finishNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "symbol": ".sec..text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin5startNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
@@ -912,10 +926,14 @@
   {
    "addend": 0,
 <<<<<<< HEAD
+<<<<<<< HEAD
    "offset": 228,
    "section": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin4doneNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
 =======
    "offset": 284,
+=======
+   "offset": 264,
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "section": ".text._RINvMs2_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB6_11PeakWindows6finishNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
    "symbol": "_RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin5alive",
@@ -1243,6 +1261,7 @@
    "addend": 0,
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 =======
    "offset": 16,
@@ -1260,8 +1279,11 @@
   {
    "addend": 0,
    "offset": 24,
+=======
+   "offset": 6,
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5enterB1I_",
-   "symbol": ".sec..text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5admitB1I_",
+   "symbol": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
    "type": "cf.32"
   },
   {
@@ -1283,7 +1305,7 @@
    "addend": 0,
    "offset": 28,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1n",
+   "symbol": ".sec..rodata.global.1m",
    "type": "cf.32"
   },
   {
@@ -1297,7 +1319,7 @@
    "addend": 0,
    "offset": 48,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1o",
+   "symbol": ".sec..rodata.global.1n",
    "type": "cf.32"
   },
   {
@@ -1325,7 +1347,7 @@
    "addend": 0,
    "offset": 104,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1s",
+   "symbol": ".sec..rodata.global.1r",
    "type": "cf.32"
   },
   {
@@ -1339,7 +1361,7 @@
    "addend": 0,
    "offset": 124,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1t",
+   "symbol": ".sec..rodata.global.1s",
    "type": "cf.32"
   },
   {
@@ -1353,7 +1375,7 @@
    "addend": 0,
    "offset": 148,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1u",
+   "symbol": ".sec..rodata.global.1t",
    "type": "cf.32"
   },
   {
@@ -1367,7 +1389,7 @@
    "addend": 0,
    "offset": 168,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1v",
+   "symbol": ".sec..rodata.global.1u",
    "type": "cf.32"
   },
   {
@@ -1381,7 +1403,7 @@
    "addend": 0,
    "offset": 188,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1w",
+   "symbol": ".sec..rodata.global.1v",
    "type": "cf.32"
   },
   {
@@ -1395,7 +1417,7 @@
    "addend": 0,
    "offset": 208,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1x",
+   "symbol": ".sec..rodata.global.1w",
    "type": "cf.32"
   },
   {
@@ -1409,7 +1431,7 @@
    "addend": 0,
    "offset": 232,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1y",
+   "symbol": ".sec..rodata.global.1x",
    "type": "cf.32"
   },
   {
@@ -1423,7 +1445,7 @@
    "addend": 0,
    "offset": 252,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1z",
+   "symbol": ".sec..rodata.global.1y",
    "type": "cf.32"
   },
   {
@@ -1437,7 +1459,7 @@
    "addend": 0,
    "offset": 272,
    "section": ".text._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1A",
+   "symbol": ".sec..rodata.global.1z",
    "type": "cf.32"
   },
   {
@@ -2344,64 +2366,68 @@
    "symbol": "_RINvNtCs6uNbiqmv1Ak_4core5slice20copy_from_slice_implhEB4_",
 =======
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 4,
    "offset": 72,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 8,
    "offset": 78,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 12,
    "offset": 84,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 16,
    "offset": 90,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 20,
    "offset": 96,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 24,
    "offset": 102,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 28,
    "offset": 108,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 32,
    "offset": 114,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1p",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1o",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -2433,63 +2459,63 @@
    "addend": 0,
    "offset": 192,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 4,
    "offset": 198,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 8,
    "offset": 204,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 12,
    "offset": 210,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 16,
    "offset": 216,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 20,
    "offset": 222,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 24,
    "offset": 228,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 28,
    "offset": 234,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 32,
    "offset": 240,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env5closeCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
@@ -2599,44 +2625,16 @@
   },
   {
    "addend": 0,
-   "offset": 104,
+   "offset": 42,
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5leaveB1I_",
-   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
+   "symbol": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate3pop",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 156,
+   "offset": 78,
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5leaveB1I_",
    "symbol": ".sec..text._RNvXs_CscV2BNreiBRn_20dkrt_svc_samples_dksNtB4_11DkSvcEventsINtNtCs1H2YknomaMO_11dkrt_svc_rt5owner6EventsNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesE5apply",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 168,
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5leaveB1I_",
-   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi8irq_mask",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 202,
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5leaveB1I_",
-   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 222,
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5leaveB1I_",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 234,
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5leaveB1I_",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
@@ -3488,21 +3486,21 @@
   },
   {
    "addend": 0,
-   "offset": 36,
+   "offset": 30,
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E4postB1I_",
-   "symbol": ".sec..text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5admitB1I_",
+   "symbol": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate11admit_event",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 70,
+   "offset": 84,
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E4postB1I_",
    "symbol": ".sec..text._RNvXs_CscV2BNreiBRn_20dkrt_svc_samples_dksNtB4_11DkSvcEventsINtNtCs1H2YknomaMO_11dkrt_svc_rt5owner6EventsNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesE5apply",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 80,
+   "offset": 94,
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E4postB1I_",
    "symbol": ".sec..text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5leaveB1I_",
    "type": "cf.32"
@@ -3742,42 +3740,42 @@
    "addend": 12,
    "offset": 154,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env7publishCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 16,
    "offset": 160,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env7publishCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 20,
    "offset": 166,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env7publishCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 24,
    "offset": 172,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env7publishCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 28,
    "offset": 178,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env7publishCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 32,
    "offset": 184,
    "section": ".text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksINtB4_6DeviceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreENtNtCscYw7BUUnwGb_8dkrt_sdk13sample_tracks3Env7publishCscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
@@ -4673,63 +4671,63 @@
    "addend": 28,
    "offset": 202,
    "section": ".text._RINvMNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksNtB3_6Tracks7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNCNvXs0_NtB5_7samplesNtB24_7SamplesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider5parts7DspPartB12_E7release0ECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 32,
    "offset": 208,
    "section": ".text._RINvMNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksNtB3_6Tracks7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNCNvXs0_NtB5_7samplesNtB24_7SamplesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider5parts7DspPartB12_E7release0ECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 216,
    "section": ".text._RINvMNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksNtB3_6Tracks7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNCNvXs0_NtB5_7samplesNtB24_7SamplesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider5parts7DspPartB12_E7release0ECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 4,
    "offset": 224,
    "section": ".text._RINvMNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksNtB3_6Tracks7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNCNvXs0_NtB5_7samplesNtB24_7SamplesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider5parts7DspPartB12_E7release0ECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 8,
    "offset": 232,
    "section": ".text._RINvMNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksNtB3_6Tracks7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNCNvXs0_NtB5_7samplesNtB24_7SamplesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider5parts7DspPartB12_E7release0ECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 12,
    "offset": 240,
    "section": ".text._RINvMNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksNtB3_6Tracks7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNCNvXs0_NtB5_7samplesNtB24_7SamplesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider5parts7DspPartB12_E7release0ECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 16,
    "offset": 248,
    "section": ".text._RINvMNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksNtB3_6Tracks7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNCNvXs0_NtB5_7samplesNtB24_7SamplesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider5parts7DspPartB12_E7release0ECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 20,
    "offset": 256,
    "section": ".text._RINvMNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksNtB3_6Tracks7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNCNvXs0_NtB5_7samplesNtB24_7SamplesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider5parts7DspPartB12_E7release0ECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 24,
    "offset": 264,
    "section": ".text._RINvMNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracksNtB3_6Tracks7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNCNvXs0_NtB5_7samplesNtB24_7SamplesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider5parts7DspPartB12_E7release0ECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
@@ -4804,35 +4802,42 @@
   },
   {
    "addend": 0,
-   "offset": 50,
+   "offset": 52,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5startNCNvB1J_12dk_svc_start0EB1J_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 80,
+   "offset": 82,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5startNCNvB1J_12dk_svc_start0EB1J_",
    "symbol": ".sec..text._RNvXs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7samplesNtB4_7SamplesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider8contract8ProviderNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreE8start_inCscV2BNreiBRn_20dkrt_svc_samples_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 100,
+   "offset": 102,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5startNCNvB1J_12dk_svc_start0EB1J_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi8irq_mask",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 118,
+   "offset": 134,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5startNCNvB1J_12dk_svc_start0EB1J_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 160,
+   "offset": 156,
+   "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5startNCNvB1J_12dk_svc_start0EB1J_",
+   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 178,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5startNCNvB1J_12dk_svc_start0EB1J_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
@@ -4990,7 +4995,7 @@
    "symbol": "_RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples4pool7present",
 =======
    "offset": 8,
-   "section": ".rodata.global.1m",
+   "section": ".rodata.global.1l",
    "symbol": ".sec..rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks16DK_SVC_LIFECYCLE",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
    "type": "cf.32"
@@ -4999,10 +5004,14 @@
    "addend": 0,
    "offset": 20,
 <<<<<<< HEAD
+<<<<<<< HEAD
    "section": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracks4tickNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
    "symbol": "_RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples4pool4tick",
 =======
    "section": ".rodata.global.1m",
+=======
+   "section": ".rodata.global.1l",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "symbol": ".sec..rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_DSP",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
    "type": "cf.32"
@@ -5050,7 +5059,7 @@
    "symbol": ".sec..text._RNvXNtCs1rn8dOcwRXB_16dkrt_svc_samples7recordsNtB2_7SamplesINtNtCsaMgU3lEIvKO_8dkrt_abi7service7ServiceNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreE4tickCscV2BNreiBRn_20dkrt_svc_samples_dks",
 =======
    "offset": 32,
-   "section": ".rodata.global.1m",
+   "section": ".rodata.global.1l",
    "symbol": ".sec..rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks11DK_SVC_TICK",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
    "type": "cf.32"
@@ -5147,7 +5156,7 @@
    "addend": 0,
    "offset": 8,
    "section": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
-   "symbol": ".sec..rodata.global.1m",
+   "symbol": ".sec..rodata.global.1l",
    "type": "cf.32"
   },
   {
@@ -5384,6 +5393,62 @@
   },
   {
    "addend": 0,
+   "offset": 4,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "symbol": "dkc_irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "symbol": "dkc_irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate11admit_event",
+   "symbol": "dkc_irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 82,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate11admit_event",
+   "symbol": "dkc_irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 136,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate11admit_event",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate3pop",
+   "symbol": "dkc_irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 50,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate3pop",
+   "symbol": "dkc_irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 104,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate3pop",
+   "symbol": "memcpy",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 6,
    "section": ".text._RNvNtCs1H2YknomaMO_11dkrt_svc_rt7declare12set_init_ctx",
    "symbol": ".sec..bss._RNvNtCs1H2YknomaMO_11dkrt_svc_rt7declare8INIT_CTX",
@@ -5598,10 +5663,24 @@
    "type": "cf.32"
   },
   {
+<<<<<<< HEAD
    "addend": 24,
    "offset": 42,
    "section": ".text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples4pool3fns",
    "symbol": ".sec..bss._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples4pool3FNS",
+=======
+   "addend": 0,
+   "offset": 24,
+   "section": ".text._RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob3end",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text._RNvMNtCs1rn8dOcwRXB_16dkrt_svc_samples7samplesNtB2_7Samples9pool_done",
+   "symbol": ".sec..text._RNvMs_NtCscYw7BUUnwGb_8dkrt_sdk13sample_tracksINtB4_4CoreKj2_Kj10_E4doneCs1rn8dOcwRXB_16dkrt_svc_samples",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -6160,20 +6239,31 @@
   {
    "addend": 0,
 <<<<<<< HEAD
+<<<<<<< HEAD
    "offset": 8,
    "section": ".text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin12hook_present",
    "symbol": ".sec..text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples4pool3fns",
+=======
+   "offset": 10,
+   "section": ".text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin4step",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 40,
    "section": ".text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin4step",
+<<<<<<< HEAD
    "symbol": ".sec..text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples4pool3fns",
+=======
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 12,
    "section": ".text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin5alive",
    "symbol": ".sec..text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples6tracks5core_",
@@ -6183,6 +6273,8 @@
    "addend": 0,
    "offset": 34,
 =======
+=======
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "offset": 28,
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
    "section": ".text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin5alive",
@@ -7081,7 +7173,7 @@
   },
   {
    "align": 2,
-   "hex": "598f2f0a2f02246f0010487800014eb900000000142a4435588f4a0266404a2a4434673a122a44361f41000b7201154144362f00487800014eb900000000508f4a2f000b660c4200154044341540443674017001c082241f245f588f4e752f00487800014eb900000000508f420260e2",
+   "hex": "598f2f0a2f02246f0010487800014eb900000000142a000d588f4a0266504a2a000c674a122a000e1f41000b72011541000e2f00487800014eb900000000508f4a2f000b6638487800014eb90000000042011541000c1541000e2f00487800014eb9000000004fef000c740160102f00487800014eb900000000508f42027001c082241f245f588f4e75",
    "kind": "text",
 <<<<<<< HEAD
    "name": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj21_E4stopNCNvB1J_11dk_svc_stop0EB1J_",
@@ -7089,8 +7181,12 @@
 >>>>>>> 02aa91f (svc-rt: the owner cell stays all-zero; events go through a zero-size Events type)
 =======
    "name": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E4stopNCNvB1J_11dk_svc_stop0EB1J_",
+<<<<<<< HEAD
    "size": 112
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "size": 138
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
   },
   {
    "align": 2,
@@ -7211,6 +7307,7 @@
   {
    "align": 2,
 <<<<<<< HEAD
+<<<<<<< HEAD
    "hex": "4e56feb4206e000871d07201b28067044e5e4e754a28047a66184a28047b66664aae000c677c70b0b0ae000c676c70036072206e0008206804762d48feb448780132226e000848690140486efeba4eb90000000048780132486efeba206e00084868000e4eb9000000004200206e00081140047a2f082f2efeb44eb9000000004fef0020608a4200206e00081140047b425042a800026000ff7842ae000c424060027002206e00083080226e000c2149000243e8000e2d51ffec43e800122d51fff043e800162d51fff443e8001a2d51fff843e8001e2d51fffc486effec2f2800064eb900000000508f4a006600ff22206e0008425042a800026000ff14",
    "kind": "text",
    "name": ".text._RINvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin4doneNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
@@ -7221,9 +7318,12 @@
    "hex": "4feffd882f0e2f022c6f0288206f028c2f4800082250202800042f400010222800082f4100142428000c2f420018242800102f42000c301673c07401b48167000084b3ee000e673e487801322f2f000c486f01564eb90000000048780132486f015e486e000e4eb9000000002f0e2f2f02a04eb9000000004fef0020241f2c5f4fef02784e75206f0010b1ee001266b8226f0014b3ee001666ae222f0018b2ae001a66a4242f000cb4ae001e669a73c07402b481677871c07203b280668a202e000260b8122e047a66000086700ed08e4a2e047b661e2040b3d0677e4a0166142f2e000a42a72f2f028c4eb9000000004fef000c487801322f2f000c486f00244eb90000000048780132486f002c486e01404eb90000000070011d40047a42011d41047b4fef001842806000ff50202f000ce5882f00486e02722f2f02984eb900000000202f00184fef000c6000ff2e203c000001406000ff76226f0010b3e800046600ff78242f0014b4a800086600ff6c226f0018b3e8000c6600ff60242f000cb4a8001067a04a016600ff686000ff50",
 =======
    "hex": "4e56fec02f02206e0014242802042d42fec0242802442d42fec42428023c2d42fec87001b0aefec06408242efebc4e5e4e752f084eb900000000588f7203b28066e8202efec04480028000000156206e0008d1c02d48fec073d07401b48166ca4a280154661a4a280155666e4aaefec46700008472b0b2aefec46772720360784201206efec01141015448780132206e000848700822486efece4eb9000000004fef000c4aae00186700008e4aaefec8670000862f2efec82f2e0018486efece2f2efec02f2e00142f2e000c4eb9000000004fef00186000ff524200206efec011400155425042a800026000ff3e42aefec4424160027202206efec03081242efec421420002206e00084870080e206efec02f2800062f2e00104eb9000000004fef000c4a006600ff02206efec0425042a800026000fef4206efec0425042a800026000fee6",
+=======
+   "hex": "4e56fec42f022f2e00144eb900000000588f7203b2806708242efec04e5e4e75206e001420280204222802442428023c2d42fec87401b48065de4480028000000156206e0008d1c02d48fec475d020427401b48866c2206efec44a28015466164a28015566684a81677e74b0b4816772307c000360764201206efec41141015448780132226e000848710822486efece4eb9000000004fef000c4aae0018670000844aaefec8677c2f2efec82f2e0018486efece2f2efec42f2e00142f2e000c4eb9000000004fef00186000ff4c4200206efec411400155425042a800026000ff38428191c86004307c0002226efec4328823410002206e00084870080e2f2900062f2e00104eb9000000004fef000c4a006600ff04226efec4425142a900026000fef6206efec4425042a800026000fee8",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "kind": "text",
    "name": ".text._RINvMs2_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB6_11PeakWindows6finishNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECscV2BNreiBRn_20dkrt_svc_samples_dks",
-   "size": 326
+   "size": 306
   },
   {
    "align": 2,
@@ -7259,6 +7359,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 =======
    "hex": "206f00044a284a7c67224a284a7e661c10284a7d720111414a7d4a00660a200806800000000c600652a8000842804e75",
@@ -7272,18 +7373,25 @@
   {
    "align": 2,
    "hex": "4e56fff070ff3d40fff0486efff02f2e000841eefffa4eb900000000508f4a6efffa6608202efffc4e5e4e75428060f8",
+=======
+   "hex": "2f2f00044eb900000000588f4a00660c202f00040680000000104e75428060fa",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "kind": "text",
    "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5enterB1I_",
-   "size": 48
+   "size": 32
   },
   {
    "align": 2,
+<<<<<<< HEAD
 <<<<<<< HEAD
 >>>>>>> 00de844 (svc-rt: one begin() for every guarded call; objects and boot snapshots rebuilt)
    "hex": "206f00044a284a7c67104a284a7e660a200806800000000c4e75428060fa",
 =======
    "hex": "206f00044a28443467104a284436660a200806800000000c4e75428060fa",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "hex": "206f00044a28000c660442804e754a28000e66f6200806800000001060ee",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "kind": "text",
    "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E8instanceB1I_",
    "size": 30
@@ -7589,10 +7697,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffe02f032f0260000098206e000824107222b282650000c4720a4c021800204141e842d6d1ee00082d58fff62d58fffa3d50fffe528276234c432001206e000820815389214900042d6efff6ffe22d6efffaffe63d6efffeffea342efff62f00487800014eb900000000508f71c20c800000ffff67583d42ffe22d6effe2ffec2d6effe6fff03d6effeafff4486effec206e00084868000c4eb900000000508f487800014eb900000000206e000822680004588f4a896600ff524201114144352f00487800014eb900000000508f242effd8262effdc4e5e4e75487900000000487800232f024eb900000000",
+   "hex": "4fefffe048d744042c6f0024240e0682000042da45ef0016486f000c487800234878000a2f022f0e4eb9000000004fef00144a00672024af000c2f6f0010001a3f6f0014001e2f0a486e00104eb900000000508f60c24cd744044fef00204e75",
    "kind": "text",
    "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5leaveB1I_",
-   "size": 238
+   "size": 96
   },
   {
    "align": 2,
@@ -7890,10 +7998,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56fff02f02206e000c2d58fff02d58fff43d50fff8486efff02f2e000841eefffa4eb900000000302efffa508f73c07402b481672665284a40662e2f2e000c2f2efffc4eb9000000002f2e00084eb9000000004fef000c42006006700160027002242effec4e5e4e75700360f4",
+   "hex": "4e56fff42f02487800234878000a206e0008486842da2f2e000c2f084eb90000000014004fef001471807202b2806738653a4a026642206e000c2d58fff62d58fffa3d50fffe486efff6206e0008486800104eb9000000002f2e00084eb9000000004fef000c60067401600274021002242efff04e5e4e75740360f2",
    "kind": "text",
    "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E4postB1I_",
-   "size": 110
+   "size": 124
   },
   {
    "align": 2,
@@ -8077,10 +8185,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffe448d7440c2c48246f0020487800014eb900000000588f4a2a44346678142a44367201154144362f00487800014eb900000000508f4a02664e260a06830000000c2f034878000141ef001e4eb900000000342f001e2f6f00200018487800014eb9000000004201154144362f00487800014eb9000000004fef00144a42660e700115404434602076f67401601a262f0010740160122f00487800014eb900000000508f76f674013c822d430002200e4cd7440c4fef001c4e75",
+   "hex": "4fefffe448d7440c2c48246f0020487800014eb900000000588f4a2a000c6600008a142a000e72011541000e2f00487800014eb900000000508f4a026650260a0683000000102f034878000141ef001e4eb900000000342f001e2f6f00200018487800014eb90000000042011541000e4fef000c4a42661c72011541000c2f00487800014eb900000000508f602e76f6740160282f00487800014eb900000000262f0018508f740160122f00487800014eb900000000508f76f674013c822d430002200e4cd7440c4fef001c4e75",
    "kind": "text",
    "name": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5startNCNvB1J_12dk_svc_start0EB1J_",
-   "size": 188
+   "size": 206
   },
   {
    "align": 2,
@@ -8115,63 +8223,63 @@
    "align": 1,
    "hex": "646b5f73616d706c655f706f6f6c5f7065616b735f77696e646f77",
    "kind": "data",
-   "name": ".rodata.global.1A",
+   "name": ".rodata.global.1z",
    "size": 27
   },
   {
    "align": 1,
    "hex": "646b5f73616d706c655f706f6f6c5f7065616b73",
    "kind": "data",
-   "name": ".rodata.global.1z",
+   "name": ".rodata.global.1y",
    "size": 20
   },
   {
    "align": 1,
    "hex": "646b5f73616d706c655f706f6f6c5f736574",
    "kind": "data",
-   "name": ".rodata.global.1y",
+   "name": ".rodata.global.1x",
    "size": 18
   },
   {
    "align": 1,
    "hex": "646b5f73616d706c655f706f6f6c5f70617468",
    "kind": "data",
-   "name": ".rodata.global.1x",
+   "name": ".rodata.global.1w",
    "size": 19
   },
   {
    "align": 1,
    "hex": "646b5f73616d706c655f706f6f6c5f696e666f",
    "kind": "data",
-   "name": ".rodata.global.1w",
+   "name": ".rodata.global.1v",
    "size": 19
   },
   {
    "align": 1,
    "hex": "646b5f73616d706c655f706f6f6c5f737461747573",
    "kind": "data",
-   "name": ".rodata.global.1v",
+   "name": ".rodata.global.1u",
    "size": 21
   },
   {
    "align": 1,
    "hex": "646b5f73616d706c655f706f6f6c5f636c656172",
    "kind": "data",
-   "name": ".rodata.global.1u",
+   "name": ".rodata.global.1t",
    "size": 20
   },
   {
    "align": 1,
    "hex": "646b5f73616d706c655f706f6f6c5f616464",
    "kind": "data",
-   "name": ".rodata.global.1t",
+   "name": ".rodata.global.1s",
    "size": 18
   },
   {
    "align": 1,
    "hex": "646b5f73616d706c655f706f6f6c5f6f70656e",
    "kind": "data",
-   "name": ".rodata.global.1s",
+   "name": ".rodata.global.1r",
    "size": 19
   },
   {
@@ -8180,7 +8288,7 @@
    "align": 16,
    "hex": "000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
-   "name": ".rodata.global.1p",
+   "name": ".rodata.global.1o",
    "size": 36
   },
   {
@@ -8188,20 +8296,21 @@
    "align": 1,
    "hex": "706f6f6c5f6c6f7374",
    "kind": "data",
-   "name": ".rodata.global.1o",
+   "name": ".rodata.global.1n",
    "size": 9
   },
   {
    "align": 1,
    "hex": "706f6f6c5f646f6e65",
    "kind": "data",
-   "name": ".rodata.global.1n",
+   "name": ".rodata.global.1m",
    "size": 9
   },
   {
    "align": 1,
    "hex": "73616d706c6573",
    "kind": "data",
+<<<<<<< HEAD
    "name": ".rodata.global.1m",
    "size": 7
   },
@@ -8214,6 +8323,9 @@
    "size": 306
 =======
    "name": ".rodata.global.1m",
+=======
+   "name": ".rodata.global.1l",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 36
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
   },
@@ -8345,6 +8457,27 @@
    "kind": "data",
    "name": ".rodata._RNvCscV2BNreiBRn_20dkrt_svc_samples_dks10DK_SVC_ROW",
    "size": 112
+  },
+  {
+   "align": 2,
+   "hex": "598f4eb900000000206f00084a28000c661672011f4100032f004eb900000000102f0007508f4e75206f00084a28000e66e01228000d1f410003660872011141000d60d4206f000852a8000872031f41000360c4",
+   "kind": "text",
+   "name": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "size": 84
+  },
+  {
+   "align": 2,
+   "hex": "518f4eb9000000002f400004206f000c4a28000c67324a28000e662c1ea8000d660870011140000d6022206f000c2ea800042017b0af001c6526206f000c52a800081ebc000360041ebc00012f2f00044eb900000000102f00044fef000c4e752017206f000cd090b0af001c650490af001c222f00184c0108002f012f2f0014d0af001c2f004eb900000000202f000c5280206f0018214000044fef000c1ebc000260a8",
+   "kind": "text",
+   "name": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate11admit_event",
+   "size": 164
+  },
+  {
+   "align": 2,
+   "hex": "4feffff04eb9000000002f400008206f0014206800042f4800044a8866264200206f00141140000d1f4000032f2f00084eb900000000102f00077201c0814fef00144e75206f00142f50000c202f001c222f000c4c0108002f2f001cd0af001c2f002f2f002c4eb900000000202f001852804fef000cb0af00206718206f00142080202f000453802140000472011f4100036098428060e4",
+   "kind": "text",
+   "name": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate3pop",
+   "size": 152
   },
   {
    "align": 2,
@@ -8570,24 +8703,10 @@
   },
   {
    "align": 2,
-   "hex": "226f0004236f0008024422bc000000032149000230bc000220084e75",
+   "hex": "2f0a244843ef000c206f000821510244487800032f084eb900000000256f0010000234bc0002508f200a245f4e75",
    "kind": "text",
    "name": ".text._RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob3end",
-   "size": 28
-  },
-  {
-   "align": 2,
-   "hex": "206f000420104e75",
-   "kind": "text",
-   "name": ".text._RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob5phase",
-   "size": 8
-  },
-  {
-   "align": 2,
-   "hex": "206f000420af00084e75",
-   "kind": "text",
-   "name": ".text._RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob7publish",
-   "size": 10
+   "size": 46
   },
   {
    "align": 2,
@@ -8757,6 +8876,7 @@
   {
    "align": 2,
 <<<<<<< HEAD
+<<<<<<< HEAD
    "hex": "4fefffe0204f4eb9000000004a9767124aaf001c56c044807201c0814fef00204e75420060f2",
    "kind": "text",
    "name": ".text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin12hook_present",
@@ -8868,9 +8988,12 @@
    "size": 32
 =======
    "hex": "206f000420107201b280670a7202b280670a70d0603020bc00000002226802384a8967ee48680240486800042f2802182f2802142f280210486802484868021c4e914fef001c4e75",
+=======
+   "hex": "2f0a246f00082f0a4eb900000000588f7201b280670a7202b280671270d06038487800022f0a4eb900000000508f206a02384a8867e6486a0240486a00042f2a02182f2a02142f2a0210486a0248486a021c4e904fef001c245f4e75",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "kind": "text",
    "name": ".text._RNvNtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwin4step",
-   "size": 72
+   "size": 92
   },
   {
    "align": 2,
@@ -8917,10 +9040,24 @@
   },
   {
    "align": 2,
+<<<<<<< HEAD
    "hex": "206f0004202800082228000c4e75",
    "kind": "text",
    "name": ".text._RNvMs6_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "size": 14
+=======
+   "hex": "206f000420104e75",
+   "kind": "text",
+   "name": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
+   "size": 8
+  },
+  {
+   "align": 2,
+   "hex": "206f000420af00084e75",
+   "kind": "text",
+   "name": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
+   "size": 10
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
   },
   {
    "align": 2,
@@ -9254,6 +9391,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
  "source_sha256": "d3a03fd1b9e172b6026842438669bd193730ffc609042eccffe6026c5c28915c",
 =======
  "source_sha256": "ee1a3fdf98dcd878f2def908555ba143c748f2f5eb82efc8fc3314d403dde730",
@@ -9282,6 +9420,9 @@
 =======
  "source_sha256": "26db6b25c321bd3e6ca6de79694d3cc3af805b6867cd522aa06c6cc329b6a6c0",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+ "source_sha256": "7a01d750e639d1ea758d586a3258a5113bec3d2a116fb500992bee391c015f6d",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
  "symbols": [
   {
    "global": false,
@@ -9395,6 +9536,7 @@
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..rodata.global.1A",
    "section": ".rodata.global.1A",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
@@ -9402,6 +9544,8 @@
   },
   {
    "global": false,
+=======
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "name": ".sec..rodata.global.1f",
    "section": ".rodata.global.1f",
    "value": 0
@@ -9438,6 +9582,12 @@
   },
   {
    "global": false,
+   "name": ".sec..rodata.global.1l",
+   "section": ".rodata.global.1l",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..rodata.global.1m",
    "section": ".rodata.global.1m",
    "value": 0
@@ -9456,8 +9606,8 @@
   },
   {
    "global": false,
-   "name": ".sec..rodata.global.1p",
-   "section": ".rodata.global.1p",
+   "name": ".sec..rodata.global.1r",
+   "section": ".rodata.global.1r",
    "value": 0
   },
   {
@@ -10320,6 +10470,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 =======
    "name": ".sec..text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj21_E5beginB1I_",
@@ -10337,6 +10488,8 @@
    "name": ".sec..text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj21_E5leaveB1I_",
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj21_E5leaveB1I_",
 =======
+=======
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "name": ".sec..text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5enterB1I_",
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCs1rn8dOcwRXB_16dkrt_svc_samples7samples7SamplesNtCscV2BNreiBRn_20dkrt_svc_samples_dks11DkSvcEventsKj23_E5enterB1I_",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
@@ -10830,6 +10983,24 @@
   },
   {
    "global": false,
+   "name": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate11admit_event",
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate11admit_event",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate3pop",
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate3pop",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "_RNvMs1_NtCs1rn8dOcwRXB_16dkrt_svc_samples7samplesNtB5_7Samples13pre_tick_with",
    "section": ".text._RNvMs1_NtCs1rn8dOcwRXB_16dkrt_svc_samples7samplesNtB5_7Samples13pre_tick_with",
    "value": 0
@@ -10858,15 +11029,20 @@
   },
   {
    "global": false,
-   "name": "_RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob5phase",
-   "section": ".text._RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob5phase",
+   "name": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
+   "section": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": "_RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob7publish",
    "section": ".text._RNvMs_NtCs1rn8dOcwRXB_16dkrt_svc_samples7peakwinNtB4_7PeakJob7publish",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
+   "section": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "value": 0
   },
   {
@@ -11463,6 +11639,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   "instructions_redecoded": "6969",
   "isa_check": "f9b53667f418f95f83a81d7d2aa49bac072ab1dd8cd5a0eb3e31f8138cd9c178",
 =======
@@ -11477,6 +11654,10 @@
   "instructions_redecoded": "8632",
   "isa_check": "66c8f05abc7b8c0c4d31463e658049741cd1da1441c4fb1155247996c06571e0",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+  "instructions_redecoded": "8656",
+  "isa_check": "ee1a0cd93d71330a0663ee4a2b42b990c50096a0d57c2ded18a12c14d0e830cc",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

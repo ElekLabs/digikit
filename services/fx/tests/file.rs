@@ -15,6 +15,8 @@ use file::builder::{
 pub use file::{builder, rt, DK_SVC_OWNER};
 use file::{dk_service_query_v1, dk_svc_start, dk_svc_stop};
 
+// the core imports (`dkc_*`) of the service file, as host functions (this test links no runtime)
+#[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
 mod stubs;
 
 /// The cell is one per process: the tests take turns.

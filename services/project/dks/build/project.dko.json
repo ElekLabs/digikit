@@ -122,8 +122,12 @@
    "symbol": ".sec..rodata.global.1o",
 =======
    "section": ".text._RNvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore11module_pathNtB2_10ModulePath3new",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1q",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1p",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -366,7 +370,21 @@
   },
   {
    "addend": 0,
-   "offset": 106,
+   "offset": 88,
+   "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE4stopNCNvB1O_11dk_svc_stop0EB1O_",
+   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi8irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 110,
+   "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE4stopNCNvB1O_11dk_svc_stop0EB1O_",
+   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 130,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE4stopNCNvB1O_11dk_svc_stop0EB1O_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
@@ -673,51 +691,16 @@
   },
   {
    "addend": 0,
-   "offset": 18,
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5admitB1N_",
-   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi8irq_mask",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 46,
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5admitB1N_",
-   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
+   "offset": 10,
+   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5enterB1N_",
+   "symbol": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 12,
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5enterB1N_",
-   "symbol": ".sec..text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5admitB1N_",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 6,
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5leaveB1N_",
-   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi8irq_mask",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 36,
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5leaveB1N_",
-   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 46,
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5leaveB1N_",
-   "symbol": ".sec..rodata.global.11",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 62,
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5leaveB1N_",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "symbol": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate7release",
    "type": "cf.32"
   },
   {
@@ -1092,7 +1075,7 @@
    "offset": 28,
 >>>>>>> 02aa91f (svc-rt: the owner cell stays all-zero; events go through a zero-size Events type)
    "section": ".text._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1g",
+   "symbol": ".sec..rodata.global.1f",
    "type": "cf.32"
   },
   {
@@ -1106,7 +1089,7 @@
    "addend": 0,
    "offset": 30,
    "section": ".text._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1h",
+   "symbol": ".sec..rodata.global.1g",
    "type": "cf.32"
   },
   {
@@ -1120,7 +1103,7 @@
    "addend": 0,
    "offset": 50,
    "section": ".text._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1i",
+   "symbol": ".sec..rodata.global.1h",
    "type": "cf.32"
   },
   {
@@ -1134,7 +1117,7 @@
    "addend": 0,
    "offset": 70,
    "section": ".text._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1j",
+   "symbol": ".sec..rodata.global.1i",
    "type": "cf.32"
   },
   {
@@ -1148,7 +1131,7 @@
    "addend": 0,
    "offset": 94,
    "section": ".text._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1k",
+   "symbol": ".sec..rodata.global.1j",
    "type": "cf.32"
   },
   {
@@ -1197,7 +1180,7 @@
    "addend": 0,
    "offset": 216,
    "section": ".text._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1t",
+   "symbol": ".sec..rodata.global.1s",
    "type": "cf.32"
   },
   {
@@ -1211,7 +1194,7 @@
    "addend": 0,
    "offset": 236,
    "section": ".text._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks14dk_svc_declare",
-   "symbol": ".sec..rodata.global.1u",
+   "symbol": ".sec..rodata.global.1t",
    "type": "cf.32"
   },
   {
@@ -1265,7 +1248,7 @@
    "addend": 0,
    "offset": 6,
    "section": ".text._RNvXNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue3envNtNtB4_4host6DkHostNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3env3Env10list_start",
-   "symbol": ".sec..rodata.global.1D",
+   "symbol": ".sec..rodata.global.1C",
    "type": "cf.32"
   },
   {
@@ -1377,7 +1360,7 @@
    "addend": 0,
    "offset": 52,
    "section": ".text._RNvXNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue3envNtNtB4_4host6DkHostNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3env3Env11warn_module",
-   "symbol": ".sec..rodata.global.1E",
+   "symbol": ".sec..rodata.global.1D",
    "type": "cf.32"
   },
   {
@@ -1398,7 +1381,7 @@
    "addend": 0,
    "offset": 128,
    "section": ".text._RNvXNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue3envNtNtB4_4host6DkHostNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3env3Env11warn_module",
-   "symbol": ".sec..rodata.global.1F",
+   "symbol": ".sec..rodata.global.1E",
    "type": "cf.32"
   },
   {
@@ -1419,7 +1402,7 @@
    "addend": 0,
    "offset": 176,
    "section": ".text._RNvXNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue3envNtNtB4_4host6DkHostNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3env3Env11warn_module",
-   "symbol": ".sec..rodata.global.1G",
+   "symbol": ".sec..rodata.global.1F",
    "type": "cf.32"
   },
   {
@@ -1440,7 +1423,7 @@
    "addend": 0,
    "offset": 224,
    "section": ".text._RNvXNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue3envNtNtB4_4host6DkHostNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3env3Env11warn_module",
-   "symbol": ".sec..rodata.global.1H",
+   "symbol": ".sec..rodata.global.1G",
    "type": "cf.32"
   },
   {
@@ -1524,56 +1507,56 @@
    "addend": 0,
    "offset": 32,
    "section": ".text._RINvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB3_9ModuleSet9of_loadedNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1B_",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 4,
    "offset": 38,
    "section": ".text._RINvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB3_9ModuleSet9of_loadedNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1B_",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 8,
    "offset": 44,
    "section": ".text._RINvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB3_9ModuleSet9of_loadedNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1B_",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 12,
    "offset": 50,
    "section": ".text._RINvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB3_9ModuleSet9of_loadedNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1B_",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 16,
    "offset": 56,
    "section": ".text._RINvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB3_9ModuleSet9of_loadedNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1B_",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 20,
    "offset": 62,
    "section": ".text._RINvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB3_9ModuleSet9of_loadedNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1B_",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 24,
    "offset": 68,
    "section": ".text._RINvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB3_9ModuleSet9of_loadedNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1B_",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 28,
    "offset": 74,
    "section": ".text._RINvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB3_9ModuleSet9of_loadedNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1B_",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
@@ -1727,7 +1710,7 @@
    "addend": 0,
    "offset": 44,
    "section": ".text._RNvXNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue3envNtNtB4_4host6DkHostNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3env3Env16find_module_file",
-   "symbol": ".sec..rodata.global.1I",
+   "symbol": ".sec..rodata.global.1H",
    "type": "cf.32"
   },
   {
@@ -1963,37 +1946,37 @@
   },
   {
    "addend": 0,
-   "offset": 6,
+   "offset": 16,
    "section": ".text._RINvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB5_8StoreJob4postNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1f_",
-   "symbol": "_RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob5phase",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 34,
+   "offset": 46,
    "section": ".text._RINvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB5_8StoreJob4postNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1f_",
    "symbol": "_RNvMs1_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine6writerNtB5_11StoreWriter8set_spec",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 48,
+   "offset": 58,
    "section": ".text._RINvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB5_8StoreJob4postNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1f_",
-   "symbol": "_RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob7publish",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 58,
+   "offset": 68,
    "section": ".text._RINvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB5_8StoreJob4postNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1f_",
    "symbol": ".sec..text._RNvXNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue3envNtNtB4_4host6DkHostNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3env3Env4post",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 82,
+   "offset": 90,
    "section": ".text._RINvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB5_8StoreJob4postNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1f_",
-   "symbol": "_RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob7publish",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
    "type": "cf.32"
   },
   {
@@ -2490,7 +2473,7 @@
    "addend": 0,
    "offset": 24,
    "section": ".text._RNvXNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue3envNtNtB4_4host6DkHostNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3env3Env5toast",
-   "symbol": ".sec..rodata.global.1K",
+   "symbol": ".sec..rodata.global.1J",
    "type": "cf.32"
   },
   {
@@ -2504,7 +2487,7 @@
    "addend": 0,
    "offset": 64,
    "section": ".text._RNvXNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue3envNtNtB4_4host6DkHostNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3env3Env5toast",
-   "symbol": ".sec..rodata.global.1J",
+   "symbol": ".sec..rodata.global.1I",
    "type": "cf.32"
   },
   {
@@ -3713,21 +3696,21 @@
   },
   {
    "addend": 0,
-   "offset": 6,
+   "offset": 16,
    "section": ".text._RINvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB5_8StoreJob7io_stepNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue5files7DkFilesEB1i_",
-   "symbol": "_RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob5phase",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 38,
+   "offset": 48,
    "section": ".text._RINvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB5_8StoreJob7io_stepNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue5files7DkFilesEB1i_",
-   "symbol": "_RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob7publish",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 62,
+   "offset": 72,
    "section": ".text._RINvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB5_8StoreJob7io_stepNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue5files7DkFilesEB1i_",
    "symbol": ".sec..text._RINvMs1_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine6writerNtB6_11StoreWriter7io_stepNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue5files7DkFilesEB1q_",
    "type": "cf.32"
@@ -3818,35 +3801,42 @@
   },
   {
    "addend": 0,
-   "offset": 50,
+   "offset": 52,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5startNCNvB1O_12dk_svc_start0EB1O_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 72,
+   "offset": 74,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5startNCNvB1O_12dk_svc_start0EB1O_",
    "symbol": ".sec..text._RNvXs_NtCsgKDWfuAt9QT_16dkrt_svc_project7projectINtB4_7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider8contract8ProviderNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreE8start_inB14_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 92,
+   "offset": 94,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5startNCNvB1O_12dk_svc_start0EB1O_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi8irq_mask",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 110,
+   "offset": 126,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5startNCNvB1O_12dk_svc_start0EB1O_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 154,
+   "offset": 150,
+   "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5startNCNvB1O_12dk_svc_start0EB1O_",
+   "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 172,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5startNCNvB1O_12dk_svc_start0EB1O_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
@@ -5571,6 +5561,7 @@
    "addend": 0,
    "offset": 8,
 <<<<<<< HEAD
+<<<<<<< HEAD
    "section": ".text._RINvMNtCsgKDWfuAt9QT_16dkrt_svc_project6engineNtB3_14ProjectService17retry_failed_loadNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue5DkEnvEB1q_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi7live_op",
    "type": "cf.32"
@@ -6429,6 +6420,9 @@
    "symbol": ".sec..text._RINvMNtCsgKDWfuAt9QT_16dkrt_svc_project6engineNtB3_14ProjectService7io_stepNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue7DkFilesEB1f_",
 =======
    "section": ".rodata.global.1f",
+=======
+   "section": ".rodata.global.1e",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "symbol": ".sec..rodata._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks16DK_SVC_LIFECYCLE",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
    "type": "cf.32"
@@ -6546,32 +6540,54 @@
    "offset": 20,
    "section": ".rodata._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks10DK_SVC_ROW",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk5checkNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtCsgKDWfuAt9QT_16dkrt_svc_project10ProjectSvcECsc1Zn0JYKBJt_20dkrt_svc_project_dks",
+=======
+   "symbol": ".sec..rodata.global.1e",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 24,
    "section": ".rodata._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks10DK_SVC_ROW",
    "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk5applyNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtCsgKDWfuAt9QT_16dkrt_svc_project10ProjectSvcECsc1Zn0JYKBJt_20dkrt_svc_project_dks",
+=======
+   "offset": 4,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "symbol": "dkc_irq_mask",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 28,
+<<<<<<< HEAD
    "section": ".rodata._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks10DK_SVC_ROW",
    "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk12apply_recordNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtCsgKDWfuAt9QT_16dkrt_svc_project10ProjectSvcECsc1Zn0JYKBJt_20dkrt_svc_project_dks",
+=======
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "symbol": "dkc_irq_restore",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 32,
    "section": ".rodata._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks10DK_SVC_ROW",
    "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk6removeNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtCsgKDWfuAt9QT_16dkrt_svc_project10ProjectSvcECsc1Zn0JYKBJt_20dkrt_svc_project_dks",
+=======
+   "offset": 2,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate7release",
+   "symbol": "dkc_irq_mask",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
    "addend": 0,
+<<<<<<< HEAD
    "offset": 36,
    "section": ".rodata._RNvCsc1Zn0JYKBJt_20dkrt_svc_project_dks10DK_SVC_ROW",
    "symbol": ".sec..text._RINvNtNtCsaMgU3lEIvKO_8dkrt_abi7service5thunk3capNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtCsgKDWfuAt9QT_16dkrt_svc_project10ProjectSvcECsc1Zn0JYKBJt_20dkrt_svc_project_dks",
@@ -6704,6 +6720,11 @@
 =======
    "symbol": ".sec..rodata.global.1f",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "offset": 20,
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate7release",
+   "symbol": "dkc_irq_restore",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -6896,8 +6917,12 @@
    "symbol": ".sec..rodata.global.1b",
 =======
    "section": ".text._RNvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB2_9ModuleSet3new",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.17",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.16",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -6908,8 +6933,12 @@
    "symbol": ".sec..rodata.global.1b",
 =======
    "section": ".text._RNvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB2_9ModuleSet3new",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.17",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.16",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -6920,8 +6949,12 @@
    "symbol": ".sec..rodata.global.1b",
 =======
    "section": ".text._RNvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB2_9ModuleSet3new",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.17",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.16",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -6932,8 +6965,12 @@
    "symbol": ".sec..rodata.global.1b",
 =======
    "section": ".text._RNvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB2_9ModuleSet3new",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.17",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.16",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -6944,8 +6981,12 @@
    "symbol": ".sec..rodata.global.1b",
 =======
    "section": ".text._RNvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB2_9ModuleSet3new",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.17",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.16",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -6956,8 +6997,12 @@
    "symbol": ".sec..rodata.global.1b",
 =======
    "section": ".text._RNvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB2_9ModuleSet3new",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.17",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.16",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -6968,8 +7013,12 @@
    "symbol": ".sec..rodata.global.1b",
 =======
    "section": ".text._RNvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB2_9ModuleSet3new",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.17",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.16",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -6980,8 +7029,12 @@
    "symbol": ".sec..rodata.global.1b",
 =======
    "section": ".text._RNvMNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore10module_setNtB2_9ModuleSet3new",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.17",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.16",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -7569,35 +7622,35 @@
    "addend": 64,
    "offset": 236,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4plan10plan_clear",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 68,
    "offset": 246,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4plan10plan_clear",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 72,
    "offset": 256,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4plan10plan_clear",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 76,
    "offset": 266,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4plan10plan_clear",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 80,
    "offset": 276,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4plan10plan_clear",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
@@ -7849,58 +7902,86 @@
   },
   {
    "addend": 0,
+   "offset": 16,
+   "section": ".text._RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob4done",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text._RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob4done",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text._RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob4poll",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 58,
+   "section": ".text._RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob4poll",
+   "symbol": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 26,
    "section": ".text._RNvMs_NtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore9module_idNtB4_8ModuleId3new",
-   "symbol": ".sec..rodata.global.17",
+   "symbol": ".sec..rodata.global.16",
    "type": "cf.32"
   },
   {
    "addend": 4,
    "offset": 36,
    "section": ".text._RNvMs_NtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore9module_idNtB4_8ModuleId3new",
-   "symbol": ".sec..rodata.global.17",
+   "symbol": ".sec..rodata.global.16",
    "type": "cf.32"
   },
   {
    "addend": 8,
    "offset": 46,
    "section": ".text._RNvMs_NtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore9module_idNtB4_8ModuleId3new",
-   "symbol": ".sec..rodata.global.17",
+   "symbol": ".sec..rodata.global.16",
    "type": "cf.32"
   },
   {
    "addend": 12,
    "offset": 56,
    "section": ".text._RNvMs_NtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore9module_idNtB4_8ModuleId3new",
-   "symbol": ".sec..rodata.global.17",
+   "symbol": ".sec..rodata.global.16",
    "type": "cf.32"
   },
   {
    "addend": 16,
    "offset": 66,
    "section": ".text._RNvMs_NtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore9module_idNtB4_8ModuleId3new",
-   "symbol": ".sec..rodata.global.17",
+   "symbol": ".sec..rodata.global.16",
    "type": "cf.32"
   },
   {
    "addend": 20,
    "offset": 76,
    "section": ".text._RNvMs_NtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore9module_idNtB4_8ModuleId3new",
-   "symbol": ".sec..rodata.global.17",
+   "symbol": ".sec..rodata.global.16",
    "type": "cf.32"
   },
   {
    "addend": 24,
    "offset": 86,
    "section": ".text._RNvMs_NtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore9module_idNtB4_8ModuleId3new",
-   "symbol": ".sec..rodata.global.17",
+   "symbol": ".sec..rodata.global.16",
    "type": "cf.32"
   },
   {
    "addend": 28,
    "offset": 96,
    "section": ".text._RNvMs_NtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore9module_idNtB4_8ModuleId3new",
-   "symbol": ".sec..rodata.global.17",
+   "symbol": ".sec..rodata.global.16",
    "type": "cf.32"
   },
   {
@@ -8087,8 +8168,12 @@
    "symbol": ".sec..rodata.global.1d",
 =======
    "section": ".text._RNvMs_NtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restore9module_idNtB4_8ModuleId4file",
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1e",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1d",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -9195,10 +9280,14 @@
    "offset": 88,
    "section": ".text._RNvNtCsgKDWfuAt9QT_16dkrt_svc_project4name11slot_of_row",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1j",
 =======
    "symbol": ".sec..rodata.global.1h",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1g",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -9367,10 +9456,14 @@
    "offset": 152,
    "section": ".text._RNvNtCsgKDWfuAt9QT_16dkrt_svc_project4name17archive_path_copy",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1k",
 =======
    "symbol": ".sec..rodata.global.1i",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1h",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -9385,10 +9478,14 @@
    "offset": 182,
    "section": ".text._RNvNtCsgKDWfuAt9QT_16dkrt_svc_project4name17archive_path_copy",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1l",
 =======
    "symbol": ".sec..rodata.global.1j",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1i",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -9410,10 +9507,14 @@
    "offset": 274,
    "section": ".text._RNvNtCsgKDWfuAt9QT_16dkrt_svc_project4name17archive_path_copy",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1m",
 =======
    "symbol": ".sec..rodata.global.1k",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1j",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -9442,10 +9543,14 @@
    "offset": 412,
    "section": ".text._RNvNtCsgKDWfuAt9QT_16dkrt_svc_project4name17archive_path_copy",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1j",
 =======
    "symbol": ".sec..rodata.global.1h",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1g",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -9558,10 +9663,14 @@
    "offset": 148,
    "section": ".text._RNvNtCsgKDWfuAt9QT_16dkrt_svc_project4name9file_path",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1h",
 =======
    "symbol": ".sec..rodata.global.1f",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1e",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -9576,10 +9685,14 @@
    "offset": 176,
    "section": ".text._RNvNtCsgKDWfuAt9QT_16dkrt_svc_project4name9file_path",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1l",
 =======
    "symbol": ".sec..rodata.global.1j",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1i",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -9587,10 +9700,14 @@
    "offset": 274,
    "section": ".text._RNvNtCsgKDWfuAt9QT_16dkrt_svc_project4name9file_path",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1m",
 =======
    "symbol": ".sec..rodata.global.1k",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1j",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -9612,10 +9729,14 @@
    "offset": 352,
    "section": ".text._RNvNtCsgKDWfuAt9QT_16dkrt_svc_project4name9file_path",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "symbol": ".sec..rodata.global.1j",
 =======
    "symbol": ".sec..rodata.global.1h",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "symbol": ".sec..rodata.global.1g",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "type": "cf.32"
   },
   {
@@ -9811,7 +9932,7 @@
    "addend": 80,
    "offset": 1152,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4plan9plan_load",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
@@ -9825,28 +9946,28 @@
    "addend": 64,
    "offset": 1266,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4plan9plan_load",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 68,
    "offset": 1276,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4plan9plan_load",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 72,
    "offset": 1286,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4plan9plan_load",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
    "addend": 76,
    "offset": 1296,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4plan9plan_load",
-   "symbol": ".sec..rodata.global.1p",
+   "symbol": ".sec..rodata.global.1o",
    "type": "cf.32"
   },
   {
@@ -10324,7 +10445,7 @@
 =======
    "offset": 14,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project3dkp4head4seal",
-   "symbol": ".sec..rodata.global.1m",
+   "symbol": ".sec..rodata.global.1l",
    "type": "cf.32"
   },
   {
@@ -10506,7 +10627,7 @@
    "addend": 0,
    "offset": 18,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project3dkp4head5reset",
-   "symbol": ".sec..rodata.global.1m",
+   "symbol": ".sec..rodata.global.1l",
    "type": "cf.32"
   },
   {
@@ -10541,7 +10662,7 @@
    "addend": 0,
    "offset": 118,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project3dkp5check5check",
-   "symbol": ".sec..rodata.global.1m",
+   "symbol": ".sec..rodata.global.1l",
    "type": "cf.32"
   },
   {
@@ -10555,7 +10676,7 @@
    "addend": 0,
    "offset": 164,
    "section": ".text._RNvNtNtCsgKDWfuAt9QT_16dkrt_svc_project3dkp5check5check",
-   "symbol": ".sec..rodata.global.1m",
+   "symbol": ".sec..rodata.global.1l",
    "type": "cf.32"
   },
   {
@@ -12489,14 +12610,18 @@
    "align": 2,
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
    "hex": "2f02203c0000947d206f0008123008006658203c0000947c10300800674e203c0000947e1430080030427401226f00081382080030084a0067041001602e42a7487800014eb900000000203c0000947c4201206f001011810800203c0000947e11810800508f7001600242007201c081241f4e75",
 =======
    "hex": "598f2f0a2f02246f0010487800014eb900000000142a536d588f4a0266444a2a536c673e122a536e1f41000b72011541536e2f00487800014eb900000000508f4a2f000b662c42a7487800014eb90000000042001540536c1540536e508f740160102f00487800014eb900000000508f42027001c082241f245f588f4e75",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "hex": "598f2f0a2f02246f0010487800014eb900000000142a536d588f4a02665c4a2a536c6756122a536e1f41000b72011541536e2f00487800014eb900000000508f4a2f000b664442a7487800014eb900000000487800014eb90000000042011541536c1541536e2f00487800014eb9000000004fef0014740160102f00487800014eb900000000508f42027001c082241f245f588f4e75",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "kind": "text",
    "name": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE4stopNCNvB1O_11dk_svc_stop0EB1O_",
-   "size": 126
+   "size": 150
   },
   {
    "align": 2,
@@ -12596,24 +12721,17 @@
   },
   {
    "align": 2,
-   "hex": "598f2f0b2f0a2448266f0010487800014eb900000000588f4a2b536c662897cb72013f41000a2f00487800014eb90000000034af0012254b0002508f200a245f265f588f4e754a2b536e66d24a2b536d660e72011741536d42413f41000a60c652ab536897cb72033f41000a60b8",
-   "kind": "text",
-   "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5admitB1N_",
-   "size": 110
-  },
-  {
-   "align": 2,
-   "hex": "518f2f2f000c41ef00064eb900000000588f4a6f00026608202f0004508f4e75428060f8",
+   "hex": "206f0004486853604eb900000000588f4a006606202f00044e7542af000460f4",
    "kind": "text",
    "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5enterB1N_",
-   "size": 36
+   "size": 32
   },
   {
    "align": 2,
-   "hex": "487800014eb900000000588f206f00044aa85364661642011141536d2f00487800014eb900000000508f4e7548790000000042a7206f000c2f2853604eb900000000",
+   "hex": "206f000441e853602f084eb900000000588f4e75",
    "kind": "text",
    "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5leaveB1N_",
-   "size": 66
+   "size": 20
   },
   {
    "align": 2,
@@ -12757,7 +12875,7 @@
   },
   {
    "align": 2,
-   "hex": "202f000420404a28536c670c4a28536e66024e75428060fa428060f6",
+   "hex": "206f00044a28536c670e4a28536e6604200860064280600242804e75",
    "kind": "text",
    "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE8instanceB1N_",
    "size": 28
@@ -12947,14 +13065,18 @@
   },
   {
    "align": 2,
-   "hex": "2f2f00044eb900000000588f4a80670442004e752f2f000c206f0008486840004eb900000000487800012f2f00104eb9000000002f2f00184eb9000000004fef00144a806d04700160c842a72f2f00084eb900000000508f60b6",
+   "hex": "2f02242f00080682000041002f024eb900000000588f4a8067064200241f4e752f2f0010206f000c486840004eb900000000487800012f024eb9000000002f2f001c4eb9000000004fef00144a806d04700160c842a72f024eb900000000508f60b8",
    "kind": "text",
 <<<<<<< HEAD
    "name": ".text._RINvMs1_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine6writerNtB6_11StoreWriter4postNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue5DkEnvEB1l_",
 =======
    "name": ".text._RINvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB5_8StoreJob4postNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEB1f_",
+<<<<<<< HEAD
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
    "size": 90
+=======
+   "size": 98
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
   },
   {
    "align": 2,
@@ -13304,7 +13426,7 @@
   },
   {
    "align": 2,
-   "hex": "2f2f00044eb900000000588f7201b280670a7202b280671470ff602a487800022f2f00084eb900000000508f2f2f00042f2f000c206f000c486840004eb9000000004fef000c4e75",
+   "hex": "598f206f000841e841002e882f084eb900000000588f7201b280670a7202b280671470ff602a487800022f2f00044eb900000000508f2f2f00082f2f0010206f0010486840004eb9000000004fef000c588f4e75",
    "kind": "text",
 <<<<<<< HEAD
    "name": ".text._RINvMNtCsgKDWfuAt9QT_16dkrt_svc_project6engineNtB3_14ProjectService7io_stepNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue7DkFilesEB1f_",
@@ -13326,7 +13448,7 @@
    "hex": "4879000000004eb900000000588f4a80670c2f004eb900000000588f4e7570ff60fa",
 =======
    "name": ".text._RINvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB5_8StoreJob7io_stepNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue5files7DkFilesEB1i_",
-   "size": 72
+   "size": 84
   },
   {
    "align": 2,
@@ -13352,10 +13474,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffe848d744042c48246f001c487800014eb900000000588f4a2a536c6672142a536e72011541536e2f00487800014eb900000000508f4a0266462f0a4878000141ef001a4eb900000000342f001a2f6f001c0014487800014eb90000000042011541536e2f00487800014eb9000000004fef00144a42661070011540536c6024347cfff67401601c246f000c740160142f00487800014eb900000000508f347cfff674013c822d4a0002200e4cd744044fef00184e75",
+   "hex": "4fefffe848d744042c48246f001c487800014eb900000000588f4a2a536c66000084142a536e72011541536e2f00487800014eb900000000508f4a0266482f0a4878000141ef001a4eb900000000342f001a2f6f001c0014487800014eb90000000042011541536e4fef000c4a42661e72011541536c2f00487800014eb900000000508f6032347cfff67401602a2f00487800014eb900000000246f0014508f740160142f00487800014eb900000000508f347cfff674013c822d4a0002200e4cd744044fef00184e75",
    "kind": "text",
    "name": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5startNCNvB1O_12dk_svc_start0EB1O_",
-   "size": 184
+   "size": 202
   },
   {
    "align": 2,
@@ -13378,6 +13500,7 @@
    "kind": "data",
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
    "name": ".rodata.global.1H",
 =======
    "name": ".rodata.global.1J",
@@ -13385,12 +13508,16 @@
 =======
    "name": ".rodata.global.1K",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".rodata.global.1J",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 20
   },
   {
    "align": 1,
    "hex": "50524f4a4543542044415441204e4f542052454144",
    "kind": "data",
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
    "name": ".rodata.global.1G",
@@ -13400,12 +13527,16 @@
 =======
    "name": ".rodata.global.1J",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".rodata.global.1I",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 21
   },
   {
    "align": 1,
    "hex": "6d6f64756c65732f",
    "kind": "data",
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
    "name": ".rodata.global.1F",
@@ -13415,12 +13546,16 @@
 =======
    "name": ".rodata.global.1I",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".rodata.global.1H",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 8
   },
   {
    "align": 1,
    "hex": "204e4f54204b455054",
    "kind": "data",
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
    "name": ".rodata.global.1E",
@@ -13430,12 +13565,16 @@
 =======
    "name": ".rodata.global.1H",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".rodata.global.1G",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 9
   },
   {
    "align": 1,
    "hex": "204e4f54204c4f41444544",
    "kind": "data",
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
    "name": ".rodata.global.1D",
@@ -13445,12 +13584,16 @@
 =======
    "name": ".rodata.global.1G",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".rodata.global.1F",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 11
   },
   {
    "align": 1,
    "hex": "20444f4553204e4f5420464954",
    "kind": "data",
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
    "name": ".rodata.global.1C",
@@ -13460,12 +13603,16 @@
 =======
    "name": ".rodata.global.1F",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".rodata.global.1E",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 13
   },
   {
    "align": 1,
    "hex": "4d4f44554c45204d495353494e473a20",
    "kind": "data",
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
    "name": ".rodata.global.1B",
@@ -13475,12 +13622,16 @@
 =======
    "name": ".rodata.global.1E",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".rodata.global.1D",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 16
   },
   {
    "align": 1,
    "hex": "70726f6a6563747300",
    "kind": "data",
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
    "name": ".rodata.global.1A",
@@ -13490,20 +13641,23 @@
 =======
    "name": ".rodata.global.1D",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".rodata.global.1C",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 9
   },
   {
    "align": 1,
    "hex": "646b5f70726f6a6563745f737461747573",
    "kind": "data",
-   "name": ".rodata.global.1u",
+   "name": ".rodata.global.1t",
    "size": 17
   },
   {
    "align": 1,
    "hex": "646b5f70726f6a6563745f63757272656e74",
    "kind": "data",
-   "name": ".rodata.global.1t",
+   "name": ".rodata.global.1s",
    "size": 18
   },
   {
@@ -13511,10 +13665,14 @@
    "hex": "0000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "name": ".rodata.global.1p",
    "size": 32
 =======
    "name": ".rodata.global.1q",
+=======
+   "name": ".rodata.global.1p",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 64
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
   },
@@ -13523,10 +13681,14 @@
    "hex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "name": ".rodata.global.1o",
    "size": 84
 =======
    "name": ".rodata.global.1p",
+=======
+   "name": ".rodata.global.1o",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 52
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
   },
@@ -13535,17 +13697,21 @@
    "hex": "63662e70726f6a6563742e686f6f6b2e70617374655f657869740000000000002e646b70",
    "kind": "data",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "name": ".rodata.global.1j",
    "size": 36
 =======
    "name": ".rodata.global.1k",
+=======
+   "name": ".rodata.global.1j",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 33
   },
   {
    "align": 8,
    "hex": "63662e70726f6a6563742e686f6f6b2e636c6561725f6d616e795f65786974002f",
    "kind": "data",
-   "name": ".rodata.global.1j",
+   "name": ".rodata.global.1i",
    "size": 33
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
   },
@@ -13553,10 +13719,14 @@
    "align": 1,
    "hex": "63662e70726f6a6563742e686f6f6b2e636c6561725f6d616e795f65786974",
    "kind": "data",
+<<<<<<< HEAD
    "name": ".rodata.global.1i",
 <<<<<<< HEAD
    "size": 31
 =======
+=======
+   "name": ".rodata.global.1h",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 46
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
   },
@@ -13564,6 +13734,7 @@
    "align": 8,
    "hex": "63662e70726f6a6563742e686f6f6b2e636c6561725f6f6e655f65786974000070726f6a65637473",
    "kind": "data",
+<<<<<<< HEAD
    "name": ".rodata.global.1h",
    "size": 40
   },
@@ -13576,6 +13747,9 @@
    "size": 25
 =======
    "name": ".rodata.global.1h",
+=======
+   "name": ".rodata.global.1g",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 36
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
   },
@@ -13583,7 +13757,7 @@
    "align": 1,
    "hex": "63662e70726f6a6563742e686f6f6b2e736c6f745f736574",
    "kind": "data",
-   "name": ".rodata.global.1g",
+   "name": ".rodata.global.1f",
    "size": 24
   },
   {
@@ -13591,10 +13765,14 @@
    "hex": "70726f6a656374000000000000000000444b504a0000002a000040000001",
    "kind": "data",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "name": ".rodata.global.1e",
    "size": 30
 =======
    "name": ".rodata.global.1f",
+=======
+   "name": ".rodata.global.1e",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 24
   },
   {
@@ -13745,6 +13923,20 @@
    "kind": "bss",
    "name": ".bss.DKRT_PROJECT_PENDING",
    "size": 48
+  },
+  {
+   "align": 2,
+   "hex": "598f4eb900000000206f00084a28000c661672011f4100032f004eb900000000102f0007508f4e75206f00084a28000e66e01228000d1f410003660872011141000d60d4206f000852a8000872031f41000360c4",
+   "kind": "text",
+   "name": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "size": 84
+  },
+  {
+   "align": 2,
+   "hex": "4eb900000000206f000442011141000d2f004eb900000000588f4e75",
+   "kind": "text",
+   "name": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate7release",
+   "size": 28
   },
   {
    "align": 2,
@@ -14186,10 +14378,10 @@
   },
   {
    "align": 2,
-   "hex": "206f00042028410053807201b28064024e75216f000840f870032140410060f0",
+   "hex": "598f206f000841e841002e882f084eb9000000005380588f7201b2806404588f4e7543ef000c206f0008215140f8487800032f2f00044eb900000000508f60de",
    "kind": "text",
    "name": ".text._RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob4done",
-   "size": 32
+   "size": 64
   },
   {
    "align": 2,
@@ -14200,24 +14392,10 @@
   },
   {
    "align": 2,
-   "hex": "226f0004202941004a80671a7203b2806618202940f842a94100720230812140000220084e75424160f24280720160ec",
+   "hex": "518f2f0a2448206f001041e841002f4800082f084eb900000000588f4a8067347203b2806636206f0010206840f82f48000442a72f2f000c4eb900000000508f70023480202f000425400002200a245f508f4e7542af0004424060e642af0004700160de",
    "kind": "text",
    "name": ".text._RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob4poll",
-   "size": 48
-  },
-  {
-   "align": 2,
-   "hex": "206f0004202841004e75",
-   "kind": "text",
-   "name": ".text._RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob5phase",
-   "size": 10
-  },
-  {
-   "align": 2,
-   "hex": "206f0004216f000841004e75",
-   "kind": "text",
-   "name": ".text._RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob7publish",
-   "size": 12
+   "size": 100
   },
   {
    "align": 2,
@@ -14751,6 +14929,7 @@
    "align": 8,
    "hex": "2d",
    "kind": "data",
+<<<<<<< HEAD
    "name": ".rodata.global.1m",
    "size": 1
   },
@@ -14770,6 +14949,9 @@
    "size": 16
 =======
    "name": ".rodata.global.1m",
+=======
+   "name": ".rodata.global.1l",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 14
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
   },
@@ -14777,7 +14959,7 @@
    "align": 1,
    "hex": "2e646b6d",
    "kind": "data",
-   "name": ".rodata.global.1e",
+   "name": ".rodata.global.1d",
    "size": 4
   },
   {
@@ -14785,10 +14967,14 @@
    "hex": "0000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
 <<<<<<< HEAD
+<<<<<<< HEAD
    "name": ".rodata.global.1b",
 =======
    "name": ".rodata.global.17",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".rodata.global.16",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "size": 32
   },
   {
@@ -14800,10 +14986,24 @@
   },
   {
    "align": 2,
+<<<<<<< HEAD
    "hex": "206f0004202800082228000c4e75",
    "kind": "text",
    "name": ".text._RNvMs6_NtCsaMgU3lEIvKO_8dkrt_abi7serviceNtB5_10ServiceRow5kinds",
    "size": 14
+=======
+   "hex": "206f000420104e75",
+   "kind": "text",
+   "name": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
+   "size": 8
+  },
+  {
+   "align": 2,
+   "hex": "206f000420af00084e75",
+   "kind": "text",
+   "name": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
+   "size": 10
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
   },
   {
    "align": 2,
@@ -15130,6 +15330,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
  "source_sha256": "1e76d2979d75044a7193386b011c9efcf3d18e940c75d59fae95afc5df7f73a4",
 =======
  "source_sha256": "baa013ead244f4ff5a28dcf2b4b591ebb86d9435e7f7c68abb01176a15e0cfce",
@@ -15158,6 +15359,9 @@
 =======
  "source_sha256": "c7107bdf696b2165e236a3aa52332fdbb108123417a46b0bf9aa2a1fd22a8473",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+ "source_sha256": "fc8de5f7909a9e3b4f9cb886c831a64f2cf414cf9c97bfbfce1122c773ae1d11",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
  "symbols": [
   {
    "global": false,
@@ -15250,11 +15454,16 @@
   {
    "global": false,
 <<<<<<< HEAD
+<<<<<<< HEAD
    "name": ".sec..rodata.global.1A",
    "section": ".rodata.global.1A",
 =======
    "name": ".sec..rodata.global.17",
    "section": ".rodata.global.17",
+=======
+   "name": ".sec..rodata.global.16",
+   "section": ".rodata.global.16",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "value": 0
   },
   {
@@ -15262,6 +15471,12 @@
    "name": ".sec..rodata.global.19",
    "section": ".rodata.global.19",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.global.1C",
+   "section": ".rodata.global.1C",
    "value": 0
   },
   {
@@ -15308,12 +15523,13 @@
   },
   {
    "global": false,
-   "name": ".sec..rodata.global.1K",
-   "section": ".rodata.global.1K",
+   "name": ".sec..rodata.global.1b",
+   "section": ".rodata.global.1b",
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
 <<<<<<< HEAD
    "name": ".sec..rodata.global.1c",
    "section": ".rodata.global.1c",
@@ -15327,6 +15543,10 @@
    "name": ".sec..rodata.global.1b",
    "section": ".rodata.global.1b",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".sec..rodata.global.1d",
+   "section": ".rodata.global.1d",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "value": 0
   },
   {
@@ -15367,6 +15587,7 @@
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..rodata.global.1k",
    "section": ".rodata.global.1k",
 <<<<<<< HEAD
@@ -15378,10 +15599,15 @@
    "section": ".rodata.global.1l",
 =======
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".sec..rodata.global.1l",
+   "section": ".rodata.global.1l",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "value": 0
   },
   {
    "global": false,
+<<<<<<< HEAD
    "name": ".sec..rodata.global.1m",
    "section": ".rodata.global.1m",
 <<<<<<< HEAD
@@ -15393,6 +15619,10 @@
    "section": ".rodata.global.1o",
 =======
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+   "name": ".sec..rodata.global.1o",
+   "section": ".rodata.global.1o",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "value": 0
   },
   {
@@ -15403,20 +15633,14 @@
   },
   {
    "global": false,
-   "name": ".sec..rodata.global.1q",
-   "section": ".rodata.global.1q",
+   "name": ".sec..rodata.global.1s",
+   "section": ".rodata.global.1s",
    "value": 0
   },
   {
    "global": false,
    "name": ".sec..rodata.global.1t",
    "section": ".rodata.global.1t",
-   "value": 0
-  },
-  {
-   "global": false,
-   "name": ".sec..rodata.global.1u",
-   "section": ".rodata.global.1u",
    "value": 0
   },
   {
@@ -16229,12 +16453,6 @@
   },
   {
    "global": false,
-   "name": ".sec..text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5admitB1N_",
-   "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5admitB1N_",
-   "value": 0
-  },
-  {
-   "global": false,
    "name": ".sec..text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5enterB1N_",
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerINtNtCsgKDWfuAt9QT_16dkrt_svc_project7project7ProjectNtNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue4host6DkHostEE5enterB1N_",
    "value": 0
@@ -16892,6 +17110,18 @@
   },
   {
    "global": false,
+   "name": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate7release",
+   "section": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate7release",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "_RNvMNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3envNtB2_7ListRow8as_bytes",
    "section": ".text._RNvMNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3envNtB2_7ListRow8as_bytes",
    "value": 0
@@ -16971,9 +17201,24 @@
   {
    "global": false,
 <<<<<<< HEAD
+<<<<<<< HEAD
    "name": "_RNvMs0_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restoreNtB5_10ModulePath8as_bytes",
    "section": ".text._RNvMs0_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine7restoreNtB5_10ModulePath8as_bytes",
 =======
+=======
+   "name": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
+   "section": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff5phase",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "_RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
+   "section": ".text._RNvMs_NtCsaMgU3lEIvKO_8dkrt_abi7handoffNtB4_7Handoff7publish",
+   "value": 0
+  },
+  {
+   "global": false,
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "name": "_RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob4done",
    "section": ".text._RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3jobNtB4_8StoreJob4done",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
@@ -17003,6 +17248,7 @@
   },
   {
    "global": false,
+<<<<<<< HEAD
 <<<<<<< HEAD
    "name": "_RNvMs1_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine5boundNtB5_12BoundProject11note_change",
    "section": ".text._RNvMs1_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine5boundNtB5_12BoundProject11note_change",
@@ -17085,6 +17331,8 @@
   },
   {
    "global": false,
+=======
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
    "name": "_RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4taskNtB4_7TaskRun9task_done",
    "section": ".text._RNvMs_NtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine4taskNtB4_7TaskRun9task_done",
    "value": 0
@@ -17689,6 +17937,7 @@
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   "instructions_redecoded": "13037",
   "isa_check": "778320b039da331b0b0042034f75ddb2840a2c51481498a16cd41aa44e7d4673",
 =======
@@ -17703,6 +17952,10 @@
   "instructions_redecoded": "13784",
   "isa_check": "71e58aef7de6be27c18cbb1edeecd2c44d2ec7c737fb5e64428c07eadf432f6e",
 >>>>>>> 7a61867 (svc-rt: owner guard is atomic; job state leaves the owner; pre-tick; wiring test)
+=======
+  "instructions_redecoded": "13811",
+  "isa_check": "fb562599fce5160d9f40fff0516d0ee0800171953c5b6d1f5acfd4df8fec0440",
+>>>>>>> 3184e4b (svc-rt: ordered handoff, non-generic gate, neutral shortcut keys)
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

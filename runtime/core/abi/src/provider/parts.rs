@@ -95,7 +95,7 @@ pub trait Ticker<C: CoreApi> {
 
     /// Work of the same pass that must run before the owner is entered: the table's tick function calls it first, outside the owner's guard (no `&mut self`, so nothing forms a
     /// reference to the object). It is for a call into foreign code that delivers events to the owner (`Owner::post` runs them at once, with the owner idle, in the order the
-    /// callbacks fire) ahead of the tick that depends on them. The default does nothing.
+    /// callbacks fire) ahead of the tick that depends on them. It runs also when the owner is not live (before `start`, after `stop`): its events then meet `Post::NoOwner`. The default does nothing.
     fn pre_tick(_core: &C, _phase: u32) {}
 }
 

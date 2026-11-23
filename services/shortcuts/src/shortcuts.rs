@@ -10,7 +10,7 @@ use core::ffi::c_void;
 use core::mem::MaybeUninit;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::platform::DeviceProfile;
-use dkrt_abi::provider::{ConsumerId, Provider, Reentry, Status, Ticker};
+use dkrt_abi::provider::{ConsumerId, Provider, Status, Ticker};
 use dkrt_abi::service::tick_phase;
 
 /// The bits of the `flags` of a key event.
@@ -249,24 +249,5 @@ impl<C: CoreApi> Ticker<C> for Shortcuts {
             // SAFETY: the queued callbacks are code of modules that are loaded: `detach` drops the calls of a module before its image goes.
             unsafe { self.run_pending() };
         }
-    }
-}
-
-/// One key event of the panel, as the key hook saw it while the service was inside a call: the hook cannot decide it then (the object is in use), so the owner queues it.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct KeyEvent {
-    pub code: u32,
-    pub flags: u32,
-}
-
-impl<C: CoreApi> Reentry<C> for Shortcuts {
-    type Event = KeyEvent;
-    /// A call of the service is short (one tick runs the queued `on` and `off` calls): a few keys at most arrive meanwhile.
-    const QUEUE: usize = 8;
-
-    /// Take the key after the call it arrived in: its state counts (a held first key, a release), so no key is lost. The stock walker has seen the event already, so the verdict
-    /// has no one to go to.
-    fn apply(&mut self, core: &C, event: KeyEvent) {
-        let _ = self.dispatch(core, event.code, event.flags);
     }
 }
