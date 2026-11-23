@@ -64,7 +64,7 @@ fn the_manager_brings_up_the_packed_local_ping_fixtures_and_takes_them_down_with
             let export = l.exports.owned(hash).unwrap().0;
             let found_export = l.m.live.iter().any(|(_, mem)| {
                 let words = core::slice::from_raw_parts(mem.as_ptr() as *const u8, mem.len() * 16);
-                words.chunks_exact(4).any(|w| u32::from_be_bytes([w[0], w[1], w[2], w[3]]) == export)
+                words.windows(4).any(|w| u32::from_be_bytes([w[0], w[1], w[2], w[3]]) == export)
             });
             assert!(found_export, "{}: a consumer's image holds the address of the service's export", dev.name);
 
