@@ -1282,6 +1282,39 @@ fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refu
     }
 }
 
+/// The seam of the FX ROUTING pick (E1): a pick saves `fx/route/<id>` and reloads the effect's module, so the real packed effect `dyn-fx-gain` must pass the reload check against the live
+/// set (with the fx service up), be taken down and be loaded again into its record, twice. The host runs no module code, so what the load registers (the route read at `apply`) is the
+/// service's unit test (`dkrt-svc-fx` `routing`) and the device test; the job's other refusals (a menu built for the module, DSP rows that stay held) are facts of the module, here none.
+#[test]
+fn a_packed_effect_module_is_reloaded_twice_through_the_plan() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
+            // the host models no DSP rows and no effect registry: the file without its DSP part, as the boot-effects scenario takes it
+            swap_module(&mut l, 0, FX_GAIN.leaf, without_dsp(*dev, &FX_GAIN));
+            let _dsp = dsp_env(*dev, &l, &plan);
+            let path = "modules/dyn-fx-gain.dkm\0";
+            let rec = boot_record(&["dyn-fx-gain"]);
+            let mut rt = Box::new(crate::package::lifecycle::Rt::new(&mut l as *mut _));
+            rt.boot_with(&rec, &capacity(&l.p));
+            assert_eq!(crate::boot::info().results[0], OK, "{}", dev.name);
+            crate::package::boot_idx::set(u32::MAX);
+            l.phase = Phase::Closed;
+            let mut caps = capacity(&l.p);
+            crate::package::loader::live_caps(&mut caps, crate::package::loader::own_use(0));
+            for round in 0..2 {
+                assert_eq!(l.reload_check(0, path.as_ptr(), &caps), OK, "{} round {round}", dev.name);
+                assert_eq!(rt.unload(0), OK, "{} round {round}", dev.name);
+                assert_eq!(rt.reload_load_with(0, path.as_ptr(), &live_cap(&l)), OK, "{} round {round}", dev.name);
+                assert_eq!((records::module(0).used, l.sel_of(0)), (1, 0), "{} round {round}", dev.name);
+            }
+        }
+        let _ = clean_state();
+    }
+}
+
 /// The live seam (docs/plans/extension-model.md E5c): a real packed module of the boot is taken down, its file is loaded again at run time under a new path at a new
 /// selection index, taken down, and loaded again at its own path and index, each time through the file checks and the plan over the live set. A file whose name is loaded
 /// is refused first.

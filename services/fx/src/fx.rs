@@ -5,6 +5,7 @@ use crate::builder::Builder;
 use crate::dsp::FxGuard;
 use crate::fxpage;
 use crate::fxsend;
+use crate::routing::{self, Routing};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::{ConsumerId, Describe, Provider, Status, Ticker};
 use dkrt_abi::service::{tick_phase, TableFault};
@@ -14,6 +15,9 @@ use dkrt_sdk::proto::{CAPK_FX_SLOTS, CAPK_SEND_SLOTS};
 pub struct Fx {
     builder: Builder,
     guard: FxGuard,
+    routing: Routing,
+    /// The UI handle the FX ROUTING row was added with (0: the image has no UI, or the row was refused).
+    ui: usize,
 }
 
 impl Fx {
@@ -22,12 +26,19 @@ impl Fx {
         Fx {
             builder: Builder::new(),
             guard: FxGuard::new(),
+            routing: Routing::new(),
+            ui: 0,
         }
     }
 
     /// The collection of the module whose `init` is open: the builder calls of the service file reach it here.
     pub fn builder(&mut self) -> &mut Builder {
         &mut self.builder
+    }
+
+    /// What the FX ROUTING steps keep between two popups, and the UI handle they show them with (0: none).
+    pub fn routing(&mut self) -> (&mut Routing, usize) {
+        (&mut self.routing, self.ui)
     }
 
     /// What the guard's diagnostics have logged already.
@@ -51,7 +62,9 @@ impl<C: CoreApi> Provider<C> for Fx {
         if r != dkrt_sdk::OK {
             return Err(r);
         }
-        Ok(Fx::new())
+        let mut fx = Fx::new();
+        fx.ui = routing::attach();
+        Ok(fx)
     }
 
     // An effect module is torn down like any other (`can_stop` keeps its default): the loader's `DspPart::clear` (the row's pc to "free" first, so the chain skips it at once: the

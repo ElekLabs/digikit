@@ -54,7 +54,7 @@ fn settings_keys_carry_the_module_id() {
 #[test]
 fn the_saved_route_falls_back_to_the_default() {
     use dkrt_test_support::FakeCore;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_lock::hold();
     let core = FakeCore::new();
     unsafe {
         let s = ss();
@@ -94,10 +94,8 @@ fn route_choices_use_pending_sends_and_the_image_slot_limit() {
 #[test]
 fn fx_entry_without_a_page_answers_no_fx() {
     use dkrt_test_support::FakeCore;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_lock::hold();
     let core = FakeCore::new();
     let mut out: DkrtFx = unsafe { core::mem::zeroed() };
     assert_eq!(unsafe { fx_entry(&core, 0, &mut out) }, E_NOT_FOUND);
 }
-
-static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

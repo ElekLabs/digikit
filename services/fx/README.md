@@ -13,6 +13,7 @@ src/builder.rs    the builder calls (`dk_module_ctx_add_fx`, `dk_fx_add_page`, `
                   `init` and the gate, lowers it to the effect records and declares the route flags and defaults at the commit; the owner gives it out with `Fx::builder()`
 src/rule.rs       the rule for the effect records (`effects`), shared by `Records::check` and `validate`
 src/dsp/          the effect rows of the DSP loader (`mod.rs`) and the `DspPart` of the owner (`part.rs`: check_sections, check_rows, claim, release, clear, row_step, attribute, diag)
+src/routing.rs    FX ROUTING: the SETTINGS list of the effects, the routes offered and what a pick does, over `CoreApi` and the `Ui` trait (`routing/tests.rs`: FakeCore and a fake UI)
 src/queries.rs    the `Query` part: the route choices the FX ROUTES menu asks for (operation 1)
 src/fxpage/       the effect pages: page rows, parameter rows, the kit's values, the page list and the tick that sends changed values (`DKRT_FXP`, `DKRT_FXP_*`)
 src/fxsend/       the send route and send amounts: cells, settings, the tick over the 16 Sound objects (`DKRT_FXS`)
@@ -20,7 +21,7 @@ src/rows.rs       the effect rows of the chain (`DKRT_FROWS`)
 src/slots.rs      docs only: the file fills no pointer slot (`patchkit service-check` wants the file because the manifest has DSP `[[fill]]`s)
 src/lib.rs        docs, `mod` only
 dks/              the service file: `lib.rs` (the `service!` call), `hooks.rs` (the nine hooks, assembler), `builder.rs` (the builder exports, which reach the owner), `rt.rs` (the
-                  entry of the FX ROUTES list), `gen_exports.rs` (generated: never edit); `dsp/*.s` is the effect dispatch of the DSP
+                  entry of the FX ROUTES list), `ui.rs` (the FX ROUTING row and its three callbacks over the UI SDK), `gen_exports.rs` (generated: never edit); `dsp/*.s` is the effect dispatch of the DSP
 tests/            host tests over `FakeCore`: `contract.rs` (the shared suite through `provider_contract`, and the cases of reload and park), `records.rs` (apply, tick, detach, check,
                   DSP steps), `builder.rs` (the collection, the lowering and the commit), `queries.rs` (the `Query` part), `table.rs` and `fxpage_checks.rs` (the image table, the record
                   rule), `guard.rs` (diagnostics, table check, attribute, section check), `file.rs` (the file's code over the owner cell); `stubs/` (the `dkc_*` imports as host functions)

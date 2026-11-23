@@ -4,7 +4,7 @@
 //! Every function that needs the core takes it by reference (`core: &C`, `C: CoreApi`): the file passes its `ImportCore` (a zero-sized type over the `dkc_*` imports) and a host test
 //! passes a `FakeCore`.
 //! Layout (README.md): `fx` (the owner `Fx` with `Provider`, `Ticker` and `Describe`), `records` (the `Records` part), `dsp/` (the `DspPart` and the effect rows' loader steps),
-//! `queries` (the `Query` part), `builder` (the builder calls' collection), `rule` (the rule for the effect records), `slots` (docs only: the file fills no pointer slot, see `service-check`); `fxpage`, `fxsend` and `rows` are the tables the service keeps by name;
+//! `routing` (the FX ROUTING list and its picks, over a small `Ui` trait), `queries` (the `Query` part), `builder` (the builder calls' collection), `rule` (the rule for the effect records), `slots` (docs only: the file fills no pointer slot, see `service-check`); `fxpage`, `fxsend` and `rows` are the tables the service keeps by name;
 //! `tests/` (host tests over `FakeCore`).
 #![no_std]
 #[cfg(test)]
@@ -16,6 +16,9 @@ pub mod fxpage;
 pub mod fxsend;
 mod queries;
 pub mod records;
+pub mod routing;
 pub mod rows;
 pub mod rule;
 pub mod slots;
+#[cfg(test)]
+pub(crate) mod test_lock;

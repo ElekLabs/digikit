@@ -13,6 +13,7 @@ mod gen_exports;
 pub mod builder;
 mod hooks;
 pub mod rt;
+pub mod ui;
 
 dkrt_svc_rt::service!(
     Fx,

@@ -20,6 +20,7 @@
 //! Everything runs in the UI task (the settings store is not for other tasks).
 mod apply;
 mod choices;
+mod effect;
 mod layout;
 mod naming;
 mod route;
@@ -30,6 +31,7 @@ mod tests;
 mod tick;
 pub use apply::*;
 pub use choices::*;
+pub use effect::*;
 pub use layout::*;
 pub use naming::*;
 pub use route::*;
