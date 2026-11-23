@@ -94,7 +94,12 @@ fn check_core(f: unsafe fn(&FakeCore, &Ctx) -> i32, recs: &[Rec], pages: bool) -
 
 fn check_core_with(f: unsafe fn(&FakeCore, &Ctx) -> i32, recs: &[Rec], inf: Vec<u32>) -> i32 {
     let mut core = FakeCore::new();
-    core.device = dkrt_abi::profiles::DT2.id; // the run-time machine types are the device profile's
+    // the run-time machine types are the device profile's: any profile that has them
+    core.device = dkrt_abi::profiles::ALL
+        .iter()
+        .find(|p| p.dyn_types > 0)
+        .expect("a profile with run-time machine types")
+        .id;
     let s = section(recs);
     unsafe {
         f(

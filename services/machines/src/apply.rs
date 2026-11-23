@@ -89,7 +89,7 @@ pub(crate) unsafe fn apply<C: CoreApi>(core: &C, ctx: &AppCtx) -> i32 {
             ai += 1;
         }
     });
-    // pages (Digitone II): their machine is published below, so they sit unused until then
+    // pages (on a device whose machine pages register before their machine): the machine is published below, so they sit unused until then
     let slot_base = iw(inf, w::SLOT_BASE);
     each(reg, |kind, b| {
         if kind != KIND_PAGE {
