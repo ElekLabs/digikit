@@ -133,14 +133,9 @@
       },
       {
         "files": ["store-format.device.test.ts"],
-        "firmwareOnly": "VERIFY of card bytes, load refusal (E_SHA), version 3 card boot and restart, transfer install loaded by the real runtime",
+        "firmwareOnly": "host hash against the runtime's on uploaded files, the booted image refusing to load a module whose card bytes changed, and a version 3 card booting, taking the first upload and loading its kept selection after a restart",
         "tags": ["C:loading", "C:storage"],
-        "modules": ["test/c-demo", "digikit/debug", "test/svc-test", "test/svc-test-user"],
-        "sources": [
-          "packages/workbench-core/src/firmware/default-modules-core.ts",
-          "packages/workbench-core/src/modules/dktransfer.ts",
-          "packages/workbench-core/src/modules/services.ts"
-        ],
+        "modules": ["test/c-demo"],
         "plusdrive": true
       },
       {
@@ -177,7 +172,7 @@
       },
       {
         "files": ["card-safety.device.test.ts"],
-        "firmwareOnly": "boot counter record and USB, log and ABOUT replies of the booted image on cards the emulated driver reports (blank, foreign, torn, small)",
+        "firmwareOnly": "core-only boot cause, boot counter record, USB store replies and log events of the booted image on cards the emulated driver reports (blank, foreign, torn, small)",
         "devices": ["dt2"],
         "tags": ["C:storage"],
         "modules": ["test/c-demo"],
@@ -189,6 +184,18 @@
         "tags": ["C:boot", "C:layout", "C:storage"],
         "modules": ["test/c-demo", "test/dyn-dn2", "test/dyn-crash", "test/sine", "core/services/machines"],
         "plusdrive": true
+      },
+      {
+        "files": ["core-only.device.test.ts"],
+        "firmwareOnly": "a core-only boot of the real firmware: the reported cause, the core-only frame in place of the intro, the resident store answering, and the counter cleared on the card by an upload of the package or by RETRY",
+        "tags": ["C:boot", "C:storage"],
+        "modules": [],
+        "plusdrive": true,
+        "sources": [
+          "runtime/core/tests/fixtures/safe-counter.bin",
+          "runtime/core/tests/fixtures/core-crashes.bin",
+          "runtime/core/tests/fixtures/core-missing.bin"
+        ]
       },
       {
         "files": ["boot-restart.device.test.ts"],

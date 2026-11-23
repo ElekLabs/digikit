@@ -19,6 +19,10 @@ pub const C_OUT: &str = "runtime/core/include/dkrt.h";
 pub const RUST_OUT: &str = "runtime/core/sdk/src/gen_abi.rs";
 /// The generated signature check of the runtime crate, relative to the repository root.
 pub const CHECK_OUT: &str = "runtime/core/src/rs/src/gen_abi_check.rs";
+/// The host directory ids for the TypeScript tools (`packages/dk-session`), relative to the repository root.
+pub const HOST_TS_OUT: &str = "packages/dk-session/src/gen_host_dir.ts";
+/// The host directory ids for the address map reader (`packages/dkaddrmap`), relative to the repository root.
+pub const HOST_RS_OUT: &str = "packages/dkaddrmap/src/gen_host_dir.rs";
 
 // Keep the original generated labels so moving the files leaves their contents unchanged.
 const HEADER: &str =
@@ -30,6 +34,18 @@ struct Abi {
     r#const: Vec<ConstToml>,
     r#struct: Vec<StructToml>,
     r#fn: Vec<FnToml>,
+    /// The ids of the host directory, in id order (append only).
+    #[serde(default)]
+    host_dir: Vec<HostDirToml>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HostDirToml {
+    /// The id's name without a prefix (`DSP`): the symbol `DKRT_<name>` of the package static it names.
+    name: String,
+    /// Who fills the entry: `package` or `core`.
+    owner: String,
+    doc: String,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -262,6 +278,99 @@ fn functions(abi: &Abi) -> Result<Vec<(&FnToml, Sig)>> {
     Ok(out)
 }
 
+/// The host directory ids, checked: unique upper-case names, a doc each.
+fn host_ids(abi: &Abi) -> Result<&[HostDirToml]> {
+    for (i, h) in abi.host_dir.iter().enumerate() {
+        let what = format!("[[host_dir]] {}", h.name);
+        if h.name.is_empty()
+            || !h
+                .name
+                .bytes()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+        {
+            return Err(err!(
+                "{SOURCE}: {what}: the name is upper case letters, digits and _"
+            ));
+        }
+        if h.doc.is_empty() || h.doc.contains("*/") {
+            return Err(err!("{SOURCE}: {what}: needs a doc without a comment end"));
+        }
+        if h.owner != "core" && h.owner != "package" {
+            return Err(err!("{SOURCE}: {what}: owner is \"core\" or \"package\""));
+        }
+        if abi.host_dir[..i].iter().any(|o| o.name == h.name) {
+            return Err(err!("{SOURCE}: {what}: the name is twice"));
+        }
+    }
+    Ok(&abi.host_dir)
+}
+
+/// `packages/dk-session/src/gen_host_dir.ts`: the ids for the TypeScript tools. Written as Prettier prints it.
+fn host_ts(abi: &Abi, ids: &[HostDirToml]) -> String {
+    let magic = const_value_of(abi, "HOST_DIR_MAGIC");
+    let ready = const_value_of(abi, "HOST_DIR_READY_MAGIC");
+    let mut s = format!(
+        "// {HEADER}\n\n/** `HostDir.magic` (`HOST_DIR_MAGIC` of abi.toml). */\nexport const HOST_DIR_MAGIC = {magic:#010x};\n/** `HostDir.ready` once the package has attached (`HOST_DIR_READY_MAGIC` of abi.toml). */\nexport const HOST_DIR_READY = {ready:#010x};\n"
+    );
+    let _ = writeln!(
+        s,
+        "/** The ids this build knows (`[[host_dir]]` of abi.toml); a core may have fewer, which its directory says in `count`. */\nexport const HOST_COUNT = {};\n",
+        ids.len()
+    );
+    s.push_str("/** The package statics that tools read by name, and their ids in the host directory (`DKRT_HOST_DIR`). */\nexport const HOST_ID = {\n");
+    for (i, h) in ids.iter().enumerate() {
+        let _ = writeln!(s, "  {}: {i},", h.name);
+    }
+    s.push_str("} as const;\n");
+    s.push_str("/** Who fills each entry of the directory: the package at its entry, or the core before it starts the package. */\nexport const HOST_OWNER = {\n");
+    for h in ids {
+        let _ = writeln!(s, "  {}: '{}',", h.name, h.owner);
+    }
+    s.push_str("} as const;\n");
+    s.push_str("/** The boot level the core reports: `DkrtBootInfo.reason` (`SAFE_*`), `DkrtBootInfo.core_cause` (`CORE_*`) and the counter thresholds of abi.toml. */\nexport const BOOT_LEVEL = {\n");
+    for c in abi
+        .r#const
+        .iter()
+        .filter(|c| c.name.starts_with("SAFE_") || c.name.starts_with("CORE_"))
+    {
+        let _ = writeln!(s, "  {}: {},", c.name, c.value);
+    }
+    s.push_str("} as const;\n");
+    s
+}
+
+/// The value of the const `name` of abi.toml (0 when there is none: the generated file then fails its own checks).
+fn const_value_of(abi: &Abi, name: &str) -> i64 {
+    abi.r#const
+        .iter()
+        .find(|c| c.name == name)
+        .map(|c| c.value)
+        .unwrap_or(0)
+}
+
+/// `packages/dkaddrmap/src/gen_host_dir.rs`: the ids for the address map reader (a crate that cannot depend on the runtime's SDK: it builds for wasm).
+fn host_rs(abi: &Abi, ids: &[HostDirToml]) -> String {
+    let magic = const_value_of(abi, "HOST_DIR_MAGIC");
+    let ready = const_value_of(abi, "HOST_DIR_READY_MAGIC");
+    let mut s = format!(
+        "// {HEADER}\n\n/// `HostDir.magic` (`HOST_DIR_MAGIC` of abi.toml).\npub const HOST_DIR_MAGIC: u32 = {magic:#010x};\n/// `HostDir.ready` once the package has attached (`HOST_DIR_READY_MAGIC` of abi.toml).\npub const HOST_DIR_READY: u32 = {ready:#010x};\n"
+    );
+    let _ = writeln!(
+        s,
+        "/// The ids this build knows (`[[host_dir]]` of abi.toml).\npub const HOST_COUNT: usize = {};",
+        ids.len()
+    );
+    for (i, h) in ids.iter().enumerate() {
+        let _ = writeln!(s, "/// {}\npub const HOST_{}: u32 = {i};", h.doc, h.name);
+    }
+    s.push_str("/// Every id with the name of the static it stands for, in id order.\n#[rustfmt::skip]\npub const HOST_NAMES: [&str; HOST_COUNT] = [\n");
+    for h in ids {
+        let _ = writeln!(s, "    \"DKRT_{}\",", h.name);
+    }
+    s.push_str("];\n");
+    s
+}
+
 /// A const as Rust text: a magic number in hex, the rest in decimal.
 fn const_value(c: &ConstToml) -> String {
     if c.name.ends_with("_MAGIC") {
@@ -296,6 +405,30 @@ fn rust(abi: &Abi, lays: &[Layout], fns: &[(&FnToml, Sig)], inputs: &AbiInputs) 
         "/// Paths of the selection (`[limits.max] modules` of sdk/sdk.toml).\npub const SEL_MAX: usize = {};",
         inputs.sel_max
     );
+    for (i, h) in abi.host_dir.iter().enumerate() {
+        let _ = writeln!(s, "/// {}\npub const HOST_{}: u32 = {i};", h.doc, h.name);
+    }
+    let _ = writeln!(
+        s,
+        "/// The ids of the host directory this build knows (`[[host_dir]]` of abi.toml).\npub const HOST_COUNT: usize = {};",
+        abi.host_dir.len()
+    );
+    for owner in ["package", "core"] {
+        let ids: Vec<String> = abi
+            .host_dir
+            .iter()
+            .enumerate()
+            .filter(|(_, h)| h.owner == owner)
+            .map(|(i, _)| i.to_string())
+            .collect();
+        let _ = writeln!(
+            s,
+            "/// The ids of the host directory the {owner} fills (`owner = \"{owner}\"` of `[[host_dir]]`).\npub const HOST_{}_OWNED: [u32; {}] = [{}];",
+            owner.to_uppercase(),
+            ids.len(),
+            ids.join(", ")
+        );
+    }
     let _ = writeln!(
         s,
         "/// Provider slots of the boot plan (`[limits.format] provider_max` of sdk/sdk.toml), separate from the selection.\npub const PROVIDER_MAX: usize = {};",
@@ -376,6 +509,16 @@ fn c_header(abi: &Abi, lays: &[Layout], fns: &[(&FnToml, Sig)], inputs: &AbiInpu
         "/* Paths of the selection ([limits.max] modules of sdk/sdk.toml). */\n#define DKRT_SEL_MAX {}",
         inputs.sel_max
     );
+    s.push_str("\n/* Ids of the host directory (`DKRT_HOST_DIR`): the package statics that host tools read, by id. */\n");
+    for (i, h) in abi.host_dir.iter().enumerate() {
+        let _ = writeln!(
+            s,
+            "/* {} */\n#define DKRT_HOST_{} {i}",
+            c_text(&h.doc),
+            h.name
+        );
+    }
+    let _ = writeln!(s, "#define DKRT_HOST_COUNT {}", abi.host_dir.len());
     s.push_str("\n/* Result codes (negative = error), from [load.status] of sdk/sdk.toml. Additive: a code is never renumbered. */\n");
     for (n, code, text) in &inputs.codes {
         let d = format!("#define DKRT_{n} ({code})");
@@ -460,10 +603,13 @@ pub(crate) fn render(text: &str, inputs: &AbiInputs) -> Result<Vec<(String, Stri
     let sizes = size_names(&abi, inputs)?;
     let lays = layouts(&abi, &sizes)?;
     let fns = functions(&abi)?;
+    let ids = host_ids(&abi)?;
     Ok(vec![
         (C_OUT.to_string(), c_header(&abi, &lays, &fns, inputs)),
         (RUST_OUT.to_string(), rust(&abi, &lays, &fns, inputs)),
         (CHECK_OUT.to_string(), check(&fns)),
+        (HOST_TS_OUT.to_string(), host_ts(&abi, ids)),
+        (HOST_RS_OUT.to_string(), host_rs(&abi, ids)),
     ])
 }
 

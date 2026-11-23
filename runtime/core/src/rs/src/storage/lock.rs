@@ -4,7 +4,7 @@
 //! Rules: no `match` on integers (a dense one becomes a jump table, which is not ColdFire code), no `core::fmt`, no slice indexing.
 
 #[cfg(not(test))]
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::store::lease::Leases;
 use dkrt_sdk::store::{self, Entry};
@@ -67,12 +67,12 @@ static mut STORE_LOCK: bool = false;
 
 /// Take the store lock without blocking. False: another task is inside a store operation.
 pub fn try_lock() -> bool {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let free = unsafe { !read_volatile(addr_of!(STORE_LOCK)) };
     if free {
         unsafe { write_volatile(addr_of_mut!(STORE_LOCK), true) };
     }
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     free
 }
 
@@ -99,7 +99,7 @@ pub unsafe fn acquire() -> bool {
             return true;
         }
         if !waits || n >= WAIT_STEPS {
-            crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [0xb5, E_BUSY as u32, 0, 0, 0]);
+            crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [crate::storage::upload_codes::LOCK_BUSY, E_BUSY as u32, 0, 0, 0]);
             return false;
         }
         pause();
@@ -124,14 +124,14 @@ unsafe fn on_midi_task() -> bool {
 }
 
 /// Is the store lock held now (an SDK call or a SysEx command is inside the store)?
-pub fn is_locked() -> bool {
+pub extern "C" fn is_locked() -> bool {
     unsafe { read_volatile(addr_of!(STORE_LOCK)) }
 }
 
 pub fn unlock() {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     unsafe { write_volatile(addr_of_mut!(STORE_LOCK), false) };
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
 }
 
 // ---- read leases --------------------------------------------------------------------------------------------------------------
@@ -148,24 +148,24 @@ pub(crate) fn leases() -> &'static mut Leases {
 /// Lease the data extent (`first`, `size` bytes) of a store file for `owner` (0: an adapter). The caller holds the store lock. The id (> 0), or
 /// `E_NOMEM` when the table (`lease::MAX`) is full: the caller fails its load; it must not wait with the lock held.
 pub fn lease_take(owner: u8, first: u32, size: u32) -> i32 {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let id = leases().take(owner, first, store::sectors_of(size));
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     id
 }
 
 /// Release lease `id` (any task, no lock): 0, or `E_NOT_FOUND`.
 pub fn lease_end(id: i32) -> i32 {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let r = leases().end(id);
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     r
 }
 
 pub(crate) fn lease_drop_owner(owner: u8) {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     leases().drop_owner(owner);
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
 }
 
 /// Is any lease live? (CLEAR refuses then.)

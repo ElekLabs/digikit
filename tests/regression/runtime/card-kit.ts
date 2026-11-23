@@ -8,6 +8,7 @@ import { LOAD_STATUS, STATUS } from '../../../packages/dk-session/src/gen_proto.
 import { emulatorClock, repoRoot, waitClock, type Device, type Session } from '@digi/test-support';
 import { cardStore } from './device-data.ts';
 import { rpc, word } from './guest-access.ts';
+import { installSystemPackage } from './system-package.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { cardOverlay, encodeOverlay, layOver, linkCard, mergeOverlays, overlayFile } from './write-safety.ts';
 
@@ -140,6 +141,8 @@ export interface CardOptions extends Partial<Omit<SelRecord, 'paths'>> {
   drive?: { name: string; file: string }[];
   /** A plus_drive folder that `plusdrive build` scans as it is (the daemon's `card.load` scans a folder the same way); not with `modules` or `drive`. */
   folder?: string;
+  /** `false`: leave `digikit/system.dksp` off the card (a test of a card without the package). Default: the built package is on it, also on a `folder` card. */
+  systemPackage?: false;
   /** Verified DT2 firmware (.syx) that seeds the boot project; omit for none. */
   syx?: string;
   /** Selected store paths, written to both copies. Undefined or null: no record. */
@@ -162,7 +165,10 @@ export async function buildCard(device: Device, o: CardOptions): Promise<string>
   if (!o.base) {
     const seed = path.join(o.dir, `seed-${o.name ?? 'card'}`);
     fs.rmSync(seed, { recursive: true, force: true });
-    if (!o.folder) fs.mkdirSync(path.join(seed, 'digikit'), { recursive: true });
+    // a folder card is the folder's copy plus the package: the caller's folder stays as it is
+    if (o.folder) fs.cpSync(o.folder, seed, { recursive: true });
+    else fs.mkdirSync(path.join(seed, 'digikit'), { recursive: true });
+    if (o.systemPackage !== false) installSystemPackage(seed);
     fs.mkdirSync(dir, { recursive: true });
     for (const m of o.modules ?? []) {
       fs.mkdirSync(path.dirname(path.join(seed, 'digikit', m.name)), { recursive: true });
@@ -174,7 +180,7 @@ export async function buildCard(device: Device, o: CardOptions): Promise<string>
     }
     await exec(
       plusdriveBinary(),
-      ['build', o.folder ?? seed, '-o', out, '--device', device, ...(o.syx ? ['--syx', o.syx] : ['--no-project'])],
+      ['build', seed, '-o', out, '--device', device, ...(o.syx ? ['--syx', o.syx] : ['--no-project'])],
       {
         cwd: repoRoot(),
         timeout: 60_000,
@@ -218,7 +224,7 @@ export interface StoreEntry {
   hash: string;
 }
 
-/** `plusdrive store ls`: the header line (used sectors, version, seq, header copy) and the files with their hash slot. Fails on a card with no store. */
+/** `plusdrive store ls`: the header line (used sectors, version, seq, header copy) and every entry with its hash slot, the system package of a card that carries it included. Fails on a card with no store. */
 export async function storeList(cardImage: string, device: Device): Promise<{ head: string; entries: StoreEntry[] }> {
   const { stdout } = await exec(
     plusdriveBinary(),
@@ -301,7 +307,7 @@ async function words<const F extends readonly string[]>(
   return Object.fromEntries(fields.map((k, i) => [k, values[i]!])) as Record<F[number], number>;
 }
 
-/** `DKRT_BOOT`: the boot's fields, per-module results (signed, `results` has `count` of them), `dspWait` and `stable`. */
+/** `DKRT_BOOT`: the boot's fields, per-module results (signed, `results` has `count` of them), `coreCause` (CORE_*, 0 when the boot is not core-only; the word that was `dsp_wait`) and `stable`. */
 export async function bootInfo(session: Session, plan: RuntimePlan) {
   const d = await words(session, plan, 'DKRT_BOOT', BI_FIELDS);
   const base = planSymbol(plan, 'DKRT_BOOT') + 4 * BI_FIELDS.length;
@@ -326,13 +332,13 @@ export async function bootInfo(session: Session, plan: RuntimePlan) {
     states: states.slice(0, d.count),
     /** What the plan refused each module on (`DkrtBootInfo.detail`). */
     detail: detail.slice(0, d.count),
-    dspWait: tail[SEL_MAX]!,
+    coreCause: tail[SEL_MAX]!,
     stable: tail[SEL_MAX + 1]!,
     reasonName: SAFE_NAMES[d.reason] ?? '?',
   };
 }
 
-/** The offset of `DkrtBootInfo.states` (after the 10 words before `results`, the results, dsp_wait, stable and `needs`; asserted by `abi.toml`'s layout check). */
+/** The offset of `DkrtBootInfo.states` (after the 10 words before `results`, the results, core_cause, stable and `needs`; asserted by `abi.toml`'s layout check). */
 const BI_STATES_AT = 176;
 
 /**

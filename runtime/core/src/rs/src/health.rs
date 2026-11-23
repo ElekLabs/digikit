@@ -1,10 +1,11 @@
 //! The health report: the measurements of `core/health` with the arena and DSP area (`dkrt_health`), and the block clock.
 
 use dkrt_abi::platform::Platform;
-use crate::{fw_blocks, has_dsp};
+use crate::{platform::fw_blocks, platform::has_dsp};
 use crate::platform::st;
 use crate::state::init_once;
-use crate::{arena, dsp, store};
+use crate::{arena, store};
+use crate::hooks;
 use dkrt_sdk::*;
 
 extern "C" {
@@ -90,9 +91,9 @@ pub unsafe extern "C" fn dkrt_health(out: *mut DkrtHealth) {
     init_once();
     dkrt_health_light(&mut *out, true);
     store::figures(&mut *out);
-    (*out).card_sectors = crate::PLATFORM.card_sectors();
+    (*out).card_sectors = crate::platform::PLATFORM.card_sectors();
     (*out).card_state = crate::card::state();
-    let g = crate::storage::card_guard::stats(&crate::PLATFORM);
+    let g = crate::storage::card_guard::stats(&crate::platform::PLATFORM);
     (*out).guard_refused_writes = g.refused_writes;
     (*out).guard_refused_erases = g.refused_erases;
 }
@@ -107,17 +108,17 @@ pub unsafe fn dkrt_health_light(o: &mut DkrtHealth, walk_heap: bool) {
     o.magic = HEALTH_MAGIC;
     o.version = 5;
     o.flags = 0;
-    o.arena_total = s.arena_hi - s.arena_lo;
+    o.arena_total = s.arena.hi - s.arena.lo;
     o.arena_free = afree;
     o.arena_largest = alargest;
-    o.dsp_area_total = dsp::area_bytes();
+    let area = hooks::dsp_area();
+    o.dsp_area_total = area.total;
     if !has_dsp() {
         o.flags |= HEALTH_NO_DSP;
     }
-    let (dfree, dlargest) = dsp::area_stats();
-    o.dsp_area_free = dfree;
-    o.dsp_area_largest = dlargest;
-    let p = crate::profile();
+    o.dsp_area_free = area.free;
+    o.dsp_area_largest = area.largest;
+    let p = crate::platform::profile();
     o.dsp_period = p.dsp_block_cycles;
     o.store_total = if p.has_store { store::layout().limit() / 2 } else { 0 };
     if health_fn(health_read) == 0 {

@@ -288,6 +288,7 @@ pub mod proto {
     pub const CMD_RELOAD_STATE: u8 = 0x07;
     pub const CMD_LOAD: u8 = 0x08;
     pub const CMD_UNLOAD: u8 = 0x09;
+    pub const CMD_RETRY: u8 = 0x0b;
     pub const CMD_BEGIN: u8 = 0x10;
     pub const CMD_DATA: u8 = 0x11;
     pub const CMD_END: u8 = 0x12;
@@ -372,8 +373,9 @@ pub mod proto {
     pub const CAPK_SEND_SLOTS: u8 = 14;
     pub const CAPK_DSP_COST: u8 = 15;
     pub const CAPK_DSP_VOICES: u8 = 16;
+    pub const CAPK_PACKAGE: u8 = 17;
     /// Every CAPACITY kind in the order of its number: the runtime answers each one.
-    pub const CAP_KINDS: [u8; 16] = [
+    pub const CAP_KINDS: [u8; 17] = [
         CAPK_MODULES,
         CAPK_SELECTION,
         CAPK_ARENA,
@@ -390,9 +392,10 @@ pub mod proto {
         CAPK_SEND_SLOTS,
         CAPK_DSP_COST,
         CAPK_DSP_VOICES,
+        CAPK_PACKAGE,
     ];
     /// The `name_hash` of `cap_<kind>` (the kind name in lower case) for each kind of `CAP_KINDS`: the name of the `[[info]]` entry of the image's info table that gives the kind's limit when no service answers (docs/PATCHING.md).
-    pub const CAP_INFO_HASHES: [u32; 16] = [
+    pub const CAP_INFO_HASHES: [u32; 17] = [
         0x88b64095,
         0x4905a3e2,
         0x60285193,
@@ -409,6 +412,7 @@ pub mod proto {
         0x8a4e9248,
         0x4ebaf5d9,
         0xcb8f5ab7,
+        0xb6dc3d64,
     ];
     /// The most a kind's limit may report (`ceiling` of the kind, a key of `[limits.max]`): the size of the arrays that hold its rows. `u32::MAX`: none.
     pub const CAPMAX_MACHINE_ROWS: u32 = 8;
@@ -418,7 +422,7 @@ pub mod proto {
     pub const CAPMAX_FX_SLOTS: u32 = 4;
     pub const CAPMAX_MAP_ENTRIES: u32 = 8;
     pub const CAPMAX_SEND_SLOTS: u32 = 2;
-    pub const CAP_CEILING: [u32; 16] = [
+    pub const CAP_CEILING: [u32; 17] = [
         4294967295,
         4294967295,
         4294967295,
@@ -433,6 +437,7 @@ pub mod proto {
         4294967295,
         4294967295,
         2,
+        4294967295,
         4294967295,
         4294967295,
     ];
@@ -1211,13 +1216,16 @@ pub mod api {
     pub type DkDebugSpeedFlagsFn = unsafe extern "C" fn(clear: u32, set: u32) -> u32;
 }
 
-/// The imports that another module provides (`[[import]] requires`): the external functions, the stubs for an absent module and
-/// the table of both. Expand it once in the runtime's object; its symbols must be in the `optional` list of the runtime's module.toml.
+/// How many imports another module provides (`[[import]] requires`): the length of the resident table's `optional` row.
+pub const OPTIONAL_COUNT: usize = 39;
+
+/// The resident core's side of the imports that another module provides: the external functions and the address of each (null in a host test). Expand it once in the
+/// runtime's object; its symbols must be in the `optional` list of the runtime's module.toml.
 #[macro_export]
-macro_rules! optional_imports {
+macro_rules! optional_links {
     () => {
         #[allow(dead_code, trivial_numeric_casts)]
-        pub mod optional {
+        pub mod optional_link {
             #[allow(unused_imports)]
             use $crate::api::*;
             extern "C" {
@@ -1262,6 +1270,58 @@ macro_rules! optional_imports {
                 pub fn dk_sdhc_large_ctl(sl: *mut u8, key: u32, val: u32) -> u32;
             }
 
+            /// The address of each import, in the order of the package's `optional::table`: 0 when the module is not in the image.
+            pub const ADDRESSES: [*const (); 39] = [
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_new as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_confirm as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_choice as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_toast as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_tick as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_settings_row as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_view_open as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_view_close as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_text_input as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_open as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_open as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_close as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_select as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_refresh as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_is_open as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_add_text as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_add_action as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_add_submenu as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_add_toggle as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_add_value as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_check as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_ui_menu_checked as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_input_open as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_input_key as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_input_turn as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_usb_bulk_open as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_usb_bulk_enable as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_usb_bulk_disable as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_usb_bulk_take as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_usb_bulk_release as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_usb_bulk_send as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_usb_bulk_state as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_usb_bulk_takeover as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_usb_bulk_giveback as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_usb_bulk_ring as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_dsp_link_open as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_dsp_link_set_tick as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_sdhc_large_open as *const () },
+                if cfg!(test) { core::ptr::null() } else { dk_sdhc_large_ctl as *const () },
+            ];
+        }
+    };
+}
+
+/// The package's side: the stubs for an absent module and the table of the imports. The addresses come from the resident table (`optional_links!`).
+#[macro_export]
+macro_rules! optional_imports {
+    () => {
+        #[allow(dead_code, trivial_numeric_casts)]
+        pub mod optional {
             /// What an absent module's import calls: the failure value of the API.
             pub mod absent {
                 #[allow(unused_imports)]
@@ -1307,48 +1367,48 @@ macro_rules! optional_imports {
                 pub unsafe extern "C" fn dk_sdhc_large_ctl(_a0: *mut u8, _a1: u32, _a2: u32) -> u32 { 0 as _ }
             }
 
-            /// (name, address from the module or 0, address of the stub or 0, the module that provides it)
-            pub fn table() -> [(&'static str, usize, usize, &'static str); 39] {
+            /// (name, address from the module or 0, address of the stub or 0, the module that provides it); `addresses` is the resident table's row.
+            pub fn table(addresses: &[*const (); 39]) -> [(&'static str, usize, usize, &'static str); 39] {
                 [
-                    ("dk_ui_menu_new", core::hint::black_box(dk_ui_menu_new as usize), absent::dk_ui_menu_new as usize, "core/ui"),
-                    ("dk_ui_confirm", core::hint::black_box(dk_ui_confirm as usize), absent::dk_ui_confirm as usize, "core/ui"),
-                    ("dk_ui_choice", core::hint::black_box(dk_ui_choice as usize), absent::dk_ui_choice as usize, "core/ui"),
-                    ("dk_ui_toast", core::hint::black_box(dk_ui_toast as usize), absent::dk_ui_toast as usize, "core/ui"),
-                    ("dk_ui_tick", core::hint::black_box(dk_ui_tick as usize), absent::dk_ui_tick as usize, "core/ui"),
-                    ("dk_ui_settings_row", core::hint::black_box(dk_ui_settings_row as usize), absent::dk_ui_settings_row as usize, "core/ui"),
-                    ("dk_ui_view_open", core::hint::black_box(dk_ui_view_open as usize), absent::dk_ui_view_open as usize, "core/ui"),
-                    ("dk_ui_view_close", core::hint::black_box(dk_ui_view_close as usize), absent::dk_ui_view_close as usize, "core/ui"),
-                    ("dk_ui_text_input", core::hint::black_box(dk_ui_text_input as usize), absent::dk_ui_text_input as usize, "core/ui"),
-                    ("dk_ui_open", core::hint::black_box(dk_ui_open as usize), absent::dk_ui_open as usize, "core/ui"),
-                    ("dk_ui_menu_open", core::hint::black_box(dk_ui_menu_open as usize), absent::dk_ui_menu_open as usize, "core/ui"),
-                    ("dk_ui_menu_close", core::hint::black_box(dk_ui_menu_close as usize), absent::dk_ui_menu_close as usize, "core/ui"),
-                    ("dk_ui_menu_select", core::hint::black_box(dk_ui_menu_select as usize), absent::dk_ui_menu_select as usize, "core/ui"),
-                    ("dk_ui_menu_refresh", core::hint::black_box(dk_ui_menu_refresh as usize), absent::dk_ui_menu_refresh as usize, "core/ui"),
-                    ("dk_ui_menu_is_open", core::hint::black_box(dk_ui_menu_is_open as usize), absent::dk_ui_menu_is_open as usize, "core/ui"),
-                    ("dk_ui_menu_add_text", core::hint::black_box(dk_ui_menu_add_text as usize), absent::dk_ui_menu_add_text as usize, "core/ui"),
-                    ("dk_ui_menu_add_action", core::hint::black_box(dk_ui_menu_add_action as usize), absent::dk_ui_menu_add_action as usize, "core/ui"),
-                    ("dk_ui_menu_add_submenu", core::hint::black_box(dk_ui_menu_add_submenu as usize), absent::dk_ui_menu_add_submenu as usize, "core/ui"),
-                    ("dk_ui_menu_add_toggle", core::hint::black_box(dk_ui_menu_add_toggle as usize), absent::dk_ui_menu_add_toggle as usize, "core/ui"),
-                    ("dk_ui_menu_add_value", core::hint::black_box(dk_ui_menu_add_value as usize), absent::dk_ui_menu_add_value as usize, "core/ui"),
-                    ("dk_ui_menu_check", core::hint::black_box(dk_ui_menu_check as usize), absent::dk_ui_menu_check as usize, "core/ui"),
-                    ("dk_ui_menu_checked", core::hint::black_box(dk_ui_menu_checked as usize), absent::dk_ui_menu_checked as usize, "core/ui"),
-                    ("dk_input_open", core::hint::black_box(dk_input_open as usize), absent::dk_input_open as usize, "core/input"),
-                    ("dk_input_key", core::hint::black_box(dk_input_key as usize), absent::dk_input_key as usize, "core/input"),
-                    ("dk_input_turn", core::hint::black_box(dk_input_turn as usize), absent::dk_input_turn as usize, "core/input"),
-                    ("dk_usb_bulk_open", core::hint::black_box(dk_usb_bulk_open as usize), absent::dk_usb_bulk_open as usize, "core/usb-bulk"),
-                    ("dk_usb_bulk_enable", core::hint::black_box(dk_usb_bulk_enable as usize), absent::dk_usb_bulk_enable as usize, "core/usb-bulk"),
-                    ("dk_usb_bulk_disable", core::hint::black_box(dk_usb_bulk_disable as usize), absent::dk_usb_bulk_disable as usize, "core/usb-bulk"),
-                    ("dk_usb_bulk_take", core::hint::black_box(dk_usb_bulk_take as usize), absent::dk_usb_bulk_take as usize, "core/usb-bulk"),
-                    ("dk_usb_bulk_release", core::hint::black_box(dk_usb_bulk_release as usize), absent::dk_usb_bulk_release as usize, "core/usb-bulk"),
-                    ("dk_usb_bulk_send", core::hint::black_box(dk_usb_bulk_send as usize), absent::dk_usb_bulk_send as usize, "core/usb-bulk"),
-                    ("dk_usb_bulk_state", core::hint::black_box(dk_usb_bulk_state as usize), absent::dk_usb_bulk_state as usize, "core/usb-bulk"),
-                    ("dk_usb_bulk_takeover", core::hint::black_box(dk_usb_bulk_takeover as usize), absent::dk_usb_bulk_takeover as usize, "core/usb-bulk"),
-                    ("dk_usb_bulk_giveback", core::hint::black_box(dk_usb_bulk_giveback as usize), absent::dk_usb_bulk_giveback as usize, "core/usb-bulk"),
-                    ("dk_usb_bulk_ring", core::hint::black_box(dk_usb_bulk_ring as usize), absent::dk_usb_bulk_ring as usize, "core/usb-bulk"),
-                    ("dk_dsp_link_open", core::hint::black_box(dk_dsp_link_open as usize), absent::dk_dsp_link_open as usize, "core/dsp-link"),
-                    ("dk_dsp_link_set_tick", core::hint::black_box(dk_dsp_link_set_tick as usize), absent::dk_dsp_link_set_tick as usize, "core/dsp-link"),
-                    ("dk_sdhc_large_open", core::hint::black_box(dk_sdhc_large_open as usize), absent::dk_sdhc_large_open as usize, "core/sdhc-large"),
-                    ("dk_sdhc_large_ctl", core::hint::black_box(dk_sdhc_large_ctl as usize), absent::dk_sdhc_large_ctl as usize, "core/sdhc-large"),
+                    ("dk_ui_menu_new", addresses[0] as usize, absent::dk_ui_menu_new as usize, "core/ui"),
+                    ("dk_ui_confirm", addresses[1] as usize, absent::dk_ui_confirm as usize, "core/ui"),
+                    ("dk_ui_choice", addresses[2] as usize, absent::dk_ui_choice as usize, "core/ui"),
+                    ("dk_ui_toast", addresses[3] as usize, absent::dk_ui_toast as usize, "core/ui"),
+                    ("dk_ui_tick", addresses[4] as usize, absent::dk_ui_tick as usize, "core/ui"),
+                    ("dk_ui_settings_row", addresses[5] as usize, absent::dk_ui_settings_row as usize, "core/ui"),
+                    ("dk_ui_view_open", addresses[6] as usize, absent::dk_ui_view_open as usize, "core/ui"),
+                    ("dk_ui_view_close", addresses[7] as usize, absent::dk_ui_view_close as usize, "core/ui"),
+                    ("dk_ui_text_input", addresses[8] as usize, absent::dk_ui_text_input as usize, "core/ui"),
+                    ("dk_ui_open", addresses[9] as usize, absent::dk_ui_open as usize, "core/ui"),
+                    ("dk_ui_menu_open", addresses[10] as usize, absent::dk_ui_menu_open as usize, "core/ui"),
+                    ("dk_ui_menu_close", addresses[11] as usize, absent::dk_ui_menu_close as usize, "core/ui"),
+                    ("dk_ui_menu_select", addresses[12] as usize, absent::dk_ui_menu_select as usize, "core/ui"),
+                    ("dk_ui_menu_refresh", addresses[13] as usize, absent::dk_ui_menu_refresh as usize, "core/ui"),
+                    ("dk_ui_menu_is_open", addresses[14] as usize, absent::dk_ui_menu_is_open as usize, "core/ui"),
+                    ("dk_ui_menu_add_text", addresses[15] as usize, absent::dk_ui_menu_add_text as usize, "core/ui"),
+                    ("dk_ui_menu_add_action", addresses[16] as usize, absent::dk_ui_menu_add_action as usize, "core/ui"),
+                    ("dk_ui_menu_add_submenu", addresses[17] as usize, absent::dk_ui_menu_add_submenu as usize, "core/ui"),
+                    ("dk_ui_menu_add_toggle", addresses[18] as usize, absent::dk_ui_menu_add_toggle as usize, "core/ui"),
+                    ("dk_ui_menu_add_value", addresses[19] as usize, absent::dk_ui_menu_add_value as usize, "core/ui"),
+                    ("dk_ui_menu_check", addresses[20] as usize, absent::dk_ui_menu_check as usize, "core/ui"),
+                    ("dk_ui_menu_checked", addresses[21] as usize, absent::dk_ui_menu_checked as usize, "core/ui"),
+                    ("dk_input_open", addresses[22] as usize, absent::dk_input_open as usize, "core/input"),
+                    ("dk_input_key", addresses[23] as usize, absent::dk_input_key as usize, "core/input"),
+                    ("dk_input_turn", addresses[24] as usize, absent::dk_input_turn as usize, "core/input"),
+                    ("dk_usb_bulk_open", addresses[25] as usize, absent::dk_usb_bulk_open as usize, "core/usb-bulk"),
+                    ("dk_usb_bulk_enable", addresses[26] as usize, absent::dk_usb_bulk_enable as usize, "core/usb-bulk"),
+                    ("dk_usb_bulk_disable", addresses[27] as usize, absent::dk_usb_bulk_disable as usize, "core/usb-bulk"),
+                    ("dk_usb_bulk_take", addresses[28] as usize, absent::dk_usb_bulk_take as usize, "core/usb-bulk"),
+                    ("dk_usb_bulk_release", addresses[29] as usize, absent::dk_usb_bulk_release as usize, "core/usb-bulk"),
+                    ("dk_usb_bulk_send", addresses[30] as usize, absent::dk_usb_bulk_send as usize, "core/usb-bulk"),
+                    ("dk_usb_bulk_state", addresses[31] as usize, absent::dk_usb_bulk_state as usize, "core/usb-bulk"),
+                    ("dk_usb_bulk_takeover", addresses[32] as usize, absent::dk_usb_bulk_takeover as usize, "core/usb-bulk"),
+                    ("dk_usb_bulk_giveback", addresses[33] as usize, absent::dk_usb_bulk_giveback as usize, "core/usb-bulk"),
+                    ("dk_usb_bulk_ring", addresses[34] as usize, absent::dk_usb_bulk_ring as usize, "core/usb-bulk"),
+                    ("dk_dsp_link_open", addresses[35] as usize, absent::dk_dsp_link_open as usize, "core/dsp-link"),
+                    ("dk_dsp_link_set_tick", addresses[36] as usize, absent::dk_dsp_link_set_tick as usize, "core/dsp-link"),
+                    ("dk_sdhc_large_open", addresses[37] as usize, absent::dk_sdhc_large_open as usize, "core/sdhc-large"),
+                    ("dk_sdhc_large_ctl", addresses[38] as usize, absent::dk_sdhc_large_ctl as usize, "core/sdhc-large"),
                 ]
             }
         }

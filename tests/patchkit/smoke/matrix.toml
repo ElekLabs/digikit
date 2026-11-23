@@ -28,17 +28,6 @@ device = "dn2"
 firmware = "1.12"
 modules = ["test/cf-demo"]
 
-# SETTINGS > DIGIKIT (finding 28)
-[[cell]]
-device = "dt2"
-firmware = "1.17"
-modules = ["core/digikit-menu"]
-
-[[cell]]
-device = "dn2"
-firmware = "1.12"
-modules = ["core/digikit-menu"]
-
 # The DSP code channel (finding 31): hooks the frame sender and the DSP's block handler; idle it must change nothing visible.
 [[cell]]
 device = "dt2"
@@ -55,3 +44,17 @@ modules = ["core/dsp-link"]
 device = "dt2"
 firmware = "1.17"
 modules = ["core/fx"]
+
+# SETTINGS > DIGIKIT in the system package's menu (finding 28; the cards carry digikit/system.dksp): the tour of
+# runtime/apps/digikit-menu/tests/menu.toml walks ABOUT, MEMORY and MODULES on the real firmware.
+# The MEMORY page's CPU row is the module arena (CAPACITY kind ARENA), not processor load. The system package has its own block (PACKAGE_BYTES, CAPACITY kind PACKAGE),
+# so with no module loaded the row reads 0% and MODS 0/8 on both devices. Not load-dependent; it changes only when the arena's use changes.
+[[cell]]
+device = "dt2"
+firmware = "1.17"
+modules = ["core/digikit-menu"]
+
+[[cell]]
+device = "dn2"
+firmware = "1.12"
+modules = ["core/digikit-menu"]

@@ -13,7 +13,7 @@ import {
   sweepMachineList,
   type PanelMachine,
 } from './project-kit.ts';
-import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
+import { packageSymbol, planSymbol, type RuntimePlan } from './runtime-plan.ts';
 
 /**
  * The ColdFire memory audit (port of tools/patchkit/pk_digikit_memaudit.py).
@@ -77,11 +77,13 @@ export function guardPlan(
   plan: RuntimePlan,
   modules: Pick<DkModule, 'cf_base' | 'cf_size'>[],
   arena: [number, number],
+  /** Code that may write like the runtime's own: the system package's block. */
+  extraCode: Owned[] = [],
 ): GuardPlan {
   let protect: Range[] = freeRegions(device, firmware).map((r) => ({ label: r.name, lo: r.lo, hi: r.hi }));
   protect = cutRanges(protect, arena[0], arena[1], 'arena');
   for (const m of modules) protect = cutRanges(protect, m.cf_base, m.cf_base + m.cf_size);
-  return { protect: protect.filter((r) => r.hi > r.lo), code: patchCode(plan, arena[0]) };
+  return { protect: protect.filter((r) => r.hi > r.lo), code: [...patchCode(plan, arena[0]), ...extraCode] };
 }
 
 /** The code a PC belongs to: a module's block, a patch object (the runtime included), else the stock firmware. */
@@ -106,7 +108,7 @@ export async function providerBlocks(
   session: Session,
   plan: RuntimePlan,
 ): Promise<Pick<DkModule, 'name' | 'cf_base' | 'cf_size'>[]> {
-  const table = planSymbol(plan, 'DKRT_PROVIDERS');
+  const table = await packageSymbol(session, plan, 'PROVIDERS');
   const RECORD = 52; // bytes of one `Module` record
   const out: Pick<DkModule, 'name' | 'cf_base' | 'cf_size'>[] = [];
   for (let j = 0; j < PROVIDER_MAX; j++) {
@@ -121,6 +123,19 @@ export async function providerBlocks(
     });
   }
   return out;
+}
+
+/**
+ * The block the core placed the system package in (its image, relocation table and bss) in `DKRT_PKG`, apart from the arena. The core publishes it in the host directory
+ * (`PACKAGE_LO`, `PACKAGE_HI`). The package is the runtime's own code, so its stores are allowed, and its statics lie in the block, which is not a stray target.
+ */
+export async function packageBlock(
+  session: Session,
+  plan: RuntimePlan,
+): Promise<Pick<DkModule, 'name' | 'cf_base' | 'cf_size'>> {
+  const lo = await packageSymbol(session, plan, 'PACKAGE_LO');
+  const hi = await packageSymbol(session, plan, 'PACKAGE_HI');
+  return { name: 'system package', cf_base: lo, cf_size: hi - lo };
 }
 
 /** The current bytes of every module's block, read from guest memory. */

@@ -1,10 +1,8 @@
 import zlib from 'node:zlib';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
-import { overlayArgs } from '@digi/regression/runtime/card-kit.ts';
 import { cardStore, deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import type { Device } from '@digi/test-support';
-import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 
 /** Shared by settings.device.test.ts, settings-copies.device.test.ts and settings-cards.device.test.ts (one file per group of independent tests). */
@@ -12,7 +10,6 @@ import { RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 export const ROUTE = 'fx/route/test/dyn-fx-gain';
 export const SEND = 'fx/send/test/dyn-fx-gain';
 export const AMOUNTS = Buffer.from([0, 127, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100]);
-export const E_BAD_STORE = -2;
 export const DELAY_MS = 2000; // the runtime writes the record this long after the last change
 export const SECTOR = 512;
 export const MODULE = 'test/c-demo';
@@ -41,7 +38,7 @@ export const torn = (b: Buffer) => {
 
 export const suiteName = (device: Device) => `${device.toUpperCase()} ${FIRMWARE[device]} settings store`;
 
-/** The card rig of a settings describe block, with the store layout of the device and the patchkit dump helpers. */
+/** The card rig of a settings describe block, with the store layout of the device. */
 export function settingsCase(device: Device) {
   const s = cardStore(device);
   const first = s.first;
@@ -61,8 +58,5 @@ export function settingsCase(device: Device) {
   // The boot counts itself in the selection record (a boot writes copy B, the stable-period clear writes A), so the selection sectors are no
   // evidence about the settings store: these tests look at every other store sector.
   const written = async () => (await kit.storeWrites()).filter((x) => x !== s.selA && x !== s.selB);
-  const dump = async (card: string, ...flags: string[]) =>
-    (await patchkit(['store', 'dump', card, ...overlayArgs(card), '--device', device, ...flags])).stdout;
-  const dumpJson = async (card: string) => JSON.parse(await dump(card, '--json'));
-  return { s, first, headerB, limit, sectors, settingsArea, kit, written, dump, dumpJson };
+  return { s, first, headerB, limit, sectors, settingsArea, kit, written };
 }

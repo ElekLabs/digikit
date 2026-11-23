@@ -33,6 +33,8 @@
 #define DKRT_CAP_MAX 20
 /* The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it). */
 #define DKRT_ARENA_BYTES 524288
+/* The system package block: a static array of the runtime's bss, outside the module arena. Stage 1 places the package in it (a body whose placed size is larger is refused, by patchkit at build and by stage 1 at load). */
+#define DKRT_PACKAGE_BYTES 327680
 /* The staging buffer of a .dkm file and of the store directory: a static array of the runtime's bss ([limits.max] stage_bytes of sdk/sdk.toml). */
 #define DKRT_STAGE_BYTES 131072
 /* Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start). */
@@ -87,10 +89,26 @@
 #define DKRT_SAFE_PANIC 5
 /* DkrtBootInfo.reason: no selection copy is valid and a copy could not be read; no modules load and the selection is not written during this boot. */
 #define DKRT_SAFE_READ 6
+/* DkrtBootInfo.reason: the resident core runs alone (no system package, no modules, no DIGIKIT menu); DkrtBootInfo.core_cause says why. The resident store and the upload commands still answer. */
+#define DKRT_SAFE_CORE_ONLY 7
+/* DkrtBootInfo.core_cause: this boot is not core-only. */
+#define DKRT_CORE_NONE 0
+/* DkrtBootInfo.core_cause: the boot counter reached its second threshold (boots kept crashing, in safe mode too); writing the package or a RETRY command clears it. */
+#define DKRT_CORE_CRASHES 1
+/* DkrtBootInfo.core_cause: the card has no digikit/system.dksp. */
+#define DKRT_CORE_MISSING 2
+/* DkrtBootInfo.core_cause: the package file is of another format, or asks for a resident table this core does not have, or the core refused its table. */
+#define DKRT_CORE_INCOMPATIBLE 3
+/* DkrtBootInfo.core_cause: the package file is not whole (too short, another size than its header says, a body that does not match its hash, a relocation outside the image, or no room for it in the arena). */
+#define DKRT_CORE_DAMAGED 4
+/* DkrtBootInfo.core_cause: the card could not be read for the package; the next boot asks again. */
+#define DKRT_CORE_UNREADABLE 5
 /* Rows of DkrtDiag.fault_text. */
 #define DKRT_FAULT_ROWS 4
 /* Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode. */
 #define DKRT_SAFE_AFTER 2
+/* Boots in a row that did not stay up for STABLE_BLOCKS after which the next one runs the resident core only (no system package): the crashes went on in safe mode, so the package or the core is the likely cause. */
+#define DKRT_CORE_ONLY_AFTER 4
 /* The stable period: DSP blocks (1500 per second) of UI loop after which the boot counter is cleared (30 seconds). */
 #define DKRT_STABLE_BLOCKS 45000
 /* DkrtDiag.card_state: not checked. */
@@ -105,6 +123,10 @@
 #define DKRT_CARD_UNREADABLE 4
 /* DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store. */
 #define DKRT_CARD_TOO_SMALL 5
+/* HostDir.magic, "DKHD" (the host directory `DKRT_HOST_DIR`). */
+#define DKRT_HOST_DIR_MAGIC 0x44484b44u
+/* HostDir.ready once the package has attached and every entry is filled ("REDY"), written last by the core; 0 before (cleared, or the package still starting). */
+#define DKRT_HOST_DIR_READY_MAGIC 0x52454459u
 /* DkrtDiag.magic, "DIAG". */
 #define DKRT_DIAG_MAGIC 0x44494147u
 /* Store leases (dkrt_store_lease) that can be live at once, RAM only: a reboot clears them. The sample pool takes one per request and one per peak-window step (one at a time); its request count plus a reserve of 8 must fit (checked at compile time in the adapter). */
@@ -131,6 +153,69 @@
 #define DKRT_FIT_MEM 8
 /* Paths of the selection ([limits.max] modules of sdk/sdk.toml). */
 #define DKRT_SEL_MAX 8
+
+/* Ids of the host directory (`DKRT_HOST_DIR`): the package statics that host tools read, by id. */
+/* DKRT_DSP: the DSP loader's placement table (module ranges in the DSP area). */
+#define DKRT_HOST_DSP 0
+/* DKRT_PROVIDERS: the records of the loaded service files (the layout of the module records of DKRT_STATE, without its header). */
+#define DKRT_HOST_PROVIDERS 1
+/* DKRT_TICKS: the tick counter of each module record. */
+#define DKRT_HOST_TICKS 2
+/* DKRT_TABLE_BAD: the byte that says the firmware's tables changed under the runtime (0: intact; the top byte of its word). */
+#define DKRT_HOST_TABLE_BAD 3
+/* The first byte of the arena block the core placed the package in (its image, relocation table and bss). */
+#define DKRT_HOST_PACKAGE_LO 4
+/* One past the last byte of that block. */
+#define DKRT_HOST_PACKAGE_HI 5
+/* DK_LOAD of the DIGIKIT menu: the MODULES page's rows as text (40 rows of 24 bytes). */
+#define DKRT_HOST_MENU_LOAD 6
+/* DK_LOAD_N of the DIGIKIT menu: the number of rows in MENU_LOAD. */
+#define DKRT_HOST_MENU_LOAD_N 7
+/* DK_POPUP of the DIGIKIT menu: the title of the last dialog the menu opened. */
+#define DKRT_HOST_MENU_POPUP 8
+/* DK_POPUP_TEXT of the DIGIKIT menu: the text of the last dialog the menu opened. */
+#define DKRT_HOST_MENU_POPUP_TEXT 9
+/* DK_POPUPS of the DIGIKIT menu: how many dialogs the menu opened. */
+#define DKRT_HOST_MENU_POPUPS 10
+/* DK_ABOUT of the DIGIKIT menu: the ABOUT page's rows as text (24 rows of 24 bytes). */
+#define DKRT_HOST_MENU_ABOUT 11
+/* DK_ABOUT_N of the DIGIKIT menu: the number of rows in MENU_ABOUT. */
+#define DKRT_HOST_MENU_ABOUT_N 12
+/* DK_PANEL of the DIGIKIT menu: the rows of the last side panel as text (4 rows of 24 bytes). */
+#define DKRT_HOST_MENU_PANEL 13
+/* DK_PANEL_N of the DIGIKIT menu: the number of rows in MENU_PANEL. */
+#define DKRT_HOST_MENU_PANEL_N 14
+/* DK_MEM of the DIGIKIT menu: the MEMORY page's rows as text (8 rows of 24 bytes). */
+#define DKRT_HOST_MENU_MEM 15
+/* DK_MEM_N of the DIGIKIT menu: the number of rows in MENU_MEM. */
+#define DKRT_HOST_MENU_MEM_N 16
+/* TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row. */
+#define DKRT_HOST_MENU_TICK 17
+/* DK_FXR_PEND of the DIGIKIT menu: the pending routes of the loaded effects (1 master, 2 send). */
+#define DKRT_HOST_MENU_FXR_PEND 18
+/* DK_FXR_SET of the DIGIKIT menu: the result of the last route write (`dkrt_settings_put`). */
+#define DKRT_HOST_MENU_FXR_SET 19
+/* DK_FXR_FLUSH of the DIGIKIT menu: the result of the last settings flush. */
+#define DKRT_HOST_MENU_FXR_FLUSH 20
+/* DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran. */
+#define DKRT_HOST_MENU_APPLIES 21
+/* DK_ROUTE_N of the DIGIKIT menu: the number of routes the last ROUTE... choice offered. */
+#define DKRT_HOST_MENU_ROUTE_N 22
+/* DK_ROUTE_ITEM of the DIGIKIT menu: the routes the last ROUTE... choice offered (1 master, 2 send), in the order shown. */
+#define DKRT_HOST_MENU_ROUTE_ITEM 23
+/* LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads. */
+#define DKRT_HOST_MENU_LOADED 24
+/* DK_LINES of the DIGIKIT menu: the HEALTH page's rows as text (12 rows of 24 bytes). */
+#define DKRT_HOST_MENU_LINES 25
+/* DK_REDRAWS of the DIGIKIT menu: how many times the HEALTH page redrew. */
+#define DKRT_HOST_MENU_REDRAWS 26
+/* DK_POLLS of the DIGIKIT menu: how many times the HEALTH page polled the runtime. */
+#define DKRT_HOST_MENU_POLLS 27
+/* DK_HEALTH of the DIGIKIT menu: the last DkrtHealth the HEALTH page read. */
+#define DKRT_HOST_MENU_HEALTH 28
+/* DK_HEALTH_MENU of the DIGIKIT menu: the HEALTH page's menu object (the firmware's view is the pointer at +4). */
+#define DKRT_HOST_MENU_HEALTH_MENU 29
+#define DKRT_HOST_COUNT 30
 
 /* Result codes (negative = error), from [load.status] of sdk/sdk.toml. Additive: a code is never renumbered. */
 #define DKRT_E_NOT_FOUND (-1)            /* no store, or no such file or module */
@@ -222,6 +307,7 @@
 #define DKRT_CAPK_SEND_SLOTS 14
 #define DKRT_CAPK_DSP_COST 15
 #define DKRT_CAPK_DSP_VOICES 16
+#define DKRT_CAPK_PACKAGE 17
 
 /* dkrt_status result. The caller owns the memory; the layout only grows at the end. */
 typedef struct DkrtStatus {
@@ -378,7 +464,7 @@ typedef struct DkrtBootInfo {
     uint32_t loaded;                             /* how many of them loaded without an error */
     uint32_t ui_reached;                         /* 1 once the UI loop has run (the boot counter is back to 0) */
     int32_t results[DKRT_SEL_MAX];               /* OK, a negative code, or LOADING (the CF part is live, the DSP part is still going) per selected module, in selection order */
-    uint32_t dsp_wait;                           /* reserved (0): the boot does not wait for DSP code */
+    uint32_t core_cause;                         /* CORE_* why the resident core runs alone (reason is SAFE_CORE_ONLY); CORE_NONE (0) otherwise. This was a reserved word (the boot never waited for DSP code), so a reader of the older layout sees 0 in a normal boot */
     uint32_t stable;                             /* 1 once the boot counter is back to 0: after STABLE_BLOCKS DSP blocks of UI loop in a normal boot, at the first UI-loop pass in a safe boot */
     uint8_t needs[DKRT_SEL_MAX][DKRT_NEEDS_LEN]; /* per selected module with result E_IMPORT: the first module its imports need that is not in the image, without the `core/` prefix (usb-bulk); empty otherwise */
     uint8_t states[DKRT_SEL_MAX];                /* per selected module: its STATE_* ([load.state] of sdk/sdk.toml); a selection index at or above count is STATE_SELECTED */
@@ -578,7 +664,7 @@ _Static_assert(offsetof(DkrtBootInfo, count) == 28, "DkrtBootInfo.count");
 _Static_assert(offsetof(DkrtBootInfo, loaded) == 32, "DkrtBootInfo.loaded");
 _Static_assert(offsetof(DkrtBootInfo, ui_reached) == 36, "DkrtBootInfo.ui_reached");
 _Static_assert(offsetof(DkrtBootInfo, results) == 40, "DkrtBootInfo.results");
-_Static_assert(offsetof(DkrtBootInfo, dsp_wait) == 72, "DkrtBootInfo.dsp_wait");
+_Static_assert(offsetof(DkrtBootInfo, core_cause) == 72, "DkrtBootInfo.core_cause");
 _Static_assert(offsetof(DkrtBootInfo, stable) == 76, "DkrtBootInfo.stable");
 _Static_assert(offsetof(DkrtBootInfo, needs) == 80, "DkrtBootInfo.needs");
 _Static_assert(offsetof(DkrtBootInfo, states) == 176, "DkrtBootInfo.states");
@@ -759,5 +845,8 @@ int32_t dkrt_aux_run(uintptr_t f, uint8_t *ctx);
 
 /* Adapter to runtime: wait until the run started by dkrt_aux_run has finished. Returns 0, or E_STATE when none was started. */
 int32_t dkrt_aux_wait(void);
+
+/* Called by core/ui at the end of the SETTINGS rebuild (the `ui.settings_rows` hook of the system package): the package adds its rows to the stock menu `settings_menu` (the menu object the rebuild's hook gets) with dk_ui_stock_row. With no package, a package built before the hook, or a null hook entry, it does nothing: the stock menu stays as it is. */
+void dkrt_ui_settings_rows(uint8_t *settings_menu);
 
 #endif /* DKRT_H */

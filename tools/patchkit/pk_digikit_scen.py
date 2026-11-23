@@ -68,7 +68,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 
 from tools import python_env  # noqa: E402
-from tools.patchkit import pk_device  # noqa: E402
+from tools.patchkit import pk_device, pk_hostdir  # noqa: E402
 from tools.patchkit import pk_dkrt_boot as B  # noqa: E402
 from tools.patchkit import pk_dkrt_machine as M  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
@@ -763,7 +763,7 @@ def memory_rows(cap: dict[str, dict[str, int]]) -> list[str]:
 
 
 def check_memory_page(c: Ctx, rig: B.BootRig, plan: Any) -> None:
-    """SETTINGS > DIGIKIT > MEMORY on a boot that loaded a machine: the rows the menu kept in `DK_MEM` equal the rows computed from the
+    """SETTINGS > DIGIKIT > MEMORY on a boot that loaded a machine: the rows the menu kept in `DK_MEM` (the host directory's `MENU_MEM`) equal the rows computed from the
     CAPACITY reply of the same boot (so the DSP percent is the same figure rounded the same way), and MACH and PARAM show the machine (a page row only where the device has page rows: the equality covers it)."""
     from tools.device import dkupload as DK
     from tools.patchkit import pk_digikit_upload as U
@@ -780,7 +780,9 @@ def check_memory_page(c: Ctx, rig: B.BootRig, plan: Any) -> None:
     for _ in range(2):
         tap("DOWN", 200)
     tap("YES", 700)
-    base, n = plan.addr("DK_MEM"), rig.w(plan.addr("DK_MEM_N"))
+    directory = plan.addr("DKRT_HOST_DIR")
+    base = pk_hostdir.read_package_address(rig.w, directory, "MENU_MEM")
+    n = rig.w(pk_hostdir.read_package_address(rig.w, directory, "MENU_MEM_N"))
     got = []
     for i in range(n):
         raw = b"".join(
@@ -840,7 +842,7 @@ def run_menu(c: Ctx) -> None:
         f = c.env.folder / "digikit" / path
         blobs[path] = f.read_bytes()
         f.unlink()
-    menu_img = c.image_for(f"{RT},core/digikit-menu", "menu")
+    menu_img = c.image_for(f"{RT},core/ui", "menu")
     plan = D.Plan(menu_img.plan)
     empty = c.card(None)
     trig = t.get("trig_frame", M.TRIG_FRAME if c.dt2 else M.TRIG_FRAME_DN2)

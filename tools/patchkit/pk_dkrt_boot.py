@@ -24,7 +24,7 @@ Python API for the scenario suite (lane C builds on it; everything below is impo
     env.pack("test/sine", "sine-d.dkm")           # a .dkm into the card folder (digikit/modules/)
     card = env.card(["modules/sine-d.dkm"], counter=0, seq=1)      # a card image holding that selection record
     with env.boot(img, card, tag="a") as rig:           # a coupled daemon, cold-booted on that card: the boot hook has run
-        rig.boot_info()        # dict: safe, reason, counter, seq, copy, count, loaded, results[], ui_reached, dsp_wait
+        rig.boot_info()        # dict: safe, reason, counter, seq, copy, count, loaded, results[], ui_reached, core_cause
         rig.voice_rows()       # [(type, pc)] of the DSP voice registry (type 0xffffffff: free)
         rig.dyn_type("test/sine", "sine")   # the type the runtime assigned at this boot (from DKRT_ASSIGN)
         rig.machine_listed(16) # is the machine row of that type named
@@ -414,7 +414,7 @@ class BootRig(M.Rig):
             res.append(v - (1 << 32) if v >= 1 << 31 else v)
         d["results"] = res[: d["count"]] if d["count"] else res[:0]
         d["all_results"] = res
-        d["dsp_wait"] = self.w(self.boot_sym + 4 * (len(BI_FIELDS) + SEL_MAX))
+        d["core_cause"] = self.w(self.boot_sym + 4 * (len(BI_FIELDS) + SEL_MAX))
         d["stable"] = self.w(self.boot_sym + 4 * (len(BI_FIELDS) + SEL_MAX + 1))
         d["reason_name"] = SAFE_NAMES.get(d["reason"], "?")
         return d
@@ -821,7 +821,7 @@ class Proof:
                 and info["results"] == [0] * n
                 and info["loaded"] == n
                 and info["safe"] == 0,
-                f"{info['results']} dsp_wait {info['dsp_wait']}",
+                f"{info['results']} core_cause {info['core_cause']}",
             )
             rec = current(run.sel_records())
             self.check(
@@ -848,7 +848,9 @@ class Proof:
                 (e.folder / "digikit/modules/m1.dkm").read_bytes()
             )
             assert self.run_img is not None
-            base = run.info_word(3) + run.w(run.dsp + M.D_MOD_OFF + 4 * idx)
+            base = run.info_word(3) + run.w(
+                run.package_symbol("DSP") + M.D_MOD_OFF + 4 * idx
+            )
             want = M.relocate(sec, base, M.run_imports(run, self.run_img.plan))
             got = run.dsp_bytes(base, len(want))
             self.check(

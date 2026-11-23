@@ -339,6 +339,12 @@ pub mod capacity;
 /// The settings record, two copies before the selection record (docs/design/digikit-store.md, "The settings record").
 pub mod settings;
 
+/// The one rule of resident table versions, shared by the package header and the table check.
+pub mod table_version;
+
+/// The header of the system package, shared by the resident stage 1 and patchkit's packer.
+pub mod syspkg;
+
 /// The last fault (a CPU crash or a DSP stop) as the settings key `dk/fault`, and the ABOUT rows made from it.
 pub mod fault;
 
@@ -351,7 +357,7 @@ pub mod fault;
 /// Written by `patchkit gen` from `sdk/sdk.toml` (`gen_sdk.rs`), with the runtime version.
 #[rustfmt::skip]
 mod gen_sdk;
-pub use gen_sdk::{limits, logk, proto};
+pub use gen_sdk::{limits, logk, proto, OPTIONAL_COUNT};
 
 #[cfg(test)]
 mod tests {

@@ -8749,7 +8749,7 @@
   },
   {
    "align": 2,
-   "hex": "4b109a2b",
+   "hex": "8e7a934f",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -9987,7 +9987,7 @@
    "size": 28
   }
  ],
- "source_sha256": "643b424f8cf551cf3f30145147fc7730dd57d056eb875e269060aab077295c52",
+ "source_sha256": "1e76d2979d75044a7193386b011c9efcf3d18e940c75d59fae95afc5df7f73a4",
  "symbols": [
   {
    "global": false,
@@ -12249,7 +12249,7 @@
  "toolchain": {
   "exports": "DKRT_PROJECT_PENDING dk_module dk_project_current dk_project_status dk_svc_abi project_hook_clear_many project_hook_clear_one project_hook_paste project_hook_save project_hook_slot",
   "instructions_redecoded": "13046",
-  "isa_check": "5087a067626aa042f0dbaaf3ac9d480c15c39222f3bddf62b9b950804bf1fe23",
+  "isa_check": "7951d5e9983d21190bfcf5d482d46654f2218a908ae2d334489d699809b8fe2c",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

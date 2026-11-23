@@ -33,9 +33,14 @@ pub struct MockDevice {
     /// Fault injection: the next n requests are lost before they are handled / the next n replies are lost.
     pub drop_requests: u32,
     pub drop_replies: u32,
+    /// CLEAR of a full store: no room for the package's table, so the package goes too.
+    pub clear_drops_package: bool,
     /// Commands handled, in order (cmd without the reply bit), for tests that check the traffic.
     pub log: Vec<u8>,
 }
+
+/// The package CLEAR keeps (`stage1::PACKAGE_PATH` of the runtime).
+const SYSTEM_PACKAGE: &str = "digikit/system.dksp";
 
 /// Room kept for the table, as the real store keeps it after the staged data.
 const TABLE_ROOM: u64 = 4096;
@@ -54,6 +59,7 @@ impl MockDevice {
             old_store: false,
             drop_requests: 0,
             drop_replies: 0,
+            clear_drops_package: false,
             log: Vec::new(),
         }
     }
@@ -126,8 +132,15 @@ impl MockDevice {
                 {
                     return r(Status::Msg);
                 }
-                self.files.clear();
-                self.used = 0;
+                // as the runtime: a store with room for one more table keeps the system package, a full one drops it
+                let keep = !self.clear_drops_package;
+                self.files.retain(|(p, _)| keep && p == SYSTEM_PACKAGE);
+                self.dirs.clear();
+                self.used = self
+                    .files
+                    .iter()
+                    .map(|(_, d)| d.len().div_ceil(512) as u64 * 512)
+                    .sum();
                 self.upload = None;
                 self.no_store = false;
                 r(Status::Ok)

@@ -64,8 +64,8 @@ pub unsafe fn tick_with<P: Platform>(p: &P, reported: *mut u32, last: *mut u32, 
 
 /// Called from the UI tick. The clock is the firmware's block counter; without it (no core/health) the UI pass count, which only ever rises too.
 pub unsafe fn tick() {
-    let now = crate::fw_blocks().unwrap_or_else(|| crate::platform::st().ticks);
-    tick_with(&crate::PLATFORM, addr_of_mut!(REPORTED), addr_of_mut!(LAST_EVENT), addr_of_mut!(RAISED), now);
+    let now = crate::platform::fw_blocks().unwrap_or_else(|| crate::platform::st().ticks);
+    tick_with(&crate::platform::PLATFORM, addr_of_mut!(REPORTED), addr_of_mut!(LAST_EVENT), addr_of_mut!(RAISED), now);
 }
 
 #[cfg(test)]
@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn a_refusal_raises_one_event_with_the_last_request_and_the_totals() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         let f = FakePlatform::new(profiles::ALL[0]);
         let mut c = Clock::default();
         let events = || unsafe { core::ptr::read_volatile(core::ptr::addr_of!(dlog::DKRT_LOG_COUNT)) };
@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn a_writer_that_keeps_trying_raises_one_event_per_wait_not_one_per_pass() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         let f = FakePlatform::new(profiles::ALL[0]);
         let mut c = Clock::default();
         let events = || unsafe { core::ptr::read_volatile(core::ptr::addr_of!(dlog::DKRT_LOG_COUNT)) };

@@ -12,7 +12,7 @@ import { prepareRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 export async function prepareRemote(runtime: PatchedSession): Promise<RuntimePlan> {
   const { session, dk } = runtime;
   const artifacts = liveArtifacts(session, 'remote-input');
-  const plan = await prepareRuntimePlan(session, artifacts, ['DKRT_BOOT', 'DK_ABOUT', 'DK_ABOUT_N']);
+  const plan = await prepareRuntimePlan(session, artifacts, ['DKRT_BOOT', 'DKRT_HOST_DIR']);
   const epoch = await expectRuntimeUi(session, plan, artifacts, { fresh: true });
   await installRemote(runtime);
   await expectRuntimeUi(session, plan, artifacts, { afterEpoch: epoch });

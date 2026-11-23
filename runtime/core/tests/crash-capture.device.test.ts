@@ -13,17 +13,22 @@ import { rpc } from '@digi/regression/runtime/fx-live.ts';
  *
  * Both clocks start at the same block: the stable period counts from the first UI-loop pass of the runtime (`ui_pass`, runtime/core/src/rs/src/safe_mode.rs,
  * `DKRT_UI_START`), the card's selection record shortens it to STABLE_BLOCKS (`DKRT_STABLE_BLOCKS`), and dyn-crash counts its delay from its first tick, which
- * is in the same pass (UI_FIRST and the first tick lie at the same block in the log). The cold boot is ready about 3,300 blocks after that block, and the test pauses
- * there, so the early delay must be above that with room for a slower boot (1,200 blocks, about 0.8 s); the late delay lies 1,000 blocks above the period, the
- * early one 1,000 below. A wait for the crash needs at most (LATE - 3,300) / 4.5 = 720 steps of the emulator (WAIT_STEPS has some room).
+ * is in the same pass (UI_FIRST and the first tick lie at the same block in the log). The test pauses at the cold boot's ready state, about 1,900 blocks after that block (from the steps the early crash takes), so the early
+ * delay must be above that with room for a slower boot; the late delay lies 1,000 blocks above the period, the
+ * early one 1,000 below. A wait for the crash needs about 1,015 steps of the emulator at most (WAIT_STEPS bounds it).
  */
 
 const STABLE_BLOCKS = 5500;
-const WAIT_STEPS = 1000;
 const KINDS = {
   early: { blocks: 4500, mode: 0, vector: 4 }, // illegal instruction
   late: { blocks: 6500, mode: 1, vector: 5 }, // divide by zero
 } as const;
+/**
+ * The guard of a wait for the reset after a crash, in emulator steps (4.5 DSP blocks each): the crash comes `blocks` after the first UI-loop pass and the run is paused after that
+ * pass, so a wait never needs more than the longest delay in steps. It is a hang guard in emulated time; the wait itself ends on the firmware's own events (`cpu.reset`, then
+ * the cold boot's `firmware.loaded` and a ready ColdFire side). Measured on the device of the test (its `devices` record): the early crash is reached in about 575 steps, the late one in about 1015.
+ */
+const WAIT_STEPS = Math.ceil(Math.max(...Object.values(KINDS).map((k) => k.blocks)) / 4.5);
 
 /** What a test looks at after a boot, read while the run is paused. */
 async function observe(h: CardRig) {
@@ -124,7 +129,7 @@ cardRigs(
               loaded: 0,
             });
           }
-          expect(b2.info.uiReached, 'the safe boot clears the counter at its first UI-loop pass').toBe(1);
+          expect(b2.info.uiReached, 'the safe boot reaches the UI loop').toBe(1);
           expect(b2.sel?.paths, 'and keeps the selection').toEqual([debug.name, crash.name]);
         },
       );

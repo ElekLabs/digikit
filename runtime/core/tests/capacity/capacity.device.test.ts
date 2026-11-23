@@ -6,6 +6,7 @@ import { cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts
 import { needsOf, parseDspSection, relocate } from '@digi/regression/runtime/dkm.ts';
 import { dspBytes } from '@digi/regression/runtime/fx-live.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { systemPackagePlacedBytes } from '@digi/regression/runtime/system-package.ts';
 import { bootEntries, COUPLED_ROOTS, expectBoot, SYMBOLS, type Entry } from './capacity-helpers.ts';
 import {
   ARENA_HDR,
@@ -105,6 +106,23 @@ cardRigs('capacity, ColdFire only', { roots: RT, dsp: 'cold', symbols: SYMBOLS }
         g.arenaFree - COLLECT_BLOCK,
       );
       expect(got.cap.ARENA!.largest, 'a free block is left for the next load').toBe(COLLECT_BLOCK - ARENA_HDR);
+    },
+  );
+
+  test(
+    'no modules: the arena is whole (512 KiB, nothing used) and the system package has its own block, reported apart',
+    async () => {
+      await rig.first();
+      const g = geometryOf(rig.device, rig.plan);
+      const got = await bootEntries(rig, 'idle', []);
+      await expectBoot(rig, g, [], got);
+      expect(g.arenaBytes, 'every device has the 512 KiB arena').toBe(524288);
+      expect(
+        [got.cap.ARENA!.limit, got.cap.ARENA!.used, got.cap.ARENA!.largest],
+        'the arena has all its bytes free in one block: the package is not in it',
+      ).toEqual([g.arenaBytes, 0, g.arenaBytes - ARENA_HDR]);
+      expect(got.cap.PACKAGE!.limit, 'the package block is its own constant').toBe(g.packageBytes);
+      expect(got.cap.PACKAGE!.used, 'the package takes what its body header says: image, and the larger of bss and relocation table').toBe(systemPackagePlacedBytes());
     },
   );
 

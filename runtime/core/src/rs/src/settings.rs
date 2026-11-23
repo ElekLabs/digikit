@@ -10,7 +10,7 @@
 //! A `.dkm` module uses `dk_settings_open`, `dk_settings_get`, `dk_settings_put` and `dk_settings_remove` (`module_*` below): the runtime
 //! stores its keys as `<module name>/<key>`, so a module reaches its own prefix only. There is no task check: `dk_settings_put` and `dk_settings_remove`
 //! must be called from the UI task (a menu, `tick`, `init`), not from a host command handler (MIDI task) or an interrupt.
-use crate::{block_read, block_write, card, dlog};
+use crate::{platform::block_read, block_write, card, dlog};
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::proto::*;
 use dkrt_sdk::settings as set;
@@ -62,21 +62,26 @@ pub struct State {
     pub off: u32,
 }
 
+impl State {
+    /// The state of a fresh start: nothing loaded, no copy, nothing changed. `DKRT_SET` starts as this, and a host test boots again from it.
+    pub const INITIAL: State = State {
+        loaded: 0,
+        copy: set::NONE,
+        card_seq: 0,
+        dirty: 0,
+        changed: 0,
+        writes: 0,
+        fails: 0,
+        last_result: 0,
+        damaged: 0,
+        passes: 0,
+        changed_pass: 0,
+        off: 0,
+    };
+}
+
 #[no_mangle]
-pub static mut DKRT_SET: State = State {
-    loaded: 0,
-    copy: set::NONE,
-    card_seq: 0,
-    dirty: 0,
-    changed: 0,
-    writes: 0,
-    fails: 0,
-    last_result: 0,
-    damaged: 0,
-    passes: 0,
-    changed_pass: 0,
-    off: 0,
-};
+pub static mut DKRT_SET: State = State::INITIAL;
 
 fn state() -> &'static mut State {
     unsafe { &mut *addr_of_mut!(DKRT_SET) }
@@ -100,7 +105,7 @@ fn io() -> Io {
 
 /// The time now and the delay in the same unit: blocks when the firmware's counter is there, else UI-loop passes.
 unsafe fn clock() -> (u32, u32) {
-    match crate::fw_blocks() {
+    match crate::platform::fw_blocks() {
         Some(b) => (b, DELAY_BLOCKS),
         None => (state().passes, DELAY_PASSES),
     }
@@ -366,7 +371,7 @@ unsafe fn key_of<'a>(key: *const u8) -> &'a [u8] {
 /// The card is written about 2 s after the last change. UI task.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_settings_put(key: *const u8, value: *const u8, len: u32) -> i32 {
-    crate::init_once();
+    crate::state::init_once();
     if len as usize > set::VALUE_MAX {
         return E_SET_VALUE;
     }
@@ -377,18 +382,18 @@ pub unsafe extern "C" fn dkrt_settings_put(key: *const u8, value: *const u8, len
 
 /// `dk_settings_open`: the module's handle, only inside its `init` (the check of `dk_files_open`). The handle is the module's record index + 1: the
 /// same module gets the same handle every time. `E_NOT_FOUND` outside `init`.
-pub unsafe fn module_client() -> i32 {
+pub unsafe extern "C" fn module_client() -> i32 {
     let source = dlog::current_source();
     if source == 0 {
         return E_NOT_FOUND;
     }
     let rec = source as usize - 1;
     // a service file reads the device scope through the core, not through a module handle
-    if rec >= crate::MAX_MODULES || !crate::files::in_init(rec) {
+    if rec >= dkrt_abi::MAX_MODULES || !crate::hooks::files_in_init(rec) {
         return E_NOT_FOUND;
     }
     // the module reads its settings in `init`: a change of what they return reloads it (`settings_reload`)
-    crate::settings_reload::note_opened(rec);
+    crate::hooks::settings_opened(rec);
     rec as i32 + 1
 }
 
@@ -396,14 +401,14 @@ pub unsafe fn module_client() -> i32 {
 /// caller. A handle that is 0, past the table or of a record that is not loaded (and not inside its `init`) is stale: `E_SET_KEY`, the settings
 /// argument error, as for a key that breaks the rules. The prefix stops mistakes, not hostile code: modules are native code with no memory protection.
 unsafe fn module_stored_key(client: u32, key: *const u8, out: &mut [u8; set::KEY_MAX]) -> Result<usize, i32> {
-    if client == 0 || client as usize > crate::MAX_MODULES || key.is_null() {
+    if client == 0 || client as usize > dkrt_abi::MAX_MODULES || key.is_null() {
         return Err(E_SET_KEY);
     }
-    let m = &crate::st().modules[client as usize - 1];
+    let m = &crate::platform::st().modules[client as usize - 1];
     if m.used == 0 {
         return Err(E_SET_KEY);
     }
-    let name = core::slice::from_raw_parts(m.name.as_ptr(), crate::cstr_len(m.name.as_ptr(), 31));
+    let name = core::slice::from_raw_parts(m.name.as_ptr(), dkrt_abi::mem::cstr_len(m.name.as_ptr(), 31));
     match set::module_key(name, key_of(key), out) {
         Some(n) => Ok(n),
         None => Err(E_SET_KEY),
@@ -412,19 +417,19 @@ unsafe fn module_stored_key(client: u32, key: *const u8, out: &mut [u8; set::KEY
 
 /// The module id of a settings handle (the name of its record), as `module_stored_key` takes it: `None` for a handle that is 0, past the table or of a record that is not loaded.
 unsafe fn module_id<'a>(client: u32) -> Option<&'a [u8]> {
-    if client == 0 || client as usize > crate::MAX_MODULES {
+    if client == 0 || client as usize > dkrt_abi::MAX_MODULES {
         return None;
     }
-    let m = &crate::st().modules[client as usize - 1];
+    let m = &crate::platform::st().modules[client as usize - 1];
     if m.used == 0 {
         return None;
     }
-    Some(core::slice::from_raw_parts(m.name.as_ptr(), crate::cstr_len(m.name.as_ptr(), 31)))
+    Some(core::slice::from_raw_parts(m.name.as_ptr(), dkrt_abi::mem::cstr_len(m.name.as_ptr(), 31)))
 }
 
 /// `settings_get`: the length of the value (0 is valid), `E_SET_NOKEY`, `E_SET_VALUE` (`cap` too small: nothing is written), `E_SET_KEY` (bad handle or
 /// key), `E_SET_OFF`. In `init` and in the UI task. With a settings overlay set the overlay's value is the answer when it holds one (`settings_overlay`), else the record's.
-pub unsafe fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) -> i32 {
+pub unsafe extern "C" fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) -> i32 {
     let mut k = [0u8; set::KEY_MAX];
     let n = match module_stored_key(client, key, &mut k) {
         Ok(n) => n,
@@ -436,7 +441,7 @@ pub unsafe fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) ->
     let mut none = [0u8; 0];
     let buf: &mut [u8] = if cap == 0 { &mut none } else { core::slice::from_raw_parts_mut(out, cap as usize) };
     if let Some(id) = module_id(client) {
-        if let Some(r) = crate::settings_overlay::get(id, key_of(key), buf) {
+        if let Some(r) = crate::hooks::overlay_get(id, key_of(key), buf) {
             return r;
         }
     }
@@ -447,7 +452,7 @@ pub unsafe fn module_get(client: u32, key: *const u8, out: *mut u8, cap: u32) ->
 /// first the record is asked whether it can take the change (`fits`: key, value size, room after replacing the key's entry, settings on); a refusal is the answer and nothing
 /// is written. Then the settings overlay (if set) takes the value; its refusal (any answer `settings_overlay::put` passes through) is the answer, with the record unchanged.
 /// Last the record takes it, which cannot refuse for the reasons `fits` checked. So a module that gets an error reads back what it read before.
-pub unsafe fn module_put(client: u32, key: *const u8, value: *const u8, len: u32) -> i32 {
+pub unsafe extern "C" fn module_put(client: u32, key: *const u8, value: *const u8, len: u32) -> i32 {
     let mut k = [0u8; set::KEY_MAX];
     let n = match module_stored_key(client, key, &mut k) {
         Ok(n) => n,
@@ -465,7 +470,7 @@ pub unsafe fn module_put(client: u32, key: *const u8, value: *const u8, len: u32
         return r;
     }
     if let Some(id) = module_id(client) {
-        let r = crate::settings_overlay::put(id, key_of(key), v);
+        let r = crate::hooks::overlay_put(id, key_of(key), v);
         if r != OK {
             return r;
         }
@@ -476,7 +481,7 @@ pub unsafe fn module_put(client: u32, key: *const u8, value: *const u8, len: u32
 /// `settings_remove`: 0 (also when the key was not there), or `E_SET_KEY` (bad handle or key), `E_SET_OFF`. UI task. The order is: the record is asked whether it can take the
 /// remove (`can_remove`: key valid, settings on); a refusal is the answer and nothing changes. Then the key leaves the settings overlay (a refusal the overlay passes through is
 /// the answer, the record unchanged); last the record drops it. A module that gets an error still reads the value it read before.
-pub unsafe fn module_remove(client: u32, key: *const u8) -> i32 {
+pub unsafe extern "C" fn module_remove(client: u32, key: *const u8) -> i32 {
     let mut k = [0u8; set::KEY_MAX];
     let n = match module_stored_key(client, key, &mut k) {
         Ok(n) => n,
@@ -487,7 +492,7 @@ pub unsafe fn module_remove(client: u32, key: *const u8) -> i32 {
         return r;
     }
     if let Some(id) = module_id(client) {
-        let r = crate::settings_overlay::remove(id, key_of(key));
+        let r = crate::hooks::overlay_remove(id, key_of(key));
         if r != OK {
             return r;
         }
@@ -511,7 +516,7 @@ pub unsafe fn flush_if_dirty() -> i32 {
 /// to the 2 s delay; `dkrt_restart` does it too): 0 (also when nothing was changed), or `E_WRITE`, `E_RANGE`, `E_CARD_RO`, `E_SET_OFF`. UI task.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_settings_flush() -> i32 {
-    crate::init_once();
+    crate::state::init_once();
     flush_if_dirty()
 }
 
@@ -594,7 +599,7 @@ mod tests {
 
     // ---- the settings overlay of the module calls (settings_overlay.rs) ---------------------------------------------------------------
 
-    use crate::settings_overlay;
+    use crate::package::settings_overlay;
     use dkrt_abi::service::{SettingsOverlay, SETTINGS_OVERLAY_VERSION};
     use std::collections::BTreeMap;
     use std::sync::Mutex;
@@ -641,7 +646,7 @@ mod tests {
         ENTRIES.lock().unwrap().clear();
         *PUT_ANSWER.lock().unwrap() = None;
         *REMOVE_ANSWER.lock().unwrap() = None;
-        let m = &mut crate::st().modules[0];
+        let m = &mut crate::platform::st().modules[0];
         m.used = 1;
         m.name = [0; 32];
         m.name[..6].copy_from_slice(b"test/m");
@@ -653,7 +658,7 @@ mod tests {
     }
     unsafe fn teardown() {
         settings_overlay::withdraw(0);
-        crate::st().modules[0].used = 0;
+        crate::platform::st().modules[0].used = 0;
     }
     unsafe fn rd(key: &[u8]) -> i32 {
         let mut out = [0u8; 8];
@@ -662,7 +667,7 @@ mod tests {
 
     #[test]
     fn without_the_service_module_settings_are_the_record_alone() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(false);
             assert_eq!(module_put(1, b"k\0".as_ptr(), b"v".as_ptr(), 1), 0);
@@ -676,7 +681,7 @@ mod tests {
 
     #[test]
     fn with_an_overlay_a_read_prefers_it_and_a_write_goes_to_both() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             // the record's value is the answer while the overlay holds none
@@ -704,7 +709,7 @@ mod tests {
 
     #[test]
     fn a_write_the_overlay_refuses_leaves_the_record_unchanged() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             assert_eq!(put(b"test/m/k", b"old"), 0);
@@ -741,7 +746,7 @@ mod tests {
 
     #[test]
     fn a_put_the_record_refuses_never_reaches_the_overlay() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             assert_eq!(module_put(1, b"k\0".as_ptr(), b"old".as_ptr(), 3), 0);
@@ -765,7 +770,7 @@ mod tests {
 
     #[test]
     fn with_the_settings_off_a_put_and_a_remove_leave_the_overlay_alone() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             assert_eq!(module_put(1, b"k\0".as_ptr(), b"old".as_ptr(), 3), 0);
@@ -783,7 +788,7 @@ mod tests {
 
     #[test]
     fn a_remove_the_overlay_refuses_leaves_the_record_and_the_overlay() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             assert_eq!(module_put(1, b"k\0".as_ptr(), b"v".as_ptr(), 1), 0);
@@ -801,7 +806,7 @@ mod tests {
 
     #[test]
     fn the_runtimes_own_keys_do_not_pass_through_the_overlay() {
-        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             setup(true);
             // the runtime's own `put` (the core's `settings_put`, the menu's `dkrt_settings_put`) is device scope: a route or a send never reaches the overlay

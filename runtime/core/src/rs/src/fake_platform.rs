@@ -5,14 +5,18 @@
 //!
 //! The contract table `tests/platform/contract.toml` names a host test for each check; `every_contract_row_names_a_host_test` keeps the names real.
 
+pub mod address_map;
+pub(crate) mod test_arena;
+
 use crate::card;
 use crate::fake_storage::FakeStorage;
-use crate::files::path_too_big;
+use crate::package::files::path_too_big;
 use crate::card::block_write_with;
 use crate::storage::layout::TEST_LAYOUT;
 use crate::transport::{reply_with, tx_room_with, TX_RING};
 use core::cell::{Cell, RefCell};
 use core::ffi::c_void;
+use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::platform::{blocks_since, locked, DeviceProfile, Platform, SamplePool, StagedWriter, Tasking};
 use dkrt_abi::profiles;
 use dkrt_abi::storage::{DirEntry, Stat, Storage, ROOT_SAMPLES};
@@ -50,6 +54,8 @@ pub struct FakePlatform {
     /// The transport state `play_state` returns (`None`: the platform cannot read it). Starts stopped.
     pub play: Cell<Option<u32>>,
     pub reset: Cell<bool>,
+    /// The panel key `key_down` reports as held (any key number): the safe-mode key of a boot test.
+    pub key_held: Cell<bool>,
     /// The exception hook word has been pointed at the runtime's hook.
     pub exc_hook: Cell<bool>,
     /// The `*_info` tables of the adapters, by name.
@@ -72,6 +78,8 @@ pub info_dsp: RefCell<Vec<(u32, u32)>>,
     pub calls: RefCell<Vec<Call>>,
     /// The files of the two roots (`Storage`).
     pub storage: FakeStorage,
+    /// The device addresses of host memory and code; `with_addresses` makes it the space of `DevAddr`.
+    pub addresses: address_map::AddressMap,
 }
 
 /// One logged platform call of the installer path: the mask, the code and slot writes, the flushes and the restore.
@@ -88,6 +96,9 @@ impl FakePlatform {
     pub fn new(profile: DeviceProfile) -> Self {
         let storage = FakeStorage::new();
         storage.samples_path_max.set(profile.sample_path_max);
+        let addresses = address_map::AddressMap::new();
+        addresses.map_arena();
+        addresses.map_package();
         FakePlatform {
             profile,
             card: RefCell::new(BTreeMap::new()),
@@ -107,6 +118,7 @@ impl FakePlatform {
             os_upgrade: Cell::new(false),
             play: Cell::new(Some(0)),
             reset: Cell::new(false),
+            key_held: Cell::new(false),
             exc_hook: Cell::new(false),
             info: RefCell::new(BTreeMap::new()),
             pool: Cell::new(false),
@@ -122,7 +134,12 @@ impl FakePlatform {
 info_dsp: RefCell::new(Vec::new()),
             calls: RefCell::new(Vec::new()),
             storage,
+            addresses,
         }
+    }
+    /// Run `body` with `addresses` as the address space of `DevAddr`; the previous space returns afterwards, also on unwind.
+    pub fn with_addresses<R>(&self, body: impl FnOnce() -> R) -> R {
+        self.addresses.with_addresses(body)
     }
     /// Set code bytes without a log entry (a test's stock image).
     pub fn put_code(&self, addr: u32, bytes: &[u8]) {
@@ -185,11 +202,15 @@ impl Platform for FakePlatform {
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
         self.info_entries.borrow().iter().find(|(h, _)| *h == name_hash).map_or(core::ptr::null(), |(_, w)| w.as_ptr())
     }
-    unsafe fn info_slot(&self, name_hash: u32) -> *const u32 {
+    unsafe fn info_slot(&self, name_hash: u32) -> DevAddr {
         if self.info_data.borrow().contains(&name_hash) {
-            return core::ptr::null();
+            return DevAddr::NULL;
         }
-        self.info(name_hash)
+        let entries = self.info_entries.borrow();
+        match entries.iter().find(|(h, _)| *h == name_hash) {
+            None => DevAddr::NULL,
+            Some((_, words)) => DevAddr::new(self.addresses.place(words.as_ptr() as *mut u8, words.len() * 4)),
+        }
     }
     unsafe fn info_dsp_slot(&self, name_hash: u32) -> Option<u32> {
         self.info_dsp.borrow().iter().find(|(h, _)| *h == name_hash).map(|(_, i)| *i)
@@ -247,7 +268,7 @@ impl Platform for FakePlatform {
         self.play.get()
     }
     unsafe fn key_down(&self, _key: u32) -> bool {
-        false
+        self.key_held.get()
     }
     fn install_exception_hook(&self) -> bool {
         let first = !self.exc_hook.get();
@@ -335,7 +356,7 @@ const INVENTED: DeviceProfile = DeviceProfile { id: 9, name: 0x78797a00, samples
 
 const L: Layout = Layout { first: 1000, sectors: 4096 };
 
-fn card_reset() {
+pub(crate) fn card_reset() {
     *card::info() = card::CardInfo {
         state: CARD_UNKNOWN,
         first_nonblank: u32::MAX,
@@ -388,7 +409,7 @@ fn every_profile_is_complete_and_distinct() {
 
 #[test]
 fn card_writes_outside_the_store_are_refused_and_never_reach_the_card() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     unsafe {
@@ -402,7 +423,7 @@ fn card_writes_outside_the_store_are_refused_and_never_reach_the_card() {
 
 #[test]
 fn a_blank_card_is_claimed_before_the_first_data_write_and_ours_afterwards() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DN2);
     unsafe {
@@ -422,7 +443,7 @@ fn a_blank_card_is_claimed_before_the_first_data_write_and_ours_afterwards() {
 
 #[test]
 fn a_foreign_card_is_read_only_for_every_write() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     f.put(L.first + 5, [0x55; 512]); // not blank and not ours
@@ -437,7 +458,7 @@ fn a_foreign_card_is_read_only_for_every_write() {
 
 #[test]
 fn a_card_that_ends_before_the_store_has_no_store() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     f.card_sectors.set(L.first + 100);
@@ -450,7 +471,7 @@ fn a_card_that_ends_before_the_store_has_no_store() {
 
 #[test]
 fn the_card_check_decides_from_the_capacity_the_driver_reports() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let end = L.first + L.sectors;
     // not ready (0xFFFFFFFF): nothing is decided, nothing is read, the write is refused this time and the check runs again at the next write
     card_reset();
@@ -510,7 +531,7 @@ fn the_card_check_decides_from_the_capacity_the_driver_reports() {
 
 #[test]
 fn an_unreadable_card_is_read_only() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     f.bad_read.borrow_mut().push(L.first);
@@ -552,7 +573,7 @@ fn check(f: &FakePlatform) {
 
 #[test]
 fn every_write_outside_the_store_is_refused_for_range_and_counted_whatever_its_size() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     check(&f);
@@ -578,7 +599,7 @@ fn every_write_outside_the_store_is_refused_for_range_and_counted_whatever_its_s
 
 #[test]
 fn a_valid_selection_record_makes_the_area_ours_without_scanning_it() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     // foreign bytes in both headers, a valid selection copy: ours (an empty selection record is what a fresh runtime card holds)
@@ -597,7 +618,7 @@ fn a_valid_selection_record_makes_the_area_ours_without_scanning_it() {
 
 #[test]
 fn a_foreign_card_names_its_first_nonblank_sector_and_hash_and_refuses_selection_and_range() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     const STRAY: u32 = 100;
@@ -626,7 +647,7 @@ fn the_card_state_after_a_torn_claim_or_selection_write() {
         ("header A torn, B blank", Some(torn(a)), None, None, CARD_FOREIGN, 0),
         ("selection copy A torn, the rest blank", None, None, Some(torn(selection_sector(1))), CARD_BLANK, u32::MAX),
     ];
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     for (what, ha, hb, sa, state, first_nonblank) in cases {
         card_reset();
         let f = FakePlatform::new(profiles::DT2);
@@ -647,7 +668,7 @@ fn the_card_state_after_a_torn_claim_or_selection_write() {
 
 #[test]
 fn a_claim_cut_after_its_first_write_leaves_a_card_the_next_boot_calls_ours() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     card_reset();
     let f = FakePlatform::new(profiles::DT2);
     // the claim writes header B first, then A, then the data: the cut comes at header A
@@ -703,7 +724,7 @@ fn interrupt_masks_nest_and_restore_the_caller_state() {
 
 #[test]
 fn a_reply_goes_to_the_usb_port_as_one_sysex_message_and_is_dropped_without_room() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     let f = FakePlatform::new(profiles::DT2);
     unsafe {
         assert_eq!(reply_with(&f, 1, 5, 0, 0), 1);

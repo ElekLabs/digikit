@@ -64,6 +64,7 @@ CMD: dict[str, int] = {
     "RELOAD_STATE": 0x07,
     "LOAD": 0x08,
     "UNLOAD": 0x09,
+    "RETRY": 0x0B,
     "BEGIN": 0x10,
     "DATA": 0x11,
     "END": 0x12,
@@ -88,6 +89,7 @@ CMD_RELOAD = 0x06
 CMD_RELOAD_STATE = 0x07
 CMD_LOAD = 0x08
 CMD_UNLOAD = 0x09
+CMD_RETRY = 0x0B
 CMD_BEGIN = 0x10
 CMD_DATA = 0x11
 CMD_END = 0x12
@@ -334,6 +336,7 @@ CAPACITY_KINDS: dict[str, int] = {
     "SEND_SLOTS": 14,
     "DSP_COST": 15,
     "DSP_VOICES": 16,
+    "PACKAGE": 17,
 }
 
 SETTINGS_SECTORS = 16  # one copy of the settings record

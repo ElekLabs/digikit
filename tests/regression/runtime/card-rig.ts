@@ -57,6 +57,7 @@ import {
   withoutOwn,
 } from './write-safety.ts';
 import { rootsOf } from './image-roots.ts';
+import { systemPackageSectors } from './system-package.ts';
 
 /**
  * The one card fixture of the runtime device tests (settings, round trip, equiv, debug, card, crash, safe mode and upload): an owned daemon
@@ -67,7 +68,7 @@ import { rootsOf } from './image-roots.ts';
 
 /** The runtime image of the Python scenarios (`B.RT`). */
 export const RT = rootsOf('rt');
-/** Runtime variables the card scenarios read or poke (`DKRT_BOOT` is always planned). */
+/** Runtime variables the card scenarios read or poke (`DKRT_BOOT` and the host directory `DKRT_HOST_DIR`, which holds the addresses of the package's statics, are always planned). */
 export const CARD_SYMBOLS = ['DKRT_CARD', 'DKRT_CRASH', 'DKRT_MAILBOX', 'DKRT_STATE', ...RING_SYMBOLS];
 /** The test knob `DKRT_STORE_CAP` keeps every sector from here to header B out of the allocations (a DN2 store of 20 GiB then fits INFO's 32 bits). */
 export const CAP_SECTORS = 0x40000;
@@ -85,7 +86,7 @@ export interface CardRigOptions {
   roots?: string[];
   /** The image has no runtime (a patched-in module only): no `DKRT_BOOT`, no runtime readiness; the case is ready 300 emulated ms after the stock firmware's ready point. */
   plain?: boolean;
-  /** Plan symbols besides `DKRT_BOOT`. */
+  /** Plan symbols besides `DKRT_BOOT` and `DKRT_HOST_DIR`. */
   symbols?: string[];
   /** Daemon environment besides the write watch; it overrides the watch's variables. A function gets the prepared runtime plan when the daemon starts. */
   env?: Record<string, string> | ((prepared: PreparedRuntimePlan) => Record<string, string>);
@@ -153,8 +154,8 @@ export interface CardRig {
   ): Promise<TestRuntime>;
   /** Poll until the UI loop was reached (and the boot is safe mode when `safe`); returns the boot's fields. */
   ready(safe?: boolean): Promise<Awaited<ReturnType<typeof bootInfo>>>;
-  /** A protocol restart (the card and its guest writes stay); returns the runtime of the new boot, settled. */
-  restart(runtime: PatchedSession): Promise<TestRuntime>;
+  /** A protocol restart (the card and its guest writes stay); returns the runtime of the new boot, settled. `coreOnly`: the new boot never reaches the runtime UI, so it is not settled on it: the call returns once the new boot is installed (a new epoch), and `ready(true)` proves its boot info. */
+  restart(runtime: PatchedSession, o?: { coreOnly?: boolean }): Promise<TestRuntime>;
   /** Run protocol calls on the paused daemon (the transport steps the emulator). */
   usb<T>(runtime: PatchedSession, run: (dk: DkSession) => Promise<T>): Promise<T>;
   /** The card the guest left: `base` (default the card booted last) with the overlay of its writes laid over a copy (Python `card_after`). */
@@ -181,6 +182,8 @@ export interface CardRig {
   applyCap(): Promise<void>;
   /** INFO's free bytes of a card with no store: used 1, room for a one-entry table (cut by the cap). */
   freeFresh(): number;
+  /** INFO's free bytes of a card whose store holds the system package only: `freeFresh` less the package's sectors and the table sector beside it. */
+  freeWithPackage(): number;
   /** One request and its reply, whatever the status. `version` sends the request raw with that protocol version byte. */
   request(cmd: number, body?: Uint8Array, version?: number): Promise<{ status: number; body: Uint8Array }>;
   /** The status of one request. */
@@ -224,7 +227,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
   const cardServices = new Set<string>();
   const epochs = new Set<number>();
   const extra = new Set(o.storeExtra ?? []);
-  const symbols = [...(o.plain ? [] : ['DKRT_BOOT']), ...(o.symbols ?? [])];
+  const symbols = [...(o.plain ? [] : ['DKRT_BOOT', 'DKRT_HOST_DIR']), ...(o.symbols ?? [])];
 
   const baseline = (cardImage: string, deliverExceptions = o.deliverExceptions): RuntimeBaseline => {
     if (o.roots && !prepared.preparedImage)
@@ -472,13 +475,23 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       );
       return bootInfo(session, prepared.plan);
     },
-    async restart(runtime) {
+    async restart(runtime, { coreOnly = false } = {}) {
       const { session } = runtime;
       const before = Number((await bounded(() => session.status())).epoch);
       await rpc(session, 'run.mode', { mode: 'free' });
       await bounded(() => runtime.dk.restart());
       runtime.dk.cancelPending();
       const dk = emulatorDk(session);
+      if (coreOnly) {
+        // a core-only boot draws the reason frame and keeps the stock firmware: no runtime UI to settle on; the new boot is the new epoch
+        cap = undefined;
+        await pollEmulated(session, async () => Number((await session.status()).epoch) > before, Boolean, {
+          emulatedMs: 120_000,
+          intervalMs: 500,
+          message: 'the restarted core-only boot was installed',
+        });
+        return withWaitApi({ session, dk, close: runtime.close });
+      }
       // This controller can answer throughout the guest reset: settle proves the fresh ready epoch/UI hook.
       cap = undefined;
       // The reset boots to the boot window again and no daemon press answers it, so the rig answers it before its UI checks, as `Session.start` and `reloadRuntimeBaseline` do:
@@ -596,6 +609,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       }
     },
     freeFresh: () => Math.min(((cap ?? rig.store.limit) - 2) * 512, 0xffffffff),
+    freeWithPackage: () => rig.freeFresh() - systemPackageSectors() * 512,
     async request(cmd, body = new Uint8Array(), version) {
       if (!stepping) throw new Error('no protocol session: boot with pausedBoot');
       if (version === undefined) return stepping.dk.request(cmd, body);

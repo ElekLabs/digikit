@@ -3,7 +3,7 @@ import { bootInfo, E_LOADING } from '@digi/regression/runtime/card-kit.ts';
 import { CARD_SYMBOLS, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { word } from '@digi/regression/runtime/fx-live.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
-import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
+import { packageSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { LOADED, type Geometry, type Want } from '@digi/regression/runtime/synth.ts';
 import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 import { stateName, statesFor } from '@digi/regression/runtime/load-states.ts';
@@ -15,15 +15,21 @@ export interface Entry {
   want: Want;
 }
 
-export const SYMBOLS = [...CARD_SYMBOLS, 'DKRT_ARENA', '_dl_area', 'DKRT_TABLE_BAD'];
+export const SYMBOLS = [...CARD_SYMBOLS, 'DKRT_ARENA', '_dl_area', 'DKRT_HOST_DIR'];
 export const popcount = (n: number) => n.toString(2).replace(/0/g, '').length;
 const resultOk = (got: number, want: Want) => (want === LOADED ? got === 0 || got === E_LOADING : got === want);
 
-/** Boot a card of ENTRIES (selected in order) and read what the runtime says. `files` are put on the card without being selected (a service file in `services/`). */
-export async function bootEntries(rig: CardRig, tag: string, entries: Entry[], files: { name: string; file: string }[] = []) {
+/** Boot a card of ENTRIES (selected in order) and read what the runtime says. `files` are put on the card without being selected (a service file in `services/`). `absent` paths are selected after the entries and are not on the card. */
+export async function bootEntries(
+  rig: CardRig,
+  tag: string,
+  entries: Entry[],
+  files: { name: string; file: string }[] = [],
+  absent: string[] = [],
+) {
   const rt = await rig.load(tag, {
     modules: [...entries.map((e, i) => ({ name: `modules/m${i}.dkm`, file: e.file })), ...files],
-    selection: entries.map((_, i) => `modules/m${i}.dkm`),
+    selection: [...entries.map((_, i) => `modules/m${i}.dkm`), ...absent],
   });
   const info = await bootInfo(rt.session, rig.plan);
   const { mods, cap } = await rig.usb(rt, async (dk) => ({ mods: await dk.modules(), cap: await dk.capacity() }));
@@ -83,6 +89,10 @@ export async function expectBoot(
   expect(cap.MODULES!, 'CAPACITY modules').toMatchObject({ limit: g.modules, used: loaded.length });
   expect(cap.SELECTION!.used, 'CAPACITY selection').toBe(entries.length);
   expect(cap.ARENA!.limit, 'CAPACITY arena').toBe(g.arenaFree);
+  // the system package has a block of its own: it is reported apart and never counted in the arena
+  expect(cap.PACKAGE!.limit, 'CAPACITY package block').toBe(g.packageBytes);
+  expect(cap.PACKAGE!.used, 'the placed package takes part of its block').toBeGreaterThan(0);
+  expect(cap.PACKAGE!.used).toBeLessThanOrEqual(g.packageBytes);
   expect(cap.STAGE!, 'CAPACITY stage').toMatchObject({ limit: g.stageBytes, largest: g.stageBytes });
   expect(cap.DSP_AREA!.limit, 'CAPACITY DSP area').toBe(g.dspArea);
   expect(cap.VOICE_ROWS!, 'CAPACITY voice rows are the owned rows').toMatchObject({
@@ -94,7 +104,7 @@ export async function expectBoot(
     g.paramRows,
     g.pageRows,
   ]);
-  const bad = (await word(rt.session, planSymbol(rig.plan, 'DKRT_TABLE_BAD'))) >>> 24;
+  const bad = (await word(rt.session, await packageSymbol(rt.session, rig.plan, 'TABLE_BAD'))) >>> 24;
   expect(
     [bad, (await ringEvents(rt.session, rig.plan, 'TABLE_BAD')).length],
     'the table check never failed: a refused module left nothing behind',

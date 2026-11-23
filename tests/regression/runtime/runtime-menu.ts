@@ -12,16 +12,17 @@ import { LOAD_STATUS, LOG_KIND } from '@digi/dk-session/gen_proto';
 import { emulatorClock, pollUntil, waitClock, type Session } from '@digi/test-support';
 import type { PatchedSession } from '../support.ts';
 import { record } from './artifacts.ts';
-import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
+import { packageSymbol, planSymbol, type RuntimePlan } from './runtime-plan.ts';
 
 /** fill_about publishes incrementally: the runtime row alone precedes BOOT and the final RAM row. */
 export const aboutIsComplete = (rows: string[]): boolean =>
   rows.some((row) => /^BOOT: \d+ OF \d+ OK$/.test(row)) && /^RAM KEPT: (YES|NO)$/.test(rows.at(-1) ?? '');
 
+/** The ABOUT rows of the menu in the system package (`MENU_ABOUT`, `MENU_ABOUT_N` of the host directory: the plan has `DKRT_HOST_DIR`). */
 export async function readAboutRows(session: Session, plan: RuntimePlan): Promise<string[]> {
-  const base = planSymbol(plan, 'DK_ABOUT');
+  const base = await packageSymbol(session, plan, 'MENU_ABOUT');
   const peek = (address: number) => session.client.memPeek(address);
-  const count = await peek(planSymbol(plan, 'DK_ABOUT_N'));
+  const count = await peek(await packageSymbol(session, plan, 'MENU_ABOUT_N'));
   if (count === null || !Number.isInteger(count) || count < 1 || count > 24)
     throw new Error(`invalid ABOUT row count: ${count}`);
   const rows: string[] = [];

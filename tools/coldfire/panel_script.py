@@ -246,7 +246,7 @@ def pattern_temp() -> Script:
 
 
 # --- SETTINGS > DIGIKIT (runtime/apps/digikit-menu, finding 28) ---------------------------------------------------
-# Only meaningful on an image patched with core/digikit-menu: DIGIKIT is the 9th SETTINGS entry (8 DOWN from PROJECT;
+# Only meaningful on a boot with the system package (the menu): DIGIKIT is the 9th SETTINGS entry (8 DOWN from PROJECT;
 # DN2 and DT2 alike while OUTBOX 8 is hidden).
 
 

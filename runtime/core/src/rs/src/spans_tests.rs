@@ -1,10 +1,11 @@
 //! The span producers (`entry::tick_all`, `tick::phase`, `tick::poll_all`) over a fake clock and a fake emit: nothing is read or emitted without a span sink
 //! and a clock. A span carries its producer's owner, the first clock reading and the elapsed cycles across a wrap. The sink channel is global state. The
 //! tests share the lock of `cleanup_tests`.
+use crate::fake_platform::test_arena::TestArena;
 use crate::dlog::{self, Span, SINK_SPAN};
-use crate::entry::{self, Ctx};
+use crate::package::entry;
+use dkrt_abi::module::Ctx;
 use crate::state::{DKRT_POLLS, POLLS};
-use crate::test_lock::LOCK;
 use crate::tick::{phase, poll_all};
 use core::ptr::addr_of_mut;
 use dkrt_sdk::{E_CONTRACT, E_NOMEM, OK};
@@ -47,7 +48,7 @@ unsafe fn reset(now: u32, step: u32) {
     CLOCK_CALLS = 0;
     TICKED = 0;
     (*addr_of_mut!(EMITS)).clear();
-    *crate::st() = core::mem::zeroed();
+    *crate::platform::st() = core::mem::zeroed();
     *addr_of_mut!(crate::state::DKRT_MENU_OBJS) = [0; crate::state::MAX_MODULES];
     let mut i = 0;
     while i < POLLS {
@@ -76,7 +77,7 @@ fn emits() -> Vec<(u32, u32, u32)> {
 
 #[test]
 fn no_sink_means_no_clock_read_and_no_span() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         (*addr_of_mut!(DKRT_POLLS))[0] = fake_poll as *const () as usize;
@@ -91,7 +92,7 @@ fn no_sink_means_no_clock_read_and_no_span() {
 
 #[test]
 fn an_emit_without_a_clock_measures_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         assert_eq!(in_module(|| dlog::dk_sink_set(SINK_SPAN, p(fake_emit as *const () as usize))), OK);
@@ -110,7 +111,7 @@ fn an_emit_without_a_clock_measures_nothing() {
 /// difference, a wrap of the counter included. The 32-bit `DKRT_TICKS` table cannot hold a fake's address on a 64-bit host, so `tick_all` itself is not run here.
 #[test]
 fn spanned_emits_one_record_per_call_with_its_owner_and_start() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(u32::MAX - 2, 10);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -138,7 +139,7 @@ fn spanned_emits_one_record_per_call_with_its_owner_and_start() {
 
 #[test]
 fn a_phase_and_each_poll_carry_their_own_owner() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(u32::MAX - 2, 10);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -158,7 +159,7 @@ fn a_phase_and_each_poll_carry_their_own_owner() {
 
 #[test]
 fn releasing_the_sinks_clears_the_clock() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -176,7 +177,7 @@ fn releasing_the_sinks_clears_the_clock() {
 
 #[test]
 fn dk_sink_set_on_the_span_channel_clears_the_clock() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         assert_eq!(in_module(|| dlog::dk_span_sink_set(p(fake_emit as *const () as usize), p(fake_clock as *const () as usize))), OK);
@@ -200,19 +201,19 @@ fn dk_sink_set_on_the_span_channel_clears_the_clock() {
 /// `dkrt_poll_add` records the owner of a slot: the module record whose loaded range holds the function, the runtime marker for any other address.
 #[test]
 fn a_poll_slot_records_the_module_that_registered_it() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
-        let s = crate::st();
+        let s = crate::platform::st();
         s.modules[1].used = 1;
         s.modules[1].base = 0x1000;
         s.modules[1].size = 0x100;
         s.modules[3].used = 1;
         s.modules[3].base = 0x2000;
         s.modules[3].size = 0x100;
-        assert_eq!(crate::dkrt_poll_add(0x1010), OK);
-        assert_eq!(crate::dkrt_poll_add(0x9000), OK);
-        assert_eq!(crate::dkrt_poll_add(0x20ff), OK);
+        assert_eq!(crate::api::dkrt_poll_add(0x1010), OK);
+        assert_eq!(crate::api::dkrt_poll_add(0x9000), OK);
+        assert_eq!(crate::api::dkrt_poll_add(0x20ff), OK);
         let mut f = 0u32;
         assert_eq!(crate::report::debug_poll(0, &mut f), 2, "record 1 gives 2");
         assert_eq!(f, 0x1010);
@@ -223,16 +224,16 @@ fn a_poll_slot_records_the_module_that_registered_it() {
         assert_eq!(crate::report::debug_poll(3, &mut f), 0, "an empty slot");
         assert_eq!(crate::report::debug_poll(4, core::ptr::null_mut()), 0, "past the table");
         // adding a function that is in the table keeps its slot and owner
-        assert_eq!(crate::dkrt_poll_add(0x1010), OK);
+        assert_eq!(crate::api::dkrt_poll_add(0x1010), OK);
         assert_eq!(crate::report::debug_poll(0, core::ptr::null_mut()), 2);
         // a module that is released takes its polls with it; the others stay
         crate::api::poll_drop_range(0x1000, 0x100);
         assert_eq!(crate::report::debug_poll(0, &mut f), 0);
         assert_eq!(crate::report::debug_poll(2, &mut f), 4);
         // removing one frees the slot; a new function reuses it with its own owner
-        crate::dkrt_poll_remove(0x9000);
+        crate::api::dkrt_poll_remove(0x9000);
         assert_eq!(crate::report::debug_poll(1, &mut f), 0);
-        assert_eq!(crate::dkrt_poll_add(0x1020), OK);
+        assert_eq!(crate::api::dkrt_poll_add(0x1020), OK);
         assert_eq!(crate::report::debug_poll(0, &mut f), 2);
         assert_eq!(f, 0x1020);
         reset(0, 5);
@@ -251,36 +252,36 @@ unsafe extern "C" fn observer_b(owner: u32) {
 /// others are called in table order with the owner.
 #[test]
 fn unload_observers_are_called_with_the_owner_and_an_own_observer_is_dropped() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
         (*core::ptr::addr_of_mut!(CALLED)).clear();
         let a = observer_a as *const () as usize;
         let b = observer_b as *const () as usize;
-        assert_eq!(crate::dkrt_unload_observer_add(0), E_CONTRACT);
-        assert_eq!(crate::dkrt_unload_observer_add(a), OK);
-        assert_eq!(crate::dkrt_unload_observer_add(a), OK, "in the table already");
-        assert_eq!(crate::dkrt_unload_observer_add(b), OK);
+        assert_eq!(crate::api::dkrt_unload_observer_add(0), E_CONTRACT);
+        assert_eq!(crate::api::dkrt_unload_observer_add(a), OK);
+        assert_eq!(crate::api::dkrt_unload_observer_add(a), OK, "in the table already");
+        assert_eq!(crate::api::dkrt_unload_observer_add(b), OK);
         crate::api::notify_unload(3, 0, 0);
         assert_eq!(*core::ptr::addr_of!(CALLED), [3, 103]);
         // an observer in the range of the unloaded module (a fake address: it must not be called) is dropped
-        assert_eq!(crate::dkrt_unload_observer_add(0x5010), OK);
+        assert_eq!(crate::api::dkrt_unload_observer_add(0x5010), OK);
         (*core::ptr::addr_of_mut!(CALLED)).clear();
         crate::api::notify_unload(4, 0x5000, 0x100);
         assert_eq!(*core::ptr::addr_of!(CALLED), [4, 104]);
         (*core::ptr::addr_of_mut!(CALLED)).clear();
         crate::api::notify_unload(5, 0x5000, 0x100);
         assert_eq!(*core::ptr::addr_of!(CALLED), [5, 105]);
-        crate::dkrt_unload_observer_remove(a);
+        crate::api::dkrt_unload_observer_remove(a);
         // four slots
         for i in 1..4usize {
-            assert_eq!(crate::dkrt_unload_observer_add(0x7000 + i), OK);
+            assert_eq!(crate::api::dkrt_unload_observer_add(0x7000 + i), OK);
         }
-        assert_eq!(crate::dkrt_unload_observer_add(0x7100), E_NOMEM);
-        crate::dkrt_unload_observer_remove(b);
-        assert_eq!(crate::dkrt_unload_observer_add(0x7100), OK);
+        assert_eq!(crate::api::dkrt_unload_observer_add(0x7100), E_NOMEM);
+        crate::api::dkrt_unload_observer_remove(b);
+        assert_eq!(crate::api::dkrt_unload_observer_add(0x7100), OK);
         for f in [0x7001usize, 0x7002, 0x7003, 0x7100] {
-            crate::dkrt_unload_observer_remove(f);
+            crate::api::dkrt_unload_observer_remove(f);
         }
         assert_eq!(*core::ptr::addr_of!(crate::state::DKRT_UNLOAD_OBSERVERS), [0; 4]);
         reset(0, 5);
@@ -290,21 +291,25 @@ fn unload_observers_are_called_with_the_owner_and_an_own_observer_is_dropped() {
 /// `dkrt_ctx_owner` gives the record of a live module context and refuses any other pointer.
 #[test]
 fn a_module_context_names_its_owner() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
-        crate::entry::bind(2);
-        // the host's addresses are 64 bits wide: take the address of the context itself, not `ctx_addr`'s u32
+        // other tests leave contexts bound
+        for rec in 0..crate::state::REC_MAX {
+            crate::package::entry::unbind(rec);
+        }
+        crate::package::entry::bind(2);
+        // the host's addresses are 64 bits wide: `dkrt_ctx_owner` takes the address of the context itself, a host pointer
         let ctx = core::ptr::addr_of!(entry::DKRT_CTXS[2]) as usize;
-        assert_eq!(crate::dkrt_ctx_owner(ctx), 2);
-        assert_eq!(crate::dkrt_ctx_owner(ctx + 1), E_CONTRACT);
-        assert_eq!(crate::dkrt_ctx_owner(0), E_CONTRACT);
-        assert_eq!(crate::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[3]) as usize), E_CONTRACT, "record 3 is not loaded");
-        crate::entry::unbind(2);
+        assert_eq!(crate::api::dkrt_ctx_owner(ctx), 2);
+        assert_eq!(crate::api::dkrt_ctx_owner(ctx + 1), E_CONTRACT);
+        assert_eq!(crate::api::dkrt_ctx_owner(0), E_CONTRACT);
+        assert_eq!(crate::api::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[3]) as usize), E_CONTRACT, "record 3 is not loaded");
+        crate::package::entry::unbind(2);
         // a service file's record has a context too, but no owner id is given out for it
-        crate::entry::bind(crate::MAX_MODULES);
-        assert_eq!(crate::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[crate::MAX_MODULES]) as usize), E_CONTRACT);
-        crate::entry::unbind(crate::MAX_MODULES);
+        crate::package::entry::bind(dkrt_abi::MAX_MODULES);
+        assert_eq!(crate::api::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[dkrt_abi::MAX_MODULES]) as usize), E_CONTRACT);
+        crate::package::entry::unbind(dkrt_abi::MAX_MODULES);
         reset(0, 5);
     }
 }
@@ -312,22 +317,24 @@ fn a_module_context_names_its_owner() {
 /// `dkrt_menu_built` counts a menu for the module record that holds the fill function, else the descriptor; an address in no module counts for none.
 #[test]
 fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
-        let s = crate::st();
+        let s = crate::platform::st();
         for (rec, base) in [(1usize, 0x1000u32), (3, 0x2000)] {
             s.modules[rec].used = 1;
             s.modules[rec].base = base;
             s.modules[rec].size = 0x100;
         }
         let n = |rec: usize| core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec]));
-        crate::dkrt_menu_built(0x1010, 0x2010);
+        crate::api::dkrt_menu_built(0x1010, 0x2010);
         assert_eq!((n(1), n(3)), (1, 0), "the fill function decides");
-        crate::dkrt_menu_built(0x9000, 0x2010);
+        crate::api::dkrt_menu_built(0x9000, 0x2010);
         assert_eq!((n(1), n(3)), (1, 1), "no module holds the fill function: the descriptor does");
-        crate::dkrt_menu_built(0x9000, 0x9100);
+        crate::api::dkrt_menu_built(0x9000, 0x9100);
         assert_eq!((n(1), n(3)), (1, 1), "a menu of the firmware image counts for no module");
+        crate::api::dkrt_menu_built(0x0800, 0x0810);
+        assert_eq!((n(1), n(3)), (1, 1), "a menu below every module (the system package block) counts for no module");
         reset(0, 5);
     }
 }
@@ -337,11 +344,11 @@ fn a_menu_is_counted_for_the_module_that_holds_its_code_or_descriptor() {
 /// a release lets it through, releases never take the count below 0, and a load into the record starts at 0, so a release that arrives after it changes nothing.
 #[test]
 fn an_open_page_holds_the_module_and_the_release_lets_it_go() {
-    use crate::reload::{Ops, RealOps};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    use crate::package::reload::{Ops, RealOps};
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
-        let s = crate::st();
+        let s = crate::platform::st();
         for (rec, base) in [(1usize, 0x1000u32), (3, 0x2000)] {
             s.modules[rec].used = 1;
             s.modules[rec].base = base;
@@ -349,24 +356,24 @@ fn an_open_page_holds_the_module_and_the_release_lets_it_go() {
         }
         let n = |rec: usize| core::ptr::read_volatile(core::ptr::addr_of!(crate::state::DKRT_MENU_OBJS[rec]));
         let mut ops = RealOps;
-        crate::dkrt_menu_built(0x1020, 0); // the page opens: the module's menu function is the code address
+        crate::api::dkrt_menu_built(0x1020, 0); // the page opens: the module's menu function is the code address
         assert!(ops.menu_built(1) && !ops.menu_built(3), "held: the job refuses module 1 only");
-        crate::dkrt_menu_release(0x1020, 0); // the page is left
+        crate::api::dkrt_menu_release(0x1020, 0); // the page is left
         assert!(!ops.menu_built(1), "released: the job goes on");
         // a menu object the module built itself and the page hold together: both must go
-        crate::dkrt_menu_built(0x1010, 0x2000);
-        crate::dkrt_menu_built(0x1020, 0);
-        crate::dkrt_menu_release(0x1020, 0);
+        crate::api::dkrt_menu_built(0x1010, 0x2000);
+        crate::api::dkrt_menu_built(0x1020, 0);
+        crate::api::dkrt_menu_release(0x1020, 0);
         assert_eq!(n(1), 1, "the module's own menu object still holds it");
         // releases past 0 stay at 0; an address in no module counts for nothing
-        crate::dkrt_menu_release(0x1020, 0);
-        crate::dkrt_menu_release(0x1020, 0);
-        crate::dkrt_menu_release(0x9000, 0x9100);
+        crate::api::dkrt_menu_release(0x1020, 0);
+        crate::api::dkrt_menu_release(0x1020, 0);
+        crate::api::dkrt_menu_release(0x9000, 0x9100);
         assert_eq!((n(1), n(3)), (0, 0), "the count stops at 0");
         // a load into the record reset the count to 0: the release of the old page does not go below
-        crate::dkrt_menu_built(0x2020, 0);
+        crate::api::dkrt_menu_built(0x2020, 0);
         crate::state::DKRT_MENU_OBJS[3] = 0; // `set_menu` at a load
-        crate::dkrt_menu_release(0x2020, 0);
+        crate::api::dkrt_menu_release(0x2020, 0);
         assert_eq!(n(3), 0);
         reset(0, 5);
     }
@@ -376,11 +383,11 @@ fn an_open_page_holds_the_module_and_the_release_lets_it_go() {
 /// a record number past the table is no menu, and the count does not wrap after many menus.
 #[test]
 fn the_job_reads_the_menu_count_of_its_own_record() {
-    use crate::reload::{Ops, RealOps};
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    use crate::package::reload::{Ops, RealOps};
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
-        let s = crate::st();
+        let s = crate::platform::st();
         for (rec, base) in [(1usize, 0x1000u32), (3, 0x2000)] {
             s.modules[rec].used = 1;
             s.modules[rec].base = base;
@@ -388,12 +395,12 @@ fn the_job_reads_the_menu_count_of_its_own_record() {
         }
         let mut ops = RealOps;
         assert!(!ops.menu_built(1) && !ops.menu_built(3), "no menu yet");
-        crate::dkrt_menu_built(0x2010, 0);
+        crate::api::dkrt_menu_built(0x2010, 0);
         assert!(!ops.menu_built(1), "a menu of module 3 is no menu of module 1");
         assert!(ops.menu_built(3));
-        assert!(!ops.menu_built(crate::MAX_MODULES), "a record past the table has no menu");
+        assert!(!ops.menu_built(dkrt_abi::MAX_MODULES), "a record past the table has no menu");
         for _ in 0..300 {
-            crate::dkrt_menu_built(0x1010, 0);
+            crate::api::dkrt_menu_built(0x1010, 0);
         }
         assert!(ops.menu_built(1), "the count stays at its top and does not wrap to 0");
         reset(0, 5);
@@ -403,16 +410,32 @@ fn the_job_reads_the_menu_count_of_its_own_record() {
 /// `dkrt_phase` says what the running module code is.
 #[test]
 fn the_phase_is_that_of_the_running_module_code() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = TestArena::lock();
     unsafe {
         reset(0, 5);
-        assert_eq!(crate::dkrt_phase(), 0);
+        assert_eq!(crate::api::dkrt_phase(), 0);
         let prev = dlog::enter_module(0, dlog::PHASE_INIT);
-        assert_eq!(crate::dkrt_phase(), 1);
+        assert_eq!(crate::api::dkrt_phase(), 1);
         dlog::leave_module(prev);
         let prev = dlog::enter_module(0, dlog::PHASE_TICK);
-        assert_eq!(crate::dkrt_phase(), 2);
+        assert_eq!(crate::api::dkrt_phase(), 2);
         dlog::leave_module(prev);
-        assert_eq!(crate::dkrt_phase(), 0);
+        assert_eq!(crate::api::dkrt_phase(), 0);
     }
+}
+
+/// `in_range` works on u32 addresses, the device's width: below base, at base, inside, at the exclusive end, above, and near the top of the address space.
+#[test]
+fn in_range_is_a_half_open_u32_interval() {
+    use crate::api::in_range;
+    assert!(!in_range(0x0FFF, 0x1000, 0x100), "below base");
+    assert!(in_range(0x1000, 0x1000, 0x100), "at base");
+    assert!(in_range(0x1080, 0x1000, 0x100), "inside");
+    assert!(in_range(0x10FF, 0x1000, 0x100), "last byte");
+    assert!(!in_range(0x1100, 0x1000, 0x100), "at end");
+    assert!(!in_range(0x2000, 0x1000, 0x100), "above");
+    assert!(!in_range(0x1000, 0xFFFF_FF00, 0x100), "below a base near the top");
+    assert!(in_range(0xFFFF_FFFF, 0xFFFF_FF00, 0x100), "last address");
+    assert!(in_range(0xFFFF_FF00, 0xFFFF_FF00, 0x100), "base near the top");
+    assert!(!in_range(0xFFFF_FEFF, 0xFFFF_FF00, 0x100), "just below a base near the top");
 }

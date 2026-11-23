@@ -113,6 +113,18 @@ export interface Geometry {
   dspFirst: number;
   /** Bytes of the arena's one free block at the start (header included). */
   arenaFree: number;
+  /** `PACKAGE_BYTES` of runtime/core/abi.toml: the system package block, which is not in the arena. */
+  packageBytes: number;
+}
+
+/** A `[[const]]` of runtime/core/abi.toml. */
+function abiConst(name: string): number {
+  const abi = parse(fs.readFileSync(path.join(repoRoot(), 'runtime/core/abi.toml'), 'utf8')) as {
+    const: { name: string; value: number }[];
+  };
+  const c = abi.const.find((k) => k.name === name);
+  if (!c) throw new Error(`runtime/core/abi.toml has no const ${name}`);
+  return c.value;
 }
 
 /** `dynamic_first ..= last` of the device in the machines `types.toml`: the run-time machine type numbers. */
@@ -149,6 +161,7 @@ export function geometryOf(device: Device, plan: RuntimePlan): Geometry {
     typeFirst: first,
     dspFirst: -dspBase & 7,
     arenaFree: arenaHi - arenaLo,
+    packageBytes: abiConst('PACKAGE_BYTES'),
   };
 }
 

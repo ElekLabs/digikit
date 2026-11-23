@@ -1,0 +1,267 @@
+use super::*;
+
+fn calm() -> Inputs {
+    Inputs {
+        record_unreadable: false,
+        safe_once: false,
+        safe_key_held: false,
+        dsp_hang_seen: false,
+        panic_seen: false,
+        boot_counter: 0,
+        package: PackageStatus::Ok,
+    }
+}
+
+#[test]
+fn nothing_wrong_is_normal() {
+    assert_eq!(decide(&calm()), Level::Normal);
+    assert_eq!(
+        decide(&Inputs {
+            boot_counter: SAFE_AFTER - 1,
+            ..calm()
+        }),
+        Level::Normal
+    );
+}
+
+#[test]
+fn each_safe_trigger_gives_its_reason() {
+    let cases = [
+        (
+            Inputs {
+                record_unreadable: true,
+                ..calm()
+            },
+            SafeReason::Unreadable,
+        ),
+        (
+            Inputs {
+                safe_once: true,
+                ..calm()
+            },
+            SafeReason::Flag,
+        ),
+        (
+            Inputs {
+                safe_key_held: true,
+                ..calm()
+            },
+            SafeReason::Key,
+        ),
+        (
+            Inputs {
+                dsp_hang_seen: true,
+                ..calm()
+            },
+            SafeReason::DspHang,
+        ),
+        (
+            Inputs {
+                panic_seen: true,
+                ..calm()
+            },
+            SafeReason::Panic,
+        ),
+        (
+            Inputs {
+                boot_counter: SAFE_AFTER,
+                ..calm()
+            },
+            SafeReason::Counter,
+        ),
+    ];
+    for (i, want) in cases {
+        assert_eq!(decide(&i), Level::Safe(want));
+    }
+}
+
+#[test]
+fn safe_reason_codes_are_the_boot_info_reasons() {
+    assert_eq!(SafeReason::Unreadable.code(), SAFE_READ);
+    assert_eq!(SafeReason::Flag.code(), SAFE_FLAG);
+    assert_eq!(SafeReason::Key.code(), SAFE_KEY);
+    assert_eq!(SafeReason::DspHang.code(), SAFE_DSP);
+    assert_eq!(SafeReason::Panic.code(), SAFE_PANIC);
+    assert_eq!(SafeReason::Counter.code(), SAFE_COUNTER);
+}
+
+#[test]
+fn core_only_reason_codes_are_the_boot_info_causes() {
+    assert_eq!(CoreOnlyReason::Crashes.code(), CORE_CRASHES);
+    assert_eq!(CoreOnlyReason::PackageMissing.code(), CORE_MISSING);
+    assert_eq!(CoreOnlyReason::PackageIncompatible.code(), CORE_INCOMPATIBLE);
+    assert_eq!(CoreOnlyReason::PackageDamaged.code(), CORE_DAMAGED);
+    assert_eq!(CoreOnlyReason::PackageUnreadable.code(), CORE_UNREADABLE);
+}
+
+#[test]
+fn the_first_safe_trigger_found_is_the_reason() {
+    let all = Inputs {
+        safe_once: true,
+        safe_key_held: true,
+        dsp_hang_seen: true,
+        panic_seen: true,
+        boot_counter: SAFE_AFTER,
+        ..calm()
+    };
+    assert_eq!(decide(&all), Level::Safe(SafeReason::Flag));
+    assert_eq!(
+        decide(&Inputs {
+            safe_once: false,
+            ..all
+        }),
+        Level::Safe(SafeReason::Key)
+    );
+    assert_eq!(
+        decide(&Inputs {
+            safe_once: false,
+            safe_key_held: false,
+            ..all
+        }),
+        Level::Safe(SafeReason::DspHang)
+    );
+    assert_eq!(
+        decide(&Inputs {
+            safe_once: false,
+            safe_key_held: false,
+            dsp_hang_seen: false,
+            ..all
+        }),
+        Level::Safe(SafeReason::Panic)
+    );
+    assert_eq!(
+        decide(&Inputs {
+            record_unreadable: true,
+            ..all
+        }),
+        Level::Safe(SafeReason::Unreadable)
+    );
+}
+
+#[test]
+fn the_two_counter_thresholds() {
+    assert!(SAFE_AFTER < CORE_ONLY_AFTER);
+    assert_eq!(
+        decide(&Inputs {
+            boot_counter: CORE_ONLY_AFTER - 1,
+            ..calm()
+        }),
+        Level::Safe(SafeReason::Counter)
+    );
+    assert_eq!(
+        decide(&Inputs {
+            boot_counter: CORE_ONLY_AFTER,
+            ..calm()
+        }),
+        Level::CoreOnly(CoreOnlyReason::Crashes)
+    );
+    assert_eq!(
+        decide(&Inputs {
+            boot_counter: u32::MAX,
+            ..calm()
+        }),
+        Level::CoreOnly(CoreOnlyReason::Crashes)
+    );
+}
+
+#[test]
+fn many_crashes_beat_a_safe_trigger() {
+    let i = Inputs {
+        safe_key_held: true,
+        dsp_hang_seen: true,
+        boot_counter: CORE_ONLY_AFTER,
+        ..calm()
+    };
+    assert_eq!(decide(&i), Level::CoreOnly(CoreOnlyReason::Crashes));
+}
+
+#[test]
+fn an_unreadable_record_has_no_counter_to_trust() {
+    let i = Inputs {
+        record_unreadable: true,
+        boot_counter: CORE_ONLY_AFTER,
+        ..calm()
+    };
+    assert_eq!(decide(&i), Level::Safe(SafeReason::Unreadable));
+}
+
+#[test]
+fn a_package_that_cannot_run_is_core_only_and_not_a_crash() {
+    for (status, want) in [
+        (PackageStatus::Missing, CoreOnlyReason::PackageMissing),
+        (
+            PackageStatus::Incompatible,
+            CoreOnlyReason::PackageIncompatible,
+        ),
+        (PackageStatus::Damaged, CoreOnlyReason::PackageDamaged),
+        (
+            PackageStatus::Unreadable,
+            CoreOnlyReason::PackageUnreadable,
+        ),
+    ] {
+        let level = decide(&Inputs {
+            package: status,
+            ..calm()
+        });
+        assert_eq!(level, Level::CoreOnly(want));
+        assert!(!Level::CoreOnly(want).counts_boot());
+        // it wins over every safe trigger: safe mode needs the package's menu
+        let busy = Inputs {
+            package: status,
+            safe_key_held: true,
+            safe_once: true,
+            record_unreadable: true,
+            panic_seen: true,
+            ..calm()
+        };
+        assert_eq!(decide(&busy), Level::CoreOnly(want));
+    }
+}
+
+#[test]
+fn a_package_fault_and_many_crashes_name_the_package() {
+    let i = Inputs {
+        package: PackageStatus::Damaged,
+        boot_counter: CORE_ONLY_AFTER,
+        ..calm()
+    };
+    assert_eq!(decide(&i), Level::CoreOnly(CoreOnlyReason::PackageDamaged));
+}
+
+#[test]
+fn the_safe_key_does_not_hold_back_core_only_at_the_counter_threshold() {
+    let i = Inputs {
+        safe_key_held: true,
+        boot_counter: CORE_ONLY_AFTER,
+        ..calm()
+    };
+    assert_eq!(decide(&i), Level::CoreOnly(CoreOnlyReason::Crashes));
+}
+
+#[test]
+fn only_a_normal_boot_or_one_the_counter_caused_counts_itself() {
+    assert!(Level::Normal.counts_boot());
+    for (reason, counts) in [
+        (SafeReason::Counter, true),
+        (SafeReason::Key, false),
+        (SafeReason::Flag, false),
+        (SafeReason::DspHang, false),
+        (SafeReason::Panic, false),
+        (SafeReason::Unreadable, false),
+    ] {
+        assert_eq!(Level::Safe(reason).counts_boot(), counts, "{reason:?}");
+    }
+    for reason in [CoreOnlyReason::PackageMissing, CoreOnlyReason::PackageIncompatible, CoreOnlyReason::PackageDamaged, CoreOnlyReason::PackageUnreadable] {
+        assert!(!Level::CoreOnly(reason).counts_boot(), "{reason:?}: a card state is no crash");
+    }
+    assert!(!Level::CoreOnly(CoreOnlyReason::Crashes).counts_boot(), "a core-only boot keeps the counter where it is");
+}
+
+#[test]
+fn every_core_only_boot_keeps_the_counter() {
+    for reason in [CoreOnlyReason::Crashes, CoreOnlyReason::PackageMissing, CoreOnlyReason::PackageIncompatible, CoreOnlyReason::PackageDamaged, CoreOnlyReason::PackageUnreadable] {
+        assert!(Level::CoreOnly(reason).keeps_counter(), "{reason:?}");
+    }
+    assert!(!Level::Safe(SafeReason::Counter).keeps_counter());
+    assert!(!Level::Normal.keeps_counter());
+}

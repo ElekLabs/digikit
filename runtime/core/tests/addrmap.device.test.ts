@@ -19,7 +19,7 @@ runtimeTests('the address map names a runtime function and a loaded module funct
   const { session, dk } = runtime;
   await expectRuntimeReady(session);
   const device = session.options.device;
-  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'addrmap'), ['DKRT_STATE', 'DKRT_DSP', 'dyndsp_info']);
+  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'addrmap'), ['DKRT_STATE', 'DKRT_HOST_DIR', 'dyndsp_info']);
   const shipMap = path.join(session.runDir, `runtime-${device}.addrmap.json`);
   const artifact = moduleArtifact(device, ID);
   const moduleMap = artifact.replace(/\.dkm$/, '.addrmap.json');

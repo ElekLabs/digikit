@@ -25,7 +25,7 @@ import { record } from '@digi/regression/runtime/artifacts.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { readSmallRing } from '@digi/regression/runtime/runtime-menu.ts';
-import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
+import { packageSymbol, planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { emulatorDk } from '@digi/regression/runtime/waits.ts';
 
 /** DSP frames added to the shared trigger frame: the hooked setup takes up to the shared frame (frames 6988 to 7005 of 7000 seen). */
@@ -93,7 +93,7 @@ for (const device of DEVICES) {
           name: 'fx-chain',
           modules: [...RT, 'core/dynfx', 'core/fxpages'],
           inventory,
-          symbols: [...symbols, 'fx.rows', '_dl_area', 'DKRT_TABLE_BAD', 'DKRT_LOG', 'DKRT_LOG_COUNT'],
+          symbols: [...symbols, 'fx.rows', '_dl_area', 'DKRT_HOST_DIR', 'DKRT_LOG', 'DKRT_LOG_COUNT'],
           policy: 'default',
         },
         initial: 'dry',
@@ -189,7 +189,7 @@ for (const device of DEVICES) {
         const fit = await chainCheck(snapshot, effectFiles);
         record(artifacts, 'full-fit', fit);
         expect(fit.ranges_ok, 'overflow leaves pairwise disjoint DSP ranges').toBe(true);
-        expect((await word(full.session, planSymbol(plan, 'DKRT_TABLE_BAD'))) >>> 24).toBe(0);
+        expect((await word(full.session, await packageSymbol(full.session, plan, 'TABLE_BAD'))) >>> 24).toBe(0);
         const events = await bounded(() => readSmallRing(full.session, plan));
         record(artifacts, 'full-events', events);
         expect(events.map((event) => event.kind)).not.toContain(LOG_KIND.TABLE_BAD);

@@ -1,11 +1,10 @@
-import { hasCap, type DkSession } from '@digi/dk-session';
+import type { DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
 import { statusOf } from '@digi/regression/runtime/card-kit.ts';
 import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { DEVICES } from '@digi/regression/runtime/devices.ts';
 import {
   decodeSettings,
-  E_SET_KEY,
   E_SET_NOKEY,
   sectorOf,
   settingsMap,
@@ -13,21 +12,23 @@ import {
   settingsRecord,
 } from '@digi/regression/runtime/project-kit.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
-import { AMOUNTS, byte, DELAY_MS, ROUTE, SECTOR, SEND, settingsCase, suiteName, text } from './settings-support.ts';
+import { AMOUNTS, byte, DELAY_MS, ROUTE, SECTOR, SEND, settingsCase, suiteName } from './settings-support.ts';
 
 /**
- * The settings store of the runtime (docs/design/digikit-store.md "The settings record"; port of 6a5bb1ed:tools/patchkit/pk_digikit_settings.py).
- * A key put through the mailbox is written 2 s after the last change to the copy that is not current, and only there; a soft restart reads it back;
- * SETTINGS and CAPACITY report it; `patchkit store dump` decodes the card the guest left; a blank card is claimed first; a torn newer copy leaves the older one.
- * Route key persistence, error mapping with mocks and kit persistence are covered by fx-routes-persist, fault.test.ts and fx-kit-persist.
- * This file: the main flow and the restart. The blank card and the copy choice are in settings-copies, the older and overlapping stores in settings-cards.
+ * The settings store of the runtime on the firmware (docs/design/digikit-store.md "The settings record"; port of 6a5bb1ed:tools/patchkit/pk_digikit_settings.py).
+ * Only what the firmware shows is here: the record is written 2 s of the firmware's block counter after the last change, to the copy that is not current,
+ * on the real card; a restart reads it back; CAPACITY and SETTINGS answer over USB; a put and at once a restart keeps the value; a blank card is claimed first.
+ * The logic is in host tests: the put/get flow, the delay and its restart, the copy choice, the mailbox answers, a torn copy and a store that reaches into the
+ * settings area are `settings_tests.rs` of the runtime; the format and the copy choice are `dkrt_sdk::settings`' tests; `patchkit store dump` decoding is
+ * `storedump.rs`' tests. Route key persistence, error mapping with mocks and kit persistence are covered by fx-routes-persist, fault.test.ts and fx-kit-persist.
+ * This file: the main flow and the restart. The blank card is in settings-copies, the older and overlapping stores in settings-cards.
  */
 
 for (const device of DEVICES) {
   describe(suiteName(device), () => {
-    const { s, settingsArea, kit, written, dump, dumpJson } = settingsCase(device);
+    const { s, settingsArea, kit, written } = settingsCase(device);
 
-    test('main: put and get, the 2 s delay, copy A then B, restart, remove', async () => {
+    test('main: the 2 s delay on the firmware clock, copy A then B on the card, restart', async () => {
       const rt = await kit.first();
       const { session } = rt;
       const usb = <T>(run: (dk: DkSession) => Promise<T>) => kit.usb(rt, run);
@@ -38,11 +39,9 @@ for (const device of DEVICES) {
 
       let ev = await events();
       expect(ev.length, 'the boot read the settings area once').toBe(1);
-      expect(ev[0]!.args, 'no valid copy (state 0, copy none, seq 0, 18 bytes, no entry)').toEqual([0, 2, 0, 18, 0]);
       let cap = (await usb((dk) => dk.capacity())).SETTINGS!;
       expect(cap.limit, 'CAPACITY reports SETTINGS in bytes (the area of one copy)').toBe(16 * SECTOR);
       expect(cap.used, 'CAPACITY used: the header').toBe(18);
-      expect(hasCap(await usb((dk) => dk.info()), 'SETTINGS'), 'INFO has the capability').toBe(true);
       expect(await statusOf(() => usb(settingsRecord)), 'SETTINGS answers E_SET_NOKEY while there is no record').toBe(
         E_SET_NOKEY,
       );
@@ -55,12 +54,6 @@ for (const device of DEVICES) {
         [1, byte(1)],
         [16, AMOUNTS],
       ]);
-      expect((await mb.get('fx/route/none'))[0], 'a key that is not there answers E_SET_NOKEY').toBe(E_SET_NOKEY);
-      expect(
-        [await mb.put('has space', text('x')), (await mb.get('has space'))[0], await mb.remove('has space')],
-        'a key with a space answers E_SET_KEY (put, get, remove)',
-      ).toEqual([E_SET_KEY, E_SET_KEY, E_SET_KEY]);
-      expect(await mb.put(ROUTE, byte(1)), 'the same value again changes nothing').toBe(0);
       cap = (await usb((dk) => dk.capacity())).SETTINGS!;
       expect(cap.used, 'CAPACITY used is the header and the two entries (18 + 29 + 43)').toBe(
         18 + (1 + ROUTE.length + 2 + 1) + (1 + SEND.length + 2 + 16),
@@ -97,20 +90,6 @@ for (const device of DEVICES) {
       const recA = sectorOf(after1, s.setA);
       expect(decodeSettings(recA)?.seq, 'copy A on the card is a valid record, seq 1').toBe(1);
       expect(recA.subarray(90).equals(Buffer.alloc(SECTOR - 90)), '90 bytes, zero after them').toBe(true);
-      const shown = await dump(after1);
-      const d1 = await dumpJson(after1);
-      const sc = d1.settings;
-      expect(sc.active, 'copy A in use').toBe('A');
-      expect(sc.copies[0].seq).toBe(1);
-      expect(sc.copies[1].state, 'copy B empty').toBe('empty');
-      expect(
-        Object.fromEntries(sc.copies[0].entries.map((e: { key: string; value: unknown }) => [e.key, e.value])),
-        'the keys decoded (route master, the 16 amounts)',
-      ).toEqual({ [ROUTE]: 'master', [SEND]: [...AMOUNTS] });
-      expect(shown).toContain(`${SEND}  [${[...AMOUNTS].join(', ')}]`);
-      expect(shown).toContain(`${ROUTE}  master (0)`);
-      expect(shown).toContain('copy A: sector');
-
       // the next change goes to the other copy, A stays as it is
       const amounts2 = Buffer.alloc(16, 127);
       await mb.put(SEND, amounts2);
@@ -138,24 +117,6 @@ for (const device of DEVICES) {
         0, 1, 2,
       ]);
 
-      // the next change goes to A again (seq 3); a removed key stays removed
-      await mb.put('fx/route/test/other', byte(1));
-      await mb.remove(SEND);
-      expect((await mb.get(SEND))[0], 'a removed key is gone at once').toBe(E_SET_NOKEY);
-      await rt.ui.wait({ ms: DELAY_MS + 500, why: SETTLE });
-      const after3 = await left('m3');
-      const ra = decodeSettings(sectorOf(after3, s.setA));
-      expect(ra?.seq, 'after the restart the next write goes to copy A (seq 3)').toBe(3);
-      expect(settingsMap(ra), 'with the new key and without the removed one').toEqual({
-        [ROUTE]: '00',
-        'fx/route/test/other': '01',
-      });
-      expect(sectorOf(after3, s.setB).equals(sectorOf(after2, s.setB)), 'copy B is as it was').toBe(true);
-      const all = await written();
-      expect(
-        all.filter((x) => x !== s.selA && x !== s.selB),
-        'the only store sectors written are the two settings copies',
-      ).toEqual(settingsArea);
     });
 
     test('restart: a put and at once a restart keeps the value (dkrt_restart writes the pending record first)', async () => {

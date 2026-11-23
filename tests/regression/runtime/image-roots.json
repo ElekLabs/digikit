@@ -6,8 +6,8 @@
       "roots": ["core/runtime", "core/dynreg", "core/dyndsp"]
     },
     {
-      "id": "rt-menu",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/digikit-menu"]
+      "id": "rt-ui",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/ui"]
     },
     {
       "id": "coupled",
@@ -72,8 +72,8 @@
       "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages"]
     },
     {
-      "id": "rt-dynfx-fxpages-menu",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/digikit-menu"]
+      "id": "rt-dynfx-fxpages-ui",
+      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui"]
     },
     {
       "id": "fx-kit-persist",

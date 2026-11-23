@@ -165,14 +165,14 @@ pub fn anchor_entries(port: &Port) -> Vec<Entry> {
         .collect()
 }
 
-/// The byte addresses of the symbols a host reads to decode the load table (`DKRT_STATE`, `DKRT_DSP`, `dyndsp_info`; docs/ADDRMAP.md "Load table"),
-/// for those the image has exactly once.
+/// The byte addresses of the resident symbols a host reads to decode the load table (`DKRT_STATE`, `DKRT_HOST_DIR`, `dyndsp_info`; docs/ADDRMAP.md "Load table"),
+/// for those the image has exactly once. The statics of the system package (`DKRT_DSP`, `DKRT_PROVIDERS`) are not in the image: the host finds them through
+/// `DKRT_HOST_DIR` (`dkaddrmap::host_dir`).
 pub fn load_symbols(plan: &crate::apply::Plan) -> std::collections::BTreeMap<String, u64> {
     [
         dkaddrmap::snapshot::SYM_STATE,
-        dkaddrmap::snapshot::SYM_DSP,
+        dkaddrmap::host_dir::SYM_HOST_DIR,
         dkaddrmap::snapshot::SYM_INFO,
-        dkaddrmap::snapshot::SYM_PROVIDERS,
     ]
     .iter()
     .filter_map(|s| {
@@ -203,8 +203,9 @@ pub fn ship_map(plan: &crate::apply::Plan) -> AddrMap {
             modules,
             l2_byte_base: crate::dsp::L2_BYTE_BASE as u64,
             l2_sw_base: crate::dsp::L2_SW_BASE as u64,
-            dsp: has(dkaddrmap::snapshot::SYM_DSP) && has(dkaddrmap::snapshot::SYM_INFO),
-            providers: if has(dkaddrmap::snapshot::SYM_PROVIDERS) {
+            // `DKRT_DSP` and `DKRT_PROVIDERS` belong to the system package, loaded from the card: the image's own part is the DSP loader's info table and the directory
+            dsp: has(dkaddrmap::snapshot::SYM_INFO),
+            providers: if has(dkaddrmap::host_dir::SYM_HOST_DIR) {
                 dkrt_sdk::PROVIDER_MAX as u64
             } else {
                 0
@@ -251,8 +252,8 @@ pub fn module_map(
 const USAGE: &str = "usage: patchkit addr --map FILE... [--loads FILE] [--load ID=BASE]... [--dsp-base ID=PC]... [--snapshot SYMBOL=HEX]... [--cpu cf|sharc] [--ret] [--format json|text|reads|loads] (ADDR... | --stdin)
   ADDR is hex (0x...) or decimal, optionally CPU:ADDR (sharc:0xb80010). --stdin reads one ADDR per line.
   --loads is a JSON load table {\"modules\":[{\"id\":NAME,\"base\":N}]}; --load adds one module (hex base).
-  --snapshot gives the raw bytes of a runtime symbol (DKRT_STATE, DKRT_DSP, dyndsp_info) as read from the emulator or device; the load table is decoded from them
-  with the map's loader header. --format reads lists the symbols and byte counts to read; --format loads prints the decoded load table.
+  --snapshot gives the raw bytes of a runtime symbol (DKRT_STATE, DKRT_HOST_DIR, DKRT_DSP, dyndsp_info) as read from the emulator or device; the load table is decoded from them
+  with the map's loader header. --format reads lists the symbols and byte counts to read (a read with host_id is a package static: its address is the entry of that id in DKRT_HOST_DIR, which is read before it); --format loads prints the decoded load table.
   --dsp-base sets where the DSP image of a loaded module starts (hex software PC); `sharc` names of the module need it.
   --ret names a return address (the address minus 2).";
 

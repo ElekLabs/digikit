@@ -18,16 +18,25 @@ shared = [
   "dkrt::lib",
   "dkrt::state",
   "dkrt::api",
-  "dkrt::core_api",
-  "dkrt::entry",       # the `dk_*` SDK entry points that modules call
+  "dkrt::package::core_api",
+  "dkrt::package::entry",       # the `dk_*` SDK entry points that modules call
   "dkrt::platform",
   "dkrt::dev",         # the device object `dkrt_dev`: the reader behind RealPlatform
   "dkrt::mailbox",
-  "dkrt::handlers",
+  "dkrt::package::handlers",
   "dkrt::resident_query",
-  "dkrt::gen_services",
-  "dkrt::imports",
-  "dkrt::svc_imports", # the `dkc_*` shims of a service file: one function per CoreApi method
+  "dkrt::resident",    # the resident table: the thunks the package calls
+  "dkrt::stage1",      # stage 1: loads the system package from the card, places it in the package block and starts it
+  "dkrt::boot_env",    # the boot's steps on the device: stage 1, the package start and the block given back
+  "dkrt::host_dir",    # the host directory `DKRT_HOST_DIR` (tools find the package statics through it)
+  "dkrt::package::resident", # the package's facade over it
+  "dkrt::package::boot_idx",
+  "dkrt::hooks",       # the resident core's calls into the package, and the package's table of them
+  "dkrt::package::hooks",
+  "dkrt::menu_exports",
+  "dkrt::package::gen_services",
+  "dkrt::package::imports",
+  "dkrt::package::svc_imports", # the `dkc_*` shims of a service file: one function per CoreApi method
   "dkrt::native",
   "dkrt::arena",
   "dkrt::hash32",
@@ -40,31 +49,32 @@ shared = [
 
 "S:lfo" = ["dkrt_svc_lfo"]
 
-"C:state" = ["dkrt::settings", "dkrt::settings_overlay", "dkrt::selection"]
-"C:boot" = ["dkrt::boot", "dkrt::intro", "dkrt::safe_mode", "dkrt::safe_screen"]
+"C:state" = ["dkrt::settings", "dkrt::package::settings_overlay", "dkrt::selection"]
+"C:boot" = ["dkrt::boot", "dkrt::package::boot_steps", "dkrt::intro", "dkrt::safe_mode", "dkrt::safe_screen"]
 "C:loading" = [
-  "dkrt::loader",
-  "dkrt::reload",   # the reload job, its refusals and the placeholder phase (docs/plans/extension-model.md E5)
-  "dkrt::settings_reload",
-  "dkrt::svc_rows",
-  "dkrt::admission", # owner, key and fit verdicts of a boot or a live load
-  "dkrt::lifecycle", # the runtime's seams of the package manager
+  "dkrt::package::loader",
+  "dkrt::image",     # the parse and checks of a `.dkm` image (stage 1 reads it too)
+  "dkrt::package::reload",   # the reload job, its refusals and the placeholder phase (docs/plans/extension-model.md E5)
+  "dkrt::package::settings_reload",
+  "dkrt::package::svc_rows",
+  "dkrt::package::admission", # owner, key and fit verdicts of a boot or a live load
+  "dkrt::package::lifecycle", # the runtime's seams of the package manager
   "dkrt_lifecycle",  # package graph and package manager (runtime/core/lifecycle)
-  "dkrt::scan",
-  "dkrt::collect",
+  "dkrt::package::scan",
+  "dkrt::package::collect",
   "dkrt::assign",
-  "dkrt::registry",
+  "dkrt::package::registry",
   "dkrt::params",
-  "dkrt::invariants",
+  "dkrt::package::invariants",
   "dkrt_fit",
 ]
-"C:dsp" = ["dkrt::dsp", "dkrt::dsp_stats", "dkrt::link", "dkrt_link"]
+"C:dsp" = ["dkrt::package::dsp", "dkrt::package::dsp_stats", "dkrt::package::link", "dkrt_link"]
 "C:storage" = [
   "dkrt::storage",
-  "dkrt::files",
+  "dkrt::package::files",
   "dkrt::io",
   "dkrt::aux",
 ]
-"C:transport" = ["dkrt::transport", "dkrt::store_cmds", "dkrt::module_cmds", "dkrt::admin_cmds"]
-"C:diagnostics" = ["dkrt::dlog", "dkrt::fault", "dkrt::report", "dkrt::watch", "dkrt::health"]
+"C:transport" = ["dkrt::transport", "dkrt::store_cmds", "dkrt::package::module_cmds", "dkrt::admin_cmds", "dkrt::package::live_cmds", "dkrt::package::commands"]
+"C:diagnostics" = ["dkrt::dlog", "dkrt::fault", "dkrt::report", "dkrt::watch", "dkrt::health", "dkrt::package::capacity"]
 "C:tick" = ["dkrt::tick"]

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DkSession } from '@digi/dk-session';
+import { HOST_COUNT, HOST_DIR_MAGIC, HOST_DIR_READY, HOST_ID, type DkSession } from '@digi/dk-session';
 import { emulatorClock, type Session } from '@digi/test-support';
 import { withWaitApi, type PatchedSession } from '../support.ts';
 
@@ -56,11 +56,25 @@ const plan: RuntimePlan = {
   base: { device: 'dt2', version: '1.17', syx_sha256: 'a'.repeat(64) },
   modules: ['core/runtime@0.1.0', 'core/digikit-menu@0.1.0'],
   symbols: {
-    'core/digikit-menu@0.1.0:DK_ABOUT': 4096,
-    'core/digikit-menu@0.1.0:DK_ABOUT_N': 8192,
     'core/runtime@0.1.0:DKRT_BOOT': 12288,
+    'core/runtime@0.1.0:DKRT_HOST_DIR': 16384,
   },
 };
+/** The menu is part of the system package: its statics are found through the host directory (`DKRT_HOST_DIR`, a resident symbol). */
+const ABOUT_AT = 4096;
+const ABOUT_N_AT = 8192;
+const DIRECTORY_AT = 16384;
+const directory = Buffer.alloc(4 * (3 + HOST_COUNT));
+directory.writeUInt32BE(HOST_DIR_MAGIC, 0);
+directory.writeUInt32BE(HOST_COUNT, 4);
+directory.writeUInt32BE(HOST_DIR_READY, 8);
+directory.writeUInt32BE(ABOUT_AT, 12 + 4 * HOST_ID.MENU_ABOUT);
+directory.writeUInt32BE(ABOUT_N_AT, 12 + 4 * HOST_ID.MENU_ABOUT_N);
+/** The word of the directory at `address`, or undefined outside it. */
+const directoryWord = (address: number): number | undefined =>
+  address >= DIRECTORY_AT && address < DIRECTORY_AT + directory.length
+    ? directory.readUInt32BE(address - DIRECTORY_AT)
+    : undefined;
 const session = {
   options: { device: 'dt2', firmware: '1.17' },
   dsp: 'sharc',
@@ -362,14 +376,17 @@ test('negative setup installs natively on its own device-set daemon without patc
 });
 
 test('ABOUT reads are bounded and assert the live protocol runtime identity without a Python formatter', async () => {
-  const memPeek = vi.fn().mockResolvedValue(25);
+  const memPeek = vi.fn(async (address: number) => directoryWord(address) ?? 25);
   const menuSession = { client: { memPeek } } as unknown as Session;
   await expect(readAboutRows(menuSession, plan)).rejects.toThrow('invalid ABOUT row count');
-  expect(memPeek.mock.calls).toEqual([[8192]]);
+  expect(memPeek.mock.calls.at(-1), 'the count is the last read: no row is read for an invalid count').toEqual([
+    ABOUT_N_AT,
+  ]);
   const rows = ['DIGIKIT 0.1.0', 'RUNTIME 0.2.5', 'BOOT: 1 OF 1 OK', 'RAM KEPT: NO'];
   const bytes = Buffer.from(rows.map((row) => row.padEnd(24, '\0')).join(''), 'latin1');
-  memPeek.mockImplementation(async (address: number) =>
-    address === 8192 ? rows.length : bytes.readUInt32BE(address - 4096),
+  memPeek.mockImplementation(
+    async (address: number) =>
+      directoryWord(address) ?? (address === ABOUT_N_AT ? rows.length : bytes.readUInt32BE(address - ABOUT_AT)),
   );
   const info = vi.fn().mockResolvedValue({ runtime: 0x205 });
   await expect(expectRuntimeAbout(menuSession, { info } as unknown as DkSession, plan, '/artifacts')).resolves.toEqual(
@@ -441,7 +458,7 @@ function fakeRuntime(client: Record<string, unknown>, dk: Record<string, unknown
 }
 
 test('ABOUT refuses stale content before pressing YES', async () => {
-  const memPeek = vi.fn().mockResolvedValue(4);
+  const memPeek = vi.fn(async (address: number) => directoryWord(address) ?? 4);
   const rt = fakeRuntime({ memPeek }, {});
   await expect(openRuntimeAbout(rt, plan, '/artifacts')).rejects.toThrow('ABOUT buffer is empty');
   expect(rt.session.client.inputTap).not.toHaveBeenCalled();
@@ -456,8 +473,10 @@ test('ABOUT returns only the complete snapshot after the new open', async () => 
   let counts = 0;
   const memPeek = vi.fn(async (address: number) => {
     // Pre-open is empty; after the open the buffer fills: identity only, then BOOT, then the final RAM row (each poll reads the count twice).
-    if (address === 8192) return opened ? [2, 3, 4][Math.min(Math.floor(counts++ / 2), 2)]! : 0;
-    return bytes.readUInt32BE(address - 4096);
+    const dir = directoryWord(address);
+    if (dir !== undefined) return dir;
+    if (address === ABOUT_N_AT) return opened ? [2, 3, 4][Math.min(Math.floor(counts++ / 2), 2)]! : 0;
+    return bytes.readUInt32BE(address - ABOUT_AT);
   });
   const rt = fakeRuntime(
     { memPeek, inputTap: vi.fn(async () => ((opened = true), {})) },

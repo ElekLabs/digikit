@@ -1,10 +1,11 @@
 //! The public C ABI of the runtime: load, poll functions, module and effect listings, the selection, boot info and restart.
 
 use crate::platform::st;
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use dkrt_abi::platform::Platform;
 use crate::state::{init_once, DKRT_UNLOAD_OBSERVERS, OBSERVERS, DKRT_POLLS, DKRT_POLL_OWNER, MAX_MODULES, POLLS, POLL_OWNER_RUNTIME, DKRT_MENUS, DKRT_MENU_OBJS, DKRT_PATHS};
-use crate::{boot, dlog, dsp, entry, loader, scan, settings};
+use crate::{boot, dlog, selection, settings};
+use crate::hooks;
 use core::ptr::{addr_of, addr_of_mut, read_volatile};
 use dkrt_sdk::*;
 
@@ -17,7 +18,7 @@ use dkrt_sdk::*;
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_load(path: *const u8) -> i32 {
     init_once();
-    let r = loader::load(path);
+    let r = hooks::module_load(path);
     st().last_result = r;
     r
 }
@@ -92,11 +93,7 @@ pub unsafe extern "C" fn dkrt_unload_observer_remove(f: usize) {
 /// The owner id of a module context: its record index; `E_CONTRACT` for a pointer that is not the live context of a content module (a service has none given out).
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_ctx_owner(ctx: usize) -> i32 {
-    match crate::entry::ctx_owner(ctx as *mut u8) {
-        // a service file's context is not given out: the unload observers are for content modules
-        Some(rec) if rec < MAX_MODULES => rec as i32,
-        _ => E_CONTRACT,
-    }
+    hooks::ctx_owner(ctx)
 }
 
 /// What the running module code is (`dlog::PHASE_*`); 0 outside module code. UI task.
@@ -111,7 +108,7 @@ pub(crate) unsafe fn notify_unload(owner: usize, base: u32, size: u32) {
     let t = &mut *addr_of_mut!(DKRT_UNLOAD_OBSERVERS);
     let mut i = 0;
     while i < OBSERVERS {
-        if t[i] != 0 && (t[i] as u64).wrapping_sub(base as u64) < size as u64 {
+        if t[i] != 0 && in_range(t[i] as u32, base, size) {
             t[i] = 0;
         }
         i += 1;
@@ -156,14 +153,20 @@ unsafe fn menu_owner(code: usize, data: usize) -> Option<usize> {
     (rec != POLL_OWNER_RUNTIME).then_some(rec as usize)
 }
 
+/// Is `f` in `[base, base + size)`? In the width of an address: the 64-bit difference of two 32-bit addresses gave the wrong answer on the device for an address below `base`
+/// (the system package in its own block counted as inside the first module's range, so its menus were counted for that module and its polls dropped with it).
+#[inline(always)]
+pub(crate) fn in_range(f: u32, base: u32, size: u32) -> bool {
+    f.wrapping_sub(base) < size
+}
+
 /// The module record whose loaded range holds `f`, or `POLL_OWNER_RUNTIME`.
 unsafe fn poll_owner(f: usize) -> u8 {
     let s = st();
     let mut rec = 0;
     while rec < MAX_MODULES {
         let m = &s.modules[rec];
-        let off = (f as u64).wrapping_sub(m.base as u64);
-        if m.used != 0 && off < m.size as u64 {
+        if m.used != 0 && in_range(f as u32, m.base, m.size) {
             return rec as u8;
         }
         rec += 1;
@@ -172,11 +175,11 @@ unsafe fn poll_owner(f: usize) -> u8 {
 }
 
 /// Free the poll slots whose function lies in `[base, base + size)` (a module that is released).
-pub(crate) unsafe fn poll_drop_range(base: u32, size: u32) {
+pub(crate) unsafe extern "C" fn poll_drop_range(base: u32, size: u32) {
     let t = &mut *addr_of_mut!(DKRT_POLLS);
     let mut i = 0;
     while i < POLLS {
-        if t[i] != 0 && (t[i] as u64).wrapping_sub(base as u64) < size as u64 {
+        if t[i] != 0 && in_range(t[i] as u32, base, size) {
             t[i] = 0;
             (*addr_of_mut!(DKRT_POLL_OWNER))[i] = POLL_OWNER_RUNTIME;
         }
@@ -205,7 +208,7 @@ pub unsafe extern "C" fn dkrt_poll_remove(f: usize) {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_module_header(first: u32, out: *mut DkrtModuleHeader) -> i32 {
     init_once();
-    scan::module_header(first, out)
+    hooks::module_header(first, out)
 }
 
 
@@ -228,9 +231,10 @@ pub unsafe extern "C" fn dkrt_module(index: u32, out: *mut DkrtModule) -> i32 {
                 o.size = m.size;
                 o.path = (*addr_of!(DKRT_PATHS))[i];
                 o.state = if m.used == 2 { MOD_LOADING } else { MOD_LOADED };
-                o.dsp_size = dsp::ds().mod_len[i];
+                let extra = hooks::module_extra(i);
+                o.dsp_size = extra.dsp_size;
                 o.menu = (*addr_of!(DKRT_MENUS))[i];
-                o.ctx = entry::ctx_addr(i);
+                o.ctx = extra.ctx;
                 return OK;
             }
             seen += 1;
@@ -245,7 +249,7 @@ pub unsafe extern "C" fn dkrt_module(index: u32, out: *mut DkrtModule) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_fx(index: u32, out: *mut DkrtFx) -> i32 {
     init_once();
-    crate::handlers::exports::fx_entry(index, &mut *out)
+    hooks::fx_entry(index, out)
 }
 
 
@@ -256,14 +260,14 @@ pub unsafe extern "C" fn dkrt_fx(index: u32, out: *mut DkrtFx) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_selection_get(out: *mut DkrtSelection) -> i32 {
     init_once();
-    boot::selection_get(out)
+    selection::selection_get(out)
 }
 
 /// `dkrt_selection_set(sel)`: save the selection (two copies, sequence number, CRC); no effect until the next boot. 0 or `E_SEL_*`.
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_selection_set(sel: *const DkrtSelection) -> i32 {
     init_once();
-    boot::selection_set(sel)
+    selection::selection_set(sel)
 }
 
 /// `dkrt_boot_info(out)`: safe mode and why, the boot counter, each selected module's result at this boot.
@@ -306,8 +310,8 @@ unsafe fn save_working_state() {
 /// MCF5441x eSDHC: offset of the present-state register (`PRSSTAT`); bits 0 to 2 are command inhibit, data inhibit and data line active.
 const MCF5441X_ESDHC_PRSSTAT: u32 = 0x24;
 /// Is a card transfer in flight? The card's eSDHC controller is the profile's (`[board] esdhc_base` of the device file); a device without one has no busy card.
-pub(crate) unsafe fn card_busy() -> bool {
-    let p = crate::profile();
+pub(crate) unsafe extern "C" fn card_busy() -> bool {
+    let p = crate::platform::profile();
     p.has_sdhc && read_volatile((p.esdhc_base + MCF5441X_ESDHC_PRSSTAT) as *const u32) & 7 != 0
 }
 

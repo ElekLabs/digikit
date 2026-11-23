@@ -2334,7 +2334,7 @@ impl Actor {
     }
 
     /// `runtime.maps {modules_dir?}`: what a host needs to name addresses of the image that runs now: `{image_sha256, matches, ship, symbols}`.
-    /// `ship` is the ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` to their byte
+    /// `ship` is the ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_HOST_DIR` and `dyndsp_info` to their byte
     /// addresses, the memory the host reads (`mem.cf.peek`) for the load table. The map is made from the running image's patch record, so
     /// after a `dev.reload` swap the next call answers for the new image. `matches` is false when the image on disk gives other bytes than
     /// the running ones (a hot DSP injection, or an object changed since): the names may be wrong. An image with no patch record is an error.

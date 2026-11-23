@@ -369,13 +369,13 @@ mise run dk:module pluck  # zero-DSP machine UI preview, selected on its card
 mise run dk:module pluck --dsp  # full module with SHARC audio
 ```
 
-Each command starts or reloads a kept DN2 emulator, navigates to SETTINGS > DIGIKIT, and opens a local browser faceplate with its live display and controls. The command prints the exact panel URL. `dk:menu` uses the `emulator` patch set, including `core/digikit-menu`; `dk:ui-demo` uses the separate `test/ui-demo` fixture, which requires `core/ui` and conflicts with the real menu. These two previews automatically use zero DSP, so they have no audio.
+Each command starts or reloads a kept DN2 emulator, navigates to SETTINGS > DIGIKIT, and opens a local browser faceplate with its live display and controls. The command prints the exact panel URL. `dk:menu` uses the `emulator` patch set and the DIGIKIT menu of the system package; `dk:ui-demo` adds the `test/ui-demo` content module (a SETTINGS row of its own, `dk_ui_settings_row`) to the card of the same patch set. These two previews automatically use zero DSP, so they have no audio.
 
 `dk:module` accepts a full module id or a unique leaf alias (for example, `pluck`). It packs a card `.dkm`, saves its selection for boot, and uses the `emulator` runtime patch set. By default, a declarative machine (including pluck) uses a data-only UI preview pack and zero DSP, with no audio. Machines declaring a sample bank or sample tracks automatically use the full module with DSP, preserving sample loading and picker callbacks. The UI preview pack rejects actions, samples and hooks. ColdFire-only services use normal packing and zero DSP. Effects and DSP-backed services require `--dsp`, which packs the full module and selects SHARC when needed. Its dependencies must already be provided by that patch set. It opens the DIGIKIT MODULES list; use the panel controls to reach the module's machine or effect page. Add `--device dt2` for Digitakt II (with its firmware available); DN2 is the default.
 
 On each invocation, `dk:module` delegates to the generic `dk:dev --store` path. It stages content and compares the exact store request and initial selection with the kept daemon. Unchanged content keeps the daemon and overlay, including any selection the user changed while it was running; changed content rebuilds the card and restarts that exact daemon. To restore the initial selected card after changing selection live, stop and restart the daemon. `mise run dk:module ID --stop` stops only that module's kept daemon for the chosen device, without packing or opening the browser.
 
-Keep the command running while using the panel. Ctrl-C stops the Vite browser server; the emulator stays alive for the next reload. Stop it with `mise run dk:dev -- emulator --stop` or `mise run dk:dev -- test/ui-demo --stop`, respectively. For the controls and acceptance test, see the [UI demo README](../tests/fixtures/modules/ui-demo/README.md).
+Keep the command running while using the panel. Ctrl-C stops the Vite browser server; the emulator stays alive for the next reload. Stop it with `mise run dk:dev -- emulator --stop` or `mise run dk:dev -- emulator --store 'test/ui-demo*' --stop`, respectively. For the controls and acceptance test, see the [UI demo README](../tests/fixtures/modules/ui-demo/README.md).
 
 ### A module or fixture of your own
 
@@ -383,10 +383,10 @@ Keep the command running while using the panel. Ctrl-C stops the Vite browser se
 
 ```sh
 mise run dk:dev -- AUTHOR/NAME --device dn2 --keys 'shot:main' # your module
-mise run dk:dev -- test/ui-demo --device dn2 --keys 'tap:NO,tap:SETTINGS,wait:400,tap:DOWN*8,tap:YES,wait:600,shot:menu'
+mise run dk:dev -- emulator --store 'test/ui-demo*' --device dn2 --keys 'tap:NO,tap:SETTINGS,wait:400,tap:DOWN*9,tap:YES,wait:600,shot:menu'
 mise run dk:dev -- emulator --device dn2,dt2 --keys FILE.json   # the workbench's module set of devices/*.toml
-mise run dk:dev -- core/digikit-menu --store 'test/dyn-demo*,synth:HUGE:8000000'  # a card with these modules (* = selected)
-mise run dk:dev -- test/ui-demo --stop                          # end the kept daemon
+mise run dk:dev -- emulator --store 'test/dyn-demo*,synth:HUGE:8000000'  # a card with these modules (* = selected)
+mise run dk:dev -- emulator --store 'test/ui-demo*' --stop      # end the kept daemon
 cargo test --offline -p dkui-host                               # menu and UI logic on the host, about 1 s
 ```
 
@@ -394,7 +394,7 @@ For an interactive content module in an already running workbench or emulator, u
 
 `dk:dev` builds what changed, reloads a daemon it keeps per device and module set, runs the keys from the main screen and writes `out/runs/devreload/<device>/sheet.png`. The reload (daemon method `dev.reload`) compares the new patched image with the running one:
 
-- Only UI-layer modules changed (`core/ui`, `core/digikit-menu`, modules that require `core/ui`): it restores the main screen and writes the new code. About 1.5 s, or 4 s for a `dk:dev` round with a short key script.
+- Only UI-layer modules changed (`core/ui`, modules that require `core/ui`; a change of the menu rebuilds the system package, which boots): it restores the main screen and writes the new code. About 1.5 s, or 4 s for a `dk:dev` round with a short key script.
 - Anything else changed (the Rust runtime, another module, the DSP image): it boots the new image. Cold: DN2 5 s, DT2 10 s; an image booted before: under 1 s.
 
 In the workbench (`mise run wb`) the **Reload modules** button (⇧⌘R) builds and reloads the open session: it calls `dev.reload {build: true}`, which builds the stale objects (ColdFire C, assembly, Rust; SHARC+ assembly) of the session's modules in the app, then does the reload above. A C edit takes about 0.25 s to build and 2.5 s to reload (DN2). A compiler error shows in the status line (short) and in full in the red box under the top bar; nothing is swapped. A SHARC+ source builds there too (Selache as a library, about 5 ms for an object); an assembler error or a refused encoding shows the same way. `dk:dev` keeps its own build call (`patchkit build`) and reloads without `build`. A watch task that rebuilds on save is still possible ([docs/plans/sdk-api.md](plans/sdk-api.md), "Dev loop").

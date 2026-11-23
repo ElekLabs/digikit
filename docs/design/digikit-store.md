@@ -90,7 +90,7 @@ new store) and **the settings store is off** (below). The runtime never writes h
 
 A header copy is **usable** when its magic, version, CRC, area and counts hold (`table_sectors` = ceil(count / 2), the table and `used_sectors` inside the area). A reader
 takes the usable copy with the higher `seq` (equal: A), and, when it checks the table's CRC (once per header: a runtime that wrote the table itself skips it), skips a copy whose table
-does not check for the other one. An empty store (CLEAR, or every file deleted) is a valid store with `entry_count` 0 and no table.
+does not check for the other one. An empty store (every file deleted, or CLEAR on a store without the system package or with an unreadable table or no free sector for the new table; CLEAR keeps `digikit/system.dksp` of a readable store) is a valid store with `entry_count` 0 and no table.
 
 **The table is never held whole.** It is read and written through small buffers (the runtime's: 8 KiB), so the number of entries is bounded only by the room on the card
 (two entries per sector). A lookup is one pass over the table; a list starts at the sector of its first entry.

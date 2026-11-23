@@ -123,6 +123,15 @@ export class LogCursor {
   }
 }
 
+/** The first argument (`cmd`) of an UPLOAD event that is no command id: the runtime lists them in `storage/upload_codes.rs`. */
+export const UPLOAD_EVENT = {
+  LOCK_BUSY: 0xb5,
+  PENDING_DROPPED: 0xb6,
+  PLUSDRIVE_REPLY: 0xb7,
+  WRITE_FAILED: 0xb8,
+  CLEAR_DROPPED_PACKAGE: 0xb9,
+} as const;
+
 /** `RuntimeEvents.until` ran out of time: the event was not seen. */
 export class EventTimeout extends Error {}
 

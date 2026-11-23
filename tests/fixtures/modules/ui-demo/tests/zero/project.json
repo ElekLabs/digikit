@@ -1,16 +1,25 @@
 {
   "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
   "name": "sdk-ui-zero-tests",
-  "tags": ["test-only"],
+  "tags": [
+    "test-only"
+  ],
   "metadata": {
     "runtimeAcceptance": [
       {
-        "files": ["ui.device.test.ts"],
-        "tags": ["A:core/ui"],
-        "modules": [],
-        "plusdrive": true,
-        "patchModules": ["test/ui-demo"]
+        "files": [
+          "ui.device.test.ts"
+        ],
+        "tags": [
+          "A:core/ui"
+        ],
+        "modules": [
+          "test/ui-demo"
+        ]
       }
     ]
-  }
+  },
+  "implicitDependencies": [
+    "core/runtime"
+  ]
 }

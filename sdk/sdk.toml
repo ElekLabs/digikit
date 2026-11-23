@@ -1879,9 +1879,10 @@ SETTINGS = 0x19     # read-only: the active settings record (docs/design/digikit
 FAULT = 0x23        # dev: make the runtime fail on purpose to test the fault path; body byte 0 = 1: a Rust panic (a bounds check)
 SELECT = 0x30
 RESTART = 0x31
+RETRY = 0x0b        # the resident core's own command: clear the boot counter without an upload, so that the next boot tries the system package again (a core-only boot caused by crashes keeps its counter until the package file is written; writing digikit/system.dksp through the store clears it too). No body; status 0, or E_INUSE (the card is not writable: the counter cannot be written), E_STATE (an upload is open or a store write is in flight). The counter changes on the card only; this boot goes on as it is: RESTART follows
 
 [protocol.ranges]   # command numbers a run-time module may register with dk_host_register (a request number is 6 bits: bit 6 of the command byte marks a reply)
-# 0x0b-0x0f are reserved for the commands of test fixtures and are never built-in commands (the built-in numbers are in [protocol.commands]); 0x0a is the debug module's SETUP; `ui_views_test` is the first fixture.
+# 0x0c-0x0f are reserved for the commands of test fixtures and are never built-in commands (the built-in numbers are in [protocol.commands], RETRY took 0x0b: the 6-bit command space has no other free number); 0x0a is the debug module's SETUP; `ui_views_test` is the first fixture.
 ui_views_test = [0x0f, 0x0f]   # test/ui-views: its report (rows, views, text input); with a body byte 1 it closes its overlay
 remote = [0x38, 0x3d]   # digikit/remote: key and turn of the panel (docs/plans/remote-control.md)
 remote_state = [0x3e, 0x3f]   # digikit/remote: the state
@@ -1983,7 +1984,7 @@ FW_ID = 18          # the INFO reply ends with `fw_id` after `svc_abi`: 8 bytes,
 LIVE = 19           # the LOAD and UNLOAD commands (a content module is loaded or unloaded without a boot); RELOAD_STATE reports them too
 
 [capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused.
-                   # `fit = true`: a resource a fit looks at, with its `label` for a person (CAP_FIT in the generated code); every kind is in CAP_KINDS
+                   # `fit = true`: a resource a fit looks at, with its `label` for a person (CAP_FIT in the generated code; a fit kind needs a label, a kind may have one without `fit`); every kind is in CAP_KINDS
 MODULES = { id = 1, fit = true, label = "module records" }   # module records; used: loaded; largest: 0
 SELECTION = { id = 2, fit = true, label = "selection paths" }   # paths of the selection record; used: paths this boot loaded
 ARENA = { id = 3, fit = true, label = "CPU memory" }   # ColdFire arena bytes; used: taken (headers included); largest: the largest free block's payload
@@ -2000,6 +2001,7 @@ SETTINGS = { id = 13 }   # the settings record, in bytes: limit: the area of one
 SEND_SLOTS = { id = 14, ceiling = "send_slots" }   # effects that run on a send bus: the device's limit (`[limits] send_slots`, 0 when the image has no send page); used: loaded effects with the send route; largest: 0
 DSP_COST = { id = 15, fit = true, label = "DSP load" }   # DSP instructions per block: limit: the headroom of the device (the generated profile: the stock firmware's load and the safety margin taken out of the block); used: the load of the loaded modules, `max(per-voice machine cost) * DSP_VOICES + sum(effect costs)`; largest: the largest per-voice machine cost loaded (the state of that maximum)
 DSP_VOICES = { id = 16, fit = true, label = "DSP voices" }   # voices the machine cost counts for (the generated profile); used and largest: 0; a fit reads the limit, it is not short of it
+PACKAGE = { id = 17, label = "system package" }   # the system package block (`[[const]] PACKAGE_BYTES` of runtime/core/abi.toml), outside the module arena (a label without `fit`: a host names it, a fit does not look at it); limit: its bytes; used: what the placed package takes (`State.package_bytes`, 0 at the core-only level); largest: 0
 
 # The in-crate services of the runtime, in the order the core calls them (samples first: its DSP-section checks and its track-table claim ran before the
 # voice and effect parts, and the unreserve of its table before theirs; machines before fx: the registry applies machines, pages and native pages before

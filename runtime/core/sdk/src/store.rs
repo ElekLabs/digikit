@@ -984,6 +984,9 @@ pub enum Edit {
     Rename(*const u8, *const u8, *const u8),
     /// An empty table.
     Clear,
+    /// A table with only the entry that has this NUL-terminated path (an empty one when no entry has it): CLEAR of a readable store keeps the
+    /// system package. The table is written again, so the old one must be readable (`Clear` needs no table).
+    Retain(*const u8),
 }
 
 /// The most entries of one `Edit::InsertMany`.
@@ -1133,6 +1136,12 @@ pub unsafe fn commit_at(
         table_sectors(cur.count + 1)
     } else if matches!(edit, Edit::Remove(_)) {
         table_sectors(cur.count)
+    } else if let Edit::Retain(path) = edit {
+        // no entry to keep: the table stays empty, as for a clear, and needs no sector
+        match find(io, lay, cur, buf_in, cap, path)? {
+            Some(_) => table_sectors(1),
+            None => 0,
+        }
     } else {
         0
     };
@@ -1212,6 +1221,10 @@ pub unsafe fn commit_at(
             } else if let Edit::Remove(path) = edit {
                 if cstr_eq(e, path) {
                     removed = Some(entry_of(e));
+                    return true;
+                }
+            } else if let Edit::Retain(path) = edit {
+                if !cstr_eq(e, path) {
                     return true;
                 }
             } else {

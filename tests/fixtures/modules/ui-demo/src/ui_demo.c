@@ -1,14 +1,21 @@
-/* test/ui-demo: every kind of row and view of <dk/platform/ui.h>, to see core/ui on the screen. */
+/* test/ui-demo: every kind of row and view of <dk/platform/ui.h>, to see core/ui on the screen. A content module: in init it adds the SETTINGS row UI DEMO
+ * (dk_ui_settings_row) that opens the demo menu, and registers the report command.
+ *
+ *   0x0f  no body: report; reply, big-endian words: 0 dk_demo_value, 4/8/12 dk_demo_checks[0..2], 16 dk_demo_events_n, 20 dk_demo_answer_v
+ *         (the number is a fixture command of sdk.toml [protocol.ranges] `ui_views_test`: the two fixtures are never loaded together)
+ */
 #include <stdint.h>
+#include <dk/core/bytes.h>
+#include <dk/core/module.h>
+#include <dk/platform/host.h>
 #include <dk/platform/ui.h>
-#include <dk_ui_core.h>
 
 static int32_t g_toggle = 1;
 int32_t dk_demo_value = 64;
 int dk_demo_checks[3];
 int dk_demo_events_n;
 int dk_demo_answer_v = -1;
-static dk_ui *g_ui; /* core/ui's handle (dk_ui_core_handle), set at the first open */
+static dk_ui *g_ui; /* core/ui's handle (dk_ui_open), set in init */
 static dk_ui_menu *g_main, *g_page, *g_list, *g_empty;
 
 static void on_answer(void *ctx, int32_t v)
@@ -141,12 +148,10 @@ static void fill_main(dk_ui_menu *m, void *ctx)
 static const dk_ui_menu_desc main_desc = {
     .name = "UiDemoMenu", .title = "UI DEMO", .fill = fill_main};
 
-static void open_main(void *ctx, int32_t arg)
+static void open_main(void *arg)
 {
-    (void)ctx;
     (void)arg;
     if (!g_main) {
-        g_ui = dk_ui_core_handle();
         g_page = dk_ui_menu_new(g_ui, &page_desc);
         g_list = dk_ui_menu_new(g_ui, &list_desc);
         g_empty = dk_ui_menu_new(g_ui, &empty_desc);
@@ -156,10 +161,31 @@ static void open_main(void *ctx, int32_t arg)
         dk_ui_menu_open(g_main);
 }
 
-/* Called from the hook at the end of the SETTINGS rebuild (core/ui). */
-void dk_app_settings_rows(uint8_t *settings_menu)
+static int32_t command(uint32_t cmd, uint32_t seq, const void *request, uint32_t len, void *reply)
 {
-    dk_ui_stock_row(settings_menu, "DIGIKIT", open_main, 0);
+    uint8_t *out = reply;
+    (void)seq;
+    (void)request;
+    if (cmd != 0x0f || len != 0)
+        return -50;
+    dk_bytes_put32(out + 0, (uint32_t)dk_demo_value);
+    for (uint32_t i = 0; i < 3; i++)
+        dk_bytes_put32(out + 4 + 4 * i, (uint32_t)dk_demo_checks[i]);
+    dk_bytes_put32(out + 16, (uint32_t)dk_demo_events_n);
+    dk_bytes_put32(out + 20, (uint32_t)dk_demo_answer_v);
+    return 24;
 }
 
-/* Read by the proof (tools/patchkit/pk_uidemo.py): dk_demo_value, dk_demo_checks, dk_demo_events_n, dk_demo_answer_v. */
+static int32_t init(dk_module_ctx *ctx)
+{
+    int32_t r = dk_ui_open(ctx, &g_ui);
+    if (r != DK_OK)
+        return r;
+    r = dk_ui_settings_row(g_ui, "UI DEMO", open_main, 0);
+    if (r != DK_OK)
+        return r;
+    dk_host_register(0x0f, 1, command);
+    return DK_OK;
+}
+
+const dk_module_def dk_module = {.init = init};

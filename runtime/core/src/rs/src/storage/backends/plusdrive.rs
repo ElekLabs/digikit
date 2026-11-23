@@ -4,7 +4,7 @@
 
 use super::super::lock::{acquire, unlock};
 use super::super::store_writer::*;
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::platform::{Platform, StagedWriter};
 use dkrt_sdk::proto::*;
@@ -45,23 +45,23 @@ pub(crate) fn pd_present() -> bool {
 /// Take the adapter for one call while no write session is open (the UI pass). The session test and the claim of the adapter are one step under
 /// the irq mask, so a `pd_create` that claims the session meanwhile finds the adapter busy and gives up.
 fn pd_enter_idle() -> bool {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let ok = unsafe { !read_volatile(addr_of!(PD_BUSY)) && up().kind == NONE };
     if ok {
         unsafe { write_volatile(addr_of_mut!(PD_BUSY), true) };
     }
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     ok
 }
 
 /// Take the adapter for one call. False: another call is running.
 pub(crate) fn pd_enter() -> bool {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let free = unsafe { !read_volatile(addr_of!(PD_BUSY)) };
     if free {
         unsafe { write_volatile(addr_of_mut!(PD_BUSY), true) };
     }
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     free
 }
 
@@ -119,7 +119,7 @@ pub(crate) unsafe fn tick() {
             write_volatile(addr_of_mut!(PD_RECOVERED), true);
             if out[0] != 0 || out[1] != 0 || out[2] != 0 || out[3] != 0 {
                 // renamed into place, deleted, our leftovers that stayed, entries that are not ours (left alone)
-                crate::dlog::ev(dkrt_sdk::logk::UPLOAD, 0, [0xb7, out[0], out[1], out[2], out[3]]);
+                crate::dlog::ev(dkrt_sdk::logk::UPLOAD, 0, [crate::storage::upload_codes::PLUSDRIVE_REPLY, out[0], out[1], out[2], out[3]]);
             }
         }
     }

@@ -7,6 +7,11 @@ publish = false
 [lib]
 crate-type = ["staticlib"]
 
+# `package-image` builds the package artifact (`[system_package]` of module.toml, `--no-default-features --features package-image`); the resident object is built without it.
+[features]
+default = []
+package-image = []
+
 [dependencies]
 dkrt-sdk = { path = "../../sdk" }
 dkrt-abi = { path = "../../abi" }

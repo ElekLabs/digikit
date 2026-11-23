@@ -81,6 +81,10 @@ pub struct RealPlatform;
 /// The platform of this image. The core calls it through the free functions below, or takes a `P: Platform` where a host test drives the path.
 pub const PLATFORM: RealPlatform = RealPlatform;
 
+/// Host tests: the info tables of the test image, `None` for a name the tests have no table for. A test setup gives it once (`test_lock`).
+#[cfg(test)]
+pub(crate) static TEST_INFO: std::sync::OnceLock<unsafe fn(u32) -> Option<*const u32>> = std::sync::OnceLock::new();
+
 #[cfg(test)]
 thread_local! {
     /// The profile a host test runs with (`with_profile`); `None`: the first device file's.
@@ -310,16 +314,16 @@ impl Platform for RealPlatform {
     unsafe fn info(&self, name_hash: u32) -> *const u32 {
         // host tests link no image: the tables of the runtime's own tests (`dyndsp_info`, `dynfx_info`)
         #[cfg(test)]
-        if let Some(t) = crate::cleanup_tests::test_info(name_hash) {
+        if let Some(t) = TEST_INFO.get().and_then(|f| f(name_hash)) {
             return t;
         }
-        dkrt_abi::platform::info_find(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash)
+        dkrt_abi::platform::info_find(dkrt_abi::dev_addr::fn_addr(dkrt_info_table) as *const u32, name_hash)
     }
-    unsafe fn info_slot(&self, name_hash: u32) -> *const u32 {
-        dkrt_abi::platform::info_find_slot(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash)
+    unsafe fn info_slot(&self, name_hash: u32) -> dkrt_abi::dev_addr::DevAddr {
+        dkrt_abi::dev_addr::DevAddr::of_ptr(dkrt_abi::platform::info_find_slot(dkrt_abi::dev_addr::fn_addr(dkrt_info_table) as *const u32, name_hash))
     }
     unsafe fn info_dsp_slot(&self, name_hash: u32) -> Option<u32> {
-        dkrt_abi::platform::info_find_dsp_slot(crate::dsp::fn_addr(dkrt_info_table) as *const u32, name_hash)
+        dkrt_abi::platform::info_find_dsp_slot(dkrt_abi::dev_addr::fn_addr(dkrt_info_table) as *const u32, name_hash)
     }
 
     unsafe fn block_read(&self, sector: u32, bytes: u32, buf: *mut u8) -> i32 {
@@ -562,10 +566,14 @@ pub unsafe fn blit(dst: *mut u8, src: *mut u8) {
 }
 
 /// The firmware's own save of the working state: the project into the persistent arena, the arena into the boot record.
+///
+/// Host tests link no firmware: there both saves do nothing (the restart export is in the resident table, so a test binary holds `dkrt_restart`).
 pub unsafe fn project_serialize() {
+    #[cfg(not(test))]
     dkfw::project::serialize();
 }
 pub unsafe fn boot_record_write() {
+    #[cfg(not(test))]
     dkfw::storage::boot_record_write();
 }
 
@@ -590,7 +598,7 @@ pub fn st() -> &'static mut State {
     unsafe { &mut *addr_of_mut!(DKRT_STATE) }
 }
 
-pub fn flush(start: u32, len: u32) {
+pub extern "C" fn flush(start: u32, len: u32) {
     PLATFORM.flush(start, len)
 }
 
@@ -610,7 +618,7 @@ pub fn device_name() -> u32 {
 }
 
 /// The device has the DSP the digikit link drives (`DeviceProfile::has_dsp`).
-pub fn has_dsp() -> bool {
+pub extern "C" fn has_dsp() -> bool {
     PLATFORM.has_dsp()
 }
 
@@ -637,11 +645,11 @@ pub fn os_upgrade_active() -> bool {
     PLATFORM.os_upgrade_active()
 }
 
-pub fn irq_mask() -> u32 {
+pub extern "C" fn irq_mask() -> u32 {
     PLATFORM.irq_mask()
 }
 
-pub fn irq_restore(sr: u32) {
+pub extern "C" fn irq_restore(sr: u32) {
     PLATFORM.irq_restore(sr)
 }
 

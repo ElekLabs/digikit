@@ -288,7 +288,7 @@ pub const TEST_SERVICE_USER: &str = "test/svc-test";
 /// device (the same name, `devices` apart).
 ///
 /// The test fixture's names and hooks (`users` has `test/svc-test`) are not in this set: a production port file lists none of them, because they sit on sites that image modules patch
-/// (the test hook shares the site of `core/digikit-menu`'s). [`service_decls_with`] adds them for the port file of the test image.
+/// (the test hook shares the site of the SETTINGS hook of `core/ui`). [`service_decls_with`] adds them for the port file of the test image.
 pub fn service_decls(decls: &[&str]) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
     service_decls_with(decls, false)
 }

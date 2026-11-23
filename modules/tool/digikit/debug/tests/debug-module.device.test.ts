@@ -9,7 +9,7 @@ import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { DEBUG_MODULE, installModules, installWithDebug, moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { ofKind, readSmallRing, RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
-import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { packageSymbol, planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
 const text = (words: number[]) =>
@@ -67,7 +67,11 @@ async function expectWithDebugModule(runtime: PatchedSession): Promise<void> {
   expect((modLog!.flags >> 8) & 0xff, 'its source is the probe module (record index + 1)').toBe(probe.index + 1);
 
   // levels: the defaults, then a set that is read back; the levels are in RAM
-  expect(await dk.logConfig()).toEqual({ level: 2, modules: Array(8).fill(0xff), debug: true });
+  // `installWithDebug` listens to the log (RuntimeEvents.listen), which raises the debug module's own record to level 3 once the module is registered; every other record has the default
+  const debug = modules.find((m) => m.name === 'digikit/debug')!;
+  const listened = Array<number>(8).fill(0xff);
+  listened[debug.index] = 3;
+  expect(await dk.logConfig()).toEqual({ level: 2, modules: listened, debug: true });
   const modulesLevels = Array<number>(8).fill(0xff);
   modulesLevels[probe.index] = 4;
   expect(await dk.setLogConfig(1, modulesLevels)).toEqual({ level: 1, modules: modulesLevels, debug: true });
@@ -285,12 +289,12 @@ async function expectCardLog(runtime: PatchedSession): Promise<void> {
   await session.expectNoFault('card log');
 }
 
-/** The DIGIKIT menu's HEALTH page registers a poll function (`dkrt_poll_add`) while it is open. The menu is patched into the image, so PROFILE_STATE names
- * the runtime as the owner (0xff) and the function lies in the code the patchkit placed for core/digikit-menu. */
+/** The DIGIKIT menu's HEALTH page registers a poll function (`dkrt_poll_add`) while it is open. The menu is no content module, so PROFILE_STATE names
+ * the runtime as the owner (0xff) and the function lies in the block the core placed the system package in (the menu is a part of the package). */
 async function expectPollOwner(runtime: TestRuntime): Promise<void> {
   const { session, dk } = runtime;
   await expectRuntimeReady(session);
-  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'debug-poll-owner'), []);
+  const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'debug-poll-owner'), ['DKRT_HOST_DIR']);
   await installWithDebug(runtime);
   expect((await dk.profileAll()).polls.filter(Boolean), 'no poll before the page is open').toEqual([]);
   // NO leaves any popup, SETTINGS, eight rows down is DIGIKIT, YES opens it, DOWN is HEALTH, YES opens it
@@ -314,16 +318,16 @@ async function expectPollOwner(runtime: TestRuntime): Promise<void> {
   const polls = (await dk.profileAll()).polls.flatMap((p, slot) => (p ? [{ slot, ...p }] : []));
   console.log('poll slots', JSON.stringify(polls.map((p) => ({ ...p, fn: p.fn.toString(16) }))));
   expect(polls.length, 'the HEALTH page registered a poll').toBeGreaterThan(0);
-  const placed = (plan.writes ?? []).filter((w) => w.cpu === 'cf' && w.code !== undefined && w.owner.includes('digikit-menu'));
+  const lo = await packageSymbol(session, plan, 'PACKAGE_LO');
+  const hi = await packageSymbol(session, plan, 'PACKAGE_HI');
   for (const p of polls) {
-    expect(p.owner, 'a patched-in core module belongs to the firmware image').toBe('runtime');
-    const at = placed.find((w) => p.fn >= w.addr && p.fn < w.addr + w.len);
-    expect(at, `poll ${p.slot} function ${p.fn.toString(16)} is in the code placed for core/digikit-menu`).toBeDefined();
+    expect(p.owner, 'the system package belongs to the runtime, not to a content module').toBe('runtime');
+    expect(p.fn >= lo && p.fn < hi, `poll ${p.slot} function ${p.fn.toString(16)} is in the package block ${lo.toString(16)}..${hi.toString(16)}`).toBe(true);
   }
   await session.expectNoFault('poll owner');
 }
 
-runtimeTests('the HEALTH page poll is owned by the runtime and lies in the menu code', expectPollOwner, { dsp: 'sharc' });
+runtimeTests('the HEALTH page poll is owned by the runtime and lies in the system package', expectPollOwner, { dsp: 'sharc' });
 runtimeTests('the card log is written to the store and reads back', expectCardLog, { dsp: 'sharc' });
 runtimeTests(
   'without the debug module the runtime boots, has no log commands and keeps a small ring',

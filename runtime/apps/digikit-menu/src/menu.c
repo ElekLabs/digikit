@@ -839,7 +839,8 @@ static void fill_about(dk_ui_menu *m, void *ctx)
 
 /* ---- MEMORY ---------------------------------------------------------------------------------------------------------- */
 
-/* The resources the page shows, in order: the CAPACITY kind, the row label and 1 when the row shows a percent (bytes), 0 for used/limit.
+/* CPU is the module arena alone: the system package has its own block (CAPK_PACKAGE) and is not in it, so the row reads 0% with no modules.
+   The resources the page shows, in order: the CAPACITY kind, the row label and 1 when the row shows a percent (bytes), 0 for used/limit.
    Left out: the staging buffer, the selection, the effect slots and the map entries (they say nothing a user can act on). */
 static const uint8_t mem_kind[7] = {
     DKRT_CAPK_DSP_AREA,   DKRT_CAPK_ARENA,      DKRT_CAPK_MODULES,  DKRT_CAPK_MACHINE_ROWS,

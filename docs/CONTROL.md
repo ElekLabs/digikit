@@ -135,7 +135,7 @@ exact stock firmware (desktop only), else none; an image of another device never
 written this way runs as new code. Unmapped pages are mapped zeroed. Like `mem.cf.poke` it is a host write, not part of the replay record.
 
 `runtime.maps {modules_dir?}` answers what a host needs to name addresses of the image that runs now: `{image_sha256, matches, ship, symbols}`. `ship` is the
-ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` (the ones the image has) to byte addresses: the memory a host reads
+ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_HOST_DIR` and `dyndsp_info` (the ones the image has) to byte addresses: the memory a host reads
 with `mem.cf.peek` and passes to `dkprof` (`loadTable`) to get the load table. The map is made from the running image's patch record and the stock image, as `dev.reload`
 makes its plan, so it follows a module swap: ask again after a `dev.reload`. The answer is kept for the image's SHA-256. `matches` is false when the modules on disk give other bytes
 than the running image (a hot DSP injection, or an object changed since): the names may then be wrong. An image with no patch record, or no stock image in `firmware/`, is an error.

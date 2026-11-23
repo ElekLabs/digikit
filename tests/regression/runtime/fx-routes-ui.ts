@@ -1,6 +1,7 @@
 import { REDRAW, rows, word, type Rt } from './fx-live.ts';
 import { readTextRows, withPausedFxProtocol, shot } from './fx-session.ts';
-import { type RuntimePlan } from './runtime-plan.ts';
+import type { HostName } from '@digi/dk-session';
+import { packageSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { symbolsOf } from './service-symbols.ts';
 
 export const MASTER = 1;
@@ -9,15 +10,17 @@ export const SEND_ROUTE = 2;
 /** The MODULES route panel's published diagnostics and its real front-panel navigation. */
 export function routeUi(runtime: Rt, plan: RuntimePlan, artifacts: string, slots: number) {
   const { session } = runtime;
-  // `fxp_send_count` and `DKRT_FXS` are the fx service file's (`symbolsOf`, bound after each boot by `inspectFxBoot`); the `DK_*` cells are the image's
+  // `fxp_send_count` and `DKRT_FXS` are the fx service file's (`symbolsOf`, bound after each boot by `inspectFxBoot`); the `DK_*` cells are the DIGIKIT menu's, a part of the system
+  // package: the host directory has their addresses (`DK_POPUP` is `MENU_POPUP`)
   const sym = (name: string) => symbolsOf(runtime, plan)(name);
-  const cell = (name: string) => word(session, sym(name));
+  const menuAt = (name: string) => packageSymbol(session, plan, `MENU_${name.slice('DK_'.length)}` as HostName);
+  const cell = async (name: string) => word(session, name.startsWith('DK_') ? await menuAt(name) : sym(name));
   const bytes = (value: number, count: number) =>
     Array.from({ length: count }, (_, i) => (value >>> (24 - 8 * i)) & 0xff);
   const pending = async () => bytes(await cell('DK_FXR_PEND'), 4);
   const popup = async () => {
-    const title = await readTextRows(session, sym('DK_POPUP'), 1, 48);
-    const text = await readTextRows(session, sym('DK_POPUP_TEXT'), 1, 48);
+    const title = await readTextRows(session, await menuAt('DK_POPUP'), 1, 48);
+    const text = await readTextRows(session, await menuAt('DK_POPUP_TEXT'), 1, 48);
     return [title[0], text[0]];
   };
   const toModules = async () => {
@@ -32,7 +35,7 @@ export function routeUi(runtime: Rt, plan: RuntimePlan, artifacts: string, slots
     for (let i = 0; i < 5; i++) await runtime.ui.tap('UP', { until: { ms: 150, why: REDRAW } });
     for (let i = 0; i < row; i++) await runtime.ui.tap('DOWN', { until: { ms: 150, why: REDRAW } });
   };
-  const panelRows = async () => readTextRows(session, sym('DK_PANEL'), await cell('DK_PANEL_N'), 24);
+  const panelRows = async () => readTextRows(session, await menuAt('DK_PANEL'), await cell('DK_PANEL_N'), 24);
   const openPanel = async (row: number) => {
     await goto(row);
     await runtime.ui.tap('RIGHT', { until: { ms: 400, why: REDRAW } });
