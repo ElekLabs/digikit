@@ -215,3 +215,16 @@ fn the_firmware_words_of_the_file_are_put_into_the_table() {
         fxpage::unbind();
     }
 }
+
+#[test]
+fn a_second_start_keeps_the_live_table() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        fxpage::unbind();
+        assert_eq!(fxpage::bind(&core_with(table(4, DEVICE, 2)), [0, 0]), OK);
+        // a reload of the file binds again: the live table stays, the image table is not read over it
+        assert_eq!(fxpage::bind(&FakeCore::new(), [0, 0]), OK);
+        assert!(fxpage::available(&FakeCore::new()));
+        fxpage::unbind();
+    }
+}

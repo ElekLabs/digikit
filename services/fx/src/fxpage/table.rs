@@ -113,13 +113,13 @@ pub(crate) fn bound() -> *const u32 {
 
 /// The table of the effect pages as this service reads it, or null (no `core/fxpages` in the image, another device, an older table than the hooks need). The first
 /// call copies the image table (`CoreApi::info`) into `DKRT_FXP_TAB` and fills the words that point at the state of the hooks; `Fx::start` makes that call (`bind`) before the
-/// file's hooks are installed. A later call binds with no firmware words (a host test that changes the fake image table).
+/// file's hooks are installed. A later call after `unbind` binds with the file's firmware words again (a host test that changes the fake image table).
 pub(crate) unsafe fn info<C: CoreApi>(core: &C) -> *const u32 {
     let tab = bound();
     if !tab.is_null() {
         return tab;
     }
-    bind_with(core, [0, 0])
+    bind_with(core, firmware())
 }
 
 /// Copy the image table into the bound table, with `fw` as the firmware words (null: refused).
@@ -212,6 +212,10 @@ pub(super) unsafe fn bind_table<C: CoreApi>(
 /// What `Fx::start` does before the file's hooks are installed: the table is bound with the firmware words `fw`, or the file is refused (`E_NO_REGISTRY`: no usable
 /// `core/fxpages` in the image).
 pub unsafe fn bind<C: CoreApi>(core: &C, fw: [u32; 2]) -> i32 {
+    // a second start (a reload of the file) keeps the live table: the image table is not copied over it
+    if !bound().is_null() {
+        return OK;
+    }
     if bind_with(core, fw).is_null() {
         E_NO_REGISTRY
     } else {
