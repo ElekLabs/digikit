@@ -57,7 +57,7 @@ cardRigs('core-only boots and recovery', { uploads: true, roots: RT, symbols: CA
   /** Two core-only boots in a row leave the counter at `expected`: the second boot reads the record the first one left. */
   const twiceCoreOnly = async (rt: Running, expected: number, cause: number, frame: 'crashes' | 'missing') => {
     expect(await counter(), 'the first core-only boot does not count itself').toBe(expected);
-    const again = await h.restart(rt);
+    const again = await h.restart(rt, { coreOnly: true });
     await expectCoreOnly(cause, frame);
     expect(await counter(), 'the second core-only boot does not count either').toBe(expected);
     return again;

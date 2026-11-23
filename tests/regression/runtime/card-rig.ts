@@ -153,8 +153,8 @@ export interface CardRig {
   ): Promise<TestRuntime>;
   /** Poll until the UI loop was reached (and the boot is safe mode when `safe`); returns the boot's fields. */
   ready(safe?: boolean): Promise<Awaited<ReturnType<typeof bootInfo>>>;
-  /** A protocol restart (the card and its guest writes stay); returns the runtime of the new boot, settled. */
-  restart(runtime: PatchedSession): Promise<TestRuntime>;
+  /** A protocol restart (the card and its guest writes stay); returns the runtime of the new boot, settled. `coreOnly`: the new boot never reaches the runtime UI, so it is not settled on it: the call returns once the new boot is installed (a new epoch), and `ready(true)` proves its boot info. */
+  restart(runtime: PatchedSession, o?: { coreOnly?: boolean }): Promise<TestRuntime>;
   /** Run protocol calls on the paused daemon (the transport steps the emulator). */
   usb<T>(runtime: PatchedSession, run: (dk: DkSession) => Promise<T>): Promise<T>;
   /** The card the guest left: `base` (default the card booted last) with the overlay of its writes laid over a copy (Python `card_after`). */
@@ -472,13 +472,23 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       );
       return bootInfo(session, prepared.plan);
     },
-    async restart(runtime) {
+    async restart(runtime, { coreOnly = false } = {}) {
       const { session } = runtime;
       const before = Number((await bounded(() => session.status())).epoch);
       await rpc(session, 'run.mode', { mode: 'free' });
       await bounded(() => runtime.dk.restart());
       runtime.dk.cancelPending();
       const dk = emulatorDk(session);
+      if (coreOnly) {
+        // a core-only boot draws the reason frame and keeps the stock firmware: no runtime UI to settle on; the new boot is the new epoch
+        cap = undefined;
+        await pollEmulated(session, async () => Number((await session.status()).epoch) > before, Boolean, {
+          emulatedMs: 120_000,
+          intervalMs: 500,
+          message: 'the restarted core-only boot was installed',
+        });
+        return withWaitApi({ session, dk, close: runtime.close });
+      }
       // This controller can answer throughout the guest reset: settle proves the fresh ready epoch/UI hook.
       cap = undefined;
       // The reset boots to the boot window again and no daemon press answers it, so the rig answers it before its UI checks, as `Session.start` and `reloadRuntimeBaseline` do:
