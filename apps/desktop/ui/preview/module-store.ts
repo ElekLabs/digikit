@@ -103,9 +103,7 @@ async function seedStore(library: PreviewLibrary, profile: DeviceProfile) {
   const files = new Map<string, Uint8Array>();
   const selected = new Map<string, Uint8Array | undefined>();
   if (sim.dev !== 'empty') {
-    const modules = library.modules(device);
-    const outdated = modules.find((m) => m.id === 'digikit/pluck');
-    const installed = modules.find((m) => m.id === 'digikit/shot');
+    const [outdated, installed] = library.modules(device);
     for (const { id, pack } of [installed, outdated].filter((m) => m !== undefined)) {
       const bytes = new Uint8Array(await library.library.read(device, pack.file));
       const header = headerInfo(bytes);
