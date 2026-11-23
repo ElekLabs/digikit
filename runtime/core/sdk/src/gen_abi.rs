@@ -196,10 +196,20 @@ pub const HOST_MENU_ROUTE_N: u32 = 22;
 pub const HOST_MENU_ROUTE_ITEM: u32 = 23;
 /// LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads.
 pub const HOST_MENU_LOADED: u32 = 24;
+/// DK_LINES of the DIGIKIT menu: the HEALTH page's rows as text (12 rows of 24 bytes).
+pub const HOST_MENU_LINES: u32 = 25;
+/// DK_REDRAWS of the DIGIKIT menu: how many times the HEALTH page redrew.
+pub const HOST_MENU_REDRAWS: u32 = 26;
+/// DK_POLLS of the DIGIKIT menu: how many times the HEALTH page polled the runtime.
+pub const HOST_MENU_POLLS: u32 = 27;
+/// DK_HEALTH of the DIGIKIT menu: the last DkrtHealth the HEALTH page read.
+pub const HOST_MENU_HEALTH: u32 = 28;
+/// DK_HEALTH_MENU of the DIGIKIT menu: the HEALTH page's menu object (the firmware's view is the pointer at +4).
+pub const HOST_MENU_HEALTH_MENU: u32 = 29;
 /// The ids of the host directory this build knows (`[[host_dir]]` of abi.toml).
-pub const HOST_COUNT: usize = 25;
+pub const HOST_COUNT: usize = 30;
 /// The ids of the host directory the package fills (`owner = "package"` of `[[host_dir]]`).
-pub const HOST_PACKAGE_OWNED: [u32; 23] = [0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
+pub const HOST_PACKAGE_OWNED: [u32; 28] = [0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29];
 /// The ids of the host directory the core fills (`owner = "core"` of `[[host_dir]]`).
 pub const HOST_CORE_OWNED: [u32; 2] = [4, 5];
 /// Provider slots of the boot plan (`[limits.format] provider_max` of sdk/sdk.toml), separate from the selection.

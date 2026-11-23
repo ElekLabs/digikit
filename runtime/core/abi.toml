@@ -1095,3 +1095,28 @@ doc = "DK_ROUTE_ITEM of the DIGIKIT menu: the routes the last ROUTE... choice of
 name = "MENU_LOADED"
 owner = "package"
 doc = "LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads."
+
+[[host_dir]]
+name = "MENU_LINES"
+owner = "package"
+doc = "DK_LINES of the DIGIKIT menu: the HEALTH page's rows as text (12 rows of 24 bytes)."
+
+[[host_dir]]
+name = "MENU_REDRAWS"
+owner = "package"
+doc = "DK_REDRAWS of the DIGIKIT menu: how many times the HEALTH page redrew."
+
+[[host_dir]]
+name = "MENU_POLLS"
+owner = "package"
+doc = "DK_POLLS of the DIGIKIT menu: how many times the HEALTH page polled the runtime."
+
+[[host_dir]]
+name = "MENU_HEALTH"
+owner = "package"
+doc = "DK_HEALTH of the DIGIKIT menu: the last DkrtHealth the HEALTH page read."
+
+[[host_dir]]
+name = "MENU_HEALTH_MENU"
+owner = "package"
+doc = "DK_HEALTH_MENU of the DIGIKIT menu: the HEALTH page's menu object (the firmware's view is the pointer at +4)."

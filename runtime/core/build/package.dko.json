@@ -20255,175 +20255,210 @@
   },
   {
    "addend": 0,
-   "offset": 364,
+   "offset": 404,
    "section": ".text.dkpkg_entry",
    "symbol": ".sec..bss.DKRT_PROVIDERS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 370,
+   "offset": 410,
    "section": ".text.dkpkg_entry",
    "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 426,
+   "offset": 466,
    "section": ".text.dkpkg_entry",
    "symbol": ".sec..bss.DKRT_DSP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 434,
+   "offset": 474,
    "section": ".text.dkpkg_entry",
    "symbol": ".sec..bss.DKRT_TICKS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 442,
+   "offset": 482,
    "section": ".text.dkpkg_entry",
    "symbol": ".sec..bss.DKRT_TABLE_BAD",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 450,
+   "offset": 490,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_LOAD",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 458,
+   "offset": 498,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_LOAD_N",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 466,
+   "offset": 506,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_POPUP",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 474,
+   "offset": 514,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_POPUP_TEXT",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 482,
+   "offset": 522,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_POPUPS",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 490,
+   "offset": 530,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_ABOUT",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 498,
+   "offset": 538,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_ABOUT_N",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 508,
+   "offset": 548,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_PANEL",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 518,
+   "offset": 558,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_PANEL_N",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 528,
+   "offset": 568,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_MEM",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 538,
+   "offset": 578,
    "section": ".text.dkpkg_entry",
    "symbol": "DK_MEM_N",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 548,
+   "offset": 588,
    "section": ".text.dkpkg_entry",
    "symbol": "TICK",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 558,
+   "offset": 598,
    "section": ".text.dkpkg_entry",
    "symbol": "LOADED",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 568,
-   "section": ".text.dkpkg_entry",
-   "symbol": "DK_FXR_PEND",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 578,
-   "section": ".text.dkpkg_entry",
-   "symbol": "DK_FXR_SET",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 588,
-   "section": ".text.dkpkg_entry",
-   "symbol": "DK_FXR_FLUSH",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 598,
-   "section": ".text.dkpkg_entry",
-   "symbol": "DK_APPLIES",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 608,
    "section": ".text.dkpkg_entry",
-   "symbol": "DK_ROUTE_N",
+   "symbol": "DK_LINES",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 618,
    "section": ".text.dkpkg_entry",
-   "symbol": "DK_ROUTE_ITEM",
+   "symbol": "DK_REDRAWS",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 628,
+   "section": ".text.dkpkg_entry",
+   "symbol": "DK_POLLS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 638,
+   "section": ".text.dkpkg_entry",
+   "symbol": "DK_HEALTH",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 648,
+   "section": ".text.dkpkg_entry",
+   "symbol": "DK_HEALTH_MENU",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 658,
+   "section": ".text.dkpkg_entry",
+   "symbol": "DK_FXR_PEND",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 668,
+   "section": ".text.dkpkg_entry",
+   "symbol": "DK_FXR_SET",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 678,
+   "section": ".text.dkpkg_entry",
+   "symbol": "DK_FXR_FLUSH",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 688,
+   "section": ".text.dkpkg_entry",
+   "symbol": "DK_APPLIES",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 698,
+   "section": ".text.dkpkg_entry",
+   "symbol": "DK_ROUTE_N",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 708,
+   "section": ".text.dkpkg_entry",
+   "symbol": "DK_ROUTE_ITEM",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 718,
    "section": ".text.dkpkg_entry",
    "symbol": ".sec..rodata._RNvNtNtCsacrnCRhYs1l_4dkrt7package5hooks5HOOKS",
    "type": "cf.32"
@@ -30204,10 +30239,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ff6848d7041c487900000000487800032f2e000841eeff7e4eb9000000004fef000c71aeff8e0c80000000ff670c42804cee041cff684e5e4e75203c0000000023c0000000004879000000004eb90000000023c000000000588f4a80673472ff2d41ffec72b12d41fff02d40fff442aefff842aefffc207900000000486effec4878000148780005206800a84e904fef000c41eeff902d48ff78280e0684ffffffec263c00000000240845f900000000600000d67201b280670000ae7202b280670000ec7203b280670000ec7206b280670000ec7207b280670000ec7208b280670000ec7209b280670000ec720ab280670000ec720bb280670000ec720cb280670000ec720db280670000ee720eb280670000f0720fb280670000f27210b280670000f47211b280670000f67218b280670000f87212b280670000fa7213b280670000fc7214b280670000fe7215b280670001007216b280670001027217b2806700010442816006223c000000002079000000002f012f00206802dc4e90508fb8aeff78670000ea4878005c2f032f024e92206eff7858aeff7820184fef000c4a806600ff10223c0000000060c0223c0000000060b8223c0000000060b0223c0000000060a8223c0000000060a0223c000000006098223c000000006090223c000000006088223c000000006080223c000000006000ff78223c000000006000ff6e223c000000006000ff64223c000000006000ff5a223c000000006000ff50223c000000006000ff46223c000000006000ff3c223c000000006000ff32223c000000006000ff28223c000000006000ff1e223c000000006000ff14223c000000006000ff0a223c000000006000ff00203c000000006000fdb8",
+   "hex": "4e56ff5448d7041c487900000000487800032f2e000841eeff6a4eb9000000004fef000c71aeff7a0c80000000ff670c42804cee041cff544e5e4e75203c0000000023c0000000004879000000004eb90000000023c000000000588f4a80673472ff2d41ffec72b12d41fff02d40fff442aefff842aefffc207900000000486effec4878000148780005206800a84e904fef000c41eeff7c2d48ff64280e0684ffffffec263c00000000240845f900000000600000fe7201b280670000d67202b280670001147203b280670001147206b280670001147207b280670001147208b280670001147209b28067000114720ab28067000114720bb28067000114720cb28067000114720db28067000116720eb28067000118720fb2806700011a7210b2806700011c7211b2806700011e7218b280670001207219b28067000122721ab28067000124721bb28067000126721cb28067000128721db2806700012a7212b2806700012c7213b2806700012e7214b280670001307215b280670001327216b280670001347217b2806700013642816006223c000000002079000000002f012f00206802dc4e90508fb8aeff646700011c487800702f032f024e92206eff6458aeff6420184fef000c4a806600fee8223c0000000060c0223c0000000060b8223c0000000060b0223c0000000060a8223c0000000060a0223c000000006098223c000000006090223c000000006088223c000000006080223c000000006000ff78223c000000006000ff6e223c000000006000ff64223c000000006000ff5a223c000000006000ff50223c000000006000ff46223c000000006000ff3c223c000000006000ff32223c000000006000ff28223c000000006000ff1e223c000000006000ff14223c000000006000ff0a223c000000006000ff00223c000000006000fef6223c000000006000feec223c000000006000fee2223c000000006000fed8223c000000006000fece203c000000006000fd5e",
    "kind": "text",
    "name": ".text.dkpkg_entry",
-   "size": 636
+   "size": 726
   },
   {
    "align": 2,
@@ -30813,10 +30848,10 @@
   },
   {
    "align": 2,
-   "hex": "00000000000000010000000200000003000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018",
+   "hex": "00000000000000010000000200000003000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018000000190000001a0000001b0000001c0000001d",
    "kind": "data",
    "name": ".rodata.global.2G",
-   "size": 92
+   "size": 112
   },
   {
    "align": 16,
@@ -33381,7 +33416,7 @@
    "size": 24
   }
  ],
- "source_sha256": "5a4b21ad5d2d2498a1542316dbc5d4d4df2eee12695ee9be66450eb1583bb167",
+ "source_sha256": "05ecee7298b3c88d6a74f1d3e3e92021c5baf1373bb7b5216e4765fae9bc4308",
  "symbols": [
   {
    "global": false,
@@ -37639,6 +37674,24 @@
   },
   {
    "global": true,
+   "name": "DK_HEALTH",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "DK_HEALTH_MENU",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "DK_LINES",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "DK_LOAD",
    "section": null,
    "value": 0
@@ -37675,6 +37728,12 @@
   },
   {
    "global": true,
+   "name": "DK_POLLS",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "DK_POPUP",
    "section": null,
    "value": 0
@@ -37688,6 +37747,12 @@
   {
    "global": true,
    "name": "DK_POPUP_TEXT",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "DK_REDRAWS",
    "section": null,
    "value": 0
   },
@@ -38786,8 +38851,8 @@
  ],
  "toolchain": {
   "exports": "DKPKG_TABLE DKRT_CTXS DKRT_DSP DKRT_PROVIDERS DKRT_TABLE_BAD DKRT_TICKS dk_dsp_stats_ctl dk_dsp_stats_read dk_ui_choice dk_ui_confirm dk_ui_core_handle dk_ui_menu_add_action dk_ui_menu_add_submenu dk_ui_menu_add_text dk_ui_menu_check dk_ui_menu_close dk_ui_menu_is_open dk_ui_menu_new dk_ui_menu_open dk_ui_menu_refresh dk_ui_menu_select dk_ui_stock_row dkpkg_entry dkrt_blocks dkrt_boot_info dkrt_boot_name dkrt_capacity dkrt_diag dkrt_dsp_stats_feed dkrt_fit dkrt_fx dkrt_health dkrt_live dkrt_live_state dkrt_menu_built dkrt_menu_release dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_service_query dkrt_settings_flush dkrt_settings_put dkrt_status",
-  "instructions_redecoded": "48432",
-  "isa_check": "0b62e11570dbed8495868ba285155204159c9dfc9921aeec7f53f6b57a40f9c5",
+  "instructions_redecoded": "48457",
+  "isa_check": "d7800482527d66cc9a6d97626be3a13b42327bb607acbece5a4587ab2c5ba112",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

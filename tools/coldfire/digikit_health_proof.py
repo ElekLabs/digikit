@@ -36,6 +36,7 @@ import time
 
 from tools.coldfire.digikit_menu_proof import Plan
 from tools.device.dkproto import ARENA_HDR
+from tools.patchkit import pk_hostdir
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = ROOT / "out" / "runs" / "lanes" / "r1-health"
@@ -154,9 +155,9 @@ class HealthProof:
     # ---- reads
     def sym(self, name: str) -> int:
         if name.startswith("DK_"):
-            # the menu's statics are package statics; the host directory (abi.toml `MENU_*`) has ids for the ones the device tests read, not for these
-            raise NotImplementedError(
-                f"{name} is a static of the menu in the system package and has no host directory id (runtime/core/abi.toml): the page checks need one"
+            # a static of the menu in the system package: found through the host directory (abi.toml `MENU_*`), never by the image plan
+            return pk_hostdir.read_package_address(
+                self.rig.w, self.plan.addr("DKRT_HOST_DIR"), "MENU_" + name[3:]
             )
         return self.plan.addr(name)
 

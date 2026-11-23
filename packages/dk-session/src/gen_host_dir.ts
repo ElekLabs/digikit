@@ -5,7 +5,7 @@ export const HOST_DIR_MAGIC = 0x44484b44;
 /** `HostDir.ready` once the package has attached (`HOST_DIR_READY_MAGIC` of abi.toml). */
 export const HOST_DIR_READY = 0x52454459;
 /** The ids this build knows (`[[host_dir]]` of abi.toml); a core may have fewer, which its directory says in `count`. */
-export const HOST_COUNT = 25;
+export const HOST_COUNT = 30;
 
 /** The package statics that tools read by name, and their ids in the host directory (`DKRT_HOST_DIR`). */
 export const HOST_ID = {
@@ -34,6 +34,11 @@ export const HOST_ID = {
   MENU_ROUTE_N: 22,
   MENU_ROUTE_ITEM: 23,
   MENU_LOADED: 24,
+  MENU_LINES: 25,
+  MENU_REDRAWS: 26,
+  MENU_POLLS: 27,
+  MENU_HEALTH: 28,
+  MENU_HEALTH_MENU: 29,
 } as const;
 /** Who fills each entry of the directory: the package at its entry, or the core before it starts the package. */
 export const HOST_OWNER = {
@@ -62,6 +67,11 @@ export const HOST_OWNER = {
   MENU_ROUTE_N: 'package',
   MENU_ROUTE_ITEM: 'package',
   MENU_LOADED: 'package',
+  MENU_LINES: 'package',
+  MENU_REDRAWS: 'package',
+  MENU_POLLS: 'package',
+  MENU_HEALTH: 'package',
+  MENU_HEALTH_MENU: 'package',
 } as const;
 /** The boot level the core reports: `DkrtBootInfo.reason` (`SAFE_*`), `DkrtBootInfo.core_cause` (`CORE_*`) and the counter thresholds of abi.toml. */
 export const BOOT_LEVEL = {
