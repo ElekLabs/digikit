@@ -278,6 +278,21 @@ fn the_row_a_service_file_declares_is_added_at_the_commit() {
 }
 
 #[test]
+fn a_row_named_other_than_the_header_provides_refuses_the_load() {
+    use dkneeds::keys::{name_hash, Pair, Table};
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // the header says it provides "other"; `init` declares the row of "svc-test"
+        static PROVIDES: std::sync::OnceLock<[Pair; 1]> = std::sync::OnceLock::new();
+        let table = Table { provides: PROVIDES.get_or_init(|| [Pair { a: name_hash("other"), b: 0x000802 }]), ..Default::default() };
+        let mut l = loader_of(Init::DeclaresRow, service_file(&table, 0));
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_DECL_KIND);
+        assert!(l.m.live.is_empty());
+        assert!(!l.r.log.iter().any(|e| matches!(e, Ev::AddProvider(..))), "no row reached the registry: {:?}", l.r.log);
+    }
+}
+
+#[test]
 fn a_row_the_registry_refuses_undoes_the_load() {
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {

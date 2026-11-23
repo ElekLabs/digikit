@@ -32,6 +32,7 @@ What goes where (copy this split):
 - `service!(Shortcuts, "shortcuts", &KINDS_SHORTCUTS, parts = [Records, Tick], ...)` lists the parts the owner adopts, in one place: the contract recipe reads them from the row
   (`file::dk_svc_row()`), it does not list them again. `Provider` is always there. A part is a trait the owner
   implements (`Records`, `Ticker`); `attach` has no work here, so the default stays, and `detach` is what the old `remove` did.
+- `Provider::can_stop(&self, core)` names no consumer: a service refuses a take-down for every module or for none (no shipped service refused per owner before the provider contract).
 - No device facts in the crate: the key codes and flag bits come from the device profile (`DeviceProfile`) that `core.device_id()` names.
 - A builder call that is a thin wrapper over a free function is generated; one that must reach the owner is hand-written in `dks/src/builder.rs` and named with
   `wrapper = "builder"` in `sdk/sdk.toml`.
