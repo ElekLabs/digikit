@@ -52,6 +52,7 @@ cardRigs('safe mode', { dsp: 'sharc', full: true, relaxFs: true, roots: RT, symb
       expect(info, 'the third boot is safe mode (counter 2)').toMatchObject({
         safe: 1,
         reason: SAFE_COUNTER,
+        coreCause: 0,
         counter: 2,
       });
       expect(info.uiReached, 'the UI was reached in safe mode').toBe(1);
@@ -75,7 +76,7 @@ cardRigs('safe mode', { dsp: 'sharc', full: true, relaxFs: true, roots: RT, symb
       const others = FLAG_MODULES[h.device].map((id, i) => h.mod(id, `m${i}`));
       await h.boot(await h.card({ modules: others, selection: others.map((m) => m.name), flags: 1 }));
       const info = await h.ready(true);
-      expect(info).toMatchObject({ safe: 1, reason: SAFE_FLAG, loaded: 0 });
+      expect(info).toMatchObject({ safe: 1, reason: SAFE_FLAG, coreCause: 0, loaded: 0 });
       const rec = currentRecord(await h.records());
       expect(rec?.flags, 'flag cleared').toBe(0);
       expect(rec?.paths, 'selection kept').toEqual(others.map((m) => m.name));
@@ -101,6 +102,7 @@ cardRigs('safe mode', { dsp: 'sharc', full: true, relaxFs: true, roots: RT, symb
       expect(safe, 'two boots without a stable period: the third is safe mode (counter 2)').toMatchObject({
         safe: 1,
         reason: SAFE_COUNTER,
+        coreCause: 0,
         counter: 2,
       });
       expect((await introNow(h.session)).equals(safeFrame('counter')), 'the intro shows the 2 FAILED BOOTS frame').toBe(true);
@@ -164,6 +166,7 @@ cardRigs('safe mode', { dsp: 'sharc', full: true, relaxFs: true, roots: RT, symb
           expect(third.info, 'two bad boots in a row: safe mode (counter), no module').toMatchObject({
             safe: 1,
             reason: SAFE_COUNTER,
+            coreCause: 0,
             loaded: 0,
           });
           expect(third.hung, 'the UI keeps running').toBe(false);
