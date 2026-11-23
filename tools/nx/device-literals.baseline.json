@@ -1053,7 +1053,7 @@
   "tools/gate/pins/project.json": 5,
   "tools/gate/smoke/project.json": 3,
   "tools/gate/stock/project.json": 4,
-  "tools/nx/cargo.mjs": 10,
+  "tools/nx/cargo.mjs": 11,
   "tools/nx/coupled-inputs.mjs": 23,
   "tools/nx/device-inputs.mjs": 18,
   "tools/nx/device-test-keys.mjs": 2,
