@@ -45,7 +45,9 @@ export const TIERS = {
     access: 'rw',
     narrow: false,
   },
-  merge: { targets: MERGE_TARGETS, access: 'rw', narrow: false, pgo: true },
+  // The merge tier selects device tests by area (tools/nx/test-subset.mjs `--gate`, docs/TESTING.md "Area-based device selection"):
+  // `affected` runs every target below except `test-device` and `test-conformance`; `--all-affected` puts them back (the old selection).
+  merge: { targets: MERGE_TARGETS, access: 'rw', narrow: false, pgo: true, areaDevice: true },
   full: {
     targets: [
       ...MERGE_TARGETS.filter(
@@ -65,6 +67,9 @@ export const TIERS = {
     pgo: true,
   },
 };
+
+// Whether the tier's device tests are selected by area and not by `affected` (the tier says so and `--all-affected` is not given).
+export const deviceByArea = (tier, allAffected) => Boolean(tier?.areaDevice) && !allAffected;
 
 // The gate's emulators (daemons and coupled-run) use the per-device PGO profile of DN2 and DT2.
 export function pgoRead(device) {
@@ -124,6 +129,7 @@ export function pgoReport(read = pgoRead, env = process.env) {
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   let args = process.argv.slice(2);
+  let allAffected = false;
   const tierIndex = args.findIndex((arg) => arg === '--tier' || arg.startsWith('--tier='));
   let tier;
   if (tierIndex >= 0) {
@@ -135,8 +141,12 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       process.exit(2);
     }
     args = args.filter((_, i) => i !== tierIndex && (inline || i !== tierIndex + 1));
+    allAffected = args.includes('--all-affected');
+    args = args.filter((arg) => arg !== '--all-affected');
     process.env.DIGI_GATE_BASE ||= 'main';
-    const targets = tier.targets.join(',');
+    const targets = deviceByArea(tier, allAffected)
+      ? tier.targets.filter((t) => t !== 'test-device' && t !== 'test-conformance').join(',')
+      : tier.targets.join(',');
     args = tier.runMany ? ['-t', targets, ...args] : ['--base', process.env.DIGI_GATE_BASE, '-t', targets, ...args];
   }
   const explain = args.includes('--explain');
@@ -167,8 +177,17 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       : ['pnpm', ['nx:pilot', ...command]];
   const commands = [tier?.runMany ? ['run-many', ...args] : ['affected', ...args]];
   console.log(`gate: ${commands[0][0]} ${tier ? 'over the tier targets' : 'with the given arguments'}`);
-  for (const command of commands) {
-    const [file, fileArgs] = wrap(styled(command));
+  // The device tests of the changed areas and the fixed smoke set: test-subset.mjs plans the run (it runs it itself, with the
+  // remote cache and the compact output); the plan alone with --explain. Each command has its own trace dir and summary.
+  const areaCommand = deviceByArea(tier, allAffected)
+    ? [
+        'node',
+        ['tools/nx/test-subset.mjs', '--gate', '--base', process.env.DIGI_GATE_BASE, ...(explain ? [] : ['--run'])],
+      ]
+    : undefined;
+  for (const command of [...commands, ...(areaCommand ? [areaCommand] : [])]) {
+    const isArea = command === areaCommand;
+    const [file, fileArgs] = isArea ? command : wrap(styled(command));
     console.log(`gate: ${file} ${fileArgs.join(' ')}`);
     const startedAt = Date.now();
     // A tier run keeps its trace in out/runs/gate/<stamp>/: Nx's task profile and the emulator slot waits.
