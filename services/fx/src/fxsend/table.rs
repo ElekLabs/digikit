@@ -1,0 +1,30 @@
+//! The info table of the send cells and the count cell of the track FX key.
+
+use super::*;
+use crate::fxpage;
+use dkrt_abi::core_api::CoreApi;
+use dkrt_abi::mem::iw;
+
+/// The info table when this image has send cells (a `core/fxpages` object of version 2 with at least one), else null.
+pub(super) unsafe fn info<C: CoreApi>(core: &C) -> *const u32 {
+    let inf = fxpage::info(core);
+    if inf.is_null() || iw(inf, w::VERSION) < 2 || iw(inf, w::CELLS) == 0 {
+        return core::ptr::null();
+    }
+    inf
+}
+
+/// The cells of the send page this image has (the CAPACITY limit of `SEND_SLOTS`): 0 without `core/fxpages` or on a device with no send page.
+pub unsafe fn slots<C: CoreApi>(core: &C) -> u32 {
+    let inf = info(core);
+    if inf.is_null() {
+        return 0;
+    }
+    iw(inf, w::CELLS).min(SEND_MAX as u32)
+}
+
+/// The count cell of the track FX key's list: 2 (the send page follows the stock page) while a cell is in use, else 0 (the stock list).
+#[inline]
+pub(super) unsafe fn publish_count<C: CoreApi>(core: &C, inf: *const u32) {
+    core.wr(iw(inf, w::COUNT), if ss().used != 0 { 2 } else { 0 });
+}
