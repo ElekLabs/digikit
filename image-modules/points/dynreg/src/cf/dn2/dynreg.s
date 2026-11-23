@@ -2,7 +2,7 @@
 | Design: docs/design/digikit-registry.md. The device id and the number of reserved types are the device file's and
 | core/machines types.toml's, through build/gen/device-dn2.inc (`patchkit gen`).
 |
-| dynreg_info: addresses of the rows and tables core/machines and core/params built at patch time, the row layouts, and
+| dynreg_info: addresses of the rows and tables core/machines and core/rows built at patch time, the row layouts, and
 | the lowering of a parameter row (device data: the runtime's registry names no device). All words big endian.
 |
 | dynreg_copy: the `std::copy` at the end of the machine list getter (`FUN_4004d8b6`: the static list is copied into the

@@ -1,4 +1,4 @@
-"""core/params as a module: the hook routine on the native core, and the table-row expressions of module.toml against
+"""core/rows as a module: the hook routine on the native core, and the table-row expressions of module.toml against
 the Rust generator's row builder (a1cf1df^:native/patchkit/src/params.rs, removed in a1cf1df).
 
 The expressions are evaluated by a small stand-in for patchkit's expression language (integers, symbols, `$field`,

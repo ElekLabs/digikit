@@ -165,7 +165,7 @@ symbol = "pk_loader"
 ```
 
 ```toml
-[[op]]                       # raise every stock bound by the number of added rows (see core/params)
+[[op]]                       # raise every stock bound by the number of added rows (see core/rows)
 op = "write"
 anchors = "cf.param.sites.descriptor_table.bound.*"
 offset = 2
@@ -268,7 +268,7 @@ after a second agent checked it), `offset`, `len` (bytes).
 | `cf_func` | `hash`, `ordinal` (default 0), `offset` | `len` bytes at an offset in a function with this address-masked hash |
 | `cf_ptr` | `hash`, `ordinal`, `offset`, `len` | the table behind an address literal in a function |
 | `cf_words` | `words = [u32 or "*", ...]` | a table row by masked signature |
-| `cf_params_t1`, `cf_params_refs`, `cf_params_bounds`, `cf_params_sites` | | the parameter table and its readers (used by `core/params`; `exclude_anchors` drops sites inside named anchors) |
+| `cf_params_t1`, `cf_params_refs`, `cf_params_bounds`, `cf_params_sites` | | the parameter table and its readers (used by `core/rows`; `exclude_anchors` drops sites inside named anchors) |
 | `cf_reset_init_calls`, `cf_reset_helper` | `which = "copy"\|"clear"` | the reset-path calls (used by `core/expansion`) |
 
 ```toml
@@ -419,7 +419,7 @@ then placed in a region. The firmware table is never stored in the repository.
 | `region` | where to place it |
 | `from` | `{ anchor, offset = 0, len = EXPR, expect_sha256 }`; `len` defaults to the rest of the anchor; `expect_sha256` is needed when the range reaches outside the anchor |
 | `append` | `{ registry, row = [EXPR, ...] }`: for each entry append the row; a word is `EXPR` (32-bit), `u8:EXPR` or `u16:EXPR`; `$field` is an entry field and `$index` its index |
-| `edit` | `{ registry, at = EXPR, fields = [{ offset, value = EXPR }, ...] }`: for each entry rewrite words of one copied row in place: `at` is the row's byte offset in the copied bytes, `offset` a word's offset in the row, `value` as a word of `append` (core/params `param_edits`) |
+| `edit` | `{ registry, at = EXPR, fields = [{ offset, value = EXPR }, ...] }`: for each entry rewrite words of one copied row in place: `at` is the row's byte offset in the copied bytes, `offset` a word's offset in the row, `value` as a word of `append` (core/rows `param_edits`) |
 | `align` | bytes, default 4 |
 | `devices` | optional device filter |
 
@@ -515,6 +515,6 @@ The format is `docs/design/digikit-dkm.md`; the design of the pages is "Effect p
 Example and fixture: `tests/fixtures/modules/dyn-fx-gain`.
 
 The frameworks themselves are ordinary modules: `image-modules/points/machines/` (about 24 ColdFire anchors, six copied
-tables, the hooks in `src/cf/dt2/machines.s` and `src/cf/dn2/machines.s`), `image-modules/points/params/` and
+tables, the hooks in `src/cf/dt2/machines.s` and `src/cf/dn2/machines.s`), `runtime/platform/rows/` and
 `image-modules/points/dsp-voice/`. Their routines are unit-tested on the emulated ColdFire core (`tools/patchkit/pk_cfunit.py`,
-`image-modules/points/machines/tests/test_pk_machines_fw.py`, `image-modules/points/params/tests/test_pk_params_fw.py`), and the proofs are the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`). Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).
+`image-modules/points/machines/tests/test_pk_machines_fw.py`, `runtime/platform/rows/tests/test_pk_params_fw.py`), and the proofs are the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`). Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).

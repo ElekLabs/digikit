@@ -772,7 +772,7 @@ fn a_row_anchor_has_one_service_in_its_users() {
         row("cf.a.data.row_ok", "[\"core/services/lfo\"]", words)
             + &row("cf.a.data.row_shared", "[\"core/services/lfo\", \"core/services/fx\"]", words)
             // a row that no service names, a service and a core module, and a code site (not a row)
-            + &row("cf.a.data.row_core", "[\"core/params\", \"core/services/lfo\"]", words)
+            + &row("cf.a.data.row_core", "[\"core/rows\", \"core/services/lfo\"]", words)
             + &row(
                 "cf.a.data.site",
                 "[\"core/services/lfo\", \"core/services/fx\"]",

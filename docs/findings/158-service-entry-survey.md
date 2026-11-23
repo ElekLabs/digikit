@@ -102,7 +102,7 @@ confirmed: each is `[[hook]]` without `handler`, installed by install.rs. [D]
 | view.build hook (`dynreg_view_hook`) | 0x40060f50 / 0x4005b2c0 | entry of machine selection view item builder | task | image | 2, or delete: digikit-runtime.md l.173 says the view hook and rebuild are removed with the archive commit, but module.toml l.118-124 still has the op and the build contains `dynreg_view_hook` [O: stale doc or stale op] |
 | 8 machine rows, 16 param rows, 8 page rows (data) | data only | reserved rows | | image | stays as data (the registry area), not an entry |
 
-### core/params (image-modules/points/params)
+### core/rows (runtime/platform/rows)
 
 | site | addr DT2 / DN2 | what | ctx | entry today | recommended |
 | --- | --- | --- | --- | --- | --- |
@@ -184,7 +184,7 @@ could be pointer-indirected in the flashed adapter code once; afterwards the ser
 (A). Cost today: the copies of names/permit/pertype with appended rows exist only to keep the stock readers bounded and to give each added type a row.
 Confidence 0.7 (not checked: every reader of the type byte beyond those anchors).
 
-### 2. core/params (6 [[op]], 2 [[section]] pf_table)
+### 2. core/rows (6 [[op]], 2 [[section]] pf_table)
 
 - Stock: DT2 descriptor table 0x4020f59c, 275 rows x 60 B (0x113 count from `cmpi.l #0x113` at 0x400c8932, accessor FUN_400c892e); DN2 0x401f83a4, 321 rows. Const data in DDR, no slack (next table at 0x40211a68 is another object).
 - Readers: 56 absolute references + 54 clamp bounds `cmpi.l #N` per device (anchors `cf.param.sites.descriptor_table.ref` / `.bound`; xref shows ~70 hits at

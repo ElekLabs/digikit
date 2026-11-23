@@ -204,7 +204,7 @@ References. An aligned-to-2 scan of every word of the MAIN OS section for values
 56 code references per device. They equal the anchors `cf.param.sites.descriptor_table.ref.*` exactly, plus
 one table-end word (DT2 0x400de70c, DN2 0x400e067e, `pea`). [V] Three of the 56 point inside the table (+8,
 +0x20, +0x20). A computed address is not seen by this scan. [D]
-`core/params` repoints all 56 to the RAM copy (module.toml `write` op on `ref.*`). The end word is not
+`core/rows` repoints all 56 to the RAM copy (module.toml `write` op on `ref.*`). The end word is not
 repointed. [D]
 
 Readers of min/max/default. The range accessor (DT2 0x400da368, DN2 0x400dc154) copies 12 bytes from row+8

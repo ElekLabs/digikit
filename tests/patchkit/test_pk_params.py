@@ -1,4 +1,4 @@
-"""core/params port rules: the Python scan that records the sites agrees with the recorded ports, and its pieces."""
+"""core/rows port rules: the Python scan that records the sites agrees with the recorded ports, and its pieces."""
 
 import os
 import tomllib
@@ -36,7 +36,7 @@ def test_rules_are_declared_for_the_three_anchors():
         for r in pr.fw_rules(REPO_ROOT)
         if r["name"].startswith("cf.param.")
         and r["_source"] == "fw/param"
-        and "core/params" in declarations[r["name"]].get("users", [])
+        and "core/rows" in declarations[r["name"]].get("users", [])
     ]
     for device in ("dt2", "dn2"):
         rules = {r["name"]: r for r in params_rules if device in r["devices"]}

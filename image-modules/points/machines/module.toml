@@ -20,7 +20,7 @@ conflicts = []
 #     short = "PLK"            # the SRC page header
 #     clone_of = 0             # stock type whose permission, per-type byte, name hint and DSP selector it copies
 #     position = 2             # index in the displayed list (default: the end)
-#     f0 = 0xca ... f8 = 0x0a  # the nine descriptor ID fields; a parameter of core/params as "params.<id>.index"
+#     f0 = 0xca ... f8 = 0x0a  # the nine descriptor ID fields; a parameter of core/rows as "params.<id>.index"
 #     own_dsp = 1              # Digitone II: the DSP is told the machine's own type
 #
 # The type of an entry is its permanent number in types.toml (key "<module id>:<entry id>", per device; the file
@@ -29,7 +29,7 @@ conflicts = []
 # DSP object or a voice entry names).
 # Row layout (offsets in src/cf/*/machines.s): the order of the fields below, every field one 32-bit word.
 # Digitone II: a machine with own parameter pages adds `[[entry]] registry = "pages"` rows (documented at the registry
-# below) and, for its knobs, `registry = "params"` rows of core/params; without page rows it is a clone of `clone_of`.
+# below) and, for its knobs, `registry = "params"` rows of core/rows; without page rows it is a clone of `clone_of`.
 # Contract, evidence and limits: finding 02, "core.machines" and "DN2 own parameter pages: built".
 
 [targets]
@@ -138,7 +138,7 @@ resource = "cf.machines.sites"
 #     machine = "machines.pluck.index"   # the type the page belongs to (pages are numbered in entry order)
 #     name = "PLUCK"                     # the short page name (SYN1 ...), at most 23 characters
 #     title = "Pluck"                    # the title shown on the page
-#     c0 = "params.pluck_decay.index"    # knob A .. H: a parameter code (a core/params code, or a stock code); 0 = no knob
+#     c0 = "params.pluck_decay.index"    # knob A .. H: a parameter code (a core/rows code, or a stock code); 0 = no knob
 #     s0 = 25                            # the sound-array slot (25 .. 64) of that code's row: slot -> code for the defaults
 #     ...                                # c8 = 10 (track level) by default
 #

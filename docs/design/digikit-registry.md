@@ -71,7 +71,7 @@ and the MODULES command show each module's assigned types. Scenario: `sticky-typ
 
 ## Reserved rows (patch time, `core/dynreg`)
 
-`core/dynreg` requires `core/runtime`, `core/machines` and `core/params`. It adds ordinary registry entries (so nothing in the frameworks changes
+`core/dynreg` requires `core/runtime`, `core/machines` and `core/rows`. It adds ordinary registry entries (so nothing in the frameworks changes
 and an image without `core/dynreg` is byte-identical to before):
 
 | What | How many | Where | Looks like |
@@ -107,7 +107,7 @@ builds more from them. What was found, and what the registry does (evidence in f
 | page row (84 bytes) in `pages.rows` (Digitone II) | `mf_typemap0/1/2` (page count, descriptor, slot -> code), `mf_reader` (a machine with pages is its own type for every caller) | written from the PAGE record: name and title as std::string representations (not upper-cased, in the registry's state), nine codes, nine slots, `machine` last (the page belongs to the type from that store on) |
 | the DSP's type -> selector table (Digitakt II) | the DSP | not touched: it is part of the DSP image (reserved types select as type 0). Open |
 
-The defaults refresh and the other loops over parameter codes keep the stock count (core/params), so a new code does not enter them: the same as for
+The defaults refresh and the other loops over parameter codes keep the stock count (core/rows), so a new code does not enter them: the same as for
 a patched machine.
 
 ## Writing, publishing, and what must hold

@@ -8,7 +8,7 @@ type = "framework"
 author = "digikit"
 status = "experimental"
 summary = "Reserves machine, parameter and (Digitone II) page rows that modules loaded at run time by the digikit runtime fill"
-requires = ["core/runtime", "core/machines", "core/params"]
+requires = ["core/runtime", "core/machines", "core/rows"]
 conflicts = []
 ports = ["dt2-1.17", "dn2-1.12"]
 

@@ -11,14 +11,14 @@ second agent has checked it against the image bytes). Digitone II and the unload
 
 | Step (DT2 1.16 and 1.17) | Result |
 | --- | --- |
-| patch `core/runtime` + `core/dynreg` (so `core/machines`, `core/params`) | 633 512 of 1 396 736 bytes of `cf.expansion`; machine rows for types 7 to 23, 16 parameter rows; `dynreg_info` present |
+| patch `core/runtime` + `core/dynreg` (so `core/machines`, `core/rows`) | 633 512 of 1 396 736 bytes of `cf.expansion`; machine rows for types 7 to 23, 16 parameter rows; `dynreg_info` present |
 | pack `test/dyn-xslice` (a data-only clone of MANUAL SLICE, one parameter): `patchkit pack test/dyn-xslice --device dt2` | 372 bytes: header, a 4-byte image, 204 bytes of records |
 | eight edited copies of the file (wrong device, bad version, type 9, type 24, `clone_of` a run-time type, knob naming a missing parameter, knob not a stock code, position 3) | refused with -21, -5, -22, -22, -22, -5, -5, -5; **no byte of any row or table changes** |
 | the firmware's list getter (`FUN_40052a08`, called through a stub that loads `a0`) before the load | `0 1 2 3 6 4 5` (the built-in order); the static sorted vector holds 15 entries including 16 to 23 |
 | load `xslice-d.dkm` | 0; row 16: `clone_of` 6, knobs `f8 f9 fa fb fc fd <param code 0x113> fe`, level 10; entry 16 of the name, permission and per-type tables written (the clone's permission and per-type byte); parameter row 0: mirror index 33, 0x80 + slot 6, range 0..0x7f00, default 0x2000; **only row 16 and parameter row 0 changed**; `mf_dispatch(16)` returns row 16; the getter returns `... 5 16` |
 | load a second file with type 16 | -23 (`E_TYPE_USED`), nothing written |
 | unload | 0; the machine rows, names, permission, per-type and parameter tables are byte for byte the start (but for the string-representation, name and short pointers of the free rows); the getter is back to `... 5` |
-| load, unload again; then `test/dyn-params` (eight parameters, one per slot) with `xslice-d` | all 0; the eight parameter rows equal the patch-time formulas of `core/params` for every slot 0 to 7 (word by word, but the two string pointers); a third machine whose eight parameters do not fit (9 + 8 > 16): -24 (`E_PARAM_FULL`), nothing written |
+| load, unload again; then `test/dyn-params` (eight parameters, one per slot) with `xslice-d` | all 0; the eight parameter rows equal the patch-time formulas of `core/rows` for every slot 0 to 7 (word by word, but the two string pointers); a third machine whose eight parameters do not fit (9 + 8 > 16): -24 (`E_PARAM_FULL`), nothing written |
 | write watch on the rows and tables, the runtime's code the only allowed writer | 34 events, all by `core/machines` (`mf_ensure`: the two representation pointers of each of 17 rows, at first use); control run (runtime not allowed): 648 more events, all the runtime's |
 | flush check | 0 hits (1.03 M CPUSHL) |
 

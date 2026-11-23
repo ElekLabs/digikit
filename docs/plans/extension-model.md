@@ -836,7 +836,7 @@ What:
    - UI-task sites, as `lfo.dks` hooks (B1 bind resolves the addresses; routines in `services/lfo/dks/src/hooks-ui.s`, sites in `devices/fw/lfo.toml`,
      finding 149 "The panel hooks"): the name formatter (`wave_name`: DT2 0x400e1b68 and DN2 0x400e3610, four characters; `wave_name3`: DN2
      0x4000766c, the first three characters). The maximum of the WAVE parameter is no hook: the service writes the max word of the three WAVE rows (codes 79, 89 and 99) in the
-     RAM copy of the parameter table that `core/params` makes, to the highest loaded wave number << 8, and puts the stock pair back when the last shape is gone (E6c), so
+     RAM copy of the parameter table that `core/rows` makes, to the highest loaded wave number << 8, and puts the stock pair back when the last shape is gone (E6c), so
      with the service absent the maximum stays 0x600. The firmware's range accessor (DT2 0x400da368, DN2 0x400dc154, 172 callers on DT2 and 191 on DN2, among them the live-set
      clamp the encoder reaches) reads that copy. No caller scales a value onto 0..max (finding 149, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
      a CC value above 6 selects a shape number up to the highest one instead of clamping to RAND. Gaps: the maximum follows the highest loaded number, so a number below it
@@ -921,7 +921,7 @@ interrupt cost is the open risk). Depends on: E3; E4. Open first: which field th
 
 What: the maximum of the LFO WAVE parameter is a word of the firmware's parameter table, so the lfo service writes it and hooks nothing. The service writes
 the max word (+0xc) of the three WAVE rows (codes 79, 89 and 99; row layout: owner +0, mirror +4, min +8, max +0xc, default +0x10, stride 0x3c) in the RAM copy of
-the table that `core/params` makes (every reference of the stock table points into the copy). Only the range accessor reads min, max and default of those rows,
+the table that `core/rows` makes (every reference of the stock table points into the copy). Only the range accessor reads min, max and default of those rows,
 apart from the default read in `ParameterPageView::vfunc_2`, which the write does not touch (finding 149, "Direct readers of the parameter table"). The write
 is made at run time, never at patch time, so with no shape loaded the maximum stays 0x600 (RAND).
 

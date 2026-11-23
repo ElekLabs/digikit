@@ -1,4 +1,4 @@
-| core/params on the Digitakt II (1.16, 1.17): the one run-time routine.
+| core/rows on the Digitakt II (1.16, 1.17): the one run-time routine.
 |
 | The framework's work is data: patchkit copies the firmware's parameter table (60-byte rows, finding 02) to
 | pf_table with one row appended per `[[entry]] registry = "params"`, repoints every reference to the table and raises

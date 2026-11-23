@@ -1,5 +1,5 @@
 [module]
-id = "core/params"
+id = "core/rows"
 version = "0.2.0"
 name = "Parameter descriptors"
 category = "core"
@@ -11,7 +11,7 @@ summary = "Framework that adds parameter descriptors (names, range, default, for
 requires = []
 conflicts = []
 
-# Content modules list `core/params` in `requires` and add parameters with
+# Content modules list `core/rows` in `requires` and add parameters with
 #
 #     [[entry]]
 #     registry = "params"

@@ -81,12 +81,12 @@ test.skipIf(!need)('wasm and CLI produce byte-identical output for core/fx', asy
 });
 
 test.skipIf(!need)(
-  'wasm and CLI produce byte-identical output for core/machines and core/params on each device',
+  'wasm and CLI produce byte-identical output for core/machines and core/rows on each device',
   async () => {
     const work = workDir('pk-wasm-');
     const bundle = readFileSync(writeBundle(work));
     const { x, put, get, text } = await load();
-    const mods = 'core/machines,core/params';
+    const mods = 'core/machines,core/rows';
     for (const dev of ['dt2', 'dn2'] as const) {
       const out = join(work, `${dev}-machines.syx`);
       const plan = join(work, `${dev}-machines.plan.json`);
@@ -115,7 +115,7 @@ test.skipIf(!need)(
 );
 
 test.skipIf(!need)(
-  'wasm adds core/machines and core/params as requirements of core/dynreg like the CLI and the plan reserves the run-time rows',
+  'wasm adds core/machines and core/rows as requirements of core/dynreg like the CLI and the plan reserves the run-time rows',
   async () => {
     const work = workDir('pk-wasm-');
     const { x, put, get, text } = await load();

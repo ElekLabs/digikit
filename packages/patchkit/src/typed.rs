@@ -6,7 +6,7 @@
 //!
 //! A run-time effect (`FxDef`) is a `DK_FX` record in C (sdk/include/dk/fx/fx.h), read by `desc`.
 //!
-//! `lower` turns them, per device, into the `[[entry]]` rows the frameworks (`core/machines`, `core/params`,
+//! `lower` turns them, per device, into the `[[entry]]` rows the frameworks (`core/machines`, `core/rows`,
 //! `core/dsp-voice`) take. What a knob means on a device is device data: `[modules.knobs]` and `[modules.frame]` in
 //! `devices/<device>.toml` ([`DeviceModel`]). Nothing here names a device. The same resolved view feeds the
 //! generator (`modgen.rs`: gallery JSON).

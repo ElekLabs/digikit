@@ -8,7 +8,7 @@ type = "framework"
 author = "digikit"
 status = "experimental"
 summary = "Reserves the FX view pages and the parameter rows of run-time effects: one page after CHO for each effect row, answered by the page accessor, listed in the FX view; the digikit runtime fills them from the module's effect record. Keeps the effects' knob values with the kit (hooks on the kit loader, saver and initialiser)"
-requires = ["core/runtime", "core/params", "core/dynreg", "core/dynfx"]
+requires = ["core/runtime", "core/rows", "core/dynreg", "core/dynfx"]
 conflicts = []
 ports = ["dt2-1.17", "dn2-1.12"]
 

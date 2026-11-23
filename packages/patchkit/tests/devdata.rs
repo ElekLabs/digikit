@@ -579,7 +579,7 @@ const RT021_MODULES: [&str; 9] = [
     "core/expansion",
     "core/health",
     "core/machines",
-    "core/params",
+    "core/rows",
     "core/runtime",
 ];
 

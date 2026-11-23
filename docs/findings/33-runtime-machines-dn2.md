@@ -12,7 +12,7 @@ no re-patch:
 
 | Step (DN2 1.11 and 1.12) | Result |
 | --- | --- |
-| patch `core/runtime` + `core/dynreg` (so `core/machines`, `core/params`) | 643 656 of 25 976 832 bytes of `cf.expansion` (1.12); machine rows for types 5 to 23 (19 rows), 16 parameter rows, 8 page rows; `dynreg_info` version 2 |
+| patch `core/runtime` + `core/dynreg` (so `core/machines`, `core/rows`) | 643 656 of 25 976 832 bytes of `cf.expansion` (1.12); machine rows for types 5 to 23 (19 rows), 16 parameter rows, 8 page rows; `dynreg_info` version 2 |
 | pack `test/dyn-dn2` (machine `own_dsp`, 4 parameters, 1 page with knobs A to D): `patchkit pack test/dyn-dn2 --device dn2` | 708 bytes: header, a 4-byte image, 540 bytes of records (4 PARAM, 1 MACHINE, 1 PAGE) |
 | 11 edited copies (wrong device, bad version, type 9, type 24, `clone_of` a run-time type, `own_dsp` 2, position 3, page for a type not in the file, page knob a stock code, page knob naming a missing parameter, unknown record kind) | refused with -21, -5, -22, -22, -22, -5, -5, -5, -5, -5, -5; **no byte of any row, table or page row changes** |
 | list getter (`FUN_4004d8b6`, called through a stub that loads `a0`) before the load | `0 2 1 3 4` (the built-in order) |

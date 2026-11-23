@@ -618,7 +618,7 @@ knobs = [3]
 why = "the sample slot: only the sample number bits reach the DSP"
 
 # The DSP's copy of the frame holds knob j of track t at halfword 0x6d + 48 t + j + (j / 4) * 2 (byte 0xda + 0x60 t);
-# the parameter table gives knob j the mirror index 25 + j + (j / 4) * 2 (core/params builds the same index).
+# the parameter table gives knob j the mirror index 25 + j + (j / 4) * 2 (core/rows builds the same index).
 [modules.frame]
 base = 0x6d
 stride = 48

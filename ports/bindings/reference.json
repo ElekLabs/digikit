@@ -10311,7 +10311,7 @@
         "dt2",
         "dn2"
       ],
-      "doc": "the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/params` makes.",
+      "doc": "the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/rows` makes.",
       "file": "devices/fw/param.toml",
       "kind": "data",
       "mark": "D",
@@ -10326,7 +10326,7 @@
       },
       "subsystem": "param",
       "users": [
-        "core/params",
+        "core/rows",
         "core/services/lfo"
       ],
       "was": [
@@ -10492,7 +10492,7 @@
       },
       "subsystem": "param",
       "users": [
-        "core/params"
+        "core/rows"
       ],
       "was": [
         "cf.param.fn.t2",
@@ -10540,7 +10540,7 @@
       "site": "cf.param.fn.value_class",
       "subsystem": "param",
       "users": [
-        "core/params"
+        "core/rows"
       ],
       "was": []
     },
@@ -11206,7 +11206,7 @@
         "dt2",
         "dn2"
       ],
-      "doc": "Every clamp bound of the descriptor table's readers (a 7-byte `cmpi.l #count` compare, the row count as the immediate at +2), except the one in the value_class accessor; core/params raises them.",
+      "doc": "Every clamp bound of the descriptor table's readers (a 7-byte `cmpi.l #count` compare, the row count as the immediate at +2), except the one in the value_class accessor; core/rows raises them.",
       "file": "devices/fw/param.toml",
       "kind": "sites",
       "mark": "D",
@@ -11221,7 +11221,7 @@
       },
       "subsystem": "param",
       "users": [
-        "core/params"
+        "core/rows"
       ],
       "was": [
         "cf.param.sites.bound",
@@ -11929,7 +11929,7 @@
       },
       "subsystem": "param",
       "users": [
-        "core/params"
+        "core/rows"
       ],
       "was": [
         "cf.param.sites.ref",

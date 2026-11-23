@@ -548,7 +548,7 @@ pub mod param {
     // cf.param.fn.value_class: no sig yet
 
     unsafe extern "C" {
-        /// the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/params` makes.
+        /// the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/rows` makes.
         #[link_name = "cf.param.data.descriptor_table"]
         pub static DESCRIPTOR_TABLE: u8;
     }

@@ -10,7 +10,7 @@ Related: `docs/plans/digikit-runtime.md` (Phase 11), `docs/design/digikit-dkm.md
 
 | Kind | Example | What it is | Loaded how |
 | --- | --- | --- | --- |
-| framework | `core/runtime`, `core/dynreg`, `core/dyndsp`, `core/dsp-link`, `core/dsp-voice`, `core/machines`, `core/params` | has firmware hooks, anchor rules, patch ops | patched into the image (`modules/core/*/module.toml`) |
+| framework | `core/runtime`, `core/dynreg`, `core/dyndsp`, `core/dsp-link`, `core/dsp-voice`, `core/machines`, `core/rows` | has firmware hooks, anchor rules, patch ops | patched into the image (`modules/core/*/module.toml`) |
 | content, patched in | `test/patched-pluck`, `test/xslice` | machine rows and a DSP routine, placed by patchkit | patched into the image |
 | content, run time | `digikit/pluck`, `test/dyn-xslice` | the same machine as a `.dkm` (`dynamic = true`) | `dkrt_load` at boot (`docs/design/digikit-runtime.md:161-183`) |
 | ColdFire tool | `test/c-demo`, `test/rust-demo` | the constant `dk_module` with `init`, `fini`, `tick`, `menu` (`docs/MODULES.md`) | `.dkm` |

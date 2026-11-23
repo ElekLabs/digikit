@@ -454,7 +454,7 @@ the same, but DN2's machines are FM engines, so new DN2 machines need the DSP vo
 ### Phase 3 results (wave 6, 2026-10-14, lane `b`): core.params and PLUCK end to end
 
 Built: `a1cf1df^:native/patchkit/src/params.rs` (3 unit tests, `a1cf1df^:native/patchkit/tests/params.rs` 5 integration tests), `[[param]]` and `fields` that
-name parameters in the manifest, `modules/core/params`, three port rule kinds in `tools/patchkit/port_resolve.py` (`cf_params_t1`,
+name parameters in the manifest, `modules/core/rows`, three port rule kinds in `tools/patchkit/port_resolve.py` (`cf_params_t1`,
 `cf_params_sites`: count and hash of 111 sites, plus a `cf_func` for the second table), `modules/machines/pluck` (machine,
 four parameters, the DSP row now registers `machines.pluck.type`), `tools/patchkit/pk_proof_pluck.py`, harness helpers
 (`Session.mirror`, `tx_word`, `turn_burst`, `turn_to`), two matrix cells.
@@ -529,7 +529,7 @@ Details and evidence: findings 02 ("DN2 own parameter pages: built", "PLUCK on D
 Emulator only; nothing flashed; one agent; no change in `packages/patchkit` (no primitive was missing).
 
 - **Own pages**: `core/machines` gets a registry `pages` (a row is a page descriptor plus its machine and the sound slots of
-  its knobs) and the DN2 hooks `typemap.0/1/2` answer page count, descriptor and slot to code from it; `core/params` now has
+  its knobs) and the DN2 hooks `typemap.0/1/2` answer page count, descriptor and slot to code from it; `core/rows` now has
   the Digitone II side (the same table copy, 56 references and 55 bounds, T2 shim). A machine with page rows is its own type for
   every caller of the type reader (the research's list of about 17 sites was incomplete: the defaults on selection call the reader
   too). `test/dn2-pages` + `tools/patchkit/pk_proof_pages_dn2.py` (quick about 1 min, full about 6 min): own names and titles on screen, the
@@ -546,7 +546,7 @@ Emulator only; nothing flashed; one agent; no change in `packages/patchkit` (no 
 
 ### Phase 3b: frameworks as modules (refactor, decided 2026-10-14)
 
-Problem: `core/machines` and `core/params` were built as Rust generators inside patchkit (`machines.rs`,
+Problem: `core/machines` and `core/rows` were built as Rust generators inside patchkit (`machines.rs`,
 `machines/dn2.rs`, `params.rs`: about 2,070 of 6,520 lines). They emit ColdFire words by hand, copy firmware
 tables and unroll code per added type. That breaks the layer rule ("patchkit is generic; frameworks are modules")
 and means every framework change is a Rust and wasm rebuild. Fix: give patchkit the generic primitives the
@@ -585,7 +585,7 @@ Primitives (patchkit, Rust, wasm parity; every one usable by any module):
 
 Frameworks after the refactor: `modules/core/machines/` (DT2 and DN2 asm: list/rank/group/dispatch/name/permit/
 pertype/clone/typearg/persist hooks that look up `machines.rows` at run time for `type >= machines.first`, plus a
-P1 copy of the DSP selector table with appended words), `modules/core/params/` (P1 copies of the two parameter
+P1 copy of the DSP selector table with appended words), `modules/core/rows/` (P1 copies of the two parameter
 tables with appended rows, bound writes via P3, reader hooks), `modules/core/dsp-voice/` (registry `voices`).
 Content modules use `[[entry]]` only.
 
@@ -602,7 +602,7 @@ Content modules use `[[entry]]` only.
 ### Phase 3b.2 results (2026-10-14, lane `b`)
 
 Written: `modules/core/machines/` (`src/cf/dt2/machines.s`, `src/cf/dn2/machines.s`, manifest with registry `machines`, six
-`[[section]]` copies of stock tables, hook and bound-write ops), `modules/core/params/` (`src/cf/dt2/params.s`, registry
+`[[section]]` copies of stock tables, hook and bound-write ops), `modules/core/rows/` (`src/cf/dt2/params.s`, registry
 `params`, `pf_table` section, glob writes for the 56 references and 54 bounds), `modules/core/dsp-voice/` (registry
 `voices`, hook op, `_dv_table = voices.rows`); content modules (xslice, machine-clone, pluck, dn2-clone, sine-voice,
 dn2-sine) on `[[entry]]`. New anchors in `tools/patchkit/port_resolve.py`: rule kind `cf_ptr` (a table behind an address literal),
@@ -702,7 +702,7 @@ Deviations and readings of the spec (simplest consistent choice):
   `<name>.0 .. <name>.N-1` (DT2 1.17: 56 references as 4-byte data anchors, 54 bounds as 7-byte code anchors, the
   numbers of the old scan). A `write` with `anchors = "PREFIX.*"` visits each in numeric order, `this` names the
   current one. `params::scan` and the `cf.params.sites` anchor stay until 3b.3 deletes the old path; lane b adds the
-  two rules to `modules/core/params` and drops the old one then.
+  two rules to `modules/core/rows` and drops the old one then.
 - **Plan:** new keys `registries`, `sections`, `hooks` (absent when empty, so old plans are byte-identical);
   registry/section/hook symbols appear in `symbols` as `module@version:name`.
 - `patchkit.wasm` grew from 638 KB to 1.05 MB (the ColdFire decoder tables now link in); still under the 2 MB check.

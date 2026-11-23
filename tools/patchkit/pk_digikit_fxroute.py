@@ -19,7 +19,7 @@ from tools.patchkit import pk_digikit_project as P
 CLASSES = {
     "dt2": 0x4293C040,
     "dn2": 0x4243425C,
-}  # the second per-code table (value-class objects of 0x44 bytes; the accessor of core/params' anchor cf.param.fn.value_class)
+}  # the second per-code table (value-class objects of 0x44 bytes; the accessor of core/rows' anchor cf.param.fn.value_class)
 
 
 def lock_check(

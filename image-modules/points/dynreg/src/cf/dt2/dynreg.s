@@ -2,7 +2,7 @@
 | Design: docs/design/digikit-registry.md. The device id and the number of reserved types are the device file's and
 | core/machines types.toml's, through build/gen/device-dt2.inc (`patchkit gen`).
 |
-| dynreg_info: addresses of the rows and tables core/machines and core/params built at patch time, the row layouts, and
+| dynreg_info: addresses of the rows and tables core/machines and core/rows built at patch time, the row layouts, and
 | the lowering of a parameter row (device data: the runtime's registry names no device). All words big endian.
 |
 | dynreg_copy: replaces the `std::copy` at the end of the machine list getter (`FUN_40052a08`: the static list, sorted once at
@@ -108,7 +108,7 @@ dynreg_info:
     .long   dynreg_empty                | 116 address of an empty string
     | 120: how each of the 15 words of a parameter row is made: 0..0x3c = copy that word of the template's row,
     | 0x100 min, 0x101 max, 0x102 default, 0x103 name pointer, 0x104 short pointer, 0x105 mirror index
-    | (25 + slot + (slot >> 2) * 2), 0x106 kind word (see core/params module.toml), 0x107 0x80 + slot
+    | (25 + slot + (slot >> 2) * 2), 0x106 kind word (see core/rows module.toml), 0x107 0x80 + slot
     .long   0x00, 0x105, 0x100, 0x101, 0x102, 0x14, 0x106, 0x107
     .long   0x20, 0x24, 0x103, 0x2c, 0x104, 0x34, 0x38
     .long   8                           | 180 knobs per machine (descriptor fields f0 .. f7)

@@ -75,7 +75,7 @@ pub unsafe fn write_param_row(
         m.wr(row + 4 * i as u32, v);
         i += 1;
     }
-    // the registry row (core/params): name, short, template, slot, min, max, default; pf_t2 reads `template`
+    // the registry row (core/rows): name, short, template, slot, min, max, default; pf_t2 reads `template`
     let reg_row = iw(inf, w::P_ROWS) + (code - iw(inf, w::P_FIRST)) * iw(inf, w::P_ROW_SIZE);
     m.wr(reg_row, name);
     m.wr(reg_row + 4, short);
@@ -187,7 +187,7 @@ pub unsafe fn stock_range(
 }
 
 /// Set the minimum and the maximum of a stock row of the table's RAM copy (the words at +8 and +0xc of the row at the stock address `row`; `table` is the stock table's
-/// address) and return the pair it held. `None`, nothing written, for a row `stock_row` refuses. The copy is the table every reader of the firmware uses after `core/params`
+/// address) and return the pair it held. `None`, nothing written, for a row `stock_row` refuses. The copy is the table every reader of the firmware uses after `core/rows`
 /// repointed the stock references to it, so the new range is the one the firmware sees; the stock table in the image is not changed.
 pub unsafe fn set_stock_range(
     m: &impl FwMem,

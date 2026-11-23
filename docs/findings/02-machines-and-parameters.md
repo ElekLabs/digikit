@@ -1176,7 +1176,7 @@ before **[O]**. A row is a complete description for the SRC page: the page shows
 ### What the framework does
 
 Content modules declare `[[param]] id, name, short, template, slot, min, max, default, formatter_from?` and
-`requires = ["core/params"]`; a machine's `fields` may name them (`"pluck_decay"`). patchkit assigns the codes `275, 276, ...` in
+`requires = ["core/rows"]`; a machine's `fields` may name them (`"pluck_decay"`). patchkit assigns the codes `275, 276, ...` in
 canonical module order (selection order does not change the bytes: tested) and generates **at patch time, from the image**:
 
 | part | what is generated |
@@ -1191,7 +1191,7 @@ The scan is part of the port: `tools/patchkit/port_resolve.py` records the **cou
 `cf.params.sites` (kind `sites`), the table in `cf.params.t1` (found by the 36-byte signature of its reader, finding 02 above) and
 the accessor in `cf.params.t2` (`cf_func`); patchkit runs the same scan and refuses an image whose sites differ. Both firmwares: 111
 sites (56 + 55). Cost: 16,832 bytes of expansion for four rows (16,500 + 60 K + names + the `u32` map), 54 bytes of flash cave (the cave holds 2,108; core/machines
-(216 B), core/params and the loader use 328 together).
+(216 B), core/rows and the loader use 328 together).
 
 ### Corrections to core.machines **[C]**
 
@@ -1486,7 +1486,7 @@ of the same value class, `slot` = the **sound-array slot itself** 25..64, `min`,
     c0 = "params.pg_alpha.index"        # knob A .. H: a parameter code (own or stock), 0 = no knob; c8 = 10 (track level)
     s0 = 25                             # the sound-array slot of that code's row
 
-`core/params` on the Digitone II appends T1 rows (60 bytes: the template's owner, flag, CC word, key and formatter; our slot, range,
+`core/rows` on the Digitone II appends T1 rows (60 bytes: the template's owner, flag, CC word, key and formatter; our slot, range,
 default and names) to a copy of the 321-row table, repoints the 56 references and raises the 55 bounds (the Digitakt rules
 resolve unchanged, `cf.params.ref.N`, `cf.params.bound.N`, `cf.params.t1/t2`), and the T2 accessor shim maps an added code to its
 template's value-class object (A Env Decay, `0xd5`, plain 0..0x7f00 words, for all of the proof's parameters).
@@ -1545,7 +1545,7 @@ The routine and its contract: finding 06, "DN2 voice routine: PLUCK". Evidence (
 | the edge, repeated notes | 20 notes of TRIG 1 150 ms apart: 20 plucks of note 60 (sampled in tune); 40 notes 110 ms apart (past 16 voice slots, 16 strings overlapping): 40 plucks; a note after the burst sounds |
 | sequencer | a step recorded on track 1 plucks on both passes of the pattern (onsets at 2.0 s and 4.0 s, the first at note 60: +0.24 cents) |
 | save and load | DECAY and BRIGHT edited, project saved, track set to FM TONE, loaded: PLUCK (row 4) and all four values back; the card's sound records hold type 5; stock loads the project (track 1 is FM TONE), no fault |
-| harness | `tests/patchkit_smoke` cell `dn2-1.12: core/machines, core/params, core/dsp-voice, digikit/pluck` (select, own page, trig sounds, BRIGHT knob moves the page) |
+| harness | `tests/patchkit_smoke` cell `dn2-1.12: core/machines, core/rows, core/dsp-voice, digikit/pluck` (select, own page, trig sounds, BRIGHT knob moves the page) |
 
 **Differences from the Digitakt PLUCK [D].** No TUNE and no LEV rows (the engine's level is the last knob; pitch is the voice's pitch word);
 the note's end is the engine's amplitude envelope and gate, so a long DECAY is heard only while the key is held or the AMP release is long

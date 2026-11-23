@@ -487,10 +487,10 @@ def decode_tables(rig: B.BootRig) -> dict[str, Any]:
     o = "core/machines"
     rows, count = M.sym(plan, o, "machines.rows"), M.sym(plan, o, "machines.count")
     first, size = M.sym(plan, o, "machines.first"), M.sym(plan, o, "machines.row_size")
-    pf = M.sym(plan, "core/params", "pf_table")
+    pf = M.sym(plan, "core/rows", "pf_table")
     pfirst, pcount = (
-        M.sym(plan, "core/params", "params.first"),
-        M.sym(plan, "core/params", "params.count"),
+        M.sym(plan, "core/rows", "params.first"),
+        M.sym(plan, "core/rows", "params.count"),
     )
     pnames: dict[int, str] = {}
     params: dict[str, Any] = {}
