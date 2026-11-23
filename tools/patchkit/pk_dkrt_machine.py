@@ -331,11 +331,7 @@ class Rig:
 
     def package_symbol(self, name: str) -> int:
         """The address of a static of the system package (`DSP` is `DKRT_DSP`), through the host directory; raises `pk_hostdir.NoPackage` when none is loaded."""
-        raw = b"".join(
-            self.w(self.host_dir + 4 * i).to_bytes(4, "big")
-            for i in range(pk_hostdir.directory_bytes() // 4)
-        )
-        return pk_hostdir.package_address(name, raw)
+        return pk_hostdir.read_package_address(self.w, self.host_dir, name)
 
     def dsp_bytes(self, addr: int, n: int) -> bytes:
         out = bytearray()

@@ -770,8 +770,8 @@ mod tests {
 
     /// A copied site (a tail or a stock path) is compared with its check value at the load of the port file, so it must hold the stock bytes on a patched image: no site that a
     /// module of the image patches, by a hook, a stub, a write or a retarget of a module of any patch set of the device (`devices/*.toml` `[patch_sets]`, with their requires).
-    /// The test fixture's hook shares the site of `core/digikit-menu`'s hook, so a production port file lists none of the fixture's hooks; the port file of the test image
-    /// (which runs without digikit-menu) lists them.
+    /// The test fixture's hook shares the site of the SETTINGS hook of `core/ui`, so a production port file lists none of the fixture's hooks; the port file of the test image
+    /// (which runs without core/ui) lists them.
     #[test]
     fn a_production_port_file_has_no_test_hook_and_no_copied_site_on_a_site_an_image_module_patches()
      {
@@ -782,7 +782,7 @@ mod tests {
             images
                 .iter()
                 .any(|(n, _)| n == "cf.menu.hook.settings_list.tail"),
-            "digikit-menu's hook is an image hook"
+            "the SETTINGS rebuild hook of core/ui is an image hook"
         );
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let lib = crate::module::library_with(

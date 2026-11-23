@@ -68,3 +68,12 @@ def package_address(name: str, directory: bytes) -> int:
             f"no package loaded: the host directory has no address for DKRT_{name}"
         )
     return address
+
+
+def read_package_address(word, directory_at: int, name: str) -> int:
+    """The address of package static `name`, reading the directory at `directory_at` with `word(address) -> int` (a rig's big-endian word reader); raises `NoPackage` when none is loaded."""
+    raw = b"".join(
+        word(directory_at + 4 * i).to_bytes(4, "big")
+        for i in range(directory_bytes() // 4)
+    )
+    return package_address(name, raw)

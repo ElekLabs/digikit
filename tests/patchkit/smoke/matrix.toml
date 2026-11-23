@@ -28,17 +28,6 @@ device = "dn2"
 firmware = "1.12"
 modules = ["test/cf-demo"]
 
-# SETTINGS > DIGIKIT (finding 28)
-[[cell]]
-device = "dt2"
-firmware = "1.17"
-modules = ["core/digikit-menu"]
-
-[[cell]]
-device = "dn2"
-firmware = "1.12"
-modules = ["core/digikit-menu"]
-
 # The DSP code channel (finding 31): hooks the frame sender and the DSP's block handler; idle it must change nothing visible.
 [[cell]]
 device = "dt2"

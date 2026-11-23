@@ -88,8 +88,6 @@ FOLDER_ROLES = {
 # Content modules that patch the firmware themselves (they have [[op]] and anchor externs by design: patchkit's own
 # example of a hook; the test service takes a raw hook like a core service file does). They are exempt from the objects and apps rules.
 FIRMWARE_PATCH_MODULES = {"test/registry-demo", "test/svc-test"}
-# Test fixtures that stand in for an app (they use core/ui like core/digikit-menu does): app include rights.
-APP_LIKE = {"test/ui-demo"}
 # Headers of the core layers an app may include.
 APP_HEADERS = {"dkrt.h", "dk_ui_core.h"}
 ANCHOR = re.compile(r"^(cf|dsp|hook|pk)\.")
@@ -278,7 +276,7 @@ def check_sources(root: Path, mods: list[Module]) -> list[Violation]:
     for m in mods:
         kind = classify(root, m)
         role = m.mod.get("role")
-        is_app = (kind == "core" and role == "app") or m.id in APP_LIKE
+        is_app = kind == "core" and role == "app"
         if kind == "core" and not is_app:
             continue  # installer and adapters may use the firmware bindings; the runtime's own rule is `check_runtime_platform`
         who = (
@@ -506,7 +504,7 @@ def check_objects(root: Path, mods: list[Module]) -> list[Violation]:
     stored = stored_objects(root)
     for m in mods:
         kind = classify(root, m)
-        is_app = (kind == "core" and m.mod.get("role") == "app") or m.id in APP_LIKE
+        is_app = kind == "core" and m.mod.get("role") == "app"
         if (kind == "core" and not is_app) or m.id in FIRMWARE_PATCH_MODULES:
             continue
         mrel = rel(root, m.dir)

@@ -72,10 +72,6 @@
       "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages"]
     },
     {
-      "id": "rt-dynfx-fxpages-menu",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/digikit-menu"]
-    },
-    {
       "id": "fx-kit-persist",
       "roots": ["core/runtime", "core/dynfx", "core/fxpages"]
     }

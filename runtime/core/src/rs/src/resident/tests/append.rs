@@ -143,6 +143,19 @@ fn a_missing_group_is_refused_by_name() {
     each_group!(one);
 }
 
+/// `PackageHooks` is the table the package gives the core, not the resident table, and its appends follow the same rule: the group of table minor 3 (`ui`) is the last one, right after
+/// the group of the minor before (`provider`), so a package built before it is a prefix of the table the core reads, and the core reads `ui` only when the package's minor has it
+/// (`UI_HOOKS_SINCE`, `hooks::has_group`).
+#[test]
+fn the_ui_hooks_are_the_last_group_of_the_package_hooks() {
+    use core::mem::{offset_of, size_of};
+    use dkrt_abi::hooks::{PackageHooks, ProviderHooks, UiHooks, UI_HOOKS_SINCE};
+    assert_eq!(offset_of!(PackageHooks, provider) + size_of::<ProviderHooks>(), offset_of!(PackageHooks, ui));
+    assert_eq!(offset_of!(PackageHooks, ui) + size_of::<UiHooks>(), size_of::<PackageHooks>());
+    assert_eq!(UI_HOOKS_SINCE, 3, "the group came with table minor 3 (RC2s-3)");
+    assert!(RESIDENT_MINOR >= UI_HOOKS_SINCE);
+}
+
 /// `links` is the group that version 1.1 appended (RC2s-2 step c), `host_dir` the one of 1.2 (the host directory) and `exports` the one of 1.3 (the menu's calls, RC2s-3): the
 /// layout of an older package is the prefix of a newer table and of the checked `Resident`, so a 1.0, 1.1 or 1.2 package reads a 1.3 table at the offsets it always had, and a
 /// newer package finds an older core out by its minor (and by the pointer the table is too short for).

@@ -15,12 +15,12 @@ call is a generated anchor (`ports/bindings/include/dk_fw_*.h`). The host fake o
   empty text of a list; key (slot 2) of a list adds RIGHT (side panel), YES (check mark) and the `back` callback, and sends the rest to the
   stock handler.
 - Dialogs are `make_shared` blocks built by hand and pushed on the Brain's view manager; the firmware frees them. One at a time.
-- `dk_ui_stock_row(stock_menu, text, fn, arg)` and `dk_ui_core_handle()` (the `dk_ui` handle, for a core module that has no `dk_module_ctx`) are for other core modules (`include/dk_ui_core.h`, not part of the SDK): a row among the rows of a stock menu (SETTINGS), with its icon. `core/digikit-menu` and `test/ui-demo` use it.
+- `dk_ui_stock_row(stock_menu, text, fn, arg)` and `dk_ui_core_handle()` (the `dk_ui` handle, for a core module that has no `dk_module_ctx`) are for other core modules (`include/dk_ui_core.h`, not part of the SDK): a row among the rows of a stock menu (SETTINGS), with its icon. `core/digikit-menu` (part of the system package) uses it.
 - The one firmware hook of the module is the end of the SETTINGS item list rebuild (`cf.menu.hook.settings_list.tail`, `src/shim.s` `dk_hook`). It calls `dkrt_ui_settings_rows(settings_menu)` of the runtime: the `ui.settings_rows` hook of the system package (`dkrt_abi::hooks::UiHooks`), which the DIGIKIT menu in the package fills with `dk_app_settings_rows`; with no package (core-only boot) the hook does nothing and the stock menu stays as it is. The layers are in [docs/ARCHITECTURE.md](../../../docs/ARCHITECTURE.md).
 - `dk_ui_tick(ui, fn, arg, period_ms)` is a table of four timers (`src/tick.h`, no firmware, tested in `host/tests/tick.rs`) behind one function on the runtime's `dkrt_poll_add` list; it is on the list only while a timer runs. The block clock times the periods (the UI-loop pass when there is none).
 - An empty list paints the same inverted title bar as a list with rows, then its `empty` text. A text page opens at its first row; a menu or list keeps its selected row.
 
-Proof and demo: `tests/fixtures/modules/ui-demo`, driven by `uv run python -m tools.patchkit.pk_uidemo shots|leak --device dt2|dn2`.
+Proof and demo: the content module `tests/fixtures/modules/ui-demo` (a SETTINGS row with `dk_ui_settings_row`), driven by `mise run dk:ui-demo` and `pnpm nx:pilot run sdk-ui-zero-tests:test-device`.
 Details: [docs/findings/71-ui-components-1-17.md](../../../docs/findings/71-ui-components-1-17.md).
 
 The font of a plain menu or text page is read from the operand of one instruction of the firmware's VerticalMenuView constructor

@@ -190,7 +190,7 @@ Use the lowest layer that sees the behavior. A host test replaces device coverag
 
 `check:layers` enforces the source and object boundaries it can inspect. The assembly and device checks cover declaration and execution behavior.
 
-Exceptions are listed in `layercheck.py` with a reason: `test/registry-demo` patches the firmware itself (it is patchkit's example of a hook), and `test/ui-demo` stands in for an app.
+Exceptions are listed in `layercheck.py` with a reason: `test/registry-demo` patches the firmware itself (it is patchkit's example of a hook).
 
 Run it:
 

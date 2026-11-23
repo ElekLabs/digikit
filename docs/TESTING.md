@@ -239,8 +239,8 @@ The subset does not replace the static checks (`lint,fmt-check,rust-fmt,typechec
 
 ## Fast iteration: dk:dev and Reload
 
-For module code and the UI layer (`core/ui`, `core/digikit-menu`, `test/ui-demo`) one edit and one look should take seconds, not a
-boot. `mise run dk:dev -- test/ui-demo --device dn2[,dt2] --keys 'tap:NO,tap:SETTINGS,wait:400,tap:DOWN*8,tap:YES,wait:600,shot:menu'`
+For module code and the UI layer (`core/ui`, the menu of the system package, `test/ui-demo`) one edit and one look should take seconds, not a
+boot. `mise run dk:dev -- emulator --store 'test/ui-demo*' --device dn2[,dt2] --keys 'tap:NO,tap:SETTINGS,wait:400,tap:DOWN*9,tap:YES,wait:600,shot:menu'`
 (`tools/patchkit/pk_devreload.py`) builds the objects whose sources changed (`patchkit build`), reloads a daemon it keeps alive per device and
 module set (`--stop` ends it), runs the key script from the main screen, and writes `out/runs/devreload/<device>/NAME.png` (4x) and
 `sheet.png` (2x, four per row, labelled). The target is a patch set of `devices/*.toml` or module ids; `--keys` is a JSON list of harness
@@ -253,11 +253,11 @@ A device that boots cold and has no ready snapshot (the Syntakt, `st`) is named 
 `--store ID,ID*,synth:NAME:BSS` boots the daemon on a card whose module store holds those modules (`*`: also in the saved selection; `synth:` needs BSS bytes of arena, so it never fits), which the MODULES list of `core/digikit-menu` needs; each list has its own kept daemon.
 
 For a no-argument DN2 preview, `mise run dk:menu` opens the real DIGIKIT menu in a visible browser faceplate;
-`mise run dk:ui-demo` opens the separate [`test/ui-demo` fixture](../tests/fixtures/modules/ui-demo/README.md), which conflicts with the real menu. See [visible previews](DEVELOPMENT.md#visible-preview) for the quick start. Both start or reload their kept daemon with the same automatic DSP selection as
+`mise run dk:ui-demo` opens the separate [`test/ui-demo` fixture](../tests/fixtures/modules/ui-demo/README.md), a content module with its own SETTINGS row (the tenth, after the system package's DIGIKIT row). See [visible previews](DEVELOPMENT.md#visible-preview) for the quick start. Both start or reload their kept daemon with the same automatic DSP selection as
 `dk:dev`, navigate to the menu, then open `/panel.html` through the live Vite proxy on an available localhost port against that exact daemon.
 The command prints the exact panel URL. `dk:dev` itself writes screenshots without opening a browser.
 Keep the command running while using the panel. Ctrl-C stops its browser server and keeps the emulator for the next reload;
-`mise run dk:dev -- emulator --stop` or `mise run dk:dev -- test/ui-demo --stop` stops the respective emulator.
+`mise run dk:dev -- emulator --stop` or `mise run dk:dev -- emulator --store 'test/ui-demo*' --stop` stops the respective emulator.
 The commands also write `out/runs/devreload/dn2/digikit-menu.png` or `ui-demo.png`. Use `dk:dev` directly to choose DT2, load a particular module or card store, or provide another key script.
 
 For a content module, `mise run dk:module ID [--device dn2|dt2]` packs its card `.dkm`, selects it for boot and opens the MODULES list in the live faceplate. It uses the `emulator` patch set. The module is packed in full; the DSP mode follows the module closure (ColdFire-only services run with zero DSP, machines and effects select SHARC automatically). `dk:module` delegates to generic `dk:dev --store`: the generic path stages content and compares the exact request and initial selection. Unchanged content keeps the daemon and overlay, including a user-edited live selection; changed content rebuilds the card and restarts that exact daemon. Stop and restart to restore the initial selected card after changing selection live. `mise run dk:module ID --stop` stops it. See [visible previews](DEVELOPMENT.md#visible-preview) for aliases and selection behavior. This interactive preview does not replace the module's acceptance checks.
@@ -524,7 +524,7 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `dsp-facts` | Probe: cycle counts, instruction semantics and core register values on the SHARC+ core, one framed word per block | host, device |
 | `sharc-probe` | Probe: RECIPS and RSQRTS over a fixed sequence, one framed word per block | host, device |
 | `step-beacon` | Probe: stores a call counter in the module step word on every call | device |
-| `ui-demo` | The framework menu: SETTINGS > DIGIKIT with one row of each kind, text page, list, side panel | host, assembly |
+| `ui-demo` | A content module: its SETTINGS row opens a menu with one row of each kind, text page, list, side panel, confirm, choice and toast (`dk_ui_settings_row`) | device |
 | `native-page` | Native callback page cycling, parameter edits, local zoom and clipped drawing | host |
 | `usb-echo` | The bulk interface of `core/usb-bulk`: echo of every buffer on EP2 IN from an I/O job | host, device |
 | `input-probe` | The input adapter: SysEx commands press keys and turn encoders through `core/input` | device |

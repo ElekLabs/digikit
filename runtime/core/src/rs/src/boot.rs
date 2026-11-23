@@ -557,6 +557,7 @@ mod tests {
             fresh_boot_record();
             let mut missing = [0u8; NEEDS_LEN];
             missing[..8].copy_from_slice(b"usb-bulk");
+            let before = core::ptr::read_volatile(addr_of!(crate::dlog::DKRT_LOG_COUNT));
             report_module(1, sel_path(b"mods/deep/a.dkm").as_ptr(), E_IMPORT, &missing, &[0; LOG_NAME]);
             assert_eq!(info().results[1], E_IMPORT);
             assert_eq!(st().last_result, E_IMPORT);
@@ -564,6 +565,11 @@ mod tests {
             assert_eq!(info().needs[1], missing);
             assert_eq!(name_of(1)[..6], *b"a.dkm\0");
             assert_eq!(info().needs[0], [0; NEEDS_LEN]);
+            // the event of the missing module: one MOD_NEEDS with the error flag, the selection index and the name words of the missing module (the host's reading of it is `runtime-log.test.ts`)
+            let needs: std::vec::Vec<crate::dlog::Ev> = (0..crate::dlog::RING).map(|i| (*addr_of!(crate::dlog::DKRT_LOG))[i]).filter(|e| e.seq > before && e.kind == logk::MOD_NEEDS).collect();
+            assert_eq!(needs.len(), 1, "one MOD_NEEDS for one import error");
+            assert_eq!((needs[0].flags & logk::F_ERROR, needs[0].a[0]), (logk::F_ERROR, 1));
+            assert_eq!(needs[0].a[1], u32::from_be_bytes(*b"usb-"));
 
             // another error with a name set keeps no needs; an import error with no name keeps none either
             fresh_boot_record();

@@ -33,9 +33,9 @@ Step format (TOML `[[segment.step]]` / `[[step]]`, exactly one action key each; 
     expect_pcm_db = {min = -60, max = -3}   peak 100 ms-window RMS (dBFS) since the last input started
     expect_no_fault = true         assert the health now (it is also asserted after every input)
     expect_mem = {addr = 0x4265338c, mask = 0xff00, eq = 0x0700}   a ColdFire word (mem.cf.peek) under a mask;
-                                   `symbol = "STORE", module = "core/digikit-menu"` instead of `addr`: a symbol of the
+                                   `symbol = "NAME", module = "MODULE-ID"` instead of `addr`: a symbol of the
                                    image's plan (the module's static; `module` is optional)
-    expect_text = {rows = "DK_ABOUT", count = "DK_ABOUT_N", stride = 24, has = ["RUNTIME {runtime}"]}
+    expect_text = {rows = "ROWS", count = "ROWS_N", stride = 24, has = ["RUNTIME {runtime}"]}
                                    the text rows a module keeps in RAM (NUL-terminated, STRIDE bytes each, COUNT rows) must
                                    have every `has` string as a row; `{runtime}` is the runtime version of sdk/sdk.toml
     expect_dsp = {addr = 0x255970, hex = "07"}                     DSP memory bytes (dsp.peek) from addr
@@ -615,8 +615,8 @@ def explain_mismatch(
 
 
 def plan_symbol(plan: dict[str, Any], name: str, module: str | None = None) -> int:
-    """The address of a module symbol in the symbols of a patch plan: the exact name (`DK_ABOUT`) or, for a Rust static, the end of
-    its mangled name (`..._15pk_digikit_menu5STORE`). MODULE (`core/digikit-menu`) limits the search to that module's symbols."""
+    """The address of a module symbol in the symbols of a patch plan: the exact name or, for a Rust static, the end of
+    its mangled name (`..._15pk_digikit_menu5STORE`). MODULE (a module id) limits the search to that module's symbols."""
     found = {
         v
         for k, v in plan["symbols"].items()
