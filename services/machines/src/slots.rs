@@ -29,12 +29,6 @@ pub use detector::*;
 /// The page's track reference (`view + 0x74`, the argument of `cf.page.fn.view_track`).
 const VIEW_TRACK_REF: usize = 0x74;
 
-static mut DET: Detector = Detector::new();
-static mut ACTIONS: [u32; limits::PARAM_ROWS] = [0; limits::PARAM_ROWS];
-/// The `arg` of an action registered through `dk_param_on_click` : such a callback is `void fn(void *arg, u32 track)`.
-static mut ARGS: [(bool, u32); limits::PARAM_ROWS] = [(false, 0); limits::PARAM_ROWS];
-/// The number of parameter rows that have an action: 0 keeps both hooks at one test.
-static mut ARMED: u32 = 0;
 /// A click waiting for the next UI pass: the callback (0: none), the track, the clicked view and the clicked parameter code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pending {
@@ -49,42 +43,191 @@ const NO_CLICK: Pending = Pending {
     view: 0,
     code: 0,
 };
-static mut PENDING: Pending = NO_CLICK;
-/// The click flow that `param_get` and `param_set` may serve: from the callback until the page gets input again.
-static mut HELD: Held = Held::new();
 
-/// Set (`addr` != 0) or clear (0) the action of parameter row `k` (a row of core/dynreg). Called by the registry.
-pub unsafe fn set(k: usize, addr: u32) {
-    if k >= limits::PARAM_ROWS {
-        return;
-    }
-    let a = &mut *addr_of_mut!(ACTIONS);
-    let old = a[k];
-    a[k] = addr;
-    (*addr_of_mut!(ARGS))[k] = (false, 0);
-    let mut n = 0;
-    let mut i = 0;
-    while i < limits::PARAM_ROWS {
-        if a[i] != 0 {
-            n += 1;
-        }
-        i += 1;
-    }
-    write_volatile(addr_of_mut!(ARMED), n);
-    // a click of an unloaded module must not run
-    let p = &mut *addr_of_mut!(PENDING);
-    if addr == 0 && old != 0 {
-        if p.callback == old {
-            *p = NO_CLICK;
-        }
-        (*addr_of_mut!(HELD)).input(); // the module that owns the flow is going away
+/// The state of the page's clicks, in the owner: the detector, the action and argument of each parameter row, the click that waits for the next pass and the flow that
+/// `param_get` and `param_set` may serve.
+pub struct Slots {
+    det: Detector,
+    actions: [u32; limits::PARAM_ROWS],
+    /// The `arg` of an action registered through `dk_param_on_click` : such a callback is `void fn(void *arg, u32 track)`.
+    args: [(bool, u32); limits::PARAM_ROWS],
+    /// The number of parameter rows that have an action: 0 keeps both hooks at one test.
+    armed: u32,
+    pending: Pending,
+    /// The click flow that `param_get` and `param_set` may serve: from the callback until the page gets input again.
+    held: Held,
+}
+
+impl Default for Slots {
+    fn default() -> Slots {
+        Slots::new()
     }
 }
 
-/// Give the action of parameter row `k` an argument (the callback is then called `fn(arg, track)`).
-pub unsafe fn set_arg(k: usize, arg: u32) {
-    if k < limits::PARAM_ROWS {
-        (*addr_of_mut!(ARGS))[k] = (true, arg);
+impl Slots {
+    pub const fn new() -> Slots {
+        Slots {
+            det: Detector::new(),
+            actions: [0; limits::PARAM_ROWS],
+            args: [(false, 0); limits::PARAM_ROWS],
+            armed: 0,
+            pending: NO_CLICK,
+            held: Held::new(),
+        }
+    }
+
+    /// Set (`addr` != 0) or clear (0) the action of parameter row `k` (a row of core/dynreg). Called by `apply` and `remove`.
+    pub fn set(&mut self, k: usize, addr: u32) {
+        if k >= limits::PARAM_ROWS {
+            return;
+        }
+        let old = self.actions[k];
+        self.actions[k] = addr;
+        self.args[k] = (false, 0);
+        let mut n = 0;
+        let mut i = 0;
+        while i < limits::PARAM_ROWS {
+            if self.actions[i] != 0 {
+                n += 1;
+            }
+            i += 1;
+        }
+        // SAFETY: a field of the owner; the volatile write keeps the hooks' reads honest
+        unsafe { write_volatile(addr_of_mut!(self.armed), n) };
+        // a click of an unloaded module must not run
+        if addr == 0 && old != 0 {
+            if self.pending.callback == old {
+                self.pending = NO_CLICK;
+            }
+            self.held.input(); // the module that owns the flow is going away
+        }
+    }
+
+    /// Give the action of parameter row `k` an argument (the callback is then called `fn(arg, track)`).
+    pub fn set_arg(&mut self, k: usize, arg: u32) {
+        if k < limits::PARAM_ROWS {
+            self.args[k] = (true, arg);
+        }
+    }
+
+    /// Whether any parameter row has an action.
+    fn is_armed(&self) -> bool {
+        // SAFETY: as in `set`
+        unsafe { read_volatile(addr_of!(self.armed)) != 0 }
+    }
+
+    /// Hook at the entry of the page's key handler (stack: view, event).
+    pub unsafe fn page_key<C: CoreApi, F: Fw>(
+        &mut self,
+        core: &C,
+        fw: &F,
+        view: *const u8,
+        ev: *const u8,
+    ) {
+        if !self.is_armed() {
+            return;
+        }
+        self.held.input();
+        if let Some(enc) = self.det.key(view as usize, word(ev, 0xc), word(ev, 0x10)) {
+            self.click(core, fw, view, enc);
+        }
+    }
+
+    /// Hook at the entry of the page's turn handler (stack: view, event): every page turn ends the click flow, including LOCAL and unused custom encoders. Bookkeeping must
+    /// precede the consumed return: press A, turn an unused D, release A must never become an SMP click. The native handler (`nativepage::turn`) runs after it, outside
+    /// the owner.
+    pub unsafe fn page_turn_input(&mut self, view: *const u8, ev: *const u8) {
+        if self.is_armed() {
+            turn_input(&mut self.det, &mut self.held, view as usize, word(ev, 0xc));
+        }
+    }
+
+    /// A click of encoder `enc` on `view`: queue the action of the parameter under it, if it has one.
+    unsafe fn click<C: CoreApi, F: Fw>(&mut self, core: &C, fw: &F, view: *const u8, enc: u32) {
+        let code = fw.param_code(view as usize, enc);
+        let first = crate::records::param_first(core);
+        let track = || fw.view_track(word(view, VIEW_TRACK_REF) as usize);
+        if let Some((callback, track)) = resolve(&self.actions, first, code, track) {
+            self.pending = Pending {
+                callback,
+                track,
+                view: view as usize,
+                code: code as u32,
+            };
+        }
+    }
+
+    /// The queued click, taken for the UI pass: its callback, and the argument it was registered with. The flow of `param_get` and `param_set` is open from here until the
+    /// page gets input again, so the list the action opens can set the value when the user picks. `None`: nothing queued, or the row was unloaded.
+    unsafe fn take_click<C: CoreApi>(&mut self, core: &C) -> Option<(Pending, (bool, u32))> {
+        let p = self.pending;
+        if p.callback == 0 {
+            return None;
+        }
+        self.pending = NO_CLICK;
+        let ctx = click_context(core, &p)?;
+        self.held.begin(ctx);
+        let arg = self.args[(p.code.wrapping_sub(crate::records::param_first(core))) as usize
+            % limits::PARAM_ROWS];
+        Some((p, arg))
+    }
+
+    /// The UI loop pass: run the queued action (`void fn(u32 track)`). The callback is the last thing that runs: it may call `dk_param_get` and `dk_param_set`, which reach
+    /// the flow through the owner again.
+    pub unsafe fn tick<C: CoreApi>(&mut self, core: &C) {
+        let Some((p, (with_arg, arg))) = self.take_click(core) else {
+            return;
+        };
+        if with_arg {
+            let call: unsafe extern "C" fn(u32, u32) = core::mem::transmute(p.callback as usize);
+            call(arg, p.track);
+        } else {
+            let call: unsafe extern "C" fn(u32) = core::mem::transmute(p.callback as usize);
+            call(p.track);
+        }
+    }
+
+    /// `dk_param_get`.
+    pub unsafe fn param_get<C: CoreApi, F: Fw>(
+        &self,
+        core: &C,
+        fw: &F,
+        track: u32,
+        word: u32,
+    ) -> i32 {
+        paramapi::get(
+            fw,
+            self.held.ctx(),
+            crate::records::param_owners(),
+            crate::records::param_first(core),
+            track,
+            word,
+        )
+    }
+
+    /// `dk_param_set`.
+    pub unsafe fn param_set<C: CoreApi, F: Fw>(
+        &self,
+        core: &C,
+        fw: &F,
+        track: u32,
+        word: u32,
+        raw: i32,
+    ) -> i32 {
+        paramapi::set(
+            fw,
+            self.held.ctx(),
+            crate::records::param_owners(),
+            crate::records::param_first(core),
+            track,
+            word,
+            raw,
+        )
+    }
+
+    /// The click that waits for the next UI pass (for the tests of the registry: what `apply` armed).
+    pub fn pending(&self) -> Pending {
+        self.pending
     }
 }
 
@@ -92,55 +235,10 @@ pub(crate) unsafe fn word(p: *const u8, off: usize) -> u32 {
     read_volatile(p.add(off) as *const u32)
 }
 
-/// Hook at the entry of the page's key handler (stack: view, event).
-pub unsafe fn page_key<C: CoreApi, F: Fw>(core: &C, fw: &F, view: *const u8, ev: *const u8) {
-    if read_volatile(addr_of!(ARMED)) == 0 {
-        return;
-    }
-    (*addr_of_mut!(HELD)).input();
-    let det = &mut *addr_of_mut!(DET);
-    if let Some(enc) = det.key(view as usize, word(ev, 0xc), word(ev, 0x10)) {
-        click(core, fw, view, enc);
-    }
-}
-
-/// Hook at the entry of the page's turn handler (stack: view, event). Only an encoder event (`event[3] - 1` is 0 to 7) is a turn.
-pub unsafe fn page_turn<C: CoreApi>(core: &C, view: *const u8, ev: *const u8) -> u32 {
-    // Every page turn ends the click flow, including LOCAL and unused custom
-    // encoders. Bookkeeping must precede the consumed return: press A, turn an
-    // unused D, release A must never become an SMP click.
-    if read_volatile(addr_of!(ARMED)) != 0 {
-        turn_input(
-            &mut *addr_of_mut!(DET),
-            &mut *addr_of_mut!(HELD),
-            view as usize,
-            word(ev, 0xc),
-        );
-    }
-    // PARAM continues through the native handler exactly once; LOCAL/unused is
-    // consumed only after recording the turn above.
-    super::nativepage::turn(core, view, ev)
-}
-
 pub fn turn_input(detector: &mut Detector, held: &mut Held, view: usize, encoder: u32) {
     held.input();
     if encoder.wrapping_sub(1) < ENCODERS {
         detector.turn(view);
-    }
-}
-
-/// A click of encoder `enc` on `view`: queue the action of the parameter under it, if it has one.
-unsafe fn click<C: CoreApi, F: Fw>(core: &C, fw: &F, view: *const u8, enc: u32) {
-    let code = fw.param_code(view as usize, enc);
-    let first = crate::records::param_first(core);
-    let track = || fw.view_track(word(view, VIEW_TRACK_REF) as usize);
-    if let Some((callback, track)) = resolve(&*addr_of!(ACTIONS), first, code, track) {
-        *addr_of_mut!(PENDING) = Pending {
-            callback,
-            track,
-            view: view as usize,
-            code: code as u32,
-        };
     }
 }
 
@@ -164,64 +262,4 @@ pub fn click_context<C: CoreApi>(c: &C, p: &Pending) -> Option<Ctx> {
         crate::records::param_owners(),
         crate::records::param_first(c),
     )
-}
-
-/// The UI loop pass: run the queued action (`void fn(u32 track)`). `param_get` and `param_set` serve the clicked view from here until the page
-/// gets input again, so the list the action opens can set the value when the user picks.
-pub unsafe fn tick<C: CoreApi>(core: &C) {
-    let p = *addr_of!(PENDING);
-    if p.callback != 0 {
-        *addr_of_mut!(PENDING) = NO_CLICK;
-        let Some(ctx) = click_context(core, &p) else {
-            return;
-        };
-        (*addr_of_mut!(HELD)).begin(ctx);
-        let (with_arg, arg) =
-            (*addr_of!(ARGS))[(p.code.wrapping_sub(crate::records::param_first(core))) as usize
-                % limits::PARAM_ROWS];
-        if with_arg {
-            let call: unsafe extern "C" fn(u32, u32) = core::mem::transmute(p.callback as usize);
-            call(arg, p.track);
-        } else {
-            let call: unsafe extern "C" fn(u32) = core::mem::transmute(p.callback as usize);
-            call(p.track);
-        }
-    }
-}
-
-/// `dk_param_get`.
-pub unsafe fn param_get<C: CoreApi, F: Fw>(core: &C, fw: &F, track: u32, word: u32) -> i32 {
-    paramapi::get(
-        fw,
-        (*addr_of!(HELD)).ctx(),
-        crate::records::param_owners(),
-        crate::records::param_first(core),
-        track,
-        word,
-    )
-}
-
-/// `dk_param_set`.
-pub unsafe fn param_set<C: CoreApi, F: Fw>(
-    core: &C,
-    fw: &F,
-    track: u32,
-    word: u32,
-    raw: i32,
-) -> i32 {
-    paramapi::set(
-        fw,
-        (*addr_of!(HELD)).ctx(),
-        crate::records::param_owners(),
-        crate::records::param_first(core),
-        track,
-        word,
-        raw,
-    )
-}
-
-/// The click that waits for the next UI pass (for the tests of the registry: what `apply` armed). `#[inline]`: no caller in the runtime, so no code in the object.
-#[inline]
-pub unsafe fn pending() -> Pending {
-    *addr_of!(PENDING)
 }

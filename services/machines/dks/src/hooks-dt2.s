@@ -4,7 +4,7 @@
 | control flow of the site and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, made by
 | the port file) or, when a branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `ports/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address the port file resolves:
 | the jump changes no register or flag). The aliases `mf_x_*`, `mf_spt` are the `[object.externs]` of module.toml.
-| `MF_TAB` is the image table `machines_info` of core/machines, copied by `setup` (lib.rs); its words give the registry rows and counts and the addresses of the
+| `DKRT_MF_TAB` is the image table `machines_info` of core/machines, copied by `setup` (lib.rs); its words give the registry rows and counts and the addresses of the
 | adapter's routines. Offsets T_* below; the same layout is in hooks-dn2.s and in `image.rs`.
 |
 | Hook convention: registers the stock site frees are scratch (`ports/fw/machine.toml` lists them per hook); everything else a routine saves.
@@ -19,7 +19,7 @@
     .equ ROWSIZE,  64
 
 
-| the table (byte offsets of the words of MF_TAB; `image.rs` has the same layout)
+| the table (byte offsets of the words of DKRT_MF_TAB; `image.rs` has the same layout)
     .equ T_FIRST, 12
     .equ T_COUNT, 16
     .equ T_ROWS, 24
@@ -34,7 +34,7 @@ mfd_row:
     move.l  %d1,-(%sp)
     move.l  #ROWSIZE,%d1
     muls.l  %d0,%d1
-    add.l   MF_TAB+T_ROWS,%d1
+    add.l   DKRT_MF_TAB+T_ROWS,%d1
     movea.l %d1,%a0
     move.l  (%sp)+,%d1
     rts
@@ -45,8 +45,8 @@ mfd_row:
 mf_clone5:
     move.l  %a0,-(%sp)
     move.l  %d0,%d1
-    sub.l   MF_TAB+T_FIRST,%d0
-    cmp.l   MF_TAB+T_COUNT,%d0
+    sub.l   DKRT_MF_TAB+T_FIRST,%d0
+    cmp.l   DKRT_MF_TAB+T_COUNT,%d0
     bcc.s   1f
     bsr.w   mfd_row
     move.l  O_CLONE(%a0),%d1
@@ -68,8 +68,8 @@ mf_clone5:
     .globl mf_typearg
 mf_typearg:
     move.l  0x10(%sp),%d0
-    sub.l   MF_TAB+T_FIRST,%d0
-    cmp.l   MF_TAB+T_COUNT,%d0
+    sub.l   DKRT_MF_TAB+T_FIRST,%d0
+    cmp.l   DKRT_MF_TAB+T_COUNT,%d0
     bcc.s   9f
     lea     -16(%sp),%sp
     movem.l %d1-%d2/%a0/%a2,(%sp)
@@ -78,7 +78,7 @@ mf_typearg:
     cmpi.l  #9,%d2
     bhi.s   7f
     lsl.l   #2,%d2
-    movea.l MF_TAB+T_SLOTMAP,%a2
+    movea.l DKRT_MF_TAB+T_SLOTMAP,%a2
     move.l  (%a2,%d2.l),%d2
     bmi.s   6f
     bsr.w   mfd_row
@@ -108,11 +108,11 @@ mf_srcpage:
     move.l  %a2,-(%sp)
     jsr     mf_spt
     addq.l  #4,%sp
-    cmp.l   MF_TAB+T_FIRST,%d0
+    cmp.l   DKRT_MF_TAB+T_FIRST,%d0
     blt.s   1f
     move.l  #SRC_PAGES,-(%sp)
     move.l  %d0,-(%sp)
-    movea.l MF_TAB+T_N_PAGE_COUNT,%a1
+    movea.l DKRT_MF_TAB+T_N_PAGE_COUNT,%a1
     jsr     (%a1)
     addq.l  #8,%sp
     move.l  %d0,%d1

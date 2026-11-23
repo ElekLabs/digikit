@@ -1,7 +1,6 @@
 //! What `init` declared of the machines: the collected machines, pages and parameters (`Build`).
-use super::*;
 use dkrt_sdk::*;
-use dkrt_svc_rows::builder::{fail, find, put_text, room};
+use dkrt_svc_rows::builder::{fail, find, put_text, room, Gate};
 
 /// The most machines, pages and records (machines, pages, parameters and click actions together) of one module.
 pub const MAX_M: usize = limits::MACHINE_ROWS;
@@ -91,6 +90,8 @@ pub struct Build {
     pub params: [CParam; MAX_PA],
     pub nparam: usize,
     records: usize,
+    /// Whose `init` is open, and the placeholder handle of a refused call (a handle is the address of an element of the collection, so the placeholder is none).
+    pub(super) gate: Gate,
 }
 
 impl Build {
@@ -104,7 +105,13 @@ impl Build {
             params: [P0; MAX_PA],
             nparam: 0,
             records: 0,
+            gate: Gate::new(),
         }
+    }
+
+    /// The placeholder handle of a refused call.
+    pub fn placeholder(&self) -> *mut u8 {
+        self.gate.placeholder()
     }
 
     /// Nothing was declared.
@@ -129,7 +136,7 @@ impl Build {
     pub fn add_machine(&mut self, index: u32, name: *const u8, short: *const u8) -> *mut u8 {
         if self.nm >= MAX_M || !self.room() {
             self.fail(E_DECL_FULL);
-            return placeholder();
+            return self.placeholder();
         }
         let i = self.nm;
         let mut m = M0;
@@ -148,11 +155,11 @@ impl Build {
     pub fn machine_add_page(&mut self, m: *mut u8, name: *const u8, short: *const u8) -> *mut u8 {
         let owner = match find(&self.machines, m) {
             Some(i) => i,
-            None => return placeholder(),
+            None => return self.placeholder(),
         };
         if self.np >= MAX_PG || !self.room() {
             self.fail(E_DECL_FULL);
-            return placeholder();
+            return self.placeholder();
         }
         let i = self.np;
         let mut g = G0;
@@ -179,15 +186,15 @@ impl Build {
         let pg = match find(&self.pages, p) {
             Some(i) => i,
             None => {
-                if gate().foreign(p) {
+                if self.gate.foreign(p) {
                     self.fail(E_FORMAT);
                 }
-                return placeholder();
+                return self.placeholder();
             }
         };
         if self.nparam >= MAX_PA || !self.room() {
             self.fail(E_DECL_FULL);
-            return placeholder();
+            return self.placeholder();
         }
         let i = self.nparam;
         let mut q = P0;
@@ -239,7 +246,7 @@ impl Build {
                 self.params[i].click_arg = arg;
             }
             None => {
-                if gate().foreign(h) {
+                if self.gate.foreign(h) {
                     self.fail(E_FORMAT);
                 }
             }

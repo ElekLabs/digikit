@@ -36,6 +36,45 @@ pub unsafe fn fx_add_fx(ctx: *mut u8, index: u32) {
     dkrt_svc_fx_dks::builder::dk_module_ctx_add_fx(ctx, index, b"Test\0".as_ptr(), b"TST\0".as_ptr());
 }
 
+/// The row of the machines file: what its `service!` call declares.
+pub fn machines_file_row() -> &'static dkrt_abi::provider::ProviderRow {
+    dkrt_svc_machines_dks::dk_svc_row()
+}
+
+/// The owner of the machines file in its cell, made as the file's `init` makes it before the declarations, except that no image table is bound (the hooks do not run on a host).
+/// The instance of a started owner is kept: a case that needs the file's owner and finds one uses it. `E_LOADED` never comes back.
+pub fn machines_start() -> *mut u8 {
+    let live = dkrt_svc_machines_dks::DK_SVC_OWNER.instance();
+    if !live.is_null() {
+        return live as *mut u8;
+    }
+    dkrt_svc_machines_dks::DK_SVC_OWNER
+        .start(|slot| {
+            slot.write(dkrt_svc_machines::machines::Machines::new());
+            Ok(())
+        })
+        .expect("the owner of the machines file starts") as *mut u8
+}
+
+/// What the machines file's `fini` does: the owner is dropped (nothing when there is none).
+pub fn machines_stop() {
+    dkrt_svc_machines_dks::dk_svc_stop()
+}
+
+/// The row of the machines file as a loaded service file has it, over its owner (started when no one is).
+pub fn machines_source() -> crate::package::svc_rows::RowSource<'static> {
+    crate::package::svc_rows::RowSource::Provider { row: machines_file_row(), instance: machines_start(), extent: 0..usize::MAX }
+}
+
+/// The builder call `dk_module_ctx_add_machine` of the file, for the module whose context is `ctx`: the export that a module's `init` calls (the owner is started when no one is).
+///
+/// # Safety
+/// `ctx` is any pointer (the core only compares it).
+pub unsafe fn machines_add_machine(ctx: *mut u8, index: u32) {
+    machines_start();
+    dkrt_svc_machines_dks::builder::dk_module_ctx_add_machine(ctx, index, b"Test\0".as_ptr(), b"TST\0".as_ptr());
+}
+
 /// The Rust service files: (file name, declarations).
 pub fn declarations() -> [(&'static str, DeclareFn); 6] {
     [

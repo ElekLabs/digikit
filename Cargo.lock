@@ -1305,6 +1305,7 @@ dependencies = [
  "dkrt-abi",
  "dkrt-sdk",
  "dkrt-svc-rows",
+ "dkrt-svc-rt",
  "dkrt-test-support",
 ]
 

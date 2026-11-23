@@ -5,6 +5,7 @@ mod admit;
 mod check;
 mod claim;
 mod lookup;
+mod part;
 mod placeholder;
 
 pub(crate) use admit::*;

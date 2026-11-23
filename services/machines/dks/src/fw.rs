@@ -4,7 +4,7 @@
 //! the calls are no-ops with the neutral answer.
 use core::ptr::read_volatile;
 use dkrt_abi::fw::{Fw, MODE_KEYS};
-use dkrt_svc_machines::slots;
+use dkrt_svc_machines::{nativepage, paramapi};
 use dkrt_svc_rt::ImportCore;
 
 pub struct DkFw;
@@ -15,7 +15,9 @@ mod native {
     use crate::guard::call_if_bound;
 
     pub unsafe fn key_down(key: u32) -> u32 {
-        call_if_bound(dkfw::input::key_down as usize, 0, || dkfw::input::key_down(key))
+        call_if_bound(dkfw::input::key_down as usize, 0, || {
+            dkfw::input::key_down(key)
+        })
     }
     pub unsafe fn set_value(obj: *const u8, code: u32, raw: i32, track: u32) {
         call_if_bound(dkfw::param::set_value as usize, (), || {
@@ -23,7 +25,9 @@ mod native {
         })
     }
     pub unsafe fn view_track(track_ref: *const u8) -> u32 {
-        call_if_bound(dkfw::page::view_track as usize, 0, || dkfw::page::view_track(track_ref))
+        call_if_bound(dkfw::page::view_track as usize, 0, || {
+            dkfw::page::view_track(track_ref)
+        })
     }
 }
 #[cfg(not(target_arch = "m68k"))]
@@ -94,30 +98,34 @@ impl Fw for DkFw {
     }
 }
 
-fn tab() -> DkFw {
-    DkFw
-}
-
-/// The hook entry of the machine page's key event: the click detector of the service.
+/// The hook entry of the machine page's key event: the click detector of the owner. Without an owner (before `init` made it, after `fini`) the event passes.
 #[no_mangle]
 pub unsafe extern "C" fn dks_page_key(view: *const u8, ev: *const u8) {
-    slots::page_key(&ImportCore, &tab(), view, ev)
+    crate::DK_SVC_OWNER.with(|m| m.clicks().page_key(&ImportCore, &DkFw, view, ev));
 }
 
-/// The hook entry of the machine page's turn: nonzero when a native page consumed it.
+/// The hook entry of the machine page's turn: the turn ends the click flow (the owner), then the native handler of the page runs outside the owner: nonzero when a native page
+/// consumed the turn. Without an owner nothing is consumed.
 #[no_mangle]
 pub unsafe extern "C" fn dks_page_turn(view: *const u8, ev: *const u8) -> u32 {
-    slots::page_turn(&ImportCore, view, ev)
+    match crate::DK_SVC_OWNER.with(|m| m.clicks().page_turn_input(view, ev)) {
+        Some(()) => nativepage::turn(&ImportCore, view, ev),
+        None => 0,
+    }
 }
 
-/// `dk_param_get` (an `[[export]]` of the file): the value of a parameter word in the flow of a click.
+/// `dk_param_get` (an `[[export]]` of the file): the value of a parameter word in the flow of a click. Without an owner there is no flow (`E_STATE`).
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_param_get(track: u32, word: u32) -> i32 {
-    slots::param_get(&ImportCore, &tab(), track, word)
+    crate::DK_SVC_OWNER
+        .with(|m| m.clicks().param_get(&ImportCore, &DkFw, track, word))
+        .unwrap_or(paramapi::E_STATE)
 }
 
 /// `dk_param_set`, as `dk_param_get`.
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_param_set(track: u32, word: u32, raw: i32) -> i32 {
-    slots::param_set(&ImportCore, &tab(), track, word, raw)
+    crate::DK_SVC_OWNER
+        .with(|m| m.clicks().param_set(&ImportCore, &DkFw, track, word, raw))
+        .unwrap_or(paramapi::E_STATE)
 }

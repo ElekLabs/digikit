@@ -105,7 +105,7 @@ struct MachinesBack(bool);
 impl Drop for MachinesBack {
     fn drop(&mut self) {
         if self.0 {
-            unsafe { crate::package::svc_rows::add(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), None) };
+            unsafe { crate::package::svc_rows::add(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200)) };
         }
     }
 }

@@ -2,12 +2,13 @@
 //! record and the capacity counts. The machine and page rows are written through `FwMem` (`wr`), so a host test reaches them: `tests/contract.rs` loads and
 //! unloads whole modules and compares the rows (the contract suite); the tests here cover the single handlers.
 use dkneeds::keys::name_hash;
-use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::FwMem;
+use dkrt_abi::provider::{Consumer, ConsumerId, Describe, DspPart, Provider, Records, Ticker};
 use dkrt_abi::service::*;
 use dkrt_sdk::records::*;
 use dkrt_sdk::*;
 use dkrt_svc_machines::info;
+use dkrt_svc_machines::machines::Machines;
 use dkrt_svc_machines::records::*;
 use dkrt_svc_machines::slots;
 use dkrt_svc_rows::dynreg::w;
@@ -17,7 +18,7 @@ use std::rc::Rc;
 use std::sync::Mutex;
 use std::vec::Vec;
 
-/// The tests that drive the statics of the crate (the click state and `APPLIED`) take this lock.
+/// The tests that drive the tables the crate keeps by name (the registry state `DKRT_REG`) take this lock.
 static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 const P_FIRST: u32 = 100;
@@ -144,19 +145,32 @@ fn check_ctx(reg: &[u8]) -> CheckCtx {
 }
 
 fn run_check(core: &FakeCore, step: u32, reg: &[u8]) -> i32 {
-    unsafe { <Machines as Service<FakeCore>>::check(core, step, &check_ctx(reg)) }
+    Records::check(&mut Machines::new(), core, step, &check_ctx(reg))
+        .err()
+        .unwrap_or(OK)
 }
 
-fn apply_ctx(reg: &[u8]) -> ApplyCtx {
-    ApplyCtx {
-        owner: OWNER,
-        reg: reg.as_ptr(),
-        base: BASE,
-    }
+/// The consumer of module record `OWNER - 1` over section `reg`, loaded at `BASE`.
+fn consumer(reg: &[u8]) -> Consumer<'_> {
+    unsafe { Consumer::of_section(ConsumerId::new(OWNER), reg.as_ptr(), BASE) }
+}
+
+/// `Provider::attach` of the owner over section `reg`: 0 or the refusal.
+fn attach(owner: &mut Machines, core: &FakeCore, reg: &[u8]) -> i32 {
+    Provider::attach(owner, core, &consumer(reg))
+        .err()
+        .unwrap_or(OK)
+}
+
+/// `Records::apply` of the owner for one record of `reg`: 0 or the refusal.
+fn apply_record(owner: &mut Machines, core: &FakeCore, kind: u32, body: &[u8], reg: &[u8]) -> i32 {
+    Records::apply(owner, core, kind, body, &consumer(reg))
+        .err()
+        .unwrap_or(OK)
 }
 
 /// Press and release of encoder `enc` on `VIEW`, with the page answering that `code` is under it.
-fn click(core: &FakeCore, code: i32, track: u32, enc: u32) -> slots::Pending {
+fn click(owner: &mut Machines, core: &FakeCore, code: i32, track: u32, enc: u32) -> slots::Pending {
     let fw = FakeFw {
         param_code: code,
         track,
@@ -171,9 +185,13 @@ fn click(core: &FakeCore, code: i32, track: u32, enc: u32) -> slots::Pending {
         // the view's track reference word (`view + 0x74`) is read before the page is asked: a block of words stands in for the view
         let view = [0u32; 0x40];
         let v = view.as_ptr() as *const u8;
-        slots::page_key(core, &fw, v, press.as_ptr() as *const u8);
-        slots::page_key(core, &fw, v, release.as_ptr() as *const u8);
-        slots::pending()
+        owner
+            .clicks()
+            .page_key(core, &fw, v, press.as_ptr() as *const u8);
+        owner
+            .clicks()
+            .page_key(core, &fw, v, release.as_ptr() as *const u8);
+        owner.clicks().pending()
     }
 }
 
@@ -237,10 +255,9 @@ fn a_table_with_more_rows_than_the_state_has_or_no_table_refuses_the_records_tha
     // an image without `dynreg_info`: the section needs a registry, one without machine records does not
     assert_eq!(run_check(&core, check_step::COUNTS, &reg), E_NO_REGISTRY);
     assert_eq!(run_check(&core, check_step::COUNTS, &section(&[])), OK);
-    assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::apply(&core, &apply_ctx(&reg)) },
-        E_NO_REGISTRY
-    );
+    assert_eq!(attach(&mut Machines::new(), &core, &reg), E_NO_REGISTRY);
+    // a section with no machine record needs no registry
+    assert_eq!(attach(&mut Machines::new(), &core, &section(&[])), OK);
     // a table that fits
     core.set_dynreg(table());
     assert_eq!(run_check(&core, check_step::COUNTS, &reg), OK);
@@ -254,30 +271,27 @@ fn a_table_with_more_rows_than_the_state_has_or_no_table_refuses_the_records_tha
 #[test]
 fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back() {
     let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let mut core = core();
-    let inf = table();
+    let core = core();
+    let mut owner = Box::new(Machines::new());
     let reg = section(&[
         param(0, SLOT_BASE, 0, 255, 17, "LEVEL"),
         param(1, SLOT_BASE + 1, -64, 63, 0, "PAN"),
         action(1, 8),
     ]);
-    assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::apply(&core, &apply_ctx(&reg)) },
-        OK
-    );
+    assert_eq!(attach(&mut owner, &core, &reg), OK);
     // the parameters sit in the first free rows, with their ranges and the owner
     assert_eq!(row_words(&core, P_DYN0), [0, 255, 17]);
     assert_eq!(row_words(&core, P_DYN0 + 1), [-64i32 as u32, 63, 0]);
     assert_eq!(&rstate().param_owner[..3], [OWNER, OWNER, 0]);
     assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::cap(&core, dkrt_sdk::proto::CAPK_PARAM_ROWS) },
+        Describe::cap(&*owner, &core, dkrt_sdk::proto::CAPK_PARAM_ROWS),
         Some((16, 2))
     );
     // the first parameter has no action: the stock click, nothing is queued
     assert_eq!(&rstate().param_owner[..3], [OWNER, OWNER, 0]);
-    assert_eq!(click(&core, P_DYN0 as i32, 6, 1).callback, 0);
+    assert_eq!(click(&mut owner, &core, P_DYN0 as i32, 6, 1).callback, 0);
     // a click on the second parameter queues the callback at the module's load address plus its image offset
-    let p = click(&core, (P_DYN0 + 1) as i32, 6, 0);
+    let p = click(&mut owner, &core, (P_DYN0 + 1) as i32, 6, 0);
     assert_eq!((p.callback, p.track, p.code), (BASE + 8, 6, P_DYN0 + 1));
     assert_eq!(
         slots::click_context(&core, &p).map(|c| c.owner),
@@ -285,18 +299,18 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
     );
     // remove: the rows are free, the action is disarmed and the queued click of the unloaded module is dropped
     core.calls.borrow_mut().clear();
-    unsafe { <Machines as Service<FakeCore>>::remove(&core, OWNER) };
+    Provider::detach(&mut *owner, &core, ConsumerId::new(OWNER));
     assert_eq!(&rstate().param_owner[..3], [0, 0, 0]);
     assert_eq!(
         (row_words(&core, P_DYN0), row_words(&core, P_DYN0 + 1)),
         ([0, 0, 0], [0, 0, 0]),
         "both parameter rows are written back as gap rows"
     );
-    assert_eq!(unsafe { slots::pending() }.callback, 0);
-    let p = click(&core, (P_DYN0 + 1) as i32, 6, 2);
+    assert_eq!(owner.clicks().pending().callback, 0);
+    let p = click(&mut owner, &core, (P_DYN0 + 1) as i32, 6, 2);
     assert_eq!(p.callback, 0, "no action is armed any more");
     assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::cap(&core, dkrt_sdk::proto::CAPK_PARAM_ROWS) },
+        Describe::cap(&*owner, &core, dkrt_sdk::proto::CAPK_PARAM_ROWS),
         Some((16, 0))
     );
 }
@@ -305,11 +319,10 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
 fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kinds_do_nothing() {
     let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = core();
-    let inf = table();
+    let mut owner = Box::new(Machines::new());
     // the key of the machine is a pinned type number of the run-time range
     let (kind, body) = native(0x12);
     let reg = section(&[(kind, body.clone())]);
-    let ctx = apply_ctx(&reg);
     // what the adapter's `mf_native_register` reads, taken while its arguments are valid: (owner, draw, event, snapshot words, arg, with_arg)
     let seen: Rc<RefCell<Vec<(usize, usize, usize, Vec<u32>, usize, usize)>>> =
         Rc::new(RefCell::new(Vec::new()));
@@ -321,25 +334,15 @@ fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kind
             .push((a[0], a[2], a[3], words, a[7], a[8]));
         0
     }));
-    unsafe {
-        assert_eq!(
-            <Machines as Service<FakeCore>>::apply_record(&core, KIND_PARAM, body.as_ptr(), &ctx),
-            OK
-        );
-        assert!(
-            core.calls().is_empty(),
-            "a kind of another service or a parameter record writes nothing"
-        );
-        assert_eq!(
-            <Machines as Service<FakeCore>>::apply_record(
-                &core,
-                KIND_NATIVE_PAGE,
-                body.as_ptr(),
-                &ctx
-            ),
-            OK
-        );
-    }
+    assert_eq!(apply_record(&mut owner, &core, KIND_PARAM, &body, &reg), OK);
+    assert!(
+        core.calls().is_empty(),
+        "a kind of another service or a parameter record writes nothing"
+    );
+    assert_eq!(
+        apply_record(&mut owner, &core, KIND_NATIVE_PAGE, &body, &reg),
+        OK
+    );
     assert_eq!(
         *seen.borrow(),
         [(0x12, BASE as usize + 2, BASE as usize + 4, Vec::new(), 0, 0)]
@@ -347,15 +350,19 @@ fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kind
     // a refusal of the firmware adapter is the record's status
     *core.on_call.borrow_mut() = Some(Box::new(|_, _| E_NO_REGISTRY as usize));
     assert_eq!(
-        unsafe {
-            <Machines as Service<FakeCore>>::apply_record(
-                &core,
-                KIND_NATIVE_PAGE,
-                body.as_ptr(),
-                &ctx,
-            )
-        },
+        apply_record(&mut owner, &core, KIND_NATIVE_PAGE, &body, &reg),
         E_NO_REGISTRY
+    );
+    // a body shorter than the record's is no record
+    assert_eq!(
+        apply_record(
+            &mut owner,
+            &core,
+            KIND_NATIVE_PAGE,
+            &body[..body.len() - 4],
+            &reg
+        ),
+        E_FORMAT
     );
     // a turn calls the adapter's turn function, and its answer says whether the turn was consumed
     *core.on_call.borrow_mut() = None;
@@ -376,14 +383,7 @@ fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kind
     );
     bare.calls.borrow_mut().clear();
     assert_eq!(
-        unsafe {
-            <Machines as Service<FakeCore>>::apply_record(
-                &bare,
-                KIND_NATIVE_PAGE,
-                body.as_ptr(),
-                &ctx,
-            )
-        },
+        apply_record(&mut owner, &bare, KIND_NATIVE_PAGE, &body, &reg),
         OK,
         "an unbound word is not called (the check refused the record before; apply has nothing to register)"
     );
@@ -398,6 +398,7 @@ fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kind
 fn the_capacity_counts_need_a_registry_and_the_ui_pass_runs_the_click_last() {
     let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut core = FakeCore::new();
+    let mut owner = Box::new(Machines::new());
     rstate().mach_owner = [0; limits::MACHINE_ROWS]; // other tests leave rows owned in the static state
     for kind in [
         dkrt_sdk::proto::CAPK_MACHINE_ROWS,
@@ -405,27 +406,27 @@ fn the_capacity_counts_need_a_registry_and_the_ui_pass_runs_the_click_last() {
         dkrt_sdk::proto::CAPK_PAGE_ROWS,
     ] {
         assert_eq!(
-            unsafe { <Machines as Service<FakeCore>>::cap(&core, kind) },
+            Describe::cap(&*owner, &core, kind),
             Some((0, 0)),
             "no registry"
         );
     }
     assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::cap(&core, 0xff) },
+        Describe::cap(&*owner, &core, 0xff),
         None,
         "a kind another service counts"
     );
     core.set_dynreg(table());
     assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::cap(&core, dkrt_sdk::proto::CAPK_MACHINE_ROWS) },
+        Describe::cap(&*owner, &core, dkrt_sdk::proto::CAPK_MACHINE_ROWS),
         Some((8, 0))
     );
     assert_eq!(
-        unsafe { <Machines as Service<FakeCore>>::cap(&core, dkrt_sdk::proto::CAPK_PAGE_ROWS) },
+        Describe::cap(&*owner, &core, dkrt_sdk::proto::CAPK_PAGE_ROWS),
         Some((4, 0))
     );
     // no click is queued: the pass in any phase runs nothing
-    unsafe { <Machines as Service<FakeCore>>::tick(&core, tick_phase::LAST) };
+    Ticker::tick(&mut *owner, &core, tick_phase::LAST);
 }
 
 #[test]
@@ -476,7 +477,7 @@ fn the_machines_of_a_module_are_its_rows_its_types_and_the_guard_counts_for_them
     w[17] = 3 | 1 << 24;
     w[18] = 0x1e;
     w[23] = 0x1e;
-    unsafe { <Machines as Service<FakeCore>>::diag(&core, &w) };
+    DspPart::diag(&mut Machines::new(), &core, &w);
     let m = dkrt_svc_machines::records::module_info(&core, 2);
     assert_eq!((m.faults, m.guard_off), (3, 1));
     // at most 8 types
@@ -506,7 +507,7 @@ fn apply_refuses_a_machine_without_a_run_time_type_number_instead_of_indexing_th
         put(&mut b, 8, 255);
         let reg = section(&[param(0, SLOT_BASE, 0, 255, 0, "LEVEL"), (KIND_MACHINE, b)]);
         assert_eq!(
-            unsafe { <Machines as Service<FakeCore>>::apply(&core, &apply_ctx(&reg)) },
+            attach(&mut Machines::new(), &core, &reg),
             E_TYPE_RANGE,
             "key {key:#x}"
         );

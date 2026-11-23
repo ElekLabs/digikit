@@ -558,9 +558,13 @@ impl Images for Card {
             self.provider_recs.push(rec);
             return crate::package::collect::dk_provider_declare_row(ctx, crate::package::handlers::dks_decls::fx_row(), instance);
         }
-        let row: &'static ServiceRow = if self.real_rows && name == "machines" {
-            crate::package::handlers::exports::machines_row()
-        } else {
+        if self.real_rows && name == "machines" {
+            // the machines file provides a `ProviderRow` over its owner, as the fx file does
+            let instance = crate::package::handlers::dks_decls::machines_start();
+            self.provider_recs.push(rec);
+            return crate::package::collect::dk_provider_declare_row(ctx, crate::package::handlers::dks_decls::machines_file_row(), instance);
+        }
+        let row: &'static ServiceRow = {
             Box::leak(Box::new(ServiceRow::of::<Nothing, crate::package::core_api::RealCore>(name, kinds)))
         };
         crate::package::collect::dk_service_declare_row(ctx, row)
@@ -575,6 +579,7 @@ impl Images for Card {
             self.provider_recs.remove(at);
             dkrt_fixture_local_ping::dk_svc_stop();
             crate::package::handlers::dks_decls::fx_stop();
+            crate::package::handlers::dks_decls::machines_stop();
         }
     }
 }
@@ -600,6 +605,7 @@ pub(super) fn clean() -> Clean {
         // a case that ended early left the instance of the provider fixture started
         dkrt_fixture_local_ping::dk_svc_stop();
         crate::package::handlers::dks_decls::fx_stop();
+        crate::package::handlers::dks_decls::machines_stop();
         // the link script is a static: a test with no DSP part never calls `script_link`, and would see the strict tick drop of the initial value or the state of
         // whichever test ran before it
         crate::package::cleanup_tests::lenient_tick_drop();
@@ -613,7 +619,7 @@ impl Drop for Clean {
             for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
                 crate::package::svc_rows::remove(rec);
             }
-            crate::package::svc_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), None);
+            crate::package::svc_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200));
         }
     }
 }

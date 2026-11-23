@@ -1,9 +1,5 @@
 //! The callback arguments of the ACTION and native page records the commit wrote, for `apply`.
 use super::*;
-use core::ptr::addr_of;
-
-/// The callback arguments of the ACTION and native page records `WRITE` wrote, for `apply` (`take_args`).
-pub(super) static mut ARGS: Option<ApplyArgs> = None;
 
 /// The callback arguments of the ACTION and native page records `lower` wrote, in record order (`apply` reads them through `take_args`).
 pub struct ApplyArgs {
@@ -40,9 +36,4 @@ pub fn apply_args(b: &Build, plan: &Plan) -> ApplyArgs {
         m += 1;
     }
     a
-}
-
-/// The callback arguments of the section the last commit wrote.
-pub fn args() -> Option<&'static ApplyArgs> {
-    unsafe { (*addr_of!(ARGS)).as_ref() }
 }

@@ -46,9 +46,9 @@ R2b crossings and their replacements:
 | --- | --- |
 | `tracks` checks `fxpage` and `fxsend` busy; `fx_live` checks `tracks::busy` | The DSP link queue of the core (R6a, `link.rs`): live values with `link_set`, owner requests with `link_submit`. No writer asks whether the link is busy |
 | `fx` needs `machines` rows | Both write parameter rows with the shared crate `dkrt-svc-rows` and find `dynreg_info` through `CoreApi::info`; neither calls a function of the other (RS-C: no registry state or table in `CoreApi`) |
-| `pageclick` reads registry rows | `dkrt_svc_machines::records::param_first`, `param_owners`: the registry state `DKRT_REG` is a static of `machines.dks` |
+| `pageclick` reads registry rows | `dkrt_svc_machines::records::param_first`, `param_owners`: the registry state `DKRT_REG` is a named table of `machines.dks`; the click, builder and parking state are private fields of the owner `Machines` (provider contract, `services/machines/README.md`) |
 | `fxsend` uses `settings` | `CoreApi::settings_get` and `settings_put` (a broker resource) |
-| `assign` (sticky type numbers) in `machines` | In `machines` again (RS-C, `assign.rs` of the crate): `Service::settle` plans the numbers once per boot from the machine keys of the selection, and the map is the settings key `machines.types` (the selection record's old map is read once: `CoreApi::legacy_type_map`) |
+| `assign` (sticky type numbers) in `machines` | In `machines` again (RS-C, `assign.rs` of the crate): `Provider::settle` of the owner `Machines` plans the numbers once per boot from the machine keys of the selection, and the map is the settings key `machines.types` (the selection record's old map is read once: `CoreApi::legacy_type_map`) |
 | core calls of `assign`, `fxpage::tick`, `pageclick::tick`, `tracks::tick`, the `dk_fx_routes_entry` export, the nativepage kinds | `Service::tick(phase)`, `handlers::exports`, `dkrt_abi::registry::KIND_NATIVE*` |
 
 - **R2b** moved files into L2 and L3 folders inside the runtime crate.

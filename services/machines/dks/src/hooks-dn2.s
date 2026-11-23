@@ -4,7 +4,7 @@
 | through the image stub of the pointer slot `frametype` (an interrupt site). The routine takes the whole control flow of the site: it runs in place of the stock
 | instructions there and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, copied by the runtime from the port file) or, when a
 | branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `ports/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address the port file resolves: the jump changes no
-| register or flag). A routine that ends the hooked function leaves by `jmp mf_ret_*` (`dk_ret_<hash>`, an `rts`). The aliases are the `[object.externs]` of module.toml. `MF_TAB` is the image table
+| register or flag). A routine that ends the hooked function leaves by `jmp mf_ret_*` (`dk_ret_<hash>`, an `rts`). The aliases are the `[object.externs]` of module.toml. `DKRT_MF_TAB` is the image table
 | `machines_info` of core/machines, copied by `setup` (lib.rs). Offsets T_* below; the same layout is in hooks-dt2.s and in `image.rs`.
 |
 | Hook convention: registers the stock site frees are scratch (`ports/fw/machine.toml` lists them per hook); everything else a routine saves.
@@ -25,7 +25,7 @@
     .equ PG_SIZE,  84
 
 
-| the table (byte offsets of the words of MF_TAB; `image.rs` has the same layout)
+| the table (byte offsets of the words of DKRT_MF_TAB; `image.rs` has the same layout)
     .equ T_FIRST, 12
     .equ T_COUNT, 16
     .equ T_ROWS, 24
@@ -40,7 +40,7 @@
 
 | mf_ensure: the image's table builder; it preserves every register (not the flags). Called as a subroutine.
 mfn_call_ensure:
-    move.l  MF_TAB+T_ENSURE,-(%sp)
+    move.l  DKRT_MF_TAB+T_ENSURE,-(%sp)
     rts                                 | enters mf_ensure, which returns to the caller of mfn_call_ensure
 
 | mfn_row: d0 = index k (< count) -> a0 = &machines.rows[k]. Preserves every other register (not the flags).
@@ -48,7 +48,7 @@ mfn_row:
     move.l  %d1,-(%sp)
     move.l  #ROWSIZE,%d1
     muls.l  %d0,%d1
-    add.l   MF_TAB+T_ROWS,%d1
+    add.l   DKRT_MF_TAB+T_ROWS,%d1
     movea.l %d1,%a0
     move.l  (%sp)+,%d1
     rts
@@ -58,8 +58,8 @@ mfn_row:
     .globl mf_group
 mf_group:
     move.l  %d0,%d1
-    sub.l   MF_TAB+T_FIRST,%d1
-    cmp.l   MF_TAB+T_COUNT,%d1
+    sub.l   DKRT_MF_TAB+T_FIRST,%d1
+    cmp.l   DKRT_MF_TAB+T_COUNT,%d1
     bcc.s   1f
     moveq   #0,%d0
 1:  moveq   #3,%d1                      | the stock test
@@ -75,8 +75,8 @@ mf_group:
     .macro CLONEMAP off                 | d0 = the type (>= first)
     lea     -12(%sp),%sp
     movem.l %d0-%d1/%a0,(%sp)
-    sub.l   MF_TAB+T_FIRST,%d0
-    cmp.l   MF_TAB+T_COUNT,%d0
+    sub.l   DKRT_MF_TAB+T_FIRST,%d0
+    cmp.l   DKRT_MF_TAB+T_COUNT,%d0
     bcc.s   1f
     bsr.w   mfn_row
     move.l  O_CLONE(%a0),%d0
@@ -89,7 +89,7 @@ mf_group:
     .globl mf_typemap0
 mf_typemap0:
     move.l  4(%sp),%d0
-    cmp.l   MF_TAB+T_FIRST,%d0
+    cmp.l   DKRT_MF_TAB+T_FIRST,%d0
     bcs.s   9f                          | a stock type (or a negative one: the range check below refuses it)
     movea.l %d0,%a1
     bsr.w   mfn_pg_count
@@ -97,7 +97,7 @@ mf_typemap0:
     beq.s   1f
     move.l  %d0,-(%sp)
     move.l  %a1,-(%sp)
-    movea.l MF_TAB+T_N_PAGE_COUNT,%a0
+    movea.l DKRT_MF_TAB+T_N_PAGE_COUNT,%a0
     jsr     (%a0)
     addq.l  #8,%sp
     jmp     mf_ret_tm0                  | ordinary pages plus an opt-in native callback page
@@ -110,7 +110,7 @@ mf_typemap0:
 mf_typemap1:
     move.l  0xc(%sp),-(%sp)
     move.l  0xc(%sp),-(%sp)
-    movea.l MF_TAB+T_N_DESCRIPTOR,%a0
+    movea.l DKRT_MF_TAB+T_N_DESCRIPTOR,%a0
     jsr     (%a0)
     addq.l  #8,%sp
     tst.l   %d0
@@ -118,7 +118,7 @@ mf_typemap1:
     move.l  (%sp)+,%d2
     jmp     mf_ret_tm1
 8:  move.l  8(%sp),%d0
-    cmp.l   MF_TAB+T_FIRST,%d0
+    cmp.l   DKRT_MF_TAB+T_FIRST,%d0
     bcs.s   9f
     movea.l %d0,%a1
     bsr.w   mfn_pg_count
@@ -144,7 +144,7 @@ mf_typemap1:
     .globl mf_typemap2
 mf_typemap2:
     move.l  0xc(%sp),%d0
-    cmp.l   MF_TAB+T_FIRST,%d0
+    cmp.l   DKRT_MF_TAB+T_FIRST,%d0
     bcs.s   9f
     move.l  %a0,%d1
     movea.l %d0,%a1
@@ -169,8 +169,8 @@ mf_typemap2:
 mfn_pg_count:
     bsr.w   mfn_call_ensure
     move.l  %d2,-(%sp)
-    move.l  MF_TAB+T_PGN,%d2
-    movea.l MF_TAB+T_PGROWS,%a0
+    move.l  DKRT_MF_TAB+T_PGN,%d2
+    movea.l DKRT_MF_TAB+T_PGROWS,%a0
     moveq   #0,%d1
     tst.l   %d2
     beq.s   9f
@@ -187,8 +187,8 @@ mfn_pg_count:
 | mfn_pg_page: d0 = type, d1 = page (< its count) -> a0 = the page's row; clobbers d1.
 mfn_pg_page:
     move.l  %d2,-(%sp)
-    move.l  MF_TAB+T_PGN,%d2
-    movea.l MF_TAB+T_PGROWS,%a0
+    move.l  DKRT_MF_TAB+T_PGN,%d2
+    movea.l DKRT_MF_TAB+T_PGROWS,%a0
     tst.l   %d2
     beq.s   8f
 1:  cmp.l   PG_MACH(%a0),%d0
@@ -208,8 +208,8 @@ mfn_pg_page:
 mfn_pg_slot:
     lea     -12(%sp),%sp
     movem.l %d2-%d4,(%sp)
-    move.l  MF_TAB+T_PGN,%d2
-    movea.l MF_TAB+T_PGROWS,%a0
+    move.l  DKRT_MF_TAB+T_PGN,%d2
+    movea.l DKRT_MF_TAB+T_PGROWS,%a0
     moveq   #0,%d3
     moveq   #0,%d4
     tst.l   %d2
@@ -240,17 +240,17 @@ mfn_pg_slot:
     .globl mf_frametype
 mf_frametype:
     mvs.b   0xd8c(%a0),%d0              | the stock move.b and ext.w in one (the upper word of d0 is dead)
-    cmp.l   MF_TAB+T_FIRST,%d0
+    cmp.l   DKRT_MF_TAB+T_FIRST,%d0
     blt.s   9f
     lea     -12(%sp),%sp
     movem.l %d1-%d2/%a1,(%sp)
     move.l  %d0,%d1
-    sub.l   MF_TAB+T_FIRST,%d1
-    cmp.l   MF_TAB+T_COUNT,%d1
+    sub.l   DKRT_MF_TAB+T_FIRST,%d1
+    cmp.l   DKRT_MF_TAB+T_COUNT,%d1
     bcc.s   1f
     move.l  #ROWSIZE,%d2
     muls.l  %d2,%d1
-    add.l   MF_TAB+T_ROWS,%d1
+    add.l   DKRT_MF_TAB+T_ROWS,%d1
     movea.l %d1,%a1
     move.l  O_OWN(%a1),%d2
     bne.s   1f
@@ -266,11 +266,11 @@ mf_frametype:
     .globl mf_reader
 mf_reader:
     mvs.b   0xde(%a0),%d0
-    cmp.l   MF_TAB+T_FIRST,%d0
+    cmp.l   DKRT_MF_TAB+T_FIRST,%d0
     blt.w   9f
     move.l  %d0,%d1
-    sub.l   MF_TAB+T_FIRST,%d1
-    cmp.l   MF_TAB+T_COUNT,%d1
+    sub.l   DKRT_MF_TAB+T_FIRST,%d1
+    cmp.l   DKRT_MF_TAB+T_COUNT,%d1
     bcc.w   9f
     move.l  4(%sp),%d1
     cmpi.l  #mf_rc0+4,%d1
@@ -300,10 +300,10 @@ mf_reader:
     tst.l   %d1
     bne.w   9f
     move.l  %a1,-(%sp)
-    sub.l   MF_TAB+T_FIRST,%d0
+    sub.l   DKRT_MF_TAB+T_FIRST,%d0
     move.l  #ROWSIZE,%d1
     muls.l  %d1,%d0
-    add.l   MF_TAB+T_ROWS,%d0
+    add.l   DKRT_MF_TAB+T_ROWS,%d0
     movea.l %d0,%a1
     move.l  O_CLONE(%a1),%d0
     movea.l (%sp)+,%a1
@@ -314,22 +314,22 @@ mf_reader:
     .globl mf_owner
 mf_owner:
     mvs.b   0xde(%a0),%d3
-    cmp.l   MF_TAB+T_FIRST,%d3
+    cmp.l   DKRT_MF_TAB+T_FIRST,%d3
     blt.s   9f
     lea     -8(%sp),%sp
     movem.l %d0/%a1,(%sp)
     move.l  %d3,%d0
-    sub.l   MF_TAB+T_FIRST,%d0
-    cmp.l   MF_TAB+T_COUNT,%d0
+    sub.l   DKRT_MF_TAB+T_FIRST,%d0
+    cmp.l   DKRT_MF_TAB+T_COUNT,%d0
     bcc.s   1f
     move.l  #ROWSIZE,%d3
     muls.l  %d3,%d0
-    add.l   MF_TAB+T_ROWS,%d0
+    add.l   DKRT_MF_TAB+T_ROWS,%d0
     movea.l %d0,%a1
     move.l  O_CLONE(%a1),%d3
     bra.s   2f
 1:  move.l  %d0,%d3
-    add.l   MF_TAB+T_FIRST,%d3
+    add.l   DKRT_MF_TAB+T_FIRST,%d3
 2:  movem.l (%sp),%d0/%a1
     lea     8(%sp),%sp
 9:  move.l  %d2,-(%sp)                  | the second displaced instruction

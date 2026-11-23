@@ -91,10 +91,8 @@ pub mod exports {
     #[cfg(test)]
     pub(crate) use dkrt_svc_machines::assign::seed_for_test;
     #[cfg(test)]
-    pub(crate) fn machines_row() -> &'static dkrt_abi::service::ServiceRow {
-        static ROW: dkrt_abi::service::ServiceRow =
-            dkrt_abi::service::ServiceRow::of::<dkrt_svc_machines::records::Machines, crate::package::core_api::RealCore>("machines", &dkrt_sdk::records::KINDS_MACHINES);
-        &ROW
+    pub(crate) fn machines_row() -> crate::package::svc_rows::RowSource<'static> {
+        crate::package::handlers::dks_decls::machines_source()
     }
     /// The shapes of the lfo service, for the runtime's own tests of the record path.
     #[cfg(test)]

@@ -1,7 +1,12 @@
-//! The layout of the image table `machines_info` of `core/machines` (its `[[info]]`): what the machines service reads of the patched image. The service file copies the
-//! table into its own bss for its assembler hooks (`dks/src/image.rs`); the crate reads the native page functions from the table the core gives (`CoreApi::info`).
+//! The image table `machines_info` of `core/machines` (its `[[info]]`): what the machines service reads of the patched image. The owner copies the table into `DKRT_MF_TAB`
+//! (`bind`, from `Provider::start`), where the assembler hooks of the service file read it; the crate reads the native page functions from the table the core gives
+//! (`CoreApi::info`).
 //!
 //! The words are big endian in the image (ColdFire is big endian, so a read of the word is the value). A word that is 0 was not bound: the service does not call it.
+use core::ptr::{addr_of_mut, read_volatile, write_volatile};
+use dkneeds::keys::name_hash;
+use dkrt_abi::core_api::CoreApi;
+use dkrt_sdk::{E_NO_REGISTRY, OK};
 
 /// `MACH`.
 pub const MAGIC: u32 = 0x4d41_4348;
@@ -40,4 +45,66 @@ pub mod w {
     pub const N_REGISTER_V2: usize = 17;
     pub const N_REMOVE: usize = 18;
     pub const N_TURN: usize = 19;
+}
+
+/// The byte offsets the assembler files name (`.equ T_NAME, offset`), for the test that compares them with `w`.
+pub const ASM_OFFSETS: &[(&str, usize)] = &[
+    ("T_FIRST", w::FIRST),
+    ("T_COUNT", w::COUNT),
+    ("T_ROWS", w::ROWS),
+    ("T_ENSURE", w::ENSURE),
+    ("T_N_PAGE_COUNT", w::N_PAGE_COUNT),
+    ("T_N_DESCRIPTOR", w::N_DESCRIPTOR),
+    ("T_N_CODE", w::N_CODE),
+    ("T_N_DRAW", w::N_DRAW),
+    ("T_N_OVERLAY", w::N_OVERLAY),
+    ("T_SLOTMAP", w::SLOTMAP),
+    ("T_PGROWS", w::PGROWS),
+    ("T_PGN", w::PGN),
+];
+
+/// The image table `machines_info`, copied by `bind`; the hooks of the service file read it (`T_*` of the assembler files). It is a table the assembler reads by name, so it stays
+/// a named static of the crate (`README.md`).
+#[no_mangle]
+pub static mut DKRT_MF_TAB: [u32; WORDS] = [0; WORDS];
+
+/// Bind the image table into `DKRT_MF_TAB`, or refuse (`E_NO_REGISTRY`: no usable `core/machines` in the image).
+///
+/// # Safety
+/// Nothing reads `DKRT_MF_TAB` meanwhile (the hooks are declared after it).
+pub unsafe fn bind<C: CoreApi>(core: &C) -> i32 {
+    bind_table(core, addr_of_mut!(DKRT_MF_TAB) as *mut u32)
+}
+
+/// The table of the image, or null: the image has no `core/machines`.
+unsafe fn image<C: CoreApi>(core: &C) -> *const u32 {
+    core.info(name_hash("machines_info"))
+}
+
+/// Is `src` a table this service can use (magic, version, the device the core runs on, and the words the hooks cannot do without)?
+unsafe fn usable<C: CoreApi>(core: &C, src: *const u32) -> bool {
+    !src.is_null()
+        && read_volatile(src.add(w::MAGIC)) == MAGIC
+        && read_volatile(src.add(w::VERSION)) == VERSION
+        && read_volatile(src.add(w::DEVICE)) == core.device_id()
+        && read_volatile(src.add(w::ENSURE)) != 0
+        && read_volatile(src.add(w::ROWS)) != 0
+}
+
+/// Copy the image table to `dst` (`WORDS` words), the magic last: a table is usable only when every word is in. `E_NO_REGISTRY` when the image has no usable table.
+///
+/// # Safety
+/// `dst` points at `WORDS` words.
+pub unsafe fn bind_table<C: CoreApi>(core: &C, dst: *mut u32) -> i32 {
+    let src = image(core);
+    if !usable(core, src) {
+        return E_NO_REGISTRY;
+    }
+    let mut i = 1;
+    while i < WORDS {
+        write_volatile(dst.add(i), read_volatile(src.add(i)));
+        i += 1;
+    }
+    write_volatile(dst, MAGIC);
+    OK
 }

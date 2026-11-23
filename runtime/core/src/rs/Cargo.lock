@@ -146,15 +146,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dkrt-svc-rows"
-version = "0.1.0"
-dependencies = [
- "dkneeds",
- "dkrt-abi",
- "dkrt-sdk",
-]
-
-[[package]]
 name = "dkrt-svc-project"
 version = "0.1.0"
 dependencies = [
@@ -171,6 +162,15 @@ dependencies = [
  "dkrt-sdk",
  "dkrt-svc-project",
  "dkrt-svc-rt",
+]
+
+[[package]]
+name = "dkrt-svc-rows"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
 ]
 
 [[package]]
