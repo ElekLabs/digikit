@@ -11,8 +11,10 @@ the read-only Nx graph queries ``pnpm nx:pilot show target|project|projects ...`
 """
 
 import json
+import os
 import re
 import shlex
+import subprocess
 import sys
 from typing import NoReturn
 
@@ -205,11 +207,49 @@ def check_fw(words: list[str]) -> None:
     print("{}")
 
 
+NX_SHOW_FLAGS = {"--json", "--verbose", "--affected"}
+NX_SHOW_VALUE_FLAGS = {"--check", "--base", "--head"}
+
+
 def check_nx_show(words: list[str]) -> None:
     rest = words[len(NX_SHOW_PREFIX) :]
     if not rest or rest[0] not in NX_SHOW_SUBCOMMANDS:
         deny("only `pnpm nx:pilot show target|project|projects` is allowed")
+    index = 1
+    while index < len(rest):
+        word = rest[index]
+        name = word.split("=", 1)[0]
+        if name in NX_SHOW_VALUE_FLAGS:
+            index += 1 if "=" in word else 2
+            continue
+        if word.startswith("-") and word not in NX_SHOW_FLAGS:
+            # e.g. --web starts a local server
+            deny(f"nx show option {word} is not on the allowlist")
+        index += 1
     print("{}")
+
+
+def worktree_roots() -> list[str]:
+    """The worktrees of this repository (the hook runs in the project directory)."""
+    out = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=2,
+    ).stdout
+    return [
+        os.path.realpath(line[len("worktree ") :])
+        for line in out.splitlines()
+        if line.startswith("worktree ")
+    ]
+
+
+def inside_worktree(directory: str) -> bool:
+    path = os.path.realpath(directory)
+    return any(
+        path == root or path.startswith(root + os.sep) for root in worktree_roots()
+    )
 
 
 def main() -> None:
@@ -258,6 +298,9 @@ def main() -> None:
         if word == "-C" and not saw_directory:
             if index + 1 >= len(words):
                 deny("git -C requires a directory")
+            # a foreign repository's config (fsmonitor, textconv, diff.external) could run a program
+            if not inside_worktree(words[index + 1]):
+                deny("git -C must name a worktree of this repository")
             saw_directory = True
             index += 2
             continue
