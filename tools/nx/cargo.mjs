@@ -194,7 +194,7 @@ const DAEMON_BUILD_SOURCES = [
   '{workspaceRoot}/devices/**/*',
   '{workspaceRoot}/ports/*.toml',
   '{workspaceRoot}/ports/fw/**/*',
-  '{workspaceRoot}/tests/scenarios/dn2.json',
+  '{workspaceRoot}/tests/scenarios/*.json', // read by include_str! in the emulator crates
   '{workspaceRoot}/sdk/sdk.toml',
   '{workspaceRoot}/runtime/core/abi.toml',
   '{workspaceRoot}/tools/patchkit/toolchain/**/*',
@@ -217,7 +217,7 @@ export const DAEMON_NODSP_EXTRA = [
   '{workspaceRoot}/runtime/core/abi.toml',
   '{workspaceRoot}/config/test-source-patterns.json',
   '{workspaceRoot}/tools/patchkit/toolchain/**/*',
-  '{workspaceRoot}/tests/scenarios/dn2.json',
+  '{workspaceRoot}/tests/scenarios/*.json', // read by include_str! in the emulator crates
 ];
 
 // Gate helper targets. They build under dist/ or out/native; out/ is never an Nx output.
