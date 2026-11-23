@@ -1,8 +1,8 @@
 //! `DkFiles`: the engine's `Files` over the SDK's file calls, and the write job's entries (I/O task and UI task).
 use super::c_strings::cpath;
+use super::host::Owner;
 use super::sdk_imports as sys;
 use super::sdk_imports::{REPLACE, STORE};
-
 use dkrt_svc_project::engine::Files;
 
 /// The file calls of the write job: the listing client's handle, which the I/O task reads.
@@ -48,13 +48,14 @@ impl Files for DkFiles {
 }
 
 /// The write job's step, in the I/O task (`dk_io_post`). It reaches the owner by its pointer, not through `with`: the UI task may be inside the owner (`tick`) while the I/O
-/// task runs the step, as the engine's own design has it (the step touches the writer only, which the UI task leaves alone while a job runs).
+/// task runs the step. The step forms references to the writer, the file buffer and the file client only (`Project::io_step`), never to the whole owner; the UI task leaves
+/// those alone while a job runs.
 pub unsafe extern "C" fn io_step(_arg: *mut u8) -> i32 {
     let project = crate::DK_SVC_OWNER.instance();
     if project.is_null() {
         return dkrt_sdk::E_NOT_FOUND;
     }
-    (*project).io_step()
+    Owner::io_step(project)
 }
 
 /// The end of the write job, in the UI task.

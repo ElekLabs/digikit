@@ -359,6 +359,17 @@ impl ProjectService {
         self.writer.io_step(files, &self.buffer)
     }
 
+    /// The write job's step through a raw pointer to the service: it forms references to the writer and the file buffer only, the two parts the UI task leaves alone while a
+    /// job runs. The I/O task uses it while the UI task may hold `&mut` to the rest of the service (inside `tick`), so no `&mut ProjectService` exists in the I/O task.
+    ///
+    /// # Safety
+    /// `this` points to a live service; the UI task does not touch `writer` or `buffer` until the job's `io_done`.
+    pub unsafe fn io_step_at<F: Files + ?Sized>(this: *mut ProjectService, files: &mut F) -> i32 {
+        let writer = &mut *core::ptr::addr_of_mut!((*this).writer);
+        let buffer = &*core::ptr::addr_of!((*this).buffer);
+        writer.io_step(files, buffer)
+    }
+
     /// The job ended (UI task): `status` is the last step's result, or the runtime's cancel code.
     pub fn io_done(&mut self, status: i32) {
         self.writer.io_done(status)

@@ -123,7 +123,7 @@ unsafe impl Host for TestHost {
             status => Err(status),
         }
     }
-    fn files(&self) -> NoFiles {
+    unsafe fn files(_: *const Self) -> NoFiles {
         NoFiles
     }
     fn begin_pass(&mut self) {}

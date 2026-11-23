@@ -151,7 +151,7 @@ impl Env for DkHost {
         }
     }
     fn post(&mut self) -> i32 {
-        // SAFETY: the step and the done function are this file's; the job reaches the state through the statics.
+        // SAFETY: the step and the done function are this file's; the job reaches the owner through its cell.
         unsafe {
             sys::dk_io_post(
                 Some(super::files::io_step),

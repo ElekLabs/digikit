@@ -85,3 +85,36 @@ fn the_tick_and_the_exports_reach_the_one_instance_that_start_made() {
     unsafe { file::glue::tick(core::ptr::null_mut()) };
     assert_eq!(passes(), None);
 }
+
+#[test]
+fn the_write_job_step_runs_without_the_owner_being_free() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    dk_svc_start().expect("start");
+    // the UI task is inside the owner (`tick`): the I/O task's step must still reach it, through the pointer, and with no job posted it has nothing to do
+    let inside = DK_SVC_OWNER.with(|_| {
+        // SAFETY: the entry takes no pointer the test does not give
+        unsafe { file::glue::io_step(core::ptr::null_mut()) }
+    });
+    assert_eq!(inside, Some(0));
+    dk_svc_stop();
+}
+
+#[test]
+fn an_export_called_inside_the_owner_answers_neutrally_and_changes_nothing() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    dk_svc_start().expect("start");
+    // `with` refuses a nested call. Nothing in `tick` calls an export or the overlay table synchronously (the engine's module settings change only queues a reload), so this
+    // is not reached on the device; the test pins that a nested call is refused and leaves the state as it was
+    let nested = DK_SVC_OWNER.with(|_| {
+        // SAFETY: as above
+        unsafe {
+            (
+                file::glue::dk_project_status(),
+                (file::glue::SCOPE.put)(b"m".as_ptr(), 1, b"k".as_ptr(), 1, b"v".as_ptr(), 1),
+            )
+        }
+    });
+    assert_eq!(nested, Some((0, E_SET_OFF)));
+    assert_eq!(passes(), Some(0));
+    dk_svc_stop();
+}

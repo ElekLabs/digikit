@@ -27,4 +27,9 @@ Differences from the shortcuts template:
   table the runtime forwards the settings calls to). Nothing else is static.
 - The write job's entries `io_step` (I/O task) and `io_done` reach the owner with `DK_SVC_OWNER.instance()`, not `with`: the I/O task must not find the cell busy while the UI task is in
   `tick`. Everything else uses `with` and answers "no service" on `None` (`E_SET_NOKEY` for a get, `E_SET_OFF` for a put or remove, `E_NOT_FOUND` for `dk_project_current`).
+- Nesting: `with` refuses a call inside another `with` of the same cell, and the exports and overlay table then answer "no service". The tick is the only code that runs inside
+  `with` for long, and nothing in it calls `dk_project_status`, `dk_project_current` or the overlay table synchronously: a module's settings change only queues a reload
+  (`dkc_settings_changed`), which the runtime runs outside the tick. `tests/file.rs` pins the refusal.
+- The I/O step forms references to the engine's writer and file buffer and to the host's file client only (`Project::io_step`, `ProjectService::io_step_at`, `Host::files` take
+  raw pointers), so it never aliases the `&mut` the UI task holds in `tick` over the other fields.
 - `service-check` still reports `src/records.rs` missing: the service has no record kind, and the check requires the file.

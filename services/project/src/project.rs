@@ -23,8 +23,12 @@ pub unsafe trait Host: Env {
     /// nothing that needs a drop.
     fn open(&mut self) -> Result<(), Status>;
 
-    /// The client of the write job's file calls.
-    fn files(&self) -> Self::Files;
+    /// The client of the write job's file calls, read through a raw pointer: the I/O task calls it while the UI task may hold `&mut` to the host state, so it forms no
+    /// reference to it.
+    ///
+    /// # Safety
+    /// `this` points to a live host state; the fields that hold the client are not written after `open`.
+    unsafe fn files(this: *const Self) -> Self::Files;
 
     /// A UI pass begins (the clock when the image has no block counter).
     fn begin_pass(&mut self);
@@ -56,10 +60,14 @@ impl<H: Host> Project<H> {
         self.engine.tick(&mut self.host, pending);
     }
 
-    /// The write job's step, in the I/O task.
-    pub fn io_step(&mut self) -> i32 {
-        let mut files = self.host.files();
-        self.engine.io_step(&mut files)
+    /// The write job's step, in the I/O task. It takes a pointer, not `&mut self`: the UI task may be inside `tick` with `&mut` to the whole owner, and the step reads and
+    /// writes the writer and the file buffer of the engine and the file client of the host only.
+    ///
+    /// # Safety
+    /// `this` points to a live owner (the cell's instance); the UI task leaves the writer and the buffer alone while a job runs.
+    pub unsafe fn io_step(this: *mut Self) -> i32 {
+        let mut files = H::files(core::ptr::addr_of!((*this).host));
+        ProjectService::io_step_at(core::ptr::addr_of_mut!((*this).engine), &mut files)
     }
 
     /// The end of the write job, in the UI task.

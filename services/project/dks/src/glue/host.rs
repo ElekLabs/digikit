@@ -54,8 +54,10 @@ unsafe impl Host for DkHost {
         Ok(())
     }
 
-    fn files(&self) -> DkFiles {
-        DkFiles { handle: self.files }
+    unsafe fn files(this: *const Self) -> DkFiles {
+        DkFiles {
+            handle: core::ptr::read_volatile(core::ptr::addr_of!((*this).files)),
+        }
     }
 
     fn begin_pass(&mut self) {
