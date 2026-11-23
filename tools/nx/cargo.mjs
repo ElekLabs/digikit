@@ -182,6 +182,7 @@ const DAEMON_BUILD_SOURCES = [
   // The emulator guide is developer documentation and is never read by the daemon build.
   '!{workspaceRoot}/packages/emulator/README.md',
   '{workspaceRoot}/packages/dkaddrmap/**/*',
+  '{workspaceRoot}/packages/dkprof/**/*',
   '{workspaceRoot}/packages/dksharc/**/*',
   '{workspaceRoot}/packages/dkneeds/**/*',
   '{workspaceRoot}/packages/dksample/**/*',
