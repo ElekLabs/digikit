@@ -14,7 +14,14 @@ const devices = (workspaceRoot) =>
     .flatMap((file) => {
       const t = parse(readFileSync(join(workspaceRoot, file), 'utf8'));
       if (!t.device?.short) return [];
-      return [{ short: t.device.short, stem: basename(file, '.toml'), cell: Boolean(t.acceptance?.ready_dir) }];
+      return [
+        {
+          short: t.device.short,
+          stem: basename(file, '.toml'),
+          cell: Boolean(t.acceptance?.ready_dir),
+          dsp: t.capabilities?.dsp !== 'none',
+        },
+      ];
     });
 const globsOf = ({ stem, short }) => [`devices/${stem}.toml`, `devices/**/${stem}-*.toml`, `ports/${short}-*.toml`];
 
@@ -24,6 +31,11 @@ export const deviceShorts = (workspaceRoot = root) => devices(workspaceRoot).map
 export const cellShorts = (workspaceRoot = root) =>
   devices(workspaceRoot)
     .filter((d) => d.cell)
+    .map((d) => d.short);
+/** The short ids of the devices without a SHARC DSP (`[capabilities] dsp = "none"`): their daemon is the build without a core. */
+export const noDspShorts = (workspaceRoot = root) =>
+  devices(workspaceRoot)
+    .filter((d) => !d.dsp)
     .map((d) => d.short);
 /** Repository-relative globs of the files of the device `short`. */
 export const filesOf = (short, workspaceRoot = root) => {

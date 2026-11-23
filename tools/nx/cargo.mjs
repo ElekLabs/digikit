@@ -168,6 +168,37 @@ const CRATE_TARGETS = {
   },
 };
 
+// The sources the daemon is built from (SOURCE_GLOBS of tools/devtools/emud_key.py, without the Python tools that run the build).
+// The store keys the binary by content; these inputs make a source edit select the task, and so every task that consumes the binary.
+const DAEMON_BUILD_SOURCES = [
+  '{workspaceRoot}/Cargo.toml',
+  '{workspaceRoot}/Cargo.lock',
+  '{workspaceRoot}/rust-toolchain*',
+  '{workspaceRoot}/.cargo/**/*',
+  '{workspaceRoot}/packages/emulator/**/*',
+  // The emulator guide is developer documentation and is never read by the daemon build.
+  '!{workspaceRoot}/packages/emulator/README.md',
+  '{workspaceRoot}/packages/dkaddrmap/**/*',
+  '{workspaceRoot}/packages/dksharc/**/*',
+  '{workspaceRoot}/packages/dkneeds/**/*',
+  '{workspaceRoot}/packages/dksample/**/*',
+  '{workspaceRoot}/packages/dkupload/**/*',
+  '{workspaceRoot}/packages/patchkit/**/*',
+  '{workspaceRoot}/runtime/core/fit/{Cargo.toml,build.rs,src/**/*}',
+  '{workspaceRoot}/runtime/core/sdk/{Cargo.toml,build.rs,src/**/*}',
+  // Test sources (config/test-source-patterns.json): `#[cfg(test)]` modules that the release build does not compile.
+  ...testSourceGlobs('{workspaceRoot}/{packages,modules,runtime,services,image-modules,ports/bindings}', '.rs'),
+  '{workspaceRoot}/devices/**/*',
+  '{workspaceRoot}/ports/*.toml',
+  '{workspaceRoot}/ports/fw/**/*',
+  '{workspaceRoot}/tests/scenarios/dn2.json',
+  '{workspaceRoot}/sdk/sdk.toml',
+  '{workspaceRoot}/runtime/core/abi.toml',
+  '{workspaceRoot}/tools/patchkit/toolchain/**/*',
+  '{workspaceRoot}/tools/sharc_dev/sharc_core/seed_tables.py',
+  '{workspaceRoot}/config/test-source-patterns.json',
+];
+
 // Gate helper targets. They build under dist/ or out/native; out/ is never an Nx output.
 const GATE = {
   'digi-control': {
@@ -181,35 +212,8 @@ const GATE = {
         '{workspaceRoot}/dist/bytes/daemon-test-*.key',
       ],
       inputs: [
-        // The sources the daemon is built from: SOURCE_GLOBS of tools/devtools/emud_key.py. The store keys the binary by
-        // content; these inputs make a source edit select this task, and so every task that consumes dist/daemons.json.
-        '{workspaceRoot}/Cargo.toml',
-        '{workspaceRoot}/Cargo.lock',
-        '{workspaceRoot}/rust-toolchain*',
-        '{workspaceRoot}/.cargo/**/*',
-        '{workspaceRoot}/packages/emulator/**/*',
-        // The emulator guide is developer documentation and is never read by the daemon build.
-        '!{workspaceRoot}/packages/emulator/README.md',
-        '{workspaceRoot}/packages/dkaddrmap/**/*',
-        '{workspaceRoot}/packages/dksharc/**/*',
-        '{workspaceRoot}/packages/dkneeds/**/*',
-        '{workspaceRoot}/packages/dksample/**/*',
-        '{workspaceRoot}/packages/dkupload/**/*',
-        '{workspaceRoot}/packages/patchkit/**/*',
-        '{workspaceRoot}/runtime/core/fit/{Cargo.toml,build.rs,src/**/*}',
-        '{workspaceRoot}/runtime/core/sdk/{Cargo.toml,build.rs,src/**/*}',
-        // Test sources (config/test-source-patterns.json): `#[cfg(test)]` modules that the release build does not compile.
-        ...testSourceGlobs('{workspaceRoot}/{packages,modules,runtime,services,image-modules,ports/bindings}', '.rs'),
-        '{workspaceRoot}/devices/**/*',
-        '{workspaceRoot}/ports/*.toml',
-        '{workspaceRoot}/ports/fw/**/*',
-        '{workspaceRoot}/tests/scenarios/dn2.json',
-        '{workspaceRoot}/sdk/sdk.toml',
-        '{workspaceRoot}/runtime/core/abi.toml',
-        '{workspaceRoot}/tools/patchkit/toolchain/**/*',
-        '{workspaceRoot}/tools/sharc_dev/sharc_core/seed_tables.py',
+        ...DAEMON_BUILD_SOURCES,
         '{workspaceRoot}/tools/devtools/emud_key.py',
-        '{workspaceRoot}/config/test-source-patterns.json',
         '{workspaceRoot}/tools/devtools/verify_build.py',
         '{workspaceRoot}/tools/devtools/stablebin.py',
         '{workspaceRoot}/tools/devtools/store.py',
@@ -224,6 +228,24 @@ const GATE = {
         commands: [
           'mkdir -p dist',
           'CARGO_BUILD_JOBS=${DIGI_JOBS:-4} uv run python -m tools.devtools.verify_build daemons --env-out dist/daemons.json',
+        ],
+        parallel: false,
+        cwd: '.',
+      },
+    },
+    'daemon-nodsp': {
+      executor: 'nx:run-commands',
+      cache: true,
+      parallelism: true,
+      description:
+        'Builds digi-emud without a SHARC core (the daemon of the devices with `[capabilities] dsp = "none"`, which boot cold) into dist/bin/digi-emud-nodsp: the binary the daemons target builds for them.',
+      inputs: [...DAEMON_BUILD_SOURCES, '{workspaceRoot}/tools/nx/rust-env.mjs', '{workspaceRoot}/mise.toml'],
+      outputs: ['{workspaceRoot}/dist/bin/digi-emud-nodsp'],
+      options: {
+        commands: [
+          // the no-core target dir and the cf-profile variant of the daemon (every workbench daemon has the run-time ColdFire profile)
+          'CARGO_BUILD_JOBS=${DIGI_JOBS:-4} node tools/nx/rust-env.mjs --variant cfprof -- cargo build --release --locked --manifest-path packages/emulator/control/Cargo.toml --bin digi-emud --features cf-profile',
+          `mkdir -p dist/bin && node tools/nx/rust-env.mjs --variant cfprof -- sh -c 'cp "$CARGO_TARGET_DIR/release/digi-emud" dist/bin/digi-emud-nodsp.tmp && mv -f dist/bin/digi-emud-nodsp.tmp dist/bin/digi-emud-nodsp'`,
         ],
         parallel: false,
         cwd: '.',
