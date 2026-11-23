@@ -30,6 +30,8 @@ Step format (TOML `[[segment.step]]` / `[[step]]`, exactly one action key each; 
                                    moves a value by about nothing)
     wait_ms = 300                  run that many emulated milliseconds
     expect_frame = "name"          hash of the OLED frame against the golden (PNG to out/); `differs_from = "other"`
+                                   `within_ms = 3000` polls emulated time until the firmware shows the golden (a bound against a hang,
+                                   not a wait: the boot's project load and the save end by themselves)
     expect_pcm_db = {min = -60, max = -3}   peak 100 ms-window RMS (dBFS) since the last input started
     expect_no_fault = true         assert the health now (it is also asserted after every input)
     expect_mem = {addr = 0x4265338c, mask = 0xff00, eq = 0x0700}   a ColdFire word (mem.cf.peek) under a mask;
@@ -1091,9 +1093,28 @@ class Session:
         _, raw = self.emu.frame()
         return hashlib.sha256(raw).hexdigest(), raw
 
-    def expect_frame(self, name: str, differs_from: str | None = None) -> None:
+    FRAME_POLL_MS = 50
+
+    def frame_when_reached(self, key: str, within_ms: float) -> tuple[str, bytes]:
+        """The frame once the firmware shows the golden of KEY, polled in emulated time every FRAME_POLL_MS for at most
+        WITHIN_MS (a guard against a hang, not a delay: the poll ends when the firmware has got there). Without a golden to
+        wait for (`--update`, or none recorded) it runs the whole bound and takes the last frame."""
+        want = None if self.update else self.goldens.get(key)
         digest, raw = self.frame()
+        waited = 0.0
+        while digest != want and waited < within_ms:
+            self.run_ms(self.FRAME_POLL_MS)
+            self.health(f"wait for {key}")
+            waited += self.FRAME_POLL_MS
+            digest, raw = self.frame()
+        self.timings["frame_wait_ms"] = self.timings.get("frame_wait_ms", 0.0) + waited
+        return digest, raw
+
+    def expect_frame(
+        self, name: str, differs_from: str | None = None, within_ms: float = 0
+    ) -> None:
         key = f"{self.cell.golden_prefix}/{self.segment}/{name}"
+        digest, raw = self.frame_when_reached(key, within_ms)
         png_dir = OUT / "frames" / self.cell.slug
         png_dir.mkdir(parents=True, exist_ok=True)
         from tools.control.digi_client import oled_png
@@ -1259,7 +1280,11 @@ class Session:
                 self.run_ms(step["wait_ms"])
                 self.health(f"wait {step['wait_ms']} ms")
             elif "expect_frame" in step:
-                self.expect_frame(step["expect_frame"], step.get("differs_from"))
+                self.expect_frame(
+                    step["expect_frame"],
+                    step.get("differs_from"),
+                    step.get("within_ms", 0),
+                )
             elif "expect_pcm_db" in step:
                 want = step["expect_pcm_db"]
                 self.expect_pcm_db(want.get("min"), want.get("max"))

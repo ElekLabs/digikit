@@ -4,9 +4,8 @@
 [[segment]]
 name = "boot"
 [[segment.step]]
-wait_ms = 1000
-[[segment.step]]
 expect_frame = "main"
+within_ms = 3000
 [[segment.step]]
 expect_no_fault = true
 
@@ -105,9 +104,8 @@ expect_frame = "save_prompt"
 [[segment.step]]
 tap = "YES"
 [[segment.step]]
-wait_ms = 8000
-[[segment.step]]
 expect_frame = "saved"
+within_ms = 10000
 [[segment.step]]
 tap = "SETTINGS"
 [[segment.step]]
@@ -127,9 +125,8 @@ expect_frame = "project_list"
 [[segment.step]]
 tap = "YES"
 [[segment.step]]
-wait_ms = 5000
-[[segment.step]]
 expect_frame = "reloaded"
+within_ms = 10000
 [[segment.step]]
 expect_no_fault = true
 

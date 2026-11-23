@@ -47,6 +47,9 @@ modules = ["core/fx"]
 
 # SETTINGS > DIGIKIT in the system package's menu (finding 28; the cards carry digikit/system.dksp): the tour of
 # runtime/apps/digikit-menu/tests/menu.toml walks ABOUT, MEMORY and MODULES on the real firmware.
+# The MEMORY page's CPU row is the module arena (CAPACITY kind ARENA), not processor load: the package block (image, relocation table and bss, placed at
+# the arena top) is 249,664 B of the 524,288 B arena (as measured on the cell with a sample card), so `digikit_memory` reads 47% with the package and 0% core-only. Not load-dependent; it moves
+# when the package's size crosses a percent step, then re-pin it from the reported figure.
 [[cell]]
 device = "dt2"
 firmware = "1.17"
