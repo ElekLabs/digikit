@@ -1,6 +1,13 @@
 import { expect, it } from 'vitest';
 import { parseOwners } from '../area-paths.mjs';
-import { DEVICES, DEVICE_SMOKE, areaSelection, halvesOfDevices, selectionPairs } from '../test-subset.mjs';
+import {
+  DEVICES,
+  DEVICE_SMOKE,
+  areaSelection,
+  conformanceSelection,
+  halvesOfDevices,
+  selectionPairs,
+} from '../test-subset.mjs';
 
 const project = (name: string, targets: string[], runtimeAcceptance: object[]) => ({
   name,
@@ -104,4 +111,36 @@ it('widens a device file to the halves of its device only', () => {
   // with a path that has no area the device filter is gone
   expect(selected(['devices/x-device.toml', 'sdk/sdk.toml']).got.wideDevices).toBeNull();
   expect(halvesOfDevices(halves, null)).toEqual(halves);
+});
+
+it('selects the records of a changed module and the smoke set', () => {
+  const { got, pairs } = selected(['modules/m/src/a.c']);
+  expect(got.mapped).toEqual([]);
+  expect(pairs).toEqual([`core/m:test-device--${d1}`, 'gate-device-smoke:device']);
+});
+
+it('selects the tests that import a changed harness file, and no others', () => {
+  const closureOf = (root: string, file: string) => [`${root}/${file}`, ...(root === 'modules/m' ? ['h/kit.ts'] : [])];
+  expect(selected(['h/kit.ts'], [], closureOf).pairs).toEqual([
+    `core/m:test-device--${d1}`,
+    'gate-device-smoke:device',
+  ]);
+});
+
+it('selects the conformance of a changed module, all of it for loading or a wide path', () => {
+  const affected = new Set(['core/m:test-conformance', 'core/other:test-conformance', 'core/m:pack']);
+  const conf = (changed: string[]) => {
+    const got = selected(changed).got;
+    return conformanceSelection(affected, areaGraph, { changed, tags: got.tags, wideAll: got.wideAll });
+  };
+  expect(conf(['modules/m/src/a.c'])).toEqual(['core/m:test-conformance']);
+  expect(conf(['packages/patchkit/src/x.rs'])).toEqual(['core/m:test-conformance', 'core/other:test-conformance']);
+  const loading = conformanceSelection(affected, areaGraph, { changed: [], tags: ['C:loading'], wideAll: false });
+  expect(loading).toHaveLength(2);
+});
+
+it('goes wide for a shared runtime module, and names the file and why', () => {
+  const { got } = selected(['runtime/core/src/rs/src/entry.rs']);
+  expect(got.wideAll).toBe(true);
+  expect(got.wide[0]!.why).toContain('shared runtime module dkrt::entry');
 });
