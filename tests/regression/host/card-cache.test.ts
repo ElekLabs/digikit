@@ -28,6 +28,18 @@ test('a built card carries its key as the content id the daemon puts in its snap
   expect(fs.readFileSync(path.join(path.dirname(card), 'card.key'), 'utf8')).toBe('abc123');
 });
 
+test('a card built on a base, whose build already wrote a read-only card.key, takes the cache key', async () => {
+  // linkCard writes the derived card's id read-only (write-safety.ts); the cache then sets its own key on the same file
+  const card = await cachedCard('abc123', (work) => {
+    const dir = path.join(work, 'out');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'card.img'), 'card');
+    fs.writeFileSync(path.join(dir, 'card.key'), 'base-and-overlay', { mode: 0o444 });
+    return Promise.resolve(path.join(dir, 'card.img'));
+  });
+  expect(fs.readFileSync(path.join(path.dirname(card), 'card.key'), 'utf8')).toBe('abc123');
+});
+
 test('the hash of the card builder sources changes when a source changes', () => {
   fs.writeFileSync(path.join(root, 'builder.ts'), 'one');
   const before = sourcesHash(root, ['builder.ts']);

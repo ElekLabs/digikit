@@ -202,7 +202,8 @@ export async function cachedCard(key: string, produce: (work: string) => Promise
     const made = await produce(work);
     const dir = path.dirname(made);
     // The content id the daemon puts in its snapshot key (see `card_identity` in packages/emulator/control).
-    fs.writeFileSync(path.join(dir, 'card.key'), key, { mode: 0o444 });
+    // atomic: a build through linkCard has already written a read-only card.key here
+    writeIdFile(path.join(dir, 'card.key'), key);
     for (const name of ['card.img', 'overlay.bin']) {
       const file = path.join(dir, name);
       if (fs.existsSync(file)) fs.chmodSync(file, 0o444);
