@@ -1,12 +1,20 @@
+import fs from 'node:fs';
 import type { Device } from '@digi/test-support';
-import { cachedRunDir, daemonBinary, FIRMWARE } from './devices.ts';
+import { cachedRunDir, daemonBinary, FIRMWARE, snapshotStore } from './devices.ts';
 import { liveCard } from './live-card.ts';
+
+/** The snapshot store of the daemon build, made if missing (the claim of a run dir does this for the sessions that claim one). */
+function sharedSnapshotDir(binary: string, device: Device): string | undefined {
+  const dir = snapshotStore(binary, device);
+  if (dir) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 /**
  * The session options of a live patched session. It starts on the cached card of `liveCard`; `blankCard: true` leaves the card to the
  * daemon (a test of the stock initialisation of a blank card); `stableBlocks` replaces the stable period of the card's selection record (0: the
  * runtime's default of 30 s, for a test of the boot counter). Mirror sessions and `fresh: true` keep a fresh run dir (the mirror folder
- * must start empty).
+ * must start empty); every session shares the snapshot store, which is keyed by what the card holds, not by the run dir.
  */
 export function liveOptions(
   device: Device,
@@ -14,7 +22,9 @@ export function liveOptions(
 ) {
   const binary = daemonBinary(device);
   const { fresh, blankCard, stableBlocks, ...rest } = extra;
-  const claim = extra.mirror || fresh ? undefined : cachedRunDir(device);
+  // Only a session that uses the cached run dir claims it (a pid-locked dir); the others take the snapshot store alone.
+  const own = extra.mirror || fresh;
+  const claim = own ? undefined : cachedRunDir(device);
   return {
     device,
     firmware: FIRMWARE[device],
@@ -22,6 +32,6 @@ export function liveOptions(
     ...(blankCard ? {} : { cardImage: () => liveCard(device, FIRMWARE[device], stableBlocks) }),
     ...rest,
     runDir: claim?.dir,
-    snapshotDir: claim?.snapshotDir,
+    snapshotDir: claim ? claim.snapshotDir : sharedSnapshotDir(binary, device),
   };
 }

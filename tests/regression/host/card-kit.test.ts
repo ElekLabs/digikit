@@ -12,7 +12,7 @@ import {
   readSectors,
   recordsIn,
 } from '../runtime/card-kit.ts';
-import { cardAfter, encodeOverlay } from '../runtime/write-safety.ts';
+import { cardAfter, encodeOverlay, linkCard } from '../runtime/write-safety.ts';
 
 const directories: string[] = [];
 const tmp = () => {
@@ -114,4 +114,37 @@ describe('card sectors', () => {
       expect(copies[1]).toEqual(copies[0]);
     },
   );
+});
+
+describe('card content id of a linked card', () => {
+  const base = (key?: string) => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'card.img'), 'image');
+    if (key) fs.writeFileSync(path.join(dir, 'card.key'), key);
+    return path.join(dir, 'card.img');
+  };
+  const keyOf = (card: string) => fs.readFileSync(path.join(path.dirname(card), 'card.key'), 'utf8');
+
+  test('the same base and writes give the same id in another directory', () => {
+    const baseCard = base('base-key');
+    const a = linkCard(baseCard, path.join(tmp(), 'one'), Buffer.from('writes'));
+    const b = linkCard(baseCard, path.join(tmp(), 'two'), Buffer.from('writes'));
+    expect(keyOf(a)).toBe(keyOf(b));
+  });
+
+  test('other writes or another base give another id, never the id of the base', () => {
+    const baseCard = base('base-key');
+    const a = linkCard(baseCard, path.join(tmp(), 'one'), Buffer.from('writes'));
+    const b = linkCard(baseCard, path.join(tmp(), 'two'), Buffer.from('other writes'));
+    const c = linkCard(base('another-key'), path.join(tmp(), 'three'), Buffer.from('writes'));
+    expect(new Set([keyOf(a), keyOf(b), keyOf(c), 'base-key']).size).toBe(4);
+  });
+
+  test('a base without an id gives a card without one, and an old id in the directory goes', () => {
+    const dir = path.join(tmp(), 'card');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'card.key'), 'stale');
+    const card = linkCard(base(), dir, Buffer.from('writes'));
+    expect(fs.existsSync(path.join(path.dirname(card), 'card.key'))).toBe(false);
+  });
 });

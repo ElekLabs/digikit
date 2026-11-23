@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { cloneFile, type Device } from '@digi/test-support';
+import { writeIdFile } from './card-cache.ts';
 import { cardStore, deviceProfile, expansionRegion, uploadStore } from './device-data.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 
@@ -149,6 +151,18 @@ export function linkCard(base: string, dir: string, overlay: Buffer): string {
     cloneFile(base, card);
   }
   fs.writeFileSync(overlayFile(card), overlay);
+  // The content id of the new card (`card.key`, which the daemon puts in its snapshot key): the id of the base and the sha256 of the
+  // writes, so equal content in another directory finds the snapshot and other writes never share one. A base with no id gives none.
+  const id = path.join(dir, 'card.key');
+  const baseId = path.join(path.dirname(base), 'card.key');
+  fs.rmSync(id, { force: true });
+  if (fs.existsSync(baseId)) {
+    const text = createHash('sha256')
+      .update(`${fs.readFileSync(baseId, 'utf8').trim()}\0${createHash('sha256').update(overlay).digest('hex')}`)
+      .digest('hex')
+      .slice(0, 32);
+    writeIdFile(id, text);
+  }
   return card;
 }
 

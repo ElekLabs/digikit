@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { cachedCard, sourcesHash } from '../runtime/card-cache.ts';
+import type { Device } from '@digi/test-support';
+import { FIRMWARE } from '../runtime/devices.ts';
+import { cachedCard, cardSpecKey, sourcesHash } from '../runtime/card-cache.ts';
 
 let root: string;
 beforeEach(() => {
@@ -40,4 +42,26 @@ test('a card dir of an earlier build gets its content id when it is reused', asy
   fs.writeFileSync(path.join(dir, 'card.img'), 'card');
   const card = await cachedCard('abc123', () => Promise.reject(new Error('must not rebuild')));
   expect(fs.readFileSync(path.join(path.dirname(card), 'card.key'), 'utf8')).toBe('abc123');
+});
+
+const device = Object.keys(FIRMWARE)[0] as Device;
+const put = (file: string, text: string) => {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, text);
+  return file;
+};
+
+test('a card spec key follows the content of drive files and folder, not their paths', () => {
+  const at = (dir: string, text: string) => ({
+    modules: [],
+    drive: [{ name: 'Samples/a.bin', file: put(path.join(root, dir, 'a.bin'), text) }],
+    folder: path.join(root, dir, 'folder'),
+  });
+  put(path.join(root, 'one', 'folder', 'x.wav'), 'x');
+  put(path.join(root, 'two', 'folder', 'x.wav'), 'x');
+  const one = cardSpecKey(device, at('one', 'same'));
+  expect(cardSpecKey(device, at('two', 'same'))).toBe(one);
+  expect(cardSpecKey(device, at('two', 'other'))).not.toBe(one);
+  put(path.join(root, 'two', 'folder', 'x.wav'), 'y');
+  expect(cardSpecKey(device, at('two', 'same'))).not.toBe(one);
 });
