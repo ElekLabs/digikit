@@ -517,8 +517,8 @@
 
 <script>
   const DATA = __DATA__;
-  const isDsp = DATA.cpu === "sharc";
-  const isPeer = DATA.image.endsWith("-peer");
+  const isDsp = DATA.cpu === 'sharc';
+  const isPeer = DATA.image.endsWith('-peer');
   const state = { group: null, decisions: {}, db: null, local: false, canWrite: false, pending: {}, drafts: {} };
   const $ = (id) => document.getElementById(id);
   const rowsByGroup = new Map();
@@ -586,7 +586,13 @@
         .toLowerCase();
       if (isDsp) {
         const text = hay.replaceAll('_', ' ');
-        if (!q.replaceAll('_', ' ').split(/\s+/).every((word) => text.includes(word))) return false;
+        if (
+          !q
+            .replaceAll('_', ' ')
+            .split(/\s+/)
+            .every((word) => text.includes(word))
+        )
+          return false;
       } else if (!hay.includes(q)) return false;
     }
     return true;
@@ -780,9 +786,7 @@
         lab.conf ? el('span', { class: 'chip conf-' + lab.conf, text: 'confidence ' + lab.conf }) : null,
         el('span', { class: 'muted mono', text: 'score ' + r.sc.toFixed(2) }),
       ),
-      lab.role
-        ? el('div', { class: 'role', text: lab.role })
-        : null,
+      lab.role ? el('div', { class: 'role', text: lab.role }) : null,
       el(
         'dl',
         { class: 'kv' },
@@ -794,16 +798,38 @@
           : null,
         r.by ? [el('dt', { text: 'Called by' }), el('dd', { text: r.by })] : null,
         r.ck ? [el('dt', { text: 'Calls' }), el('dd', { class: 'mono', text: r.ck })] : null,
-        r.hint ? [el('dt', { text: isDsp ? 'DSP hints' : 'UI string' }), el('dd', { text: isDsp ? r.hint : '“' + r.hint + '”' })] : null,
+        r.hint
+          ? [
+              el('dt', { text: isDsp ? 'DSP hints' : 'UI string' }),
+              el('dd', { text: isDsp ? r.hint : '“' + r.hint + '”' }),
+            ]
+          : null,
         el('dt', { text: 'Rule' }),
-        el('dd', { class: 'mono', text: isDsp ? r.rule : r.rule + ' · ' + r.size + ' bytes' + (isPeer ? '' : ' · ' + r.uic + ' UI callers') }),
-        isDsp ? [
-          el('dt', { text: 'Instructions' }),
-          el('dd', { text: r.size + ' instructions' + (r.dsp.bytes ? ' · ' + r.dsp.bytes + ' bytes' : '') }),
-          el('dt', { text: 'Control flow' }),
-          el('dd', { text: r.dsp.callers + ' callers · ' + r.dsp.callees + ' callees · ' + r.dsp.loops + ' loops (' + r.dsp.do + ' hardware DO)' }),
-          ...(r.dsp.prof_insns ? [el('dt', { text: 'Profile' }), el('dd', { text: r.dsp.prof_insns + ' executed instructions' })] : []),
-        ] : null,
+        el('dd', {
+          class: 'mono',
+          text: isDsp ? r.rule : r.rule + ' · ' + r.size + ' bytes' + (isPeer ? '' : ' · ' + r.uic + ' UI callers'),
+        }),
+        isDsp
+          ? [
+              el('dt', { text: 'Instructions' }),
+              el('dd', { text: r.size + ' instructions' + (r.dsp.bytes ? ' · ' + r.dsp.bytes + ' bytes' : '') }),
+              el('dt', { text: 'Control flow' }),
+              el('dd', {
+                text:
+                  r.dsp.callers +
+                  ' callers · ' +
+                  r.dsp.callees +
+                  ' callees · ' +
+                  r.dsp.loops +
+                  ' loops (' +
+                  r.dsp.do +
+                  ' hardware DO)',
+              }),
+              ...(r.dsp.prof_insns
+                ? [el('dt', { text: 'Profile' }), el('dd', { text: r.dsp.prof_insns + ' executed instructions' })]
+                : []),
+            ]
+          : null,
         el('dt', { text: DATA.other + ' pair' }),
         el(
           'dd',
@@ -1019,7 +1045,8 @@
     ' of ' +
     DATA.total_rows +
     ' candidates shown. The full catalogue: uv run python -m tools.coldfire.fw catalog -i ' +
-    DATA.image + (isDsp ? ' --cpu sharc' : '') +
+    DATA.image +
+    (isDsp ? ' --cpu sharc' : '') +
     '.';
   render();
   followHash();
