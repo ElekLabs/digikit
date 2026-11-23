@@ -1,4 +1,4 @@
-import { encoder, emulatorRead, readTopMenuItems, viewStackFacts, type Device } from '@digi/test-support';
+import { encoder, emulatorRead, readTopMenuItems, readViewStack, viewStackFacts, type Device } from '@digi/test-support';
 import { expect } from 'vitest';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { REDRAW, SETTLE } from '@digi/regression/runtime/fx-live.ts';
@@ -54,12 +54,14 @@ runtimeTests(
     const facts = viewStackFacts(device);
     if (!facts) throw new Error(`${device} has no [ui] facts`);
     const readMem = emulatorRead(session);
-    await press('NO');
-    await press('SETTINGS');
-    const rows = await pollEmulated(session, () => readTopMenuItems(readMem, facts), (n) => n > 1, {
-      emulatedMs: 10_000,
-      message: 'SETTINGS did not open',
+    const depth = async () => (await readViewStack(readMem, facts, 32)).length;
+    const main = await pollEmulated(session, depth, (n) => n > 0, {
+      emulatedMs: 30_000,
+      message: 'the main screen is not on the view stack',
+      retry: true,
     });
+    await rt.ui.tap('SETTINGS', { until: { state: depth, done: (n: number) => n > main, withinMs: 10_000, what: 'SETTINGS on the view stack' } });
+    const rows = await readTopMenuItems(readMem, facts);
     for (let i = 0; i < rows; i++) await press('UP', 0);
     for (let i = 0; i < rows - 1; i++) await press('DOWN', 0);
     await press('YES');
@@ -152,11 +154,15 @@ runtimeTests(
     const beforeToast = await read('events');
     await press('YES', 50);
     expect(await read('events')).toBe(beforeToast + 1);
+    // the main screen draws the toast (finding 71: a menu does not): back out of the menus, see it, and wait for the firmware to take it off
     await press('NO', 50);
     await press('NO', 50);
+    await pollEmulated(session, depth, (n) => n === main, { emulatedMs: 10_000, message: 'the main screen is not back', retry: true });
     const toast = await frame('toast');
-    await rt.ui.wait({ ms: 2500, why: SETTLE });
-    expect(await frame('toast-expired')).not.toBe(toast);
+    await pollEmulated(session, () => frame('toast-expired'), (hash) => hash !== toast, {
+      emulatedMs: 20_000,
+      message: 'the toast is still on the main screen',
+    });
     await session.expectNoFault('SDK row/list/dialog/toast interactions without DSP');
     expect((await session.status()).audio).toBeNull();
   },
