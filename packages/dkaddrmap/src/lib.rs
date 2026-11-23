@@ -13,6 +13,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub mod gen_host_dir;
+pub mod host_dir;
 pub mod snapshot;
 
 pub const FORMAT: &str = "dk-addrmap";

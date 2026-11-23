@@ -73,9 +73,7 @@ tap = "YES"
 [[step]]
 wait_ms = 800
 [[step]]
-expect_mem = {symbol = "STORE", module = "core/digikit-menu", eq = 1}
-[[step]]
-expect_mem = {symbol = "NENT", module = "core/digikit-menu", eq = 0}
+expect_text = {rows = "MENU_LOAD", count = "MENU_LOAD_N", stride = 24, has = ["NO MODULES ON CARD"]}
 [[step]]
 tap = "NO"
 [[step]]
@@ -97,7 +95,7 @@ tap = "YES"
 [[step]]
 wait_ms = 600
 [[step]]
-expect_text = {rows = "DK_ABOUT", count = "DK_ABOUT_N", stride = 24, has = ["RUNTIME {runtime}", "BOOT: 0 OF 0 OK"]}
+expect_text = {rows = "MENU_ABOUT", count = "MENU_ABOUT_N", stride = 24, has = ["RUNTIME {runtime}", "BOOT: 0 OF 0 OK"]}
 [[step]]
 tap = "DOWN"
 [[step]]
@@ -125,7 +123,7 @@ tap = "YES"
 [[step]]
 wait_ms = 600
 [[step]]
-expect_text = {rows = "DK_MEM", count = "DK_MEM_N", stride = 24, has = ["CPU   .......... 0%", "MODS  .......... 0/8"]}
+expect_text = {rows = "MENU_MEM", count = "MENU_MEM_N", stride = 24, has = ["MODS  .......... 0/8"]}
 [[step]]
 expect_frame = "digikit_memory"
 [[step]]

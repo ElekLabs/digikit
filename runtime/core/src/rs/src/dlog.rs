@@ -12,8 +12,8 @@
 //! code set it. A second owner gets `E_BUSY`. The channel is cleared after its owner's `fini` (`release_sinks`). With no sink set a producer pays one test.
 //!
 //! Appends mask interrupts for a few instructions: the UI task, the MIDI task and the crash handler all append.
-use crate::entry::Ctx;
-use crate::{fw_blocks, irq_mask, irq_restore};
+use dkrt_abi::module::Ctx;
+use crate::{platform::fw_blocks, platform::irq_mask, platform::irq_restore};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
@@ -43,8 +43,8 @@ static mut SINK: usize = 0;
 static mut TICK: usize = 0;
 static mut TICK_SRC: u8 = 0;
 
-/// Sink channel numbers (`dk_sink_set`, <dk/core/sink.h>).
-pub const SINK_LOG: u32 = 0;
+/// Sink channel numbers (`dk_sink_set`, <dk/core/sink.h>); the log channel is shared with the package (`dkrt_abi::log`).
+pub use dkrt_abi::log::SINK_LOG;
 pub const SINK_SPAN: u32 = 1;
 const SINKS: usize = 2;
 
@@ -72,24 +72,14 @@ pub struct Span {
     pub start_tick: u32,
 }
 
-/// The flags of a non-error event at the info level (an error event is `logk::F_ERROR`: level 0).
-pub const INFO: u16 = dkrt_abi::core_api::LOG_INFO;
+pub use dkrt_abi::log::INFO;
 
 /// The module whose code is running (record index + 1; 0: the runtime).
 static mut CURRENT_SRC: u8 = 0;
 /// What that module code is: one of the `PHASE_*` values. The crash record keeps it.
 static mut CURRENT_PHASE: u8 = PHASE_NONE;
 
-/// No module code is running.
-pub const PHASE_NONE: u8 = 0;
-/// The module's `init`.
-pub const PHASE_INIT: u8 = 1;
-/// The module's `tick`.
-pub const PHASE_TICK: u8 = 2;
-/// The module's `fini`.
-pub const PHASE_FINI: u8 = 3;
-/// A callback of the module: a host command handler, an I/O or job step, an intro frame, a menu action.
-pub const PHASE_CALLBACK: u8 = 4;
+pub use dkrt_abi::log::{PHASE_CALLBACK, PHASE_FINI, PHASE_INIT, PHASE_NONE, PHASE_TICK};
 
 /// Module code is about to run in `phase`: events it logs carry its source. Returns the previous source and phase for `leave_module`.
 pub fn enter_module(idx: usize, phase: u8) -> u16 {
@@ -144,7 +134,7 @@ pub unsafe fn call_fini(idx: usize, f: unsafe extern "C" fn(*const Ctx), ctx: *c
 }
 
 /// Is a sink set (the debug module is loaded)?
-pub fn sink_present() -> bool {
+pub extern "C" fn sink_present() -> bool {
     unsafe { read_volatile(addr_of!(SINK)) != 0 }
 }
 
@@ -261,7 +251,7 @@ pub unsafe extern "C" fn dk_span_sink_set(emit: *mut u8, clock: *mut u8) -> i32 
     irq_restore(sr);
     if r == OK && emit.is_null() {
         // the owner gives the channel up: the DSP counters are its to control, and stop with it
-        crate::dsp_stats::owner_gone();
+        crate::hooks::dsp_stats_owner_gone();
     }
     r
 }
@@ -294,7 +284,7 @@ pub unsafe fn release_sinks(idx: usize) {
     }
     irq_restore(sr);
     if span_released {
-        crate::dsp_stats::owner_gone();
+        crate::hooks::dsp_stats_owner_gone();
     }
 }
 
@@ -305,7 +295,7 @@ pub fn span_owner() -> u8 {
 
 /// Is a sink set on `channel`? (The one flag test of a producer.)
 #[inline]
-pub fn sink_on(channel: u32) -> bool {
+pub extern "C" fn sink_on(channel: u32) -> bool {
     unsafe { read_volatile(addr_of!((*addr_of!(CHAN))[channel as usize].f)) != 0 }
 }
 
@@ -350,7 +340,7 @@ fn clock_slow() -> Option<u32> {
 /// The end of a span that `span_t0` started: emit the original reading and the clock's difference, including across a counter wrap.
 #[cold]
 #[inline(never)]
-pub unsafe fn span_end(owner: u32, t0: u32) {
+pub unsafe extern "C" fn span_end(owner: u32, t0: u32) {
     let k = read_volatile(addr_of!(SPAN_CLOCK));
     if k == 0 {
         return;
@@ -371,7 +361,7 @@ pub unsafe fn spanned<R>(owner: u32, f: impl FnOnce() -> R) -> R {
 }
 
 /// After a module's `fini`, or when its range is freed: the sink, the tick and the channels may not point into its memory [lo, hi) (a module that forgot to clear them).
-pub unsafe fn sink_drop(lo: u32, hi: u32) {
+pub unsafe extern "C" fn sink_drop(lo: u32, hi: u32) {
     let sr = irq_mask();
     let mut i = 0;
     while i < SINKS {
@@ -484,15 +474,15 @@ pub unsafe fn copy_event(seq: u32, dst: *mut u8) -> bool {
     if e.seq != seq {
         return false;
     }
-    crate::wr32(dst, e.seq);
-    crate::wr32(dst.add(4), e.time);
+    dkrt_abi::mem::wr32(dst, e.seq);
+    dkrt_abi::mem::wr32(dst.add(4), e.time);
     *dst.add(8) = (e.kind >> 8) as u8;
     *dst.add(9) = e.kind as u8;
     *dst.add(10) = (e.flags >> 8) as u8;
     *dst.add(11) = e.flags as u8;
     let mut i = 0;
     while i < 5 {
-        crate::wr32(dst.add(12 + 4 * i), e.a[i]);
+        dkrt_abi::mem::wr32(dst.add(12 + 4 * i), e.a[i]);
         i += 1;
     }
     true
@@ -515,7 +505,7 @@ mod tests {
     /// An event with the keep flag is in the small ring after the first UI frame, at any level and of any kind; one without it is not (an info-level event of an ordinary kind).
     #[test]
     fn the_small_ring_keeps_an_event_with_the_keep_flag() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         crate::boot::info().ui_reached = 1;
         assert!(keeps(logk::HEALTH, logk::F_KEEP));
         assert!(keeps(logk::MOD_LOG, logk::F_KEEP | (logk::L_DEBUG << logk::LEVEL_SHIFT)));
@@ -539,7 +529,7 @@ mod tests {
 
     /// A clean channel table and counters; the guard serializes the tests that share the statics.
     unsafe fn fresh() -> Fresh {
-        let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         test_reset_sinks();
         LOGGED = 0;
         SPANS = 0;

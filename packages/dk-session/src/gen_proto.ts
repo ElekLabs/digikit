@@ -68,6 +68,7 @@ export const CMD = {
   RELOAD_STATE: 0x07,
   LOAD: 0x08,
   UNLOAD: 0x09,
+  RETRY: 0x0b,
   BEGIN: 0x10,
   DATA: 0x11,
   END: 0x12,
@@ -291,6 +292,7 @@ export const CAPACITY_KINDS = {
   SEND_SLOTS: 14,
   DSP_COST: 15,
   DSP_VOICES: 16,
+  PACKAGE: 17,
 } as const;
 
 /** What a person calls a capacity kind a fit looks at, by kind number. */
@@ -307,6 +309,7 @@ export const CAPACITY_LABELS: Record<number, string> = {
   10: 'effect slots',
   15: 'DSP load',
   16: 'DSP voices',
+  17: 'system package',
 };
 
 /** The `kind` of a LOG event. */

@@ -17,7 +17,7 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The hook it takes: a test-only hook on the site of the last step of the SETTINGS list rebuild (ports/fw/menu.toml; stock on an image without core/digikit-menu, which
+# The hook it takes: a test-only hook on the site of the last step of the SETTINGS list rebuild (ports/fw/menu.toml; stock on an image without core/ui, which
 # hooks the same site). The port file lists it; the entry is the routine of src/cf/hook.s, which calls the C function and runs the tail. `init` repeats the hook with
 # dk_service_declare_hook.
 [[hook]]

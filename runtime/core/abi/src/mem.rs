@@ -1,4 +1,5 @@
 //! Memory and string helpers with no state: big-endian words, C strings, volatile words and halfwords. Core and services share them.
+use crate::dev_addr::DevAddr;
 use core::ptr::{read_volatile, write_volatile};
 
 pub unsafe fn rd32(p: *const u8) -> u32 {
@@ -45,37 +46,52 @@ pub unsafe fn iw(i: *const u32, k: usize) -> u32 {
     read_volatile(i.add(k))
 }
 
+/// The word at the device address `a` (volatile): the one read path of words.
+#[inline(always)]
+pub unsafe fn read32(a: DevAddr) -> u32 {
+    read_volatile(a.ptr::<u32>())
+}
+
+/// Write the word `v` at the device address `a` (volatile): the one write path of words.
+#[inline(always)]
+pub unsafe fn write32(a: DevAddr, v: u32) {
+    write_volatile(a.ptr::<u32>(), v)
+}
+
 #[inline]
 pub unsafe fn rd(a: u32) -> u32 {
-    read_volatile(a as *const u32)
+    read32(DevAddr::new(a))
 }
 
 #[inline]
 pub unsafe fn wr(a: u32, v: u32) {
-    write_volatile(a as *mut u32, v)
+    write32(DevAddr::new(a), v)
 }
 
 /// The big-endian s16 at `a` (read byte by byte: `a` may be odd).
 #[inline]
 pub unsafe fn rd16(a: u32) -> i32 {
-    let hi = read_volatile(a as *const u8) as u16;
-    let lo = read_volatile((a + 1) as *const u8) as u16;
+    let a = DevAddr::new(a);
+    let hi = read_volatile(a.ptr::<u8>()) as u16;
+    let lo = read_volatile(a.add(1).ptr::<u8>()) as u16;
     ((hi << 8 | lo) as i16) as i32
 }
 
 #[inline]
 pub unsafe fn wr16(a: u32, v: i32) {
-    write_volatile(a as *mut u8, (v >> 8) as u8);
-    write_volatile((a + 1) as *mut u8, v as u8);
+    let a = DevAddr::new(a);
+    write_volatile(a.ptr::<u8>(), (v >> 8) as u8);
+    write_volatile(a.add(1).ptr::<u8>(), v as u8);
 }
 
-/// Call the function at address `a` with `args` (at most `CALL_ARGS` words) and give its result. The ColdFire C calling convention passes the arguments on the stack and the
-/// caller takes them off, so a function that wants fewer arguments reads the first of them. An address of 0 is a word that nobody bound: nothing is called and the answer is 0.
+/// Call the function at the device address `a` with `args` (at most `CALL_ARGS` words) and give its result. The ColdFire C calling convention passes the arguments on the stack
+/// and the caller takes them off, so a function that wants fewer arguments reads the first of them. An address of 0 is a word that nobody bound: nothing is called and the answer
+/// is 0.
 ///
 /// # Safety
 /// `a` is the address of a function of the C calling convention that takes the first words of `args` (the image's code or the firmware's), or 0.
-pub unsafe fn call(a: u32, args: &[usize]) -> usize {
-    if a == 0 {
+pub unsafe fn call_at(a: DevAddr, args: &[usize]) -> usize {
+    if a.is_null() {
         return 0;
     }
     let mut v = [0usize; CALL_ARGS];
@@ -103,13 +119,17 @@ pub unsafe fn call(a: u32, args: &[usize]) -> usize {
         usize,
         usize,
     ) -> usize;
-    let f: F = core::mem::transmute(a as usize);
+    // On the device the address is the code address; the host maps it to the host function of its address space.
+    #[cfg(target_pointer_width = "32")]
+    let f: F = core::mem::transmute(a.get() as usize);
+    #[cfg(not(target_pointer_width = "32"))]
+    let f: F = core::mem::transmute(a.code_addr());
     f(
         v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11],
     )
 }
 
-/// The most arguments `call` passes.
+/// The most arguments `call_at` passes.
 pub const CALL_ARGS: usize = 12;
 
 /// Firmware memory and code by address: word reads and writes of the rows and tables of the image that a service fills, and calls of the image's functions. A service
@@ -124,11 +144,11 @@ pub trait FwMem {
     }
     /// The byte at `a`.
     unsafe fn rd8(&self, a: u32) -> u32 {
-        read_volatile(a as *const u8) as u32
+        read_volatile(DevAddr::new(a).ptr::<u8>()) as u32
     }
     /// The low byte of `v` at `a`.
     unsafe fn wr8(&self, a: u32, v: u32) {
-        write_volatile(a as *mut u8, v as u8)
+        write_volatile(DevAddr::new(a).ptr::<u8>(), v as u8)
     }
     /// The big-endian s16 at `a`, read byte by byte (`a` may be odd).
     unsafe fn rd16(&self, a: u32) -> i32 {
@@ -140,10 +160,19 @@ pub trait FwMem {
     }
     /// The low halfword of `v` at the even address `a` in one store (a table of the image that other code reads as halfwords).
     unsafe fn wr_half(&self, a: u32, v: u32) {
-        write_volatile(a as *mut u16, v as u16)
+        write_volatile(DevAddr::new(a).ptr::<u16>(), v as u16)
     }
-    /// `call`: the function at `a` (0: none, answers 0).
+    /// `call_at`: the function at `a` (0: none, answers 0).
     unsafe fn call(&self, a: u32, args: &[usize]) -> usize {
-        call(a, args)
+        call_at(DevAddr::new(a), args)
+    }
+}
+
+/// Copy `n` bytes from `src` to `dst` (the ranges do not overlap), one byte at a time: no call to the compiler's `memcpy`.
+pub unsafe fn copy(dst: *mut u8, src: *const u8, n: usize) {
+    let mut i = 0;
+    while i < n {
+        *dst.add(i) = *src.add(i);
+        i += 1;
     }
 }

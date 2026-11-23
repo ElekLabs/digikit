@@ -25,10 +25,10 @@ pub fn on(bit: u32) -> bool {
 
 /// Clear the bits of `clear`, then set the bits of `set` (both limited to `ALL`); returns the new word.
 pub fn update(clear: u32, set: u32) -> u32 {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let n = unsafe { (read_volatile(addr_of!(FLAGS)) & !(clear & ALL)) | (set & ALL) };
     unsafe { write_volatile(addr_of_mut!(FLAGS), n) };
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     n
 }
 

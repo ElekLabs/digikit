@@ -51,15 +51,18 @@ def test_unfinished_navigation_cleans_only_its_group(monkeypatch, interrupted):
     killpg.assert_called_once_with(proc.pid, signal.SIGTERM)
 
 
-@pytest.mark.parametrize("target", ["emulator", "test/ui-demo"])
-def test_socket_comes_from_exact_auto_mode_daemon(monkeypatch, target):
+@pytest.mark.parametrize("store", [[], ["test/ui-demo*"]])
+def test_socket_comes_from_exact_auto_mode_daemon(monkeypatch, store):
+    target = "emulator"
     emu = Mock(path="/tmp/preview.sock")
     emu.status.return_value = {"dsp": "zero"}
     connect = Mock(return_value=emu)
     monkeypatch.setattr(panel.dev, "connect", connect)
 
-    assert panel.panel_socket(target) == emu.path
-    connect.assert_called_once_with(panel.dev.run_dir_of("dn2", target, dsp="zero"))
+    assert panel.panel_socket(target, "dn2", store) == emu.path
+    connect.assert_called_once_with(
+        panel.dev.run_dir_of("dn2", target, store, dsp="zero")
+    )
     emu.call.assert_called_once_with("run.mode", mode="free")
     emu.assert_has_calls(
         [call.status(), call.call("run.mode", mode="free"), call.close()]
@@ -98,22 +101,25 @@ def test_failed_navigation_does_not_open_browser(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "preview,target", [("menu", "emulator"), ("ui-demo", "test/ui-demo")]
+    "preview,store", [("menu", []), ("ui-demo", ["test/ui-demo*"])]
 )
-def test_navigation_then_serving_same_target(monkeypatch, preview, target):
+def test_navigation_then_serving_same_target(monkeypatch, preview, store):
+    target, store_wanted = "emulator", store
     events = []
 
     def navigate(argv):
         events.append("navigate")
         assert argv[0] == target
+        stored = argv[argv.index("--store") + 1] if "--store" in argv else None
+        assert stored == (",".join(store) or None)
         steps = panel.dev.load_keys(argv[argv.index("--keys") + 1])
         assert {"tap": "SETTINGS"} in steps
         assert {"tap": "YES"} in steps
         return 0
 
-    def resolve(actual):
+    def resolve(actual, store=None):
         events.append("resolve")
-        assert actual == target
+        assert (actual, store) == (target, store_wanted)
         return "/tmp/exact-preview.sock"
 
     def serve(path):

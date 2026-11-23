@@ -3,7 +3,7 @@
 
     mise run dk:dev -- MODULE_OR_SET [--device dn2[,dt2]] [--keys FILE|INLINE] [--store IDS] [--trace] [--out DIR] [--stop]
 
-MODULE_OR_SET is a patch set of devices/<device>.toml (`emulator`), or module ids separated by commas (`test/ui-demo`); the modules
+MODULE_OR_SET is a patch set of devices/<device>.toml (`emulator`), or module ids separated by commas (`core/ui`); the modules
 they require are added. Per device the tool
 
 1. builds the objects of every module in the set whose sources changed (`patchkit build`: unchanged objects cost nothing),

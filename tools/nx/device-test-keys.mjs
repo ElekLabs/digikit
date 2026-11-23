@@ -16,6 +16,9 @@ import { testSourceGlobs } from './test-source.mjs';
 import { SHARED_SDK_INPUTS } from './module-build.mjs';
 
 export const PACK_NEEDS = '{workspaceRoot}/tests/regression/runtime/pack-needs.ts';
+// The module that puts the system package on every card the harness builds (system-package.ts): a narrow key holds the package when its closure imports it.
+export const SYSTEM_PACKAGE_USER = '{workspaceRoot}/tests/regression/runtime/system-package.ts';
+export const SYSTEM_PACKAGE_FILE = 'dist/syspkg/runtime/system.dksp';
 
 // Files that tests read by path and do not import. The import walk (ts-imports.mjs) cannot see them.
 // Extend this list when a test reads a new file; a file only one record's tests read goes in that record's `sources`.
@@ -117,6 +120,8 @@ const SHARED_BUILT = [
   'dist/ports-test/*.dkport',
   'dist/plusdrive/plusdrive',
   'apps/web/public/dksample.wasm',
+  // the system package on every test card (the full and merge keys; a narrow key adds it when it imports system-package.ts)
+  SYSTEM_PACKAGE_FILE,
 ];
 // The binaries that move with every edit of the patchkit sources, whatever bytes the edit packs: the patchkit CLI, and the daemon
 // (dist/daemons.json holds the path of the store entry, which is keyed on the patchkit sources too).
@@ -297,6 +302,8 @@ export const DRIVER_ROOTS = ['packages/dk-session/', 'packages/test-support/', '
 export const DRIVER_SUBJECT_FILES = [
   'packages/dk-session/src/gen_proto.ts',
   'packages/dk-session/src/gen_bulk.ts',
+  'packages/dk-session/src/gen_host_dir.ts',
+  'packages/dk-session/src/host-directory.ts',
   'packages/dk-session/src/runtime-log.ts',
   'packages/dk-session/src/log-names.ts',
   'packages/dk-session/src/runtime-events.ts',
@@ -362,6 +369,7 @@ export const deviceInputs = (
     ...(patchkitWasm ? [{ dependentTasksOutputFiles: 'apps/web/public/patchkit.wasm', transitive: true }] : []),
     // a test that reads the precomputed `needs` of committed packs keys on that file's content
     ...(imports.includes(PACK_NEEDS) ? outputFiles(['dist/bytes/pack-verdicts.json']) : []),
+    ...(imports.includes(SYSTEM_PACKAGE_USER) ? outputFiles([SYSTEM_PACKAGE_FILE]) : []),
     ...(opts.narrow && patchkitLive ? outputFiles([PATCHKIT_TEST_KEY]) : []),
     ...(opts.narrow
       ? [

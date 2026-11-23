@@ -1,6 +1,6 @@
 //! The `register` section of a `.dkm`: typed machine and parameter records for the digikit runtime's registry
 //! (docs/design/digikit-registry.md). The packer lowers a dynamic module's typed sections (`typed.rs`) for one device into
-//! these records; the runtime (`runtime/core/src/rs/src/registry.rs`) validates them before it writes any row.
+//! these records; the runtime (`runtime/core/src/rs/src/package/registry.rs`) validates them before it writes any row.
 //!
 //! All integers are big endian. Layout:
 //!

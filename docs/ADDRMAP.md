@@ -59,8 +59,13 @@ where the module's DSP image starts. A module without a DSP part, or a table wri
 Hosts do not decode the table. They read raw memory and `dkaddrmap::snapshot` (one Rust decoder, also built for wasm32) turns it into the table:
 
 - A ship map has `key.loader`: `{"modules": slots, "l2_byte_base": ..., "l2_sw_base": ..., "dsp": true}`. `patchkit apply --addrmap` writes it from the device
-  file (`[limits] modules`) and the L2 constants of `packages/patchkit/src/dsp.rs`; `dsp` says the image has the run-time DSP loader.
-- `patchkit addr --map SHIP --format reads` lists what to read: the plan symbols `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` with their byte counts.
+  file (`[limits] modules`) and the L2 constants of `packages/patchkit/src/dsp.rs`; `dsp` says the image has the run-time DSP loader (`dyndsp_info`).
+- `patchkit addr --map SHIP --format reads` lists what to read, in order: the plan symbols `DKRT_STATE`, `DKRT_HOST_DIR` and `dyndsp_info` with their byte counts, and `DKRT_DSP` and
+  `DKRT_PROVIDERS`, which belong to the system package (a card file placed at a different address each boot, so they have no symbol in the image). A read with a `host_id` is such a
+  static: its address is the entry of that id in the host directory `DKRT_HOST_DIR` (read first; ids in `runtime/core/abi.toml` `[[host_dir]]`, generated to
+  `packages/dk-session/src/gen_host_dir.ts` and `packages/dkaddrmap/src/gen_host_dir.rs`). The directory is a magic, the count of ids the core knows, a ready word and one 32-bit address per id;
+  the core clears it before it starts the package, fills the ids it owns (the package's block), the package fills its own at its entry, and the core sets the ready word last. A directory that is not ready, or an empty entry, means no package is loaded (a core-only boot, no `digikit/system.dksp`, or the package still starting).
+  `dkaddrmap::host_dir::HostDir` reads it and `Loader::collect` is the whole procedure; `packages/dk-session/src/host-directory.ts` is the TypeScript reader and `tools/patchkit/pk_hostdir.py` the Python one (its ids come from abi.toml).
 - `patchkit addr --map SHIP --snapshot SYMBOL=HEX ... [--format loads]` takes the bytes (hex, one flag per symbol) and decodes them; `--format loads` prints
   the table, any other format names addresses with it.
 
@@ -128,7 +133,7 @@ read; patchkit decodes the bytes:
 ```sh
 dist/patchkit/patchkit --root . apply --firmware firmware/Digitakt_II_OS1.17.syx --set emulator -o out/try/rt.syx --plan out/try/rt.plan.json --addrmap out/try/rt.addrmap.json
 dist/patchkit/patchkit addr --map out/try/rt.addrmap.json --format reads
-# [{"len":456,"symbol":"DKRT_STATE"},{"len":116,"symbol":"DKRT_DSP"},{"len":16,"symbol":"dyndsp_info"}]
+# [{"len":456,"symbol":"DKRT_STATE"},{"len":24,"symbol":"DKRT_HOST_DIR"},{"host_id":0,"len":116,"symbol":"DKRT_DSP"},{"len":16,"symbol":"dyndsp_info"},...]
 dist/patchkit/patchkit addr --map out/try/rt.addrmap.json --snapshot DKRT_STATE=$(printf '00%.0s' $(seq 456)) --format loads
 # {"modules":[]}
 ```
@@ -146,7 +151,7 @@ Only the source of the ship map differs. **Hardware proof is a later, explicit s
 (`runtime/core/tests/log-names.device.test.ts`, registered, run in the batched gate), and the host tests use a fake session for both origins.
 
 - Emulator: the controller call `runtime.maps` ([CONTROL.md](CONTROL.md)) returns the ship map of the running image, made from its patch record where `dev.reload` makes its plan, and
-  the addresses of `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info`; it follows a module swap.
+  the addresses of `DKRT_STATE`, `DKRT_HOST_DIR` and `dyndsp_info`; it follows a module swap.
 - Device: `firmware_prepare` keeps the ship map and the same symbol addresses of the image it prepares in `out/addrmap/<device>/<image id>.ship.json` (`library::store_ship`).
   The follower picks the record whose image id equals the id INFO reports. A device whose image was not prepared by this workbench has no names: the Log says why once.
 - Modules: `lib_build` writes `M.addrmap.json` beside each `M.dkm` in `out/modules/<device>/`. The Host command `library.readMaps(device)` returns these and the kept ship

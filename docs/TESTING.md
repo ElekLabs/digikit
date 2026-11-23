@@ -18,7 +18,7 @@ execution requirements, not levels. A successful boot proves only what the run a
 | Level | What | Command |
 | --- | --- | --- |
 | Static (JS/TS) | oxlint, Prettier check, host Vitest, `pnpm -r run typecheck` | `pnpm verify:host` |
-| Static (Python) | ruff check and format over pyproject `[tool.ruff] include`; mypy over `[tool.mypy] files` | `mise run lint:py`; `mise run check:layers` (module layering, docs/ARCHITECTURE.md) |
+| Static (Python) | ruff check and format over pyproject `[tool.ruff] include`; mypy over `[tool.mypy] files` | `mise run lint:py`; `mise run check:layers` (module layering, docs/ARCHITECTURE.md); `layercheck --boundary-report` lists the resident/package crossings |
 | Fast preflight | Affected projects only; no builds, no devices | `mise run test:changed` |
 | Unit (TS host) | Packages, desktop UI logic, regression helpers; no device | `pnpm test:host` |
 | Unit (web) | Web app suites in `apps/web/tests`: Vitest `*.test.ts` (`test-host`, no wasm) and the real-wasm suites `*.wasm.test.ts` (`test-wasm`) | `pnpm nx:pilot run @digi/web:test-host`, `@digi/web:test-wasm` |
@@ -177,7 +177,7 @@ To prove the suite sees a leftover, change the service's `remove`, `dsp_clear` o
 
 The assembly layer sits between the unit tests of a component and the device tests (docs/plans/test-architecture.md T2 step 4). A unit test owns the logic and the edge cases of one component against fakes. An assembly test owns a seam between separately built real artifacts: per seam one case that fits and one typical refusal, never a repeat of a unit edge case. A device test owns only what the firmware or hardware shows. An assertion belongs at the lowest layer that can see it.
 
-`pnpm nx:pilot run core/runtime:test-assembly` runs `runtime/core/src/rs/src/loader/tests/assembly_tests.rs` (`cargo test --lib assembly_tests`, host build, seconds, cached). Its `dependsOn` build what it reads: `<id>:pack` of the fixtures (`test/sine`, `test/dyn-dn2`, `test/dyn-fx-gain`, `test/lfo-shape`, `test/svc-test`, `test/svc-test-user`) and of the services (`core/services/fx`, `machines`, `lfo`), `patchkit:ports-test` (`dist/ports-test/<device>-<version>.dkport`, the port file of the test image) and `patchkit:cli` (the test runs `patchkit port stock` to put the stock bytes of every hook site in the fake firmware), and `patchkit:device-images`, which also writes `dist/bytes/images/<device>/set-<set>.info`, the info table of the patched image: `name hash kind address words...` per entry, taken from the `info` list of the plan that `patchkit apply` writes. The committed `runtime.dko.json` and the service objects are read from the repository. A device without its firmware file is skipped with a `SKIP` line, as its device tests are.
+`pnpm nx:pilot run core/runtime:test-assembly` runs `runtime/core/src/rs/src/package/loader/tests/assembly_tests.rs` (`cargo test --lib assembly_tests`, host build, seconds, cached). Its `dependsOn` build what it reads: `<id>:pack` of the fixtures (`test/sine`, `test/dyn-dn2`, `test/dyn-fx-gain`, `test/lfo-shape`, `test/svc-test`, `test/svc-test-user`) and of the services (`core/services/fx`, `machines`, `lfo`), `patchkit:ports-test` (`dist/ports-test/<device>-<version>.dkport`, the port file of the test image) and `patchkit:cli` (the test runs `patchkit port stock` to put the stock bytes of every hook site in the fake firmware), and `patchkit:device-images`, which also writes `dist/bytes/images/<device>/set-<set>.info`, the info table of the patched image: `name hash kind address words...` per entry, taken from the `info` list of the plan that `patchkit apply` writes. The committed `runtime.dko.json` and the service objects are read from the repository. A device without its firmware file is skipped with a `SKIP` line, as its device tests are.
 
 The Workbench settings case uses `test/settings-a:pack` on both profiles. It replays descriptor registration during init over `FakePlatform` and checks discovery for the loaded instance and refusal after unload. It can run without the stock firmware images.
 
@@ -241,8 +241,8 @@ The subset does not replace the static checks (`lint,fmt-check,rust-fmt,typechec
 
 ## Fast iteration: dk:dev and Reload
 
-For module code and the UI layer (`core/ui`, `core/digikit-menu`, `test/ui-demo`) one edit and one look should take seconds, not a
-boot. `mise run dk:dev -- test/ui-demo --device dn2[,dt2] --keys 'tap:NO,tap:SETTINGS,wait:400,tap:DOWN*8,tap:YES,wait:600,shot:menu'`
+For module code and the UI layer (`core/ui`, the menu of the system package, `test/ui-demo`) one edit and one look should take seconds, not a
+boot. `mise run dk:dev -- emulator --store 'test/ui-demo*' --device dn2[,dt2] --keys 'tap:NO,tap:SETTINGS,wait:400,tap:DOWN*9,tap:YES,wait:600,shot:menu'`
 (`tools/patchkit/pk_devreload.py`) builds the objects whose sources changed (`patchkit build`), reloads a daemon it keeps alive per device and
 module set (`--stop` ends it), runs the key script from the main screen, and writes `out/runs/devreload/<device>/NAME.png` (4x) and
 `sheet.png` (2x, four per row, labelled). The target is a patch set of `devices/*.toml` or module ids; `--keys` is a JSON list of harness
@@ -255,11 +255,11 @@ A device that boots cold and has no ready snapshot (the Syntakt, `st`) is named 
 `--store ID,ID*,synth:NAME:BSS` boots the daemon on a card whose module store holds those modules (`*`: also in the saved selection; `synth:` needs BSS bytes of arena, so it never fits), which the MODULES list of `core/digikit-menu` needs; each list has its own kept daemon.
 
 For a no-argument DN2 preview, `mise run dk:menu` opens the real DIGIKIT menu in a visible browser faceplate;
-`mise run dk:ui-demo` opens the separate [`test/ui-demo` fixture](../tests/fixtures/modules/ui-demo/README.md), which conflicts with the real menu. See [visible previews](DEVELOPMENT.md#visible-preview) for the quick start. Both start or reload their kept daemon with the same automatic DSP selection as
+`mise run dk:ui-demo` opens the separate [`test/ui-demo` fixture](../tests/fixtures/modules/ui-demo/README.md), a content module with its own SETTINGS row (the tenth, after the system package's DIGIKIT row). See [visible previews](DEVELOPMENT.md#visible-preview) for the quick start. Both start or reload their kept daemon with the same automatic DSP selection as
 `dk:dev`, navigate to the menu, then open `/panel.html` through the live Vite proxy on an available localhost port against that exact daemon.
 The command prints the exact panel URL. `dk:dev` itself writes screenshots without opening a browser.
 Keep the command running while using the panel. Ctrl-C stops its browser server and keeps the emulator for the next reload;
-`mise run dk:dev -- emulator --stop` or `mise run dk:dev -- test/ui-demo --stop` stops the respective emulator.
+`mise run dk:dev -- emulator --stop` or `mise run dk:dev -- emulator --store 'test/ui-demo*' --stop` stops the respective emulator.
 The commands also write `out/runs/devreload/dn2/digikit-menu.png` or `ui-demo.png`. Use `dk:dev` directly to choose DT2, load a particular module or card store, or provide another key script.
 
 For a content module, `mise run dk:module ID [--device dn2|dt2]` packs its card `.dkm`, selects it for boot and opens the MODULES list in the live faceplate. It uses the `emulator` patch set. The module is packed in full; the DSP mode follows the module closure (ColdFire-only services run with zero DSP, machines and effects select SHARC automatically). `dk:module` delegates to generic `dk:dev --store`: the generic path stages content and compares the exact request and initial selection. Unchanged content keeps the daemon and overlay, including a user-edited live selection; changed content rebuilds the card and restarts that exact daemon. Stop and restart to restore the initial selected card after changing selection live. `mise run dk:module ID --stop` stops it. See [visible previews](DEVELOPMENT.md#visible-preview) for aliases and selection behavior. This interactive preview does not replace the module's acceptance checks.
@@ -445,8 +445,8 @@ renames its dir to `<dir>.failed-<time>` (the newest 2 per device stay), so the 
 of a boot that failed a check would otherwise pass the next run. A `.dirty` marker, written at the claim and removed by a clean release, does the same for a killed or timed-out run. Only the newest 2 `<key12>` dirs of each device stay.
 Cards that the fixtures build (`cardRig`, the fx presets) are content-named: `dist/session-cache/cards/<key>/`
 holds `card.img` and `overlay.bin`, read-only. The key is a hash of the spec, the bytes of every input file
-(`.dkm`, `.syx`, the settings tool), the plusdrive binary, `devices/*.toml` and a format version in
-`tests/regression/runtime/card-cache.ts`. `card.key` holds this key. Equal inputs give the same content id, so the daemon's
+(`.dkm`, `.syx`, the settings tool), the plusdrive binary, the system package, `devices/*.toml` and a format version in
+`tests/regression/runtime/card-cache.ts`. Every card carries the system package `digikit/system.dksp` (built by the Nx target `core/runtime:package`, a dependency of every device target): `system-package.ts` is the one owner of the file and its store path, `buildCard` installs it (also on a `folder` card; `systemPackage: false` leaves it off, for a test of a card without it) and the fx seed cards call `installSystemPackage`; a changed package changes every card key and so every boot snapshot. A test that lists the store expects the package in the listing (`SYSTEM_PACKAGE_STORE_PATH`, `systemPackageFiles()`). `card.key` holds this key. Equal inputs give the same content id, so the daemon's
 snapshot key matches and a baseline reload restores the snapshot (0.2 to 1.5 s) instead of a cold boot
 (14 s DT2, 38 s DN2). A card built on a `base` outside the cache (a card after the guest's writes) is built in a
 fresh dir and always boots cold. Eviction runs when a fixture claims its run dir: only the newest 32 card dirs
@@ -526,7 +526,7 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `dsp-facts` | Probe: cycle counts, instruction semantics and core register values on the SHARC+ core, one framed word per block | host, device |
 | `sharc-probe` | Probe: RECIPS and RSQRTS over a fixed sequence, one framed word per block | host, device |
 | `step-beacon` | Probe: stores a call counter in the module step word on every call | device |
-| `ui-demo` | The framework menu: SETTINGS > DIGIKIT with one row of each kind, text page, list, side panel | host, assembly |
+| `ui-demo` | A content module: its SETTINGS row opens a menu with one row of each kind, text page, list, side panel, confirm, choice and toast (`dk_ui_settings_row`) | device |
 | `native-page` | Native callback page cycling, parameter edits, local zoom and clipped drawing | host |
 | `usb-echo` | The bulk interface of `core/usb-bulk`: echo of every buffer on EP2 IN from an I/O job | host, device |
 | `input-probe` | The input adapter: SysEx commands press keys and turn encoders through `core/input` | device |
@@ -788,7 +788,7 @@ no whole free DSP granule.
 The quick TypeScript capacity tests in `runtime/core/tests/capacity/capacity.device.test.ts` fill runtime limits with
 synthetic modules (`patchkit synth-dkm`, built by `tests/regression/runtime/synth.ts`; limits in `[limits]` of `devices/*.toml`) and check refusal codes and
 the reference module's DSP bytes. The separate full-tier `runtime/core/tests/capacity/inferred/inferred-needs.device.test.ts` checks needs inferred
-by `patchkit needs` against real modules and fixtures. `runtime/apps/digikit-menu/tests/fits.device.test.ts` checks the MODULES page.
+by `patchkit needs` against real modules and fixtures. The MODULES page (rows, the fit refusal) is a host test of the menu with a fake runtime (`runtime/platform/ui/host/tests/menu.rs`, `menu_mechanism.rs`).
 `tests/patchkit/test_limits.py` keeps tools from repeating a limit as a number.
 
 ### Machine and FX conformance
@@ -1240,7 +1240,7 @@ Where the targets come from:
 
 Three keys exist:
 - Full key: all shared reads and all built outputs, including the patchkit binary. Used by `test-device-all`, `test-conformance-all` and `stock-all` (the full tier); the merge targets `test-conformance` and `stock` leave the driver out.
-- Merge key: the key of files listed in `metadata.mergeTests`. It holds the bytes the test loads (its `.dkm` packs, `images-<device>.sha256`, the daemon key of the device) and the reads its import closure needs, without the driver packages. A half of it leaves out the files of the other device.
+- Merge key: the key of files listed in `metadata.mergeTests`. It holds the bytes the test loads (its `.dkm` packs, the system package `dist/syspkg/runtime/system.dksp` that every card carries, `images-<device>.sha256`, the daemon key of the device) and the reads its import closure needs, without the driver packages. A half of it leaves out the files of the other device.
 - Narrow key and merge key of a device test, and the merge key of `test-conformance`: one rule, one builder (`deviceInputs` in `tools/nx/device-test-keys.mjs`; `conformanceTarget` calls it). Builds key on sources, tests key on what they run. The key holds only the artifacts the test loads (the image hashes and the daemon test key of its half, `MERGE_BYTES`, and its packs: the packs the test loads for a narrow key, every uploadable module's for `test-conformance`, the patchkit key when the test runs patchkit live), its own test files and setup (the import closure of the test files and the Vitest setup, and for a test-only project that is a tests directory the files under it: `ownFiles`), the files its records list in `sources`, and `DRIVER_SUBJECT_FILES`; the other driver files are left out. No other source file is an input: not `src`, `include`, `fit`, `sdk` or the other files of the module (its pack carries them), and not the runtime or an image module (the image hashes carry them; a runtime edit that leaves the image bytes alone, such as a comment or `runtime/core/src/rs/Cargo.lock`, selects no device test). A test that reads a source file at run time, as `reload.device.test.ts` does through `packModuleVariant` (the files of the `sine` fixture), lists it in its record's `sources` (globs are allowed); a Python tool goes there too. For a test-only project the subject module is a fileset, `<subject root>/**/*`, without `src`, `include`, `fit`, `sdk`, `build` and `tests` at its top level, without the directories of nested projects and crates (found when the graph is built), without `*.md`, `Cargo.toml` and `Cargo.lock`, without test sources (`subjectInputs`), plus its pack output when it is packed (a service or content module); the half of a device whose image holds the subject follows the image hashes, and the other halves follow the pack or, when the subject has none, its `production` files. A fixture module that a record names in `patchModules` is built from source at run time and keeps its production files and the patchkit key. The full keys (`test-device-all`, `test-conformance-all`) are unchanged: they hold `production` of the project and the built binaries. Host tests: `tools/nx/tests/device-test-keys.test.ts`.
 
 `affected`, `test:plan` and `test:subset` stay source based and list the coarse set; the cache keys decide what runs.

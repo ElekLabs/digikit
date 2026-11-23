@@ -2,7 +2,7 @@
 //! `tests/contract.rs`. It proves the reload property of a service on the host: a module that is loaded, unloaded and loaded again leaves the service in the same
 //! state, and the loads and unloads of one module do not touch another module's rows.
 //!
-//! `Lifecycle` runs a module the way the loader does (`loader/mod.rs`, `complete`, `commit_services` and `unload_body`) over a `FakeCore`: the DSP reservation
+//! `Lifecycle` runs a module the way the loader does (`loader/`, `complete`, `commit_services` and `unload_body`) over a `FakeCore`: the DSP reservation
 //! (`dsp_admit`, `dsp_claim`), `module_begin`, the module's `init` (its builder calls), `module_commit` (the `PREPARE` and `WRITE` passes), the registry walker's
 //! check, the `DECLARE` pass, the walker's apply (`apply`, then `apply_record` for each record), and the publication of the DSP rows. A refusal at any step gives the
 //! services their `remove` and the DSP clear and release, as the loader's `fail` does; an unload does `dsp_clear`, `remove` and `dsp_release`. The registry walker's layout

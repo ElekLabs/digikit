@@ -755,7 +755,7 @@ pub unsafe extern "C" fn endian_write(value: u32, p: *mut u32) {
 "#,
     )
     .unwrap();
-    let (proto, hash, info) = rust::object_proto(&env, &manifest).unwrap();
+    let (proto, hash, info) = rust::object_proto(&env, &manifest, &[]).unwrap();
     let helper = proto
         .symbols
         .iter()
@@ -887,13 +887,17 @@ fn the_source_hash_of_a_crate_covers_the_sources_of_its_path_dependencies() {
     write("abi/src/service.rs", "pub const A: u32 = 1;\n");
     write("abi/src/gen_svc_abi.rs", "pub const FILES_HASH: u32 = 1;\n");
     let manifest = d.join("svc/Cargo.toml");
-    let before = rust::source_sha256(&manifest).unwrap();
+    let before = rust::source_sha256(&manifest, &[]).unwrap();
     for file in ["abi/src/service.rs", "abi/src/gen_svc_abi.rs"] {
         let old = std::fs::read_to_string(d.join(file)).unwrap();
         write(file, &old.replace('1', "2"));
-        assert_ne!(rust::source_sha256(&manifest).unwrap(), before, "{file}");
+        assert_ne!(
+            rust::source_sha256(&manifest, &[]).unwrap(),
+            before,
+            "{file}"
+        );
         write(file, &old);
-        assert_eq!(rust::source_sha256(&manifest).unwrap(), before);
+        assert_eq!(rust::source_sha256(&manifest, &[]).unwrap(), before);
     }
 }
 

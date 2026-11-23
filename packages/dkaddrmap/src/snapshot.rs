@@ -4,6 +4,8 @@
 //!
 //! The constants of the DSP placement come from the map header ([`Loader`], written by `patchkit apply`), not from the caller.
 
+use crate::gen_host_dir::{HOST_DSP, HOST_PROVIDERS};
+use crate::host_dir::{self, SYM_HOST_DIR};
 use crate::{Load, LoadTable};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -33,49 +35,91 @@ pub struct Loader {
     /// L2 memory: the byte address of the nominal base, and the software PC of the same place (`pc = sw + (byte - byte_base) / 2`).
     pub l2_byte_base: u64,
     pub l2_sw_base: u64,
-    /// The image has the run-time DSP loader (`DKRT_DSP`, `dyndsp_info`).
+    /// The image has the run-time DSP loader (`dyndsp_info`; its placement table `DKRT_DSP` is the system package's, found through the host directory).
     #[serde(default)]
     pub dsp: bool,
-    /// Provider record slots of `DKRT_PROVIDERS` (0: the image has none, as in older ship maps).
+    /// Provider record slots of `DKRT_PROVIDERS`, a static of the system package (0: none, as in older ship maps).
     #[serde(default)]
     pub providers: u64,
 }
 
-/// One range of memory to read: a symbol of the patch plan and the bytes from its address.
+/// One range of memory to read: a symbol and the bytes from its address. A resident symbol is a symbol of the patch plan (`host_id` is `None`). A static of the system package
+/// has none: `host_id` is its id in the host directory (`SYM_HOST_DIR`, read before it), and the address comes from [`crate::host_dir::HostDir::address`]; `symbol` then only names
+/// the bytes in the snapshot.
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct Read {
     pub symbol: &'static str,
     pub len: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_id: Option<u32>,
 }
 
 /// Raw bytes by symbol name.
 pub type Snapshot = BTreeMap<String, Vec<u8>>;
 
 impl Loader {
-    /// The ranges to read, in the order of [`decode_loads`] needs them.
+    /// The ranges to read, in the order [`decode_loads`] needs them. The directory comes before the package statics whose addresses it gives.
     pub fn reads(&self) -> Vec<Read> {
         let n = self.modules;
-        let mut r = vec![Read {
-            symbol: SYM_STATE,
-            len: STATE_HEADER as u64 + STATE_RECORD as u64 * n,
-        }];
+        let resident = |symbol, len| Read {
+            symbol,
+            len,
+            host_id: None,
+        };
+        let package = |symbol, len, id| Read {
+            symbol,
+            len,
+            host_id: Some(id),
+        };
+        let mut r = vec![resident(
+            SYM_STATE,
+            STATE_HEADER as u64 + STATE_RECORD as u64 * n,
+        )];
+        if self.dsp || self.providers > 0 {
+            r.push(resident(SYM_HOST_DIR, host_dir::BYTES));
+        }
         if self.dsp {
-            r.push(Read {
-                symbol: SYM_DSP,
-                len: DSP_HEADER as u64 + 8 * n,
-            });
-            r.push(Read {
-                symbol: SYM_INFO,
-                len: INFO_BYTES as u64,
-            });
+            r.push(package(SYM_DSP, DSP_HEADER as u64 + 8 * n, HOST_DSP));
+            r.push(resident(SYM_INFO, INFO_BYTES as u64));
         }
         if self.providers > 0 {
-            r.push(Read {
-                symbol: SYM_PROVIDERS,
-                len: STATE_RECORD as u64 * self.providers,
-            });
+            r.push(package(
+                SYM_PROVIDERS,
+                STATE_RECORD as u64 * self.providers,
+                HOST_PROVIDERS,
+            ));
         }
         r
+    }
+
+    /// Read the memory the load table is decoded from: `symbols` gives the address of each resident symbol (`patchkit addr` / the controller's `runtime.maps`), `peek` reads `len`
+    /// bytes at an address. A package static is found through the host directory; an empty entry is the error "no package loaded". One procedure for a host that reads memory itself.
+    pub fn collect<F>(
+        &self,
+        symbols: &BTreeMap<String, u64>,
+        mut peek: F,
+    ) -> Result<Snapshot, String>
+    where
+        F: FnMut(u64, u64) -> Result<Vec<u8>, String>,
+    {
+        let mut snap = Snapshot::new();
+        for read in self.reads() {
+            let at = match read.host_id {
+                None => *symbols
+                    .get(read.symbol)
+                    .ok_or_else(|| format!("the image has no symbol {}", read.symbol))?,
+                Some(id) => {
+                    let dir = snap
+                        .get(SYM_HOST_DIR)
+                        .ok_or_else(|| format!("{SYM_HOST_DIR} was not read"))?;
+                    host_dir::HostDir::parse(dir)
+                        .and_then(|d| d.address(id))
+                        .map_err(|e| e.to_string())? as u64
+                }
+            };
+            snap.insert(read.symbol.to_string(), peek(at, read.len)?);
+        }
+        Ok(snap)
     }
 }
 

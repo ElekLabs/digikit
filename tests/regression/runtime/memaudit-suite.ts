@@ -19,6 +19,7 @@ import {
   guardPlan,
   loadWatchEnv,
   moduleBlocks,
+  packageBlock,
   providerBlocks,
   type GuardPlan,
 } from './memaudit-kit.ts';
@@ -109,8 +110,8 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
           if (synthDir) fs.rmSync(synthDir, { recursive: true, force: true });
         });
         const base = {
-          roots: [...RT, 'core/digikit-menu'],
-          symbols: [...CARD_SYMBOLS, 'DKRT_ARENA', 'DKRT_PROVIDERS', '_dl_area'],
+          roots: [...RT, 'core/ui'],
+          symbols: [...CARD_SYMBOLS, 'DKRT_ARENA', 'DKRT_HOST_DIR', '_dl_area'],
           // a run-time machine needs machines.dks, a service with a DSP part: only a coupled session installs it (service-files.ts)
           dsp: spec.machines?.length ? ('sharc' as const) : ('zero' as const),
         };
@@ -198,8 +199,11 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
             }
 
             // the files of the services are blocks of the arena as well: their code and statics are not strays
-            blocks = [...modules, ...(await providerBlocks(session, h.plan))];
-            const plan = guardPlan(device, FIRMWARE[device], h.plan, blocks, arena);
+            const pkg = await packageBlock(session, h.plan);
+            blocks = [...modules, ...(await providerBlocks(session, h.plan)), pkg];
+            const plan = guardPlan(device, FIRMWARE[device], h.plan, blocks, arena, [
+              { owner: pkg.name, lo: pkg.cf_base, hi: pkg.cf_base + pkg.cf_size },
+            ]);
             guard = plan;
             record(h.artifacts, 'memaudit-plan', {
               protect: plan.protect.map((r) => [r.label, r.lo, r.hi]),

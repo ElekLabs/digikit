@@ -1518,6 +1518,13 @@ export class DkSession {
     this.rpcProven = false;
   }
   /**
+   * RETRY (resident core, also in a core-only boot): clear the boot counter without an upload, so that the next boot tries the system package again. It restarts nothing; call
+   * `restart` after it. No body; E_STATE while an upload is open or the store is busy.
+   */
+  async retry(): Promise<void> {
+    await this.ok(GCMD.RETRY, 'retry');
+  }
+  /**
    * RELOAD (runtime capability RELOAD): queue the reload of the loaded module that came from the store path `path`; the new file is on the card already. The reply says only that the
    * job is queued (E_BUSY: one runs, E_STATE: an upload is open, E_NOT_FOUND: no loaded module has that path). See `reloadState` and `reloadAndWait`.
    */

@@ -20,9 +20,11 @@ from tools.firmware import device as device_files
 from tools.patchkit import pk_devreload as dev
 from tools.patchkit import pk_dkrt
 
+# preview: (patch set, module store, screenshot name, DOWN presses from the top of SETTINGS to its row). The DIGIKIT row (the system package's) is the ninth; the demo row of a
+# content module comes after it.
 PREVIEWS = {
-    "menu": ("emulator", "digikit-menu"),
-    "ui-demo": ("test/ui-demo", "ui-demo"),
+    "menu": ("emulator", [], "digikit-menu", 8),
+    "ui-demo": ("emulator", ["test/ui-demo*"], "ui-demo", 9),
 }
 
 
@@ -248,12 +250,13 @@ def main(argv: list[str]) -> int:
     try:
         if args.preview == "module":
             return module_preview(args.module, args.device, args.stop)
-        target, shot = PREVIEWS[args.preview]
-        keys = f"tap:NO,tap:SETTINGS,wait:400,tap:DOWN*8,tap:YES,wait:600,shot:{shot}"
-        result = navigate([target, "--device", "dn2", "--keys", keys])
+        target, store, shot, downs = PREVIEWS[args.preview]
+        keys = f"tap:NO,tap:SETTINGS,wait:400,tap:DOWN*{downs},tap:YES,wait:600,shot:{shot}"
+        stored = ["--store", ",".join(store)] if store else []
+        result = navigate([target, "--device", "dn2", *stored, "--keys", keys])
         if result:
             return result
-        socket_path = panel_socket(target)
+        socket_path = panel_socket(target, store=store)
         print(
             "Opening the live faceplate; Ctrl-C stops the browser server and keeps the emulator.",
             flush=True,

@@ -490,10 +490,12 @@ mod tests {
         );
         // the symbols the loader header asks for are all there, in the runtime's RAM
         assert!(
-            maps.symbols.len() >= 1 && maps.symbols.contains_key("DKRT_STATE"),
+            maps.symbols.contains_key("DKRT_STATE") && maps.symbols.contains_key("DKRT_HOST_DIR"),
             "{:?}",
             maps.symbols
         );
+        // the system package's statics are not in the image: the host finds them through the directory
+        assert!(!maps.symbols.contains_key("DKRT_DSP"), "{:?}", maps.symbols);
         assert!(
             maps.symbols.values().all(|a| *a >= 0x4000_0000),
             "{:?}",

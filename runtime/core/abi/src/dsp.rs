@@ -130,7 +130,7 @@ pub struct Pending {
     /// The image to send: byte address in the area, bytes, the arena block holding the relocated copy (set by `launch`).
     pub send_base: u32,
     pub send_len: u32,
-    pub send_buf: u32,
+    pub send_buf: crate::dev_addr::DevAddr,
 }
 
 /// The DSP loader's state: one object a host can peek (`DKRT_DSP`). The voice rows are the machines service's (`DKRT_VROWS`), the effect rows the fx service's (`DKRT_FROWS`).
@@ -147,7 +147,7 @@ pub struct DspState {
     /// Byte address, bytes and arena block of the image `reserve` has prepared and `launch` has not taken yet.
     pub send_base: u32,
     pub send_len: u32,
-    pub send_buf: u32,
+    pub send_buf: crate::dev_addr::DevAddr,
     pub transfers: u32,
     pub row_writes: u32,
     pub failures: u32,

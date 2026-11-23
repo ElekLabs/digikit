@@ -18,6 +18,7 @@ pub const CMD_RELOAD: u8 = 0x06;
 pub const CMD_RELOAD_STATE: u8 = 0x07;
 pub const CMD_LOAD: u8 = 0x08;
 pub const CMD_UNLOAD: u8 = 0x09;
+pub const CMD_RETRY: u8 = 0x0b;
 pub const CMD_BEGIN: u8 = 0x10;
 pub const CMD_DATA: u8 = 0x11;
 pub const CMD_END: u8 = 0x12;
@@ -105,8 +106,9 @@ pub const CAPK_SETTINGS: u8 = 13;
 pub const CAPK_SEND_SLOTS: u8 = 14;
 pub const CAPK_DSP_COST: u8 = 15;
 pub const CAPK_DSP_VOICES: u8 = 16;
+pub const CAPK_PACKAGE: u8 = 17;
 /// Every CAPACITY kind in the order of its number: the runtime answers each one.
-pub const CAP_KINDS: [u8; 16] = [
+pub const CAP_KINDS: [u8; 17] = [
     CAPK_MODULES,
     CAPK_SELECTION,
     CAPK_ARENA,
@@ -123,9 +125,10 @@ pub const CAP_KINDS: [u8; 16] = [
     CAPK_SEND_SLOTS,
     CAPK_DSP_COST,
     CAPK_DSP_VOICES,
+    CAPK_PACKAGE,
 ];
 /// The `name_hash` of `cap_<kind>` (the kind name in lower case) for each kind of `CAP_KINDS`: the name of the `[[info]]` entry of the image's info table that gives the kind's limit when no service answers (docs/PATCHING.md).
-pub const CAP_INFO_HASHES: [u32; 16] = [
+pub const CAP_INFO_HASHES: [u32; 17] = [
     0x88b64095,
     0x4905a3e2,
     0x60285193,
@@ -142,6 +145,7 @@ pub const CAP_INFO_HASHES: [u32; 16] = [
     0x8a4e9248,
     0x4ebaf5d9,
     0xcb8f5ab7,
+    0xb6dc3d64,
 ];
 /// The most a kind's limit may report (`ceiling` of the kind, a key of `[limits.max]`): the size of the arrays that hold its rows. `u32::MAX`: none.
 pub const CAPMAX_MACHINE_ROWS: u32 = 8;
@@ -151,7 +155,7 @@ pub const CAPMAX_PAGE_ROWS: u32 = 8;
 pub const CAPMAX_FX_SLOTS: u32 = 4;
 pub const CAPMAX_MAP_ENTRIES: u32 = 8;
 pub const CAPMAX_SEND_SLOTS: u32 = 2;
-pub const CAP_CEILING: [u32; 16] = [
+pub const CAP_CEILING: [u32; 17] = [
     4294967295,
     4294967295,
     4294967295,
@@ -166,6 +170,7 @@ pub const CAP_CEILING: [u32; 16] = [
     4294967295,
     4294967295,
     2,
+    4294967295,
     4294967295,
     4294967295,
 ];

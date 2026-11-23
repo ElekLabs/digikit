@@ -17,7 +17,7 @@
 //! copied into the settings key `dk/fault` (`store_fault`), which stays until a newer fault replaces it; the ABOUT page reads that key.
 use crate::dlog;
 use dkrt_sdk::fault::Hang;
-use crate::{st, PLATFORM};
+use crate::{platform::st, platform::PLATFORM};
 use dkrt_abi::platform::Platform;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::store::crc32_of;
@@ -129,7 +129,7 @@ pub unsafe extern "C" fn dkrt_exc(frame: *const u32, saved: *const u32) -> ! {
     let fmt = w0 >> 28;
     let vec = (w0 >> 18) & 0xff;
     write_volatile(r.add(W_VERSION), VERSION);
-    write_volatile(r.add(W_TIME), crate::fw_blocks().unwrap_or(0));
+    write_volatile(r.add(W_TIME), crate::platform::fw_blocks().unwrap_or(0));
     write_volatile(r.add(W_VEC), vec | fmt << 8);
     write_volatile(r.add(W_SR), w0 & 0xffff);
     write_volatile(r.add(W_PC), pc);
@@ -172,7 +172,7 @@ pub unsafe extern "C" fn dkrt_exc(frame: *const u32, saved: *const u32) -> ! {
         i += 1;
     }
     let mut m = 0;
-    while m < crate::MAX_MODULES {
+    while m < dkrt_abi::MAX_MODULES {
         let md = &s.modules[m];
         if md.used != 0 && pc >= md.base && pc < md.base.wrapping_add(md.size) {
             write_volatile(r.add(W_MODULE), m as u32);
@@ -269,7 +269,7 @@ unsafe fn begin(kind: u32) {
         i += 1;
     }
     write_volatile(r.add(W_VERSION), VERSION);
-    write_volatile(r.add(W_TIME), crate::fw_blocks().unwrap_or(0));
+    write_volatile(r.add(W_TIME), crate::platform::fw_blocks().unwrap_or(0));
     write_volatile(r.add(W_STABLE), crate::boot::info().stable);
     write_volatile(r.add(W_MODULE), u32::MAX);
     write_tail(r);
@@ -282,7 +282,7 @@ const PANIC_NAME: [u8; 16] = *b"runtime\0\0\0\0\0\0\0\0\0";
 
 /// A panic of the runtime's Rust code: `panic_handler` calls this. The toolchain strips the file and line of a panic, so nothing of `PanicInfo` is used;
 /// the record holds the stack (the return addresses lead to the panicking code). The settings store is not touched: the panic may be inside it. Never returns.
-pub fn panic() -> ! {
+pub extern "C" fn panic() -> ! {
     unsafe {
         // the first fault only: a panic inside this function, or after a CPU exception, keeps the record
         if read_volatile(addr_of!(IN_EXC)) != 0 {
@@ -320,7 +320,7 @@ pub unsafe fn write_hang(h: &Hang) -> ! {
     begin(dkrt_sdk::fault::KIND_DSP);
     let r = rec();
     let mut i;
-    if h.module < crate::MAX_MODULES {
+    if h.module < dkrt_abi::MAX_MODULES {
         let md = &st().modules[h.module];
         write_volatile(r.add(W_MODULE), h.module as u32);
         i = 0;
@@ -361,7 +361,7 @@ unsafe fn write_tail(r: *mut u32) {
         if dkrt_sdk::fault::tail_keeps(kind, flags) {
             let mut k = 0;
             while k < 8 {
-                write_volatile(r.add(W_TAIL + 8 * n + k), crate::rd32(b.as_ptr().add(4 * k)));
+                write_volatile(r.add(W_TAIL + 8 * n + k), dkrt_abi::mem::rd32(b.as_ptr().add(4 * k)));
                 k += 1;
             }
             n += 1;

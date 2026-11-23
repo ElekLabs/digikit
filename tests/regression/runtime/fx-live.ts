@@ -22,6 +22,7 @@ import { record } from './artifacts.ts';
 import { comparePcmAligned } from './pcm-compare.ts';
 import { bounded, rpc, word } from './guest-access.ts';
 import { plusdriveBinary } from './card-kit.ts';
+import { installSystemPackage } from './system-package.ts';
 import { cachedCard, cardKey, fileSha } from './card-cache.ts';
 import { daemonBinary, FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
@@ -102,6 +103,7 @@ async function baseline(
     const seed = path.join(work, 'card', 'seed');
     const modules = path.join(seed, 'digikit', 'modules');
     fs.mkdirSync(modules, { recursive: true });
+    installSystemPackage(seed);
     for (const f of files) fs.copyFileSync(f.file, path.join(modules, f.name));
     const serviceDir = path.join(seed, 'digikit', 'services');
     fs.mkdirSync(serviceDir, { recursive: true });

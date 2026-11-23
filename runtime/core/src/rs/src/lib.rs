@@ -10,6 +10,12 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(static_mut_refs)]
 
+/// Resident code: everything of the crate except the package artifact's own root. A `package-image` build holds the package and no resident module.
+macro_rules! resident {
+    ($($item:item)*) => { $( #[cfg(not(feature = "package-image"))] $item )* };
+}
+
+resident! {
 #[cfg(not(test))]
 use core::panic::PanicInfo;
 use core::ptr::{addr_of, read_volatile, write_volatile};
@@ -18,31 +24,21 @@ use dkrt_sdk::*;
 mod api;
 mod arena;
 mod dev;
-pub mod core_api;
-pub mod collect;
-mod handlers;
 pub mod storage;
 pub(crate) use storage::storage_adapter;
 pub use storage::card::{block_write, block_write_with};
 pub use storage::{card, store, store_writer};
-#[rustfmt::skip]
-mod gen_services;
 pub mod boot;
+mod boot_env;
 pub mod fault;
 pub mod dlog;
-mod dsp;
-mod link;
-pub mod dsp_stats;
-pub mod entry;
 mod gen_abi_check;
 mod resident_query;
-mod loader;
-pub mod registry;
-pub mod scan;
+mod hooks;
+mod host_dir;
+mod resident;
+mod menu_exports;
 pub mod settings;
-mod settings_overlay;
-mod settings_reload;
-mod files;
 mod hash32;
 // The file is not aux.rs: Windows does not allow a file named AUX, with any extension.
 #[path = "aux_task.rs"]
@@ -50,19 +46,14 @@ pub mod aux;
 pub mod speed;
 mod intro;
 mod safe_screen;
-mod sha256;
 mod io;
-mod invariants;
 mod watch;
 mod worker;
 mod health;
-mod imports;
-mod svc_imports;
-mod svc_rows;
 mod mailbox;
-mod admission;
 mod platform;
-pub mod reload;
+pub mod level;
+pub mod stage1;
 mod safe_mode;
 mod selection;
 mod report;
@@ -71,18 +62,8 @@ mod tick;
 mod transport;
 mod store_cmds;
 mod admin_cmds;
-mod module_cmds;
-mod module_ui;
 
-// The items that moved out of this file are still reachable as `crate::name`.
-pub use api::*;
-pub use health::*;
-pub use imports::*;
-pub use platform::*;
-pub use report::*;
 pub use resident_query::dkrt_service_query;
-pub use state::*;
-pub use tick::*;
 
 #[cfg(not(test))]
 #[panic_handler]
@@ -127,16 +108,24 @@ pub(crate) unsafe extern "C" fn debug_selected_params(out: *mut i16, n: u32) -> 
     }
     track as i32
 }
+}
 
+// The system package (docs/plans/resident-core-and-system-package.md) is its own artifact: the second object of this crate, built with `--features package-image` and packed
+// by `patchkit syspkg build` into digikit/system.dksp. Its entry is `package/image.rs`. The resident object holds no package code; stage 1 places the card file in the package block (`DKRT_PKG`).
+// Host tests compile the package into their binary.
+#[cfg(any(test, feature = "package-image"))]
+mod package;
+// `dkrt_sdk::optional_imports!` (expanded in package/imports.rs) names `crate::loader::stub_missing`; this alias is the crate-root name of the package's loader
+// (`check:layers` does not count it as a crossing).
+#[cfg(any(test, feature = "package-image"))]
+use package::loader;
 
-
-mod lifecycle;
-#[cfg(test)]
-mod cleanup_tests;
 #[cfg(test)]
 mod test_lock;
 #[cfg(test)]
 mod fake_platform;
+#[cfg(test)]
+mod fake_boot_env;
 #[cfg(test)]
 mod spans_tests;
 #[cfg(test)]
@@ -149,5 +138,9 @@ mod fake_storage;
 mod host_io;
 #[cfg(test)]
 mod store_tests;
+#[cfg(test)]
+mod package_counter_tests;
+#[cfg(test)]
+mod settings_tests;
 
 

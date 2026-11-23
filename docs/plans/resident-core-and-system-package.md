@@ -56,7 +56,7 @@ The boundary is enforced in the tree before the binaries split (RC2s-1): `check:
 
 ## 6. Memory
 
-- The package takes about a third of the 512 KB arena. It sits at the top of the arena so module allocations below it are unchanged; the capacity report counts it as `core.package` (Em, 2026-11-22).
+- The package has its own block outside the module arena (`DKRT_PKG`, `PACKAGE_BYTES` = 320 KiB in `abi.toml`; Em, 2026-11-23, replacing the arena-top placement of 2026-11-22): the arena keeps its 512 KiB, the capacity report has a `PACKAGE` kind, and `patchkit syspkg build` and stage 1 refuse a package that needs more than the block.
 - The staging buffer stays 128 KB; stage 1 streams.
 - The menu lifetime rule (menus are never freed) means the package is replaced only at the next boot, never at run time. That matches an update: upload, then restart.
 
@@ -85,4 +85,4 @@ Taken by Em, 2026-11-22:
 1. Safe mode loads the system package and its menu with no modules; core-only (resident core, no DIGIKIT UI) is the fallback when the package is missing, broken or keeps crashing. No resident interactive screen.
 2. A missing or incompatible system package is core-only, not counted as a crash.
 3. The DSP hang watch stays resident.
-4. The package sits at the top of the arena, counted as `core.package`.
+4. The package has its own block outside the arena (`PACKAGE_BYTES`), reported as the `PACKAGE` capacity kind.

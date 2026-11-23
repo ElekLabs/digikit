@@ -71,7 +71,7 @@ int dk_ui_text_input(dk_ui *ui, const dk_ui_text_input_desc *d);
   frees a module's views and drops its SETTINGS rows when the module unloads, so a module with views stays unloadable
   (menus are not: `DK_E_RELOAD_MENUS`).
 - SETTINGS rows: one registry (`SettingsRows`, at most 4 rows). The existing hook `cf.menu.hook.settings_list.tail` adds
-  the app row (`dk_app_settings_rows`) and then the registered rows, in load order.
+  the system package's rows (`dkrt_ui_settings_rows`: the `ui.settings_rows` hook, the DIGIKIT row) and then the registered rows, in load order.
 
 ### `shortcuts`
 

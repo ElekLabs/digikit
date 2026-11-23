@@ -3,7 +3,7 @@
 
     uv run python -m tools.coldfire.digikit_health_proof run [--image dt2-1.16] [--quick] [--no-cost]
 
-One coupled daemon on a patched image (core/runtime, core/dynreg, core/dyndsp, core/digikit-menu, core/health), the write watch and
+One coupled daemon on a patched image (core/runtime, core/dynreg, core/dyndsp, core/ui, core/health; the DIGIKIT menu is part of the system package), the write watch and
 the flush check on. Everything is read from the guest's memory (the runtime's `DKRT_HEALTH` after the mailbox command `CMD_HEALTH`,
 the menu's `DK_LINES`, `DK_REDRAWS`, the module's counters), not from OLED pixels:
 
@@ -36,12 +36,13 @@ import time
 
 from tools.coldfire.digikit_menu_proof import Plan
 from tools.device.dkproto import ARENA_HDR
+from tools.patchkit import pk_hostdir
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = ROOT / "out" / "runs" / "lanes" / "r1-health"
 SHOTS = ROOT / "out" / "runs" / "lanes" / "r1-shots"
 RT = "core/runtime,core/dynreg,core/dyndsp"
-MODULES = f"{RT},core/digikit-menu,core/health"
+MODULES = f"{RT},core/ui,core/health"
 CMD_HEALTH = 6
 HEALTH_FIELDS = [
     "magic", "version", "flags", "blocks", "windows", "cpu_x10", "idle_win", "idle_ref", "dsp_avg", "dsp_max", "dsp_period",
@@ -153,6 +154,11 @@ class HealthProof:
 
     # ---- reads
     def sym(self, name: str) -> int:
+        if name.startswith("DK_"):
+            # a static of the menu in the system package: found through the host directory (abi.toml `MENU_*`), never by the image plan
+            return pk_hostdir.read_package_address(
+                self.rig.w, self.plan.addr("DKRT_HOST_DIR"), "MENU_" + name[3:]
+            )
         return self.plan.addr(name)
 
     def w(self, addr: int) -> int:
@@ -327,7 +333,7 @@ class HealthProof:
         """An image patched without core/health leaves the boot thread's last call and the block handler's entry as the firmware has them
         (no write of the patch plan touches them); the image with it patches exactly those two sites, for core/health."""
         sites = {"cf.rtos.site.idle": 6, "cf.link.fn.block_isr": 8}
-        without = self.env.build_image(f"{RT},core/digikit-menu", "nohealth")
+        without = self.env.build_image(f"{RT},core/ui", "nohealth")
         plan0, plan1 = without.plan, self.img.plan
 
         def touched(plan: dict) -> dict:

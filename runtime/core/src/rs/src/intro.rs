@@ -140,7 +140,7 @@ unsafe extern "C" fn tramp(_index: u32, _count: u32, bitmap: *mut u8) {
 #[cfg(not(test))]
 pub unsafe fn take(frame: Option<IntroFrameFn>, done: Option<IntroDoneFn>, ctx: *mut u8, ticks: u32) -> i32 {
     let source = dlog::current_source();
-    let in_init = source != 0 && (source as usize) <= crate::MAX_MODULES && crate::files::in_init(source as usize - 1);
+    let in_init = source != 0 && (source as usize) <= dkrt_abi::MAX_MODULES && crate::hooks::files_in_init(source as usize - 1);
     let r = check(in_init, read_volatile(addr_of!(STATE)) != 0, frame.is_some(), ticks, intro_running());
     if r != OK {
         return r;
@@ -200,6 +200,22 @@ pub unsafe fn show_safe(reason: u32) {
     }
     let buf = &mut *addr_of_mut!(SAFE_BUF);
     crate::safe_screen::render(reason, buf);
+    show_frame(buf);
+}
+
+/// `dkrt_boot` of a core-only boot: the core-only frame in place of the stock intro, like `show_safe`.
+#[cfg(not(test))]
+pub unsafe fn show_core_only(reason: crate::level::CoreOnlyReason) {
+    if !intro_running() {
+        return;
+    }
+    let buf = &mut *addr_of_mut!(SAFE_BUF);
+    crate::safe_screen::render_core_only(reason, buf);
+    show_frame(buf);
+}
+
+#[cfg(not(test))]
+unsafe fn show_frame(buf: &[u8; crate::safe_screen::FRAME_BYTES]) {
     write_volatile(addr_of_mut!(STATIC_PIXELS), buf.as_ptr());
     write_volatile(addr_of_mut!(FRAME), None);
     write_volatile(addr_of_mut!(DONE), None);
@@ -257,6 +273,8 @@ pub unsafe fn take(_: Option<IntroFrameFn>, _: Option<IntroDoneFn>, _: *mut u8, 
 pub unsafe fn commit(_: usize) {}
 #[cfg(test)]
 pub unsafe fn show_safe(_: u32) {}
+#[cfg(test)]
+pub unsafe fn show_core_only(_: crate::level::CoreOnlyReason) {}
 #[cfg(test)]
 pub unsafe fn end_blank() {}
 

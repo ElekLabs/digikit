@@ -13,7 +13,7 @@
 //! Rules: no `match` on integers (a dense one becomes a jump table, which is not ColdFire code), no `core::fmt`, no slice indexing.
 
 use crate::hash32::{self, Hash32};
-use crate::{block_read, block_write, card, PLATFORM};
+use crate::{platform::block_read, block_write, card, platform::PLATFORM};
 use dkrt_abi::platform::{Platform, StagedWriter};
 #[cfg(not(test))]
 use dkrt_abi::platform::Tasking;
@@ -119,7 +119,7 @@ pub(crate) fn up() -> &'static mut Up {
 }
 
 /// Is a write session open (SysEx or SDK)?
-pub fn is_open() -> bool {
+pub extern "C" fn is_open() -> bool {
     up().kind != NONE
 }
 
@@ -157,7 +157,7 @@ const IDLE_BLOCKS: u32 = 20 * 1500;
 
 #[cfg(not(test))]
 pub(crate) unsafe fn now() -> u32 {
-    crate::fw_blocks().unwrap_or(0)
+    crate::platform::fw_blocks().unwrap_or(0)
 }
 #[cfg(test)]
 pub static mut TEST_NOW: u32 = 0;
@@ -175,7 +175,7 @@ pub unsafe fn tick() {
         return;
     }
     #[cfg(not(test))]
-    if crate::fw_blocks().is_none() {
+    if crate::platform::fw_blocks().is_none() {
         return;
     }
     if u.pd && read_volatile(addr_of!(PD_BUSY)) {
@@ -187,7 +187,7 @@ pub unsafe fn tick() {
         return;
     }
     if u.kind != NONE && now().wrapping_sub(u.last) >= limit {
-        crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [0xb6, u.kind as u32, u.owner as u32, u.next, u.size]);
+        crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [crate::storage::upload_codes::PENDING_DROPPED, u.kind as u32, u.owner as u32, u.next, u.size]);
         drop_sdk(u);
     }
     unlock();
@@ -256,11 +256,11 @@ pub static mut DKRT_UPLOAD_WRITES: u32 = 0;
 /// Test knob: when not 0, the Nth card write since boot (counted in `DKRT_UPLOAD_WRITES`) is torn when it is one sector: only its first
 /// 256 bytes reach the card (a header then fails its CRC), and every later write is refused as with `DKRT_UPLOAD_CUT`.
 #[no_mangle]
-pub static mut DKRT_UPLOAD_TEAR: crate::boot::Knob = crate::boot::Knob(0);
+pub static mut DKRT_UPLOAD_TEAR: crate::safe_mode::Knob = crate::safe_mode::Knob(0);
 /// Test knob: when not 0, the Nth card write since boot (counted in `DKRT_UPLOAD_WRITES`) succeeds, then the first byte of its first sector on the card is
 /// flipped: a card that holds other bytes than the host sent (the close's read-back must refuse it).
 #[no_mangle]
-pub static mut DKRT_UPLOAD_FLIP: crate::boot::Knob = crate::boot::Knob(0);
+pub static mut DKRT_UPLOAD_FLIP: crate::safe_mode::Knob = crate::safe_mode::Knob(0);
 #[repr(C, align(16))]
 struct Sec([u8; 512]);
 static mut TEAR_BUF: Sec = Sec([0; 512]);
@@ -393,13 +393,7 @@ pub fn free_bytes(h: &Hdr) -> u32 {
     }
 }
 
-pub unsafe fn copy(dst: *mut u8, src: *const u8, n: usize) {
-    let mut i = 0;
-    while i < n {
-        *dst.add(i) = *src.add(i);
-        i += 1;
-    }
-}
+pub use dkrt_abi::mem::copy;
 
 pub unsafe fn zero(dst: *mut u8, n: usize) {
     let mut i = 0;
@@ -427,6 +421,10 @@ unsafe fn do_commit_hinted(b: &Bufs, cur: &Hdr, edit: Edit, pend: Option<(u32, u
         Some(k) if k.valid && k.h == *cur && k.n == extra.len() && same_extents(&k.extra[..k.n], extra) => Some(k.at),
         _ => None,
     };
+    if edit_names_package(edit) {
+        // the commit puts a file at the system package's path: the safe-mode owner decides what that means for the boot counter, before the commit writes
+        crate::safe_mode::package_written_with(&PLATFORM);
+    }
     match store::commit_at(&io(), &lay(), cur, b.tin, b.tout, TBL_CAP, b.scr, edit, extra, at) {
         Ok(c) => {
             crate::store::note_commit(&c.h);
@@ -434,6 +432,39 @@ unsafe fn do_commit_hinted(b: &Bufs, cur: &Hdr, edit: Edit, pend: Option<(u32, u
         }
         Err(e) => pe(e),
     }
+}
+
+/// Does `edit` put a file at the system package's path (`digikit/system.dksp`)? Compares the NUL-terminated path that starts the entry.
+unsafe fn edit_names_package(edit: Edit) -> bool {
+    if let Edit::Insert(ent) = edit {
+        return is_package_path(ent);
+    }
+    if let Edit::InsertMany(ents, n) = edit {
+        let mut i = 0;
+        while i < n {
+            if is_package_path(*ents.add(i)) {
+                return true;
+            }
+            i += 1;
+        }
+        return false;
+    }
+    if let Edit::Rename(_, to, _) = edit {
+        return is_package_path(to);
+    }
+    false
+}
+
+unsafe fn is_package_path(ent: *const u8) -> bool {
+    let want = crate::stage1::PACKAGE_PATH;
+    let mut i = 0;
+    while i < want.len() {
+        if *ent.add(i) != want[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
 }
 
 fn same_extents(a: &[(u32, u32)], b: &[(u32, u32)]) -> bool {
@@ -720,7 +751,7 @@ unsafe fn pend_tick() {
         return;
     }
     #[cfg(not(test))]
-    if crate::fw_blocks().is_none() {
+    if crate::platform::fw_blocks().is_none() {
         return;
     }
     if !pend_due(p, now()) {
@@ -747,7 +778,7 @@ unsafe extern "C" fn pend_step(_: *mut u8) -> i32 {
             p.retrying = false; // else entries with a leased target stay: `commit_pending` set the pause
         }
     } else {
-        crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [0xb8, r as u32, p.n as u32, 0, 0]);
+        crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [crate::storage::upload_codes::WRITE_FAILED, r as u32, p.n as u32, 0, 0]);
         p.retrying = true;
         p.retry_at = now().wrapping_add(PENDING_RETRY);
     }
@@ -1112,7 +1143,7 @@ unsafe fn rb_free(_: *mut u8) {}
 /// bytes over it) and drop them after each read. Nothing writes these buffers but the DMA, so the lines stay clean between the two.
 #[cfg(not(test))]
 fn cache_sync(p: *const u8, n: usize) {
-    crate::flush(p as u32, n as u32);
+    crate::platform::flush(p as u32, n as u32);
 }
 #[cfg(test)]
 fn cache_sync(_: *const u8, _: usize) {}
@@ -1290,7 +1321,7 @@ mod tests {
 
     #[test]
     fn an_idle_session_expires_after_20_seconds_of_block_clock_and_not_before() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             open_session(SYSEX, 1000);
             TEST_NOW = 1000 + 20 * 1500 - 1;
@@ -1308,7 +1339,7 @@ mod tests {
 
     #[test]
     fn a_session_is_not_dropped_while_the_store_lock_is_held() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             open_session(SDK, 0);
             TEST_NOW = 100_000;
@@ -1323,7 +1354,7 @@ mod tests {
 
     #[test]
     fn the_idle_knob_overrides_the_default() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             open_session(SYSEX, 0);
             write_volatile(addr_of_mut!(DKRT_SESSION_IDLE), 10);
@@ -1425,7 +1456,7 @@ mod tests {
 
     #[test]
     fn pending_files_keep_their_extents_out_and_count_for_their_owner() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             put("samples/a", 500, 1024, 3);
@@ -1451,7 +1482,7 @@ mod tests {
 
     #[test]
     fn a_pending_replace_takes_the_slot_of_its_path() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             TEST_NOW = 10;
@@ -1468,7 +1499,7 @@ mod tests {
 
     #[test]
     fn pending_files_are_due_when_the_owner_is_idle_for_a_second_or_its_job_ends_and_never_dropped_by_the_session_idle() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             put("samples/a", 500, 512, 3);
@@ -1504,7 +1535,7 @@ mod tests {
 
     #[test]
     fn a_module_that_goes_gets_its_pending_files_flushed() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             put("samples/a", 500, 512, 3);
@@ -1529,7 +1560,7 @@ mod tests {
 
     #[test]
     fn free_bytes_leaves_room_for_the_pending_entries_and_their_data() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             crate::store::TEST_LAYOUT.with(|c| c.set(Some(Layout { first: 100, sectors: 100_000 })));
@@ -1548,7 +1579,7 @@ mod tests {
 
     #[test]
     fn a_pending_path_is_found_without_being_removed() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             pend_clear();
             put("samples/a", 500, 512, 3);
@@ -1563,7 +1594,7 @@ mod tests {
 
     #[test]
     fn a_stale_or_foreign_handle_is_refused() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             open_session(SDK, 0);
             up().handle = 7;

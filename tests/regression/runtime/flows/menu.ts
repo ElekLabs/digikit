@@ -3,7 +3,7 @@ import { pollUntil } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '../../support.ts';
 import { record } from '../artifacts.ts';
-import { planSymbol, type RuntimePlan } from '../runtime-plan.ts';
+import { packageSymbol, type RuntimePlan } from '../runtime-plan.ts';
 import { aboutIsComplete, readAboutRows } from '../runtime-menu.ts';
 
 /** The panel flows of the DIGIKIT menu. Each takes `rt` and uses only `rt.ui` and state reads (docs/plans/test-architecture.md, T2 step 3). */
@@ -52,7 +52,7 @@ export async function openDigikitMenu(
 
 /** The ABOUT rows once the page is complete (`fill_about` ends on RAM KEPT); [] while the buffer is empty or half filled. */
 async function aboutNow(rt: Rt, plan: RuntimePlan): Promise<string[]> {
-  const count = await rt.session.client.memPeek(planSymbol(plan, 'DK_ABOUT_N'));
+  const count = await rt.session.client.memPeek(await packageSymbol(rt.session, plan, 'MENU_ABOUT_N'));
   if (count === null || count < 1 || count > 24) return [];
   return readAboutRows(rt.session, plan);
 }
@@ -85,7 +85,7 @@ export async function openRuntimeAbout(
   let runtimeRow: string | undefined;
   let failed = true;
   try {
-    initialCount = await rt.session.client.memPeek(planSymbol(plan, 'DK_ABOUT_N'));
+    initialCount = await rt.session.client.memPeek(await packageSymbol(rt.session, plan, 'MENU_ABOUT_N'));
     expect(initialCount, 'ABOUT buffer is empty before its first open').toBe(0);
     runtimeRow = `RUNTIME ${fmtVersion((await rt.dk.info()).runtime)}`;
     rows = await pressAbout(rt, plan, o);

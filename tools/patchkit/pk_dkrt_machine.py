@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 from tools.coldfire import arena_safety  # noqa: E402
 from tools.control.digi_client import Emu  # noqa: E402
 from tools.device.dkproto import SETTINGS_SECTORS  # noqa: E402
-from tools.patchkit import hook_ab, pk_device  # noqa: E402
+from tools.patchkit import hook_ab, pk_device, pk_hostdir  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 from tools.patchkit.pk_dkrt import (  # noqa: E402
     ProofError,
@@ -41,7 +41,6 @@ MODULES_STATIC = "core/runtime,core/dynreg,core/dyndsp"
 MODULE = "test/sine"
 MACHINE = "sine"  # its machine
 # DspState (runtime/core/abi/src/dsp.rs), byte offsets of the fields the proof reads
-D_MAGIC, D_PHASE, D_STEP, D_TRANSFERS, D_ROW_WRITES, D_FAILURES = 0, 4, 12, 36, 40, 44
 D_MOD_OFF, D_MOD_LEN, D_ROW_TYPE, D_ROW_PC, D_ROW_OWNER = 52, 84, 148, 180, 212
 # State: last_result at 12; Mailbox: cmd 0, seq 4, result 8, arg 12
 ST_LAST = 12
@@ -286,7 +285,9 @@ class Rig:
         self.checks: list[tuple[str, bool, str]] = []
         self.mb = sym(plan, "core/runtime", "DKRT_MAILBOX") if has_rt(plan) else 0
         self.state = sym(plan, "core/runtime", "DKRT_STATE") if has_rt(plan) else 0
-        self.dsp = sym(plan, "core/runtime", "DKRT_DSP") if has_rt(plan) else 0
+        self.host_dir = (
+            sym(plan, "core/runtime", "DKRT_HOST_DIR") if has_rt(plan) else 0
+        )
 
     def check(self, name: str, ok: bool, detail: str = "") -> None:
         self.checks.append((f"{self.tag}: {name}", bool(ok), detail))
@@ -328,8 +329,9 @@ class Rig:
         r = self.w(self.state + ST_LAST)
         return r - (1 << 32) if r >= 1 << 31 else r
 
-    def dsp_phase(self) -> int:
-        return self.w(self.dsp + D_PHASE)
+    def package_symbol(self, name: str) -> int:
+        """The address of a static of the system package (`DSP` is `DKRT_DSP`), through the host directory; raises `pk_hostdir.NoPackage` when none is loaded."""
+        return pk_hostdir.read_package_address(self.w, self.host_dir, name)
 
     def dsp_bytes(self, addr: int, n: int) -> bytes:
         out = bytearray()

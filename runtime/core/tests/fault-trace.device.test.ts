@@ -30,8 +30,7 @@ async function expectFxHang(runtime: TestRuntime): Promise<void> {
   const { session, dk } = runtime;
   await expectRuntimeReady(session);
   const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), [
-    'DK_ABOUT',
-    'DK_ABOUT_N',
+    'DKRT_HOST_DIR',
     'DKRT_BOOT',
     ...RING_SYMBOLS,
   ]);
@@ -122,8 +121,7 @@ async function expectRuntimePanic(runtime: TestRuntime): Promise<void> {
   const { session, dk } = runtime;
   await expectRuntimeReady(session);
   const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'fault-trace'), [
-    'DK_ABOUT',
-    'DK_ABOUT_N',
+    'DKRT_HOST_DIR',
     'DKRT_BOOT',
     ...RING_SYMBOLS,
   ]);

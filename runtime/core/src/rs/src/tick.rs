@@ -5,14 +5,15 @@ use crate::health::{dkrt_health, DKRT_HEALTH};
 use crate::mailbox::mailbox_select;
 use crate::platform::st;
 use crate::state::{init_once, DKRT_MAILBOX, DKRT_POLLS, POLLS};
-use crate::handlers::{services, tick_phase};
-use crate::{admin_cmds, boot, card, dlog, fault, entry, files, intro, io, loader, settings, store_writer, watch, worker};
+use dkrt_abi::hooks::tick_phase;
+use crate::{admin_cmds, card, dlog, fault, intro, io, safe_mode, settings, store_writer, watch, worker};
+use crate::hooks;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::*;
 
 /// One tick phase of the services, measured as a span (owner `SPAN_PHASE | p`) while a span sink and clock are set.
 pub(crate) unsafe fn phase(p: u32) {
-    dlog::spanned(dlog::SPAN_PHASE | p, || services().tick(p));
+    dlog::spanned(dlog::SPAN_PHASE | p, || hooks::tick(p));
 }
 
 /// Every registered poll function, each measured as a span (owner `SPAN_POLL | i`, `i` its slot) while a span sink and clock are set.
@@ -37,21 +38,18 @@ pub unsafe extern "C" fn dkrt_tick() {
     let s = st();
     s.ticks = s.ticks.wrapping_add(1);
     intro::ui_pass();
-    boot::ui_pass();
+    safe_mode::ui_pass();
     admin_cmds::restart_poll();
-    crate::reload::poll();
-    crate::settings_reload::poll();
-    crate::module_ui::tick();
+    hooks::tick(tick_phase::POLL_JOB);
     crate::storage::backends::plusdrive::tick();
     store_writer::tick();
     crate::storage::card_guard::tick();
     fault::install();
-    crate::link::pump();
-    crate::lifecycle::dsp_step();
+    hooks::tick(tick_phase::POLL_DSP);
     worker::tick();
     io::tick();
     phase(tick_phase::EARLY);
-    files::tick();
+    hooks::tick(tick_phase::FILES);
     phase(tick_phase::LATE);
     phase(tick_phase::LAST);
     settings::tick();
@@ -83,6 +81,6 @@ pub unsafe extern "C" fn dkrt_tick() {
         write_volatile(addr_of_mut!(mb.cmd), 0);
     }
     // the tick of every loaded module (`dk_module.tick`)
-    entry::tick_all();
+    hooks::tick(tick_phase::MODULES);
     poll_all();
 }

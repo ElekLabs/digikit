@@ -185,9 +185,9 @@ page_rows = 0
 # `emulator`: what the emulator patches in itself. The DSP, run-time machine and effect modules have no Syntakt port (no DSP). There is no
 # `device-introblank`: the boot screen module has no Syntakt port.
 [patch_sets]
-device = ["core/runtime", "core/card-guard", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
+device = ["core/runtime", "core/card-guard", "core/ui", "core/health", "core/input", "core/peer-image"]
 device-peer = ["core/peer-image"]
-emulator = ["core/runtime", "core/card-guard", "core/ui", "core/digikit-menu", "core/health", "core/input", "core/peer-image"]
+emulator = ["core/runtime", "core/card-guard", "core/ui", "core/health", "core/input", "core/peer-image"]
 
 # Where the card keeps things (finding 138 "Storage"; sectors are 512 bytes). Read by packages/emulator/device-profile and used by the +Drive builder,
 # reader and exporter (packages/emulator/plusdrive). The MmcFs of OS 1.42 has no kit pool and no kit bitmap, and no path filesystem.

@@ -8,7 +8,7 @@
 //! Where an object is written: a `core/*` module (`category = "core"`) keeps its objects in the module (`build/x.dko.json`, committed: the
 //! workbench and the browser patch without a toolchain). Every other module (content modules, test fixtures, imported modules) is
 //! build output: its objects go to the cache `out/cache/dko/<module id>/<src12>/<object path>`, where `<src12>` is the first 12 digits of the
-//! object's `source_sha256` (so builds of other commits sit beside this one). [`object_file`] names the file.
+//! object's `source_sha256` (so builds of other commits sit beside this one). [`object_file_at`] names the file.
 //!
 //! An object whose `source_sha256` equals the hash of its sources now, and, for a SHARC+ object, whose `selache_rev` is the pinned one,
 //! is not compiled ("unchanged"). `--check` rebuilds and
@@ -98,6 +98,14 @@ pub struct ModuleToml {
     module: ModuleHead,
     #[serde(default)]
     object: Vec<ObjectToml>,
+    /// The system package (`[system_package]`): one more Rust object of the module, built and checked like the others but not linked into the image;
+    /// `patchkit syspkg build` packs it (docs/plans/resident-core-and-system-package.md).
+    #[serde(default)]
+    system_package: Option<ObjectToml>,
+    /// An object that `patchkit syspkg build --part` links into the system package (`[package_part]`: the DIGIKIT menu's C object). It is built and checked like the
+    /// others and is not linked into the image.
+    #[serde(default)]
+    package_part: Option<ObjectToml>,
 }
 
 #[derive(Deserialize)]
@@ -112,6 +120,31 @@ struct ObjectToml {
     path: String,
     #[serde(default)]
     sources: Vec<String>,
+    /// Rust only: the crate's cargo features (`--features`).
+    #[serde(default)]
+    features: Vec<String>,
+    /// Rust only: `false` builds with `--no-default-features`.
+    #[serde(default = "yes")]
+    default_features: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl ObjectToml {
+    /// The cargo flags that select the crate's features: part of the object's source hash.
+    fn cargo_flags(&self) -> Vec<String> {
+        let mut flags = vec![];
+        if !self.default_features {
+            flags.push("--no-default-features".to_string());
+        }
+        if !self.features.is_empty() {
+            flags.push("--features".to_string());
+            flags.push(self.features.join(","));
+        }
+        flags
+    }
 }
 
 impl ModuleToml {
@@ -127,6 +160,14 @@ impl ModuleToml {
         &self.module.id
     }
 
+    /// Every object the build makes: the `[[object]]` list, the `[system_package]` object and the `[package_part]` object.
+    fn built(&self) -> impl Iterator<Item = &ObjectToml> {
+        self.object
+            .iter()
+            .chain(self.system_package.iter())
+            .chain(self.package_part.iter())
+    }
+
     /// A content module: its objects are build output (the cache), not committed.
     pub fn is_content(&self) -> bool {
         self.module.category != "core"
@@ -136,8 +177,7 @@ impl ModuleToml {
     pub fn builds(&self, path: &str) -> bool {
         self.is_content()
             && self
-                .object
-                .iter()
+                .built()
                 .any(|o| o.path == path && !o.sources.is_empty())
     }
 }
@@ -273,17 +313,18 @@ fn cf_module_include_dirs(
 fn source_hash(
     env: &Env,
     moddir: &Path,
-    sources: &[String],
+    o: &ObjectToml,
     sdk: bool,
     header: Option<&workbench::Header>,
 ) -> Result<String> {
+    let sources = &o.sources;
     let paths: Vec<PathBuf> = sources.iter().map(|s| moddir.join(s)).collect();
     match kind_of(sources) {
         Kind::Sharc => {
             let text = sharc::source_text(&env.root, moddir, &paths, &env.defines)?;
             Ok(sharc::source_hash(&text))
         }
-        Kind::Rust => rust::source_sha256(&paths[0]),
+        Kind::Rust => rust::source_sha256(&paths[0], &o.cargo_flags()),
         Kind::Cf => cf::source_digest_with_workbench(
             env,
             &paths,
@@ -325,11 +366,10 @@ pub fn module_status(root: &Path, moddir: &Path) -> Result<Vec<(String, bool)>> 
     let env = Env::new(root);
     let m = manifest(moddir)?;
     let header = m.workbench_header(moddir)?;
-    m.object
-        .iter()
+    m.built()
         .filter(|o| !o.sources.is_empty())
         .map(|o| {
-            let hash = source_hash(&env, moddir, &o.sources, m.is_content(), header.as_ref())?;
+            let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
             let file = object_file_at(&env, moddir, &m, o, &hash);
             Ok((
                 o.path.clone(),
@@ -344,11 +384,10 @@ pub fn object_files(root: &Path, moddir: &Path) -> Result<Vec<(String, PathBuf)>
     let env = Env::new(root);
     let m = manifest(moddir)?;
     let header = m.workbench_header(moddir)?;
-    m.object
-        .iter()
+    m.built()
         .filter(|o| !o.sources.is_empty())
         .map(|o| {
-            let hash = source_hash(&env, moddir, &o.sources, m.is_content(), header.as_ref())?;
+            let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
             Ok((o.path.clone(), object_file_at(&env, moddir, &m, o, &hash)))
         })
         .collect()
@@ -411,7 +450,7 @@ fn build_object(
                         "a Rust object lists its Cargo.toml as the only source"
                     ));
                 }
-                let (proto, sha, toolchain) = rust::object_proto(env, &paths[0])?;
+                let (proto, sha, toolchain) = rust::object_proto(env, &paths[0], &o.cargo_flags())?;
                 cf::dko_from_proto(&proto, sha, toolchain)
             } else {
                 cf::cf_object_with_workbench(
@@ -446,8 +485,7 @@ fn write_object(path: &Path, text: &str) -> Result<()> {
 /// uses cached declarations to bootstrap headers that the next build may need.
 pub fn read_cached_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Result<String> {
     let o = m
-        .object
-        .iter()
+        .built()
         .find(|o| o.path == rel)
         .ok_or_else(|| err!("{rel}: not an object of the module"))?;
     if !m.is_content() {
@@ -473,12 +511,11 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
     static BUILDING: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _one_at_a_time = BUILDING.lock().unwrap_or_else(|e| e.into_inner());
     let o = m
-        .object
-        .iter()
+        .built()
         .find(|o| o.path == rel)
         .ok_or_else(|| err!("{rel}: not an object of the module"))?;
     let header = m.workbench_header(moddir)?;
-    let want = source_hash(env, moddir, &o.sources, m.is_content(), header.as_ref())
+    let want = source_hash(env, moddir, o, m.is_content(), header.as_ref())
         .map_err(|e| err!("{}: {rel}: cannot hash the sources: {e}", moddir.display()))?;
     let file = object_file_at(env, moddir, m, o, &want);
     if stored_current(&file, &want)
@@ -517,8 +554,8 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
     let m = manifest(moddir)?;
     let header = m.workbench_header(moddir)?;
     let mut report = BuildReport::default();
-    for o in m.object.iter().filter(|o| !o.sources.is_empty()) {
-        let hash = source_hash(&env, moddir, &o.sources, m.is_content(), header.as_ref())?;
+    for o in m.built().filter(|o| !o.sources.is_empty()) {
+        let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
         let stored = |h: &str| object_file_at(&env, moddir, &m, o, h);
         if !opts.check
             && opts.defines.is_empty()

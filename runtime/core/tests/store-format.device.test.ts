@@ -1,43 +1,25 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileHashHex } from '@digi/dk-session';
-import { LOG_KIND, RUNTIME_SERVICE_NAMES } from '@digi/dk-session/gen_proto';
-import { repoRoot } from '@digi/test-support';
+import { BOOT_LEVEL } from '@digi/dk-session/gen_host_dir';
+import { STATUS } from '@digi/dk-session/gen_proto';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { expect, test } from 'vitest';
-import {
-  blob,
-  bootInfoLoaded,
-  cardInfo,
-  overlayArgs,
-  readSectors,
-  statusOf,
-  type SelRecord,
-} from '@digi/regression/runtime/card-kit.ts';
+import { blob, bootInfoLoaded, cardInfo, readSectors, statusOf } from '@digi/regression/runtime/card-kit.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { CARD_TIMEOUT } from '@digi/regression/runtime/debug-kit.ts';
 import { cardStore, deviceProfile } from '@digi/regression/runtime/device-data.ts';
-import { FIRMWARE } from '@digi/regression/runtime/devices.ts';
-import { moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { patchkit } from '@digi/regression/runtime/patchkit.ts';
-import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
-import { encodeSettings } from '@digi/regression/runtime/project-kit.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
-import { installDefaults, type DefaultOps } from '../../../packages/workbench-core/src/firmware/default-modules-core.ts';
-import { deleteFiles, install, libraryModule } from '../../../packages/workbench-core/src/modules/dktransfer.ts';
-import { nameHash, portFileOf, serviceFileOf } from '../../../packages/workbench-core/src/modules/services.ts';
+import { rpc } from '@digi/regression/runtime/fx-live.ts';
 
 /**
- * The store's file hash (version 4: the +Drive content hash in the table's 32-byte slot) and what a store of another version is. Both devices.
+ * What a card with real bytes shows the booted image, both devices. The decisions are host tests: `store_tests.rs` (a flipped byte: E_SHA and VERIFY; a
+ * version 3 store is empty and the first upload makes version 4), the loader's tests (E_SHA ends a module's load), `dktransfer.test.ts` (Transfer installs
+ * services), `default-modules.test.ts` (`installDefaults`); `patchkit store dump` decoding is the unit tests of `storedump.rs`.
  *  - A flipped byte on the card: VERIFY says another hash, the module with that byte is not loaded.
- *  - The flash scenario: a card with a real version 3 store (the old header, a table with a SHA-256 slot, a module), a selection and a settings
- *    record. The new runtime boots, LIST is empty, the first upload makes a version 4 store, a restart loads the module from the kept selection,
- *    and the workbench's default-module install (`installDefaults`, the same TypeScript code) ends with the module loaded.
- *  - Transfer installs services (docs/plans/runtime-and-services.md R12-7, docs/plans/port-file.md): `install` with service inputs uploads the port file of the test image
- *    (`ports/<device>-<version>.dkport`, `patchkit:ports-test`) and `services/svc-test.dks` as packed before the module that needs it, a second install skips all, the restart loads
- *    port file, provider and module (the module's ping answers 42), and `deleteFiles` of the module takes the unused `.dks` and the port file with it.
+ *  - The flash scenario: a card with a real version 3 store, a module and a selection. The new runtime boots, the first upload makes a version 4 store, a
+ *    restart loads the module from the kept selection.
  * The END with a wrong hash is in upload.device.test.ts ("a wrong file hash: E_HASH").
  */
 
@@ -65,27 +47,18 @@ function version3Store(device: 'dt2' | 'dn2', file: Buffer): Record<number, Buff
   return { [first]: head, [headerB]: head, [first + 1]: table, [first + 2]: padded(file) };
 }
 
-/** The sectors (relative to the store) of the old store's bytes that `card` holds differently now. */
-const oldSectors = (v3: Record<number, Buffer>, first: number, card: string): number[] =>
-  Object.entries(v3).flatMap(([s, b]) =>
-    Array.from({ length: b.length / SECTOR }, (_, k) => k).filter(
-      (k) => !readSectors(card, Number(s) + k, 1).equals(b.subarray(k * SECTOR, (k + 1) * SECTOR)),
-    ).map((k) => Number(s) + k - first),
-  );
-
+const { SAFE_CORE_ONLY, CORE_MISSING } = BOOT_LEVEL;
+const E_PROTO = STATUS.find(([, name]) => name === 'E_PROTO')![0];
 
 cardRigs(
   'store format 4',
   { dsp: 'zero', uploads: true, relaxFs: true, roots: RT, symbols: CARD_SYMBOLS },
   (h) => {
     const store = cardStore(h.device);
-    const headerB = deviceProfile(h.device).card.store.header_b_sector;
     /** The modules the runtime reports loaded (protocol calls run on the paused daemon). */
     const names = async (rt: PatchedSession) => (await h.usb(rt, (dk) => dk.modules())).map((m) => m.name);
     const demo = h.mod('test/c-demo');
     const bytes = () => fs.readFileSync(demo.file);
-    const dump = async (card: string) =>
-      JSON.parse((await patchkit(['store', 'dump', card, ...overlayArgs(card), '--device', h.device, '--json'])).stdout);
 
     test(
       'a flipped byte on the card: VERIFY reports it and the module is not loaded',
@@ -107,7 +80,7 @@ cardRigs(
         const ls = (await h.ls('good')).entries;
         const abs = (p: string) => store.first + ls.find((e) => e.path === p)!.firstSector;
 
-        // flip one byte of each file on the card
+        // flip one byte of the module on the card (the load's E_SHA and VERIFY of the flipped bytes: `store_tests.rs`, the loader's tests)
         const flipped = (p: string, at: number) => {
           const s = Buffer.from(readSectors(after, abs(p), 1));
           s[at] = s[at]! ^ 0x10;
@@ -115,14 +88,11 @@ cardRigs(
         };
         rt = await h.load('hash-bad', {
           base: after,
-          foreign: { [abs(demo.name)]: flipped(demo.name, 300), [abs('samples/s')]: flipped('samples/s', 100) },
+          foreign: { [abs(demo.name)]: flipped(demo.name, 300) },
         });
         const badModule = Buffer.from(good);
         badModule.writeUInt8(badModule.readUInt8(300) ^ 0x10, 300);
-        const badSample = Buffer.from(sample);
-        badSample.writeUInt8(badSample.readUInt8(100) ^ 0x10, 100);
         check('VERIFY of the module says what the card holds now', (await h.usb(rt, (dk) => dk.verify(demo.name))) === fileHashHex(badModule));
-        check('VERIFY of the sample says what the card holds now', (await h.usb(rt, (dk) => dk.verify('samples/s'))) === fileHashHex(badSample));
         check('and that is not the host hash', fileHashHex(badModule) !== fileHashHex(good));
         const info = await bootInfoLoaded(rt.session, h.plan);
         expect(info, 'the selected module is not loaded').toMatchObject({ count: 1, loaded: 0 });
@@ -132,147 +102,34 @@ cardRigs(
     );
 
     test(
-      'flash scenario: a version 3 store counts as empty, the first upload makes version 4, the kept selection loads the module',
+      'flash scenario: a version 3 store counts as empty, so the boot is core-only; the first upload makes a version 4 store and a restart keeps it',
       async () => {
         const file = bytes();
-        const settings = Buffer.concat([
-          encodeSettings(2, [['fx/route/test/x', Buffer.from([1])]]),
-        ]);
         const v3 = version3Store(h.device as 'dt2' | 'dn2', file);
-        const settingsCopy = Buffer.concat([settings, Buffer.alloc(SECTOR - settings.length)]);
-        const facts: Record<string, unknown> = {};
 
-        // boot: it goes on, the old store is no store
-        let rt: PatchedSession = await h.load('v3-flash', {
-          selection: [MOD_PATH],
-          foreign: { ...v3, [store.setA]: settingsCopy },
+        // boot: a version 3 store holds no package, so the boot is core-only (no runtime UI); the old store is no store (the card's reading of it: `store_tests.rs`)
+        const card = await h.card({ selection: [MOD_PATH], foreign: v3, systemPackage: false });
+        let rt: PatchedSession = await h.boot(card);
+        expect(await h.ready(true), 'the boot is core-only: the package is missing, nothing is loaded').toMatchObject({
+          safe: 1,
+          reason: SAFE_CORE_ONLY,
+          coreCause: CORE_MISSING,
+          loaded: 0,
         });
-        const boot = await bootInfoLoaded(rt.session, h.plan);
-        facts.boot = boot;
-        expect(boot, 'the boot goes on, nothing is loaded, no safe mode').toMatchObject({ safe: 0, loaded: 0, uiReached: 1 });
+        await rpc(h.session, 'run.mode', { mode: 'paused' });
         expect((await cardInfo(rt.session, h.plan)).stateName, 'the card is ours').toBe('ours');
         expect(await h.usb(rt, (dk) => dk.list()), 'LIST is empty').toEqual([]);
-        expect(await names(rt)).toEqual([]);
-        const quiet = await h.after('v3-boot');
-        facts.selectionAfterBoot = (await h.records()).map((r: SelRecord | null) => r && r.paths);
-        const d0 = await dump(quiet);
-        facts.settingsAfterBoot = d0.settings ?? null;
-        facts.storeAfterBoot = d0.store ?? null;
-        const changed = oldSectors(v3, store.first, quiet);
-        check('the old bytes are untouched by a boot', changed.length === 0, `changed store sectors ${changed.join()}`);
+        expect(await statusOf(() => h.usb(rt, (dk) => dk.modules())), 'MODULES is refused in the core-only boot').toBe(E_PROTO);
 
-        // the first upload makes a version 4 store
+        // the first upload makes a version 4 store, which the plusdrive reader reads off the card
         expect(await statusOf(() => h.usb(rt, (dk) => dk.put(MOD_PATH, file))), 'the upload works').toBe(0);
-        const listed = await h.usb(rt, (dk) => dk.list());
-        expect(listed.map((e) => [e.path, e.size, e.hash])).toEqual([[MOD_PATH, file.length, fileHashHex(file)]]);
-        let view = await h.view('v4-first');
-        expect(view.head, 'the card holds a version 4 store').toContain('version=4');
-        const became = (card: string) => oldSectors(v3, store.first, card);
-        const afterFirst = await h.after('v4-first');
-        facts.oldBytesAfterFirstUpload = became(afterFirst);
-        expect(readSectors(afterFirst, store.first, 1).readUInt32BE(4), 'header A is version 4').toBe(4);
-        expect(readSectors(afterFirst, headerB, 1).readUInt32BE(4), 'header B is version 4').toBe(4);
+        expect((await h.view('v4-first')).head, 'the card holds a version 4 store').toContain('version=4');
 
-        // a restart: the kept selection loads the module
-        rt = await h.restart(rt);
-        facts.loadedAfterRestart = await names(rt);
-        facts.selectionAfterRestart = (await h.records()).map((r: SelRecord | null) => r && r.paths);
-        expect(await names(rt), 'the kept selection loads the uploaded module').toEqual(['test/c-demo']);
-
-        // again: a second file, and what the old bytes are then
-        expect(await statusOf(() => h.usb(rt, (dk) => dk.put('modules/b.dkm', blob(3000, 5))))).toBe(0);
-        facts.oldBytesAfterSecondUpload = became(await h.after('v4-second'));
-        const d1 = await dump(await h.after('v4-dump'));
-        facts.settingsAfterUploads = d1.settings ?? null;
-        fs.writeFileSync(`${h.artifacts}/store-format-facts-${h.device}.json`, JSON.stringify(facts, null, 1));
-        console.log(`store-format facts ${h.device}: ${JSON.stringify(facts)}`);
-      },
-      CARD_TIMEOUT * 2,
-    );
-
-    test(
-      'Transfer installs the service a module needs: with its port file, uploaded first, skipped the second time, loaded after a restart, deleted with its module',
-      async () => {
-        const user = h.mod('test/svc-test-user');
-        const debug = h.mod('digikit/debug');
-        const packed = fs.readFileSync(moduleArtifact(h.device, 'test/svc-test'));
-        const service = serviceFileOf('svc-test', new Uint8Array(packed), fileHashHex(packed))!;
-        // the port file of the test image lists the fixture's hook; its stem is `<device>-<version>`
-        const portStem = `${h.device}-${FIRMWARE[h.device]}`;
-        const portBytes = fs.readFileSync(path.join(repoRoot(), 'dist/ports-test', `${portStem}.dkport`));
-        const port = portFileOf(portStem, new Uint8Array(portBytes), fileHashHex(portBytes))!;
-        const library = [(await libraryModule(fs.readFileSync(user.file)))!, (await libraryModule(fs.readFileSync(debug.file)))!];
-        let rt: PatchedSession = await h.load('transfer-services', { selection: [] });
-        const events: { event: string; kind?: string; path?: string; ok?: boolean }[] = [];
-        const deps = {
-          services: [service],
-          ports: [port],
-          runtimeIdentity: (info: { runtime: number; svc_abi: number | null; fw_id: string | null }) => ({
-            version: info.runtime,
-            fingerprint: info.svc_abi,
-            fw: info.fw_id,
-          }),
-          runtimeServices: new Set(RUNTIME_SERVICE_NAMES.map(nameHash)),
-        };
-        const ids = library.map((m) => m.id);
-        const first = await h.usb(rt, (dk) => install(dk, ids, library, (e) => events.push(e), deps));
-        expect(first.refused ?? [], 'nothing is refused: the fingerprint of the .dks is the runtime\'s').toEqual([]);
-        const uploads = events.filter((e) => e.event === 'upload').map((e) => [e.kind ?? 'module', e.path]);
-        expect(uploads.slice(0, 2), 'the port file and the service go first').toEqual([
-          ['service', port.path],
-          ['service', 'services/svc-test.dks'],
-        ]);
-        expect(events.filter((e) => e.event === 'verify').every((e) => e.ok), 'every file verifies').toBe(true);
-        expect(
-          (await h.usb(rt, (dk) => dk.list())).map((e) => e.path).sort(),
-          'the card holds the port file, the service and both modules',
-        ).toEqual([...library.map((m) => m.path), port.path, 'services/svc-test.dks'].sort());
-        const again: typeof events = [];
-        await h.usb(rt, (dk) => install(dk, ids, library, (e) => again.push(e), deps));
-        expect(again.filter((e) => e.event === 'skip').length, 'the second install sends nothing').toBe(4);
-
-        // the restart loads the provider and the module: the module's call of the provider answers 42
-        await h.usb(rt, (dk) => dk.select(library.map((m) => m.path)));
-        rt = await h.restart(rt);
-        const log = await h.usb(rt, (dk) => dk.readLog());
-        const ping = ofKind(log, LOG_KIND.MOD_LOG).filter((e) =>
-          String.fromCharCode(...e.args.slice(0, 4).flatMap((w) => [w >>> 24, (w >>> 16) & 255, (w >>> 8) & 255, w & 255]).filter(Boolean)).startsWith('svctest-ping'),
-        );
-        expect(ping.map((e) => e.args[4]), 'dk_svctest_ping() returned 42').toEqual([42]);
-
-        // delete: the module takes its unused service with it
-        const gone: { event: string; path?: string; why?: string }[] = [];
-        const userPath = library.find((m) => m.id === 'test/svc-test-user')!.path;
-        const deleted = await h.usb(rt, (dk) => deleteFiles(dk, [userPath], (e) => gone.push(e)));
-        expect(deleted.deleted.sort()).toEqual([port.path, userPath, 'services/svc-test.dks'].sort());
-        expect(gone.find((e) => e.path === 'services/svc-test.dks')?.why).toBe('unused-service');
-      },
-      CARD_TIMEOUT * 3,
-    );
-
-    test(
-      'default modules on a card with a version 3 store: installDefaults ends with the module loaded',
-      async () => {
-        const file = bytes();
-        let rt: PatchedSession = await h.load('v3-defaults', { selection: [], foreign: version3Store(h.device as 'dt2' | 'dn2', file) });
-        const lib = (await libraryModule(file))!;
-        const library = [lib];
-        const id = lib.id;
-        const ops: DefaultOps = {
-          pathOf: (i) => library.find((m) => m.id === i)?.path,
-          waitForRuntime: async () => void (await h.usb(rt, (dk) => dk.info())),
-          upload: async (i: string) =>
-            (await h.usb(rt, (dk) => install(dk, [i], library))).uploaded.includes(i) ? 'uploaded' : 'same',
-          loaded: async () => (await h.usb(rt, (dk) => dk.modules())).map((m) => m.name),
-          select: (paths) => h.usb(rt, (dk) => dk.select(paths)),
-          restart: async () => {
-            rt = await h.restart(rt);
-            return names(rt);
-          },
-        };
-        const lines = await installDefaults(ops, [id]);
-        expect(lines.at(-1), 'installDefaults ends with the module enabled').toContain(`enabled ${id}`);
-        expect(await names(rt)).toEqual([id]);
+        // a restart: still core-only (no package); the version 4 store is read whole and the module is not loaded
+        rt = await h.restart(rt, { coreOnly: true });
+        expect(await h.ready(true), 'the next boot is core-only too').toMatchObject({ safe: 1, reason: SAFE_CORE_ONLY, coreCause: CORE_MISSING, loaded: 0 });
+        await rpc(h.session, 'run.mode', { mode: 'paused' });
+        expect((await h.view('v4-restart')).head, 'the version 4 store is kept').toContain('version=4');
       },
       CARD_TIMEOUT * 2,
     );

@@ -4,7 +4,7 @@
 use crate::dlog;
 use crate::block_write_with;
 use crate::card;
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use dkrt_abi::platform::Platform;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::sel::{self, Record};
@@ -23,9 +23,6 @@ pub(crate) static mut REC_COPY: u32 = 0;
 fn secbuf() -> *mut u8 {
     unsafe { addr_of_mut!(DKRT_SECBUF) as *mut u8 }
 }
-
-/// The selection index of the module being loaded by the boot hook (`u32::MAX`: none). Written by the boot, read by the type assignment and the loader.
-pub static mut BOOT_IDX: u32 = u32::MAX;
 
 /// One selection copy as read from the card.
 #[derive(Clone, Copy)]

@@ -26,7 +26,7 @@
         "files": [
           "commit.device.test.ts"
         ],
-        "firmwareOnly": "the committed rows, the knob ranges and the latch mask in the real DSP voice row, and a refusal leaves the real tables clean",
+        "firmwareOnly": "the MODULE_COMMIT event against the record block in firmware memory, and the knob ranges and the latch mask in the real DSP voice row",
         "dsp": "sharc",
         "tags": ["C:loading", "S:machines"],
         "modules": [

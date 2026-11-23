@@ -33,7 +33,7 @@ async function expectInputAdapter(device: Device): Promise<void> {
       await timePhase(
         'scenario.body',
         async () => {
-          const plan = await prepareRuntimePlan(session, artifacts, ['DK_ABOUT', 'DK_ABOUT_N', 'DKRT_BOOT']);
+          const plan = await prepareRuntimePlan(session, artifacts, ['DKRT_HOST_DIR', 'DKRT_BOOT']);
           const epoch = await expectRuntimeUi(session, plan, artifacts, { fresh: true });
           await timePhase('module.upload', () => protocol.put('modules/input-probe.dkm', bytes));
           expect(

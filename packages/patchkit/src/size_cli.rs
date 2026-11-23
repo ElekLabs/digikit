@@ -2,7 +2,7 @@
 //!
 //! Per device: the stored container of a patch set and of `core/runtime` with its `requires`, against the port's `container_max`
 //! (measured without the flash cap, so an image over the limit still gets a number), and the saving of dropping each module of
-//! the set. Then the runtime object (`runtime/core/build/runtime.dko.json`): text, data and bss, and text+data by crate and
+//! the set. Then the runtime object (`runtime/core/build/runtime.dko.json`) and the system package's object (`package.dko.json`, its statics and code): text, data and bss, and text+data by crate and
 //! first module path of the Rust v0 symbol names. `--write-baseline FILE` saves every number, `--baseline FILE` prints the deltas.
 //!
 //! `measure` fills a [`SizeReport`] (numbers and errors, no printing); `render_text` and `to_json` show it.
@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 const USAGE: &str = "usage: patchkit size [--set NAME] [--device SHORT,...] [--firmware FILE]... [--no-drop-one]
-                     [--runtime-object FILE] [--top N] [--json] [--baseline FILE] [--write-baseline FILE]
+                     [--runtime-object FILE] [--package-object FILE] [--top N] [--json] [--baseline FILE] [--write-baseline FILE]
   --device filters by the device short name (`short` in devices/*.toml), also for --firmware files; --help prints this text";
 
 fn num(n: i64) -> String {
@@ -134,6 +134,7 @@ const VALUE_FLAGS: &[&str] = &[
     "--firmware",
     "--top",
     "--runtime-object",
+    "--package-object",
     "--baseline",
     "--write-baseline",
 ];
@@ -221,6 +222,8 @@ struct RuntimeReport {
 struct SizeReport {
     devices: Vec<DeviceReport>,
     runtime: Option<RuntimeReport>,
+    /// The system package's object (`runtime/core/build/package.dko.json`): its statics and code are not in the resident object.
+    package: Option<RuntimeReport>,
     /// failures that belong to no device: an unreadable firmware file, a missing runtime object
     errors: Vec<String>,
     top: usize,
@@ -252,6 +255,14 @@ impl SizeReport {
                 m.insert(format!("runtime/group/{k}"), *v);
             }
         }
+        if let Some(r) = &self.package {
+            m.insert("package/text".into(), r.text);
+            m.insert("package/data".into(), r.data);
+            m.insert("package/bss".into(), r.bss);
+            for (k, v) in &r.groups {
+                m.insert(format!("package/group/{k}"), *v);
+            }
+        }
         m
     }
 
@@ -264,6 +275,9 @@ impl SizeReport {
             .collect();
         if self.runtime.is_some() {
             p.push("runtime/".into());
+        }
+        if self.package.is_some() {
+            p.push("package/".into());
         }
         p
     }
@@ -300,6 +314,12 @@ fn to_json(r: &SizeReport) -> serde_json::Value {
     if let Some(o) = &r.runtime {
         m.insert(
             "runtime_object".into(),
+            serde_json::json!({"text": o.text, "data": o.data, "bss": o.bss, "groups": o.groups}),
+        );
+    }
+    if let Some(o) = &r.package {
+        m.insert(
+            "package_object".into(),
             serde_json::json!({"text": o.text, "data": o.data, "bss": o.bss, "groups": o.groups}),
         );
     }
@@ -354,9 +374,10 @@ fn render_text(r: &SizeReport) -> String {
             let _ = writeln!(o, "  error: {e}");
         }
     }
-    if let Some(g) = &r.runtime {
+    for (what, report) in [("runtime", &r.runtime), ("package", &r.package)] {
+        let Some(g) = report else { continue };
         let total = g.text + g.data;
-        let _ = writeln!(o, "== runtime object {}", g.path);
+        let _ = writeln!(o, "== {what} object {}", g.path);
         let _ = writeln!(
             o,
             "  text {}  data+rodata {}  bss {}  (image carries {} non-bss bytes)",
@@ -681,6 +702,15 @@ pub fn run(root: &Path, rest: &[String]) -> Result<()> {
     match measure_runtime_object(&obj) {
         Ok(r) => rep.runtime = Some(r),
         Err(e) => rep.errors.push(format!("runtime object: {e}")),
+    }
+    // the system package is a second object of the same crate (`[system_package]`): the statics tools read through the host directory and its code are measured here
+    let package_obj = cli
+        .one("--package-object")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join("runtime/core/build/package.dko.json"));
+    match measure_runtime_object(&package_obj) {
+        Ok(r) => rep.package = Some(r),
+        Err(e) => rep.errors.push(format!("package object: {e}")),
     }
     let now = rep.flat();
     let delta = match cli.one("--baseline") {

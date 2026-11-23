@@ -1,6 +1,6 @@
 //! The mailbox commands that carry a selection.
 
-use crate::boot;
+use crate::selection;
 use crate::platform::cstr_len;
 use dkrt_sdk::*;
 
@@ -35,8 +35,8 @@ pub(crate) unsafe fn mailbox_select(arg: *const u8, copy: u32) -> i32 {
     }
     sel.count = n as u32;
     if copy == 2 {
-        boot::selection_set(&sel)
+        selection::selection_set(&sel)
     } else {
-        boot::selection_set_one(copy, &sel)
+        selection::selection_set_one(copy, &sel)
     }
 }

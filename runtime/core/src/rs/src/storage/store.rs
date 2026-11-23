@@ -4,7 +4,8 @@
 //! scanned through the staging buffer.
 
 use crate::hash32;
-use crate::{DKRT_STAGE, STAGE_BYTES};
+use dkrt_sdk::STAGE_BYTES;
+use crate::{state::DKRT_STAGE};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::store::{self, Hdr, Io, Layout, Table, KIND_FILE};
 use dkrt_sdk::*;
@@ -22,7 +23,7 @@ pub static mut DKRT_STORE_PEEK: PeekBuf = PeekBuf([0; 512]);
 #[no_mangle]
 pub static mut DKRT_STORE_FP: PeekBuf = PeekBuf([0; 512]);
 
-pub unsafe fn stage() -> *mut u8 {
+pub unsafe extern "C" fn stage() -> *mut u8 {
     addr_of_mut!(DKRT_STAGE) as *mut u8
 }
 
@@ -31,7 +32,7 @@ unsafe fn scratch() -> *mut u8 {
 }
 
 unsafe extern "C" fn block_read(sector: u32, bytes: u32, buf: *mut u8) -> i32 {
-    crate::block_read(sector, bytes, buf)
+    crate::platform::block_read(sector, bytes, buf)
 }
 
 unsafe extern "C" fn no_write(_sector: u32, _bytes: u32, _buf: *mut u8) -> i32 {
@@ -43,12 +44,8 @@ pub fn reader() -> Io {
     Io { rd: block_read, wr: no_write }
 }
 
-/// Where a file is and what its table entry says its file hash slot is.
-pub struct File {
-    pub first: u32,
-    pub size: u32,
-    pub sha: [u8; 32],
-}
+/// Where a file is and what its table entry says its file hash slot is (shared with the package through `StoreFns`).
+pub use dkrt_abi::storage::StoreFile as File;
 
 /// The table the reads last checked: (seq, table CRC, table first sector). A commit of the runtime's own upload sets it; a read of a header that
 /// differs checks the table's CRC again (one pass over the table), so a lookup costs the headers and one scan.
@@ -193,6 +190,27 @@ pub unsafe fn load_to_stage(f: &File) -> i32 {
     OK
 }
 
+/// Read up to `count` sectors of the file `f` from sector `from` of the file into `buf` (`cap` bytes, 16-byte aligned) without the file hash check: the
+/// caller checks what it reads (stage 1 streams a package larger than the staging buffer and hashes it itself). The read stops at the end of the
+/// file (the sectors after it belong to the next file or to nothing): at most `ceil(left / 512)` sectors, none when `from` is at or past the end.
+/// Returns the number of file bytes now in `buf`: `min(count * 512, size - from * 512)`; the bytes of the last sector after them are not defined.
+pub unsafe fn read_file_sectors(f: &File, from: u32, count: u32, buf: *mut u8, cap: usize) -> Result<u32, i32> {
+    let left = (f.size as u64).saturating_sub(from as u64 * 512);
+    let sectors = count.min(left.div_ceil(512) as u32);
+    if sectors == 0 {
+        return Ok(0);
+    }
+    if !super::lock::acquire() {
+        return Err(E_BUSY);
+    }
+    let r = store::read_span(&reader(), &layout(), f.first + from, sectors, buf, cap);
+    super::lock::unlock();
+    if r != OK {
+        return Err(r);
+    }
+    Ok(left.min(sectors as u64 * 512) as u32)
+}
+
 /// `dk_files_read`: copy a store file to `dst` (at most `cap` bytes); returns its size or a negative code.
 pub unsafe fn read_file(path: *const u8, dst: *mut u8, cap: u32) -> i32 {
     let f = match find(path) {
@@ -307,7 +325,7 @@ pub unsafe fn listed(e: *const u8, prefix: *const u8, plen: usize, filter: Filte
 /// `list(prefix, out, max)`: the files whose path starts with `prefix` (NUL-terminated, e.g. `modules/`), in path order, at most `max`
 /// into `out`; returns how many, or a negative code (`E_NOT_FOUND`: no store). A path that does not fit 63 bytes, a folder and an empty file are
 /// left out. A commit of an upload running at the same time makes the list start again (it is one header's table).
-pub unsafe fn list(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32 {
+pub unsafe extern "C" fn list(prefix: *const u8, out: *mut DkrtStoreEntry, max: u32) -> i32 {
     if !super::lock::acquire() {
         return E_BUSY;
     }
@@ -402,7 +420,7 @@ unsafe fn find_name_unlocked(prefix: *const u8, name: &[u8], out: *mut [u8; 64])
                 path[k] = *e.add(k);
                 k += 1;
             }
-            if !crate::scan::last_part_is(&path, name) {
+            if !dkrt_abi::store_path::last_part_is(&path, name) {
                 return true;
             }
             *out = path;
@@ -422,7 +440,7 @@ unsafe fn find_name_unlocked(prefix: *const u8, name: &[u8], out: *mut [u8; 64])
 }
 
 /// `dkrt_store_read_sector(rel, out)`: one sector of the store (relative to its start) into `out`, 512 bytes, 16-byte aligned. 0 or a negative code.
-pub unsafe fn read_sector(rel: u32, out: *mut u8) -> i32 {
+pub unsafe extern "C" fn read_sector(rel: u32, out: *mut u8) -> i32 {
     if crate::card::state() == CARD_TOO_SMALL {
         return E_NOT_FOUND;
     }
@@ -441,7 +459,7 @@ pub unsafe extern "C" fn dkrt_store_stat(path: *const u8, out: *mut DkrtStoreFil
     if path.is_null() || out.is_null() {
         return E_CONTRACT;
     }
-    crate::init_once();
+    crate::state::init_once();
     match find(path) {
         Ok(f) => {
             let o = &mut *out;
@@ -461,7 +479,7 @@ pub unsafe extern "C" fn dkrt_store_read(f: *const DkrtStoreFile, sector: u32, c
     if f.is_null() || dst.is_null() || (dst as usize) & 15 != 0 {
         return E_CONTRACT;
     }
-    crate::init_once();
+    crate::state::init_once();
     if crate::card::state() == CARD_TOO_SMALL {
         return E_NOT_FOUND;
     }
@@ -519,7 +537,7 @@ pub unsafe extern "C" fn dkrt_store_lease(path: *const u8, out: *mut DkrtStoreFi
     if path.is_null() || out.is_null() {
         return E_CONTRACT;
     }
-    crate::init_once();
+    crate::state::init_once();
     lease(0, path, &mut *out)
 }
 

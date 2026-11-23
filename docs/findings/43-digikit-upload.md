@@ -340,7 +340,7 @@ request, nothing counted dropped). Not run: a real full ring (the spin itself) *
 
 An upload commit writes the new table (fresh sectors), header B, then header A. A reader in the UI task reads header A, header B, then the table.
 With fresh sectors the table of either header stays intact, so a plain `open` is already safe for an ordinary commit: it can only pick the old
-or the new store. The torn read is the **reuse** case: after CLEAR the next upload stages over sector 1, where the old table was; a reader
+or the new store. The torn read is the **reuse** case: after a CLEAR that leaves no file (a store without the system package, or an unreadable table) the next upload stages over sector 1, where the old table was; CLEAR of a store with the package writes a new table in free sectors and keeps the package; a reader
 that read the old header before the CLEAR finished then reads garbage for its table, its table CRC fails and the menu shows a store error until
 it is refreshed.
 

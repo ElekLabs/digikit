@@ -105,7 +105,7 @@ it('maps the real runtime files by the real owners.toml and service records', ()
   expect(real.owners.length).toBeGreaterThan(20);
   expect(readFileSync(resolve(root, OWNERS_FILE), 'utf8')).toContain('"C:boot"');
   expect(areasOfPath('runtime/core/src/rs/src/boot.rs', real)).toEqual({ areas: ['C:boot'] });
-  expect(areasOfPath('runtime/core/src/rs/src/loader/mod.rs', real)).toEqual({ areas: ['C:loading'] });
+  expect(areasOfPath('runtime/core/src/rs/src/package/loader/mod.rs', real)).toEqual({ areas: ['C:loading'] });
   expect(areasOfPath('runtime/core/src/rs/src/entry.rs', real)).toHaveProperty('unknown');
   expect(areasOfPath('ports/fw/lfo.toml', real)).toEqual({ areas: ['S:lfo'] });
   for (const short of deviceShorts(root)) {

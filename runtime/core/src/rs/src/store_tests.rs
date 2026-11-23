@@ -23,7 +23,7 @@ use crate::storage::sdk_files as sf;
 use crate::store_writer::{self as sw};
 use crate::test_lock::LOCK;
 use crate::transport::{buffer, BODY_AT, DKRT_UPLOAD_LAST, RBODY};
-use crate::{card as card_gate, PLATFORM};
+use crate::{card as card_gate, platform::PLATFORM};
 use core::ptr::{addr_of, addr_of_mut, null, read_volatile, write_volatile};
 use dkrt_abi::platform::DeviceProfile;
 use dkrt_abi::profiles;
@@ -38,7 +38,7 @@ use std::sync::MutexGuard;
 use std::vec;
 use std::vec::Vec;
 
-const L: Layout = Layout { first: 1000, sectors: 4096 };
+pub(crate) const L: Layout = Layout { first: 1000, sectors: 4096 };
 /// The module that owns the SDK calls of these tests (a source index, as `io` gives it).
 const OWNER: u8 = 3;
 
@@ -52,7 +52,7 @@ pub(crate) struct Fixture {
 
 impl Fixture {
     pub(crate) fn new() -> Fixture {
-        let lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let lock = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe { rest() };
         *card_gate::info() = card_gate::CardInfo {
             state: CARD_UNKNOWN,
@@ -87,15 +87,15 @@ unsafe fn rest() {
     sw::unlock();
     write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_CUT), 0);
     write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_WRITES), 0);
-    write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_TEAR), crate::boot::Knob(0));
+    write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_TEAR), crate::safe_mode::Knob(0));
     sw::TEST_NOW = 0;
 }
 
-fn pattern(n: usize, m: usize) -> Vec<u8> {
+pub(crate) fn pattern(n: usize, m: usize) -> Vec<u8> {
     (0..n).map(|i| (i * m + 1) as u8).collect()
 }
 
-fn slot(data: &[u8]) -> [u8; 32] {
+pub(crate) fn slot(data: &[u8]) -> [u8; 32] {
     unsafe { hash32::slot_of(data.as_ptr(), data.len() as u32) }
 }
 
@@ -142,7 +142,7 @@ fn delete(path: &str) -> i32 {
     send(store_cmds::cmd_delete, &zpath(path))
 }
 
-fn rename(from: &str, to: &str) -> i32 {
+pub(crate) fn rename(from: &str, to: &str) -> i32 {
     let mut b = zpath(from);
     b.extend(zpath(to));
     send(store_cmds::cmd_rename, &b)
@@ -154,7 +154,7 @@ fn clear_with(magic: u32) -> i32 {
     send(store_cmds::cmd_clear, &b)
 }
 
-fn begin(path: &str, size: usize, sha: [u8; 32]) -> i32 {
+pub(crate) fn begin(path: &str, size: usize, sha: [u8; 32]) -> i32 {
     let mut b = zpath(path);
     let at = b.len();
     b.extend([0u8; 4 + 32]);
@@ -289,8 +289,52 @@ fn verify_cmd(path: &str, range: Option<(u32, u32)>) -> (i32, [u8; 32]) {
 }
 
 /// The store file `path` as `crate::store::find` knows it: where it starts.
-fn found(path: &str) -> crate::store::File {
+pub(crate) fn found(path: &str) -> crate::store::File {
     unsafe { crate::store::find(zpath(path).as_ptr()).unwrap_or_else(|e| panic!("{path}: {e}")) }
+}
+
+// ---- reads of a file in pieces ----------------------------------------------------------------------------------------------------------
+
+#[test]
+fn a_file_read_in_sectors_stops_at_the_end_of_the_file() {
+    let _f = Fixture::new();
+    let a = pattern(700, 7);
+    assert_eq!(upload("a/x", &a), OK);
+    assert_eq!(upload("a/y", &pattern(3000, 5)), OK);
+    let file = found("a/x");
+    let read = |from: u32, count: u32| {
+        let mut buf = Aligned([0xee; 8192]);
+        let r = unsafe { crate::store::read_file_sectors(&file, from, count, buf.0.as_mut_ptr(), buf.0.len()) };
+        (r, buf)
+    };
+    // more sectors asked than the file has (a file followed by another one): two are read, and the bytes after them are untouched
+    let (r, buf) = read(0, 8);
+    assert_eq!(r, Ok(700));
+    assert_eq!(&buf.0[..700], &a[..]);
+    assert!(buf.0[1024..].iter().all(|b| *b == 0xee));
+    // an offset near the end: the last sector alone, then nothing
+    let (r, buf) = read(1, 4);
+    assert_eq!(r, Ok(188));
+    assert_eq!(&buf.0[..188], &a[512..]);
+    assert!(buf.0[512..].iter().all(|b| *b == 0xee));
+    let reads = card(|c| c.reads);
+    for from in [2, 3, 1000] {
+        assert_eq!(read(from, 4).0, Ok(0), "from {from}");
+    }
+    assert_eq!(card(|c| c.reads), reads, "no sector is read at or past the end");
+    // a short count is what was asked
+    assert_eq!(read(0, 1).0, Ok(512));
+}
+
+#[test]
+fn the_last_file_of_the_store_reads_to_its_end_and_a_whole_sector_file_gives_its_size() {
+    let _f = Fixture::new();
+    assert_eq!(upload("a/x", &pattern(1024, 7)), OK);
+    let file = found("a/x");
+    let mut buf = Aligned([0xee; 8192]);
+    let r = unsafe { crate::store::read_file_sectors(&file, 0, 16, buf.0.as_mut_ptr(), buf.0.len()) };
+    assert_eq!(r, Ok(1024));
+    assert!(buf.0[1024..].iter().all(|b| *b == 0xee));
 }
 
 // ---- the SDK file_* calls ---------------------------------------------------------------------------------------------------------------
@@ -299,7 +343,7 @@ fn found(path: &str) -> crate::store::File {
 struct Aligned([u8; 8192]);
 
 /// Run `f` as a step of an I/O job of `OWNER`: the context `file_*` calls need.
-fn in_step<R>(f: impl FnOnce() -> R) -> R {
+pub(crate) fn in_step<R>(f: impl FnOnce() -> R) -> R {
     unsafe { crate::io::test_in_step(OWNER, f) }
 }
 
@@ -310,7 +354,7 @@ fn sdk_open(root: u32, path: &str, size: usize, flags: u32) -> i32 {
 }
 
 /// `file_create`, `file_write`, `file_close`: the first status that is not OK (the handle counts as OK).
-fn sdk_put(root: u32, path: &str, bytes: &[u8], flags: u32) -> i32 {
+pub(crate) fn sdk_put(root: u32, path: &str, bytes: &[u8], flags: u32) -> i32 {
     assert!(bytes.len() <= 8192);
     let mut buf = Aligned([0; 8192]);
     buf.0[..bytes.len()].copy_from_slice(bytes);
@@ -335,7 +379,7 @@ fn sdk_delete(root: u32, path: &str) -> i32 {
 }
 
 const SAMPLES: u32 = dkrt_sdk::files::SAMPLES;
-const STORE: u32 = dkrt_sdk::files::STORE;
+pub(crate) const STORE: u32 = dkrt_sdk::files::STORE;
 
 // ---- write sessions -------------------------------------------------------------------------------------------------------------------
 
@@ -403,6 +447,19 @@ fn verify_names_the_bytes_on_the_card_not_the_table() {
     assert_eq!(r, OK);
     assert_ne!(now, listed, "bad: a bit of the data sector flipped");
     assert_eq!(held()["cases/a"].1, listed, "the table still says what was written");
+    // the boot's read of the file checks the table's hash: E_SHA, and VERIFY names the hash of the flipped bytes
+    let mut flipped = bytes.clone();
+    flipped[512 + 10] ^= 0x01;
+    assert_eq!(now, slot(&flipped), "VERIFY hashes the flipped bytes");
+    assert_eq!(unsafe { crate::store::load_to_stage(&found("cases/a")) }, dkrt_sdk::E_SHA, "a file that no longer matches its table hash is not loaded");
+}
+
+/// The file is read for a load when its bytes are as written.
+#[test]
+fn a_file_read_for_a_load_matches_its_table_hash() {
+    let _f = Fixture::new();
+    assert_eq!(upload("cases/a", &pattern(3000, 7)), OK);
+    assert_eq!(unsafe { crate::store::load_to_stage(&found("cases/a")) }, OK);
 }
 
 #[test]
@@ -536,6 +593,76 @@ fn clear_empties_the_store_only_with_its_magic() {
     assert_eq!(clear_with(CLEAR_MAGIC), OK);
     assert!(held().is_empty());
     assert_eq!(upload("c/z", &pattern(100, 7)), OK, "a cleared store takes files");
+}
+
+#[test]
+fn clear_removes_every_module_file_and_keeps_the_system_package() {
+    let _f = Fixture::new();
+    let pkg = std::str::from_utf8(&crate::stage1::PACKAGE_PATH[..crate::stage1::PACKAGE_PATH.len() - 1]).unwrap();
+    assert_eq!(upload("a/x", &pattern(3000, 7)), OK);
+    assert_eq!(upload(pkg, &pattern(5000, 9)), OK);
+    assert_eq!(upload("z/y", &pattern(100, 7)), OK);
+    assert_eq!(mkdir("empty"), OK);
+    let before = held()[pkg];
+    assert_eq!(clear_with(CLEAR_MAGIC), OK);
+    let left: Vec<String> = held().keys().cloned().collect();
+    assert_eq!(left, vec![pkg.to_string()], "only the system package is left");
+    assert_eq!(held()[pkg], before, "the package keeps its size and hash");
+    assert_eq!(verify_cmd(pkg, None), (OK, before.1), "and its bytes still hash the same");
+    assert_eq!(upload("c/z", &pattern(100, 7)), OK, "the cleared store takes files");
+}
+
+/// Fills a fresh store with one file `path`, the biggest that fits. The store had no table before, so no sector the old table held is left over:
+/// nothing is free for another table, and the next upload answers `E_FULL`.
+fn fill_store(path: &str) {
+    let mut n = 4090usize;
+    while upload(path, &pattern(n * 512, 3)) != OK {
+        n -= 1;
+        assert!(n > 100, "the store takes a big file");
+    }
+    assert_eq!(upload("x", &pattern(1, 5)), p::E_FULL, "no sector is left");
+    assert_eq!(mkdir("y"), p::E_FULL, "not even for a table");
+}
+
+/// The events of the runtime log after the first `since` ones: `(kind, flags, args)`.
+fn events_since(since: u32) -> Vec<(u16, u16, [u32; 5])> {
+    unsafe {
+        let n = read_volatile(addr_of!(crate::dlog::DKRT_LOG_COUNT));
+        let ring = &*addr_of!(crate::dlog::DKRT_LOG);
+        (since.wrapping_add(1)..=n).map(|i| ring[(i as usize - 1) % crate::dlog::RING]).map(|e| (e.kind, e.flags, e.a)).collect()
+    }
+}
+
+fn event_count() -> u32 {
+    unsafe { read_volatile(addr_of!(crate::dlog::DKRT_LOG_COUNT)) }
+}
+
+fn dropped_events(since: u32) -> usize {
+    events_since(since).iter().filter(|e| e.0 == dkrt_sdk::logk::UPLOAD && e.2[0] == crate::storage::upload_codes::CLEAR_DROPPED_PACKAGE).count()
+}
+
+#[test]
+fn clear_of_a_full_store_drops_the_system_package_and_logs_it() {
+    let _f = Fixture::new();
+    let pkg = std::str::from_utf8(&crate::stage1::PACKAGE_PATH[..crate::stage1::PACKAGE_PATH.len() - 1]).unwrap();
+    fill_store(pkg);
+    let before = event_count();
+    assert_eq!(clear_with(CLEAR_MAGIC), OK, "a full store is cleared: that is how repack gets space back");
+    assert!(held().is_empty(), "no room for the package's table: everything is gone");
+    assert_eq!(dropped_events(before), 1, "one event names the dropped package");
+    let e = events_since(before).into_iter().find(|e| e.2[0] == crate::storage::upload_codes::CLEAR_DROPPED_PACKAGE).unwrap();
+    assert_eq!(e.1 & dkrt_sdk::logk::F_ERROR, dkrt_sdk::logk::F_ERROR);
+    assert_eq!(upload("c/z", &pattern(100, 7)), OK, "the cleared store takes files");
+}
+
+#[test]
+fn clear_of_a_full_store_without_the_package_needs_no_table_space() {
+    let _f = Fixture::new();
+    fill_store("big");
+    let before = event_count();
+    assert_eq!(clear_with(CLEAR_MAGIC), OK);
+    assert!(held().is_empty());
+    assert_eq!(dropped_events(before), 0, "no package was lost: no event");
 }
 
 #[test]
@@ -740,6 +867,107 @@ fn only_a_blank_header_pair_on_a_card_that_may_hold_a_store_is_an_empty_store() 
     }
 }
 
+/// The two selection copies as the card holds them, decoded.
+fn selection_copies() -> [Option<dkrt_sdk::sel::Record>; 2] {
+    let at = |s: u32| card(|c| c.sectors.get(&s).copied()).and_then(|b| dkrt_sdk::sel::decode(&b));
+    [at(L.sel_a()), at(L.sel_b())]
+}
+
+/// SELECT after the boot counter's record: both copies are written (two card writes), with the next sequence number and the counter of the record kept.
+#[test]
+fn a_selection_write_keeps_the_boot_counter_takes_the_next_sequence_number_and_writes_both_copies() {
+    let _f = Fixture::new();
+    unsafe { card_gate::check() };
+    let mut r = dkrt_sdk::sel::Record::empty();
+    r.boot_counter = 1;
+    assert_eq!(unsafe { crate::selection::update(r, 0, false) }, OK, "the boot counter's record: copy A, seq 1");
+    assert_eq!(card(|c| c.writes), 1);
+    let mut body = vec![1u8];
+    body.extend(zpath("modules/a.dkm"));
+    assert_eq!(send(store_cmds::h_select, &body), OK);
+    assert_eq!(card(|c| c.writes), 3, "both copies");
+    let [a, b] = selection_copies();
+    let (a, b) = (a.expect("copy A is valid"), b.expect("copy B is valid"));
+    assert_eq!((a.seq, a.boot_counter, a.count), (2, 1, 1));
+    assert_eq!((b.seq, b.boot_counter, b.count), (2, 1, 1));
+    assert_eq!(&a.paths[0][..14], b"modules/a.dkm\0");
+    assert_eq!(a.paths, b.paths);
+}
+
+/// A selection record, as the boot of a fresh runtime leaves it on a card.
+fn put_selection_record() {
+    let mut b = [0u8; 512];
+    dkrt_sdk::sel::encode(&dkrt_sdk::sel::Record::empty(), &mut b);
+    card(|c| {
+        c.sectors.insert(L.sel_a(), b);
+    });
+}
+
+/// The store a previous runtime left (version 3 headers, a table, a file) beside the runtime's selection record: it reads as no store, the check and the
+/// views write nothing, and the first upload makes a version 4 store in both headers that lists only the new file.
+#[test]
+fn a_version_3_store_is_an_empty_store_that_the_first_upload_turns_into_version_4() {
+    let _f = Fixture::new();
+    let hb = L.header_b();
+    // the previous runtime's store as it wrote it: the layout of version 4 with version 3 in the header, a table of one entry and a CRC of both that holds
+    let mut table = [0u8; 512];
+    table[..9].copy_from_slice(b"modules/o");
+    table[160..164].copy_from_slice(&2u32.to_be_bytes()); // first sector
+    table[164..168].copy_from_slice(&512u32.to_be_bytes()); // size
+    let table_crc = unsafe { dkrt_sdk::store::crc32_of(table.as_ptr(), 512) };
+    let hdr = dkrt_sdk::store::Hdr { count: 1, table_sectors: 1, table_first: 1, table_crc, seq: 1, used: 3, area: L.sectors };
+    let mut old = [0u8; 512];
+    unsafe { dkrt_sdk::store::encode_header(&hdr, old.as_mut_ptr()) };
+    old[4..8].copy_from_slice(&(dkrt_sdk::store::VERSION - 1).to_be_bytes());
+    let crc = unsafe { dkrt_sdk::store::crc32_of(old.as_ptr(), 508) };
+    old[508..].copy_from_slice(&crc.to_be_bytes());
+    let mut as_v4 = old;
+    unsafe { dkrt_sdk::store::encode_header(&hdr, as_v4.as_mut_ptr()) };
+    assert!(unsafe { dkrt_sdk::store::parse_header(as_v4.as_ptr()) }.is_some(), "the same fields with version 4 are a header");
+    put_selection_record();
+    card(|c| {
+        c.sectors.insert(L.first, old);
+        c.sectors.insert(L.first + hb, old);
+        c.sectors.insert(L.first + 1, table);
+        c.sectors.insert(L.first + 2, [0x44; 512]); // its file
+    });
+    let writes = card(|c| c.writes);
+    unsafe { card_gate::check() };
+    assert_eq!(card_gate::state(), dkrt_sdk::CARD_OURS);
+    let (l, seen, lst) = views();
+    assert!(l == 0 && seen.is_some() && lst == OK, "no store: {l} {seen:?} {lst}");
+    assert!(held().is_empty());
+    assert_eq!(card(|c| c.writes), writes, "the check and the views write nothing");
+    assert_eq!(upload("modules/a.dkm", &pattern(1000, 3)), OK);
+    for sector in [L.first, L.first + hb] {
+        let h = card(|c| c.sectors[&sector]);
+        assert_eq!(u32::from_be_bytes(h[4..8].try_into().unwrap()), dkrt_sdk::store::VERSION, "header at {sector} is version 4");
+    }
+    assert_eq!(held().keys().collect::<Vec<_>>(), ["modules/a.dkm"], "only the new file");
+}
+
+/// A claim cut inside its first write leaves header B torn and header A blank. With the runtime's selection record the card is ours, but the torn header is
+/// no store: an upload is refused and writes nothing; CLEAR makes the store, and the next upload commits.
+#[test]
+fn a_torn_header_b_with_a_blank_header_a_is_no_store_until_clear_makes_one() {
+    let _f = Fixture::new();
+    let mut torn_b = torn_header();
+    torn_b[256..].fill(0);
+    put_selection_record();
+    card(|c| {
+        c.sectors.insert(L.first + L.header_b(), torn_b);
+    });
+    unsafe { card_gate::check() };
+    assert_eq!(card_gate::state(), dkrt_sdk::CARD_OURS);
+    let writes = card(|c| c.writes);
+    let blob = pattern(3000, 31);
+    assert_eq!(begin("modules/b.dkm", blob.len(), slot(&blob)), p::E_NOSTORE);
+    assert_eq!(card(|c| c.writes), writes, "the refused upload wrote nothing");
+    assert_eq!(clear_with(CLEAR_MAGIC), OK);
+    assert_eq!(upload("modules/b.dkm", &blob), OK, "the next upload commits");
+    assert!(held().contains_key("modules/b.dkm"));
+}
+
 // ---- power cuts -----------------------------------------------------------------------------------------------------------------------
 
 /// A cut or a torn sector at each card write of one upload leaves the old table or the new one, files that read back with their hashes, and a store that
@@ -763,7 +991,7 @@ fn cut_sweep(tear: bool) {
         unsafe {
             write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_WRITES), 0);
             if tear {
-                write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_TEAR), crate::boot::Knob(k));
+                write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_TEAR), crate::safe_mode::Knob(k));
             } else {
                 write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_CUT), k);
             }
@@ -983,7 +1211,7 @@ fn every_lister_gives_the_same_entries_for_the_same_folder() {
 
     // 3: the loader's provider search lists through the same call
     let mut out2 = unsafe { core::mem::zeroed::<[DkrtStoreEntry; 8]>() };
-    let n2 = unsafe { crate::loader::discover::Cards::list(&mut crate::loader::RealImages, b"modules/\0".as_ptr(), out2.as_mut_ptr(), 8) };
+    let n2 = unsafe { crate::package::loader::discover::Cards::list(&mut crate::package::loader::RealImages, b"modules/\0".as_ptr(), out2.as_mut_ptr(), 8) };
     assert_eq!(n2, n);
     assert_eq!(out2[..4].iter().map(|e| (cname(&e.path), e.size, e.first)).collect::<Vec<_>>(), out[..4].iter().map(|e| (cname(&e.path), e.size, e.first)).collect::<Vec<_>>());
 
@@ -1001,7 +1229,7 @@ fn every_lister_gives_the_same_entries_for_the_same_folder() {
 /// `store_find` of a name under `modules/`: the status and the path it found.
 fn find_module(name: &str) -> (i32, String) {
     let mut out = [0u8; 64];
-    let r = unsafe { crate::scan::store_find(b"modules/", name.as_bytes(), &mut out) };
+    let r = unsafe { crate::package::scan::store_find(b"modules/", name.as_bytes(), &mut out) };
     let end = out.iter().position(|b| *b == 0).unwrap_or(64);
     (r, String::from_utf8_lossy(&out[..end]).into_owned())
 }

@@ -7,7 +7,8 @@ import { cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { openDigikitMenu } from '@digi/regression/runtime/flows/menu.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { logEvents, RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
-import { planSymbol, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import type { HostName } from '@digi/dk-session';
+import { packageSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { packSynth } from '@digi/regression/runtime/synth.ts';
 
 /**
@@ -18,21 +19,15 @@ import { packSynth } from '@digi/regression/runtime/synth.ts';
  * - the transport plays, tick `a`: the dialog "A NOT APPLIED" with the text STOP PLAYBACK, then "RESTART TO APPLY?"; NO leaves the device running, `a` is not loaded;
  * - with the transport still playing, tick `c` the same way and YES on "RESTART TO APPLY?": the device restarts (the epoch rises).
  * The host cases of the batch (order, texts, refusals, the settings cache, the boot results by index) are in runtime/platform/ui/host/tests/menu.rs.
+ * The menu is part of the system package: the test finds its statics through the host directory.
  * Run only with the go of the owner.
  */
 
 const E_RELOAD_PLAYING = loadCode('E_RELOAD_PLAYING');
 
-/** TICK and LOADED are also names of runtime statics: take the menu's. */
-function menuSymbol(plan: RuntimePlan, name: string): number {
-  const key = Object.keys(plan.symbols).find((k) => k.startsWith('core/digikit-menu@') && k.endsWith(`:${name}`));
-  if (key === undefined) throw new Error(`no menu symbol ${name}`);
-  return plan.symbols[key]!;
-}
+const SYMBOLS = RING_SYMBOLS;
 
-const SYMBOLS = ['DK_LOAD', 'DK_LOAD_N', 'DK_POPUP', 'DK_POPUP_TEXT', 'DK_POPUPS', ...RING_SYMBOLS];
-
-cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols: SYMBOLS }, (rig) => {
+cardRigs('MODULES applies live', { roots: [...RT, 'core/ui'], symbols: SYMBOLS }, (rig) => {
   test('tick loads and untick unloads without a boot; a playing transport refuses; YES restarts', async () => {
     await rig.first();
     const dir = path.join(rig.artifacts, 'apply-live');
@@ -45,17 +40,19 @@ cardRigs('MODULES applies live', { roots: [...RT, 'core/digikit-menu'], symbols:
       selection: [storePath[0]!],
     });
     const { session, ui } = rt;
-    const peek = async (symbol: string) => (await session.client.memPeek(planSymbol(rig.plan, symbol)))! >>> 0;
+    // the menu is part of the system package: its statics (`DK_POPUP` is `MENU_POPUP`) are found through the host directory
+    const at = (symbol: string) => packageSymbol(session, rig.plan, `MENU_${symbol.replace(/^DK_/, '')}` as HostName);
+    const peek = async (symbol: string) => (await session.client.memPeek(await at(symbol)))! >>> 0;
     const text = async (symbol: string, i = 0, stride = 24) => {
       const bytes = Buffer.alloc(stride);
       for (let k = 0; k < stride; k += 4)
-        bytes.writeUInt32BE((await session.client.memPeek(planSymbol(rig.plan, symbol) + stride * i + k))! >>> 0, k);
+        bytes.writeUInt32BE((await session.client.memPeek((await at(symbol)) + stride * i + k))! >>> 0, k);
       return bytes.toString('latin1').split('\0')[0]!;
     };
     const dialog = async () => [await text('DK_POPUP', 0, 48), await text('DK_POPUP_TEXT', 0, 48)];
     /** TICK or LOADED of the menu: one byte for each row (a), b, c. The check mark itself is not row text. */
     const flags = async (name: 'TICK' | 'LOADED') => {
-      const v = (await session.client.memPeek(menuSymbol(rig.plan, name)))! >>> 0;
+      const v = await peek(name);
       return names.map((_, k) => (v >>> (24 - 8 * k)) & 0xff);
     };
     const flagsText = (v: number[]) => v.join();

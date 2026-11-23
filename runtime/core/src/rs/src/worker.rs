@@ -13,7 +13,7 @@
 //! the worker runs exactly one step per submit.
 //!
 //! Values `JOB_MORE` and `JOB_E_CANCELLED` must match sdk/include/dk/platform/job.h.
-use crate::PLATFORM;
+use crate::platform::PLATFORM;
 use core::ffi::c_void;
 #[cfg(not(test))]
 use dkrt_abi::platform::SamplePool;
@@ -86,9 +86,9 @@ static mut FN: [u32; 4] = [0; 4];
 static mut DONE: [u32; 8] = [0; 8];
 
 unsafe fn locked<T>(f: impl FnOnce() -> T) -> T {
-    let sr = crate::irq_mask();
+    let sr = crate::platform::irq_mask();
     let result = f();
-    crate::irq_restore(sr);
+    crate::platform::irq_restore(sr);
     result
 }
 
@@ -111,7 +111,7 @@ extern "C" fn invoker(_storage: *const u8) {
 unsafe fn run_flight() {
     let step = read_volatile(addr_of!(FLIGHT_STEP));
     let ctx = read_volatile(addr_of!(FLIGHT_CTX));
-    let start = crate::fw_blocks();
+    let start = crate::platform::fw_blocks();
     let mut result = JOB_E_CANCELLED;
     if let Some(step) = step {
         loop {
@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn full_queue_is_busy_and_null_step_is_refused() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut s = script(1, 0);
@@ -481,7 +481,7 @@ mod tests {
 
     #[test]
     fn more_twice_then_done_once() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut s = script(1, 2);
@@ -502,7 +502,7 @@ mod tests {
 
     #[test]
     fn error_result_is_the_status() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut s = script(1, 0);
@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn two_more_jobs_alternate() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 100);
@@ -534,7 +534,7 @@ mod tests {
 
     #[test]
     fn cancel_queued_calls_done_once() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 100);
@@ -555,7 +555,7 @@ mod tests {
 
     #[test]
     fn cancel_running_stops_after_the_current_step() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 100);
@@ -573,7 +573,7 @@ mod tests {
 
     #[test]
     fn retire_drops_queued_and_waits_for_the_flight() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             let mut a = script(1, 100);
@@ -596,7 +596,7 @@ mod tests {
 
     #[test]
     fn missing_worker_finishes_with_an_error() {
-        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         unsafe {
             reset();
             TEST_WORKER = false;

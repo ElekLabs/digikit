@@ -91,14 +91,3 @@ def test_plan_helpers(tmp_path):
     assert p.addr("TICK") == 0x47E8C100 and p.addr("DKRT_STATE") == 0x47E8C200
     lo, hi = arena_safety.expansion("dt2-1.17")
     assert arena_safety.plan_allow_pc(plan) == "0x%x-0x%x" % (lo, lo + 0x1000)
-
-
-def test_peek_parsers(tmp_path):
-    (tmp_path / "probe.stdout").write_text(
-        '{"peek_at":"0x47e8c100","t":5,"value":Some(7)}\n{"peek_at":"0x47e8c100","t":9,"value":None}\n'
-        '{"peek":"0x47e8c100","value":Some(16909060)}\n{"peek":"0x47e8c104","value":None}\n'
-    )
-    assert digikit_menu_proof.peek_ats(tmp_path) == [7, None]
-    assert digikit_menu_proof.peek(tmp_path, 0x47E8C100) == 0x01020304
-    assert digikit_menu_proof.peek(tmp_path, 0x47E8C104) is None
-    assert digikit_menu_proof.peek_bytes(tmp_path, 0x47E8C100, 3) == b"\x01\x02\x03"
