@@ -6,7 +6,8 @@ description: Use before writing SQL or one-off scripts against the firmware data
 # Firmware queries with tools/coldfire/fw.py
 
 Run from the repo root. `-i IMAGE` (dt2-1.17, dn2-1.12, dt2-1.16, dn2-1.11) or `export FW_IMAGE=dt2-1.17`.
-The CPU follows the address: 0x40000000 and up is ColdFire, below 0x1000000 is SHARC (`--cpu` overrides).
+Addressed queries select the CPU from the address or a declared `dsp.*` name.
+Use `--cpu sharc` for DSP text, SQL, and atlas queries. A batch can mix CPUs.
 Output is capped at 60 lines (`--max N`, 0 = all). A call costs about 0.05 to 0.1 s.
 
 Use `batch` for more than one question: one process, one `## query` block each.
@@ -18,7 +19,29 @@ Use `batch` for more than one question: one process, one `## query` block each.
     str WRONG UI
     Q
 
-## Recipe: one primitive on both devices
+## SHARC queries
+
+Run these in the same batch, with the image set on the batch:
+
+    search q31 converter --cpu sharc
+    dossier dsp.master.fn.q31_converter --other dn2-1.12
+    search recips --cpu sharc --in disasm
+
+`atlas TERM --cpu sharc` searches the recovered function inventory, port declarations,
+notes and roles from the generated DSP atlas. `dossier` accepts a short-word PC
+or a declared name. It shows marked anchors, callers, memory references,
+hardware loops, the listing and matches on `--other`. Use `--callers N` and
+`--listing N` to tune the output. `str TEXT --cpu sharc` finds candidate printable
+runs from the loader, and `xref ADDR --cpu sharc` shows recorded references.
+
+The decoded facts live in `out/sharcdb/<image>.sqlite`. The optional DSP atlas,
+`out/atlas/<image>-dsp.sqlite`, adds `function_index` for all recovered functions,
+`function_anchors` with declaration provenance, and `catalog` for anchor candidates.
+SHARC provides annotated listings and DSP-specific facts. Decompilation and C++
+RTTI commands use the ColdFire data. See [Analysis tools](../../../docs/DEVELOPMENT.md#analysis-tools)
+for the database build commands.
+
+## ColdFire recipe: one primitive on both devices
 
 1. `atlas TERM -i dt2-1.17` finds the candidate functions.
 2. One `batch`, one `dossier ADDR --other dn2-1.12` line per hit. It prints name, size, hash, class and vtable slot, strings, callers with the argument setup before each call (an A0 load is marked as a possible hidden return pointer), callees, the first decompiled lines, existing anchors, the suggested rule and its pair on the other device.
@@ -58,7 +81,7 @@ Order of work:
 3b. `cost ADDR [--vars R2=32 | R2@FN=32] [--vars-all R2=32]` (SHARC): static instruction count with DO-loop trip counts and callees; see "DSP (SHARC) catalog".
 4. `port NAME --from dt2-1.16 --to dt2-1.17` carries a function between versions (cfmatch matches).
 5. `sql "SELECT ..."` (read-only) only when none of these fits. Tables: functions, edges, datarefs, strings,
-   symbols, typeinfos, vtables, matches (cfdb); functions, edges, insn, literals, ptr (sharcdb).
+   symbols, typeinfos, vtables, matches (cfdb); functions, edges, insn, strings, mem_access, literals, ptr (sharcdb).
 Only then write a script, and put it under tools/ if it will be reused.
 
 An empty `callers` or `xref` is not evidence of dead code (Ghidra misses code outside functions and indirect
@@ -110,7 +133,7 @@ Without Claude's database, Keep/Later/Skip uses per-image browser storage, with 
     uv run python -m tools.sharc_dev.sharc_catalog dt2-1.17 dn2-1.12 [--profile IMAGE=PATH]
     fw.py catalog -i dt2-1.17 --cpu sharc --grade --top 20
 
-Needs `out/sharcdb/<image>.sqlite` (also of the old image, for `stable`). Writes `out/atlas/<image>-dsp.sqlite` (tables `catalog`, `catalog_groups`), `<image>-dsp-catalog.tsv`, `<image>-dsp-catalog-groups.tsv` and `<image>-dsp-catalog-graph.json`. Addresses are short words. Columns differ from ColdFire: `reloc_hash` replaces `h_strict`; no ui or class fields. DSP-only: `role` (voice, master/fx, util, frame, io, other), `label`, `callers`, `callees`, `loops`, `do`, `recip`, `lit_data`, `abs_dm`, `hints`, and `prof_insns` (NULL without `--profile`, which also adds the tag `hot`). `fw.py catalog` shows `role` and `hints`; TERM matches name, role, hints or tags.
+Needs `out/sharcdb/<image>.sqlite` (also of the old image, for `stable`). Writes `out/atlas/<image>-dsp.sqlite` (tables `function_index`, `function_anchors`, `catalog`, `catalog_groups`), `<image>-dsp-catalog.tsv`, `<image>-dsp-catalog-groups.tsv` and `<image>-dsp-catalog-graph.json`. Addresses are short words. Columns differ from ColdFire: `reloc_hash` replaces `h_strict`; no ui or class fields. DSP-only: `role` (voice, master/fx, util, frame, io, other), `label`, `callers`, `callees`, `loops`, `do`, `recip`, `lit_data`, `abs_dm`, `hints`, and `prof_insns` (NULL without `--profile`, which also adds the tag `hot`). `fw.py catalog` shows `role` and `hints`; TERM matches name, role, hints or tags.
 
 `fw.py cost ADDR [--vars R2=32] [--vars-all R2=32]` gives a static instruction count with DO-loop trip counts (literal or symbolic) and callees. It is an upper bound over all paths with no stall model, and the unit of `dsp_cost_voice` and `patchkit budget`. Trip symbols name the register and the function that reads it, `R2@1cd286`: a callee's R2 is not the caller's. `--vars NAME=V` sets the entry function's register, `NAME@FN=V` one function's, `--vars-all NAME=V` every function's; an unknown name is an error that lists the symbols present. Jumps to another function (conditional too) count as tail calls whose targets are summed (upper bound); with `--vars` the output also gives the tighter total taking the largest target. A zero or missing DO count is `trip?@fn`; notes list what was not handled.
 

@@ -198,6 +198,13 @@ def cmd_analyze(args):
             print("FAILED  %s  not a sharcdb database (no meta.image)" % path)
             ok = False
             continue
+        if meta.get("db_version") != str(DB_VERSION):
+            print(
+                "FAILED  %s  database schema has changed; rebuild from its source"
+                % path
+            )
+            ok = False
+            continue
 
         mem, blocks = None, None
         blob_path = meta.get("blob_path")
@@ -223,13 +230,6 @@ def cmd_analyze(args):
             db = sqlite3.connect(tmp_path)
             try:
                 stats = analyze_image(db, name, mem=mem, blocks=blocks)
-                # Keep meta.db_version current so a later `build` (without
-                # --force) doesn't see a stale version and redo the whole
-                # decode just to re-stamp it.
-                db.execute(
-                    "INSERT OR REPLACE INTO meta VALUES (?,?,?)",
-                    (name, "db_version", str(DB_VERSION)),
-                )
                 db.commit()
             finally:
                 db.close()
@@ -282,7 +282,7 @@ def main(argv=None):
     b.add_argument(
         "--force",
         action="store_true",
-        help="rebuild even if sha256+DB_VERSION already match",
+        help="rebuild even if source, analysis and options match",
     )
     b.add_argument(
         "--jobs",
@@ -311,7 +311,7 @@ def main(argv=None):
     g.add_argument(
         "--force",
         action="store_true",
-        help="rebuild even if sha256+DB_VERSION already match",
+        help="rebuild even if source, analysis and options match",
     )
     args = ap.parse_args(argv)
 

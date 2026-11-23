@@ -15,6 +15,10 @@ from tools.coldfire import (  # noqa: E402
     atlas,  # noqa: E402
     fw,  # noqa: E402
 )
+from tools.sharc_dev import (  # noqa: E402
+    fw_query as dsp_query,
+)
+from tools.sharc_dev import sharc_catalog  # noqa: E402
 
 CF_DB = os.path.join(ROOT, "out", "cfdb", "dt2-1.17-emac.sqlite")
 SHARC_DB = os.path.join(ROOT, "out", "sharcdb", "dt2-1.17.sqlite")
@@ -224,7 +228,7 @@ def store_db(tmp_path, monkeypatch):
         "INSERT INTO edges(image,from_sw,to_sw,kind,from_function,to_function) VALUES ('dn2-1.12',?,?,?,?,?)",
         edges,
     )
-    monkeypatch.setattr(fw, "SHARC_DIR", str(tmp_path))
+    monkeypatch.setattr(dsp_query, "SHARC_DIR", str(tmp_path))
 
     def store(sw, space="DM", base="I0", width="word", form="i,m-mod", owner=0x10):
         db.execute(
@@ -384,7 +388,7 @@ def test_stores_fails_closed_without_rebuilding(store_db, change, error):
 
 
 def test_stores_missing_database_does_not_create_it(tmp_path, monkeypatch):
-    monkeypatch.setattr(fw, "SHARC_DIR", str(tmp_path))
+    monkeypatch.setattr(dsp_query, "SHARC_DIR", str(tmp_path))
     with pytest.raises(fw.FwError, match="missing database"):
         fw.Sharc("dn2-1.12")
     assert list(tmp_path.iterdir()) == []
@@ -420,3 +424,52 @@ def test_stores_entry_identity_is_independent_of_edge_normalization(store_db):
     assert missing["target_is_recorded_entry"] is False
     assert missing["to_sw"] == missing["to_function"] == 0x99
     assert not known["followed_by_policy"] and not missing["followed_by_policy"]
+
+
+def test_sharc_batch_routes_semantic_names_and_keeps_the_db_read_only(
+    store_db, monkeypatch
+):
+    db, path, _, _, _ = store_db
+    image = path.stem
+    name = "dsp.master.fn.q31_converter"
+    monkeypatch.setattr(
+        dsp_query,
+        "port_anchors",
+        lambda _: [{"name": name, "pm": 0x10, "mark": "D"}],
+    )
+    db.execute("UPDATE functions SET n_insns=1, is_leaf=0")
+    db.execute(
+        "INSERT INTO strings VALUES (?,256,128,134,0,'SYNTHETIC MARKER')", (image,)
+    )
+    db.commit()
+    before = path.read_bytes()
+    session = fw.Session()
+
+    def query(*args: str) -> str:
+        return fw.run_line(session, list(args), image, 60)
+
+    assert name in query("search", "q31 converter", "--cpu", "sharc")
+    assert name in query("atlas", "q31 converter", "--cpu", "sharc")
+    dossier = query("dossier", name, "--listing", "0")
+    assert f"{name} [D]+0x0" in dossier
+    assert "callers (1):" in dossier
+    assert "memory:" in dossier
+    assert "listing " not in dossier
+    assert "SYNTHETIC MARKER" in query("str", "marker", "--cpu", "sharc")
+    monkeypatch.setattr(fw, "ATLAS_DIR", str(path.parent))
+    monkeypatch.setattr(
+        sharc_catalog,
+        "DSP_ROOTS",
+        {image: dict.fromkeys(("voice", "master", "frame"), 0x10)},
+    )
+    inventory = sharc_catalog.DspImg()
+    inventory.fn = {a: (a + 0x10, 1, f"fn_{a:x}", "") for a in (0x10, 0x20, 0x30)}
+    sharc_catalog.write_function_index(image, "peer", inventory, {}, str(path.parent))
+    assert (
+        query(
+            "sql", "select count(*) from function_index", "--cpu", "sharc", "--atlas"
+        ).splitlines()[1]
+        == "3"
+    )
+    assert path.read_bytes() == before
+    assert not list(path.parent.glob("*.notes.sqlite"))

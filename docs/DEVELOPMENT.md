@@ -258,13 +258,27 @@ The ColdFire PC probe (`coupled-run --pc-probe`, RPC `pc.probe.set`): [INSTRUMEN
 
 ## Analysis tools
 
-For the DSP, `uv run python -m tools.sharc_dev.sharcdb build out/sections/*/section_7_BLOB.bin`
-builds `out/sharcdb/<image>.sqlite`. `tools/sharc_dev/sharc.py` queries it: `sharc.load("dt2-1.17")`
-gives `func`, `callers`, `callees`, `reach`, `last_def`, `refs`, `trace` and `sql`, and
-`uv run python -m tools.sharc_dev.sharc dt2-1.17 "SQL"` runs one query. For the ColdFire OS, `tools/coldfire/ghidradump.py` exports a
-Ghidra project, `tools/coldfire/cfdb.py build` makes a database from the dump, and `tools/coldfire/cf.py`
-queries it. Decoding uses only public manuals ([docs/sharc/SOURCES.md](sharc/SOURCES.md)).
-All tools are indexed in [docs/TOOLS.md](TOOLS.md).
+Use [the firmware query CLI](TOOLS.md#firmware-query-cli-and-the-atlas) for both CPUs.
+The query backends are `tools/coldfire/fw_query.py` and `tools/sharc_dev/fw_query.py`.
+
+From the repository root with the firmware files in `firmware/`, build the DSP databases and atlas:
+
+```sh
+uv run python -m tools.firmware.extract firmware/Digitakt_II_OS1.17.syx -o out/sections/dt2-1.17
+uv run python -m tools.firmware.extract firmware/Digitone_II_OS1.12.syx -o out/sections/dn2-1.12
+uv run python -m tools.sharc_dev.sharcdb build out/sections/{dt2-1.17,dn2-1.12}/section_7_BLOB.bin
+uv run python -m tools.sharc_dev.sharc_catalog dt2-1.17 dn2-1.12
+uv run python -m tools.coldfire.fw dossier dsp.master.fn.q31_converter -i dt2-1.17 --other dn2-1.12
+```
+
+The builder reports instruction and function counts for each `out/sharcdb/<image>.sqlite`.
+The atlas writer reports the number of candidates. Open `out/atlas/<image>-dsp.sqlite`
+and browse `function_index` for the full inventory. The dossier shows the converter's
+callers, memory references and cross-device match. DSP decoding uses the public
+manuals in [SHARC sources](sharc/SOURCES.md).
+
+The ColdFire database imports a Ghidra export from `tools/coldfire/ghidradump.py`
+through `tools/coldfire/cfdb.py build`. [Tools](TOOLS.md) covers the build and query commands.
 
 Register local firmware databases and symbol maps from [desktop Settings](ADDRMAP.md#firmware-symbols-in-desktop-settings).
 

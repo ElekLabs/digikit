@@ -487,27 +487,37 @@ stores the stack pointer's circular MODIFY was blocking for target
 needs an offset at or beyond one buffer length, or an unrecognised symbol
 name, which the fix deliberately does not claim bounded (see the proof).
 
-## Agent query CLI and the atlas
+## Firmware query CLI and the atlas
 
-`tools/coldfire/fw.py` is the first stop for firmware questions (the `firmware-query` skill says the same). One process,
-compact text, a 60-line cap with a "... N more" tail, ColdFire and SHARC from one image name
-(`-i dt2-1.17`, or `FW_IMAGE`). It uses only the standard library; the call graph is cached in `out/cache/fw/`
-(keyed by the database hash).
+`tools/coldfire/fw.py` is the entry point for firmware questions. Set the image with
+`-i` or `FW_IMAGE`. A short-word PC or a `dsp.*` declaration name routes the query to
+SHARC. Use `--cpu sharc` for DSP text searches and raw SQL. A batch can mix both CPUs.
+Text output defaults to 60 lines. The call graph is cached in `out/cache/fw/`.
 
-| Command | Answers |
-| --- | --- |
-| `fn X`, `decomp X`, `disasm X` | Summary (size, callers, callees, strings, a few decompiled lines), full C, listing. X is an address, a Ghidra name or a `cf_names` name. |
-| `callers X`, `callees X`, `xref ADDR`, `path A B` | Call sites, callees, every reference to an address (data, code, vtable slots), shortest call path. |
-| `str TEXT`, `class NAME` | Strings and the functions using them; an RTTI class with bases, derived classes and vtable. |
-| `port X --from dt2-1.16 --to dt2-1.17` | The same function on another version (`cfmatch` matches in the database). |
-| `search TERM` | FTS5 over function and class names, strings, decompiled C and the atlas. |
-| `atlas TERM` | Machines, parameters, classes, UI strings, structs and manual pages for a manual term. |
-| `sql "SELECT ..."` | Read-only SQL on the same database. |
-| `batch FILE\|-` | One command per line, one `## command` result block each, one process. |
+| Command | ColdFire | SHARC |
+| --- | --- | --- |
+| `fn`, `disasm` | Function summary and Ghidra listing | Function summary and annotated DSP listing |
+| `dossier X --other IMAGE` | Signature, anchors, call setup, decompilation and paired function | Anchors, roots, callers, memory references, loops, listing and paired function |
+| `callers`, `callees`, `xref`, `path` | Call graph, code and data references, vtable slots | Call graph, code references, resolved and inferred memory references, literals |
+| `search TERM --in SOURCES` | `names,strings,decomp,atlas` | `names,notes,atlas,disasm,strings`. Defaults to names, notes and atlas |
+| `atlas TERM`, `catalog` | Firmware glossary and anchor candidates | Search recovered functions and declarations, or list anchor candidates |
+| `port X --from IMAGE --to IMAGE` | Recorded cross-image matches | Declared counterparts and function hash matches |
+| `str TERM` | Strings and their recorded users | Candidate printable runs from loaded sections |
+| `decomp`, `class` | Decompiled C and RTTI | Use `disasm` for listings and `atlas` for inferred DSP roles |
+| `cost`, `stores` | | Static instruction cost and call-reachable store operands |
+| `sql`, `batch` | Read-only SQL and mixed query batches | Read-only SQL and mixed query batches |
 
-Full-text indexes are sidecars, `out/cfdb/<image>-emac.fts.sqlite` (`tools/coldfire/cfdb.py fts IMAGE`, 2 s, built on
-first use): trigram tables for names and strings, a token index for decompiled C. SHARC `search` uses LIKE over
-function names, labels and notes (there is no SHARC decompilation).
+ColdFire full-text indexes are sidecars in `out/cfdb/<image>-emac.fts.sqlite` and
+build on first use. The DSP builder indexes printable runs from the loader blob.
+Some matches can be printable instruction bytes. A recorded reference helps
+establish that a run is used as text.
+
+Build the databases and atlas with the [analysis commands](DEVELOPMENT.md#analysis-tools).
+The generated DSP atlas SQLite has `function_index` for the full inventory with
+decoder labels, annotations, inferred roles and paired addresses. Use `sql --atlas --cpu sharc` to query it from the CLI. The
+`function_anchors` table records declared names, site addresses and evidence marks.
+`catalog` is the anchor shortlist. CLI function lookup and dossiers can also run
+directly on the DSP database when the optional atlas hasn't been built.
 
 `tools/coldfire/atlas.py build IMAGE...` writes `out/atlas/<image>.sqlite` from the rules in the repository: the
 machine/page descriptor table (found by its 44-byte stride, any version), the parameter table

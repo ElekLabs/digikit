@@ -21,6 +21,7 @@ import os
 import sqlite3
 import sys
 import time
+from pathlib import Path
 
 _here = os.path.dirname(os.path.abspath(__file__))
 
@@ -302,37 +303,25 @@ def load(
     blocks=None,
     force=False,
 ):
-    """Open `db_dir`/<name>.sqlite, building (or rebuilding, if the blob's
-    sha256 or tools/sharc_dev/sharcdb/'s DB_VERSION has moved on) from
-    `sections_dir`/<name>/section_7_BLOB.bin first when needed. If the blob
-    is gone but an up-to-date database is already on disk, that's fine --
-    only a build or rebuild requires the blob."""
+    """Open the image, rebuilding from the local blob when build inputs change."""
     blob_path = os.path.join(sections_dir, name, "section_7_BLOB.bin")
     out_path = os.path.join(db_dir, name + ".sqlite")
 
-    stale = force or not os.path.exists(out_path)
-    if not stale:
-        meta = sharcdb.read_meta(out_path)
-        if (
-            meta.get("db_version") != str(sharcdb.DB_VERSION)
-            or os.path.exists(blob_path)
-            and meta.get("image_sha256") != sharcfn.sha256_of(blob_path)
-        ):
-            stale = True
-
-    if stale:
-        if not os.path.exists(blob_path):
-            raise FileNotFoundError(
-                "sharc.load(%r): %s is missing or stale and %s does not exist to rebuild it"
-                % (name, out_path, blob_path)
-            )
+    if os.path.exists(blob_path):
         sharcdb.build_database(
             blob_path,
             out_path,
             name=name,
             min_depth=min_depth,
             blocks=blocks,
-            force=True,
+            force=force,
+        )
+    elif force or sharcdb.read_meta(out_path).get("db_version") != str(
+        sharcdb.DB_VERSION
+    ):
+        raise FileNotFoundError(
+            "sharc.load(%r): %s is missing or stale and %s does not exist to rebuild it"
+            % (name, out_path, blob_path)
         )
 
     return Image(name, out_path, blob_path)
@@ -342,11 +331,16 @@ class Image:
     """A queryable image: a handle on out/sharcdb/<name>.sqlite plus,
     lazily, the LoadedMemory needed for trace()/xref_table()."""
 
-    def __init__(self, name, db_path, blob_path):
+    def __init__(self, name, db_path, blob_path, *, read_only=False):
         self.name = name
         self.db_path = db_path
         self.blob_path = blob_path
-        self.db = sqlite3.connect(db_path)
+        self._read_only = read_only
+        self.db = (
+            sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
+            if read_only
+            else sqlite3.connect(db_path)
+        )
         self.meta = dict(
             self.db.execute(
                 "SELECT key, value FROM meta WHERE image=?", (name,)
@@ -1102,16 +1096,26 @@ class Image:
 
     def _ensure_notes_db(self):
         if self._notes_attached:
-            return
+            return True
         notes_path = os.path.join(
             os.path.dirname(os.path.abspath(self.db_path)), self.name + ".notes.sqlite"
         )
+        if self._read_only:
+            if not os.path.isfile(notes_path):
+                return False
+            self.db.execute(
+                "ATTACH DATABASE ? AS notesdb",
+                (Path(notes_path).resolve().as_uri() + "?mode=ro",),
+            )
+            self._notes_attached = True
+            return True
         self.db.execute("ATTACH DATABASE ? AS notesdb", (notes_path,))
         self.db.execute("""CREATE TABLE IF NOT EXISTS notesdb.notes (
             image TEXT, function_sw INTEGER, role TEXT, summary TEXT, reads TEXT,
             writes TEXT, confidence TEXT, evidence TEXT, author TEXT, created TEXT,
             PRIMARY KEY (image, function_sw))""")
         self._notes_attached = True
+        return True
 
     _NOTE_FIELDS = (
         "role",
@@ -1129,6 +1133,8 @@ class Image:
         evidence/author; a field left out keeps its previous value (or NULL,
         for a brand new row). `created` is set to now on first write and left
         alone on an update, unless passed explicitly."""
+        if self._read_only:
+            raise ValueError("cannot write notes on a read-only image")
         self._ensure_notes_db()
         existing = self.notes(fn)
         prior = existing[0] if existing else {}
@@ -1162,7 +1168,8 @@ class Image:
     def notes(self, fn=None):
         """This image's note for `fn` (a single-element list, or [] when
         none exists), or every note in the image when fn is None."""
-        self._ensure_notes_db()
+        if not self._ensure_notes_db():
+            return []
         cols = (
             "function_sw",
             "role",
@@ -1204,7 +1211,7 @@ class Image:
         self._cross_cache[self.name] = other
         return other
 
-    def card(self, fn, listing_n=8):
+    def card(self, fn, listing_n=8, *, caller_limit=None):
         """A deterministic, compact text card for one function: header,
         roots reaching it, callers/callees (with any note's role/summary),
         literals and datarefs, resolved memory reads/writes grouped by
@@ -1273,9 +1280,14 @@ class Image:
                     _role_suffix(c["from_function"]),
                 )
             )
-        L.append(
-            "callers (%d): %s" % (len(caller_bits), "; ".join(caller_bits) or "none")
+        shown_callers = caller_bits[:caller_limit]
+        omitted_callers = len(caller_bits) - len(shown_callers)
+        caller_text = "; ".join(shown_callers) or (
+            "none shown" if omitted_callers else "none"
         )
+        if omitted_callers:
+            caller_text += " (+%d more)" % omitted_callers
+        L.append("callers (%d): %s" % (len(caller_bits), caller_text))
 
         callees = self.callees(entry)
         L.append(
@@ -1358,7 +1370,7 @@ class Image:
                 % (100.0 * floaty / total, floaty, total)
             )
 
-        other = self._cross_partner()
+        other = None if self._read_only else self._cross_partner()
         if other is not None:
             matches = self.match(other, entry)
             L.append(
@@ -1374,6 +1386,9 @@ class Image:
                     else "no match",
                 )
             )
+
+        if not listing_n:
+            return "\n".join(L)
 
         all_rows = self.db.execute(
             "SELECT sw, mnemonic FROM insn WHERE image=? AND function_sw=? AND aligned=1 ORDER BY sw",
