@@ -221,10 +221,17 @@ fn a_second_start_keeps_the_live_table() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe {
         fxpage::unbind();
-        assert_eq!(fxpage::bind(&core_with(table(4, DEVICE, 2)), [0, 0]), OK);
+        assert_eq!(fxpage::bind(&core_with(table(4, DEVICE, 2)), [1, 2]), OK);
+        let tab = std::ptr::addr_of!(fxpage::DKRT_FXP_TAB) as *const u32;
+        let before: Vec<u32> = (0..64).map(|i| *tab.add(i)).collect();
         // a reload of the file binds again: the live table stays, the image table is not read over it
-        assert_eq!(fxpage::bind(&FakeCore::new(), [0, 0]), OK);
+        assert_eq!(fxpage::bind(&FakeCore::new(), [1, 2]), OK);
         assert!(fxpage::available(&FakeCore::new()));
+        // other firmware words and another image table do not touch the bound table
+        assert_eq!(fxpage::bind(&core_with(table(4, DEVICE, 5)), [3, 4]), OK);
+        let after: Vec<u32> = (0..64).map(|i| *tab.add(i)).collect();
+        assert_eq!(before, after);
+        assert_eq!((after[10], after[11]), (1, 2));
         fxpage::unbind();
     }
 }
