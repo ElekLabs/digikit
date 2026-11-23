@@ -2,6 +2,8 @@
 
 /** `HostDir.magic` (`HOST_DIR_MAGIC` of abi.toml). */
 export const HOST_DIR_MAGIC = 0x44484b44;
+/** `HostDir.ready` once the package has attached (`HOST_DIR_READY_MAGIC` of abi.toml). */
+export const HOST_DIR_READY = 0x52454459;
 /** The ids this build knows (`[[host_dir]]` of abi.toml); a core may have fewer, which its directory says in `count`. */
 export const HOST_COUNT = 6;
 
@@ -13,4 +15,13 @@ export const HOST_ID = {
   TABLE_BAD: 3,
   PACKAGE_LO: 4,
   PACKAGE_HI: 5,
+} as const;
+/** Who fills each entry of the directory: the package at its entry, or the core before it starts the package. */
+export const HOST_OWNER = {
+  DSP: 'package',
+  PROVIDERS: 'package',
+  TICKS: 'package',
+  TABLE_BAD: 'package',
+  PACKAGE_LO: 'core',
+  PACKAGE_HI: 'core',
 } as const;

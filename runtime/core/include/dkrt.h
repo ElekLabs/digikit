@@ -121,6 +121,8 @@
 #define DKRT_CARD_TOO_SMALL 5
 /* HostDir.magic, "DKHD" (the host directory `DKRT_HOST_DIR`). */
 #define DKRT_HOST_DIR_MAGIC 0x44484b44u
+/* HostDir.ready once the package has attached and every entry is filled ("REDY"), written last by the core; 0 before (cleared, or the package still starting). */
+#define DKRT_HOST_DIR_READY_MAGIC 0x52454459u
 /* DkrtDiag.magic, "DIAG". */
 #define DKRT_DIAG_MAGIC 0x44494147u
 /* Store leases (dkrt_store_lease) that can be live at once, RAM only: a reboot clears them. The sample pool takes one per request and one per peak-window step (one at a time); its request count plus a reserve of 8 must fit (checked at compile time in the adapter). */

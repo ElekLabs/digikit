@@ -63,9 +63,9 @@ Hosts do not decode the table. They read raw memory and `dkaddrmap::snapshot` (o
 - `patchkit addr --map SHIP --format reads` lists what to read, in order: the plan symbols `DKRT_STATE`, `DKRT_HOST_DIR` and `dyndsp_info` with their byte counts, and `DKRT_DSP` and
   `DKRT_PROVIDERS`, which belong to the system package (a card file placed at a different address each boot, so they have no symbol in the image). A read with a `host_id` is such a
   static: its address is the entry of that id in the host directory `DKRT_HOST_DIR` (read first; ids in `runtime/core/abi.toml` `[[host_dir]]`, generated to
-  `packages/dk-session/src/gen_host_dir.ts` and `packages/dkaddrmap/src/gen_host_dir.rs`). The directory is a magic, the count of ids the core knows and one 32-bit address per id;
-  the core clears it before it starts the package and the package fills it at its entry. An empty entry means no package is loaded (a core-only boot, or no `digikit/system.dksp`).
-  `dkaddrmap::host_dir::HostDir` reads it and `Loader::collect` is the whole procedure; `packages/dk-session/src/host-directory.ts` is the TypeScript reader.
+  `packages/dk-session/src/gen_host_dir.ts` and `packages/dkaddrmap/src/gen_host_dir.rs`). The directory is a magic, the count of ids the core knows, a ready word and one 32-bit address per id;
+  the core clears it before it starts the package, fills the ids it owns (the package's block), the package fills its own at its entry, and the core sets the ready word last. A directory that is not ready, or an empty entry, means no package is loaded (a core-only boot, no `digikit/system.dksp`, or the package still starting).
+  `dkaddrmap::host_dir::HostDir` reads it and `Loader::collect` is the whole procedure; `packages/dk-session/src/host-directory.ts` is the TypeScript reader and `tools/patchkit/pk_hostdir.py` the Python one (its ids come from abi.toml).
 - `patchkit addr --map SHIP --snapshot SYMBOL=HEX ... [--format loads]` takes the bytes (hex, one flag per symbol) and decodes them; `--format loads` prints
   the table, any other format names addresses with it.
 

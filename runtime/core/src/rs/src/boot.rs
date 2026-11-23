@@ -196,21 +196,34 @@ pub(crate) unsafe fn run<E: BootEnv>(env: &E) {
         update_with(env.platform(), r, copy, valid);
     }
     let mut counted = crate::safe_mode::count_boot_with(env.platform(), level, r, copy, valid, card::writable());
-    // the package gets the resident table and gives its hooks (declare-check-commit of its services); a core-only boot runs none of its code. The host directory is empty
-    // until the package fills it at its entry.
+    // the package gets the resident table and gives its hooks (declare-check-commit of its services); a core-only boot runs none of its code. The host directory is empty and
+    // not ready until the core has filled its own entries (the block the package is placed in, before the package starts) and the package has filled its own at its entry; the
+    // core marks it ready last, so a tool that reads it during the start sees no package, never a half-filled table.
     crate::host_dir::clear();
     if is_core_only(level) {
         // stage 1 may have placed the package (core-only by crashes): give its block back
         env.abandon_package();
-    } else if !env.start_package() {
-        // the package was placed and its table accepted, yet it gave no hooks: it cannot run on this core
-        env.abandon_package();
-        crate::host_dir::clear();
-        level = Level::CoreOnly(CoreOnlyReason::PackageIncompatible);
-        // core-only comes first: it consumes the one-shot flag too (the record as counted above, so the count stays)
-        if counted.flags & sel::FLAG_SAFE_ONCE != 0 {
-            counted.flags &= !sel::FLAG_SAFE_ONCE;
-            update_with(env.platform(), counted, copy, valid);
+    } else {
+        let started = if let Some((lo, hi)) = env.package_extent() {
+            crate::host_dir::publish_core(lo, hi);
+            env.start_package()
+        } else {
+            // a package without a placed block cannot be told apart from none: it does not run
+            false
+        };
+        if started {
+            crate::host_dir::complete();
+        } else {
+            // the package was placed and its table accepted, yet it gave no hooks (or there is no block to audit): it cannot run on this core. The boot stays counted: the package's
+            // entry ran, and a fault in it would have counted (the stable period of this core-only boot clears the count, as for any core-only boot no crash caused)
+            env.abandon_package();
+            crate::host_dir::clear();
+            level = Level::CoreOnly(CoreOnlyReason::PackageIncompatible);
+            // core-only comes first: it consumes the one-shot flag too (the record as counted above, so the count stays)
+            if counted.flags & sel::FLAG_SAFE_ONCE != 0 {
+                counted.flags &= !sel::FLAG_SAFE_ONCE;
+                update_with(env.platform(), counted, copy, valid);
+            }
         }
     }
     KEEP_COUNTER = level.keeps_counter();

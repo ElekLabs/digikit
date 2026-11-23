@@ -32,6 +32,10 @@ impl BootEnv for HostBootEnv {
     unsafe fn load_package(&self) -> crate::level::PackageStatus {
         crate::level::PackageStatus::Ok
     }
+    /// A block of the arena for the host directory (the package of the host's boot is linked into the test, not placed).
+    unsafe fn package_extent(&self) -> Option<(u32, u32)> {
+        Some((0x4010_0000, 0x4011_0000))
+    }
     unsafe fn start_package(&self) -> bool {
         crate::hooks::attach_package(&crate::resident::TABLE);
         true

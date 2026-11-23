@@ -2,6 +2,8 @@
 
 /// `HostDir.magic` (`HOST_DIR_MAGIC` of abi.toml).
 pub const HOST_DIR_MAGIC: u32 = 0x44484b44;
+/// `HostDir.ready` once the package has attached (`HOST_DIR_READY_MAGIC` of abi.toml).
+pub const HOST_DIR_READY: u32 = 0x52454459;
 /// The ids this build knows (`[[host_dir]]` of abi.toml).
 pub const HOST_COUNT: usize = 6;
 /// DKRT_DSP: the DSP loader's placement table (module ranges in the DSP area).

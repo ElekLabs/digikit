@@ -848,7 +848,9 @@ class Proof:
                 (e.folder / "digikit/modules/m1.dkm").read_bytes()
             )
             assert self.run_img is not None
-            base = run.info_word(3) + run.w(run.dsp + M.D_MOD_OFF + 4 * idx)
+            base = run.info_word(3) + run.w(
+                run.package_symbol("DSP") + M.D_MOD_OFF + 4 * idx
+            )
             want = M.relocate(sec, base, M.run_imports(run, self.run_img.plan))
             got = run.dsp_bytes(base, len(want))
             self.check(

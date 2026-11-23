@@ -116,6 +116,8 @@ pub const CARD_UNREADABLE: u32 = 4;
 pub const CARD_TOO_SMALL: u32 = 5;
 /// HostDir.magic, "DKHD" (the host directory `DKRT_HOST_DIR`).
 pub const HOST_DIR_MAGIC: u32 = 0x44484b44;
+/// HostDir.ready once the package has attached and every entry is filled ("REDY"), written last by the core; 0 before (cleared, or the package still starting).
+pub const HOST_DIR_READY_MAGIC: u32 = 0x52454459;
 /// DkrtDiag.magic, "DIAG".
 pub const DIAG_MAGIC: u32 = 0x44494147;
 /// Store leases (dkrt_store_lease) that can be live at once, RAM only: a reboot clears them. The sample pool takes one per request and one per peak-window step (one at a time); its request count plus a reserve of 8 must fit (checked at compile time in the adapter).
@@ -156,6 +158,10 @@ pub const HOST_PACKAGE_LO: u32 = 4;
 pub const HOST_PACKAGE_HI: u32 = 5;
 /// The ids of the host directory this build knows (`[[host_dir]]` of abi.toml).
 pub const HOST_COUNT: usize = 6;
+/// The ids of the host directory the package fills (`owner = "package"` of `[[host_dir]]`).
+pub const HOST_PACKAGE_OWNED: [u32; 4] = [0, 1, 2, 3];
+/// The ids of the host directory the core fills (`owner = "core"` of `[[host_dir]]`).
+pub const HOST_CORE_OWNED: [u32; 2] = [4, 5];
 /// Provider slots of the boot plan (`[limits.format] provider_max` of sdk/sdk.toml), separate from the selection.
 pub const PROVIDER_MAX: usize = 8;
 

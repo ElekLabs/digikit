@@ -403,6 +403,7 @@ fn the_host_dir_group_fills_the_directory_the_tools_read() {
         assert!((r.host_dir.publish)(dkrt_sdk::HOST_TABLE_BAD, 0x4000_0040));
         assert_eq!((*addr_of!(crate::host_dir::DKRT_HOST_DIR)).get(dkrt_sdk::HOST_TABLE_BAD), Some(0x4000_0040));
         assert!(!(r.host_dir.publish)(dkrt_sdk::HOST_COUNT as u32, 4));
+        assert!(!(r.host_dir.publish)(dkrt_sdk::HOST_PACKAGE_LO, 4), "the core's ids are not the package's to write");
         crate::host_dir::clear();
     }
 }

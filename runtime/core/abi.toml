@@ -356,6 +356,12 @@ value = 0x44484b44
 doc = "HostDir.magic, \"DKHD\" (the host directory `DKRT_HOST_DIR`)."
 
 [[const]]
+name = "HOST_DIR_READY_MAGIC"
+type = "u32"
+value = 0x52454459
+doc = "HostDir.ready once the package has attached and every entry is filled (\"REDY\"), written last by the core; 0 before (cleared, or the package still starting)."
+
+[[const]]
 name = "DIAG_MAGIC"
 type = "u32"
 value = 0x44494147
@@ -700,33 +706,41 @@ fields = [
 # The statics of the system package that host tools (the harness, the daemon, `patchkit addr`) read by address. The package is a card file placed at a different address
 # each boot, so it has no symbol in the image: the resident core owns one table of addresses, `DKRT_HOST_DIR` (`HostDir` of `dkrt_abi`): a magic, the count of ids this core
 # knows, and one 32-bit address per id. Stage 1 clears it before it starts the package; the package fills each entry of its statics at its entry (the `host_dir` group of the resident
-# table; the core fills the two that give the package's block); a core-only boot leaves it empty. A tool reads the one resident symbol and follows the address of the id it needs: an empty entry means no package is loaded.
+# table; the core fills the two that give the package's block, before it starts the package); a core-only boot leaves it empty. A tool reads the one resident symbol and follows the address of the id it needs: an empty entry means no package is loaded.
+# `owner` says who fills the entry: `package` (its own static, through the resident table at its entry) or `core` (what the core knows, before it starts the package); the core refuses a package write to a core id.
+# The directory also has a `ready` word the core sets last, after the package attached: a tool that reads a directory that is not ready finds no package.
 # Ids are append-only: a new one goes at the end and its meaning never changes. Resident statics are not listed: they stay plain symbols.
 
 [[host_dir]]
 name = "DSP"
+owner = "package"
 doc = "DKRT_DSP: the DSP loader's placement table (module ranges in the DSP area)."
 
 [[host_dir]]
 name = "PROVIDERS"
+owner = "package"
 doc = "DKRT_PROVIDERS: the records of the loaded service files (the layout of the module records of DKRT_STATE, without its header)."
 
 [[host_dir]]
 name = "TICKS"
+owner = "package"
 doc = "DKRT_TICKS: the tick counter of each module record."
 
 [[host_dir]]
 name = "TABLE_BAD"
+owner = "package"
 doc = "DKRT_TABLE_BAD: the byte that says the firmware's tables changed under the runtime (0: intact; the top byte of its word)."
 
 # The next two are filled by the resident core, not by the package: it knows the block it placed the package in, and a tool that audits memory needs the extent.
 
 [[host_dir]]
 name = "PACKAGE_LO"
+owner = "core"
 doc = "The first byte of the arena block the core placed the package in (its image, relocation table and bss)."
 
 [[host_dir]]
 name = "PACKAGE_HI"
+owner = "core"
 doc = "One past the last byte of that block."
 
 # ---- exports ---------------------------------------------------------------------------------------------------------------

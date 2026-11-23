@@ -301,7 +301,7 @@ async function words<const F extends readonly string[]>(
   return Object.fromEntries(fields.map((k, i) => [k, values[i]!])) as Record<F[number], number>;
 }
 
-/** `DKRT_BOOT`: the boot's fields, per-module results (signed, `results` has `count` of them), `dspWait` and `stable`. */
+/** `DKRT_BOOT`: the boot's fields, per-module results (signed, `results` has `count` of them), `coreCause` (CORE_*, 0 when the boot is not core-only; the word that was `dsp_wait`) and `stable`. */
 export async function bootInfo(session: Session, plan: RuntimePlan) {
   const d = await words(session, plan, 'DKRT_BOOT', BI_FIELDS);
   const base = planSymbol(plan, 'DKRT_BOOT') + 4 * BI_FIELDS.length;
@@ -326,7 +326,7 @@ export async function bootInfo(session: Session, plan: RuntimePlan) {
     states: states.slice(0, d.count),
     /** What the plan refused each module on (`DkrtBootInfo.detail`). */
     detail: detail.slice(0, d.count),
-    dspWait: tail[SEL_MAX]!,
+    coreCause: tail[SEL_MAX]!,
     stable: tail[SEL_MAX + 1]!,
     reasonName: SAFE_NAMES[d.reason] ?? '?',
   };

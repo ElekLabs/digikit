@@ -397,6 +397,18 @@ fn memory_with(
     std::collections::BTreeMap<String, u64>,
     FakeMemory,
 ) {
+    memory_with_ready(package_loaded, package_loaded)
+}
+
+/// `memory_with`, with the ready word of the directory chosen apart from the entries: the core marks it ready last.
+fn memory_with_ready(
+    package_loaded: bool,
+    ready: bool,
+) -> (
+    snapshot::Loader,
+    std::collections::BTreeMap<String, u64>,
+    FakeMemory,
+) {
     let (mut loader, snap) = synthetic();
     loader.providers = 1;
     let mut mem = FakeMemory {
@@ -410,12 +422,13 @@ fn memory_with(
     let mut directory = words(&[
         gen_host_dir::HOST_DIR_MAGIC,
         gen_host_dir::HOST_COUNT as u32,
+        if ready { gen_host_dir::HOST_DIR_READY } else { 0 },
     ]);
     directory.extend(words(&[0; gen_host_dir::HOST_COUNT]));
     if package_loaded {
         mem.put(dsp_at, &snap["DKRT_DSP"]);
         let mut at = |id: u32, addr: u64| {
-            let o = 8 + 4 * id as usize;
+            let o = 12 + 4 * id as usize;
             directory[o..o + 4].copy_from_slice(&(addr as u32).to_be_bytes());
         };
         at(gen_host_dir::HOST_DSP, dsp_at);
@@ -460,9 +473,31 @@ fn an_empty_entry_says_no_package_is_loaded() {
     );
 }
 
+/// The core clears the directory, fills its own entries and the package fills its own; only then does it mark the directory ready. A tool that reads in between (the entries
+/// are there, the ready word is not) finds no package.
+#[test]
+fn a_directory_that_is_not_ready_says_no_package_even_with_entries_filled() {
+    let (loader, symbols, mem) = memory_with_ready(true, false);
+    let err = loader
+        .collect(&symbols, |at, len| mem.peek(at, len))
+        .unwrap_err();
+    assert!(
+        err.contains("no package loaded") && err.contains("still starting"),
+        "{err}"
+    );
+    let (loader, symbols, mem) = memory_with_ready(true, true);
+    assert!(loader
+        .collect(&symbols, |at, len| mem.peek(at, len))
+        .is_ok());
+}
+
 #[test]
 fn the_directory_reader_tells_empty_old_and_foreign_bytes_apart() {
-    let mut d = words(&[gen_host_dir::HOST_DIR_MAGIC, 1]);
+    let mut d = words(&[
+        gen_host_dir::HOST_DIR_MAGIC,
+        1,
+        gen_host_dir::HOST_DIR_READY,
+    ]);
     d.extend(words(
         &[0x4000_2000, 0, 0, 0][..gen_host_dir::HOST_COUNT.min(4)],
     ));

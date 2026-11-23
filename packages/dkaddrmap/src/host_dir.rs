@@ -1,23 +1,25 @@
 //! The host directory of the runtime (`DKRT_HOST_DIR`, `runtime/core/abi.toml` `[[host_dir]]`): how a tool finds a static of the system package.
 //!
 //! The package is a card file placed at a different address each boot, so none of its statics has a symbol in the image. The resident core keeps one table of their addresses:
-//! a magic, the count of ids that core knows and one 32-bit big-endian address per id (the layout of `dkrt_abi::host_dir::HostDir`, the words as the device holds them). A tool
-//! reads the bytes of the one resident symbol (`SYM_HOST_DIR`, [`BYTES`] long), asks [`HostDir::address`] for the id it needs and reads the memory there. An empty entry means no
+//! a magic, the count of ids that core knows, a ready word and one 32-bit big-endian address per id (the layout of `dkrt_abi::host_dir::HostDir`, the words as the device holds them). A tool
+//! reads the bytes of the one resident symbol (`SYM_HOST_DIR`, [`BYTES`] long), asks [`HostDir::address`] for the id it needs and reads the memory there. A directory that is not ready (the core cleared it, or the package is still starting) and an empty entry both mean no
 //! package is running (a core-only boot, or no package file); the answer then names the static, never an address of garbage.
 
-use crate::gen_host_dir::{HOST_COUNT, HOST_DIR_MAGIC, HOST_NAMES};
+use crate::gen_host_dir::{HOST_COUNT, HOST_DIR_MAGIC, HOST_DIR_READY, HOST_NAMES};
 
 /// The resident symbol of the directory.
 pub const SYM_HOST_DIR: &str = "DKRT_HOST_DIR";
-/// The bytes of the directory a tool reads: the magic, the count and one word per id this build knows.
-pub const BYTES: u64 = 4 * (2 + HOST_COUNT as u64);
+/// The words before the addresses: the magic, the count and the ready word.
+const HEADER: usize = 12;
+/// The bytes of the directory a tool reads: the header and one word per id this build knows.
+pub const BYTES: u64 = HEADER as u64 + 4 * HOST_COUNT as u64;
 
 /// Why an address could not be found.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     /// The bytes are not a directory (too short, or another magic): the image has none, or the read went to the wrong place.
     NotADirectory,
-    /// The entry is empty: no package is loaded.
+    /// The directory is not ready, or the entry is empty: no package is loaded.
     NoPackage(&'static str),
     /// The core that wrote the directory is older than this tool: it has no such id.
     UnknownId(&'static str),
@@ -34,7 +36,7 @@ impl core::fmt::Display for Error {
             ),
             Error::NoPackage(name) => write!(
                 f,
-                "no package loaded: the host directory has no address for {name} (the resident core runs alone, or the card has no system package)"
+                "no package loaded: the host directory has no address for {name} (the resident core runs alone, the card has no system package, or the package is still starting)"
             ),
             Error::UnknownId(name) => write!(
                 f,
@@ -52,6 +54,7 @@ impl core::fmt::Display for Error {
 pub struct HostDir<'a> {
     words: &'a [u8],
     count: u32,
+    ready: bool,
 }
 
 fn word(b: &[u8], at: usize) -> u32 {
@@ -61,7 +64,7 @@ fn word(b: &[u8], at: usize) -> u32 {
 impl<'a> HostDir<'a> {
     /// The directory in `bytes` (what a read of [`SYM_HOST_DIR`] gave).
     pub fn parse(bytes: &'a [u8]) -> Result<HostDir<'a>, Error> {
-        if bytes.len() < 8 || word(bytes, 0) != HOST_DIR_MAGIC {
+        if bytes.len() < HEADER || word(bytes, 0) != HOST_DIR_MAGIC {
             return Err(Error::NotADirectory);
         }
         let count = word(bytes, 4);
@@ -69,15 +72,20 @@ impl<'a> HostDir<'a> {
         Ok(HostDir {
             words: bytes,
             count,
+            ready: word(bytes, 8) == HOST_DIR_READY,
         })
     }
 
     /// The address of the static with `id` (`HOST_*` of `gen_host_dir`).
     pub fn address(&self, id: u32) -> Result<u32, Error> {
         let name = *HOST_NAMES.get(id as usize).ok_or(Error::BadId(id))?;
-        let at = 8 + 4 * id as usize;
+        let at = HEADER + 4 * id as usize;
         if id >= self.count || at + 4 > self.words.len() {
             return Err(Error::UnknownId(name));
+        }
+        if !self.ready {
+            // the core clears the directory before it starts the package and marks it ready last: a read in between sees no package, not a half-filled table
+            return Err(Error::NoPackage(name));
         }
         match word(self.words, at) {
             0 => Err(Error::NoPackage(name)),

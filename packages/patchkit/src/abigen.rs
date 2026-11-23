@@ -43,6 +43,8 @@ struct Abi {
 struct HostDirToml {
     /// The id's name without a prefix (`DSP`): the symbol `DKRT_<name>` of the package static it names.
     name: String,
+    /// Who fills the entry: `package` or `core`.
+    owner: String,
     doc: String,
 }
 #[derive(Deserialize)]
@@ -293,6 +295,9 @@ fn host_ids(abi: &Abi) -> Result<&[HostDirToml]> {
         if h.doc.is_empty() || h.doc.contains("*/") {
             return Err(err!("{SOURCE}: {what}: needs a doc without a comment end"));
         }
+        if h.owner != "core" && h.owner != "package" {
+            return Err(err!("{SOURCE}: {what}: owner is \"core\" or \"package\""));
+        }
         if abi.host_dir[..i].iter().any(|o| o.name == h.name) {
             return Err(err!("{SOURCE}: {what}: the name is twice"));
         }
@@ -302,14 +307,10 @@ fn host_ids(abi: &Abi) -> Result<&[HostDirToml]> {
 
 /// `packages/dk-session/src/gen_host_dir.ts`: the ids for the TypeScript tools. Written as Prettier prints it.
 fn host_ts(abi: &Abi, ids: &[HostDirToml]) -> String {
-    let magic = abi
-        .r#const
-        .iter()
-        .find(|c| c.name == "HOST_DIR_MAGIC")
-        .map(|c| c.value)
-        .unwrap_or(0);
+    let magic = const_value_of(abi, "HOST_DIR_MAGIC");
+    let ready = const_value_of(abi, "HOST_DIR_READY_MAGIC");
     let mut s = format!(
-        "// {HEADER}\n\n/** `HostDir.magic` (`HOST_DIR_MAGIC` of abi.toml). */\nexport const HOST_DIR_MAGIC = {magic:#010x};\n"
+        "// {HEADER}\n\n/** `HostDir.magic` (`HOST_DIR_MAGIC` of abi.toml). */\nexport const HOST_DIR_MAGIC = {magic:#010x};\n/** `HostDir.ready` once the package has attached (`HOST_DIR_READY_MAGIC` of abi.toml). */\nexport const HOST_DIR_READY = {ready:#010x};\n"
     );
     let _ = writeln!(
         s,
@@ -321,19 +322,29 @@ fn host_ts(abi: &Abi, ids: &[HostDirToml]) -> String {
         let _ = writeln!(s, "  {}: {i},", h.name);
     }
     s.push_str("} as const;\n");
+    s.push_str("/** Who fills each entry of the directory: the package at its entry, or the core before it starts the package. */\nexport const HOST_OWNER = {\n");
+    for h in ids {
+        let _ = writeln!(s, "  {}: '{}',", h.name, h.owner);
+    }
+    s.push_str("} as const;\n");
     s
+}
+
+/// The value of the const `name` of abi.toml (0 when there is none: the generated file then fails its own checks).
+fn const_value_of(abi: &Abi, name: &str) -> i64 {
+    abi.r#const
+        .iter()
+        .find(|c| c.name == name)
+        .map(|c| c.value)
+        .unwrap_or(0)
 }
 
 /// `packages/dkaddrmap/src/gen_host_dir.rs`: the ids for the address map reader (a crate that cannot depend on the runtime's SDK: it builds for wasm).
 fn host_rs(abi: &Abi, ids: &[HostDirToml]) -> String {
-    let magic = abi
-        .r#const
-        .iter()
-        .find(|c| c.name == "HOST_DIR_MAGIC")
-        .map(|c| c.value)
-        .unwrap_or(0);
+    let magic = const_value_of(abi, "HOST_DIR_MAGIC");
+    let ready = const_value_of(abi, "HOST_DIR_READY_MAGIC");
     let mut s = format!(
-        "// {HEADER}\n\n/// `HostDir.magic` (`HOST_DIR_MAGIC` of abi.toml).\npub const HOST_DIR_MAGIC: u32 = {magic:#010x};\n"
+        "// {HEADER}\n\n/// `HostDir.magic` (`HOST_DIR_MAGIC` of abi.toml).\npub const HOST_DIR_MAGIC: u32 = {magic:#010x};\n/// `HostDir.ready` once the package has attached (`HOST_DIR_READY_MAGIC` of abi.toml).\npub const HOST_DIR_READY: u32 = {ready:#010x};\n"
     );
     let _ = writeln!(
         s,
@@ -393,6 +404,22 @@ fn rust(abi: &Abi, lays: &[Layout], fns: &[(&FnToml, Sig)], inputs: &AbiInputs) 
         "/// The ids of the host directory this build knows (`[[host_dir]]` of abi.toml).\npub const HOST_COUNT: usize = {};",
         abi.host_dir.len()
     );
+    for owner in ["package", "core"] {
+        let ids: Vec<String> = abi
+            .host_dir
+            .iter()
+            .enumerate()
+            .filter(|(_, h)| h.owner == owner)
+            .map(|(i, _)| i.to_string())
+            .collect();
+        let _ = writeln!(
+            s,
+            "/// The ids of the host directory the {owner} fills (`owner = \"{owner}\"` of `[[host_dir]]`).\npub const HOST_{}_OWNED: [u32; {}] = [{}];",
+            owner.to_uppercase(),
+            ids.len(),
+            ids.join(", ")
+        );
+    }
     let _ = writeln!(
         s,
         "/// Provider slots of the boot plan (`[limits.format] provider_max` of sdk/sdk.toml), separate from the selection.\npub const PROVIDER_MAX: usize = {};",

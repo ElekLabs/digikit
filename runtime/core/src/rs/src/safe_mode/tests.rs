@@ -513,3 +513,117 @@ fn a_core_only_boot_by_crashes_abandons_the_placed_package_and_leaves_the_host_d
         assert!((0..dkrt_sdk::HOST_COUNT as u32).all(|id| (*core::ptr::addr_of!(crate::host_dir::DKRT_HOST_DIR)).get(id).is_none()), "no package, no entries");
     }
 }
+
+fn dir() -> dkrt_abi::host_dir::HostDir {
+    unsafe { *core::ptr::addr_of!(crate::host_dir::DKRT_HOST_DIR) }
+}
+
+/// The core fills its own entries before the package starts and marks the directory ready only after the package has attached: a tool that reads while the package starts finds the
+/// directory not ready. The package of this binary fills its entries at its attach, so after the boot every id is filled.
+#[test]
+fn the_host_directory_is_ready_only_after_the_package_attached_and_the_core_filled_its_ids_before() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let f = fresh_card();
+        let env = FakeBootEnv::new(&f);
+        let b = boot_with(&f, &env, End::Early);
+        assert!(!b.core_only);
+        assert_eq!(
+            env.dir_at_start.get(),
+            Some((false, dkrt_sdk::HOST_CORE_OWNED.len())),
+            "while the package starts: not ready, the core's ids already filled"
+        );
+        let d = dir();
+        assert!(d.is_ready(), "ready once the package attached");
+        assert_eq!(d.get(dkrt_sdk::HOST_PACKAGE_LO), Some(0x4010_0000));
+        assert_eq!(d.get(dkrt_sdk::HOST_PACKAGE_HI), Some(0x4011_0000));
+        for id in 0..dkrt_sdk::HOST_COUNT as u32 {
+            assert!(d.get(id).is_some(), "id {id} is filled in a normal boot");
+        }
+    }
+}
+
+/// A placed package whose block the core cannot describe (no extent) does not run: core-only, incompatible, its start never called, the directory empty and not ready.
+#[test]
+fn a_package_without_a_block_extent_is_a_start_failure_and_the_directory_stays_not_ready() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let f = fresh_card();
+        hooks::without_package(|| {
+            let env = FakeBootEnv::new(&f);
+            env.extent.set(None);
+            let b = boot_with(&f, &env, End::Early);
+            assert_eq!((b.core_only, b.cause, b.loaded), (true, CORE_INCOMPATIBLE, false));
+            let steps = env.steps.borrow().clone();
+            assert!(!steps.contains(&"package") && steps.contains(&"abandon"), "{steps:?}");
+            assert!(!hooks::installed());
+            let d = dir();
+            assert!(!d.is_ready() && (0..dkrt_sdk::HOST_COUNT as u32).all(|id| d.get(id).is_none()));
+        });
+    }
+}
+
+/// A start failure leaves the directory empty and not ready, even though the core filled its ids before the start.
+#[test]
+fn a_start_failure_clears_what_the_core_filled_before_it() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let f = fresh_card();
+        hooks::without_package(|| {
+            let env = FakeBootEnv::new(&f);
+            env.start_fails.set(true);
+            boot_with(&f, &env, End::Early);
+            assert_eq!(env.dir_at_start.get(), Some((false, dkrt_sdk::HOST_CORE_OWNED.len())));
+            let d = dir();
+            assert!(!d.is_ready() && (0..dkrt_sdk::HOST_COUNT as u32).all(|id| d.get(id).is_none()));
+        });
+    }
+}
+
+/// The counter of a package that fails to start, over the real boot. The boot is counted before the package's entry runs (a fault there must count), and a failure that
+/// returns is no crash: the stable period of its core-only boot clears the count, as for a package refused on the card. A boot that ends early leaves the count, so a package that
+/// fails and then crashes the boot works its way up the same ladder as any crash: safe boots, then core-only by crashes, which keeps the counter until the package is written or RETRY runs.
+#[test]
+fn a_start_failure_counts_its_boot_until_the_stable_period_and_retry_clears_the_ladder() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let failing = |f: &FakePlatform, end: End| {
+            hooks::without_package(|| {
+                let env = FakeBootEnv::new(f);
+                env.start_fails.set(true);
+                let b = boot_with(f, &env, end);
+                let started = env.steps.borrow().contains(&"package");
+                (b, started)
+            })
+        };
+        // a failure whose boot reaches the stable period: counted during the boot, cleared by the period; the next boot with a good package is normal
+        let f = fresh_card();
+        let (b, started) = failing(&f, End::FirstPass);
+        assert_eq!((b.core_only, b.cause, started), (true, CORE_INCOMPATIBLE, true));
+        assert_eq!(counter(&f), 1, "counted before the package started");
+        stable_period(&f);
+        assert_eq!(counter(&f), 0, "no crash: the stable period of the core-only boot clears the count");
+        let b = boot(&f, End::Stable);
+        assert_eq!((b.safe, b.loaded), (false, true));
+        assert_eq!(counter(&f), 0);
+
+        // failures whose boots end early (a crash behind each): the counter climbs, safe boots count themselves, and at CORE_ONLY_AFTER the package is not started any more
+        let f = fresh_card();
+        for want in 1..=CORE_ONLY_AFTER {
+            let (b, started) = failing(&f, End::Early);
+            assert_eq!((b.core_only, b.cause, started), (true, CORE_INCOMPATIBLE, true), "boot {want}");
+            assert_eq!(counter(&f), want, "boot {want}: the boot counts itself, whatever level the failure then gives");
+        }
+        let (b, started) = failing(&f, End::Early);
+        assert_eq!((b.core_only, b.cause, started), (true, CORE_CRASHES, false), "from the fourth count the package is not tried");
+        assert_eq!(counter(&f), CORE_ONLY_AFTER, "core-only by crashes keeps the counter");
+        // RETRY (or writing the package) clears it: the next boot runs the package, normal and counted from zero
+        new_boot();
+        package_written_with(&f);
+        assert_eq!(counter(&f), 0);
+        let b = boot(&f, End::Stable);
+        assert_eq!((b.safe, b.loaded), (false, true));
+        assert_eq!(counter(&f), 0);
+    }
+}
+

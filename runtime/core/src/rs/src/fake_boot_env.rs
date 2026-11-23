@@ -18,6 +18,10 @@ pub(crate) struct FakeBootEnv<'a> {
     /// The boot before left a DSP hang record / a panic record.
     pub hang: Cell<bool>,
     pub panic: Cell<bool>,
+    /// The arena block the placed package lives in; `None`: no block (a placement the host directory cannot describe).
+    pub extent: Cell<Option<(u32, u32)>>,
+    /// The host directory as the package finds it when it is started, before it fills its own entries: `(ready, core-owned ids filled)`; `None` before it started.
+    pub dir_at_start: Cell<Option<(bool, usize)>>,
     /// The package gives no hooks when started.
     pub start_fails: Cell<bool>,
     /// The boot counter the card held when the package started (what a fault in its entry leaves behind); `None` before it started or without a record.
@@ -34,6 +38,8 @@ impl<'a> FakeBootEnv<'a> {
             late_crash: Cell::new(false),
             hang: Cell::new(false),
             panic: Cell::new(false),
+            extent: Cell::new(Some((0x4010_0000, 0x4011_0000))),
+            dir_at_start: Cell::new(None),
             start_fails: Cell::new(false),
             counter_at_start: Cell::new(None),
             steps: RefCell::new(Vec::new()),
@@ -60,6 +66,9 @@ impl BootEnv for FakeBootEnv<'_> {
         self.note("stage1");
         self.package.get()
     }
+    unsafe fn package_extent(&self) -> Option<(u32, u32)> {
+        self.extent.get()
+    }
     /// The test-only attach: the package of this binary gets the resident table (the device's stage 1 places the package file instead).
     unsafe fn start_package(&self) -> bool {
         self.note("package");
@@ -68,6 +77,8 @@ impl BootEnv for FakeBootEnv<'_> {
             _ => None,
         };
         self.counter_at_start.set(held);
+        let dir = *core::ptr::addr_of!(crate::host_dir::DKRT_HOST_DIR);
+        self.dir_at_start.set(Some((dir.is_ready(), dkrt_sdk::HOST_CORE_OWNED.iter().filter(|&&id| dir.get(id).is_some()).count())));
         if self.start_fails.get() {
             return false;
         }

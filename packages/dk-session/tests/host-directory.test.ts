@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { HOST_COUNT, HOST_DIR_MAGIC, HOST_ID } from '../src/gen_host_dir.ts';
+import { HOST_COUNT, HOST_DIR_MAGIC, HOST_DIR_READY, HOST_ID } from '../src/gen_host_dir.ts';
 import { HOST_DIR_BYTES, HostDirectoryError, hostAddress, readHostAddress } from '../src/host-directory.ts';
 
 /** The directory as the device holds it: big-endian words. */
-function directory(entries: Partial<Record<keyof typeof HOST_ID, number>>, count = HOST_COUNT, magic = HOST_DIR_MAGIC) {
+function directory(
+  entries: Partial<Record<keyof typeof HOST_ID, number>>,
+  count = HOST_COUNT,
+  magic = HOST_DIR_MAGIC,
+  ready = HOST_DIR_READY,
+) {
   const bytes = Buffer.alloc(HOST_DIR_BYTES);
   bytes.writeUInt32BE(magic, 0);
   bytes.writeUInt32BE(count, 4);
+  bytes.writeUInt32BE(ready, 8);
   for (const [name, address] of Object.entries(entries))
-    bytes.writeUInt32BE(address, 8 + 4 * HOST_ID[name as keyof typeof HOST_ID]);
+    bytes.writeUInt32BE(address, 12 + 4 * HOST_ID[name as keyof typeof HOST_ID]);
   return bytes;
 }
 const reason = (f: () => unknown) => {
@@ -31,6 +37,12 @@ describe('host directory', () => {
     const dir = directory({});
     expect(reason(() => hostAddress(dir, 'DSP'))).toBe('no-package');
     expect(() => hostAddress(dir, 'DSP')).toThrow(/no package loaded.*DKRT_DSP/);
+  });
+
+  it('says no package is loaded while the core has not marked the directory ready, even with entries filled', () => {
+    const filling = directory({ PROVIDERS: 0x4012_3400 }, HOST_COUNT, HOST_DIR_MAGIC, 0);
+    expect(reason(() => hostAddress(filling, 'PROVIDERS'))).toBe('no-package');
+    expect(() => hostAddress(filling, 'PROVIDERS')).toThrow(/still starting/);
   });
 
   it('tells a core older than this tool, and bytes that are no directory', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOST_COUNT, HOST_DIR_MAGIC, HOST_ID } from '../src/gen_host_dir.ts';
+import { HOST_COUNT, HOST_DIR_MAGIC, HOST_DIR_READY, HOST_ID } from '../src/gen_host_dir.ts';
 import { HOST_DIR_BYTES } from '../src/host-directory.ts';
 import { readLoadTable, type NameProf } from '../src/log-names.ts';
 
@@ -23,8 +23,9 @@ function memory(published: Partial<Record<keyof typeof HOST_ID, number>>) {
   const dir = Buffer.alloc(HOST_DIR_BYTES);
   dir.writeUInt32BE(HOST_DIR_MAGIC, 0);
   dir.writeUInt32BE(HOST_COUNT, 4);
+  dir.writeUInt32BE(HOST_DIR_READY, 8);
   for (const [name, at] of Object.entries(published))
-    dir.writeUInt32BE(at, 8 + 4 * HOST_ID[name as keyof typeof HOST_ID]);
+    dir.writeUInt32BE(at, 12 + 4 * HOST_ID[name as keyof typeof HOST_ID]);
   const peeks: number[] = [];
   const peek = async (addr: number, len: number) => {
     peeks.push(addr);

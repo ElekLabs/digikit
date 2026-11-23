@@ -12,7 +12,6 @@ use core::ptr::addr_of_mut;
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::sel::Record;
-use dkrt_sdk::{HOST_PACKAGE_HI, HOST_PACKAGE_LO};
 
 /// The steps of the boot that depend on where it runs. The order and the decisions between them are `boot::run`'s.
 pub(crate) trait BootEnv {
@@ -30,6 +29,8 @@ pub(crate) trait BootEnv {
     /// Stage 1: find the system package on the card, place it at the arena top and check that the resident table fits it. What it found is the one input of the level
     /// decision that is not read from the record, the key or the crash records. A package that is not `Ok` is not left in the arena.
     unsafe fn load_package(&self) -> PackageStatus;
+    /// The arena block the placed package lives in (`lo..hi`), for the host directory the core fills before it starts the package; `None` when no package is placed.
+    unsafe fn package_extent(&self) -> Option<(u32, u32)>;
     /// Give the placed package the resident table and take its hooks (`stage1::start`). Only after `load_package` gave `Ok`, and only when the level runs the package.
     /// False when the package gave no hooks: the boot then runs core-only.
     unsafe fn start_package(&self) -> bool;
@@ -82,16 +83,14 @@ impl BootEnv for RealBootEnv {
         self.placed.set(stage1.placed());
         status
     }
+    unsafe fn package_extent(&self) -> Option<(u32, u32)> {
+        self.placer.borrow().extent()
+    }
     unsafe fn start_package(&self) -> bool {
         let Some((entry, _)) = self.placed.get() else { return false };
         match stage1::start(entry, &crate::resident::TABLE) {
             Some(hooks) => {
                 hooks::install(hooks);
-                // the block the package lives in, for the tools that audit memory (the package filled the entries of its own statics at its entry)
-                if let Some((lo, hi)) = self.placer.borrow().extent() {
-                    crate::host_dir::publish(HOST_PACKAGE_LO, lo);
-                    crate::host_dir::publish(HOST_PACKAGE_HI, hi);
-                }
                 true
             }
             None => false,
