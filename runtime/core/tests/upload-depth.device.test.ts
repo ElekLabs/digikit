@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { DkError, DkSession, EmuUsbTransport, fileHashHex, parseReply, type DkTransport } from '@digi/dk-session';
 import { expect } from 'vitest';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
+import { systemPackageFiles } from '@digi/regression/runtime/system-package.ts';
 import { uploadTests } from '@digi/regression/runtime/upload-kit.ts';
 
 /**
@@ -63,7 +64,7 @@ class Link implements DkTransport {
 }
 
 uploadTests('upload-depth: two DATA requests in flight on the digikit store', async (rig) => {
-  await rig.pausedBoot(await rig.card({ name: 'depth', systemPackage: false }));
+  await rig.pausedBoot(await rig.card({ name: 'depth' }));
   await rig.applyCap();
   const call = (method: string, params?: Record<string, unknown>) => rig.session.client.call(method, params);
   // Wall-time wait: this test uses its own stepping link.
@@ -72,7 +73,7 @@ uploadTests('upload-depth: two DATA requests in flight on the digikit store', as
     return { link, dk: new DkSession(link, { timeoutMs }) };
   };
   const { link, dk } = open(60_000);
-  const sent: Record<string, Buffer> = {};
+  const sent: Record<string, Buffer> = systemPackageFiles();
   const put = async (name: string, data: Buffer, session: DkSession = dk) => {
     await session.put(name, data);
     sent[name] = data;

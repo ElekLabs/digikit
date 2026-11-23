@@ -57,6 +57,7 @@ import {
   withoutOwn,
 } from './write-safety.ts';
 import { rootsOf } from './image-roots.ts';
+import { systemPackageSectors } from './system-package.ts';
 
 /**
  * The one card fixture of the runtime device tests (settings, round trip, equiv, debug, card, crash, safe mode and upload): an owned daemon
@@ -181,6 +182,8 @@ export interface CardRig {
   applyCap(): Promise<void>;
   /** INFO's free bytes of a card with no store: used 1, room for a one-entry table (cut by the cap). */
   freeFresh(): number;
+  /** INFO's free bytes of a card whose store holds the system package only: `freeFresh` less the package's sectors and the table sector beside it. */
+  freeWithPackage(): number;
   /** One request and its reply, whatever the status. `version` sends the request raw with that protocol version byte. */
   request(cmd: number, body?: Uint8Array, version?: number): Promise<{ status: number; body: Uint8Array }>;
   /** The status of one request. */
@@ -606,6 +609,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
       }
     },
     freeFresh: () => Math.min(((cap ?? rig.store.limit) - 2) * 512, 0xffffffff),
+    freeWithPackage: () => rig.freeFresh() - systemPackageSectors() * 512,
     async request(cmd, body = new Uint8Array(), version) {
       if (!stepping) throw new Error('no protocol session: boot with pausedBoot');
       if (version === undefined) return stepping.dk.request(cmd, body);

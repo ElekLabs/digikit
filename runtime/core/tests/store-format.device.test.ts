@@ -25,10 +25,12 @@ import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 import { encodeSettings } from '@digi/regression/runtime/project-kit.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
+import { BOOT_LEVEL } from '@digi/dk-session/gen_host_dir';
+import { rpc } from '@digi/regression/runtime/fx-live.ts';
 import { installDefaults, type DefaultOps } from '../../../packages/workbench-core/src/firmware/default-modules-core.ts';
 import { deleteFiles, install, libraryModule } from '../../../packages/workbench-core/src/modules/dktransfer.ts';
 import { nameHash, portFileOf, serviceFileOf } from '../../../packages/workbench-core/src/modules/services.ts';
-import { withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
+import { SYSTEM_PACKAGE_STORE_PATH, systemPackageFile, withoutSystemPackage } from '@digi/regression/runtime/system-package.ts';
 
 /**
  * The store's file hash (version 4: the +Drive content hash in the table's 32-byte slot) and what a store of another version is. Both devices.
@@ -74,6 +76,8 @@ const oldSectors = (v3: Record<number, Buffer>, first: number, card: string): nu
     ).map((k) => Number(s) + k - first),
   );
 
+
+const { SAFE_CORE_ONLY, CORE_MISSING } = BOOT_LEVEL;
 
 cardRigs(
   'store format 4',
@@ -132,8 +136,16 @@ cardRigs(
       },
     );
 
+    /** A core-only boot of `card` (a store without the system package): its boot info, then paused for the protocol calls. */
+    const coreOnlyBoot = async (card: string) => {
+      const rt = await h.boot(card);
+      const info = await h.ready(true);
+      await rpc(h.session, 'run.mode', { mode: 'paused' });
+      return { rt, info };
+    };
+
     test(
-      'flash scenario: a version 3 store counts as empty, the first upload makes version 4, the kept selection loads the module',
+      'flash scenario: a version 3 store counts as empty, so the boot is core-only; the resident store takes the first upload as a version 4 store and keeps it over a restart',
       async () => {
         const file = bytes();
         const settings = Buffer.concat([
@@ -143,17 +155,19 @@ cardRigs(
         const settingsCopy = Buffer.concat([settings, Buffer.alloc(SECTOR - settings.length)]);
         const facts: Record<string, unknown> = {};
 
-        // boot: it goes on, the old store is no store
-        let rt: PatchedSession = await h.load('v3-flash', {
-          selection: [MOD_PATH],
-          foreign: { ...v3, [store.setA]: settingsCopy },
+        // boot: a version 3 store holds no package, so the boot is core-only (no runtime UI); the old store is no store
+        const card = await h.card({ selection: [MOD_PATH], foreign: { ...v3, [store.setA]: settingsCopy }, systemPackage: false });
+        const first = await coreOnlyBoot(card);
+        let rt: PatchedSession = first.rt;
+        facts.boot = first.info;
+        expect(first.info, 'the boot is core-only: the package is missing, nothing is loaded').toMatchObject({
+          safe: 1,
+          reason: SAFE_CORE_ONLY,
+          coreCause: CORE_MISSING,
+          loaded: 0,
         });
-        const boot = await bootInfoLoaded(rt.session, h.plan);
-        facts.boot = boot;
-        expect(boot, 'the boot goes on, nothing is loaded, no safe mode').toMatchObject({ safe: 0, loaded: 0, uiReached: 1 });
         expect((await cardInfo(rt.session, h.plan)).stateName, 'the card is ours').toBe('ours');
-        expect(withoutSystemPackage(await h.usb(rt, (dk) => dk.list())), 'LIST is empty').toEqual([]);
-        expect(await names(rt)).toEqual([]);
+        expect(await h.usb(rt, (dk) => dk.list()), 'LIST is empty').toEqual([]);
         const quiet = await h.after('v3-boot');
         facts.selectionAfterBoot = (await h.records()).map((r: SelRecord | null) => r && r.paths);
         const d0 = await dump(quiet);
@@ -164,7 +178,7 @@ cardRigs(
 
         // the first upload makes a version 4 store
         expect(await statusOf(() => h.usb(rt, (dk) => dk.put(MOD_PATH, file))), 'the upload works').toBe(0);
-        const listed = withoutSystemPackage(await h.usb(rt, (dk) => dk.list()));
+        const listed = await h.usb(rt, (dk) => dk.list());
         expect(listed.map((e) => [e.path, e.size, e.hash])).toEqual([[MOD_PATH, file.length, fileHashHex(file)]]);
         let view = await h.view('v4-first');
         expect(view.head, 'the card holds a version 4 store').toContain('version=4');
@@ -174,11 +188,13 @@ cardRigs(
         expect(readSectors(afterFirst, store.first, 1).readUInt32BE(4), 'header A is version 4').toBe(4);
         expect(readSectors(afterFirst, headerB, 1).readUInt32BE(4), 'header B is version 4').toBe(4);
 
-        // a restart: the kept selection loads the module
-        rt = await h.restart(rt);
-        facts.loadedAfterRestart = await names(rt);
+        // a restart: still core-only (no package), the version 4 store is read whole and the module is not loaded
+        rt = await h.restart(rt, { coreOnly: true });
+        const again = await h.ready(true);
+        await rpc(h.session, 'run.mode', { mode: 'paused' });
+        expect(again, 'the next boot is core-only too').toMatchObject({ safe: 1, reason: SAFE_CORE_ONLY, coreCause: CORE_MISSING, loaded: 0 });
         facts.selectionAfterRestart = (await h.records()).map((r: SelRecord | null) => r && r.paths);
-        expect(await names(rt), 'the kept selection loads the uploaded module').toEqual(['test/c-demo']);
+        expect((await h.usb(rt, (dk) => dk.list())).map((e) => e.path), 'the version 4 store lists the uploaded file').toEqual([MOD_PATH]);
 
         // again: a second file, and what the old bytes are then
         expect(await statusOf(() => h.usb(rt, (dk) => dk.put('modules/b.dkm', blob(3000, 5))))).toBe(0);
@@ -252,10 +268,15 @@ cardRigs(
     );
 
     test(
-      'default modules on a card with a version 3 store: installDefaults ends with the module loaded',
+      'default modules on a card with a version 3 store: the package uploaded in the core-only boot recovers it, and installDefaults ends with the module loaded',
       async () => {
         const file = bytes();
-        let rt: PatchedSession = await h.load('v3-defaults', { selection: [], foreign: version3Store(h.device as 'dt2' | 'dn2', file) });
+        // a version 3 store holds no package: the boot is core-only, and the host recovers the card by uploading the package, then restarts
+        let rt: PatchedSession = (
+          await coreOnlyBoot(await h.card({ selection: [], foreign: version3Store(h.device as 'dt2' | 'dn2', file), systemPackage: false }))
+        ).rt;
+        await h.usb(rt, (dk) => dk.put(SYSTEM_PACKAGE_STORE_PATH, fs.readFileSync(systemPackageFile())));
+        rt = await h.restart(rt);
         const lib = (await libraryModule(file))!;
         const library = [lib];
         const id = lib.id;

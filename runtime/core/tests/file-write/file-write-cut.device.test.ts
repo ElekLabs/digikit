@@ -8,6 +8,7 @@ import { rawModule } from '@digi/regression/runtime/service-files.ts';
 import { word, SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
+import { systemPackageFiles } from '@digi/regression/runtime/system-package.ts';
 import { deviceListing } from '@digi/regression/runtime/upload-kit.ts';
 
 /**
@@ -88,7 +89,7 @@ for (const device of DEVICES) {
         modules: [mod, { name: 'modules/old.dkm', file: oldFile }],
         selection: [mod.name],
       });
-      const oldFiles: Files = { 'modules/old.dkm': old, [mod.name]: moduleBytes };
+      const oldFiles: Files = { ...systemPackageFiles(), 'modules/old.dkm': old, [mod.name]: moduleBytes };
       const data = pattern(SIZE);
       for (const [k, [label, knobs, committed]] of cases.entries()) {
         const dk = await rig.pausedBoot(base);
@@ -131,7 +132,7 @@ for (const device of DEVICES) {
         modules: [mod, { name: 'modules/old.dkm', file: oldFile }, { name: PATH, file: prevFile }],
         selection: [mod.name],
       });
-      const oldFiles: Files = { 'modules/old.dkm': old, [mod.name]: moduleBytes, [PATH]: prev };
+      const oldFiles: Files = { ...systemPackageFiles(), 'modules/old.dkm': old, [mod.name]: moduleBytes, [PATH]: prev };
       const data = pattern(SIZE);
       for (const [k, [label, knobs, committed]] of cases.entries()) {
         const dk = await rig.pausedBoot(base);
@@ -161,7 +162,7 @@ for (const device of DEVICES) {
       const mod = rig.mod('test/file-write');
       const moduleBytes = fs.readFileSync(mod.file);
       const base = await rig.card({ name: 'cut-batch-base', modules: [mod, { name: 'modules/old.dkm', file: oldFile }], selection: [mod.name] });
-      const oldFiles: Files = { 'modules/old.dkm': old, [mod.name]: moduleBytes };
+      const oldFiles: Files = { ...systemPackageFiles(), 'modules/old.dkm': old, [mod.name]: moduleBytes };
       const newFiles: Files = { ...oldFiles };
       for (let i = 0; i < BATCH_N; i++) newFiles[batchPath(i)] = shifted(BATCH_SIZE, i);
 

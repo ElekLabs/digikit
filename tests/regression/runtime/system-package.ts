@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot } from '@digi/test-support';
+import type { Files } from './card-kit.ts';
 
 /**
  * The system package on a test card: the one owner of where the file comes from and where it goes. `dist/syspkg/runtime/system.dksp` is written by the Nx target
@@ -27,3 +28,12 @@ export function installSystemPackage(seed: string): void {
 /** The entries of a store listing without the system package: a test of the store's files lists the files it put there. */
 export const withoutSystemPackage = <T extends { path: string }>(entries: T[]): T[] =>
   entries.filter((e) => e.path !== SYSTEM_PACKAGE_STORE_PATH);
+
+/** The system package as a store file of a card that carries it: a test's expected listing starts from this. */
+export const systemPackageFiles = (): Files => ({ [SYSTEM_PACKAGE_STORE_PATH]: fs.readFileSync(systemPackageFile()) });
+
+/** The sectors the package takes in a store: its data and the table sector written beside it. */
+export const systemPackageSectors = (): number => Math.ceil(fs.statSync(systemPackageFile()).size / 512) + 1;
+
+/** CAPACITY's STORE `used` (KiB) of a store that holds the package only: the header sector and the package's sectors, rounded up. */
+export const systemPackageUsedKib = (): number => Math.ceil((1 + systemPackageSectors()) / 2);

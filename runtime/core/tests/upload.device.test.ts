@@ -21,6 +21,7 @@ import { wordBase } from '@digi/regression/runtime/memory.ts';
 import { portFile } from '@digi/regression/runtime/device-data.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
 import { FIRMWARE } from '@digi/regression/runtime/devices.ts';
+import { systemPackageFiles, systemPackageUsedKib } from '@digi/regression/runtime/system-package.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import {
   beginBody,
@@ -103,25 +104,25 @@ async function readChecks(rig: CardRig, file: string, data: Buffer): Promise<voi
 }
 
 async function ops(rig: CardRig, quick: boolean): Promise<void> {
-  const dk = await rig.pausedBoot(await rig.card({ name: 'ops', systemPackage: false }));
+  const dk = await rig.pausedBoot(await rig.card({ name: 'ops' }));
   // The boot counts itself in the selection record (this card has none): the record read here is the boot counter's own (seq 1, counter 1, or seq 2 and
   // counter 0 when the stable period has already cleared it). The uploads below must leave it alone.
   const atBoot = currentRecord(await rig.records());
   await rig.applyCap();
-  const files: Files = {};
+  const files: Files = systemPackageFiles();
   const info = await dk.info();
   check(
-    "INFO: protocol 1, the runtime's version, the device, the free bytes of an empty store, 32 KiB chunks",
+    "INFO: protocol 1, the runtime's version, the device, the free bytes of a store with the system package only, 32 KiB chunks",
     info.protocol === 1 &&
       info.runtime === runtimeVersion() &&
       info.port === rig.device &&
-      info.free_bytes === rig.freeFresh() &&
+      info.free_bytes === rig.freeWithPackage() &&
       info.max_chunk === 32768 &&
       !info.safe_mode &&
       !info.upload_open,
     JSON.stringify(info),
   );
-  check('LIST of a card with no store: empty', (await dk.list()).length === 0);
+  expect(await deviceListing(dk), 'LIST of a card with no files of its own: the system package').toEqual(listing(files));
 
   const a = blob(70_000, 1); // three chunks, the last partial
   files['modules/a.dkm'] = a;
@@ -277,17 +278,17 @@ uploadTests('upload-ops: the commands, errors and CLEAR', (rig) => ops(rig, fals
 /** Folders, LIST by prefix, MKDIR, CAPACITY's STORE entry, a streamed upload of several MiB, a delete that frees its space for the next file, and LIST paging. */
 async function folders(rig: CardRig): Promise<void> {
   const mib = 6;
-  const dk = await rig.pausedBoot(await rig.card({ name: 'folders', systemPackage: false }));
+  const dk = await rig.pausedBoot(await rig.card({ name: 'folders' }));
   await rig.applyCap();
-  const files: Files = {};
+  const files: Files = systemPackageFiles();
   const zeroHash = '0'.repeat(64);
   const status = (cmd: number, body?: Uint8Array) => rig.status(cmd, body);
   check('INFO: capability FOLDERS', hasCap(await dk.info(), 'FOLDERS'));
   const totalKib = Math.floor(rig.store.limit / 2);
   const cap = (await dk.capacity()).STORE;
   check(
-    "CAPACITY: a STORE entry with the area's size in KiB, nothing used yet, largest 0",
-    cap !== undefined && cap.limit === totalKib && cap.used === 0 && cap.largest === 0,
+    "CAPACITY: a STORE entry with the area's size in KiB, only the system package used, largest 0",
+    cap !== undefined && cap.limit === totalKib && cap.used === systemPackageUsedKib() && cap.largest === 0,
     JSON.stringify(cap),
   );
 
@@ -353,7 +354,7 @@ async function folders(rig: CardRig): Promise<void> {
   const cap1 = (await dk.capacity()).STORE!;
   check(
     'CAPACITY: STORE used grew by the file in KiB',
-    cap1.limit === totalKib && mib * 1024 <= cap1.used && cap1.used <= mib * 1024 + 8,
+    cap1.limit === totalKib && mib * 1024 <= cap1.used - systemPackageUsedKib() && cap1.used - systemPackageUsedKib() <= mib * 1024 + 8,
     JSON.stringify(cap1),
   );
   let rows = await verify('big upload (the folder entry is gone)', []);
@@ -388,7 +389,7 @@ async function folders(rig: CardRig): Promise<void> {
     `${freeBack} vs ${free0}`,
   );
   const cap2 = (await dk.capacity()).STORE!;
-  check('CAPACITY: STORE used fell again', cap2.used < 16, JSON.stringify(cap2));
+  check('CAPACITY: STORE used fell again', cap2.used - systemPackageUsedKib() < 16, JSON.stringify(cap2));
   await put(dk, files, 'samples/second.wav', blob(mib * MIB + 77, 22));
   rows = await verify('a file of the same size', []);
   check(
@@ -553,7 +554,7 @@ uploadTests(
   'upload-txfull: replies are dropped while the TX ring is full',
   async (rig) => {
     const { session, device } = rig;
-    const dk = await rig.pausedBoot(await rig.card({ name: 'txfull', systemPackage: false }));
+    const dk = await rig.pausedBoot(await rig.card({ name: 'txfull' }));
     const symbol = (name: string) => planSymbol(rig.plan, name);
     // the 4-byte address literal of the code anchor (not word aligned: read as bytes)
     const anchor = portFile(device, FIRMWARE[device]).anchor?.find((a) => a.name === 'cf.midi.site.tx_inflight_lit');
