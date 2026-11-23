@@ -23,6 +23,8 @@ export interface DeviceProfile {
   };
   /** `[ui]`: `brain_ptr`, the Brain pointer global (the port anchor `cf.view.value.brain`). The view stack and boot window facts are read by `@digi/test-support` `bootWindowFacts`. */
   ui: { brain_ptr: number };
+  /** `[midi]`: `track_channels[n]` is the factory MIDI channel (1-16) of track n+1. */
+  midi?: { track_channels: number[] };
   capabilities: { card: 'path-fs' | 'slots' | 'none' | 'unknown' } & Record<string, string>;
   storage?: { samples?: string };
   card: {

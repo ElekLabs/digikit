@@ -67,7 +67,6 @@ const GAP = 'the gap between encoder events (the stock encoder scales by event r
 export class LfoRig {
   private soundBase: number | undefined;
   private opened = false;
-  private mainLoopSeen = false;
 
   readonly rt: Rt;
 
@@ -196,32 +195,38 @@ export class LfoRig {
     return halfword(this.session, deviceProfile(this.device).fx.lfo_live + 2 * index);
   }
 
-  /**
-   * Before the first CC: wait until the stock main loop, which takes the MIDI input, has passed twice more (`cf.mainloop_hits` of the daemon status) since the call. The runtime's ready wait ends at the first UI pass
-   * (FW_READY, `ui_reached`), when the main loop has run only a few times; a CC sent in that first moment was seen to be dropped (Sound word unchanged). Emulated time; no event shows this.
-   */
-  private async untilMainLoop(): Promise<void> {
-    if (this.mainLoopSeen) return;
-    const hits = async () => (await this.session.status()).cf.mainloop_hits;
-    const first = await hits();
-    await pollUntil(this.rt.clock, hits, (got) => got >= first + 2, {
-      withinMs: 5000,
-      intervalMs: 20,
-      message: () => `the stock main loop did not pass after the runtime was ready (mainloop_hits stayed ${first})`,
-    });
-    console.info(`lfo-rig ${this.device}: main loop running (mainloop_hits ${first} at the first CC, t=${await this.rt.clock.now()} ms)`);
-    this.mainLoopSeen = true;
-  }
-
   /** Send CC `cc` on channel 1 and wait until the Sound word `word` and then its smoothed copy are `value << 8` (firmware state). */
   private async setCc(name: string, cc: number, word: number, value: number): Promise<void> {
-    await this.untilMainLoop();
     await sendCc(this.rt, 1, cc, value);
     const want = value << 8;
-    await pollUntil(this.rt.clock, () => this.word(word), (got) => got === want, {
+    // what the poll saw, for the failure message: the Sound word (first, last, when it first changed) and the main loop count
+    const sentAt = await this.rt.clock.now();
+    let first: number | undefined;
+    let seen = -1;
+    let changedAt: number | undefined;
+    let hitsNow = -1;
+    const read = async (): Promise<number> => {
+      const got = await this.word(word);
+      first ??= got;
+      if (got !== first && changedAt === undefined) changedAt = (await this.rt.clock.now()) - sentAt;
+      seen = got;
+      hitsNow = (await this.session.status()).cf.mainloop_hits;
+      return got;
+    };
+    await pollUntil(this.rt.clock, read, (got) => got === want, {
       withinMs: 1000,
       intervalMs: 20,
-      message: () => `${name}: CC ${cc} = ${value} did not store the word ${want.toString(16)} in Sound word ${word}`,
+      message: () => {
+        const { fx, midi } = deviceProfile(this.device);
+        const hex = (n: number | undefined) => (n === undefined ? 'none' : n.toString(16));
+        return (
+          `${name}: CC ${cc} = ${value} did not store the word ${want.toString(16)} in Sound word ${word}; ` +
+          `Sound word first ${hex(first)}, last ${hex(seen)}, changed at ${changedAt ?? 'never'} ms after the CC; ` +
+          `mainloop_hits ${hitsNow}; CC channel 1, track 1 factory channel ${midi?.track_channels[0] ?? 'unknown'}; ` +
+          `sound base ${hex(this.soundBase)} (kit_ptr ${hex(fx.kit_ptr)}); ` +
+          `not available: firmware MIDI receive count or input queue, active track (no address in devices/ or ports/fw)`
+        );
+      },
     });
     let last = -1;
     await pollUntil(
