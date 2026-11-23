@@ -29,13 +29,13 @@ With sections extracted and ColdFire Ghidra dumps under `out/ghidra/`:
 
     uv run python -m tools.coldfire.fw build -i dt2-1.17 --other dn2-1.12
 
-Build just one CPU with `--cpu cf` or `--cpu sharc`. Register
-`out/cfdb/<image>-emac.sqlite` or `out/sharcdb/<image>.sqlite` in Workbench
-under **Settings → Firmware symbols**. The database for each CPU carries its
-own catalog and query tables. To browse the files in SQLiteStudio, select
-**Add a database**. In the macOS file picker, press **Command–Shift–G**
-and paste the full path to the database. See [Analysis tools](../../../docs/DEVELOPMENT.md#analysis-tools)
-for the input preparation commands.
+Build one program with `--core main` or `--core dsp`. Register
+`out/firmware/<image>/<core>/firmware.sqlite` in Workbench
+under **Settings → Firmware symbols**. Browse the files with a SQLite viewer
+or query them with `fw sql`. Each database contains its functions and
+cross-references, plus `catalog` and `catalog_groups` for candidate review.
+See [Firmware analysis](../../../docs/FIRMWARE.md) for the input preparation
+commands and the tables available for each core.
 
 ## Select a device and program
 
@@ -51,11 +51,11 @@ With the main and DSP Ghidra exports in place:
 
     uv run python -m tools.coldfire.fw build --device syntakt --firmware 1.42
     uv run python -m tools.coldfire.fw fn 0x4000290e --device syntakt --firmware 1.42 --core dsp
-    uv run python -m tools.firmware.catalog_page --device syntakt --firmware 1.42 --core dsp --all
+    uv run python -m tools.coldfire.fw review --device syntakt --firmware 1.42 --core dsp --all
 
-The Syntakt main OS is `out/cfdb/st-1.42-emac.sqlite`. The DSP is
-`out/cfdb/st-1.42-peer-emac.sqlite` and its review page lands at
-`out/atlas/st-1.42-peer-review.html`. The legacy image key `-i st-1.42-peer`
+The Syntakt main OS is `out/firmware/st-1.42/main/firmware.sqlite`. The DSP is
+`out/firmware/st-1.42/dsp/firmware.sqlite` and its review page lands at
+`out/firmware/st-1.42/dsp/review.html`. The legacy image key `-i st-1.42-peer`
 also selects the DSP. A paired SHARC catalog needs `--other IMAGE`.
 
 ## SHARC queries
@@ -74,11 +74,11 @@ hardware loops, the listing and matches on `--other`. Use `--callers N` and
 `--listing N` to tune the output. `str TEXT --cpu sharc` finds candidate printable
 runs from the loader, and `xref ADDR --cpu sharc` shows recorded references.
 
-In `out/sharcdb/<image>.sqlite`, browse `function_index` for all recovered
+In `out/firmware/<image>/dsp/firmware.sqlite`, browse `function_index` for all recovered
 functions, `function_anchors` for declared sites and provenance, and `catalog`
 for anchor candidates. `sql ... --cpu sharc` queries those tables directly.
 SHARC provides annotated listings and DSP-specific facts. Decompilation and C++
-RTTI commands use the ColdFire data. See [Analysis tools](../../../docs/DEVELOPMENT.md#analysis-tools)
+RTTI commands use the ColdFire data. See [Firmware analysis](../../../docs/FIRMWARE.md)
 for the database build commands.
 
 ## ColdFire recipe: one primitive on both devices
@@ -138,7 +138,7 @@ Build (both devices, one run; needs `atlas build` for both images and the cfdb o
 
     uv run python -m tools.coldfire.atlas catalog dt2-1.17 dn2-1.12
 
-It adds the table `catalog` to `out/cfdb/<image>-emac.sqlite` and writes `out/atlas/<image>-catalog.tsv` (best score first). Query:
+It adds the table `catalog` to `out/firmware/<image>/main/firmware.sqlite` and writes `out/firmware/<image>/main/exports/catalog.tsv` (best score first). Query:
 
     fw.py catalog -i dt2-1.17 --grade --top 20          # best anchor candidates
     fw.py catalog menu -i dt2-1.17 --tag near:cf.menu   # TERM matches name, class, hint or tags
@@ -146,16 +146,16 @@ It adds the table `catalog` to `out/cfdb/<image>-emac.sqlite` and writes `out/at
     fw.py catalog -i dt2-1.17 --groups --top 20         # groups by size
     fw.py catalog -i dt2-1.17 --group 3 --top 50        # rows of one group
 
-Review by group first, then rows. The build also writes `out/atlas/<image>-catalog-groups.tsv` (table `catalog_groups`) and `out/atlas/<image>-catalog-graph.json` (nodes and call edges between catalog rows). A group is a Louvain community of the call graph between catalog rows; group -1 contains the ungrouped functions.
+Review by group first, then rows. The build also writes `out/firmware/<image>/main/exports/groups.tsv` (table `catalog_groups`) and `out/firmware/<image>/main/exports/graph.json` (nodes and call edges between catalog rows). A group is a Louvain community of the call graph between catalog rows; group -1 contains the ungrouped functions.
 
 Full UI candidate review (after cataloguing both devices):
 
-    uv run python -m tools.firmware.catalog_page dt2-1.17 --all
-    uv run python -m tools.firmware.catalog_page dn2-1.12 --all
+    uv run python -m tools.coldfire.fw review -i dt2-1.17 --core main --all
+    uv run python -m tools.coldfire.fw review -i dn2-1.12 --core main --all
 
-Open `out/atlas/<image>-review.html`; keep both standard filenames together for paired-device links. `--all` includes every catalogue row/group, including small groups, anchored functions and ungrouped rows. Without it the visible set stays curated; omitted records remain lookup data so address/paired links can reveal them. Only the active group's filtered results render. Labels come from `out/atlas/labels/<image>/*.jsonl`, or `--labels FILE ...`. Pass the previous review TSV with `--label-catalog FILE` when reusing labels after reclustering. The exporter matches group labels by exact member addresses.
+Open `out/firmware/<image>/main/review.html`. Paired-device links follow the release and core layout. `--all` includes every catalogue row/group, including small groups, anchored functions and ungrouped rows. Without it the visible set stays curated; omitted records remain lookup data so address/paired links can reveal them. Only the active group's filtered results render. Labels come from `out/firmware/<image>/main/labels/*.jsonl`, with a fallback to `out/atlas/labels/<image>/`. Override discovery with `--labels FILE ...`. Pass the previous review TSV with `--label-catalog FILE` when reusing labels after reclustering. The exporter matches group labels by exact member addresses.
 
-Each run also writes `out/atlas/<image>-review.tsv`: the complete catalogue with original evidence, flattened row/group labels and links to both pages, even when HTML is curated. Row links use `#r-0x...`. A pair outside the other candidate catalogue retains its address/match evidence without a dead link. SDK-use labels, hashes, stability, pair/rule agreement, UI-string counts and tags are visible on the page.
+Each run also writes `out/firmware/<image>/main/exports/review.tsv`: the complete catalogue with original evidence, flattened row/group labels and links to both pages, even when HTML is curated. Row links use `#r-0x...`. A pair outside the other candidate catalogue retains its address/match evidence without a dead link. SDK-use labels, hashes, stability, pair/rule agreement, UI-string counts and tags are visible on the page.
 
 Without Claude's database, Keep/Later/Skip uses per-image browser storage, with JSONL export/import for backup and transfer (`<image>-decisions.jsonl`). Local-file storage varies by browser: export before closing when storage is unavailable, and before moving review files. Published Claude pages keep the existing database path; local imports are disabled there. Bitmap/Parameter candidate shortcuts search function metadata; glyph IDs, glyph previews and bitmap assets are not in this catalogue. Full workflow: `docs/DEVELOPMENT.md`, "ColdFire UI candidate review".
 
@@ -178,13 +178,13 @@ Without Claude's database, Keep/Later/Skip uses per-image browser storage, with 
     uv run python -m tools.sharc_dev.sharc_catalog dt2-1.17 dn2-1.12 [--profile IMAGE=PATH]
     fw.py catalog -i dt2-1.17 --cpu sharc --grade --top 20
 
-Needs `out/sharcdb/<image>.sqlite` (also of the old image, for `stable`). Adds `function_index`, `function_anchors`, `function_names`, `function_notes`, `catalog` and `catalog_groups` to sharcdb. TSV and graph exports go under `out/atlas/`. Addresses are short words. Columns differ from ColdFire: `reloc_hash` replaces `h_strict`; no ui or class fields. DSP-only: `role` (voice, master/fx, util, frame, io, other), `label`, `callers`, `callees`, `loops`, `do`, `recip`, `lit_data`, `abs_dm`, `hints`, and `prof_insns` (NULL without `--profile`, which also adds the tag `hot`). `fw.py catalog` shows `role` and `hints`; TERM matches name, role, hints, tags or anchors.
+Needs `out/firmware/<image>/dsp/firmware.sqlite` (also of the old image, for `stable`). Adds `function_index`, `function_anchors`, `function_names`, `function_notes`, `catalog` and `catalog_groups` to sharcdb. TSV and graph files go in the DSP core's `exports/` folder. Addresses are short words. Columns differ from ColdFire: `reloc_hash` replaces `h_strict`; no ui or class fields. DSP-only: `role` (voice, master/fx, util, frame, io, other), `label`, `callers`, `callees`, `loops`, `do`, `recip`, `lit_data`, `abs_dm`, `hints`, and `prof_insns` (NULL without `--profile`, which also adds the tag `hot`). `fw.py catalog` shows `role` and `hints`; TERM matches name, role, hints, tags or anchors.
 
-For browser review, run `uv run python -m tools.firmware.catalog_page IMAGE --cpu sharc`
-for each image in the pair. Open `out/atlas/<image>-dsp-review.html`. Keep both
-HTML files in the same folder for paired links. The page includes every DSP
+For browser review, run `uv run python -m tools.coldfire.fw review -i IMAGE --core dsp`
+for each image in the pair. Open `out/firmware/<image>/dsp/review.html`. Paired
+links follow the release and core layout. The page includes every DSP
 catalog candidate and supports search by group title, name, anchor, role,
-and hint. Review JSONL belongs under `out/atlas/labels/sharc/<image>/`. Group
+and hint. Store review JSONL in the DSP core's `labels/` folder. The legacy `out/atlas/labels/sharc/<image>/` folder is a fallback. Group
 titles without a review label come from the existing DSP roles and hints.
 
 `fw.py cost ADDR [--vars R2=32] [--vars-all R2=32]` gives a static instruction count with DO-loop trip counts (literal or symbolic) and callees. It is an upper bound over all paths with no stall model, and the unit of `dsp_cost_voice` and `patchkit budget`. Trip symbols name the register and the function that reads it, `R2@1cd286`: a callee's R2 is not the caller's. `--vars NAME=V` sets the entry function's register, `NAME@FN=V` one function's, `--vars-all NAME=V` every function's; an unknown name is an error that lists the symbols present. Jumps to another function (conditional too) count as tail calls whose targets are summed (upper bound); with `--vars` the output also gives the tighter total taking the largest target. A zero or missing DO count is `trip?@fn`; notes list what was not handled.

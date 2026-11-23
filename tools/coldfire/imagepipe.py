@@ -9,7 +9,7 @@ NAME is the image name (for example `<firmware>-peer`). Every path derives from 
     Ghidra project   out/ghidra-projects/NAME-emac  (program /NAME/<file name>)
     seeds, RTTI      out/symbols/NAME-seeds.json, out/symbols/NAME-rtti.json
     dump             out/ghidra/NAME-emac
-    cfdb             out/cfdb/NAME-emac.sqlite and its .fts.sqlite
+    cfdb             firmware database with embedded search indexes
 
 Steps, in order:
     import   tools/coldfire/ghidra.sh import, then McfLabels.java
@@ -36,8 +36,11 @@ import os
 import shlex
 import subprocess
 import sys
+from contextlib import closing
 
 from tools import REPO_ROOT, python_env
+from tools.firmware.artifacts import database_path
+from tools.firmware.query_db import _has, open_ro
 
 STEPS = ("import", "seeds", "rtti", "apply", "dump", "cfdb", "fts")
 LANGUAGE = "68000:BE:32:ColdfireEMAC"
@@ -57,8 +60,7 @@ class Paths:
         self.seeds = os.path.join(REPO_ROOT, "out", "symbols", name + "-seeds.json")
         self.rtti = os.path.join(REPO_ROOT, "out", "symbols", name + "-rtti.json")
         self.dump = os.path.join(REPO_ROOT, "out", "ghidra", name + "-emac")
-        self.cfdb = os.path.join(REPO_ROOT, "out", "cfdb", name + "-emac.sqlite")
-        self.fts = os.path.join(REPO_ROOT, "out", "cfdb", name + "-emac.fts.sqlite")
+        self.cfdb = database_path(name, "cf")
 
 
 def hexs(v: int) -> str:
@@ -182,7 +184,10 @@ def done(step: str, p: Paths) -> bool:
     if step == "cfdb":
         return os.path.exists(p.cfdb)
     if step == "fts":
-        return os.path.exists(p.fts)
+        if os.path.isfile(p.cfdb):
+            with closing(open_ro(p.cfdb)) as db:
+                return _has(db, "fts_meta")
+        return False
     return False  # apply has no output of its own
 
 

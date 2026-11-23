@@ -12,7 +12,7 @@ instruction set. Set FW_IMAGE to skip
 "... N more" tail. The stores command instead returns uncapped JSON.
 
 Subcommands: fn decomp disasm callers callees xref str class path port sql
-search atlas catalog dossier stores build batch. In a batch file each line is one command line (without
+search atlas catalog dossier stores build review batch. In a batch file each line is one command line (without
 "fw.py"); lines starting with # are comments; every result block starts with
 "## <line>". The call graph is cached on disk (out/cache/fw/), keyed by the
 database hash, so a cold process only pays for opening SQLite.
@@ -55,6 +55,8 @@ from tools.coldfire.fw_query import (
 from tools.coldfire.fw_query import (
     tri_query as tri_query,
 )
+from tools.firmware import catalog_page
+from tools.firmware.artifacts import database_path
 from tools.firmware.query_db import (
     ATLAS_DIR as ATLAS_DIR,
 )
@@ -214,7 +216,7 @@ def cmd_catalog(
     """Rows of the firmware database's catalog, best score first."""
     short = short_image(image)
     if cpu == "sharc":
-        path = os.path.join(SHARC_DIR, short + ".sqlite")
+        path = database_path(short, "sharc", SHARC_DIR)
         build = "uv run python -m tools.sharc_dev.sharc_catalog %s OTHER" % short
     else:
         build = "uv run python -m tools.coldfire.atlas catalog %s" % short
@@ -476,6 +478,10 @@ def build_parser() -> argparse.ArgumentParser:
         )
     )
     sp.add_argument("--other", help="second device image to build and pair")
+    review = common(
+        sub.add_parser("review", help="export a browsable catalog and review TSV")
+    )
+    catalog_page.add_review_options(review)
     sp = common(sub.add_parser("batch", help="run many queries from FILE or - (stdin)"))
     sp.add_argument("file")
     return p
@@ -502,6 +508,10 @@ def run(
     if c == "build":
         build_images(image or os.environ.get("FW_IMAGE"), args.other, core, args.cpu)
         return "Firmware databases and catalogs built."
+    if c == "review":
+        return catalog_page.export_review(
+            image or os.environ.get("FW_IMAGE"), core, args.cpu, args
+        )
     if c == "batch":
         raise FwError("batch cannot be nested")
     if c == "dossier":

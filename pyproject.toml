@@ -79,6 +79,7 @@ files = [
     "tools/patchkit/pk_package.py",
     "tools/coldfire/fw.py",
     "tools/coldfire/fw_query.py",
+    "tools/firmware/artifacts.py",
     "tools/firmware/query_db.py",
     "tools/firmware/query_target.py",
     "tools/sharc_dev/fw_query.py",

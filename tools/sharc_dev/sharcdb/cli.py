@@ -8,6 +8,7 @@ import shutil
 import sqlite3
 import time
 
+from tools.firmware.artifacts import FirmwareArtifacts, database_path
 from tools.sharc_dev import sharcldr
 
 from .analysis import analyze_image
@@ -64,9 +65,13 @@ def cmd_import_ghidra(args):
 
 def _build_one_cli(blob, out, name, min_depth, blocks, force):
     try:
-        return build_database(
+        result = build_database(
             blob, out, name=name, min_depth=min_depth, blocks=blocks, force=force
         )
+        artifacts = FirmwareArtifacts(name, "sharc")
+        if str(artifacts.database) == os.path.abspath(out):
+            artifacts.publish_legacy_alias()
+        return result
     except Exception as exc:
         return {
             "name": name,
@@ -97,7 +102,7 @@ def cmd_build(args):
         out = (
             args.out
             if (args.out and single)
-            else os.path.join(args.out_dir, name + ".sqlite")
+            else database_path(name, "sharc", args.out_dir)
         )
         jobs.append((blob, out, name))
 
@@ -192,6 +197,11 @@ def cmd_analyze(args):
             print("FAILED  %s  no such file" % path)
             ok = False
             continue
+        # Keep the compatibility link when re-analyzing a database in the new layout.
+        if os.path.islink(path):
+            resolved = os.path.realpath(path)
+            if os.path.basename(resolved) == "firmware.sqlite":
+                path = resolved
         meta = read_meta(path)
         name = meta.get("image")
         if not name:

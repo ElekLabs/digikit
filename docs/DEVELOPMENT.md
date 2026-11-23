@@ -261,28 +261,9 @@ The ColdFire PC probe (`coupled-run --pc-probe`, RPC `pc.probe.set`): [INSTRUMEN
 Use [the firmware query CLI](TOOLS.md#firmware-query-cli-and-the-atlas) for both CPUs.
 The query backends are `tools/coldfire/fw_query.py` and `tools/sharc_dev/fw_query.py`.
 
-From the repository root, extract the supplied firmware files and build the
-query databases:
-
-```sh
-uv run python -m tools.firmware.extract firmware/Digitakt_II_OS1.17.syx -o out/sections/dt2-1.17
-uv run python -m tools.firmware.extract firmware/Digitone_II_OS1.12.syx -o out/sections/dn2-1.12
-uv run python -m tools.coldfire.fw build -i dt2-1.17 --other dn2-1.12
-uv run python -m tools.coldfire.fw search q31_converter -i dt2-1.17 --cpu sharc --in catalog
-```
-
-For ColdFire, prepare a [Ghidra dump](TOOLS.md#coldfire-static-analysis-and-ghidra)
-under `out/ghidra/<image>-emac` before running the build. Use `--cpu sharc` to
-build only the DSP databases from the extracted sections, or `--cpu cf` to
-build only ColdFire. The command prints the candidate and group counts.
-
-The files to register in Workbench are `out/cfdb/<image>-emac.sqlite` and
-`out/sharcdb/<image>.sqlite`. Each contains its own catalog. The SHARC catalog
-command `uv run python -m tools.sharc_dev.sharc_catalog dt2-1.17 dn2-1.12`
-refreshes the tables in those two SHARC databases and writes TSV and graph
-exports under `out/atlas/`. For the full recovered DSP inventory, open the
-`function_index` table in sharcdb. DSP decoding uses the public manuals in
-[SHARC sources](sharc/SOURCES.md).
+The [firmware guide](FIRMWARE.md) covers section extraction, database builds,
+the output layout, and browser review. DSP decoding uses the public manuals
+in [SHARC sources](sharc/SOURCES.md).
 
 ### Syntakt main OS and DSP
 
@@ -299,8 +280,8 @@ From the repository root:
 uv run python -m tools.firmware.extract firmware/Syntakt_OS1.42.syx -o out/sections/st-1.42
 uv run python -m tools.coldfire.fw build --device syntakt --firmware 1.42
 uv run python -m tools.coldfire.fw fn 0x4000290e --device syntakt --firmware 1.42 --core dsp
-uv run python -m tools.firmware.catalog_page --device syntakt --firmware 1.42 --core main --all
-uv run python -m tools.firmware.catalog_page --device syntakt --firmware 1.42 --core dsp --all
+uv run python -m tools.coldfire.fw review --device syntakt --firmware 1.42 --core main --all
+uv run python -m tools.coldfire.fw review --device syntakt --firmware 1.42 --core dsp --all
 ```
 
 The build reports separate catalog counts. Inspect the database and HTML
@@ -308,13 +289,12 @@ for the core you selected:
 
 | Program | Database | Review page |
 | --- | --- | --- |
-| Main OS | `out/cfdb/st-1.42-emac.sqlite` | `out/atlas/st-1.42-review.html` |
-| DSP | `out/cfdb/st-1.42-peer-emac.sqlite` | `out/atlas/st-1.42-peer-review.html` |
+| Main OS | `out/firmware/st-1.42/main/firmware.sqlite` | `out/firmware/st-1.42/main/review.html` |
+| DSP | `out/firmware/st-1.42/dsp/firmware.sqlite` | `out/firmware/st-1.42/dsp/review.html` |
 
 The main OS has the semantic atlas. The DSP catalog includes all recovered
 peer functions and uses the peer call graph. Workbench's current ColdFire
-symbol import resolves main OS addresses. Use the query CLI or SQLiteStudio
-to inspect the peer address space.
+symbol import resolves main OS addresses. Browse the DSP database directly or query it with `fw sql --core dsp`.
 
 Register local firmware databases and symbol maps from [desktop Settings](ADDRMAP.md#firmware-symbols-in-desktop-settings).
 
@@ -340,13 +320,13 @@ Usage of profiles (`wb profile report`, `wb profile record`, the `dk.profile/1` 
 After building both atlases and their catalogues, generate the complete inventories:
 
 ```sh
-uv run python -m tools.firmware.catalog_page dt2-1.17 --all
-uv run python -m tools.firmware.catalog_page dn2-1.12 --all
+uv run python -m tools.coldfire.fw review -i dt2-1.17 --core main --all
+uv run python -m tools.coldfire.fw review -i dn2-1.12 --core main --all
 ```
 
-Open `out/atlas/dt2-1.17-review.html` or `out/atlas/dn2-1.12-review.html` in a browser. Keep both files together with these names for paired-device links. `--all` includes every catalogue row, including anchored functions, small groups and the ungrouped bucket. The page renders only the active group's filtered rows; search also covers tags, existing anchors and labelled SDK uses. An address links directly to its row (`#r-0x...`), revealing it through active filters. Pairs outside the other candidate inventory retain their address and matching evidence without a broken row link.
+Open `out/firmware/dt2-1.17/main/review.html` or `out/firmware/dn2-1.12/main/review.html` in a browser. Paired links follow this release and core layout. `--all` includes every catalogue row, including anchored functions, small groups and the ungrouped bucket. The page renders only the active group's filtered rows; search also covers tags, existing anchors and labelled SDK uses. An address links directly to its row (`#r-0x...`), revealing it through active filters. Pairs outside the other candidate inventory retain their address and matching evidence without a broken row link.
 
-Each command also writes `out/atlas/<image>-review.tsv`, containing the **complete** catalogue, original evidence columns, flattened row/group labels and links to both review pages. This TSV is complete even without `--all`; omitting that option retains the curated visible selection. Curated pages keep omitted rows as lookup data so TSV and paired-device deep links can reveal any catalogue row on demand. `--labels FILE ...` replaces the discovered labels. Labels remain guesses [O] until checked against image bytes; stability, hash uniqueness, pair matches and rule agreement are shown separately.
+Each command also writes `out/firmware/<image>/main/exports/review.tsv`, containing the **complete** catalogue, original evidence columns, flattened row/group labels and links to both review pages. This TSV is complete even without `--all`; omitting that option retains the curated visible selection. Curated pages keep omitted rows as lookup data so TSV and paired-device deep links can reveal any catalogue row on demand. `--labels FILE ...` replaces the discovered labels. Labels remain guesses [O] until checked against image bytes; stability, hash uniqueness, pair matches and rule agreement are shown separately.
 
 Groups with review labels use those titles. Otherwise the page shows common
 classes for ColdFire and recorded roles, decoder hints, or anchors for SHARC.
@@ -367,14 +347,14 @@ The **Bitmap candidates** and **Parameter candidates** shortcuts search the exis
 After building the DSP catalogs, run:
 
 ```sh
-uv run python -m tools.firmware.catalog_page dt2-1.17 --cpu sharc
-uv run python -m tools.firmware.catalog_page dn2-1.12 --cpu sharc
+uv run python -m tools.coldfire.fw review -i dt2-1.17 --core dsp
+uv run python -m tools.coldfire.fw review -i dn2-1.12 --core dsp
 ```
 
-The exporter reads the catalog and call edges from each sharcdb and writes
-`out/atlas/<image>-dsp-review.html` plus a review TSV. The HTML opens in a browser
+The exporter reads the catalog and call edges from each DSP database and writes
+`out/firmware/<image>/dsp/review.html` and `dsp/exports/review.tsv`. The HTML opens in a browser
 and includes every DSP candidate by default. Use the search box to find an
-anchor, role, or DSP hint. Keep both pages together for paired-device links.
+anchor, role, or DSP hint. Paired links follow the release and core layout.
 
 ## Patching
 

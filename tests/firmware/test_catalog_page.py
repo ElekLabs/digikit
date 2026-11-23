@@ -10,7 +10,8 @@ from urllib.parse import unquote
 
 import pytest
 
-from tools.firmware import catalog, catalog_page
+from tools.coldfire import fw
+from tools.firmware import artifacts, catalog, catalog_page
 from tools.sharc_dev import sharc_catalog
 
 
@@ -217,7 +218,8 @@ def test_custom_output_tsv_links_to_actual_html(tmp_path, monkeypatch):
     rows, groups, _, _ = inventory()
     atlas = tmp_path / "atlas"
     atlas.mkdir()
-    monkeypatch.setattr(catalog_page.fw, "ATLAS_DIR", str(atlas))
+    monkeypatch.setattr(catalog_page, "ATLAS_DIR", str(atlas))
+    monkeypatch.setattr(artifacts, "OUTPUT_ROOT", tmp_path)
     for suffix, records in (("-catalog.tsv", rows), ("-catalog-groups.tsv", groups)):
         with (atlas / ("dt2-1.17" + suffix)).open("w", newline="") as f:
             writer = csv.DictWriter(f, list(records[0]), delimiter="\t")
@@ -236,14 +238,13 @@ def test_custom_output_tsv_links_to_actual_html(tmp_path, monkeypatch):
 
 
 def test_sharc_review_reads_the_canonical_database(tmp_path, monkeypatch):
-    db_dir = tmp_path / "sharcdb"
-    db_dir.mkdir()
     atlas = tmp_path / "atlas"
-    monkeypatch.setattr(catalog_page.fw, "SHARC_DIR", str(db_dir))
-    monkeypatch.setattr(catalog_page.fw, "ATLAS_DIR", str(atlas))
+    monkeypatch.setattr(catalog_page, "ATLAS_DIR", str(atlas))
+    monkeypatch.setattr(artifacts, "OUTPUT_ROOT", tmp_path)
     image, other = next(iter(catalog_page.OTHER_IMAGE.items()))
     for current, addr, pair in ((image, 0x10, 0x40), (other, 0x40, 0x10)):
-        path = db_dir / (current + ".sqlite")
+        path = artifacts.FirmwareArtifacts(current, "sharc").database
+        path.parent.mkdir(parents=True)
         rows = [
             dict.fromkeys(column for column, _ in sharc_catalog.CATALOG_COLUMNS)
             for _ in range(2)
@@ -279,14 +280,25 @@ def test_sharc_review_reads_the_canonical_database(tmp_path, monkeypatch):
                     (current, addr + 1, addr, "jump"),
                 ],
             )
-    assert catalog_page.main([image, "--cpu", "sharc"]) == 0
-    output = atlas / (image + "-dsp-review.html")
+    for release in (image, other):
+        assert fw.main(["review", "-i", release, "--core", "dsp"]) == 0
+    current = artifacts.FirmwareArtifacts(image, "sharc")
+    target = artifacts.FirmwareArtifacts(other, "sharc")
+    output = current.review
     page = output.read_text()
     data = json.loads(page.split("const DATA = ", 1)[1].split(";\n", 1)[0])
     assert data["cpu"] == "sharc" and data["full_inventory"]
-    assert data["rows"][0]["pair_url"] == f"{other}-dsp-review.html#r-0x40"
+    assert data["rows"][0]["pair_url"] == f"../../{other}/dsp/review.html#r-0x40"
     assert data["rows"][0]["nb"] == [["0x11", "recovered_function", True, 2]]
-    assert len(catalog_page.read_tsv(str(output.with_suffix(".tsv")))) == 2
+    exported = catalog_page.read_tsv(str(current.review_tsv))
+    assert len(exported) == 2
+    for link_field, page_path in (
+        ("review_link", output),
+        ("pair_review_link", target.review),
+    ):
+        href, _ = exported[0][link_field].split("#r-")
+        assert (current.review_tsv.parent / unquote(href)).resolve() == page_path
+        assert page_path.is_file()
 
 
 def test_pair_outside_inventory_retains_evidence_without_dead_link(tmp_path):

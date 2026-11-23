@@ -33,6 +33,7 @@ _here = os.path.dirname(os.path.abspath(__file__))
 import networkx as nx  # noqa: E402
 
 from tools.coldfire import cfdb  # noqa: E402
+from tools.firmware.artifacts import coldfire_database_path  # noqa: E402
 
 try:
     from tools.coldfire import cf_names
@@ -66,7 +67,7 @@ def load(name, ghidra_dir=None, db_dir=DB_DIR, force=False):
     is gone but an up-to-date database is already on disk, that's fine --
     only a build or rebuild requires the dump."""
     dump_dir = ghidra_dir or os.path.join(GHIDRA_DIR, name)
-    out_path = os.path.join(db_dir, name + ".sqlite")
+    out_path = coldfire_database_path(name, db_dir)
 
     stale = force or not os.path.exists(out_path)
     if not stale:

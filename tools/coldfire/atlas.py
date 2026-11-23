@@ -59,6 +59,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 from tools.coldfire import fw, fw_query  # noqa: E402
 from tools.firmware import catalog as shared  # noqa: E402
 from tools.firmware import config, device  # noqa: E402
+from tools.firmware.artifacts import FirmwareArtifacts, database_path  # noqa: E402
 from tools.firmware.catalog import (  # noqa: E402
     STRONG_PAIR,
     catalog_grade,
@@ -877,7 +878,7 @@ ATLAS_TABLES = (
 def publish_atlas(image: str, source: str) -> None:
     """Install the generated atlas in the matching ColdFire database."""
     name = image + "-emac"
-    path = os.path.join(fw.CF_DIR, name + ".sqlite")
+    path = database_path(image, "cf", fw.CF_DIR)
     with closing(sqlite3.connect(path, uri=True)) as db, db:
         db.execute(
             "ATTACH DATABASE ? AS src", (Path(source).resolve().as_uri() + "?mode=ro",)
@@ -1129,7 +1130,7 @@ def collect_catalog(image: str, *, peer: bool = False) -> CatImg:
 
     old = CATALOG_OLD.get(image)
     im = image + "-emac"
-    db = fw.open_ro(os.path.join(fw.CF_DIR, im + ".sqlite"))
+    db = fw.open_ro(database_path(image, "cf", fw.CF_DIR))
     at = None if peer else fw.open_ro(fw_query.atlas_path(image))
     d = CatImg()
     d.fn = {
@@ -1151,7 +1152,7 @@ def collect_catalog(image: str, *, peer: bool = False) -> CatImg:
         groups[d.hs[e]].append(e)
     d.groups = dict(groups)
     # stability against the old version
-    old_path = os.path.join(fw.CF_DIR, "%s-emac.sqlite" % old) if old else ""
+    old_path = database_path(old, "cf", fw.CF_DIR) if old else ""
     if (
         old
         and os.path.exists(old_path)
@@ -1345,37 +1346,8 @@ def catalog_rows(
     return rows
 
 
-def write_catalog(
-    image: str, rows: list[dict[str, Any]], out_dir: str, db: sqlite3.Connection
-) -> None:
-    shared.write_catalog(
-        db,
-        os.path.join(out_dir, image + "-catalog.tsv"),
-        rows,
-        CATALOG_COLUMNS,
-    )
-
-
-def write_catalog_groups(
-    image: str,
-    rows: list[dict[str, Any]],
-    edges: dict[tuple[int, int], int],
-    out_dir: str,
-    db: sqlite3.Connection,
-) -> int:
-    """Write table catalog_groups, the groups TSV and the graph JSON; return the group count."""
-    return shared.write_catalog_groups(
-        image,
-        rows,
-        edges,
-        db,
-        os.path.join(out_dir, image + "-catalog-groups.tsv"),
-        os.path.join(out_dir, image + "-catalog-graph.json"),
-    )
-
-
 def catalog(
-    image: str, other_image: str | None = None, out_dir: str = fw.ATLAS_DIR
+    image: str, other_image: str | None = None, out_dir: str | None = None
 ) -> int:
     from tools.coldfire import cfmatch
 
@@ -1400,7 +1372,6 @@ def catalog(
             ):
                 print("run atlas build %s first" % n)
                 return 2
-    os.makedirs(out_dir, exist_ok=True)
     a = collect_catalog(first, peer=peer)
     if second is None:
         jobs: list[
@@ -1415,7 +1386,7 @@ def catalog(
     for n, other, d, o, pair in jobs:
         rows = catalog_rows(d, o, pair)
         with (
-            closing(sqlite3.connect(os.path.join(fw.CF_DIR, n + "-emac.sqlite"))) as db,
+            closing(sqlite3.connect(database_path(n, "cf", fw.CF_DIR))) as db,
             db,
         ):
             db.execute("BEGIN IMMEDIATE")
@@ -1429,9 +1400,16 @@ def catalog(
                         for source, (target, method) in pair.items()
                     ),
                 )
-            write_catalog(n, rows, out_dir, db)
-            n_groups = write_catalog_groups(
-                n, rows, group_edges([r["addr"] for r in rows], d.callee_n), out_dir, db
+            exports = FirmwareArtifacts(n, "cf").catalog_exports(out_dir)
+            exports.catalog.parent.mkdir(parents=True, exist_ok=True)
+            shared.write_catalog(db, str(exports.catalog), rows, CATALOG_COLUMNS)
+            n_groups = shared.write_catalog_groups(
+                n,
+                rows,
+                group_edges([r["addr"] for r in rows], d.callee_n),
+                db,
+                str(exports.groups),
+                str(exports.graph),
             )
         counts: dict[str, int] = {}
         for r in rows:
@@ -1464,7 +1442,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     c.add_argument("image")
     c.add_argument("other", nargs="?", help="optional image for pairing")
-    c.add_argument("--out-dir", default=fw.ATLAS_DIR)
+    c.add_argument(
+        "--out-dir", help="export with image-prefixed names in this directory"
+    )
     args = ap.parse_args(argv)
     if args.cmd == "catalog":
         return catalog(args.image, args.other, args.out_dir)

@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from contextlib import closing
 from typing import Any
 
+from tools.firmware.artifacts import FirmwareArtifacts, database_path
 from tools.firmware.query_db import (
     ATLAS_DIR,
     CF_DIR,
@@ -50,7 +51,7 @@ class CF:
     def __init__(self, image: str):
         self.image = short_image(image)
         self.db_name = self.image + "-emac"
-        self.path = os.path.join(CF_DIR, self.db_name + ".sqlite")
+        self.path = database_path(image, "cf", CF_DIR)
         self.db = open_ro(self.path)
         self.meta = dict(self.db.execute("SELECT key, value FROM meta").fetchall())
         self._graph: Graph | None = None
@@ -538,7 +539,7 @@ def cmd_atlas(image: str, term: str, per: int = 15) -> list[str]:
 def atlas_path(image: str, table: str = "glossary") -> str:
     """Prefer the tables bundled into cfdb, with a fallback for old exports."""
     short = short_image(image)
-    canonical = os.path.join(CF_DIR, short + "-emac.sqlite")
+    canonical = database_path(short, "cf", CF_DIR)
     if os.path.isfile(canonical):
         with closing(open_ro(canonical)) as db:
             if _has(db, table):
@@ -915,8 +916,9 @@ def build_images(image: str, other: str | None = None, *, peer: bool = False) ->
         dump = os.path.join(ROOT, "out", "ghidra", name)
         if not os.path.isfile(os.path.join(dump, "manifest.json")):
             raise FwError(f"no Ghidra dump for {short}: expected {dump}")
-        db_path = os.path.join(CF_DIR, name + ".sqlite")
-        cfdb.build_database(dump, db_path, name=name)
+        artifacts = FirmwareArtifacts(short, "cf")
+        cfdb.build_database(dump, str(artifacts.database), name=name)
+        artifacts.publish_legacy_alias()
         if not peer:
             atlas.build(short)
     if atlas.catalog(image, other):

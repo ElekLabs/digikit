@@ -11,6 +11,7 @@ from contextlib import closing
 from functools import cached_property
 from typing import Any
 
+from tools.firmware.artifacts import FirmwareArtifacts, database_path
 from tools.firmware.query_db import (
     ROOT,
     SHARC_DIR,
@@ -64,7 +65,7 @@ class Sharc:
 
     def __init__(self, image: str):
         self.image = short_image(image)
-        self.path = os.path.join(SHARC_DIR, self.image + ".sqlite")
+        self.path = database_path(image, "sharc", SHARC_DIR)
         self.db = open_ro(self.path)
         self.meta = (
             dict(self.db.execute("SELECT key, value FROM meta").fetchall())
@@ -961,8 +962,8 @@ def build_images(image: str, other: str) -> None:
         blob = os.path.join(ROOT, "out", "sections", name, "section_7_BLOB.bin")
         if not os.path.isfile(blob):
             raise FwError(f"no SHARC blob for {name}: expected {blob}")
-        sharcdb.build_database(
-            blob, os.path.join(SHARC_DIR, name + ".sqlite"), name=name
-        )
+        artifacts = FirmwareArtifacts(name, "sharc")
+        sharcdb.build_database(blob, str(artifacts.database), name=name)
+        artifacts.publish_legacy_alias()
     if sharc_catalog.catalog(image, other):
         raise FwError("SHARC catalog build failed")

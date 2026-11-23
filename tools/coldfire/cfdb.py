@@ -41,6 +41,7 @@ import sys
 import time
 from contextlib import closing
 
+from tools.firmware.artifacts import FirmwareArtifacts, coldfire_database_path
 from tools.firmware.query_db import FUNCTION_NAMES_SQL
 
 DB_VERSION = 2
@@ -417,8 +418,11 @@ def build_database(dump_dir, out_path, name=None, force=False):
 
 def cmd_build(args):
     name = args.name or os.path.basename(os.path.normpath(args.dump_dir))
-    out = args.out or os.path.join(args.out_dir, name + ".sqlite")
+    out = args.out or coldfire_database_path(name, args.out_dir)
     r = build_database(args.dump_dir, out, name=name, force=args.force)
+    artifacts = FirmwareArtifacts(name, "cf")
+    if str(artifacts.database) == os.path.abspath(out):
+        artifacts.publish_legacy_alias()
     if r["skipped"]:
         print(
             "%-16s SKIPPED (up to date)  %s  %.1fs"
@@ -591,7 +595,7 @@ def _image_names(name):
 
 
 def cmd_fts(args):
-    path = args.db or os.path.join(args.db_dir, args.name + ".sqlite")
+    path = args.db or coldfire_database_path(args.name, args.db_dir)
     t = time.time()
     try:
         out = build_fts(path, force=args.force)
@@ -613,7 +617,7 @@ def main(argv=None):
         "--name", help="image name; default is the dump directory's own name"
     )
     b.add_argument(
-        "--out", help="output .sqlite path (default: --out-dir/<name>.sqlite)"
+        "--out", help="output .sqlite path (defaults to the firmware database)"
     )
     b.add_argument("--out-dir", default=DEFAULT_DB_DIR)
     b.add_argument(

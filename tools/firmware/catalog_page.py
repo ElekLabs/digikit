@@ -1,14 +1,13 @@
 """catalog_page.py: build the anchor review page from a catalogue and its labels.
 
-Reads the ColdFire review exports or the SHARC catalog tables in sharcdb,
-adds the agent labels (JSONL) and writes a standalone HTML page with its TSV.
+Reads the catalog tables, adds labels from JSONL and writes a standalone
+HTML page with a complete TSV inventory.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
-import glob
 import html
 import json
 import os
@@ -17,12 +16,14 @@ import sys
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import closing
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from tools.coldfire import fw
 from tools.firmware import config, device
+from tools.firmware.artifacts import FirmwareArtifacts
 from tools.firmware.catalog import group_edges, parse_counts
+from tools.firmware.query_db import ATLAS_DIR, FwError, open_ro, short_image
 from tools.firmware.query_target import select_core, select_image
 
 Row = dict[str, str]
@@ -61,11 +62,16 @@ def sqlite_rows(cursor: sqlite3.Cursor, *address_columns: str) -> list[Row]:
     ]
 
 
-def read_sharc_catalog(
-    image: str,
+def read_database_catalog(
+    artifacts: FirmwareArtifacts,
 ) -> tuple[list[Row], list[Row], list[tuple[str, str, int]]]:
-    path = os.path.join(fw.SHARC_DIR, image + ".sqlite")
-    with closing(fw.open_ro(path)) as db:
+    sharc = artifacts.cpu == "sharc"
+    image = short_image(artifacts.image)
+    name = image if sharc else image + "-emac"
+    source, target = (
+        ("from_function", "to_function") if sharc else ("from_func", "to_func")
+    )
+    with closing(open_ro(str(artifacts.database_path()))) as db:
         db.execute("BEGIN")
         rows = sqlite_rows(
             db.execute("SELECT * FROM catalog ORDER BY score DESC, addr"),
@@ -77,17 +83,38 @@ def read_sharc_catalog(
         )
         calls: dict[int, Counter[int]] = defaultdict(Counter)
         for caller, callee, count in db.execute(
-            "SELECT from_function, to_function, count(*) FROM edges "
+            f"SELECT {source}, {target}, count(*) FROM edges "
             "WHERE image=? AND kind IN ('call','jump') "
-            "AND from_function IN (SELECT addr FROM catalog) "
-            "AND to_function IN (SELECT addr FROM catalog) AND from_function<>to_function "
-            "GROUP BY from_function, to_function",
-            (image,),
+            f"AND {source} IN (SELECT addr FROM catalog) "
+            f"AND {target} IN (SELECT addr FROM catalog) AND {source}<>{target} "
+            f"GROUP BY {source}, {target}",
+            (name,),
         ):
             calls[caller][callee] = count
     addrs = [int(row["addr"], 16) for row in rows]
     edges = [(hex(a), hex(b), n) for (a, b), n in group_edges(addrs, calls).items()]
     return rows, groups, edges
+
+
+def read_catalog(
+    artifacts: FirmwareArtifacts,
+) -> tuple[list[Row], list[Row], list[tuple[str, str, int]]]:
+    try:
+        return read_database_catalog(artifacts)
+    except (FwError, sqlite3.OperationalError) as exc:
+        # Pre-database ColdFire catalogs can still be opened from their exports.
+        exports = artifacts.catalog_exports(ATLAS_DIR)
+        if artifacts.cpu == "cf" and all(p.is_file() for p in exports):
+            with exports.graph.open() as f:
+                return (
+                    read_tsv(str(exports.catalog)),
+                    read_tsv(str(exports.groups)),
+                    json.load(f)["edges"],
+                )
+        raise FwError(
+            f"no catalog for {artifacts.image} ({artifacts.cpu}); "
+            "run uv run python -m tools.coldfire.fw build first"
+        ) from exc
 
 
 def review_filename(image: str, cpu: str) -> str:
@@ -275,6 +302,7 @@ def build_payload(
     full_inventory: bool = False,
     other_addrs: set[int] | None = None,
     cpu: str = "cf",
+    pair_page: str | None = None,
 ) -> dict[str, Any]:
     edges = list(edges)
     by_addr = {int(r["addr"], 16): r for r in rows}
@@ -337,7 +365,9 @@ def build_payload(
                 "hint": r.get("hints", r.get("hint", "")),
                 "pair": r["pair_addr"],
                 "pm": r["pair_method"],
-                "pair_url": pair_link(other, r["pair_addr"], other_addrs, cpu),
+                "pair_url": pair_link(
+                    other, r["pair_addr"], other_addrs, cpu, pair_page
+                ),
                 "hash": r.get("reloc_hash", r.get("h_strict", "")),
                 "hash_count": r.get("hash_count", ""),
                 "stable": r.get("stable", ""),
@@ -415,6 +445,7 @@ def build_payload(
             True,
             other_addrs,
             cpu,
+            pair_page,
         )
         selected = {r["a"] for r in out_rows}
         payload["linked_rows"] = [r for r in complete["rows"] if r["a"] not in selected]
@@ -424,7 +455,7 @@ def build_payload(
 
 def review_link(image: str, addr: str, page_filename: str | None = None) -> str:
     page = (
-        quote(page_filename, safe="")
+        quote(page_filename, safe="/")
         if page_filename is not None
         else quote(image, safe="") + "-review.html"
     )
@@ -432,7 +463,11 @@ def review_link(image: str, addr: str, page_filename: str | None = None) -> str:
 
 
 def pair_link(
-    other: str, addr: str, other_addrs: set[int] | None, cpu: str = "cf"
+    other: str,
+    addr: str,
+    other_addrs: set[int] | None,
+    cpu: str = "cf",
+    page: str | None = None,
 ) -> str:
     if (
         not other
@@ -440,7 +475,7 @@ def pair_link(
         or (other_addrs is not None and int(addr, 16) not in other_addrs)
     ):
         return ""
-    return review_link(other, addr, review_filename(other, cpu))
+    return review_link(other, addr, page or review_filename(other, cpu))
 
 
 def write_review_tsv(
@@ -453,6 +488,7 @@ def write_review_tsv(
     other_addrs: set[int] | None = None,
     page_filename: str | None = None,
     cpu: str = "cf",
+    pair_page: str | None = None,
 ) -> None:
     """Export the complete inventory with original evidence and flattened labels."""
     label_keys = (
@@ -482,7 +518,7 @@ def write_review_tsv(
                         image, r["addr"], page_filename or review_filename(image, cpu)
                     ),
                     "pair_review_link": pair_link(
-                        other, r["pair_addr"], other_addrs, cpu
+                        other, r["pair_addr"], other_addrs, cpu, pair_page
                     ),
                     **{
                         "label_" + k: " | ".join(str(x.get(k, "")) for x in labels)
@@ -517,21 +553,13 @@ def render(template: str, payload: Mapping[str, Any], sub: str) -> str:
     return template.replace("__SUBTITLE__", html.escape(sub)).replace("__DATA__", data)
 
 
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("image", nargs="?")
-    ap.add_argument("--device", help="device short name or product name")
-    ap.add_argument(
-        "--firmware", metavar="VERSION", help="firmware version for --device"
-    )
-    ap.add_argument("--core", choices=("main", "dsp"), help="main OS or DSP program")
-    ap.add_argument("--cpu", choices=("cf", "sharc"))
+def add_review_options(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--other", help="image of the paired device")
     ap.add_argument(
         "--labels",
         nargs="+",
         metavar="FILE",
-        help="JSONL label files; replaces <atlas>/labels/<image>/*.jsonl",
+        help="JSONL label files; replaces labels discovered for the core",
     )
     ap.add_argument(
         "--label-catalog",
@@ -545,74 +573,50 @@ def main(argv: list[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         help="include every catalog row and group (default for SHARC)",
     )
-    ap.add_argument("--out", help="override the output HTML path under out/atlas")
-    args = ap.parse_args(argv)
+    ap.add_argument("--out", help="override the output HTML path")
 
-    try:
-        image = select_image(args.image, args.device, args.firmware)
-        if image is None:
-            raise fw.FwError("select an image or pass --device")
-        other = args.other or OTHER_IMAGE.get(image, "")
-        if args.core:
-            program = select_core(image, args.core, args.cpu)
-            image, args.cpu = program
-            if other:
-                other = select_core(other, args.core, args.cpu).image
-    except fw.FwError as exc:
-        ap.error(str(exc))
-    args.cpu = args.cpu or "cf"
-    base = os.path.join(fw.ATLAS_DIR, image)
-    paths = [
-        base + s for s in ("-catalog.tsv", "-catalog-groups.tsv", "-catalog-graph.json")
-    ]
-    label_dir = os.path.join(fw.ATLAS_DIR, "labels")
-    if args.cpu == "sharc":
-        try:
-            rows, groups, edges = read_sharc_catalog(image)
-        except (fw.FwError, sqlite3.Error):
-            print(
-                f"missing DSP catalog; run: uv run python -m tools.sharc_dev.sharc_catalog {image} {other or 'OTHER_IMAGE'}",
-                file=sys.stderr,
-            )
-            return 2
-        other_addrs = set()
+
+def export_review(
+    image: str | None, core: str | None, cpu: str | None, args: argparse.Namespace
+) -> str:
+    if image is None:
+        raise FwError("select an image or pass --device")
+    other = args.other or OTHER_IMAGE.get(short_image(image), "")
+    if core:
+        image, cpu = select_core(image, core, cpu)
         if other:
-            try:
-                other_rows, _, _ = read_sharc_catalog(other)
-                other_addrs = {int(r["addr"], 16) for r in other_rows}
-            except (fw.FwError, sqlite3.Error):
-                pass
-        label_dir = os.path.join(label_dir, "sharc")
-    else:
-        if not all(os.path.exists(p) for p in paths):
-            print(
-                "missing catalogue files; run: uv run python -m tools.coldfire.atlas catalog %s %s"
-                % (image, other or "OTHER_IMAGE"),
-                file=sys.stderr,
-            )
-            return 2
-        rows = read_tsv(paths[0])
-        groups = read_tsv(paths[1])
-        other_catalog = os.path.join(fw.ATLAS_DIR, other + "-catalog.tsv")
-        other_addrs = (
-            {int(r["addr"], 16) for r in read_tsv(other_catalog)}
-            if other and os.path.exists(other_catalog)
-            else set()
-        )
-        with open(paths[2]) as f:
-            edges = json.load(f)["edges"]
-    label_files = args.labels or sorted(
-        glob.glob(os.path.join(label_dir, image, "*.jsonl"))
-    )
+            other = select_core(other, core, cpu).image
+    image = short_image(image)
+    other = short_image(other)
+    cpu = cpu or "cf"
+    artifacts = FirmwareArtifacts(image, cpu)
+    rows, groups, edges = read_catalog(artifacts)
+    out = Path(args.out) if args.out else artifacts.review
+    tsv = out.with_suffix(".tsv") if args.out else artifacts.review_tsv
+    other_page = None
+    other_addrs: set[int] = set()
+    if other:
+        counterpart = FirmwareArtifacts(other, cpu)
+        try:
+            other_rows, _, _ = read_catalog(counterpart)
+            other_addrs = {int(r["addr"], 16) for r in other_rows}
+        except FwError:
+            pass
+        other_page = counterpart.review
+        legacy_page = Path(ATLAS_DIR) / review_filename(other, cpu)
+        if args.out and not other_page.is_file() and legacy_page.is_file():
+            other_page = legacy_page
+
+    label_files = args.labels or artifacts.label_files(ATLAS_DIR)
     source_rows = read_tsv(args.label_catalog) if args.label_catalog else None
     if source_rows is not None:
-        hash_field = "reloc_hash" if args.cpu == "sharc" else "h_strict"
+        hash_field = "reloc_hash" if cpu == "sharc" else "h_strict"
         if not source_rows or any(
             not {"addr", "group", hash_field} <= r.keys()
             or r.get("image", image) != image
             for r in source_rows
         ):
-            ap.error(
+            raise FwError(
                 "--label-catalog must contain the old catalog for this image and CPU"
             )
     group_labels, row_labels = read_labels(label_files, rows, source_rows)
@@ -626,44 +630,52 @@ def main(argv: list[str] | None = None) -> int:
         row_labels,
         args.min_group,
         args.per_group,
-        args.cpu == "sharc" if args.all is None else args.all,
+        cpu == "sharc" if args.all is None else args.all,
         other_addrs,
-        args.cpu,
+        cpu,
+        pair_page=os.path.relpath(other_page, out.parent) if other_page else None,
     )
-    with open(TEMPLATE) as f:
-        template = f.read()
+    template = Path(TEMPLATE).read_text()
     sub = subtitle(image, other)
-    page = render(template, payload, ("SHARC · " if args.cpu == "sharc" else "") + sub)
-    out = args.out or os.path.join(fw.ATLAS_DIR, review_filename(image, args.cpu))
-    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    with open(out, "w") as f:
-        f.write(page)
-    tsv = os.path.splitext(out)[0] + ".tsv"
+    page = render(template, payload, ("SHARC · " if cpu == "sharc" else "") + sub)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(page)
+    tsv.parent.mkdir(parents=True, exist_ok=True)
     write_review_tsv(
-        tsv,
+        str(tsv),
         image,
         other,
         rows,
         group_labels,
         row_labels,
         other_addrs,
-        page_filename=os.path.basename(out),
-        cpu=args.cpu,
+        page_filename=os.path.relpath(out, tsv.parent),
+        cpu=cpu,
+        pair_page=os.path.relpath(other_page, tsv.parent) if other_page else None,
     )
-    print(
-        "groups",
-        len(payload["groups"]),
-        "rows",
-        len(payload["rows"]),
-        "labelled",
-        sum(1 for r in payload["rows"] if r["lab"]),
-        "bytes",
-        len(page),
-        "->",
-        out,
-        "TSV ->",
-        tsv,
+    labelled = sum(1 for r in payload["rows"] if r["lab"])
+    return (
+        f"{len(payload['groups'])} groups, {len(payload['rows'])} rows, "
+        f"{labelled} labelled → {out}\nReview TSV → {tsv}"
     )
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("image", nargs="?")
+    ap.add_argument("--device", help="device short name or product name")
+    ap.add_argument(
+        "--firmware", metavar="VERSION", help="firmware version for --device"
+    )
+    ap.add_argument("--core", choices=("main", "dsp"), help="main OS or DSP program")
+    ap.add_argument("--cpu", choices=("cf", "sharc"))
+    add_review_options(ap)
+    args = ap.parse_args(argv)
+    try:
+        image = select_image(args.image, args.device, args.firmware)
+        print(export_review(image, args.core, args.cpu, args))
+    except FwError as exc:
+        ap.error(str(exc))
     return 0
 
 

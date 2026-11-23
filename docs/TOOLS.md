@@ -511,20 +511,20 @@ Text output defaults to 60 lines. The call graph is cached in `out/cache/fw/`.
 | `sql`, `batch` | Read-only SQL and mixed query batches | Read-only SQL and mixed query batches |
 
 Build both CPU databases with `fw.py build -i IMAGE --other IMAGE`. See the
-[analysis commands](DEVELOPMENT.md#analysis-tools) for the required inputs.
+[firmware guide](FIRMWARE.md) for the required inputs.
 
-- `out/cfdb/<image>-emac.sqlite` holds the Ghidra facts, decompiled C and
+- The ColdFire `firmware.sqlite` holds the Ghidra facts, decompiled C and
   disassembly in `function_text`, full-text indexes, glossary, and catalog.
   `tools/coldfire/cfdb.py fts IMAGE-emac` embeds texts and search tables in
   an existing cfdb from its matching dump.
-- `out/sharcdb/<image>.sqlite` holds the decoded DSP, printable runs,
+- `out/firmware/<image>/dsp/firmware.sqlite` holds the decoded DSP, printable runs,
   `function_index` for the full inventory, `function_anchors` and
   `function_notes` for annotations, and `catalog` and `catalog_groups`
   for anchor candidates. `fw.py sql --cpu sharc` opens these tables
   directly. Some printable runs come from coincidental instruction bytes.
 
-Each catalog generator publishes to its CPU's database and writes TSV and graph
-exports under `out/atlas/`. Workbench loads function names from either database
+Each catalog generator publishes to its core's database and writes TSV and graph
+files in that core's `exports/` folder. Use `fw review` for a browsable HTML catalog. Workbench loads function names from either database
 through [Firmware symbols](ADDRMAP.md#firmware-symbols-in-desktop-settings).
 
 The ColdFire atlas contains machine/page descriptors, parameters, RTTI classes

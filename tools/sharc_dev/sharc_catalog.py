@@ -28,6 +28,7 @@ from contextlib import closing
 from typing import Any, cast
 
 from tools.firmware import catalog as shared
+from tools.firmware.artifacts import FirmwareArtifacts, database_path
 from tools.firmware.catalog import (
     STRONG_PAIR,
     catalog_grade,
@@ -36,7 +37,6 @@ from tools.firmware.catalog import (
     suggest_rule,
 )
 from tools.firmware.query_db import (
-    ATLAS_DIR,
     FUNCTION_NAMES_SQL,
     ROOT,
     SHARC_DIR,
@@ -264,7 +264,7 @@ def collect_dsp(image: str) -> DspImg:
 def old_groups(image: str) -> dict[str, list[int]] | None:
     """Hash groups of the old image of `image`, None when its sharcdb is missing."""
     old = DSP_OLD.get(image)
-    if not old or not os.path.exists(os.path.join(SHARC_DIR, old + ".sqlite")):
+    if not old or not os.path.exists(database_path(old, "sharc", SHARC_DIR)):
         return None
     return collect_dsp(old).groups
 
@@ -489,13 +489,15 @@ def write_dsp_catalog(
     image: str,
     rows: list[dict[str, Any]],
     d: DspImg,
-    out_dir: str,
+    out_dir: str | None,
     db: sqlite3.Connection,
 ) -> int:
     """Write tables, TSV and graph JSON of `image`; return the group count."""
+    exports = FirmwareArtifacts(image, "sharc").catalog_exports(out_dir)
+    exports.catalog.parent.mkdir(parents=True, exist_ok=True)
     shared.write_catalog(
         db,
-        os.path.join(out_dir, image + "-dsp-catalog.tsv"),
+        str(exports.catalog),
         rows,
         CATALOG_COLUMNS,
         ADDR_FMT,
@@ -505,8 +507,8 @@ def write_dsp_catalog(
         rows,
         group_edges([r["addr"] for r in rows], d.callee_n),
         db,
-        os.path.join(out_dir, image + "-dsp-catalog-groups.tsv"),
-        os.path.join(out_dir, image + "-dsp-catalog-graph.json"),
+        str(exports.groups),
+        str(exports.graph),
         ADDR_FMT,
         class_col="role",
         hint_col="label",
@@ -597,7 +599,7 @@ def write_function_index(
 def catalog(
     image: str,
     other_image: str,
-    out_dir: str = ATLAS_DIR,
+    out_dir: str | None = None,
     profiles: dict[str, str] | None = None,
 ) -> int:
     names = [short_image(image), short_image(other_image)]
@@ -605,10 +607,9 @@ def catalog(
         if n not in DSP_ROOTS:
             print("no DSP roots for %s: add it to DSP_ROOTS" % n)
             return 2
-        if not os.path.exists(os.path.join(SHARC_DIR, n + ".sqlite")):
+        if not os.path.exists(database_path(n, "sharc", SHARC_DIR)):
             print("no sharcdb for %s: run sharc.load(%r) first" % (n, n))
             return 2
-    os.makedirs(out_dir, exist_ok=True)
     a, b = collect_dsp(names[0]), collect_dsp(names[1])
     fwd, rev = pair_up(a, b), pair_up(b, a)
     for n, d, o, pair in ((names[0], a, b, fwd), (names[1], b, a, rev)):
@@ -616,7 +617,7 @@ def catalog(
         prof = read_profile(path, d) if path else collections.Counter()
         rows = dsp_rows(n, d, o, pair, old_groups(n), prof)
         peer = names[1] if n == names[0] else names[0]
-        with closing(sqlite3.connect(os.path.join(SHARC_DIR, n + ".sqlite"))) as db, db:
+        with closing(sqlite3.connect(database_path(n, "sharc", SHARC_DIR))) as db, db:
             db.execute("BEGIN IMMEDIATE")
             n_groups = write_dsp_catalog(n, rows, d, out_dir, db)
             write_function_index(n, peer, d, pair, db)
@@ -641,7 +642,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("image")
     ap.add_argument("other")
-    ap.add_argument("--out-dir", default=ATLAS_DIR)
+    ap.add_argument(
+        "--out-dir", help="export with image-prefixed names in this directory"
+    )
     ap.add_argument(
         "--profile",
         action="append",

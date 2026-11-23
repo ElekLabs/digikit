@@ -27,6 +27,7 @@ _here = os.path.dirname(os.path.abspath(__file__))
 
 import networkx as nx  # noqa: E402
 
+from tools.firmware.artifacts import database_path  # noqa: E402
 from tools.sharc_dev import (  # noqa: E402
     sharc_trace,  # noqa: E402
     sharcdb,  # noqa: E402
@@ -305,7 +306,7 @@ def load(
 ):
     """Open the image, rebuilding from the local blob when build inputs change."""
     blob_path = os.path.join(sections_dir, name, "section_7_BLOB.bin")
-    out_path = os.path.join(db_dir, name + ".sqlite")
+    out_path = database_path(name, "sharc", db_dir)
 
     if os.path.exists(blob_path):
         sharcdb.build_database(

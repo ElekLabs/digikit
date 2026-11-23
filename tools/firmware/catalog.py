@@ -25,6 +25,8 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
+from tools.firmware.artifacts import FirmwareArtifacts
+
 # Rule kinds that find a function by its hash.
 FUNC_KINDS = ("cf_func", "sharc_func")
 # Pair methods that count as a reliable match between the two devices.
@@ -308,12 +310,7 @@ def rule_at(image: str, addr: int, length: int, cpu: str, root: Path) -> dict:
 def catalog_pair(image: str, cpu: str, entry: int, root: Path) -> int | None:
     """The function on the other device that the atlas catalogue pairs with the function at ENTRY, or None."""
     out = root / "out"
-    canonical = (
-        out / "sharcdb" / f"{image}.sqlite"
-        if cpu == "sharc"
-        else out / "cfdb" / f"{image}-emac.sqlite"
-    )
-    paths = [canonical]
+    paths = [FirmwareArtifacts(image, cpu, out).database_path()]
     if cpu == "cf":
         paths.append(out / "atlas" / f"{image}.sqlite")
     for db in paths:

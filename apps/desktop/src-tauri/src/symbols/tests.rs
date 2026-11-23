@@ -212,25 +212,25 @@ fn imports_the_current_repository_databases() {
         (
             SourceKind::Cf,
             Cpu::Cf,
-            "cfdb/dn2-1.12-emac.sqlite",
+            "firmware/dn2-1.12/main/firmware.sqlite",
             "dn2-1.12",
         ),
         (
             SourceKind::Cf,
             Cpu::Cf,
-            "cfdb/dt2-1.17-emac.sqlite",
+            "firmware/dt2-1.17/main/firmware.sqlite",
             "dt2-1.17",
         ),
         (
             SourceKind::Sharc,
             Cpu::Sharc,
-            "sharcdb/dn2-1.12.sqlite",
+            "firmware/dn2-1.12/dsp/firmware.sqlite",
             "dn2-1.12",
         ),
         (
             SourceKind::Sharc,
             Cpu::Sharc,
-            "sharcdb/dt2-1.17.sqlite",
+            "firmware/dt2-1.17/dsp/firmware.sqlite",
             "dt2-1.17",
         ),
     ] {
