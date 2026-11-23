@@ -24,7 +24,7 @@ import {
 import { BOOT_LEVEL } from '@digi/dk-session/gen_host_dir';
 import { SYSTEM_PACKAGE_STORE_PATH } from '@digi/regression/runtime/system-package.ts';
 
-const { SAFE_CORE_ONLY } = BOOT_LEVEL;
+const { SAFE_CORE_ONLY, CORE_UNREADABLE } = BOOT_LEVEL;
 
 /** The settings store, part 3 (see settings.device.test.ts): a store that overlaps the settings area, and a card with the older header B. */
 
@@ -50,6 +50,7 @@ for (const device of DEVICES) {
       expect(await kit.ready(true), 'the boot is core-only: the package is unreadable from the refused store').toMatchObject({
         safe: 1,
         reason: SAFE_CORE_ONLY,
+        coreCause: CORE_UNREADABLE, // the headers hold a store that fails its check (E_BAD_STORE): stage 1 cannot read the file
       });
       await rpc(rt.session, 'run.mode', { mode: 'paused' }); // the protocol calls below step the emulator themselves
       const { session } = rt;

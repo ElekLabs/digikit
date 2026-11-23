@@ -177,7 +177,7 @@
       },
       {
         "files": ["card-safety.device.test.ts"],
-        "firmwareOnly": "boot counter record and USB, log and ABOUT replies of the booted image on cards the emulated driver reports (blank, foreign, torn, small)",
+        "firmwareOnly": "core-only boot cause, boot counter record, USB store replies and log events of the booted image on cards the emulated driver reports (blank, foreign, torn, small)",
         "devices": ["dt2"],
         "tags": ["C:storage"],
         "modules": ["test/c-demo"],

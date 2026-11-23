@@ -25,7 +25,7 @@ import { BOOT_LEVEL } from '@digi/dk-session/gen_host_dir';
 /**
  * Host coverage (the decisions): `fake_platform.rs` (range refusals, blank claim, foreign, too small, torn claim, cut claim), `store_tests.rs` (foreign refuses
  * store writes, ours without headers, blank header pair rule, cut sweeps). These cases keep what the booted image shows: the boot counter record, the
- * USB replies, the log events, the ABOUT rows and the card writes seen from the emulated card.
+ * USB replies, the log events and the card writes seen from the emulated card.
  *
  * Card safety (was Python `run_card`, `run_card_small`; deleted: 6a5bb1ed:tests/digikit/scenarios/card-safety.toml, 6a5bb1ed:tests/digikit/scenarios/card-small.toml): the one card-write function refuses writes
  * outside the store range; a blank card works as before; foreign bytes in the range make the card read-only for the runtime; a card with our store keeps
@@ -38,17 +38,18 @@ import { BOOT_LEVEL } from '@digi/dk-session/gen_host_dir';
 const MOD = 'modules/a.dkm';
 const STRAY = 100; // relative sector of the foreign bytes
 const PAT = Buffer.from(Array.from({ length: 512 }, (_, i) => (i * 7 + 3) & 0xff)); // neither all 0x00 nor all 0xFF
-const { SAFE_CORE_ONLY } = BOOT_LEVEL;
+const { SAFE_CORE_ONLY, CORE_MISSING } = BOOT_LEVEL;
 
 /**
- * A boot of `card`, a card whose store holds no readable system package (a blank card, foreign bytes, a torn header): the boot is core-only. It
+ * A boot of `card`, a card whose store holds no readable system package (a blank card, foreign bytes, a torn header): the boot is core-only, and its cause is `coreCause`
+ * (CORE_MISSING for every card here: with no store header, or a card too small for the store, stage 1 finds no package file; a header that fails its checks would be CORE_UNREADABLE). It
  * counts nothing and writes nothing of its own, never reaches the runtime UI and keeps the stock firmware; the card check, the card-write function
  * and the store commands are core code and answer as before. Returns the boot info; the run is paused for the protocol calls.
  */
-async function coreOnlyBoot(h: CardRig, card: string) {
+async function coreOnlyBoot(h: CardRig, card: string, coreCause: number = CORE_MISSING) {
   const rt = await h.boot(card);
   const info = await h.ready(true);
-  expect(info, 'the boot is core-only: the card holds no package').toMatchObject({ safe: 1, reason: SAFE_CORE_ONLY });
+  expect(info, 'the boot is core-only: the card holds no package').toMatchObject({ safe: 1, reason: SAFE_CORE_ONLY, coreCause });
   await rpc(rt.session, 'run.mode', { mode: 'paused' });
   return { rt, info, usb: <T>(run: (dk: DkSession) => Promise<T>) => h.usb(rt, run) };
 }
@@ -149,7 +150,7 @@ cardRigs(
   },
   (h) => {
     test(
-      'foreign bytes in the range make the card read-only: nothing written, no selection, no upload, ABOUT says so',
+      'foreign bytes in the range make the card read-only: nothing written, no selection, no upload, the store commands answer E_NOSTORE',
       async () => {
         const { first } = cardStore(h.device);
         const { rt, usb } = await coreOnlyBoot(h, await h.card({ foreign: { [first + STRAY]: PAT }, systemPackage: false }));
@@ -232,7 +233,7 @@ cardRigs(
           claims: 0,
           writes: 0,
         });
-        expect(info, 'a card with no store holds no package: the boot is core-only').toMatchObject({ safe: 1, reason: SAFE_CORE_ONLY });
+        expect(info, 'a card with no store holds no package: the boot is core-only').toMatchObject({ safe: 1, reason: SAFE_CORE_ONLY, coreCause: CORE_MISSING });
 
         const checks = ofKind(await logEvents(h.runtime, h.plan), LOG_KIND.CARD_CHECK);
         expect(checks, 'one error event for the check (state too small)').toHaveLength(1);
