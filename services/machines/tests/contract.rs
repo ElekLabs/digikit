@@ -22,6 +22,7 @@ use dkrt_test_support::{
 };
 
 // the core imports of the file's code (no runtime is linked)
+#[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
 mod stubs;
 
 // the service file's source: its `service!` call is the one place that lists the parts

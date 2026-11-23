@@ -18,6 +18,7 @@ use file::fw::{dk_param_get, dk_param_set, dks_page_key, dks_page_turn};
 pub use file::{builder, fw, rt, DK_SVC_OWNER};
 use file::{dk_svc_start, dk_svc_stop};
 
+#[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
 mod stubs;
 
 /// The cell is one per process: the tests take turns.
@@ -93,4 +94,18 @@ fn the_exports_reach_the_started_owner() {
     }
     drop(started);
     assert!(DK_SVC_OWNER.with(|_| ()).is_none());
+}
+
+#[test]
+fn the_row_reaches_the_object_through_the_owner_guard() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    // the stub image has no machines table, so `dk_svc_start` refuses: the owner is started directly
+    let _o = Started::new();
+    dkrt_test_support::contract::row_is_guarded(
+        file::dk_svc_row(),
+        &|f| {
+            DK_SVC_OWNER.with(|_| f());
+        },
+        &|| DK_SVC_OWNER.refused(),
+    );
 }
