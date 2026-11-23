@@ -292,7 +292,7 @@ Shared runtime test files: each worktree edits only its own lines; the orchestra
 | Q12 route UI and RC2s-3 | Closed: the base is after the RC2s merge. Scope is E1. | |
 | Q13 machines and RC4 | Decided by Em: separate. | |
 
-## 9. For Em (2)
+## 9. For Em (2): decided by Em 2026-11-23: D3 accepted (both row kinds only inside the branch; deleted in RC3-8); E1 and E2 are their own items after RC3 (E1 with RC3m)
 
 **E1 Settings part, FX route panel and the two bridges.** The plan's RC3 row includes the `Settings` part, the FX route row moved to it, the menu's route panel deleted, and `Describe` and Query in place of the `dkrt_fx` and `dk_machines_module_info` bridges (`package/handlers.rs:49-50, 74-89`). The lean decision does not name them.
 - Recommendation: their own item after RC3, together with RC3m, which needs the same renderer.
