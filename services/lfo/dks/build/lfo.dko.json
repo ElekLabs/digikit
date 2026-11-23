@@ -3862,7 +3862,11 @@
    "size": 28
   }
  ],
- "source_sha256": "e56b162dcf181ab4aa21a65e50d713669584e021f7486f910808e7caaf78e13d",
+<<<<<<< HEAD
+ "source_sha256": "37c51e92e89a3b6852fb5496578ff64482aa46ee453653bb68978e082f991af2",
+=======
+ "source_sha256": "b4abf1e3bccfd11e44f5c43f628793245f248d3a28c5241aba4eb3050db3ee94",
+>>>>>>> f72007238 (Rebuild the committed objects after rebasing the RC2s and RC2t stacks onto main)
  "symbols": [
   {
    "global": false,
