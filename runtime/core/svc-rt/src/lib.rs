@@ -18,6 +18,7 @@ mod import_core;
 mod module_def;
 mod owner;
 mod service;
+mod shared;
 #[cfg(test)]
 mod tests;
 
@@ -28,3 +29,4 @@ pub use dkrt_sdk;
 pub use import_core::{sys, ImportCore};
 pub use module_def::{ModuleDef, TickFn};
 pub use owner::{Events, NoEvent, NoEvents, Owner, Post};
+pub use shared::Shared;

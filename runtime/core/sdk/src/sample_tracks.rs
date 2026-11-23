@@ -328,12 +328,54 @@ pub fn unrooted<'a>(root: &[u8], stored: &'a [u8]) -> &'a [u8] {
     stored.strip_prefix(root).unwrap_or(stored)
 }
 
-fn fnv(path: &[u8]) -> u32 {
+/// The key of a stored path (FNV-1a): equal paths have equal keys, so a scan of a pool compares the bytes of a path only where the keys are equal.
+pub fn path_key(path: &[u8]) -> u32 {
     let mut h = 0x811c9dc5u32;
     for b in path {
         h = (h ^ *b as u32).wrapping_mul(0x01000193);
     }
     h
+}
+
+/// What `sample_pool_add` does with a path, from a scan of the entries of one client (`pool_pick`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Pick {
+    /// An entry holds the path already (a file added twice is one entry): its index.
+    Same(usize),
+    /// An entry holds the path with a sticky error (`E_CHANGED`, a missing file): select it again.
+    Again(usize),
+    /// No entry holds it: the first UNUSED entry.
+    Free(usize),
+    /// All `TRACKS` entries are in use (`E_POOL`).
+    Full,
+}
+
+/// The decision of `pool_add` over the entries `(status, path_key, stored path)` of one client in index order. One copy for the state machine (`Core::pool_add`) and for the table
+/// that the module calls reach in a masked section (`dkrt-svc-samples`): the entry of the same path wins over a free one, holes stay (an index never moves), the key is compared first.
+pub fn pool_pick<'a>(
+    key: u32,
+    path: &[u8],
+    entries: impl Iterator<Item = (i32, u32, &'a [u8])>,
+) -> Pick {
+    let mut free = TRACKS;
+    for (k, (status, k_key, stored)) in entries.enumerate() {
+        if status == UNUSED {
+            if free == TRACKS {
+                free = k;
+            }
+        } else if k_key == key && stored == path {
+            return if status < 0 {
+                Pick::Again(k)
+            } else {
+                Pick::Same(k)
+            };
+        }
+    }
+    if free == TRACKS {
+        Pick::Full
+    } else {
+        Pick::Free(free)
+    }
 }
 
 /// `CL` clients, `EN` dedup entries.
@@ -421,28 +463,21 @@ impl<const CL: usize, const EN: usize> Core<CL, EN> {
             return E_NOT_FOUND;
         }
         let path = &path[..n];
-        let mut free = TRACKS;
-        for k in 0..TRACKS {
-            let t = &self.tracks[client][k];
-            if t.status == UNUSED {
-                if free == TRACKS {
-                    free = k;
-                }
-            } else if &t.path[..t.plen] == path {
-                if t.status < 0 {
-                    // The same file again after a sticky error (E_CHANGED, a missing file): a new select, the same entry.
-                    let r = self.select(client, k, path);
-                    return if r == 0 { k as i32 } else { r };
-                }
-                return k as i32;
-            }
-        }
-        if free == TRACKS {
-            return E_POOL;
-        }
-        let r = self.select(client, free, path);
+        let pick = pool_pick(
+            path_key(path),
+            path,
+            self.tracks[client]
+                .iter()
+                .map(|t| (t.status, t.pathkey, &t.path[..t.plen])),
+        );
+        let k = match pick {
+            Pick::Same(k) => return k as i32,
+            Pick::Again(k) | Pick::Free(k) => k,
+            Pick::Full => return E_POOL,
+        };
+        let r = self.select(client, k, path);
         if r == 0 {
-            free as i32
+            k as i32
         } else {
             r
         }
@@ -482,7 +517,7 @@ impl<const CL: usize, const EN: usize> Core<CL, EN> {
         };
         t.path[..path.len()].copy_from_slice(path);
         t.plen = path.len();
-        t.pathkey = fnv(path);
+        t.pathkey = path_key(path);
         t.status = if reload { LOADING } else { QUEUED };
         t.reload = reload;
         t.fresh = false;

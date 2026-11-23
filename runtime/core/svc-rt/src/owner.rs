@@ -77,6 +77,12 @@ impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
         self.gate.refused()
     }
 
+    /// Is there a live object (after `start`, before `stop`, no transition running)? It says nothing about a call in progress: a state of a service file that lives outside the
+    /// owner (a `Shared` table) uses it to answer "no service" as `with` does, without the guard.
+    pub fn is_live(&self) -> bool {
+        self.gate.is_live()
+    }
+
     fn at(&self) -> *mut T {
         self.cell.get() as *mut T
     }
@@ -201,6 +207,6 @@ impl<T, A: Events<T>, const N: usize> Default for Owner<T, A, N> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 #[cfg(test)]
 pub(crate) use tests::{irq_mask as test_irq_mask, irq_restore as test_irq_restore};

@@ -52,6 +52,7 @@ pub mod runtime_state;
 pub mod service;
 mod service_table;
 pub mod sha256;
+pub mod shared;
 pub mod state;
 pub mod storage;
 pub mod store_path;

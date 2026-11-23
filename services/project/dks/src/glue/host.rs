@@ -36,6 +36,7 @@ impl DkHost {
 unsafe impl Host for DkHost {
     /// The listing client that this file's `init` is the only place to open, and core/ui (optional: without it the result is a failure and the handle stays null).
     fn open(&mut self) -> Result<(), Status> {
+        super::exports::reset_status();
         let ctx = dkrt_svc_rt::init_ctx();
         let mut f: *mut u8 = core::ptr::null_mut();
         // SAFETY: `ctx` is the module context of this `init`.

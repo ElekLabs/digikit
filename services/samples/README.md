@@ -6,7 +6,8 @@ one client slot; its tracks are published to the DSP by queued link writes. It f
 concepts beside it. It differs from it in having no record kind (so no `Records` part) and a `DspPart`.
 
 ```text
-src/samples.rs   the owner `Samples`: private state, the module API as methods (one for each `dk_sample_pool_*` call), `Provider` (start_in), `DspPart` and `Ticker` in one block each
+src/samples.rs   the owner `Samples`: private state, the module API that needs the object as methods (`open`, `peaks`, `peaks_window`), `Provider` (start_in), `DspPart` and `Ticker` in one block each
+src/table.rs     `PoolTable` in the cell `POOL_TABLE` (outside the owner): what the pool calls read and write at once, and the bodies of those calls
 src/tracks.rs    `Tracks`: the clients' slots and their state machine (`dkrt_sdk::sample_tracks`), bound to the adapter and to the table writes (`Device` is its environment)
 src/writes.rs    `Writes`: the queued table writes over the DSP link (close, publish), one in flight at a time, and when a client's table may be written
 src/pool.rs      `Pool`: the adapter's calls, found through its table `sample_pool_info` (`Pool::from_info`) or given by a host test
@@ -24,6 +25,16 @@ What goes where:
 - The owner holds all state as private fields. The file's cell (`DK_SVC_OWNER`) holds the one instance: `Provider::start_in` makes it in the file's `init`, in place (zero bytes plus the
   few non-zero starting values), because the track core is 35 kB. The exports and the event slots reach it with `DK_SVC_OWNER.with(...)`; with no owner they answer `E_CONTEXT`
   (a call) or drop the event.
+- The pool calls `dk_sample_pool_add`, `_set`, `_clear`, `_status`, `_info` and `_path` do not enter the owner. They come from the MIDI task and the UI task, and the owner is busy exactly
+  when the UI task is inside a tick or a window, so the guard would refuse them. They read and change the pool table (`table.rs`, the static `POOL_TABLE`, a `Shared` cell: sections with
+  interrupts masked): per entry the status, the stored path with its 32-bit key, the info of a READY entry, and per client whether it is open. The results are final when the call returns
+  (add: the index of the first free entry or of the entry that holds the path; set: 0 or an error; clear: 0, the entry is a hole), and the next `status` shows them. A call leaves a
+  request; `Tracks::intake` takes the requests at the start of the tick (also before a loss of the backing) and applies them as `select` and `unbind`; `Tracks::mirror` publishes the status
+  and info of each entry after the tick, a loss, a claim and a release, never over an entry with a request waiting. `dk_sample_pool_open`, `_peaks` and `_peaks_window` stay in the owner
+  (UI task only). The table is not a field of `Samples` (it holds a reference to the static); a host test gives its own cell.
+  Longest sections: `add` scans 16 entries by 32-bit key and compares the bytes of at most one stored path (one of 255 bytes at most, where keys are equal), then copies the path in (16 compares, one 255-byte compare, one 255-byte copy: bounded by that count
+  of steps, about a thousand ColdFire cycles at most, a few microseconds; an estimate, not timed on the device). The old code held the mask over the byte compare of every entry of equal length (up to 16 x 255
+  bytes). `publish` stores 32 entries (copied outside the section), `take_request` scans 32 entries and copies one path.
 - Named statics stay only where something reads them by symbol: `DKRT_SMP_RECORDS` and `DKRT_SMP_CONTROL` (the L2 addresses of the 16 records and 16 control sets of each client;
   read by the device tests of the shot machine). `Tracks::reserve` is the only writer; the logic reads the copies in `Writes`.
 - `Ticker::tick` runs in the early phase only. The adapter's `dkpool_tick` is the part's pre-tick step (`Ticker::pre_tick`): the table's tick function runs it first, before the owner

@@ -69,6 +69,9 @@ pub struct FakeHost {
     pub in_store: Cell<bool>,
     pub masked: Cell<u32>,
     pub masks_taken: Cell<u32>,
+    /// The masks given back at depth 0 since `interrupt_at_restore` (the points where an unmasked CPU takes a pending interrupt), and the interrupt waiting for one.
+    restores: Cell<u32>,
+    isr: core::cell::RefCell<Option<(u32, std::boxed::Box<dyn FnOnce()>)>>,
 }
 
 impl FakeHost {
@@ -79,6 +82,8 @@ impl FakeHost {
             in_store: Cell::new(false),
             masked: Cell::new(0),
             masks_taken: Cell::new(0),
+            restores: Cell::new(0),
+            isr: core::cell::RefCell::new(None),
         }
     }
 }
@@ -98,6 +103,29 @@ impl FakeHost {
     }
     pub fn restore_irq(&self, _sr: u32) {
         self.masked.set(self.masked.get() - 1);
+        if self.masked.get() != 0 {
+            return;
+        }
+        self.restores.set(self.restores.get() + 1);
+        let due = {
+            let mut isr = self.isr.borrow_mut();
+            match isr.take() {
+                Some((at, f)) if at == self.restores.get() => Some(f),
+                other => {
+                    *isr = other;
+                    None
+                }
+            }
+        };
+        if let Some(f) = due {
+            f();
+        }
+    }
+    /// An interrupt that runs `f` when the `at`-th mask (counted from now) is given back at depth 0: the moment a task switch or an interrupt can fall between two sections. `f` may
+    /// mask and give back again (the interrupt handler's own sections).
+    pub fn interrupt_at_restore(&self, at: u32, f: impl FnOnce() + 'static) {
+        self.restores.set(0);
+        *self.isr.borrow_mut() = Some((at, std::boxed::Box::new(f)));
     }
 }
 

@@ -342,12 +342,16 @@ pub(crate) fn irq_restore(_sr: u32) {
     }
 }
 
-fn masks_taken() -> u32 {
+pub(crate) fn mask_depth() -> u32 {
+    MASK_DEPTH.with(|d| d.get())
+}
+
+pub(crate) fn masks_taken() -> u32 {
     MASKS_TAKEN.with(|n| n.get())
 }
 
 /// Deliver `f` as an interrupt when the owner gives its `at`-th mask back (counted from now).
-fn interrupt_at(at: u32, f: impl FnOnce() + 'static) {
+pub(crate) fn interrupt_at(at: u32, f: impl FnOnce() + 'static) {
     RESTORES.with(|n| n.set(0));
     ISR.with(|i| *i.borrow_mut() = Some((at, Box::new(f))));
 }

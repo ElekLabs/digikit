@@ -6,6 +6,7 @@ use dkrt_svc_rt::ImportCore;
 use dkrt_svc_samples::events::PoolEvent;
 use dkrt_svc_samples::peakwin::{PeakJob, PeakJobs};
 use dkrt_svc_samples::samples::Samples;
+use dkrt_svc_samples::table::{self, POOL_TABLE};
 
 const CORE: ImportCore = ImportCore;
 
@@ -29,6 +30,16 @@ fn owner(f: impl FnOnce(&mut Samples) -> i32) -> i32 {
     crate::DK_SVC_OWNER.with(f).unwrap_or(E_CONTEXT)
 }
 
+/// The call `f` on the pool table, or `E_CONTEXT` when the service is not loaded (before `init`, after `fini`). The table is not the owner's: a call answers at once from any task, also while
+/// the owner is inside a call (`table.rs`).
+fn pool(f: impl FnOnce() -> i32) -> i32 {
+    if crate::DK_SVC_OWNER.is_live() {
+        f()
+    } else {
+        E_CONTEXT
+    }
+}
+
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_sample_pool_open(ctx: *mut u8, out: *mut *mut u8) -> i32 {
     if out.is_null() || CORE.module_of(ctx) == 0 {
@@ -44,22 +55,22 @@ pub unsafe extern "C" fn dk_sample_pool_open(ctx: *mut u8, out: *mut *mut u8) ->
 
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_sample_pool_add(p: *mut u8, path: *const u8) -> i32 {
-    owner(|s| s.pool_add(&CORE, client(p), path))
+    pool(|| table::pool_add(&POOL_TABLE, &CORE, client(p), path))
 }
 
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_sample_pool_clear(p: *mut u8, index: u32) -> i32 {
-    owner(|s| s.pool_clear(&CORE, client(p), index))
+    pool(|| table::pool_clear(&POOL_TABLE, &CORE, client(p), index))
 }
 
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_sample_pool_status(p: *mut u8, index: u32) -> i32 {
-    owner(|s| s.status(client(p), index))
+    pool(|| table::pool_status(&POOL_TABLE, &CORE, client(p), index))
 }
 
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_sample_pool_info(p: *mut u8, index: u32, out: *mut u8) -> i32 {
-    owner(|s| s.info(client(p), index, out))
+    pool(|| table::pool_info(&POOL_TABLE, &CORE, client(p), index, out))
 }
 
 #[cfg_attr(target_arch = "m68k", no_mangle)]
@@ -69,12 +80,12 @@ pub unsafe extern "C" fn dk_sample_pool_path(
     buf: *mut u8,
     cap: u32,
 ) -> i32 {
-    owner(|s| s.path(&CORE, client(p), index, buf, cap))
+    pool(|| table::pool_path(&POOL_TABLE, &CORE, client(p), index, buf, cap))
 }
 
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_sample_pool_set(p: *mut u8, index: u32, path: *const u8) -> i32 {
-    owner(|s| s.pool_set(&CORE, client(p), index, path))
+    pool(|| table::pool_set(&POOL_TABLE, &CORE, client(p), index, path))
 }
 
 #[cfg_attr(target_arch = "m68k", no_mangle)]

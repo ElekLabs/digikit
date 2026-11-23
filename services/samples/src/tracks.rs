@@ -1,6 +1,6 @@
 //! Per-module stereo sample pool of 16 entries (docs/design/sample-api-1.5.md). The state machine is
 //! `dkrt_sdk::sample_tracks` (device-neutral, host-tested); this file binds it to the runtime:
-//! the imports `dk_sample_pool_add`, `_set`, `_clear`, `_status`, `_info` and `_path`, the backing adapter's calls (`pool.rs`, plug-in point `dkrt_pool.h`, version 1)
+//! the requests of the pool calls (`dk_sample_pool_add`, `_set`, `_clear`: answered from the pool table, `table.rs`), the backing adapter's calls (`pool.rs`, plug-in point `dkrt_pool.h`, version 1)
 //! and the events adapters call (`dkrt_pool_done`, `dkrt_pool_lost`).
 //! No firmware address and no `cf.*` anchor is used here. Without the backing adapter every
 //! `sample_pool_add` returns E_CONTRACT.
@@ -14,17 +14,19 @@
 //! The pool list is not kept here: the module keeps it in its settings (the picker, sdk/src/sample/picker.c), and the settings are per project
 //! while the `project` service is loaded.
 //!
-//! TODO (not wired yet): a request mailbox so API calls from the MIDI task cannot interleave with a tick step of the same track (an idle track is safe today).
-use crate::files::{files_in_store, probe, root_of, rooted_path};
+//! The calls of a module do not touch this state: they change the pool table (`table.rs`) and leave a request that `intake` applies at the start of the tick, so a call from the MIDI
+//! task never interleaves with a step of a track.
+use crate::files::{files_in_store, probe};
 use crate::pool::Pool;
+use crate::table::{PoolCell, Req, Snap};
 use crate::writes::Writes;
 use core::mem::MaybeUninit;
 use core::ptr::{addr_of_mut, write_volatile};
 use dkrt_abi::core_api::{CoreApi, LOG_INFO};
 use dkrt_sdk::sample_tracks::{
-    store_inspect, unrooted, Core, Env, FileId, Handle, Inspect, Load, Note, Strack, PATH,
+    store_inspect, Core, Env, FileId, Handle, Info, Inspect, Load, Note, Strack, PATH, UNUSED,
 };
-use dkrt_sdk::{logk, E_CONTRACT, E_NOT_FOUND, E_SEL_PATH};
+use dkrt_sdk::{logk, E_CONTRACT, E_NOT_FOUND};
 
 pub(crate) const CLIENTS: usize = 2;
 pub(crate) const ENTRIES: usize = 16;
@@ -221,148 +223,44 @@ impl Tracks {
         self.tracks(core, self.local[best])
     }
 
-    /// `sample_pool_add`: the pool index of the file (a new entry, or the one that already holds the path), or a negative error.
-    ///
-    /// # Safety
-    /// `path` is null or a NUL-terminated string.
-    pub(crate) unsafe fn pool_add<C: CoreApi>(
-        &mut self,
-        core: &C,
-        pool: &Pool,
-        handle: u32,
-        path: *const u8,
-    ) -> i32 {
-        if path.is_null() {
-            return E_SEL_PATH;
-        }
-        if !pool.present() {
-            return E_CONTRACT;
-        }
-        let c = match self.client(handle) {
-            Ok(c) => c,
-            Err(e) => return e,
-        };
-        let mut full = [0u8; PATH];
-        let n = match rooted_path(core, path, &mut full) {
-            Ok(n) => n,
-            Err(e) => return e,
-        };
-        let sr = core.irq_mask();
-        let r = self.core.pool_add(c, &full[..n]);
-        core.irq_restore(sr);
-        r
-    }
-
-    /// `sample_pool_set`: load the file into entry `index` (replacing what was there); 0 or a negative error.
-    ///
-    /// # Safety
-    /// `path` is null or a NUL-terminated string.
-    pub(crate) unsafe fn pool_set<C: CoreApi>(
-        &mut self,
-        core: &C,
-        pool: &Pool,
-        handle: u32,
-        index: u32,
-        path: *const u8,
-    ) -> i32 {
-        if path.is_null() {
-            return E_SEL_PATH;
-        }
-        if !pool.present() {
-            return E_CONTRACT;
-        }
-        let c = match self.client(handle) {
-            Ok(c) => c,
-            Err(e) => return e,
-        };
-        let mut full = [0u8; PATH];
-        let n = match rooted_path(core, path, &mut full) {
-            Ok(n) => n,
-            Err(e) => return e,
-        };
-        let sr = core.irq_mask();
-        let r = self.core.pool_set(c, index as usize, &full[..n]);
-        core.irq_restore(sr);
-        r
-    }
-
-    /// `sample_pool_clear`: the entry becomes UNUSED (a hole); the other indexes stay.
-    pub(crate) fn pool_clear<C: CoreApi>(&mut self, core: &C, handle: u32, track: u32) -> i32 {
-        match self.client(handle) {
-            Ok(c) => {
-                let sr = core.irq_mask();
-                let r = self.core.unbind(c, track as usize);
-                core.irq_restore(sr);
-                r
+    /// Apply the requests the calls of a module left in the pool table (`table.rs`) to the state machine: each as `select` or `unbind`, in slot order, the same changes the calls made
+    /// directly before the table existed. A request that arrives while this runs is taken in the same loop. The table is read in short sections; the path is copied out of it.
+    pub(crate) fn intake<C: CoreApi>(&mut self, core: &C, table: &PoolCell) {
+        let mut path = [0u8; PATH];
+        while let Some((c, k, req, len)) = table.with(core, |t| t.take_request(&mut path)) {
+            if req == Req::Select {
+                self.core.select(c, k, &path[..len]);
+            } else {
+                self.core.unbind(c, k);
             }
-            Err(e) => e,
         }
     }
 
-    pub(crate) fn status(&self, handle: u32, track: u32) -> i32 {
-        match self.client(handle) {
-            Ok(c) => self.core.status(c, track as usize),
-            Err(e) => e,
-        }
-    }
-
-    /// `sample_pool_path`: the entry's current selection, root-relative, NUL-terminated, into `buf`; the length without the NUL.
-    ///
-    /// # Safety
-    /// `buf` is null or writable for `cap` bytes.
-    pub(crate) unsafe fn path<C: CoreApi>(
-        &self,
-        core: &C,
-        handle: u32,
-        track: u32,
-        buf: *mut u8,
-        cap: u32,
-    ) -> i32 {
-        let c = match self.client(handle) {
-            Ok(c) => c,
-            Err(e) => return e,
-        };
-        if buf.is_null() {
-            return E_SEL_PATH;
-        }
-        match self.core.path(c, track as usize) {
-            Ok(stored) => {
-                let p = unrooted(root_of(core), stored);
-                if p.len() + 1 > cap as usize {
-                    return E_SEL_PATH;
+    /// Publish the state machine's view to the pool table (see `table.rs`): the copy is made here, outside the section, and the section only stores it.
+    pub(crate) fn mirror<C: CoreApi>(&self, core: &C, table: &PoolCell) {
+        let mut open = [false; CLIENTS];
+        let mut snap = [[Snap {
+            status: UNUSED,
+            info: Info {
+                frames: 0,
+                rate: 0,
+                channels: 0,
+                token: 0,
+            },
+        }; ENTRIES]; CLIENTS];
+        for c in 0..CLIENTS {
+            open[c] = self.core.is_open(c);
+            if !open[c] {
+                continue;
+            }
+            for k in 0..ENTRIES {
+                snap[c][k].status = self.core.status(c, k);
+                if let Ok(i) = self.core.info(c, k) {
+                    snap[c][k].info = i;
                 }
-                core::ptr::copy_nonoverlapping(p.as_ptr(), buf, p.len());
-                *buf.add(p.len()) = 0;
-                p.len() as i32
             }
-            Err(e) => e,
         }
-    }
-
-    /// Copies a 16-byte `dk_sample_info` (big-endian words, as the module sees them) when the track is READY.
-    ///
-    /// # Safety
-    /// `out` is null or writable for 16 bytes.
-    pub(crate) unsafe fn info(&self, handle: u32, track: u32, out: *mut u8) -> i32 {
-        let c = match self.client(handle) {
-            Ok(c) => c,
-            Err(e) => return e,
-        };
-        if out.is_null() {
-            return E_NOT_FOUND;
-        }
-        match self.core.info(c, track as usize) {
-            Ok(i) => {
-                let w = [i.frames, i.rate, i.channels, i.token];
-                let mut k = 0;
-                while k < 4 {
-                    core::ptr::copy_nonoverlapping(w[k].to_be_bytes().as_ptr(), out.add(k * 4), 4);
-                    k += 1;
-                }
-                0
-            }
-            Err(e) => e,
-        }
+        table.with(core, |t| t.publish(&open, &snap));
     }
 
     /// Bounded overview copy; no file or PCM access in the UI task.

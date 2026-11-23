@@ -9,9 +9,13 @@ use dkrt_svc_rt::{Events, Owner, Post};
 use dkrt_svc_samples::events::PoolEvent;
 use dkrt_svc_samples::pool::{self, Pool};
 use dkrt_svc_samples::samples::Samples;
+use dkrt_svc_samples::table::{PoolCell, PoolTable};
 use dkrt_test_support::FakeCore;
 
-// the core imports of the owner cell's guard (no runtime is linked)
+/// A pool table of the test's own (the service file's is a static shared by the whole process).
+fn table() -> &'static PoolCell {
+    Box::leak(Box::new(PoolCell::new(PoolTable::new())))
+}
 
 /// The 32-byte track-table record of a DSP section (little-endian words): kind 2, the module's local id, the offsets of its records and control sets.
 fn bank(local: u32) -> [u8; 32] {
@@ -48,7 +52,7 @@ fn admit(s: &mut Samples, core: &FakeCore, j: &Job) -> Result<(), i32> {
 #[test]
 fn a_module_without_a_track_table_is_not_the_services_business() {
     let core = FakeCore::new();
-    let mut s = Samples::new(Pool::none());
+    let mut s = Samples::new(Pool::none(), table());
     assert_eq!(admit(&mut s, &core, &job(None)), Ok(()));
     let mut other = bank(1);
     other[0] = 3; // another record kind
@@ -69,7 +73,7 @@ fn a_module_without_a_track_table_is_not_the_services_business() {
 #[test]
 fn a_track_table_is_admitted_claimed_loaded_and_released() {
     let core = FakeCore::new();
-    let mut s = Samples::new(Pool::none());
+    let mut s = Samples::new(Pool::none(), table());
     let (b0, b1, b2) = (bank(1), bank(1), bank(1));
     assert_eq!(admit(&mut s, &core, &job(Some(&b0))), Ok(()));
     claim(&mut s, &core, 4, &job(Some(&b0)));
@@ -96,8 +100,8 @@ fn a_track_table_is_admitted_claimed_loaded_and_released() {
 #[test]
 fn two_owners_do_not_share_their_tracks() {
     let core = FakeCore::new();
-    let mut a = Samples::new(Pool::none());
-    let b = Samples::new(Pool::none());
+    let mut a = Samples::new(Pool::none(), table());
+    let b = Samples::new(Pool::none(), table());
     let table = bank(1);
     claim(&mut a, &core, 4, &job(Some(&table)));
     assert!(a.has_table(4) && !b.has_table(4));
@@ -134,13 +138,16 @@ fn the_adapter_tick_is_early_only_and_needs_the_pool_adapter() {
 fn the_tick_needs_the_pool_adapter_and_runs_no_adapter_call_itself() {
     let core = FakeCore::new();
     ADAPTER_TICKS.with(|n| n.set(0));
-    let mut s = Samples::new(Pool::none());
+    let mut s = Samples::new(Pool::none(), table());
     Ticker::<FakeCore>::tick(&mut s, &core, tick_phase::EARLY);
     // with the adapter the tick steps the tracks, and the adapter's own tick is the pre-tick step's (before the owner is entered), not this call's
-    let mut s = Samples::new(Pool::new(Some(pool::PoolFns {
-        tick: counting_tick,
-        ..pool::refusing()
-    })));
+    let mut s = Samples::new(
+        Pool::new(Some(pool::PoolFns {
+            tick: counting_tick,
+            ..pool::refusing()
+        })),
+        table(),
+    );
     Ticker::<FakeCore>::tick(&mut s, &core, tick_phase::EARLY);
     Ticker::<FakeCore>::tick(&mut s, &core, tick_phase::LATE);
     assert_eq!(ADAPTER_TICKS.with(|n| n.get()), 0);
@@ -204,7 +211,7 @@ fn the_adapters_events_apply_before_the_tick_of_the_pass() {
         ..pool::refusing()
     }));
     cell.start(|slot| {
-        slot.write(Samples::new(pool));
+        slot.write(Samples::new(pool, table()));
         Ok(())
     })
     .unwrap();

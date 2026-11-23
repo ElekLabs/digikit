@@ -40,13 +40,21 @@ unsafe extern "C" fn scope_put(
 ) -> i32 {
     // no owner: the layer has nothing to hold, the record alone takes the change
     DK_SVC_OWNER
-        .with(|p| p.scope_put(bytes(id, id_len), bytes(key, key_len), bytes(value, len)))
+        .with(|p| {
+            let r = p.scope_put(bytes(id, id_len), bytes(key, key_len), bytes(value, len));
+            super::exports::publish(p);
+            r
+        })
         .unwrap_or(E_SET_OFF)
 }
 
 unsafe extern "C" fn scope_remove(id: *const u8, id_len: u32, key: *const u8, key_len: u32) -> i32 {
     DK_SVC_OWNER
-        .with(|p| p.scope_remove(bytes(id, id_len), bytes(key, key_len)))
+        .with(|p| {
+            let r = p.scope_remove(bytes(id, id_len), bytes(key, key_len));
+            super::exports::publish(p);
+            r
+        })
         .unwrap_or(E_SET_OFF)
 }
 

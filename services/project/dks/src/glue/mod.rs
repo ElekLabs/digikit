@@ -14,7 +14,7 @@ mod sdk_imports;
 mod tick;
 mod toast;
 
-pub use exports::{dk_project_current, dk_project_status};
+pub use exports::{dk_project_current, dk_project_status, DK_STATUS};
 pub use files::{io_done, io_step, DK_JOB};
 pub use host::{DkHost, Owner};
 pub use scope::SCOPE;

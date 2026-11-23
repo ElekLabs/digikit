@@ -1,11 +1,16 @@
 use super::*;
+use crate::table::PoolTable;
 use dkrt_test_support::FakeCore;
 use std::boxed::Box;
+
+fn table() -> &'static PoolCell {
+    Box::leak(Box::new(PoolCell::new(PoolTable::new())))
+}
 
 #[test]
 fn a_release_stops_the_peak_window_of_the_freed_client_only() {
     let core = FakeCore::new();
-    let mut s = Box::new(Samples::new(Pool::none()));
+    let mut s = Box::new(Samples::new(Pool::none(), table()));
     assert!(s.tracks.reserve(4, 1, 0x1000, 0x2000));
     assert!(s.tracks.reserve(5, 1, 0x3000, 0x4000));
     s.peaks.set_pending(0);
@@ -21,7 +26,7 @@ fn a_release_stops_the_peak_window_of_the_freed_client_only() {
 #[test]
 fn a_release_stops_the_window_of_every_client_slot_of_the_module() {
     let core = FakeCore::new();
-    let mut s = Box::new(Samples::new(Pool::none()));
+    let mut s = Box::new(Samples::new(Pool::none(), table()));
     assert!(s.tracks.reserve(4, 1, 0x1000, 0x2000));
     assert!(s.tracks.reserve(4, 2, 0x3000, 0x4000));
     s.peaks.set_pending(0);

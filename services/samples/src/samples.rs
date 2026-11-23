@@ -7,6 +7,7 @@
 use crate::dsp;
 use crate::peakwin::{PeakJob, PeakJobs, PeakWindows};
 use crate::pool::Pool;
+use crate::table::{PoolCell, POOL_TABLE};
 use crate::tracks::Tracks;
 use core::mem::MaybeUninit;
 use core::ptr::addr_of_mut;
@@ -20,15 +21,19 @@ pub struct Samples {
     tracks: Tracks,
     pool: Pool,
     peaks: PeakWindows,
+    /// The pool table (`table.rs`): a cell outside this object, shared with the exports that answer at once. The owner meets it in short sections.
+    table: &'static PoolCell,
 }
 
 impl Samples {
-    /// A service over the backing `pool` (`Pool::none()`: no adapter, so every `sample_pool_add` refuses).
-    pub fn new(pool: Pool) -> Samples {
+    /// A service over the backing `pool` (`Pool::none()`: no adapter, so every `sample_pool_add` refuses) and the pool table `table`. `Provider::start` empties the table and tells
+    /// it whether an adapter is installed; this constructor leaves the table as it is.
+    pub fn new(pool: Pool, table: &'static PoolCell) -> Samples {
         Samples {
             tracks: Tracks::new(),
             pool,
             peaks: PeakWindows::new(),
+            table,
         }
     }
 
@@ -50,61 +55,6 @@ impl Samples {
     /// `dk_sample_pool_open`: the handle of the calling module's table with the lowest local id.
     pub fn open_first<C: CoreApi>(&self, core: &C) -> i32 {
         self.tracks.open_first(core)
-    }
-
-    /// `dk_sample_pool_add`.
-    ///
-    /// # Safety
-    /// `path` is null or a NUL-terminated string.
-    pub unsafe fn pool_add<C: CoreApi>(&mut self, core: &C, handle: u32, path: *const u8) -> i32 {
-        self.tracks.pool_add(core, &self.pool, handle, path)
-    }
-
-    /// `dk_sample_pool_set`.
-    ///
-    /// # Safety
-    /// `path` is null or a NUL-terminated string.
-    pub unsafe fn pool_set<C: CoreApi>(
-        &mut self,
-        core: &C,
-        handle: u32,
-        index: u32,
-        path: *const u8,
-    ) -> i32 {
-        self.tracks.pool_set(core, &self.pool, handle, index, path)
-    }
-
-    /// `dk_sample_pool_clear`.
-    pub fn pool_clear<C: CoreApi>(&mut self, core: &C, handle: u32, index: u32) -> i32 {
-        self.tracks.pool_clear(core, handle, index)
-    }
-
-    /// `dk_sample_pool_status`.
-    pub fn status(&self, handle: u32, index: u32) -> i32 {
-        self.tracks.status(handle, index)
-    }
-
-    /// `dk_sample_pool_info`.
-    ///
-    /// # Safety
-    /// `out` is null or writable for 16 bytes.
-    pub unsafe fn info(&self, handle: u32, index: u32, out: *mut u8) -> i32 {
-        self.tracks.info(handle, index, out)
-    }
-
-    /// `dk_sample_pool_path`.
-    ///
-    /// # Safety
-    /// `buf` is null or writable for `cap` bytes.
-    pub unsafe fn path<C: CoreApi>(
-        &self,
-        core: &C,
-        handle: u32,
-        index: u32,
-        buf: *mut u8,
-        cap: u32,
-    ) -> i32 {
-        self.tracks.path(core, handle, index, buf, cap)
     }
 
     /// `dk_sample_pool_peaks`.
@@ -172,7 +122,10 @@ impl Samples {
 
     /// The pool event `pool_lost` (applied by `Reentry::apply`): the backing was lost, all handles are invalid.
     pub(crate) fn pool_lost<C: CoreApi>(&mut self, core: &C) {
+        // the calls of a module that came before the loss are applied first, as they were when they changed the machine at once
+        self.tracks.intake(core, self.table);
         self.tracks.pool_lost(core, &self.pool);
+        self.tracks.mirror(core, self.table);
     }
 }
 
@@ -181,7 +134,9 @@ impl<C: CoreApi> Provider<C> for Samples {
     /// refused with a missing need); `Pool::none()` here is a host build, where there is no way to call the adapter.
     fn start(core: &C) -> Result<Samples, Status> {
         // SAFETY: the table of the image holds the addresses of the adapter's functions
-        Ok(Samples::new(unsafe { Pool::from_info(core) }))
+        let pool = unsafe { Pool::from_info(core) };
+        POOL_TABLE.with(core, |t| t.reset(pool.present()));
+        Ok(Samples::new(pool, &POOL_TABLE))
     }
 
     /// The state is made where it lives: the tracks are 35 kB, so no copy of the value goes through the stack.
@@ -191,7 +146,10 @@ impl<C: CoreApi> Provider<C> for Samples {
         unsafe {
             Tracks::init(&mut *(addr_of_mut!((*p).tracks) as *mut MaybeUninit<Tracks>));
             PeakWindows::init(&mut *(addr_of_mut!((*p).peaks) as *mut MaybeUninit<PeakWindows>));
-            addr_of_mut!((*p).pool).write(Pool::from_info(core));
+            let pool = Pool::from_info(core);
+            addr_of_mut!((*p).pool).write(pool);
+            addr_of_mut!((*p).table).write(&POOL_TABLE);
+            POOL_TABLE.with(core, |t| t.reset(pool.present()));
         }
         Ok(())
     }
@@ -208,9 +166,11 @@ impl<C: CoreApi> DspPart<C> for Samples {
         unsafe { dsp::admit(&self.tracks, job) }
     }
 
-    fn claim(&mut self, _core: &C, c: &mut Claim) {
+    fn claim(&mut self, core: &C, c: &mut Claim) {
         // SAFETY: as `admit`
         unsafe { dsp::claim(&mut self.tracks, c) }
+        // the client is open now: the calls of the module find its table
+        self.tracks.mirror(core, self.table);
     }
 
     /// Give back the client slots of the module: its tracks are unbound, the pool references released and its peak window stopped.
@@ -219,6 +179,7 @@ impl<C: CoreApi> DspPart<C> for Samples {
         let peaks = &mut self.peaks;
         self.tracks
             .release(core, &self.pool, module, |client| peaks.reset(core, client));
+        self.tracks.mirror(core, self.table);
     }
 
     /// Every row of the module is in the DSP: queued table writes may go out.
@@ -247,8 +208,11 @@ impl<C: CoreApi> Ticker<C> for Samples {
     }
 
     fn tick(&mut self, core: &C, phase: u32) {
-        if phase == tick_phase::EARLY {
+        if phase == tick_phase::EARLY && self.pool.present() {
+            // the requests of the calls of a module first, then one step of every track, then what a call reads is the new state
+            self.tracks.intake(core, self.table);
             self.tracks.tick(core, &self.pool);
+            self.tracks.mirror(core, self.table);
         }
     }
 }

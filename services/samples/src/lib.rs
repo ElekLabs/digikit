@@ -23,5 +23,6 @@ mod files;
 pub mod peakwin;
 pub mod pool;
 pub mod samples;
+pub mod table;
 mod tracks;
 mod writes;

@@ -121,3 +121,35 @@ fn the_row_reaches_the_object_through_the_owner_guard() {
     );
     dk_svc_stop();
 }
+
+#[test]
+fn the_status_export_answers_from_the_published_copy_while_the_owner_is_inside_a_call() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    dk_svc_start().expect("start");
+    // the copy as an earlier tick left it (the engine has no bound project on the host to make bits)
+    glue::DK_STATUS.with(&dkrt_svc_rt::ImportCore, |s| *s = 3);
+    let refused = DK_SVC_OWNER.refused();
+    // SAFETY: the export takes no pointer
+    let inside = DK_SVC_OWNER.run(None, |_| Some(unsafe { glue::dk_project_status() }));
+    assert_eq!(
+        inside,
+        Some(3),
+        "the MIDI task gets the bits while the UI task is in a call"
+    );
+    assert_eq!(
+        DK_SVC_OWNER.refused(),
+        refused,
+        "the export does not go through the guard"
+    );
+    // the tick publishes what the owner says
+    // SAFETY: as above
+    unsafe { glue::tick(core::ptr::null_mut()) };
+    assert_eq!(
+        unsafe { glue::dk_project_status() },
+        DK_SVC_OWNER.with(|p| p.status()).unwrap()
+    );
+    assert_eq!(unsafe { glue::dk_project_status() }, 0);
+    dk_svc_stop();
+    // SAFETY: as above
+    assert_eq!(unsafe { glue::dk_project_status() }, 0, "no service");
+}

@@ -70,6 +70,22 @@ Re-entry (every service):
   and its end reaches the owner as an event or not at all (`services/project`: `StoreJob`; `services/samples`: `PeakJob`).
 - A service file's wiring is checked by `dkrt_test_support::contract::row_is_guarded`: a part call through the file's row while a hook holds `DK_SVC_OWNER.with` is refused and counted.
 
+Shared tables across tasks (a call that must answer at once from any task):
+
+- The owner's guard refuses a call that arrives while another call of the service runs (`E_CONTEXT`, or the part's refusal). That is right for a call that needs `&mut` to the object. It is
+  wrong for an export that a module calls from the MIDI task or from a callback in the UI task and that has an answer ready: add an entry to a table and read it back. The guard
+  would refuse it exactly when the UI task is inside a tick or a window, which is when the MIDI task runs.
+- Such a table is not a field of the owner. It is a `Shared<T>` (`dkrt-svc-rt`, defined in `dkrt-abi`): a static of the service file next to `DK_SVC_OWNER`, and `with(core, |t| ..)` runs a
+  closure with interrupts masked (`CoreApi::irq_mask`), so no task or interrupt runs meanwhile and the one `&mut T` cannot overlap another. A nested `with` on the same cell panics.
+- A section is short and bounded: a fixed number of steps over fixed-size data (a scan of a small table, a copy of a path). No I/O, no call out, no allocation, no waiting. State the
+  longest section in the service's README. Heavy work stays in the owner and the job path, which read the table in one short section and write the result in another.
+- A call writes its result into the table at once (the status it leaves is what its result says, and what the next call reads: read your own write) and leaves a request for the owner.
+  The owner takes the requests at the start of its tick and applies them to its state machine, so the machine changes in the UI task at the place it always did. The owner publishes its
+  view (status, data of a finished entry) back into the table after its tick, except for an entry with a request waiting: the newer request wins.
+- A service file answers "no service" from such an export with `DK_SVC_OWNER.is_live()` (the cell has no object before `init` and after `fini`), as `with` answers `None`.
+- A single word is a smaller case: the owner publishes a copy (`services/project`: `DK_STATUS`, set at the end of each entry that can change it) and the export reads it in a section.
+- Examples: `services/samples/src/table.rs` (the pool table: `dk_sample_pool_add`, `_set`, `_clear`, `_status`, `_info`, `_path`) and `services/project` (`dk_project_status`).
+
 Steps for a new service:
 
 1. The owner file `src/<name>.rs`: private state, `Provider` (`start_in`, `detach`) and the other parts in one `impl` block each.
