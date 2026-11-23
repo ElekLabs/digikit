@@ -26,8 +26,8 @@ What goes where:
   (a call) or drop the event.
 - Named statics stay only where something reads them by symbol: `DKRT_SMP_RECORDS` and `DKRT_SMP_CONTROL` (the L2 addresses of the 16 records and 16 control sets of each client;
   read by the device tests of the shot machine). `Tracks::reserve` is the only writer; the logic reads the copies in `Writes`.
-- `Ticker::tick` runs in the early phase only. The adapter's `dkpool_tick` runs first and may call the pool events, which reach the owner through the cell again: nothing of the owner's
-  state is read across that call.
+- `Ticker::tick` runs in the early phase only. The adapter's `dkpool_tick` runs first and may call the pool events, which reach the owner through the cell again: this aliases the `&mut self` of `tick`
+  (the part functions run through the instance pointer, so the cell is not marked busy). It holds only because `tick` touches no state before that call; `tests/dsp.rs` covers the re-entry.
 - A module goes down through `DspPart::release`: its tracks are unbound without closing them in the DSP, the pool references are released, its peak window is stopped and its client
   slot is free. A write already in flight ends by itself.
 - A job on the queue (a peak window) holds a pointer into the owner, so the owner does not move while a job is pending; it lives in the cell.

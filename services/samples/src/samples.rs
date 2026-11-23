@@ -227,3 +227,6 @@ impl<C: CoreApi> Ticker<C> for Samples {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

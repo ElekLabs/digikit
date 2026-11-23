@@ -45,7 +45,7 @@ pub static mut DKRT_SMP_CONTROL: [u32; CLIENTS] = [0; CLIENTS];
 /// where it lives (a 35 kB state is never copied through the stack).
 pub(crate) struct Tracks {
     core: TrackCore,
-    /// Module record + 1 of the owner of each client slot (0: free), and its local id.
+    /// Module record + 1 of the owner of each client slot (0: free; the port replaced the `usize::MAX` marker, and a record index is small, so `rec + 1` cannot wrap), and its local id.
     owner: [usize; CLIENTS],
     local: [u32; CLIENTS],
     writes: Writes,
@@ -91,7 +91,7 @@ impl Tracks {
 
     /// Is a client slot free (checked by `dsp::admit` before it takes anything)?
     pub(crate) fn can_reserve(&self) -> bool {
-        self.owner.iter().any(|o| *o == 0)
+        self.owner.contains(&0)
     }
 
     /// A module's track table was found in its DSP section: `records` and `control` are the L2 byte addresses of its 16 records and 16
@@ -390,7 +390,7 @@ impl Tracks {
             return;
         }
         // Optional on its own: the adapter delivers completions and finds a stock reset here, before the runtime steps the tracks.
-        // SAFETY: the adapter's call (`dkpool_tick`); it may call `pool_done` and `pool_lost` of this owner, so nothing of the state is read across it.
+        // SAFETY: the adapter's call (`dkpool_tick`). It may call `pool_done` and `pool_lost` of this owner through the file's cell while this `&mut self` is live: an alias of the exclusive borrow. It is sound in practice only because nothing of the state is read or written before the call and every later access sees the state the callbacks left; keep this call first.
         unsafe { pool.tick() };
         // SAFETY: the core's link calls
         unsafe { self.writes.pump(core) };

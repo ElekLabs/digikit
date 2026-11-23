@@ -148,3 +148,35 @@ fn the_owner_made_in_a_dirty_slot_is_the_owner_made_by_new() {
     DspPart::<FakeCore>::release(&mut s, &core, 4);
     assert_eq!(admit(&mut s, &core, &job(Some(&b2))), Ok(()));
 }
+
+std::thread_local! {
+    /// The owner under test, for the adapter's tick to call back into it as the service file's event slots do through the cell.
+    static OWNER: std::cell::Cell<*mut Samples> = const { std::cell::Cell::new(std::ptr::null_mut()) };
+    static CORE: std::cell::Cell<*const FakeCore> = const { std::cell::Cell::new(std::ptr::null()) };
+}
+
+unsafe extern "C" fn losing_tick() {
+    // SAFETY: the test keeps both alive across the tick; it mirrors the slots `pool_done` and `pool_lost` of the service file
+    unsafe {
+        let s = &mut *OWNER.with(|o| o.get());
+        s.pool_done(9, 0);
+        s.pool_lost(&*CORE.with(|c| c.get()));
+    }
+}
+
+#[test]
+fn the_adapter_may_call_the_pool_events_from_inside_the_tick() {
+    let core = FakeCore::new();
+    let mut s = Box::new(Samples::new(Pool::new(Some(pool::PoolFns {
+        tick: losing_tick,
+        ..pool::refusing()
+    }))));
+    OWNER.with(|o| o.set(&mut *s as *mut Samples));
+    CORE.with(|c| c.set(&core as *const FakeCore));
+    Ticker::<FakeCore>::tick(&mut *s, &core, tick_phase::EARLY);
+    assert_eq!(core.calls().len(), 1, "the lost-pool event is logged once");
+    // the owner is intact after the re-entry: a table is still admitted and claimed
+    let table = bank(1);
+    claim(&mut s, &core, 4, &job(Some(&table)));
+    assert!(s.has_table(4));
+}

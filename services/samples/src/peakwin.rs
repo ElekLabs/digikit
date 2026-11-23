@@ -277,6 +277,18 @@ impl PeakWindows {
         }
     }
 
+    /// Test support: put the window of `client` in the Pending state as a started job would.
+    #[cfg(test)]
+    pub(crate) fn set_pending(&mut self, client: usize) {
+        self.win[client].state = State::Pending;
+    }
+
+    /// Test support: was the pending window of `client` stopped by a reset?
+    #[cfg(test)]
+    pub(crate) fn abandoned(&self, client: usize) -> bool {
+        self.win[client].abandon
+    }
+
     /// `sample_pool_peaks_window`, UI task.
     ///
     /// # Safety
