@@ -44,3 +44,15 @@ modules = ["core/dsp-link"]
 device = "dt2"
 firmware = "1.17"
 modules = ["core/fx"]
+
+# SETTINGS > DIGIKIT in the system package's menu (finding 28; the cards carry digikit/system.dksp): the tour of
+# runtime/apps/digikit-menu/tests/menu.toml walks ABOUT, MEMORY and MODULES on the real firmware.
+[[cell]]
+device = "dt2"
+firmware = "1.17"
+modules = ["core/digikit-menu"]
+
+[[cell]]
+device = "dn2"
+firmware = "1.12"
+modules = ["core/digikit-menu"]
