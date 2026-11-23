@@ -8,7 +8,7 @@
 // Area gate (`--base`, and `--gate` for the merge gate): the changed paths also name areas (tools/nx/area-paths.mjs: owners.toml and the
 // service directories, firmware declaration files by their users, device files), and the tests of those areas join the selection with the
 // fixed smoke set gate-device-smoke. Precise when the area is known, wide when it is not: when any changed path that reaches device tests
-// names no area (a shared module, the SDK, patchkit, owners.toml), every device test `affected` selects runs, and the gate prints the
+// names no area and is an input of any device or conformance test task as Nx resolves it (device-reach.mjs: a shared module, the SDK, patchkit, owners.toml, config, device data, bindings, image-module sources), every device test `affected` selects runs, and the gate prints the
 // path that forced it; a device file alone widens to the halves of its device. Conformance follows the same rule (a module's own
 // conformance on its changes; the loading and types areas, or a wide path: all). What `affected` selects and the gate skips is listed.
 import { spawnSync } from 'node:child_process';
@@ -16,10 +16,9 @@ import { mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AREAS, SERVICES } from './acceptance-tags.mjs';
-import { matchesGlob } from 'node:path';
 import { isTestSource } from './test-source.mjs';
 import { SHARED_PROJECTS } from './device-tests.mjs';
-import { NON_CELL_GLOBS, SHARED_INPUT_GLOBS } from './device-test-keys.mjs';
+import { reachingDeviceTests } from './device-reach.mjs';
 import { budget, startAtOnce, workCores } from './resources.mjs';
 import { closureFiles, testImportInputs } from './ts-imports.mjs';
 import { areaContext, areasOfPath } from './area-paths.mjs';
@@ -69,29 +68,16 @@ export const subjectFiles = (rec, root, changed, rootOf, subjects = [], skip = n
   return changed.filter((file) => files.includes(file) || roots.some((r) => isSource(file, r)));
 };
 
-// Why a changed file is a shared input of every device test, or '' when it is not: the source of the projects every device task
-// depends on (patchkit, the daemons, the runtime image), or a file the device-test keys hold for every test.
-export const sharedInput = (file, projects) => {
-  for (const name of SHARED_PROJECTS) {
-    const root = projects.find((p) => p.name === name)?.root;
-    if (root && isSource(file, root)) return `the source of ${name}`;
-  }
-  if (NON_CELL_GLOBS.some((g) => matchesGlob(file, g))) return '';
-  const glob = SHARED_INPUT_GLOBS.find((g) => matchesGlob(file, g));
-  return glob ? `the shared key input ${glob}` : '';
-};
-
 // `projects`: [{ name, root, subjects, targets: string[], metadata }] (the nodes of the Nx project graph).
 // `opts.changed`: changed files relative to the repository root: records whose subject changed, or whose test files import a changed
 // file (`opts.closureOf(projectRoot, file)`: the import closure of a test file, repository-relative), join the tag selection.
-// `opts.sharedOf(file)`: why a file is a shared input (see sharedInput), or ''.
-// Returns { tests: [{ project, file, tags, changed, dsp, targets }], unknown, shared: [{ file, why }] } where `targets` are the leaf targets of
+// Returns { tests: [{ project, file, tags, changed, dsp, targets }], unknown, covered } where `targets` are the leaf targets of
 // the file, one per device it runs on: `test-device--<file>--<dev>`, or `test-device--<dev>` for a project with one device test file.
-// `shared` lists the changed files that no record's subject covers (or always, for the projects of every device task).
+// `covered` is the set of changed files a record's subject, sources or test imports cover.
 // `opts.excludeSubjects`: project names that are no subject of a record (the area gate maps the paths of those projects by area:
 // tools/nx/area-paths.mjs), so a change below `core/runtime` selects no record through a test project's dependency on it.
 export const resolveSubset = (tags, projects, opts = {}) => {
-  const { changed = [], closureOf, sharedOf } = opts;
+  const { changed = [], closureOf } = opts;
   const skip = new Set(opts.excludeSubjects ?? []);
   const wanted = new Set(tags);
   const found = new Set();
@@ -117,6 +103,7 @@ export const resolveSubset = (tags, projects, opts = {}) => {
             tsChanged.filter((c) => closure.has(c)).forEach((c) => reached.add(c));
           }
           viaFiles = [...reached];
+          viaFiles.forEach((f) => covered.add(f));
           byPath = viaFiles.length > 0;
         }
       }
@@ -132,12 +119,7 @@ export const resolveSubset = (tags, projects, opts = {}) => {
       }
     }
   }
-  const shared = [];
-  for (const file of changed) {
-    const why = sharedOf?.(file) ?? '';
-    if (why && (why.startsWith('the source of') || !covered.has(file))) shared.push({ file, why });
-  }
-  return { tests, unknown: tags.filter((tag) => !found.has(tag)), shared };
+  return { tests, unknown: tags.filter((tag) => !found.has(tag)), covered };
 };
 
 // The `--why` line of a selected test: the given tags it has, and the changed files that selected it (`--base`).
@@ -262,11 +244,14 @@ export const halvesOfDevices = (halves, devices) =>
 // Returns what `resolveSubset` returns, with `mapped` ([{ file, areas }]) and `wide`: [{ file, why, devices? }], the changed paths that
 // reach device tests and name no area (`devices`: a device file, which widens to the halves of that device only), and `wideDevices`:
 // null when the selection is not wide or a path widens it for every device, else the devices to widen to; `wideAll` says the selection
-// is wide. A shared input (patchkit, the runtime, the SDK) counts as reaching device tests; a path no test reaches is ignored.
-export const areaSelection = (tags, projects, { changed, closureOf, ctx }) => {
+// is wide. `reaches(files)` (device-reach.mjs) returns the files that are inputs of a device or conformance task; a path no such task reads is ignored.
+export const areaSelection = (tags, projects, { changed, closureOf, ctx, reaches }) => {
+  if (!reaches)
+    throw new Error('areaSelection: `reaches` is required (device-reach.mjs): no default may narrow silently');
   const mapped = [];
   const wide = [];
   const derived = new Set();
+  const unnamed = [];
   for (const file of changed) {
     const found = areasOfPath(file, ctx);
     if (found.areas) {
@@ -274,13 +259,16 @@ export const areaSelection = (tags, projects, { changed, closureOf, ctx }) => {
       found.areas.forEach((a) => derived.add(a));
     } else if (found.devices)
       wide.push({ file, why: `device file of ${found.devices.join(' ')}`, devices: found.devices });
-    else if (found.unknown) {
-      const reach = sharedInput(file, projects);
-      if (reach) wide.push({ file, why: `${found.unknown}; ${reach}` });
-    }
+    else if (found.unknown) unnamed.push({ file, why: found.unknown });
   }
   const all = [...new Set([...tags, ...derived])];
   const got = resolveSubset(all, projects, { changed, closureOf, excludeSubjects: SHARED_PROJECTS });
+  // A path no area names is wide when it is an input of any device or conformance test task; a path a record's subject, sources or
+  // test imports cover selects that record instead, and a path no such task reads is ignored.
+  const open = unnamed.filter((u) => !got.covered.has(u.file));
+  const reached = new Set(reaches(open.map((u) => u.file)));
+  for (const u of open)
+    if (reached.has(u.file)) wide.push({ file: u.file, why: `${u.why}; an input of the device or conformance tests` });
   const wideAll = wide.length > 0;
   const wideDevices = wideAll && wide.every((w) => w.devices) ? [...new Set(wide.flatMap((w) => w.devices))] : null;
   // A derived tag without a record is no error (the area has no device test); a tag the caller gave is.
@@ -369,6 +357,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     selection = areaSelection(tags, projects, {
       changed,
       ctx: areaContext(root, projects),
+      reaches: (files) => reachingDeviceTests(root, files),
       closureOf: (projectRoot, file) => closureFiles(importInputs, `${projectRoot}/${file}`),
     });
     selection.changed = changed;

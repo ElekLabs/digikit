@@ -1,11 +1,9 @@
 import { expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { globSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { parse } from 'smol-toml';
+import { join } from 'node:path';
 import { tagProblem } from '../acceptance-tags.mjs';
-import { nonCellGlobs } from '../device-files.mjs';
 import { parseOwners } from '../area-paths.mjs';
 import { TIERS, deviceByArea } from '../gate.mjs';
 import {
@@ -22,7 +20,6 @@ import {
   projectsWithTarget,
   resolveSubset,
   selectionPairs,
-  sharedInput,
   skipText,
   skippedHalves,
   smokeHalves,
@@ -158,22 +155,6 @@ it('errors on a module id that is no project', () => {
   expect(() => resolveSubset([], bad, { changed: ['x'] })).toThrow(/no\/such .* is no Nx project/);
 });
 
-it('reports a shared input', () => {
-  expect(sharedInput('sdk/sdk.toml', graph)).toMatch(/shared key input/);
-  expect(sharedInput('packages/patchkit/src/main.rs', graph)).toBe('the source of patchkit');
-  expect(sharedInput('modules/c/src/x.c', graph)).toBe('');
-  // the files of a device without an acceptance cell are no shared input; those of a device with one are
-  const nonCell = nonCellGlobs().find((g) => /^devices\/[^*/]+\.toml$/.test(g));
-  if (!nonCell) throw new Error('no device without an acceptance cell in devices/*.toml');
-  const repoRoot = resolve(import.meta.dirname, '../../..');
-  const cell = globSync('devices/*.toml', { cwd: repoRoot })
-    .sort()
-    .find((f) => parse(readFileSync(join(repoRoot, f), 'utf8')).acceptance?.ready_dir);
-  if (!cell) throw new Error('no device with an acceptance cell in devices/*.toml');
-  expect(sharedInput(nonCell, graph)).toBe('');
-  expect(sharedInput(cell, graph)).not.toBe('');
-});
-
 it('counts an untracked file as changed', () => {
   const dir = mkdtempSync(join(tmpdir(), 'subset-git-'));
   try {
@@ -261,8 +242,15 @@ const areaCtx = {
   crateOf: (file: string) =>
     file.startsWith('runtime/core/src/rs/') ? { name: 'dkrt', dir: 'runtime/core/src/rs' } : undefined,
 };
+// A stand-in for Nx's answer (device-reach.mjs): these paths are inputs of device tests, the others are not.
+const fakeReaches = (files: string[]) =>
+  files.filter(
+    (f) =>
+      /^(packages\/patchkit\/|sdk\/|runtime\/core\/owners|h\/)/.test(f) ||
+      /^runtime\/core\/src\/rs\/src\/(newmod|entry)\.rs$/.test(f),
+  );
 const selected = (changed: string[], tags: string[] = [], closureOf?: (r: string, f: string) => string[]) => {
-  const got = areaSelection(tags, areaGraph, { changed, ctx: areaCtx, closureOf });
+  const got = areaSelection(tags, areaGraph, { changed, ctx: areaCtx, closureOf, reaches: fakeReaches });
   return {
     got,
     pairs: selectionPairs(got.tests, areaGraph, [DEVICE_SMOKE]).map((p) => `${p.project}:${p.target}`),
@@ -355,7 +343,11 @@ it('adds the tests of the given tags to the tests of the changed paths', () => {
   expect(selected([], ['S:fx']).got.unknown).toEqual(['S:fx']);
   // a tag no record carries that a path derives is no error
   expect(
-    areaSelection([], [areaGraph[3]!], { changed: ['runtime/core/src/rs/src/boot.rs'], ctx: areaCtx }).unknown,
+    areaSelection([], [areaGraph[3]!], {
+      changed: ['runtime/core/src/rs/src/boot.rs'],
+      ctx: areaCtx,
+      reaches: fakeReaches,
+    }).unknown,
   ).toEqual([]);
 });
 
@@ -417,4 +409,38 @@ it('makes the merge tier select device tests by area unless all affected is aske
   expect(deviceByArea(TIERS.merge, true)).toBe(false);
   expect(deviceByArea(TIERS.full, false)).toBe(false);
   expect(deviceByArea(TIERS.changed, false)).toBe(false);
+});
+
+it('refuses to select without a reach function: no default narrows silently', () => {
+  expect(() => areaSelection([], areaGraph, { changed: ['x'], ctx: areaCtx } as never)).toThrow(/reaches/);
+});
+
+it('selects the record a path is listed in `sources` of, and does not go wide for it', () => {
+  const graph = [
+    {
+      ...project(
+        'core/s',
+        [`test-device--${d1}`],
+        [{ files: ['tests/s.device.test.ts'], tags: ['C:state'], sources: ['tools/s/input.txt'] }],
+      ),
+      root: 'modules/s',
+    },
+  ];
+  const got = areaSelection([], graph, {
+    changed: ['tools/s/input.txt'],
+    ctx: areaCtx,
+    reaches: () => ['tools/s/input.txt'],
+  });
+  expect(got.wideAll).toBe(false);
+  expect(got.tests.map((t: { project: string }) => t.project)).toEqual(['core/s']);
+});
+
+it('asks reaches only about paths no area and no record covers', () => {
+  const asked: string[][] = [];
+  areaSelection([], areaGraph, {
+    changed: ['runtime/core/src/rs/src/boot.rs', 'modules/m/src/a.c', 'docs/x.md'],
+    ctx: areaCtx,
+    reaches: (f: string[]) => (asked.push(f), []),
+  });
+  expect(asked).toEqual([['docs/x.md']]);
 });
