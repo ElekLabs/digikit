@@ -61,14 +61,96 @@ NX_SHOW_PREFIX = ["pnpm", "nx:pilot", "show"]
 NX_SHOW_SUBCOMMANDS = {"project", "projects", "target"}
 PROFILES = {"reviewer", "architect"}
 
+# Long options that run programs or write files. git accepts any unambiguous prefix of a long option, so a word that
+# abbreviates one of these is refused too.
+FORBIDDEN_LONG = (
+    "--ext-diff",
+    "--textconv",
+    "--no-index",
+    "--output",
+    "--paginate",
+    "--open-files-in-pager",
+    "--exec-path",
+)
+
+# git grep is checked against a positive allowlist: short flags (also clustered), flags with a value, long flags.
+GREP_SHORT = set("nilwLcEFPhHvIoz")
+GREP_VALUE_SHORT = {"-e", "-f", "-A", "-B", "-C", "-m"}
+GREP_LONG = {
+    "--line-number",
+    "--ignore-case",
+    "--word-regexp",
+    "--files-with-matches",
+    "--name-only",
+    "--files-without-match",
+    "--count",
+    "--extended-regexp",
+    "--basic-regexp",
+    "--fixed-strings",
+    "--perl-regexp",
+    "--invert-match",
+    "--no-color",
+    "--heading",
+    "--break",
+    "--full-name",
+    "--null",
+    "--column",
+    "--only-matching",
+    "--cached",
+    "--untracked",
+    "--and",
+    "--or",
+    "--not",
+    "--all-match",
+    "--text",
+    "--max-depth",
+    "--context",
+    "--after-context",
+    "--before-context",
+    "--max-count",
+    "--function-context",
+    "--show-function",
+}
+
+
+def abbreviates_forbidden(word: str) -> bool:
+    if not word.startswith("--") or len(word) < 4:
+        return False
+    name = word.split("=", 1)[0]
+    return any(opt.startswith(name) for opt in FORBIDDEN_LONG)
+
+
+def check_grep(args: list[str]) -> None:
+    index = 0
+    while index < len(args):
+        word = args[index]
+        if word == "--":
+            return
+        if not word.startswith("-") or word == "-":
+            index += 1
+            continue
+        if word in GREP_VALUE_SHORT:
+            index += 2
+            continue
+        if re.fullmatch(r"-[ABCm]\d+", word):
+            index += 1
+            continue
+        if word.startswith("--"):
+            if word.split("=", 1)[0] not in GREP_LONG:
+                deny(f"git grep option {word} is not on the allowlist")
+            index += 1
+            continue
+        if not set(word[1:]) <= GREP_SHORT:
+            deny(f"git grep option {word} is not on the allowlist")
+        index += 1
+
+
 FORBIDDEN_ARGUMENTS = {
     "--ext-diff",
     "--no-index",
     "--paginate",
     "--textconv",
     "-p",
-    # git grep: runs a program on the matches
-    "-O",
 }
 
 
@@ -154,7 +236,12 @@ def main() -> None:
     if index >= len(words) or words[index] not in ALLOWED_SUBCOMMANDS:
         deny(f"Git subcommand is not on the {PROFILE} allowlist")
 
+    if words[index] == "grep":
+        check_grep(words[index + 1 :])
+
     for word in words[index + 1 :]:
+        if abbreviates_forbidden(word):
+            deny(f"{word} is (an abbreviation of) a forbidden option")
         if word in FORBIDDEN_ARGUMENTS:
             deny(f"{word} is not allowed")
         if word == "-c" or word.startswith("-c="):
