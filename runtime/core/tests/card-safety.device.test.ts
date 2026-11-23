@@ -61,7 +61,7 @@ cardRigs(
     dsp: 'zero',
     uploads: true,
     relaxFs: true, // the card carries the firmware's own writes: no filesystem check on the next boot
-    roots: [...RT, 'core/ui'],
+    roots: RT,
     symbols: CARD_SYMBOLS,
   },
   (h) => {
@@ -215,7 +215,7 @@ cardRigs(
     relaxFs: true,
     env: { DIGI_CARD_IDENTITY: 'small' },
     uploads: true,
-    roots: [...RT, 'core/ui'],
+    roots: RT,
     symbols: CARD_SYMBOLS,
   },
   (h) => {
