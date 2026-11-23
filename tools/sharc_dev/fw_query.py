@@ -6,14 +6,12 @@ import hashlib
 import json
 import os
 import re
-import sqlite3
 import tomllib
 from contextlib import closing
 from functools import cached_property
 from typing import Any
 
 from tools.firmware.query_db import (
-    ATLAS_DIR,
     ROOT,
     SHARC_DIR,
     FwError,
@@ -95,19 +93,9 @@ class Sharc:
 
     @cached_property
     def atlas_roles(self) -> dict[int, str]:
-        filename = os.path.join(ATLAS_DIR, self.image + "-dsp.sqlite")
-        if not os.path.isfile(filename):
+        if not _has(self.db, "function_index"):
             return {}
-        with closing(open_ro(filename)) as db:
-            if not _has(db, "function_index_meta"):
-                return {}
-            stamp = dict(db.execute("SELECT key, value FROM function_index_meta"))
-            if any(
-                stamp.get(k) != self.meta.get(k)
-                for k in ("image_sha256", "build_input_sha256", "min_depth", "blocks")
-            ):
-                return {}
-            return dict(db.execute("SELECT addr, inferred_role FROM function_index"))
+        return dict(self.db.execute("SELECT addr, inferred_role FROM function_index"))
 
     def func_row(self, sw: int) -> tuple[Any, ...] | None:
         return self.db.execute(
@@ -137,6 +125,17 @@ class Sharc:
     @cached_property
     def anchors(self) -> dict[int, list[tuple[str, int, str, str]]]:
         """Declared names and annotated sites, grouped by containing function."""
+        if _has(self.db, "function_anchors"):
+            grouped: dict[int, list[tuple[str, int, str, str]]] = {}
+            for owner, site, name, mark, doc in self.db.execute(
+                "SELECT function_sw, site_sw, name, mark, description FROM function_anchors "
+                "ORDER BY function_sw, site_sw, name"
+            ):
+                grouped.setdefault(owner, []).append((name, site, mark, doc))
+            return grouped
+        return self.declared_anchors()
+
+    def declared_anchors(self) -> dict[int, list[tuple[str, int, str, str]]]:
         docs = {
             a["name"]: a.get("doc") or ""
             for a in load_reference()
@@ -161,33 +160,43 @@ class Sharc:
             for name, sw, _mark, _doc in group
         }
 
-    def function_index(self) -> list[tuple[int, int, str, str, str, str, str, str]]:
-        """One row per recovered function, including unnamed entries."""
-        notes = (
-            {
-                sw: (role, summary, confidence)
-                for sw, role, summary, confidence in self.notes.execute(
-                    "SELECT function_sw, role, summary, confidence FROM notes WHERE image=?",
+    def note_records(self) -> dict[int, tuple[Any, ...]]:
+        """Local authoring notes take precedence over the last published snapshot."""
+        rows = {}
+        for db, table in ((self.db, "function_notes"), (self.notes, "notes")):
+            if db is not None and _has(db, table):
+                for row in db.execute(
+                    f"SELECT function_sw, role, summary, reads, writes, confidence, evidence, author, created "
+                    f"FROM {table} WHERE image=?",
                     (self.image,),
-                )
-            }
-            if self.notes is not None and _has(self.notes, "notes")
-            else {}
-        )
+                ):
+                    rows[row[0]] = row
+        return rows
+
+    def function_index(
+        self, anchors: dict[int, list[tuple[str, int, str, str]]] | None = None
+    ) -> list[tuple[int, int, str, str, str, str, str, str]]:
+        """One row per recovered function, including unnamed entries."""
+        if anchors is None:
+            anchors = self.anchors
+        notes = self.note_records()
         rows = []
         for sw, end, name, label in self.db.execute(
             "SELECT entry_sw, end_sw, name, label FROM functions WHERE image=? ORDER BY entry_sw",
             (self.image,),
         ):
-            role, summary, confidence = notes.get(sw, ("", "", ""))
-            anchors = ", ".join(a[0] for a in self.anchors.get(sw, []))
+            note = notes.get(sw)
+            role, summary, confidence = (
+                (note[1], note[2], note[5]) if note else ("", "", "")
+            )
+            names = ", ".join(a[0] for a in anchors.get(sw, []))
             rows.append(
                 (
                     sw,
                     end,
                     name,
                     label or "",
-                    anchors,
+                    names,
                     role or "",
                     summary or "",
                     confidence or "",
@@ -195,17 +204,13 @@ class Sharc:
             )
         return rows
 
+    @cached_property
+    def _note_records(self) -> dict[int, tuple[Any, ...]]:
+        return self.note_records()
+
     def note(self, entry: int) -> tuple[str, str] | None:
-        if self.notes is None:
-            return None
-        try:
-            row = self.notes.execute(
-                "SELECT role, summary FROM notes WHERE image=? AND function_sw=?",
-                (self.image, entry),
-            ).fetchone()
-        except sqlite3.Error:
-            return None
-        return row
+        row = self._note_records.get(entry)
+        return (row[1], row[2]) if row is not None else None
 
     def label(self, entry: int) -> str:
         row = self.db.execute(
@@ -947,3 +952,17 @@ def cmd_search(img: Sharc, term: str, where: str | None, cap: int) -> list[str]:
     if "decomp" in parts:
         out.append("SHARC decompiled C unavailable; search with --in disasm")
     return out
+
+
+def build_images(image: str, other: str) -> None:
+    from tools.sharc_dev import sharc_catalog, sharcdb
+
+    for name in (image, other):
+        blob = os.path.join(ROOT, "out", "sections", name, "section_7_BLOB.bin")
+        if not os.path.isfile(blob):
+            raise FwError(f"no SHARC blob for {name}: expected {blob}")
+        sharcdb.build_database(
+            blob, os.path.join(SHARC_DIR, name + ".sqlite"), name=name
+        )
+    if sharc_catalog.catalog(image, other):
+        raise FwError("SHARC catalog build failed")

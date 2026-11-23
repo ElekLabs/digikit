@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import re
 import sqlite3
-import sys
 from collections.abc import Sequence
+from contextlib import closing
 from typing import Any
 
 from tools.firmware.query_db import (
@@ -131,16 +131,28 @@ class CF:
 
     def fts(self) -> sqlite3.Connection:
         if self._fts is None:
-            from tools.coldfire import cfdb
+            if _has(self.db, "fts_names"):
+                self._fts = self.db
+            else:
+                from tools.coldfire import cfdb
 
-            path = cfdb.fts_path(self.path)
-            if not os.path.exists(path):
-                print("# building full-text index (one time)", file=sys.stderr)
-                cfdb.build_fts(self.path)
-            self._fts = open_ro(path)
+                path = cfdb.fts_path(self.path)
+                if not os.path.isfile(path):
+                    raise FwError(
+                        f"missing search index; run tools.coldfire.cfdb fts {self.db_name}"
+                    )
+                self._fts = open_ro(path)
         return self._fts
 
     def read_dump(self, rel: str | None) -> str | None:
+        if not rel:
+            return None
+        if _has(self.db, "function_text"):
+            row = self.db.execute(
+                "SELECT body FROM function_text WHERE image=? AND path=?",
+                (self.db_name, rel),
+            ).fetchone()
+            return row[0] if row else None
         dump = self.meta.get("ghidra_dump_dir")
         if not rel or not dump:
             return None
@@ -492,8 +504,9 @@ def cmd_search(img: CF, term: str, where: str, cap: int) -> list[str]:
                         line = ln
                         break
             out.append("  %s : %s" % (img.label(rowid), clip(line, 70)))
-    if "atlas" in parts and os.path.exists(
-        os.path.join(ATLAS_DIR, img.image + ".sqlite")
+    if "atlas" in parts and (
+        _has(img.db, "glossary")
+        or os.path.isfile(os.path.join(ATLAS_DIR, img.image + ".sqlite"))
     ):
         out.append("atlas:")
         out.extend("  " + ln for ln in cmd_atlas(img.image, term, 8))
@@ -518,8 +531,20 @@ def cmd_atlas(image: str, term: str, per: int = 15) -> list[str]:
     return out
 
 
+def atlas_path(image: str, table: str = "glossary") -> str:
+    """Prefer the tables bundled into cfdb, with a fallback for old exports."""
+    short = short_image(image)
+    canonical = os.path.join(CF_DIR, short + "-emac.sqlite")
+    if os.path.isfile(canonical):
+        with closing(open_ro(canonical)) as db:
+            if _has(db, table):
+                return canonical
+    legacy = os.path.join(ATLAS_DIR, short + ".sqlite")
+    return legacy if os.path.isfile(legacy) else canonical
+
+
 def _atlas_one(image: str, term: str, per: int) -> list[str]:
-    path = os.path.join(ATLAS_DIR, short_image(image) + ".sqlite")
+    path = atlas_path(image)
     if not os.path.exists(path):
         raise FwError(
             "no atlas for %s: run uv run python -m tools.coldfire.atlas build %s"
@@ -636,7 +661,7 @@ def anchor_addrs(entries: Sequence[dict[str, Any]], image: str) -> dict[int, str
 
 
 def catalog_row(image: str, entry: int) -> dict[str, Any] | None:
-    path = os.path.join(ATLAS_DIR, short_image(image) + ".sqlite")
+    path = atlas_path(image, "catalog")
     if not os.path.exists(path):
         return None
     con = open_ro(path)
@@ -871,3 +896,18 @@ def cmd_dossier(
                 )
             out.extend("  " + ln for ln in _caller_lines(other, pair, 2, 4))
     return out
+
+
+def build_images(image: str, other: str) -> None:
+    from tools.coldfire import atlas, cfdb
+
+    for short in (image, other):
+        name = short + "-emac"
+        dump = os.path.join(ROOT, "out", "ghidra", name)
+        if not os.path.isfile(os.path.join(dump, "manifest.json")):
+            raise FwError(f"no Ghidra dump for {short}: expected {dump}")
+        db_path = os.path.join(CF_DIR, name + ".sqlite")
+        cfdb.build_database(dump, db_path, name=name)
+        atlas.build(short)
+    if atlas.catalog(image, other):
+        raise FwError("ColdFire catalog build failed")

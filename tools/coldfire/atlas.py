@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""atlas.py: a per-firmware semantic atlas, out/atlas/<image>.sqlite.
+"""atlas.py: a per-firmware semantic atlas stored in cfdb.
 
     uv run python -m tools.coldfire.atlas build dt2-1.17 [dn2-1.12 ...]
     uv run python -m tools.coldfire.fw atlas machine -i dt2-1.17
@@ -48,12 +48,15 @@ import sqlite3
 import sys
 import time
 from collections.abc import Iterable, Sequence
+from contextlib import closing
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, cast
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
-from tools.coldfire import fw  # noqa: E402
+from tools.coldfire import fw, fw_query  # noqa: E402
 from tools.firmware import catalog as shared  # noqa: E402
 from tools.firmware import config, device  # noqa: E402
 from tools.firmware.catalog import (  # noqa: E402
@@ -859,8 +862,61 @@ def insert(con: sqlite3.Connection, table: str, rows: list[dict[str, Any]]) -> N
     )
 
 
-def build(image: str, out_dir: str = fw.ATLAS_DIR) -> dict[str, int]:
+ATLAS_TABLES = (
+    "descriptors",
+    "params",
+    "classes",
+    "vfuncs",
+    "ui_strings",
+    "structs",
+    "manual",
+    "glossary",
+)
+
+
+def publish_atlas(image: str, source: str) -> None:
+    """Install the generated atlas in the matching ColdFire database."""
+    name = image + "-emac"
+    path = os.path.join(fw.CF_DIR, name + ".sqlite")
+    with closing(sqlite3.connect(path, uri=True)) as db, db:
+        db.execute(
+            "ATTACH DATABASE ? AS src", (Path(source).resolve().as_uri() + "?mode=ro",)
+        )
+        db.execute("BEGIN IMMEDIATE")
+        actual = db.execute(
+            "SELECT value FROM main.meta WHERE image=? AND key='image_sha256'", (name,)
+        ).fetchone()
+        expected = db.execute(
+            "SELECT value FROM src.meta WHERE key='image_sha256'"
+        ).fetchone()
+        if not actual or actual != expected:
+            raise ValueError(f"{image}: ColdFire database changed during atlas build")
+        db.execute("DROP VIEW IF EXISTS main.machines")
+        for table in ATLAS_TABLES:
+            db.execute(f"DROP TABLE IF EXISTS main.{table}")
+            ddl = db.execute(
+                "SELECT sql FROM src.sqlite_schema WHERE type='table' AND name=?",
+                (table,),
+            ).fetchone()[0]
+            db.execute(ddl)
+            db.execute(f"INSERT INTO {table} SELECT * FROM src.{table}")
+        for (ddl,) in db.execute(
+            "SELECT sql FROM src.sqlite_schema WHERE sql IS NOT NULL AND type IN ('index','view')"
+        ).fetchall():
+            db.execute(ddl)
+        db.execute("DROP TABLE IF EXISTS atlas_meta")
+        db.execute("CREATE TABLE atlas_meta (key TEXT PRIMARY KEY, value TEXT)")
+        db.execute("INSERT INTO atlas_meta SELECT * FROM src.meta")
+
+
+def build(image: str, out_dir: str | None = None) -> dict[str, int]:
+    """Build the atlas in cfdb, or export a separate SQLite file when requested."""
     image = fw.short_image(image)
+    if out_dir is None:
+        with TemporaryDirectory() as work:
+            counts = build(image, work)
+            publish_atlas(image, os.path.join(work, image + ".sqlite"))
+            return counts
     t0 = time.time()
     img = fw.CF(image)
     section = os.path.join(ROOT, "out", "sections", image, "section_3_MAIN_OS.bin")
@@ -1074,7 +1130,7 @@ def collect_catalog(image: str) -> CatImg:
     old = CATALOG_OLD.get(image)
     im = image + "-emac"
     db = fw.open_ro(os.path.join(fw.CF_DIR, im + ".sqlite"))
-    at = fw.open_ro(os.path.join(fw.ATLAS_DIR, image + ".sqlite"))
+    at = fw.open_ro(fw_query.atlas_path(image))
     d = CatImg()
     d.fn = {
         e: (n, sz, end)
@@ -1272,9 +1328,11 @@ def catalog_rows(
     return rows
 
 
-def write_catalog(image: str, rows: list[dict[str, Any]], out_dir: str) -> None:
+def write_catalog(
+    image: str, rows: list[dict[str, Any]], out_dir: str, db: sqlite3.Connection
+) -> None:
     shared.write_catalog(
-        os.path.join(out_dir, image + ".sqlite"),
+        db,
         os.path.join(out_dir, image + "-catalog.tsv"),
         rows,
         CATALOG_COLUMNS,
@@ -1286,13 +1344,14 @@ def write_catalog_groups(
     rows: list[dict[str, Any]],
     edges: dict[tuple[int, int], int],
     out_dir: str,
+    db: sqlite3.Connection,
 ) -> int:
     """Write table catalog_groups, the groups TSV and the graph JSON; return the group count."""
     return shared.write_catalog_groups(
         image,
         rows,
         edges,
-        os.path.join(out_dir, image + ".sqlite"),
+        db,
         os.path.join(out_dir, image + "-catalog-groups.tsv"),
         os.path.join(out_dir, image + "-catalog-graph.json"),
     )
@@ -1303,19 +1362,42 @@ def catalog(image: str, other_image: str, out_dir: str = fw.ATLAS_DIR) -> int:
 
     names = [fw.short_image(image), fw.short_image(other_image)]
     for n in names:
-        if not os.path.exists(os.path.join(out_dir, n + ".sqlite")):
+        path = fw_query.atlas_path(n)
+        if not os.path.isfile(path):
             print("run atlas build %s first" % n)
             return 2
+        with closing(fw.open_ro(path)) as db:
+            if (
+                db.execute(
+                    "SELECT 1 FROM sqlite_schema WHERE name='glossary'"
+                ).fetchone()
+                is None
+            ):
+                print("run atlas build %s first" % n)
+                return 2
+    os.makedirs(out_dir, exist_ok=True)
     mt = cfmatch.load_pair(names[0] + "-emac", names[1] + "-emac")
     fwd = {s: (t, mt.method[s]) for s, t in mt.m.items()}
     rev = {t: (s, mt.method[s]) for s, t in mt.m.items()}
     a, b = collect_catalog(names[0]), collect_catalog(names[1])
     for n, d, o, pair in ((names[0], a, b, fwd), (names[1], b, a, rev)):
         rows = catalog_rows(d, o, pair)
-        write_catalog(n, rows, out_dir)
-        n_groups = write_catalog_groups(
-            n, rows, group_edges([r["addr"] for r in rows], d.callee_n), out_dir
-        )
+        with (
+            closing(sqlite3.connect(os.path.join(fw.CF_DIR, n + "-emac.sqlite"))) as db,
+            db,
+        ):
+            db.execute("BEGIN IMMEDIATE")
+            peer = names[1] if n == names[0] else names[0]
+            cfmatch.save_matches(
+                db,
+                n + "-emac",
+                peer + "-emac",
+                ((target, source, method) for source, (target, method) in pair.items()),
+            )
+            write_catalog(n, rows, out_dir, db)
+            n_groups = write_catalog_groups(
+                n, rows, group_edges([r["addr"] for r in rows], d.callee_n), out_dir, db
+            )
         counts: dict[str, int] = {}
         for r in rows:
             for t in r["tags"].split(","):
@@ -1337,9 +1419,11 @@ def catalog(image: str, other_image: str, out_dir: str = fw.ATLAS_DIR) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    b = sub.add_parser("build", help="build out/atlas/<image>.sqlite")
+    b = sub.add_parser(
+        "build", help="embed the semantic atlas in the ColdFire database"
+    )
     b.add_argument("images", nargs="+")
-    b.add_argument("--out-dir", default=fw.ATLAS_DIR)
+    b.add_argument("--out-dir", help="export standalone atlas files to a directory")
     c = sub.add_parser(
         "catalog", help="candidate anchor functions of IMAGE, paired with OTHER"
     )

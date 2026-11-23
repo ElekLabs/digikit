@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""sharc_catalog.py: candidate anchor functions of the DSP image, out/atlas/<image>-dsp.sqlite.
+"""sharc_catalog.py: candidate anchor functions in out/sharcdb/<image>.sqlite.
 
     uv run python -m tools.sharc_dev.sharc_catalog dt2-1.17 dn2-1.12
     uv run python -m tools.sharc_dev.sharc_catalog dt2-1.17 dn2-1.12 --profile dt2-1.17=out/prof.txt
@@ -35,7 +35,13 @@ from tools.firmware.catalog import (
     louvain_groups,
     suggest_rule,
 )
-from tools.firmware.query_db import ATLAS_DIR, ROOT, SHARC_DIR, short_image
+from tools.firmware.query_db import (
+    ATLAS_DIR,
+    FUNCTION_NAMES_SQL,
+    ROOT,
+    SHARC_DIR,
+    short_image,
+)
 from tools.sharc_dev.fw_query import Sharc, port_anchors
 from tools.sharc_dev.fw_query import anchor_sw as anchor_sw
 
@@ -480,10 +486,13 @@ def dsp_rows(
 
 
 def write_dsp_catalog(
-    image: str, rows: list[dict[str, Any]], d: DspImg, out_dir: str
+    image: str,
+    rows: list[dict[str, Any]],
+    d: DspImg,
+    out_dir: str,
+    db: sqlite3.Connection,
 ) -> int:
     """Write tables, TSV and graph JSON of `image`; return the group count."""
-    db = os.path.join(out_dir, image + "-dsp.sqlite")
     shared.write_catalog(
         db,
         os.path.join(out_dir, image + "-dsp-catalog.tsv"),
@@ -509,13 +518,34 @@ def write_function_index(
     other: str,
     d: DspImg,
     pair: dict[int, tuple[int, str]],
-    out_dir: str,
+    db: sqlite3.Connection,
 ) -> None:
-    """Write the full inventory beside the curated anchor catalogue."""
-    filename = os.path.join(out_dir, image + "-dsp.sqlite")
+    """Publish the full inventory and annotations in the SHARC database."""
     depth = dsp_depths(image, d)
-    with closing(Sharc(image)) as src, closing(sqlite3.connect(filename)) as db, db:
-        db.execute("BEGIN")
+    with closing(Sharc(image)) as src:
+        anchors_by_entry = src.declared_anchors()
+        notes = src.note_records()
+        db.execute(FUNCTION_NAMES_SQL)
+        db.execute("DELETE FROM function_names WHERE image=?", (image,))
+        db.executemany(
+            "INSERT INTO function_names VALUES (?,?,?,?)",
+            (
+                (image, entry, name, "declared")
+                for entry, anchors in anchors_by_entry.items()
+                for name, site, _, _ in anchors
+                if site == entry and ".fn." in name
+            ),
+        )
+        db.execute("DROP TABLE IF EXISTS function_notes")
+        db.execute("""CREATE TABLE function_notes (
+            image TEXT, function_sw INTEGER, role TEXT, summary TEXT, reads TEXT,
+            writes TEXT, confidence TEXT, evidence TEXT, author TEXT, created TEXT,
+            PRIMARY KEY (image, function_sw)
+        )""")
+        db.executemany(
+            "INSERT INTO function_notes VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ((image, *row) for row in notes.values()),
+        )
         db.execute("DROP TABLE IF EXISTS function_index_meta")
         db.execute(
             "CREATE TABLE function_index_meta (key TEXT PRIMARY KEY, value TEXT)"
@@ -534,7 +564,7 @@ def write_function_index(
             inferred_role TEXT, pair_image TEXT, pair_addr INTEGER, pair_method TEXT
         )""")
         rows = []
-        for row in src.function_index():
+        for row in src.function_index(anchors_by_entry):
             entry, _end, _name, label, *_notes = row
             pair_addr, method = pair.get(entry, (None, None))
             rows.append(
@@ -558,7 +588,7 @@ def write_function_index(
             "INSERT INTO function_anchors VALUES (?,?,?,?,?)",
             (
                 (entry, site, name, mark, doc)
-                for entry, anchors in src.anchors.items()
+                for entry, anchors in anchors_by_entry.items()
                 for name, site, mark, doc in anchors
             ),
         )
@@ -585,9 +615,11 @@ def catalog(
         path = (profiles or {}).get(n)
         prof = read_profile(path, d) if path else collections.Counter()
         rows = dsp_rows(n, d, o, pair, old_groups(n), prof)
-        n_groups = write_dsp_catalog(n, rows, d, out_dir)
         peer = names[1] if n == names[0] else names[0]
-        write_function_index(n, peer, d, pair, out_dir)
+        with closing(sqlite3.connect(os.path.join(SHARC_DIR, n + ".sqlite"))) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            n_groups = write_dsp_catalog(n, rows, d, out_dir, db)
+            write_function_index(n, peer, d, pair, db)
         counts: dict[str, int] = {}
         for r in rows:
             for t in r["tags"].split(","):

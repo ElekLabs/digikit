@@ -1168,7 +1168,13 @@ class Image:
     def notes(self, fn=None):
         """This image's note for `fn` (a single-element list, or [] when
         none exists), or every note in the image when fn is None."""
-        if not self._ensure_notes_db():
+        if self._ensure_notes_db():
+            table = "notesdb.notes"
+        elif self.db.execute(
+            "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='function_notes'"
+        ).fetchone():
+            table = "main.function_notes"
+        else:
             return []
         cols = (
             "function_sw",
@@ -1181,7 +1187,7 @@ class Image:
             "author",
             "created",
         )
-        query = "SELECT %s FROM notesdb.notes WHERE image=?" % ",".join(cols)
+        query = "SELECT %s FROM %s WHERE image=?" % (",".join(cols), table)
         args = [self.name]
         if fn is not None:
             query += " AND function_sw=?"

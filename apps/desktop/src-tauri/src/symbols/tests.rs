@@ -145,6 +145,29 @@ fn keeps_sharc_word_ranges_and_uses_the_internal_release_for_a_shared_blob() {
 }
 
 #[test]
+fn uses_published_sharc_aliases_for_the_same_image_and_entry() {
+    let (_dir, path, db) = fixture(Cpu::Sharc);
+    let dn = port("dn2-1.12");
+    add_identity(&db, dn.id, dn.dsp.unwrap());
+    db.execute_batch(
+        "CREATE TABLE function_names (image TEXT, entry INTEGER, name TEXT, source TEXT);
+         INSERT INTO functions VALUES
+            ('dn2-1.12', 12062720, 12062724, 'FUN_b81000', 'start'),
+            ('dn2-1.12', 12062724, 12062725, 'FUN_b81004', '');
+         INSERT INTO function_names VALUES
+            ('dn2-1.12', 12062720, 'dsp.example.fn.entry', 'declared'),
+            ('dn2-1.12', 12062721, 'dsp.example.site.interior', 'declared'),
+            ('dt2-1.17', 12062724, 'wrong_image', 'declared');",
+    )
+    .unwrap();
+
+    let maps = read_source(SourceKind::Sharc, &path).unwrap();
+    let parsed = AddrMap::parse(&maps[0].json).unwrap();
+    assert_eq!(parsed.entries[0].name, "dsp.example.fn.entry");
+    assert_eq!(parsed.entries[1].name, "FUN_b81004");
+}
+
+#[test]
 fn validates_direct_developer_maps_and_canonicalizes_the_stock_key() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("symbols.json");
@@ -217,5 +240,13 @@ fn imports_the_current_repository_databases() {
         assert_eq!(maps[0].sha256, port(image).stock);
         assert!(parsed.entries.len() > 1000);
         assert!(parsed.entries.iter().all(|e| e.cpu == cpu && e.size > 0));
+        if cpu == Cpu::Sharc {
+            assert!(
+                parsed
+                    .entries
+                    .iter()
+                    .any(|entry| entry.name == "dsp.master.fn.q31_converter")
+            );
+        }
     }
 }

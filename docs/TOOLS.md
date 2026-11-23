@@ -499,7 +499,7 @@ Text output defaults to 60 lines. The call graph is cached in `out/cache/fw/`.
 | `fn`, `disasm` | Function summary and Ghidra listing | Function summary and annotated DSP listing |
 | `dossier X --other IMAGE` | Signature, anchors, call setup, decompilation and paired function | Anchors, roots, callers, memory references, loops, listing and paired function |
 | `callers`, `callees`, `xref`, `path` | Call graph, code and data references, vtable slots | Call graph, code references, resolved and inferred memory references, literals |
-| `search TERM --in SOURCES` | `names,strings,decomp,atlas` | `names,notes,atlas,disasm,strings`. Defaults to names, notes and atlas |
+| `search TERM --in SOURCES` | `names,strings,decomp,atlas,catalog` | `names,notes,atlas,disasm,strings,catalog`. Defaults to names, notes and atlas |
 | `atlas TERM`, `catalog` | Firmware glossary and anchor candidates | Search recovered functions and declarations, or list anchor candidates |
 | `port X --from IMAGE --to IMAGE` | Recorded cross-image matches | Declared counterparts and function hash matches |
 | `str TERM` | Strings and their recorded users | Candidate printable runs from loaded sections |
@@ -507,24 +507,27 @@ Text output defaults to 60 lines. The call graph is cached in `out/cache/fw/`.
 | `cost`, `stores` | | Static instruction cost and call-reachable store operands |
 | `sql`, `batch` | Read-only SQL and mixed query batches | Read-only SQL and mixed query batches |
 
-ColdFire full-text indexes are sidecars in `out/cfdb/<image>-emac.fts.sqlite` and
-build on first use. The DSP builder indexes printable runs from the loader blob.
-Some matches can be printable instruction bytes. A recorded reference helps
-establish that a run is used as text.
+Build both CPU databases with `fw.py build -i IMAGE --other IMAGE`. See the
+[analysis commands](DEVELOPMENT.md#analysis-tools) for the required inputs.
 
-Build the databases and atlas with the [analysis commands](DEVELOPMENT.md#analysis-tools).
-The generated DSP atlas SQLite has `function_index` for the full inventory with
-decoder labels, annotations, inferred roles and paired addresses. Use `sql --atlas --cpu sharc` to query it from the CLI. The
-`function_anchors` table records declared names, site addresses and evidence marks.
-`catalog` is the anchor shortlist. CLI function lookup and dossiers can also run
-directly on the DSP database when the optional atlas hasn't been built.
+- `out/cfdb/<image>-emac.sqlite` holds the Ghidra facts, decompiled C and
+  disassembly in `function_text`, full-text indexes, glossary, and catalog.
+  `tools/coldfire/cfdb.py fts IMAGE-emac` embeds texts and search tables in
+  an existing cfdb from its matching dump.
+- `out/sharcdb/<image>.sqlite` holds the decoded DSP, printable runs,
+  `function_index` for the full inventory, `function_anchors` and
+  `function_notes` for annotations, and `catalog` and `catalog_groups`
+  for anchor candidates. `fw.py sql --cpu sharc` opens these tables
+  directly. Some printable runs come from coincidental instruction bytes.
 
-`tools/coldfire/atlas.py build IMAGE...` writes `out/atlas/<image>.sqlite` from the rules in the repository: the
-machine/page descriptor table (found by its 44-byte stride, any version), the parameter table
-(`paramtable.py`), RTTI classes and vtable slots, UI strings grouped by the view class that uses them, storage
-structs, manual pages (`out/refs/`, Digitakt II 1.03A and Digitone II 1.12 text via `tools/devtools/refstext.py`) and a
-glossary of manual terms (`TERMS` in the file). Every row has `provenance` and `confidence`. The data is derived
-from firmware and stays uncommitted. Add a term by adding a `TERMS` entry; rebuild takes about 12 s per image.
+Each catalog generator publishes to its CPU's database and writes TSV and graph
+exports under `out/atlas/`. Workbench loads function names from either database
+through [Firmware symbols](ADDRMAP.md#firmware-symbols-in-desktop-settings).
+
+The ColdFire atlas contains machine/page descriptors, parameters, RTTI classes
+and vtable slots, UI strings, storage structs, and snippets from any matching
+manual text available under `out/refs/`. Every glossary row carries provenance
+and confidence. Add new terms in `tools/coldfire/atlas.py`.
 
 Measured (Apple M-series): `fw.py fn` 0.05 s, `path` 0.10 s with a cold graph cache and 0.06 s warm, a
 12-query `batch` 0.27 s.

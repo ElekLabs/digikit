@@ -11,7 +11,7 @@ from the address, a DSP declaration name or --cpu. Set FW_IMAGE to skip
 "... N more" tail. The stores command instead returns uncapped JSON.
 
 Subcommands: fn decomp disasm callers callees xref str class path port sql
-search atlas catalog dossier stores batch. In a batch file each line is one command line (without
+search atlas catalog dossier stores build batch. In a batch file each line is one command line (without
 "fw.py"); lines starting with # are comments; every result block starts with
 "## <line>". The call graph is cached on disk (out/cache/fw/), keyed by the
 database hash, so a cold process only pays for opening SQLite.
@@ -197,27 +197,15 @@ def cmd_catalog(
     groups: bool = False,
     cpu: str = "cf",
 ) -> list[str]:
-    """Rows of the atlas `catalog` table (candidate anchor functions), best score first.
-
-    With cpu="sharc" the rows come from out/atlas/<image>-dsp.sqlite (tools/sharc_dev/sharc_catalog.py).
-    """
+    """Rows of the firmware database's catalog, best score first."""
     short = short_image(image)
     if cpu == "sharc":
-        path = os.path.join(ATLAS_DIR, short + "-dsp.sqlite")
+        path = os.path.join(SHARC_DIR, short + ".sqlite")
         build = "uv run python -m tools.sharc_dev.sharc_catalog %s OTHER" % short
-        if not os.path.exists(path):
-            raise FwError(
-                "no DSP catalog for %s: run %s (e.g. dt2-1.17 dn2-1.12)"
-                % (short, build)
-            )
     else:
-        path = os.path.join(ATLAS_DIR, short + ".sqlite")
+        path = os.path.join(CF_DIR, short + "-emac.sqlite")
         build = "uv run python -m tools.coldfire.atlas catalog %s OTHER" % short
-        if not os.path.exists(path):
-            raise FwError(
-                "no atlas for %s: run uv run python -m tools.coldfire.atlas build %s"
-                % (short, short)
-            )
+        path = coldfire.atlas_path(short, "catalog")
     con = open_ro(path)
     if not _has(con, "catalog"):
         raise FwError(
@@ -257,12 +245,13 @@ def cmd_catalog(
     if term:
         cls_col, hint_col = ("role", "hints") if cpu == "sharc" else ("class", "hint")
         where.append(
-            "(name LIKE ?%d OR %s LIKE ?%d OR %s LIKE ?%d OR tags LIKE ?%d)"
+            "(name LIKE ?%d OR %s LIKE ?%d OR %s LIKE ?%d OR tags LIKE ?%d OR anchors LIKE ?%d)"
             % (
                 len(args) + 1,
                 cls_col,
                 len(args) + 1,
                 hint_col,
+                len(args) + 1,
                 len(args) + 1,
                 len(args) + 1,
             )
@@ -416,7 +405,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp = common(sub.add_parser("sql", help="read-only SQL"))
     sp.add_argument("query")
     sp.add_argument(
-        "--atlas", action="store_true", help="query the generated atlas database"
+        "--atlas",
+        action="store_true",
+        help="query the atlas tables (legacy ColdFire atlas files are supported)",
     )
     sp = common(
         sub.add_parser(
@@ -459,6 +450,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--listing", type=int, default=8, help="SHARC listing lines per end"
     )
+    sp = common(
+        sub.add_parser(
+            "build", help="build both images' canonical databases and catalogs"
+        )
+    )
+    sp.add_argument("--other", required=True, help="peer image to build and pair")
     sp = common(sub.add_parser("batch", help="run many queries from FILE or - (stdin)"))
     sp.add_argument("file")
     return p
@@ -474,6 +471,17 @@ def run(
         else args.max
     )
     image = args.image or default_image
+    if c == "build":
+        image = image or os.environ.get("FW_IMAGE")
+        if not image:
+            raise FwError("no image: pass -i or set FW_IMAGE")
+        if short_image(image) == short_image(args.other):
+            raise FwError("--other must be a different image")
+        if args.cpu != "sharc":
+            coldfire.build_images(short_image(image), short_image(args.other))
+        if args.cpu != "cf":
+            sharc.build_images(short_image(image), short_image(args.other))
+        return "Firmware databases and catalogs built."
     if c == "batch":
         raise FwError("batch cannot be nested")
     if c == "dossier":
@@ -505,22 +513,38 @@ def run(
             image = image or os.environ.get("FW_IMAGE")
             if not image:
                 raise FwError("no image: pass -i or set FW_IMAGE")
-            suffix = "-dsp.sqlite" if args.cpu == "sharc" else ".sqlite"
-            with closing(
-                open_ro(os.path.join(ATLAS_DIR, short_image(image) + suffix))
-            ) as db:
+            short = short_image(image)
+            path = (
+                os.path.join(SHARC_DIR, short + ".sqlite")
+                if args.cpu == "sharc"
+                else coldfire.atlas_path(short)
+            )
+            with closing(open_ro(path)) as db:
                 return capped(cmd_sql(db, args.query), cap)
         return capped(cmd_sql(sess.get(image, cpu=args.cpu).db, args.query), cap)
     if c == "search":
         term = " ".join(args.term)
         img = sess.get(image, term if term.startswith("dsp.") else None, args.cpu)
         where = args.where
+        sources = where.split(",") if where else None
+        search_lines: list[str] = []
+        if sources is not None and "catalog" in sources:
+            search_lines.extend(
+                cmd_catalog(img.image, term, None, cap or -1, False, cpu=img.cpu)
+            )
+            sources = [source for source in sources if source != "catalog"]
+            if not sources:
+                return capped(search_lines, cap)
+            where = ",".join(sources)
         if isinstance(img, Sharc):
-            return capped(sharc.cmd_search(img, term, where, cap), cap)
-        return capped(
-            coldfire.cmd_search(img, term, where or "names,strings,decomp,atlas", cap),
-            cap,
-        )
+            search_lines.extend(sharc.cmd_search(img, term, where, cap))
+        else:
+            search_lines.extend(
+                coldfire.cmd_search(
+                    img, term, where or "names,strings,decomp,atlas", cap
+                )
+            )
+        return capped(search_lines, cap)
     if c == "atlas":
         image = image or os.environ.get("FW_IMAGE")
         if not image:

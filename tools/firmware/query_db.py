@@ -19,6 +19,12 @@ CACHE_DIR = os.path.join(ROOT, "out", "cache", "fw")
 REFERENCE = os.path.join(ROOT, "ports", "bindings", "reference.json")
 
 
+FUNCTION_NAMES_SQL = """CREATE TABLE IF NOT EXISTS function_names (
+    image TEXT NOT NULL, entry INTEGER NOT NULL, name TEXT NOT NULL, source TEXT NOT NULL,
+    PRIMARY KEY (image, entry, name)
+)"""
+
+
 class FwError(Exception):
     """A usage or lookup problem reported as one line, not a traceback."""
 

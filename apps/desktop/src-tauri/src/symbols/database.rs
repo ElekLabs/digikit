@@ -108,17 +108,32 @@ fn meta(db: &Connection, image: &str, key: &str) -> Result<Option<String>, Strin
 }
 
 fn entries(db: &Connection, cpu: Cpu, image: &str) -> Result<Vec<Entry>, String> {
-    // These columns and the end-exclusive ranges are the ones used by addrmap_export.py.
-    let sql = match cpu {
-        Cpu::Cf => {
-            "SELECT entry, end, name, NULL FROM main.functions WHERE image = ?1 AND end > entry"
-        }
-        Cpu::Sharc => {
-            "SELECT entry_sw, end_sw, name, label FROM main.functions \
-             WHERE image = ?1 AND end_sw > entry_sw"
-        }
+    let has_names: bool = db
+        .query_row(
+            "SELECT EXISTS (SELECT 1 FROM pragma_table_list \
+             WHERE schema = 'main' AND type = 'table' AND name = 'function_names')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(sql_error)?;
+    let (start, end, label) = match cpu {
+        Cpu::Cf => ("entry", "end", "NULL"),
+        Cpu::Sharc => ("entry_sw", "end_sw", "f.label"),
     };
-    let mut stmt = db.prepare(sql).map_err(sql_error)?;
+    let name = if has_names {
+        format!(
+            "COALESCE((SELECT n.name FROM main.function_names n \
+             WHERE n.image = f.image AND n.entry = f.{start} AND n.name <> '' \
+             ORDER BY n.source = 'cf_names' DESC, n.name LIMIT 1), f.name)"
+        )
+    } else {
+        "f.name".into()
+    };
+    let sql = format!(
+        "SELECT f.{start}, f.{end}, {name}, {label} FROM main.functions f \
+         WHERE f.image = ?1 AND f.{end} > f.{start}"
+    );
+    let mut stmt = db.prepare(&sql).map_err(sql_error)?;
     let rows = stmt
         .query_map([image], |row| entry(row, cpu))
         .map_err(sql_error)?;

@@ -103,6 +103,38 @@ def run(*argv: str) -> str:
     return fw.run_line(fw.Session(), list(argv), "dt2-1.17", 60)
 
 
+def test_coldfire_embeds_text_and_search_in_the_registered_database(
+    tmp_path, monkeypatch
+):
+    from contextlib import closing
+
+    from tools.coldfire import cfdb, fw_query
+
+    image = "fixture"
+    name = image + "-emac"
+    path = tmp_path / (name + ".sqlite")
+    dump = tmp_path / "dump"
+    dump.mkdir()
+    c_file = dump / "function.c"
+    c_file.write_text("void fixture(void) { unique_symbol(); }\n")
+    with closing(cfdb.open_db(path)) as db, db:
+        db.execute("INSERT INTO meta VALUES (?, 'image', ?)", (name, name))
+        db.execute(
+            "INSERT INTO functions(image,entry,end,name,decomp_path) VALUES (?,?,?,?,?)",
+            (name, 0x40000000, 0x40000010, "fixture", c_file.name),
+        )
+    cfdb.build_fts(path, dump_dir=dump)
+    c_file.unlink()
+    monkeypatch.setattr(fw_query, "CF_DIR", str(tmp_path))
+    session = fw.Session()
+    assert "unique_symbol" in fw.run_line(session, ["decomp", "fixture"], image, 60)
+    output = fw.run_line(
+        session, ["search", "unique_symbol", "--in", "decomp"], image, 60
+    )
+    assert "decomp: 1 functions" in output and "unique_symbol" in output
+    assert not list(tmp_path.glob("*.fts.sqlite"))
+
+
 @need_cf
 def test_fn_and_callers():
     out = run("fn", "0x401be1be")
@@ -456,7 +488,7 @@ def test_sharc_batch_routes_semantic_names_and_keeps_the_db_read_only(
     assert "memory:" in dossier
     assert "listing " not in dossier
     assert "SYNTHETIC MARKER" in query("str", "marker", "--cpu", "sharc")
-    monkeypatch.setattr(fw, "ATLAS_DIR", str(path.parent))
+    assert path.read_bytes() == before
     monkeypatch.setattr(
         sharc_catalog,
         "DSP_ROOTS",
@@ -464,12 +496,22 @@ def test_sharc_batch_routes_semantic_names_and_keeps_the_db_read_only(
     )
     inventory = sharc_catalog.DspImg()
     inventory.fn = {a: (a + 0x10, 1, f"fn_{a:x}", "") for a in (0x10, 0x20, 0x30)}
-    sharc_catalog.write_function_index(image, "peer", inventory, {}, str(path.parent))
+    with db:
+        db.execute("BEGIN IMMEDIATE")
+        sharc_catalog.write_function_index(image, "peer", inventory, {}, db)
+    monkeypatch.setattr(dsp_query, "port_anchors", lambda _: [])
+    session = fw.Session()
+    published = path.read_bytes()
+    assert name in query("search", "q31 converter", "--cpu", "sharc")
     assert (
         query(
-            "sql", "select count(*) from function_index", "--cpu", "sharc", "--atlas"
+            "sql", "select count(*) from function_index", "--cpu", "sharc"
         ).splitlines()[1]
         == "3"
     )
-    assert path.read_bytes() == before
+    row = db.execute(
+        "SELECT name FROM function_names WHERE entry=?", (0x10,)
+    ).fetchone()
+    assert row == (name,)
+    assert path.read_bytes() == published
     assert not list(path.parent.glob("*.notes.sqlite"))
