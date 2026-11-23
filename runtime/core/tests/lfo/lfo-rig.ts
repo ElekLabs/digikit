@@ -65,7 +65,6 @@ const GAP = 'the gap between encoder events (the stock encoder scales by event r
 
 /** Track 1, LFO 1, set with MIDI CC. Create it after the runtime is up; it reads the Sound words of track 1 from firmware memory. */
 export class LfoRig {
-  private soundBase: number | undefined;
   private opened = false;
 
   readonly rt: Rt;
@@ -82,12 +81,10 @@ export class LfoRig {
   }
 
   private async base(): Promise<number> {
-    if (this.soundBase === undefined) {
-      const { fx } = deviceProfile(this.device);
-      // the Sound array of track 1 starts 0x14 into its Sound object; the kit object holds the Sound objects from `sound_off` on
-      this.soundBase = (await word(this.session, fx.kit_ptr)) + fx.sound_off + 0x14;
-    }
-    return this.soundBase;
+    const { fx } = deviceProfile(this.device);
+    // The Sound array of track 1 starts 0x14 into its Sound object; the kit object holds the Sound objects from `sound_off` on. The kit pointer is read at every access, not once:
+    // a kit object that the firmware replaces after the rig was made would leave a cached address pointing at the old object, whose words no CC writes.
+    return (await word(this.session, fx.kit_ptr)) + fx.sound_off + 0x14;
   }
 
   /** Sound word `index` of track 1: the stored knob value (the LFO does not write it). */
