@@ -24,6 +24,8 @@ macro_rules! hook_device {
 /// The old form: `service!(Lfo, "lfo", KINDS_LFO)` for `impl<C: CoreApi> Service<C> for Lfo`, the name of its `[[service]]` and the record kinds
 /// it owns (`&'static [(u32, u32)]`, as `dkrt_sdk::records::KINDS_*`). It emits `dk_module`, `dk_svc_abi` and (on the ColdFire) the panic handler.
 ///
+/// A provider without provided imports (the lfo) ends its call after `fills = [...]`: no `exports`.
+///
 /// After the kinds: `setup = f`, `hooks = [...]`, `fills = [...]`, `exports = gen_exports::exports()` (the list `patchkit gen` writes for a service with `provided` imports in `sdk/sdk.toml`:
 /// `[(name hash, entry); N]`) or, only in tests (`patchkit service-check` refuses it in a service crate), `exports = [("dk_param_get", fw::dk_param_get), ...]` (name, function: declared with the hash of the name) and `tick = f` (`unsafe extern "C" fn(*mut u8)`, the file's `tick`: once per UI pass, with the module context; only after `exports`), each optional list in this order. Every form also emits `dk_svc_declare(ctx, device)`: the declarations
 /// of `init` without `setup` (the host test of the assembly runs it and compares the result with the header table). Both exports forms

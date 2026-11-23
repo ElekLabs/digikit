@@ -126,12 +126,15 @@ fn save<C: CoreApi>(core: &C, map: &[u32; MAX_SHAPES]) -> bool {
 }
 
 impl<C: CoreApi> Provider<C> for Lfo {
-    fn start(_core: &C) -> Result<Lfo, Status> {
-        bind_firmware();
-        Ok(Lfo::new())
+    fn start(core: &C) -> Result<Lfo, Status> {
+        let mut slot = MaybeUninit::<Lfo>::uninit();
+        Self::start_in(core, &mut slot)?;
+        // SAFETY: `start_in` filled the slot
+        Ok(unsafe { slot.assume_init() })
     }
 
-    /// The state is made where it lives: all-zero bytes are the initial state (`Lfo::new`; `tests/state.rs` checks it), so this is one fill.
+    /// The state is made where it lives: all-zero bytes are the initial state (`Lfo::new`; `tests/state.rs` checks it), so this is one fill. `start` goes through here, so
+    /// both ways make the owner alike.
     fn start_in(_core: &C, slot: &mut MaybeUninit<Lfo>) -> Result<(), Status> {
         bind_firmware();
         // SAFETY: every field of `Lfo` is valid as zero bytes (integers and arrays of them).

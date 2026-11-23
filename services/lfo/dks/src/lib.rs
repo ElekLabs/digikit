@@ -31,6 +31,5 @@ dkrt_svc_rt::service!(
         ("cf.lfo.hook.wave_name3", hooks::lfo_ui_name3, dn2),
         ("cf.lfo.hook.graph_vec", hooks::lfo_ui_graph),
     ],
-    fills = [],
-    exports = []
+    fills = []
 );
