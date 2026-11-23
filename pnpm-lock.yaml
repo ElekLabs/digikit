@@ -425,6 +425,15 @@ importers:
         specifier: 5.1.0
         version: 5.1.0(@types/node@22.15.0)(vite@8.3.1(@types/node@22.15.0)(esbuild@0.28.2)(yaml@2.9.1))
 
+  tests/fixtures/modules/settings-a/workbench:
+    dependencies:
+      '@digi/workbench-core':
+        specifier: workspace:*
+        version: link:../../../../../packages/workbench-core
+      solid-js:
+        specifier: 1.9.15
+        version: 1.9.15
+
   tests/regression:
     dependencies:
       '@digi/control-client':

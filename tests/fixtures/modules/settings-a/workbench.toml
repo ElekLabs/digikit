@@ -1,0 +1,13 @@
+[workbench]
+version = 1
+component = "workbench/Panel.tsx"
+
+[[setting]]
+id = "boot"
+label = "Boot value"
+type = "text"
+max_bytes = 16
+
+[[operation]]
+id = "readAtInit"
+output = "optional-text"

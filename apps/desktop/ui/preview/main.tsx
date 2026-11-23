@@ -1,3 +1,6 @@
+import { createPreviewStores } from './module-store';
+import type { EmuRpc } from '@digi/workbench-core/host/host.ts';
+import { createPreviewModulePages } from './module-pages';
 import { firmwarePort } from './firmware-mock';
 import { emulator } from './tauri-mock';
 import { createPreviewSymbols } from './symbols-mock';
@@ -18,14 +21,27 @@ export function createWorkbenchEnvironment(): WorkbenchEnvironment {
   const query = new URLSearchParams(location.search);
   const transferFixture = PARAMS.some((name) => query.has(name)) || query.has('lib');
   const page = query.get('page') ?? (transferFixture ? 'transfer' : undefined);
+  const modulePages = createPreviewModulePages();
   const fixture = createPreviewLibrary();
+  const stores = createPreviewStores(fixture, modulePages);
+  const base = createTauriHost();
+  const rpc: EmuRpc = {
+    async call<T>(method: string, params?: Record<string, unknown>, session?: number) {
+      const result = await base.rpc.call<T>(method, params, session);
+      if (method === 'firmware.load' || method === 'restart' || method === 'dev.reload') {
+        await stores.restart('emulator');
+      }
+      return result;
+    },
+  };
   const host = {
-    ...createTauriHost(),
+    ...base,
+    rpc,
     library: fixture.library,
     analyzer: createPreviewAnalyzer(),
     symbols: createPreviewSymbols(),
   };
-  const apps = createDesktopApps(host, undefined, previewSessions(fixture, emulator.hasRuntime));
+  const apps = createDesktopApps(host, undefined, previewSessions(stores, emulator.hasRuntime));
   bindSimApp(apps.app);
   if (page === 'firmware') {
     apps.app.target.startOn({ kind: 'midi', port: firmwarePort });
@@ -47,6 +63,7 @@ export function createWorkbenchEnvironment(): WorkbenchEnvironment {
     apps: query.has('defmods') ? { ...apps, firmware: previewFirmware(apps) } : apps,
     options: {
       browserPreview: true,
+      modulePages,
       initialPage:
         page === 'transfer' || page === 'files' || page === 'firmware' || page === 'settings' ? page : undefined,
       ...(page === 'log'

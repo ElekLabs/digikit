@@ -1,6 +1,6 @@
 # Workbench module pages
 
-Proposal for review. The offline Transfer change is independent. The examples below describe proposed authoring and transport APIs.
+The host preview now exercises the settings sample with a generated text form and a colocated Solid companion. Run it from the [development guide](../DEVELOPMENT.md). Device discovery, wire messages and the Bootscreen and Project Manager APIs below remain proposals.
 
 ## Discovery and ownership
 
@@ -80,6 +80,12 @@ export default function Panel({ client }: ProjectManagerPanelProps) {
 
 A list request returns a bounded page with a continuation cursor. Rename submits a bounded request. The dispatcher queues it for the UI task, which rechecks the loaded owner, validates the project reference, and calls the service. The client resolves once the operation completes, then the panel rereads the list. Switching target disposes the client and drops late replies. Unloading cancels queued work before module code is released. An already committed service mutation remains committed if its reply is lost.
 
+## Compiled Workbench distribution
+
+The source files live with the module for authoring. The release build compiles bundled companions and embeds their descriptors in frontend assets. A user's machine needs neither TSX nor a compiler. The settings sample registry is a preview entry point only. A production registry will match a loaded module's ID and contract fingerprint to its compiled companion. A module installed after the app release can still use standard controls once the runtime supports descriptor discovery. A new executable companion requires a Workbench update in this distribution model.
+
+The native backend also resolves Workbench Wasm assets through the repository root. Include the required Wasm assets in the release resource lookup. The development library currently calls `lib_build` and scans the repository's `out/modules/<device>/`. Before publishing a standalone catalog, package the prebuilt DKM, DKS and port files with a device-indexed manifest in app resources. Give the released desktop app a library adapter for those resources. The existing repository-backed adapter remains useful for authoring. Verify the published app's offline library and a bundled panel on a machine without the checkout. This packaging work is separate from compiling the frontend.
+
 ## Transport and settings semantics
 
 Negotiate a runtime capability for module UI v1. Use one module-addressed command family over the existing session. Proposed verbs cover discovery, descriptor pages, reading and updating public settings, invoking named operations and obtaining a queued result. The module command handler runs on the MIDI task and must return promptly. The UI task executes storage access and module callbacks. Version the public descriptor independently of the runtime release.
@@ -92,21 +98,21 @@ The runtime validates every field's type, bounds, access mode, schema and owner.
 
 ## A sample for preview and unit tests
 
-Use the existing `tests/fixtures/modules/settings-a/` module as the authoring example. Give it a `workbench.toml` declaring a public `boot` text field (up to 16 bytes) and a `readAtInit` operation. Its `workbench/Panel.tsx` shows the value the module read during init when the user clicks **Read at startup**. This makes the distinction visible: editing the current setting updates the standard form immediately, while the custom panel reports the old startup value until the next simulated load. The existing C fixture already captures that value. Keep its current proof commands and the settings-b wrapper working.
+Use the existing `tests/fixtures/modules/settings-a/` module as the authoring example. Give it a `workbench.toml` declaring a public `boot` text field (up to 16 bytes) and a `readAtInit` operation. Its companion explains when a saved change applies. Host tests exercise the startup snapshot through the module client. The existing C fixture already captures that value. Keep its current proof commands and the settings-b wrapper working.
 
 Build the generic form and this actual panel against a small injected `ModuleClient`. For tests provide `createMemoryModuleClient(descriptor, handlers)` in Workbench test support with a map of values, a revision and module-owned operation handlers. Use the same generated descriptor, panel and registry entry as a real host. Put fixture-specific initial values and the startup-value handler beside the fixture. The memory adapter has no Tauri, Solid, MIDI, filesystem or firmware dependency. Share the pure validation and settings codecs with the real client. Device-side validation remains authoritative. A test can supply a rejecting or deferred operation for error and pending states.
 
-The preview already constructs its sessions per target in `apps/desktop/ui/preview/main.tsx` and derives loaded records from its simulated card in `module-store.ts`. Add an opt-in preview scenario that seeds the sample as installed and loaded on that card. Route its instance to the memory adapter through the host's module-client factory. Use the real sidebar discovery, generated form and companion mount. Keep one settings backing map per simulated target, take the startup snapshot on simulated load, and issue a fresh scoped client on reload. Release it on unload or disconnect. Seeding the loaded inventory this way keeps Transfer and the sidebar consistent. The preview should never insert a menu item by hand. Ship fixture registrations only in preview and test builds.
+The preview already constructs its sessions per target in `apps/desktop/ui/preview/main.tsx` and derives loaded records from its simulated card in `module-store.ts`. Seed the sample as installed and loaded on the default simulated card. Keep the empty-card fixture empty. Route its instance to the memory adapter through the host's module-client factory. Use the real sidebar discovery, generated form and companion mount. Keep one settings backing map per simulated target, take the startup snapshot on simulated load, and issue a fresh scoped client on reload. Release it on unload or disconnect. Seeding the loaded inventory this way keeps Transfer and the sidebar consistent. The preview should never insert a menu item by hand. Ship fixture registrations only in preview and test builds.
 
 | Test owner | Observable behavior |
 | --- | --- |
 | Descriptor and form model units | Field validation, empty versus unset, edits and resets, revision conflicts, and a private field missing from discovery. |
-| Companion units | Give the real panel a small typed fake. Verify it displays the returned startup value and recovers from an operation error. Control promise completion directly. |
+| Companion units | Give the real panel a small typed fake. For an interactive companion, verify its result and error states. Control promise completion directly. |
 | Target and registry units | A loaded sample gets one page, a card-only sample gets none, a missing companion leaves its standard form, and a late result cannot populate another target. |
 | Adapter contract | Run the same short behavior cases against the memory client and the real client over scripted replies. Exercise framing and ticket handling in the protocol adapter tests. |
 | Assembly and device | One assembly case for packed metadata and runtime registration. One device round trip for behavior only firmware can establish. Keep the desktop shell, project list and UI permutations out of device tests. |
 
-Preview acceptance is a short manual interaction: edit the field, read the startup snapshot through the custom panel, then reload and see the new snapshot. Switch targets and confirm their values remain independent. This scenario also works as a demonstration for module authors.
+In the preview, save a boot value, reopen the page and verify the saved value, then reset it. Switch targets and confirm their values remain independent. This scenario also works as a demonstration for module authors.
 
 ## Acceptance for the protocol implementation
 

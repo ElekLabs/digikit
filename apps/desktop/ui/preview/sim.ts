@@ -207,10 +207,23 @@ export const control = {
   sim,
   /** Change the state; `dev` and `folder` reset what they stand for. */
   set(next: Partial<SimState>): void {
+    const wasOffline = sim.dev === 'noreply';
     Object.assign(sim, next);
     if (next.dev) {
       deviceRevision++;
       resetTree();
+      const app = simApp.app;
+      if (next.dev === 'noreply')
+        app?.connection.noteConnection({ type: 'lost', reason: 'Simulated device disconnected.' });
+      else if (wasOffline && app && !app.target.libraryOnly()) {
+        const binding = app.target.bindSession();
+        void binding
+          .session()
+          .then((session) =>
+            app.connection.noteReply(session, () => !app.target.switching() && app.target.target() === binding.target),
+          )
+          .catch(() => {});
+      }
     }
   },
   /** A file appears in the samples folder (the folder poll or the focus read must show it). */

@@ -1466,7 +1466,7 @@ node packages/sharc-rig-kit/src/pin-cli.ts write --wav CAPTURE.wav --pin PIN.jso
 
 ## Desktop UI preview
 
-`mise run wb:preview` prepares the preview assets and serves the desktop pages
+`mise run wb:preview` simulates the Transfer content packs without a ColdFire compiler. Use `mise run wb:preview:real` to exercise actual compiled packs. Both serve the desktop pages
 (`apps/desktop/ui`) at http://127.0.0.1:5199/ over a fake device (state in the address:
 `?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=MiB/s&mode=modules|samples`).
 `node tools/devtools/ui_shots.mjs --out DIR [--prefix before] [scene ...]` writes one PNG per scene at

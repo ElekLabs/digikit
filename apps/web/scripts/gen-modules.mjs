@@ -10,7 +10,7 @@
 //
 // The objects of `core/*` modules are committed in the module and are only read here, never rebuilt. The browser never builds: patchkit.wasm packs from the bundle.
 //
-//   node scripts/gen-modules.mjs [--out DIR] [--workbench-preview]
+//   node scripts/gen-modules.mjs [--out DIR] [--workbench-preview [--real-packs]]
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, statSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname, resolve, sep, relative } from 'node:path';
@@ -112,7 +112,7 @@ const moduleDevices = (d) => [...(d.module.ports ?? []), ...Object.keys(d.target
  * @param {string} [root]
  * @param {readonly string[]} [offered]
  */
-export function buildModuleData(root = repoRoot, offered = undefined) {
+export function buildModuleData(root = repoRoot, offered = undefined, { firmwareOnly = false } = {}) {
   const ports = readdirSync(join(root, 'ports'))
     .filter((f) => f.endsWith('.toml') && (!offered || offered.includes(f.split('-')[0])))
     .sort()
@@ -120,7 +120,7 @@ export function buildModuleData(root = repoRoot, offered = undefined) {
   // the module roots in the order of tools/patchkit/modroots.py REPO_ROOTS; the tests use the fixtures
   // The published site leaves out the test fixtures: only the site's tests use them, and some need the Rust toolchain for ColdFire.
   const roots = ['modules', 'runtime', 'services', 'image-modules'];
-  if (!process.env.DIGI_SITE_NO_FIXTURES) roots.push('tests/fixtures/modules');
+  if (!firmwareOnly && !process.env.DIGI_SITE_NO_FIXTURES) roots.push('tests/fixtures/modules');
   const manifests = roots.flatMap((r) => walk(join(root, r), 'module.toml').sort(byParts));
   const parsed = manifests
     .map((file) => {
@@ -128,6 +128,7 @@ export function buildModuleData(root = repoRoot, offered = undefined) {
       return { dir: dirname(file), text, d: parse(text) };
     })
     .filter(({ d }) => {
+      if (firmwareOnly && d.module.category !== 'core') return false;
       const mine = moduleDevices(d);
       return !offered || mine.length === 0 || mine.some((x) => offered.includes(x));
     });
@@ -203,7 +204,7 @@ function packAll(root, ids, device, to) {
 }
 
 /** Write the shipped modules under `out`: <dev>/<leaf>.dkm, index.json and src/<id>/**. Returns the index. */
-export function shipModules(out, root = repoRoot, extraModules = new Set()) {
+export function shipModules(out, root = repoRoot, extraModules = new Set(), { simulated = false } = {}) {
   const scratch = join(root, 'out', 'cache', 'site-pack');
   for (const sub of [...loadDevices().runtimeIds, 'src']) rmSync(join(out, sub), { recursive: true, force: true });
   const modules = [];
@@ -218,12 +219,19 @@ export function shipModules(out, root = repoRoot, extraModules = new Set()) {
     for (const dev of shippedDevices(d, deviceIds)) (idsByDevice[dev] ??= []).push(d.module.id);
   }
   const packed = {};
-  for (const [dev, ids] of Object.entries(idsByDevice)) packed[dev] = packAll(root, ids, dev, join(scratch, dev));
+  if (!simulated)
+    for (const [dev, ids] of Object.entries(idsByDevice)) packed[dev] = packAll(root, ids, dev, join(scratch, dev));
   for (const { dir, d } of shipped) {
     const m = d.module;
     const leaf = m.id.split('/').pop();
     const devices = {};
     for (const dev of shippedDevices(d, deviceIds)) {
+      if (simulated) {
+        const group = d.machine?.length ? 'machine' : d.fx?.length ? 'fx' : 'tool';
+        const keys = (d[group] ?? []).map((entry) => entry.id);
+        devices[dev] = { file: `${dev}/${leaf}.dkm`, size: 4096, fixture: { group, keys, uses: d.uses?.[dev] ?? {} } };
+        continue;
+      }
       const bytes = packed[dev][m.id];
       if (!bytes) continue; // skipped by the packer (patch-only)
       mkdirSync(join(out, dev), { recursive: true });
@@ -231,7 +239,7 @@ export function shipModules(out, root = repoRoot, extraModules = new Set()) {
       devices[dev] = { file: `${dev}/${leaf}.dkm`, size: bytes.length, sha256: sha256(bytes) };
     }
     if (!Object.keys(devices).length) continue;
-    const files = sourceFiles(dir);
+    const files = simulated ? [] : sourceFiles(dir);
     for (const f of files) {
       const bytes = readFileSync(join(dir, f));
       if (bytes.length > SOURCE_MAX) throw new Error(`${m.id}/${f} is too large to show (${bytes.length} bytes)`);
@@ -353,13 +361,16 @@ if (
     : i > 0
       ? resolve(process.argv[i + 1])
       : join(here, '..', 'public', 'modules');
-  const { bundle } = buildModuleData(repoRoot, SITE_DEVICES);
+  const simulated = preview && !process.argv.includes('--real-packs');
+  const { bundle } = simulated
+    ? buildModuleData(repoRoot, SITE_DEVICES, { firmwareOnly: true })
+    : buildModuleData(repoRoot, SITE_DEVICES);
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'bundle.json'), JSON.stringify(bundle));
   const devices = loadDevices();
   // The desktop installs these after a boot, including tools excluded from the public site.
   const defaults = preview ? new Set(deviceIds.flatMap((id) => devices.get(id).defaultModules)) : undefined;
-  const index = shipModules(out, repoRoot, defaults);
+  const index = shipModules(out, repoRoot, defaults, { simulated });
   console.log(`shipped: ${index.modules.map((m) => `${m.id} (${Object.keys(m.devices).join(',')})`).join(', ')}`);
   console.log(
     `modules: ${bundle.modules.length} modules, ${bundle.ports.length} ports, bundle ${statSync(join(out, 'bundle.json')).size} bytes`,

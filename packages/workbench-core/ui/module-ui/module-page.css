@@ -1,0 +1,64 @@
+.module-page {
+  padding: 1rem 1.25rem;
+  overflow: auto;
+}
+.module-settings {
+  max-width: 44rem;
+  margin-top: 1.5rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: var(--r-s);
+}
+.module-field {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  padding: 1rem;
+  gap: 0.5rem;
+}
+.module-field + .module-field {
+  border-top: 1px solid var(--line);
+}
+.module-field label {
+  display: grid;
+  flex: 1 1 15rem;
+  min-width: 0;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+.module-field small,
+.module-page > p {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+.module-page > p {
+  margin-top: 0.75rem;
+}
+.module-field input,
+.module-field .btn {
+  box-sizing: border-box;
+  height: 2.25rem;
+  font: inherit;
+}
+.module-field input {
+  margin-top: 0.25rem;
+  width: 100%;
+  padding: 0 0.7rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s);
+  font-weight: 400;
+}
+.module-field .btn {
+  padding-inline: 0.9rem;
+}
+.module-field .btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+.module-field [role='alert'] {
+  flex-basis: 100%;
+}

@@ -14,6 +14,9 @@ import {
   onMount,
   untrack,
 } from 'solid-js';
+import ModulePageView from '@digi/workbench-core/ui/module-ui/ModulePageView.tsx';
+import type { ModulePageSource } from '@digi/workbench-core/module-ui/module-page.ts';
+import { targetKey } from '@digi/workbench-core/transfer/session-core.ts';
 import LivePanel, { type LivePanelApi } from '@digi/workbench-core/ui/components/LivePanel.tsx';
 import { defaultFaceplate, panels } from '@digi/workbench-core/data/faceplates.ts';
 import { deviceNameOf, registry, runtimeDeviceIds, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
@@ -140,6 +143,7 @@ const PerformancePanel = lazy(() => import('./PerformancePanel'));
 const AnalyzerPanel = lazy(() => import('./AnalyzerPanel'));
 
 export interface ConsoleOptions {
+  modulePages?: ModulePageSource;
   initialPage?: Page;
   browserPreview?: boolean;
   logSources?: Pick<FollowEnv, 'emulator' | 'device'>;
@@ -198,6 +202,20 @@ export default function Console(
   const [windowPx, setWindowPx] = createSignal(window.innerHeight);
   const [dockDrag, setDockDrag] = createSignal(false);
   const [page, setPage] = createSignal<Page>(props.initialPage ?? 'run');
+  const [moduleId, setModuleId] = createSignal('');
+  const modulePages = createMemo(() => {
+    const source = props.modulePages;
+    if (!source || app.target.switching() || app.target.libraryOnly()) return [];
+    const key = targetKey(target());
+    return app.inventory.modules().flatMap(({ name }) => {
+      const view = source.lookup(key, name);
+      return view ? [{ id: name, view }] : [];
+    });
+  });
+  const modulePage = () => modulePages().find((item) => item.id === moduleId())?.view;
+  createEffect(() => {
+    if (page() === 'module' && !app.target.switching() && !modulePage()) setPage('transfer');
+  });
   const [sidebarOpen, setSidebarOpen] = createSignal(readSidebarPref());
   const [card, setCard] = createSignal<CardStatus>();
   const [bootRuntime, setBootRuntime] = createSignal(readRuntimePref());
@@ -1010,6 +1028,27 @@ export default function Console(
             <Icon d={FIRMWARE} />
             <span>Firmware</span>
           </button>
+          <Show when={modulePages().length}>
+            <span class="side-group">Modules</span>
+            <For each={modulePages()}>
+              {(item) => (
+                <button
+                  type="button"
+                  class="side"
+                  classList={{ on: page() === 'module' && moduleId() === item.id }}
+                  aria-current={page() === 'module' && moduleId() === item.id ? 'page' : undefined}
+                  title={item.view.descriptor.name}
+                  onClick={() => {
+                    setModuleId(item.id);
+                    setPage('module');
+                  }}
+                >
+                  <Icon d={MODULES} />
+                  <span>{item.view.descriptor.name}</span>
+                </button>
+              )}
+            </For>
+          </Show>
           <button
             type="button"
             class="side settings-link"
@@ -1281,6 +1320,9 @@ export default function Console(
               </Show>
             </div>
           </div>
+          <Show when={page() === 'module' && modulePage()} keyed>
+            {(view) => <ModulePageView page={view} current={() => modulePage() === view} />}
+          </Show>
           <Show when={page() === 'transfer'}>
             <TransferPage onFlash={() => setPage('firmware')} />
           </Show>

@@ -1,0 +1,9 @@
+{
+  "name": "@digi-fixture/settings-a-panel",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@digi/workbench-core": "workspace:*",
+    "solid-js": "1.9.15"
+  }
+}
