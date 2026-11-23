@@ -583,6 +583,38 @@ fn a_clear_leaves_an_empty_store() {
 }
 
 #[test]
+fn retain_keeps_one_entry_and_an_absent_path_empties_the_store() {
+    let _g = lock();
+    for (keep, left) in [("b", &["b"][..]), ("nope", &[][..])] {
+        fresh();
+        let mut w = work();
+        insert(&mut w, "a", 10, 512, &[]).unwrap();
+        insert(&mut w, "b", 11, 512, &[]).unwrap();
+        insert(&mut w, "c", 12, 512, &[]).unwrap();
+        let cur = current(&mut w);
+        let path = std::format!("{keep}\0");
+        let c = unsafe {
+            commit(
+                &IO,
+                &LAY,
+                &cur,
+                w.a.0.as_mut_ptr(),
+                w.b.0.as_mut_ptr(),
+                1024,
+                w.s.0.as_mut_ptr(),
+                Edit::Retain(path.as_ptr()),
+                &[],
+            )
+        }
+        .unwrap();
+        assert_eq!(c.h.count as usize, left.len());
+        assert!(state(&mut w).unwrap().agree);
+        let got: Vec<std::string::String> = paths(&mut w).into_iter().map(|(p, _)| p).collect();
+        assert_eq!(got, left);
+    }
+}
+
+#[test]
 fn a_full_area_refuses_the_table_with_e_full() {
     let _g = lock();
     fresh();

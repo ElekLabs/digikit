@@ -367,12 +367,14 @@ pub(crate) unsafe fn cmd_clear(seq: u32, buf: *mut u8, body: *const u8, blen: us
         return reply(CMD_CLEAR, seq, E_MSG, 0);
     }
     // CLEAR works on a damaged store too: the new sequence number is above every copy that is readable
-    let seq_now = match state(buf) {
-        Ok(t) => t.h.seq,
-        Err(_) => highest_seq(buf),
+    // A readable store keeps the system package (`stage1::PACKAGE_PATH`): removing it stays an explicit delete of that path. A damaged one is
+    // emptied whole (its table cannot be read).
+    let (seq_now, edit, cur) = match state(buf) {
+        Ok(t) => (t.h.seq, Edit::Retain(crate::stage1::PACKAGE_PATH.as_ptr()), Some(t.h)),
+        Err(_) => (highest_seq(buf), Edit::Clear, None),
     };
-    let cur = Hdr { seq: seq_now, ..Hdr::empty(&lay()) };
-    let r = do_commit(buf, &cur, Edit::Clear, None);
+    let cur = cur.unwrap_or(Hdr { seq: seq_now, ..Hdr::empty(&lay()) });
+    let r = do_commit(buf, &cur, edit, None);
     if r == OK {
         sw::pend_clear(); // the store is emptied: pending files go too (only once it is)
     }

@@ -153,8 +153,8 @@ uploadTests(
 /**
  * Finding 43, "CLEAR double fault". Fault 1 cuts an operation between header B and header A; fault 2 tears the next upload's header B. The
  * store must still be a valid store (the committed one) afterwards.
- *   clear   CLEAR is cut after header B: B is the empty store, A still the old one, pointing at a table in sector 1. The next upload stages its
- *           file over sector 1 (the store starts over) and its header B write tears.
+ *   clear   CLEAR keeps the system package, so it writes its table (write 1), header B (2) and header A (3). Cut after header B: B is the store with
+ *           the package only, A still the old one. The next upload repairs A, stages its file and its header B write tears.
  *   upload  An upload is cut after header B (the new store in B, the old one in A) and the next upload's header B tears: the first upload's
  *           files must still be there (A was made equal to B by the second BEGIN).
  */
@@ -166,17 +166,16 @@ uploadTests(
     const two = blob(700, 63);
     const base = await cardWithOld(rig, 'clear-cut-base', old);
 
-    // clear: fault 1 = CLEAR writes header B (write 1) and is cut before header A
-    const cleared = await faultSession(rig, 'cc-1', base, { DKRT_UPLOAD_CUT: 1 }, (dk) => statusOf(() => dk.clear()));
+    // clear: fault 1 = CLEAR writes the table (write 1), header B (write 2) and is cut before header A
+    const cleared = await faultSession(rig, 'cc-1', base, { DKRT_UPLOAD_CUT: 2 }, (dk) => statusOf(() => dk.clear()));
     check(
       'clear cut after header B: CLEAR is refused its second write',
       cleared.status === -57,
       String(cleared.status),
     );
-    check(
-      'after the cut the next boot reads B, the empty store',
-      (await (await rig.pausedBoot(cleared.card)).list()).length === 0,
-    );
+    const afterCut = await deviceListing(await rig.pausedBoot(cleared.card));
+    expect(ours(afterCut), 'after the cut the next boot reads B: no module file is left').toEqual({});
+    expectSystemPackage(afterCut, 'CLEAR cut after header B: the next boot');
     // fault 2 = the next upload: write 1 = the repair of header A, 2 = the data, 3 = the table, 4 = header B, torn
     const torn = await faultSession(rig, 'cc-2', cleared.card, { DKRT_UPLOAD_TEAR: 4 }, (dk) =>
       statusOf(() => dk.put('modules/one.dkm', one)),

@@ -596,6 +596,23 @@ fn clear_empties_the_store_only_with_its_magic() {
 }
 
 #[test]
+fn clear_removes_every_module_file_and_keeps_the_system_package() {
+    let _f = Fixture::new();
+    let pkg = std::str::from_utf8(&crate::stage1::PACKAGE_PATH[..crate::stage1::PACKAGE_PATH.len() - 1]).unwrap();
+    assert_eq!(upload("a/x", &pattern(3000, 7)), OK);
+    assert_eq!(upload(pkg, &pattern(5000, 9)), OK);
+    assert_eq!(upload("z/y", &pattern(100, 7)), OK);
+    assert_eq!(mkdir("empty"), OK);
+    let before = held()[pkg];
+    assert_eq!(clear_with(CLEAR_MAGIC), OK);
+    let left: Vec<String> = held().keys().cloned().collect();
+    assert_eq!(left, vec![pkg.to_string()], "only the system package is left");
+    assert_eq!(held()[pkg], before, "the package keeps its size and hash");
+    assert_eq!(verify_cmd(pkg, None), (OK, before.1), "and its bytes still hash the same");
+    assert_eq!(upload("c/z", &pattern(100, 7)), OK, "the cleared store takes files");
+}
+
+#[test]
 fn a_file_a_reader_holds_is_not_deleted_replaced_or_cleared() {
     let _f = Fixture::new();
     let a = pattern(3000, 7);

@@ -253,7 +253,7 @@ impl<T: Transport> Session<T> {
         }
     }
 
-    /// Repack: CLEAR, then upload `files` again. The device keeps old file data until CLEAR, so this is how space
+    /// Repack: CLEAR (which keeps `digikit/system.dksp`; a `files` entry for it replaces it), then upload `files` again. The device keeps old file data until CLEAR, so this is how space
     /// comes back. The caller must hold every file the store should keep (`repack_missing`).
     pub fn repack(
         &mut self,
