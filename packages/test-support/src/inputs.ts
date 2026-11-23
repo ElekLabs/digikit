@@ -7,6 +7,7 @@ import {
   stockSyx,
   stockImage as stockImageOf,
 } from '@digi/workbench-core/node/stock-image.ts';
+import { registry } from '@digi/devices/node';
 import { parse as parseToml } from 'smol-toml';
 import { resolveTiers } from './emulator-config.ts';
 
@@ -53,17 +54,9 @@ export function repoRoot(): string {
   }
 }
 
-/** Whether the device has a SHARC DSP: `[capabilities] dsp` of its device file is not "none". */
+/** Whether the device has a SHARC DSP: `[capabilities] dsp` of its device file is not "none" (the shared device registry). */
 export function hasDsp(device: Device): boolean {
-  const dir = path.join(repoRoot(), 'devices');
-  for (const name of fs.readdirSync(dir).filter((n) => n.endsWith('.toml'))) {
-    const t = parseToml(fs.readFileSync(path.join(dir, name), 'utf8')) as {
-      device?: { short?: string };
-      capabilities?: { dsp?: string };
-    };
-    if (t.device?.short === device) return t.capabilities?.dsp !== 'none';
-  }
-  throw new Error(`no device file with short = "${device}"`);
+  return registry().get(device).capabilities.dsp !== 'none';
 }
 
 /**
