@@ -9,8 +9,8 @@ installer calls
   flush blk1+0 188
   flush blk1+0 188
   flush blk1+4 184
-  flush blk4+0 61500
-  flush blk4+0 61500
+  flush blk4+0 63464
+  flush blk4+0 63464
   mask
   write 0x40016eac 8
   write 0x400da3ac 8
@@ -27,8 +27,8 @@ installer calls
   flush 0x4005da60 16
   flush 0x400184e0 32
   restore
-  flush blk7+0 41324
-  flush blk7+0 41324
+  flush blk7+0 42992
+  flush blk7+0 42992
   mask
   write 0x400dafd8 6
   write 0x40074ff8 6
@@ -49,8 +49,8 @@ installer calls
   flush 0x400daf80 16
   flush 0x40074dc0 16
   restore
-  flush blk10+0 22614
-  flush blk10+0 22614
+  flush blk10+0 23282
+  flush blk10+0 23282
   mask
   write 0x4013986c 6
   write 0x401394dc 6
@@ -69,8 +69,8 @@ installer calls
   flush 0x40139540 16
   flush 0x400e1b60 16
   restore
-  flush blk13+0 4668
-  flush blk13+0 4668
+  flush blk13+0 5280
+  flush blk13+0 5280
   flush blk16+0 118
   flush blk16+0 118
   flush blk18+0 134
@@ -128,13 +128,13 @@ service rows
 arena blocks
   0x00100000 192 bytes
   0x00200000 2576 bytes
-  0x00400000 61504 bytes
+  0x00400000 63472 bytes
   0x00500000 432 bytes
-  0x00700000 41328 bytes
+  0x00700000 42992 bytes
   0x00800000 272 bytes
-  0x00a00000 22624 bytes
+  0x00a00000 23296 bytes
   0x00b00000 224 bytes
-  0x00d00000 4672 bytes
+  0x00d00000 5280 bytes
   0x00e00000 96 bytes
   0x01000000 128 bytes
   0x01200000 144 bytes
@@ -165,10 +165,10 @@ records
   2 test/lfo-shape modules/lfo-shape.dkm version 0x100 base 0x01400000 size 110 fini 0x00000000
   3 test/local-ping-user modules/local-ping-user.dkm version 0x100 base 0x01600000 size 60 fini 0x00000000
   4 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x01800000 size 1760 fini 0x0180020a
-  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 61500 fini 0x004058b0
-  9 core/services/fx services/fx.dks version 0x803 base 0x00700000 size 41324 fini 0x0070336c
-  10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 22614 fini 0x00a00ee0
-  11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 4668 fini 0x00d0007e
+  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 63464 fini 0x004050ce
+  9 core/services/fx services/fx.dks version 0x803 base 0x00700000 size 42992 fini 0x00702e80
+  10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 23282 fini 0x00a00f20
+  11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 5280 fini 0x00d0009e
   12 port ports/dt2-1.17.dkport version 0x100 base 0x00100000 size 188 fini 0x00000000
 card sectors
   5094 b6b695370e18
@@ -194,13 +194,13 @@ service rows
 arena blocks
   0x00100000 192 bytes
   0x00200000 2576 bytes
-  0x00400000 61504 bytes
+  0x00400000 63472 bytes
   0x00500000 432 bytes
-  0x00700000 41328 bytes
+  0x00700000 42992 bytes
   0x00800000 272 bytes
-  0x00a00000 22624 bytes
+  0x00a00000 23296 bytes
   0x00b00000 224 bytes
-  0x00d00000 4672 bytes
+  0x00d00000 5280 bytes
   0x00e00000 96 bytes
   0x01000000 128 bytes
   0x01200000 144 bytes
@@ -231,10 +231,10 @@ records
   2 test/lfo-shape modules/lfo-shape.dkm version 0x100 base 0x01a00000 size 110 fini 0x00000000
   3 test/local-ping-user modules/local-ping-user.dkm version 0x100 base 0x01600000 size 60 fini 0x00000000
   4 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x01800000 size 1760 fini 0x0180020a
-  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 61500 fini 0x004058b0
-  9 core/services/fx services/fx.dks version 0x803 base 0x00700000 size 41324 fini 0x0070336c
-  10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 22614 fini 0x00a00ee0
-  11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 4668 fini 0x00d0007e
+  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 63464 fini 0x004050ce
+  9 core/services/fx services/fx.dks version 0x803 base 0x00700000 size 42992 fini 0x00702e80
+  10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 23282 fini 0x00a00f20
+  11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 5280 fini 0x00d0009e
   12 port ports/dt2-1.17.dkport version 0x100 base 0x00100000 size 188 fini 0x00000000
 card sectors
   5094 b6b695370e18
@@ -255,13 +255,13 @@ service rows
 arena blocks
   0x00100000 192 bytes
   0x00200000 2576 bytes
-  0x00400000 61504 bytes
+  0x00400000 63472 bytes
   0x00500000 432 bytes
-  0x00700000 41328 bytes
+  0x00700000 42992 bytes
   0x00800000 272 bytes
-  0x00a00000 22624 bytes
+  0x00a00000 23296 bytes
   0x00b00000 224 bytes
-  0x00d00000 4672 bytes
+  0x00d00000 5280 bytes
   0x00e00000 96 bytes
   0x01000000 128 bytes
   0x01200000 144 bytes
@@ -289,10 +289,10 @@ records
   1 test/dyn-fx-gain modules/dyn-fx-gain.dkm version 0x100 base 0x01200000 size 134 fini 0x00000000
   3 test/local-ping-user modules/local-ping-user.dkm version 0x100 base 0x01600000 size 60 fini 0x00000000
   4 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x01800000 size 1760 fini 0x0180020a
-  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 61500 fini 0x004058b0
-  9 core/services/fx services/fx.dks version 0x803 base 0x00700000 size 41324 fini 0x0070336c
-  10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 22614 fini 0x00a00ee0
-  11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 4668 fini 0x00d0007e
+  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 63464 fini 0x004050ce
+  9 core/services/fx services/fx.dks version 0x803 base 0x00700000 size 42992 fini 0x00702e80
+  10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 23282 fini 0x00a00f20
+  11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 5280 fini 0x00d0009e
   12 port ports/dt2-1.17.dkport version 0x100 base 0x00100000 size 188 fini 0x00000000
 card sectors
   5094 b6b695370e18
@@ -318,13 +318,13 @@ service rows
 arena blocks
   0x00100000 192 bytes
   0x00200000 2576 bytes
-  0x00400000 61504 bytes
+  0x00400000 63472 bytes
   0x00500000 432 bytes
-  0x00700000 41328 bytes
+  0x00700000 42992 bytes
   0x00800000 272 bytes
-  0x00a00000 22624 bytes
+  0x00a00000 23296 bytes
   0x00b00000 224 bytes
-  0x00d00000 4672 bytes
+  0x00d00000 5280 bytes
   0x00e00000 96 bytes
   0x01000000 128 bytes
   0x01200000 144 bytes
@@ -355,10 +355,10 @@ records
   2 test/lfo-shape modules/lfo-shape.dkm version 0x100 base 0x01c00000 size 110 fini 0x00000000
   3 test/local-ping-user modules/local-ping-user.dkm version 0x100 base 0x01600000 size 60 fini 0x00000000
   4 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x01800000 size 1760 fini 0x0180020a
-  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 61500 fini 0x004058b0
-  9 core/services/fx services/fx.dks version 0x803 base 0x00700000 size 41324 fini 0x0070336c
-  10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 22614 fini 0x00a00ee0
-  11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 4668 fini 0x00d0007e
+  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 63464 fini 0x004050ce
+  9 core/services/fx services/fx.dks version 0x803 base 0x00700000 size 42992 fini 0x00702e80
+  10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 23282 fini 0x00a00f20
+  11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 5280 fini 0x00d0009e
   12 port ports/dt2-1.17.dkport version 0x100 base 0x00100000 size 188 fini 0x00000000
 card sectors
   5094 b6b695370e18
@@ -380,13 +380,13 @@ service rows
 arena blocks
   0x00100000 192 bytes
   0x00200000 2576 bytes
-  0x00400000 61504 bytes
+  0x00400000 63472 bytes
   0x00500000 432 bytes
-  0x00700000 41328 bytes
+  0x00700000 42992 bytes
   0x00800000 272 bytes
-  0x00a00000 22624 bytes
+  0x00a00000 23296 bytes
   0x00b00000 224 bytes
-  0x00d00000 4672 bytes
+  0x00d00000 5280 bytes
   0x00e00000 96 bytes
   0x01000000 128 bytes
   0x01200000 144 bytes
@@ -414,10 +414,10 @@ records
   1 test/dyn-fx-gain modules/dyn-fx-gain.dkm version 0x100 base 0x01200000 size 134 fini 0x00000000
   2 test/lfo-shape modules/lfo-shape.dkm version 0x100 base 0x01c00000 size 110 fini 0x00000000
   3 test/local-ping-user modules/local-ping-user.dkm version 0x100 base 0x01600000 size 60 fini 0x00000000
-  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 61500 fini 0x004058b0
-  9 core/services/fx services/fx.dks version 0x803 base 0x00700000 size 41324 fini 0x0070336c
-  10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 22614 fini 0x00a00ee0
-  11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 4668 fini 0x00d0007e
+  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 63464 fini 0x004050ce
+  9 core/services/fx services/fx.dks version 0x803 base 0x00700000 size 42992 fini 0x00702e80
+  10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 23282 fini 0x00a00f20
+  11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 5280 fini 0x00d0009e
   12 port ports/dt2-1.17.dkport version 0x100 base 0x00100000 size 188 fini 0x00000000
 card sectors
   5094 b6b695370e18
