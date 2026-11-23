@@ -27,7 +27,7 @@ use dkrt_sdk::sample_tracks::{
 use dkrt_sdk::{logk, E_CONTRACT, E_NOT_FOUND, E_SEL_PATH};
 
 pub(crate) const CLIENTS: usize = 2;
-const ENTRIES: usize = 16;
+pub(crate) const ENTRIES: usize = 16;
 
 /// The state machine of the tracks of all clients (`dkrt_sdk::sample_tracks`).
 pub(crate) type TrackCore = Core<CLIENTS, ENTRIES>;
@@ -397,7 +397,7 @@ impl Tracks {
             return;
         }
         // Optional on its own: the adapter delivers completions and finds a stock reset here, before the runtime steps the tracks.
-        // SAFETY: the adapter's call (`dkpool_tick`). It may call `pool_done` and `pool_lost` of this owner through the file's cell while this `&mut self` is live: an alias of the exclusive borrow. It is sound in practice only because nothing of the state is read or written before the call and every later access sees the state the callbacks left; keep this call first.
+        // SAFETY: the adapter's call (`dkpool_tick`). It posts `pool_done` and `pool_lost` to the owner as events (`events.rs`); the owner is busy, so they run after this tick returns.
         unsafe { pool.tick() };
         // SAFETY: the core's link calls
         unsafe { self.writes.pump(core) };

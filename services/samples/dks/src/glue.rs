@@ -3,6 +3,7 @@
 use dkrt_abi::core_api::CoreApi;
 use dkrt_sdk::{E_CONTEXT, E_CONTRACT, E_NOT_FOUND, OK};
 use dkrt_svc_rt::ImportCore;
+use dkrt_svc_samples::events::PoolEvent;
 use dkrt_svc_samples::samples::Samples;
 
 const CORE: ImportCore = ImportCore;
@@ -104,12 +105,12 @@ pub unsafe extern "C" fn dk_sample_pool_peaks_window(
 /// The slot `pool_done` of the sample-pool adapter: load `req` finished (`result` 0, E_POOL, E_READ or E_FORMAT).
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn pool_done_fill(req: u32, result: i32) {
-    // no owner (after `fini`): the event is dropped, as the adapter does for an empty slot
-    let _ = crate::DK_SVC_OWNER.with(|s| s.pool_done(req, result));
+    // no owner (after `fini`): the event is dropped, as the adapter does for an empty slot; inside a call of the owner it is queued and runs after it
+    let _ = crate::DK_SVC_OWNER.post(PoolEvent::Done { req, result });
 }
 
 /// The slot `pool_lost`: the backing was lost, all handles are invalid.
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn pool_lost_fill() {
-    let _ = crate::DK_SVC_OWNER.with(|s| s.pool_lost(&CORE));
+    let _ = crate::DK_SVC_OWNER.post(PoolEvent::Lost);
 }

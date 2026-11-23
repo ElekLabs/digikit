@@ -2,9 +2,11 @@
 //! part traits of the owner, as the part tables call them. The service has no record kind, so its parts are the DSP-section ones and the tick. Each test makes its own owner.
 //! The state machine of the tracks and the table writes have unit tests in `src/tracks`, `src/writes` and the peak windows in `src/peakwin`.
 use dkrt_abi::dsp::{DspSec, Job};
-use dkrt_abi::provider::{DspPart, Provider, Ticker};
+use dkrt_abi::provider::{DspPart, Provider, Reentry, Ticker};
 use dkrt_abi::service::{tick_phase, Claim};
 use dkrt_sdk::*;
+use dkrt_svc_rt::{Owner, Post};
+use dkrt_svc_samples::events::PoolEvent;
 use dkrt_svc_samples::pool::{self, Pool};
 use dkrt_svc_samples::samples::Samples;
 use dkrt_test_support::FakeCore;
@@ -149,34 +151,48 @@ fn the_owner_made_in_a_dirty_slot_is_the_owner_made_by_new() {
     assert_eq!(admit(&mut s, &core, &job(Some(&b2))), Ok(()));
 }
 
+type Cell = Owner<Samples, PoolEvent, { <Samples as Reentry<FakeCore>>::QUEUE }>;
+
 std::thread_local! {
-    /// The owner under test, for the adapter's tick to call back into it as the service file's event slots do through the cell.
-    static OWNER: std::cell::Cell<*mut Samples> = const { std::cell::Cell::new(std::ptr::null_mut()) };
+    /// The owner under test, for the adapter's tick to post to as the service file's event slots do through the cell.
+    static OWNER: std::cell::Cell<*const Cell> = const { std::cell::Cell::new(std::ptr::null()) };
     static CORE: std::cell::Cell<*const FakeCore> = const { std::cell::Cell::new(std::ptr::null()) };
 }
 
+/// What the file's `service!` hands the owner: the event reaches the object with the file's core.
+fn apply(s: &mut Samples, e: PoolEvent) {
+    // SAFETY: the test keeps the core alive across the tick
+    Reentry::<FakeCore>::apply(s, unsafe { &*CORE.with(|c| c.get()) }, e)
+}
+
 unsafe extern "C" fn losing_tick() {
-    // SAFETY: the test keeps both alive across the tick; it mirrors the slots `pool_done` and `pool_lost` of the service file
-    unsafe {
-        let s = &mut *OWNER.with(|o| o.get());
-        s.pool_done(9, 0);
-        s.pool_lost(&*CORE.with(|c| c.get()));
-    }
+    // SAFETY: the test keeps the owner cell alive across the tick; it mirrors the slots `pool_done` and `pool_lost` of the service file
+    let cell = unsafe { &*OWNER.with(|o| o.get()) };
+    assert_eq!(cell.post(PoolEvent::Done { req: 9, result: 0 }), Post::Queued);
+    assert_eq!(cell.post(PoolEvent::Lost), Post::Queued);
 }
 
 #[test]
-fn the_adapter_may_call_the_pool_events_from_inside_the_tick() {
+fn the_adapter_may_post_the_pool_events_from_inside_the_tick() {
     let core = FakeCore::new();
-    let mut s = Box::new(Samples::new(Pool::new(Some(pool::PoolFns {
-        tick: losing_tick,
-        ..pool::refusing()
-    }))));
-    OWNER.with(|o| o.set(&mut *s as *mut Samples));
+    let cell: Cell = Owner::with_events(apply);
     CORE.with(|c| c.set(&core as *const FakeCore));
-    Ticker::<FakeCore>::tick(&mut *s, &core, tick_phase::EARLY);
-    assert_eq!(core.calls().len(), 1, "the lost-pool event is logged once");
-    // the owner is intact after the re-entry: a table is still admitted and claimed
+    cell.start(|slot| {
+        slot.write(Samples::new(Pool::new(Some(pool::PoolFns {
+            tick: losing_tick,
+            ..pool::refusing()
+        }))));
+        Ok(())
+    })
+    .unwrap();
+    OWNER.with(|o| o.set(&cell as *const Cell));
+    // the part call runs under the owner's busy state, as the file's tables do
+    cell.run((), |s| Ticker::<FakeCore>::tick(s, &core, tick_phase::EARLY));
+    assert_eq!(cell.refused(), 0);
+    assert_eq!(core.calls().len(), 1, "the lost-pool event is logged once, after the tick");
     let table = bank(1);
-    claim(&mut s, &core, 4, &job(Some(&table)));
-    assert!(s.has_table(4));
+    cell.with(|s| {
+        claim(s, &core, 4, &job(Some(&table)));
+        assert!(s.has_table(4), "the owner is intact after the events");
+    });
 }

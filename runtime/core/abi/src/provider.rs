@@ -27,7 +27,7 @@ pub use contract::Provider;
 pub use declarations::{Declarations, Limit, MAX_ENTRIES, MAX_RESOURCES};
 pub use enter::{Enter, Plain};
 pub use handle::ProviderHandle;
-pub use parts::{Describe, DspPart, Query, Records, Ticker};
+pub use parts::{Describe, DspPart, Query, Records, Reentry, Ticker};
 pub use row::{
     check, name_hash, CheckedRow, PartLookup, PartRef, ProviderRow, PART_DESCRIBE, PART_DSP,
     PART_LIFECYCLE, PART_QUERY, PART_RECORDS, PART_TICK, PROVIDER_ABI,

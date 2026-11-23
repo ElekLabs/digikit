@@ -1,5 +1,5 @@
 use super::*;
-use crate::Reentry;
+use crate::{ImportCore, Reentry};
 use core::sync::atomic::{AtomicU32, Ordering::SeqCst};
 
 fn put<T>(v: T) -> impl FnOnce(&mut MaybeUninit<T>) -> Result<(), Status> {
@@ -174,10 +174,10 @@ impl Fake {
     }
 }
 
-impl Reentry for Fake {
+impl Reentry<ImportCore> for Fake {
     type Event = u32;
     const QUEUE: usize = 2;
-    fn apply(&mut self, event: u32) {
+    fn apply(&mut self, _core: &ImportCore, event: u32) {
         self.ran[self.count] = event;
         self.saw_in_call[self.count] = self.in_call;
         self.count += 1;
@@ -187,7 +187,7 @@ impl Reentry for Fake {
 type FakeOwner = Owner<Fake, u32, 2>;
 
 fn fake() -> FakeOwner {
-    let o = FakeOwner::with_events(<Fake as Reentry>::apply);
+    let o = FakeOwner::with_events(|f, e| f.apply(&ImportCore, e));
     o.start(put(Fake::new())).unwrap();
     o
 }
@@ -264,7 +264,7 @@ fn a_normal_call_is_unchanged() {
     assert_eq!(o.with(|f| f.ran[0]), Some(4));
     assert_eq!(o.refused(), 0);
     // not live: refused answer, no event
-    let dead = FakeOwner::with_events(<Fake as Reentry>::apply);
+    let dead = FakeOwner::with_events(|f, e| f.apply(&ImportCore, e));
     assert_eq!(dead.run(9, |_| 1), 9);
     assert_eq!(dead.post(1), Post::NoOwner);
     assert_eq!(dead.refused(), 0);

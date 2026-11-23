@@ -254,12 +254,12 @@ macro_rules! service {
     // the type of the owner cell and its constructor: `Reentry` among the parts gives it the event queue of the service
     (@owner_ty $svc:ty; []) => { $crate::Owner<$svc> };
     (@owner_ty $svc:ty; [Reentry $(, $rest:ident)*]) => {
-        $crate::Owner<$svc, <$svc as $crate::Reentry>::Event, { <$svc as $crate::Reentry>::QUEUE }>
+        $crate::Owner<$svc, <$svc as $crate::Reentry<$crate::ImportCore>>::Event, { <$svc as $crate::Reentry<$crate::ImportCore>>::QUEUE }>
     };
     (@owner_ty $svc:ty; [$other:ident $(, $rest:ident)*]) => { $crate::service!(@owner_ty $svc; [$($rest),*]) };
     (@owner_new $svc:ty; []) => { $crate::Owner::new() };
     (@owner_new $svc:ty; [Reentry $(, $rest:ident)*]) => {
-        $crate::Owner::with_events(<$svc as $crate::Reentry>::apply)
+        $crate::Owner::with_events(|svc, event| <$svc as $crate::Reentry<$crate::ImportCore>>::apply(svc, &$crate::ImportCore, event))
     };
     (@owner_new $svc:ty; [$other:ident $(, $rest:ident)*]) => { $crate::service!(@owner_new $svc; [$($rest),*]) };
     // the table of one adopted part (an item) and its entry in the part list (an expression)

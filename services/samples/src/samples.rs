@@ -154,13 +154,13 @@ impl Samples {
         )
     }
 
-    /// The pool event `pool_done`: load `req` finished (`result` 0, E_POOL, E_READ or E_FORMAT).
-    pub fn pool_done(&mut self, req: u32, result: i32) {
+    /// The pool event `pool_done` (applied by `Reentry::apply`, after the call it arrived in): load `req` finished (`result` 0, E_POOL, E_READ or E_FORMAT).
+    pub(crate) fn pool_done(&mut self, req: u32, result: i32) {
         self.tracks.pool_done(req, result);
     }
 
-    /// The pool event `pool_lost`: the backing was lost, all handles are invalid.
-    pub fn pool_lost<C: CoreApi>(&mut self, core: &C) {
+    /// The pool event `pool_lost` (applied by `Reentry::apply`): the backing was lost, all handles are invalid.
+    pub(crate) fn pool_lost<C: CoreApi>(&mut self, core: &C) {
         self.tracks.pool_lost(core, &self.pool);
     }
 }

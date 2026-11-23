@@ -18,6 +18,7 @@
 #[cfg(test)]
 extern crate std;
 pub mod dsp;
+pub mod events;
 mod files;
 mod peakwin;
 pub mod pool;

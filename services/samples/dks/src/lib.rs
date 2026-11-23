@@ -15,7 +15,7 @@ dkrt_svc_rt::service!(
     "samples",
     // the service owns no record kind of the `register` section
     &[],
-    parts = [Dsp, Tick],
+    parts = [Dsp, Tick, Reentry],
     hooks = [],
     fills = [
         ("pool_done", glue::pool_done_fill),
