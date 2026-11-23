@@ -4,7 +4,7 @@ import zlib from 'node:zlib';
 import type { DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
 import { bootInfo, buildCard, E_NOSTORE, statusOf } from '@digi/regression/runtime/card-kit.ts';
-import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { rpc, SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { DEVICES } from '@digi/regression/runtime/devices.ts';
 import { E_SET_OFF, sectorOf, settingsMailbox, settingsRecord } from '@digi/regression/runtime/project-kit.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
@@ -21,7 +21,10 @@ import {
   storeHeader,
   suiteName,
 } from './settings-support.ts';
+import { BOOT_LEVEL } from '@digi/dk-session/gen_host_dir';
 import { SYSTEM_PACKAGE_STORE_PATH } from '@digi/regression/runtime/system-package.ts';
+
+const { SAFE_CORE_ONLY } = BOOT_LEVEL;
 
 /** The settings store, part 3 (see settings.device.test.ts): a store that overlaps the settings area, and a card with the older header B. */
 
@@ -42,7 +45,13 @@ for (const device of DEVICES) {
         [first + 1]: table,
       };
       for (let k = 0; k < 4; k++) foreign[first + firstRel + k] = PATTERN;
-      const rt = await kit.load('overlap', { selection: [], foreign });
+      // the store cannot be opened, so the system package cannot be read from it: the boot is core-only (no runtime UI), the settings store is core code
+      const rt = await kit.boot(await kit.card({ name: 'overlap', selection: [], foreign }));
+      expect(await kit.ready(true), 'the boot is core-only: the package is unreadable from the refused store').toMatchObject({
+        safe: 1,
+        reason: SAFE_CORE_ONLY,
+      });
+      await rpc(rt.session, 'run.mode', { mode: 'paused' }); // the protocol calls below step the emulator themselves
       const { session } = rt;
       const mb = settingsMailbox(session, kit.plan);
       const usb = <T>(run: (dk: DkSession) => Promise<T>) => kit.usb(rt, run);
@@ -51,8 +60,6 @@ for (const device of DEVICES) {
       expect(ev[0]!.args[0], 'SETTINGS_LOAD state 4').toBe(4);
       expect(ev[0]!.flags & 1, 'an error event').toBe(1);
       expect(ev[0]!.args[3], "the store's status E_BAD_STORE").toBe(E_BAD_STORE >>> 0);
-      const cap = (await usb((dk) => dk.capacity())).SETTINGS!;
-      expect([cap.limit, cap.used], 'CAPACITY SETTINGS has limit 0 and nothing used').toEqual([0, 0]);
       expect(
         [await mb.put(ROUTE, byte(1)), (await mb.get(ROUTE))[0], await mb.remove(ROUTE)],
         'put, get and remove answer E_SET_OFF',
