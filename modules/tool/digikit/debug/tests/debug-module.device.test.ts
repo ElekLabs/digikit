@@ -67,7 +67,11 @@ async function expectWithDebugModule(runtime: PatchedSession): Promise<void> {
   expect((modLog!.flags >> 8) & 0xff, 'its source is the probe module (record index + 1)').toBe(probe.index + 1);
 
   // levels: the defaults, then a set that is read back; the levels are in RAM
-  expect(await dk.logConfig()).toEqual({ level: 2, modules: Array(8).fill(0xff), debug: true });
+  // `installWithDebug` listens to the log (RuntimeEvents.listen), which raises the debug module's own record to level 3 once the module is registered; every other record has the default
+  const debug = modules.find((m) => m.name === 'digikit/debug')!;
+  const listened = Array<number>(8).fill(0xff);
+  listened[debug.index] = 3;
+  expect(await dk.logConfig()).toEqual({ level: 2, modules: listened, debug: true });
   const modulesLevels = Array<number>(8).fill(0xff);
   modulesLevels[probe.index] = 4;
   expect(await dk.setLogConfig(1, modulesLevels)).toEqual({ level: 1, modules: modulesLevels, debug: true });
