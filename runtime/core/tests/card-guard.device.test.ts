@@ -86,9 +86,10 @@ runtimeTests(
       refused_writes: 0,
       refused_erases: 0,
     });
-    const info = await dk.info();
-    expect(info.card_state, 'the card is ours').toBe(1);
+    // a blank card holds no system package: the boot is core-only and writes no boot record, so the card is blank until the first upload claims it
+    expect((await dk.info()).card_state, 'the card is blank: the boot wrote no record').toBe(2);
     expect(await statusOf(() => dk.put('modules/s.dkm', blob(3_000, 4))), 'the runtime writes the store').toBe(0);
+    expect((await dk.info()).card_state, 'the upload claimed the card: it is ours').toBe(1);
     expect(await guard(), 'after the runtime upload').toMatchObject({ refused_writes: 0, refused_erases: 0 });
     const data = new RpcData(dk);
     const first = image('guard one', 4_000);
