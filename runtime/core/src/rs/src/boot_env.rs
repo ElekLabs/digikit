@@ -12,6 +12,7 @@ use core::ptr::addr_of_mut;
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::platform::Platform;
 use dkrt_sdk::sel::Record;
+use dkrt_sdk::{HOST_PACKAGE_HI, HOST_PACKAGE_LO};
 
 /// The steps of the boot that depend on where it runs. The order and the decisions between them are `boot::run`'s.
 pub(crate) trait BootEnv {
@@ -86,6 +87,11 @@ impl BootEnv for RealBootEnv {
         match stage1::start(entry, &crate::resident::TABLE) {
             Some(hooks) => {
                 hooks::install(hooks);
+                // the block the package lives in, for the tools that audit memory (the package filled the entries of its own statics at its entry)
+                if let Some((lo, hi)) = self.placer.borrow().extent() {
+                    crate::host_dir::publish(HOST_PACKAGE_LO, lo);
+                    crate::host_dir::publish(HOST_PACKAGE_HI, hi);
+                }
                 true
             }
             None => false,

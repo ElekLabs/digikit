@@ -3,7 +3,7 @@
 /** `HostDir.magic` (`HOST_DIR_MAGIC` of abi.toml). */
 export const HOST_DIR_MAGIC = 0x44484b44;
 /** The ids this build knows (`[[host_dir]]` of abi.toml); a core may have fewer, which its directory says in `count`. */
-export const HOST_COUNT = 4;
+export const HOST_COUNT = 6;
 
 /** The package statics that tools read by name, and their ids in the host directory (`DKRT_HOST_DIR`). */
 export const HOST_ID = {
@@ -11,4 +11,6 @@ export const HOST_ID = {
   PROVIDERS: 1,
   TICKS: 2,
   TABLE_BAD: 3,
+  PACKAGE_LO: 4,
+  PACKAGE_HI: 5,
 } as const;

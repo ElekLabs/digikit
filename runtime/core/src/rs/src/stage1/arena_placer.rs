@@ -16,6 +16,14 @@ impl ArenaPlacer {
         ArenaPlacer { block: DevAddr::NULL, header: None }
     }
 
+    /// The block the package was placed in, `[lo, hi)`: from the block start to the end of what `begin` asked for, rounded to the arena's 16 bytes. `None` before `begin`
+    /// succeeded and after `abandon`.
+    pub fn extent(&self) -> Option<(u32, u32)> {
+        let h = self.header?;
+        let bytes = ((h.placed_bytes() as u32) + 15) & !15;
+        Some((self.block.get(), self.block.get() + bytes))
+    }
+
     /// The device address of the image start (the base the package is relocated to); null before `begin` succeeded.
     fn base(&self) -> DevAddr {
         if self.block.is_null() {

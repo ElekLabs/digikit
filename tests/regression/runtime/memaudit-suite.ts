@@ -19,6 +19,7 @@ import {
   guardPlan,
   loadWatchEnv,
   moduleBlocks,
+  packageBlock,
   providerBlocks,
   type GuardPlan,
 } from './memaudit-kit.ts';
@@ -198,8 +199,11 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
             }
 
             // the files of the services are blocks of the arena as well: their code and statics are not strays
-            blocks = [...modules, ...(await providerBlocks(session, h.plan))];
-            const plan = guardPlan(device, FIRMWARE[device], h.plan, blocks, arena);
+            const pkg = await packageBlock(session, h.plan);
+            blocks = [...modules, ...(await providerBlocks(session, h.plan)), pkg];
+            const plan = guardPlan(device, FIRMWARE[device], h.plan, blocks, arena, [
+              { owner: pkg.name, lo: pkg.cf_base, hi: pkg.cf_base + pkg.cf_size },
+            ]);
             guard = plan;
             record(h.artifacts, 'memaudit-plan', {
               protect: plan.protect.map((r) => [r.label, r.lo, r.hi]),

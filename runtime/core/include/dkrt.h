@@ -157,7 +157,11 @@
 #define DKRT_HOST_TICKS 2
 /* DKRT_TABLE_BAD: the byte that says the firmware's tables changed under the runtime (0: intact; the top byte of its word). */
 #define DKRT_HOST_TABLE_BAD 3
-#define DKRT_HOST_COUNT 4
+/* The first byte of the arena block the core placed the package in (its image, relocation table and bss). */
+#define DKRT_HOST_PACKAGE_LO 4
+/* One past the last byte of that block. */
+#define DKRT_HOST_PACKAGE_HI 5
+#define DKRT_HOST_COUNT 6
 
 /* Result codes (negative = error), from [load.status] of sdk/sdk.toml. Additive: a code is never renumbered. */
 #define DKRT_E_NOT_FOUND (-1)            /* no store, or no such file or module */

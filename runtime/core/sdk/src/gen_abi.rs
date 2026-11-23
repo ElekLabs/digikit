@@ -150,8 +150,12 @@ pub const HOST_PROVIDERS: u32 = 1;
 pub const HOST_TICKS: u32 = 2;
 /// DKRT_TABLE_BAD: the byte that says the firmware's tables changed under the runtime (0: intact; the top byte of its word).
 pub const HOST_TABLE_BAD: u32 = 3;
+/// The first byte of the arena block the core placed the package in (its image, relocation table and bss).
+pub const HOST_PACKAGE_LO: u32 = 4;
+/// One past the last byte of that block.
+pub const HOST_PACKAGE_HI: u32 = 5;
 /// The ids of the host directory this build knows (`[[host_dir]]` of abi.toml).
-pub const HOST_COUNT: usize = 4;
+pub const HOST_COUNT: usize = 6;
 /// Provider slots of the boot plan (`[limits.format] provider_max` of sdk/sdk.toml), separate from the selection.
 pub const PROVIDER_MAX: usize = 8;
 

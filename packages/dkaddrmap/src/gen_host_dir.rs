@@ -3,7 +3,7 @@
 /// `HostDir.magic` (`HOST_DIR_MAGIC` of abi.toml).
 pub const HOST_DIR_MAGIC: u32 = 0x44484b44;
 /// The ids this build knows (`[[host_dir]]` of abi.toml).
-pub const HOST_COUNT: usize = 4;
+pub const HOST_COUNT: usize = 6;
 /// DKRT_DSP: the DSP loader's placement table (module ranges in the DSP area).
 pub const HOST_DSP: u32 = 0;
 /// DKRT_PROVIDERS: the records of the loaded service files (the layout of the module records of DKRT_STATE, without its header).
@@ -12,6 +12,10 @@ pub const HOST_PROVIDERS: u32 = 1;
 pub const HOST_TICKS: u32 = 2;
 /// DKRT_TABLE_BAD: the byte that says the firmware's tables changed under the runtime (0: intact; the top byte of its word).
 pub const HOST_TABLE_BAD: u32 = 3;
+/// The first byte of the arena block the core placed the package in (its image, relocation table and bss).
+pub const HOST_PACKAGE_LO: u32 = 4;
+/// One past the last byte of that block.
+pub const HOST_PACKAGE_HI: u32 = 5;
 /// Every id with the name of the static it stands for, in id order.
 #[rustfmt::skip]
 pub const HOST_NAMES: [&str; HOST_COUNT] = [
@@ -19,4 +23,6 @@ pub const HOST_NAMES: [&str; HOST_COUNT] = [
     "DKRT_PROVIDERS",
     "DKRT_TICKS",
     "DKRT_TABLE_BAD",
+    "DKRT_PACKAGE_LO",
+    "DKRT_PACKAGE_HI",
 ];
