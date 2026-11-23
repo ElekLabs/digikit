@@ -1,176 +1,324 @@
-# RC3 worker briefs (planning scout, 2026-11-23; read-only, nothing built or run)
+# RC3 worker briefs: lean scope (architect pass, 2026-11-23; read-only, nothing built or run)
 
-Sources: plan `/Users/em/src/digi/lanes/fx-route-policy/docs/plans/runtime-contract-and-lifecycle.md` (RC3 rows at ~519, 600-603; checklists in Status), `docs/plans/rc3-header-table-v4.md`, code on `rc/rc2s-2c` (lane fx-route-policy). Paths below are relative to the repo root.
+Plan: [runtime-contract-and-lifecycle.md](runtime-contract-and-lifecycle.md), rows "RC3 briefs" and "Canonical service layout". Code read on `rc/rc2s-2c` (lane fx-route-policy). Re-find every path with `git grep` at the base; RC2s moves files.
 
-## 0. State of the code today (verified in the tree)
+Marks: [V] read in the tree in this pass; [D] taken from the scout draft, not re-read.
 
-- The contract types exist but nothing uses them: `runtime/core/abi/src/provider/{contract,parts,consumer,declarations,row,word_sink,status}.rs` (`Provider<C>`, `Records`, `DspPart`, `Ticker`, `Query`, `Describe`; `ProviderRow`, `PartRef`, `check`, `PART_*`, `PROVIDER_ABI=1`). There is no `Settings` trait yet (only in the proposal section 6.6) and no `PART_SETTINGS` tag.
-- All six services still implement the old interface-B trait `dkrt_abi::service::Service` (`validate_records(kind: u32, ..)`, `apply_record`, `remove`, `cap`, `attribute`, `diag`, `table_check`, `on_loaded`) and the `service!` macro in `runtime/core/svc-rt/src/lib.rs` (568 lines) emits a `ServiceRow` plus a `static mut STATE` per service (85 `static mut` in services/*/src and dks/src).
-- Fallback rows: `runtime/core/src/rs/src/package/svc_rows.rs`. Global kinds and resources: `sdk/sdk.toml` `[records.kinds]` (~2041), `[records.resources]` (~2054), `[capacity.kinds]` (~1985), generated into `dkneeds/gen_limits.rs`, `runtime/core/sdk/src/gen_sdk.rs`, `sdk/include/dk/gen/*.h`, `dk-session/gen_proto.ts`, `dkupload/gen_proto.rs`, `tools/device/dkproto.py`. `patchkit/src/service_resource.rs` parses `[[service.resource]]` but does not pack it. `keys.rs` (`packages/dkneeds/src/keys.rs`) writes versions 1-3.
-- Test support: `runtime/core/test-support/src/contract.rs` (1975 lines) is `Service`-typed (`Lifecycle<'f, S: Service<FakeCore>>`).
-- Service sizes (lines, src + tests + dks): shortcuts 2.3k, samples 2.3k, lfo 2.9k, fx 5.6k, project 8.3k, machines 12.4k. Layout today differs from the canonical row for all of them (owner in `records.rs` for fx/lfo/samples/shortcuts, `ProjectSvc` in project `lib.rs`, `engine/` and in-crate `dkp/tests.rs` in project, `fxpage.rs` 1030 and `fxsend.rs` 676 in fx, `build.rs` 1007 / `records.rs` 1629 / `slots.rs` 539 in machines).
-- Service projects: `core/services/<name>` (module.toml `dks/`), device-test projects `core/services/shortcuts-tests`, `core/services/project-tests`; FX and machine device tests live in `image-modules/points/{fx,fxpages,dynfx}/tests`, `runtime/core/tests/{machines,lfo,settings,services,service-commands}`, `modules/machine/**/tests`.
+## 1. Scope (decided by Em 2026-11-23)
 
-## 0.1 RC2s dependencies the briefs rely on (re-check at the base)
+- RC3 ports the six services (shortcuts, samples, lfo, project, fx, machines) to the Provider contract on one branch. No LegacyService adapter. One device gate, one PR.
+- Commit order: contract path; shortcuts (template); samples, lfo, project, fx in parallel worktrees branched from the template commit, cherry-picked after review; machines last; delete the old `Service` trait and macro.
+- Not in RC3: header table v4, the typed-address cleanup. Machines stays separate from the RC4 machines point.
+- Tests: the contract is tested once on the fixture; each service has unit tests with fakes for its own logic; device tests only for firmware facts; the existing device tests are the proof and stay unchanged.
 
-1. Base is the merge of the RC2s stack (rc/rc2s-1, -2, -2c, RC2s-3, RC2t) after Em's PR and the one ABI bump. Do not start RC3-0 before that; read-only parts of it (the Settings trait text, fixture designs) can be drafted earlier.
-2. `DevAddr`/`FwMem` seam (RC2s-1 S1-S3 done): the "raw device-memory reads through the seam" shared item is mostly a mechanical use of `mem::read32`/`call_at`; check `grep -rn "rd32\|rd16\|wr32\|as u32" services/*/src services/*/dks/src` at the base for what is left (the plan counts ~64 sites in 17 files; S3 covered `ctx_addr` and `fn as u32` only).
-3. Package placement (RC2s-2d): services load as `.dks` from the card into the arena; `system.dksp` is the package that also holds the menu after RC2s-3. Host-visible statics (`DKRT_PROVIDERS`, `DKRT_CTXS`, ...) are package-owned and read through the resident host directory (option C, step e). RC3 changes what `DKRT_PROVIDERS` holds (ProviderRow instead of ServiceRow): the host-directory id for it is append-only, so either keep the id and bump the entry's layout version or add a new id. Tools and tests that read it by plan symbol (boot-restart device test, `dkaddrmap`, `patchkit size` groups) go through the one helper per language.
-4. The resident table 1.1 `LinkRows` group (45 optional `dk_*`/`dl_*` symbols) is append-only with an append-safety test. Any new core entry a Provider service needs (record routing, settings broker, resource claim) is appended there, not inserted.
-5. `SVC_ABI` word and `SVC_ABI_FILES`: `provider/*` is outside the fingerprint. RC3 should not touch `service.rs`, `core_api.rs` or other ABI-hashed files beyond what RC2s already did; the new path is versioned by `PROVIDER_ABI`, header table 4 and runtime MINOR 0.12.0. If a brief finds it must edit an ABI-hashed file, stop and ask (one bump already spent in RC2s).
-6. RC2s-3 moves the C menu (`runtime/apps/digikit-menu/src/menu.c`) into the package and adds the `ui.settings_rows` hook. The RC3 Settings renderer and the FX route panel deletion (RC3-fx) edit the same menu files, so they land after RC2s-3.
-7. Paths moved by RC2s-1 S5 (`package/` folder): `svc_rows.rs` is at `runtime/core/src/rs/src/package/svc_rows.rs` on this branch; re-find files with `git grep` at the base, do not trust the paths in this file.
-8. Syntakt image: `patchkit size` showed 108 KB spare after step (d); RC3 must not eat it (row says "must shrink"). Measure before/after in every brief that changes runtime text.
+RC3 is behaviour-neutral. The proof is: the boot-effects snapshots do not change, the contract suite passes per service, and the existing device tests pass unchanged.
 
-## 0.2 Order, parallelism, file ownership
+## 2. State of the code (verified)
 
-```
-RC3-0 shared (serial, one lane)
-  -> RC3-1 shortcuts (template; serial, same lane; review of the template gates the rest)
-     -> parallel lanes (one PR each):  RC3-2 samples | RC3-3 lfo | RC3-4 project | RC3-5 fx
-        -> RC3-6 machines (+ RC4 machines point; after fx PR because RC4-fx follows RC3-fx)
-           -> RC3-z cleanup (delete legacy path, global tables)  [small]
-RC3m (settings schema for modules) after RC3-0 + RC3-4/5 (needs the renderer); not in this list.
-```
+- Contract types exist and nothing uses them: `runtime/core/abi/src/provider/{contract,parts,consumer,declarations,row}.rs`. `PROVIDER_ABI = 1`, tags 1-6 (`row.rs:7-15`), `check` and `CheckedRow::part` with `TooNew` (`row.rs:100-177`). [V]
+- The old trait has 25 callbacks plus `validate_records` (`abi/src/service.rs:556-662`); `ServiceRow` has 24 function pointers and no `validate` pointer (`service.rs:706-738`); `ServiceTable` holds the walks (`service.rs:999-1345`). [V]
+- The Provider traits are much narrower: lifecycle 6 methods, `Records::validate`, `DspPart` 2, `Ticker`, `Query`, `Describe` (`provider/contract.rs:6-28`, `provider/parts.rs`). They do not cover the check steps, the per-record apply, the commit phases, `settle`, `live_done`, `cap`, `attribute`, `diag`, `table_check`, `on_loaded` or 6 of the 8 DSP steps. [V]
+- What each service implements [V]:
+  - shortcuts: validate, declare, tick, module_begin, module_commit, check, apply_record, remove (`services/shortcuts/src/records.rs:77-214`).
+  - samples: on_loaded, tick, dsp_check_sections, dsp_admit, dsp_claim, dsp_release (`services/samples/src/records.rs:11-41`).
+  - lfo: validate, declare, settle, check, apply_record, remove (`services/lfo/src/records.rs:427-594`).
+  - project: nothing; its work is in `dks/src/glue.rs` behind `setup`, five hooks and the module-record `tick` (`services/project/src/lib.rs:22-25`, `dks/src/lib.rs:13-29`).
+  - fx: 16 callbacks (`services/fx/src/records.rs:25-159`) and `query = rt::dk_service_query_v1` (`dks/src/lib.rs:34`).
+  - machines: validate, declare, settle, check (7 steps), apply, apply_record, live_done, remove, module_begin, module_commit, tick, cap and the DSP set (`services/machines/src/records.rs:134-273` and on).
+  - All six use `accepts_teardown!` (shortcuts `records.rs:82`, samples `:14`, fx `:33`, lfo `:432`, machines `:139`, project `lib.rs:24`).
+- Record order across services matters: the host runs every row's `apply`, then each record in file order to the row that owns its kind (`runtime/core/lifecycle/src/seams/host.rs:28-31`, `package/registry.rs:45-60`).
+- The runtime gets a row through `dk_service_declare_row` (`abi/src/core_imports.rs:80`), `Registry::add` (`package/loader/seams.rs:50`, `:142-147`) and `svc_rows::add`; the table is sorted by callback order (`package/svc_rows.rs:51-85`). `gen_services::STATIC = 0`: there is no in-crate service (`package/gen_services.rs:11`).
+- `svc_rows.rs:13-23` holds the callback-order fallback that names the six services. `callback_order` is in each manifest (`services/shortcuts/dks/module.toml:8`).
+- `service!` is in `runtime/core/svc-rt/src/lib.rs:382-466`; `dk_module.fini` is `None` (`:441`); `setup` runs before the declarations (`:425-436`).
+- patchkit depends on the service code in two places: `packages/patchkit/src/record_rules.rs:16-19` names `dkrt_svc_<name>::records::<Type>::validate` for lfo, shortcuts, fx, machines; `packages/patchkit/src/svccheck.rs:10-24` reads the `service!` call and the `d.kind(...)` lines of `Service::declare` with regular expressions.
+- Statics named `DKRT_*` in a service are read by device tests by name (`svccheck.rs:21` names `DKRT_FXP`, `DKRT_FXS`).
+- The shared contract suite already exists: `runtime/core/test-support/src/contract.rs` (`contract::<S>(&Fixture)`, `S: Service<FakeCore>`), and every service runs it in `tests/contract.rs`. The plan says RC3 reuses it (plan section 3, "Relation to other plans").
+- `tests/fixtures/modules/local-ping/src/lib.rs` is a Rust service on the old trait with one export.
+- `test/svc-test` and `test/svc-echo` are C service files with no row. A service file without a row stays valid (`seams.rs:143-144`).
+- Correction of the draft: `DKRT_PROVIDERS` holds the module records of the provider files, not service rows (`package/loader/records.rs:2`, `package/host_dir.rs:17-18`). RC3 does not change its layout and adds no host-directory id.
+- Correction of the draft: `services/shortcuts/README.md` and `src/shortcuts.rs` (the `Shortcuts` state object) exist already.
+- ColdFire rule seen in the code: use an if chain, not a `match` on dense integers; a jump table is not valid ColdFire code here (`services/machines/src/records.rs:262`, `package/host_dir.rs:14`).
+- [D] 85 `static mut` in `services/*/src` and `dks/src`. [D] Sizes: shortcuts 2.3k lines, samples 2.3k, lfo 2.9k, fx 5.6k, project 8.3k, machines 12.4k. [D] Oversized files: fx `fxpage.rs` 1030, `fxsend.rs` 676; machines `build.rs` 1007, `records.rs` 1629, `slots.rs` 539; project `dks/src/glue.rs` 621.
 
-Decision that makes the parallel lanes possible (open question Q1, recommended): RC3-0 keeps the old `Service`/`ServiceRow` path working through a small `LegacyService` adapter so each service PR flips one service; RC3-z deletes the adapter, `svc_rows.rs`, `[records.kinds]`, `[records.resources]`, domain `[capacity.kinds]`, `Table::version`, v1-v3 item branches. Without it all six services flip in one PR (no parallel lanes).
+## 3. Design decisions for the branch
 
-File ownership (no conflicts between lanes if respected):
+### D1 Part version 1 carries today's callbacks, regrouped
 
-| Lane | Owns (edits) | Shared files it must NOT edit (changes go to RC3-0 or RC3-z) |
+Decision: every old callback maps to exactly one method of one part. No callback changes its meaning or its place in a walk. The part traits in `provider/` gain the methods the walks still make, each with a default.
+
+| Part (tag) | Methods in version 1 | Old callbacks |
 | --- | --- | --- |
-| RC3-1 shortcuts | `services/shortcuts/**`, `tests/fixtures/modules/shortcut-demo/**`, its device test | sdk.toml, gen_*, svc-rt |
-| RC3-2 samples | `services/samples/**`, `runtime/core/tests/samples-*.device.test.ts` | same |
-| RC3-3 lfo | `services/lfo/**`, `ports/*.toml` + `ports/fw/lfo.toml` (hook names), `tests/fixtures/modules/lfo-shape*`, `modules/lfo-shape/**`, `runtime/core/tests/lfo/**`, `tools/nx/device-literals.baseline.json` (lfo rows) | other ports files |
-| RC3-4 project | `services/project/**`, `runtime/core/tests/reload-project*`, `tests/fixtures/modules/project-user` | same |
-| RC3-5 fx | `services/fx/**`, `image-modules/points/{fx,fxpages,dynfx}/tests/**`, `runtime/apps/digikit-menu/**` FX route panel, `sdk/include/dk/fx/route-query.h`, the `dkrt_fx` bridge in `runtime/core/{abi.toml,include/dkrt.h,abi/src/hooks.rs,sdk/src/gen_abi.rs,src/rs/src/{hooks,api}.rs}` | menu code other than the route panel |
-| RC3-6 machines | `services/machines/**`, `runtime/core/tests/machines/**`, `modules/machine/**/tests`, `image-modules/points/machines` (RC4 point) | |
+| Lifecycle (1), `Provider<C>` | `start` (runs in the file's `init`), `attach`, `detach`, `can_stop`, `stop` (runs in the file's `fini`), `settle`, `reload_done` | `setup`, `apply`, `remove`, -, -, `settle`, `live_done` |
+| Records (2) | `validate` (host only, not in the device table), `begin`, `commit`, `check`, `apply` per record; the table also holds the kinds list | `validate_records`, `module_begin`, `module_commit`, `check`, `apply_record`, `ServiceRow.kinds` |
+| Dsp (3) | `check_sections`, `check_rows`, `check_types`, `admit`, `claim`, `release`, `clear`, `row_step`, `loaded`, `attribute`, `diag` | the eight `dsp_*`, `on_loaded`, `attribute`, `diag` |
+| Tick (4) | `tick(phase)` | `tick` |
+| Query (5) | `query(op, req, reply)` | the `query =` entry |
+| Describe (6) | `cap`, `table_check`, `describe` | `cap`, `table_check`, - |
 
-Each lane also edits one section of `docs/ARCHITECTURE.md` (its own service); expect trivial textual merge conflicts there, resolve at merge. Regenerated files (`gen_*`, `dist/`) are never hand-merged: regenerate.
+- `Service::declare` is dropped: the kinds come from the `service!` kinds argument, as `svc-rt` `init` does today (`svc-rt/src/lib.rs:261-269`).
+- `teardown_refusal` is dropped: no service uses it. `can_stop` keeps its default.
+- `Consumer` gains the module base and reads records from the register section, so `attach` gets what `ApplyCtx` gives today. `consumer.rs` is outside the ABI hash.
 
-Template for every brief (included once here, referenced as "STD"):
+Reason: header table v4 is out of RC3, so record kinds stay global, records are still written by the services at the commit, and capacity is still `cap(kind)`. The plan's narrow signatures (section 6.1) need packed records and resources.
 
-STD worker rules (paste in every brief): Read before Edit; leave changes uncommitted, mark plan row `review`; update `docs/ARCHITECTURE.md` and inventories for the step; run `mise run test:plan` with `DIGI_GATE_BASE=<base>` first and state whether the selection matches what the change reaches; static set `pnpm nx:pilot run-many -t lint,fmt-check,rust-fmt,typecheck,python-checks`; `DIGI_GATE_BASE=<base> mise run test:changed` before handing back; no `pkill`; emulators only through Nx or `tools/devtools/emu-slot.mjs`; use `dk:dev` for device iteration, one device run for the proof; report at most 200 words (Result, Commits, Checks, Device runs, Open items). Design checklist (separation of concerns, device facts only from device data behind capabilities, DRY, owner objects with private state, files named after the noun, no utils/helpers). First-pass checklist, all eight points: (1) every new or moved test seen to fail (TDD or a reported temporary break); (2) no device literals, device-literals baseline only goes down (`node tools/nx/device-literals.mjs --write` after removing literals); (3) tests drive real entry points, fakes only for hardware; (4) objdiff and size: every differing function explained, size before and after (`patchkit objdiff`, `patchkit size` DT2, DN2, Syntakt); (5) after any move grep the tree for the old path and update docs, tables, comments; (6) per rule one accept and one refuse case plus the design's edge cases; (7) a change to build inputs runs that build (`verify_build daemons`, patchkit); (8) globals in tests through one owner with a guard that restores on unwind. Layering: logic to unit tests over a fake CoreApi; one assembly case per seam (fit and typical refusal); device tests only for what firmware or hardware shows, and the record names that reason.
+Rejected:
+- Narrow to section 6.1 now: needs v4 and changes the record order across services (`seams/host.rs:28-31`).
+- One part with all callbacks: every later change then bumps one part for all services.
 
----
+Changes the decision: v4 lands first, or a service needs a narrower part before v4. Then that part gets version 2.
 
-## RC3-0 Shared work (once)
+### D2 Lifecycle uses the module record's entry points
 
-- **Goal:** header table v4 written by patchkit and read by the runtime; `[[service.resource]]` and `[[service.record]]` packed; PackageManager part lookup and admission by tag and version; `service!` emits `ProviderRow`/`PartRef`; services' remaining raw device reads behind `FwMem`/`DevAddr`; fake CoreApi and contract harness take a `Provider`. Old services keep working through a `LegacyService` adapter (Q1).
-- **Branch base:** `main` after the RC2s merge; branch `rc/rc3-0-shared` in a warm lane (`tools/devtools/lane.sh rc3 origin/main`). Everything below is one lane, split into reviewed commits.
-- **Commits (each reviewed, each host-green):**
-  1. Format: `packages/dkneeds/src/keys.rs` v4 only (decisions D1-D6: refuse v1-v3, always write 4, wider items: KEYS group 12 B, USES 12 B, RESOURCES 24 B), `valid_tag(4, ..)` allows 1-15, delete `Table::version` and `item_bytes_v` branches; `dkneeds/src/lib.rs keys_table` and `Needs::fields` (generic list, see Q4); `[limits.format] table_version = 4`; `[runtime] version` 0.12.0 and `table = "0.12.0"` in `sdk/sdk.toml`; DKRG version 2 (record header `u32 service hash, u16 local kind, u16 len`). Role checks `== 4`.
-  2. Patchkit: `dkm.rs`, `major3.rs`, `module.rs`, `register.rs`, `service_resource.rs` (now packed), `records_cli.rs`, `record_rules.rs`, `svccheck.rs`, `fit.rs`, `explain.rs`, `portfile.rs`, `services.rs`, `main.rs`, `dkmsynth.rs`, `dkm_identity.rs`; hook table rule "same hook name once per disjoint device set" (lift `dkm.rs:~820` duplicate check, `module.rs:~282`, `svccheck.rs` per-device compare, `service!` macro `hook_device!`); `[[service.record]] (name, kind, len)` per service; reserved service name `core` refused.
-  3. Runtime reader: `abi/src/{keys,service,regcheck}.rs`, `Declare`, `collect.rs`, `loader/{mod,discover,role,live,package}.rs` (role.rs `hook_items` must skip items whose mask lacks the running device before the port-site lookup; `admission.rs` hook clash compares `(hash, overlapping mask)`), `admission.rs` (kind owner becomes name uniqueness; fit through the `fit` crate ledger `PoolKey/Want/Aggregate`; `needs_of_uses`, `take_fit` replaced), `abi/src/profiles.rs` hash table for `profile:<key>` limits (D5), `lifecycle/graph/from_tables.rs`.
-  4. Provider path: the `Settings` trait and `PART_SETTINGS` (tag 7) in `abi/src/provider/`, `PackageManager` part lookup by tag and version via `CheckedRow::part` (TooNew refuses), `svc-rt` `service!` new form (`provider = Type`, one owner instance in the macro's cell, hooks reach state through it, emits `dk_provider_row` and the part tables), `LegacyService` adapter (wraps a `Service` as `Provider` so the six old services still load), record routing `(service, kind)` to `Records::attach`.
-  5. Typed seam: remaining raw reads in `services/*` through `FwMem`/`DevAddr` (mechanical, objdiff identical except call helpers).
-  6. Test support: `runtime/core/test-support/src/contract.rs` generic over `Provider<FakeCore>` (keep a `Legacy` instantiation until RC3-z); `FakeCore` gains resource and record-routing fakes; new `provider_contract` suite (the one shared suite every service runs).
-  7. Decoders in the same PR (a v4 file passes their version gate but their group parse is wrong): `packages/workbench-core/src/modules/{dktransfer,services}.ts`, `tests/regression/runtime/dkm.ts`, `apps/web/tests/support/dkm.ts`, `tools/device/dkmodule.py`, generated `gen_proto.ts`/`dkproto.py`, `dktransfer.test.ts:81`, `dkneeds.wasm.test.ts`. CAPACITY wire stays unchanged (decision 3 of 2026-11-22): old capacity ids are mapped from core and well-known service pools until RC3b.
-  8. Fixtures: extend `tests/fixtures/modules/local-ping*` (resource `local-ping.tokens` limit 2, a record kind owned by the service, attach/detach counters, a query, one ColdFire hook, one settings field per scope, a greedy consumer for the fit refusal); repack all fixtures and the three port files (`ports/{dt2-1.17,dn2-1.11,dn2-1.12}.toml`) at v4; the six service files declare their resources and records in `dks/module.toml` (`machines.machine_rows|param_rows|page_rows|voice_cost`, `fx.fx_cost`, claim on `core.arena`) so the legacy path still passes fit.
-- **Tests first (lowest layer):**
-  - Unit (`dkneeds`): v4 parse/write round trip, refuse v3 and v5, out-of-order and duplicate tags, group header 12 B, `(service,kind,key)` uniqueness, hook items `(hash, mask)` ordering and disjointness (accept disjoint masks; refuse overlapping; refuse mask 0 plus another), profile-key hash table covers every `profile:` key used in manifests.
-  - Unit (`abi`/`fit`): ledger fit with `sum` and `max{scale}` (voice cost rule `max(per-voice)*voices + sum(effects)`), `draws_from` parent, `init` limit checked at start; `CheckedRow::part` Found/Missing/TooNew; `Declarations` vs header mismatch refused.
-  - Unit (`lifecycle`): from_tables with v4 tables; admission refuses a second service of the same name, an unmet NEED, a local kind twice in one file.
-  - Fake CoreApi: `provider_contract` suite against the local-ping fixture implementation (record validation, attach/detach ownership, resource limits, Query ops, can_stop refusal, stop order).
-  - Assembly: `pnpm nx:pilot run core/runtime:test-assembly`: one fit and one refusal per seam: packed fixture v4 reaches `PackageGraph`, admission and the registry walker; v3 file refused `E_CONTRACT`; DKRG 2 record routed to the service's `attach`; two-device hook table installs the right entry per device.
-  - Host (Python/TS decoders): `dktransfer.test.ts` reads a v4 file; `dkneeds.wasm.test.ts`; `pnpm nx:pilot run @digi/web:test-host` and `@digi/web:test-wasm`.
-- **Checks (exact):** `pnpm nx:pilot run core/runtime:rust-tests`; `core/runtime:test-assembly`; `@digi/workbench-core:test-host`; `@digi/web:test-host`, `@digi/web:test-wasm`; `@digi/desktop:test-host` and `@digi/desktop:typecheck` (memory pane uses `pk_needs`); patchkit tests (`pnpm nx:pilot show project patchkit` for the target names); `node tools/nx/device-literals.mjs`; `mise run check:layers`; static set; `DIGI_GATE_BASE=<base> mise run test:changed`; `verify_build daemons`.
-  Named device targets (change -> test), one quick check per step then one run for the milestone: gate-smoke and gate-pins (selected by `affected`); `core/runtime-tests:test-device--boot-restart--dn2` (loads all six services at v4); `core/runtime-tests:test-device--store-format`; the refusal and inferred-needs tests that patch bytes (`runtime/core/tests/refusal/dkm-patch.ts`, `refusal-table.ts`) are fixed in this PR and rerun (`refusal` target, both devices); `core/services/shortcuts-tests:test-device`; `runtime/core/tests/services/providers.device.test.ts` target. `test:full` only if Em asks.
-- **Break proofs:** (a) write a v3 table: refuse test goes red if `keys::VERSION` bound is relaxed; (b) change the 12-B group header to 8 in `dkneeds` and `dktransfer.ts`: round-trip test and decoder test fail; (c) delete the mask check in `role.rs hook_items`: the two-device hook assembly case installs the wrong entry; (d) drop the `max` aggregate: voice-cost ledger test fails; (e) make `CheckedRow::part` ignore version: TooNew test fails.
-- **Size and risk:** 3-4 agent-days (the plan row says ~0.5 day for shared work; the proposal lists five change groups across dkneeds, patchkit, runtime, six decoders and fixtures: I estimate 3-4 days wall for one lane, medium-high risk). Risks: `BOOT_TABLE_MAX = 640` and the 6,740-B boot frame (measure `patchkit size`, machines has 13 hooks, 6 kinds, exports); FNV-1a collisions (patchkit and admission must refuse); `Needs::fields` is part of the `pk_needs` JSON read by desktop and web (UI change); every card in the field refused until repacked ("built for an older runtime").
-- **Open questions:** Q1, Q2, Q3, Q4, Q5 (section 9).
+Decision: `start` runs inside the file's `init`, before the declarations, in the place of `setup`. `stop` runs in `fini`, which the macro now emits. The instance lives in one cell that the macro declares (`Owner<T>` in `svc-rt`). The file passes the row and the instance pointer with a new import `dk_provider_declare_row(ctx, row, instance)`. Part thunks are generic functions that take the instance pointer, as `ServiceRow::of` builds its thunks today.
 
----
+Reason: no new loader step; the loader already runs `init` and `fini` in the right lifecycle states. A host test builds the same row over `FakeCore` or `RealCore`.
 
-## RC3-1 shortcuts (template)
+Rejected: a `start` pointer in the lifecycle table that the loader calls (a new loader step and a second place that owns the instance).
 
-- **Goal:** the canonical layout and contract v2 in one PR, and the one reference the other five copy. Shortcuts is the smallest (2.3k lines) and has a device test.
-- **Branch base:** `rc/rc3-0-shared` tip (stack) or main after RC3-0 merges; branch `rc/rc3-1-shortcuts`.
-- **Files:** `services/shortcuts/`:
-  - `src/shortcuts.rs` becomes the owner `Shortcuts` with the `Provider` impl (start/attach/detach/can_stop/stop in one impl block; `attach` turns the module's SHORTCUT records into bindings, `detach` = old `remove`), the `Ticker` part (old `tick` calling `run_pending`) beside it; state private; no `static mut STATE` (the `service!` macro holds the instance, `dks/src/hooks.rs` reaches it through the macro's accessor).
-  - `src/records.rs`: only the record kinds (local `SHORTCUT = 1`, from `[[service.record]]`) and `Records::validate` (today `validate.rs` 147 lines: fold in or keep `validate.rs` if it exceeds the concept; one noun per file).
-  - `src/{keys,bindings,build}.rs` stay (concepts); `src/slots.rs` (2 lines, "none yet") deleted; `src/lib.rs` docs + mod + pub use only; add `README.md`.
-  - `dks/{module.toml,src/{lib,hooks,gen_exports}.rs,src/hooks.s}`: `module.toml` gains `[[service.record]] name="shortcut" kind=1 len=...`, drops the `callback_order` dependence on `svc_rows` only if Q3 says order stays in the manifest; `dks/src/lib.rs` uses `service!(provider = Shortcuts, ...)`; `image.rs` (6 lines) folded or removed.
-  - `tests/contract.rs` becomes a call of the shared `provider_contract` suite; `tests/state.rs`, `tests/records.rs` stay as unit tests over the fake core (no `LOCK` mutex once state is not a static).
-  - `tests/fixtures/modules/shortcut-demo` repacked (builder `dk_shortcut_add` unchanged); `tests/device/shortcuts.device.test.ts` (project `core/services/shortcuts-tests`) keeps only key events and swallow verdict on hardware.
-  - `docs/ARCHITECTURE.md` section for the service layout (the template section the others point to).
-- **Tests first:** unit with fake core: attach with N records registers N bindings in file order; first owner of a key pair keeps the binding (refuse second); detach drops bindings, queued calls and active binding without calling `off`; `can_stop` refuses while a binding is active (decide, Q6); `validate` accept and refuse (duplicate id, too many per module `MAX_PER_MODULE`, bad key pair); `Ticker::tick` runs pending in order. Contract suite: `provider_contract` (attach/detach ownership, resource none). Assembly: the packed `shortcuts.dks` row passes `check`, declares its record kind, and the fixture's SHORTCUT record reaches `attach` (one fit, one refusal: a record kind the service does not declare). Device: only the existing shortcuts device test (TRK+YES swallowed, TRK passes, on/off at press/release) on DT2 and DN2.
-- **Checks:** `pnpm nx:pilot run core/services/shortcuts:test-host` (find exact target with `pnpm nx:pilot show project core/services/shortcuts`), `core/runtime:test-assembly`, `core/runtime:rust-tests`, `patchkit objdiff` of `shortcuts.dks` (differences only in the row and hook cell), static set, `verify_build daemons`; device: `pnpm nx:pilot run core/services/shortcuts-tests:test-device` (both halves, `--dt2`, `--dn2` to iterate), `core/runtime-tests:test-device--boot-restart--dn2`; `mise run test:plan` to confirm no other device test is selected.
-- **Break proofs:** make `detach` leave bindings: unit test red; skip the first-owner rule: refusal test red; make the macro hand out a fresh instance per call: hooks-reach-state test (hook drives `on_key` then `tick`, asserted through the macro accessor) red; delete the record kind from `module.toml`: assembly refusal case red.
-- **Size and risk:** 1 day, low-medium. Risk: the template is copied five times, so a review of it (adversarial, including the README and ARCHITECTURE text) gates the lanes.
-- **Open questions:** Q3 (callback order), Q6 (can_stop semantics), Q7 (state cell).
+Changes the decision: a service that must start without `init` (none today).
 
----
+### D3 Mid-branch, the row table accepts both row kinds
 
-## RC3-2 samples (parallel lane)
+Decision: commit 1 makes the runtime's one row table (`svc_rows.rs`, the type `services()` returns) hold a row of either kind, in callback order. The old arm delegates to the existing single-row `ServiceTable` walk (`svc_rows.rs:137-140` already builds a one-row table). The last commit deletes the old arm with `Service`, `ServiceRow` and `ServiceTable`. Walk method names stay, so call sites do not change.
 
-- **Goal:** layout + contract v2; the Provider with `Records` (none today beyond sample-pool claims, check `services/samples/src/records.rs`, 41 lines), `DspPart` (`dsp/mod.rs` 103), `Ticker` (peak window), `Query` (pool and track queries replace any resident bridge).
-- **Files:** `services/samples/**` only: owner `samples.rs` (new; today `tracks.rs` 942 lines and `pool.rs`, `peakwin.rs` 538 are concepts, `records.rs` 41 holds the owner); `slots.rs` (2 lines) deleted; `dks/{module.toml,src/{lib,glue,gen_exports}.rs}`; tests `tests/{contract,lifecycle}.rs`; device tests `runtime/core/tests/samples-live.device.test.ts`, `samples-store-live.device.test.ts`.
-- **Tests first:** unit with fake core: pool admit/release per consumer, peak window ordering, track state per owner, resource limits if any pool is declared (`samples.<pool>` limit), Query ops each with accept and refuse (unknown op, short reply buffer), detach releases everything; `provider_contract` suite. Assembly: packed `samples.dks` row passes `check`. Device: the two existing samples tests only (sample playback and store restore, firmware facts).
-- **Checks:** `core/services/samples:test-host`, `core/runtime:test-assembly`, objdiff, static set; device `core/runtime-tests:test-device--samples-live`, `--samples-store-live` (names via `pnpm nx:pilot show project core/runtime-tests`), both devices.
-- **Break proofs:** skip pool release in `detach`; return a longer length than the reply buffer from `Query`; each turns a unit test red.
-- **Size and risk:** 1 day, low-medium. No file conflicts with the other lanes.
-- **Open questions:** Q8 (is the samples DSP pool a resource of the service or of core).
+Reason: Em's order ends with "delete the old trait and macro", so both exist during the branch. The runtime's host tests link the service crates (`package/handlers.rs:92-101`); without this, `core/runtime:rust-tests` and `test-assembly` do not compile between commit 1 and the machines commit, and commit 1 cannot prove itself. The merged result has one path (plan section 12: no dual path in the core).
 
-## RC3-3 lfo (parallel lane)
+Rejected:
+- Adapter that wraps `Service` as a Provider: decided against by Em.
+- Runtime drives only Provider from commit 1: the branch is not testable until all six are ported.
+- Two tables: breaks callback order between ported and unported services.
 
-- **Goal:** layout + contract v2; drop the `_dt2`/`_dn2` hook-name suffixes (plain names again, two HOOKS items per name with disjoint device masks; hooks chosen by device capability, not by name); lower the device-literals baseline they raised (lfo `module.toml` 28 -> 76? the plan says baseline counts 28->76 and `lfo.dko.json` 24->84 were raised; the task is to return them to their old values or lower).
-- **Files:** `services/lfo/**` (`src/records.rs` 594 -> owner `lfo.rs` + `records.rs` for kinds/validate; `graph.rs`, `route.rs`, `validate.rs`; `dks/src/{hooks.rs,hooks-dt2.s,hooks-dn2.s,hooks-ui.s}`; `dks/module.toml` two `[[hook]]` per name with `devices`); `ports/{dt2-1.17,dn2-1.11,dn2-1.12}.toml` and `ports/fw/lfo.toml` (hook names back to `cf.lfo.hook.*`); fixtures `lfo-shape`, `lfo-shape-b`; modules `lfo_shapes_1`; `tools/nx/device-literals.baseline.json` (run `node tools/nx/device-literals.mjs --write` after); device tests `runtime/core/tests/lfo/*`.
-- **Tests first:** unit: shape record validate accept/refuse (existing `tests/validate.rs`, `records.rs`), graph/route rules; attach registers shapes per owner, detach removes them and falls back to built-in shapes; `Ticker` at the lfo tick. Assembly: the packed lfo file has two items per hook hash with disjoint masks and the device-masked loader picks one (this is RC3-0's case; lfo adds the real file, one fit and one refusal: an lfo file whose two items overlap). Hook-name check: a test asserting no `_dt2`/`_dn2` strings remain in `ports/`, `services/lfo/` (grep test in the owner's host tests) and the baseline did not rise. Device: `lfo.device.test.ts`, `lfo-shape-output`, `lfo-shape-panel`, `lfo-shape-project` (firmware facts: tick audio, panel drawing, project save).
-- **Checks:** `core/services/lfo:test-host`, `core/runtime:test-assembly`, `node tools/nx/device-literals.mjs`, `patchkit service-check` for lfo, objdiff (hooks only), static set, `verify_build daemons`; device: the four lfo device targets on DT2 and DN2 halves in parallel.
-- **Break proofs:** keep a suffixed name in one port: suffix grep test red; make the two items overlap: refusal case red; delete the `devices` filter from one hook: svccheck per-device compare red.
-- **Size and risk:** 1-1.5 days, medium (port files are shared inputs of every device half and change keys; dn2-1.11 patch port must stay valid, keep hash-resolved anchors).
-- **Open questions:** Q9 (does DN2 1.11 port stay in this PR).
+Changes the decision: Em wants no old arm in the runtime even inside the branch. Then all service commits are verified only at the end.
 
-## RC3-4 project (parallel lane; Settings candidate)
+### D4 One `SVC_ABI` change; `PROVIDER_ABI` stays 1
 
-- **Goal:** layout + contract v2 for the biggest non-machines service (8.3k lines): owner `Project` (today `ProjectSvc` in `lib.rs`, engine in `engine/` with ~12 files, `dkp.rs` 614 and in-crate `dkp/tests.rs`), tests moved beside code, `static mut` removed; the `Settings` part as the first user (project overlay and names are settings with `Scope::Service`).
-- **Files:** `services/project/**` (`src/lib.rs`, `name.rs`, `dkp.rs`, `engine/*`, `dks/src/{glue.rs 621,hooks.rs,lib.rs,hooks.s}`, `dks/module.toml`, `tests/{contract,service}.rs` (2472 lines: split by behaviour)); `runtime/core/tests/reload-project.device.test.ts`, `services/project/tests/project.device.test.ts` (project `core/services/project-tests`); fixture `project-user`.
-- **Tests first:** unit with fake core: engine restore/plan/queue state machines already have tests (keep, move `dkp/tests.rs` to `dkp/tests.rs` convention), new attach/detach cases (consumer with project overlay), Settings `fields/choices/validate` accept and refuse, Query ops. Assembly: packed `project.dks` row passes. Device: `project.device.test.ts` and `reload-project` (project save and restore by the firmware: firmware facts only).
-- **Checks:** `core/services/project:test-host`, `core/services/project-tests:test-device` (halves), `core/runtime-tests:test-device--reload-project`, `core/runtime:test-assembly`, objdiff, static set.
-- **Break proofs:** `detach` leaves overlay state; `validate` accepts a value the choices refuse; each red in unit tests.
-- **Size and risk:** 2 days, medium (largest file moves; behaviour-neutral moves proved with objdiff and the boot-effects snapshot). Split into two commits: pure layout moves (objdiff identical), then contract v2.
-- **Open questions:** Q10 (does project take the Settings renderer first, or only fx).
+Decision: RC3 changes `SVC_ABI` once from main's view. `core_imports.rs` and `service.rs` are hashed boundary files (`core_imports.rs:11`, `service.rs:22-29`). Part tables are versioned by `PartRef.version`, not by the files hash. `service.rs` stays as the file of the boundary types (`CheckCtx`, `ApplyCtx`, `Claim`, `RowWrite`, `ModuleCommitCtx`, `RecordSink`, `SettleCtx`, `Declare`, `Problem`, `SettingsOverlay`); the trait, the row, the thunks and the table leave it.
 
-## RC3-5 fx (parallel lane; after RC2s-3 for the menu)
+Reason: plan section 12, "one service ABI change per item, with all six services adapted in the same stack". No shipped file carries a `ProviderRow`, so its ABI number does not move.
 
-- **Goal:** layout + contract v2; `dkrt_fx` bridge becomes `Query` (the menu's route-query goes through the service Query op instead of the bridge); `Settings` part (`Scope::Consumer(id)`: the route choice row) replaces the menu's FX route panel, which is deleted with its old-picker fallback; `fxpage.rs` 1030 and `fxsend.rs` 676 split by concept; resources `fx.fx_cost` (sum, draws_from `core.dsp_cost`) and send slots.
-- **Files:** `services/fx/**` (`src/{records,build,fxpage,fxsend,rows,validate,dsp/mod}.rs`, `dks/src/{hooks,rt,gen_exports,lib}.rs`, `dks/module.toml`, `dks/dsp/fx-{dt2,dn2}.s` untouched); `runtime/apps/digikit-menu/src/menu.c` (FX route panel; ~28 route references) and `module.toml`; `sdk/include/dk/fx/route-query.h`; `runtime/platform/ui/host/tests/c/menu_fake.c`; the `dkrt_fx` entries in `runtime/core/abi.toml`, `include/dkrt.h`, `abi/src/hooks.rs`, `sdk/src/gen_abi.rs`, `src/rs/src/{hooks,api}.rs` (removing an ABI entry: this touches ABI-hashed files; needs Q11 and Em's ABI decision); device tests in `image-modules/points/{fx,fxpages,dynfx}/tests` (11 files in ledger RC3).
-- **Tests first:** unit (move from device tests per ledger `docs/plans/ledgers/device-test-inventory.md` rows 17-31: send-slot capacity and choice state machine -> `Settings::choices`/`validate` tests; kit seeding defaults and reorder -> unit; send limit and project-save order -> unit; value codec -> unit/rig), `Query` ops, attach/detach of FX records, `fx_cost` fit. Each moved assertion: lower test first, shown to fail, then device assertion removed, adversarial review (project rule RC2t). Assembly: packed `fx.dks` row; the Settings part reaches the renderer (RC3m seam). Device: keep fx-pages (pixels and audio preserved), fx-routes-persist (one test: menu YES persists both route directions and restart gives matching audio/pages), fx-send PCM (numeric pin report, never hash alone), fx-contract (service absent keeps stock pages). Delete `fx-two-notes` (ledger: experiment, no firmware fact) after review.
-- **Checks:** `core/services/fx:test-host`, `core/runtime:test-assembly`, `@digi/*` not touched, `core/dynfx:test-device--fx-contract`, `core/fx:test-device--fx-routes-panel|fx-routes-persist|fx-send|fx-send-dn2`, `core/fxpages:test-device` (names via `pnpm nx:pilot show project <id>`), `mise run test:plan` to confirm selection, static set, `check:layers`, objdiff and size (menu text shrinks: the route panel is deleted).
-- **Break proofs:** `validate` accepts a route with no free send slot: unit red; `detach` leaks a send slot: red; `Query` unknown op returns OK: red.
-- **Size and risk:** 2-3 days, medium-high (FX has the most device tests and touches the menu and the ABI-hashed bridge). Python FX analyzers stay for now; they port in RC4 (Em 2026-11-23).
-- **Open questions:** Q11 (ABI), Q12 (route UI before RC2s-3 lands).
+Consequence: every `.dks` and `system.dksp` is rebuilt. An older `.dks` on a card is refused (`seams.rs:139-141`). Content modules (`.dkm`) are not affected. No runtime MINOR bump: the header table does not change.
 
----
+Changes the decision: nothing in RC3.
 
-## RC3-6 machines (last; with RC4 machines point)
+### D5 The contract suite
 
-- **Goal:** layout + contract v2 for the largest service (12.4k lines) plus RC4's machines point: hooks installed at load like lfo, slot fills, voice-cost aggregate `machines.voice_cost` (`max`, scale `profile:dsp_voices`, draws_from `core.dsp_cost`), `machine_rows|param_rows|page_rows` resources; `build.rs` 1007, `records.rs` 1629, `slots.rs` 539, `dsp/mod.rs` 656 split by behaviour; `static mut` removed.
-- **Files:** `services/machines/**` (`src/{records,build,slots,assign,guard,validate,paramapi,nativepage,dsp/mod}.rs`, `dks/{module.toml,src/{fw,image,hooks-*.s,gen_exports}.rs,dsp/dispatch-{dt2,dn2}.s}`), `image-modules/points/machines` and its patchkit ops/anchors/smoke entries (RC4 point removal), `ports/fw/*.toml` sites, `runtime/core/tests/machines/**`, `modules/machine/**/tests` (tb303, shot ×7), fixtures for machines.
-- **Tests first:** host tests over the fake CoreApi: record validation (`records.rs` is the bulk), assign, slot fills, voice-cost aggregate against the ledger (accept at limit, refuse over), param rows, guard; `provider_contract`. Assembly: packed `machines.dks`, one fit and one refusal (voice cost over limit from tables only). Device only for DSP fills and page hooks (machine-rows-dt2/dn2, frametype-slot, shot*, tb303).
-- **Checks:** `core/services/machines:test-host`, `core/runtime:test-assembly`, `core/runtime-tests:test-device--machine-rows-dt2|dn2|frametype-slot`, module device targets `modules/machine/**:test-device`, `test-dsp-conformance` (`pnpm nx:pilot run-many -t test-dsp-conformance`), gate-smoke, objdiff for pure moves, `patchkit size`; the Python `test_pk_*_fw` tests of the machines point become Rust host tests here.
-- **Break proofs:** voice-cost aggregate switched to `sum`; slot fill not released in `detach`; `records` accept with no matching `MACHINE_ROWS`; each red in unit.
-- **Size and risk:** 3-4 days, high (largest, DSP-coupled, RC4 point removal in patchkit). Split into pure moves (objdiff identical), contract v2, RC4 point.
-- **Open questions:** Q13 (RC3 machines and RC4 machines point in one PR or two).
+Decision: `test-support/src/contract.rs` becomes generic over a small driving trait with two wrappers: one for a Provider owner object (new, drives the real part thunks) and one for `S: Service<FakeCore>` (old, deleted in the last commit). `contract::<S>` keeps its name for unported services; ported services call `provider_contract`. No second copy of the suite.
 
-## RC3-z cleanup (after all lanes)
+Reason: plan section 3 (reuse the suite of plan E); first-pass point 3 (tests drive the real entry points).
 
-Delete `LegacyService`, `Service` trait path, `svc_rows.rs` fallback, `[records.kinds]`, `[records.resources]`, domain `[capacity.kinds]` ids, generated `KIND_*`/`RES_*` consumers; regenerate (`patchkit gen`); `contract.rs` legacy instantiation; size report ("must shrink"); `mise run test:changed` then the RC3 milestone device gate (`mise run test:subset -- ...` named tags `S:services`, `S:machines`, `S:fx` plus gate-smoke and gate-pins on DT2 and DN2, halves in parallel; post-landing reviewer). 0.5-1 day, low.
+Rejected: a copied suite (two definitions); converting the suite in one step (unported services' tests do not compile).
 
----
+### D6 The `service!` grammar
 
-## 9. Open design questions for Em
+Decision: only the head changes: `service!(Shortcuts, "shortcuts", &KINDS_SHORTCUTS, parts = [Records, Tick], hooks = [...], fills = [...], exports = ...)`. The `hooks`, `fills`, `exports` lists keep their text form. `setup =` goes (it is `start`). `query =` goes (it is the Query part); the macro still declares the resident query export and points it at the Query thunk, so `hooks::provider_query` (`resident_query.rs:48`), the manifest and patchkit do not change. `tick =` (module-record tick, project) stays allowed.
 
-- **Q1 Adapter or big bang for the six services.** Recommend a temporary `LegacyService` adapter in RC3-0, deleted in RC3-z. Changes: with it, lanes are parallel and each PR is bisectable and small; without it RC3 is one large PR for all six, no parallel lanes, the runtime is smaller sooner. Cost: some runtime text lives until RC3-z (measure on Syntakt).
-- **Q2 Size of RC3-0.** The plan says ~0.5 day for shared work; the tree needs a format change in dkneeds, patchkit, runtime, six decoders and fixtures (3-4 days). Recommend splitting RC3-0 into commits 1-3 (format, patchkit, reader) as one reviewed milestone and 4-8 (Provider path, harness, decoders, fixtures) as another, one branch. Changes: whether the template can start before decoders are done (it can).
-- **Q3 Callback order.** Today `callback_order` is in `module.toml` with the six-name fallback in `svc_rows.rs`. Recommend keep it in the manifest (packed already) and delete the fallback in RC3-z; cards written before the order was packed are refused anyway by MINOR 0.12.0. Changes: whether `svc_rows` can go with the header bump.
-- **Q4 `Needs::fields` (11 named fields in `pk_needs` JSON read by desktop memory pane and web fit tests).** Recommend a generic list `[(owner, name, claim)]` with UI labels from manifests in this PR's follow-up (RC3b with the CAPACITY wire). Interim: derive the 11 named fields from the list for the old JSON. Changes: UI work in RC3-0 versus none.
-- **Q5 `BOOT_TABLE_MAX = 640` and boot frame.** Recommend measure first (commit 1), raise the cap only with a stack-frame audit. Changes: possible runtime memory cost.
-- **Q6 `can_stop` for shortcuts.** Recommend `Ok` always (a held key binding ends cleanly on stop, `remove` semantics are already safe). Changes: whether the template sets a pattern of "refuse while active", which would block unloads.
-- **Q7 State cell.** `service!` holds the one instance. Recommend a typed `Owner<T>` cell in `svc-rt` with `&mut` only inside macro-generated entry points (hooks call `with(|s| ...)`), no `static mut` in service crates. Changes: how host tests drive hooks (through the same accessor) and whether test locks disappear.
-- **Q8 Samples DSP pool ownership.** Recommend a resource of `samples` (`samples.pool`), with `core.dsp_area` as parent. Changes: pool numbers move from core capacity to the service ledger.
-- **Q9 dn2-1.11 port in RC3-3.** Recommend repack but keep the 1.11 patch port a smoke-only target (AGENTS.md: health proof on 1.12/1.17). Changes: device halves needed.
-- **Q10/Q12 Settings renderer first user.** Recommend fx first (it replaces a real panel) and project as the second consumer for `Scope::Service`; both require RC2s-3's `ui.settings_rows` hook. If RC2s-3 slips, project and fx wait; the other services do not.
-- **Q11 `dkrt_fx` bridge removal edits ABI-hashed files** (`abi.toml`, `include/dkrt.h`, `abi/src/hooks.rs`, `sdk/src/gen_abi.rs`). Recommend keep the bridge symbol one release behind a deprecated entry (menu no longer calls it) and remove it in RC3-z together with the next deliberate ABI bump, so RC3 spends no ABI bump. Changes: dead entry stays in the resident table meanwhile.
-- **Q13 Machines and RC4 machines point.** Recommend two PRs on one branch (contract v2 first, then the point), because the point change touches patchkit ops and anchors that the Provider change does not. Changes: review size, bisect points.
+Reason: `patchkit service-check` reads the call as text (`svccheck.rs:10-24`).
+
+### D7 Service state
+
+Decision: state is private fields of the owner object. Three kinds of table stay named statics in their concept file, written only through that concept's type: a table a device test or tool reads by symbol (`DKRT_*`), a table an assembler hook reads by symbol, a table an interrupt reads. Each one is listed in the service README with its reader. Every other `static mut` goes. Hooks reach state through `Owner::with`.
+
+Reason: canonical layout row ("no loose static mut"); assembler and device tests stay unchanged, so the device tests remain a valid proof.
+
+Rejected: moving every table into the owner with offset constants for the assembler (changes hook code and device-test symbols for no gain in RC3).
+
+Changes the decision: a later item that gives tools a symbol map for service files.
+
+### D8 Fixtures
+
+Decision: `local-ping` is ported in commit 1 and gains only what today's header can express: attach and detach counters, a Tick, a Query that returns the counters. Its record kind, resource, hook and settings fields wait for v4 and the Settings item. `svc-test`, `svc-test-user`, `svc-echo` stay.
+
+Reason: a fixture record kind needs an entry in `sdk/sdk.toml [records.kinds]` until v4. Deleting fixtures changes device tests that are the proof.
+
+### D9 No device-test moves in RC3
+
+Decision: the ledger moves of item RC3 (FX, services, settings) are a later item.
+
+Reason: Em's rule (d): existing device tests are the proof. A moved test proves less about a contract change.
+
+## 4. RC2s dependencies
+
+1. Base: `main` after the RC2s stack merges (RC2s-0 to RC2s-3 and RC2t) and its one ABI bump. Do not start commit 1 before that.
+2. After RC2s-2 the loader and the row table are in `system.dksp`. Measure the package size and the flashed image.
+3. `DKRT_PROVIDERS` is read through the host directory (`HOST_PROVIDERS`); RC3 does not change it. `boot-restart` must read it through the helper that RC2s-2 step (e) adds.
+4. New imports for service files go in `core_imports!` (the package's import table). Nothing is added to the resident table. If a brief finds it needs a resident entry, stop and ask.
+5. The Settings part and the FX route panel depend on RC2s-3 (the menu in the package, `ui.settings_rows`). See question E1.
+6. Paths: `package/` moved in RC2s-1 S5. Re-find files at the base.
+
+## 5. Order, lanes, ownership
+
+```
+commit 1  contract path                         lane A (rc3)
+commit 2  shortcuts (template; its review gates the rest)   lane A
+parallel, branched from commit 2, cherry-picked in this order after review:
+          samples | lfo | project | fx
+          (machines pure-move commit may run beside them)
+then      machines
+then      delete the old path
+then      one device gate, post-landing review, one PR
+```
+
+Lanes: `tools/devtools/lane.sh rc3 origin/main` for lane A. Reuse warm lanes for the parallel worktrees (fx in lane A; lfo, project, samples in three warm lanes). At most two cold cargo builds at once. Emulators only through Nx or `tools/devtools/emu-slot.mjs`.
+
+| Unit | Owns | Must not edit |
+| --- | --- | --- |
+| contract path | `runtime/core/abi/src/provider/**`, `abi/src/{core_imports,service}.rs`, `runtime/core/svc-rt/**`, `runtime/core/test-support/**`, `runtime/core/src/rs/src/package/{svc_rows,svc_imports,handlers,registry}.rs`, `package/loader/{seams,commit}.rs`, `package/lifecycle/host.rs`, `packages/patchkit/src/{svccheck,record_rules,sdkgen}.rs`, `tests/fixtures/modules/local-ping/**`, one free `validate` in the `records.rs` of shortcuts, lfo, fx, machines | service logic |
+| each service | `services/<name>/**`, its fixture call lists, its own lines in the runtime's test files (`package/handlers.rs:92-101`, `handlers/{fx_fixture,machines_fixture,lfo_tests,dks_decls}.rs`), its section of `docs/ARCHITECTURE.md` | patchkit, `svc-rt`, `abi`, `test-support`, `sdk/sdk.toml`, `ports/`, device tests |
+| delete | the old halves in the files of commit 1 | services |
+
+Shared runtime test files: each worktree edits only its own lines; the orchestrator resolves text conflicts at the cherry-pick. Committed objects (`*.dko.json`) are never merged by hand: regenerate.
+
+## 6. Rules for every brief (STD)
+
+- Read before Edit. Leave changes uncommitted and mark the plan row `review`. Report in at most 200 words: Result, Commits, Checks, Device runs, Open items.
+- Run `DIGI_GATE_BASE=<base> mise run test:plan` first and say whether the selection matches what the change reaches.
+- Static set: `pnpm nx:pilot run-many -t lint,fmt-check,rust-fmt,typecheck,python-checks`. Then `DIGI_GATE_BASE=<base> mise run test:changed`.
+- Update `docs/ARCHITECTURE.md` for the step. No `pkill`. `dk:dev` for device iteration.
+- If chains, not `match` on dense integers, in code that runs on the ColdFire.
+- First-pass checklist, all eight points: (1) every new or moved test seen to fail, by TDD or by a reported temporary break; (2) no device literals, the baseline only goes down; (3) tests drive real entry points, fakes only for hardware; (4) `patchkit objdiff` and `patchkit size` (DT2, DN2, Syntakt): every differing function explained, sizes before and after; (5) after a move, search the tree for the old path; (6) one accept and one refuse case per rule plus the edge cases; (7) a change to build inputs runs that build (`uv run python -m tools.devtools.verify_build daemons`, patchkit, `patchkit:objects-check`); (8) globals in tests through one owner with a guard that restores on unwind.
+- Design checklist: separation of concerns; device facts only from device data behind capabilities; DRY; owner objects with private state; files named after the noun; no utils or helpers files.
+- Canonical service layout (plan row): `src/<name>.rs` owner with the `Provider` impl in one block; `src/records.rs` kinds and `Records`; a part in its own file only when substantial (`dsp.rs`, `queries.rs`); `src/lib.rs` docs, mod, pub use only; README; tests beside code; `dks/` with `module.toml`, `src/{lib,hooks,gen_exports}.rs`.
+- A service unit with file moves is two commits: pure moves (objdiff identical), then the port.
+- Test layers: logic in unit tests over `FakeCore`; one fit and one refusal per seam in `core/runtime:test-assembly`; no new device test.
+
+## 7. Briefs
+
+### RC3-1 Contract path (commit 1)
+
+- **Goal:** a service file can export a `ProviderRow` and the runtime drives it. Decisions D1 to D6 and D8 are implemented. The six services do not change and still load.
+- **Files:** see section 5. Also: split `svc-rt/src/lib.rs` (568 lines) by concept first as a pure move (`import_core.rs`, `module_def.rs`, `declare.rs`, `service.rs` for the macro, new `owner.rs`); regenerate `abi/src/gen_svc_abi.rs` with `patchkit gen`; regenerate the committed objects of the runtime, the package, the six services and the fixtures; `docs/ARCHITECTURE.md` service contract section, `modules/README.md` "Services", the fixture table in `docs/TESTING.md`.
+- **Tests first:**
+  - Unit, `dkrt-abi`: each part table's thunk calls the owner method with the same arguments, reached through `check` and `CheckedRow::part`; `Consumer` gives the base and the records of a kind in file order.
+  - Unit, `svc-rt`: `Owner::with` gives nothing before `start` and after `stop`; a second `start` is refused; the macro emits exactly the adopted parts; a hook reaches the instance that `start` made.
+  - Unit, runtime row table: old and new rows walk in callback order; the first refusal stops a walk; a missing part is skipped; a part version newer than the core knows is refused at `add`.
+  - Contract suite: `provider_contract` over the ported `local-ping` on `FakeCore` (start, attach and detach counters per consumer, query, tick, stop order).
+  - Assembly: fit: the packed `local-ping.dks` loads through the real loader, its two consumers attach and detach, the query answers. Refusal: a thin-wrapper variant of the fixture with a newer part version is refused with a clear status.
+- **Checks:** `pnpm nx:pilot run core/runtime:rust-tests`; `core/runtime:test-assembly`; `dkrt-abi:rust-tests`, `dkrt-svc-rt:rust-tests`, `dkrt-test-support:rust-tests` and the six `dkrt-svc-<name>:rust-tests` (Cargo projects, `tools/nx/cargo.mjs:1-4`; confirm names with `pnpm nx:pilot show project <name>`); patchkit tests; `patchkit service-check` for the six services and local-ping; `patchkit:objects-check`; `mise run check:layers`; STD set. Boot-effects snapshots unchanged.
+- **Quick device check:** `core/runtime-provider-tests:test-device--dn2` (loads `test/local-ping` and its user in the real image).
+- **Break proofs:** ignore the part version in `add` (refusal case red); hand a fresh instance to each thunk (hook-reaches-state red); sort the table by load order (callback-order test red); skip `detach` in the fixture walk (counter case red).
+- **Size:** 10 h. Risk medium: walk order with mixed rows; `svccheck` text rules; object regeneration for every service.
+
+### RC3-2 shortcuts (template)
+
+- **Goal:** the reference port that the others copy: canonical layout, D7 state rule, README.
+- **Files:** `services/shortcuts/**`. `Shortcuts` (`src/shortcuts.rs:53`) becomes the owner with the `Provider` impl (`attach` none, `detach` = old `remove`) and `Ticker` beside it; `src/records.rs` keeps kinds, `Records` (`begin`, `commit`, `check`, `apply`) and the free `validate`; `STATE` (`records.rs:28`) and `state()` go; `ShortcutsService` goes; `src/slots.rs` deleted; `dks/src/image.rs` setup moves into `start`; `dks/src/hooks.rs` reaches state through the cell; `tests/{contract,state,records}.rs` lose the `LOCK` mutex.
+- **Tests first:** unit: records become bindings in file order; the first owner of a key pair keeps it and the second is disabled with the log event; `detach` drops bindings, queued calls and the active binding without calling `off`; `check` refuses a full table and a callback outside the image; `tick` runs pending calls in order only in the early phase. Contract suite: `provider_contract` on every profile. Assembly: the existing shortcut-demo case.
+- **Checks:** `dkrt-svc-shortcuts:rust-tests`; `core/runtime:rust-tests`; `core/runtime:test-assembly`; `patchkit service-check`; `patchkit objdiff` of `shortcuts.dks` with every difference explained; `patchkit:objects-check`; STD set.
+- **Quick device check:** `core/services/shortcuts-tests:test-device--dn2`.
+- **Break proofs:** `detach` leaves bindings; drop the first-owner rule; run pending calls in every phase. Each turns a unit test red.
+- **Size:** 3 h. Risk low to medium: the template is copied five times, so its review is adversarial and includes the README and the ARCHITECTURE text.
+
+### RC3-3 samples
+
+- **Goal:** owner `Samples` in `src/samples.rs` with `Provider`, `DspPart` (`check_sections`, `admit`, `claim`, `release`, `loaded`) and `Ticker`.
+- **Files:** `services/samples/**` (`src/records.rs` 41 lines becomes the owner file; `src/slots.rs` deleted; `tracks.rs`, `pool.rs`, `peakwin.rs` stay concepts; `dks/src/{lib,glue}.rs`).
+- **Tests first:** unit: track state per owner; `release` gives back every track of the consumer; `loaded` marks tracks ready; the tick works only in the early phase; `admit` accept and refuse. Contract suite. Assembly: existing cases.
+- **Checks:** `dkrt-svc-samples:rust-tests`; `core/runtime:rust-tests`; `core/runtime:test-assembly`; objdiff; `patchkit:objects-check`; STD set.
+- **Device targets (gate):** `core/runtime-tests:test-device--samples-live` (DT2), `core/runtime-tests:test-device--samples-store-live` (DN2).
+- **Break proofs:** skip the release of tracks; mark ready before `loaded`.
+- **Size:** 3 h. Risk low to medium.
+
+### RC3-4 lfo
+
+- **Goal:** owner `Lfo` in `src/lfo.rs` with `Provider` (`settle`, `detach`) and `Records`. Hook names and port files do not change (question E2).
+- **Files:** `services/lfo/**` (`src/records.rs` 594 lines split into owner and records; `graph.rs`, `route.rs`, `validate.rs` stay; `dks/src/hooks*.s` untouched). The shape table that the vector 191 tick reads (`SHAPES`) and `WAVE` stay named statics under D7.
+- **Tests first:** unit: `settle` gives each key one number and saves only when the map changed; `check` refuses a key the module does not provide and a full table; `apply` writes the shape under the interrupt mask and does not overwrite another owner; `detach` retracts the picture first and syncs the range. Contract suite. Assembly: existing lfo-shape cases.
+- **Checks:** `dkrt-svc-lfo:rust-tests`; `core/runtime:rust-tests`; `core/runtime:test-assembly`; `patchkit service-check`; objdiff (hooks identical); `node tools/nx/device-literals.mjs` (no rise); STD set.
+- **Device targets (gate):** `core/runtime-lfo-tests:test-device` (lfo, lfo-shape-output, lfo-shape-project, lfo-shape-panel).
+- **Break proofs:** write a shape without the mask order (unit asserts the fake's mask calls); let `apply` overwrite another owner; skip `sync_range` in `detach`.
+- **Size:** 4 h. Risk medium: tables read in an interrupt.
+
+### RC3-5 project
+
+- **Goal:** owner `Project` in `src/project.rs`; the state that is in `dks/src/glue.rs` statics moves into it; `start` does what `glue::setup` does (settings overlay); `stop` drops the overlay.
+- **Files:** `services/project/**` (`ProjectSvc` goes; `engine/` and `dkp.rs` stay concepts; `glue.rs` 621 lines split by concept; tests in `tests/service.rs` split by behaviour).
+- **Tick:** keep the module-record `tick =` unless the worker shows that a `Ticker` phase gives the same place in the UI pass; report which.
+- **Tests first:** unit: existing engine tests stay; new: `start` sets the overlay once, `stop` removes it, the hook entries reach the one instance. Contract suite. Assembly: existing project-user case.
+- **Checks:** `dkrt-svc-project:rust-tests`; `core/runtime:rust-tests`; `core/runtime:test-assembly`; objdiff identical for the move commit; STD set.
+- **Device targets (gate):** `core/services/project-tests:test-device`; `core/runtime-tests:test-device--reload-project` (DT2).
+- **Break proofs:** leave the overlay set after `stop`; give the hooks a second instance.
+- **Size:** 4 h. Risk medium: the largest moves outside machines.
+
+### RC3-6 fx
+
+- **Goal:** owner `Fx` in `src/fx.rs` with `Provider`, `Records`, `DspPart`, `Ticker`, `Query`, `Describe` (`cap`, `table_check`). The route panel, `dkrt_fx` and the Settings part do not change (question E1).
+- **Files:** `services/fx/**` (move commit: `fxpage.rs` 1030 and `fxsend.rs` 676 split by concept, objdiff identical; port commit: `src/records.rs`, `build.rs`, `dsp/mod.rs`, `dks/src/{lib,hooks,rt}.rs`). `DKRT_FXP` and `DKRT_FXS` stay named statics (device tests read them). `dks/dsp/*.s` untouched.
+- **Tests first:** unit: check steps (count over `MAX_FX`, effect rules, missing registry); `apply` claims a row and writes the page; `detach` gives back page, list entry, send cell and defaults; `cap` for effect and send slots; `query` accept, unknown op, short reply buffer; `row_step` order. Contract suite. Assembly: existing dyn-fx-gain cases.
+- **Checks:** `dkrt-svc-fx:rust-tests`; `core/runtime:rust-tests`; `core/runtime:test-assembly`; `patchkit service-check`; objdiff; STD set.
+- **Device targets (gate):** `core/dynfx:test-device` (fx-contract); `core/fx:test-device--fx-routes-panel`, `--fx-routes-persist`, `--fx-send`, `--fx-send-dn2`; `core/fxpages:test-device--fx-pages`, `--fx-bipolar`, `--fx-kit-persist`, `--fx-track-route`; `core/runtime-tests:test-device--reload-fx`, `--fault-trace`.
+- **Break proofs:** `detach` leaks a send cell; `query` answers OK for an unknown op; `cap` counts a freed row.
+- **Size:** 6 h. Risk medium to high: most callbacks after machines, nine assembler hooks, most device tests.
+
+### RC3-7 machines (last)
+
+- **Goal:** owner `Machines` in `src/machines.rs` with all parts except Query. The RC4 machines point is not touched.
+- **Files:** `services/machines/**`; `services/rows` crate renamed from `dkrt-svc-params` to `dkrt-svc-rows` (canonical layout row; also `runtime/core/project.json:4,16,58`). Move commit: `records.rs` 1629, `build.rs` 1007, `slots.rs` 539, `dsp/mod.rs` split by behaviour, objdiff identical. This commit may run beside the four parallel worktrees. Port commit: state into the owner; `PARK_TRIES`, `BUSY_PASSES`, `LOGGED`, `MISSING_ROWS` become fields.
+- **Tests first:** unit: the seven check steps, each accept and refuse; `attach` and per-record `apply`; `settle` plans numbers and resets the parking state; `reload_done` frees placeholders and resets missing rows; `cap` for the five capacity kinds; `detach`; DSP claim, release, clear and row steps. Contract suite. Assembly: existing sine and dyn-dn2 cases; boot-effects snapshots unchanged.
+- **Checks:** `dkrt-svc-machines:rust-tests`; `dkrt-svc-rows:rust-tests`; `core/runtime:rust-tests`; `core/runtime:test-assembly`; `pnpm nx:pilot run-many -t test-dsp-conformance`; `patchkit service-check`; objdiff; `patchkit size`; STD set.
+- **Device targets (gate):** `core/runtime-machines-tests:test-device` (frametype-slot, machine-rows-dn2, machine-rows-dt2); `core/runtime-tests:test-device--reload`, `--live`, `--missing`, `--boot-restart`; the machine module device targets that `test:plan` lists (tb303, shot).
+- **Break proofs:** keep the parking state across `settle`; skip a row release in `detach`; return the wrong pair for one capacity kind.
+- **Size:** 9 h. Risk high: the largest service and DSP-coupled.
+
+### RC3-8 Delete the old path
+
+- **Goal:** one path. Delete `Service`, `ServiceRow`, the thunks, `ServiceTable`, `RowPtrs`, `accepts_records!`, `accepts_teardown!`, `Declare::ROW`, `dk_service_declare_row`, the old macro arms, the old arm of the row table, the `Service` wrapper of the contract suite, the old form in `svccheck.rs`, and the callback-order fallback (`svc_rows.rs:13-23`) with its test reworked to explicit orders. Rename `svc_rows.rs` to the noun it now owns. Regenerate `gen_services.rs`, `gen_svc_abi.rs` and all objects.
+- **Tests first:** none new. The runtime tests that used a fake row for `teardown_refusal` become a `can_stop` case of a fixture provider, with an adversarial review of each change.
+- **Checks:** all host targets of RC3-1; search the tree for the deleted names; `patchkit size` for DT2, DN2, Syntakt and the package against the base (plan: must shrink); `mise run check:layers`; STD set.
+- **Break proofs:** not applicable (deletion); the search for old names is the check.
+- **Size:** 2 h. Risk low.
+
+### RC3-9 Gate and PR
+
+- `DIGI_GATE_BASE=origin/main mise run test:changed`, then `mise run test:plan` and show the plan and its cost. One device gate on DT2 and DN2, halves in parallel: the device targets named in RC3-1 to RC3-7 plus `gate-device-smoke`, and `gate-smoke` and `gate-pins` when `affected` selects them. Post-landing reviewer on the combined diff. The PR text names the subset and what it skips. Push, PR and merge need Em's OK.
+- **Size:** 3 h agent time; the last stack gate took 41 minutes.
+
+**Total:** 44 agent-hours. Wall: about 2.5 days; about 2 days when the machines move commit runs beside the four worktrees and reviews need one round.
+
+## 8. Questions of the draft
+
+| Q | Decision | Reason |
+| --- | --- | --- |
+| Q1 adapter | Decided by Em: none. Detail in D3. | |
+| Q2 size of the shared work | Closed. v4 is out; commit 1 is 10 h. | |
+| Q3 callback order | Stays in the manifest. The six-name fallback is deleted in RC3-8. | The `SVC_ABI` change refuses every older `.dks`, so no file without a packed order can load. |
+| Q4 `Needs::fields` | Deferred with header table v4. | RC3 does not touch the table. |
+| Q5 `BOOT_TABLE_MAX` | Deferred with v4. | Same. |
+| Q6 `can_stop` for shortcuts | Default `Ok` for all six. The per-consumer refusal walk is deleted. | All six use `accepts_teardown!`. A service that must refuse one consumer later adds `can_detach` as lifecycle version 2. |
+| Q7 state cell | `Owner<T>` in `svc-rt`; D2 and D7. | |
+| Q8 samples DSP pool | Deferred with v4. | Resources are not packed in RC3; samples keeps its `admit` check. |
+| Q9 dn2-1.11 port | No port file changes in RC3. With the hook-name item: rename in all three port files, device proof on 1.12 and 1.17, 1.11 by patchkit host tests. | AGENTS.md: 1.11 is a patch port only. |
+| Q10 project Settings | Not in RC3; project keeps `SettingsOverlay` (`service.rs:675-695`). | Follows E1. |
+| Q11 `dkrt_fx` bridge | Question E1. | |
+| Q12 route UI and RC2s-3 | Closed: the base is after the RC2s merge. Scope is E1. | |
+| Q13 machines and RC4 | Decided by Em: separate. | |
+
+## 9. For Em (2)
+
+**E1 Settings part, FX route panel and the two bridges.** The plan's RC3 row includes the `Settings` part, the FX route row moved to it, the menu's route panel deleted, and `Describe` and Query in place of the `dkrt_fx` and `dk_machines_module_info` bridges (`package/handlers.rs:49-50, 74-89`). The lean decision does not name them.
+- Recommendation: their own item after RC3, together with RC3m, which needs the same renderer.
+- If in RC3: about 10 to 14 h more; a UI change that needs an agreed design first; `fx-routes-panel` is rewritten and is no longer an unchanged proof; menu edits after RC2s-3; `abi.toml` and `dkrt.h` change.
+- If out: RC3 stays behaviour-neutral with unchanged snapshots and device tests; the runtime names `fx` and `machines` in two export lookups for one more item.
+
+**E2 lfo hook names.** The plan says RC3 returns `cf.lfo.hook.*_dt2` and `*_dn2` to plain names and lowers the device-literals baseline. The device mask is already in the HOOKS item (`rc3-header-table-v4.md:19`), so this needs no v4, but it edits patchkit (duplicate-name checks, `svccheck`), the loader (`role.rs`, `admission.rs`) and the three port files.
+- Recommendation: its own small item right after RC3 (about 4 h, proof: the four lfo device tests, `gate-smoke`, `gate-pins`).
+- If in RC3: the lfo worktree is no longer disjoint and lands serially; port files change in the branch.
+- If out: the suffixes and the raised baseline stay for one more item.
+
+## 10. Later items (not in RC3)
+
+| Item | Payoff |
+| --- | --- |
+| Header table v4 (resources and records packed, DKRG 2, decoders, runtime MINOR) | A new service ships its record kinds and capacity as card files with no `sdk.toml` or runtime edit; `[records.kinds]`, `[records.resources]`, the domain capacity ids and the v1-v3 parser branches are deleted; the Records part narrows to routed records. |
+| Typed-address cleanup (about 64 raw reads in 17 service files, [D]) | Service host tests run on the address map; the boot-effects snapshot can hold a real machines commit and run in-process. |
+| Settings part, FX route rows, bridges to Query and Describe (if E1 is "out") | No service name in the runtime; the route panel leaves the menu; RC3m is unblocked. |
+| Hook names per device set (if E2 is "out") | Plain lfo hook names; device-literals baseline back down. |
+| Ledger RC3 device-test moves; `svc-test` and `svc-echo` replaced by `local-ping` | Fewer emulator minutes per gate; one fixture per contract feature. |
+
+## 11. Conflicts and risks across items
+
+- `packages/patchkit` changes only in RC3-1 and RC3-8. A service unit that finds it must edit patchkit stops and reports.
+- The runtime's test files that name services are shared; expect small text conflicts at the cherry-picks.
+- Every unit regenerates its own committed object; RC3-1 and RC3-8 regenerate all. Run `patchkit:objects-check` after each cherry-pick.
+- RC3 changes the image hashes and every `.dks`, so no device result replays from cache at the gate.
+- Size: the old arm of the row table costs text only inside the branch. Report `patchkit size` at RC3-1 and RC3-8.
+- If the RC2s merge slips, only reading and the fixture design can start early.
