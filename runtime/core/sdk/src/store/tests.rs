@@ -615,6 +615,57 @@ fn retain_keeps_one_entry_and_an_absent_path_empties_the_store() {
 }
 
 #[test]
+fn a_retaining_clear_of_an_absent_path_needs_no_free_sector() {
+    let _g = lock();
+    fresh();
+    let mut w = work();
+    insert(&mut w, "a", 10, 512, &[]).unwrap();
+    // a reserved extent covers every free sector
+    let cur = current(&mut w);
+    let path = "nope\0";
+    let big = [(1, SECTORS - 3 - 1)];
+    let c = unsafe {
+        commit(
+            &IO,
+            &LAY,
+            &cur,
+            w.a.0.as_mut_ptr(),
+            w.b.0.as_mut_ptr(),
+            1024,
+            w.s.0.as_mut_ptr(),
+            Edit::Retain(path.as_ptr()),
+            &big,
+        )
+    };
+    assert_eq!(c.map(|c| c.h.count), Ok(0));
+}
+
+#[test]
+fn a_retaining_clear_of_a_present_path_needs_a_free_sector() {
+    let _g = lock();
+    fresh();
+    let mut w = work();
+    insert(&mut w, "a", 10, 512, &[]).unwrap();
+    let cur = current(&mut w);
+    let path = "a\0";
+    let big = [(1, SECTORS - 3 - 1)];
+    let c = unsafe {
+        commit(
+            &IO,
+            &LAY,
+            &cur,
+            w.a.0.as_mut_ptr(),
+            w.b.0.as_mut_ptr(),
+            1024,
+            w.s.0.as_mut_ptr(),
+            Edit::Retain(path.as_ptr()),
+            &big,
+        )
+    };
+    assert_eq!(c.err(), Some(E_FULL));
+}
+
+#[test]
 fn a_full_area_refuses_the_table_with_e_full() {
     let _g = lock();
     fresh();
@@ -696,6 +747,64 @@ fn a_power_cut_at_any_write_leaves_the_old_store_or_the_new_one() {
             .unwrap();
             assert_eq!(ok, t.h.table_crc, "case {case} cut {cut}");
         }
+    }
+}
+
+/// The retaining clear writes the table, header B, header A: a cut after the table leaves the old store whole with its old files, a cut after
+/// header B or after header A (the commit is done) leaves the store with only the kept entry, its two headers agreeing after the second.
+#[test]
+fn a_power_cut_in_a_retaining_clear_leaves_the_old_store_or_the_kept_entry() {
+    let _g = lock();
+    for (cut, kept_only, agree) in [
+        (0u32, false, true),
+        (1, false, true),
+        (2, true, false),
+        (3, true, true),
+    ] {
+        fresh();
+        let mut w = work();
+        insert(&mut w, "a", 10, 512, &[]).unwrap();
+        insert(&mut w, "b", 11, 512, &[]).unwrap();
+        insert(&mut w, "c", 12, 512, &[]).unwrap();
+        let old = paths(&mut w);
+        let path = "b\0";
+        let cur = current(&mut w);
+        *CUT.lock().unwrap() = (cut, 0);
+        let r = unsafe {
+            commit(
+                &IO,
+                &LAY,
+                &cur,
+                w.a.0.as_mut_ptr(),
+                w.b.0.as_mut_ptr(),
+                1024,
+                w.s.0.as_mut_ptr(),
+                Edit::Retain(path.as_ptr()),
+                &[],
+            )
+        };
+        *CUT.lock().unwrap() = (u32::MAX, 0);
+        assert_eq!(r.is_ok(), cut == 3, "cut {cut}");
+        let t = state(&mut w).unwrap_or_else(|e| panic!("cut {cut}: unreadable ({e})"));
+        let now = paths(&mut w);
+        if kept_only {
+            assert_eq!(now, [("b".into(), 11)], "cut {cut}");
+        } else {
+            assert_eq!(now, old, "cut {cut}: the old store, whole");
+        }
+        assert_eq!(t.agree, agree, "cut {cut}");
+        let ok = unsafe {
+            table_crc(
+                &IO,
+                &LAY,
+                t.h.table_first,
+                t.h.table_sectors,
+                w.a.0.as_mut_ptr(),
+                4096,
+            )
+        }
+        .unwrap();
+        assert_eq!(ok, t.h.table_crc, "cut {cut}");
     }
 }
 

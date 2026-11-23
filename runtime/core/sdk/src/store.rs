@@ -1136,8 +1136,12 @@ pub unsafe fn commit_at(
         table_sectors(cur.count + 1)
     } else if matches!(edit, Edit::Remove(_)) {
         table_sectors(cur.count)
-    } else if matches!(edit, Edit::Retain(_)) {
-        table_sectors(1)
+    } else if let Edit::Retain(path) = edit {
+        // no entry to keep: the table stays empty, as for a clear, and needs no sector
+        match find(io, lay, cur, buf_in, cap, path)? {
+            Some(_) => table_sectors(1),
+            None => 0,
+        }
     } else {
         0
     };

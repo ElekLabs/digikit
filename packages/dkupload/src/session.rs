@@ -253,15 +253,22 @@ impl<T: Transport> Session<T> {
         }
     }
 
-    /// Repack: CLEAR (which keeps `digikit/system.dksp`; a `files` entry for it replaces it), then upload `files` again. The device keeps old file data until CLEAR, so this is how space
-    /// comes back. The caller must hold every file the store should keep (`repack_missing`).
+    /// Repack: CLEAR, then upload `files` again. CLEAR keeps `digikit/system.dksp` when the store has room for its table and drops it when it is full,
+    /// so the store is listed after CLEAR and a file the device already holds (same path and hash) is not sent again: the package is uploaded only
+    /// when it went. The device keeps old file data until CLEAR, so this is how space comes back. The caller must hold every file the store should
+    /// keep (`repack_missing`).
     pub fn repack(
         &mut self,
         files: Vec<(String, Vec<u8>)>,
         progress: &mut dyn FnMut(usize, Progress) -> bool,
     ) -> Result<(), Error> {
         self.clear()?;
+        let kept = self.list()?;
         for (i, (path, data)) in files.into_iter().enumerate() {
+            let hash = file_hash(&data);
+            if kept.iter().any(|e| e.path == path && e.hash == hash) {
+                continue;
+            }
             self.put(&path, data, &mut |p| progress(i, p))?;
         }
         Ok(())

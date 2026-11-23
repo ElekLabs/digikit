@@ -352,6 +352,9 @@ pub(crate) unsafe fn cmd_verify(seq: u32, buf: *mut u8, body: *const u8, blen: u
     reply(CMD_VERIFY, seq, OK, 32)
 }
 
+/// The first argument of the `logk::UPLOAD` event that says CLEAR had no room for the table of the system package and dropped it.
+pub(crate) const CLEAR_DROPPED_PACKAGE: u32 = 0xb7;
+
 pub(crate) unsafe fn cmd_clear(seq: u32, buf: *mut u8, body: *const u8, blen: usize) -> i32 {
     // CLEAR frees every extent: a reader that still reads one (a sample load) keeps the store as it is
     if sw::leased_any() {
@@ -368,13 +371,25 @@ pub(crate) unsafe fn cmd_clear(seq: u32, buf: *mut u8, body: *const u8, blen: us
     }
     // CLEAR works on a damaged store too: the new sequence number is above every copy that is readable
     // A readable store keeps the system package (`stage1::PACKAGE_PATH`): removing it stays an explicit delete of that path. A damaged one is
-    // emptied whole (its table cannot be read).
-    let (seq_now, edit, cur) = match state(buf) {
-        Ok(t) => (t.h.seq, Edit::Retain(crate::stage1::PACKAGE_PATH.as_ptr()), Some(t.h)),
-        Err(_) => (highest_seq(buf), Edit::Clear, None),
-    };
-    let cur = cur.unwrap_or(Hdr { seq: seq_now, ..Hdr::empty(&lay()) });
-    let r = do_commit(buf, &cur, edit, None);
+    // emptied whole (its table cannot be read). A full store has no room for the new table: it is emptied whole too (that is how a repack gets
+    // space back) and the event says the package went.
+    let pkg = Edit::Retain(crate::stage1::PACKAGE_PATH.as_ptr());
+    let mut r;
+    match state(buf) {
+        Ok(t) => {
+            r = do_commit(buf, &t.h, pkg, None);
+            if r == E_FULL {
+                r = do_commit(buf, &t.h, Edit::Clear, None);
+                if r == OK {
+                    crate::dlog::ev(dkrt_sdk::logk::UPLOAD, dkrt_sdk::logk::F_ERROR, [CLEAR_DROPPED_PACKAGE, 0, 0, 0, 0]);
+                }
+            }
+        }
+        Err(_) => {
+            let cur = Hdr { seq: highest_seq(buf), ..Hdr::empty(&lay()) };
+            r = do_commit(buf, &cur, Edit::Clear, None);
+        }
+    }
     if r == OK {
         sw::pend_clear(); // the store is emptied: pending files go too (only once it is)
     }

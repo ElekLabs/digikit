@@ -12359,84 +12359,98 @@
   },
   {
    "addend": 0,
-   "offset": 202,
-   "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
-   "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds5state",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 262,
+   "offset": 194,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
    "symbol": ".sec..rodata.global.1F",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 314,
+   "offset": 218,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
-   "symbol": ".sec..text._RNvNtNtCskEQhmZu1bvr_4dkrt7storage12store_writer3lay",
+   "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds5state",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 386,
+   "offset": 328,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds9do_commit",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 414,
+   "offset": 364,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt9transport5reply",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 428,
+   "offset": 378,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
    "symbol": ".sec..text._RNvNtNtCskEQhmZu1bvr_4dkrt7storage12store_writer3lay",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 496,
+   "offset": 446,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
    "symbol": "cf.storage.fn.block.read",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 528,
+   "offset": 472,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
    "symbol": ".sec..text._RNvNtNtCskEQhmZu1bvr_4dkrt7storage12store_writer3lay",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 580,
+   "offset": 540,
+   "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
+   "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds9do_commit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 562,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
    "symbol": "_RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store12parse_header",
    "type": "cf.32"
   },
   {
+   "addend": 0,
+   "offset": 622,
+   "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
+   "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds9do_commit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 674,
+   "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
+   "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
+   "type": "cf.32"
+  },
+  {
    "addend": 4112,
-   "offset": 610,
+   "offset": 684,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
    "symbol": ".sec..bss._RNvNtNtCskEQhmZu1bvr_4dkrt7storage12store_writer4PEND",
    "type": "cf.32"
   },
   {
    "addend": 4128,
-   "offset": 618,
+   "offset": 692,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
    "symbol": ".sec..bss._RNvNtNtCskEQhmZu1bvr_4dkrt7storage12store_writer4PEND",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 652,
+   "offset": 728,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
    "symbol": "cf.storage.fn.block.read",
    "type": "cf.32"
@@ -26247,119 +26261,126 @@
   },
   {
    "addend": 0,
-   "offset": 310,
+   "offset": 268,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RINvNtCsfgJyBKL6YOn_8dkrt_sdk5store4scanNCNvB2_9commit_at0EB4_",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 496,
+   "offset": 412,
+   "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
+   "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store4find",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 570,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RNvMs1_NtCsfgJyBKL6YOn_8dkrt_sdk5storeNtB5_3Out3put",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 650,
+   "offset": 728,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store6before",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 664,
+   "offset": 742,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RNvMNtCs6uNbiqmv1Ak_4core5sliceSPh14swap_uncheckedCsfgJyBKL6YOn_8dkrt_sdk",
    "type": "cf.32"
   },
   {
    "addend": 32,
-   "offset": 704,
+   "offset": 782,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 32,
-   "offset": 772,
+   "offset": 850,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 784,
+   "offset": 862,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 810,
+   "offset": 888,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store6before",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 886,
+   "offset": 964,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RNvMs1_NtCsfgJyBKL6YOn_8dkrt_sdk5storeNtB5_3Out5flush",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 980,
+   "offset": 1058,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9table_crc",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1054,
+   "offset": 1132,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store12write_header",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1094,
+   "offset": 1172,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": "memcpy",
    "type": "cf.32"
   },
   {
    "addend": 32,
-   "offset": 1162,
+   "offset": 1240,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..rodata.global.11",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1174,
+   "offset": 1252,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1282,
+   "offset": 1360,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store13encode_header",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1304,
+   "offset": 1382,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store12write_header",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 1396,
+   "offset": 1502,
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
    "symbol": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9first_fit",
    "type": "cf.32"
@@ -29973,10 +29994,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ff384879000000004eb900000000588f4a0066244eb9000000004a00663642a74878fff42f2e0008487800144eb9000000004fef0010601842a74878ffb92f2e0008487800144eb9000000004fef00104e5e4e754eb9000000004a0067227004b0ae0014674442a74878ffce2f2e0008487800144eb9000000004fef001060d04eb9000000007205b280671a70c242a72f002f2e0008487800144eb9000000004fef001060aa70c360e42f2e00104eb900000000588f0c80434c522166a82f2e000c41eeffc04eb900000000588f71aeffe07202b280670000d041eeff6a20eeffc020eeffc420eeffc820eeffcc20eeffd020eeffd420aeffd8206effd02d48ff3c203c000000002d40ff5e72053d41ff5c2d48ff7a41eeff6a2d58ffa42d58ffa82d58ffac2d58ffb02d58ffb42d58ffb82d50ffbc4eb9000000002d6effa4ff862d6effa8ff8a2d6effacff8e2d6effb0ff92206eff3c2d48ff962d6effb8ff9a2d6effbcff9e42403d40ff52486eff52486eff5c486eff862f2e000c4eb9000000004fef00104a80670000d242a72f002f2e0008487800144eb9000000004fef00106000feaa4eb9000000002d40ff4c42aeff3842aeff3c206e000cd1fc000080202d48ff40204041f018dd2d48ff484aaeff3867000098202eff402d40ff442f00487802002f2eff484eb9000000004fef000c4a80673e52aeff387202b2aeff3866cc70043d40ff5c4eb90000000042aeff8642aeff8a70012d40ff8e42aeff92206eff3c2d48ff962d40ff9a2d41ff9e6000ff322f2eff4441eeffe24eb900000000588f4a6effe267ac202efff4b0aeff3c63a22d40ff3c609c42b900000000420113c1000000006000ff20206e000cd1fc000080202d48ff442f08487802002f2eff4c4eb9000000004fef000c4a8067a252aeff386000ff36",
+   "hex": "4e56ff0c4879000000004eb900000000588f4a0066244eb9000000004a00663642a74878fff42f2e0008487800144eb9000000004fef0010601842a74878ffb92f2e0008487800144eb9000000004fef00104e5e4e754eb9000000004a0067227004b0ae0014674442a74878ffce2f2e0008487800144eb9000000004fef001060d04eb9000000007205b280671a70c242a72f002f2e0008487800144eb9000000004fef001060aa70c360e42f2e00104eb900000000588f0c80434c522166a8223c000000002d41ff6270053d40ff602f2e000c41eeffc04eb900000000588f71aeffe07202b2806700008e2d6effc0ff9e2d6effc4ffa22d6effc8ffa62d6effccffaa2d6effd0ffae2d6effd4ffb22d6effd8ffb62d6effdcffba3d6effe0ffbe42413d41ff3a43eeff3a41eeff2620d920d93091486eff26486eff60486eff9e2f2e000c4eb9000000004fef001072ccb280670000fa4a806700014e42a72f002f2e0008487800144eb9000000004fef00106000fedc4eb9000000002d40ff2042aeff0c42aeff18206e000cd1fc000080202d48ff10204041f018dd2d48ff1c4aaeff0c67000116206eff102d48ff142f08487802002f2eff1c4eb9000000004fef000c4a80675e52aeff0c7002b0aeff0c66cc4eb90000000042aeff8242aeff8670012d40ff8a42aeff8e206eff182d48ff922d40ff962d41ff9a70043d40ff4442413d41ff30486eff30486eff44486eff822f2e000c4eb9000000004fef00106000ff322f2eff1441eeffe24eb900000000588f4a6effe2678c202efff4b0aeff1863822d40ff186000ff7c70043d40ff5242413d41ff3a486eff3a486eff52486eff9e2f2e000c4eb9000000004fef00104a806600fee4307c00b72d48ff6e42aeff7242aeff7642aeff7a42aeff7e486eff6e48780001487800074eb9000000004fef000c42b900000000420013c00000000042806000fea2222e000c0681000080202d41ff142f01487802002f2eff204eb9000000004fef000c4a806700ff4452aeff0c6000feb6",
    "kind": "text",
    "name": ".text._RNvNtCskEQhmZu1bvr_4dkrt10store_cmds7h_clear",
-   "size": 672
+   "size": 750
   },
   {
    "align": 2,
@@ -32829,10 +32850,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56fea448d73c0c2648206e0024341071c27201b280672e4a426700051871c27203b2806700058a71c27202b280670001387605b6806700017076012d43003442aefec8602a202800067610b6806500010a206e001022105281d081e2882d40fec84aaefec8660004e676012d4300342d6e0018feda262e001c2d43fede42aefee242aefee670ff2d40feea42aefeee42aefef2262e00342d43fef642403d40fefa41eeff26200e0680ffffff664298b08866fa42aeff664a4266000106206e002443e800022d51ff2670012d40ff6642aeff6a42aeff6e226e00242d49ff7241eefefa2d48ff7643eeff262d49ff7a41eeff662d48ff7e43eeff6a2d49ff8241eeff6e2d48ff8643eefeda2d49ff8a262e00082d43ff8e206e000c2d48ff92486eff722f2e001c2f2e00142f2e00102f082f034eb9000000004fef00184a8066000212202eff6e4a806700009a2740000236bc00026000020470ce2740000236bc0002600001f6206e001020105280e2882d40fec86000feea4aae0034670003ce206e000c202800040680ffffffddb0ae0034650003b890ae0034b0aefec86400fece600003a876012d43fec86000039e262e00342743000236bc00026000019c71c27201b280676e71c27203b2806700014242aeff6a42aeff6e75c27004b0826600fef4240e0682fffffeda45f900000000262e0008286e000c202eff6ab0aeff6664000162720fb2806500027a41f60c002f28ff262f0c2f032f024e9252aeff6a4fef00104a8067d02740000236bc000260000126206e0024206800062d48fecc206e002422680002721192aefecc41eeff267011600c53804a80670a4a88670620d9b28066f0263cffffff2ad68e2d43fec074012d4bfed026426060246efec02d4bfebc49f900000000260e0683ffffff264bf90000000060042d42febc720fb2aefebc655420122f222f004e94508f4a006722242efebc53824879000000002f022f2efebc487800102f034e954fef00144a8266c4528b58aefec0b7eefecc659a266efed0262efecc2d43ff6642aeff6a42aeff6e6000fddc262efebc487900000000487800102f034eb900000000206e0024262800062428000a4a82671e2f032f024eb900000000508f4a0066162d43ff262d42ff2a70026000fd8c2d43ff266000fd822d42ff262d43ff2a60e82740000236bc0002200b4cee3c0cfea44e5e4e752f2e000c2f2e0008486efeda4eb9000000004fef000c4a80670a2740000236bc000260d0242efee64a8267000106202efeee5280e288b082670c70c72740000236bc000260aeb4aefec862ee262efeea2f2e001c2f2e00142f022f2e00342f2e000c2f2e000841eefffa4eb900000000202efffc4fef00184a6efffa661c4683b083670e76c72743000236bc00026000ff64246efeee600000b22740000236bc00026000ff502f2e002042a72f2e000c2f2e00084eb9000000004fef00104a00660e76c72743000236bc00026000ff264878002c486efefa486effb24bf9000000004e952d4affde2d42ffe2206e00342d48ffe62d43ffea262efebc2d43ffee2d4cfff2262efec42d43fff648780048486effb22f0b4e954fef00186000fed6487900000000487800102f004eb900000000246efeee200a52807201b2806500fefa260270012d400034206e00102268001052892d49febc2842d9eefef2528c206e000c206800042d48fec42d4aff962d42ff9a226e00342d49ff9e2d43ffa2202efebc2d40ffa62d4cffaa2d48ffae2f2e0020486eff964eb9000000002f2e0020487800012f2e000c2f2e00084eb9000000004fef00184a006600feea72c72741000236bc00026000fe2a206e001020105480e2882d40fec84a8067604a6e00326600fc2e2f2e002c2f2e00282f2efec82f2e001c2f2e00142f2e00102f2e000c2f2e000841eefed44eb900000000262efed62d430034302efed44fef002073c07602b6816700fc224a406600fada70cc2740000236bc00026000fdb876012d4300346000fac2206e001020105480e2882d40fec84a80668c76012d4300346000faa6",
+   "hex": "4e56fe7448d73c0c2648206e0024341071c27201b280670001184a426700058071c27203b2806700055a71c27202b280670001387605b6806700014076012d43003442aefe982d6e0018feda262e001c2d43fede42aefee242aefee670ff2d40feea42aefeee42aefef2262e00342d43fef642403d40fefa41eeff26200e0680ffffff664298b08866fa42aeff664a426600017a206e002443e800022d51ff2670012d40ff6642aeff6a42aeff6e226e00242d49ff7241eefefa2d48ff7643eeff262d49ff7a41eeff662d48ff7e43eeff6a2d49ff8241eeff6e2d48ff8643eefeda2d49ff8a262e00082d43ff8e206e000c2d48ff92486eff722f2e001c2f2e00142f2e00102f082f034eb9000000004fef00184a806600028a202eff6e4a806700010e2740000236bc00026000027c202800067610b6806522206e001022105281d081e2882d40fe984aaefe986600046876012d4300346000feec70ce2740000236bc000260000242206e001020105280e2882d40fe9860d0226e00242f2900022f2e001c2f2e00142f2e00102f2e000c2f2e000841eefea44eb900000000302efea44fef001873c07602b68167104a406700fe8876012d43fe98600003fa276efea6000236bc0002600001de4aae0034670003e4206e000c202800040680ffffffddb0ae0034650003ce90ae0034b0aefe986400fe50600003be262e00342743000236bc0002600001a071c27201b280676e71c27203b2806700014642aeff6a42aeff6e75c27004b0826600fe80240e0682fffffeda45f900000000262e0008286e000c202eff6ab0aeff6664000166720fb2806500027e41f60c002f28ff262f0c2f032f024e9252aeff6a4fef00104a8067d02740000236bc00026000012a206e0024206800062d48fe9c206e002422680002223cffffff66d28e41eeff26202efe9c600cb1c1670c4a886708538020d94a8066f0263cffffff2ad68e2d43fe9074012d4bfea026426060246efe902d4bfe8c49f900000000260e0683ffffff264bf90000000060042d42fe8c720fb2aefe8c655420122f222f004e94508f4a006722242efe8c53824879000000002f022f2efe8c487800102f034e954fef00144a8266c4528b58aefe90b7eefe9c659a266efea0262efe9c2d43ff6642aeff6a42aeff6e6000fd64262efe8c487900000000487800102f034eb900000000206e0024262800062428000a4a82671e2f032f024eb900000000508f4a0066162d43ff262d42ff2a70026000fd142d43ff266000fd0a2d42ff262d43ff2a60e82740000236bc0002200b4cee3c0cfe744e5e4e752f2e000c2f2e0008486efeda4eb9000000004fef000c4a80670a2740000236bc000260d0242efee64a8267000106202efeee5280e288b082670c70c72740000236bc000260aeb4aefe9862ee262efeea2f2e001c2f2e00142f022f2e00342f2e000c2f2e000841eefffa4eb900000000202efffc4fef00184a6efffa661c4683b083670e76c72743000236bc00026000ff64246efeee600000b22740000236bc00026000ff502f2e002042a72f2e000c2f2e00084eb9000000004fef00104a00660e76c72743000236bc00026000ff264878002c486efefa486effb24bf9000000004e952d4affde2d42ffe2206e00342d48ffe62d43ffea262efe8c2d43ffee2d4cfff2262efe942d43fff648780048486effb22f0b4e954fef00186000fed6487900000000487800102f004eb900000000246efeee200a52807201b2806500fefa260270012d400034206e00102268001052892d49fe8c2842d9eefef2528c206e000c206800042d48fe942d4aff962d42ff9a226e00342d49ff9e2d43ffa2202efe8c2d40ffa62d4cffaa2d48ffae2f2e0020486eff964eb9000000002f2e0020487800012f2e000c2f2e00084eb9000000004fef00184a006600feea72c72741000236bc00026000fe2a206e001020105480e2882d40fe984a80662476012d4300346000faaa206e001020105480e2882d40fe984a8067604a6e00326600fc182f2e002c2f2e00282f2efe982f2e001c2f2e00142f2e00102f2e000c2f2e000841eefed44eb900000000262efed62d430034302efed44fef002073c07602b6816700fc024a406600fa4670cc2740000236bc00026000fd9c76012d4300346000fa2e",
    "kind": "text",
    "name": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store9commit_at",
-   "size": 1484
+   "size": 1562
   },
   {
    "align": 2,
@@ -33465,7 +33486,7 @@
    "size": 24
   }
  ],
- "source_sha256": "967aeba4affac01267bb1becd21226c32030174b4c4c8dd3fa18b370b4199697",
+ "source_sha256": "0fc8d0629b30f41a4e6f15da508b99d4c164f6a359c113e339ad20a29246093b",
  "symbols": [
   {
    "global": false,
@@ -35421,6 +35442,12 @@
    "global": false,
    "name": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store4be32",
    "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store4be32",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store4find",
+   "section": ".text._RNvNtCsfgJyBKL6YOn_8dkrt_sdk5store4find",
    "value": 0
   },
   {
@@ -39446,8 +39473,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_DSP_STOPPED DKRT_HEALTH DKRT_HOST_DIR DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MENU_OBJS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_PKG DKRT_POLLS DKRT_POLL_OWNER DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_UI_START DKRT_UNLOAD_OBSERVERS DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_boot_name dkrt_capacity dkrt_ctx_owner dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_live dkrt_live_state dkrt_load dkrt_menu_built dkrt_menu_release dkrt_midi_rx dkrt_module dkrt_module_header dkrt_phase dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_service_query dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick dkrt_ui_settings_rows dkrt_unload_observer_add dkrt_unload_observer_remove",
-  "instructions_redecoded": "37864",
-  "isa_check": "fe6c34bbd5d470ed822431c686731257941f8184624fb0ed1dad15f6b24bc08e",
+  "instructions_redecoded": "37905",
+  "isa_check": "98e866c8cd3980a8cf8b9b7deba982e8a8da14c5806fc51ffcf5b95ac122bd03",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

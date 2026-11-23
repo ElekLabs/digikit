@@ -612,6 +612,59 @@ fn clear_removes_every_module_file_and_keeps_the_system_package() {
     assert_eq!(upload("c/z", &pattern(100, 7)), OK, "the cleared store takes files");
 }
 
+/// Fills a fresh store with one file `path`, the biggest that fits. The store had no table before, so no sector the old table held is left over:
+/// nothing is free for another table, and the next upload answers `E_FULL`.
+fn fill_store(path: &str) {
+    let mut n = 4090usize;
+    while upload(path, &pattern(n * 512, 3)) != OK {
+        n -= 1;
+        assert!(n > 100, "the store takes a big file");
+    }
+    assert_eq!(upload("x", &pattern(1, 5)), p::E_FULL, "no sector is left");
+    assert_eq!(mkdir("y"), p::E_FULL, "not even for a table");
+}
+
+/// The events of the runtime log after the first `since` ones: `(kind, flags, args)`.
+fn events_since(since: u32) -> Vec<(u16, u16, [u32; 5])> {
+    unsafe {
+        let n = read_volatile(addr_of!(crate::dlog::DKRT_LOG_COUNT));
+        let ring = &*addr_of!(crate::dlog::DKRT_LOG);
+        (since.wrapping_add(1)..=n).map(|i| ring[(i as usize - 1) % crate::dlog::RING]).map(|e| (e.kind, e.flags, e.a)).collect()
+    }
+}
+
+fn event_count() -> u32 {
+    unsafe { read_volatile(addr_of!(crate::dlog::DKRT_LOG_COUNT)) }
+}
+
+fn dropped_events(since: u32) -> usize {
+    events_since(since).iter().filter(|e| e.0 == dkrt_sdk::logk::UPLOAD && e.2[0] == store_cmds::CLEAR_DROPPED_PACKAGE).count()
+}
+
+#[test]
+fn clear_of_a_full_store_drops_the_system_package_and_logs_it() {
+    let _f = Fixture::new();
+    let pkg = std::str::from_utf8(&crate::stage1::PACKAGE_PATH[..crate::stage1::PACKAGE_PATH.len() - 1]).unwrap();
+    fill_store(pkg);
+    let before = event_count();
+    assert_eq!(clear_with(CLEAR_MAGIC), OK, "a full store is cleared: that is how repack gets space back");
+    assert!(held().is_empty(), "no room for the package's table: everything is gone");
+    assert_eq!(dropped_events(before), 1, "one event names the dropped package");
+    let e = events_since(before).into_iter().find(|e| e.2[0] == store_cmds::CLEAR_DROPPED_PACKAGE).unwrap();
+    assert_eq!(e.1 & dkrt_sdk::logk::F_ERROR, dkrt_sdk::logk::F_ERROR);
+    assert_eq!(upload("c/z", &pattern(100, 7)), OK, "the cleared store takes files");
+}
+
+#[test]
+fn clear_of_a_full_store_without_the_package_needs_no_table_space() {
+    let _f = Fixture::new();
+    fill_store("big");
+    let before = event_count();
+    assert_eq!(clear_with(CLEAR_MAGIC), OK);
+    assert!(held().is_empty());
+    assert_eq!(dropped_events(before), 0, "no package was lost: no event");
+}
+
 #[test]
 fn a_file_a_reader_holds_is_not_deleted_replaced_or_cleared() {
     let _f = Fixture::new();
