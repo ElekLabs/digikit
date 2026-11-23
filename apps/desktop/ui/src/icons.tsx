@@ -1,4 +1,4 @@
-// The stroke icons of the workbench buttons (16x16 paths), shared by Console.tsx and the UI preview.
+// The stroke icons of the workbench buttons (16x16 paths), shared by the Workbench and the UI preview.
 export function Icon(props: { d: string }) {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">

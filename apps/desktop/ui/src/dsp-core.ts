@@ -1,4 +1,4 @@
-// The pure part of the "DSP" tick in Console.tsx: which devices have the choice, and what a tick that differs from the running image
+// The pure part of the emulator toolbar’s "DSP" tick: which devices have the choice, and what a tick that differs from the running image
 // means. Host tests: apps/desktop/ui/tests/dsp.test.ts.
 import type { DeviceRecord } from '@digi/devices';
 import type { KeyValue } from '@digi/workbench-core/storage.ts';

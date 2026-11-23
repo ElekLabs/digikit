@@ -1,7 +1,15 @@
-// Actions of the Emulator page that other pages offer (Console.tsx registers them; desktop-env.ts hands them to the shared pages).
-let reloadWith: (() => void) | undefined;
-export const setReloadWithRuntime = (f: () => void): void => {
-  reloadWith = f;
-};
-/** Tick "Boot with runtime" and reload the emulator. */
-export const reloadWithRuntime = (): void => reloadWith?.();
+// One window's firmware action, exposed to other pages through the Transfer environment.
+export function createEmulatorActions() {
+  let reloadWith: (() => void) | undefined;
+
+  return {
+    reloadWithRuntime: () => reloadWith?.(),
+    registerReloadWithRuntime(command: () => void) {
+      const registered = () => command();
+      reloadWith = registered;
+      return () => {
+        if (reloadWith === registered) reloadWith = undefined;
+      };
+    },
+  };
+}

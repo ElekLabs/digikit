@@ -233,7 +233,7 @@ export default function RemotePage(props: { source: TargetBinding }): JSX.Elemen
           {keyError()}
         </p>
       </Show>
-      {/* the same markup as the Emulator page's faceplate (Console.tsx), so the screen has the same place and scale; the side column with the Memory panel is beside it */}
+      {/* the same markup as the Emulator page's faceplate (WorkbenchShell.tsx), so the screen has the same place and scale; the side column with the Memory panel is beside it */}
       <div class="remote-row">
         <Show when={artwork()}>
           {(faceplate) => (

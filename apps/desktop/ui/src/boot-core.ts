@@ -1,4 +1,4 @@
-// The pure part of the loading state in Console.tsx: what the status bar and the Log say while a firmware starts.
+// The pure part of the emulator loading state: what the status bar and the Log say while a firmware starts.
 // Host tests: apps/desktop/ui/tests/boot.test.ts.
 import { deviceNameOf, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import type { Target } from '@digi/workbench-core/transfer/target.ts';

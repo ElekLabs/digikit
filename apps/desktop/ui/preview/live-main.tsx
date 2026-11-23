@@ -1,4 +1,4 @@
-// The live preview's entry: a small desktop shell (the sidebar of src/Console.tsx, its page switch and its panels) over a running emulator
+// The live preview's entry: a small desktop shell (the sidebar of src/shell/Navigation.tsx, its page switch and its panels) over a running emulator
 // (live.vite.config.ts). What the real Console does that the pages feel is kept: the faceplate stays mounted behind the other pages, the
 // Memory panels are shown only on the Emulator page, and `status` is set once per display frame, as the runtime's pump sets it (a
 // new object each time), so a panel that reads on every change of `status` is as busy here as in the app. The daemon is asked for the
@@ -65,7 +65,7 @@ function Shell() {
     requestAnimationFrame(frame);
   };
   frame();
-  // as Console.tsx: a memo, so the panels hear of a change of this value only
+  // as WorkbenchShell.tsx: a memo, so the panels hear of a change of this value only
   const shown = createMemo(() => page() === 'emulator' && !!status());
   const device = () => (status()?.device === 'dt2' ? 'dt2' : 'dn2');
   const panel = () => panels[device()];

@@ -1,5 +1,5 @@
 // The emulator of the desktop app behind `EmulatorRuntime` (packages/workbench-core/src/runtime/runtime.ts): the controller's session, the pump that steps it and
-// the inputs, all through the Host. The browser app has its own, `browserRuntime`, over workers; Console.tsx picks the one of its app.
+// the inputs, all through the Host. The browser app has its own, `browserRuntime`, over workers; The desktop emulator session owns the native runtime.
 import type { CardStatus } from '@digi/workbench-core/runtime/cards.ts';
 import type { ReloadReport } from '@digi/workbench-core/runtime/reload.ts';
 import type {

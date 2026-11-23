@@ -10,7 +10,6 @@ import { targetLabel, type Target } from '@digi/workbench-core/transfer/target.t
 import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import { bumpCardRefresh } from './card-state';
 import { hostWasmSource } from './desktop-wasm';
-import { reloadWithRuntime } from './emulator-actions';
 import { TauriBulkLink } from '@digi/workbench-core/host/bulk-link.ts';
 import { EmuUsbTransport, emulatorMode } from '@digi/workbench-core/host/emu-transport.ts';
 import type { LogWriter } from './log-state';
@@ -100,7 +99,12 @@ function logBuild(device: string, report: LibBuildReport, logInput: LogWriter['l
  * The Transfer environment of the desktop app over `host`. `app` is the app that will own it (the samples backend and the bulk link use its
  * target and page state); it is a function because the app is built from the environment.
  */
-export function createDesktopEnv(host: Host, app: () => TransferApp, writer: LogWriter): TransferEnv {
+export function createDesktopEnv(
+  host: Host,
+  app: () => TransferApp,
+  writer: LogWriter,
+  reloadWithRuntime: () => void,
+): TransferEnv {
   let backend: SamplesBackendApi | undefined;
   const samples = (): SamplesBackendApi => (backend ??= createSamplesBackend(host, app(), writer));
   const emulatorBulk = EmuBulkLink.opener((method, params) => host.rpc.call(method, params));

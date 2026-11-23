@@ -7,8 +7,8 @@ Make the desktop Workbench easier to navigate and safer to change. Each feature 
 | Slice | State | Evidence |
 | --- | --- | --- |
 | Log and tool drawers | Committed as `056dd95ec` | Desktop host and type checks, simulated drawer and save checks, independent review. Review caught a live fixture behavior change that was corrected before the commit. |
-| Emulator lifetime | Verified and reviewed | The window owner discards late startup results and clears its polls. A single controller stop waits for pending firmware work. The final desktop host and type checks, both simulated scenarios, and an independent re-review passed. |
-| Firmware operations and shell | Planned | Starts after the lifetime boundary is verified and reviewed. |
+| Emulator lifetime | Committed as `ae185d45c` | The window owner discards late startup results and clears its polls. A single controller stop waits for pending firmware work. The final desktop host and type checks, both simulated scenarios, and an independent re-review passed. |
+| Firmware operations and shell | Verified and reviewed | Firmware and default-module jobs have separate owners. `WorkbenchShell` composes Navigation, FirmwareToolbar, StatusBar, and the drawers. The desktop host suite, type checks, production UI build, and simulated preview checks passed. |
 | Inspector, Samples, and adapter | Planned | Separate edit surfaces once the shell-facing interfaces are stable. |
 
 ## Ownership and dependencies
@@ -62,11 +62,19 @@ Keep one session owner mounted for the Workbench window. It starts the native ru
 
 ### 2b. Move firmware operations and narrow the shell
 
-1. Put boot, firmware reload, module reload, and file-watch policy under the emulator feature. Give the operations access to the narrow target, job, firmware default, inventory, and log capabilities they use. Preserve job grouping, held-key release, success and failure logging, and card refresh.
-2. Preserve the deferred last-file boot when a hardware target starts selected, refused-load recovery, and upstream module-page and inventory behavior. Prove boot decisions and runtime behavior in their existing host tests.
-3. Rename `Console.tsx` to `WorkbenchShell.tsx` once its remaining responsibility is composing navigation, page content, and drawers. Pull the navigation and status bar into components with direct inputs. Use Solid `<Switch>` and `<Match>` for the three drawer choices. Keep selectors stable through the preview checks.
+1. Put boot, firmware reload, module reload, reset, and file-watch policy under the emulator feature. Give the operations access to the narrow target, job, firmware default, inventory, and log capabilities they use. Keep boot state and preferences private. Preserve job grouping, held-key release, success and failure logging, and card refresh.
+2. Bind Reload with runtime to the Workbench window. Transfer and Memory use the existing desktop capability. Dispose the binding with the shell so closed windows cannot receive the action.
+3. Once firmware operations are independent, rename `Console.tsx` to `WorkbenchShell.tsx`. Pull navigation and status into focused components with direct inputs. Use Solid `<Switch>` and `<Match>` for the three drawer choices. Preserve the upstream module pages and keep visible selectors stable.
 
-Use the real emulator or Tauri checks when verifying behavior that depends on those boundaries.
+| Behavior | Lowest test seam |
+| --- | --- |
+| Launch file and DSP flag precedence | Compose the firmware owner with a fake runtime and memory preferences. Assert the launch file and options reach the runtime and the launcher choice stays session-local. |
+| Last-file load deferred on a hardware target | Change page and target through their accessors. Assert a single boot on the first eligible visit to Emulator. |
+| File watching and shutdown | Feed the firmware owner source readings with and without a changed timestamp. Resolve a pending operation after disposal and check for stale notices, preference writes, or refreshes. |
+| Reload with runtime from Transfer | The Vitest integration case uses the production emulator composition, the real Transfer target and job owners, and a fake Host. It starts with stock firmware, runs the shared recovery action, verifies Transfer is available again, and checks that disposal disables the action. |
+| Rendered shell and firmware controls | Simulated preview smoke checks cover target switching, performance, booting and failed boot, the Analyzer drawer, a Transfer-to-Files round trip, and stock reload followed by recovery from Memory. |
+
+Firmware behavior is covered in `apps/desktop/ui/tests/emulator-firmware.test.ts`. The composition workflow in `apps/desktop/ui/tests/emulator.integration.test.ts` runs under the existing desktop host target without an emulator or browser. The final independent review checked lifecycle, shell wiring, and test assertions. Use the real emulator or Tauri checks when verifying behavior that depends on those boundaries.
 
 ## 3. Inspector, Samples, and adapter
 
@@ -93,4 +101,5 @@ Update the progress table after verification or when a review changes the direct
 - Iterate with `pnpm exec vitest run --config vitest.host.config.ts --project desktop-host <test-file>`. Run the test that owns the behavior being changed, with existing tests for nearby boundaries.
 - Verify the slice with `pnpm nx:pilot run @digi/desktop:test-host`, `pnpm nx:pilot run @digi/desktop:check:ui`, and `pnpm nx:pilot run @digi/desktop:typecheck`. Run Oxlint and Prettier on the changed files. Triage Solid reactivity warnings where the slice changes reactive reads.
 - Use `mise run wb:preview` for the rendered UI while iterating. Run `node tools/devtools/ui_shots.mjs analyzer-scope log-save` for the first slice, plus the drawer interactions above. The standard preview substitutes simulated services at the Host boundary. Vitest owns exact state assertions and the native boundary has its own tests.
+- Test feature owners through named commands and read accessors. Add a small integration case for the important workflow when separately owned pieces are wired together. Use the production composition and fake platform I/O. Keep the preview for checks that need the rendered controls or layout.
 - Use the affected merge gate once for changes headed for merge. Select device coverage only when the behavior under test needs firmware or hardware.

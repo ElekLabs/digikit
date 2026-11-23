@@ -21,7 +21,6 @@ import { focusReadDue } from '@digi/workbench-core/transfer/refresh-core.ts';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
-import { reloadWithRuntime } from './emulator-actions';
 import './card-panel.css';
 import './memory-panel.css';
 
@@ -235,7 +234,7 @@ export default function MemoryPanel(props: {
         </Show>
         <Show when={noRuntime() && emulatorRead()}>
           <div class="acts">
-            <button type="button" class="act small" onClick={() => reloadWithRuntime()}>
+            <button type="button" class="act small" onClick={() => app.env.extras?.reloadWithRuntime?.()}>
               Reload with runtime
             </button>
           </div>

@@ -5,6 +5,7 @@ import { createFirmwareApp, type FirmwareApp } from '@digi/workbench-core/firmwa
 import { localStorageKeyValue, type KeyValue } from '@digi/workbench-core/storage.ts';
 import { createTransferApp, type TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import { createSessionHub } from '@digi/workbench-core/transfer/session-core.ts';
+import { createEmulatorActions } from './emulator-actions';
 import { createDesktopEnv } from './desktop-env';
 import { createDesktopFirmwareEnv } from './desktop-firmware';
 import { createLogDrawer, type DrawerSelection, type LogReader, type LogWriter } from './log-state';
@@ -16,6 +17,7 @@ export interface DesktopApps {
   drawer: DrawerSelection;
   log: LogReader;
   logWriter: LogWriter;
+  emulatorActions: ReturnType<typeof createEmulatorActions>;
 }
 
 export function createDesktopApps(
@@ -24,11 +26,17 @@ export function createDesktopApps(
   sessions = createSessionHub((transport, opts) => new DkSession(transport, { timeoutMs: 6000, ...opts })),
 ): DesktopApps {
   const tools = createLogDrawer(storage);
+  const emulatorActions = createEmulatorActions();
   let app!: TransferApp;
   const getApp = () => app;
-  app = createTransferApp(createDesktopEnv(host, getApp, tools.logWriter), {
+  app = createTransferApp(createDesktopEnv(host, getApp, tools.logWriter, emulatorActions.reloadWithRuntime), {
     storage,
     sessions,
   });
-  return { ...tools, app, firmware: createFirmwareApp(createDesktopFirmwareEnv(host, getApp, tools.logWriter), app) };
+  return {
+    ...tools,
+    emulatorActions,
+    app,
+    firmware: createFirmwareApp(createDesktopFirmwareEnv(host, getApp, tools.logWriter), app),
+  };
 }
