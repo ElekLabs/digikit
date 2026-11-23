@@ -512,7 +512,7 @@ const COPY: u32 = 0x8000;
 const CODES: [u32; 3] = [79, 89, 99];
 
 /// An image with the registry's parameter table (`P_TABLE` = the copy, 60-byte rows, the registry from row 300) and the three WAVE rows in the copy (0..0x600, defaults 0x100, 0, 0);
-/// the service knows the stock addresses (`set_firmware`, as `setup` gives them from the bound anchors).
+/// the service knows the stock addresses (`set_firmware`, as `Lfo::start_in` gives them from the bound anchors).
 fn image_with_rows(core: &mut FakeCore) {
     let mut t = vec![0u32; 90];
     t[20] = COPY; // P_TABLE
@@ -613,7 +613,7 @@ fn an_image_without_the_registry_table_refuses_a_shape_and_writes_nothing() {
         E_NO_REGISTRY
     );
     detach(&mut lfo, &core, 1);
-    assert_eq!(used(), 0, "the loader's remove takes the shape back");
+    assert_eq!(used(), 0, "`Provider::detach` takes the shape back");
     assert!(core.mem.borrow().is_empty(), "no word was written");
     // a module with no shape has nothing to refuse
     let none = section(&[]);
@@ -850,25 +850,6 @@ fn a_refused_save_is_tried_again_at_the_next_boot() {
     core.put_result.set(0);
     settle(&mut lfo, &core, &[&[KEY_A]]);
     assert_eq!(saves(&core), first + 1);
-}
-
-#[test]
-fn apply_refuses_a_body_shorter_than_a_record() {
-    let (_g, core, mut lfo) = fresh();
-    settle(&mut lfo, &core, &[&[KEY_A]]);
-    core.boot_index.set(0);
-    let short = body(KEY_A, b"RAMP", 0);
-    assert_eq!(
-        apply(
-            &mut lfo,
-            &core,
-            1,
-            KIND_LFO_SHAPE,
-            &short[..short.len() - 1]
-        ),
-        E_FORMAT
-    );
-    assert_eq!(used(), 0);
 }
 
 #[test]

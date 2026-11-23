@@ -14,26 +14,32 @@ pub fn wave_max() -> u32 {
 /// The three WAVE rows of the parameter table (one for each LFO): the stock addresses of the table and of the rows, which the port file resolves (`cf.param.data.descriptor_table`,
 /// `cf.lfo.data.wave_row.N`), and the pair (minimum, maximum) each row had before the first shape was loaded. Words 0: a host build with no firmware, which has no rows to write.
 pub(crate) struct Wave {
-    pub(crate) table: u32,
+    table: u32,
     row: [u32; 3],
     /// the rows hold the shape maximum; `stock` has what to put back
     armed: bool,
     stock: [(u32, u32); 3],
 }
-pub(crate) static mut WAVE: Wave = Wave {
+static mut WAVE: Wave = Wave {
     table: 0,
     row: [0; 3],
     armed: false,
     stock: [(0, 0); 3],
 };
 
-/// The firmware addresses of the WAVE rows (the service file's `setup`, from the words `bind` resolved): the stock table and the rows of the three LFOs. Not called by a host
+/// The firmware addresses of the WAVE rows (`Lfo::start_in`, from the words `bind_firmware` resolved): the stock table and the rows of the three LFOs. Not called by a host
 /// build; with `table` 0 the service writes no row and refuses nothing.
 pub fn set_firmware(table: u32, rows: [u32; 3]) {
     let w = unsafe { &mut *addr_of_mut!(WAVE) };
     w.table = table;
     w.row = rows;
     w.armed = false;
+}
+
+/// True when `set_firmware` gave the stock table (an image build); a host build has none.
+pub(crate) fn has_firmware() -> bool {
+    // SAFETY: `WAVE` is written by `set_firmware` at start only.
+    unsafe { (*addr_of!(WAVE)).table != 0 }
 }
 
 /// The pairs (minimum, maximum) the three WAVE rows hold now, or `None` when the image cannot take the maximum: it has no registry table, or a row is not a stock row of its

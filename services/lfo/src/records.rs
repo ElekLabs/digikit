@@ -9,8 +9,7 @@
 //! The table (`shapes`) is indexed by `number - RANGE.lo`. It is read in the interrupt of the LFO tick (`eval`), so it is written under the interrupt mask. One owner per number.
 use crate::lfo::Lfo;
 use crate::shapes::{self, slot};
-use crate::wave::{sync_range, wave_rows, WAVE};
-use core::ptr::addr_of;
+use crate::wave::{has_firmware, sync_range, wave_rows};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::rd32;
 use dkrt_abi::provider::{Consumer, Records, Status};
@@ -107,10 +106,11 @@ impl<C: CoreApi> Records<C> for Lfo {
                 r = E_TABLE_FULL;
             }
             // the WAVE rows must take the maximum (`sync_range`): the image has the registry's parameter table
-            // SAFETY: `WAVE` is written by `set_firmware` at start only; this is the UI task.
             if r == OK
                 && add > 0
-                && unsafe { (*addr_of!(WAVE)).table != 0 && wave_rows(core).is_none() }
+                && has_firmware()
+                // SAFETY: this is the UI task; `core` is the bound core API
+                && unsafe { wave_rows(core) }.is_none()
             {
                 r = E_NO_REGISTRY;
             }
