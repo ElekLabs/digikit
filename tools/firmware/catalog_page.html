@@ -190,6 +190,7 @@
     background: var(--chip);
     color: var(--ink);
   }
+  .controls[hidden],
   .banner[hidden] {
     display: none;
   }
@@ -494,7 +495,7 @@
   </div>
 
   <div class="banner" id="banner" hidden></div>
-  <div class="controls">
+  <div class="controls" id="cf-discovery">
     <span>Glyph/bitmap discovery:</span>
     <button type="button" id="find-bitmaps">Bitmap candidates</button>
     <button type="button" id="find-params">Parameter candidates</button>
@@ -516,6 +517,7 @@
 
 <script>
   const DATA = __DATA__;
+  const isDsp = DATA.cpu === "sharc";
   const state = { group: null, decisions: {}, db: null, local: false, canWrite: false, pending: {}, drafts: {} };
   const $ = (id) => document.getElementById(id);
   const rowsByGroup = new Map();
@@ -525,8 +527,14 @@
   }
   const rowByAddr = new Map(DATA.rows.map((r) => [r.a, r]));
   const linkedByAddr = new Map((DATA.linked_rows || []).map((r) => [r.a, r]));
-  const docId = (a) => DATA.image + '-' + a;
-  const localKey = 'digikit-catalog-decisions-' + DATA.image;
+  const reviewId = DATA.image + (isDsp ? '-dsp' : '');
+  const docId = (a) => reviewId + '-' + a;
+  const localKey = 'digikit-catalog-decisions-' + reviewId;
+  const sameReview = (d) => d?.image === DATA.image && (d.cpu || 'cf') === (DATA.cpu || 'cf');
+  if (isDsp) {
+    $('cf-discovery').hidden = true;
+    $('q').setAttribute('placeholder', 'Search name, anchor, role, or DSP hint');
+  }
   if (DATA.full_inventory) $('f-lab').checked = false;
 
   function el(tag, attrs, ...kids) {
@@ -573,7 +581,10 @@
       ]
         .join(' ')
         .toLowerCase();
-      if (!hay.includes(q)) return false;
+      if (isDsp) {
+        const text = hay.replaceAll('_', ' ');
+        if (!q.replaceAll('_', ' ').split(/\s+/).every((word) => text.includes(word))) return false;
+      } else if (!hay.includes(q)) return false;
     }
     return true;
   }
@@ -673,9 +684,9 @@
           text:
             '#' + g.id + ' · ' + g.size + ' functions · ' + g.grade + ' anchor-grade · ' + g.anch + ' already anchored',
         }),
-        el('dt', { text: 'Classes' }),
+        el('dt', { text: isDsp ? 'DSP roles' : 'Classes' }),
         el('dd', {}, g.classes || 'none'),
-        el('dt', { text: 'Strings' }),
+        el('dt', { text: isDsp ? 'DSP labels' : 'Strings' }),
         el('dd', {}, g.strings || 'none'),
         el('dt', { text: 'Tags' }),
         el('dd', { class: 'mono', text: g.tags || '' }),
@@ -699,7 +710,7 @@
       id: 'an-' + r.a,
       class: 'mono',
       value: state.drafts['an-' + r.a] ?? dec.anchor ?? lab.anchor ?? '',
-      placeholder: 'cf.<subsystem>.fn.<name>',
+      placeholder: (isDsp ? 'dsp' : 'cf') + '.<subsystem>.fn.<name>',
       'aria-label': 'Anchor name for ' + r.a,
     });
     const noteIn = el('input', {
@@ -779,9 +790,16 @@
           : null,
         r.by ? [el('dt', { text: 'Called by' }), el('dd', { text: r.by })] : null,
         r.ck ? [el('dt', { text: 'Calls' }), el('dd', { class: 'mono', text: r.ck })] : null,
-        r.hint ? [el('dt', { text: 'UI string' }), el('dd', { text: '“' + r.hint + '”' })] : null,
+        r.hint ? [el('dt', { text: isDsp ? 'DSP hints' : 'UI string' }), el('dd', { text: isDsp ? r.hint : '“' + r.hint + '”' })] : null,
         el('dt', { text: 'Rule' }),
-        el('dd', { class: 'mono', text: r.rule + ' · ' + r.size + ' bytes · ' + r.uic + ' UI callers' }),
+        el('dd', { class: 'mono', text: isDsp ? r.rule : r.rule + ' · ' + r.size + ' bytes · ' + r.uic + ' UI callers' }),
+        isDsp ? [
+          el('dt', { text: 'Instructions' }),
+          el('dd', { text: r.size + ' instructions' + (r.dsp.bytes ? ' · ' + r.dsp.bytes + ' bytes' : '') }),
+          el('dt', { text: 'Control flow' }),
+          el('dd', { text: r.dsp.callers + ' callers · ' + r.dsp.callees + ' callees · ' + r.dsp.loops + ' loops (' + r.dsp.do + ' hardware DO)' }),
+          ...(r.dsp.prof_insns ? [el('dt', { text: 'Profile' }), el('dd', { text: r.dsp.prof_insns + ' executed instructions' })] : []),
+        ] : null,
         el('dt', { text: DATA.other + ' pair' }),
         el(
           'dd',
@@ -803,8 +821,8 @@
             ' · stable across versions: ' +
             evidenceFlag(r.stable),
         }),
-        el('dt', { text: 'UI strings / tags' }),
-        el('dd', { text: (r.ui_strings || '0') + ' strings · ' + r.tags }),
+        el('dt', { text: isDsp ? 'Tags' : 'UI strings / tags' }),
+        el('dd', { text: isDsp ? r.tags : (r.ui_strings || '0') + ' strings · ' + r.tags }),
         r.anchors ? [el('dt', { text: 'Existing anchors' }), el('dd', { class: 'mono', text: r.anchors })] : null,
       ),
       el('div', { class: 'edit' }, anchorIn, decide),
@@ -856,6 +874,7 @@
       anchor: anchor.trim(),
       note: note.trim(),
       image: DATA.image,
+      ...(isDsp ? { cpu: DATA.cpu } : {}),
       addr: r.a,
       name: r.n,
       group: r.g,
@@ -902,10 +921,10 @@
   }
 
   $('export').addEventListener('click', () => {
-    const records = Object.values(state.decisions).filter((d) => d.image === DATA.image);
+    const records = Object.values(state.decisions).filter(sameReview);
     const blob = new Blob([records.map((d) => JSON.stringify(d)).join('\n') + '\n'], { type: 'application/x-ndjson' });
     const url = URL.createObjectURL(blob);
-    const link = el('a', { href: url, download: DATA.image + '-decisions.jsonl' });
+    const link = el('a', { href: url, download: reviewId + '-decisions.jsonl' });
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
@@ -919,7 +938,7 @@
         .map((line) => JSON.parse(line));
       for (const d of records) {
         if (
-          d.image !== DATA.image ||
+          !sameReview(d) ||
           !(rowByAddr.has(d.addr) || linkedByAddr.has(d.addr)) ||
           !['keep', 'later', 'skip'].includes(d.status) ||
           typeof d.anchor !== 'string' ||
@@ -992,14 +1011,14 @@
     ' of ' +
     DATA.total_rows +
     ' candidates shown. The full catalogue: uv run python -m tools.coldfire.fw catalog -i ' +
-    DATA.image +
+    DATA.image + (isDsp ? ' --cpu sharc' : '') +
     '.';
   render();
   followHash();
 
   (async () => {
     const banner = $('banner');
-    const db = await window.claude?.use?.('db');
+    const db = isDsp ? null : await window.claude?.use?.('db');
     if (!db) {
       state.local = true;
       state.canWrite = true;
@@ -1007,7 +1026,7 @@
       try {
         const stored = JSON.parse(localStorage.getItem(localKey) || '{}');
         for (const d of Object.values(stored)) {
-          if (d?.image === DATA.image && typeof d.addr === 'string' && ['keep', 'later', 'skip'].includes(d.status))
+          if (sameReview(d) && typeof d.addr === 'string' && ['keep', 'later', 'skip'].includes(d.status))
             state.decisions[docId(d.addr)] = d;
         }
         $('storage-mode').textContent = 'Local browser decisions; export a copy to keep or share.';
@@ -1035,7 +1054,7 @@
       .onSnapshot(
         (snap) => {
           const next = {};
-          for (const d of snap.docs) if (d.data().image === DATA.image) next[d.id] = d.data();
+          for (const d of snap.docs) if (sameReview(d.data())) next[d.id] = d.data();
           state.decisions = next;
           const ae = document.activeElement;
           const keep = ae && ae.id;

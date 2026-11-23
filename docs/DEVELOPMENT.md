@@ -320,6 +320,20 @@ Without Claude's database, Keep/Later/Skip uses local browser storage per firmwa
 
 The **Bitmap candidates** and **Parameter candidates** shortcuts search the existing function names, callees and anchor tags. The catalogue does not contain glyph IDs, glyph previews or bitmap asset metadata, so these are entry points for investigation rather than an asset gallery.
 
+### SHARC candidate review
+
+After building the DSP catalogs, run:
+
+```sh
+uv run python -m tools.firmware.catalog_page dt2-1.17 --cpu sharc
+uv run python -m tools.firmware.catalog_page dn2-1.12 --cpu sharc
+```
+
+The exporter reads the catalog and call edges from each sharcdb and writes
+`out/atlas/<image>-dsp-review.html` plus a review TSV. The HTML opens in a browser
+and includes every DSP candidate by default. Use the search box to find an
+anchor, role, or DSP hint. Keep both pages together for paired-device links.
+
 ## Patching
 
 patchkit applies modules (new machines, parameters, master-bus effects) to your own stock `.syx` and writes a new

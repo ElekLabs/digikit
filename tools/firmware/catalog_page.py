@@ -1,8 +1,7 @@
 """catalog_page.py: build the anchor review page from a catalogue and its labels.
 
-Reads <image>-catalog.tsv, <image>-catalog-groups.tsv and
-<image>-catalog-graph.json from out/atlas/ (made by tools.coldfire.atlas),
-adds the agent labels (JSONL) and writes one HTML page.
+Reads the ColdFire review exports or the SHARC catalog tables in sharcdb,
+adds the agent labels (JSONL) and writes a standalone HTML page with its TSV.
 """
 
 from __future__ import annotations
@@ -13,14 +12,17 @@ import glob
 import html
 import json
 import os
+import sqlite3
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
+from contextlib import closing
 from typing import Any
 from urllib.parse import quote
 
 from tools.coldfire import fw
 from tools.firmware import config, device
+from tools.firmware.catalog import group_edges
 
 Row = dict[str, str]
 
@@ -41,6 +43,54 @@ def read_tsv(path: str) -> list[Row]:
     csv.field_size_limit(sys.maxsize)
     with open(path, newline="") as f:
         return list(csv.DictReader(f, delimiter="\t"))
+
+
+def sqlite_rows(cursor: sqlite3.Cursor, *address_columns: str) -> list[Row]:
+    columns = [desc[0] for desc in cursor.description]
+    return [
+        {
+            key: ""
+            if value is None
+            else hex(value)
+            if key in address_columns
+            else str(value)
+            for key, value in zip(columns, row, strict=True)
+        }
+        for row in cursor
+    ]
+
+
+def read_sharc_catalog(
+    image: str,
+) -> tuple[list[Row], list[Row], list[tuple[str, str, int]]]:
+    path = os.path.join(fw.SHARC_DIR, image + ".sqlite")
+    with closing(fw.open_ro(path)) as db:
+        db.execute("BEGIN")
+        rows = sqlite_rows(
+            db.execute("SELECT * FROM catalog ORDER BY score DESC, addr"),
+            "addr",
+            "pair_addr",
+        )
+        groups = sqlite_rows(
+            db.execute("SELECT * FROM catalog_groups ORDER BY size DESC, id"), "best"
+        )
+        calls: dict[int, Counter[int]] = defaultdict(Counter)
+        for caller, callee, count in db.execute(
+            "SELECT from_function, to_function, count(*) FROM edges "
+            "WHERE image=? AND kind IN ('call','jump') "
+            "AND from_function IN (SELECT addr FROM catalog) "
+            "AND to_function IN (SELECT addr FROM catalog) AND from_function<>to_function "
+            "GROUP BY from_function, to_function",
+            (image,),
+        ):
+            calls[caller][callee] = count
+    addrs = [int(row["addr"], 16) for row in rows]
+    edges = [(hex(a), hex(b), n) for (a, b), n in group_edges(addrs, calls).items()]
+    return rows, groups, edges
+
+
+def review_filename(image: str, cpu: str) -> str:
+    return image + ("-dsp" if cpu == "sharc" else "") + "-review.html"
 
 
 def read_labels(
@@ -135,6 +185,7 @@ def build_payload(
     per_group: int,
     full_inventory: bool = False,
     other_addrs: set[int] | None = None,
+    cpu: str = "cf",
 ) -> dict[str, Any]:
     edges = list(edges)
     by_addr = {int(r["addr"], 16): r for r in rows}
@@ -144,7 +195,7 @@ def build_payload(
         r = by_addr.get(a)
         if not r:
             return hex(a)
-        return r["work_name"] or r["name"]
+        return r.get("work_name") or r["name"]
 
     labelled_groups = {int(by_addr[a]["group"]) for a in row_labels if a in by_addr}
     keep_groups, small = select_groups(groups, labelled_groups, min_group)
@@ -187,18 +238,18 @@ def build_payload(
             {
                 "a": r["addr"],
                 "n": r["name"],
-                "wn": r["work_name"],
-                "cls": r["class"],
+                "wn": r.get("work_name", ""),
+                "cls": r.get("role", r.get("class", "")),
                 "g": int(r["group"]),
                 "sc": float(r["score"]),
                 "gr": r["anchor_grade"] == "1",
                 "tags": r["tags"],
-                "uic": int(r["ui_callers"] or 0),
-                "hint": r["hint"],
+                "uic": int(r.get("ui_callers") or 0),
+                "hint": r.get("hints", r.get("hint", "")),
                 "pair": r["pair_addr"],
                 "pm": r["pair_method"],
-                "pair_url": pair_link(other, r["pair_addr"], other_addrs),
-                "hash": r.get("h_strict", ""),
+                "pair_url": pair_link(other, r["pair_addr"], other_addrs, cpu),
+                "hash": r.get("reloc_hash", r.get("h_strict", "")),
                 "hash_count": r.get("hash_count", ""),
                 "stable": r.get("stable", ""),
                 "pair_same_hash": r.get("pair_same_hash", ""),
@@ -207,13 +258,18 @@ def build_payload(
                 "anchors": r["anchors"],
                 "rule": r["rule_kind"]
                 + ("#" + r["rule_ordinal"] if r["rule_ordinal"] else ""),
-                "by": r["caller_classes"],
-                "ck": r["callees_known"],
+                "by": r.get("caller_classes", ""),
+                "ck": r.get("callees_known", ""),
                 "size": int(r["size"] or 0),
                 "lab": label_fields(row_labels.get(a, [])),
                 "nb": [[hex(b), disp(b), b in included, w] for w, b in ns],
             }
         )
+        if cpu == "sharc":
+            out_rows[-1]["dsp"] = {
+                key: r.get(key, "")
+                for key in ("bytes", "callers", "callees", "loops", "do", "prof_insns")
+            }
 
     out_groups: list[dict[str, Any]] = []
     for g in keep_groups:
@@ -241,6 +297,7 @@ def build_payload(
 
     payload = {
         "image": image,
+        "cpu": cpu,
         "other": other,
         "total_rows": len(rows),
         "total_groups": len(
@@ -265,6 +322,7 @@ def build_payload(
             per_group,
             True,
             other_addrs,
+            cpu,
         )
         selected = {r["a"] for r in out_rows}
         payload["linked_rows"] = [r for r in complete["rows"] if r["a"] not in selected]
@@ -281,14 +339,16 @@ def review_link(image: str, addr: str, page_filename: str | None = None) -> str:
     return page + "#r-" + quote(addr, safe="")
 
 
-def pair_link(other: str, addr: str, other_addrs: set[int] | None) -> str:
+def pair_link(
+    other: str, addr: str, other_addrs: set[int] | None, cpu: str = "cf"
+) -> str:
     if (
         not other
         or not addr
         or (other_addrs is not None and int(addr, 16) not in other_addrs)
     ):
         return ""
-    return review_link(other, addr)
+    return review_link(other, addr, review_filename(other, cpu))
 
 
 def write_review_tsv(
@@ -300,6 +360,7 @@ def write_review_tsv(
     row_labels: Mapping[int, Sequence[Mapping[str, Any]]],
     other_addrs: set[int] | None = None,
     page_filename: str | None = None,
+    cpu: str = "cf",
 ) -> None:
     """Export the complete inventory with original evidence and flattened labels."""
     label_keys = (
@@ -325,8 +386,12 @@ def write_review_tsv(
                     **r,
                     "image": image,
                     "other_image": other,
-                    "review_link": review_link(image, r["addr"], page_filename),
-                    "pair_review_link": pair_link(other, r["pair_addr"], other_addrs),
+                    "review_link": review_link(
+                        image, r["addr"], page_filename or review_filename(image, cpu)
+                    ),
+                    "pair_review_link": pair_link(
+                        other, r["pair_addr"], other_addrs, cpu
+                    ),
                     **{
                         "label_" + k: " | ".join(str(x.get(k, "")) for x in labels)
                         for k in label_keys
@@ -362,6 +427,7 @@ def render(template: str, payload: Mapping[str, Any], sub: str) -> str:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("image")
+    ap.add_argument("--cpu", choices=("cf", "sharc"), default="cf")
     ap.add_argument("--other", help="image of the paired device")
     ap.add_argument(
         "--labels",
@@ -372,9 +438,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--min-group", type=int, default=10)
     ap.add_argument("--per-group", type=int, default=20)
     ap.add_argument(
-        "--all", action="store_true", help="include every catalogue row and group"
+        "--all",
+        action=argparse.BooleanOptionalAction,
+        help="include every catalog row and group (default for SHARC)",
     )
-    ap.add_argument("--out", help="default: <atlas>/<image>-review.html")
+    ap.add_argument("--out", help="override the output HTML path under out/atlas")
     args = ap.parse_args(argv)
 
     image = args.image
@@ -383,44 +451,66 @@ def main(argv: list[str] | None = None) -> int:
     paths = [
         base + s for s in ("-catalog.tsv", "-catalog-groups.tsv", "-catalog-graph.json")
     ]
-    if not all(os.path.exists(p) for p in paths):
-        print(
-            "missing catalogue files; run: uv run python -m tools.coldfire.atlas catalog %s %s"
-            % (image, other or "OTHER_IMAGE"),
-            file=sys.stderr,
+    label_dir = os.path.join(fw.ATLAS_DIR, "labels")
+    if args.cpu == "sharc":
+        try:
+            rows, groups, edges = read_sharc_catalog(image)
+        except (fw.FwError, sqlite3.Error):
+            print(
+                f"missing DSP catalog; run: uv run python -m tools.sharc_dev.sharc_catalog {image} {other or 'OTHER_IMAGE'}",
+                file=sys.stderr,
+            )
+            return 2
+        other_addrs = set()
+        if other:
+            try:
+                other_rows, _, _ = read_sharc_catalog(other)
+                other_addrs = {int(r["addr"], 16) for r in other_rows}
+            except (fw.FwError, sqlite3.Error):
+                pass
+        label_dir = os.path.join(label_dir, "sharc")
+    else:
+        if not all(os.path.exists(p) for p in paths):
+            print(
+                "missing catalogue files; run: uv run python -m tools.coldfire.atlas catalog %s %s"
+                % (image, other or "OTHER_IMAGE"),
+                file=sys.stderr,
+            )
+            return 2
+        rows = read_tsv(paths[0])
+        groups = read_tsv(paths[1])
+        other_catalog = os.path.join(fw.ATLAS_DIR, other + "-catalog.tsv")
+        other_addrs = (
+            {int(r["addr"], 16) for r in read_tsv(other_catalog)}
+            if other and os.path.exists(other_catalog)
+            else set()
         )
-        return 2
+        with open(paths[2]) as f:
+            edges = json.load(f)["edges"]
     label_files = args.labels or sorted(
-        glob.glob(os.path.join(fw.ATLAS_DIR, "labels", image, "*.jsonl"))
+        glob.glob(os.path.join(label_dir, image, "*.jsonl"))
     )
-    rows = read_tsv(paths[0])
-    groups = read_tsv(paths[1])
-    other_catalog = os.path.join(fw.ATLAS_DIR, other + "-catalog.tsv")
-    other_addrs = (
-        {int(r["addr"], 16) for r in read_tsv(other_catalog)}
-        if other and os.path.exists(other_catalog)
-        else set()
-    )
-    with open(paths[2]) as f:
-        graph = json.load(f)
     group_labels, row_labels = read_labels(label_files)
     payload = build_payload(
         image,
         other,
         rows,
         groups,
-        graph["edges"],
+        edges,
         group_labels,
         row_labels,
         args.min_group,
         args.per_group,
-        args.all,
+        args.cpu == "sharc" if args.all is None else args.all,
         other_addrs,
+        args.cpu,
     )
     with open(TEMPLATE) as f:
         template = f.read()
-    page = render(template, payload, subtitle(image, other))
-    out = args.out or base + "-review.html"
+    sub = subtitle(image, other)
+    page = render(template, payload, ("SHARC · " if args.cpu == "sharc" else "") + sub)
+    out = args.out or os.path.join(fw.ATLAS_DIR, review_filename(image, args.cpu))
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w") as f:
         f.write(page)
     tsv = os.path.splitext(out)[0] + ".tsv"
@@ -433,6 +523,7 @@ def main(argv: list[str] | None = None) -> int:
         row_labels,
         other_addrs,
         page_filename=os.path.basename(out),
+        cpu=args.cpu,
     )
     print(
         "groups",

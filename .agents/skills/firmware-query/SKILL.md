@@ -148,6 +148,11 @@ Without Claude's database, Keep/Later/Skip uses per-image browser storage, with 
 
 Needs `out/sharcdb/<image>.sqlite` (also of the old image, for `stable`). Adds `function_index`, `function_anchors`, `function_names`, `function_notes`, `catalog` and `catalog_groups` to sharcdb. TSV and graph exports go under `out/atlas/`. Addresses are short words. Columns differ from ColdFire: `reloc_hash` replaces `h_strict`; no ui or class fields. DSP-only: `role` (voice, master/fx, util, frame, io, other), `label`, `callers`, `callees`, `loops`, `do`, `recip`, `lit_data`, `abs_dm`, `hints`, and `prof_insns` (NULL without `--profile`, which also adds the tag `hot`). `fw.py catalog` shows `role` and `hints`; TERM matches name, role, hints, tags or anchors.
 
+For browser review, run `uv run python -m tools.firmware.catalog_page IMAGE --cpu sharc`
+for each image in the pair. Open `out/atlas/<image>-dsp-review.html`. Keep both
+HTML files in the same folder for paired links. The page includes every DSP
+catalog candidate and supports search by name, anchor, role, and hint.
+
 `fw.py cost ADDR [--vars R2=32] [--vars-all R2=32]` gives a static instruction count with DO-loop trip counts (literal or symbolic) and callees. It is an upper bound over all paths with no stall model, and the unit of `dsp_cost_voice` and `patchkit budget`. Trip symbols name the register and the function that reads it, `R2@1cd286`: a callee's R2 is not the caller's. `--vars NAME=V` sets the entry function's register, `NAME@FN=V` one function's, `--vars-all NAME=V` every function's; an unknown name is an error that lists the symbols present. Jumps to another function (conditional too) count as tail calls whose targets are summed (upper bound); with `--vars` the output also gives the tighter total taking the largest target. A zero or missing DO count is `trip?@fn`; notes list what was not handled.
 
 ### From a candidate to a declaration

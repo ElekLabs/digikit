@@ -2,6 +2,7 @@
 
 import csv
 import json
+import sqlite3
 import subprocess
 import unittest
 from pathlib import Path
@@ -9,7 +10,8 @@ from urllib.parse import unquote
 
 import pytest
 
-from tools.firmware import catalog_page
+from tools.firmware import catalog, catalog_page
+from tools.sharc_dev import sharc_catalog
 
 
 def row(addr: int, score: float, anchors: str = "") -> dict[str, str]:
@@ -103,8 +105,20 @@ def inventory():
     return rows, groups, glabels, labels
 
 
-def payload(full=True):
+def payload(full=True, cpu="cf"):
     rows, groups, glabels, labels = inventory()
+    if cpu == "sharc":
+        for record in rows:
+            record.update(
+                role="master/fx",
+                anchors="dsp.master.fn.q31_converter",
+                hints="DO1",
+                callers="2",
+                callees="3",
+                loops="1",
+                do="1",
+                prof_insns="80",
+            )
     return catalog_page.build_payload(
         "dt2-1.17",
         "dn2-1.12",
@@ -116,6 +130,7 @@ def payload(full=True):
         10,
         1,
         full,
+        cpu=cpu,
     )
 
 
@@ -167,6 +182,60 @@ def test_custom_output_tsv_links_to_actual_html(tmp_path, monkeypatch):
         assert address == record["addr"]
 
 
+def test_sharc_review_reads_the_canonical_database(tmp_path, monkeypatch):
+    db_dir = tmp_path / "sharcdb"
+    db_dir.mkdir()
+    atlas = tmp_path / "atlas"
+    monkeypatch.setattr(catalog_page.fw, "SHARC_DIR", str(db_dir))
+    monkeypatch.setattr(catalog_page.fw, "ATLAS_DIR", str(atlas))
+    image, other = next(iter(catalog_page.OTHER_IMAGE.items()))
+    for current, addr, pair in ((image, 0x10, 0x40), (other, 0x40, 0x10)):
+        path = db_dir / (current + ".sqlite")
+        rows = [
+            dict.fromkeys(column for column, _ in sharc_catalog.CATALOG_COLUMNS)
+            for _ in range(2)
+        ]
+        for index, entry in enumerate(rows):
+            entry.update(
+                addr=addr + index,
+                name="recovered_function",
+                score=9,
+                size=12,
+                group=1,
+                anchor_grade=1,
+                tags="master_path",
+            )
+        rows[0].update(
+            pair_addr=pair, role="master/fx", anchors="dsp.master.fn.q31_converter"
+        )
+        with sqlite3.connect(path) as db:
+            catalog._write_table(db, "catalog", sharc_catalog.CATALOG_COLUMNS, rows)
+            catalog._write_table(
+                db,
+                "catalog_groups",
+                catalog.GROUP_COLUMNS,
+                catalog.catalog_group_rows(rows, "role", "label"),
+            )
+            db.execute(
+                "CREATE TABLE edges (image TEXT, from_function INTEGER, to_function INTEGER, kind TEXT)"
+            )
+            db.executemany(
+                "INSERT INTO edges VALUES (?,?,?,?)",
+                [
+                    (current, addr, addr + 1, "call"),
+                    (current, addr + 1, addr, "jump"),
+                ],
+            )
+    assert catalog_page.main([image, "--cpu", "sharc"]) == 0
+    output = atlas / (image + "-dsp-review.html")
+    page = output.read_text()
+    data = json.loads(page.split("const DATA = ", 1)[1].split(";\n", 1)[0])
+    assert data["cpu"] == "sharc" and data["full_inventory"]
+    assert data["rows"][0]["pair_url"] == f"{other}-dsp-review.html#r-0x40"
+    assert data["rows"][0]["nb"] == [["0x11", "recovered_function", True, 2]]
+    assert len(catalog_page.read_tsv(str(output.with_suffix(".tsv")))) == 2
+
+
 def test_pair_outside_inventory_retains_evidence_without_dead_link(tmp_path):
     rows, groups, glabels, labels = inventory()
     data = catalog_page.build_payload(
@@ -199,10 +268,12 @@ def test_render_escapes_html_without_changing_payload():
     )
 
 
-@pytest.mark.parametrize("full", [False, True])
-def test_page_deep_links_local_triage_and_export(tmp_path, full):
+@pytest.mark.parametrize(
+    ("full", "cpu"), [(False, "cf"), (True, "cf"), (True, "sharc")]
+)
+def test_page_deep_links_local_triage_and_export(tmp_path, full, cpu):
     template = Path(catalog_page.TEMPLATE).read_text()
-    page = catalog_page.render(template, payload(full), "Review")
+    page = catalog_page.render(template, payload(full, cpu), "Review")
     script = page.split("<script>", 1)[1].split("</script>", 1)[0]
     path = tmp_path / "page.js"
     path.write_text(script)
@@ -214,6 +285,8 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const source = fs.readFileSync(process.argv[1], 'utf8');
+const dsp = process.argv[2] === 'sharc';
+const review = 'dt2-1.17' + (dsp ? '-dsp' : '');
 class Element {
   constructor(tag) { this.tag = tag; this.nodeType = 1; this.children = []; this.events = {}; this.value = ''; this.classList = {add(){}, remove(){}}; }
   setAttribute(k,v) { this[k] = v; }
@@ -224,12 +297,12 @@ class Element {
   click() {}
 }
 const storage = new Map();
-storage.set('digikit-catalog-decisions-dt2-1.17', JSON.stringify({
-  'dt2-1.17-0x20': {image:'dt2-1.17',addr:'0x20',status:'later',anchor:'cf.hidden',note:'outside current selection'},
+storage.set('digikit-catalog-decisions-' + review, JSON.stringify({
+  [review + '-0x20']: {image:'dt2-1.17', ...(dsp ? {cpu:'sharc'} : {}), addr:'0x20',status:'later',anchor:'cf.hidden',note:'outside current selection'},
 }));
 let exported;
 function boot(claude) {
-  const ids = ['q','f-lab','f-open','f-grade','f-rel','groups','detail','progress','foot','banner','export','import','storage-mode','find-bitmaps','find-params'];
+  const ids = ['q','f-lab','f-open','f-grade','f-rel','groups','detail','progress','foot','banner','export','import','storage-mode','cf-discovery','find-bitmaps','find-params'];
   const roots = Object.fromEntries(ids.map(id => [id,new Element('root')]));
   roots['f-lab'].checked = true;
   roots.import.disabled = true;
@@ -252,7 +325,17 @@ function boot(claude) {
   assert.equal(vm.runInContext('state.canWrite && state.local',context),true);
   const article = roots.detail.children[1].children[0];
   function all(node) { return [node,...node.children.flatMap(all)]; }
-  assert(all(article).some(n=>n.href==='dn2-1.12-review.html#r-0x40'));
+  assert(all(article).some(n=>n.href==='dn2-1.12' + (dsp ? '-dsp' : '') + '-review.html#r-0x40'));
+  if (dsp) {
+    assert.equal(roots['cf-discovery'].hidden,true);
+    assert(all(article).some(n=>n.textContent?.includes('24 instructions')));
+    assert(all(article).some(n=>n.textContent?.includes('80 executed instructions')));
+    roots.q.value = 'q31 converter';
+    roots.q.events.input();
+    assert.equal(roots.detail.children[1].children.length,1);
+    roots.q.value = '';
+    roots.q.events.input();
+  }
   assert(all(article).some(n=>n.href==='#r-0x30'));
   vm.runInContext("$('f-rel').value='UI'; jump('0x30')",context);
   assert.equal(vm.runInContext('state.group',context),-1);
@@ -270,6 +353,7 @@ function boot(claude) {
   decision.status='later';
   await roots.import.events.change({target:{files:[{text:async()=>JSON.stringify(decision)}],value:''}});
   assert.equal(vm.runInContext("statusOf('0x30')",context),'later');
+  if (dsp) { assert.equal(decision.cpu,'sharc'); return; }
   let written;
   const db = {
     collection:()=>({limit:()=>({onSnapshot:fn=>fn({docs:[]})})}),
@@ -288,7 +372,10 @@ function boot(claude) {
 })().catch(e=>{console.error(e);process.exitCode=1;});
 """
     subprocess.run(
-        ["node", "-e", harness, str(path)], check=True, capture_output=True, text=True
+        ["node", "-e", harness, str(path), cpu],
+        check=True,
+        capture_output=True,
+        text=True,
     )
 
 
