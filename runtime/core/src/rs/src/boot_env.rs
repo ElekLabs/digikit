@@ -87,10 +87,10 @@ impl BootEnv for RealBootEnv {
         self.placer.borrow().extent()
     }
     unsafe fn start_package(&self) -> bool {
-        let Some((entry, _)) = self.placed.get() else { return false };
+        let Some((entry, built_minor)) = self.placed.get() else { return false };
         match stage1::start(entry, &crate::resident::TABLE) {
             Some(hooks) => {
-                hooks::install(hooks);
+                hooks::install(hooks, built_minor);
                 true
             }
             None => false,

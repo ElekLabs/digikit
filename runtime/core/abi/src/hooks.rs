@@ -189,6 +189,18 @@ pub struct ProviderHooks {
     pub query: Option<unsafe extern "C" fn(provider: u32, minimum: u32, out: *mut u32) -> i32>,
 }
 
+/// The first resident table minor whose package gives `PackageHooks::ui`. A package built against an older table has a shorter `PackageHooks`: the core does not read a
+/// group the package predates (`hooks.rs` of the runtime crate), so the entry has its default there.
+pub const UI_HOOKS_SINCE: u16 = 3;
+
+/// What `core/ui` asks of the package: the rows the DIGIKIT menu adds to the SETTINGS rebuild.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct UiHooks {
+    /// Add the app's rows to the stock SETTINGS menu `menu` (the menu object the rebuild's hook gets). A null entry adds nothing: the stock menu stays as it is.
+    pub settings_rows: Option<unsafe extern "C" fn(menu: *mut u8)>,
+}
+
 /// Every crossing from the resident core into the system package, by owner.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -201,4 +213,6 @@ pub struct PackageHooks {
     pub diag: DiagHooks,
     pub settings: SettingsHooks,
     pub provider: ProviderHooks,
+    /// Appended with table minor `UI_HOOKS_SINCE`.
+    pub ui: UiHooks,
 }

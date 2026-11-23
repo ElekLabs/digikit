@@ -23,12 +23,11 @@ needs_device = ["input.keys"]
 
 # One C source for both devices: every firmware call is a generated anchor (ports/bindings/include/dk_fw_*.h), so the object has no
 # externs table for C. The assembly shim maps its own symbol below. The dk_ui_* functions are plain global symbols that other
-# modules which require core/ui import by name. The module's one firmware hook is the end of the SETTINGS item list rebuild: it calls the app's optional dk_app_settings_rows (dk_ui_core.h).
+# modules which require core/ui import by name. The module's one firmware hook is the end of the SETTINGS item list rebuild: it calls the runtime's dkrt_ui_settings_rows, which asks the system package for its rows (the `ui.settings_rows` hook).
 [[object]]
 path = "build/ui.dko.json"
 sources = ["src/ui.c", "src/settings_rows.c", "src/view_pool.c", "src/panel_keys.c", "src/key_map.c", "src/key_defer.c", "src/canvas_map.c", "src/text_input.c", "src/shim.s"]
 place = "cf.expansion"
-optional = ["dk_app_settings_rows"]
 
 [object.externs]
 _dk_tail = "hook.cf.menu.site.settings_list.tail.tail"

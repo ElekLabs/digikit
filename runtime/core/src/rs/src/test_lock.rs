@@ -18,7 +18,7 @@ impl TestLock {
         let _ = crate::platform::TEST_INFO.set(|h| unsafe { crate::package::cleanup_tests::test_info(h) });
         unsafe {
             crate::package::resident::install(&crate::resident::TABLE).expect("the resident table fits the package");
-            crate::hooks::install(&crate::package::hooks::HOOKS);
+            crate::hooks::install(&crate::package::hooks::HOOKS, dkrt_abi::resident::RESIDENT_MINOR);
         }
         guard
     }

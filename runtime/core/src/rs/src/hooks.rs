@@ -18,8 +18,13 @@ static NO_PACKAGE: PackageHooks = unsafe { core::mem::zeroed() };
 /// The table every typed caller reads: `NO_PACKAGE` until the package installs its own.
 static mut INSTALLED: *const PackageHooks = &NO_PACKAGE;
 
-/// The package gives its table: every typed caller below goes through it from now on. Once per boot; installing the same table again is harmless.
-pub(crate) unsafe fn install(table: &'static PackageHooks) {
+/// The resident table minor the installed package was built against: a group of `PackageHooks` that was appended later is not in a package's table (`UI_HOOKS_SINCE`).
+static mut INSTALLED_MINOR: u16 = 0;
+
+/// The package gives its table: every typed caller below goes through it from now on. Once per boot; installing the same table again is harmless. `built_minor` is the
+/// resident table minor the package was built against (its header): it says which groups of the hooks the package has.
+pub(crate) unsafe fn install(table: &'static PackageHooks, built_minor: u16) {
+    write_volatile(core::ptr::addr_of_mut!(INSTALLED_MINOR), built_minor);
     write_volatile(core::ptr::addr_of_mut!(INSTALLED), table);
 }
 
@@ -33,7 +38,7 @@ fn table() -> &'static PackageHooks {
 #[cfg(test)]
 pub(crate) unsafe fn attach_package(table: &'static dkrt_abi::resident::ResidentTable) {
     match crate::package::attach(table) {
-        Ok(hooks) => install(hooks),
+        Ok(hooks) => install(hooks, dkrt_abi::resident::RESIDENT_MINOR),
         Err(why) => crate::stage1::log_refusal(&why),
     }
 }
@@ -54,6 +59,12 @@ pub(crate) fn without_package<R>(f: impl FnOnce() -> R) -> R {
         write_volatile(core::ptr::addr_of_mut!(INSTALLED), before);
         r
     }
+}
+
+/// Is the installed package new enough to have the hook groups appended with table minor `since`?
+#[inline(always)]
+fn has_group(since: u16) -> bool {
+    unsafe { read_volatile(addr_of!(INSTALLED_MINOR)) >= since }
 }
 
 /// Call `table.<group>.<hook>(args)`; `default` when the hook is missing (always, with no package installed).
@@ -264,6 +275,16 @@ pub(crate) unsafe fn provider_query(provider: u32, minimum: u32) -> Result<u32, 
         Err(r)
     } else {
         Ok(addr)
+    }
+}
+
+// ---- the UI ------------------------------------------------------------------------------------------------------------------
+
+/// The end of the SETTINGS rebuild (`core/ui`): the package adds its rows to the stock menu `menu`. Default: the stock menu stays as it is (no package, a package built
+/// before the group, or a null entry).
+pub(crate) unsafe fn ui_settings_rows(menu: *mut u8) {
+    if has_group(dkrt_abi::hooks::UI_HOOKS_SINCE) {
+        call!(ui.settings_rows(menu), ())
     }
 }
 

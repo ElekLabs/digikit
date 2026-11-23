@@ -11,8 +11,7 @@ dk_ui *dk_ui_core_handle(void);
    Call it from a hook that rebuilds the stock menu; stock_menu is the menu object the hook gets. */
 void dk_ui_stock_row(uint8_t *stock_menu, const char *text, dk_ui_action_fn *fn, void *arg);
 
-/* Implemented by an app (core/digikit-menu) and called by core/ui from its hook at the end of the SETTINGS item list rebuild: add the
-   app's rows with dk_ui_stock_row. An optional link: core/ui resolves it at patch time and does nothing when no module provides it. */
-void dk_app_settings_rows(uint8_t *stock_menu);
+/* The rows of the SETTINGS menu that the system package adds come through the `ui.settings_rows` hook of the runtime (dkrt_ui_settings_rows): core/ui
+   calls it at the end of the SETTINGS item list rebuild, and the package's app adds its rows with dk_ui_stock_row. With no package, nothing is added. */
 
 #endif

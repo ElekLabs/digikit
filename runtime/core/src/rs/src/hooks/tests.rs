@@ -152,3 +152,51 @@ fn a_core_with_no_package_still_answers_through_its_exports_and_its_transport() 
         assert!(!crate::transport::logged(dkrt_sdk::proto::CMD_INFO, 0));
     });
 }
+
+// ---- ui.settings_rows ----------------------------------------------------------------------------------------------------
+
+static RECORDED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+unsafe extern "C" fn record_rows(menu: *mut u8) {
+    RECORDED.store(menu as usize, std::sync::atomic::Ordering::SeqCst);
+}
+
+static RECORDING: PackageHooks = PackageHooks {
+    ui: dkrt_abi::hooks::UiHooks { settings_rows: Some(record_rows) },
+    ..unsafe { core::mem::zeroed() }
+};
+
+/// Run `f` with `table` installed as built against `minor`, then give back the package of the binary (the lock is held).
+fn with_table<R>(table: &'static PackageHooks, minor: u16, f: impl FnOnce() -> R) -> R {
+    unsafe {
+        install(table, minor);
+        let r = f();
+        install(&crate::package::hooks::HOOKS, dkrt_abi::resident::RESIDENT_MINOR);
+        r
+    }
+}
+
+/// The SETTINGS rows of the package are asked through the hook: the menu pointer arrives as it is. No package, a null entry and a package that predates the group each leave the stock
+/// menu alone (no call, no fault).
+#[test]
+fn the_settings_rows_hook_reaches_the_package_and_has_a_null_default() {
+    use dkrt_abi::hooks::UI_HOOKS_SINCE;
+    use std::sync::atomic::Ordering::SeqCst;
+    let _g = locked();
+    unsafe {
+        RECORDED.store(0, SeqCst);
+        with_table(&RECORDING, UI_HOOKS_SINCE, || ui_settings_rows(0x1234 as *mut u8));
+        assert_eq!(RECORDED.load(SeqCst), 0x1234, "the package's hook got the menu");
+
+        RECORDED.store(0, SeqCst);
+        with_table(&RECORDING, UI_HOOKS_SINCE - 1, || ui_settings_rows(0x1234 as *mut u8));
+        assert_eq!(RECORDED.load(SeqCst), 0, "a package built before the group has no entry to read");
+
+        static EMPTY: PackageHooks = unsafe { core::mem::zeroed() };
+        with_table(&EMPTY, UI_HOOKS_SINCE, || ui_settings_rows(0x1234 as *mut u8));
+        assert_eq!(RECORDED.load(SeqCst), 0, "a null entry adds nothing");
+
+        without_package(|| ui_settings_rows(0x1234 as *mut u8));
+        assert_eq!(RECORDED.load(SeqCst), 0, "no package: nothing");
+    }
+}

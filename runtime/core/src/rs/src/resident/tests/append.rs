@@ -149,7 +149,7 @@ fn a_missing_group_is_refused_by_name() {
 #[test]
 fn the_appended_groups_are_the_last_ones_so_an_older_package_is_a_prefix() {
     use core::mem::{offset_of, size_of};
-    assert_eq!(RESIDENT_MINOR, 2, "this test is about the first two appends: a later minor appends after `host_dir` and needs its own case");
+    assert_eq!(RESIDENT_MINOR, 3, "this test is about the appends of 1.1 and 1.2: a later minor appends after `host_dir` and needs its own case");
     let pointer = size_of::<*const ()>();
     assert_eq!(offset_of!(ResidentTable, links) + pointer, offset_of!(ResidentTable, host_dir));
     assert_eq!(offset_of!(ResidentTable, host_dir) + pointer, size_of::<ResidentTable>());

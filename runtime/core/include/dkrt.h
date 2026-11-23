@@ -795,4 +795,7 @@ int32_t dkrt_aux_run(uintptr_t f, uint8_t *ctx);
 /* Adapter to runtime: wait until the run started by dkrt_aux_run has finished. Returns 0, or E_STATE when none was started. */
 int32_t dkrt_aux_wait(void);
 
+/* Called by core/ui at the end of the SETTINGS rebuild (the `ui.settings_rows` hook of the system package): the package adds its rows to the stock menu `settings_menu` (the menu object the rebuild's hook gets) with dk_ui_stock_row. With no package, a package built before the hook, or a null hook entry, it does nothing: the stock menu stays as it is. */
+void dkrt_ui_settings_rows(uint8_t *settings_menu);
+
 #endif /* DKRT_H */

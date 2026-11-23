@@ -44,3 +44,9 @@ pub unsafe extern "C" fn dkrt_live(op: u32, path: *const u8) -> i32 {
 pub unsafe extern "C" fn dkrt_live_state(out: *mut DkrtLive) {
     hooks::live_state(out)
 }
+
+/// `dkrt_ui_settings_rows(settings_menu)`: the end of the SETTINGS rebuild (`core/ui`) asks the package for its rows (`ui.settings_rows`).
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_ui_settings_rows(settings_menu: *mut u8) {
+    hooks::ui_settings_rows(settings_menu)
+}
