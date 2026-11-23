@@ -498,7 +498,9 @@ def install_system_package(folder: Path) -> None:
     (tests/regression/runtime/system-package.ts): `digikit/` of the card holds the store, and stage 1 reads the
     store path `digikit/system.dksp`. Without it every cell boots core-only. Built by `core/runtime:package`."""
     if not SYSTEM_PACKAGE_FILE.exists():
-        raise HarnessError(f"missing {SYSTEM_PACKAGE_FILE}: run nx run core/runtime:package")
+        raise HarnessError(
+            f"missing {SYSTEM_PACKAGE_FILE}: run nx run core/runtime:package"
+        )
     to = folder / "digikit" / SYSTEM_PACKAGE_STORE_PATH
     to.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(SYSTEM_PACKAGE_FILE, to)
@@ -511,8 +513,12 @@ def build_package_card(folder: Path, device: str) -> str:
     """The card image of FOLDER (`plusdrive build`, no project seeded: the same call as the TS card builder's), next to it."""
     if not PLUSDRIVE.exists():
         raise HarnessError(f"missing {PLUSDRIVE}: run nx run plusdrive-format:cli")
-    key = hashlib.sha256((folder / "digikit" / SYSTEM_PACKAGE_STORE_PATH).read_bytes()).hexdigest()[:12]
-    image = folder.parent / f"{folder.name}-{key}.img"  # content-keyed: one build per package, callers hold the card lock
+    key = hashlib.sha256(
+        (folder / "digikit" / SYSTEM_PACKAGE_STORE_PATH).read_bytes()
+    ).hexdigest()[:12]
+    image = (
+        folder.parent / f"{folder.name}-{key}.img"
+    )  # content-keyed: one build per package, callers hold the card lock
     if image.exists():
         return str(image)
     r = subprocess.run(
@@ -832,7 +838,9 @@ class Session:
         else:
             # every cell has a card: the sample card of a device that has one (the daemon seeds a project into it), else a
             # card of the package alone, built by the plusdrive CLI like the TS card builder does
-            sample = pk_device.load(cell.device).get("acceptance", {}).get("sample_card")
+            sample = (
+                pk_device.load(cell.device).get("acceptance", {}).get("sample_card")
+            )
             folder = OUT / ("samples" if sample else f"card-package-{cell.device}")
             if sample:
                 card_check.make_samples(folder)
