@@ -4,9 +4,10 @@
 // The page only puts files on the card (upload and verify) and restarts the device. Which modules the device loads is its own
 // selection, made in SETTINGS > DIGIKIT > MODULES on the device and applied there.
 
+import { fmtVersion } from '@digi/dk-session';
 import { formatBytes } from '../modules/backend.ts';
 import { fit, fitsSet, type Needs } from '../modules/fit.ts';
-import type { Group, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
+import type { CardServiceRef, Group, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
 import { PROVIDER_MAX } from '../modules/services.ts';
 import type { ServiceRef, ServiceRefusal } from '../modules/services.ts';
 export type { Group, TransferEvent, TransferRow, TransferView };
@@ -32,7 +33,7 @@ export function freeLine(free: number | undefined): string {
   return free === undefined ? '' : `${freeText(free)} free`;
 }
 
-/** The storage line of Modules mode, under the device line: the module files on the card (the rows of the list) and the free space of the store. Storage only: no memory. */
+/** The storage line of Modules mode, under the device line: the module files on the card and the free space of the store. Storage only: no memory. */
 export function storageLine(view: TransferView): string {
   const rows = onDevice(view);
   const bytes = rows.reduce((n, r) => n + r.file_size, 0);
@@ -276,15 +277,24 @@ export function localTags(r: TransferRow): RowTag[] {
   return out;
 }
 
-/** The tag of a service sub row under a module: where the service stands on the device. */
-export function serviceTags(sv: ServiceRef): RowTag[] {
-  return [
-    {
-      text: sv.state,
-      tone: sv.state === 'on device' ? 'ok' : 'warn',
-      title: sv.state === 'differs' ? 'A different build is on the device; Install replaces it' : undefined,
-    },
-  ];
+/** The dependency badge of either copy, with one tooltip line per hard service need. */
+export function dependencyBadge(
+  services: readonly (ServiceRef | CardServiceRef)[] | undefined,
+): { text: string; lines: string[] } | undefined {
+  if (!services?.length) return undefined;
+  return {
+    text: plural(services.length, 'dep', 'deps'),
+    lines: services.map(({ label, state, version, size }) =>
+      [
+        label,
+        state,
+        ...(version === undefined
+          ? []
+          : [version & 255 ? fmtVersion(version) : `${version >>> 16}.${(version >>> 8) & 255}`]),
+        ...(size === undefined ? [] : [formatBytes(size)]),
+      ].join(' · '),
+    ),
+  };
 }
 
 /**
@@ -582,13 +592,21 @@ export function rowStatus(p: Progress | undefined, verified: Verified, path: str
   return v ? { kind: v } : undefined;
 }
 
-/** The "On device" rows plus, for each module of the running install whose file is not on the card yet, a pending row (the file is going
- * there: the upload bar sits in it). */
-export function onDeviceWithPending(view: TransferView, p: Progress | undefined): TransferRow[] {
-  const rows = onDevice(view);
+/** Attached services are represented by their module's badge and stay in the card inventory. */
+function visibleDeviceRows(rows: TransferRow[]): TransferRow[] {
+  const attached = new Set(rows.flatMap((r) => (r.card_services ?? []).map((service) => service.path)));
+  return rows.filter((r) => !attached.has(r.path));
+}
+
+/** The destination rows, with pending installs added so their progress stays visible.
+ * During an install, an attached service being updated also gets a temporary progress row. */
+export function onDeviceWithPending(view: TransferView, p: Progress | undefined, installing = false): TransferRow[] {
+  const inventory = onDevice(view);
+  const rows = visibleDeviceRows(inventory);
   const have = new Set(rows.map((r) => r.path));
+  const onCard = new Set(inventory.map((r) => r.path));
   for (const m of p?.modules ?? []) {
-    if (!m.path || have.has(m.path)) continue;
+    if (!m.path || have.has(m.path) || (onCard.has(m.path) && !installing)) continue;
     const repo = m.kind === 'service' ? undefined : view.modules.find((r) => r.id === m.id);
     rows.push({
       ...(repo ?? { group: 'Tools', test: false, name: m.id, version: null }),
@@ -613,7 +631,7 @@ export function applyVerified(v: Verified, e: TransferEvent): Verified {
 
 /** The store paths ticked in the On device pane, in list order (ticks of rows that are gone are dropped). */
 export function deletePaths(view: TransferView, ticked: Set<string>): string[] {
-  return onDevice(view)
+  return visibleDeviceRows(onDevice(view))
     .filter((r) => ticked.has(r.path))
     .map((r) => r.path);
 }

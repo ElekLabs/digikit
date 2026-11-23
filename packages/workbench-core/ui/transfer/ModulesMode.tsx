@@ -5,7 +5,7 @@
 // in MODULES on the device, then applies and restarts there. Restart only restarts the device and reports what loaded. Delete removes the
 // ticked files from the card; a loaded module stays loaded until the restart.
 import WaitNotice from './WaitNotice';
-import { For, Show, createSignal, type JSX } from 'solid-js';
+import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import Segmented, { type SegmentedOption } from '../components/Segmented';
 import { errorLine, formatBytes } from '../../src/modules/backend';
 import {
@@ -13,7 +13,6 @@ import {
   LocalPane,
   DevicePane,
   SelectAll,
-  ServiceSubRow,
   createConfirm,
   DeleteButton,
   writing,
@@ -33,6 +32,7 @@ import {
   DONE_ON_CARD,
   deleteDoneText,
   deletePaths,
+  dependencyBadge,
   deviceTags,
   eventText,
   installModules,
@@ -187,14 +187,14 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     const v = lastView();
     return v ? available(v, showTests()).flatMap((g) => g.rows.filter((r) => r.id).map(rowKey)) : [];
   };
-  const deviceKeys = () => {
+  const deviceRows = createMemo(() => {
     const v = lastView();
-    return v
-      ? onDeviceWithPending(v, progress())
-          .filter((r) => r.on_card !== 'no')
-          .map((r) => r.path)
-      : [];
-  };
+    return v ? onDeviceWithPending(v, progress(), busy() === 'Installing') : [];
+  });
+  const deviceKeys = () =>
+    deviceRows()
+      .filter((r) => r.on_card !== 'no')
+      .map((r) => r.path);
   // the same selection model as the Samples lists: click, Shift, Cmd or Ctrl, a marquee, Cmd+A, Esc (no folders here)
   const lsel = createPaneSelect({
     keys: localKeys,
@@ -359,39 +359,35 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
                       <ul class="rows">
                         <For each={g.rows}>
                           {(r) => (
-                            <>
-                              <ListRow
-                                rowKey={rowKey(r)}
-                                selected={ticks().has(rowKey(r)) || (!!filesId(r) && selectedId() === filesId(r))}
-                                onSelect={
-                                  r.id
-                                    ? (e) => {
-                                        const f = filesId(r);
-                                        if (f) setSelectedId(f);
-                                        else {
-                                          setSelectedId(undefined);
-                                          lsel.click(rowKey(r), e);
-                                        }
+                            <ListRow
+                              rowKey={rowKey(r)}
+                              selected={ticks().has(rowKey(r)) || (!!filesId(r) && selectedId() === filesId(r))}
+                              onSelect={
+                                r.id
+                                  ? (e) => {
+                                      const f = filesId(r);
+                                      if (f) setSelectedId(f);
+                                      else {
+                                        setSelectedId(undefined);
+                                        lsel.click(rowKey(r), e);
                                       }
-                                    : undefined
-                                }
-                                check={{
-                                  label: `Install ${label(r)}`,
-                                  checked: ticks().has(rowKey(r)),
-                                  disabled: writing(busy()),
-                                  onChange: () => lsel.tick(rowKey(r)),
-                                }}
-                                name={label(r)}
-                                title={r.id ?? r.path}
-                                tags={localTags(r)}
-                                version={r.version ?? ''}
-                                size={formatBytes(r.file_size)}
-                                action={sourceAction(r)}
-                              />
-                              <For each={r.services ?? []}>
-                                {(s) => <ServiceSubRow service={s} selected={ticks().has(rowKey(r))} />}
-                              </For>
-                            </>
+                                    }
+                                  : undefined
+                              }
+                              check={{
+                                label: `Install ${label(r)}`,
+                                checked: ticks().has(rowKey(r)),
+                                disabled: writing(busy()),
+                                onChange: () => lsel.tick(rowKey(r)),
+                              }}
+                              name={label(r)}
+                              title={r.id ?? r.path}
+                              tags={localTags(r)}
+                              dependencies={dependencyBadge(r.services)}
+                              version={r.version ?? ''}
+                              size={formatBytes(r.file_size)}
+                              action={sourceAction(r)}
+                            />
                           )}
                         </For>
                       </ul>
@@ -453,58 +449,57 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
       >
         <WaitNotice active={!!busy()} cancel={busy() !== 'Installing'} />
         <Show when={lastView()}>
-          {(v) => (
-            <Show
-              when={onDeviceWithPending(v(), progress()).length}
-              fallback={
-                <p class="empty">
-                  {browsing()
-                    ? `Connect a ${deviceNamesText('or')} to see what is on it.`
-                    : 'The device holds no modules.'}
-                </p>
-              }
-            >
-              <ul class="rows">
-                <For each={onDeviceWithPending(v(), progress())}>
-                  {(r) => (
-                    <ListRow
-                      rowKey={r.on_card === 'no' ? undefined : r.path}
-                      selected={delTicks().has(r.path) || (!!filesId(r) && selectedId() === filesId(r))}
-                      onSelect={
-                        r.on_card === 'no'
-                          ? undefined
-                          : (e) => {
-                              const f = filesId(r);
-                              if (f) setSelectedId(f);
-                              else {
-                                setSelectedId(undefined);
-                                dsel.click(r.path, e);
-                              }
+          <Show
+            when={deviceRows().length}
+            fallback={
+              <p class="empty">
+                {browsing()
+                  ? `Connect a ${deviceNamesText('or')} to see what is on it.`
+                  : 'The device holds no modules.'}
+              </p>
+            }
+          >
+            <ul class="rows">
+              <For each={deviceRows()}>
+                {(r) => (
+                  <ListRow
+                    rowKey={r.on_card === 'no' ? undefined : r.path}
+                    selected={delTicks().has(r.path) || (!!filesId(r) && selectedId() === filesId(r))}
+                    onSelect={
+                      r.on_card === 'no'
+                        ? undefined
+                        : (e) => {
+                            const f = filesId(r);
+                            if (f) setSelectedId(f);
+                            else {
+                              setSelectedId(undefined);
+                              dsel.click(r.path, e);
                             }
-                      }
-                      check={
-                        r.on_card === 'no'
-                          ? undefined
-                          : {
-                              label: `Delete ${label(r)}`,
-                              checked: delTicks().has(r.path),
-                              disabled: writing(busy()),
-                              onChange: () => dsel.tick(r.path),
-                            }
-                      }
-                      name={label(r)}
-                      title={r.path}
-                      tags={deviceTags(r)}
-                      version={r.version ?? ''}
-                      size={formatBytes(r.file_size)}
-                      status={status(r)}
-                      phase={phase(r)}
-                    />
-                  )}
-                </For>
-              </ul>
-            </Show>
-          )}
+                          }
+                    }
+                    check={
+                      r.on_card === 'no'
+                        ? undefined
+                        : {
+                            label: `Delete ${label(r)}`,
+                            checked: delTicks().has(r.path),
+                            disabled: writing(busy()),
+                            onChange: () => dsel.tick(r.path),
+                          }
+                    }
+                    name={label(r)}
+                    title={r.path}
+                    tags={deviceTags(r)}
+                    dependencies={dependencyBadge(r.card_services)}
+                    version={r.version ?? ''}
+                    size={formatBytes(r.file_size)}
+                    status={status(r)}
+                    phase={phase(r)}
+                  />
+                )}
+              </For>
+            </ul>
+          </Show>
         </Show>
       </DevicePane>
     </SplitPane>

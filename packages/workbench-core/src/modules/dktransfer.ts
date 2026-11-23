@@ -8,6 +8,7 @@ import {
   HEADER_BYTES,
   H_ROLE,
   RECORD_KIND,
+  RUNTIME_SERVICE_NAMES,
   TABLE_MAGIC,
   TABLE_VERSION,
   fileHashHex,
@@ -21,11 +22,14 @@ import {
 import { LOAD_STATUS, STATUS } from '@digi/dk-session/gen_proto';
 import { fitsNow, keyWarnings, type Caps, type Needs } from './fit.ts';
 import {
+  PORT_NAME,
+  nameHash,
   planDelete,
   readFw,
   readNeeds,
   readProvides,
   resolveServices,
+  serviceFileOf,
   type Need,
   type PortFile,
   type RuntimeIdentity,
@@ -60,8 +64,10 @@ export interface TransferRow {
   fits?: boolean | null;
   warnings?: string[];
   known?: boolean;
-  /** The services a library module needs (read-only sub rows), with their state on the card. Set only when the view was built with `InstallDeps`. */
+  /** The library services a module needs, with their state on the card. */
   services?: ServiceRef[];
+  /** Hard service needs of the copy on the card, including dependencies of its installed services. */
+  card_services?: CardServiceRef[];
   /** For a `.dks` file on the card: the files on the card that hard-need it. */
   needed_by?: string[];
   /** For a `.dkport` on the card built for another firmware than the device runs: that firmware's identity (16 hex digits). Such a file stays on the card but serves no module now. */
@@ -69,6 +75,10 @@ export interface TransferRow {
   /** Why the module cannot install with the services of this workbench and the runtime of the device. */
   service_refusal?: ServiceRefusal;
 }
+
+export type CardServiceRef =
+  | { label: string; state: 'not on device'; path?: never; version?: never; size?: never }
+  | { label: string; state: 'on device'; path: string; version: number; size: number };
 
 export interface TransferView {
   device: string;
@@ -294,6 +304,7 @@ export interface ServiceView {
   /** The firmware identity (FW item) of each `.dkport` on the card, by path, and the firmware the device runs (null when it reports none). */
   portFw?: Record<string, string>;
   deviceFw?: string | null;
+  runtimeServices?: ReadonlySet<number>;
 }
 
 /** A port file on the card whose FW item is not the firmware the device runs: allowed side by side, but no provider of the current need. */
@@ -340,8 +351,36 @@ function serviceRefs(
   return out;
 }
 
+/** Resolve a card module's needs against the card index. Library files only supply labels for missing services. */
+function cardServiceRefs(
+  needs: Need[],
+  needsByPath: Map<string, Need[]>,
+  providers: ReadonlyMap<number, Extract<CardServiceRef, { state: 'on device' }>>,
+  library: Map<number, string>,
+  runtime: ReadonlySet<number>,
+): CardServiceRef[] {
+  const out: CardServiceRef[] = [];
+  const seen = new Set([nameHash(PORT_NAME), ...runtime]);
+  const visit = (ns: Need[]) => {
+    for (const n of ns) {
+      if (!n.hard || seen.has(n.hash32)) continue;
+      seen.add(n.hash32);
+      const file = providers.get(n.hash32);
+      if (file) visit(needsByPath.get(file.path) ?? []);
+      out.push(
+        file ?? {
+          label: library.get(n.hash32) ?? `Service 0x${n.hash32.toString(16).padStart(8, '0')}`,
+          state: 'not on device',
+        },
+      );
+    }
+  };
+  visit(needs);
+  return out;
+}
+
 /** The list from its parts: the library, the card's LIST, the names MODULES reports loaded, CAPACITY (or null), and the header bytes of the card files.
- * With `sv` the library rows list their services and the card's `.dks` rows say which files need them. */
+ * With `sv` the library and card copies each list their services, and provider rows say which files need them. */
 export function mergeView(
   library: LibraryModule[],
   card: { path: string; size: number; hash: string }[],
@@ -359,6 +398,31 @@ export function mergeView(
     return f && text ? { not_loaded: text, load_state: f.state } : {};
   };
   const onCard = new Map(card.map((c) => [c.path, c]));
+  const needsByPath = new Map(sv?.card.map((file) => [file.path, file.needs]));
+  const providers = new Map<number, Extract<CardServiceRef, { state: 'on device' }>>();
+  for (const c of card) {
+    if (!c.path.endsWith(SERVICE_EXT)) continue;
+    const bytes = headers[c.path];
+    const stem = leafName(c.path);
+    if (!stem || c.path !== servicePath(stem)) continue;
+    const service = bytes && serviceFileOf(stem, bytes, c.hash);
+    if (!service || service.hash32 !== nameHash(stem) || providers.has(service.hash32)) continue;
+    providers.set(service.hash32, {
+      label: service.label,
+      state: 'on device',
+      path: c.path,
+      version: service.version,
+      size: c.size,
+    });
+  }
+  const libraryLabels = new Map(sv?.services.map(({ file }) => [file.hash32, file.label]));
+  const runtime = new Set([...RUNTIME_SERVICE_NAMES.map(nameHash), ...(sv?.runtimeServices ?? [])]);
+  const cardServices = (path: string) => {
+    const needs = path.endsWith('.dkm') ? needsByPath.get(path) : undefined;
+    if (!needs?.length) return {};
+    const refs = cardServiceRefs(needs, needsByPath, providers, libraryLabels, runtime);
+    return refs.length ? { card_services: refs } : {};
+  };
   const seen = new Set<string>();
   const modules: TransferRow[] = library.map((m) => {
     const have = onCard.get(m.path);
@@ -378,6 +442,7 @@ export function mergeView(
       on_card: !have ? 'no' : have.size === m.file_size && have.hash === m.hash ? 'yes' : 'other version',
       loaded: loaded.includes(m.name),
       ...whyNot(m.path, loaded.includes(m.name)),
+      ...cardServices(m.path),
     };
     row.warnings = [...(m.path_error ? [m.path_error] : []), ...fitWarnings(row, cap)];
     row.fits = cap === null ? null : row.warnings.length === 0;
@@ -409,6 +474,7 @@ export function mergeView(
       on_card: 'yes',
       loaded: h ? loaded.includes(h.name) : false,
       ...whyNot(c.path, h ? loaded.includes(h.name) : false),
+      ...cardServices(c.path),
       // a file without the header table of this runtime was built for an older one
       ...(h && !hasHeaderTable(headers[c.path]!) ? { warnings: [OLDER_RUNTIME_TEXT] } : {}),
       ...(sv && isForOtherFirmware(sv, c.path)
@@ -707,7 +773,7 @@ async function cardFacts(
   return { needs, provides, portFw, unread };
 }
 
-/** The merged view for the device behind `s`. With `deps` the library rows list their services, the card's `.dks` and `.dkport` rows say what needs them, and a module the services cannot serve carries its refusal. */
+/** The merged view for the device behind `s`. READ supplies installed dependency data. With `deps` the library rows list the services they need and any install refusal. */
 export async function buildView(s: DkSession, library: LibraryModule[], deps?: InstallDeps): Promise<TransferView> {
   const info = await s.info();
   requireRuntime(info);
@@ -728,8 +794,11 @@ export async function buildView(s: DkSession, library: LibraryModule[], deps?: I
   }
   let sv: ServiceView | undefined;
   let refused: ServiceRefusal[] = [];
-  if (deps) {
-    const files: ServiceView['services'] = deps.services.map((file) => ({ file, needs: deps.needsOf?.(file.bytes) }));
+  if (deps || hasCap(info, 'READ')) {
+    const files: ServiceView['services'] = (deps?.services ?? []).map((file) => ({
+      file,
+      needs: deps?.needsOf?.(file.bytes),
+    }));
     const facts = hasCap(info, 'READ')
       ? await cardFacts(s, card, library, headers)
       : { needs: [], provides: {}, portFw: {} };
@@ -738,8 +807,11 @@ export async function buildView(s: DkSession, library: LibraryModule[], deps?: I
       card: facts.needs,
       provides: facts.provides,
       portFw: facts.portFw,
-      deviceFw: deps.runtimeIdentity(info).fw,
+      deviceFw: deps ? deps.runtimeIdentity(info).fw : info.fw_id,
+      runtimeServices: deps?.runtimeServices,
     };
+  }
+  if (deps) {
     refused = resolveServices(
       library.map((m) => ({ id: m.id, needs: readNeeds(m.bytes) })),
       deps.services,

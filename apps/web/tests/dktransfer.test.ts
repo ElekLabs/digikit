@@ -43,7 +43,17 @@ import {
   type ServiceFile,
 } from '@digi/workbench-core/modules/services.ts';
 import { fileHashHex } from '@digi/dk-session';
-import { installOutcome, serviceRefusalText, DONE_ON_CARD } from '@digi/workbench-core/transfer/transfer-core.ts';
+import {
+  deletePaths,
+  dependencyBadge,
+  installOutcome,
+  onDevice,
+  onDeviceWithPending,
+  serviceRefusalText,
+  startProgress,
+  storageLine,
+  DONE_ON_CARD,
+} from '@digi/workbench-core/transfer/transfer-core.ts';
 import { parseSoftwareVersion } from '@digi/workbench-core/transfer/connection-core.ts';
 import { FakeDevice, concat, hex, sha } from '@digi/test-support/fakedevice';
 import { dkm, everythingFits, needsOf } from './support/dkm.ts';
@@ -910,6 +920,84 @@ test('buildView with services: a library module lists its services with their st
   assert.equal(view.refusals?.length, 1);
   const fxRow = view.card_only.find((r) => r.path === 'services/fx.dks')!;
   assert.deepEqual(fxRow.needed_by, [shot.path]);
+});
+
+test('the installed copy supplies the destination dependencies, including transitive card-only services', async () => {
+  const libraryFx = service('fx', [[nameHash('library-only'), V1_0, true]]);
+  const localOnly = service('library-only');
+  const installedFx = service('fx', [
+    [nameHash('card-helper'), V1_0, true],
+    [nameHash('unused'), V1_0, false],
+    ...PORT_NEED,
+  ]);
+  const helper = service('card-helper');
+  const unused = service('unused');
+  const port = portFile('dt-1');
+  const libraryModuleCopy = (await libraryModule(needing('someone/pluck', ['library-only']), needsOf))!;
+  const dev = deviceOn();
+  dev.files.set(libraryModuleCopy.path, needing('someone/pluck', ['fx', 'card-helper', 'runtime', 'library-only']));
+  dev.files.set('modules/card-only.dkm', needing('someone/shot', ['fx']));
+  for (const provider of [installedFx, helper, unused, port]) dev.files.set(provider.path, provider.bytes);
+
+  const view = await buildView(
+    session(dev),
+    [libraryModuleCopy],
+    depsOf([libraryFx, localOnly], { runtimeServices: new Set([nameHash('runtime')]) }),
+  );
+  const [pluck] = view.modules;
+  assert.equal(pluck.on_card, 'other version');
+  assert.deepEqual(dependencyBadge(pluck.services), {
+    text: '1 dep',
+    lines: ['library-only service · not on device · 1.2 · 800 B'],
+  });
+  assert.deepEqual(dependencyBadge(pluck.card_services), {
+    text: '3 deps',
+    lines: [
+      'card-helper service · on device · 1.2 · 800 B',
+      'fx service · on device · 1.2 · 800 B',
+      'library-only service · not on device',
+    ],
+  });
+  const cardOnly = view.card_only.find((r) => r.path === 'modules/card-only.dkm')!;
+  assert.deepEqual(
+    cardOnly.card_services?.map((r) => r.path),
+    [helper.path, installedFx.path],
+  );
+  assert.equal(dependencyBadge(view.card_only.find((r) => r.path === unused.path)?.card_services), undefined);
+
+  const visible = [cardOnly.path, libraryModuleCopy.path, port.path, unused.path];
+  assert.deepEqual(
+    onDeviceWithPending(view, undefined).map((r) => r.path),
+    visible,
+  );
+  assert.deepEqual(deletePaths(view, new Set(dev.files.keys())), visible);
+  assert.equal(onDevice(view).length, 6);
+  assert.match(storageLine(view), /^Modules: 6 files, /);
+
+  const progress = startProgress([], false, {}, [{ id: 'fx', path: installedFx.path, bytes: 800 }]);
+  assert.equal(onDeviceWithPending(view, progress, true).find((r) => r.path === installedFx.path)?.on_card, 'no');
+  assert.deepEqual(
+    onDeviceWithPending(view, progress).map((r) => r.path),
+    visible,
+  );
+});
+
+test('installed dependencies still appear without any library services', async () => {
+  const dev = new FakeDevice();
+  const fx = service('fx');
+  dev.files.set('modules/card-only.dkm', needing('someone/shot', ['fx', 'runtime']));
+  dev.files.set(fx.path, fx.bytes);
+  dev.files.set('services/backup/fx.dks', fx.bytes);
+  dev.files.set('services/fx-copy.dks', fx.bytes);
+  const view = await buildView(session(dev), []);
+  assert.deepEqual(
+    onDeviceWithPending(view, undefined).map((r) => r.path),
+    ['modules/card-only.dkm', 'services/backup/fx.dks', 'services/fx-copy.dks'],
+  );
+  assert.deepEqual(dependencyBadge(view.card_only.find((r) => r.path === 'modules/card-only.dkm')?.card_services), {
+    text: '1 dep',
+    lines: ['fx service · on device · 1.2 · 800 B'],
+  });
 });
 
 test('install with services: a module that needs the port file itself gets it uploaded', async () => {

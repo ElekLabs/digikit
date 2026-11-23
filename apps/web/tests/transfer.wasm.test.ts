@@ -28,7 +28,6 @@ import {
   deleteResultLines,
   neededServiceText,
   serviceRefusalText,
-  serviceTags,
   modulesBar,
   onDevice,
   onDeviceWithPending,
@@ -397,20 +396,11 @@ const pluck = row('a/pluck', 'Machines', { label: 'pluck', services: [fx, machin
 const shot = row('a/shot', 'Machines', { label: 'shot', services: [machines] });
 const sv = { ...view, modules: [pluck, shot] };
 
-test('services: the with line, sub row tags, the fit line and the services to upload', () => {
+test('services: selection count and the services to upload', () => {
   assert.deepEqual(tickCountText(0, 12), { lead: '', rest: '12 items' });
   assert.deepEqual(tickCountText(0, 1), { lead: '', rest: '1 item' });
   assert.deepEqual(tickCountText(0, 0), { lead: '', rest: '' });
   assert.deepEqual(tickCountText(3, 12), { lead: '3', rest: ' of 12 selected' });
-  assert.deepEqual(
-    serviceTags(fx).map((t) => [t.text, t.tone]),
-    [['not on device', 'warn']],
-  );
-  assert.deepEqual(
-    serviceTags(machines).map((t) => [t.text, t.tone]),
-    [['on device', 'ok']],
-  );
-  assert.equal(serviceTags({ ...fx, state: 'differs' })[0].text, 'differs');
   // each service once, skipping the one on the device
   assert.deepEqual(installServices(sv, new Set(['a/pluck', 'a/shot'])), [
     { id: 'fx', path: 'services/fx.dks', bytes: 38400 },
