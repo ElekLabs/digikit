@@ -35,7 +35,7 @@ export class SetupRefused extends Error {
 const E_RANGE = [...STATUS, ...LOAD_STATUS].find(([, name]) => name === 'E_RANGE')![0];
 
 /**
- * The first run-time machine type: `dynamic_first` of `image-modules/points/machines/types.toml`, which is 16 on both devices that have the debug module (a host
+ * The first run-time machine type: `dynamic_first` of `runtime/platform/rows/types.toml`, which is 16 on both devices that have the debug module (a host
  * test keeps it equal to that file). Types below it are stock or built-in rows.
  */
 export const RUN_TIME_TYPE_FIRST = 16;
