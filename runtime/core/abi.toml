@@ -1071,9 +1071,34 @@ owner = "package"
 doc = "TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row."
 
 [[host_dir]]
+name = "REMOVED_18"
+owner = "removed"
+doc = "Removed in E1 (it was DK_FXR_PEND of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
+
+[[host_dir]]
+name = "REMOVED_19"
+owner = "removed"
+doc = "Removed in E1 (it was DK_FXR_SET of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
+
+[[host_dir]]
+name = "REMOVED_20"
+owner = "removed"
+doc = "Removed in E1 (it was DK_FXR_FLUSH of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
+
+[[host_dir]]
 name = "MENU_APPLIES"
 owner = "package"
 doc = "DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran."
+
+[[host_dir]]
+name = "REMOVED_22"
+owner = "removed"
+doc = "Removed in E1 (it was DK_ROUTE_N of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
+
+[[host_dir]]
+name = "REMOVED_23"
+owner = "removed"
+doc = "Removed in E1 (it was DK_ROUTE_ITEM of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
 
 [[host_dir]]
 name = "MENU_LOADED"

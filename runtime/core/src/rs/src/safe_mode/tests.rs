@@ -545,7 +545,8 @@ fn the_host_directory_is_ready_only_after_the_package_attached_and_the_core_fill
         assert_eq!(d.get(dkrt_sdk::HOST_PACKAGE_LO), Some(0x4010_0000));
         assert_eq!(d.get(dkrt_sdk::HOST_PACKAGE_HI), Some(0x4011_0000));
         for id in 0..dkrt_sdk::HOST_COUNT as u32 {
-            assert!(d.get(id).is_some(), "id {id} is filled in a normal boot");
+            let removed = dkrt_sdk::HOST_REMOVED_OWNED.contains(&id);
+            assert!(d.get(id).is_some() != removed, "id {id} is filled in a normal boot (a removed id stays empty)");
         }
     }
 }

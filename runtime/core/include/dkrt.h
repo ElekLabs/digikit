@@ -192,20 +192,20 @@
 /* TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row. */
 #define DKRT_HOST_MENU_TICK 17
 /* DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran. */
-#define DKRT_HOST_MENU_APPLIES 18
+#define DKRT_HOST_MENU_APPLIES 21
 /* LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads. */
-#define DKRT_HOST_MENU_LOADED 19
+#define DKRT_HOST_MENU_LOADED 24
 /* DK_LINES of the DIGIKIT menu: the HEALTH page's rows as text (12 rows of 24 bytes). */
-#define DKRT_HOST_MENU_LINES 20
+#define DKRT_HOST_MENU_LINES 25
 /* DK_REDRAWS of the DIGIKIT menu: how many times the HEALTH page redrew. */
-#define DKRT_HOST_MENU_REDRAWS 21
+#define DKRT_HOST_MENU_REDRAWS 26
 /* DK_POLLS of the DIGIKIT menu: how many times the HEALTH page polled the runtime. */
-#define DKRT_HOST_MENU_POLLS 22
+#define DKRT_HOST_MENU_POLLS 27
 /* DK_HEALTH of the DIGIKIT menu: the last DkrtHealth the HEALTH page read. */
-#define DKRT_HOST_MENU_HEALTH 23
+#define DKRT_HOST_MENU_HEALTH 28
 /* DK_HEALTH_MENU of the DIGIKIT menu: the HEALTH page's menu object (the firmware's view is the pointer at +4). */
-#define DKRT_HOST_MENU_HEALTH_MENU 24
-#define DKRT_HOST_COUNT 25
+#define DKRT_HOST_MENU_HEALTH_MENU 29
+#define DKRT_HOST_COUNT 30
 
 /* Result codes (negative = error), from [load.status] of sdk/sdk.toml. Additive: a code is never renumbered. */
 #define DKRT_E_NOT_FOUND (-1)            /* no store, or no such file or module */

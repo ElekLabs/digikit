@@ -79,6 +79,10 @@ impl<'a> HostDir<'a> {
     /// The address of the static with `id` (`HOST_*` of `gen_host_dir`).
     pub fn address(&self, id: u32) -> Result<u32, Error> {
         let name = *HOST_NAMES.get(id as usize).ok_or(Error::BadId(id))?;
+        if name.is_empty() {
+            // a removed id (tombstone) stays reserved and resolves to nothing, as an id this build does not know
+            return Err(Error::BadId(id));
+        }
         let at = HEADER + 4 * id as usize;
         if id >= self.count || at + 4 > self.words.len() {
             return Err(Error::UnknownId(name));
