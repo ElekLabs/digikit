@@ -18,6 +18,7 @@
 #include <stddef.h>
 #include <dk/platform/ui.h>
 #include <dk_ui_core.h>
+#include <dk/platform/ui_text.h>
 #include <dk/gen/limits.h>
 #include "dkrt.h"
 
@@ -193,28 +194,9 @@ static txt *t_int(txt *t, int32_t v)
     return t_num(t, (uint32_t)v);
 }
 
-/* The list font is not monospace: a letter, a digit, '-' or '_' takes 4 pixels, a space 3, '.' 2 and '~' 5 (measured on the DT2 1.16 list
-   font). Character 0x01 draws nothing and takes 4 pixels, so it pads a column the width of one letter. */
-#define PAD '\x01'
-
-static int px_of(const char *s)
-{
-    int w = 0;
-    for (; *s; s++)
-        w += *s == ' ' ? 3 : *s == '.' ? 2 : *s == '~' ? 5 : 4;
-    return w;
-}
-
-/* Spaces are three pixels wide and PAD is four. */
 static void t_pad_px(txt *t, int px)
 {
-    int rest = px - px_of(t->b);
-    while (rest >= 3 && rest % 4) {
-        t_c(t, ' ');
-        rest -= 3;
-    }
-    for (; rest >= 4; rest -= 4)
-        t_c(t, PAD);
+    t->n = dk_ui_pad_px(t->b, t->n, (int)sizeof t->b, px);
 }
 
 static char upper(char c)
@@ -232,7 +214,7 @@ static void keep(uint8_t *dst, const char *s)
 {
     int n = 0;
     while (n < 23 && s[n]) {
-        dst[n] = (uint8_t)(s[n] == PAD ? ' ' : s[n]);
+        dst[n] = (uint8_t)(s[n] == DK_UI_PAD ? ' ' : s[n]);
         n++;
     }
     while (n < 24)
@@ -1110,7 +1092,7 @@ static void module_text(int i, txt *t)
 {
     t_init(t);
     if (g_lead)
-        t_c(t, dashed(i) ? '-' : unloads_at_restart(i) ? '~' : PAD);
+        t_c(t, dashed(i) ? '-' : unloads_at_restart(i) ? '~' : DK_UI_PAD);
     const uint8_t *path = g_ent[i].path;
     if (i == g_busy_row) { /* the job of this row runs, or waits for the runtime's job slot */
         t_s(t, g_lq_state == LQ_START                  ? "WAITING"
@@ -1121,7 +1103,7 @@ static void module_text(int i, txt *t)
         return;
     }
     name_of(path, stem_len(path), 63, 1, t);
-    int kind_x = px_of(t->b) + 4;
+    int kind_x = dk_ui_px_of(t->b) + 4;
     if (kind_x < (NAME_COLS + 1) * 4)
         kind_x = (NAME_COLS + 1) * 4;
     t_pad_px(t, kind_x);
@@ -1136,7 +1118,7 @@ static void module_text(int i, txt *t)
         t_b(&sz, g_fit.rows[i].mem, DKRT_FIT_MEM);
     else
         bytes_text(&sz, g_ent[i].size);
-    t_pad_px(t, kind_x + (4 + 1 + 5) * 4 - px_of(sz.b));
+    t_pad_px(t, kind_x + (4 + 1 + 5) * 4 - dk_ui_px_of(sz.b));
     t_s(t, sz.b);
 }
 

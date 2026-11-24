@@ -26,6 +26,7 @@
 #include <dk/gen/imports.h>
 #include <dk/platform/ui.h>
 #include "dk_ui_core.h"
+#include <dk/platform/ui_text.h>
 #include "tick.h"
 #include "settings_rows.h"
 #include "dialog_slot.h"
@@ -917,6 +918,25 @@ int32_t dk_ui_confirm(dk_ui *ui, const char *title, const char *text, dk_ui_conf
     return 0;
 }
 
+/* The text of a choice item, up to DK_UI_LIST_TEXT - 1 characters. An item "NAME\tREST" has its REST start at pixel `col` (the width of the longest NAME of the
+   choice; with col -1 only the NAME is written, to measure it), so the rests of the items line up in the proportional list font (to the nearest 3 pixels: the popup draws a box for the PAD character). */
+static void choice_item(char *buf, uint32_t size, const char *item, int col)
+{
+    uint32_t n = 0;
+    while (item && item[n] && item[n] != '\t' && n + 1 < size) {
+        buf[n] = item[n];
+        n++;
+    }
+    buf[n] = 0;
+    if (!item || item[n] != '\t' || col < 0)
+        return;
+    const char *r = item + n + 1;
+    n = (uint32_t)dk_ui_pad_spaces(buf, (int)n, (int)size, col);
+    for (; *r && n + 1 < size; r++)
+        buf[n++] = *r;
+    buf[n] = 0;
+}
+
 int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int32_t n,
                      dk_ui_choice_fn *done, void *arg)
 {
@@ -927,14 +947,20 @@ int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int
     if (!blk || !strs)
         return -1;
     uint8_t alloc = 0;
-    char buf[DK_UI_ROW];
+    char buf[DK_UI_LIST_TEXT];
+    int col = 0;
     for (int i = 0; i < n; i++) {
-        cut(buf, sizeof buf, items[i]);
+        choice_item(buf, sizeof buf, items[i], -1);
+        if (dk_ui_px_of(buf) > col)
+            col = dk_ui_px_of(buf);
+    }
+    for (int i = 0; i < n; i++) {
+        choice_item(buf, sizeof buf, items[i], col);
         dk_fw_string_std_string_ctor(&strs[i], buf, &alloc);
     }
     uint32_t vec[3] = {(uint32_t)strs, (uint32_t)(strs + n), (uint32_t)(strs + n)};
     uint32_t st;
-    cut(buf, sizeof buf, title);
+    cut(buf, DK_UI_ROW, title);
     dk_fw_string_std_string_ctor(&st, buf, &alloc);
     fn cb = make_fn(0, 0, inv_answer);
     uint32_t serial = ++g_serial;

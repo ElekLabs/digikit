@@ -452,6 +452,8 @@ pub extern "C" fn dk_ui_confirm(
     })
 }
 
+/// An item keeps a tab as it is: the real service turns "NAME\tREST" into pixel padding (`choice_item` of ui.c, `<dk/platform/ui_text.h>`), which the fake does not model.
+///
 /// # Safety
 /// `items` points at `n` valid C strings.
 #[no_mangle]
@@ -468,7 +470,7 @@ pub unsafe extern "C" fn dk_ui_choice(
             return -1;
         }
         let items = (0..n as usize)
-            .map(|i| row_text(unsafe { *items.add(i) }))
+            .map(|i| text_cut(unsafe { *items.add(i) }, DK_UI_LIST_TEXT - 1))
             .collect();
         let title = row_text(title);
         s.log(format!("choice {title}"));

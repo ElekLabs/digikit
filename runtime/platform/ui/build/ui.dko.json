@@ -578,6 +578,13 @@
   },
   {
    "addend": 0,
+   "offset": 56,
+   "section": ".text.choice_item.constprop.0",
+   "symbol": ".sec..text.dk_ui_px_of",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 12,
    "section": ".text.ui_owner_gone",
    "symbol": ".sec..bss.g_rows",
@@ -1705,65 +1712,58 @@
   },
   {
    "addend": 0,
-   "offset": 20,
+   "offset": 24,
    "section": ".text.dk_ui_choice",
    "symbol": "ui_dialog_is_open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 58,
+   "offset": 60,
    "section": ".text.dk_ui_choice",
    "symbol": "cf.window.site.multichoice_cb_vptr_lit",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 68,
+   "offset": 70,
    "section": ".text.dk_ui_choice",
    "symbol": ".sec..text.new_block",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 78,
+   "offset": 80,
    "section": ".text.dk_ui_choice",
    "symbol": ".sec..text.fw_new",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 116,
+   "offset": 108,
    "section": ".text.dk_ui_choice",
-   "symbol": ".sec..text.cut",
+   "symbol": ".sec..text.choice_item.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 128,
+   "offset": 144,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..text.dk_ui_px_of",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 176,
    "section": ".text.dk_ui_choice",
    "symbol": "cf.string.fn.std_string.ctor",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 234,
-   "section": ".text.dk_ui_choice",
-   "symbol": ".sec..bss.g_serial",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 240,
-   "section": ".text.dk_ui_choice",
-   "symbol": ".sec..text.fn_manager",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 246,
    "section": ".text.dk_ui_choice",
-   "symbol": ".sec..text.inv_answer",
+   "symbol": ".sec..text.cut",
    "type": "cf.32"
   },
   {
@@ -1777,54 +1777,82 @@
    "addend": 0,
    "offset": 284,
    "section": ".text.dk_ui_choice",
-   "symbol": "cf.window.fn.multichoice_ctor",
+   "symbol": ".sec..text.fn_manager",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 296,
+   "offset": 290,
    "section": ".text.dk_ui_choice",
-   "symbol": "cf.string.fn.std_string.dtor",
+   "symbol": ".sec..text.inv_answer",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 322,
    "section": ".text.dk_ui_choice",
+   "symbol": ".sec..bss.g_serial",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 328,
+   "section": ".text.dk_ui_choice",
+   "symbol": "cf.window.fn.multichoice_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 340,
+   "section": ".text.dk_ui_choice",
+   "symbol": "cf.string.fn.std_string.dtor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 352,
+   "section": ".text.dk_ui_choice",
+   "symbol": "cf.string.fn.std_string.dtor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 372,
+   "section": ".text.dk_ui_choice",
    "symbol": "cf.mem.fn.free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 342,
+   "offset": 392,
    "section": ".text.dk_ui_choice",
    "symbol": ".sec..bss.g_dialog",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 348,
+   "offset": 398,
    "section": ".text.dk_ui_choice",
    "symbol": "ui_dialog_begin",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 358,
+   "offset": 408,
    "section": ".text.dk_ui_choice",
    "symbol": ".sec..text.show",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 374,
+   "offset": 424,
    "section": ".text.dk_ui_choice",
    "symbol": ".sec..bss.g_dialog",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 380,
+   "offset": 430,
    "section": ".text.dk_ui_choice",
    "symbol": "ui_dialog_detach",
    "type": "cf.32"
@@ -2701,6 +2729,13 @@
   },
   {
    "align": 2,
+   "hex": "2f02206f0008428012106604241f4e75730152887420b4816712742eb4816710747eb481660e7205d08160dc720360f8720260f4720460f0",
+   "kind": "text",
+   "name": ".text.dk_ui_px_of",
+   "size": 56
+  },
+  {
+   "align": 2,
    "hex": "202f000c7201206f0004226f0008b28067147202b28067124a80660620bc0000000042804e75208960f8209121690004000460ee",
    "kind": "text",
    "name": ".text.fn_manager",
@@ -2925,6 +2960,13 @@
   },
   {
    "align": 2,
+   "hex": "4feffff0206f001848d70c0c246f001442824a8866644203158328004a88674a713028007209b28066404aaf001c6d3a2f0a47f028014eb900000000588f222f001c92807001b0816c06764fb6826640420097c215802800103328006706724fb28266384203158328004cd70c0c4fef00104e7515802800528210302800679673007609b681678e724fb28266e660867620578115832800528260a815802800528260b4",
+   "kind": "text",
+   "name": ".text.choice_item.constprop.0",
+   "size": 164
+  },
+  {
+   "align": 2,
    "hex": "2f02242f000852822f024879000000004eb9000000002f024879000000004eb9000000002f024879000000004eb9000000004fef001841f90000000042804a906708b4a8000866024290528041e800147204b28066e82f024879000000004eb9000000002f024879000000004eb9000000004fef0010241f4e75",
    "kind": "text",
    "name": ".text.ui_owner_gone",
@@ -3086,10 +3128,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ff9c48d73c7c487900000000266e00144eb900000000588f24004a80660001624aae00106700015a200b5380ea88660001502c0be58e487900000000487800d84eb90000000024402f064eb9000000004fef000c2d40ffc04a8a670001244a806700011e4200260e2a0e0683ffffffe84bf9000000000685ffffffc749f9000000001d40ffc7206e00102f302c00487800182f034e9571c22f052f03282effc0204448700c004e9452824fef0018b48b66d4206effc0dc882f2e000c487800182f032d48ffcc2d46ffd02d46ffd44e952f052f0347eeffc82f0b4e9448780001486effd82f0b263900000000203c00000000223c000000005283486effcc2d40ffe02d41ffe4486a001042aeffd842aeffdc23c3000000004eb9000000004fef00282e8b47f9000000004e93588f2f044e935884588fbc8466f42f2effc04eb9000000002f2e001c2f2e00182f2e00082f034879000000004eb9000000002f032f0a4eb9000000004fef00204a8067122f034879000000004eb900000000508f70ff4cee3c7cff9c4e5e4e75",
+   "hex": "4e56ff6048d73cfc487900000000266e00102c2e00144eb900000000588f28004a80660001904a8b6700018a20065380ea88660001802406e58a487900000000487800d84eb90000000024402f024eb9000000004fef000c2d40ff884a8a670001544a806700014e420049f9000000004285260e2a4c0683ffffffb01d40ff8f4878ffff2f335c002f034e942f034eb9000000004fef0010b0846f0228005285ba8666dc2e0e42850687ffffff8f49f9000000002f042f3358002f034e952f072f032c2eff882046487058004e9458854fef0018ba8266dc206eff88d4882f2e000c487800182f032d48ff942d42ff982d42ff9c4eb9000000002f072f03280e0684ffffff902f044e9448780001486effa02f04263900000000203c00000000223c000000005283486eff942d40ffa82d41ffac486a001042aeffa042aeffa423c3000000004eb9000000004fef00282e8441f9000000004e90588f2f0641f90000000058864e90588fbc8266ee2f2eff884eb9000000002f2e001c2f2e00182f2e00082f034879000000004eb9000000002f032f0a4eb9000000004fef00204a8067122f034879000000004eb900000000508f70ff4cee3cfcff604e5e4e75",
    "kind": "text",
    "name": ".text.dk_ui_choice",
-   "size": 398
+   "size": 448
   },
   {
    "align": 2,
@@ -3743,7 +3785,7 @@
    "size": 72
   }
  ],
- "source_sha256": "91cc09383c3d3d99e8a721a3634391978dc592ec3a007bc7e9078b1097b19eaa",
+ "source_sha256": "cb575b703b6f220a5449b984a27b98fc2f0c351d7b5b7cff79f28ecbca587bed",
  "symbols": [
   {
    "global": false,
@@ -3963,6 +4005,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text.choice_item.constprop.0",
+   "section": ".text.choice_item.constprop.0",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text.close_deferred",
    "section": ".text.close_deferred",
    "value": 0
@@ -3977,6 +4025,12 @@
    "global": false,
    "name": ".sec..text.defer_start",
    "section": ".text.defer_start",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.dk_ui_px_of",
+   "section": ".text.dk_ui_px_of",
    "value": 0
   },
   {
@@ -4581,6 +4635,12 @@
   },
   {
    "global": false,
+   "name": "choice_item.constprop.0",
+   "section": ".text.choice_item.constprop.0",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": "close_deferred",
    "section": ".text.close_deferred",
    "value": 0
@@ -4715,6 +4775,12 @@
    "global": true,
    "name": "dk_ui_open",
    "section": ".text.dk_ui_open",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "dk_ui_px_of",
+   "section": ".text.dk_ui_px_of",
    "value": 0
   },
   {
@@ -5490,8 +5556,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "3922",
-  "isa_check": "7e5f72e293eba4e9bfdf6c181215845adfedc38736a213d9f653ac3410984cfa",
+  "instructions_redecoded": "4028",
+  "isa_check": "eba7a2cff3121cc2fff1686835791b62400c0b316de21530ef0ee178bd28046b",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

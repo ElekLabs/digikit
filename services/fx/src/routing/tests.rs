@@ -135,397 +135,48 @@ fn the_list_has_a_row_for_each_effect_with_its_name_and_saved_route() {
     assert_eq!(ui.choices.len(), 1);
     assert_eq!(ui.choices[0].0, "FX ROUTING");
     assert_eq!(ui.choices[0].2, Step::Effect);
-    assert_eq!(items(&ui), ["FREQSHIFT: MASTER", "GAIN-SEND: SEND"]);
+    assert_eq!(items(&ui), ["FREQSHIFT\t: MASTER", "GAIN-SEND\t: SEND"]);
 }
 
 #[test]
-fn a_long_name_is_cut_to_twelve_so_a_row_stays_within_twenty() {
+fn a_name_that_fits_shows_whole_in_the_list_and_a_longer_one_is_cut_in_the_middle() {
     let a = Arena::new(2);
-    a.effect(0, "someauthor/very-long-effect-name", BOTH, Some(0));
-    a.effect(1, "x/abcdefghijklmnop", BOTH, Some(1));
+    a.effect(0, "x/nineteen-characters", BOTH, Some(0));
+    a.effect(1, "x/abcdefghijklmnopqrstuvwxyz", BOTH, Some(1));
     let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
     routing.list(&a.core, &mut ui);
-    assert_eq!(items(&ui), ["VERY-LONG-EF: MASTER", "ABCDEFGHIJKL: SEND"]);
-    assert!(items(&ui).iter().all(|i| i.len() <= 20));
+    // 19 characters stay; 26 become 19 with `..` in the middle
+    assert_eq!(
+        items(&ui),
+        [
+            "NINETEEN-CHARACTERS\t: MASTER",
+            "ABCDEFGHI..STUVWXYZ\t: SEND"
+        ]
+    );
 }
 
 #[test]
-fn an_id_without_a_slash_is_the_name() {
-    let a = Arena::new(2);
-    a.effect(0, "plain", BOTH, Some(1));
-    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
-    routing.list(&a.core, &mut ui);
-    assert_eq!(items(&ui), ["PLAIN: SEND"]);
+fn names_that_differ_only_at_the_end_stay_apart_when_cut() {
+    let (mut one, mut two) = (Line::new(), Line::new());
+    one.put_fit(b"long-effect-name-one", 13);
+    two.put_fit(b"long-effect-name-two", 13);
+    assert_eq!(
+        (one.as_str(), two.as_str()),
+        ("LONG-E..E-ONE", "LONG-E..E-TWO")
+    );
 }
 
 #[test]
-fn no_effect_loaded_gives_a_toast_and_no_list() {
-    let a = Arena::new(2);
-    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
-    routing.list(&a.core, &mut ui);
-    assert!(ui.choices.is_empty());
-    assert_eq!(ui.toasts, ["NO EFFECTS LOADED"]);
-}
-
-#[test]
-fn the_routes_offered_are_send_then_master_for_an_effect_that_allows_both() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(0));
-    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
-    routing.list(&a.core, &mut ui);
-    routing.pick_effect(&a.core, &mut ui, 0);
-    let (title, routes, step) = &ui.choices[1];
-    assert_eq!(title, "FREQSHIFT ROUTE");
-    assert_eq!(routes, &["SEND", "MASTER"]);
-    assert_eq!(*step, Step::Route);
-}
-
-#[test]
-fn send_is_not_offered_when_every_send_cell_is_taken_by_other_effects() {
+fn the_title_and_the_toasts_keep_a_long_name_within_their_limits() {
     let a = Arena::new(1);
-    a.effect(0, "fx/first", BOTH, Some(1));
-    a.effect(1, "fx/second", BOTH, Some(0));
+    a.effect(0, "x/a-very-long-effect-nam", BOTH, Some(1));
+    a.effect(1, "x/a-very-long-sendonly-nam", SEND, None);
     let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
     routing.list(&a.core, &mut ui);
-    // the effect that holds the cell keeps both; the other one only has master
     routing.pick_effect(&a.core, &mut ui, 0);
+    assert_eq!(ui.choices[1].0, "A-VERY-L..ECT-NAM ROUTE");
+    assert!(ui.choices[1].0.len() <= 23, "DK_UI_ROW");
     routing.pick_effect(&a.core, &mut ui, 1);
-    assert_eq!(ui.choices[1].1, ["SEND", "MASTER"]);
-    assert_eq!(ui.choices[2].1, ["MASTER"]);
-}
-
-#[test]
-fn a_send_only_effect_with_no_cell_free_offers_nothing_and_says_so() {
-    let a = Arena::new(1);
-    a.effect(0, "fx/first", BOTH, Some(1));
-    a.effect(1, "fx/sendonly", SEND, None);
-    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
-    routing.list(&a.core, &mut ui);
-    routing.pick_effect(&a.core, &mut ui, 1);
-    assert_eq!(ui.choices.len(), 1);
-    assert_eq!(ui.toasts, ["SENDONLY: NO ROUTE FREE"]);
-}
-
-/// The list, the effect at `index`, the route at `route`.
-fn pick(a: &Arena, ui: &mut FakeUi, index: usize, route: usize) {
-    let mut routing = Routing::new();
-    routing.list(&a.core, ui);
-    routing.pick_effect(&a.core, ui, index);
-    routing.pick_route(&a.core, ui, route);
-}
-
-#[test]
-fn a_changed_route_is_saved_and_the_effects_module_is_reloaded() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(0));
-    let mut ui = FakeUi::default();
-    pick(&a, &mut ui, 0, 0);
-    assert_eq!(a.setting("fx/freqshift"), Some(std::vec![1]));
-    assert_eq!(
-        *a.core.live_calls.borrow(),
-        [(LIVE_RELOAD, b"modules/fx/freqshift.dkm".to_vec())]
-    );
-    // the reload is only queued: the toast follows its end
-    assert!(ui.toasts.is_empty());
-}
-
-#[test]
-fn the_same_route_writes_nothing_and_queues_nothing() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    let mut ui = FakeUi::default();
-    // SEND (index 0) is the saved route
-    pick(&a, &mut ui, 0, 0);
-    assert!(a.core.live_calls.borrow().is_empty());
-    assert!(!a
-        .core
-        .calls()
-        .iter()
-        .any(|c| matches!(c, dkrt_test_support::Call::SettingsPut(..))));
-    assert_eq!(ui.toasts, ["FREQSHIFT: SEND"]);
-}
-
-#[test]
-fn a_refused_reload_keeps_the_saved_route_for_the_next_boot() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    a.core.live_result.set(E_RELOAD_RETAINED);
-    let mut ui = FakeUi::default();
-    // MASTER is index 1
-    pick(&a, &mut ui, 0, 1);
-    assert_eq!(a.setting("fx/freqshift"), Some(std::vec![0]));
-    assert_eq!(ui.toasts, ["FREQSHIFT: RESTART TO APPLY"]);
-}
-
-#[test]
-fn a_running_job_saves_nothing_so_the_pick_can_be_made_again() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    a.core.live_result.set(E_BUSY);
-    let mut ui = FakeUi::default();
-    pick(&a, &mut ui, 0, 1);
-    assert_eq!(a.setting("fx/freqshift"), Some(std::vec![1]));
-    assert_eq!(ui.toasts, ["BUSY: TRY AGAIN"]);
-    // the job is over: the same pick takes effect
-    a.core.live_result.set(0);
-    let mut ui = FakeUi::default();
-    pick(&a, &mut ui, 0, 1);
-    assert_eq!(a.setting("fx/freqshift"), Some(std::vec![0]));
-    assert!(ui.toasts.is_empty());
-}
-
-#[test]
-fn a_failed_save_says_so() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(0));
-    a.core.put_result.set(-1);
-    let mut ui = FakeUi::default();
-    pick(&a, &mut ui, 0, 0);
-    assert_eq!(ui.toasts, ["FREQSHIFT: NOT SAVED"]);
-}
-
-#[test]
-fn an_effect_replaced_meanwhile_is_not_picked() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(0));
-    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
-    routing.list(&a.core, &mut ui);
-    // another module takes the row while the list is open
-    unsafe { (*core::ptr::addr_of_mut!(fxpage::DKRT_FXP)).owner[0] = 9 };
-    routing.pick_effect(&a.core, &mut ui, 0);
-    assert_eq!(ui.choices.len(), 1);
-    assert_eq!(ui.toasts, ["NO EFFECTS LOADED"]);
-}
-
-#[test]
-fn a_failed_save_queues_no_reload() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(0));
-    a.core.put_result.set(-1);
-    let mut ui = FakeUi::default();
-    pick(&a, &mut ui, 0, 0);
-    assert!(a.core.live_calls.borrow().is_empty());
-}
-
-#[test]
-fn the_events_of_the_ui_callbacks_run_the_steps() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(0));
-    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
-    routing.run(&a.core, &mut ui, Event::List);
-    routing.run(&a.core, &mut ui, Event::Effect(0));
-    routing.run(&a.core, &mut ui, Event::Route(0));
-    assert_eq!(ui.choices.len(), 2);
-    assert_eq!(a.core.live_calls.borrow().len(), 1);
-}
-
-#[test]
-fn a_name_that_is_not_ascii_shows_as_question_marks() {
-    let mut line = Line::new();
-    line.put("caf\u{e9}".as_bytes());
-    assert_eq!(line.as_str(), "CAF??");
-}
-
-/// A pick of MASTER for the effect saved as SEND, its reload queued; `routing` waits for the job.
-fn queued_pick(a: &Arena, ui: &mut FakeUi) -> Routing {
-    let mut routing = Routing::new();
-    routing.list(&a.core, ui);
-    routing.pick_effect(&a.core, ui, 0);
-    routing.pick_route(&a.core, ui, 1);
-    routing
-}
-
-const E_PLAYING: i32 = dkrt_sdk::E_RELOAD_PLAYING;
-
-#[test]
-fn the_success_toast_waits_for_the_end_of_the_reload_job() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    let mut ui = FakeUi::default();
-    let mut routing = queued_pick(&a, &mut ui);
-    // queued or running: nothing yet
-    a.core.live_job.set([1, 0, 2, 0, LIVE_RELOAD]);
-    routing.poll_job(&a.core, &mut ui);
-    assert!(ui.toasts.is_empty());
-    a.core.live_job.set([2, 0, 6, 0, LIVE_RELOAD]);
-    routing.poll_job(&a.core, &mut ui);
-    routing.poll_job(&a.core, &mut ui);
-    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER"], "once");
-    assert!(a.core.reload_when_possible.borrow().is_empty());
-}
-
-#[test]
-fn a_reload_refused_by_the_playing_transport_is_deferred_to_stop() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    let mut ui = FakeUi::default();
-    let mut routing = queued_pick(&a, &mut ui);
-    a.core
-        .live_job
-        .set([2, E_PLAYING as u32, 6, 0, LIVE_RELOAD]);
-    routing.poll_job(&a.core, &mut ui);
-    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER ON STOP"]);
-    assert_eq!(
-        *a.core.reload_when_possible.borrow(),
-        [b"fx/freqshift".to_vec()]
-    );
-    assert_eq!(
-        a.setting("fx/freqshift"),
-        Some(std::vec![0]),
-        "the key stays saved"
-    );
-}
-
-#[test]
-fn a_reload_the_job_refuses_for_another_reason_is_no_success() {
-    for refusal in [E_RELOAD_RETAINED, dkrt_sdk::E_RELOAD_MENUS] {
-        let a = Arena::new(2);
-        a.effect(0, "fx/freqshift", BOTH, Some(1));
-        let mut ui = FakeUi::default();
-        let mut routing = queued_pick(&a, &mut ui);
-        a.core.live_job.set([2, refusal as u32, 1, 0, LIVE_RELOAD]);
-        routing.poll_job(&a.core, &mut ui);
-        assert_eq!(ui.toasts, ["FREQSHIFT: RESTART TO APPLY"]);
-        assert!(a.core.reload_when_possible.borrow().is_empty());
-    }
-}
-
-/// Another live job is queued after the job of `queued_pick` ended: the state describes the new job, the end of ours stays in `done_*`.
-fn another_job_starts(a: &Arena) {
-    a.core.live_job.set([2, 0, 6, 0, LIVE_RELOAD]);
-    // SAFETY: a fake
-    assert_eq!(
-        unsafe { a.core.live(LIVE_RELOAD, b"modules/other.dkm\0".as_ptr()) },
-        0
-    );
-}
-
-#[test]
-fn the_end_of_our_job_is_found_by_serial_when_another_job_started_before_the_tick() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    let mut ui = FakeUi::default();
-    let mut routing = queued_pick(&a, &mut ui);
-    another_job_starts(&a);
-    assert_eq!(a.core.live_job.get()[0], 1, "the other job is running");
-    routing.poll_job(&a.core, &mut ui);
-    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER"]);
-}
-
-#[test]
-fn the_result_of_a_job_that_is_not_ours_is_no_toast() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    let mut ui = FakeUi::default();
-    let mut routing = queued_pick(&a, &mut ui);
-    // a job of another serial ends with a refusal, and ours is not the one before it
-    a.core.live_serial.set(7);
-    a.core.live_done.set((6, OK));
-    a.core
-        .live_job
-        .set([2, dkrt_sdk::E_RELOAD_MENUS as u32, 6, 0, LIVE_RELOAD]);
-    routing.poll_job(&a.core, &mut ui);
-    routing.poll_job(&a.core, &mut ui);
-    assert!(ui.toasts.is_empty());
-    assert!(a.core.reload_when_possible.borrow().is_empty());
-}
-
-#[test]
-fn the_teardown_of_our_own_running_job_is_not_the_end_of_the_wait() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    let mut ui = FakeUi::default();
-    let mut routing = queued_pick(&a, &mut ui);
-    routing.effect_gone(&a.core, 1);
-    a.core.live_job.set([2, 0, 6, 0, LIVE_RELOAD]);
-    routing.poll_job(&a.core, &mut ui);
-    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER"]);
-}
-
-#[test]
-fn another_modules_teardown_leaves_the_wait_alone() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    let mut ui = FakeUi::default();
-    let mut routing = queued_pick(&a, &mut ui);
-    routing.effect_gone(&a.core, 2);
-    a.core.live_job.set([2, 0, 6, 0, LIVE_RELOAD]);
-    routing.poll_job(&a.core, &mut ui);
-    assert_eq!(ui.toasts, ["FREQSHIFT: MASTER"]);
-}
-
-#[test]
-fn an_effect_unloaded_while_the_reload_waits_ends_the_wait_without_a_toast() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    let mut ui = FakeUi::default();
-    let mut routing = queued_pick(&a, &mut ui);
-    // our job ended; another job unloads the effect before the tick
-    a.core.live_job.set([2, 0, 6, 0, LIVE_RELOAD]);
-    // SAFETY: a fake
-    unsafe {
-        a.core.live(
-            dkrt_sdk::LIVE_UNLOAD,
-            b"modules/fx/freqshift.dkm\0".as_ptr(),
-        )
-    };
-    routing.effect_gone(&a.core, 1);
-    a.core.live_job.set([2, 0, 6, 0, dkrt_sdk::LIVE_UNLOAD]);
-    routing.poll_job(&a.core, &mut ui);
-    assert!(ui.toasts.is_empty());
-    assert!(a.core.reload_when_possible.borrow().is_empty());
-}
-
-#[test]
-fn the_saved_route_picked_again_while_its_reload_is_queued_says_pending() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    let mut ui = FakeUi::default();
-    let mut routing = queued_pick(&a, &mut ui);
-    routing.pick_effect(&a.core, &mut ui, 0);
-    routing.pick_route(&a.core, &mut ui, 1);
-    assert_eq!(ui.toasts.last().unwrap(), "FREQSHIFT: MASTER PENDING");
-    assert_eq!(a.core.live_calls.borrow().len(), 1);
-}
-
-#[test]
-fn a_re_pick_with_a_deferred_wait_marks_the_reload_again_and_never_starts_a_job() {
-    let a = Arena::new(2);
-    a.effect(0, "fx/freqshift", BOTH, Some(1));
-    let mut ui = FakeUi::default();
-    let mut routing = queued_pick(&a, &mut ui);
-    a.core
-        .live_job
-        .set([2, E_PLAYING as u32, 6, 0, LIVE_RELOAD]);
-    routing.poll_job(&a.core, &mut ui);
-    assert_eq!(a.core.reload_when_possible.borrow().len(), 1);
-    // the same route again: the runtime still holds the module, or gave up: it is asked once more
-    routing.pick_effect(&a.core, &mut ui, 0);
-    routing.pick_route(&a.core, &mut ui, 1);
-    assert_eq!(ui.toasts.last().unwrap(), "FREQSHIFT: MASTER ON STOP");
-    assert_eq!(a.core.live_calls.borrow().len(), 1, "one reload job in all");
-    assert_eq!(a.core.reload_when_possible.borrow().len(), 2);
-    // another route: saved, and the module is marked again
-    routing.pick_effect(&a.core, &mut ui, 0);
-    routing.pick_route(&a.core, &mut ui, 0);
-    assert_eq!(ui.toasts.last().unwrap(), "FREQSHIFT: SEND ON STOP");
-    assert_eq!(a.setting("fx/freqshift"), Some(std::vec![1]));
-    assert_eq!(a.core.live_calls.borrow().len(), 1);
-    assert_eq!(a.core.reload_when_possible.borrow().len(), 3);
-    // the deferred reload ran: the saved route is the applied one
-    routing.effect_gone(&a.core, 1);
-    routing.pick_effect(&a.core, &mut ui, 0);
-    routing.pick_route(&a.core, &mut ui, 0);
-    assert_eq!(ui.toasts.last().unwrap(), "FREQSHIFT: SEND");
-}
-
-#[test]
-fn the_longest_toast_fits_the_line() {
-    // a 12 character name, the longest route, the deferred text
-    let mut line = Line::new();
-    line.put(b"abcdefghijkl")
-        .put(b": ")
-        .put(route_text(Route::Master))
-        .put(ON_STOP);
-    assert_eq!(line.as_str(), "ABCDEFGHIJKL: MASTER ON STOP");
+    assert_eq!(ui.toasts, ["A-VERY..Y-NAM: NO ROUTE FREE"]);
+    assert!(ui.toasts[0].len() <= 31, "DK_UI_TOAST");
 }

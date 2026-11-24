@@ -6,7 +6,7 @@ import {
   viewStackFacts,
   type Device,
 } from '@digi/test-support';
-import { readChoiceWindow, type ChoiceWindow } from './choice-window.ts';
+import { plainItem, readChoiceWindow, type ChoiceWindow } from './choice-window.ts';
 import { REDRAW, rows, word, type Rt } from './fx-live.ts';
 import { shot, withPausedFxProtocol } from './fx-session.ts';
 import { type RuntimePlan } from './runtime-plan.ts';
@@ -17,11 +17,20 @@ import path from 'node:path';
 export const MASTER = 0;
 export const SEND_ROUTE = 1;
 
-/** The line of the FX ROUTING list for the module `id` on `route`: the part after the last `/`, upper case, cut to 12 (`NAME_MAX` of services/fx/src/routing.rs), then `: SEND` or `: MASTER`. */
+/** The text of the FX ROUTING list line for the module `id` on `route`: the part after the last `/`, upper case, cut in the middle over 19 characters, then `: SEND` or `: MASTER`. The popup pads the names to a column (`plainItem`). */
 export const listLine = (id: string, route: number): string =>
-  `${id.split('/').at(-1)!.toUpperCase().slice(0, 12)}: ${route === SEND_ROUTE ? 'SEND' : 'MASTER'}`;
-/** The title of the route popup of `id`. */
-export const routeTitle = (id: string): string => `${id.split('/').at(-1)!.toUpperCase().slice(0, 12)} ROUTE`;
+  `${fitName(id.split('/').at(-1)!.toUpperCase(), LIST_NAME_MAX)}: ${route === SEND_ROUTE ? 'SEND' : 'MASTER'}`;
+/** `LIST_NAME_MAX` of services/fx/src/routing.rs. */
+const LIST_NAME_MAX = 19;
+/** `Line::put_fit` of that file: a name over `room` keeps its start and end around `..`. */
+const fitName = (name: string, room: number): string => {
+  if (name.length <= room) return name;
+  const keep = room - 2;
+  return `${name.slice(0, keep - Math.floor(keep / 2))}..${name.slice(name.length - Math.floor(keep / 2))}`;
+};
+/** Is `title` the title of the route popup of `id`? The popup cuts a long name in the middle (`put_fit` of services/fx/src/routing.rs), so this checks the start and the end. */
+export const isRouteTitle = (title: string, id: string): boolean =>
+  title.endsWith(' ROUTE') && title.startsWith(id.split('/').at(-1)!.toUpperCase().slice(0, 4));
 
 /**
  * FX ROUTING of the SETTINGS list on the firmware's own views: the row (the last of the stock list), the choice popup of the effects, the choice popup of the routes, and the
@@ -36,15 +45,16 @@ export function routingUi(runtime: Rt, plan: RuntimePlan, artifacts: string, slo
   const depth = async () => (await readViewStack(read, facts, 32)).length;
   const sym = (name: string) => symbolsOf(runtime, plan)(name);
   let mainDepth = 0;
-  const waitChoice = async (title: string): Promise<ChoiceWindow> => {
+  /** Wait for the choice popup whose title `isTitle` accepts; its items are in `plainItem` form. A popup that cannot be read throws at once. */
+  const waitChoice = async (isTitle: (title: string) => boolean, what: string): Promise<ChoiceWindow> => {
     let seen: ChoiceWindow | undefined;
     await runtime.ui.wait({
       state: async () => (seen = await readChoiceWindow(session)),
-      done: (choice?: ChoiceWindow) => choice?.title === title,
+      done: (choice?: ChoiceWindow) => choice !== undefined && isTitle(choice.title),
       withinMs: 10_000,
-      what: `the choice popup ${title}`,
+      what: `the choice popup ${what}`,
     });
-    return seen!;
+    return { ...seen!, items: seen!.items.map(plainItem) };
   };
   return {
     /** From the main screen: SETTINGS, its last row (the FX ROUTING row), YES. The effects popup. */
@@ -64,13 +74,13 @@ export function routingUi(runtime: Rt, plan: RuntimePlan, artifacts: string, slo
       for (let i = 0; i < count; i++) await runtime.ui.tap('UP', { until: { drained: true } });
       for (let i = 0; i < count - 1; i++) await runtime.ui.tap('DOWN', { until: { drained: true } });
       await runtime.ui.tap('YES', { until: { drained: true } });
-      return waitChoice('FX ROUTING');
+      return waitChoice((title) => title === 'FX ROUTING', 'FX ROUTING');
     },
     /** DOWN to `index`, YES: the firmware passes the index to the service, which opens the route popup of that effect. */
     pickEffect: async (index: number, id: string) => {
       for (let i = 0; i < index; i++) await runtime.ui.tap('DOWN', { until: { drained: true } });
       await runtime.ui.tap('YES', { until: { drained: true } });
-      return waitChoice(routeTitle(id));
+      return waitChoice((title) => isRouteTitle(title, id), `ROUTE of ${id}`);
     },
     /** DOWN to `index`, YES: the route is chosen and the popup closes. */
     pickRoute: async (index: number) => {

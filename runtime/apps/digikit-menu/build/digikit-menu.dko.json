@@ -606,27 +606,6 @@
   },
   {
    "addend": 0,
-   "offset": 10,
-   "section": ".text.t_pad_px",
-   "symbol": ".sec..text.px_of",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 18,
-   "section": ".text.t_pad_px",
-   "symbol": ".sec..text.t_c.part.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 44,
-   "section": ".text.t_pad_px",
-   "symbol": ".sec..text.t_c.part.0",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 8,
    "section": ".text.dk_poll",
    "symbol": ".sec..bss.DK_POLLS",
@@ -1428,6 +1407,13 @@
    "offset": 44,
    "section": ".text.row_by_path",
    "symbol": ".sec..text.same_text.constprop.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": ".text.t_pad_px",
+   "symbol": ".sec..text.dk_ui_px_of",
    "type": "cf.32"
   },
   {
@@ -3919,7 +3905,7 @@
    "addend": 0,
    "offset": 756,
    "section": ".text.fill_modules",
-   "symbol": ".sec..text.px_of",
+   "symbol": ".sec..text.dk_ui_px_of",
    "type": "cf.32"
   },
   {
@@ -3947,7 +3933,7 @@
    "addend": 0,
    "offset": 888,
    "section": ".text.fill_modules",
-   "symbol": ".sec..text.px_of",
+   "symbol": ".sec..text.dk_ui_px_of",
    "type": "cf.32"
   },
   {
@@ -6189,7 +6175,7 @@
    "align": 2,
    "hex": "2f02206f0008428012106604241f4e75730152887420b4816712742eb4816710747eb481660e7205d08160dc720360f8720260f4720460f0",
    "kind": "text",
-   "name": ".text.px_of",
+   "name": ".text.dk_ui_px_of",
    "size": 56
   },
   {
@@ -6313,13 +6299,6 @@
   },
   {
    "align": 2,
-   "hex": "2f0a2f022f2f000c4eb900000000588f45f900000000242f001094807002b0826c087003c0824a80660845f900000000601e487800202f2f00104e925782508f60da487800012f2f00104e925982508f7003b0826dec241f245f4e75",
-   "kind": "text",
-   "name": ".text.t_pad_px",
-   "size": 92
-  },
-  {
-   "align": 2,
    "hex": "20390000000052b9000000004a80660e487affee4eb900000000588f60722f004eb900000000588f4a80676e700123c0000000004eb9000000004a80673e2239000000004a81670c204091c1b1fc000002ed633c23c0000000004879000000004eb9000000002f39000000004eb900000000508f52b9000000006014203900000000723b5280b280650823c0000000004e7542b90000000060c04ab90000000067ee487aff5c4eb90000000042b9000000006000ff66",
    "kind": "text",
    "name": ".text.dk_poll",
@@ -6429,6 +6408,13 @@
    "kind": "text",
    "name": ".text.row_by_path",
    "size": 76
+  },
+  {
+   "align": 2,
+   "hex": "598f2f0a2f02246f0010222a00502f4100082f0a4eb900000000588f222f00149280202f00087402b4816c0e7403c4814a826706744eb4806c1e7403b4816c06744eb4806c1e42011581080025400050241f245f588f4e757420578115820800528060c27401598115820800528060ca",
+   "kind": "text",
+   "name": ".text.t_pad_px",
+   "size": 112
   },
   {
    "align": 2,
@@ -7453,7 +7439,7 @@
    "size": 4
   }
  ],
- "source_sha256": "fb18efc129c74244a94a1812c6cf8d0ccb7514034ff5d6720fb64a1a7e9ecd16",
+ "source_sha256": "56bf22b9625a1522e1e94e2a8090cbe163502c326e027c617b79f2b27bd8d2c4",
  "symbols": [
   {
    "global": false,
@@ -8177,6 +8163,12 @@
   },
   {
    "global": false,
+   "name": ".sec..text.dk_ui_px_of",
+   "section": ".text.dk_ui_px_of",
+   "value": 0
+  },
+  {
+   "global": false,
    "name": ".sec..text.fail_text",
    "section": ".text.fail_text",
    "value": 0
@@ -8347,12 +8339,6 @@
    "global": false,
    "name": ".sec..text.prow",
    "section": ".text.prow",
-   "value": 0
-  },
-  {
-   "global": false,
-   "name": ".sec..text.px_of",
-   "section": ".text.px_of",
    "value": 0
   },
   {
@@ -8827,6 +8813,12 @@
    "global": true,
    "name": "dk_ui_menu_select",
    "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "dk_ui_px_of",
+   "section": ".text.dk_ui_px_of",
    "value": 0
   },
   {
@@ -9455,12 +9447,6 @@
   },
   {
    "global": false,
-   "name": "px_of",
-   "section": ".text.px_of",
-   "value": 0
-  },
-  {
-   "global": false,
    "name": "refit",
    "section": ".text.refit",
    "value": 0
@@ -9692,8 +9678,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "3764",
-  "isa_check": "b3ef5f414295e381ca46a685b12ce5d3f1e5ba28b84bca8ae32d21ae74f0eed2",
+  "instructions_redecoded": "3775",
+  "isa_check": "d2e2caf7bf3ce34a98b921bd68d2c8f9384b4ec4999562f724f581f67d314516",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

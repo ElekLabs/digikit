@@ -41,10 +41,22 @@ pub trait Ui {
 
 /// Rows the list can have: one for each effect row of the image.
 pub const LIST_MAX: usize = MAX_FX;
-/// Characters of an effect's name in the list and in toasts.
-pub const NAME_MAX: usize = 12;
-/// Bytes of a line, the NUL included (`DK_UI_ROW` and `DK_UI_TOAST` of <dk/platform/ui.h> are not longer).
-pub const LINE_MAX: usize = 32;
+/// Characters of an effect's name in the list: a row, with the route (`: MASTER`), has to fit the popup, which grows with its widest item up to the screen (about 27 characters; checked on the
+/// DN2 with `dyn-fx-gain-sendonly`). A longer name keeps its start and end around `..`.
+pub const LIST_NAME_MAX: usize = 19;
+/// Characters of the popup title (`DK_UI_ROW` - 1), and of the name in it: the title ends in `ROUTE_TITLE`.
+const TITLE_MAX: usize = 23;
+const ROUTE_TITLE: &[u8] = b" ROUTE";
+/// Characters of a toast (`DK_UI_TOAST` - 1), and of the name in it: the toast of the longest tail (`RESTART TO APPLY`) follows `: `.
+const TOAST_MAX: usize = 31;
+const TOAST_NAME: usize = TOAST_MAX - 2 - b"RESTART TO APPLY".len();
+/// Bytes of a line, the NUL included: a list item is the name (at most `LIST_NAME_MAX`), the column mark and the route. The popup cuts
+/// every item to `DK_UI_LIST_TEXT` (80) and the title and toast shorter (above).
+pub const LINE_MAX: usize = 48;
+/// Between the name of a list item and its route: core/ui starts the route at the same pixel column in every item (`dk_ui_choice`).
+const COLUMN: &[u8] = b"\t";
+/// The mark of a name cut in the middle.
+const ELLIPSIS: &[u8] = b"..";
 
 /// What follows the route in the toast of a reload that waits for the transport to stop, and of one that is queued or running.
 const ON_STOP: &[u8] = b" ON STOP";
@@ -91,6 +103,18 @@ impl Line {
         self
     }
 
+    /// Add `name`, at most `room` characters: a longer name keeps its start and its end around `..`, so names that differ at the end stay apart.
+    pub fn put_fit(&mut self, name: &[u8], room: usize) -> &mut Line {
+        if name.len() <= room {
+            return self.put(name);
+        }
+        let keep = room.saturating_sub(ELLIPSIS.len());
+        let head = keep - keep / 2;
+        self.put(&name[..head])
+            .put(ELLIPSIS)
+            .put(&name[name.len() - keep / 2..])
+    }
+
     /// The bytes with their terminator, for the C side.
     pub fn as_ptr(&self) -> *const u8 {
         self.buf.as_ptr()
@@ -108,10 +132,16 @@ impl Default for Line {
     }
 }
 
-/// The name of a module id for the list: the part after the last `/`, cut to `NAME_MAX`.
+/// The name of a module id: the part after the last `/`.
 fn name_of(id: &[u8]) -> &[u8] {
-    let name = id.rsplit(|c| *c == b'/').next().unwrap_or(id);
-    &name[..name.len().min(NAME_MAX)]
+    id.rsplit(|c| *c == b'/').next().unwrap_or(id)
+}
+
+/// The start of a toast about the effect `id`: its name cut to `TOAST_NAME`, then `: `.
+fn toast_start(id: &[u8]) -> Line {
+    let mut line = Line::new();
+    line.put_fit(name_of(id), TOAST_NAME).put(b": ");
+    line
 }
 
 fn route_text(route: Route) -> &'static [u8] {
@@ -184,7 +214,8 @@ impl Routing {
                 continue;
             };
             lines[self.listed]
-                .put(name_of(effect.id()))
+                .put_fit(name_of(effect.id()), LIST_NAME_MAX)
+                .put(COLUMN)
                 .put(b": ")
                 .put(route_text(effect.saved));
             self.rows[self.listed] = (k as u8, effect.owner);
@@ -213,9 +244,8 @@ impl Routing {
             self.offered[self.offered_len] = Route::Master;
             self.offered_len += 1;
         }
-        let name = name_of(effect.id());
         if self.offered_len == 0 {
-            ui.toast(Line::new().put(name).put(b": NO ROUTE FREE"));
+            ui.toast(toast_start(effect.id()).put(b"NO ROUTE FREE"));
             return;
         }
         let mut items = [Line::new(); 2];
@@ -223,7 +253,9 @@ impl Routing {
             item.put(route_text(*route));
         }
         ui.choice(
-            Line::new().put(name).put(b" ROUTE"),
+            Line::new()
+                .put_fit(name_of(effect.id()), TITLE_MAX - ROUTE_TITLE.len())
+                .put(ROUTE_TITLE),
             &items[..self.offered_len],
             Step::Route,
         );
@@ -242,8 +274,7 @@ impl Routing {
             ui.toast(&Line::of("NO EFFECTS LOADED"));
             return;
         };
-        let mut line = Line::new();
-        line.put(name_of(effect.id())).put(b": ");
+        let mut line = toast_start(effect.id());
         // a deferred wait: the runtime holds the module's reload (queued, or given up at stop). A re-pick never starts a second job: `reload_when_possible` is ignored while
         // the module is queued and marks it again when the queue gave up
         let deferred = matches!(self.waiting, Some(w) if w.deferred && w.owner == effect.owner && w.id() == effect.id());
@@ -330,8 +361,7 @@ impl Routing {
             return;
         };
         let id = w.id();
-        let mut line = Line::new();
-        line.put(name_of(id)).put(b": ");
+        let mut line = toast_start(id);
         if result == OK {
             self.waiting = None;
             line.put(route_text(w.route));
