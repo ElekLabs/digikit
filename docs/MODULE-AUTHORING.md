@@ -790,6 +790,8 @@ them: `service!(MyService, "my-service", &[], parts = [Tick], hooks = [], fills 
 
 A hook name may appear once per disjoint device set (`devices` in `[[hook]]`): the loader takes the entry for its own device and refuses a duplicate.
 
+A service can also take a patch of the firmware: `[[patch]] name = "..."` (the name is a patch site of the port file) and `patches = [("name", 4, MyService::table)]` in `service!`; the function gives the bytes from the instance `start` made. See [PATCHING](PATCHING.md) "Patches".
+
 ```toml
 [[export]]
 name = "my_service_ping"

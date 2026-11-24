@@ -81,9 +81,12 @@ fn service_file(dev: Dev, leaf: &str, nx: &str) -> Vec<u8> {
     packed(dev, leaf, "dks", nx)
 }
 
+/// The bytes the fixture `local-patch` declares for its patch (`LIST_SIZE_PATCH` of tests/fixtures/modules/local-patch/src/lib.rs): `init` is replayed here, so the value is the test's.
+pub(super) const PATCH_TEST_VALUE: u32 = 0x20;
+
 /// The stock bytes of every hook site a service takes, from the local firmware (`patchkit port stock`, which reads the image and the committed port data; the bytes go
 /// into a fake firmware here and are written nowhere): hook name hash to (site address, displaced bytes). The port file holds only their check values.
-fn stock_sites(dev: Dev) -> std::collections::BTreeMap<u32, (u32, Vec<u8>)> {
+pub(super) fn stock_sites(dev: Dev) -> std::collections::BTreeMap<u32, (u32, Vec<u8>)> {
     let out = std::process::Command::new(repo().join("dist/patchkit/patchkit"))
         .current_dir(repo())
         .args(["--root", ".", "port", "stock", "--firmware"])
@@ -351,6 +354,8 @@ pub(super) struct Card {
     pub(super) real_rows: bool,
     /// `init` declares the handler of every kind 4 bytes off the one the header table carries (a service whose `init` and file disagree).
     pub(super) skew_kind_handler: bool,
+    /// The replayed `init` of a service declares its patches with another length than the port file's site (a file whose `service!` list and port disagree).
+    pub(super) skew_patch_len: bool,
     /// The `init` and `fini` the loader entered, in order: `(is_fini, record)`.
     pub(super) hooks: Vec<(bool, usize)>,
     /// The records whose service file provides a `ProviderRow` (the fixture `local-ping`, linked into the test binary): their `fini` stops the instance.
@@ -395,6 +400,7 @@ impl Card {
             init_calls: Vec::new(),
             real_rows: false,
             skew_kind_handler: false,
+            skew_patch_len: false,
             hooks: Vec::new(),
             provider_recs: Vec::new(),
             newer_parts: false,
@@ -525,6 +531,10 @@ impl Images for Card {
                 crate::package::collect::dk_service_declare_kind(ctx, d.a, d.b, at(d.c + if self.skew_kind_handler { 4 } else { 0 }))
             } else if d.tag == Declare::SLOT {
                 crate::package::collect::dk_service_declare_slot(ctx, d.a, d.b, at(d.c))
+            } else if d.tag == Declare::HOOK && dkneeds::keys::hook_is_patch(d.b) {
+                // a patch: `init` declares the bytes `start` computed (the fixture `local-patch` gives `PATCH_TEST_VALUE`) with the length of the port file's site
+                let len = port.as_ref().and_then(|p| p.find_site(d.a)).map_or(2, |s| s.len as u32);
+                crate::package::collect::dk_service_declare_patch(ctx, d.a, PATCH_TEST_VALUE, if self.skew_patch_len { len * 2 } else { len })
             } else if d.tag == Declare::HOOK {
                 crate::package::collect::dk_service_declare_hook(ctx, d.a, at(d.b))
             } else if d.tag == Declare::EXPORT {
@@ -633,6 +643,9 @@ pub(super) const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo
 const LFO_SHAPE_B: Fixture = Fixture { leaf: "lfo-shape-b", nx: "test/lfo-shape-b" };
 pub(super) const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
 /// The test service with ColdFire hooks in the port file of the test image, and its user.
+/// A service that takes one patch of the firmware (two bytes, the chooser's order vector allocation) and the module that needs it.
+pub(super) const LOCAL_PATCH: Fixture = Fixture { leaf: "local-patch", nx: "test/local-patch" };
+pub(super) const LOCAL_PATCH_USER: Fixture = Fixture { leaf: "local-patch-user", nx: "test/local-patch-user" };
 pub(super) const SVC_TEST: Fixture = Fixture { leaf: "svc-test", nx: "test/svc-test" };
 pub(super) const LOCAL_PING: Fixture = Fixture { leaf: "local-ping", nx: "test/local-ping" };
 pub(super) const LOCAL_PING_USER: Fixture = Fixture { leaf: "local-ping-user", nx: "test/local-ping-user" };

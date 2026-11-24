@@ -805,7 +805,7 @@ mod tests {
     }
 
     fn fake_with(patches: &[(u32, &[u8])]) -> FakePlatform {
-        let f = FakePlatform::new(profiles::DN2);
+        let f = fake(&[]);
         for (a, b) in patches {
             f.put_code(*a, b);
         }
@@ -932,7 +932,7 @@ mod tests {
     fn a_full_patch_log_refuses_and_writes_nothing() {
         let stock = [0u8; 4];
         let ps: Vec<PatchItem> = (0..PATCHES_MAX as u32 + 1).map(|i| patch(0x2000_0000 + i * 16, 4, &stock, i)).collect();
-        let f = FakePlatform::new(profiles::DN2);
+        let f = fake(&[]);
         let mut ins = Installer::new();
         assert_eq!(unsafe { ins.install(&f, 0, &[], &ps, BASE, SIZE, &[]) }, Err(E_PLAN_FIT));
         assert!(f.calls.borrow().is_empty());

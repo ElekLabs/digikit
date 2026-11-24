@@ -1079,7 +1079,12 @@ pub fn resolve_patch_site(fw: &[u8], reg: &Registry, hook: &str, len: usize) -> 
     resolve_site(fw, reg, hook, Some(len))
 }
 
-fn resolve_site(fw: &[u8], reg: &Registry, hook: &str, patch_len: Option<usize>) -> Result<HookSite> {
+fn resolve_site(
+    fw: &[u8],
+    reg: &Registry,
+    hook: &str,
+    patch_len: Option<usize>,
+) -> Result<HookSite> {
     let fw = Firmware::parse(fw)?;
     let port = reg.find(&fw.syx_sha256).ok_or_else(|| {
         err!("no port for firmware {}: it is not a stock image patchkit knows (a patched image is refused too)", fw.syx_sha256)
@@ -1127,7 +1132,11 @@ fn resolve_site(fw: &[u8], reg: &Registry, hook: &str, patch_len: Option<usize>)
     let site = a.addr + h.offset as u64;
     let cf = match patch_len {
         None => prim::cf_site(main, base, a.addr, site).map_err(|e| err!("{who}: {e}"))?,
-        Some(len) => prim::CfSite { addr: site, len, insns: vec![] },
+        Some(len) => prim::CfSite {
+            addr: site,
+            len,
+            insns: vec![],
+        },
     };
     if h.offset as u64 + cf.len as u64 > a.len {
         return Err(err!(

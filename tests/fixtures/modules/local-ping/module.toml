@@ -17,10 +17,6 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# One patch of the port file of the test image (ports/fw/filter.toml): two bytes of the chooser's order vector allocation, written at load with the value `init` declares.
-[[patch]]
-name = "cf.filter.hook.test_list_size_patch"
-
 [[export]]
 name = "local_ping_value"
 

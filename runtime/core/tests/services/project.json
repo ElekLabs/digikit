@@ -22,7 +22,9 @@
           "test/svc-test",
           "test/svc-test-user",
           "test/local-ping",
-          "test/local-ping-user"
+          "test/local-ping-user",
+          "test/local-patch",
+          "test/local-patch-user"
         ],
         "plusdrive": true
       }

@@ -156,6 +156,47 @@ fn a_service_file_declares_one_row_in_init_and_only_there() {
     }
 }
 
+/// A patch is declared in init with a length of 1, 2 or 4 and a value that fits it; the table has a `HOOKS` item with the patch entry for it (the value is no part of the file), so
+/// the declarations match the table without the value and a patch the table does not name, or a hook where the table has a patch, is a difference.
+#[test]
+fn a_patch_is_declared_in_init_with_a_length_that_fits_its_value_and_matches_a_hooks_item_with_the_patch_entry() {
+    use dkneeds::keys::HOOK_ENTRY_PATCH;
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    let base = 0x4100_0000;
+    unsafe {
+        let mut b = Box::new(Collect::new());
+        begin(&mut *b);
+        let ctx = crate::package::entry::bind(0) as *mut u8;
+        assert_eq!(dk_service_declare_patch(core::ptr::null_mut(), 5, 1, 1), E_CONTEXT);
+        for (value, len) in [(0xff, 1), (0xffff, 2), (0xffff_ffff, 4), (0, 4)] {
+            assert_eq!(dk_service_declare_patch(ctx, 5, value, len), OK, "{value:#x} in {len}");
+        }
+        assert_eq!(b.err, 0);
+        for (value, len) in [(0x100, 1), (0x1_0000, 2), (1, 0), (1, 3), (1, 8)] {
+            b.err = 0;
+            assert_eq!(dk_service_declare_patch(ctx, 5, value, len), E_FORMAT, "{value:#x} in {len}");
+            assert_eq!(b.err, E_FORMAT, "the first error is kept");
+        }
+        end();
+        crate::package::entry::unbind(0);
+        assert_eq!(b.decl.n, 4, "a refused patch declares nothing");
+    }
+    let mut d = Collect::new();
+    d.decl.patch(7, 0xdead, 2);
+    d.decl.hook(9, base + 0x40);
+    let table = |entries: &[(u32, u32)]| {
+        let mut k = KeysCopy::empty();
+        for (a, b) in entries {
+            k.decl.add(Declare::HOOK, *a, *b, 0);
+        }
+        k
+    };
+    assert!(decl_matches(&d, &table(&[(7, HOOK_ENTRY_PATCH), (9, 0x40)]), base), "the table names the patch with the patch entry and not its value");
+    assert!(!decl_matches(&d, &table(&[(7, 0x40), (9, 0x40)]), base), "a hook where init declares a patch");
+    assert!(!decl_matches(&d, &table(&[(9, 0x40)]), base), "a patch the table does not name");
+    assert!(!decl_matches(&Collect::new(), &table(&[(7, HOOK_ENTRY_PATCH)]), base), "a patch the init did not declare");
+}
+
 #[test]
 fn the_generic_records_are_appended_to_the_block_the_services_write_in_the_order_they_were_added() {
     use dkrt_abi::service::RecordSink;

@@ -639,7 +639,7 @@
       "site": "cf.filter.site.list_size",
       "subsystem": "filter",
       "users": [
-        "test/local-ping"
+        "test/local-patch"
       ],
       "was": []
     },

@@ -1,7 +1,6 @@
 //! The service file's own code over the owner cell, on the host: the builder export `dk_shortcut_add` and the key hook `dk_shortcuts_key` reach the owner through
 //! `DK_SVC_OWNER.with`, and answer the neutral way when there is none. The imports of the file (`dkc_*`) are stubs here.
 use core::sync::atomic::Ordering::SeqCst;
-use dkrt_test_support::hook_context::HookContext;
 use dkrt_abi::profiles::ALL;
 use dkrt_abi::provider::Records;
 use dkrt_sdk::keys::{TRK, YES};
@@ -9,6 +8,7 @@ use dkrt_sdk::{E_CONTEXT, E_FORMAT};
 use dkrt_svc_rt::ImportCore;
 use dkrt_svc_shortcuts::bindings::Binding;
 use dkrt_svc_shortcuts::shortcuts::Shortcuts;
+use dkrt_test_support::hook_context::HookContext;
 use std::sync::Mutex;
 
 // the service file's source, as the ColdFire build has it: the key hook and the builder call reach the owner as `crate::DK_SVC_OWNER`
@@ -115,9 +115,17 @@ fn a_key_in_the_ui_task_with_the_owner_idle_enters_the_owner_and_is_not_refused(
         DK_SVC_OWNER.run((), |_| f());
     };
     let refused = || DK_SVC_OWNER.refused();
-    let first = HookContext::UiTask.fire(&hold, &refused, &mut || unsafe { dk_shortcuts_key(trk, press) });
-    let second = HookContext::UiTask.fire(&hold, &refused, &mut || unsafe { dk_shortcuts_key(yes, press) });
-    assert_eq!((first.result, second.result), (0, 1), "the owner saw both keys: the second completes the binding");
+    let first = HookContext::UiTask.fire(&hold, &refused, &mut || unsafe {
+        dk_shortcuts_key(trk, press)
+    });
+    let second = HookContext::UiTask.fire(&hold, &refused, &mut || unsafe {
+        dk_shortcuts_key(yes, press)
+    });
+    assert_eq!(
+        (first.result, second.result),
+        (0, 1),
+        "the owner saw both keys: the second completes the binding"
+    );
     assert_eq!((first.refused, second.refused), (0, 0));
     dk_svc_stop();
 }
@@ -145,7 +153,9 @@ fn a_key_that_arrives_inside_a_call_of_the_service_is_refused_and_counted() {
         DK_SVC_OWNER.run((), |_| f());
     };
     let refused = || DK_SVC_OWNER.refused();
-    let inside = HookContext::InPartCall.fire(&hold, &refused, &mut || unsafe { dk_shortcuts_key(trk, press) });
+    let inside = HookContext::InPartCall.fire(&hold, &refused, &mut || unsafe {
+        dk_shortcuts_key(trk, press)
+    });
     assert_eq!(inside.result, 0, "the key passes to the stock walker");
     assert_eq!(inside.refused, 1, "refused and counted");
     assert_eq!(

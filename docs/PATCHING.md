@@ -561,6 +561,15 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
 
   A name that only another device has, and a hook listed only for another device, resolve to 0; a name the port file does not list refuses the service file (`E_IMPORT`, the hash
   in the provider log). `patchkit apply` adds the info entry `fw_id`, and the loader refuses a port file for another firmware with E_HOOK_STOCK.
+- **Patches.** A patch is plain bytes (1, 2 or 4) at a data site of the firmware, as an operand of an instruction or a table word, that a service replaces with a value of its own and the loader gives
+  back before the service stops. The port declaration is a raw `[[hook]]` (`mode = "replace"`, no handler, `tail`, `stock` or `exits`) with `patch = N`: its `site` and `offset` give the bytes (the
+  anchor must cover them); `patchkit port facts` writes the length `N`, the kind `patch` and the check value of the stock bytes into the port file (`SITES`, kind 3). A service names it with `[[patch]] name = "..."`
+  in its `module.toml` (`devices` as for a hook) and `patches = [("name", N, f)]` in `service!`, where `f` is a `fn(&Service) -> u32` that gives the bytes (the low `N`) from the instance `Provider::start` made
+  (a table address, a count): the values exist only at run time, so `init` declares them with `dk_service_declare_patch` (a service-only import, beside `dk_service_declare_hook`) and the header table holds only
+  a `HOOKS` item whose entry word is `HOOK_ENTRY_PATCH` (the low 24 bits set; the device mask works as for a hook). The installer takes hooks and patches of a file together: the layout (overlaps, at most
+  `install_patches` over all providers), the stock copy of each site and its check value are checked outside the interrupt mask, nothing is written when one differs (`E_HOOK_STOCK`, or `E_FORMAT` for a declared
+  length that is not the site's, `E_RANGE` for a patch on a hook site or a hook on a patch site), and one mask holds only the compare of the live bytes with the saved copy, the writes and the flush. The restore
+  writes the saved bytes back, the patches in the reverse of the order they went in, then the hooks, before the service's `fini`. `patchkit service-check` compares `[[patch]]` and `patches` per device.
 - **Hooks per device.** One `.dks` serves both devices. `[[hook]]` in the module's `module.toml` has `devices`; the `service!`
   call lists `(name, entry)` for every device, `(name, entry, dt2)` or `(name, entry, dn2)` for one, and declares at `init` those of
   the running device. The packer writes the device set of each hook into the file: an item of `HOOKS` is `{name hash, word}`,

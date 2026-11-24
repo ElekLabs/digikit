@@ -1,3 +1,4 @@
+// device-literals: allow (the `service!` device filter is spelled with the device name, and the test checks it)
 use super::*;
 
 // the imports a service file makes are the runtime's; this test binary links none, so each answers OK
@@ -40,7 +41,8 @@ mod stubs {
         0
     }
     /// The patches declared, in order: (site, value, length).
-    pub static PATCHES: std::sync::Mutex<std::vec::Vec<(u32, u32, u32)>> = std::sync::Mutex::new(std::vec::Vec::new());
+    pub static PATCHES: std::sync::Mutex<std::vec::Vec<(u32, u32, u32)>> =
+        std::sync::Mutex::new(std::vec::Vec::new());
     #[no_mangle]
     extern "C" fn dk_service_declare_patch(_: *mut u8, site: u32, value: u32, len: u32) -> i32 {
         PATCHES.lock().unwrap().push((site, value, len));
@@ -206,7 +208,11 @@ mod patched {
         parts = [],
         hooks = [],
         fills = [],
-        patches = [("cf.test.patch.table", 4, S::table), ("cf.test.patch.count", 2, S::count), ("cf.test.patch.only_dt2", 1, S::count, dt2)]
+        patches = [
+            ("cf.test.patch.table", 4, S::table),
+            ("cf.test.patch.count", 2, S::count),
+            ("cf.test.patch.only_dt2", 1, S::count, dt2)
+        ]
     );
     static DEVICE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
     fn device() -> u32 {
@@ -230,10 +236,18 @@ fn the_patches_of_service_are_declared_with_the_values_start_computed_and_the_de
     assert_eq!(patched::declare(DT2.id), 0);
     assert_eq!(
         take(),
-        [(h("cf.test.patch.table"), 0x4100_2000, 4), (h("cf.test.patch.count"), 0x4100_2000 >> 12, 2), (h("cf.test.patch.only_dt2"), 0x4100_2000 >> 12, 1)]
+        [
+            (h("cf.test.patch.table"), 0x4100_2000, 4),
+            (h("cf.test.patch.count"), 0x4100_2000 >> 12, 2),
+            (h("cf.test.patch.only_dt2"), 0x4100_2000 >> 12, 1)
+        ]
     );
     assert_eq!(patched::declare(DN2.id), 0);
-    assert_eq!(take().iter().map(|p| p.0).collect::<std::vec::Vec<_>>(), [h("cf.test.patch.table"), h("cf.test.patch.count")], "the dt2 entry is not declared on dn2");
+    assert_eq!(
+        take().iter().map(|p| p.0).collect::<std::vec::Vec<_>>(),
+        [h("cf.test.patch.table"), h("cf.test.patch.count")],
+        "the dt2 entry is not declared on dn2"
+    );
 }
 
 fn whole() -> core::ops::Range<usize> {

@@ -287,8 +287,8 @@ pub struct HookDecl {
 
 /// The prefix of a `users` entry that is a service module id.
 pub const SERVICE_USER_PREFIX: &str = "core/services/";
-/// The test fixtures that take a hook or patch of their own (`test/svc-test` a hook, `test/local-ping` a patch): services for the port set like the core services.
-pub const TEST_SERVICE_USERS: [&str; 2] = ["test/svc-test", "test/local-ping"];
+/// The test fixtures that take a hook or patch of their own (`test/svc-test` a hook, `test/local-patch` a patch): services for the port set like the core services.
+pub const TEST_SERVICE_USERS: [&str; 2] = ["test/svc-test", "test/local-patch"];
 
 /// The ColdFire names and hooks of `ports/fw/` whose `users` list names a service (`core/services/*`): the set a port file lists. A hook may appear once per
 /// device (the same name, `devices` apart).
@@ -305,8 +305,10 @@ pub fn service_decls_with(
     test_users: bool,
 ) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
     let is_service = |u: &[String]| {
-        u.iter()
-            .any(|x| x.starts_with(SERVICE_USER_PREFIX) || (test_users && TEST_SERVICE_USERS.contains(&x.as_str())))
+        u.iter().any(|x| {
+            x.starts_with(SERVICE_USER_PREFIX)
+                || (test_users && TEST_SERVICE_USERS.contains(&x.as_str()))
+        })
     };
     let (mut names, mut hooks) = (vec![], vec![]);
     for text in decls.iter().copied() {
@@ -1185,7 +1187,13 @@ fn check_hook(
         ));
     }
     if let Some(n) = h.patch {
-        if h.handler.is_some() || !cf || h.mode != "replace" || h.tail || h.stock || !h.exits.is_empty() {
+        if h.handler.is_some()
+            || !cf
+            || h.mode != "replace"
+            || h.tail
+            || h.stock
+            || !h.exits.is_empty()
+        {
             return Err(err!(
                 "{name}: `patch = N` is only for a cf hook with mode \"replace\", no handler, `tail`, `stock` or `exits` (a patch site)"
             ));
@@ -1877,10 +1885,9 @@ pub fn image_hooks(decls: &[&str]) -> Result<Vec<(String, Vec<String>)>> {
                 .cpu
                 .as_deref()
                 .map_or(h.name.starts_with("cf."), |c| c == "cf");
-            let image = h
-                .users
-                .iter()
-                .any(|u| !u.starts_with(SERVICE_USER_PREFIX) && !TEST_SERVICE_USERS.contains(&u.as_str()));
+            let image = h.users.iter().any(|u| {
+                !u.starts_with(SERVICE_USER_PREFIX) && !TEST_SERVICE_USERS.contains(&u.as_str())
+            });
             if cf && image {
                 out.push((h.name.clone(), h.devices.clone()));
             }

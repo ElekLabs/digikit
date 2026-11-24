@@ -313,25 +313,46 @@ impl Manifest {
                 return Err(err!("{id}: [[patch]] needs a `name`, not empty"));
             }
             if patches.iter().any(|(n, d)| {
-                *n == h.name && (d.is_empty() || h.devices.is_empty() || d.iter().any(|x| h.devices.contains(x)))
+                *n == h.name
+                    && (d.is_empty()
+                        || h.devices.is_empty()
+                        || d.iter().any(|x| h.devices.contains(x)))
             }) {
-                return Err(err!("{id}: [[patch]] {:?} is declared twice for a common device", h.name));
+                return Err(err!(
+                    "{id}: [[patch]] {:?} is declared twice for a common device",
+                    h.name
+                ));
             }
             if hooks.iter().any(|(n, _, _)| *n == h.name) {
-                return Err(err!("{id}: [[patch]] {:?} is also a [[hook]] (a name is one or the other)", h.name));
+                return Err(err!(
+                    "{id}: [[patch]] {:?} is also a [[hook]] (a name is one or the other)",
+                    h.name
+                ));
             }
             for d in &h.devices {
                 if crate::devdata::by_short(d).is_none() {
-                    return Err(err!("{id}: [[patch]] {:?}: device {d:?} is not one of {}", h.name, crate::devdata::short_list()));
+                    return Err(err!(
+                        "{id}: [[patch]] {:?}: device {d:?} is not one of {}",
+                        h.name,
+                        crate::devdata::short_list()
+                    ));
                 }
             }
             patches.push((h.name.clone(), h.devices.clone()));
         }
         // per device, the file's patches stay within what the loader keeps from `init` to the install
-        for dev in std::iter::once(None).chain(crate::devdata::all().iter().map(|d| Some(d.short.as_str()))) {
-            let n = patches.iter().filter(|(_, d)| d.is_empty() || dev.is_some_and(|x| d.iter().any(|y| y == x))).count();
+        for dev in std::iter::once(None)
+            .chain(crate::devdata::all().iter().map(|d| Some(d.short.as_str())))
+        {
+            let n = patches
+                .iter()
+                .filter(|(_, d)| d.is_empty() || dev.is_some_and(|x| d.iter().any(|y| y == x)))
+                .count();
             if n > dkneeds::SERVICE_PATCHES_MAX as usize {
-                return Err(err!("{id}: {n} [[patch]] entries, over the {} a service file may take", dkneeds::SERVICE_PATCHES_MAX));
+                return Err(err!(
+                    "{id}: {n} [[patch]] entries, over the {} a service file may take",
+                    dkneeds::SERVICE_PATCHES_MAX
+                ));
             }
         }
         let mut fills: Vec<(String, String, Vec<String>)> = vec![];
@@ -480,7 +501,7 @@ pub struct ServiceHook {
 #[serde(deny_unknown_fields)]
 pub struct ServicePatch {
     pub name: String,
-    /// The devices the patch is for (`dt2`, `dn2`); empty: every device that declares it. `service!` lists the patches of each device the same way.
+    /// The devices the patch is for (short names of `devices/*.toml`); empty: every device that declares it. `service!` lists the patches of each device the same way.
     #[serde(default)]
     pub devices: Vec<String>,
 }
@@ -1789,6 +1810,40 @@ mod manifest_tests {
                 "{what}: {e}"
             );
         }
+    }
+
+    #[test]
+    fn a_service_patch_is_a_name_and_devices_and_a_name_is_a_hook_or_a_patch_never_both() {
+        let hook = "[[hook]]\nname = \"cf.a.hook.x\"\nentry = \"e\"\n";
+        let patch = |n: &str| format!("[[patch]]\nname = \"{n}\"\n");
+        // a patch has a name and, as a hook, devices; nothing else
+        assert!(load_service(&patch("cf.a.hook.p")).is_ok());
+        let e = load_service("[[patch]]\nname = \"cf.a.hook.p\"\nentry = \"f\"\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        let e = load_service(&patch("")).unwrap_err();
+        assert!(e.to_string().contains("needs a `name`"), "{e}");
+        // the same name twice for every device, or as a hook and a patch
+        let e =
+            load_service(&format!("{}{}", patch("cf.a.hook.p"), patch("cf.a.hook.p"))).unwrap_err();
+        assert!(
+            e.to_string().contains("declared twice for a common device"),
+            "{e}"
+        );
+        let e = load_service(&format!("{hook}{}", patch("cf.a.hook.x"))).unwrap_err();
+        assert!(e.to_string().contains("also a [[hook]]"), "{e}");
+        // a module that is no service has none
+        let e = load(&patch("cf.a.hook.p")).unwrap_err();
+        assert!(e.to_string().contains("[[patch]]"), "{e}");
+        // the loader keeps a bounded number from `init` to the install
+        let many: String = (0..=dkneeds::SERVICE_PATCHES_MAX)
+            .map(|i| patch(&format!("cf.a.hook.p{i}")))
+            .collect();
+        let e = load_service(&many).unwrap_err();
+        assert!(e.to_string().contains("a service file may take"), "{e}");
+        let ok: String = (0..dkneeds::SERVICE_PATCHES_MAX)
+            .map(|i| patch(&format!("cf.a.hook.p{i}")))
+            .collect();
+        assert!(load_service(&ok).is_ok());
     }
 
     #[test]

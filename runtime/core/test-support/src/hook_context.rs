@@ -43,7 +43,10 @@ impl HookContext {
         } else {
             result = Some(hook());
         }
-        Fired { result: result.expect("the hook ran"), refused: refused() - before }
+        Fired {
+            result: result.expect("the hook ran"),
+            refused: refused() - before,
+        }
     }
 }
 

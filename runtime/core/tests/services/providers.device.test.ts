@@ -29,6 +29,13 @@ const E_MISSING = loadCode('E_MISSING');
 /** The hook the fixture takes, and what the stock site holds (the displaced `movea.l (a2),a0` and `pea (2).w`). */
 const HOOK = 'cf.menu.hook.settings_list.test';
 const STOCK_SITE = [0x2052, 0x4878, 0x0002];
+/** The patch the fixture `test/local-patch` takes (ports/fw/filter.toml): the two bytes of `pea (0x18).w` that give the allocation size of the chooser's order vector. */
+const PATCH = 'cf.filter.hook.test_list_size_patch';
+const STOCK_ALLOCATION = 0x0018;
+/** What `LocalPatch::start` computes (tests/fixtures/modules/local-patch): a larger allocation, so the firmware does what it did. */
+const PATCHED_ALLOCATION = 0x0020;
+/** The kind of a patch site in the port file (`SITE_PATCH`). */
+const KIND_PATCH = 3;
 /** The tags of the header table. */
 const TAG_NEEDS = 1;
 const TAG_HOOKS = 6;
@@ -78,6 +85,13 @@ async function siteBytes({ session }: PatchedSession, site: number): Promise<num
   const [a, b] = await Promise.all([session.client.memPeek(site), session.client.memPeek(site + 4)]);
   if (a === null || b === null) throw new Error(`hook site ${site.toString(16)} is not mapped`);
   return [a >>> 16, a & 0xffff, b >>> 16];
+}
+
+/** The halfword at `site` (the patch site of two bytes). */
+async function halfwordAt({ session }: PatchedSession, site: number): Promise<number> {
+  const word = await session.client.memPeek(site);
+  if (word === null) throw new Error(`patch site ${site.toString(16)} is not mapped`);
+  return word >>> 16;
 }
 
 type Log = Parameters<typeof ofKind>[0];
@@ -238,5 +252,36 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
       [nameHash('svc-test-b'), 0],
     ]);
     expect(logged(log, 'svctest-ping'), 'dk_svctest_ping() ran once, for the first user').toEqual([42]);
+  });
+  test('a service with a patch writes its bytes at the site when it loads and the site is stock after the unload', async () => {
+    const { debug } = modules();
+    const client = h.mod('test/local-patch-user', 'local-patch-user');
+    const file = moduleArtifact(h.device, 'test/local-patch');
+    const provider = { name: 'services/local-patch.dks', file };
+    const portFile = path.join(repoRoot(), 'dist/ports-test', `${h.device}-${FIRMWARE[h.device]}.dkport`);
+    const port = { name: `ports/${h.device}-${FIRMWARE[h.device]}.dkport`, file: portFile };
+    // the port file lists the patch as a site of two bytes, and the service names it with a HOOKS item whose entry is the patch entry (the low 24 bits set)
+    const pf = fs.readFileSync(portFile);
+    const sites = entry(pf, TAG_SITES);
+    let item = -1;
+    for (let k = 0; k < sites.count; k++) if (pf.readUInt32BE(sites.at + SITE_BYTES * k) === nameHash(PATCH)) item = sites.at + SITE_BYTES * k;
+    expect(item, 'the port file lists the patch').toBeGreaterThanOrEqual(0);
+    const site = pf.readUInt32BE(item + 4);
+    expect([pf.readUInt16BE(item + 8), pf.readUInt8(item + 10)], 'the site is two bytes of the patch kind').toEqual([2, KIND_PATCH]);
+    const svc = fs.readFileSync(file);
+    const hooks = entry(svc, TAG_HOOKS);
+    expect([hooks.count, svc.readUInt32BE(hooks.at), svc.readUInt32BE(hooks.at + 4) & 0xffffff], 'one HOOKS item, the patch').toEqual([1, nameHash(PATCH), 0xffffff]);
+
+    const rt = await h.load('local-patch', { modules: [debug, client, provider, port], selection: [debug.name, client.name] });
+    const log = await h.usb(rt, (dk) => dk.readLog());
+    expect(providerOf(log, nameHash('local-patch')).map((p) => p.result), 'the service with the patch loaded').toEqual([0]);
+    expect(await halfwordAt(rt, site), 'the bytes the service computed are at the site').toBe(PATCHED_ALLOCATION);
+    await rt.session.expectNoFault('patched site');
+
+    // the last user goes, the orphaned service goes with it: the installer writes the stock bytes back before the service stops
+    const end = await h.usb(rt, (dk) => dk.unloadAndWait(client.name));
+    expect(end, 'the unload of the user').toEqual({ result: 0, unloaded: true });
+    expect(await halfwordAt(rt, site), 'the site is stock after the unload').toBe(STOCK_ALLOCATION);
+    await rt.session.expectNoFault('patch restored');
   });
 });

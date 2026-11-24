@@ -1057,3 +1057,42 @@ pub fn run(args: &[String]) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The `patches` list of `service!` has the length of each patch between its name and its function; `service-check` reads the names and the device filter as for a hook.
+    #[test]
+    fn the_patches_of_a_service_call_are_listed_with_their_device_filter() {
+        let shorts: Vec<String> = crate::devdata::all()
+            .iter()
+            .filter(|d| d.digikit_id.is_some())
+            .map(|d| d.short.clone())
+            .collect();
+        let (a, b) = (shorts[0].as_str(), shorts[1].as_str());
+        let lib = format!(
+            "dkrt_svc_rt::service!(S, \"s\", &[], parts = [], hooks = [(\"cf.a.hook.h\", hooks::h, {a})], fills = [],\n\
+             patches = [(\"cf.a.hook.p\", 4, S::table), (\"cf.a.hook.q\", 2, S::count, {b})],\n exports = [])"
+        );
+        let named = |key: &str| service_list(&lib, key).unwrap();
+        assert_eq!(
+            named("patches"),
+            [
+                ("cf.a.hook.p".to_string(), None),
+                ("cf.a.hook.q".to_string(), Some(b.to_string()))
+            ]
+        );
+        assert_eq!(
+            named("hooks"),
+            [("cf.a.hook.h".to_string(), Some(a.to_string()))]
+        );
+        assert!(
+            service_list(
+                "service!(S, \"s\", &[], parts = [], hooks = [], fills = [])",
+                "patches"
+            )
+            .is_none()
+        );
+    }
+}

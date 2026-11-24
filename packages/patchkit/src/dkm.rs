@@ -844,7 +844,9 @@ fn pack_inner(
                     p.a == a && (mask == 0 || other == 0 || mask & other != 0)
                 };
                 if hk.iter().any(overlaps) {
-                    return Err(err!("the service takes {patch} twice (a hook or a patch of that name already has the device)"));
+                    return Err(err!(
+                        "the service takes {patch} twice (a hook or a patch of that name already has the device)"
+                    ));
                 }
                 hk.push(dkneeds::keys::Pair {
                     a,
@@ -2080,6 +2082,65 @@ mod tests {
                 .iter()
                 .all(|h| h.a == dkneeds::keys::name_hash("hook.a"))
         );
+    }
+
+    /// A patch is a `HOOKS` item with the patch entry and the device mask in the top byte: the values are the service's, given in `init`, so the file holds none.
+    #[test]
+    fn a_service_patch_is_a_hooks_item_with_the_patch_entry_and_a_device_mask() {
+        let o = object();
+        let ids: Vec<(String, u32)> = crate::devdata::all()
+            .iter()
+            .filter_map(|d| d.digikit_id.map(|id| (d.short.clone(), id)))
+            .take(2)
+            .collect();
+        assert_eq!(ids.len(), 2, "two runtime devices");
+        let p = Provided {
+            hooks: vec![("hook.a".into(), "tick_fn".into(), vec![])],
+            patches: vec![
+                ("patch.a".into(), vec![]),
+                ("patch.b".into(), vec![ids[1].0.clone()]),
+            ],
+            ..provided()
+        };
+        let packed = pack(&o, &service_of(p)).unwrap();
+        let register = crate::dkm::Dkm::parse(&packed).unwrap().register;
+        let keys = dkneeds::keys::Keys::parse(&register).unwrap();
+        let find = |n: &str| {
+            keys.hooks()
+                .find(|h| h.a == dkneeds::keys::name_hash(n))
+                .unwrap()
+        };
+        assert!(
+            !dkneeds::keys::hook_is_patch(find("hook.a").b),
+            "the hook keeps its entry"
+        );
+        assert_eq!(
+            find("patch.a").b,
+            dkneeds::keys::HOOK_ENTRY_PATCH,
+            "no device: every device"
+        );
+        assert_eq!(
+            find("patch.b").b,
+            dkneeds::keys::HOOK_ENTRY_PATCH | (1 << (ids[1].1 - 1)) << 24
+        );
+        // one name is a hook or a patch for a device, not both, and not two patches
+        let e = |p: Provided| pack(&o, &service_of(p)).unwrap_err().0;
+        let both = Provided {
+            hooks: vec![("hook.a".into(), "tick_fn".into(), vec![])],
+            patches: vec![("hook.a".into(), vec![])],
+            ..provided()
+        };
+        assert!(e(both).contains("takes hook.a twice"));
+        let twice = Provided {
+            patches: vec![("patch.a".into(), vec![]), ("patch.a".into(), vec![])],
+            ..provided()
+        };
+        assert!(e(twice).contains("takes patch.a twice"));
+        let unknown = Provided {
+            patches: vec![("patch.a".into(), vec!["zz9".into()])],
+            ..provided()
+        };
+        assert!(e(unknown).contains("zz9"));
     }
 
     #[test]

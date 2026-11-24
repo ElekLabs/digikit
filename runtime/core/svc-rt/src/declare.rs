@@ -64,7 +64,6 @@ pub unsafe fn declare_provider(
     hooks: &[(u32, *const u8, u32)],
     fills: &[(u32, *const u8, u32)],
     exports: &[(u32, *const u8)],
-    patches: &[(u32, Patch, u32)],
 ) -> i32 {
     for &(kind, len) in kinds {
         let r = dk_service_declare_kind(ctx, kind, len, handler);
@@ -76,7 +75,7 @@ pub unsafe fn declare_provider(
     if r != 0 {
         return r;
     }
-    declare_entries(ctx, device, hooks, fills, exports, patches)
+    declare_entries(ctx, device, hooks, fills, exports)
 }
 
 #[inline(always)]
@@ -86,10 +85,9 @@ unsafe fn declare_entries(
     hooks: &[(u32, *const u8, u32)],
     fills: &[(u32, *const u8, u32)],
     exports: &[(u32, *const u8)],
-    patches: &[(u32, Patch, u32)],
 ) -> i32 {
     // the device is asked for only when an entry has a filter to compare with
-    let device = if hooks.is_empty() && fills.is_empty() && patches.is_empty() {
+    let device = if hooks.is_empty() && fills.is_empty() {
         0
     } else {
         device()
@@ -112,15 +110,6 @@ unsafe fn declare_entries(
             return r;
         }
     }
-    for &(site, patch, only) in patches {
-        if only != 0 && only != device {
-            continue;
-        }
-        let r = dk_service_declare_patch(ctx, site, patch.value, patch.len);
-        if r != 0 {
-            return r;
-        }
-    }
     for &(name, entry) in exports {
         let r = dk_service_declare_export(ctx, name, entry);
         if r != 0 {
@@ -128,6 +117,20 @@ unsafe fn declare_entries(
         }
     }
     0
+}
+
+/// One patch of the service (`service!` `patches`): declared unless its entry is for another device. The macro calls it once for each entry, so a service without patches carries no
+/// code for them.
+///
+/// # Safety
+/// `ctx` is the module context `init` was called with.
+#[doc(hidden)]
+#[inline(never)]
+pub unsafe fn declare_patch(ctx: *mut u8, device: fn() -> u32, site: u32, patch: Patch, only: u32) -> i32 {
+    if only != 0 && only != device() {
+        return 0;
+    }
+    dk_service_declare_patch(ctx, site, patch.value, patch.len)
 }
 
 /// The `[digikit] id` of the running device (`dkc_device_id`): what `service!` passes to `declare`.

@@ -232,8 +232,13 @@ fn an_lfo_hook_fired_in_an_interrupt_never_enters_the_owner() {
     };
     let refused = || DK_SVC_OWNER.refused();
     let phase = 0x4000_0000;
-    let fired = HookContext::Interrupt.fire(&hold, &refused, &mut || file::hooks::dk_lfo_eval(phase, 7));
-    assert_eq!(fired.result, dkrt_svc_lfo::shapes::eval(7, phase), "the table answers while the owner is busy");
+    let fired =
+        HookContext::Interrupt.fire(&hold, &refused, &mut || file::hooks::dk_lfo_eval(phase, 7));
+    assert_eq!(
+        fired.result,
+        dkrt_svc_lfo::shapes::eval(7, phase),
+        "the table answers while the owner is busy"
+    );
     assert_eq!(fired.refused, 0, "the hook did not enter the owner");
     file::dk_svc_stop();
 }
@@ -249,7 +254,9 @@ fn an_lfo_page_hook_fired_inside_a_part_call_never_enters_the_owner() {
     };
     let refused = || DK_SVC_OWNER.refused();
     let mut buf = [0u8; 8];
-    let fired = HookContext::InPartCall.fire(&hold, &refused, &mut || unsafe { file::hooks::dk_lfo_name(7 << 8, buf.as_mut_ptr(), 7) });
+    let fired = HookContext::InPartCall.fire(&hold, &refused, &mut || unsafe {
+        file::hooks::dk_lfo_name(7 << 8, buf.as_mut_ptr(), 7)
+    });
     assert_eq!(fired.result, 0, "no shape is loaded for wave 7");
     assert_eq!(fired.refused, 0, "the hook did not enter the owner");
     file::dk_svc_stop();

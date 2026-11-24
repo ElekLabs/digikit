@@ -1158,6 +1158,37 @@ mod tests {
         assert!(!hook_for_device(entry | 2 << HOOK_DEVICES_SHIFT, 9));
     }
 
+    #[test]
+    fn a_hooks_entry_is_a_patch_by_its_low_24_bits_whatever_the_device_mask() {
+        assert!(hook_is_patch(HOOK_ENTRY_PATCH));
+        assert!(hook_is_patch(HOOK_ENTRY_PATCH | 2 << HOOK_DEVICES_SHIFT));
+        assert!(
+            hook_for_device(HOOK_ENTRY_PATCH | 2 << HOOK_DEVICES_SHIFT, 2)
+                && !hook_for_device(HOOK_ENTRY_PATCH | 2 << HOOK_DEVICES_SHIFT, 1)
+        );
+        assert!(
+            !hook_is_patch(0)
+                && !hook_is_patch(0x1234)
+                && !hook_is_patch(HOOK_ENTRY_PATCH - 1 | 1 << HOOK_DEVICES_SHIFT)
+        );
+        // a patch item survives the table like a hook item
+        let hooks = [
+            Pair {
+                a: 7,
+                b: HOOK_ENTRY_PATCH,
+            },
+            Pair { a: 9, b: 0x40 },
+        ];
+        let t = Table {
+            hooks: &hooks,
+            ..Table::default()
+        };
+        let mut out = vec![0u8; table_size(&t)];
+        write_table(&t, &mut out).unwrap();
+        let k = Keys::parse(&out).unwrap();
+        assert!(k.hooks().eq(hooks.iter().copied()));
+    }
+
     fn table_with(groups: &[(u32, &[u32])]) -> Vec<u8> {
         let kg: Vec<KeyGroup> = groups
             .iter()

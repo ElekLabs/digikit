@@ -40,6 +40,10 @@ A raw hook (mode `replace`, no `handler`) may name the places a service leaves i
 (anchor names with an optional offset, evaluated on the port of the bound firmware; the first is exit 1). A service reaches them with the imports
 `dk_tail_<hook>` and `dk_exit_<hook>_<n>` (n = 0 is the end of the site); see "Firmware references" in docs/PATCHING.md.
 
+A raw hook (mode `replace`, no handler, no `tail`, `stock` or `exits`) may instead be a patch site: `patch = 2` (1, 2 or 4) with the `site` and `offset` of plain bytes, for example the operand
+of an instruction or a table word. The port file lists it as kind `patch` with that length and the check value of the stock bytes; no jump is written there. A service takes it with
+`[[patch]]` and gives the bytes in `init` (see "Patches" in [docs/PATCHING.md](../../docs/PATCHING.md)). The anchor of the `site` must cover the bytes (`offset + patch` within its `len`).
+
 `declare` prints a `mark = "O"` entry (a shared rule, or one rule per device) and with `--write` adds it to the
 subsystem file in name order. Review the entry and raise the mark after a check against image bytes.
 
