@@ -13,6 +13,8 @@ src/build/        the builder calls (`Builder`: the collection and its gate) and
 src/slots.rs      the page's click state (`Slots`), with `slots/` the detector and the action lookup
 src/parking.rs    the parking passes of absent numbers (`Parking`)
 src/info.rs       the image table `machines_info`: layout, binding into `DKRT_MF_TAB`
+src/list.rs       the machine list the firmware's list builder copies and the rank pairs of the sort comparator, built in `start` from the stock order and the rows' positions; the owner
+                  gives the four list patches their bytes (`list_bytes`, `list_end`, `list_start`)
 dks/              the service file: `lib.rs` (the `service!` call), `hooks.rs` and `hooks-*.s` (the machine framework's hooks), `fw.rs` (the firmware calls, the page's key and turn
                   entries, `dk_param_get`, `dk_param_set`), `builder.rs` (the builder exports, which reach the owner), `gen_exports.rs` (generated)
 tests/            host tests over `FakeCore`: `state.rs` (the owner), `records.rs`, `build.rs`, `assign.rs`, `guard.rs`, `file.rs` (the file's code over the cell), `contract.rs` (the
@@ -30,6 +32,7 @@ lives). Four tables stay named statics of the crate (D7 of the RC3 briefs), each
 | `DKRT_GUARD` (`guard.rs`) | the MODULES reply (`Describe`), on another task than the poll that writes it |
 | `DKRT_MF_TAB` (`info.rs`) | the assembler hooks (`T_*` offsets of `hooks-*.s`) |
 | `MACH_OWNER` (`registry.rs`, a `Shared<[u8; MAX_MACH]>`) | `Describe` on the MODULES task, and the owner (`attach`, `detach`, the parking pass, the load check) |
+| `DKRT_MF_LIST`, `DKRT_MF_RANK`, `DKRT_MF_RANKN` (`list.rs`) | the list builder's patched operands (addresses), and the rank hook `mf_rank` (`hooks-dt2.s`) |
 
 `Describe::describe` (`modules::describe`) gives the five words of the MODULES reply for a module record: the voice rows it owns (mask); the guard's fault count; `nt` with the guard-off flag in bit 8;
 the types 0 to 3 and 4 to 7 (one byte each, type `i` in byte `i % 4`). It has no object and never enters the owner (`Describe::describe` has no `&self`): the command handler may ask while the UI task is

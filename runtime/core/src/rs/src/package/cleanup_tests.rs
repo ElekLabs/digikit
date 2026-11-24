@@ -123,6 +123,18 @@ impl Drop for DynregInfoGuard {
     }
 }
 
+/// Runs `body` with no `dynreg_info` table: a host has no machine selection view, and the table's view variable is a firmware address that no host space maps (the machines file's
+/// `stop` reads it).
+pub(crate) fn without_dynreg_info<R>(body: impl FnOnce() -> R) -> R {
+    unsafe {
+        let saved = DYNREG_INFO_OVERRIDE;
+        DYNREG_INFO_OVERRIDE = core::ptr::null();
+        let r = body();
+        DYNREG_INFO_OVERRIDE = saved;
+        r
+    }
+}
+
 pub fn voice_info() -> *const u32 {
     unsafe {
         if VOICE_INFO_OVERRIDE.is_null() {

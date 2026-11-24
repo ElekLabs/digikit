@@ -19,6 +19,9 @@ fn table(device: u32) -> Vec<u32> {
     t[w::DEVICE] = device;
     t[w::ENSURE] = 0x4000_1000;
     t[w::ROWS] = 0x4200_0000;
+    t[w::LIST_STOCK] = 0x4700_0000;
+    t[w::ROW_SIZE] = 64;
+    t[w::O_POS] = 48;
     t[w::FIRST] = 7;
     t[w::N_CODE] = 0x4000_2000;
     t
@@ -99,4 +102,35 @@ fn start_in_makes_the_state_where_it_lives_over_whatever_the_slot_held() {
     // SAFETY: `start_in` made the state in place
     let m = unsafe { slot.assume_init_mut() };
     assert_initial(m);
+}
+
+/// The four list patches get 4 bytes per listed type (a gap row is not listed) and the addresses of the service's list buffer, and `start` leaves the buffer holding the order.
+#[test]
+fn start_builds_the_list_and_gives_the_patches_their_bytes() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let mut t = table(1);
+    t[w::COUNT] = 3;
+    t[w::ENTRIES] = 2;
+    t[w::LIST_STOCK] = 0x4700_0000;
+    t[w::ROW_SIZE] = 64;
+    t[w::O_POS] = 48;
+    let core = core_with(Some(t), 1);
+    // seven stock types in order 0 .. 6; the rows: position 2, a gap row, the end
+    for i in 0..7u32 {
+        core.mem.borrow_mut().insert(0x4700_0000 + 4 * i, i);
+    }
+    for (k, p) in [2u32, 0xffff_ffff, 255].iter().enumerate() {
+        core.mem
+            .borrow_mut()
+            .insert(0x4200_0000 + 64 * k as u32 + 48, *p);
+    }
+    let m = <Machines as Provider<FakeCore>>::start(&core).unwrap();
+    assert_eq!(
+        m.list_bytes(),
+        9 * 4,
+        "seven stock types and two listed rows"
+    );
+    assert_eq!(m.list_end(), m.list_start() + 9 * 4);
+    let list = unsafe { *core::ptr::addr_of!(dkrt_svc_machines::list::DKRT_MF_LIST) };
+    assert_eq!(&list[..9], [0, 1, 7, 2, 3, 4, 5, 6, 9]);
 }

@@ -4549,12 +4549,6 @@ mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
 
 [[hook]]
-name = "cf.machine.hook.list.entry"
-site = "cf.machine.fn.list.entry"
-mode = "before"
-clobbers = ["ccr"]
-
-[[hook]]
 name = "cf.machine.hook.owner_type_load"
 site = "cf.machine.site.owner_type_load"
 mode = "replace"
@@ -4571,6 +4565,42 @@ clobbers = ["d0", "a1", "ccr"]
 len = 8
 kind = "tail"
 check = "19faeb268555c5f5"
+
+[[hook]]
+name = "cf.machine.hook.patch_list_alloc"
+site = "cf.machine.site.list.alloc"
+offset = 2
+mode = "replace"
+len = 2
+kind = "patch"
+check = "f431a7f47862c05a"
+
+[[hook]]
+name = "cf.machine.hook.patch_list_buffer"
+site = "cf.machine.site.list.operands"
+offset = 0xc
+mode = "replace"
+len = 4
+kind = "patch"
+check = "82bd30b08b6a2be1"
+
+[[hook]]
+name = "cf.machine.hook.patch_list_buffer_end"
+site = "cf.machine.site.list.operands"
+offset = 2
+mode = "replace"
+len = 4
+kind = "patch"
+check = "d74739428e9a8740"
+
+[[hook]]
+name = "cf.machine.hook.patch_list_vector_end"
+site = "cf.machine.site.list.operands"
+offset = 8
+mode = "replace"
+len = 2
+kind = "patch"
+check = "f431a7f47862c05a"
 
 [[hook]]
 name = "cf.machine.hook.type_page.count"

@@ -203,15 +203,13 @@ fn the_image_keeps_only_the_machine_hooks_that_stay_in_it() {
             .iter()
             .map(|h| h["anchor"].as_str().unwrap().to_string())
             .collect();
-        // the image keeps the dispatch hook, the list entry and the frame type stub; the other hooks are the machines service file's (R12-6)
-        for h in [
-            "cf.machine.fn.dispatch",
-            "cf.machine.fn.list.entry",
-            "cf.machine.site.frametype",
-        ] {
+        // the image keeps the dispatch hook; the other hooks (the list and rank, the frame type among them) are the machines service file's (R12-6, RC4-3)
+        for h in ["cf.machine.fn.dispatch"] {
             assert!(hooks.iter().any(|x| x == h), "{file}: no hook on {h}");
         }
         for h in [
+            "cf.machine.fn.list.entry",
+            "cf.machine.site.frametype",
             "cf.machine.site.group",
             "cf.machine.site.type_reader.load",
             "cf.machine.site.owner_type_load",

@@ -190,7 +190,7 @@ cpu = "cf"
 rule.dt2 = { kind = "cf_func", hash = "7c680e4200eed1964a22109ee2d43932", offset = 0x24, len = 4 }
 rule.dn2 = { kind = "cf_func", hash = "69828342bcd67f7587f7d51d4c4a6575", offset = 0x2a, len = 4 }
 mark = "D"
-users = ["core/machines"]
+users = ["core/services/machines"]
 doc = "The list builder's `pea 0x1c.w` (4 bytes), the list buffer size for seven types; core/machines raises it to 4 bytes per type when types are added."
 
 [[site]]
@@ -210,7 +210,7 @@ cpu = "cf"
 rule.dt2 = { kind = "cf_func", hash = "7c680e4200eed1964a22109ee2d43932", offset = 0x44, len = 16 }
 rule.dn2 = { kind = "cf_func", hash = "69828342bcd67f7587f7d51d4c4a6575", offset = 0x4a, len = 16 }
 mark = "D"
-users = ["core/machines"]
+users = ["core/services/machines"]
 doc = "16 bytes in the machine list builder that hold the vector start and end sizes and the list buffer address; core/machines rewrites them so the builder copies its list with the added types."
 
 [[site]]
@@ -220,7 +220,7 @@ cpu = "cf"
 devices = ["dt2"]
 rule = { kind = "cf_func", hash = "50c665290477cfa36d46f17239fff705", offset = 0xae, len = 6 }
 mark = "D"
-users = ["core/machines"]
+users = ["core/services/machines"]
 doc = "The `jsr` of the std::map insert in the machine sort comparator's initialiser; the hook gives the insert the (type, position) pairs of the rank buffer."
 
 [[site]]
@@ -520,25 +520,15 @@ users = ["core/dynreg"]
 doc = "Entry of the machine selection view's item builder (view at 4(sp)); the hook remembers the view for a reload's list rebuild."
 
 [[hook]]
-name = "cf.machine.hook.list.entry"
-site = "cf.machine.fn.list.entry"
-cpu = "cf"
-mode = "before"
-regs = { in = [], clobbers = ["ccr"] }
-devices = ["dt2", "dn2"]
-mark = "D"
-users = ["core/machines"]
-doc = "Entry of the machine list builder; the hook builds the registry tables before the builder reads its list buffer."
-
-[[hook]]
 name = "cf.machine.hook.list_rank_insert"
 site = "cf.machine.site.list_rank_insert"
 cpu = "cf"
-mode = "before"
+mode = "replace"
+tail = true
 regs = { in = [], clobbers = ["d0", "ccr"] }   # stack: 0 map, 4 begin, 8 end; the hook rewrites 4(sp) and 8(sp)
 devices = ["dt2"]
 mark = "D"
-users = ["core/machines"]
+users = ["core/services/machines"]
 doc = "The jsr of the sort comparator's std::map insert (stack: map, begin, end; d0 free); the hook swaps begin/end for the (type, position) pairs."
 
 [[hook]]
@@ -683,3 +673,57 @@ devices = ["dn2"]
 mark = "D"
 users = ["core/dynreg"]
 doc = "The getter's `jsr (A3); move.l D0,(4,A2)` (6 bytes; a2 = the vector being returned); both are replaced by a routine that copies without unfilled reserved machine types."
+
+# The four patches of the machine list builder (RC4-3): the machines service writes them at load and the loader restores the stock bytes before it stops. The builder copies a vector of
+# types into a buffer; the service builds the list (`services/machines/src/list.rs`) and points the builder at it. Sizes are in bytes, 4 per listed type.
+[[hook]]
+name = "cf.machine.hook.patch_list_alloc"
+site = "cf.machine.site.list.alloc"
+offset = 2
+cpu = "cf"
+mode = "replace"
+patch = 2
+regs = { in = [], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/machines"]
+doc = "Patch: the operand word of the list builder's `pea 0x1c.w`, the allocation size of the list buffer: 4 bytes per listed type."
+
+[[hook]]
+name = "cf.machine.hook.patch_list_vector_end"
+site = "cf.machine.site.list.operands"
+offset = 8
+cpu = "cf"
+mode = "replace"
+patch = 2
+regs = { in = [], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/machines"]
+doc = "Patch: the size operand word in the list builder that sets the end of the vector it fills: 4 bytes per listed type."
+
+[[hook]]
+name = "cf.machine.hook.patch_list_buffer_end"
+site = "cf.machine.site.list.operands"
+offset = 2
+cpu = "cf"
+mode = "replace"
+patch = 4
+regs = { in = [], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/machines"]
+doc = "Patch: the address operand in the list builder of the end of the buffer it copies from: the service's list buffer plus 4 bytes per listed type."
+
+[[hook]]
+name = "cf.machine.hook.patch_list_buffer"
+site = "cf.machine.site.list.operands"
+offset = 0xc
+cpu = "cf"
+mode = "replace"
+patch = 4
+regs = { in = [], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["core/services/machines"]
+doc = "Patch: the address operand in the list builder of the start of the buffer it copies from: the service's list buffer."

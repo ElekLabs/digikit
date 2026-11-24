@@ -38,6 +38,7 @@ entries! {
     mf_clone5,
     mf_typearg,
     mf_srcpage,
+    mf_rank,
     // Digitone II
     mf_group,
     mf_typemap0,

@@ -10,10 +10,11 @@ use dkrt_sdk::{E_NO_REGISTRY, OK};
 
 /// `MACH`.
 pub const MAGIC: u32 = 0x4d41_4348;
-/// Version 3: the adapter's native page register, remove and turn functions are words of the table (version 2: the firmware addresses left it).
-pub const VERSION: u32 = 3;
+/// Version 4: the stock list order, the row size and the offset of `position` (the service builds the machine list and the rank pairs); version 3: the adapter's native page register,
+/// remove and turn functions are words of the table (version 2: the firmware addresses left it).
+pub const VERSION: u32 = 4;
 /// Words of the table.
-pub const WORDS: usize = 20;
+pub const WORDS: usize = 23;
 
 /// Word indexes of the table (byte offset = 4 * index; `hooks-dt2.s` and `hooks-dn2.s` name the byte offsets `T_*`, and a test compares them). The hooks leave through the
 /// imports the port file resolves, so the table has no word for a firmware address.
@@ -45,6 +46,11 @@ pub mod w {
     pub const N_REGISTER_V2: usize = 17;
     pub const N_REMOVE: usize = 18;
     pub const N_TURN: usize = 19;
+    /// The stock display order of the machine list: `first` words, one type each.
+    pub const LIST_STOCK: usize = 20;
+    /// Bytes of a registry row, and the offset of `position` in it.
+    pub const ROW_SIZE: usize = 21;
+    pub const O_POS: usize = 22;
 }
 
 /// The byte offsets the assembler files name (`.equ T_NAME, offset`), for the test that compares them with `w`.
@@ -107,4 +113,22 @@ pub unsafe fn bind_table<C: CoreApi>(core: &C, dst: *mut u32) -> i32 {
     }
     write_volatile(dst, MAGIC);
     OK
+}
+
+/// Build the machine list and the rank pairs (`list`) from the bound table and the stock order in the image. `None` when the table has no stock list or the registry does not fit.
+///
+/// # Safety
+/// `bind` has run: `DKRT_MF_TAB` holds the image table.
+pub unsafe fn build_list<C: CoreApi>(core: &C) -> Option<usize> {
+    let t = core::ptr::addr_of!(DKRT_MF_TAB) as *const u32;
+    let word = |i: usize| read_volatile(t.add(i));
+    crate::list::from_image(
+        core,
+        word(w::LIST_STOCK),
+        word(w::FIRST),
+        word(w::COUNT),
+        word(w::ROWS),
+        word(w::ROW_SIZE),
+        word(w::O_POS),
+    )
 }

@@ -11,9 +11,7 @@
 | code). A routine may use only the registers its site frees (stated per routine); everything else it saves.
 | Registers named in a comment as "free" are scratch at that point of the stock code (read from the disassembly).
 |
-| Lazily built tables (mf_ensure, once, the first time a routine needs them): the displayed order of the machine
-| list (stock order with every entry inserted at its `position`; gap rows, position -1, are not listed), the rank pairs the sort comparator's std::map
-| takes, and the std::string representations the dispatch descriptors point to (upper-cased name and short name).
+| Lazily built table (mf_ensure, once, the first time a routine needs it): the std::string representations the dispatch descriptors point to (upper-cased name and short name).
 
     .text
 
@@ -36,49 +34,6 @@ mf_ensure:
     bne.w   9f
     lea     -60(%sp),%sp
     movem.l %d0-%d7/%a0-%a6,(%sp)
-    | list: the stock order, then each entry inserted at min(position, length)
-    lea     mf_list_buf,%a0
-    lea     _mf_list_stock,%a1
-    move.l  #_mf_first,%d2
-    move.l  %d2,%d3                 | d3 = length
-1:  move.l  (%a1)+,(%a0)+
-    subq.l  #1,%d2
-    bne.s   1b
-    lea     _mf_rows,%a2
-    move.l  #_mf_count,%d4
-    move.l  #_mf_first,%d5          | d5 = the type of entry k
-    tst.l   %d4
-    beq.s   5f
-2:  move.l  O_POS(%a2),%d0
-    addq.l  #1,%d0
-    beq.s   20f                     | position -1: a gap row (a number nobody selected): not listed
-    subq.l  #1,%d0
-    cmp.l   %d3,%d0
-    bls.s   3f
-    move.l  %d3,%d0
-3:  lea     mf_list_buf,%a0
-    move.l  %d3,%d1
-4:  cmp.l   %d0,%d1                 | shift the entries from position up by one
-    bls.s   6f
-    move.l  -4(%a0,%d1.l*4),%d6
-    move.l  %d6,(%a0,%d1.l*4)
-    subq.l  #1,%d1
-    bra.s   4b
-6:  move.l  %d5,(%a0,%d0.l*4)
-    addq.l  #1,%d3
-20: addq.l  #1,%d5
-    lea     ROWSIZE(%a2),%a2
-    subq.l  #1,%d4
-    bne.s   2b
-5:  | rank pairs {type, display position}
-    lea     mf_list_buf,%a0
-    lea     mf_rank_buf,%a1
-    moveq   #0,%d0
-7:  move.l  (%a0)+,(%a1)+
-    move.l  %d0,(%a1)+
-    addq.l  #1,%d0
-    cmp.l   %d3,%d0
-    bcs.s   7b
     | descriptors: std::string representations of the upper-cased names
     lea     _mf_rows,%a2
     lea     mf_strbuf,%a3
@@ -143,27 +98,6 @@ mf_dispatch:
     rts
 1:  jmp     _mf_t_dispatch
 
-| ---- list builder entry: make sure the tables exist before the builder reads mf_list_buf (the builder's literals
-| point there). Site: function entry; every register is preserved.
-    .globl mf_list_entry
-mf_list_entry:
-    bsr.w   mf_ensure
-    jmp     _mf_t_list
-
-| ---- rank: the std::map insert gets the (type, position) pairs of mf_rank_buf instead of the caller's array.
-| Site: the `jsr` of the insert; stack: 0 map, 4 begin, 8 end. d0 free.
-    .globl mf_rank
-mf_rank:
-    bsr.w   mf_ensure
-    move.l  #mf_rank_buf,%d0
-    move.l  %d0,4(%sp)
-    move.l  #_mf_first,%d0
-    addi.l  #_mf_entries,%d0        | the listed machines (gap rows are not in mf_rank_buf)
-    lsl.l   #3,%d0
-    addi.l  #mf_rank_buf,%d0
-    move.l  %d0,8(%sp)
-    jmp     _mf_t_rank
-
 | descriptor field offset of mirror index 25 .. 34 (-1: none)
     .section .rodata
     .balign 4
@@ -173,10 +107,7 @@ mf_slotmap:
 
     .bss
     .balign 4
-    .globl mf_list_buf, mf_rank_buf
 mf_ready:    .space 4
-mf_list_buf: .space 4 * 64
-mf_rank_buf: .space 8 * 64
 mf_strbuf:   .space REPSIZE * 2 * MAXN
 
     .text
@@ -191,9 +122,10 @@ mf_native_type:
     .balign 4
     .globl machines_info
 machines_info:
-    .long   0x4d414348, 3, 1                | magic MACH, version, device
+    .long   0x4d414348, 4, 1                | magic MACH, version, device
     .long   _mf_first, _mf_count, _mf_entries, _mf_rows
     .long   mf_ensure
     .long   mf_native_page_count, mf_native_descriptor, mf_native_code, mf_native_draw, mf_native_overlay
     .long   mf_slotmap, 0, 0                | the slot map, (page rows, page count: Digitone II)
     .long   mf_native_register, mf_native_register_v2, mf_native_remove, mf_native_turn | the native page calls of the registry
+    .long   _mf_list_stock, ROWSIZE, O_POS  | version 4: the stock list order (the service builds the list and the rank pairs), the row size and the offset of `position`

@@ -235,7 +235,7 @@ mfn_pg_slot:
 
 | ---- frame type: the frame builder (the vector-191 handler) writes the track's machine type into TX frame word 0x94 + 2t. The DSP's FM engine knows five types; a type above
 | 4 is treated like MIDI (nothing rendered), so an added type is sent as its clone_of unless the entry has own_dsp (a registered voice routine renders it). Site (6 bytes):
-| `move.b (0xd8c,A0),D0b; ext.w D0w`, a0 = the track; d0 is the result. An interrupt site: the image stub of the slot `frametype` enters here with a1 = this address (a1 and d0
+| `move.b (0xd8c,A0),D0b; ext.w D0w`, a0 = the track; d0 is the result. An interrupt site: the installer's jump enters here (a1 and d0
 | are free). The routine runs at the interrupt's priority: no call, no wait.
     .globl mf_frametype
 mf_frametype:

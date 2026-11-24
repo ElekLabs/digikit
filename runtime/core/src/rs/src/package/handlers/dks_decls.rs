@@ -55,7 +55,8 @@ pub fn machines_start() -> *mut u8 {
 
 /// What the machines file's `fini` does: the owner is dropped (nothing when there is none).
 pub fn machines_stop() {
-    dkrt_svc_machines_dks::dk_svc_stop()
+    // `stop` builds the machine selection view's list again: a host has no view
+    crate::package::cleanup_tests::without_dynreg_info(|| dkrt_svc_machines_dks::dk_svc_stop())
 }
 
 /// The row of the machines file as a loaded service file has it, over its owner (started when no one is).

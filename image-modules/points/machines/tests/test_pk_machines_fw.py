@@ -3,8 +3,6 @@
 
 Skips when the m68k toolchain or the DT2 1.17 image is absent."""
 
-import sys
-
 import pytest
 from support.paths import REPO_ROOT
 from support.words import be32
@@ -33,8 +31,7 @@ TYPEARG_EXIT = "mf_x_typearg"
 
 STUBS = [
     "_mf_t_dispatch",
-    "_mf_t_list",
-    "_mf_t_rank",
+    "mf_x_rank",
     "dk_tail_09514a38",
     "mf_x_typearg",
     "mf_x_c5_ne",
@@ -113,25 +110,18 @@ def unit():
             "_mf_list_stock": STOCK_LIST,
             "_mf_spt": TYPE_FN,
             "mf_spt": TYPE_FN,
+            "DKRT_MF_RANK": RANK,
+            "DKRT_MF_RANKN": RANKN,
             # symbols of the info table of the image (not read by these tests)
         },
         [
             "mf_srcpage",
             "mf_dispatch",
-            "mf_list_entry",
             "mf_rank",
             "mf_typearg",
             "mf_clone5",
         ],
     )
-
-
-def model_order():
-    order = list(STOCK)
-    for k, e in enumerate(ENTRIES):
-        pos = min(e["position"], len(order))
-        order.insert(pos, FIRST + k)
-    return order
 
 
 def test_all_instructions_decode_and_use_no_privileged_forms(unit):
@@ -187,100 +177,19 @@ def test_descriptor_strings_are_std_string_representations(unit):
         assert blob[12 : 12 + len(text) + 1] == text.encode() + b"\0"
 
 
-def test_list_and_rank_tables(unit):
+RANK = 0x47EC5000  # DKRT_MF_RANK: the pairs the machines service built in `start` (services/machines/src/list.rs; its host tests own the order)
+RANKN = 0x47EC5800  # DKRT_MF_RANKN
+
+
+def test_rank_hook_gives_the_insert_the_pairs_of_the_service(unit):
     mem = tables()
+    mem[RANKN] = be32(9)
     res = unit.run_cases(
-        mem,
-        [
-            {"routine": "mf_list_entry"},
-            {
-                "routine": "mf_rank",
-                "stack": [0x1111, 0x2222, 0x3333],
-            },
-            {"routine": "mf_dispatch", "stack": [unit.rts, FIRST]},
-        ],
-    )
-    assert res[0].stub == "_mf_t_list"
-    assert res[1].stub == "_mf_t_rank"
-    order = model_order()
-    total = FIRST + COUNT
-    assert len(order) == total
-    begin, end = res[1].stack[1], res[1].stack[2]
-    assert res[1].stack[0] == 0x1111  # the map argument is untouched
-    assert end - begin == 8 * total
-    # read the tables back with a second pass over the same image
-    got = unit.run_cases(
-        mem,
-        [
-            {"routine": "mf_list_entry", "reads": []},
-            {
-                "routine": "mf_rank",
-                "stack": [0, 0, 0],
-                "reads": [(begin, 8 * total)],
-            },
-        ],
-    )[1]
-    pairs = got.reads[0]
-    for i, t in enumerate(order):
-        assert pairs[8 * i : 8 * i + 4] == be32(t) and pairs[
-            8 * i + 4 : 8 * i + 8
-        ] == be32(i)
-
-
-GAP = row("", "", [0] * 8 + [0x0A], 0, 0xFFFFFFFF)
-
-
-@pytest.fixture(scope="module")
-def gap_unit():
-    # rows: XSlice (7), a gap (8: nobody selected it), Pluck (9)
-    return pk_cfunit.CfUnit(
-        SYX,
-        [SRC, ROOT / "tests/fixtures/native-page-absent.s"],
-        STUBS,
-        {
-            "_mf_first": FIRST,
-            "_mf_count": 3,
-            "_mf_entries": 2,
-            "_mf_rows": ROWS,
-            "_mf_list_stock": STOCK_LIST,
-            "_mf_spt": TYPE_FN,
-            "mf_spt": TYPE_FN,
-        },
-        ["mf_list_entry", "mf_rank"],
-    )
-
-
-def test_a_gap_row_is_neither_listed_nor_ranked(gap_unit, monkeypatch):
-    monkeypatch.setattr(sys.modules[__name__], "ENTRIES", [ENTRIES[0], GAP, ENTRIES[1]])
-    mem = tables()
-    res = gap_unit.run_cases(
-        mem,
-        [
-            {"routine": "mf_rank", "stack": [0x1111, 0x2222, 0x3333]},
-        ],
+        mem, [{"routine": "mf_rank", "stack": [0x1111, 0x2222, 0x3333]}]
     )[0]
-    assert res.stub == "_mf_t_rank"
-    begin, end = res.stack[1], res.stack[2]
-    assert end - begin == 8 * (FIRST + 2), "the pairs cover the listed machines only"
-    # XSlice at position 7 (the end), Pluck at 2: the gap type 8 appears nowhere
-    expect = list(STOCK)
-    expect.insert(min(7, len(expect)), FIRST)
-    expect.insert(2, FIRST + 2)
-    got = gap_unit.run_cases(
-        mem,
-        [
-            {
-                "routine": "mf_rank",
-                "stack": [0, 0, 0],
-                "reads": [(begin, 8 * len(expect))],
-            },
-        ],
-    )[0]
-    pairs = got.reads[0]
-    assert [
-        int.from_bytes(pairs[8 * i : 8 * i + 4], "big") for i in range(len(expect))
-    ] == expect
-    assert FIRST + 1 not in expect
+    assert res.stub == "mf_x_rank"
+    # the map argument is untouched; begin and end cover the 9 pairs of 8 bytes
+    assert res.stack[:3] == [0x1111, RANK, RANK + 8 * 9]
 
 
 def test_masked_clone_test_maps_added_types_to_their_clone(unit):

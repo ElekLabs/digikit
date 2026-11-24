@@ -11,6 +11,9 @@ fn table(device: u32) -> Vec<u32> {
     t[w::DEVICE] = device;
     t[w::ENSURE] = 0x4000_1000;
     t[w::ROWS] = 0x4200_0000;
+    t[w::LIST_STOCK] = 0x4700_0000;
+    t[w::ROW_SIZE] = 64;
+    t[w::O_POS] = 48;
     t[w::FIRST] = 7;
     t[w::COUNT] = 3;
     t[w::N_CODE] = 0x4000_2000;

@@ -29,6 +29,8 @@ pub struct Machines {
     clicks: Slots,
     parking: Parking,
     applied: Applied,
+    /// The types in the machine list `start` built (`list`).
+    listed: u32,
 }
 
 impl Machines {
@@ -41,6 +43,7 @@ impl Machines {
             clicks: Slots::new(),
             parking: Parking::new(),
             applied: Applied::new(),
+            listed: 0,
         }
     }
 
@@ -128,6 +131,21 @@ impl Machines {
             .native_page(core, kind, body, consumer, self.builder.args())
     }
 
+    /// The list builder's buffer size in bytes, 4 per listed type: the bytes of the patches `list_alloc` and `list_vector_end`.
+    pub fn list_bytes(&self) -> u32 {
+        self.listed * 4
+    }
+
+    /// The address of the end of the list buffer: the bytes of the patch `list_buffer_end`.
+    pub fn list_end(&self) -> u32 {
+        crate::list::list_address() + self.list_bytes()
+    }
+
+    /// The address of the list buffer: the bytes of the patch `list_buffer`.
+    pub fn list_start(&self) -> u32 {
+        crate::list::list_address()
+    }
+
     /// What `attach` handed to the per-record `apply` (read only).
     pub fn applied(&self) -> &Applied {
         &self.applied
@@ -155,7 +173,9 @@ impl<C: CoreApi> Provider<C> for Machines {
     fn start(core: &C) -> Result<Machines, Status> {
         // SAFETY: `DKRT_MF_TAB` is this crate's table; nothing reads it before the hooks are declared
         status(unsafe { info::bind(core) })?;
-        Ok(Machines::new())
+        let mut m = Machines::new();
+        m.listed = unsafe { info::build_list(core) }.ok_or(E_NO_REGISTRY)? as u32;
+        Ok(m)
     }
 
     /// The state is made where it lives: all-zero bytes are valid for every field, and the gate is closed after (`Builder::init`) and the click state is written to its start
@@ -163,12 +183,14 @@ impl<C: CoreApi> Provider<C> for Machines {
     fn start_in(core: &C, slot: &mut MaybeUninit<Machines>) -> Result<(), Status> {
         // SAFETY: as in `start`
         status(unsafe { info::bind(core) })?;
+        let listed = unsafe { info::build_list(core) }.ok_or(E_NO_REGISTRY)? as u32;
         let at = slot.as_mut_ptr();
         // SAFETY: every field of `Machines` is valid as zero bytes (integers, `None`, closed flags) once `init` has written the words that are not zero
         unsafe {
             at.write_bytes(0, 1);
             Builder::init(core::ptr::addr_of_mut!((*at).builder));
             core::ptr::addr_of_mut!((*at).clicks).write(Slots::new());
+            (*at).listed = listed;
         }
         Ok(())
     }
@@ -215,6 +237,13 @@ impl<C: CoreApi> Provider<C> for Machines {
                 &mut self.clicks,
             )
         }
+    }
+
+    /// The loader has put the firmware's sites back (the list patches and the rank hook restored) before `stop`: the machine selection view still caches the list it built with
+    /// the patched list builder, so it is built again from the stock one. Nothing to do while the view does not exist.
+    fn stop(&mut self, core: &C) {
+        // SAFETY: `refresh_view` reads the image's tables through the core and calls the firmware's builder
+        unsafe { selection_view::refresh_view(core) }
     }
 
     fn settle(&mut self, core: &C, s: &SettleCtx) {

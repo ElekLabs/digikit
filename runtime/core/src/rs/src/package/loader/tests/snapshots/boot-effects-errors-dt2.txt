@@ -6,9 +6,9 @@
 == boot with a damaged module and a damaged service
 loaded modules 1
 installer calls
-  flush freed:blk1+0 188
-  flush freed:blk1+0 188
-  flush freed:blk1+4 184
+  flush freed:blk1+0 200
+  flush freed:blk1+0 200
+  flush freed:blk1+4 196
   flush freed:blk4+0 23138
   flush freed:blk4+0 23138
   mask

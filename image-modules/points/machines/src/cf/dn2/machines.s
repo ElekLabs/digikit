@@ -11,8 +11,7 @@
 | code). A routine may use only the registers its site frees (stated per routine); everything else it saves.
 | Registers named in a comment as "free" are scratch at that point of the stock code (read from the disassembly).
 |
-| Lazily built tables (mf_ensure, once, the first time a routine needs them): the displayed order of the machine
-| list (stock order with every entry inserted at its `position`; gap rows, position -1, are not listed) and the std::string representations the dispatch
+| Lazily built table (mf_ensure, once, the first time a routine needs it): the std::string representations the dispatch
 | descriptors point to (upper-cased name and short name). The Digitone II has no sort comparator, per-type byte
 | table, clone tests, parameter type argument or DSP selector table; it has the type maps, the frame type and the
 | type reader instead (finding 02, "core.machines on Digitone II 1.12").
@@ -48,41 +47,7 @@ mf_ensure:
     bne.w   9f
     lea     -60(%sp),%sp
     movem.l %d0-%d7/%a0-%a6,(%sp)
-    | list: the stock order, then each entry inserted at min(position, length)
-    lea     mf_list_buf,%a0
-    lea     _mf_list_stock,%a1
-    move.l  #_mf_first,%d2
-    move.l  %d2,%d3                 | d3 = length
-1:  move.l  (%a1)+,(%a0)+
-    subq.l  #1,%d2
-    bne.s   1b
-    lea     _mf_rows,%a2
-    move.l  #_mf_count,%d4
-    move.l  #_mf_first,%d5          | d5 = the type of entry k
-    tst.l   %d4
-    beq.s   5f
-2:  move.l  O_POS(%a2),%d0
-    addq.l  #1,%d0
-    beq.s   20f                     | position -1: a gap row (a number nobody selected): not listed
-    subq.l  #1,%d0
-    cmp.l   %d3,%d0
-    bls.s   3f
-    move.l  %d3,%d0
-3:  lea     mf_list_buf,%a0
-    move.l  %d3,%d1
-4:  cmp.l   %d0,%d1                 | shift the entries from position up by one
-    bls.s   6f
-    move.l  -4(%a0,%d1.l*4),%d6
-    move.l  %d6,(%a0,%d1.l*4)
-    subq.l  #1,%d1
-    bra.s   4b
-6:  move.l  %d5,(%a0,%d0.l*4)
-    addq.l  #1,%d3
-20: addq.l  #1,%d5
-    lea     ROWSIZE(%a2),%a2
-    subq.l  #1,%d4
-    bne.s   2b
-5:    | descriptors: std::string representations of the upper-cased names
+    | descriptors: std::string representations of the upper-cased names
     moveq   #1,%d6
     lea     _mf_rows,%a2
     lea     mf_strbuf,%a3
@@ -165,14 +130,6 @@ mf_dispatch:
     rts
 1:  jmp     _mf_t_dispatch
 
-| ---- list builder entry: make sure the tables exist before the builder reads mf_list_buf (the builder's literals
-| point there). Site: function entry; every register is preserved.
-    .globl mf_list_entry
-mf_list_entry:
-    bsr.w   mf_ensure
-    jmp     _mf_t_list
-
-
 | ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the patched image (services/machines/dks/src/
 | image.rs has the layout; the word index is the byte offset / 4): the registry, `mf_ensure`, the native page functions, the slot map and the page rows (version 3: and the native page calls of the registry). The firmware
 | addresses are not here: the file names them and the port file resolves them. 2 = the Digitone II.
@@ -180,17 +137,16 @@ mf_list_entry:
     .balign 4
     .globl machines_info
 machines_info:
-    .long   0x4d414348, 3, 2                | magic MACH, version, device
+    .long   0x4d414348, 4, 2                | magic MACH, version, device
     .long   _mf_first, _mf_count, _mf_entries, _mf_rows
     .long   mf_ensure
     .long   mf_native_page_count, mf_native_descriptor, mf_native_code, mf_native_draw, mf_native_overlay
     .long   0, _mf_pgrows, _mf_pgn          | (the slot map: Digitakt II), the page rows and their count
     .long   mf_native_register, mf_native_register_v2, mf_native_remove, mf_native_turn | the native page calls of the registry
+    .long   _mf_list_stock, ROWSIZE, O_POS  | version 4: the stock list order (the service builds the list and the rank pairs), the row size and the offset of `position`
 
     .bss
     .balign 4
-    .globl mf_list_buf
 mf_ready:    .space 4
-mf_list_buf: .space 4 * 64
 mf_strbuf:   .space REPSIZE * 2 * MAXN
 mf_pgstr:    .space REPSIZE * 2 * PGMAX

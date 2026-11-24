@@ -24,17 +24,33 @@ dkrt_svc_rt::service!(
         ("cf.machine.hook.clone.5", hooks::mf_clone5, dt2),
         ("cf.machine.hook.param_code.args", hooks::mf_typearg, dt2),
         ("cf.machine.hook.srcpage", hooks::mf_srcpage, dt2),
+        ("cf.machine.hook.list_rank_insert", hooks::mf_rank, dt2),
         ("cf.machine.hook.group", hooks::mf_group, dn2),
         ("cf.machine.hook.type_page.count", hooks::mf_typemap0, dn2),
         ("cf.machine.hook.type_page.desc", hooks::mf_typemap1, dn2),
         ("cf.machine.hook.param_code.map", hooks::mf_typemap2, dn2),
         ("cf.machine.hook.type_reader.load", hooks::mf_reader, dn2),
         ("cf.machine.hook.owner_type_load", hooks::mf_owner, dn2),
+        ("cf.machine.hook.frametype", hooks::mf_frametype, dn2),
         ("cf.page.hook.source_draw", hooks::mf_draw_hook),
         ("cf.page.hook.source_code", hooks::mf_code_hook),
         ("cf.page.hook.source_key", hooks::mf_key_hook),
         ("cf.page.hook.source_turn", hooks::mf_turn_hook),
     ],
-    fills = [("frametype", hooks::mf_frametype, dn2)],
+    fills = [],
+    patches = [
+        ("cf.machine.hook.patch_list_alloc", 2, Machines::list_bytes),
+        (
+            "cf.machine.hook.patch_list_vector_end",
+            2,
+            Machines::list_bytes
+        ),
+        (
+            "cf.machine.hook.patch_list_buffer_end",
+            4,
+            Machines::list_end
+        ),
+        ("cf.machine.hook.patch_list_buffer", 4, Machines::list_start),
+    ],
     exports = gen_exports::exports()
 );

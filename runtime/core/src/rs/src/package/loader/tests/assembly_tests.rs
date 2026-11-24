@@ -803,6 +803,16 @@ fn found(l: &Boot, plan: &Plan) -> BTreeSet<String> {
 
 /// The hook sites (hook name hash, address) that the service files which loaded install: each `HOOKS` item of the packed file that the port file lists as present.
 fn binds_of(dev: Dev, l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
+    binds_split(dev, l, plan, false)
+}
+
+/// The patch sites of the service files that came up (the `HOOKS` items with the patch entry): (name hash, address).
+fn patches_of(dev: Dev, l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
+    binds_split(dev, l, plan, true)
+}
+
+/// The sites of the `HOOKS` items of the service files that came up: the hooks, or (`patches`) the patches.
+fn binds_split(dev: Dev, l: &Boot, plan: &Plan, patches: bool) -> Vec<(u32, u32)> {
     let pf = port_file(dev);
     let pt = table_of(&pf);
     let port = Keys::parse(&pt).unwrap();
@@ -818,7 +828,7 @@ fn binds_of(dev: Dev, l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
         for i in 0..keys.count(tag::HOOKS) {
             let (hash, entry, _) = keys.words(tag::HOOKS, i).unwrap();
             // the entry of another device (one name may have an entry for each device)
-            if !dkneeds::keys::hook_for_device(entry, dev.profile.id) {
+            if !dkneeds::keys::hook_for_device(entry, dev.profile.id) || dkneeds::keys::hook_is_patch(entry) != patches {
                 continue;
             }
             let site = port.find_site(hash).expect("the port file lists the hook");
@@ -944,9 +954,11 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
     }
     // the hook sites of the files: one `jmp` written for each hook of a service file that the port lists as present, at its address, under one mask
     let binds = binds_of(dev, &l, &plan);
+    let patches = patches_of(dev, &l, &plan);
     assert_eq!(l.installer.count(), binds.len(), "{what}: installed sites");
+    assert_eq!(l.installer.patch_count(), patches.len(), "{what}: installed patches");
     let written: Vec<u32> = l.p.calls.borrow().iter().filter_map(|c| if let Call::Write { addr, .. } = c { Some(*addr) } else { None }).collect();
-    let mut sites: Vec<u32> = binds.iter().map(|b| b.1).collect();
+    let mut sites: Vec<u32> = binds.iter().chain(patches.iter()).map(|b| b.1).collect();
     sites.sort();
     let mut w2 = written.clone();
     w2.sort();
@@ -2064,7 +2076,10 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
     }
     // (tag, a, b) with the address words left out
     fn plain(tag: u16, a: u32, b: u32) -> (u16, u32, u32) {
-        if tag == Declare::HOOK || tag == Declare::EXPORT {
+        // a patch is a `HOOKS` item of the header table (the entry word names it as a patch)
+        if tag == Declare::PATCH {
+            (Declare::HOOK, a, 0)
+        } else if tag == Declare::HOOK || tag == Declare::EXPORT {
             (tag, a, 0)
         } else {
             (tag, a, b)

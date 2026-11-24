@@ -13,7 +13,10 @@ fn a_zero_address_is_refused_and_gives_the_neutral_answer() {
         1
     });
     assert_eq!(r, 7);
-    assert!(!called.get(), "the firmware function was called at address 0");
+    assert!(
+        !called.get(),
+        "the firmware function was called at address 0"
+    );
 }
 
 #[test]

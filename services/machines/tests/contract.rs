@@ -434,6 +434,9 @@ fn image(core: &mut FakeCore) {
     mi[dkrt_svc_machines::info::w::DEVICE] = core.device;
     mi[dkrt_svc_machines::info::w::ENSURE] = 0x4000_1000;
     mi[dkrt_svc_machines::info::w::ROWS] = 0x4200_0000;
+    mi[dkrt_svc_machines::info::w::LIST_STOCK] = 0x4700_0000;
+    mi[dkrt_svc_machines::info::w::ROW_SIZE] = 64;
+    mi[dkrt_svc_machines::info::w::O_POS] = 48;
     mi[dkrt_svc_machines::info::w::N_REGISTER] = 0x6000_0010;
     mi[dkrt_svc_machines::info::w::N_REGISTER_V2] = 0x6000_0020;
     core.info_tables.push((name_hash("machines_info"), mi));
@@ -1403,6 +1406,42 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
     assert!(
         run(table(0, 0), 0x1234_5678, 1).is_empty(),
         "an image without the hook has no view variable or builder"
+    );
+}
+
+/// `stop` builds the cached machine list again after the loader restored the list patches and the rank hook: the view's builder gets the stored view; with no view (or an image
+/// without the hook that remembers it) nothing is called.
+#[test]
+fn stop_builds_the_cached_machine_list_again() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    const VAR: u32 = 0x7000_0000;
+    const BUILD: u32 = 0x4006_0f50;
+    let run = |var: u32, build: u32, view: u32| {
+        let calls: Rc<RefCell<Vec<(u32, Vec<usize>)>>> = Rc::default();
+        let mut t = vec![0u32; 64];
+        t[w::VIEW_VAR] = var;
+        t[w::VIEW_BUILD] = build;
+        let mut core = FakeCore::new();
+        core.set_dynreg(t);
+        core.mem.borrow_mut().insert(VAR, view);
+        let log = calls.clone();
+        *core.on_call.borrow_mut() = Some(Box::new(move |a, args| {
+            log.borrow_mut().push((a, args.to_vec()));
+            0
+        }));
+        Provider::stop(&mut Machines::new(), &core);
+        let got = calls.borrow().clone();
+        got
+    };
+    assert_eq!(
+        run(VAR, BUILD, 0x1234_5678),
+        vec![(BUILD, vec![0x1234_5678])]
+    );
+    assert!(run(VAR, BUILD, 0).is_empty(), "the view does not exist yet");
+    assert!(
+        run(0, 0, 0x1234_5678).is_empty(),
+        "no view variable or builder"
     );
 }
 

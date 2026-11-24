@@ -37,6 +37,11 @@ entry = "mf_srcpage"
 devices = ["dt2"]
 
 [[hook]]
+name = "cf.machine.hook.list_rank_insert"
+entry = "mf_rank"
+devices = ["dt2"]
+
+[[hook]]
 name = "cf.page.hook.source_draw"
 entry = "mf_draw_hook"
 
@@ -82,9 +87,9 @@ name = "cf.machine.hook.owner_type_load"
 entry = "mf_owner"
 devices = ["dn2"]
 
-# The pointer slot of the interrupt site of the Digitone II (the frame builder's machine type): the image stub loads it, and a loaded file fills it with the address of its routine.
-[[fill]]
-slot = "frametype"
+# The frame type (Digitone II): the frame builder's interrupt site (vector 191) is a hook like the others (RC4-3): the installer writes its jump under one interrupt mask.
+[[hook]]
+name = "cf.machine.hook.frametype"
 entry = "mf_frametype"
 devices = ["dn2"]
 
@@ -108,6 +113,19 @@ slot = "voice_render"
 entry = "_dv_run"
 space = "dsp"
 devices = ["dn2"]
+
+# The patches of the machine list builder (ports/fw/machine.toml): `start` builds the list and `Machines::list_*` give the bytes.
+[[patch]]
+name = "cf.machine.hook.patch_list_alloc"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_vector_end"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_buffer_end"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_buffer"
 
 [[gen]]
 kind = "sharc-adapter"
@@ -144,6 +162,7 @@ mf_x_typearg = "hook.cf.machine.hook.param_code.args.exit.1"
 mf_x_sp_stock = "hook.cf.machine.hook.srcpage.exit.1"
 mf_x_sp_alt = "hook.cf.machine.hook.srcpage.exit.2"
 mf_spt = "cf.machine.fn.current_track_type"
+mf_x_rank = "hook.cf.machine.hook.list_rank_insert.tail"
 mf_x_g_next = "hook.cf.machine.hook.group.exit"
 mf_x_g_taken = "hook.cf.machine.hook.group.exit.1"
 mf_ret_tm0 = "hook.cf.machine.hook.type_page.count.ret"

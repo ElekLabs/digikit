@@ -134,3 +134,15 @@ mf_srcpage:
     beq.w   3f
     jmp     mf_x_sp_stock
 3:  jmp     mf_x_sp_alt
+
+| ---- rank (the sort comparator's std::map insert): it gets the (type, display position) pairs of DKRT_MF_RANK, which `start` built (src/list.rs), instead of the caller's array.
+| Site: the `jsr` of the insert; stack: 0 map, 4 begin, 8 end. d0 free. The pairs are 8 bytes; DKRT_MF_RANKN of them.
+    .globl mf_rank
+mf_rank:
+    move.l  #DKRT_MF_RANK,%d0
+    move.l  %d0,4(%sp)
+    move.l  DKRT_MF_RANKN,%d0
+    lsl.l   #3,%d0
+    addi.l  #DKRT_MF_RANK,%d0
+    move.l  %d0,8(%sp)
+    jmp     mf_x_rank

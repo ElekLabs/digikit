@@ -4229,48 +4229,6 @@
     },
     {
       "at": {
-        "dn2-1.11": [
-          {
-            "addr": "0x4004d8b6"
-          }
-        ],
-        "dn2-1.12": [
-          {
-            "addr": "0x4004d8b6"
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x40052a08"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2",
-        "dn2"
-      ],
-      "doc": "Entry of the machine list builder; the hook builds the registry tables before the builder reads its list buffer.",
-      "file": "devices/fw/machine.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "before",
-      "name": "cf.machine.hook.list.entry",
-      "regs": {
-        "clobbers": [
-          "ccr"
-        ],
-        "in": []
-      },
-      "site": "cf.machine.fn.list.entry",
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
-      ],
-      "was": []
-    },
-    {
-      "at": {
         "dt2-1.17": [
           {
             "addr": "0x400522be"
@@ -4285,7 +4243,7 @@
       "file": "devices/fw/machine.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.machine.hook.list_rank_insert",
       "regs": {
         "clobbers": [
@@ -4297,7 +4255,7 @@
       "site": "cf.machine.site.list_rank_insert",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -4409,6 +4367,170 @@
         ]
       },
       "site": "cf.machine.site.param_code.map",
+      "subsystem": "machine",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004d8e2"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004d8e2"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052a2e"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Patch: the operand word of the list builder's `pea 0x1c.w`, the allocation size of the list buffer: 4 bytes per listed type.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.machine.hook.patch_list_alloc",
+      "offset": 2,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.machine.site.list.alloc",
+      "subsystem": "machine",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004d90c"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004d90c"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052a58"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Patch: the address operand in the list builder of the start of the buffer it copies from: the service's list buffer.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.machine.hook.patch_list_buffer",
+      "offset": 12,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.machine.site.list.operands",
+      "subsystem": "machine",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004d902"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004d902"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052a4e"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Patch: the address operand in the list builder of the end of the buffer it copies from: the service's list buffer plus 4 bytes per listed type.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.machine.hook.patch_list_buffer_end",
+      "offset": 2,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.machine.site.list.operands",
+      "subsystem": "machine",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004d908"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004d908"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052a54"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Patch: the size operand word in the list builder that sets the end of the vector it fills: 4 bytes per listed type.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.machine.hook.patch_list_vector_end",
+      "offset": 8,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.machine.site.list.operands",
       "subsystem": "machine",
       "users": [
         "core/services/machines"
@@ -4853,7 +4975,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": [
         "cf.machine.site.list_alloc",
@@ -4949,7 +5071,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": [
         "cf.machine.site.list",
@@ -4983,7 +5105,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": [
         "cf.machine.site.rank",
@@ -25761,7 +25883,7 @@
       "name": "link"
     },
     {
-      "count": 65,
+      "count": 68,
       "cpu": "cf",
       "file": "devices/fw/machine.toml",
       "meaning": "the machine framework: dispatch, names, per-type tables, the run-time registry",

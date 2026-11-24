@@ -66,7 +66,6 @@ PAGES = [
 
 STUBS = [
     "_mf_t_dispatch",
-    "_mf_t_list",
     "mf_x_g_next",
     "mf_x_g_taken",
     "dk_tail_02e8a3f1",
@@ -135,7 +134,6 @@ def unit():
         sym,
         [
             "mf_dispatch",
-            "mf_list_entry",
             "mf_group",
             "mf_typemap0",
             "mf_typemap1",
@@ -147,7 +145,7 @@ def unit():
     )
 
 
-def test_dispatch_and_list(unit):
+def test_dispatch(unit):
     mem = tables()
     res = unit.run_cases(
         mem,
@@ -158,12 +156,11 @@ def test_dispatch_and_list(unit):
         + [
             {"routine": "mf_dispatch", "stack": [unit.rts, t]}
             for t in (4, FIRST + COUNT)
-        ]
-        + [{"routine": "mf_list_entry"}],
+        ],
     )
     for k in range(COUNT):
         assert res[k].stub == "rts" and res[k].d[0] == ROWS + k * ROWSIZE
-    assert [r.stub for r in res[COUNT:]] == ["_mf_t_dispatch"] * 2 + ["_mf_t_list"]
+    assert [r.stub for r in res[COUNT:]] == ["_mf_t_dispatch"] * 2
 
 
 def test_group_sends_added_types_to_the_group_one_path(unit):
