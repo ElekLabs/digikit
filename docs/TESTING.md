@@ -194,7 +194,7 @@ A new service or runtime mechanism adds an assembly case before its first device
 | `boot-restart` | `core/runtime-tests` |
 | `live` | `core/runtime-tests` |
 | `services/providers` | `core/runtime-provider-tests` |
-| dynreg `equiv` | `core/rows` |
+| machines `equiv` | `core/runtime-machines-tests` |
 | `settings/settings-api` | `core/runtime-settings-tests` |
 | `safe-mode` | `core/runtime-tests` |
 | `transfer-live` | `core/runtime-tests` |
