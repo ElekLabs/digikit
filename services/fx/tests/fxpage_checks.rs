@@ -31,6 +31,8 @@ fn facts() -> fxpage::DeviceFacts {
         device: FakeCore::new().device_id(),
         slots: MAX_FX as u32,
         values_n: 32,
+        knob_block: 2,
+        send_block: 3,
         ..Default::default()
     }
 }

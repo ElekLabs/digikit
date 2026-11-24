@@ -26,6 +26,8 @@ fn facts(cells: u32) -> DeviceFacts {
         values_n: 32,
         mark_index: 70,
         send_cells: cells,
+        knob_block: 2,
+        send_block: 3,
         track_page: 13,
         store_off: 0x80,
         ..Default::default()

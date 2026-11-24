@@ -297,6 +297,8 @@ fn facts(kit: u32) -> DeviceFacts {
         kit_ptr: kit,
         mark_index: 70,
         send_cells: 2,
+        knob_block: 2,
+        send_block: 3,
         track_page: 13,
         store_off: 0x80,
         value_indices,

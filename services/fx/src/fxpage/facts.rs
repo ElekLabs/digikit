@@ -37,6 +37,9 @@ pub struct DeviceFacts {
     pub tail_off: u32,
     /// Byte offset of the spare halfwords in the storage record.
     pub store_off: u32,
+    /// The owner numbers of the blocks of `rows_info` that hold the effect knobs and the send knobs (the second and third `[[rows.block]]` of the device file).
+    pub knob_block: u32,
+    pub send_block: u32,
     /// The value indices (the first `values_n` are used).
     pub value_indices: [u8; 32],
 }

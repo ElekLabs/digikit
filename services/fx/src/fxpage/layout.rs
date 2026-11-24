@@ -4,9 +4,6 @@
 pub(super) const INFO_MAGIC: u32 = 0x4658_5047; // "FXPG"
 /// The value of the mark in the kit's array: the rows hold values (any other value: the array was not given its defaults).
 pub(super) const FXP_MARK: u32 = 0x46a7;
-/// The owner numbers of the blocks of `rows_info` this service fills (the device files' `[[rows.block]]`): the effect knobs (`WORDS` rows for each effect row) and the send knobs.
-pub(super) const BLOCK_KNOBS: u32 = 2;
-pub(super) const BLOCK_SEND: u32 = 3;
 pub(super) const KNOBS: usize = 7;
 pub(super) const WORDS: usize = 8; // the knobs and MIX
 pub(super) const TEXT: usize = 24;

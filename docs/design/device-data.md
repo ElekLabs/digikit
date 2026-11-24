@@ -150,7 +150,7 @@ cannot differ). The sizes of the runtime's static arrays (`ARENA_BYTES`, `STAGE_
 | `caps` | 4 `[limits]` keys whose values are the capacity words the admission reads, in the order of the module's `cap_<kind>` info entries |
 | `[[rows.block]]` | exactly 3 blocks, in order: `owner` (the number the owner is known by), `limit` (a `[limits]` key), `per` (factor, default 1; rows = `per * limit`), `template` (the stock code whose row a free row copies) |
 
-The block sizes have one source: a reservation `count` in a manifest reads them as `rows_b1`, `rows_b2`, `rows_b3` (the same `per * limit`), so the entries and `rows_info` cannot differ.
+The block sizes have one source: a reservation `count` in a manifest reads them as `rows_b1`, `rows_b2`, `rows_b3` (the same `per * limit`), so the entries and `rows_info` cannot differ. The order is the owners' meaning: block 1 holds the machine parameters, block 2 the effect knobs and block 3 the send knobs. The fx service finds blocks 2 and 3 by the owner numbers that `patchkit gen` writes into its facts table (`knob_block`, `send_block`), not by a constant of its own.
 
 ```toml
 [rows]

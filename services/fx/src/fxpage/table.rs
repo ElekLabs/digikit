@@ -144,8 +144,8 @@ pub(super) unsafe fn bind_table<C: CoreApi>(
         return false;
     }
     let (Some(knobs), Some(send)) = (
-        dkrt_svc_rows::block::block(rows, BLOCK_KNOBS),
-        dkrt_svc_rows::block::block(rows, BLOCK_SEND),
+        dkrt_svc_rows::block::block(rows, f.knob_block),
+        dkrt_svc_rows::block::block(rows, f.send_block),
     ) else {
         return false;
     };

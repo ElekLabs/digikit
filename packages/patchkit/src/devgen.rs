@@ -2581,7 +2581,7 @@ fn rust_fx_tables(module: &str, per_dev: &[(String, Vec<C>)]) -> Result<String> 
             .collect::<Result<_>>()?;
         let _ = writeln!(
             body,
-            "    DeviceFacts {{\n        device: {},\n        page_first: {},\n        slots: {},\n        array_off: {:#x},\n        values_n: {},\n        template_percent: {:#x},\n        template_bipolar: {:#x},\n        template_mix: {:#x},\n        kit_ptr: {:#x},\n        mark_index: {},\n        send_cells: {},\n        send_index: [{}, {}],\n        send_template: {:#x},\n        sound_off: {:#x},\n        sound_stride: {:#x},\n        track_page: {},\n        tail_off: {:#x},\n        store_off: {:#x},\n        value_indices: [{}],\n    }},",
+            "    DeviceFacts {{\n        device: {},\n        page_first: {},\n        slots: {},\n        array_off: {:#x},\n        values_n: {},\n        template_percent: {:#x},\n        template_bipolar: {:#x},\n        template_mix: {:#x},\n        kit_ptr: {:#x},\n        mark_index: {},\n        send_cells: {},\n        send_index: [{}, {}],\n        send_template: {:#x},\n        sound_off: {:#x},\n        sound_stride: {:#x},\n        track_page: {},\n        tail_off: {:#x},\n        store_off: {:#x},\n        knob_block: {},\n        send_block: {},\n        value_indices: [{}],\n    }},",
             v("DEVICE_ID")?,
             v("FX_PAGE_FIRST")?,
             v("LIMIT_FX_SLOTS")?,
@@ -2601,6 +2601,8 @@ fn rust_fx_tables(module: &str, per_dev: &[(String, Vec<C>)]) -> Result<String> 
             v("FX_TRACK_PAGE")?,
             v("FX_TAIL_OFF")?,
             v("FX_STORE_OFF")?,
+            v("ROWS_B2_OWNER")?,
+            v("ROWS_B3_OWNER")?,
             idx.join(", ")
         );
         n += 1;

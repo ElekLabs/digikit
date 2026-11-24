@@ -115,7 +115,7 @@ pub trait CoreApi: crate::mem::FwMem {
     /// The DSP loader's state (the module ranges and the load in flight); the voice and effect rows are the services' own.
     fn dsp(&self) -> &'static mut DspState;
     /// The words of the entry `name_hash` of the image's one table `dkrt_info_table` (`dkneeds::keys::name_hash` of the name that an adapter's `[[info]]` gives): the data
-    /// table of an image adapter. Null when the image has no such entry or the core does not serve it. The caller checks the words (magic, device).
+    /// table of an image adapter, such as `fxpages_info`. Null when the image has no such entry or the core does not serve it. The caller checks the words (magic, device).
     /// The core forwards to `Platform::info`; it names no service and no table.
     unsafe fn info(&self, name_hash: u32) -> *const u32;
 

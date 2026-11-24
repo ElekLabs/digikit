@@ -24,6 +24,8 @@ pub(super) static DEVICES: [DeviceFacts; 2] = [
         track_page: 16,
         tail_off: 0xca,
         store_off: 0x60,
+        knob_block: 2,
+        send_block: 3,
         value_indices: [70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 0, 0, 0, 0, 0, 0, 0, 0],
     },
     DeviceFacts {
@@ -45,6 +47,8 @@ pub(super) static DEVICES: [DeviceFacts; 2] = [
         track_page: 12,
         tail_off: 0x8e,
         store_off: 0x60,
+        knob_block: 2,
+        send_block: 3,
         value_indices: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 0, 0, 0, 0, 0, 0, 0, 0],
     },
 ];
