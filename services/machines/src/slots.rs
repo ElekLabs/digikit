@@ -116,7 +116,7 @@ impl Slots {
         unsafe { read_volatile(addr_of!(self.armed)) != 0 }
     }
 
-    /// Hook at the entry of the page's key handler (stack: view, event).
+    /// Hook at the entry of the page's key handler (stack: view, event), as one call (host tests, a `Fw` whose code mapper does not re-enter the owner).
     pub unsafe fn page_key<C: CoreApi, F: Fw>(
         &mut self,
         core: &C,
@@ -124,27 +124,30 @@ impl Slots {
         view: *const u8,
         ev: *const u8,
     ) {
+        if let Some(enc) = self.key_click(view, ev) {
+            let code = fw.param_code(view as usize, enc);
+            self.queue_click(core, fw, view, code);
+        }
+    }
+
+    /// First half of the key hook: the detector. `Some(encoder)` is a click. The code of the encoder is asked of the page by the caller, outside the owner: the page's code hook
+    /// (`dks_native_code`) enters the owner to look up a native page, and inside this call it would be refused and the click would map to the stock code.
+    pub unsafe fn key_click(&mut self, view: *const u8, ev: *const u8) -> Option<u32> {
         if !self.is_armed() {
-            return;
+            return None;
         }
         self.held.input();
-        if let Some(enc) = self.det.key(view as usize, word(ev, 0xc), word(ev, 0x10)) {
-            self.click(core, fw, view, enc);
-        }
+        self.det.key(view as usize, word(ev, 0xc), word(ev, 0x10))
     }
 
-    /// Hook at the entry of the page's turn handler (stack: view, event): every page turn ends the click flow, including LOCAL and unused custom encoders. Bookkeeping must
-    /// precede the consumed return: press A, turn an unused D, release A must never become an SMP click. The native handler (`nativepage::turn`) runs after it, outside
-    /// the owner.
-    pub unsafe fn page_turn_input(&mut self, view: *const u8, ev: *const u8) {
-        if self.is_armed() {
-            turn_input(&mut self.det, &mut self.held, view as usize, word(ev, 0xc));
-        }
-    }
-
-    /// A click of encoder `enc` on `view`: queue the action of the parameter under it, if it has one.
-    unsafe fn click<C: CoreApi, F: Fw>(&mut self, core: &C, fw: &F, view: *const u8, enc: u32) {
-        let code = fw.param_code(view as usize, enc);
+    /// Second half: queue the action of parameter `code`, the code `view` maps the clicked encoder to, if it has one.
+    pub unsafe fn queue_click<C: CoreApi, F: Fw>(
+        &mut self,
+        core: &C,
+        fw: &F,
+        view: *const u8,
+        code: i32,
+    ) {
         let first = crate::records::param_first(core);
         let track = || fw.view_track(word(view, VIEW_TRACK_REF) as usize);
         if let Some((callback, track)) = resolve(&self.actions, first, code, track) {
@@ -154,6 +157,15 @@ impl Slots {
                 view: view as usize,
                 code: code as u32,
             };
+        }
+    }
+
+    /// Hook at the entry of the page's turn handler (stack: view, event): every page turn ends the click flow, including LOCAL and unused custom encoders. Bookkeeping must
+    /// precede the consumed return: press A, turn an unused D, release A must never become an SMP click. The native handler (`nativepage::turn`) runs after it, outside
+    /// the owner.
+    pub unsafe fn page_turn_input(&mut self, view: *const u8, ev: *const u8) {
+        if self.is_armed() {
+            turn_input(&mut self.det, &mut self.held, view as usize, word(ev, 0xc));
         }
     }
 
