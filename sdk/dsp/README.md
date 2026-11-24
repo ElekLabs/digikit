@@ -139,6 +139,11 @@ node tools/devtools/rig_profile.ts digikit/freqshift --device dt2 \
   --case params/all-mid/noise --blocks 2,3 --out out/runs/dsp-workflow/phase4/freqshift/dt2
 ```
 
+### Render and compare audio from the CLI
+
+Use the [Workbench CLI audio workflow](../../docs/INSTRUMENTATION.md#render-and-compare-audio-from-the-cli)
+to save a named rig case as WAV and JSON and compare it with a later build.
+
 ### What to check on each target
 
 Use the [generated register contract](REGISTERS.md) on both devices. Keep an explicit numerical

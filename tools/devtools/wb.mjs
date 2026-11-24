@@ -17,6 +17,8 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer delete PATH...
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
 //     node tools/devtools/wb.mjs [--format json|text] addrmap lookup ADDR... | module analyse DKM DKO | profile report FILE | profile record --seconds N --out FILE [--cpu cf|sharc]
+//     mise run wb:cli -- module render MODULE --device ID --case GROUP/NAME [--emit wav,json] --out DIR
+//     mise run wb:cli -- audio compare BASELINE CANDIDATE --out DIR
 //
 //     node tools/devtools/wb.mjs profile calibrate fit --device D.json --model E.json --out cal.json | profile calibrate report cal.json   (offline; wb_prof.mjs)
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] profile spans [--start|--stop|--reset] [--out FILE]   (a device command: reads the runtime span counters; --start resets them, then starts)
@@ -96,7 +98,7 @@ const opts = {
 };
 // the offline group takes these several times
 const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse', 'model', 'case']);
-const OFFLINE = ['addrmap', 'module', 'profile'];
+const OFFLINE = ['addrmap', 'module', 'profile', 'audio'];
 const words = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
@@ -133,6 +135,7 @@ for (let i = 0; i < args.length; i++) {
       '--seconds',
       '--run-dir',
       '--run-id',
+      '--emit',
     ].includes(a)
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);
@@ -141,7 +144,8 @@ for (let i = 0; i < args.length; i++) {
     else opts[key] = args[++i];
     // `profile calibrate fit` takes --device FILE several times (the other commands: one device id)
     if (key === 'device') (opts['device-files'] ??= []).push(opts[key]);
-  } else if (a === '--trace') opts.trace = true;
+  } else if (a === '--help' || a === '-h') opts.help = true;
+  else if (a === '--trace') opts.trace = true;
   else if (a === '--ret') opts.ret = true;
   else if (a === '--emu' || a === '--restart' || a === '--reload') opts[a.slice(2)] = true;
   else if (a === '--since-boot') opts['since-boot'] = true;
@@ -226,7 +230,21 @@ async function infoAndKind(session) {
 
 const SPANS = words[0] === 'profile' && words[1] === 'spans';
 const CALIBRATE = words[0] === 'profile' && words[1] === 'calibrate' && words[2] === 'run';
-if ((!OFFLINE.includes(words[0]) || SPANS || CALIBRATE) && !opts.emu && !existsSync(opts.bin))
+const AUDIO = words[0] === 'audio' || (words[0] === 'module' && words[1] === 'render');
+if (opts.help) {
+  if (!AUDIO) console.log(usage);
+  if (!words.length || words[0] === 'profile') console.log('wb profile report FILE [--format json]');
+  if (AUDIO || !words.length || words[0] === 'module') console.log((await import('./wb_audio.mjs')).audioUsage);
+  process.exit(0);
+}
+const deviceCommand = words.length > 0 && (!OFFLINE.includes(words[0]) || SPANS || CALIBRATE);
+if (deviceCommand && process.env.DIGI_WB_MISE === '1') {
+  // Do not start device builds for an offline report. Keep tool output off JSON stdout.
+  const prep = spawnSync('mise', ['run', 'wb:device-inputs'], { cwd: root, stdio: ['ignore', 2, 2] });
+  if (prep.error) fail(`Cannot prepare Workbench device tools: ${prep.error.message}`, 1);
+  if (prep.status !== 0) process.exit(prep.status ?? 1);
+}
+if (deviceCommand && !opts.emu && !existsSync(opts.bin))
   fail(`no dkmidi binary at ${opts.bin} (run: mise run dkmidi:build)`);
 
 /** Start the bridge on the port and open a session on it. */
@@ -488,6 +506,9 @@ if (SPANS) {
   } finally {
     await link.close();
   }
+} else if (AUDIO) {
+  const { audioCommand } = await import('./wb_audio.mjs');
+  status = await audioCommand({ cmd, sub, rest, opts, fail });
 } else if (OFFLINE.includes(cmd)) {
   status = await profCommand({ cmd, sub, rest, opts, root, fail });
 } else if (cmd === 'ports') {

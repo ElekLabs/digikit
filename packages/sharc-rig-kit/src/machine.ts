@@ -43,7 +43,7 @@ import { OpQueue, hex, pokeHalf, realRig, type RigOpener } from './ops.ts';
 import { buildMachine, type MachineBuilt, type Range } from './place.ts';
 import { PyRandom } from './prng.ts';
 import type { CallResult, RigPort } from './rig.ts';
-import { frameHw, galleryGaps, machineLabel, type MachineSpec } from './spec.ts';
+import { checkMachineGallery, frameHw, machineLabel, type MachineSpec } from './spec.ts';
 import { SW_ALIAS_BASE } from './toolchain.ts';
 
 const NAN = 0xffffffff;
@@ -131,11 +131,7 @@ export class MachineRig {
 
   /** A fresh core: zeroed stand-ins, initialised data, parameters at their defaults, the voice idle. */
   static async open(spec: MachineSpec, o: MachineRigOptions = {}): Promise<MachineRig> {
-    if (!o.built) {
-      const gaps = galleryGaps(spec.module.split('#')[0]!).filter((g) => g.startsWith(`${spec.device}:`));
-      if (gaps.length)
-        throw new Error(`${spec.module}: ${gaps.join('; ')}; run \`mise run module:check ${spec.module}\` to write it`);
-    }
+    if (!o.built) checkMachineGallery(spec);
     const rig = new MachineRig(spec, o);
     await rig.reset(o.open ?? realRig);
     return rig;

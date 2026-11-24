@@ -19,6 +19,7 @@ Keep firmware, captures, generated catalogs and listening WAVs local under ignor
 | 3. Workload replay | Committed in `7716df71d` | Machine and effect cases replay on the two emulator targets. Saved Timeline shows retained events, markers and loss. Hardware timing and focused state probes are follow-ups when needed. |
 | 4. SDK workflow and unified capture | Committed in `8e8f8d372` | The [SDK example](../../sdk/dsp/README.md) compares PLUCK on both rigs with byte-identical audio. Rigs export function and loop evidence for effects too. Workbench shares recording, opening and run selection across views. This is rig and emulator evidence, not board timing. |
 | 4a. Saved spans and processor boundaries | Complete | Offline Spans, per-run CLI reports and target-aware recording options are implemented. See the verification below. |
+| 5a. Render exports and audio comparison | Complete | The [CLI workflow](../INSTRUMENTATION.md#render-and-compare-audio-from-the-cli) exports original WAV and structured evidence and compares them offline. The two-device FREQ SHIFT rig baseline precedes the listening fixture. |
 | 5. FREQ SHIFT listening and performance proof | Pending | The current effect is a baseline. Stereo spread, drift, cost and the listening comparison are still to do. |
 
 ## 1. Generate a catalog from one firmware file
@@ -68,9 +69,12 @@ Use one **Open capture** and one **Record / Stop** flow in Workbench. A file can
 
 ## 5. Apply the workflow to FREQ SHIFT
 
+- Start with the shared CLI. `wb module render` runs a named rig case and emits WAV and/or JSON. `wb audio compare` checks two exports, uses the original PCM where present and reports summary-only comparisons as such. The technical baseline uses `params/all-mid/noise` on both rigs. It is a master-insert check, not the musical send comparison.
 - Use a send on a repeating hat, stab or texture, with the kick and bass dry. Keep the effect identity, current signed `SHIFT` range and framework `MIX`. Add **SPREAD** first, with opposite offsets around `SHIFT` for left and right. Add **DRIFT** for shallow modulation and **RATE** for its period. Start with 8–32 second periods for listening. Zero spread and drift must preserve the existing sound and settings loaded from an existing kit.
 - Profile the current shared oscillator and all-pass loops before choosing an implementation. Measure the cost with independent shifts active and check it against each target's effect budget. Update the README's cost statement from the verified result. For an optimization, compare the same algorithm and workload first so the cost of a new feature is visible.
 - Save dry/current/new renders from the same techno loop and listen across a full drift cycle. Keep phase continuous through turns and block boundaries. Use the general capture workflow for comparison and reserve a focused state probe for a specific mismatch.
+
+**5a verification.** The local `out/runs/dsp-workflow/phase5/baseline` contains the unchanged FREQ SHIFT master-insert render from each target. Independent DT2 repeats matched all 768 stereo frames and the recorded cost. A JSON-only repeat reports summary-only as intended. A PLUCK case exercised the machine export. The techno send fixture and new effect parameters are still pending.
 
 **Exit check.** `module:check` and the affected rig and device checks pass on both targets. The zero-feature path matches the existing float32 reference within the established tolerance. The new checks cover channel shift separation, parameter continuity and bounded output at control limits. Save the CLI before/after report and linked Workbench capture. Em accepts the musical result after listening to the comparison.
 

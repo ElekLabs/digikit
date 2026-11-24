@@ -87,6 +87,12 @@ export interface MachineSpec {
 
 export const machineLabel = (s: MachineSpec): string => `${s.module}@${s.device}`;
 
+export function checkMachineGallery(spec: MachineSpec): void {
+  const gaps = galleryGaps(spec.module.split('#')[0]!).filter((g) => g.startsWith(`${spec.device}:`));
+  if (gaps.length)
+    throw new Error(`${spec.module}: ${gaps.join('; ')}; run \`mise run module:check ${spec.module}\` to write it`);
+}
+
 /** What decides the behaviour of the routine: two modules built from the same sources and parameters run once. */
 export const machineKey = (s: MachineSpec): string => JSON.stringify([s.device, s.sources, s.params]);
 

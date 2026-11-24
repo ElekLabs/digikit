@@ -13,6 +13,7 @@ import { parse } from 'smol-toml';
 import { FS, fft, hanning, peak, rms, wordsHash } from './analysis.ts';
 import { BANDS, bandHz, bandLevels, type Fingerprint } from './fingerprint.ts';
 import { plotPng, wavBytes } from './plot.ts';
+import { parseWave } from './wave.ts';
 
 export interface Tolerance {
   /** frames the onset may move */
@@ -99,6 +100,8 @@ export interface MeasureOptions {
   windowFrames?: number | null;
   /** also store the RMS per 32-frame block (rig pins) */
   blockRms?: boolean;
+  /** Turn off the whole-window pitch FFT for long program material. */
+  periodic?: boolean;
 }
 
 export interface Measured {
@@ -145,7 +148,7 @@ export function measure(x: ArrayLike<number>, o: MeasureOptions = {}): Measured 
     rms_db: rmsDb,
     bandHz: bandHz(),
     bandDb: bandLevels(mono, rate).map((v) => dec(v, 2)),
-    periodic: periodicity(mono, rate),
+    periodic: o.periodic === false ? null : periodicity(mono, rate),
   };
   if (o.blockRms) {
     fp.block = 32;
@@ -568,26 +571,9 @@ export function failureMessage(name: string, pinFile: string, r: PinCheckResult,
 // ---- float WAV (the capture of the PCM tap) -------------------------------------------------------------------------------------
 
 export function parseFloatWav(d: Buffer): { rate: number; channels: number; samples: number[] } {
-  if (d.toString('latin1', 0, 4) !== 'RIFF' || d.toString('latin1', 8, 12) !== 'WAVE') throw new Error('not a WAV');
-  let pos = 12;
-  let format = 0;
-  let channels = 1;
-  let rate = FS;
-  while (pos + 8 <= d.length) {
-    const tag = d.toString('latin1', pos, pos + 4);
-    const size = d.readUInt32LE(pos + 4);
-    if (tag === 'fmt ') {
-      format = d.readUInt16LE(pos + 8);
-      channels = d.readUInt16LE(pos + 10);
-      rate = d.readUInt32LE(pos + 12);
-    } else if (tag === 'data') {
-      if (format !== 3) throw new Error(`expected an IEEE float WAV, format ${format}`);
-      const n = Math.floor(Math.min(size, d.length - pos - 8) / 4);
-      return { rate, channels, samples: Array.from({ length: n }, (_, i) => d.readFloatLE(pos + 8 + 4 * i)) };
-    }
-    pos += 8 + size + (size & 1);
-  }
-  throw new Error('no data chunk');
+  const { format, ...pcm } = parseWave(d);
+  if (format !== 'float32') throw new Error('Expected an IEEE float WAV.');
+  return pcm;
 }
 
 // ---- properties of a test tone --------------------------------------------------------------------------------------------------

@@ -103,9 +103,14 @@ run = "cargo build -p dkbulk --release --offline --target-dir \"$(SHARC_GEN_DIR=
 description = "Build the dkbulk USB bulk bridge and uploader (packages/dkbulk) into the nogen target dir, where tools/devtools/wb.mjs looks; `dkbulk list` shows the devices that offer the bulk interface; `dkbulk descriptors [ID]` checks the WinUSB descriptors of a device"
 
 ["wb:cli"]
-depends = ["dkmidi:build", "dkbulk:build", "services:pack"]
+env = { DIGI_WB_MISE = "1" }
 run = "node tools/devtools/wb.mjs"
-description = "Workbench actions from the command line through the workbench's own code: mise run wb:cli -- samples put FILE... --folder F [--bulk auto|off|force] | samples ls | store put LOCAL REMOTE | store ls [PREFIX] | store rm REMOTE | transfer install ID... [--stock STOCK.syx] [--restart] | transfer restart | transfer delete PATH... | info | ports"
+description = "Workbench CLI: profile report FILE | module render ID --device ID --case GROUP/NAME --out DIR | audio compare A B --out DIR | samples ls/put | store ls/put/rm | transfer install/restart/delete | info | ports"
+
+["wb:device-inputs"]
+hide = true
+depends = ["dkmidi:build", "dkbulk:build", "services:pack"]
+description = "Prepare the MIDI and USB bridges and Transfer service packs for device-facing wb:cli commands"
 
 ["bootscreen"]
 run = "node packages/dkbs/cli/bootscreen.mjs"

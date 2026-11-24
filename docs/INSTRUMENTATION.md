@@ -828,6 +828,46 @@ The SHARC-only rig is a second producer of `dk.profile/1` (`tools/devtools/rig_p
 
 The workbench runs the same code from the Calibration tab of the right-hand column (`CalibrationPanel.tsx`, `CalibrationSection.tsx`; the run state is owned by the panel, so switching tabs never aborts a run): choose a profile, press Run on the pane's target (the emulator or a device), and Stop ends the run at its next wait after the teardown of the case in progress has played; the captures made are kept. The table shows per case and DSP row the worst block and worst call of the emulator (instructions) and of the device (cycles), and after a fit the factor and the error of each pair. **Save run…** writes the captures of this target as one `dk.calcaptures/1` file (`{ "schema": "dk.calcaptures/1", "profile": NAME, "side": "emu"|"dev", "captures": [dk.profile/1, ...] }`). **Load file…** reads such a file, or the `<case>-<n>.profile.json` files of `wb profile calibrate run` (all of one side), as the run of that side. **Fit with…** loads a file as the missing side and fits it with the run of the other side (`dkprof` `calibrateFit`; plain **Fit** when both sides are there); the section shows fit, budget, worst under, n, leave-one-out (`n/a` with one row), refusals and warnings. **Save calibration…** writes the `dk.calibration/1` file. Cases that press keys, or need SETUP without the debug log, are skipped with their reason, as on the command line. **Active calibration** (top of the tab): **Load…** reads a `dk.calibration/1` file for the target's device (a file of another device, with no DSP fit, or with `device_unit` `insn` is refused with the reason); it is kept per device in the app's KeyValue until **Clear**. While one is active the Profile tab's DSP section (emulator target) adds a header line (`calibrated: DN2 1.12, fit 1.31 ±1.3 %`) and the columns `est. cyc/blk` (instructions times the budget factor) and `% block` (against `key.block_cycles`, `–` when the file has none); rules in `workbench-core/src/profile/calibration-active.ts`. A device target measures cycles itself and gets no estimate. Preview: `mise run wb:preview` with `node tools/devtools/ui_shots.mjs profile-calibration-fit profile-calibration-run profile-calibration-active profile-calibration-estimate` (made-up numbers).
 
+## Render and compare audio from the CLI
+
+Build the two rig tools after repository setup and the local generated core are ready.
+
+```sh
+pnpm nx:pilot run patchkit:cli
+pnpm nx:pilot run sharc-rig:build
+```
+
+Render a named conformance case on the same adapter and target you want to measure again later.
+For effects this is the stereo rig master insert, not a device send. A machine render records
+the mono voice output. Neither requires MIDI or a running Workbench.
+
+```sh
+mise run wb:cli -- module render digikit/freqshift --device dt2 \
+  --case params/all-mid/noise --out out/runs/shift-baseline
+```
+
+The default `--emit wav,json` writes `audio.wav` (original float32 PCM) and `render.json`
+(workload and build hashes, settings, rate, frames, audio measurements, and rig instructions per block).
+Use `--emit wav` or `--emit json` to keep one. `--format json` selects the terminal response, not the files.
+Keep the WAV next to its manifest if you move them. JSON-only files keep the evidence but not the samples.
+
+Render the candidate with the same device and case to a different folder. If the candidate is in another worktree,
+run that worktree's command or pass its source tree through `DIGI_RIG_ROOT` with `DIGI_SHARC_RIG` and `DIGI_PATCHKIT` pointing at the chosen binaries.
+
+```sh
+mise run wb:cli -- audio compare out/runs/shift-baseline/render.json \
+  out/runs/shift-candidate/render.json --out out/runs/shift-compare --format json
+```
+
+The comparison writes `comparison.json` and a waveform, difference and band-spectrum plot per channel
+when both have PCM at the same sample rate, channel count and duration. It checks the WAV hashes and flags
+differences in recorded workload or device. It never aligns, resamples or level-matches samples for you.
+It also accepts bare mono or stereo PCM or float32 WAVs, with no claim that their workloads match.
+With JSON-only input it compares the saved levels and fingerprints without making sample-level claims.
+Band spectra describe the first analysis window. The report gives its frame count, and level
+measurements cover the render beyond that window.
+The plots and fingerprints summarize evidence. They do not establish that one version sounds better.
+
 ## Cargo features
 
 | crate | feature | effect |

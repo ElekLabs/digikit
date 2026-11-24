@@ -248,6 +248,9 @@ DIGI_RIG_REPORT=1 pnpm exec vitest run --config vitest.host.config.ts --project 
 node tools/devtools/rig_profile.ts digikit/shot --device dn2 --case sample/stereo-fwd-oneshot/note60   # `wb profile report` of one case on the rig: instructions per function and loop (docs/TESTING.md "SHARC-only rig")
 ```
 
+For offline WAV and JSON exports, use `mise run wb:cli -- module render` and
+`mise run wb:cli -- audio compare`. See [Render and compare audio from the CLI](INSTRUMENTATION.md#render-and-compare-audio-from-the-cli).
+
 For a repository move, capture and compare the [byte manifests](TESTING.md#byte-manifests-for-repository-moves).
 
 Pins are valid only for the firmware and ready state they were recorded with.
