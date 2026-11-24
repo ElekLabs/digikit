@@ -91,7 +91,7 @@ mise run patch:preflight -- out/patch/digikit-dt2.syx      # must print PREFLIGH
 
 Without `--modules`, the device's patch set from `devices/*.toml` is applied; `--set NAME` picks another. Only flash images that pass the preflight. Open Elektron Transfer, connect the device over USB, and drop the `.syx` on it while the device shows its main screen. When the transfer ends, the device asks to upgrade: press **YES**. After the restart, SETTINGS > DIGIKIT shows the runtime.
 
-Some modules are patched into the image instead of loaded from the card, such as [Overdrive curves](image-modules/fixes/overdrive/README.md). [PATCHING.md](docs/PATCHING.md) has the details.
+Some modules are patched into the image instead of loaded from the card, such as the black intro (`core/introblank`). [PATCHING.md](docs/PATCHING.md) has the details.
 
 ### Load a module on the device
 
