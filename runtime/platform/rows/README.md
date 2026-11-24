@@ -1,11 +1,11 @@
 # Parameter rows (core/rows)
 
-The image makes room for parameter rows, the services fill them. This module owns the parameter table of the Digitakt II (1.17) and the
-Digitone II (1.12) MAIN OS and the rows reserved in it:
+The image makes room for parameter rows, the services fill them. This module owns the parameter table of the MAIN OS of the devices with a
+parameter table and the rows reserved in it:
 
 - **The copy.** patchkit copies the firmware's parameter table (60-byte rows, finding 02) to `pf_table`, appends one row for each entry of the
   `params` registry, points every reader (56 references) at the copy and raises every clamp bound (54 per device) by the number of added rows. The
-  routine `pf_t2` (`src/cf/dt2/params.s`) answers the value-class lookup for an added code with its template's code. Content modules do not add
+  routine `pf_t2` (`src/cf/*/params.s`) answers the value-class lookup for an added code with its template's code. Content modules do not add
   `params` entries to the image: no module other than `core/rows` does (`packages/patchkit/tests/rows.rs`).
 - **The reservation.** Three blocks, in this order, each one `[[entry]]` line with a `count` over the device file's `[limits]` (`modules/README.md`
   "Reservations"): `dp`, `[limits] param_rows` rows for the parameters of run-time machines; `fp`, `8 * fx_slots` rows (7 knobs and the level of a page for

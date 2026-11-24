@@ -150,8 +150,8 @@ fn word(table: &[u8], row: usize, off: usize) -> i64 {
     u32::from_be_bytes(table[at..at + 4].try_into().unwrap()) as i64
 }
 
-/// The appended row of a parameter, word by word, written out independently of the manifest (finding 02: DT2 rows
-/// are mirrored over the eight descriptor slots, DN2 rows carry the sound-array slot itself).
+/// The appended row of a parameter, word by word, written out independently of the manifest (finding 02: one device's
+/// rows are mirrored over the eight descriptor slots, the other's carry the sound-array slot itself).
 fn expected_row(
     sound_array_slot: bool,
     table: &[u8],
@@ -222,7 +222,7 @@ fn the_row_expressions_match_an_independent_row_builder() {
         let dev = sec.devices.first().expect("pf_table names its device");
         let append = sec.append.as_ref().expect("pf_table appends rows");
         assert_eq!(append.row.len(), 15, "{dev}");
-        // the DT2 section mirrors slots; the DN2 section takes the sound-array slot (its rows are the sound-array slots 25 ..= 64)
+        // a section either mirrors the slots or takes the sound-array slot itself (25 ..= 64)
         let sound_array_slot = append.row[1].text() == "$slot";
         for template in [0usize, 0xd1, 0x112] {
             for slot in 0..8i64 {
@@ -512,8 +512,13 @@ fn the_row_layout_of_the_manifest_is_the_one_the_assembly_reads() {
         return;
     };
     let m = rows_module(&lib);
-    let src =
-        std::fs::read_to_string(root().join("runtime/platform/rows/src/cf/dt2/params.s")).unwrap();
+    // the routine's source: the one `params.s` under src/cf (both devices link it)
+    let src = std::fs::read_dir(m.dir.join("src/cf"))
+        .unwrap()
+        .map(|d| d.unwrap().path().join("params.s"))
+        .find(|p| p.exists())
+        .map(|p| std::fs::read_to_string(p).unwrap())
+        .expect("params.s");
     let equ = |name: &str| -> u32 {
         let line = src
             .lines()
@@ -690,7 +695,7 @@ fn rows_info_states_the_reservation_of_the_device_file() {
                     "$default" => 0x102,
                     "$name" => 0x103,
                     "$short" => 0x104,
-                    // the computed words: the mirror index (DT2: over the eight slots, DN2: the sound-array slot), the kind word and 0x80 + slot
+                    // the computed words: the mirror index (over the eight slots, or the sound-array slot), the kind word and 0x80 + slot
                     "$slot" => 0x108,
                     s if s.starts_with("25 + $slot") => 0x105,
                     s if s.starts_with("(0x10 + $slot") => 0x106,
