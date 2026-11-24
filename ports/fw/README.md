@@ -60,3 +60,18 @@ Rust type. `port_resolve.py` writes a `[[hook]]` record into each port file. A m
 A renamed declaration lists its former names in `was`, for reading older docs and findings. A former name never
 resolves: the port file lists each anchor only under its current name. A former name must not be a current name, and
 `catalog declare` refuses one. Content modules never use these declarations; only `core/*` adapters do.
+
+## Hook calling contexts
+
+A hook of a service runs in the context of the firmware code it replaces (statically read from the port comments, finding 149 and the service sources; [D] unless marked). The Owner guard
+(`dkrt_svc_rt::Owner`) admits a hook that enters the owner only in the UI task and refuses it, counted, inside a part call of the same service. An interrupt hook must never enter the owner.
+Host tests fire a hook in a context with `dkrt_test_support::hook_context::HookContext` (`UiTask`, `InPartCall`, `Interrupt`).
+
+| service | hooks | context | enters the owner |
+| --- | --- | --- | --- |
+| shortcuts | `cf.input.hook.key_event` | UI task | yes: refused and counted inside a part call (`a_key_that_arrives_inside_a_call_of_the_service_is_refused_and_counted`) |
+| lfo | tick and read hooks, `call`, `slew`, `start`, both devices | interrupt, vector 191, IPL 5 | no: `dk_lfo_eval` reads the static shape table (`an_lfo_hook_fired_in_an_interrupt_never_enters_the_owner`) |
+| lfo | `wave_name`, `wave_name3`, `graph_vec` | UI task (MOD page) | no (`an_lfo_page_hook_fired_inside_a_part_call_never_enters_the_owner`) |
+| machines | `source_key`, `source_turn` | UI task [O] | yes |
+| machines | `frametype` and `type_reader` (DN2) | frame builder, may be an interrupt [O] | no: static table |
+| machines | the other type and page helpers | [O] | no |

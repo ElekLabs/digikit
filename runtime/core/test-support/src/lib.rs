@@ -5,6 +5,7 @@
 extern crate std;
 pub mod contract;
 mod driver;
+pub mod hook_context;
 mod pool;
 mod provider_driver;
 pub mod routes;

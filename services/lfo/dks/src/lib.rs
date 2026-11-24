@@ -7,7 +7,7 @@
 use dkrt_sdk::records::KINDS_LFO;
 use dkrt_svc_lfo::lfo::Lfo;
 
-mod hooks;
+pub mod hooks;
 
 dkrt_svc_rt::service!(
     Lfo,
