@@ -7,7 +7,7 @@ role = "adapter"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "The parameter rows of the Digitakt II and Digitone II MAIN OS: a copy of the parameter table with one row appended per parameter (descriptors: names, range, default, formatter), every reader repointed and bounded, and the reserved rows that the run-time machines, the effect pages and the send page fill (rows_info)"
+summary = "The parameter rows of the Digitakt II and Digitone II MAIN OS: a copy of the parameter table with one row appended per parameter (descriptors: names, range, default, formatter), every reader repointed and bounded, and the reserved rows that services fill, in numbered blocks (rows_info)"
 requires = []
 conflicts = []
 
@@ -35,18 +35,17 @@ conflicts = []
 # destination list) end on `bne`/`beq`, not on a clamp, and keep the stock count: the new rows do not enter them.
 
 # The reservation. The image makes room: `[[entry]]` with a `count` stands for that many rows, the count an expression over the device file's
-# `[limits]` (module.toml of the patchkit manifest, docs/PATCHING.md). Three blocks, in this order, so a code is `params.<block>0.index + k`:
-#   dp  the parameters of the run-time machines (`[limits] param_rows`), filled by the machines and fx services
-#   fp  the knobs of the effect pages: 7 knobs and the level of a page for each effect slot (`8 * fx_slots`)
-#   fs  the cells of the send page of the track FX key (`send_rows`, at least `send_slots`; finding 64)
-# Each user fills its own block at load and clears it at unload; the template is a stock row that is valid for the value-class lookup. No
-# other module adds a row to this registry in the image (packages/patchkit/tests/rows.rs). `rows_info` (src/cf/rows-info-<dev>.s) says where
-# the blocks are and how a row is made; the cap words of the admission point at it.
+# `[limits]` (module.toml of the patchkit manifest, docs/PATCHING.md). Three blocks, in this order, so a code is `params.<id>0.index + k` (the ids
+# dp, fp and fs are the symbols the users link by). The platform knows the blocks by number: each block's owner number, size (a `[limits]` key times a
+# factor) and template come from the device file's `[rows]` and `[[rows.block]]` (the device file says what each block is for).
+# Each owner fills its block at load and clears it at unload; the template is a stock row that is valid for the value-class lookup. No
+# other module adds a row to this registry in the image (packages/patchkit/tests/rows.rs). `rows_info` (src/cf/rows-info.inc) says where
+# the blocks are and how a row is made; the capacity words of the admission point at it.
 
 [[gen]]
 kind = "gas"
 path = "build/gen/device-{dev}.inc"
-uses = ["DEVICE_ID", "LIMIT_PARAM_ROWS", "LIMIT_PAGE_ROWS", "LIMIT_SEND_ROWS", "LIMIT_FX_SLOTS", "LIMIT_MACHINE_ROWS", "LIMIT_SEND_SLOTS"]
+uses = ["DEVICE_ID", "ROWS_*"]
 
 [targets]
 "dt2-1.17" = "experimental"
@@ -372,9 +371,9 @@ _rw_rows = "params.rows"
 _rw_row_size = "params.row_size"
 _rw_first = "params.first"
 _rw_count = "params.count"
-_rw_dp0 = "params.dp0.index"
-_rw_fp0 = "params.fp0.index"
-_rw_fs0 = "params.fs0.index"
+_rw_b1 = "params.dp0.index"
+_rw_b2 = "params.fp0.index"
+_rw_b3 = "params.fs0.index"
 
 [[object]]
 path = "build/rows-info-dn2.dko.json"
@@ -388,11 +387,12 @@ _rw_rows = "params.rows"
 _rw_row_size = "params.row_size"
 _rw_first = "params.first"
 _rw_count = "params.count"
-_rw_dp0 = "params.dp0.index"
-_rw_fp0 = "params.fp0.index"
-_rw_fs0 = "params.fs0.index"
+_rw_b1 = "params.dp0.index"
+_rw_b2 = "params.fp0.index"
+_rw_b3 = "params.fs0.index"
 
-# The table of this module, in the image's info table (`dkrt_info_table`), and the capacity limits it reserves, as `cap_<kind>` entries: each
+# The table of this module, in the image's info table (`dkrt_info_table`), and the capacity limits it reserves, as `cap_<kind>` entries: the admission
+# requires these exact names (the kinds of `[capacity.kinds]` in sdk/sdk.toml) and finds the limit of a kind there; each
 # points at the u32 word that holds the limit, so the planner knows the limit before any service file is loaded (docs/PATCHING.md).
 [[info]]
 name = "rows_info"

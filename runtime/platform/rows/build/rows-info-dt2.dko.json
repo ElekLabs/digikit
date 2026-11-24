@@ -41,21 +41,21 @@
    "addend": 0,
    "offset": 48,
    "section": ".rodata",
-   "symbol": "_rw_dp0",
+   "symbol": "_rw_b1",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 64,
    "section": ".rodata",
-   "symbol": "_rw_fp0",
+   "symbol": "_rw_b2",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 80,
    "section": ".rodata",
-   "symbol": "_rw_fs0",
+   "symbol": "_rw_b3",
    "type": "cf.32"
   }
  ],
@@ -68,8 +68,26 @@
    "size": 172
   }
  ],
- "source_sha256": "74b9880ff97669fc9998b86f76c44c6f2581fc572a41a44dd6a17ff3eed291e5",
+ "source_sha256": "38f36a896670e9732c18ef435aa87b916270eccbeb1099451dd4d41ce132b029",
  "symbols": [
+  {
+   "global": true,
+   "name": "_rw_b1",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_b2",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_b3",
+   "section": null,
+   "value": 0
+  },
   {
    "global": true,
    "name": "_rw_count",
@@ -78,25 +96,7 @@
   },
   {
    "global": true,
-   "name": "_rw_dp0",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
    "name": "_rw_first",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_rw_fp0",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_rw_fs0",
    "section": null,
    "value": 0
   },
@@ -130,7 +130,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "adbf57dbcd98d0bd9382454fe734c627d8ab8a49412207e1236437245f7f1729",
+  "isa_check": "2e47018a426802cbd8e47f782aabf992203ee5aa810e9f1d40419358e084ccfe",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

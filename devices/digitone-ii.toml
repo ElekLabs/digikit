@@ -209,6 +209,28 @@ send_rows = 2  # parameter rows core/rows reserves for the send page's cells (th
 param_rows = 16
 page_rows = 8
 
+# The reservation of the parameter table (runtime/platform/rows): the image makes room, the loaded services fill their blocks. The platform knows
+# the blocks by number only: `owner` is the number a service finds its block by, the rows are `per` times the `[limits]` key `limit`, `template` the
+# stock parameter code whose row a free row copies. `recipe`: how each of the 15 words of a row is made (0 .. 0x3c: that word of the template's row,
+# 0x100 min, 0x101 max, 0x102 default, 0x103 name pointer, 0x104 short pointer, then 0x108 the slot itself; the words 0x18 and 0x1c are the template's). `caps`: the `[limits]` keys whose values are the capacity
+# words the admission reads (the order of the `cap_<kind>` entries of the module; the kind names are the admission's, sdk/sdk.toml `[capacity.kinds]`).
+[rows]
+recipe = [0x00, 0x108, 0x100, 0x101, 0x102, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x103, 0x2c, 0x104, 0x34, 0x38]
+caps = ["machine_rows", "param_rows", "page_rows", "send_slots"]
+[[rows.block]]
+owner = 1
+limit = "param_rows"
+template = 0xd5
+[[rows.block]]
+owner = 2
+limit = "fx_slots"
+per = 8
+template = 0x75
+[[rows.block]]
+owner = 3
+limit = "send_rows"
+template = 0x75
+
 # The effect pages of run-time effects (core/fxpages, docs/design/digikit-registry.md "Effect pages", docs/findings/61-fx-pages.md "The Digitone II"): the
 # same facts as in the Digitakt II file, read from the 1.12 image. The kit's Fx array has 101 halfwords here (the Fx parameters use the indices 1 to 69; the
 # indices 70 to 100 belong to no Fx parameter, are not sent to the DSP and not saved by the stock saver), so the effect values and the mark live above 69.

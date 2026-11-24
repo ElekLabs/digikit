@@ -43,9 +43,36 @@ struct Doc {
     input: Option<InputDoc>,
     panel: Option<PanelDoc>,
     fx: Option<FxDoc>,
+    rows: Option<RowsDoc>,
     #[serde(default)]
     patch_sets: BTreeMap<String, Vec<String>>,
 }
+/// `[rows]`: the reservation of the parameter table (`runtime/platform/rows`): `ROWS_BLOCKS` numbered blocks, the recipe of a row (`ROWS_RECIPE_WORDS`
+/// words) and the `[limits]` keys whose values are the capacity words of the table (`caps`, in the order of the info entries `cap_<kind>` of the module).
+/// The platform knows no owner: a block's owner is a number, its size a `[limits]` key times `per`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RowsDoc {
+    recipe: Vec<u64>,
+    caps: Vec<String>,
+    block: Vec<RowsBlockDoc>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RowsBlockDoc {
+    owner: u64,
+    limit: String,
+    #[serde(default = "one")]
+    per: u64,
+    template: u64,
+}
+fn one() -> u64 {
+    1
+}
+/// The shape of the platform's table: three blocks, a recipe of 15 words, four capacity words.
+const ROWS_BLOCKS: usize = 3;
+const ROWS_RECIPE_WORDS: usize = 15;
+const ROWS_CAPS: usize = 4;
 /// `[fx]`: the facts of the effect pages of run-time effects (core/fxpages, docs/design/digikit-registry.md "Effect pages"): where the kit keeps its
 /// effect values, which of them the firmware does not use (effect row k owns `value_indices[8k .. 8k + 8]`), the page numbering and the stock
 /// parameter rows whose display an effect knob copies.
@@ -326,6 +353,7 @@ struct Entry {
     /// `[input.keys]`: logical key name to the key's id in the firmware's key events (empty: the device has no key names).
     keys: BTreeMap<String, u64>,
     fx: FxF,
+    rows: RowsF,
     profile: ProfileF,
     /// DSP instructions per block left for modules (`dkprof::budget`: the block at the default margin, less the stock firmware's load). 0 where `devices/cycle-factors.json`
     /// has no entry for the device, and in the wasm build (which has no `dkprof`).
@@ -463,6 +491,61 @@ struct AdapterF {
     gap: u64,
     block_cycles: u64,
 }
+/// `[rows]` resolved: per block the owner, the row count and the template; the recipe; the capacity words.
+#[derive(Debug, Default)]
+struct RowsF {
+    blocks: Vec<[u64; 3]>,
+    recipe: Vec<u64>,
+    caps: Vec<u64>,
+}
+
+fn rows_facts(short: &str, rows: Option<RowsDoc>, l: &Limits) -> Result<RowsF> {
+    let Some(r) = rows else {
+        return Ok(RowsF::default());
+    };
+    let limit = |key: &str| -> Result<u64> {
+        Ok(match key {
+            "modules" => l.modules,
+            "machine_rows" => l.machine_rows,
+            "arena_bytes" => l.arena_bytes,
+            "stage_bytes" => l.stage_bytes,
+            "fx_slots" => l.fx_slots,
+            "send_slots" => l.send_slots,
+            "send_rows" => l.send_rows,
+            "param_rows" => l.param_rows,
+            "page_rows" => l.page_rows,
+            _ => {
+                return Err(err!(
+                    "{short}: [rows] names {key:?}, which is no key of [limits]"
+                ));
+            }
+        })
+    };
+    if r.block.len() != ROWS_BLOCKS
+        || r.recipe.len() != ROWS_RECIPE_WORDS
+        || r.caps.len() != ROWS_CAPS
+    {
+        return Err(err!(
+            "{short}: [rows] holds {ROWS_BLOCKS} [[rows.block]] entries, a recipe of {ROWS_RECIPE_WORDS} words and {ROWS_CAPS} caps (the platform's table has that shape)"
+        ));
+    }
+    let blocks = r
+        .block
+        .iter()
+        .map(|b| Ok([b.owner, b.per * limit(&b.limit)?, b.template]))
+        .collect::<Result<Vec<_>>>()?;
+    let caps = r
+        .caps
+        .iter()
+        .map(|k| limit(k))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(RowsF {
+        blocks,
+        recipe: r.recipe,
+        caps,
+    })
+}
+
 #[derive(Debug)]
 struct LimitsF {
     modules: u64,
@@ -620,6 +703,7 @@ impl Facts {
             let keys = key_facts(&short, d.input.as_ref().map(|i| &i.keys))?;
             let input = input_facts(&short, d.input, d.panel, &keys)?;
             let fx = fx_facts(&short, d.fx, l.fx_slots, l.send_slots)?;
+            let rows = rows_facts(&short, d.rows, &l)?;
             let (adapter_machine, sample_pool) = match d.adapter {
                 Some(a) => (a.machine, a.sample_pool),
                 None => (None, None),
@@ -682,6 +766,7 @@ impl Facts {
                         input,
                         keys,
                         fx,
+                        rows,
                         profile: profile_facts(&short, models.by_device.get(&short))?,
                         dsp_headroom,
                     },
@@ -1961,6 +2046,36 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     ] {
         v.push(c(name, value, note));
     }
+    let rw = &e.rows;
+    for (i, names) in ROWS_BLOCK.iter().enumerate() {
+        let b = rw.blocks.get(i).copied().unwrap_or([0; 3]);
+        for (name, value) in names.iter().zip(b) {
+            v.push(c(
+                name,
+                value,
+                "[rows.block] (owner number, rows, template stock code)",
+            ));
+        }
+    }
+    v.push(c(
+        "ROWS_RESERVED",
+        rw.blocks.iter().map(|b| b[1]).sum(),
+        "[rows.block] the rows of all blocks",
+    ));
+    for (i, name) in ROWS_RECIPE.iter().enumerate() {
+        v.push(c(
+            name,
+            rw.recipe.get(i).copied().unwrap_or(0),
+            "[rows] recipe (how word i of a row is made)",
+        ));
+    }
+    for (i, name) in ROWS_CAP.iter().enumerate() {
+        v.push(c(
+            name,
+            rw.caps.get(i).copied().unwrap_or(0),
+            "[rows] caps (the [limits] value of capacity word i)",
+        ));
+    }
     for (i, name) in FX_VALUE.iter().enumerate() {
         v.push(c(
             name,
@@ -2072,6 +2187,29 @@ const PANEL_EXC_BIT: [&str; PANEL_EXC_MAX] = [
     "PANEL_EXC_BIT_6",
     "PANEL_EXC_BIT_7",
 ];
+const ROWS_BLOCK: [[&str; 3]; ROWS_BLOCKS] = [
+    ["ROWS_B1_OWNER", "ROWS_B1_ROWS", "ROWS_B1_TEMPLATE"],
+    ["ROWS_B2_OWNER", "ROWS_B2_ROWS", "ROWS_B2_TEMPLATE"],
+    ["ROWS_B3_OWNER", "ROWS_B3_ROWS", "ROWS_B3_TEMPLATE"],
+];
+const ROWS_RECIPE: [&str; ROWS_RECIPE_WORDS] = [
+    "ROWS_RECIPE_0",
+    "ROWS_RECIPE_1",
+    "ROWS_RECIPE_2",
+    "ROWS_RECIPE_3",
+    "ROWS_RECIPE_4",
+    "ROWS_RECIPE_5",
+    "ROWS_RECIPE_6",
+    "ROWS_RECIPE_7",
+    "ROWS_RECIPE_8",
+    "ROWS_RECIPE_9",
+    "ROWS_RECIPE_10",
+    "ROWS_RECIPE_11",
+    "ROWS_RECIPE_12",
+    "ROWS_RECIPE_13",
+    "ROWS_RECIPE_14",
+];
+const ROWS_CAP: [&str; ROWS_CAPS] = ["ROWS_CAP_0", "ROWS_CAP_1", "ROWS_CAP_2", "ROWS_CAP_3"];
 const FX_SEND_IDX: [&str; FX_SEND_MAX] = ["FX_SEND_IDX_0", "FX_SEND_IDX_1"];
 const FX_VALUE: [&str; FX_VALUES_MAX] = [
     "FX_VALUE_0",

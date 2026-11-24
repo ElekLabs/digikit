@@ -231,8 +231,27 @@ struct BoardDoc {
 struct FirmwareDoc {
     dsp: Option<toml::Value>,
 }
-#[derive(Deserialize)]
+/// `[limits]`: every value is a non-negative integer; a key with another type is refused by name.
 struct LimitsDoc(BTreeMap<String, u64>);
+impl<'de> Deserialize<'de> for LimitsDoc {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        let table = BTreeMap::<String, toml::Value>::deserialize(d)?;
+        let mut out = BTreeMap::new();
+        for (key, v) in table {
+            match v.as_integer().and_then(|n| u64::try_from(n).ok()) {
+                Some(n) => {
+                    out.insert(key, n);
+                }
+                None => {
+                    return Err(serde::de::Error::custom(format!(
+                        "[limits] {key} must be a non-negative integer, found {v}"
+                    )));
+                }
+            }
+        }
+        Ok(LimitsDoc(out))
+    }
+}
 #[derive(Deserialize)]
 struct Dev {
     name: String,
@@ -595,6 +614,25 @@ mod tests {
         let (ids, patchable) = parse_all(&[("x.toml", patch.as_str())]).unwrap();
         assert!(ids[0].patchable && !ids[0].runtime_target);
         assert_eq!(patchable[0].digikit_id, None);
+    }
+
+    #[test]
+    fn a_limits_key_that_is_no_integer_is_refused_by_name() {
+        let dev_file = DEVICE_FILES
+            .iter()
+            .find(|(_, t)| t.contains("param_rows = 16"))
+            .unwrap()
+            .1;
+        let text = edit(dev_file, "param_rows = 16", "param_rows = \"sixteen\"");
+        let e = parse(&[("limits.toml", text.as_str())])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            e.contains("[limits] param_rows must be a non-negative integer"),
+            "{e}"
+        );
+        let text = edit(dev_file, "param_rows = 16", "param_rows = -1");
+        assert!(parse(&[("limits.toml", text.as_str())]).is_err());
     }
 
     #[test]
