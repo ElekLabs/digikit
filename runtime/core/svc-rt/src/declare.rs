@@ -126,7 +126,13 @@ unsafe fn declare_entries(
 /// `ctx` is the module context `init` was called with.
 #[doc(hidden)]
 #[inline(never)]
-pub unsafe fn declare_patch(ctx: *mut u8, device: fn() -> u32, site: u32, patch: Patch, only: u32) -> i32 {
+pub unsafe fn declare_patch(
+    ctx: *mut u8,
+    device: fn() -> u32,
+    site: u32,
+    patch: Patch,
+    only: u32,
+) -> i32 {
     if only != 0 && only != device() {
         return 0;
     }

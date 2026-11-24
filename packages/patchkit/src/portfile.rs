@@ -715,6 +715,7 @@ mod tests {
             devices: vec![dev.into()],
             tail: false,
             stock: false,
+            patch: None,
             handler: false,
             exits: exits.iter().map(|e| e.to_string()).collect(),
             users: vec![],
