@@ -18,11 +18,13 @@ Phase 1 verification passed on the Syntakt 1.42 and Digitone II 1.12 emulator ta
 
 ## Phase 2 — Prove sample playback on the peer
 
-- [ ] Play one known 48 kHz mono sample from the digikit store on the second ColdFire with the stock slots intact.
+- [x] Play one known 48 kHz mono sample from the digikit store on the second ColdFire with the stock slots intact.
 
 Map the peer's memory, boot transfer and audio dispatch on Syntakt 1.42. Choose a bounded digikit sample region and a way to publish a sample to the peer. Keep the existing stock payload and slot identities valid with all 64 slots populated. The peer section is currently read-only in Patchkit. Measure packed image size and bootstrap margin before choosing how to install a peer entry point. See [the peer CPU](../findings/136-syntakt-peer-cpu.md), [the stock boot transfer](../findings/142-syntakt-sample-storage.md#2-limits-and-what-the-peer-receives) and [the unpack bound](../findings/159-syntakt-inplace-unpack-bound.md).
 
 Start with a boot preload and a single triggered voice. Check the captured signal against expected pitch and duration, verify stock playback with the adapter present, and exercise a missing or invalid sample. Record the memory budget and the measured frame cost. Stop at review if there is no safe region, dispatch point or image fit. Use the proof to define the smallest peer contract for loading a voice, passing parameters, publishing samples and retiring references.
+
+Phase 2 verified a 40 ms pool sample through the Syntakt 1.42 emulator's stereo output. All 64 populated short slots and their data matched the baseline byte for byte, and the same stock digital note played on both images. Missing and invalid samples sent the stock peer image. The fixture is opt-in and loads from the card at boot. The full-size bank faults in the stock emulator, and physical playback and Twinshot audition remain open. Measurements and the proposed peer contract are in [the playback finding](../findings/160-syntakt-peer-sample-proof.md).
 
 ## Phase 3 — Build, transfer and load Shot
 

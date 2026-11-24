@@ -11952,6 +11952,39 @@
       "at": {
         "st-1.42": [
           {
+            "addr": "0x4008287e"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "st"
+      ],
+      "doc": "The boot task still owns the card. The stock call takes no arguments and runs after the hook.",
+      "file": "devices/fw/peer.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.peer.hook.start",
+      "regs": {
+        "clobbers": [
+          "d0-d1",
+          "a0-a1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.peer.site.start",
+      "subsystem": "peer",
+      "users": [
+        "test/peer-sample"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
             "addr": "0x40082c24",
             "len": 6
           }
@@ -11973,6 +12006,34 @@
       "subsystem": "peer",
       "users": [
         "core/peer-image"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x4008287e",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "st-1.42 0x4008287e: the boot task's absolute call that starts the peer tasks, immediately after reading the stock sample bank from eMMC.",
+      "file": "devices/fw/peer.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.peer.site.start",
+      "rule": {
+        "st": {
+          "kind": "cf_words",
+          "len": 6,
+          "offset": 6
+        }
+      },
+      "subsystem": "peer",
+      "users": [
+        "test/peer-sample"
       ],
       "was": []
     },
@@ -25717,7 +25778,7 @@
       "name": "param"
     },
     {
-      "count": 5,
+      "count": 7,
       "cpu": "cf",
       "file": "devices/fw/peer.toml",
       "meaning": "the second ColdFire CPU of a device that has one: the thread that reads its image from the NOR flash and streams it, and the container section depacker",

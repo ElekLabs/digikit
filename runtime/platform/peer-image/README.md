@@ -10,6 +10,8 @@ Runs on the hardware: the `device-peer` image and the full `device` image boot o
 - **Section 6** (`dst != 0x4f84f2c6`): the stock NOR read, unchanged.
 - **Section 7** (`dst == 0x4f84f2c6`): read the packed stream to the end of the buffer (`0x4f8af2c1 - length`), check the header (length, byte sum), unpack it forward with the
   firmware's depacker (`cf.peer.fn.depack`), check the output length and its SHA-256 against the stock section, store the unpacked length big endian at 0x4f84f2c2.
+- **Extension.** An image can provide `dk_peer_image_extend(image, length, capacity)` to edit the decoded buffer after stock verification and before DMA is armed.
+  Return the resulting length in `[length, capacity]`. The default patch sets omit this symbol. See the [sample playback fixture](../../../docs/findings/160-syntakt-peer-sample-proof.md).
 - **Failure.** Any failed check pops the return address and the three arguments and jumps to the thread's own path for a missing section (`cf.peer.site.status_fail`): status 1,
   the DMA is never armed, the second CPU gets no bytes, MAIN shows its boot failure screen ("OOPS! SOMETHING WENT WRONG"). A wrong image never reaches the second CPU, which loads its own FPGA bitstream from it.
 - **patchkit.** `[[repack]]` in `module.toml` names the buffer (`dest`, `stage_end`) and the stock section (`len`, `sha256`). patchkit stores the section packed only when this
@@ -19,11 +21,11 @@ Runs on the hardware: the `device-peer` image and the full `device` image boot o
   Code and tables: about 1.4 KB in cf.expansion.
 - **Devices.** Syntakt 1.42 only (`ports = ["st-1.42"]`). The device file allows it with `[container] repack = ["cf2"]`.
 
-Boot it in the emulator (not run when this was written): `panel_drive` (header of `packages/emulator/boot/examples/panel_drive.rs`) boots a patched image headless and its
-`peer` step reports the bytes the second CPU took and the SHA-256 of each image; that of image 7 must be the stock section 7 hash in `module.toml`. Read the status word
+The emulator's `panel_drive` boots a patched image headless. Its `peer` step reports the byte count and SHA-256 of each image the second CPU received. In the default patch sets,
+image 7 must match the stock section 7 hash in `module.toml`. Read the status word
 0x41bbf448 (6 = OK) with `peek`:
 
 ```text
 node tools/nx/rust-env.mjs -- cargo run --release -p elektron-native-boot --example panel_drive -- OUT/st-peer.syx \
-  --base firmware/Syntakt_OS1.42.syx --after 130M --steps wait:1M,peek:0x41bbf448:4,peek:0x41bb32b0:4,peer
+  --after 130M --max 1800M --steps wait:1M,peek:0x41bbf448:4,peek:0x41bb32b0:4,peer
 ```

@@ -1,0 +1,30 @@
+[module]
+id = "test/peer-sample"
+version = "0.1.0"
+name = "Peer sample proof"
+category = "test"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Preloads one mono native sample for an explicitly triggered Syntakt peer playback proof"
+ports = ["st-1.42"]
+requires = ["core/peer-image", "core/runtime", "core/card-guard"]
+
+[targets]
+"st-1.42" = "experimental"
+
+[[object]]
+path = "build/peer-sample.dko.json"
+sources = ["src/preload.c", "src/boot.s", "src/peer.s"]
+place = "cf.expansion"
+
+[object.externs]
+peer_sample_boot_tail = "hook.cf.peer.site.start.tail"
+
+[[op]]
+op = "hook"
+hook = "cf.peer.hook.start"
+to = "peer_sample_boot"
+
+[[claim]]
+resource = "cf.peer.site.start"

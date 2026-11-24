@@ -540,6 +540,16 @@ mark = "O"
 rule = "fw/peer:cf_words"
 
 [[anchor]]
+name = "cf.peer.site.start"
+cpu = "cf"
+kind = "code"
+addr = 0x4008287e
+len = 6
+sha256 = "d3635d7e4f96357b2160fd01536039e55232daa21a0324bf31907a911e41b8fa"
+mark = "D"
+rule = "fw/peer:cf_words"
+
+[[anchor]]
 name = "cf.peer.site.status_fail"
 cpu = "cf"
 kind = "code"
@@ -1333,6 +1343,12 @@ name = "cf.peer.hook.nor_read_lea"
 site = "cf.peer.site.nor_read_lea"
 mode = "replace"
 clobbers = ["a2", "ccr"]
+
+[[hook]]
+name = "cf.peer.hook.start"
+site = "cf.peer.site.start"
+mode = "before"
+clobbers = ["d0-d1", "a0-a1", "ccr"]
 
 [[hook]]
 name = "cf.rtos.hook.idle"

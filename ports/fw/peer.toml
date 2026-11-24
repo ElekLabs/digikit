@@ -28,6 +28,25 @@ users = ["core/peer-image"]
 doc = "st-1.42 0x40082c24: the 6-byte `lea <NOR read>.l,A2` in the peer thread (entry 0x40082c04, no function of the database). A2 is used only by the two `jsr (a2)` calls that read the section 6 and section 7 payloads. Found by the words of the thread's first 40 bytes."
 
 [[site]]
+name = "cf.peer.site.start"
+cpu = "cf"
+rule.st = { kind = "cf_words", as = "code", words = [0x588f4eba, 0xfab84eb9, 0x40082e9c, 0x7040c0b9, 0x4029a778, 0x670260fe], offset = 6, len = 6 }
+mark = "D"
+users = ["test/peer-sample"]
+doc = "st-1.42 0x4008287e: the boot task's absolute call that starts the peer tasks, immediately after reading the stock sample bank from eMMC."
+
+[[hook]]
+name = "cf.peer.hook.start"
+site = "cf.peer.site.start"
+cpu = "cf"
+devices = ["st"]
+mode = "before"
+regs = { in = [], clobbers = ["d0-d1", "a0-a1", "ccr"] }
+mark = "D"
+users = ["test/peer-sample"]
+doc = "The boot task still owns the card. The stock call takes no arguments and runs after the hook."
+
+[[site]]
 name = "cf.peer.site.status_fail"
 cpu = "cf"
 rule.st = { kind = "cf_words", as = "code", words = [0x70ef7210, 0x4fefffdc, 0x48d71c0c, 0x260f0683, 0x00000014, "*", "*", "*", "*", "*"], offset = 0x280, len = 2 }

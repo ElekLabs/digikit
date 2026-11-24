@@ -2,13 +2,13 @@
  *
  * The peer thread of the stock MAIN reads two NOR payloads through one function, `read(src, len, dst)`: section 6 into the transmit buffer behind
  * the section 6 header, then section 7 (the second CPU's program) to `PEER_DEST`. The stream to the second CPU is the bytes of that buffer, so the
- * second CPU must get the stock bytes of section 7. patchkit stores section 7 packed (about 120 KB smaller: the stock image is over the limit
+ * second CPU normally gets the stock bytes of section 7. patchkit stores section 7 packed (about 120 KB smaller: the stock image is over the limit
  * of the OS upgrade stage) and a hook gives the thread this wrapper instead of the NOR read (hook.s).
  *
  * peer_load(src, len, dst), called from peer_read (hook.s) with the thread's own arguments:
  *   dst is not PEER_DEST (the section 6 read): the stock NOR read, unchanged.
  *   dst is PEER_DEST: read the packed stream to the end of the buffer (PEER_STAGE_END - len), check its header (length and byte sum), unpack it
- *     to PEER_DEST, check the output length and its SHA-256 against the stock section, and store the output length where the thread stored the
+ *     to PEER_DEST, verify its length and SHA-256, allow the optional extender to update the staged image, and store the output length where the thread stored the
  *     packed length. Any failed check returns 1: peer_read then takes the stock path of a missing section 7 (status 1, the boot failure screen).
  *     The DMA that streams the buffer is armed later, so a failed check streams nothing.
  * The addresses and the expected length and hash are the `[[repack]]` of module.toml, through the generated build/gen/repack.h: patchkit checks the stored
@@ -30,6 +30,9 @@ typedef uint8_t u8;
 #ifndef PEER_LEN /* the host test uses a short section */
 #define PEER_LEN REPACK_CF2_LEN
 #endif
+
+/* The optional extender sees the verified decoded image before the peer starts. */
+extern u32 (*const peer_image_extender)(u8 *image, u32 length, u32 capacity);
 
 /* Guest addresses to pointers and back. The host test defines PEER_HOST and maps them into an array. */
 #ifndef PEER_HOST
@@ -132,7 +135,7 @@ void peer_sha256(const u8 *data, u32 len, u8 out[32])
         out[i] = (u8)(h[i >> 2] >> (24 - 8 * (i & 3)));
 }
 
-/* 0: the section 6 read was done, or the stock section 7 is unpacked at PEER_DEST. 1: a check failed. */
+/* 0: the section 6 read was done, or section 7 is ready at PEER_DEST. 1: a check failed. */
 int peer_load(u32 src, u32 len, u8 *dst)
 {
     u8 *p;
@@ -159,6 +162,11 @@ int peer_load(u32 src, u32 len, u8 *dst)
     for (i = 0; i < 32; i++)
         if (sha[i] != PEER_SHA256[i])
             return 1;
+    if (peer_image_extender) {
+        n = peer_image_extender(dst, PEER_LEN, PEER_STAGE_END - PEER_DEST);
+        if (n < PEER_LEN || n > PEER_STAGE_END - PEER_DEST)
+            return 1;
+    }
     *PEER_AT(PEER_LEN_WORD + 0) = (u8)(n >> 24);
     *PEER_AT(PEER_LEN_WORD + 1) = (u8)(n >> 16);
     *PEER_AT(PEER_LEN_WORD + 2) = (u8)(n >> 8);

@@ -40,6 +40,7 @@ path = "build/gen/repack.h"
 path = "build/peer.dko.json"
 sources = ["src/cf/peer.c", "src/cf/hook.s"]
 place = "cf.expansion"
+optional = ["dk_peer_image_extend"]
 
 [object.externs]
 peer_ret = "hook.cf.peer.site.nor_read_lea.return"

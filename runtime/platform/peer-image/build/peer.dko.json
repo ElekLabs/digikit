@@ -25,6 +25,13 @@
   },
   {
    "addend": 0,
+   "offset": 0,
+   "section": ".rodata",
+   "symbol": "dk_peer_image_extend",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 44,
    "section": ".text.sha_block",
    "symbol": ".sec..rodata.SHA_K",
@@ -74,23 +81,30 @@
   },
   {
    "addend": 0,
-   "offset": 142,
+   "offset": 144,
    "section": ".text.peer_load",
    "symbol": "cf.peer.fn.depack",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 170,
+   "offset": 174,
    "section": ".text.peer_load",
    "symbol": ".sec..text.peer_sha256",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 182,
+   "offset": 186,
    "section": ".text.peer_load",
    "symbol": ".sec..rodata.PEER_SHA256",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 214,
+   "section": ".text.peer_load",
+   "symbol": "peer_image_extender",
    "type": "cf.32"
   }
  ],
@@ -101,6 +115,13 @@
    "kind": "text",
    "name": ".text",
    "size": 48
+  },
+  {
+   "align": 4,
+   "hex": "00000000",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 4
   },
   {
    "align": 2,
@@ -125,10 +146,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffd0222f003c48d7440c202f0034242f00380c814f84f2c667142f012f022f004eb9000000004fef000c4280600e260251830c830005fff3630c70014cd7440c4fef00304e752c7c4f8af2c19dc22f0e2f022f004eb9000000002f0e45f9000000004e924fef0010b08366ce307c00084283b488667c486e00044e92588fb68066b82f3c4f84f2c62f0e4eb900000000508f0c800005db1066a0486f00102f002f3c4f84f2c64eb9000000004fef000c428041f90000000075b7081073b00800b2826600ff7652807220b28066ea4200720513c04f84f2c213c14f84f2c370db721013c04f84f2c413c14f84f2c56000ff3a71b688005288d6806000ff76",
+   "hex": "4fefffd0222f003c48d7440c202f0034242f00380c814f84f2c667142f012f022f004eb9000000004fef000c4280600e260251830c830005fff3630c70014cd7440c4fef00304e752c7c4f8af2c19dc22f0e2f022f004eb9000000002f0e45f9000000004e924fef0010b08366ce307c00084283b488660000b4486e00044e92588fb68066b62f3c4f84f2c62f0e4eb900000000508f26000c800005db10669c486f00102f002f3c4f84f2c64eb9000000004fef000c428041f90000000075b7081073b00800b2826600ff7252807220b28066ea2079000000004a88672a2f3c0005fffb2f3c0005db102f3c4f84f2c64e904fef000c26000680fffa24f00c80000024eb6200ff364200720513c34f84f2c513c04f84f2c22003e08813c14f84f2c313c04f84f2c46000ff0271b688005288d6806000ff3e",
    "kind": "text",
    "name": ".text.peer_load",
-   "size": 256
+   "size": 312
   },
   {
    "align": 2,
@@ -145,7 +166,7 @@
    "size": 32
   }
  ],
- "source_sha256": "ba83abcc9eb534f68a6c02ddafe5d1353b8c5b0f8ebd6726a6f72994f2ed925f",
+ "source_sha256": "6e9aa435ad3970efd73215b94145c10b01f62c4355ed08f73409689813fab151",
  "symbols": [
   {
    "global": false,
@@ -209,8 +230,20 @@
   },
   {
    "global": true,
+   "name": "dk_peer_image_extend",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "peer_hook",
    "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_image_extender",
+   "section": ".rodata",
    "value": 0
   },
   {
@@ -254,8 +287,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "388",
-  "isa_check": "df474dd2bace9ec238b6e217dff020456efe692426af2420f8e68206b3a8e608",
+  "instructions_redecoded": "401",
+  "isa_check": "98fa60310ab1ef90a5f47751f8506ed311174bee071fc24b35c239e0968d1184",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

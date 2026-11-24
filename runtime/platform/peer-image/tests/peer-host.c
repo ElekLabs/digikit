@@ -77,12 +77,28 @@ static void vector(const char *msg, const char *want)
 
 static uint8_t out_good[PEER_LEN], out_bad[PEER_LEN], stream[208];
 static const uint32_t PASS_SRC = 0x1234, NOR_SRC = 0x80000 + 0x4321;
+static uint32_t extended_length;
+static int extend_calls;
+
+static u32 extend(u8 *image, u32 length, u32 capacity)
+{
+    ++extend_calls;
+    CHECK(image == PEER_AT(PEER_DEST));
+    CHECK(length == PEER_LEN && capacity == PEER_STAGE_END - PEER_DEST);
+    CHECK(memcmp(image, out_good, PEER_LEN) == 0);
+    if (extended_length == length + 4)
+        memset(image + length, 0xf0, 4);
+    return extended_length;
+}
+
+u32 (*const peer_image_extender)(u8 *, u32, u32) = extend;
 
 static int load(uint32_t len)
 {
     memset(arena, 0xee, 8);
     memset(&nor, 0, sizeof nor);
     memset(&dep, 0, sizeof dep);
+    extend_calls = 0;
     return peer_load(NOR_SRC, len, PEER_AT(PEER_DEST));
 }
 
@@ -119,6 +135,7 @@ static void load_cases(void)
     dep_out = out_good;
     dep_ret = PEER_LEN;
     dep_len = PEER_LEN;
+    extended_length = PEER_LEN;
 
     /* the section 6 read goes to the NOR read unchanged */
     memset(&nor, 0, sizeof nor);
@@ -137,6 +154,16 @@ static void load_cases(void)
           PEER_AT(PEER_LEN_WORD)[3] == (PEER_LEN & 255));
     CHECK(memcmp(PEER_AT(PEER_DEST), out_good, PEER_LEN) == 0);
 
+    extended_length = PEER_LEN + 4;
+    CHECK(load(len) == 0 && extend_calls == 1);
+    CHECK(be32(PEER_AT(PEER_LEN_WORD)) == extended_length);
+    CHECK(be32(PEER_AT(PEER_DEST) + PEER_LEN) == 0xf0f0f0f0u);
+    extended_length = PEER_STAGE_END - PEER_DEST + 1;
+    CHECK(load(len) == 1 && extend_calls == 1 && length_word_untouched());
+    extended_length = PEER_LEN - 1;
+    CHECK(load(len) == 1 && extend_calls == 1 && length_word_untouched());
+    extended_length = PEER_LEN;
+
     /* every check refuses and leaves the length word alone */
     stream[3]++; /* header length */
     CHECK(load(len) == 1 && dep.calls == 0 && length_word_untouched());
@@ -147,10 +174,10 @@ static void load_cases(void)
     CHECK(load(7) == 1 && nor.calls == 0 && length_word_untouched());
     CHECK(load(PEER_STAGE_END - PEER_DEST + 1) == 1 && nor.calls == 0 && length_word_untouched());
     dep_ret = PEER_LEN - 1; /* output length */
-    CHECK(load(len) == 1 && dep.calls == 1 && length_word_untouched());
+    CHECK(load(len) == 1 && dep.calls == 1 && extend_calls == 0 && length_word_untouched());
     dep_ret = PEER_LEN;
     dep_out = out_bad; /* one flipped bit in the output: the hash */
-    CHECK(load(len) == 1 && dep.calls == 1 && length_word_untouched());
+    CHECK(load(len) == 1 && dep.calls == 1 && extend_calls == 0 && length_word_untouched());
     dep_out = out_good;
     CHECK(load(len) == 0); /* and the good one still passes */
 }

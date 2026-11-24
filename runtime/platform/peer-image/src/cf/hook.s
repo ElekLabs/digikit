@@ -24,3 +24,9 @@ peer_read:
     rts
 1:  lea     16(%sp),%sp           /* the return address and the three arguments */
     jmp     peer_status_fail
+
+    .section .rodata
+    .balign 4
+    .globl  peer_image_extender
+peer_image_extender:
+    .long   dk_peer_image_extend
