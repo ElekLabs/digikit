@@ -636,8 +636,7 @@ The template `src/dsp/NAME.s` shows all of this in about 90 lines. Read it first
   effect its stored values only when the stored ID for its row is its own. Otherwise the effect gets its declared defaults. Effects count by row,
   so the same effects loaded in another order get defaults. A kit saved with effects also loads on stock firmware.
 - Not supported: p-locks, LFO and other modulation on a knob, MIDI CC, a second page for one effect, and a knob that does not reach the DSP as a
-  float. An image without `core/fxpages` refuses a module with a page (`E_NO_REGISTRY`). The Digitone II image needs `core/dynfx` and
-  `core/fxpages` in its module list (they are in its `device` patch set).
+  float. An image without the effect pages (`core/dynfx` and the page hooks of the fx service) refuses a module with a page (`E_NO_REGISTRY`). The Digitone II image needs `core/dynfx` in its module list (it is in its `device` patch set).
 - Text is printable ASCII. Write titles in mixed case. The firmware font draws a capital Q like an O.
 - Routes: a send effect gets the sum of the tracks' send amounts as its input block. Its wet output times MIX is added to the FX return. The
   user chooses the route in SETTINGS > FX ROUTING (the setting `fx/route/<module id>`; a pick reloads the module, so the effect keeps no state across it). A stored route that the effect no longer allows is

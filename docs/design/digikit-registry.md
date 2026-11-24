@@ -50,7 +50,7 @@ Built at run time in the module's arena block from the builder calls, not stored
   knob (0 to 127), `id` the effect's 16-bit ID (1 to 0xffff; the packer's `register::effect_id` of module id and effect id; the kit stores it with the values), `tab` the page's tab label (1 to 3 characters), `title` the page title (1 to 23), then 7 knob entries of which the first `n_knobs` are used: knob i is parameter word p_i
   of the effect's row, shown at `position` (0 to 7, distinct) with `display` 0 (0 .. 127) or 1 (-64 .. +63), `min`, `max` and `default` are IEEE single floats (`min < max`, the default
   inside), `name` the long name shown while the knob turns (1 to 23 characters), `short` the label under the knob (1 to 6). At most 4 per file, one for each effect; a file with one
-  needs `core/fxpages` (`E_NO_REGISTRY` otherwise). The runtime builds it from `dk_module_ctx_add_fx` and `dk_fx_add_page` (`docs/MODULE-AUTHORING.md`).
+  needs the effect pages of the fx service (`E_NO_REGISTRY` otherwise). The runtime builds it from `dk_module_ctx_add_fx` and `dk_fx_add_page` (`docs/MODULE-AUTHORING.md`).
 - Not carried yet: DSP code and voice records. The runtime refuses any record it does not know (`E_FORMAT`).
 
 ## Machine keys and sticky type numbers (D7)
