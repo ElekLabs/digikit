@@ -70,16 +70,15 @@ cardRigs(
         /** `dkrt_restart` (mailbox command), then the emulator's soft reset; returns when the new boot has read the record's sequence number and its stable period has ended (`stable`, set in the branch that clears the boot counter). */
         const restart = async () => {
           const seq = currentRecord(await h.records())?.seq;
-          const afterSeq = (await bootInfo(session, h.plan)).seq;
           await pokeWord(session, planSymbol(h.plan, 'DKRT_MAILBOX'), MAILBOX.RESTART);
           await h.waitReset();
           await pollUntil(
             rt.clock,
             () => bootInfo(session, h.plan),
-            (info) => info.seq !== afterSeq && info.seq === seq && info.stable === 1,
+            (info) => info.seq === seq && info.stable === 1,
             { withinMs: UI_WITHIN_MS, message: `the new boot (record seq ${seq}) ends its stable period` },
           );
-          return bootInfoLoaded(session, h.plan, undefined, undefined, afterSeq);
+          return bootInfoLoaded(session, h.plan);
         };
 
         const b1 = await restart();

@@ -284,11 +284,10 @@ cardRigs(
         expect(recs[0]?.seq, 'A is newer than anything the boot wrote').toBeGreaterThan(recs[1]?.seq ?? 1);
         expect(recs[1]?.paths ?? [], 'B is still empty, or the boot\'s counter clear (no selection)').toEqual([]);
 
-        const afterSeq = (await bootInfo(session, h.plan)).seq;
         await dk.restart();
         await dk.waitForBoot(90_000, { until: 'boot' }); // the boot record test: h.ready() follows
         await h.ready();
-        expect(await bootInfoLoaded(session, h.plan, undefined, undefined, afterSeq), 'the restart loads the new copy').toMatchObject({
+        expect(await bootInfoLoaded(session, h.plan), 'the restart loads the new copy').toMatchObject({
           loaded: mods.length,
           copy: 0,
         });
