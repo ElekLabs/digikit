@@ -1,4 +1,11 @@
-import { emulatorRead, readTopMenuItems, readViewStack, viewStackFacts, type Device } from '@digi/test-support';
+import {
+  emulatorRead,
+  readTopMenuItems,
+  readViewStack,
+  repoRoot,
+  viewStackFacts,
+  type Device,
+} from '@digi/test-support';
 import { readChoiceWindow, type ChoiceWindow } from './choice-window.ts';
 import { REDRAW, rows, word, type Rt } from './fx-live.ts';
 import { shot, withPausedFxProtocol } from './fx-session.ts';
@@ -107,9 +114,11 @@ export function routingUi(runtime: Rt, plan: RuntimePlan, artifacts: string, slo
     },
     epoch: async () => (await session.status()).epoch as number,
     shot: (tag: string) => shot(session, artifacts, tag),
-    /** The current OLED as a PNG in the run's artifacts; the path. */
+    /** The current OLED as a PNG in `out/runs/fx-routing/<device>/` (the run's artifacts are removed when the test passes); the path. */
     png: async (tag: string) => {
-      const file = path.join(artifacts, `${tag}.png`);
+      const dir = path.join(repoRoot(), 'out', 'runs', 'fx-routing', device);
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, `${tag}.png`);
       fs.writeFileSync(file, await session.framePng());
       return file;
     },
