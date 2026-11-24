@@ -75,6 +75,9 @@ const peakOf = (xs: Float32Array, from: number, to: number): number => {
   return p;
 };
 
+/** The selection index of the effect module: `prepare` installs `test/sine`, then the debug module, then the effect. */
+const FX_INDEX = 2;
+
 type Op = 'reload' | 'unload' | 'load';
 
 /** One live job on `file`, then what every job leaves (see the header). The job's end result is the proof that the live job ran; its state body and the `reloads` counter (one for each live job) are host tests (`reload.rs` `the_live_commands_answer_with_the_jobs_refusal_and_state_in_the_reload_state_body`, `a_job_that_changed_the_module_set_counts_one_reload_and_a_refusal_counts_none`). */
@@ -83,7 +86,8 @@ async function job(rt: TestRuntime, _plan: RuntimePlan, op: Op, file: string, wh
   const events = op === 'unload' ? undefined : await rt.listen();
   const end = await (op === 'reload' ? rt.dk.reloadAndWait(file) : op === 'unload' ? rt.dk.unloadAndWait(file) : rt.dk.loadAndWait(file));
   expect(end, `${why}: ${op} of ${file}`).toEqual({ result: 0, unloaded: op !== 'load' });
-  await events?.until('MODULE_COMMIT', () => true, { withinMs: 5000 });
+  // the event names no module, only its selection index (a live job keeps it): the effect module is the third of the install (the machine, the debug module, the effect)
+  await events?.until('MODULE_COMMIT', (e) => Number(e.fields.index) === FX_INDEX, { withinMs: 5000 });
   expect(await epochOf(rt), `${why}: a boot happened`).toBe(epoch);
   expect((await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.TABLE_BAD), `${why}: a table check failed`).toEqual([]);
   const cap = await rt.dk.capacity();
