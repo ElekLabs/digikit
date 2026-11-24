@@ -15,17 +15,33 @@ pub struct Clipped {
     plane1: [u32; PLANE_WORDS],
 }
 impl Clipped {
-    pub fn new(width: u32) -> Self {
-        let mut c = Clipped {
-            width,
+    /// Zeroed planes: the state of a static before its first `reset`.
+    pub const fn empty() -> Self {
+        Clipped {
+            width: 0,
             plane0: [0; PLANE_WORDS],
             plane1: [0; PLANE_WORDS],
-        };
-        for x in 0..width as usize {
-            c.plane1[2 * x] = u32::MAX;
-            c.plane1[2 * x + 1] = u32::MAX << (64 - HEIGHT as u32);
         }
+    }
+    pub fn new(width: u32) -> Self {
+        let mut c = Clipped::empty();
+        c.reset(width);
         c
+    }
+    /// Clears both planes for a page of `width` and makes the write mask opaque (the rounded-up band stays transparent). The planes keep their address, which the surface
+    /// the content draws on holds.
+    pub fn reset(&mut self, width: u32) {
+        self.width = width;
+        self.plane0 = [0; PLANE_WORDS];
+        self.plane1 = [0; PLANE_WORDS];
+        for x in 0..width as usize {
+            self.plane1[2 * x] = u32::MAX;
+            self.plane1[2 * x + 1] = u32::MAX << (64 - HEIGHT as u32);
+        }
+    }
+    /// Plane 0 and plane 1 as the firmware's bitmap points at them.
+    pub fn plane_ptrs(&mut self) -> [*mut u32; 2] {
+        [self.plane0.as_mut_ptr(), self.plane1.as_mut_ptr()]
     }
     pub fn width(&self) -> u32 {
         self.width

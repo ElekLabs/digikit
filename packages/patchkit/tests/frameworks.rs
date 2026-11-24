@@ -172,7 +172,8 @@ fn every_instruction_the_framework_places_decodes() {
                 assert_eq!(at, hi, "the code ends mid-instruction");
             }
         }
-        assert!(n > 100, "{file}: only {n} instructions");
+        // the dispatch, the stock-table readers and `mf_ensure` (the native pages are the service's since RC4-3)
+        assert!(n > 30, "{file}: only {n} instructions");
     }
 }
 

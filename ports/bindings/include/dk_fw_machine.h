@@ -6,7 +6,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/* cf.machine.fn.current_track_type: no sig yet */
+/* DT2: returns the current track's machine type as a signed long, -1 without a track; the SRC page hook calls it. */
+int32_t dk_fw_machine_current_track_type(uint8_t *view) __asm__("cf.machine.fn.current_track_type");
 /* cf.machine.fn.dispatch: no sig yet */
 /* cf.machine.fn.list.entry: no sig yet */
 /* cf.machine.fn.name.long: no sig yet */

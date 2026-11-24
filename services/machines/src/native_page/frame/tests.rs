@@ -48,7 +48,7 @@ fn frame_bytes_follow_the_offsets() {
 #[test]
 fn layout_header_matches_the_constants() {
     let header =
-        include_str!("../../../../../image-modules/points/machines/src/cf/native-page-layout.h");
+        include_str!("../../../../../tests/fixtures/modules/native-page/src/frame-layout.h");
     let defined = |name: &str| -> usize {
         header
             .lines()

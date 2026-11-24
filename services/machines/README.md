@@ -12,11 +12,15 @@ src/apply.rs      `attach` (the rows of a module) and the native page record: `A
 src/build/        the builder calls (`Builder`: the collection and its gate) and the commit
 src/slots.rs      the page's click state (`Slots`), with `slots/` the detector and the action lookup
 src/parking.rs    the parking passes of absent numbers (`Parking`)
-src/info.rs       the image table `machines_info`: layout, binding into `DKRT_MF_TAB`
+src/info.rs       the image table `machines_info` (version 5): layout, binding into `DKRT_MF_TAB`
+src/pagerows.rs   the reserved page rows (a device whose machines keep their knobs in page rows) as free rows: `init` at `start`, `free_row` for an unload (the page half of the image's `mf_ensure`)
+src/native_page/  the native callback pages: `PageTable` (the owner holds it), the frame, the clipped canvas and its overlay mask, the dots, `draw_page`, `overlay_page`, `turn_page`;
+                  firmware only through the traits `View`, `Surface`, `Stock` and `Content`, so every rule has a host test (`fake_firmware.rs`)
 src/list.rs       the machine list the firmware's list builder copies and the rank pairs of the sort comparator, built in `start` from the stock order and the rows' positions; the owner
                   gives the four list patches their bytes (`list_bytes`, `list_end`, `list_start`)
 dks/              the service file: `lib.rs` (the `service!` call), `hooks.rs` and `hooks-*.s` (the machine framework's hooks), `fw.rs` (the firmware calls, the page's key and turn
-                  entries, `dk_param_get`, `dk_param_set`), `builder.rs` (the builder exports, which reach the owner), `gen_exports.rs` (generated)
+                  entries, `dk_param_get`, `dk_param_set`), `native.rs` (the native pages over the firmware: the view, the stock draw routines, the content's callbacks, and the entries
+                  `dks_native_*` that the page hooks call), `builder.rs` (the builder exports, which reach the owner), `gen_exports.rs` (generated)
 tests/            host tests over `FakeCore`: `state.rs` (the owner), `records.rs`, `build.rs`, `assign.rs`, `guard.rs`, `file.rs` (the file's code over the cell), `contract.rs` (the
                   shared suite on both profiles through `provider_contract`, and the placeholder and parking cases over its `Lifecycle`)
 ```
@@ -47,3 +51,10 @@ native handler outside it (a handler may call back into the file).
 
 A failed `start` (no usable `machines_info` for the device) leaves nothing: the file is refused with `E_NO_REGISTRY` and the cell stays empty. ColdFire rule: an if chain, not
 a `match` on dense integers, in code that runs on the device (`Describe::cap`).
+
+Native pages: a module's page records are registered in the owner's `PageTable` (`nativepage::apply`) and taken out again by `unload::remove`. The hooks of the machine page call
+`dks_native_draw`, `dks_native_overlay`, `dks_native_code`, `dks_native_page_count` and `dks_native_descriptor`, which look the page up in the owner and clone it out before its
+callbacks run (a callback may call back into the file). A page's descriptor holds the address of its own name (a `std::string` representation), so the table stays where the owner
+is made and is never moved once it has pages. The clipped bitmap is a static (6.8 KiB, too big for a UI stack). The frame layout is asserted against the struct by the fixture
+`tests/fixtures/modules/native-page` (`frame-layout.h`), which the ColdFire compiler checks, and against the service's constants by `native_page/frame/tests.rs`. The machine type of the
+selected sound comes from the copy of the stock type reader when the image has one (`machines_info` word `READER_REAL`), else from the firmware's current-track type function.

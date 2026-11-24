@@ -42,3 +42,21 @@ fn overlay_mask_matches_the_c_header() {
         assert_eq!((mask[x * 2], mask[x * 2 + 1]), (u32::MAX, u32::MAX << 11));
     }
 }
+
+/// The surface the content draws on holds the planes' address once; each page starts from clean planes and an opaque mask of its own width.
+#[test]
+fn reset_keeps_the_planes_and_starts_each_page_clean() {
+    let mut c = Clipped::empty();
+    c.reset(WIDE_WIDTH);
+    let at = c.plane_ptrs();
+    unsafe { *at[0] = 7 };
+    c.reset(99);
+    assert_eq!(c.plane_ptrs(), at);
+    assert_eq!((c.width(), c.plane0()[0]), (99, 0));
+    assert_eq!(c.plane1()[2 * 98], u32::MAX);
+    assert_eq!(
+        c.plane1()[2 * 99],
+        0,
+        "the columns past this width are not opaque"
+    );
+}

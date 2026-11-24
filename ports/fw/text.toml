@@ -16,7 +16,7 @@ cpu = "cf"
 sig = "i32 (u8 *bitmap, u8 *font, i32 x, i32 y, u32 flags, const char *fmt, ...)"
 rule = { kind = "cf_func", hash = "452a08cbf1cea66a807f9ceaeeda4aff", offset = 0x0, len = 4 }
 mark = "D"
-users = ["core/ui"]
+users = ["core/ui", "core/services/machines"]
 doc = "Draws printf-formatted text (vsnprintf into 128 bytes) and returns the advance. `flags`: bit 0 proportional path, 1 centre, 2 right-align, 3 outline after, 4 clear box before (bits 3 and 4 = 0x18), 5 centre vertically, 6 bottom-align, 7 translate (finding 71 section 3)."
 
 [[fn]]

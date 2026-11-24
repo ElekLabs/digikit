@@ -1,10 +1,8 @@
-//! Validated registration/lifetime for native callback page v1.
-//! Firmware view, bitmap and event details belong to core/machines: the registration calls are functions of the image, which the table `machines_info` names (`info::w`) and
-//! the service calls through `FwMem::call`; a word the adapter did not bind is not called.
-use crate::info;
-use dkneeds::keys::name_hash;
+//! Validated registration for native callback pages (record kinds `KIND` and `KIND_V2`). The pages are the owner's table (`native_page::PageTable`): `apply` registers a checked
+//! record in it, and the firmware's view, bitmap and event details are the service file's (`dks/src/native.rs`).
+use crate::native_page::{PageTable, ENCODERS};
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::mem::{iw, rd32};
+use dkrt_abi::mem::rd32;
 use dkrt_sdk::*;
 
 pub const KIND: u32 = records::KIND_NATIVE_PAGE;
@@ -75,46 +73,11 @@ impl<const N: usize> PageSet<N> {
     }
 }
 
-/// The word `k` of the image table `machines_info` (`info::w`), 0 when the image has no usable table (another magic or version) or the adapter did not bind the word.
-unsafe fn word<C: CoreApi>(core: &C, k: usize) -> u32 {
-    let t = core.info(name_hash("machines_info"));
-    if t.is_null()
-        || iw(t, info::w::MAGIC) != info::MAGIC
-        || iw(t, info::w::VERSION) != info::VERSION
-    {
-        return 0;
-    }
-    iw(t, k)
-}
-
-/// Whether the image has the native page calls of record kind `kind` (`KIND` or `KIND_V2`).
-pub fn available<C: CoreApi>(core: &C, kind: u32) -> bool {
-    unsafe {
-        word(
-            core,
-            if kind == KIND_V2 {
-                info::w::N_REGISTER_V2
-            } else {
-                info::w::N_REGISTER
-            },
-        ) != 0
-    }
-}
-
 /// Body excludes kind/length. PARAM indexes belong to this file; the caller also
 /// checks that the referenced machine owns each PARAM through its ordinary rows.
-pub unsafe fn check<C: CoreApi>(
-    core: &C,
-    kind: u32,
-    body: *const u8,
-    params: u32,
-    image_size: u32,
-) -> i32 {
+pub unsafe fn check(kind: u32, body: *const u8, params: u32, image_size: u32) -> i32 {
     if !is_kind(kind) {
         return E_FORMAT;
-    }
-    if !available(core, kind) {
-        return E_NO_REGISTRY;
     }
     let flags = if kind == KIND_V2 {
         rd32(body.add(44))
@@ -185,9 +148,11 @@ pub unsafe fn check<C: CoreApi>(
     }
 }
 
-/// `arg`: Some for a page (`dk_page_canvas`): its callbacks are `draw(arg, frame)` and `event(arg, event)`.
+/// Registers the checked record in `pages`. `arg`: Some for a page (`dk_page_canvas`): its callbacks are `draw(arg, frame)` and `event(arg, event)`. The table refuses a page
+/// twice, another type bound or a mode that mixes (`E_FORMAT`); `check` has refused every record that could come to that.
 pub unsafe fn apply<C: CoreApi>(
     core: &C,
+    pages: &mut PageTable,
     kind: u32,
     body: *const u8,
     base: u32,
@@ -195,14 +160,10 @@ pub unsafe fn apply<C: CoreApi>(
     words: &[u32],
     arg: Option<u32>,
 ) -> i32 {
-    let (arg, with_arg) = match arg {
-        Some(a) => (a, 1u32),
-        None => (0, 0),
-    };
     if words.len() > 8 {
         return E_FORMAT;
     }
-    let mut bindings = [[0u32; 3]; 8];
+    let mut bindings = [[0u32; 3]; ENCODERS];
     for (i, binding) in bindings.iter_mut().enumerate() {
         let b = body.add(binding_offset(kind) + 12 * i);
         binding[0] = rd32(b);
@@ -214,91 +175,36 @@ pub unsafe fn apply<C: CoreApi>(
         };
         binding[2] = rd32(b.add(8));
     }
-    let owner = crate::assign::resolve(core, rd32(body.add(4)));
-    let flags = if kind == KIND_V2 {
-        rd32(body.add(44))
+    let ty = crate::assign::resolve(core, rd32(body.add(4))) as u32;
+    let (mode, index, flags) = if kind == KIND_V2 {
+        (2, page_index(kind, body), rd32(body.add(44)))
     } else {
-        0
+        (1, 1, 0)
     };
-    let (title, draw, event) = (
-        body.add(16) as usize,
-        (base + rd32(body.add(8))) as usize,
-        (base + rd32(body.add(12))) as usize,
+    let title = core::slice::from_raw_parts(body.add(16), 24);
+    let (draw, event) = (base + rd32(body.add(8)), base + rd32(body.add(12)));
+    let result = pages.register(
+        ty,
+        index,
+        mode,
+        flags,
+        title,
+        draw,
+        event,
+        &bindings,
+        words,
+        arg.unwrap_or(0),
+        arg.is_some(),
     );
-    let (bindings, words, count) = (
-        bindings.as_ptr() as usize,
-        words.as_ptr() as usize,
-        words.len(),
-    );
-    let (arg, with_arg) = (arg as usize, with_arg as usize);
-    let r = if kind == KIND_V2 {
-        let f = word(core, info::w::N_REGISTER_V2);
-        let page = page_index(kind, body) as usize;
-        core.call(
-            f,
-            &[
-                owner as usize,
-                page,
-                flags as usize,
-                title,
-                draw,
-                event,
-                bindings,
-                words,
-                count,
-                arg,
-                with_arg,
-            ],
-        )
-    } else {
-        let f = word(core, info::w::N_REGISTER);
-        core.call(
-            f,
-            &[
-                owner as usize,
-                title,
-                draw,
-                event,
-                bindings,
-                words,
-                count,
-                arg,
-                with_arg,
-            ],
-        )
-    };
-    r as i32
-}
-
-/// Remove the native pages of machine type `kind` (before its callbacks and strings are released).
-pub unsafe fn remove<C: CoreApi>(core: &C, kind: u32) {
-    core.call(word(core, info::w::N_REMOVE), &[kind as usize]);
-}
-
-/// The native handler of an encoder turn on `view`: nonzero when it consumed the turn.
-pub unsafe fn turn<C: CoreApi>(core: &C, view: *const u8, event: *const u8) -> u32 {
-    core.call(
-        word(core, info::w::N_TURN),
-        &[view as usize, event as usize],
-    ) as u32
+    match result {
+        Ok(()) => OK,
+        Err(()) => E_FORMAT,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dkrt_test_support::FakeCore;
-
-    /// A core whose image has the adapter's native page calls.
-    fn native_core() -> FakeCore {
-        let mut t = std::vec![0u32; info::WORDS];
-        t[info::w::MAGIC] = info::MAGIC;
-        t[info::w::VERSION] = info::VERSION;
-        t[info::w::N_REGISTER] = 0x6000_0010;
-        t[info::w::N_REGISTER_V2] = 0x6000_0020;
-        let mut c = FakeCore::new();
-        c.info_tables.push((name_hash("machines_info"), t));
-        c
-    }
 
     fn put(body: &mut [u8], offset: usize, value: u32) {
         body[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
@@ -321,7 +227,6 @@ mod tests {
 
     #[test]
     fn replacement_callback_checks_version_index_and_binding_bounds() {
-        let core = native_core();
         let mut body = [0u8; LEN_V2 as usize - 8];
         put(&mut body, 0, 2);
         put(&mut body, 8, 2);
@@ -329,65 +234,46 @@ mod tests {
         body[16..20].copy_from_slice(b"PAGE");
         put(&mut body, 48, 1);
         put(&mut body, 56, 7);
-        assert_eq!(unsafe { check(&core, KIND_V2, body.as_ptr(), 1, 8) }, OK);
+        assert_eq!(unsafe { check(KIND_V2, body.as_ptr(), 1, 8) }, OK);
         put(&mut body, 44, 1);
-        assert_eq!(unsafe { check(&core, KIND_V2, body.as_ptr(), 1, 8) }, OK);
+        assert_eq!(unsafe { check(KIND_V2, body.as_ptr(), 1, 8) }, OK);
         let mut page1 = body;
         put(&mut page1, 40, 1);
-        assert_eq!(
-            unsafe { check(&core, KIND_V2, page1.as_ptr(), 1, 8) },
-            E_FORMAT
-        );
+        assert_eq!(unsafe { check(KIND_V2, page1.as_ptr(), 1, 8) }, E_FORMAT);
         put(&mut page1, 44, 2);
-        assert_eq!(unsafe { check(&core, KIND_V2, page1.as_ptr(), 1, 8) }, OK);
+        assert_eq!(unsafe { check(KIND_V2, page1.as_ptr(), 1, 8) }, OK);
         put(&mut page1, 44, 3);
-        assert_eq!(
-            unsafe { check(&core, KIND_V2, page1.as_ptr(), 1, 8) },
-            E_FORMAT
-        );
+        assert_eq!(unsafe { check(KIND_V2, page1.as_ptr(), 1, 8) }, E_FORMAT);
         for (offset, value) in [(0, 1), (40, 2), (44, 2), (52, 1), (56, 8)] {
             let mut bad = body;
             put(&mut bad, offset, value);
-            assert_eq!(
-                unsafe { check(&core, KIND_V2, bad.as_ptr(), 1, 8) },
-                E_FORMAT
-            );
+            assert_eq!(unsafe { check(KIND_V2, bad.as_ptr(), 1, 8) }, E_FORMAT);
         }
     }
 
     #[test]
     fn validates_callback_bounds_and_binding_records() {
-        let core = native_core();
         let mut body = [0u8; LEN as usize - 8];
         put(&mut body, 0, 1);
         put(&mut body, 8, 2);
         put(&mut body, 12, 4);
         body[16..20].copy_from_slice(b"PAGE");
         put(&mut body, 40, 1);
-        assert_eq!(unsafe { check(&core, KIND, body.as_ptr(), 1, 8) }, OK);
+        assert_eq!(unsafe { check(KIND, body.as_ptr(), 1, 8) }, OK);
         for (offset, value) in [(0, 2), (8, 3), (12, 8), (40, 3), (44, 1), (48, 8)] {
             let mut invalid = body;
             put(&mut invalid, offset, value);
-            assert_eq!(
-                unsafe { check(&core, KIND, invalid.as_ptr(), 1, 8) },
-                E_FORMAT
-            );
+            assert_eq!(unsafe { check(KIND, invalid.as_ptr(), 1, 8) }, E_FORMAT);
         }
         let mut duplicate = body;
         put(&mut duplicate, 52, 2);
-        assert_eq!(
-            unsafe { check(&core, KIND, duplicate.as_ptr(), 1, 8) },
-            E_FORMAT
-        );
+        assert_eq!(unsafe { check(KIND, duplicate.as_ptr(), 1, 8) }, E_FORMAT);
         let mut gap = body;
         put(&mut gap, 64, 2);
         put(&mut gap, 72, 2);
-        assert_eq!(unsafe { check(&core, KIND, gap.as_ptr(), 1, 8) }, E_FORMAT);
+        assert_eq!(unsafe { check(KIND, gap.as_ptr(), 1, 8) }, E_FORMAT);
         let mut title = body;
         title[16..40].fill(b'A');
-        assert_eq!(
-            unsafe { check(&core, KIND, title.as_ptr(), 1, 8) },
-            E_FORMAT
-        );
+        assert_eq!(unsafe { check(KIND, title.as_ptr(), 1, 8) }, E_FORMAT);
     }
 }

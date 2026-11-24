@@ -100,7 +100,7 @@ pub(crate) unsafe fn ck_native<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
         if !nativepage::is_kind(kind) || bad_native != OK {
             return;
         }
-        bad_native = nativepage::check(core, kind, b, np, image_size);
+        bad_native = nativepage::check(kind, b, np, image_size);
         if bad_native != OK {
             return;
         }

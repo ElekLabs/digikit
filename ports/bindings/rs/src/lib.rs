@@ -120,7 +120,11 @@ pub mod link {
 }
 
 pub mod machine {
-    // cf.machine.fn.current_track_type: no sig yet
+    unsafe extern "C" {
+        /// DT2: returns the current track's machine type as a signed long, -1 without a track; the SRC page hook calls it.
+        #[link_name = "cf.machine.fn.current_track_type"]
+        pub fn current_track_type(view: *mut u8) -> i32;
+    }
 
     // cf.machine.fn.dispatch: no sig yet
 

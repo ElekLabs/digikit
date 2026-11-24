@@ -14,6 +14,7 @@ pub mod fw;
 mod gen_exports;
 mod guard;
 mod hooks;
+pub mod native;
 
 dkrt_svc_rt::service!(
     Machines,

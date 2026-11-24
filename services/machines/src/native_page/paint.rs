@@ -18,6 +18,7 @@ fn paint<S: Surface>(
     view: &impl View,
     clip: &mut S,
     stock: &mut impl Stock,
+    clipped: &mut Clipped,
     page: &NativePage,
     track: u32,
     content: &mut impl Content<S>,
@@ -27,7 +28,7 @@ fn paint<S: Surface>(
     let origin_x = ORIGIN_X - (width - WIDTH);
     let is_overlay = page.flags() & FLAG_STOCK_OVERLAY != 0;
     let mut mask = [0u32; MASK_WORDS];
-    let mut clipped = Clipped::new(width);
+    clipped.reset(width);
     {
         let mut canvas = Canvas::new(clip, width, is_overlay, &mut mask);
         content.draw(page, &f, &mut canvas);
@@ -38,7 +39,7 @@ fn paint<S: Surface>(
     if !is_overlay {
         stock.fill_rect(origin_x as i32, 0, 127, 52, 0);
     }
-    stock.blit(&clipped, origin_x);
+    stock.blit(clipped, origin_x);
     if !is_overlay {
         dots(view.page_index(), |a, b, c, d, e| {
             stock.fill_rect(a, b, c, d, e)
@@ -46,17 +47,31 @@ fn paint<S: Surface>(
     }
 }
 
-/// The draw hook: the content draws on `clip`; the result is composited on the firmware canvas `stock` (clear the area unless an overlay, blit, page dots).
+/// The draw hook: the content draws on `clip`, whose bitmap is the planes of `clipped`; the result is composited on the firmware canvas `stock` (clear the area unless an
+/// overlay, blit, page dots).
 pub fn draw<S: Surface>(
     table: &PageTable,
     view: &impl View,
     clip: &mut S,
     stock: &mut impl Stock,
+    clipped: &mut Clipped,
     content: &mut impl Content<S>,
 ) -> Draw {
-    let Some(page) = table.selected(view) else {
-        return Draw::Stock;
-    };
+    match table.selected(view) {
+        Some(page) => draw_page(page, view, clip, stock, clipped, content),
+        None => Draw::Stock,
+    }
+}
+
+/// `draw` for a page the caller took out of the table (`selected`): the content may call back into whatever holds the table, so the caller lets go of it first.
+pub fn draw_page<S: Surface>(
+    page: &NativePage,
+    view: &impl View,
+    clip: &mut S,
+    stock: &mut impl Stock,
+    clipped: &mut Clipped,
+    content: &mut impl Content<S>,
+) -> Draw {
     let track = view.track();
     if track >= 16 {
         return Draw::Stock;
@@ -64,7 +79,7 @@ pub fn draw<S: Surface>(
     if page.flags() & FLAG_STOCK_OVERLAY != 0 {
         return Draw::StockThenOverlay;
     }
-    paint(view, clip, stock, page, track, content);
+    paint(view, clip, stock, clipped, page, track, content);
     Draw::Handled
 }
 
@@ -74,17 +89,29 @@ pub fn overlay<S: Surface>(
     view: &impl View,
     clip: &mut S,
     stock: &mut impl Stock,
+    clipped: &mut Clipped,
     content: &mut impl Content<S>,
 ) {
-    let Some(page) = table.selected(view) else {
-        return;
-    };
+    if let Some(page) = table.selected(view) {
+        overlay_page(page, view, clip, stock, clipped, content);
+    }
+}
+
+/// `overlay` for a page the caller took out of the table.
+pub fn overlay_page<S: Surface>(
+    page: &NativePage,
+    view: &impl View,
+    clip: &mut S,
+    stock: &mut impl Stock,
+    clipped: &mut Clipped,
+    content: &mut impl Content<S>,
+) {
     if page.flags() & FLAG_STOCK_OVERLAY == 0 {
         return;
     }
     let track = view.track();
     if track < 16 {
-        paint(view, clip, stock, page, track, content);
+        paint(view, clip, stock, clipped, page, track, content);
     }
 }
 

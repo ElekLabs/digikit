@@ -273,7 +273,7 @@ devices = ["dt2"]
 from = { anchor = "dsp.machine.data.selector.table", len = "(image.u8(cf.machine.fn.dispatch + 1) + 1) * 4" }
 append = { registry = "machines", row = ["image.u32(dsp.machine.data.selector.table + 4 * $clone_of)"] }
 
-# the type reader of the Digitone II, copied: its callers that want the real type call this copy
+# the type reader of the Digitone II, copied: its callers that want the real type call this copy (the service's native pages read the type of a sound with it: `machines_info`)
 [[section]]
 name = "mf_reader_real"
 region = "cf.expansion"
@@ -282,7 +282,7 @@ from = { anchor = "cf.machine.fn.type_reader", len = 48 }
 
 # ---- the service file's half of the image (docs/plans/runtime-and-services.md section 13.2) ------------------------------
 # The table `machines_info` (src/cf/*/machines.s) is what `machines.dks` (services/machines/dks) reads of the image through the core (`dkc_info`): the registry's
-# rows and counts, `mf_ensure`, the adapter's native page functions, the slot map and the page rows (version 3: no firmware address and the native page calls `mf_native_register`, `_v2`, `_remove` and `_turn` as words, which the service calls; the file names the firmware functions and exits and the port file resolves them). The Digitone II's frame builder (the interrupt site of the frame type) is a hook of the service file (RC4-3), no slot of the image.
+# rows and counts, `mf_ensure`, the slot map, the page rows and the copy of the type reader (version 5: no firmware address; the native pages are the service's (`services/machines/src/native_page/`), the file names the firmware functions and exits and the port file resolves them). The Digitone II's frame builder (the interrupt site of the frame type) is a hook of the service file (RC4-3), no slot of the image.
 
 [[info]]
 name = "machines_info"
@@ -303,7 +303,6 @@ _mf_entries = "machines.entries"
 _mf_rows = "machines.rows"
 _mf_list_stock = "mf_list_stock"
 _mf_t_dispatch = "hook.cf.machine.fn.dispatch.tail"
-_mf_spt = "cf.machine.fn.current_track_type"
 
 [[object]]
 path = "build/machines-dn2.dko.json"
@@ -320,6 +319,7 @@ _mf_list_stock = "mf_list_stock"
 _mf_t_dispatch = "hook.cf.machine.fn.dispatch.tail"
 _mf_pgrows = "pages.rows"
 _mf_pgn = "pages.count"
+_mf_reader_real = "mf_reader_real"
 
 # ---- patches: hooks (code in the objects above), bound writes and repointed table references ------------------------
 
@@ -562,17 +562,3 @@ offset = 0x2
 value = "mf_reader_real"
 width = 4
 devices = ["dn2"]
-
-# Opt-in native callback page v1. Ordinary machine rows and their ABI stay unchanged.
-[[object]]
-path = "build/native-page-dt2.dko.json"
-sources = ["src/cf/native-page-dt2.c"]
-place = "cf.expansion"
-devices = ["dt2"]
-
-[[object]]
-path = "build/native-page-dn2.dko.json"
-sources = ["src/cf/native-page-dn2.c"]
-place = "cf.expansion"
-devices = ["dn2"]
-

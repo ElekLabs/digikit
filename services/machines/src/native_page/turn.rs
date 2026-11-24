@@ -1,3 +1,4 @@
+use super::page::NativePage;
 use super::surface::Surface;
 use super::table::PageTable;
 use super::view::{Content, View};
@@ -17,9 +18,19 @@ pub fn turn<S: Surface>(
     event: &Event,
     content: &mut impl Content<S>,
 ) -> u32 {
-    let Some(page) = table.selected(view) else {
-        return 0;
-    };
+    match table.selected(view) {
+        Some(page) => turn_page(page, view, event, content),
+        None => 0,
+    }
+}
+
+/// `turn` for a page the caller took out of the table (the content may call back into whatever holds the table).
+pub fn turn_page<S: Surface>(
+    page: &NativePage,
+    view: &impl View,
+    event: &Event,
+    content: &mut impl Content<S>,
+) -> u32 {
     let encoder = event.control.wrapping_sub(1);
     if encoder >= 8 {
         return 0;

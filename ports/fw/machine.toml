@@ -46,6 +46,7 @@ name = "cf.machine.fn.current_track_type"
 was = ["cf.machine.fn.srcpage_type", "cf.machines.srcpage.type"]
 cpu = "cf"
 devices = ["dt2"]
+sig = "i32 (u8 *view)"
 rule = { kind = "cf_func", hash = "abb082366c00e8016d04660320944930", offset = 0x0, len = 6 }
 mark = "D"
 users = ["core/machines", "core/services/machines"]

@@ -125,6 +125,7 @@ def unit():
         "_mf_pgrows": PGROWS,
         # symbols of the info table of the image (not read by these tests)
         "_mf_pgn": 0,
+        "_mf_reader_real": 0,
     }
     sym.update({f"mf_rc{i}": a for i, a in enumerate(RC)})
     return pk_cfunit.CfUnit(
@@ -321,6 +322,7 @@ def unit_pg():
         "_mf_pgrows": PGROWS,
         # symbols of the info table of the image (not read by these tests)
         "_mf_pgn": len(PAGES),
+        "_mf_reader_real": 0,
     }
     sym.update({f"mf_rc{i}": a for i, a in enumerate(RC)})
     return pk_cfunit.CfUnit(
@@ -382,108 +384,3 @@ def test_page_descriptor(unit_pg):
         res[3].stack[2] == FIRST and res[4].stack[2] == FIRST
     )  # the own type stays above 4
     assert res[5].stack[2] == ENTRIES[2][2]  # Mid Clone: its clone_of
-    # the rows are descriptors: the strings became std::string reps (length, capacity, -1 before the characters)
-    rows = res[0].reads[0]
-    for k, (_m, name, title, codes, _s) in enumerate(PAGES):
-        w = [
-            int.from_bytes(rows[PGSIZE * k + 4 * i : PGSIZE * k + 4 * i + 4], "big")
-            for i in range(11)
-        ]
-        assert w[2:11] == codes
-        for ptr, text in ((w[0], name), (w[1], title)):
-            hdr = unit_pg.run_cases(
-                mem,
-                [
-                    {
-                        "routine": "mf_typemap0",
-                        "stack": [unit_pg.rts, FIRST],
-                        "reads": [(ptr - 12, 12 + len(text) + 1)],
-                    }
-                ],
-            )[0].reads[0]
-            assert [int.from_bytes(hdr[i : i + 4], "big") for i in (0, 4, 8)] == [
-                len(text),
-                len(text),
-                0xFFFFFFFF,
-            ]
-            assert hdr[12:] == text.encode() + b"\0"
-
-
-def test_slot_to_code(unit_pg):
-    mem = page_tables()
-    cases = []
-    probes = [
-        (FIRST, 25),
-        (FIRST, 27),
-        (FIRST, 30),
-        (FIRST, 41),
-        (FIRST, 28),
-        (FIRST, 64),
-        (FIRST + 1, 35),
-        (FIRST + 1, 25),
-        (FIRST + 2, 25),
-    ]
-    for t, slot in probes:
-        cases.append(
-            {
-                "routine": "mf_typemap2",
-                "d": {2: 0xD2D2},
-                "a": {0: slot},
-                "stack": [0xD2D2, unit_pg.rts, slot, t, 3],
-            }
-        )
-    # a slot outside 25..64 of a type with pages: the stock code (it ignores the type there)
-    for slot in (0x10, 0x42, 65):
-        cases.append(
-            {
-                "routine": "mf_typemap2",
-                "a": {0: slot},
-                "stack": [0xD2D2, unit_pg.rts, slot, FIRST, 3],
-            }
-        )
-    res = unit_pg.run_cases(mem, cases)
-    want = [0x141, 0x143, 0x144, 0x146, 0, 0, 0xD4, 0, None]
-    for r, w, (t, slot) in zip(res[:9], want, probes, strict=True):
-        if w is None:  # Mid Clone has no page: clone_of mapped, a0 kept
-            assert (
-                r.stub == TAILS["typemap2"]
-                and r.stack[3] == ENTRIES[2][2]
-                and r.a[0] == slot
-            )
-        else:
-            assert r.stub == "mf_ret_tm2" and r.d[0] == w and r.d[2] == 0xD2D2, (
-                t,
-                slot,
-            )
-    for r, slot in zip(res[9:], (0x10, 0x42, 65), strict=True):
-        assert (
-            r.stub == TAILS["typemap2"]
-            and r.a[0] == slot
-            and r.stack[3] == FIRST
-            and r.d[1] == 0x64
-        )
-
-
-def test_reader_gives_pages_machines_their_own_type(unit_pg):
-    mem = page_tables()
-    for t, want in [
-        (0, 0),
-        (4, 4),
-        (FIRST, FIRST),
-        (FIRST + 1, FIRST + 1),
-        (FIRST + 2, ENTRIES[2][2]),
-    ]:
-        m = dict(mem)
-        m[OBJ + 0xDE] = bytes([t])
-        r = unit_pg.run_cases(
-            m,
-            [
-                {
-                    "routine": "mf_reader",
-                    "d": {1: 2},
-                    "a": {0: OBJ, 1: 0x55},
-                    "stack": [0x99, 0x777],
-                }
-            ],
-        )[0]
-        assert r.stub == "mf_x_rd" and r.d[0] == want and r.a[1] == 0x55

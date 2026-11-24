@@ -23,7 +23,7 @@ fn table(device: u32) -> Vec<u32> {
     t[w::ROW_SIZE] = 64;
     t[w::O_POS] = 48;
     t[w::FIRST] = 7;
-    t[w::N_CODE] = 0x4000_2000;
+    t[w::READER_REAL] = 0x4000_2000;
     t
 }
 
@@ -133,4 +133,40 @@ fn start_builds_the_list_and_gives_the_patches_their_bytes() {
     assert_eq!(m.list_end(), m.list_start() + 9 * 4);
     let list = unsafe { *core::ptr::addr_of!(dkrt_svc_machines::list::DKRT_MF_LIST) };
     assert_eq!(&list[..9], [0, 1, 7, 2, 3, 4, 5, 6, 9]);
+}
+
+/// The page half of `mf_ensure` is the service's: `start` makes the reserved page rows free rows with a string name, in the place and by `start_in` alike.
+#[test]
+fn start_makes_the_reserved_page_rows_free_rows() {
+    use dkrt_abi::mem::FwMem;
+    use dkrt_svc_rows::dynreg::w as dw;
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    const ROWS: u32 = 0x60_0000;
+    let mut dynreg = vec![0u32; 96];
+    dynreg[dw::PG_ROWS] = ROWS;
+    dynreg[dw::PG_ROW_SIZE] = 0x54;
+    dynreg[dw::PG_DYN_N] = 2;
+    dynreg[dw::PGO_NAME] = 0;
+    dynreg[dw::PGO_TITLE] = 4;
+    dynreg[dw::PGO_C] = 8;
+    dynreg[dw::PGO_S] = 0x30;
+    dynreg[dw::PGO_MACH] = 0x2c;
+    dynreg[dw::PG_FREE] = 0x7fff_ffff;
+    for in_place in [false, true] {
+        let mut core = core_with(Some(table(2)), 2);
+        core.set_dynreg(dynreg.clone());
+        core.mem.borrow_mut().insert(ROWS, 0x4000_0000);
+        core.mem.borrow_mut().insert(ROWS + 0x54 + 0x2c, 5);
+        if in_place {
+            let mut slot = Box::new(MaybeUninit::<Machines>::uninit());
+            <Machines as Provider<FakeCore>>::start_in(&core, &mut slot).unwrap();
+        } else {
+            <Machines as Provider<FakeCore>>::start(&core).unwrap();
+        }
+        let rep = core::ptr::addr_of!(dkrt_svc_machines::registry::rstate().empty_rep) as u32 + 12;
+        unsafe {
+            assert_eq!(core.rd(ROWS), rep, "in_place {in_place}");
+            assert_eq!(core.rd(ROWS + 0x54 + 0x2c), 0x7fff_ffff);
+        }
+    }
 }

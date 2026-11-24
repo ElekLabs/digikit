@@ -2,6 +2,7 @@
 //! its native pages.
 
 use crate::build::ApplyArgs;
+use crate::native_page::PageTable;
 use crate::nativepage;
 use crate::parking::Parking;
 use crate::registry::{
@@ -247,6 +248,7 @@ impl Applied {
         b: *const u8,
         consumer: &Consumer<'_>,
         args: Option<&ApplyArgs>,
+        pages: &mut PageTable,
     ) -> i32 {
         if !nativepage::is_kind(kind) {
             return OK;
@@ -285,6 +287,7 @@ impl Applied {
         if rc == OK {
             rc = nativepage::apply(
                 core,
+                pages,
                 kind,
                 b,
                 base,

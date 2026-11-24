@@ -12,7 +12,7 @@
 | Registers named in a comment as "free" are scratch at that point of the stock code (read from the disassembly).
 |
 | Lazily built table (mf_ensure, once, the first time a routine needs it): the std::string representations the dispatch
-| descriptors point to (upper-cased name and short name). The Digitone II has no sort comparator, per-type byte
+| descriptors point to (upper-cased name and short name). The page rows' strings are the service's (machines.dks, `pagerows`). The Digitone II has no sort comparator, per-type byte
 | table, clone tests, parameter type argument or DSP selector table; it has the type maps, the frame type and the
 | type reader instead (finding 02, "core.machines on Digitone II 1.12").
 
@@ -29,15 +29,6 @@
     .equ O_SNAME,  60          | pointer to the short label (C string)
     .equ ROWSIZE,  64
     .equ MAXN,     32          | registry max
-| row layout of the `pages` registry (module.toml): name, title (std::string chars after mf_ensure), nine codes, the
-| machine's type, nine slots
-    .equ PG_NAME,  0
-    .equ PG_TITLE, 4
-    .equ PG_C,     8
-    .equ PG_MACH,  44
-    .equ PG_S,     48
-    .equ PG_SIZE,  84
-    .equ PGMAX,    32          | registry max of `pages`
     .equ REPSIZE,  48          | bytes per std::string representation in mf_strbuf
 
 | ---- mf_ensure: build the run-time tables once. Preserves every register (not the flags).
@@ -63,23 +54,7 @@ mf_ensure:
     lea     ROWSIZE(%a2),%a2
     subq.l  #1,%d4
     bne.s   10b
-8:    | page descriptors: the names and titles as they are (the row is the descriptor)
-    moveq   #0,%d6
-    lea     _mf_pgrows,%a2
-    lea     mf_pgstr,%a3
-    move.l  #_mf_pgn,%d4
-    tst.l   %d4
-    beq.s   12f
-11: movea.l PG_NAME(%a2),%a0
-    bsr.w   mf_rep
-    move.l  %d0,PG_NAME(%a2)
-    movea.l PG_TITLE(%a2),%a0
-    bsr.w   mf_rep
-    move.l  %d0,PG_TITLE(%a2)
-    lea     PG_SIZE(%a2),%a2
-    subq.l  #1,%d4
-    bne.s   11b
-12: moveq   #-1,%d0
+8:  moveq   #-1,%d0
     move.b  %d0,mf_ready
     movem.l (%sp),%d0-%d7/%a0-%a6
     lea     60(%sp),%sp
@@ -130,23 +105,21 @@ mf_dispatch:
     rts
 1:  jmp     _mf_t_dispatch
 
-| ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the patched image (services/machines/dks/src/
-| image.rs has the layout; the word index is the byte offset / 4): the registry, `mf_ensure`, the native page functions, the slot map and the page rows (version 3: and the native page calls of the registry). The firmware
-| addresses are not here: the file names them and the port file resolves them. 2 = the Digitone II.
+| ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the patched image (services/machines/src/info.rs has the layout; the word index is the byte
+| offset / 4): the registry, `mf_ensure`, the slot map, the page rows and the copy of the type reader (version 5: the native page functions are the service's). The firmware addresses are not here: the file
+| names them and the port file resolves them. 2 = the Digitone II.
     .section .rodata
     .balign 4
     .globl machines_info
 machines_info:
-    .long   0x4d414348, 4, 2                | magic MACH, version, device
+    .long   0x4d414348, 5, 2                | magic MACH, version, device
     .long   _mf_first, _mf_count, _mf_entries, _mf_rows
     .long   mf_ensure
-    .long   mf_native_page_count, mf_native_descriptor, mf_native_code, mf_native_draw, mf_native_overlay
     .long   0, _mf_pgrows, _mf_pgn          | (the slot map: Digitakt II), the page rows and their count
-    .long   mf_native_register, mf_native_register_v2, mf_native_remove, mf_native_turn | the native page calls of the registry
-    .long   _mf_list_stock, ROWSIZE, O_POS  | version 4: the stock list order (the service builds the list and the rank pairs), the row size and the offset of `position`
+    .long   _mf_reader_real                 | the copy of the stock type reader
+    .long   _mf_list_stock, ROWSIZE, O_POS  | the stock list order (the service builds the list and the rank pairs), the row size and the offset of `position`
 
     .bss
     .balign 4
 mf_ready:    .space 4
 mf_strbuf:   .space REPSIZE * 2 * MAXN
-mf_pgstr:    .space REPSIZE * 2 * PGMAX

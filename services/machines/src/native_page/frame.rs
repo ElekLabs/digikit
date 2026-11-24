@@ -5,7 +5,7 @@ use super::view::View;
 /// `dk_page_frame` (sdk/include/dk/page/page.h) without the canvas function pointers: `version`, `size`, `track`, `params[8]`, the canvas width and height, `word_count`,
 /// `word_values[8]`, `level`. `size` is the size of the C struct, 100 bytes with the two 4-byte pointers.
 ///
-/// The byte offsets below are the layout. `image-modules/points/machines/src/cf/native-page-layout.h` repeats them and the C adapter asserts them against the struct
+/// The byte offsets below are the layout. `tests/fixtures/modules/native-page/src/frame-layout.h` repeats them and the fixture module (C) asserts them against the struct
 /// at compile time (`_Static_assert` on `sizeof` and `offsetof`); `tests` checks the header against these constants.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {

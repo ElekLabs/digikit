@@ -118,7 +118,8 @@
       "sig": "void (u8 *dst, u8 *src, i32 x, i32 y, u8 centre)",
       "subsystem": "draw",
       "users": [
-        "core/ui"
+        "core/ui",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -179,7 +180,8 @@
       "sig": "void (u8 *bitmap, i32 x0, i32 y0, i32 x1, i32 y1, i32 color)",
       "subsystem": "draw",
       "users": [
-        "core/ui"
+        "core/ui",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -3583,6 +3585,7 @@
           "offset": 0
         }
       },
+      "sig": "i32 (u8 *view)",
       "subsystem": "machine",
       "users": [
         "core/machines",
@@ -8911,7 +8914,8 @@
       },
       "subsystem": "page",
       "users": [
-        "core/machines"
+        "core/machines",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -8953,7 +8957,8 @@
       "sig": "u8 *(u8 *sounds, u32 index)",
       "subsystem": "page",
       "users": [
-        "core/machines"
+        "core/machines",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -8995,7 +9000,8 @@
       "sig": "u32 (u8 *view)",
       "subsystem": "page",
       "users": [
-        "core/machines"
+        "core/machines",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -9058,7 +9064,8 @@
       "subsystem": "page",
       "users": [
         "core/machines",
-        "core/runtime"
+        "core/runtime",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -17813,7 +17820,8 @@
       "sig": "i32 (u8 *bitmap, u8 *font, i32 x, i32 y, u32 flags, const char *fmt, ...)",
       "subsystem": "text",
       "users": [
-        "core/ui"
+        "core/ui",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -18882,7 +18890,8 @@
       "subsystem": "view",
       "users": [
         "core/digikit-menu",
-        "core/ui"
+        "core/ui",
+        "core/services/machines"
       ],
       "was": [
         "cf.menu.fn.invalidate"

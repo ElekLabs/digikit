@@ -59,7 +59,8 @@ impl PageTable {
         {
             return Err(());
         }
-        self.pages[ty as usize][index as usize] = NativePage::build(&PageSpec {
+        let slot = &mut self.pages[ty as usize][index as usize];
+        *slot = NativePage::build(&PageSpec {
             title,
             flags,
             draw,
@@ -69,6 +70,7 @@ impl PageTable {
             arg,
             with_arg,
         });
+        slot.anchor();
         self.modes[ty as usize] = mode;
         self.armed += 1;
         Ok(())
@@ -103,8 +105,12 @@ impl PageTable {
     }
     /// The page the view shows, if it is a native one.
     pub fn selected(&self, view: &impl View) -> Option<&NativePage> {
+        // nothing registered: the view is not even read (a hook runs on every draw and turn of the machine page)
+        if !self.armed() {
+            return None;
+        }
         let index = view.page_index();
-        if !self.armed() || index >= 2 {
+        if index >= 2 {
             return None;
         }
         let ty = view.native_type();

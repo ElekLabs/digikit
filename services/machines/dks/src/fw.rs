@@ -4,7 +4,7 @@
 //! the calls are no-ops with the neutral answer.
 use core::ptr::read_volatile;
 use dkrt_abi::fw::{Fw, MODE_KEYS};
-use dkrt_svc_machines::{nativepage, paramapi};
+use dkrt_svc_machines::paramapi;
 use dkrt_svc_rt::ImportCore;
 
 pub struct DkFw;
@@ -109,7 +109,7 @@ pub unsafe extern "C" fn dks_page_key(view: *const u8, ev: *const u8) {
 #[no_mangle]
 pub unsafe extern "C" fn dks_page_turn(view: *const u8, ev: *const u8) -> u32 {
     match crate::DK_SVC_OWNER.with(|m| m.clicks().page_turn_input(view, ev)) {
-        Some(()) => nativepage::turn(&ImportCore, view, ev),
+        Some(()) => crate::native::turn(view, ev),
         None => 0,
     }
 }

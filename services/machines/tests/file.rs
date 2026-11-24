@@ -15,7 +15,7 @@ use file::builder::{
     dk_page_bind_local, dk_param_glyph, dk_param_latched, dk_param_range,
 };
 use file::fw::{dk_param_get, dk_param_set, dks_page_key, dks_page_turn};
-pub use file::{builder, fw, DK_SVC_OWNER};
+pub use file::{builder, fw, native, DK_SVC_OWNER};
 use file::{dk_svc_start, dk_svc_stop};
 
 #[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]

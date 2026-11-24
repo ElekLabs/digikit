@@ -55,7 +55,7 @@ cpu = "cf"
 sig = "void (u8 *view)"
 rule = { kind = "cf_func", hash = "06c561b63ac3ef5d6fd66758337bb31f", offset = 0x0, len = 4 }
 mark = "V"
-users = ["core/digikit-menu", "core/ui"]
+users = ["core/digikit-menu", "core/ui", "core/services/machines"]
 doc = "`View::invalidate(View *)`, DT2 0x4011b126, DN2 0x4011ca9a (34 bytes): when +0x17 is clear sets +0x14 and tail-jumps through the manager (+0x2c) to set the redraw flag VC+0x20. The render draws only when that flag is set, from the topmost opaque view up."
 
 [[fn]]

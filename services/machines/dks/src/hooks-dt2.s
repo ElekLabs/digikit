@@ -23,11 +23,7 @@
     .equ T_FIRST, 12
     .equ T_COUNT, 16
     .equ T_ROWS, 24
-    .equ T_N_PAGE_COUNT, 32
-    .equ T_N_CODE, 40
-    .equ T_N_DRAW, 44
-    .equ T_N_OVERLAY, 48
-    .equ T_SLOTMAP, 52
+    .equ T_SLOTMAP, 32
 
 | mfd_row: d0 = index k (< count) -> a0 = &machines.rows[k]. Preserves every other register (not the flags).
 mfd_row:
@@ -112,8 +108,7 @@ mf_srcpage:
     blt.s   1f
     move.l  #SRC_PAGES,-(%sp)
     move.l  %d0,-(%sp)
-    movea.l DKRT_MF_TAB+T_N_PAGE_COUNT,%a1
-    jsr     (%a1)
+    jsr     dks_native_page_count
     addq.l  #8,%sp
     move.l  %d0,%d1
     lsl.l   #2,%d1

@@ -5,6 +5,7 @@
 //! `Provider` (`start`, `attach`, `detach`, `settle`, `reload_done`), `Ticker` and `Describe` are here, in one block each; `records.rs` and `dsp/part.rs` hold the other parts.
 use crate::apply::Applied;
 use crate::build::Builder;
+use crate::native_page::PageTable;
 use crate::parking::Parking;
 use crate::slots::Slots;
 use crate::{assign, dsp, info, registry, selection_view, unload};
@@ -29,6 +30,9 @@ pub struct Machines {
     clicks: Slots,
     parking: Parking,
     applied: Applied,
+    /// The native pages of the registered machines (`native_page/`): the hooks of the service file read it, and its descriptors are addresses of it, so it stays where the owner
+    /// is made.
+    pages: PageTable,
     /// The types in the machine list `start` built (`list`).
     listed: u32,
 }
@@ -43,6 +47,7 @@ impl Machines {
             clicks: Slots::new(),
             parking: Parking::new(),
             applied: Applied::new(),
+            pages: PageTable::new(),
             listed: 0,
         }
     }
@@ -111,6 +116,11 @@ impl Machines {
         &mut self.clicks
     }
 
+    /// The native pages of the machines (the hooks of the service file look them up).
+    pub fn pages(&self) -> &PageTable {
+        &self.pages
+    }
+
     /// The parking passes of absent numbers (read only).
     pub fn parking(&self) -> &Parking {
         &self.parking
@@ -127,8 +137,14 @@ impl Machines {
         body: *const u8,
         consumer: &Consumer<'_>,
     ) -> i32 {
-        self.applied
-            .native_page(core, kind, body, consumer, self.builder.args())
+        self.applied.native_page(
+            core,
+            kind,
+            body,
+            consumer,
+            self.builder.args(),
+            &mut self.pages,
+        )
     }
 
     /// The list builder's buffer size in bytes, 4 per listed type: the bytes of the patches `list_alloc` and `list_vector_end`.
@@ -175,6 +191,8 @@ impl<C: CoreApi> Provider<C> for Machines {
         status(unsafe { info::bind(core) })?;
         let mut m = Machines::new();
         m.listed = unsafe { info::build_list(core) }.ok_or(E_NO_REGISTRY)? as u32;
+        // SAFETY: the registry is the image's; no module has filled a row yet
+        unsafe { crate::pagerows::init(core) };
         Ok(m)
     }
 
@@ -191,6 +209,8 @@ impl<C: CoreApi> Provider<C> for Machines {
             Builder::init(core::ptr::addr_of_mut!((*at).builder));
             core::ptr::addr_of_mut!((*at).clicks).write(Slots::new());
             (*at).listed = listed;
+            // no module has filled a row yet
+            crate::pagerows::init(core);
         }
         Ok(())
     }
@@ -235,6 +255,7 @@ impl<C: CoreApi> Provider<C> for Machines {
                 consumer.get(),
                 &mut self.parking,
                 &mut self.clicks,
+                &mut self.pages,
             )
         }
     }

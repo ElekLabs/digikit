@@ -57,21 +57,11 @@ fn row_words(core: &FakeCore, code: u32) -> [u32; 3] {
     unsafe { [core.rd(a), core.rd(a + 4), core.rd(a + 8)] }
 }
 
-const N_REGISTER: u32 = 0x6000_0010;
-const N_REMOVE: u32 = 0x6000_0030;
-const N_TURN: u32 = 0x6000_0040;
-
-/// The image table `machines_info` with the adapter's native page calls bound (`native_pages: false`: the words are 0).
-fn machines_info(native_pages: bool) -> Vec<u32> {
+/// The image table `machines_info`: magic and version only (the native pages are the service's).
+fn machines_info() -> Vec<u32> {
     let mut t = std::vec![0u32; info::WORDS];
     t[info::w::MAGIC] = info::MAGIC;
     t[info::w::VERSION] = info::VERSION;
-    if native_pages {
-        t[info::w::N_REGISTER] = N_REGISTER;
-        t[info::w::N_REGISTER_V2] = N_REGISTER + 0x10;
-        t[info::w::N_REMOVE] = N_REMOVE;
-        t[info::w::N_TURN] = N_TURN;
-    }
     t
 }
 
@@ -89,7 +79,7 @@ fn core() -> FakeCore {
     let mut c = FakeCore::new();
     c.set_dynreg(table());
     c.info_tables
-        .push((name_hash("machines_info"), machines_info(true)));
+        .push((name_hash("machines_info"), machines_info()));
     c.device = dkrt_abi::profiles::DT2.id;
     c
 }
@@ -326,42 +316,39 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
 }
 
 #[test]
-fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kinds_do_nothing() {
+fn a_native_page_record_registers_its_page_in_the_owner_and_other_kinds_do_nothing() {
     let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = core();
     let mut owner = Box::new(Machines::new());
     // the key of the machine is a pinned type number of the run-time range
     let (kind, body) = native(0x12);
     let reg = section(&[(kind, body.clone())]);
-    // what the adapter's `mf_native_register` reads, taken while its arguments are valid: (owner, draw, event, snapshot words, arg, with_arg)
-    let seen: Rc<RefCell<Vec<(usize, usize, usize, Vec<u32>, usize, usize)>>> =
-        Rc::new(RefCell::new(Vec::new()));
-    let sink = seen.clone();
-    *core.on_call.borrow_mut() = Some(Box::new(move |addr, a| {
-        assert_eq!(addr, N_REGISTER, "version 1 records use the v1 function");
-        let words = unsafe { std::slice::from_raw_parts(a[5] as *const u32, a[6]) }.to_vec();
-        sink.borrow_mut()
-            .push((a[0], a[2], a[3], words, a[7], a[8]));
-        0
-    }));
     assert_eq!(apply_record(&mut owner, &core, KIND_PARAM, &body, &reg), OK);
     assert!(
-        core.calls().is_empty(),
-        "a kind of another service or a parameter record writes nothing"
+        !owner.pages().armed(),
+        "a kind of another service or a parameter record registers nothing"
     );
     assert_eq!(
         apply_record(&mut owner, &core, KIND_NATIVE_PAGE, &body, &reg),
         OK
     );
+    // version 1: the one page appended to the machine's ordinary pages, its callbacks at the file's image offsets, no argument
+    let page = owner.pages().page(0x12, 1).expect("page 1 of type 0x12");
     assert_eq!(
-        *seen.borrow(),
-        [(0x12, BASE as usize + 2, BASE as usize + 4, Vec::new(), 0, 0)]
+        (page.draw(), page.event(), page.arg(), page.flags()),
+        (BASE + 2, BASE + 4, None, 0)
     );
-    // a refusal of the firmware adapter is the record's status
-    *core.on_call.borrow_mut() = Some(Box::new(|_, _| E_NO_REGISTRY as usize));
+    assert_eq!(page.title(), b"PAGE");
+    assert_eq!(
+        page.bindings()[0],
+        [2, 9, 0],
+        "binding 0: a literal value (kind 2)"
+    );
+    assert_eq!(owner.pages().page_count(0x12, 3), 4);
+    // the same record again is refused by the table, and nothing changes
     assert_eq!(
         apply_record(&mut owner, &core, KIND_NATIVE_PAGE, &body, &reg),
-        E_NO_REGISTRY
+        E_FORMAT
     );
     // a body shorter than the record's is no record
     assert_eq!(
@@ -374,34 +361,8 @@ fn a_native_page_record_registers_its_callbacks_through_the_image_and_other_kind
         ),
         E_FORMAT
     );
-    // a turn calls the adapter's turn function, and its answer says whether the turn was consumed
-    *core.on_call.borrow_mut() = None;
-    core.fw_result.set(1);
-    assert_eq!(
-        unsafe { dkrt_svc_machines::nativepage::turn(&core, std::ptr::null(), std::ptr::null()) },
-        1
-    );
-    // a firmware without the native page calls (the words are 0) refuses the record when it is checked, registers nothing and consumes no turn
-    let mut bare = core;
-    bare.info_tables
-        .retain(|(h, _)| *h != name_hash("machines_info"));
-    bare.info_tables
-        .push((name_hash("machines_info"), machines_info(false)));
-    assert_eq!(
-        run_check(&bare, check_step::NATIVE, &section(&[(kind, body.clone())])),
-        E_NO_REGISTRY
-    );
-    bare.calls.borrow_mut().clear();
-    assert_eq!(
-        apply_record(&mut owner, &bare, KIND_NATIVE_PAGE, &body, &reg),
-        OK,
-        "an unbound word is not called (the check refused the record before; apply has nothing to register)"
-    );
-    assert_eq!(
-        unsafe { dkrt_svc_machines::nativepage::turn(&bare, std::ptr::null(), std::ptr::null()) },
-        0
-    );
-    assert!(bare.calls().iter().all(|c| !matches!(c, Call::Fw { .. })));
+    // an image without the table `machines_info` does not matter to a native page any more: no call of the image is made
+    assert!(core.calls().iter().all(|c| !matches!(c, Call::Fw { .. })));
 }
 
 #[test]

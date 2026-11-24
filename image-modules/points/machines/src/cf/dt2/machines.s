@@ -110,22 +110,16 @@ mf_slotmap:
 mf_ready:    .space 4
 mf_strbuf:   .space REPSIZE * 2 * MAXN
 
-    .text
-    .globl mf_native_type
-mf_native_type:
-    jmp     _mf_spt
-
-| ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the patched image (services/machines/dks/src/
-| image.rs has the layout; the word index is the byte offset / 4): the registry, `mf_ensure`, the native page functions, the slot map and the page rows (version 3: and the native page calls of the registry). The firmware
-| addresses are not here: the file names them and the port file resolves them. 1 = the Digitakt II.
+| ---- the table `machines_info` (an [[info]] of module.toml): what the service file `machines.dks` needs of the patched image (services/machines/src/info.rs has the layout; the word index is the byte
+| offset / 4): the registry, `mf_ensure`, the slot map, the page rows and the copy of the type reader (version 5: the native page functions are the service's). The firmware addresses are not here: the file
+| names them and the port file resolves them. 1 = the Digitakt II.
     .section .rodata
     .balign 4
     .globl machines_info
 machines_info:
-    .long   0x4d414348, 4, 1                | magic MACH, version, device
+    .long   0x4d414348, 5, 1                | magic MACH, version, device
     .long   _mf_first, _mf_count, _mf_entries, _mf_rows
     .long   mf_ensure
-    .long   mf_native_page_count, mf_native_descriptor, mf_native_code, mf_native_draw, mf_native_overlay
     .long   mf_slotmap, 0, 0                | the slot map, (page rows, page count: Digitone II)
-    .long   mf_native_register, mf_native_register_v2, mf_native_remove, mf_native_turn | the native page calls of the registry
-    .long   _mf_list_stock, ROWSIZE, O_POS  | version 4: the stock list order (the service builds the list and the rank pairs), the row size and the offset of `position`
+    .long   0                               | (the copy of the type reader: Digitone II)
+    .long   _mf_list_stock, ROWSIZE, O_POS  | the stock list order (the service builds the list and the rank pairs), the row size and the offset of `position`

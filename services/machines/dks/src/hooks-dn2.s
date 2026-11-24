@@ -30,13 +30,8 @@
     .equ T_COUNT, 16
     .equ T_ROWS, 24
     .equ T_ENSURE, 28
-    .equ T_N_PAGE_COUNT, 32
-    .equ T_N_DESCRIPTOR, 36
-    .equ T_N_CODE, 40
-    .equ T_N_DRAW, 44
-    .equ T_N_OVERLAY, 48
-    .equ T_PGROWS, 56
-    .equ T_PGN, 60
+    .equ T_PGROWS, 36
+    .equ T_PGN, 40
 
 | mf_ensure: the image's table builder; it preserves every register (not the flags). Called as a subroutine.
 mfn_call_ensure:
@@ -97,8 +92,7 @@ mf_typemap0:
     beq.s   1f
     move.l  %d0,-(%sp)
     move.l  %a1,-(%sp)
-    movea.l DKRT_MF_TAB+T_N_PAGE_COUNT,%a0
-    jsr     (%a0)
+    jsr     dks_native_page_count
     addq.l  #8,%sp
     jmp     mf_ret_tm0                  | ordinary pages plus an opt-in native callback page
 1:  move.l  %a1,%d0
@@ -110,8 +104,7 @@ mf_typemap0:
 mf_typemap1:
     move.l  0xc(%sp),-(%sp)
     move.l  0xc(%sp),-(%sp)
-    movea.l DKRT_MF_TAB+T_N_DESCRIPTOR,%a0
-    jsr     (%a0)
+    jsr     dks_native_descriptor
     addq.l  #8,%sp
     tst.l   %d0
     beq.s   8f

@@ -16,7 +16,7 @@ fn table(device: u32) -> Vec<u32> {
     t[w::O_POS] = 48;
     t[w::FIRST] = 7;
     t[w::COUNT] = 3;
-    t[w::N_CODE] = 0x4000_2000;
+    t[w::READER_REAL] = 0x4000_2000;
     t
 }
 
@@ -85,8 +85,9 @@ fn equates(text: &str) -> Vec<(String, usize)> {
 
 #[test]
 fn the_offsets_the_assembler_names_are_the_word_indexes_of_the_table() {
+    // the common file reads no word of the table any more (its native page entries are Rust); each device's file names the words it reads
+    assert!(equates(include_str!("../src/hooks-common.s")).is_empty());
     for file in [
-        include_str!("../src/hooks-common.s"),
         include_str!("../src/hooks-dt2.s"),
         include_str!("../src/hooks-dn2.s"),
     ] {

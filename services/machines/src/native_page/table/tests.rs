@@ -62,11 +62,8 @@ fn registration_builds_name_and_descriptor() {
     let d = p.descriptor();
     assert_eq!(d[2 + 2], 77);
     assert_eq!(d[10], 10);
-    assert_eq!(
-        (d[5], d[0]),
-        (0, 0),
-        "a LOCAL control has no descriptor code"
-    );
+    assert_eq!(d[5], 0, "a LOCAL control has no descriptor code");
+    assert_eq!(d[0], p.name_ptr() as usize as u32);
     let mut bad = b;
     bad[0] = [1, 1, 8];
     assert!(t
@@ -92,4 +89,29 @@ fn code_maps_encoders_for_native_pages_only() {
     other.ty = -1;
     assert_eq!(t.code(&other, 7), -1);
     assert_eq!(PageTable::new().code(&v, 7), -1);
+}
+
+/// The firmware reads a name as a `std::string`: the descriptor's words 0 and 1 are the address of the characters, and length, capacity and a reference count of -1 sit in the
+/// three words before them.
+#[test]
+fn descriptor_names_the_pages_own_string_in_its_table_slot() {
+    // registered where it stays: the descriptor holds an address, so a table is not moved once it has pages
+    let mut t = PageTable::new();
+    let mut b = [[0u32; 3]; 8];
+    b[1] = [1, 40, 7];
+    t.register(3, 1, 2, 0, b"Title", 0x1000, 0x2000, &b, &[], 0, false)
+        .unwrap();
+    let p = t.page(3, 1).unwrap();
+    let at = p.name_ptr() as usize as u32;
+    let d = p.descriptor();
+    assert_eq!((d[0], d[1]), (at, at), "long and short name");
+    assert_eq!(p.descriptor_ptr() as usize % 4, 0);
+    let rep = |k: usize| unsafe { (p.name_ptr().sub(12 - 4 * k) as *const u32).read_unaligned() };
+    assert_eq!((rep(0), rep(1), rep(2) as i32), (5, 23, -1));
+    assert_eq!(unsafe { *p.name_ptr().add(5) }, 0, "terminated");
+    // the address is the slot's, not a copy's
+    assert!(std::ptr::eq(
+        t.page(3, 1).unwrap().descriptor_ptr(),
+        p.descriptor_ptr()
+    ));
 }
