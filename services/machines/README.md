@@ -30,9 +30,11 @@ statics of the crate (D7 of the RC3 briefs), each with its reader:
 | `DKRT_GUARD` (`guard.rs`) | the MODULES reply, on another task than the poll that writes it |
 | `DKRT_MF_TAB` (`info.rs`) | the assembler hooks (`T_*` offsets of `hooks-*.s`) |
 
-`DKRT_REG` also holds the strings that the machine and page rows of the firmware's registry tables point at (`mach_name`, `mach_short`, the `empty_rep` placeholder that `remove` and
-`reset_machine_row` write as a row's name pointer): firmware reads them by address, so they live in one fixed, named object, and the free functions of `unload.rs`, `parking.rs`,
-`check.rs`, `apply.rs` and `modules.rs` reach it through `rstate()`. The owner keeps what firmware does not read (the collection, the click state, the parking passes, the slots).
+`DKRT_REG` stays a static for RC3 for one reason: `mach_owner` is read by `dk_machines_module_info` (`dks/src/rt.rs:11` -> `modules.rs:52`) on the MODULES reply task, outside the
+owner, so it must not sit behind the `Owner` guard (a call made while the owner is busy is refused and the reply would lose the module's machine types). The registry strings (`mach_name`,
+`mach_short`, the `empty_rep` placeholder that `remove` and `reset_machine_row` write as a row's name pointer) are pointed at by the firmware's registry rows only while the service is up, so
+they alone would be safe in the owner. The free functions of `unload.rs`, `parking.rs`, `check.rs`, `apply.rs` and `modules.rs` reach the static through `rstate()`. The owner keeps the rest
+(the collection, the click state, the parking passes, the slots). E1 step 4 (Describe replaces dk_machines_module_info) moves mach_owner into a Shared cell and the rest into the owner.
 
 Without an owner (before `init` made it, after `fini`) the file's calls answer the neutral way: a builder call returns null or does nothing, `dk_param_get` and
 `dk_param_set` answer `E_STATE` (no flow), the key hook passes the event and the turn hook consumes nothing. The turn hook ends the click flow in the owner, then runs the page's
