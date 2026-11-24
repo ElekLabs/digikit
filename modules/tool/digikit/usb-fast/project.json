@@ -10,10 +10,10 @@
         "modules": ["digikit/usb-fast"],
         "plusdrive": true,
         "sources": [
-          "image-modules/adapters/usb-bulk/src/**/*",
-          "image-modules/adapters/usb-bulk/build/usb-bulk.dko.json",
-          "image-modules/adapters/usb-bulk-audio/src/**/*",
-          "image-modules/adapters/usb-bulk-audio/build/usb-bulk-audio.dko.json"
+          "runtime/platform/usb-bulk/src/**/*",
+          "runtime/platform/usb-bulk/build/usb-bulk.dko.json",
+          "runtime/platform/usb-bulk-audio/src/**/*",
+          "runtime/platform/usb-bulk-audio/build/usb-bulk-audio.dko.json"
         ]
       }
     ]

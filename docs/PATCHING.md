@@ -612,7 +612,7 @@ SHA-256), that the stream fits `stage_end - dest`, and an in-place margin above 
 manifest, so `flash`, `preflight` and the wasm callers check it; with the library (the `verify` command, `apply`) the module's own `[[repack]]` must declare the same.
 A packed section without an entry is refused. This proves that the record is consistent with the image (the stored stream, its stock section and layout); it does not
 prove that the constants in MAIN's hook (the adapter's C code) match the record: `core/peer-image`'s host test and `tests/repack.rs` compare those with the manifest. The first user is `core/peer-image`
-([README](../image-modules/adapters/peer-image/README.md), [finding 151](findings/151-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
+([README](../runtime/platform/peer-image/README.md), [finding 151](findings/151-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
 over `container_max`; with it the container fits (`flash` and `verify` print the free space).
 
 ### The bootstrap's in-place unpack of MAIN

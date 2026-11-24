@@ -18,7 +18,7 @@ const wideOf = (file: string) =>
 
 it('goes wide for the inputs the keys hold that no hand list named, and not for docs', { timeout: 300_000 }, () => {
   const wide = [
-    'image-modules/adapters/card-guard/src/cf/guard.c',
+    'runtime/platform/card-guard/src/cf/guard.c',
     'config/emulator.json',
     'devices/cycle-factors.json',
     'ports/bindings/include/dk_fw_draw.h',
