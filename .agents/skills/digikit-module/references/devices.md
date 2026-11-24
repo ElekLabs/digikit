@@ -57,7 +57,7 @@ The runtime refuses a module that does not fit, with its own code (docs/findings
 | parameter rows | 16 | 16 | `E_PARAM_FULL` |
 | page rows | none | 8 | `E_PAGE_FULL` |
 | run-time effects (`fx_slots`) | 3 | 3 | a fourth: refused by the fit rule before the load, `E_DSP_ROWS` at boot |
-| send effects (`send_slots`, of those) | 2 | 1 | the effect stays an insert; FX ROUTES does not offer send |
+| send effects (`send_slots`, of those) | 2 | 1 | the effect stays an insert; FX ROUTING does not offer send |
 | effects in the chain (patched in) | 4 | 4 | patchkit refuses at build time |
 
 `bss` is not stored in the file: a large work buffer costs arena or DSP area, not file size. Size per-voice state for the lowest musical note, not for the arithmetic limit.

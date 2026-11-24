@@ -105,10 +105,15 @@ const BOTH: u8 = MASTER | SEND;
 struct FakeUi {
     choices: Vec<(String, Vec<String>, Step)>,
     toasts: Vec<String>,
+    /// A dialog is already open: `choice` shows nothing.
+    busy: bool,
 }
 
 impl Ui for FakeUi {
     fn choice(&mut self, title: &Line, items: &[Line], step: Step) -> bool {
+        if self.busy {
+            return false;
+        }
         self.choices.push((
             title.as_str().to_string(),
             items.iter().map(|l| l.as_str().to_string()).collect(),
@@ -179,4 +184,35 @@ fn the_title_and_the_toasts_keep_a_long_name_within_their_limits() {
     routing.pick_effect(&a.core, &mut ui, 1);
     assert_eq!(ui.toasts, ["A-VERY..Y-NAM: NO ROUTE FREE"]);
     assert!(ui.toasts[0].len() <= 31, "DK_UI_TOAST");
+}
+
+#[test]
+fn a_pick_saves_nothing_when_the_row_changed_owner_since_the_effect_was_chosen() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/gain-send", BOTH, Some(MASTER));
+    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
+    routing.list(&a.core, &mut ui);
+    routing.pick_effect(&a.core, &mut ui, 0);
+    // the module of the row was reloaded (or replaced) while the popup was open: the row has a new owner
+    // SAFETY: the lock is held
+    unsafe { (*core::ptr::addr_of_mut!(fxpage::DKRT_FXP)).owner[0] = 7 };
+    routing.pick_route(&a.core, &mut ui, 1);
+    assert_eq!(
+        a.setting("fx/gain-send"),
+        Some(std::vec![MASTER]),
+        "not saved"
+    );
+    assert_eq!(ui.toasts, ["BUSY: TRY AGAIN"]);
+}
+
+#[test]
+fn a_list_or_effect_pick_says_busy_when_a_dialog_is_already_open() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/gain-send", BOTH, Some(MASTER));
+    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
+    ui.busy = true;
+    routing.list(&a.core, &mut ui);
+    assert_eq!(ui.toasts, ["BUSY: TRY AGAIN"]);
+    routing.pick_effect(&a.core, &mut ui, 0);
+    assert_eq!(ui.toasts, ["BUSY: TRY AGAIN", "BUSY: TRY AGAIN"]);
 }

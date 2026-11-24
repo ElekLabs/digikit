@@ -498,7 +498,7 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `dyn-fx-gain-b` | A second effect with the same gain under another module id (another effect id) and other defaults (0.25, MIX 64): two effects in one kit; wrapper of the DSP of `dyn-fx-gain` | host, device |
 | `dyn-fx-gain-bipolar` | A signed knob (BIAS, -64 to +63) and the routes master and send | device |
 | `dyn-fx-gain-both` | Routes: master and send allowed, default master (`dk_fx_routes`); wrapper of the DSP of `dyn-fx-gain` | device |
-| `dyn-fx-gain-send` | Routes: master and send allowed, default send; the FX ROUTES panel; wrapper of the DSP of `dyn-fx-gain` | assembly, device |
+| `dyn-fx-gain-send` | Routes: master and send allowed, default send; the FX ROUTING popup; wrapper of the DSP of `dyn-fx-gain` | assembly, device |
 | `dyn-fx-gain-sendonly` | Routes: send only; wrapper of the DSP of `dyn-fx-gain` | assembly, device |
 | `commit-demo` | A multi-feature commit: a machine with three parameters (latched, click action) and an effect with routes; the golden lowered records; refusals | device, rig |
 | `local-ping` | The provider fixture: a `.dks` of the service `local-ping` (export `local_ping_value`, resident query `dk_service_query_v1`) over an owner object with the lifecycle, tick and query parts; it counts the consumers that attach and detach, the ticks, and answers the counters | host (`provider_contract`), assembly, device |

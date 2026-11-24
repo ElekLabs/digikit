@@ -15,7 +15,7 @@ The effect has a page of its own in the FX view (FUNC + FX, then UP or DOWN afte
   negative values down. One step near 0 is about 0.1 Hz, and the steps grow exponentially to about +-2 kHz at the ends. The knob is a sweep: turning it ramps
   the shift inside each block of 32 samples and never jumps the phase, so there are no clicks.
 - **MIX** (the framework's level knob). It starts at **127**. On the send route (the default on the Digitakt II) MIX is the level of the return: 127 adds the full shifted sound of the sends, 0 adds nothing.
-  As a master insert (FX ROUTES, below) MIX is the blend of the dry and the shifted sound: 127 is only the shifted sound (fully shifted), 0 only the dry sound (bit for bit). MIX is one value for both routes: after moving the
+  As a master insert (FX ROUTING, below) MIX is the blend of the dry and the shifted sound: 127 is only the shifted sound (fully shifted), 0 only the dry sound (bit for bit). MIX is one value for both routes: after moving the
   effect to the master, turn MIX down to hear some dry sound with the shifted one.
 
 | SHIFT | shift | | SHIFT | shift |
@@ -31,7 +31,7 @@ The effect has a page of its own in the FX view (FUNC + FX, then UP or DOWN afte
 The formula is in the cookbook (docs/findings/54-module-cookbook.md): `f = sign(v) 0.63 (2^(|v| / 5.5) - 1)` Hz.
 
 Route: the effect starts as a **send** effect (`route = "send"`, `routes = ["send", "master"]`): the FX key gets a second page with one knob **FSH** for the current track (while it turns the title says
-`FSH Send=40`), and the shifter gets the sum of the tracks' sends (amount squared, like the stock sends), so one track can be shifted while the others stay dry. A track with amount 0 is not shifted. DIGIKIT > FX ROUTES
+`FSH Send=40`), and the shifter gets the sum of the tracks' sends (amount squared, like the stock sends), so one track can be shifted while the others stay dry. A track with amount 0 is not shifted. SETTINGS > FX ROUTING
 moves the effect to the master (after a restart), where it shifts the whole mix. A send is limited by the device's send cells (two on the Digitakt II, one on the Digitone II); an effect past the limit runs on the master. See
 `docs/findings/62-fx-send-route.md`, `64-fx-send-page.md`, `65-fx-routes.md`, `66-freqshift-send.md`, `67-fx-routes-dn2.md`.
 

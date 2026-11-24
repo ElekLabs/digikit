@@ -1,10 +1,10 @@
-// The MODULES reply (runtime 0.11.5): its fixed part per record ends at dsp_len, then `u8 n_sections` and per section `u32 service name hash, u8 n, n words`. The runtime reads no
+// The MODULES reply (runtime 0.13.0): its fixed part per record ends at dsp_len, then `u8 n_sections` and per section `u32 service name hash, u8 n, n words`. The runtime reads no
 // meaning into the words; this file does, for the two services a host knows: `machines` (five words) and `fx` (one word per effect row). The fixture
 // tests/fixtures/protocol/modules-reply.json is written by the runtime's encoder test and read by every decoder (here and tools/device/dkupload.py).
 import { CAP } from './gen_proto.ts';
 import type { DkEffectRow, DkModule } from './dkupload-core.ts';
 
-/** What a host says when the device's MODULES records end at `dsp_len` (a runtime before 0.11.5 does not set the `MODULE_SECTIONS` capability). */
+/** What a host says when the device's MODULES records end at `dsp_len` (a runtime before 0.13.0 does not set the `MODULE_SECTIONS` capability). */
 export const OLD_MODULES = 'Update the firmware: this runtime lists modules in an older layout';
 
 /** FNV-1a 32 of a service name: the hash a section is named by (`dkneeds::keys::name_hash`). */

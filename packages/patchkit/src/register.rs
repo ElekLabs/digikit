@@ -268,7 +268,7 @@ pub fn effect_page(module: &str, fx: usize, d: &crate::typed::FxDef) -> Result<O
 }
 
 /// The routes of effect `d` as (mask of `dkmdsp::ROUTE_*`, default route). `route` is `"master"` (the default when left out) or `"send"`. `routes` lists the routes the user may
-/// choose in DIGIKIT > FX ROUTES; left out it is `["master"]`, and `["send", "master"]` when `route = "send"` (so a send effect falls back to the master when the send slots
+/// choose in SETTINGS > FX ROUTING; left out it is `["master"]`, and `["send", "master"]` when `route = "send"` (so a send effect falls back to the master when the send slots
 /// are taken, and a master effect is a master effect). A send-only effect says `routes = ["send"]`. Refused: a name that is not `master` or `send`, an empty `routes`, a route twice,
 /// and a `route` that `routes` does not list.
 pub fn fx_routes(module: &str, d: &crate::typed::FxDef) -> Result<(u32, u32)> {
@@ -307,10 +307,10 @@ pub fn fx_routes(module: &str, d: &crate::typed::FxDef) -> Result<(u32, u32)> {
             d.route.as_deref().unwrap_or("master")
         ));
     }
-    // the send knob and the FX ROUTES row are labelled with the page's tab: an effect without a page is an insert
+    // the send knob and the FX ROUTING row are labelled with the page's tab: an effect without a page is an insert
     if d.tab.is_none() && routes != ROUTE_MASTER {
         return Err(err!(
-            "{who}: a send route needs a `tab` (the label of the effect's page, which also labels its send knob and its FX ROUTES row)"
+            "{who}: a send route needs a `tab` (the label of the effect's page, which also labels its send knob and its FX ROUTING row)"
         ));
     }
     Ok((routes, route))

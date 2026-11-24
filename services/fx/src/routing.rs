@@ -58,6 +58,9 @@ const COLUMN: &[u8] = b"\t";
 /// The mark of a name cut in the middle.
 const ELLIPSIS: &[u8] = b"..";
 
+/// The toast when a dialog is already open, and when the list a popup came from is stale (the user opens the list again).
+const BUSY: &str = "BUSY: TRY AGAIN";
+
 /// What follows the route in the toast of a reload that waits for the transport to stop, and of one that is queued or running.
 const ON_STOP: &[u8] = b" ON STOP";
 const PENDING: &[u8] = b" PENDING";
@@ -155,6 +158,8 @@ pub struct Routing {
     listed: usize,
     /// The effect row the second popup is for, and the routes it offers (send first).
     row: usize,
+    /// The module record + 1 the effect row had when its routes were offered: a pick for a row of another owner is stale.
+    row_owner: u8,
     offered: [Route; 2],
     offered_len: usize,
     /// The reload of the last pick is queued: the module id, its route and whether the toast of its end is due.
@@ -187,6 +192,7 @@ impl Routing {
             rows: [(0, 0); MAX_FX],
             listed: 0,
             row: 0,
+            row_owner: 0,
             offered: [Route::Send; 2],
             offered_len: 0,
             waiting: None,
@@ -225,7 +231,9 @@ impl Routing {
             ui.toast(&Line::of("NO EFFECTS LOADED"));
             return;
         }
-        ui.choice(&Line::of("FX ROUTING"), &lines[..self.listed], Step::Effect);
+        if !ui.choice(&Line::of("FX ROUTING"), &lines[..self.listed], Step::Effect) {
+            ui.toast(&Line::of(BUSY));
+        }
     }
 
     /// Row `index` of the list was chosen: the routes the effect may take now.
@@ -235,6 +243,7 @@ impl Routing {
             return;
         };
         self.row = k;
+        self.row_owner = effect.owner;
         self.offered_len = 0;
         if effect.send_allowed {
             self.offered[self.offered_len] = Route::Send;
@@ -252,13 +261,15 @@ impl Routing {
         for (item, route) in items.iter_mut().zip(&self.offered[..self.offered_len]) {
             item.put(route_text(*route));
         }
-        ui.choice(
+        if !ui.choice(
             Line::new()
                 .put_fit(name_of(effect.id()), TITLE_MAX - ROUTE_TITLE.len())
                 .put(ROUTE_TITLE),
             &items[..self.offered_len],
             Step::Route,
-        );
+        ) {
+            ui.toast(&Line::of(BUSY));
+        }
     }
 
     /// Route `index` of the second popup was chosen. A change saves the route first (a failed save queues nothing), then queues the reload of the effect's module; the job runs
@@ -274,6 +285,11 @@ impl Routing {
             ui.toast(&Line::of("NO EFFECTS LOADED"));
             return;
         };
+        if effect.owner != self.row_owner {
+            // the module of the row was reloaded or replaced while the popup was open: the routes offered were for another effect
+            ui.toast(&Line::of(BUSY));
+            return;
+        }
         let mut line = toast_start(effect.id());
         // a deferred wait: the runtime holds the module's reload (queued, or given up at stop). A re-pick never starts a second job: `reload_when_possible` is ignored while
         // the module is queued and marks it again when the queue gave up
@@ -305,7 +321,7 @@ impl Routing {
             if queued == E_BUSY {
                 // SAFETY: as above; the old value was readable, so this put is the one that could fail only the same way
                 unsafe { fxsend::save_route(core, self.row, effect.saved) };
-                ui.toast(&Line::of("BUSY: TRY AGAIN"));
+                ui.toast(&Line::of(BUSY));
                 return;
             }
             if queued != OK {

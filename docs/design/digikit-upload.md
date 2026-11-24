@@ -186,11 +186,11 @@ the DSP loader). A record, big endian:
  49   4  u32 cf_size
  53   4  u32 dsp_off        its range in the DSP area (byte offset into the area; 0 and 0 without DSP code)
  57   4  u32 dsp_len
- 61   1  u8 n_sections      runtime 0.11.5 and later; the fixed part above ends at dsp_len (61 bytes)
+ 61   1  u8 n_sections      runtime 0.13.0 and later; the fixed part above ends at dsp_len (61 bytes)
  62   .  sections           per section: u32 service name hash, u8 n, n words (u32)
 ```
 
-From runtime 0.11.5 the record ends with the sections: what each loaded service holds for the module, by the `Describe` part of its provider row (`runtime/core/abi/src/provider/parts.rs`). The runtime asks every
+From runtime 0.13.0 the record ends with the sections: what each loaded service holds for the module, by the `Describe` part of its provider row (`runtime/core/abi/src/provider/parts.rs`). The runtime asks every
 row that adopts the part, in table order, with the module record index + 1; a service with no word for the module gives no section, and the runtime reads no meaning into the words (at most 16 words
 a section; a record whose sections do not fit ends the page). The hash is the service name's FNV-1a 32 (`dkneeds::keys::name_hash`). A host reads the sections of the services it knows:
 

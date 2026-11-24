@@ -2202,7 +2202,7 @@ fn the_modules_reply_carries_the_version_and_the_needed_runtime_of_each_loaded_f
             assert_eq!(*rb.add(16), 2, "{}: the total of loaded modules", dev.name);
             assert_eq!(*rb.add(17), 2, "{}: both records are in the reply", dev.name);
             let mut at = 18usize;
-            let mut needs = Vec::new();
+            let mut versions = Vec::new();
             for m in selection {
                 let file = packed(*dev, m.leaf, "dkm", m.nx);
                 let word = |off: usize| u32::from_be_bytes(core::slice::from_raw_parts(rb.add(at + off), 4).try_into().unwrap());
@@ -2210,7 +2210,7 @@ fn the_modules_reply_carries_the_version_and_the_needed_runtime_of_each_loaded_f
                 assert_eq!(name, m.nx, "{}: the module's name", dev.name);
                 assert_eq!(word(33), be(&file, 0x34), "{}: {}: the version of the header", dev.name, m.leaf);
                 assert_eq!(word(37), be(&file, 0x30) & 0x7fff_ffff, "{}: {}: the runtime version the file needs", dev.name, m.leaf);
-                needs.push(word(37));
+                versions.push(word(33));
                 // the fixed part ends at dsp_len (61 bytes); then `u8 n_sections` and `u32 hash, u8 n, n words` for each (the lfo shapes and the local-ping user have no machine)
                 let mut p = at + 62;
                 for _ in 0..*rb.add(at + 61) {
@@ -2218,7 +2218,9 @@ fn the_modules_reply_carries_the_version_and_the_needed_runtime_of_each_loaded_f
                 }
                 at = p;
             }
-            assert_ne!(needs[0], needs[1], "{}: the two fixtures need different runtime versions, so a swapped or constant field shows", dev.name);
+            // every packed file needs at least the runtime's `[runtime] table` floor, so two files need the same version unless one links a newer import; the two fixtures
+            // differ in their own version, so a swapped or constant version field shows
+            assert_ne!(versions[0], versions[1], "{}: the two fixtures have different versions, so a swapped or constant field shows", dev.name);
         }
         let _ = clean_state();
     }

@@ -457,7 +457,7 @@ class Uploader:
         """MODULES (runtime 0.2.0, capability MODULES): the arena and DSP-area figures and the loaded modules, every page. Returns
         `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`; a module is what `modules_reply.decode_page` reads: the record's fixed part
         (`index, name, version, needs, cf_base, cf_size, dsp_off, dsp_len`), `sections` (what each loaded service holds for it, by the hex of its name hash) and, read from
-        the `machines` and `fx` sections, `rows`, `types`, `faults`, `guard_off` and `effects` (runtime 0.11.5 and later)."""
+        the `machines` and `fx` sections, `rows`, `types`, `faults`, `guard_off` and `effects` (runtime 0.13.0 and later)."""
         info = self.info()
         if not has_cap(info, "MODULE_SECTIONS"):
             raise UploadError(0, modules_reply.OLD_MODULES)

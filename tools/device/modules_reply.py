@@ -1,4 +1,4 @@
-"""The MODULES reply (runtime 0.11.5): the fixed part of a record ends at `dsp_len`, then `u8 n_sections` and per section `u32 service name hash, u8 n, n words`.
+"""The MODULES reply (runtime 0.13.0): the fixed part of a record ends at `dsp_len`, then `u8 n_sections` and per section `u32 service name hash, u8 n, n words`.
 
 The runtime reads no meaning into the words; this module does, for the two services a host knows: `machines` (five words) and `fx` (one word per effect row). The fixture
 `tests/fixtures/protocol/modules-reply.json` is written by the runtime's encoder test and read by every decoder (here and `packages/dk-session/src/modules-reply.ts`).
@@ -10,7 +10,7 @@ from typing import Any
 #: The INFO `caps` bit of a runtime whose records end with sections (`sdk/sdk.toml` `[caps]` `MODULE_SECTIONS`).
 CAP_MODULE_SECTIONS = 21
 
-#: What a host says when the device's MODULES records end at `dsp_len` (a runtime before 0.11.5 does not set the capability).
+#: What a host says when the device's MODULES records end at `dsp_len` (a runtime before 0.13.0 does not set the capability).
 OLD_MODULES = "Update the firmware: this runtime lists modules in an older layout"
 
 

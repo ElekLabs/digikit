@@ -1,5 +1,5 @@
 /* ui_text.h: pixel widths and pixel padding of list text, shared by core/ui and the menu of the system package.
-   The list font is not monospace: a letter, a digit, '-' or '_' takes 4 pixels, a space 3, '.' 2 and '~' 5 (measured on the DT2 1.16 list
+   The list font is not monospace: a letter, a digit, '-' or '_' takes 4 pixels, a space 3, '.' 2 and '~' 5 (measured on the firmware list
    font). Character 0x01 draws nothing and takes 4 pixels, so it pads a column the width of one letter. */
 #ifndef DK_UI_TEXT_H
 #define DK_UI_TEXT_H

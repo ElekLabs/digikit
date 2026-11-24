@@ -5,10 +5,10 @@
 # and sample.h, sdk/dsp/REGISTERS.md and packages/dksharc/src/rules_table.rs from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
-table = "0.12.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
+table = "0.13.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
 service_registration = "0.12.1" # minimum runtime for callback ordering and service-local APIs
 resident_query = "0.12.2" # minimum runtime for the optional resident query facet
-version = "0.12.5"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.13.0"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -1988,7 +1988,7 @@ FW_ID = 18          # the INFO reply ends with `fw_id` after `svc_abi`: 8 bytes,
 LIVE = 19           # the LOAD and UNLOAD commands (a content module is loaded or unloaded without a boot); RELOAD_STATE reports them too
 
 MODULE_UI = 20      # loaded modules may expose public Workbench settings by instance
-MODULE_SECTIONS = 21 # a MODULES record ends with `u8 n_sections` and the sections of the services (runtime 0.12.5); a host that does not see this bit refuses the reply as an older layout
+MODULE_SECTIONS = 21 # a MODULES record ends with `u8 n_sections` and the sections of the services (runtime 0.13.0); a host that does not see this bit refuses the reply as an older layout
 
 [capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused.
                    # `fit = true`: a resource a fit looks at, with its `label` for a person (CAP_FIT in the generated code; a fit kind needs a label, a kind may have one without `fit`); every kind is in CAP_KINDS
