@@ -30,6 +30,7 @@ import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { createTargetHealth } from './target-health';
 import type { SpanRecording } from './span-recording';
 import type { PerformanceView } from './PerformancePanel';
+import { createSavedTimeline } from './saved-timeline';
 import { createUtilizationHistory } from './utilization-history';
 import { percent } from './device-health';
 import type { Page } from './page-core';
@@ -94,6 +95,7 @@ export default function WorkbenchShell(
   const { drawer, log, logWriter, emulatorActions } = untrack(() => props.tools);
   const { logEvent, logInput } = logWriter;
   const logOpen = () => drawer.active() === 'Log';
+  const savedTimeline = createSavedTimeline();
   const performanceOpen = () => drawer.active() === 'Performance';
   const toggleLog = () => drawer.toggle('Log');
   const { emulatorSession, lastMidiPort, lastMidiSession, target } = app.target;
@@ -739,6 +741,7 @@ export default function WorkbenchShell(
                 view={performanceView()}
                 setView={setPerformanceView}
                 recording={spanRecording()}
+                savedTimeline={savedTimeline}
                 activeTarget={selected().target.kind !== 'none' && (!isEmulator() || !!status())}
               />
             </Suspense>

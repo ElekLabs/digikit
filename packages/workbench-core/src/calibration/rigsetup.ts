@@ -14,11 +14,11 @@ import type { Rig } from './runner.ts';
 export const SETUP_READY_MS = 30_000;
 
 /** `module#n` -> the module id and the 1-based machine number (`module` alone is #1). */
-export function parseMachineRef(ref: string): { id: string; n: number } {
+export function parseMachineRef(ref: string, kind = 'machine'): { id: string; n: number } {
   const at = ref.lastIndexOf('#');
   if (at < 0) return { id: ref, n: 1 };
   const n = Number(ref.slice(at + 1));
-  if (!Number.isInteger(n) || n < 1) throw new Error(`machine ${ref}: the number after # counts from 1`);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`${kind} ${ref}: the number after # counts from 1`);
   return { id: ref.slice(0, at), n };
 }
 
@@ -34,7 +34,6 @@ export function sessionSetup(
   clock: Clock,
 ): NonNullable<Rig['setup']> {
   return async (what, track, type) => {
-    if (what === 'effect') throw new Error('SETUP sets machine and filter types, not effects');
     const t = trackSetup(session, events, { ready: { clock, withinMs: SETUP_READY_MS } });
     if (what === 'filter') {
       if (typeof type !== 'number') throw new Error('a filter type is a number');

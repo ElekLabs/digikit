@@ -79,7 +79,7 @@ const targetRoot = existsSync(path.join(root, '.git', 'HEAD'))
   ? path.join(root, 'out/native/target')
   : path.join(root, 'dist/native-target');
 const usage =
-  'usage: node tools/devtools/wb.mjs [--port SUB] [--device ID] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] [--slot N] (--slot N writes slot N and replaces what it holds; a cancelled write leaves the slot empty) | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--restart] [--reload] [--library DIR] | transfer reload|load|unload PATH... | transfer restart | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE] | profile calibrate run --profile NAME|FILE [--out DIR] [--allow-unidentified-firmware]';
+  'usage: node tools/devtools/wb.mjs [--port SUB] [--device ID] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] [--slot N] (--slot N writes slot N and replaces what it holds; a cancelled write leaves the slot empty) | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--restart] [--reload] [--library DIR] | transfer reload|load|unload PATH... | transfer restart | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE] | profile calibrate run --profile NAME|FILE [--case ID] [--trace] [--out DIR] [--allow-unidentified-firmware]';
 
 // options anywhere on the line; the rest are the command words
 const args = process.argv.slice(2);
@@ -95,7 +95,7 @@ const opts = {
   ret: false,
 };
 // the offline group takes these several times
-const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse', 'model']);
+const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse', 'model', 'case']);
 const OFFLINE = ['addrmap', 'module', 'profile'];
 const words = [];
 for (let i = 0; i < args.length; i++) {
@@ -112,6 +112,7 @@ for (let i = 0; i < args.length; i++) {
     a === '--speed' ||
     a === '--out' ||
     a === '--profile' ||
+    a === '--case' ||
     a === '--library' ||
     [
       '--format',
@@ -139,7 +140,8 @@ for (let i = 0; i < args.length; i++) {
     else opts[key] = args[++i];
     // `profile calibrate fit` takes --device FILE several times (the other commands: one device id)
     if (key === 'device') (opts['device-files'] ??= []).push(opts[key]);
-  } else if (a === '--ret') opts.ret = true;
+  } else if (a === '--trace') opts.trace = true;
+  else if (a === '--ret') opts.ret = true;
   else if (a === '--emu' || a === '--restart' || a === '--reload') opts[a.slice(2)] = true;
   else if (a === '--since-boot') opts['since-boot'] = true;
   else if (a === '--allow-unidentified-firmware') opts['allow-unidentified-firmware'] = true;
@@ -299,7 +301,9 @@ async function connectReady(waitMs = 8000) {
   let link;
   // true: the device answered (or failed with something that is no re-enumeration: the first real request reports it); false: no answer yet
   const answered = async () => {
-    await link?.close();
+    const previous = link;
+    link = undefined;
+    await previous?.close();
     link = opts.emu ? await connectEmu() : connect();
     try {
       try {
@@ -322,7 +326,7 @@ async function connectReady(waitMs = 8000) {
   try {
     await poll(clock, answered, Boolean, { withinMs: waitMs, intervalMs: 500, message: 'device answers' });
   } catch (e) {
-    if (e?.kind === 'cancelled') throw e;
+    if (!link || e?.kind === 'cancelled') throw e;
     // after the time the last link is returned anyway and the first real request reports the error
   }
   return link;

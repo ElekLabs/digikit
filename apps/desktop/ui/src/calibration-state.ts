@@ -17,6 +17,7 @@ import {
   type CalProfileDoc,
   type Side,
 } from '@digi/workbench-core/profile/calibration-view.ts';
+import { selectCalCases } from '@digi/workbench-core/calibration/calprofile.ts';
 import type { Capture } from '@digi/workbench-core/calibration/runner.ts';
 import type { Calibrator } from './calibration-backend';
 
@@ -43,7 +44,13 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
       return { list: [], error: asText(e) };
     }
   });
-  const [chosen, setChosen] = createSignal('');
+  const [chosen, chooseProfile] = createSignal('');
+  const [chosenCase, setChosenCase] = createSignal('');
+  const [trace, setTrace] = createSignal(false);
+  const setChosen = (name: string) => {
+    chooseProfile(name);
+    setChosenCase('');
+  };
   const profile = () => choices().list.find((p) => p.name === chosen()) ?? choices().list[0];
   // the tracks the chosen profile uses on the target, for the note before Run (a target that cannot say shows no note)
   const [tracks] = createResource(
@@ -83,6 +90,8 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
   async function run(): Promise<void> {
     const choice = profile();
     if (!choice || running() || deps.blocked()) return;
+    const cases = chosenCase() ? [chosenCase()] : [];
+    const scoped = selectCalCases(choice.profile, cases);
     setError('');
     setNotes([]);
     setStopping(false);
@@ -105,7 +114,7 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
     const refresh = () => {
       const s = shown;
       if (!s || !running()) return;
-      const total = captureTotal(choice.profile, skipping, dropped);
+      const total = captureTotal(scoped, skipping, dropped);
       const counter = captureCounter({ done, total, capturing: s.kind === 'capture' });
       setProgress(
         s.kind === 'phase'
@@ -114,7 +123,7 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
               counter,
               case: s.case,
               left: remainingSeconds({
-                profile: choice.profile,
+                profile: scoped,
                 skipping,
                 caseId: current,
                 n: completed.get(s.case) ?? 0,
@@ -127,6 +136,8 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
     try {
       const out = await calibrator.run({
         profile: choice.name,
+        cases,
+        trace: trace(),
         signal: mine.signal,
         onCapture: (c) => {
           done++;
@@ -230,6 +241,10 @@ export function createCalibrationState(deps: CalibrationStateDeps) {
     choices,
     chosen: () => profile()?.name ?? '',
     setChosen,
+    chosenCase,
+    setChosenCase,
+    trace,
+    setTrace,
     profile,
     running,
     stopping,

@@ -1,15 +1,19 @@
 // The counters a calibration capture reads: the DSP stats window (P8d `PROFILE_DSP`) and the runtime spans (`PROFILE_STATE`, `PROFILE_READ`).
 // `StatsSource` is what the runner needs; `sessionStatsSource` is written against the dk-session API (`profileAll`, and `profileDsp` of P8d,
 // feature-checked: a session without it gives spans only). Tests give a fake.
-import { spansPart, type SpansPart } from '../profile/profile-artifact.ts';
+import { spansPart, type BuildInput, type SpansPart } from '../profile/profile-artifact.ts';
 
-import { DkError, type DspStats } from '@digi/dk-session';
+import { DkError, type DkSession, type DspStats } from '@digi/dk-session';
+
+import type { TraceMarker } from '../profile/trace.ts';
 
 export type { DspRow, DspStats } from '@digi/dk-session';
 
 export interface StatsReading {
   dsp?: DspStats;
   spans?: SpansPart;
+  trace?: BuildInput['trace'];
+  traceError?: string;
 }
 
 export interface StatsSource {
@@ -19,6 +23,7 @@ export interface StatsSource {
   start(): Promise<void>;
   /** Forget what was counted (spans reset, DSP stats cleared: a new generation) and go on counting. `generation`: the clear generation of the DSP stats (absent without them). */
   clear(): Promise<{ generation?: number }>;
+  mark?(name: string): Promise<void>;
   stop(): Promise<void>;
   /** The counters now. The DSP part is the newest complete sweep of the current generation, absent when there is none yet. */
   read(): Promise<StatsReading>;
@@ -26,7 +31,10 @@ export interface StatsSource {
 
 /** The members of `DkSession` the real source uses. */
 export interface StatsSession {
-  profileState(op: 'get' | 'start' | 'stop' | 'reset'): Promise<unknown>;
+  profileState(
+    op: Parameters<DkSession['profileState']>[0],
+  ): Promise<Partial<Awaited<ReturnType<DkSession['profileState']>>> | void>;
+  profileTrace?: DkSession['profileTrace'];
   profileAll(): Promise<{
     hz: number;
     elapsedTicks: bigint;
@@ -39,7 +47,11 @@ export interface StatsSession {
 export function sessionStatsSource(
   session: StatsSession,
   nameOf: (s: { kind: 'module' | 'phase' | 'poll'; index: number }) => string,
+  trace = false,
 ): StatsSource {
+  let generation: number | undefined;
+  let markers: TraceMarker[] = [];
+  let unavailable: string | undefined;
   let dsp: boolean | undefined;
   // only the runtime's answer to an unknown command (E_PROTO: this debug module has no PROFILE_DSP) means "no DSP stats"; a timeout, busy or not-ready target throws, so a
   // calibration never silently becomes spans-only
@@ -59,6 +71,9 @@ export function sessionStatsSource(
       return { dsp: await hasDsp(), spans: true };
     },
     async start() {
+      generation = undefined;
+      markers = [];
+      unavailable = undefined;
       // counters an earlier run left on (a stale generation) are stopped first
       await session.profileState('stop');
       if (await hasDsp()) await session.profileDsp('stop');
@@ -70,18 +85,45 @@ export function sessionStatsSource(
       }
     },
     async clear() {
+      if (trace) {
+        if (session.profileTrace && (await session.profileState('get'))?.traceVersion === 1)
+          await session.profileState('startTrace');
+        else unavailable = 'The debug module does not support ColdFire event tracing.';
+      }
+      // PROFILE_STATE reset resets the trace origin to the same zero as the elapsed span clock.
       await session.profileState('reset');
+      if (trace && !unavailable) {
+        generation = (await session.profileState('startTrace'))?.traceGeneration;
+        if (generation === undefined) throw new Error('The debug module did not return a trace generation.');
+        markers = [{ name: 'Capture start', atTicks: '0' }];
+      }
       if (!(await hasDsp())) return {};
       return { generation: (await session.profileDsp('clear')).generation };
     },
+    async mark(name) {
+      if (generation === undefined) return;
+      const elapsed = (await session.profileState('get'))?.elapsedTicks;
+      if (elapsed !== undefined) markers.push({ name, atTicks: String(elapsed) });
+    },
     async stop() {
-      await session.profileState('stop');
+      const result = await session.profileState('stop');
+      if (generation !== undefined && result?.elapsedTicks !== undefined)
+        markers.push({ name: 'Capture stop', atTicks: String(result.elapsedTicks) });
       if (await hasDsp()) await session.profileDsp('stop');
     },
     async read() {
       const spans = spansPart(await session.profileAll(), nameOf);
       const reading = (await hasDsp()) ? await session.profileDsp('get') : undefined;
-      return { spans, ...(reading ? { dsp: reading } : {}) };
+      const result: StatsReading = { spans, ...(reading ? { dsp: reading } : {}) };
+      if (unavailable) result.traceError = unavailable;
+      if (generation !== undefined && session.profileTrace) {
+        try {
+          result.trace = { ...(await session.profileTrace(generation)), markers };
+        } catch (error) {
+          result.traceError = error instanceof Error ? error.message : String(error);
+        }
+      }
+      return result;
     },
   };
 }

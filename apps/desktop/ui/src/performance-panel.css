@@ -12,6 +12,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.performance-panel-timeline {
+  grid-template-rows: auto;
+  align-content: start;
+}
+
 .performance-header,
 .performance-legend,
 .performance-legend > div {

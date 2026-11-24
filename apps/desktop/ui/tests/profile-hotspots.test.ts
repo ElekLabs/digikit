@@ -136,3 +136,9 @@ test('shared dkprof resolves stock links and relocated modules from saved eviden
   assert.equal(wrong.sharc[1]?.addr, 0x305);
   assert.equal(wrong.sharc[1]?.name, undefined);
 });
+
+test('a calibration profile adds its full stock hash while retaining the short fit key', () => {
+  const run = { firmware_sha256: hash.slice(0, 16), stock_firmware_sha256: hash };
+  assert.equal(readSavedProfile({ ...doc, run }).sha256, hash);
+  assert.equal(readSavedProfile({ ...doc, run: { ...run, stock_firmware_sha256: otherHash } }).sha256, undefined);
+});

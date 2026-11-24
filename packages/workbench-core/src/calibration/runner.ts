@@ -7,6 +7,7 @@ import { buildProfile, dspStatsPart } from '../profile/profile-artifact.ts';
 import { canonicalJson, sha256Hex, STOCK_CASE, type CalCase, type CalProfile } from './calprofile.ts';
 import { resolveRef, type Op, type ResolveContext, type StepLibrary, type StepRef } from './steps.ts';
 import type { StatsReading, StatsSource } from './stats.ts';
+import type { DispatchRow, ExpectedEffectRoute } from './effects.ts';
 
 /** The module handling of a target: what the stock case needs (nothing loaded) and the module cases need (exactly their modules). */
 export interface RigModules {
@@ -35,7 +36,9 @@ export interface Rig {
    * Machine or filter type through the firmware's setters (the SETUP command of the debug module). `track` is 1 to 16; a machine `type` is a number or the id of
    * the loaded module whose machine it is (`module#n`: its n-th machine, counted from 1). Resolves when the firmware has performed the change.
    */
-  setup?: (what: 'machine' | 'filter' | 'effect', track: number, type: number | string) => Promise<void>;
+  setup?: (what: 'machine' | 'filter', track: number, type: number | string) => Promise<void>;
+  effect?: (module: string, route: ExpectedEffectRoute) => Promise<DispatchRow>;
+  dispatch?: (ids: string[]) => Promise<DispatchRow[]>;
   shot?: (name: string) => Promise<void>;
   /** Returns when the target has taken all queued input. */
   drained?: () => Promise<void>;
@@ -88,6 +91,7 @@ export interface CaseResult {
 }
 
 const isSetup = (o: Op) => o.op === 'setup';
+const isEffectSetup = (o: Op): o is Extract<Op, { op: 'setup'; what: 'effect' }> => isSetup(o) && o.what === 'effect';
 
 /** `E_MISSING` of sdk/sdk.toml `[load.status]`: the service the module imports is not in the image. */
 const E_MISSING = -73;
@@ -115,9 +119,9 @@ async function withHangGuard<T>(p: Promise<T>, ms: number, what: string): Promis
 /** What a case needs that the rig does not have, or undefined. */
 function missing(ops: Op[], rig: Rig, modules: string[]): string | undefined {
   for (const o of ops) {
-    if (isSetup(o) && o.what === 'effect')
-      return 'it puts an effect in the chain, which the SETUP command of the debug module cannot do (it sets machine and filter types)';
-    if (isSetup(o) && !rig.setup)
+    if (isSetup(o) && o.what === 'effect' && !rig.effect)
+      return 'it selects an effect route, which requires the runtime MODULES effect read-back';
+    if (isSetup(o) && o.what !== 'effect' && !rig.setup)
       return 'it sets a machine or filter type, which needs the SETUP command of the debug module (the target has no runtime log with it)';
     if ((o.op === 'key' || o.op === 'turn') && !rig.panel)
       return 'it presses keys, and the target has no panel input here';
@@ -155,6 +159,10 @@ async function playOp(o: Op, rig: Rig, pause?: (ms: number) => Promise<void>): P
     case 'turn':
       return rig.panel!.turn(o.encoder, o.by);
     case 'setup':
+      if (o.what === 'effect') {
+        await rig.effect!(o.type, o.route);
+        return;
+      }
       return rig.setup!(o.what, o.track, o.type);
     case 'shot':
       return rig.shot!(o.name);
@@ -225,7 +233,11 @@ export async function runCalibration(i: RunInput): Promise<CaseResult[]> {
     ops: resolveRef(c.steps, i.steps, ctx(`case ${c.id}`)),
     after: c.teardown ? resolveRef(c.teardown, i.steps, ctx(`case ${c.id} teardown`)) : [],
   }));
-  for (const { c, ops } of resolved) splitCapture(ops, `case ${c.id}`);
+  for (const { c, ops } of resolved) {
+    const { body, post } = splitCapture(ops, `case ${c.id}`);
+    if (body.some(isEffectSetup) || post.some(isEffectSetup))
+      throw new Error(`case ${c.id}: check the effect route before the capture window`);
+  }
   if (!i.run.firmware_sha256 && !i.allowUnidentifiedFirmware)
     throw new Error(
       'the target reported no firmware identity (run.firmware_sha256): a fit could not refuse a device and a model with different firmware; allow it explicitly to capture anyway',
@@ -322,20 +334,18 @@ async function runCase(
 ): Promise<CaseResult> {
   const { profile, rig } = i;
   const { pre, body, post, marked } = splitCapture(ops, `case ${c.id}`);
-  const input = await sha256Hex(
-    canonicalJson({
-      profile: {
-        name: profile.name,
-        warmup_s: profile.warmup_s,
-        capture_s: profile.capture_s,
-        repeats: profile.repeats,
-      },
-      modules: c.modules,
-      setup,
-      case: ops,
-      teardown: [...teardown, ...after],
-    }),
-  );
+  const workload = {
+    profile: {
+      name: profile.name,
+      warmup_s: profile.warmup_s,
+      capture_s: profile.capture_s,
+      repeats: profile.repeats,
+    },
+    modules: c.modules,
+    setup,
+    case: ops,
+    teardown: [...teardown, ...after],
+  };
   const captures: Capture[] = [];
   try {
     await ensureModules(rig, c.modules, log, c.id);
@@ -383,6 +393,17 @@ async function runCase(
   try {
     await playAll(setup, rig);
     await playAll(pre, rig);
+    const requests = [...setup, ...pre].filter(isEffectSetup);
+    const selected = await Promise.all(requests.map((o) => rig.effect!(o.type, o.route)));
+    const rows = c.modules.length ? await rig.dispatch?.(c.modules) : undefined;
+    const expected = selected.length
+      ? [...(rows ?? []).filter((row) => row.kind === 'machine'), ...selected]
+      : rows?.length
+        ? rows
+        : undefined;
+    if (c.modules.length && rig.dispatch && !expected?.length)
+      throw new Error(`case ${c.id}: no DSP dispatch rows were published for the selected modules`);
+    const input = await sha256Hex(canonicalJson(workload));
     for (let r = 1; r <= profile.repeats; r++) {
       log(`case ${c.id}: capture ${r} of ${profile.repeats}`);
       let stopped = false;
@@ -393,6 +414,7 @@ async function runCase(
         const { generation } = await rig.stats.clear();
         if (marked) await playAll(body, rig, pause);
         else await pause(profile.capture_s * 1000);
+        await rig.stats.mark?.('Workload end');
         if (dsp) {
           // the window ends with the first complete sweep of this clear generation that the mirror publishes after it (about 50 blocks): the runtime logs DSP_SWEEP
           await rig.events!.listen();
@@ -414,6 +436,20 @@ async function runCase(
       if (dsp && !dspOut) throw new Error(`case ${c.id}: no complete DSP sweep after the capture`);
       if (dspOut && c.modules.length > 0) {
         const busy = dspOut.rows.filter((x) => x.calls > 0);
+        const missing = expected?.filter((wanted) => {
+          if (wanted.kind === 'effect') return !busy.some((row) => row.kind === 'effect' && row.row === wanted.row);
+          return !expected.some(
+            (candidate) =>
+              candidate.module === wanted.module &&
+              candidate.kind === 'machine' &&
+              busy.some((row) => row.kind === 'machine' && row.row === candidate.row),
+          );
+        });
+        if (missing?.length) {
+          failed = `capture ${r} did not count the requested DSP rows (${missing.map((row) => row.module + ' row ' + row.row).join(', ')})`;
+          log(`case ${c.id}: failed, ${failed}`);
+          break;
+        }
         if (busy.length === 0) {
           // a failure of this case, recorded; the run goes on with the next case
           failed = `capture ${r} counted no calls of any machine or effect row: nothing of the module sounded in the window (a voice that ends by itself needs retrigger_ms on its note)`;
@@ -430,15 +466,24 @@ async function runCase(
         throw new Error(
           `case ${c.id}: the stock case counted module rows (a module is loaded or a module machine plays)`,
         );
+      for (const [index, request] of requests.entries()) {
+        const current = await rig.effect!(request.type, request.route);
+        if (current.row !== selected[index]?.row)
+          throw new Error(`case ${c.id}: the effect dispatch row changed during capture`);
+      }
       const profileOut = buildProfile({
         run: {
           ...i.run,
           id: `${i.run.id}-${c.id}-${r}`,
           case_id: c.id,
           input_sha256: input,
+          workload,
+          ...(expected ? { dispatch: expected } : {}),
           module_sha256: c.modules.map((m) => hashes[m]!).sort(),
         },
-        ...(reading.spans ? { spans: reading.spans } : {}),
+        spans: reading.spans,
+        trace: reading.trace,
+        traceError: reading.traceError,
         ...(dspOut ? { dsp: dspOut } : {}),
       });
       const capture = { caseId: c.id, repeat: r, file: `${c.id}-${r}.profile.json`, profile: profileOut };

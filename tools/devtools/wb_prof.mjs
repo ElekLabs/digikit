@@ -28,7 +28,7 @@ import {
   verifiedProfileMaps,
 } from '../../packages/workbench-core/src/profile/hotspots.ts';
 import { SPAN_PHASES } from '../../packages/dk-session/src/gen_proto.ts';
-import { expandCaptures } from '../../packages/workbench-core/src/profile/calibration-view.ts';
+import { expandCaptures, observedDispatch } from '../../packages/workbench-core/src/profile/calibration-view.ts';
 import {
   buildProfile,
   cfPart,
@@ -175,17 +175,28 @@ export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
           )
         : undefined;
     if (hotspots) rep.hotspots = hotspots;
+    const dispatch = observedDispatch(profile);
+    if (format === 'json' && dispatch.length) rep.dispatch = dispatch;
+    const showReport = () => {
+      show(rep, format);
+      if (format === 'text') {
+        for (const row of dispatch) {
+          const label = [row.module, row.route, 'row ' + row.row].filter(Boolean).join(' · ');
+          console.log(`${label}    ${row.calls} calls    max ${row.max_block} ${row.unit ?? 'units'}/block`);
+        }
+      }
+    };
     if (opts.calibration) {
       const cal = readJson(opts.calibration);
       const est = prof.calibrateReport({ calibration: cal, profile: req.profile, estimate_only: true, format });
       if (format === 'json') console.log(JSON.stringify({ ...rep, estimate: est.estimate }));
       else {
-        show(rep, format);
+        showReport();
         process.stdout.write(est.text);
       }
       return 0;
     }
-    show(rep, format);
+    showReport();
     return 0;
   }
   if (cmd === 'profile' && sub === 'calibrate') return calibrate({ prof, rest, opts, format, fail });

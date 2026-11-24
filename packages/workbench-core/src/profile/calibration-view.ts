@@ -10,11 +10,12 @@ import {
 } from '../calibration/calprofile.ts';
 import { parseStepFile, type StepLibrary } from '../calibration/steps.ts';
 import type { Capture } from '../calibration/runner.ts';
+import type { DispatchRow } from '../calibration/effects.ts';
 
 /** A `dk.profile/1` document as the section reads it (the calibration fields only). */
 export interface CalProfileDoc {
   schema?: string;
-  run?: { id?: string; case_id?: string; target?: string };
+  run?: { id?: string; case_id?: string; target?: string; dispatch?: DispatchRow[] };
   dsp?: { unit?: string; blocks?: number; max_stock_block_delta?: number };
   dsp_rows?: { row: number; kind?: string; calls: number; max_call: number; max_block: number }[];
 }
@@ -82,18 +83,34 @@ const STATS = ['max_block', 'max_call'] as const;
 const STAT_TEXT: Record<(typeof STATS)[number], string> = { max_block: 'block', max_call: 'call' };
 
 /** The worst-case values of a set of captures: per case, row and statistic the largest over the captures (what the fit pairs). */
-export function worstValues(captures: readonly CalProfileDoc[]): Map<string, { label: string; value: number }> {
-  const out = new Map<string, { label: string; value: number }>();
+export function observedDispatch(profile: CalProfileDoc) {
+  const rows = profile.dsp_rows;
+  if (!Array.isArray(rows) || !Array.isArray(profile.run?.dispatch)) return [];
+  return profile.run.dispatch.flatMap((owner) => {
+    if (!owner || typeof owner.module !== 'string') return [];
+    const measurement = rows.find((row) => row?.row === owner.row && row.kind === owner.kind && row.calls > 0);
+    return measurement ? [{ ...measurement, ...owner, unit: profile.dsp?.unit }] : [];
+  });
+}
+
+export function worstValues(
+  captures: readonly CalProfileDoc[],
+): Map<string, { label: string; owner?: string; value: number }> {
+  const out = new Map<string, { label: string; owner?: string; value: number }>();
   for (const c of captures) {
     const id = c.run?.case_id;
     if (!id) continue;
+    const dispatch = observedDispatch(c);
     for (const r of c.dsp_rows ?? []) {
       if (r.calls <= 0 && r.max_block <= 0) continue;
+      const named = dispatch.find((owner) => owner.row === r.row);
+      const owner = named && (named.route ? named.module + ' · ' + named.route : named.module);
       for (const stat of STATS) {
         const key = `${id}|row ${r.row}|${stat}`;
         const value = r[stat];
         const had = out.get(key);
-        if (!had || value > had.value) out.set(key, { label: `${id} · row ${r.row} · ${STAT_TEXT[stat]}`, value });
+        if (!had || value > had.value)
+          out.set(key, { label: `${id} · row ${r.row} · ${STAT_TEXT[stat]}`, owner, value });
       }
     }
   }
@@ -123,14 +140,15 @@ export function tableRows(
   return keys
     .map((key): CalRow => {
       const [kase, id, stat] = key.split('|') as [string, string, (typeof STATS)[number]];
-      const row: CalRow = {
-        key,
-        label: (emu.get(key) ?? dev.get(key))!.label,
-        case: kase,
-        what: `${id} · ${STAT_TEXT[stat]}`,
-      };
       const e = emu.get(key);
       const d = dev.get(key);
+      const owner = e?.owner && d?.owner && e.owner !== d.owner ? undefined : (e?.owner ?? d?.owner);
+      const row: CalRow = {
+        key,
+        label: [(e ?? d)!.label, owner].filter(Boolean).join(' · '),
+        case: kase,
+        what: [id, STAT_TEXT[stat], owner].filter(Boolean).join(' · '),
+      };
       if (e) row.emu = e.value;
       if (d) row.dev = d.value;
       const p = pairs[key];

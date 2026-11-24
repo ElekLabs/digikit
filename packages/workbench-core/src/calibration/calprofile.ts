@@ -234,3 +234,20 @@ export async function sha256Hex(text: string): Promise<string> {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+/** Keep the profile's declared execution order, even when callers select cases in a different order. */
+export function selectCalCases(profile: CalProfile, ids: readonly string[] = []): CalProfile {
+  const unknown = ids.filter((id) => !profile.cases.some((choice) => choice.id === id));
+  if (unknown.length) throw new Error('Unknown calibration case ' + unknown.join(', ') + ' in ' + profile.name + '.');
+  return ids.length ? { ...profile, cases: profile.cases.filter((choice) => ids.includes(choice.id)) } : profile;
+}
+
+/** Keep the INFO value as the fit key. Give hotspot lookup the full hash when the registry confirms it. */
+export function captureFirmwareIdentity(infoId: string, firmwares: readonly { sha256: string }[]) {
+  const id = infoId.toLowerCase();
+  const match = /^[a-f0-9]{16}$/.test(id) ? firmwares.filter((firmware) => firmware.sha256.startsWith(id)) : [];
+  return {
+    firmware_sha256: infoId,
+    ...(match.length === 1 ? { stock_firmware_sha256: match[0]!.sha256 } : {}),
+  };
+}

@@ -1,8 +1,4 @@
-export interface TraceTimelineCapture {
-  hz: number;
-  dropped: number;
-  events: readonly { owner: number; startTicks: string; durationTicks: number }[];
-}
+import type { TraceCapture } from '@digi/workbench-core/profile/trace.ts';
 
 interface TraceEvent {
   start: number;
@@ -22,7 +18,7 @@ export interface TraceView {
   span: number;
 }
 
-export function traceTimeline(capture: TraceTimelineCapture) {
+export function traceTimeline(capture: TraceCapture) {
   const lanes = new Map<number, TraceLane>();
   let origin: bigint | undefined;
   const parsed = capture.events.flatMap((event) => {
@@ -33,8 +29,17 @@ export function traceTimeline(capture: TraceTimelineCapture) {
     return [{ ...event, start }];
   });
 
+  const marks = (capture.markers ?? []).flatMap(({ name, atTicks }) => {
+    if (!/^\d{1,20}$/.test(atTicks)) return [];
+    const tick = BigInt(atTicks);
+    if (origin === undefined || tick < origin) origin = tick;
+    return [{ name, tick }];
+  });
   const firstTick = origin ?? 0n;
-  let end = 1;
+  const markers = marks.map(({ name, tick }) => ({ name, tick, offset: Number(tick - firstTick) }));
+  const markerEnd = markers.reduce((last, marker) => Math.max(last, marker.offset), 1);
+  let eventStart = Number.POSITIVE_INFINITY;
+  let eventEnd = 0;
   for (const { owner, start, durationTicks } of parsed) {
     let lane = lanes.get(owner);
     if (!lane) {
@@ -46,7 +51,8 @@ export function traceTimeline(capture: TraceTimelineCapture) {
     const offset = start - firstTick;
     const finish = Number(offset + BigInt(durationTicks));
     lane.events.push({ start: Number(offset), end: finish, duration: durationTicks, startTicks: start });
-    end = Math.max(end, finish);
+    eventStart = Math.min(eventStart, Number(offset));
+    eventEnd = Math.max(eventEnd, finish);
   }
 
   for (const lane of lanes.values()) {
@@ -57,7 +63,9 @@ export function traceTimeline(capture: TraceTimelineCapture) {
       lane.furthestEnd.push(furthest);
     }
   }
-  return { origin: firstTick, end, lanes: [...lanes.values()].sort((a, b) => a.owner - b.owner) };
+  const end = Math.max(markerEnd, eventEnd);
+  const retained = parsed.length === 0 ? undefined : { start: eventStart, end: eventEnd };
+  return { origin: firstTick, end, retained, markers, lanes: [...lanes.values()].sort((a, b) => a.owner - b.owner) };
 }
 
 export function moveTraceView(view: TraceView, end: number, start: number): TraceView {
@@ -71,6 +79,31 @@ export function minimumTraceSpan(end: number): number {
 export function zoomTraceView(view: TraceView, end: number, anchor: number, factor: number): TraceView {
   const span = Math.min(end, Math.max(minimumTraceSpan(end), view.span * factor));
   return moveTraceView({ start: view.start, span }, end, view.start + (view.span - span) * anchor);
+}
+
+export function focusTraceEvent(event: TraceEvent, end: number): TraceView {
+  const span = Math.min(end, Math.max(minimumTraceSpan(end), event.duration) * 12);
+  return moveTraceView({ start: 0, span }, end, (event.start + event.end - span) / 2);
+}
+
+export function traceRuler(view: TraceView, origin: bigint, hz: number, width: number) {
+  // Use round time intervals, keeping the first tick aligned to the capture clock.
+  const target = view.span / hz / Math.max(1, Math.floor(width / 120));
+  const magnitude = 10 ** Math.floor(Math.log10(target));
+  const step = Math.max(1, Math.round(([1, 2, 5, 10].find((n) => n * magnitude >= target) ?? 10) * magnitude * hz));
+  const wholeStart = Math.floor(view.start);
+  const subTick = view.start - wholeStart;
+  const start = origin + BigInt(wholeStart);
+  const interval = BigInt(step);
+  const firstWhole = start + BigInt(Math.ceil(subTick));
+  const first = ((firstWhole + interval - 1n) / interval) * interval;
+  const ticks = [];
+  for (let at = first; ; at += interval) {
+    const offset = Number(at - start) - subTick;
+    if (offset > view.span) break;
+    ticks.push({ at, fraction: offset / view.span });
+  }
+  return { step, ticks };
 }
 
 export function traceTimeAt(view: TraceView, x: number, width: number): number {
@@ -88,11 +121,11 @@ function firstCandidate(lane: TraceLane, start: number) {
   return lo;
 }
 
-export function* traceBars(lane: TraceLane, view: TraceView, width: number, atX?: number) {
+export function* traceBars(lane: TraceLane, view: TraceView, width: number, hit?: { x: number; tolerance: number }) {
   const end = view.start + view.span;
-  const first = atX === undefined ? view.start : Math.max(view.start, traceTimeAt(view, atX - 1, width));
+  const first = hit ? Math.max(view.start, traceTimeAt(view, hit.x - hit.tolerance - 1, width)) : view.start;
   // A pulse can use the rightmost pixel even when it starts exactly at the end of the view.
-  const last = atX === undefined || atX >= width - 1 ? end : traceTimeAt(view, atX, width);
+  const last = !hit || hit.x + hit.tolerance >= width - 1 ? end : traceTimeAt(view, hit.x + hit.tolerance, width);
   for (let i = firstCandidate(lane, first); i < lane.events.length; i++) {
     const event = lane.events[i];
     if (event.start > last) break;
@@ -103,15 +136,26 @@ export function* traceBars(lane: TraceLane, view: TraceView, width: number, atX?
   }
 }
 
-export function traceHit(lane: TraceLane, view: TraceView, width: number, x: number) {
+export function traceHit(lane: TraceLane, view: TraceView, width: number, x: number, tolerance = 0) {
   if (x < 0 || x >= width) return;
 
-  // Later bars paint on top of earlier ones in the same lane.
-  let hit: TraceEvent | undefined;
-  for (const bar of traceBars(lane, view, width, x)) {
-    if (bar.left <= x && x < bar.left + bar.width) hit = bar.event;
+  // Prefer a direct hit, then the nearest bar. Later bars paint over earlier ones.
+  let nearest: TraceEvent | undefined;
+  let best = tolerance;
+  for (const bar of traceBars(lane, view, width, { x, tolerance })) {
+    const right = bar.left + bar.width;
+    if (bar.left <= x && x < right) {
+      nearest = bar.event;
+      best = 0;
+    } else {
+      const distance = Math.max(bar.left - x, x - right);
+      if (best > 0 && distance <= best) {
+        nearest = bar.event;
+        best = distance;
+      }
+    }
   }
-  return hit;
+  return nearest;
 }
 
 export function formatTraceTicks(ticks: number | bigint, hz: number, resolution = 1): string {

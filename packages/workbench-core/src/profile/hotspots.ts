@@ -60,7 +60,13 @@ export function sampledPcs(raw: unknown[], cpu: Cpu, top = 10): Hotspot[] {
 
 export function readProfileHotspots(doc: unknown, top?: number): ProfileHotspots {
   const { run, raw, clock } = (doc ?? {}) as {
-    run?: { firmware_sha256?: unknown; target?: string; loads?: LoadTableJson; module_sha256?: unknown[] };
+    run?: {
+      firmware_sha256?: unknown;
+      stock_firmware_sha256?: unknown;
+      target?: string;
+      loads?: LoadTableJson;
+      module_sha256?: unknown[];
+    };
     raw?: unknown[];
     clock?: { unit?: string };
   };
@@ -70,8 +76,11 @@ export function readProfileHotspots(doc: unknown, top?: number): ProfileHotspots
     const samples = sampledPcs(rows, cpu, top);
     return unit === undefined ? samples : samples.map((sample) => ({ ...sample, unit }));
   };
+  const firmware = run?.firmware_sha256;
+  const fullStock = fingerprint(run?.stock_firmware_sha256);
+  const short = typeof firmware === 'string' && /^[a-f0-9]{16}$/i.test(firmware) ? firmware.toLowerCase() : undefined;
   return {
-    sha256: fingerprint(run?.firmware_sha256),
+    sha256: fingerprint(firmware) ?? (short && fullStock?.startsWith(short) ? fullStock : undefined),
     target: run?.target,
     loads: Array.isArray(run?.loads?.modules) ? run.loads : undefined,
     moduleHashes: Array.isArray(run?.module_sha256) ? run.module_sha256.flatMap((v) => fingerprint(v) ?? []) : [],

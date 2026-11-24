@@ -13,6 +13,7 @@ import {
 } from './utilization-history';
 import SpanBreakdown from './SpanBreakdown';
 import type { SpanRecording } from './span-recording';
+import type { createSavedTimeline } from './saved-timeline';
 import './performance-panel.css';
 
 const hoverPercent = (value: number | null) => (value === null ? '—' : `${value.toFixed(1)}%`);
@@ -32,9 +33,11 @@ interface PerformanceProps {
   setView(view: PerformanceView): void;
   recording?: SpanRecording;
   activeTarget: boolean;
+  savedTimeline: ReturnType<typeof createSavedTimeline>;
 }
 
 export default function PerformancePanel(props: PerformanceProps) {
+  let traceFile!: HTMLInputElement;
   const latest = () => {
     const point = props.points.findLast((p) => p.at <= props.now);
     return point && utilizationIsFresh(props.now - point.at, props.estimated) ? point : undefined;
@@ -45,7 +48,11 @@ export default function PerformancePanel(props: PerformanceProps) {
   }
 
   return (
-    <section class="performance-panel" aria-label="Performance">
+    <section
+      class="performance-panel"
+      classList={{ 'performance-panel-timeline': props.view === 'Timeline' }}
+      aria-label="Performance"
+    >
       <header class="performance-header">
         <div class="performance-modes" role="group" aria-label="Performance view">
           <For each={views}>
@@ -106,8 +113,46 @@ export default function PerformancePanel(props: PerformanceProps) {
           </Show>
         }
       >
+        <div class="trace-timeline-controls" role="group" aria-label="Trace source">
+          <input
+            ref={traceFile}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={(event) => {
+              void props.savedTimeline.open(event.currentTarget.files?.[0]);
+              event.currentTarget.value = '';
+            }}
+          />
+          <button type="button" onClick={() => traceFile.click()}>
+            Open trace…
+          </button>
+          <Show when={props.savedTimeline.file()}>
+            {(traces) => (
+              <>
+                <Show when={traces().length > 1} fallback={<span>{traces()[0]?.label}</span>}>
+                  <label>
+                    Capture
+                    <select
+                      value={props.savedTimeline.index()}
+                      onChange={(event) => props.savedTimeline.select(Number(event.currentTarget.value))}
+                    >
+                      <For each={traces()}>{(trace, index) => <option value={index()}>{trace.label}</option>}</For>
+                    </select>
+                  </label>
+                </Show>
+                <button type="button" onClick={props.savedTimeline.clear}>
+                  Show current target
+                </button>
+              </>
+            )}
+          </Show>
+        </div>
+        <Show when={props.savedTimeline.error()}>
+          <p role="alert">{props.savedTimeline.error()}</p>
+        </Show>
         <Show
-          when={props.activeTarget && props.recording?.frozenTrace()}
+          when={props.savedTimeline.current() ?? (props.activeTarget && props.recording?.frozenTrace())}
           fallback={
             <p role="status">
               {props.activeTarget

@@ -1,6 +1,7 @@
 .trace-timeline {
   min-width: 0;
   display: grid;
+  align-content: start;
   gap: 8px;
   color: var(--ink);
   font: 11px/1.4 var(--font-mono, monospace);
@@ -92,18 +93,7 @@
 .trace-timeline-ruler-scale > span {
   position: absolute;
   top: 6px;
-  transform: translateX(-50%);
   white-space: nowrap;
-}
-
-.trace-timeline-ruler-scale > span:first-child {
-  padding-left: 6px;
-  transform: none;
-}
-
-.trace-timeline-ruler-scale > span:last-child {
-  padding-right: 6px;
-  transform: translateX(-100%);
 }
 
 .trace-timeline-scroll {
@@ -122,7 +112,17 @@
   inset: 0 0 auto var(--trace-name-width);
   overflow: hidden;
   cursor: crosshair;
+  user-select: none;
   background: var(--panel-2);
+}
+
+.trace-timeline-plot.trace-timeline-dragging {
+  cursor: grabbing;
+}
+
+.trace-timeline-window {
+  margin-right: 4px;
+  color: var(--ink-2);
 }
 
 .trace-timeline-plot:focus-visible {

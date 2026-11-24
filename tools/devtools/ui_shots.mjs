@@ -336,17 +336,42 @@ const SCENES = [
         "document.querySelector('.trace-timeline-counts')?.textContent.includes('12 dropped')",
         'Missing trace loss count',
       );
+      const windowLabel = "document.querySelector('.trace-timeline-window')?.textContent.trim()";
+      const fullWindow = await p.eval(windowLabel);
       await p.eval(`(() => {
         const plot = document.querySelector('.trace-timeline-plot');
         const r = plot.getBoundingClientRect();
         const position = { bubbles: true, clientX: r.left + r.width * 0.018, clientY: r.top + 8 };
-        plot.dispatchEvent(new PointerEvent('pointermove', position));
-        plot.dispatchEvent(new WheelEvent('wheel', { ...position, ctrlKey: true, deltaY: -80, cancelable: true }));
+        plot.dispatchEvent(new WheelEvent('wheel', { ...position, deltaY: -80, cancelable: true }));
       })()`);
       await waitForAnalyzer(
         p,
-        "document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration') && document.querySelector('.trace-timeline-crosshair') && !document.querySelector('[aria-label=\"Zoom out\"]').disabled",
-        'Hover or pointer zoom failed',
+        `${windowLabel} !== ${JSON.stringify(fullWindow)} && document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration') && !document.querySelector('[aria-label="Zoom out"]').disabled`,
+        'Scroll zoom or call inspection failed',
+      );
+      const scrollWindow = await p.eval(windowLabel);
+      const location = (fraction) =>
+        p.eval(`(() => {
+        const r = document.querySelector('.trace-timeline-plot').getBoundingClientRect();
+        return [r.left + r.width * ${fraction}, r.top + 8];
+      })()`);
+      const [x, y] = await location(0.018);
+      await p.mouse('mousePressed', x, y, { clicks: 2 });
+      await p.mouse('mouseReleased', x, y, { clicks: 2 });
+      await p.until(
+        `${windowLabel} !== ${JSON.stringify(scrollWindow)} && document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration')`,
+        'Double-click did not focus the call',
+      );
+      const ruler = "document.querySelector('.trace-timeline-ruler-scale').innerHTML";
+      const beforePan = await p.eval(ruler);
+      const [from, top] = await location(0.6);
+      const [to] = await location(0.2);
+      await p.mouse('mousePressed', from, top);
+      await p.mouse('mouseMoved', to, top);
+      await p.mouse('mouseReleased', to, top);
+      await p.until(
+        `${ruler} !== ${JSON.stringify(beforePan)} && !document.querySelector('.trace-timeline-dragging')`,
+        'Drag did not pan the timeline',
       );
     },
   },
