@@ -67,6 +67,7 @@ describe('scan and compare', () => {
       'tools/foo_dt2.py',
       'tests/regression/dn2/a.ts',
       'a/device-dt2.inc',
+      'ports/bindings/include/dk_fw_samples.h',
     ])
       expect(allowedPath(path, p.path), path).toBe(true);
     for (const path of [
@@ -74,7 +75,7 @@ describe('scan and compare', () => {
       'tools/foo.py',
       'digitakt2/a.ts',
       'tools/dt2fx.py',
-      'ports/bindings/include/dk_fw_samples.h',
+      'ports/bindings/rs/Cargo.toml',
     ])
       expect(allowedPath(path, p.path), path).toBe(false);
     const { found, binary } = scan(
