@@ -32,7 +32,8 @@ async function expectSetup(rt: TestRuntime): Promise<void> {
   await expectRuntimeReady(session);
   await installWithDebug(rt);
   const events = await rt.listen({ fromBoot: true });
-  const setup = trackSetup(dk, events);
+  // the core takes any run-time type of the device; that a module has loaded it is the host's check, from the MODULES reply
+  const setup = trackSetup(dk, events, { runTime: { first: UNLOADED_TYPE, modules: () => dk.modules() } });
   await untilTrackBaseline(events);
 
   const machineChange = (type: number, withinMs: number) =>
@@ -58,7 +59,7 @@ async function expectSetup(rt: TestRuntime): Promise<void> {
     (e: unknown) => e instanceof SetupRefused && e.status === E_RANGE,
   );
   for (const type of [GAP_TYPE, UNLOADED_TYPE])
-    await expect(setup.setMachine(TRACK, type), `machine type ${type} is no stock type and no loaded run-time type`).rejects.toSatisfy(
+    await expect(setup.setMachine(TRACK, type), `machine type ${type} is no stock type and no loaded run-time type (15: the core refuses a gap row; 16: the host finds no module with it)`).rejects.toSatisfy(
       (e: unknown) => e instanceof SetupRefused && e.status === E_RANGE,
     );
   expect((await dk.request(SERVICE_CMD.SETUP, Uint8Array.of(1, 16, 1))).status, 'track 16').toBe(E_PROTO);

@@ -95,3 +95,27 @@ test('with a clock the request is repeated while the module answers E_STATE (its
   refused = 1000;
   await assert.rejects(t.setMachine(0, 1), /E_STATE/);
 });
+
+test('a run-time machine type that no loaded module has is refused before SETUP is sent; a stock type, a loaded one and a filter are not asked about', async () => {
+  const sent: string[] = [];
+  const dk = {
+    setup: async (what: string, track: number, type: number) => {
+      sent.push(`${what} ${track} ${type}`);
+      return 7;
+    },
+  };
+  const events = { until: async () => done(7, 0) };
+  let reads = 0;
+  const modules = async () => {
+    reads++;
+    return [{ types: [16, 18] }, { types: [] }];
+  };
+  const t = trackSetup(dk as never, events as never, { runTime: { first: 16, modules } });
+  await t.setMachine(0, 3);
+  assert.equal(reads, 0, 'a stock type needs no MODULES read');
+  await t.setMachine(0, 18);
+  await t.setFilter(0, 17);
+  await assert.rejects(t.setMachine(0, 17), (e: unknown) => e instanceof SetupRefused && e.status === -46);
+  assert.deepEqual(sent, ['machine 0 3', 'machine 0 18', 'filter 0 17'], 'the refused type was never sent');
+  assert.equal(reads, 2);
+});
