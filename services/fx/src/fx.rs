@@ -122,7 +122,6 @@ impl<C: CoreApi> Describe<C> for Fx {
 
     /// One word for each effect row of module record `who` - 1 that has a page (`fxsend::describe`); none for a module with no such row.
     fn describe(core: &C, who: ConsumerId, out: &mut WordSink) {
-        // SAFETY: reads the tables this crate owns, outside the owner (see `fxsend::describe`)
-        unsafe { fxsend::describe(core, who.get(), out) }
+        fxsend::describe(core, who.get(), out)
     }
 }

@@ -167,19 +167,25 @@ impl ServiceTable {
     }
     /// What each service holds for consumer `owner` (a module record + 1): `visit(name hash, words)` for every row of the table, in table order, that adopts the describe part
     /// and wrote at least one word (at most `DESCRIBE_WORDS` of them). The core reads no meaning into the words. Runs in the caller's task: a row's describe never enters its owner.
+    /// A service that wants more than `DESCRIBE_WORDS` words is not visited (a cut section would be read as a whole one): it is counted, and the count is returned. The buffer has
+    /// one word more than the limit, so the thunk's count of words written says a service went past it.
     #[inline]
-    pub unsafe fn describe(&self, owner: u8, mut visit: impl FnMut(u32, &[u32])) {
+    pub unsafe fn describe(&self, owner: u8, mut visit: impl FnMut(u32, &[u32])) -> u32 {
+        let mut refused = 0;
         let mut i = 0;
         while i < self.rows.len() {
             if self.rows[i].has_describe() {
-                let mut words = [0u32; DESCRIBE_WORDS];
+                let mut words = [0u32; DESCRIBE_WORDS + 1];
                 let n = self.rows[i].describe(self.core, owner, &mut words);
-                if n > 0 {
+                if n > DESCRIBE_WORDS {
+                    refused += 1;
+                } else if n > 0 {
                     visit(self.rows[i].name(), &words[..n]);
                 }
             }
             i += 1;
         }
+        refused
     }
     /// The check of the services' tables over the rows in table order: the first number that is not 0 (the mismatch is in `out`), else 0.
     #[inline]

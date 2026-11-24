@@ -57,5 +57,6 @@ pub fn bytes() -> &'static [u8] {
 /// cores: every static of the service that holds DSP state.
 pub fn reset() {
     unsafe { core::ptr::write_bytes(addr_of_mut!(DKRT_VROWS), 0, 1) }
+    crate::modules::reset_published();
     crate::guard::reset();
 }

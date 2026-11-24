@@ -130,6 +130,7 @@ fn describe_answers_while_the_owner_is_busy_in_another_call() {
         &dkrt_svc_rt::ImportCore as *const dkrt_svc_rt::ImportCore as *const core::ffi::c_void;
     dkrt_svc_machines::rows::reset();
     dkrt_svc_machines::rows::vrows().mod_rows[1] = 0b101;
+    dkrt_svc_machines::records::publish(&dkrt_svc_rt::ImportCore);
     let ask = || {
         let mut w = [0u32; 8];
         // SAFETY: `core` is the file's `ImportCore`, a zero-sized value

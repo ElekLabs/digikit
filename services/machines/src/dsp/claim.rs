@@ -76,6 +76,7 @@ pub(crate) unsafe fn claim<C: CoreApi>(core: &C, c: &mut Claim) {
     }
     c.state_at = state_at;
     d.mod_rows[rec] = claimed;
+    crate::modules::publish(core);
 }
 
 /// Give back the voice rows module record `rec` claimed.
@@ -89,6 +90,7 @@ pub(crate) unsafe fn release<C: CoreApi>(core: &C, rec: usize) {
         k += 1;
     }
     d.mod_rows[rec] = 0;
+    crate::modules::publish(core);
 }
 
 /// The voice-row word to publish at step `*want` of module `rec`: a row takes `ROW_STEPS` steps (the 8 ranges, the pc, note_on, state

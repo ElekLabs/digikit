@@ -1422,7 +1422,8 @@ export class DkSession {
   /** The loaded modules with their ranges, needed runtime versions and faults (MODULES, runtime 0.2.0, capability MODULES), every page. */
   async modules(quick: Quick = false): Promise<DkModule[]> {
     const caps = this.lastCaps !== undefined ? this.lastCaps : (await this.info(quick)).caps;
-    if (caps === null || ((caps >>> GCAP.MODULE_SECTIONS) & 1) === 0) throw new DkError({ error: OLD_MODULES, kind: 'request' });
+    if (caps === null || ((caps >>> GCAP.MODULE_SECTIONS) & 1) === 0)
+      throw new DkError({ error: OLD_MODULES, kind: 'request' });
     const out: DkModule[] = [];
     let start = 0;
     for (;;) {

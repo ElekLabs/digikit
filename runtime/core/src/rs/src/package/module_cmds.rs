@@ -7,6 +7,22 @@ use dkrt_sdk::proto::*;
 use dkrt_sdk::OK;
 use crate::package::resident::transport::{rbody, reply};
 
+/// Sections `put_sections` refused since the boot: a service that wrote more than `DESCRIBE_WORDS` words for one record, or a record with more sections than the count byte holds. The
+/// host sees the record without that section; this count (`describe_refused`) is how the refusal shows.
+static mut DESCRIBE_REFUSED: u32 = 0;
+
+/// How many sections `put_sections` refused since the boot (see `DESCRIBE_REFUSED`).
+pub(crate) fn describe_refused() -> u32 {
+    unsafe { *addr_of!(DESCRIBE_REFUSED) }
+}
+
+fn count_refused(n: u32) {
+    unsafe { *addr_of_mut!(DESCRIBE_REFUSED) = (*addr_of!(DESCRIBE_REFUSED)).wrapping_add(n) };
+}
+
+// the section count is one byte, and the table has at most `PROVIDER_MAX` rows: a record never has more sections than the byte holds
+const _: () = assert!(dkrt_sdk::PROVIDER_MAX <= u8::MAX as usize);
+
 /// The sections of module record `owner` (a record index + 1) in a MODULES reply, into `out`: `u8 n_sections`, then per section `u32 service name hash, u8 n, n words` (big
 /// endian), in the table's order. A service that has no word for the record gives no section. The core reads no meaning into the words. The length written, or `None` when the
 /// sections do not fit `out` (the caller ends the page before the record).
@@ -14,9 +30,13 @@ pub(crate) unsafe fn put_sections(table: &dkrt_abi::service::ServiceTable, owner
     let mut at = 1usize;
     let mut n = 0u8;
     let mut fits = !out.is_empty();
-    table.describe(owner, |name, words| {
+    let refused = table.describe(owner, |name, words| {
         let end = at + 5 + 4 * words.len();
-        if !fits || end > out.len() || n == u8::MAX {
+        if n == u8::MAX {
+            count_refused(1);
+            return;
+        }
+        if !fits || end > out.len() {
             fits = false;
             return;
         }
@@ -30,6 +50,7 @@ pub(crate) unsafe fn put_sections(table: &dkrt_abi::service::ServiceTable, owner
         at = end;
         n += 1;
     });
+    count_refused(refused);
     if !fits {
         return None;
     }
@@ -346,6 +367,35 @@ mod tests {
             want.extend(section("fake1", &[0x1103, 6]));
             want.extend(section("fake2", &[0x2203]));
             assert_eq!(put(3, 64), Some(want));
+        }
+
+        #[test]
+        fn a_service_that_wants_more_words_than_the_limit_gives_no_section_and_is_counted() {
+            use crate::package::handlers::tests::{set_describe, LOCK};
+            let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+            let limit = dkrt_abi::DESCRIBE_WORDS;
+            let at_limit = std::vec![7u32; limit];
+            let over = std::vec![7u32; limit + 1];
+            let put_big = || {
+                let mut buf = [0u8; 256];
+                let n = unsafe { put_sections(&two(), 3, &mut buf) }.unwrap();
+                buf[..n].to_vec()
+            };
+            // service 1 writes exactly the limit (kept whole); service 2 writes one word more (no section)
+            set_describe(Some(&[(1, 3, &at_limit), (2, 3, &over)]));
+            let before = describe_refused();
+            let mut want = std::vec![1u8];
+            want.extend(section("fake1", &at_limit));
+            assert_eq!(put_big(), want);
+            assert_eq!(describe_refused(), before + 1, "the refused section is counted");
+            // far past the limit it is refused the same way, never cut to the limit
+            let way_over = std::vec![7u32; limit + 40];
+            set_describe(Some(&[(1, 3, &way_over), (2, 3, &[5])]));
+            let mut want = std::vec![1u8];
+            want.extend(section("fake2", &[5]));
+            assert_eq!(put_big(), want);
+            assert_eq!(describe_refused(), before + 2);
+            set_describe(None);
         }
 
         #[test]

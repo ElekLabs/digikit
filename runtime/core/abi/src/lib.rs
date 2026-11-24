@@ -51,6 +51,7 @@ pub mod resident;
 pub mod runtime_state;
 pub mod service;
 mod service_table;
+pub use service_table::DESCRIBE_WORDS;
 pub mod sha256;
 pub mod shared;
 pub mod state;

@@ -70,8 +70,7 @@ export function trackSetup(
   const runTime =
     runTimeOpt === false
       ? undefined
-      : (runTimeOpt ??
-        (dk.modules ? { first: RUN_TIME_TYPE_FIRST, modules: () => dk.modules!() } : undefined));
+      : (runTimeOpt ?? (dk.modules ? { first: RUN_TIME_TYPE_FIRST, modules: () => dk.modules!() } : undefined));
   const request = async (what: 'machine' | 'filter', track: number, type: number): Promise<number> => {
     if (!ready) return dk.setup(what, track, type);
     const start = await ready.clock.now();

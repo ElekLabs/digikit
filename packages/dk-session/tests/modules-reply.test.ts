@@ -37,5 +37,8 @@ test('a reply of a device without the MODULE_SECTIONS capability is refused as a
   old[18 + 61 + 4] = 2; // n_types
   assert.throws(() => decodeModulesPage(old, 1 << CAP.MODULES), new RegExp(OLD_MODULES));
   assert.throws(() => decodeModulesPage(old, null), new RegExp(OLD_MODULES));
-  assert.throws(() => decodeModulesPage(Uint8Array.from(Buffer.from(fixture.hex, 'hex')), 1 << CAP.MODULES), /Update the firmware/);
+  assert.throws(
+    () => decodeModulesPage(Uint8Array.from(Buffer.from(fixture.hex, 'hex')), 1 << CAP.MODULES),
+    /Update the firmware/,
+  );
 });

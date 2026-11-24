@@ -2,7 +2,16 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
-import { DkError, DkSession, SetupRefused, decode8in7, encode8in7, runtimeEvent, trackSetup, RUN_TIME_TYPE_FIRST } from '@digi/dk-session';
+import {
+  DkError,
+  DkSession,
+  SetupRefused,
+  decode8in7,
+  encode8in7,
+  runtimeEvent,
+  trackSetup,
+  RUN_TIME_TYPE_FIRST,
+} from '@digi/dk-session';
 import { LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 const PREFIX = [0xf0, 0x7d, 0x64, 0x6b, 1];

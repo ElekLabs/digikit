@@ -21,7 +21,8 @@ pub fn set_mach_owner<C: CoreApi>(core: &C, k: usize, owner: u8) {
         if k < MAX_MACH {
             o[k] = owner;
         }
-    })
+    });
+    crate::modules::publish(core);
 }
 
 /// A copy of the owners of all machine rows, one short section.
@@ -31,7 +32,8 @@ pub(crate) fn mach_owners<C: CoreApi>(core: &C) -> [u8; MAX_MACH] {
 
 /// Every machine row is free (the reset of a host test; the service starts with all rows free).
 pub fn clear_mach_owners<C: CoreApi>(core: &C) {
-    MACH_OWNER.with(core, |o| *o = [0; MAX_MACH])
+    MACH_OWNER.with(core, |o| *o = [0; MAX_MACH]);
+    crate::modules::publish(core);
 }
 
 /// The code of the first run-time parameter row (a row `k` has code `param_first + k`); `u32::MAX` without a registry.

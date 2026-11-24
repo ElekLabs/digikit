@@ -34,7 +34,11 @@ pub(crate) mod test_seams {
     /// The voice rows of module record `rec` (a bit mask) as a DSP load would leave them; `None` forgets every voice row.
     pub(crate) fn set_voice_rows(rec: usize, mask: Option<u32>) {
         match mask {
-            Some(m) => dkrt_svc_machines::rows::vrows().mod_rows[rec] = m,
+            Some(m) => {
+                dkrt_svc_machines::rows::vrows().mod_rows[rec] = m;
+                // what a DSP load does when it is complete: the MODULES reply reads the published entry
+                dkrt_svc_machines::records::publish(&dkrt_test_support::FakeCore::new());
+            }
             None => dkrt_svc_machines::rows::reset(),
         }
     }

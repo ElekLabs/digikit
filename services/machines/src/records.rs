@@ -13,7 +13,7 @@ use dkrt_abi::provider::{Consumer, Records, Status};
 use dkrt_abi::service::{check_step, CheckCtx, ModuleCommitCtx, Problem};
 use dkrt_sdk::*;
 
-pub use crate::modules::{module_info, types_of};
+pub use crate::modules::{module_info, publish, types_of};
 pub use crate::registry::{clear_mach_owners, mach_owner, param_first, set_mach_owner};
 
 /// The rule for the parameter, machine, page and action records of one module (`validate::Acc`); a native page kind and a kind of another service are accepted.

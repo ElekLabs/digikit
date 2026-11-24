@@ -82,5 +82,7 @@ pub unsafe fn save_route<C: CoreApi>(core: &C, k: usize, route: Route) -> i32 {
     let s = ss();
     let mut key = [0u8; KEY_MAX];
     let kn = key_of(&mut key, b"fx/route/", &s.id[k], s.idlen[k] as usize);
-    core.settings_put(&key[..kn], &[route.byte()])
+    let status = core.settings_put(&key[..kn], &[route.byte()]);
+    publish(core);
+    status
 }

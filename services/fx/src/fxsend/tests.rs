@@ -117,6 +117,7 @@ fn describe_gives_one_word_for_each_effect_row_of_the_consumer() {
         core.settings
             .borrow_mut()
             .push((b"fx/route/m0".to_vec(), std::vec![0]));
+        publish(&core);
     }
     let words = |who: u8| {
         let mut buf = [0u32; 8];
@@ -154,6 +155,61 @@ fn describe_gives_one_word_for_each_effect_row_of_the_consumer() {
     unsafe {
         for k in [0, 2, 3] {
             crate::fxpage::set_page_owner_for_test(k, 0);
+        }
+        crate::fxsend::reset_published();
+    }
+}
+
+/// `describe` runs on the MODULES command handler's task and can be preempted by the task that removes or re-routes an effect. At each point where a task switch can fall in (each
+/// time the interrupt mask is given back), the words are those of the state before or after the change, never the owner of one with the route or the limits of the other.
+#[test]
+fn describe_is_one_state_when_the_effect_changes_between_its_reads() {
+    use dkrt_abi::provider::{ConsumerId, Describe, WordSink};
+    use dkrt_test_support::FakeCore;
+    let _g = crate::test_lock::hold();
+    let both = ROUTE_MASTER | ROUTE_SEND;
+    let words = |core: &FakeCore| {
+        let mut buf = [0u32; 8];
+        let mut sink = WordSink::new(&mut buf);
+        <crate::fx::Fx as Describe<FakeCore>>::describe(core, ConsumerId::new(2), &mut sink);
+        sink.words().to_vec()
+    };
+    let word = |running: u8, allowed: u8| {
+        0u32 | (running as u32) << 8
+            | (ROUTE_MASTER as u32) << 12
+            | (allowed as u32) << 16
+            | (ROUTE_MASTER as u32) << 20
+    };
+    // before: effect row 0 of record 1 runs on the send bus and allows both; after: another module (record 2) holds the row, on the master, allowing the master only
+    fn state(owner: u8, send: bool, allow: u8) {
+        unsafe {
+            let s = ss();
+            crate::fxpage::set_page_owner_for_test(0, owner);
+            s.id[0][..2].copy_from_slice(b"m0");
+            s.idlen[0] = 2;
+            s.allow[0] = allow;
+            s.dflt[0] = ROUTE_MASTER;
+            s.route[0] = send as _;
+        }
+    }
+    for at in 1..=6 {
+        let core = FakeCore::new();
+        state(2, true, both);
+        unsafe { publish(&core) };
+        assert_eq!(words(&core), std::vec![word(ROUTE_SEND, both)]);
+        core.host.interrupt_at_restore(at, || {
+            let core = FakeCore::new();
+            state(3, false, ROUTE_MASTER);
+            unsafe { publish(&core) };
+        });
+        let got = words(&core);
+        assert!(
+            got == std::vec![word(ROUTE_SEND, both)] || got.is_empty(),
+            "restore {at}: {got:x?} is a mix of the two states"
+        );
+        unsafe {
+            crate::fxpage::set_page_owner_for_test(0, 0);
+            crate::fxsend::reset_published();
         }
     }
 }
