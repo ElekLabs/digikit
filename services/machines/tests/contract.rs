@@ -1545,7 +1545,7 @@ fn a_loaded_page_row_names_its_page_and_title_as_string_representations() {
         let f = fixture(p.id);
         let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
         assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
-        let s = rstate();
+        let s = reg();
         let Some(k) = s.page_owner.iter().position(|o| *o == 1) else {
             continue;
         };

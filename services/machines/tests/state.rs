@@ -166,15 +166,21 @@ fn start_makes_the_reserved_page_rows_free_rows() {
         let core = core_with(Some(rows_words.clone()), 2);
         core.mem.borrow_mut().insert(ROWS, 0x4000_0000);
         core.mem.borrow_mut().insert(ROWS + 0x54 + 0x2c, 5);
+        // the rows point at the empty string of the owner, so the owner must stay at its address: only the in-place start has one
+        let mut slot = Box::new(MaybeUninit::<Machines>::uninit());
+        let mut by_value = None;
         if in_place {
-            let mut slot = Box::new(MaybeUninit::<Machines>::uninit());
             <Machines as Provider<FakeCore>>::start_in(&core, &mut slot).unwrap();
         } else {
-            <Machines as Provider<FakeCore>>::start(&core).unwrap();
+            by_value = Some(<Machines as Provider<FakeCore>>::start(&core).unwrap());
         }
-        let rep = core::ptr::addr_of!(dkrt_svc_machines::registry::rstate().empty_rep) as u32 + 12;
         unsafe {
-            assert_eq!(core.rd(ROWS), rep, "in_place {in_place}");
+            if in_place {
+                let owner = slot.assume_init_ref();
+                let rep = core::ptr::addr_of!(owner.reg().empty_rep) as u32 + 12;
+                assert_eq!(core.rd(ROWS), rep, "in_place {in_place}");
+            }
+            drop(by_value);
             assert_eq!(core.rd(ROWS + 0x54 + 0x2c), 0x7fff_ffff);
         }
     }
