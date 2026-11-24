@@ -31,6 +31,7 @@ import shlex
 import sqlite3
 import sys
 from contextlib import closing
+from pathlib import Path
 from typing import Any
 
 from tools.coldfire import fw_query as coldfire
@@ -482,6 +483,14 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_parser("review", help="export a browsable catalog and review TSV")
     )
     catalog_page.add_review_options(review)
+    review.add_argument(
+        "--syx",
+        type=Path,
+        help="build and review a registered stock SHARC firmware file",
+    )
+    review.add_argument(
+        "--other-syx", type=Path, help="build and link a second SHARC firmware file"
+    )
     sp = common(sub.add_parser("batch", help="run many queries from FILE or - (stdin)"))
     sp.add_argument("file")
     return p
@@ -509,9 +518,19 @@ def run(
         build_images(image or os.environ.get("FW_IMAGE"), args.other, core, args.cpu)
         return "Firmware databases and catalogs built."
     if c == "review":
-        return catalog_page.export_review(
-            image or os.environ.get("FW_IMAGE"), core, args.cpu, args
-        )
+        if args.syx is not None:
+            from tools.firmware.review_source import review_from_syx
+
+            outputs = review_from_syx(args, core)
+        else:
+            if args.other_syx is not None:
+                raise FwError("--other-syx requires --syx")
+            outputs = [
+                catalog_page.export_review(
+                    image or os.environ.get("FW_IMAGE"), core, args.cpu, args
+                )
+            ]
+        return catalog_page.format_reviews(outputs, args.format)
     if c == "batch":
         raise FwError("batch cannot be nested")
     if c == "dossier":

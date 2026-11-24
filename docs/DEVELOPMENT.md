@@ -352,17 +352,11 @@ The **Bitmap candidates** and **Parameter candidates** shortcuts search the exis
 
 ### SHARC candidate review
 
-After building the DSP catalogs, run:
-
-```sh
-uv run python -m tools.coldfire.fw review -i dt2-1.17 --core dsp
-uv run python -m tools.coldfire.fw review -i dn2-1.12 --core dsp
-```
-
-The exporter reads the catalog and call edges from each DSP database and writes
-`out/firmware/<image>/dsp/review.html` and `dsp/exports/review.tsv`. The HTML opens in a browser
-and includes every DSP candidate by default. Use the search box to find an
-anchor, role, or DSP hint. Paired links follow the release and core layout.
+Follow [Generate a SHARC catalog from a SysEx](FIRMWARE.md#generate-a-sharc-catalog-from-a-syx)
+to build a review page and register its symbols in Workbench. The SHARC page
+includes every DSP candidate by default. Search by group title, function name,
+anchor, role or DSP hint. The label and browser decision workflows above also
+apply to SHARC reviews.
 
 ## Patching
 

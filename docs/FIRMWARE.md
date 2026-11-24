@@ -15,6 +15,33 @@ The device profiles select the instruction set for each core. Syntakt's DSP
 appears as `st-1.42-peer-emac` in the Ghidra dump and SQLite image metadata.
 Use `--core dsp` to query its address space.
 
+## Generate a SHARC catalog from a SysEx
+
+From the repository root, with the Python dependencies installed:
+
+```sh
+uv run python -m tools.coldfire.fw review --syx /path/to/Digitakt_II_OS1.17.syx --core dsp
+```
+
+Use either Digitakt II OS 1.17 or Digitone II OS 1.12. The command identifies
+the stock release by hash, so the file can have any name. It extracts the
+firmware, builds the SHARC database and writes
+`out/firmware/<release>/dsp/review.html`. Open that file in a browser. No
+Ghidra dumps or second firmware file are needed.
+
+For paired function links, provide the second file with `--other-syx`. This
+builds both catalogs and writes both review pages in their default locations.
+An optional `--out` adds an alternate copy of the first review in paired mode. Add `--format json` for a
+`reviews` array on stdout with one record per page, including `release`, `core`,
+`cpu`, `firmware_sha256`, `peer` (null for standalone SHARC), and absolute
+`database`, `html` and `tsv` paths. Build progress goes to stderr. Register the
+reported `firmware.sqlite` in [Workbench → Settings → Firmware symbols](ADDRMAP.md#firmware-symbols-in-desktop-settings).
+
+Function links end in `#r-0x<entry>`, using the entry address shown in the review
+TSV. Keep the two review paths relative to each other when moving paired
+pages. If the catalogs already exist, [re-export the HTML](#find-and-open-the-output)
+with the release key.
+
 ## Build the databases
 
 Extract the firmware sections and prepare the ColdFire dumps. For Digitakt II
@@ -34,8 +61,8 @@ uv run python -m tools.coldfire.fw build --device syntakt --firmware 1.42
 
 These builds populate both cores for the selected releases and print catalog row
 and group counts. Pass `--core main` or `--core dsp` to build a single program.
-The SHARC catalog needs `--other` with a second SHARC release. Its inputs are
-the extracted DSP sections. The ColdFire builds import their matching Ghidra dumps.
+For the paired `fw build` workflow, pass `--other` with the second SHARC release.
+SHARC uses the extracted DSP sections. ColdFire imports the matching Ghidra dumps.
 
 ## Find and open the output
 

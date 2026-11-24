@@ -7,6 +7,7 @@ import json
 import os
 import re
 import tomllib
+from collections.abc import Callable
 from contextlib import closing
 from functools import cached_property
 from typing import Any
@@ -955,15 +956,17 @@ def cmd_search(img: Sharc, term: str, where: str | None, cap: int) -> list[str]:
     return out
 
 
-def build_images(image: str, other: str) -> None:
+def build_images(
+    image: str, other: str | None, *, report: Callable[[str], None] = print
+) -> None:
     from tools.sharc_dev import sharc_catalog, sharcdb
 
-    for name in (image, other):
+    for name in filter(None, (image, other)):
         blob = os.path.join(ROOT, "out", "sections", name, "section_7_BLOB.bin")
         if not os.path.isfile(blob):
             raise FwError(f"no SHARC blob for {name}: expected {blob}")
         artifacts = FirmwareArtifacts(name, "sharc")
         sharcdb.build_database(blob, str(artifacts.database), name=name)
         artifacts.publish_legacy_alias()
-    if sharc_catalog.catalog(image, other):
+    if sharc_catalog.catalog(image, other, report=report):
         raise FwError("SHARC catalog build failed")

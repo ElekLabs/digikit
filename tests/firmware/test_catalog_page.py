@@ -285,7 +285,10 @@ def test_sharc_review_reads_the_canonical_database(tmp_path, monkeypatch):
     current = artifacts.FirmwareArtifacts(image, "sharc")
     target = artifacts.FirmwareArtifacts(other, "sharc")
     output = current.review
-    page = output.read_text()
+    encoded_page = output.read_bytes()
+    assert b'<meta charset="utf-8">' in encoded_page[:1024]
+    page = encoded_page.decode("utf-8")
+    assert "SHARC ·" in page
     data = json.loads(page.split("const DATA = ", 1)[1].split(";\n", 1)[0])
     assert data["cpu"] == "sharc" and data["full_inventory"]
     assert data["rows"][0]["pair_url"] == f"../../{other}/dsp/review.html#r-0x40"
@@ -299,6 +302,109 @@ def test_sharc_review_reads_the_canonical_database(tmp_path, monkeypatch):
         href, _ = exported[0][link_field].split("#r-")
         assert (current.review_tsv.parent / unquote(href)).resolve() == page_path
         assert page_path.is_file()
+
+
+@pytest.mark.parametrize("with_peer", [False, True])
+def test_review_json_obeys_recorded_catalog_pairing(
+    tmp_path, monkeypatch, capsys, with_peer
+):
+    monkeypatch.setattr(artifacts, "OUTPUT_ROOT", tmp_path)
+    image, other = next(iter(catalog_page.OTHER_IMAGE.items()))
+    current = artifacts.FirmwareArtifacts(image, "sharc")
+    peer = artifacts.FirmwareArtifacts(other, "sharc")
+    # Both databases exist even for a standalone export.
+    for target, address, counterpart in [(current, 0x10, 0x40), (peer, 0x40, 0x10)]:
+        target.database.parent.mkdir(parents=True)
+        rows, _, _, _ = inventory()
+        row_data = (
+            dict.fromkeys(column for column, _ in sharc_catalog.CATALOG_COLUMNS)
+            | rows[0]
+            | {
+                "addr": address,
+                "pair_addr": counterpart if with_peer else None,
+            }
+        )
+        with sqlite3.connect(target.database) as db:
+            catalog._write_table(
+                db, "catalog", sharc_catalog.CATALOG_COLUMNS, [row_data]
+            )
+            db.execute(
+                "CREATE TABLE function_index_meta (key TEXT PRIMARY KEY, value TEXT)"
+            )
+            db.execute(
+                "INSERT INTO function_index_meta VALUES ('pair_image', ?)",
+                ((other if target == current else image) if with_peer else "",),
+            )
+            db.execute(
+                "CREATE TABLE edges (image TEXT, from_function INTEGER, to_function INTEGER, kind TEXT)"
+            )
+            db.execute(
+                "CREATE TABLE catalog_groups (size INTEGER, id INTEGER, best INTEGER)"
+            )
+
+    assert fw.main(["review", "-i", image, "--core", "dsp", "--format", "json"]) == 0
+    (record,) = json.loads(capsys.readouterr().out)["reviews"]
+    assert record["release"] == image
+    assert record["cpu"] == "sharc" and record["core"] == "dsp"
+    assert record["peer"] == (other if with_peer else None)
+    assert Path(record["database"]) == current.database
+    assert Path(record["html"]) == current.review and current.review.is_file()
+    exported = catalog_page.read_tsv(record["tsv"])
+    assert exported[0]["review_link"] == "../review.html#r-0x10"
+    assert bool(exported[0]["pair_review_link"]) == with_peer
+
+
+def test_syx_review_rejects_unregistered_firmware(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(artifacts, "OUTPUT_ROOT", tmp_path / "out")
+    stock = tmp_path / "Digitakt_II_OS1.17.syx"
+    stock.write_bytes(b"unregistered")
+    assert fw.main(["review", "--syx", str(stock), "--core", "dsp"]) == 1
+    result = capsys.readouterr()
+    assert "No device file matches" in result.err
+    assert not result.out and not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("target", ["source", "peer_tsv"])
+def test_syx_review_checks_output_collisions_before_build(
+    tmp_path, monkeypatch, capsys, target
+):
+    from tools.firmware import review_source
+
+    monkeypatch.setattr(review_source, "ROOT", str(tmp_path))
+    monkeypatch.setattr(artifacts, "OUTPUT_ROOT", tmp_path / "out")
+    image, other = next(iter(catalog_page.OTHER_IMAGE.items()))
+    primary = tmp_path / "primary"
+    secondary = tmp_path / "other"
+    primary.write_bytes(b"primary input")
+    secondary.write_bytes(b"peer input")
+    monkeypatch.setattr(
+        review_source,
+        "sharc_image",
+        lambda path, _cpu: image if path == primary else other,
+    )
+    output = (
+        primary
+        if target == "source"
+        else artifacts.FirmwareArtifacts(other, "sharc").review_tsv
+    )
+
+    assert (
+        fw.main(
+            [
+                "review",
+                "--syx",
+                str(primary),
+                "--other-syx",
+                str(secondary),
+                "--out",
+                str(output),
+            ]
+        )
+        == 1
+    )
+    assert "overlaps" in capsys.readouterr().err
+    assert primary.read_bytes() == b"primary input"
+    assert not (tmp_path / "out").exists()
 
 
 def test_pair_outside_inventory_retains_evidence_without_dead_link(tmp_path):

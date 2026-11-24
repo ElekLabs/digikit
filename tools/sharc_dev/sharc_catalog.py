@@ -6,8 +6,7 @@
     uv run python -m tools.coldfire.fw catalog -i dt2-1.17 --cpu sharc --grade
 
 Builds the full function index and the `catalog` and `catalog_groups` tables
-for both images and writes the TSV
-and graph JSON files next to them. The rows are the functions near an existing
+for each image and writes the TSV and graph JSON files next to them. The rows are the functions near an existing
 anchor, on the voice, master or frame call path, hot in a profile, or called
 from many places. Inputs: out/sharcdb/<image>.sqlite (also of the old image),
 ports/<image>.toml. The ColdFire catalogue is tools/coldfire/atlas.py;
@@ -23,7 +22,7 @@ import os
 import re
 import sqlite3
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import closing
 from typing import Any, cast
 
@@ -410,7 +409,7 @@ def function_role(
 def dsp_rows(
     image: str,
     d: DspImg,
-    other: DspImg,
+    other: DspImg | None,
     pair: dict[int, tuple[int, str]],
     old: dict[str, list[int]] | None,
     prof: collections.Counter[int],
@@ -431,7 +430,7 @@ def dsp_rows(
         pair_addr, method = pair.get(f, (None, None))
         same_hash: int | None = None
         both: int | None = None
-        if pair_addr is not None:
+        if other is not None and pair_addr is not None:
             oh = other.hs.get(pair_addr)
             same_hash = int(oh is not None and oh == h)
             if kind == "sharc_func" and h:
@@ -517,7 +516,7 @@ def write_dsp_catalog(
 
 def write_function_index(
     image: str,
-    other: str,
+    other: str | None,
     d: DspImg,
     pair: dict[int, tuple[int, str]],
     db: sqlite3.Connection,
@@ -554,10 +553,18 @@ def write_function_index(
         )
         db.executemany(
             "INSERT INTO function_index_meta VALUES (?,?)",
-            (
-                (k, src.meta.get(k))
-                for k in ("image_sha256", "build_input_sha256", "min_depth", "blocks")
-            ),
+            [
+                ("pair_image", other or ""),
+                *(
+                    (k, src.meta.get(k))
+                    for k in (
+                        "image_sha256",
+                        "build_input_sha256",
+                        "min_depth",
+                        "blocks",
+                    )
+                ),
+            ],
         )
         db.execute("DROP TABLE IF EXISTS function_index")
         db.execute("""CREATE TABLE function_index (
@@ -598,25 +605,31 @@ def write_function_index(
 
 def catalog(
     image: str,
-    other_image: str,
+    other_image: str | None = None,
     out_dir: str | None = None,
     profiles: dict[str, str] | None = None,
+    *,
+    report: Callable[[str], None] = print,
 ) -> int:
-    names = [short_image(image), short_image(other_image)]
+    names = [short_image(name) for name in (image, other_image) if name is not None]
+    if len(set(names)) != len(names):
+        report("SHARC catalog pairing requires different images")
+        return 2
     for n in names:
         if n not in DSP_ROOTS:
-            print("no DSP roots for %s: add it to DSP_ROOTS" % n)
+            report("no DSP roots for %s: add it to DSP_ROOTS" % n)
             return 2
         if not os.path.exists(database_path(n, "sharc", SHARC_DIR)):
-            print("no sharcdb for %s: run sharc.load(%r) first" % (n, n))
+            report("no sharcdb for %s: run sharc.load(%r) first" % (n, n))
             return 2
-    a, b = collect_dsp(names[0]), collect_dsp(names[1])
-    fwd, rev = pair_up(a, b), pair_up(b, a)
-    for n, d, o, pair in ((names[0], a, b, fwd), (names[1], b, a, rev)):
+    images = {name: collect_dsp(name) for name in names}
+    for n, d in images.items():
+        peer = next((name for name in names if name != n), None)
+        o = images[peer] if peer else None
+        pair = pair_up(d, o) if o is not None else {}
         path = (profiles or {}).get(n)
         prof = read_profile(path, d) if path else collections.Counter()
         rows = dsp_rows(n, d, o, pair, old_groups(n), prof)
-        peer = names[1] if n == names[0] else names[0]
         with closing(sqlite3.connect(database_path(n, "sharc", SHARC_DIR))) as db, db:
             db.execute("BEGIN IMMEDIATE")
             n_groups = write_dsp_catalog(n, rows, d, out_dir, db)
@@ -625,7 +638,7 @@ def catalog(
         for r in rows:
             for t in r["tags"].split(","):
                 counts[t] = counts.get(t, 0) + 1
-        print(
+        report(
             "%s: rows=%d anchor_grade=%d groups=%d tags: %s"
             % (
                 n,
@@ -641,7 +654,7 @@ def catalog(
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("image")
-    ap.add_argument("other")
+    ap.add_argument("other", nargs="?", help="optional peer SHARC image")
     ap.add_argument(
         "--out-dir", help="export with image-prefixed names in this directory"
     )
