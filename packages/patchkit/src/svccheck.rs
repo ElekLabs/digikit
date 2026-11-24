@@ -761,6 +761,11 @@ fn fill_problems(dir: &Path, adapters: &Path) -> Vec<String> {
     let mut slots = std::collections::BTreeMap::new();
     let mut twice = vec![];
     adapter_slots(adapters, &mut slots, &mut twice);
+    // platform modules (`runtime/platform/`) declare slots as well
+    let platform = adapters.join("../runtime/platform");
+    if platform.is_dir() {
+        adapter_slots(&platform, &mut slots, &mut twice);
+    }
     for name in twice {
         out.push(format!(
             "the slot `{name}` is declared twice ([[slot]] in the adapter module.toml files)"
