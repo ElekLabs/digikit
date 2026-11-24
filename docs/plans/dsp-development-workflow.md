@@ -20,7 +20,9 @@ Keep firmware, captures, generated catalogs and listening WAVs local under ignor
 | 4. SDK workflow and unified capture | Committed in `8e8f8d372` | The [SDK example](../../sdk/dsp/README.md) compares PLUCK on both rigs with byte-identical audio. Rigs export function and loop evidence for effects too. Workbench shares recording, opening and run selection across views. This is rig and emulator evidence, not board timing. |
 | 4a. Saved spans and processor boundaries | Complete | Offline Spans, per-run CLI reports and target-aware recording options are implemented. See the verification below. |
 | 5a. Render exports and audio comparison | Complete | The [CLI workflow](../INSTRUMENTATION.md#render-and-compare-audio-from-the-cli) exports original WAV and structured evidence and compares them offline. The two-device FREQ SHIFT rig baseline precedes the listening fixture. |
-| 5. FREQ SHIFT listening and performance proof | Pending | The current effect is a baseline. Stereo spread, drift, cost and the listening comparison are still to do. |
+| 5b. Musical send baseline | Complete | Both generated scenes have dry/current WAVs, matching source hashes and linked rig profiles on both targets. No module changes. |
+| 5c. FREQ SHIFT listening and performance proof | Pending | Add Spread first, then Drift and Rate. Use scripted sound checks, rig cost and the musical A/B to decide what ships. |
+| 6. Review the workflow | Deferred | Consider saved audio evidence in the existing Analyzer only after the CLI workflow has seen real use. No new Workbench panel. |
 
 ## 1. Generate a catalog from one firmware file
 
@@ -70,13 +72,21 @@ Use one **Open capture** and one **Record / Stop** flow in Workbench. A file can
 ## 5. Apply the workflow to FREQ SHIFT
 
 - Start with the shared CLI. `wb module render` runs a named rig case and emits WAV and/or JSON. `wb audio compare` checks two exports, uses the original PCM where present and reports summary-only comparisons as such. The technical baseline uses `params/all-mid/noise` on both rigs. It is a master-insert check, not the musical send comparison.
-- Use a send on a repeating hat, stab or texture, with the kick and bass dry. Keep the effect identity, current signed `SHIFT` range and framework `MIX`. Add **SPREAD** first, with opposite offsets around `SHIFT` for left and right. Add **DRIFT** for shallow modulation and **RATE** for its period. Start with 8–32 second periods for listening. Zero spread and drift must preserve the existing sound and settings loaded from an existing kit.
+- Generate two repeatable musical inputs without needing user samples. Send the hat or rim from a tight percussion loop while keeping kick and bass dry. Use a sustained stab or texture as a second check and try the same settings there before retuning. Save dry and current stereo WAVs, input/build identity and matching cost evidence before editing the effect. Keep rig send evidence separate from full emulator or hardware captures.
+- Keep the effect identity, current signed `SHIFT` range and framework `MIX`. Add **SPREAD** first, with opposite offsets around `SHIFT` for left and right. Add **DRIFT** for shallow modulation and **RATE** for its period. Start with 8–32 second periods for listening. Zero spread and drift must preserve the existing sound and settings loaded from an existing kit.
+- Reuse the [scripted TOML sound checks](../TESTING.md#sound-checks-testsrigtoml). Add the needed signals as the design calls for them: stepped sine across the band for shift and image rejection, two tones or seeded noise for broadband behavior, impulse then silence for settling, and a steady tone with a scripted knob move for continuity. Share the stimuli and measurement code while keeping expectations in each module. Extend the CLI to export the same named TOML cases that `test-dsp` runs when we need that export. Do not make a general tone UI a prerequisite.
 - Profile the current shared oscillator and all-pass loops before choosing an implementation. Measure the cost with independent shifts active and check it against each target's effect budget. Update the README's cost statement from the verified result. For an optimization, compare the same algorithm and workload first so the cost of a new feature is visible.
 - Save dry/current/new renders from the same techno loop and listen across a full drift cycle. Keep phase continuous through turns and block boundaries. Use the general capture workflow for comparison and reserve a focused state probe for a specific mismatch.
 
-**5a verification.** The local `out/runs/dsp-workflow/phase5/baseline` contains the unchanged FREQ SHIFT master-insert render from each target. Independent DT2 repeats matched all 768 stereo frames and the recorded cost. A JSON-only repeat reports summary-only as intended. A PLUCK case exercised the machine export. The techno send fixture and new effect parameters are still pending.
+**5a verification.** The local `out/runs/dsp-workflow/phase5/baseline` contains the unchanged FREQ SHIFT master-insert render from each target. Independent DT2 repeats matched all 768 stereo frames and the recorded cost. A JSON-only repeat reports summary-only as intended. A PLUCK case exercised the machine export.
+
+**5b verification.** The local `out/runs/dsp-workflow/phase5/send-baseline` contains both dry/current pairs per device. Each comparison verified matching source audio, a changed output when the send was raised, and no full-scale samples. The [render manifest](../INSTRUMENTATION.md#listen-to-a-send-return) links each take to a profile of block 375, with matching input and linked-build identities. The module is unchanged. Em can audition the baseline before Spread work starts.
 
 **Exit check.** `module:check` and the affected rig and device checks pass on both targets. The zero-feature path matches the existing float32 reference within the established tolerance. The new checks cover channel shift separation, parameter continuity and bounded output at control limits. Save the CLI before/after report and linked Workbench capture. Em accepts the musical result after listening to the comparison.
+
+## 6. Review whether the UI needs more
+
+Review one complete CLI-driven experiment before changing Workbench. If auditioning saved captures there would save repeated work, add a small saved A/B view to the existing Analyzer with synchronized playback and the relevant measurements. Keep Performance focused on timing and counters. Reuse saved artifacts. Leave the UI as it is if the CLI and WAVs are enough.
 
 ## End result
 

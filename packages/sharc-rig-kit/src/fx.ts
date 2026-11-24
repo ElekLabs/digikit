@@ -347,8 +347,9 @@ export class FxRig {
     master: readonly number[] = Array<number>(64).fill(0),
     ctx?: Context | 'friendly',
     regs: Record<string, number> = {},
+    profile = this.profile,
   ): Promise<FxBlock> {
-    return this.block(master, ctx, regs, [], '_fxs_entry');
+    return this.block(master, ctx, regs, [], '_fxs_entry', profile);
   }
 
   /** The words of a `dk_fx_desc` data symbol as built (before any call). */
@@ -369,6 +370,7 @@ export class FxRig {
     regs: Record<string, number> = {},
     extraReads: [address: number, count: number][] = [],
     entry = '_fx_entry',
+    profile = this.profile,
   ): Promise<FxBlock> {
     const context = resolveContext(ctx, this.ctxRng);
     this.lastCtx = { ...context };
@@ -392,7 +394,7 @@ export class FxRig {
         max_steps: this.stepLimit,
         reads,
         read_regs: ['I6', 'I7', ...names, ...CONTEXT_REGS],
-        ...(this.profile ? { profile: true } : {}),
+        ...(profile ? { profile: true } : {}),
       },
     });
     const [res] = (await this.port.run(q.take())) as [CallResult];

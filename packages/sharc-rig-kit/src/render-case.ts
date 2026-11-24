@@ -7,6 +7,9 @@ import { fxDescription, machineBudget, runFxCase, runMachineCase } from './confo
 import { buildFx, buildMachine, type FxBuilt, type MachineBuilt } from './place.ts';
 import { rigBinary } from './rig.ts';
 import { checkMachineGallery, fxBudget, fxSpec, fxWord, machineSpec, type Device } from './spec.ts';
+import { LISTENING_SCENES, type ListeningScene } from './listening-stems.ts';
+import { renderSend, type SendOptions } from './send-render.ts';
+import { moduleBaseOf, rigAddrMap, rigProfile } from './profile.ts';
 
 const SEED = 0xd1617;
 
@@ -14,7 +17,7 @@ export interface RenderedCase {
   module: string;
   device: Device;
   case: string;
-  tap: 'master-insert' | 'voice';
+  tap: 'master-insert' | 'voice' | 'send-mix';
   workload: { sha256: string; seed: number; settings: Record<string, unknown> };
   build: { linkedSha256: string; rigSha256: string };
   cost: {
@@ -25,6 +28,7 @@ export interface RenderedCase {
     worstNoteOn?: number;
   };
   pcm: { rate: number; channels: number; samples: number[] };
+  profile?: object;
 }
 
 function selectCase<T extends { group: string; name: string }>(cases: readonly T[], name: string): T {
@@ -56,7 +60,56 @@ function workload(settings: Record<string, unknown>): RenderedCase['workload'] {
   };
 }
 
-export async function renderCase(module: string, device: Device, name: string): Promise<RenderedCase> {
+export async function renderCase(
+  module: string,
+  device: Device,
+  name: string,
+  send?: SendOptions,
+): Promise<RenderedCase> {
+  if (send) {
+    if (!LISTENING_SCENES.includes(name as ListeningScene)) throw new Error('Send options need a listening scene.');
+    const sp = fxSpec(module);
+    if (!sp) throw new Error(`${module} is not an effect with a DSP object.`);
+    const { built, settings, cost, pcm, profile } = await renderSend(sp, device, name as ListeningScene, send);
+    const build = buildIdentity(built);
+    const work = workload(settings);
+    return {
+      module,
+      device,
+      case: name,
+      tap: 'send-mix',
+      workload: work,
+      build,
+      cost,
+      pcm,
+      ...(profile
+        ? {
+            profile: {
+              ...rigProfile(
+                {
+                  module,
+                  device,
+                  caseName: name,
+                  blocks: 1,
+                  binarySha256: build.rigSha256,
+                  inputSha256: settings.inputSha256,
+                  id: `rig:${module}:${device}:${name}:${work.sha256.slice(0, 12)}:${build.linkedSha256.slice(0, 12)}:block${profile.block}`,
+                },
+                new Map(profile.counts),
+                moduleBaseOf(built),
+              ),
+              rig: {
+                map: rigAddrMap(built, module, device),
+                blocks: [profile.block],
+                linkedSha256: build.linkedSha256,
+              },
+            },
+          }
+        : {}),
+    };
+  }
+  if (LISTENING_SCENES.includes(name as ListeningScene))
+    throw new Error('Provide a send amount for the listening scene.');
   const samples: number[] = [];
   const machine = machineSpec(module, device);
   if (machine) {

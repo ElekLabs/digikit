@@ -136,6 +136,9 @@ for (let i = 0; i < args.length; i++) {
       '--run-dir',
       '--run-id',
       '--emit',
+      '--send-amount',
+      '--params-f32',
+      '--profile-block',
     ].includes(a)
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);

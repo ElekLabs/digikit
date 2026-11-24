@@ -13,17 +13,22 @@ const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex
 const writeJson = (file: string, doc: unknown) => writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
 
 export type AudioExport = 'wav' | 'json';
-type RenderIdentity = Omit<RenderedCase, 'pcm'>;
+type RenderIdentity = Omit<RenderedCase, 'pcm' | 'profile'>;
 export interface RenderManifest extends RenderIdentity {
   schema: typeof RENDER_SCHEMA;
   summary: AudioSummary;
   wav?: { file: string; sha256: string };
+  profile?: { file: string; sha256: string };
 }
 
-export function writeAudioRender({ pcm, ...identity }: RenderedCase, dir: string, emit: ReadonlySet<AudioExport>) {
+export function writeAudioRender(
+  { pcm, profile, ...identity }: RenderedCase,
+  dir: string,
+  emit: ReadonlySet<AudioExport>,
+) {
   const summary = summarizeAudio(pcm);
   const manifest: RenderManifest = { schema: RENDER_SCHEMA, ...identity, summary };
-  const files: Partial<Record<AudioExport, string>> = {};
+  const files: Partial<Record<AudioExport | 'profile', string>> = {};
   mkdirSync(dir, { recursive: true });
   if (emit.has('wav')) {
     const wav = wavBytes(pcm.samples, pcm.rate, pcm.channels);
@@ -31,6 +36,14 @@ export function writeAudioRender({ pcm, ...identity }: RenderedCase, dir: string
     files.wav = path.join(dir, file);
     writeFileSync(files.wav, wav);
     manifest.wav = { file, sha256: sha256(wav) };
+  }
+  if (profile) {
+    const data = Buffer.from(JSON.stringify(profile) + '\n');
+    const digest = sha256(data);
+    const file = `profile-${digest.slice(0, 16)}.json`;
+    files.profile = path.join(dir, file);
+    writeFileSync(files.profile, data);
+    manifest.profile = { file, sha256: digest };
   }
   if (emit.has('json')) {
     files.json = path.join(dir, 'render.json');
@@ -125,6 +138,9 @@ export function writeAudioComparison(baseline: string, candidate: string, dir: s
   const y = b.summary.fingerprint;
   const workload =
     !a.render || !b.render ? 'unknown' : a.render.workload.sha256 === b.render.workload.sha256 ? 'same' : 'different';
+  const inputOf = (s: AudioInput) => s.render?.workload.settings?.inputSha256;
+  const inputMatch =
+    !hash(inputOf(a)) || !hash(inputOf(b)) ? 'unknown' : inputOf(a) === inputOf(b) ? 'same' : 'different';
   const sameGeometry = x.rate === y.rate && x.channels === y.channels && x.frames === y.frames;
   const reason =
     !a.pcm || !b.pcm
@@ -168,8 +184,10 @@ export function writeAudioComparison(baseline: string, candidate: string, dir: s
     case: render?.case,
     tap: render?.tap,
     workloadSha256: render?.workload.sha256,
+    inputSha256: render?.workload.settings?.inputSha256,
     build: render?.build,
     cost: render?.cost,
+    profile: render?.profile,
     summary,
   });
   const report = {
@@ -177,6 +195,7 @@ export function writeAudioComparison(baseline: string, candidate: string, dir: s
     baseline: describe(a),
     candidate: describe(b),
     workload,
+    inputMatch,
     warnings,
     delta: {
       peakDbfs: y.peak_db - x.peak_db,

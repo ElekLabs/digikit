@@ -22,14 +22,14 @@ function fixture() {
     device: DEVICES[0],
     case: 'simple',
     tap: 'master-insert',
-    workload: { sha256: hash.repeat(64), seed: 1, settings: {} },
+    workload: { sha256: hash.repeat(64), seed: 1, settings: { inputSha256: 'c'.repeat(64) } },
     build: { rigSha256: '1'.repeat(64), linkedSha256: '2'.repeat(64) },
     cost: { blocks: 1, instructionUnit: 'rig-instruction', worstBlock: 1, worstSteady: 1 },
     pcm: { rate: 48000, channels: 2, samples },
   });
   const save = (name: string, samples: number[], emit: AudioExport[], hash?: string) =>
     writeAudioRender(source(samples, hash), path.join(dir, name), new Set(emit));
-  return { dir, save };
+  return { dir, save, source };
 }
 
 test('render manifests hold provenance and paired stereo comparisons keep per-channel differences', () => {
@@ -69,6 +69,7 @@ test('JSON-only comparison warns about workload mismatches without claiming samp
   const { report } = writeAudioComparison(a.files.json!, b.files.json!, path.join(dir, 'ab'));
   expect(report).toMatchObject({
     workload: 'different',
+    inputMatch: 'same',
     warnings: ['Recorded workload settings differ.'],
     delta: { peakDbfs: 0, rmsDbfs: 0 },
     pcm: { mode: 'summary-only' },
@@ -99,6 +100,18 @@ test('a manifest cannot silently use a replaced WAV', () => {
   expect(() => writeAudioComparison(a.files.json!, a.files.json!, path.join(dir, 'ab'))).toThrow(
     'WAV hash does not match',
   );
+});
+
+test('reusing a render directory never points unprofiled audio at an older profile', () => {
+  const { dir, source } = fixture();
+  const emit = new Set<AudioExport>(['json']);
+  const rendered = source([0.25, 0.25]);
+  const a = writeAudioRender({ ...rendered, profile: { run: { id: 'a' } } }, dir, emit);
+  const b = writeAudioRender({ ...rendered, profile: { run: { id: 'b' } } }, dir, emit);
+  expect(b.files.profile).not.toBe(a.files.profile);
+  expect(JSON.parse(readFileSync(b.files.profile!, 'utf8'))).toEqual({ run: { id: 'b' } });
+  const dry = writeAudioRender(rendered, dir, emit);
+  expect(JSON.parse(readFileSync(dry.files.json!, 'utf8')).profile).toBeUndefined();
 });
 
 test('the report discloses the spectrum window even when the level envelope extends past it', () => {

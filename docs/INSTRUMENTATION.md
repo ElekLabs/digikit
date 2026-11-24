@@ -868,6 +868,33 @@ Band spectra describe the first analysis window. The report gives its frame coun
 measurements cover the render beyond that window.
 The plots and fingerprints summarize evidence. They do not establish that one version sounds better.
 
+### Listen to a send return
+
+The rig can generate two repeatable scenes for an effect. `send/percussion` sends a syncopated hat and
+`send/texture` sends a held stab. Both use the same dry kick and bass, at 132 BPM.
+Run the same scene twice at the same settings, with just the send amount changed.
+
+```sh
+device=dt2
+base=out/runs/shift-send
+mise run wb:cli -- module render digikit/freqshift --device "$device" \
+  --case send/percussion --params-f32 20 --send-amount 0 --profile-block 375 --out "$base/dry"
+mise run wb:cli -- module render digikit/freqshift --device "$device" \
+  --case send/percussion --params-f32 20 --send-amount 96 --profile-block 375 --out "$base/current"
+mise run wb:cli -- audio compare "$base/dry/render.json" "$base/current/render.json" --out "$base/comparison"
+profile_file=$(jq -r '.profile.file' "$base/current/render.json")
+mise run wb:cli -- profile report "$base/current/$profile_file"
+```
+
+`--params-f32` takes the effect's DSP parameter values, not MIDI knob positions or hertz.
+`--profile-block` selects one zero-based block from the actual take. The render manifest names
+the matching profile next to the audio. Its counters cover that block only. The manifest records worst block
+cost for the whole take and a hash of the generated source audio. A dry/current comparison should
+report matching input and different settings. The rig runs the target's send hook, then adds its
+return to the dry master at unity. Send amount zero gives a dry audio reference with the effect
+row still installed. Its cost is not the cost of unloading the effect. These are rig instruction
+counts and modeled audio, not a capture from a physical device or a full firmware mix.
+
 ## Cargo features
 
 | crate | feature | effect |
