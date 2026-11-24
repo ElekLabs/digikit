@@ -91,7 +91,7 @@ for (const device of DEVICES) {
       const context = withPreparedFxSession(device, 'FX contract dry/wet/full', {
         image: {
           name: 'fx-chain',
-          modules: [...RT, 'core/dynfx', 'core/fxpages'],
+          modules: [...RT, 'core/dynfx'],
           inventory,
           symbols: [...symbols, 'fx.rows', '_dl_area', 'DKRT_HOST_DIR', 'DKRT_LOG', 'DKRT_LOG_COUNT'],
           policy: 'default',

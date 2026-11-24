@@ -73,7 +73,7 @@ fn one() -> u64 {
 const ROWS_BLOCKS: usize = 3;
 const ROWS_RECIPE_WORDS: usize = 15;
 const ROWS_CAPS: usize = 4;
-/// `[fx]`: the facts of the effect pages of run-time effects (core/fxpages, docs/design/digikit-registry.md "Effect pages"): where the kit keeps its
+/// `[fx]`: the facts of the effect pages of run-time effects (services/fx, docs/design/digikit-registry.md "Effect pages"): where the kit keeps its
 /// effect values, which of them the firmware does not use (effect row k owns `value_indices[8k .. 8k + 8]`), the page numbering and the stock
 /// parameter rows whose display an effect knob copies.
 #[derive(Deserialize)]
@@ -93,7 +93,7 @@ struct FxDoc {
     /// array, and the number of spare halfwords. The values (one halfword for each of `value_indices`) come first, then one effect ID for each effect row.
     store_off: u64,
     store_halfwords: u64,
-    /// An array index nothing uses (not one of `value_indices`): the mark that an effect row holds values (core/fxpages).
+    /// An array index nothing uses (not one of `value_indices`): the mark that an effect row holds values (the fx service).
     mark_index: u64,
     /// The byte offset of the u32 after the array's halfwords (the stock loader and saver move it with `move.l (0x98,record),(tail,array)`).
     tail_off: u64,
@@ -2558,6 +2558,60 @@ fn rust_profiles(module: &str, lib: &Library, facts: &Facts) -> Result<String> {
     Ok(s)
 }
 
+/// The device facts of the effect pages as Rust statics, one `DeviceFacts` for each device that has effect pages (`[fx]`): what the fx service binds its table from
+/// (`services/fx/src/fxpage/facts.rs` names the fields). The numbers are the constants of `gas` files (`FX_*`, `LIMIT_*`), so the two cannot differ.
+fn rust_fx_tables(module: &str, per_dev: &[(String, Vec<C>)]) -> Result<String> {
+    let mut s = format!(
+        "// {module}: {NOTE}.\n// The device facts of the effect pages (`[fx]` of the device files), one entry for each device that has them.\n\nuse super::DeviceFacts;\n"
+    );
+    let mut n = 0;
+    let mut body = String::new();
+    for (dev, cs) in per_dev {
+        let v = |name: &str| -> Result<u64> {
+            cs.iter()
+                .find(|k| k.name == name)
+                .map(|k| k.value as u64)
+                .ok_or_else(|| err!("{module}: no device constant {name} for {dev}"))
+        };
+        if v("FX_VALUES_N")? == 0 {
+            continue;
+        }
+        let idx: Vec<String> = (0..FX_VALUES_MAX)
+            .map(|i| v(&format!("FX_VALUE_{i}")).map(|x| x.to_string()))
+            .collect::<Result<_>>()?;
+        let _ = writeln!(
+            body,
+            "    DeviceFacts {{\n        device: {},\n        page_first: {},\n        slots: {},\n        array_off: {:#x},\n        values_n: {},\n        template_percent: {:#x},\n        template_bipolar: {:#x},\n        template_mix: {:#x},\n        kit_ptr: {:#x},\n        mark_index: {},\n        send_cells: {},\n        send_index: [{}, {}],\n        send_template: {:#x},\n        sound_off: {:#x},\n        sound_stride: {:#x},\n        track_page: {},\n        tail_off: {:#x},\n        store_off: {:#x},\n        value_indices: [{}],\n    }},",
+            v("DEVICE_ID")?,
+            v("FX_PAGE_FIRST")?,
+            v("LIMIT_FX_SLOTS")?,
+            v("FX_ARRAY_OFF")?,
+            v("FX_VALUES_N")?,
+            v("FX_TPL_PERCENT")?,
+            v("FX_TPL_BIPOLAR")?,
+            v("FX_TPL_MIX")?,
+            v("FX_KIT_PTR")?,
+            v("FX_MARK_INDEX")?,
+            v("LIMIT_SEND_SLOTS")?,
+            v("FX_SEND_IDX_0")?,
+            v("FX_SEND_IDX_1")?,
+            v("FX_SEND_TEMPLATE")?,
+            v("FX_SOUND_OFF")?,
+            v("FX_SOUND_STRIDE")?,
+            v("FX_TRACK_PAGE")?,
+            v("FX_TAIL_OFF")?,
+            v("FX_STORE_OFF")?,
+            idx.join(", ")
+        );
+        n += 1;
+    }
+    let _ = write!(
+        s,
+        "\n/// Every device file's effect page facts.\npub(super) static DEVICES: [DeviceFacts; {n}] = [\n{body}];\n"
+    );
+    Ok(s)
+}
+
 /// A C header of the contract maxima of `sdk/sdk.toml` `[limits.max]` that a ColdFire object shared by all devices checks against: the
 /// DSP area's size is a device value, but the link's word offset (17 bits) is the contract's.
 fn c_shared(module: &str) -> String {
@@ -2933,6 +2987,14 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
                 out.push((g.path.clone(), gas_dkdv_offsets(module)));
+            }
+            "rust-fx-tables" => {
+                if g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `rust-fx-tables` gen is one file for all devices"
+                    ));
+                }
+                out.push((g.path.clone(), rust_fx_tables(module, &per_dev)?));
             }
             "rust-profiles" => {
                 if g.path.contains("{dev}") {

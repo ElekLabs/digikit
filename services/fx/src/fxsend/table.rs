@@ -5,9 +5,9 @@ use crate::fxpage;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::iw;
 
-/// `inf` (a bound table of the effect pages, or null) when this image has send cells (a `core/fxpages` object of version 2 with at least one), else null.
+/// `inf` (a bound table of the effect pages, or null) when this device has send cells (at least one), else null.
 unsafe fn with_cells(inf: *const u32) -> *const u32 {
-    if inf.is_null() || iw(inf, w::VERSION) < 2 || iw(inf, w::CELLS) == 0 {
+    if inf.is_null() || iw(inf, w::CELLS) == 0 {
         return core::ptr::null();
     }
     inf
@@ -18,7 +18,7 @@ pub(super) unsafe fn info<C: CoreApi>(core: &C) -> *const u32 {
     with_cells(fxpage::info(core))
 }
 
-/// The cells of the send page this image has (the CAPACITY limit of `SEND_SLOTS`): 0 without `core/fxpages` or on a device with no send page.
+/// The cells of the send page this image has (the CAPACITY limit of `SEND_SLOTS`): 0 without effect pages in this image or on a device with no send page.
 pub unsafe fn slots<C: CoreApi>(core: &C) -> u32 {
     cells(info(core))
 }

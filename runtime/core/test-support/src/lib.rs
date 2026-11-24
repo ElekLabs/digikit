@@ -218,6 +218,24 @@ impl FakeCore {
         self.info_tables.push((hash, table));
     }
 
+    /// The image's `rows_info` has these parameter blocks (owner number, first code, rows, template of a free row), in this order: the table is made when the image has none, and a
+    /// table a test set before keeps its other words (`dkrt_svc_rows::block::block` finds a block by its owner number).
+    pub fn set_rows_blocks(&mut self, blocks: &[(u32, u32, u32, u32)]) {
+        let hash = fnv1a("rows_info");
+        let mut t = self
+            .info_tables
+            .iter()
+            .find(|(h, _)| *h == hash)
+            .map(|(_, t)| t.clone())
+            .unwrap_or_else(|| std::vec![0u32; 110]);
+        // the words of `dkrt_svc_rows::rows_info::w`: BLOCKS 92, then 4 words for each block
+        t[92] = blocks.len() as u32;
+        for (i, b) in blocks.iter().enumerate() {
+            t[93 + 4 * i..97 + 4 * i].copy_from_slice(&[b.0, b.1, b.2, b.3]);
+        }
+        self.set_rows_info(t);
+    }
+
     /// The image has the table `dyndsp_info` (the DSP's voice registry and area) with `area_bytes` bytes of area, the first free voice row at `first` and `free` rows
     /// (the magic is set here): the services find it through `CoreApi::info`.
     pub fn set_dyndsp(&mut self, area_bytes: u32, first: u32, free: u32) {

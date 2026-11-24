@@ -228,7 +228,7 @@ owner = 3
 limit = "send_rows"
 template = 0x75
 
-# The effect pages of run-time effects (core/fxpages, docs/design/digikit-registry.md "Effect pages"): facts of the firmware's kit object and of its
+# The effect pages of run-time effects (services/fx, docs/design/digikit-registry.md "Effect pages"): facts of the firmware's kit object and of its
 # parameter table that the runtime and the patch use. All **[D]** (read from the 1.17 image and measured in the emulator, docs/findings/61).
 [fx]
 # The firmware's pointer to the live kit object (an SRAM global; the same table holds the 16 track sound pointers at +8, tools/patchkit/pk_harness.py
@@ -236,7 +236,7 @@ template = 0x75
 # accessor (anchors cf.project.fn.singleton and cf.project.fn.active_kit) returns another object, the project's: the encoders edit this one.
 kit_ptr = 0x80004704
 array_off = 0x4534
-# The number of stock pages: page numbers 0 .. 32 are in the firmware's page table, the effect pages are 33 and up (core/fxpages answers the
+# The number of stock pages: page numbers 0 .. 32 are in the firmware's page table, the effect pages are 33 and up (the fx service answers the
 # page accessor for them). The three effect pages of the Digitakt II are 33, 34 and 35.
 page_first = 33
 # Indices of the effect value array that no stock parameter reads or writes (the DSP does not get them either, finding 61), in the order the
@@ -248,7 +248,7 @@ template_percent = 0x75
 template_bipolar = 0x73
 template_mix = 0x79
 # Persistence (finding 61): the kit's storage record of the effect value array ("fxSetupStorage_v0", 0xa0 bytes) has a u32 at +0, 46 used halfwords from +4, 56
-# spare bytes from +0x60 that the stock loader and saver ignore (28 halfwords), and a u32 at +0x98. core/fxpages keeps the effect values there: one halfword for
+# spare bytes from +0x60 that the stock loader and saver ignore (28 halfwords), and a u32 at +0x98. the fx service keeps the effect values there: one halfword for
 # each of `value_indices`, then one effect ID for each effect row (27 of the 28 halfwords).
 store_off = 0x60
 store_halfwords = 28
@@ -277,7 +277,7 @@ lfo_frame_stride = 0x60
 lfo_frame_words = 10
 send_template = 0x44
 send_indices = [69, 70]
-# An index of the array that nothing reads or writes either (Fx[70]; poked in the emulator without any effect, finding 61): core/fxpages keeps a mark there, set when it gave an effect row its defaults
+# An index of the array that nothing reads or writes either (Fx[70]; poked in the emulator without any effect, finding 61): the fx service keeps a mark there, set when it gave an effect row its defaults
 # or the stored values (the init and load hooks) and not saved with the kit. A kit object without the mark (one that no hook has touched: another pattern's kit) gets the defaults when it first plays.
 mark_index = 70
 # The byte offset of the u32 that follows the array's 71 halfwords (the loader and saver copy it between the storage record's +0x98 and the array).
@@ -348,13 +348,13 @@ dsp_l2_excludes = [[0x200FA000, 0x200FE000]]
 # another). Both are the flash-image roots of the rt021 images for now. The two sets are the same
 # today (core/input and core/sample-pool, the stock sample pool adapter, are in both); a module such as digikit/remote is on exactly when its check mark in DIGIKIT > MODULES is set.
 [patch_sets]
-emulator = ["core/rows", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool"]
+emulator = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/sample-pool"]
 # Real-device image. core/usb-bulk (inert until the usb-fast module is selected) and core/plusdrive-write (the +Drive writes usb-fast uses) are in: usb-fast requires both. core/usb-bulk-audio is in too: the bulk OUT interface in USB AUDIO/MIDI, so usb-fast works without changing USB CONFIG.
-device = ["core/rows", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
+device = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
 # `device` plus the optional black intro (core/introblank): the Workbench Firmware page picks it with its "Custom boot screen" toggle.
-device-introblank = ["core/rows", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
+device-introblank = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
 # Same roots as `emulator`; the name stays for the per-track sample tests (API 1.5).
-sample-tracks = ["core/rows", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool"]
+sample-tracks = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/sample-pool"]
 
 # The input backend core/input uses to press keys and turn encoders from software (docs/plans/remote-control.md). The profile chooses; `panel-uart`: the panel
 # MCU's UART packets are decoded by the firmware's own key and encoder decoders, which core/input calls (anchors by hash in the port files).

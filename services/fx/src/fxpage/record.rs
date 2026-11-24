@@ -34,7 +34,7 @@ pub(super) unsafe fn copy_text(dst: *mut u8, src: *const u8, n: usize) {
     }
 }
 
-/// The fixed-size EFFECT record at `b` (its body), checked before anything is written; the registry's `fxpages` table must be there. The fields are the rule of `check_body`.
+/// The fixed-size EFFECT record at `b` (its body), checked before anything is written; the effect pages must be bound (`rows_info` has the blocks). The fields are the rule of `check_body`.
 pub unsafe fn check_record<C: CoreApi>(core: &C, b: *const u8) -> i32 {
     let inf = info(core);
     if inf.is_null() {

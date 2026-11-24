@@ -1,6 +1,6 @@
 [module]
 id = "core/services/fx"
-version = "0.8.3"
+version = "0.9.0"
 name = "fx service"
 category = "core"
 role = "service"
@@ -10,7 +10,7 @@ type = "raw"
 author = "digikit"
 status = "experimental"
 summary = "The fx service of the runtime as a service file: effect pages, FX parameters, routes, send amounts and the kit values of run-time effects; it owns the effect record kind, exports the builder calls of the effects and takes the nine hooks of the effect pages"
-requires = ["core/fxpages"]
+requires = ["core/rows", "core/dynfx"]
 conflicts = []
 
 [targets]
@@ -67,6 +67,11 @@ space = "dsp"
 slot = "fx_send"
 entry = "_fxs_dispatch"
 space = "dsp"
+
+# The device facts of the effect pages (`[fx]` of the device files) as statics of the service: the table the hooks read is made from them and from `rows_info` when the file starts.
+[[gen]]
+kind = "rust-fx-tables"
+path = "../src/fxpage/tables.rs"
 
 [[object]]
 path = "build/fx-dsp-dt2.dko.json"

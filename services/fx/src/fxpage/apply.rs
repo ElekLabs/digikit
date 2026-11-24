@@ -184,7 +184,7 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
     }
 }
 
-/// Hand the kit hooks of `core/fxpages` the effect ID of row `k` (0: none) and its defaults. An effect's defaults go first and its ID after them, so a kit
+/// Hand the kit hooks of the effect pages the effect ID of row `k` (0: none) and its defaults. An effect's defaults go first and its ID after them, so a kit
 /// load between the two stores cannot restore values against defaults that are not there yet; a row's ID goes to 0 first for the same reason.
 unsafe fn publish_row<C: CoreApi>(core: &C, inf: *const u32, k: usize, id: u32) {
     let s = fs();

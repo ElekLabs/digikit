@@ -1042,7 +1042,7 @@ pub struct Op {
     pub when: Option<String>,
 }
 
-/// `[[info]] name = "fxpages_info", symbol = "fxpages_info", devices = ["dt2"]`: an entry of the image's info table: the hash of `name` and the address that the
+/// `[[info]] name = "rows_info", symbol = "rows_info", devices = ["dt2"]`: an entry of the image's info table: the hash of `name` and the address that the
 /// expression `symbol` evaluates to (a global symbol of the module's objects). `name` is what a service passes to `dkc_info` (as its name hash); it shares one
 /// namespace with the `[[slot]]` names of all image adapters, and `patchkit apply` refuses two entries with one hash.
 #[derive(Clone, Debug, Deserialize)]

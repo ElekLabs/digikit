@@ -1,4 +1,4 @@
-//! The image table of `core/fxpages`: its word names, the bound copy and the firmware words.
+//! The table of the effect pages: its word names, the bound copy (made from the device facts and `rows_info`) and the firmware words.
 
 use super::*;
 use core::ptr::{addr_of_mut, read_volatile, write_volatile};
@@ -6,24 +6,10 @@ use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::MAX_FX;
 use dkrt_sdk::*;
 
-/// `name_hash` (FNV-1a 32) of `fxpages_info`, the data table of `core/fxpages` in the image: the service reads it through `CoreApi::info`, so it has no link name.
-pub const INFO_HASH: u32 = fnv1a(b"fxpages_info");
-
-const fn fnv1a(s: &[u8]) -> u32 {
-    let mut h: u32 = 0x811c_9dc5;
-    let mut i = 0;
-    while i < s.len() {
-        h ^= s[i] as u32;
-        h = h.wrapping_mul(0x0100_0193);
-        i += 1;
-    }
-    h
-}
-
-/// Words of the table (byte offsets / 4); the value indices are bytes from byte 80. Words 0 to `IMAGE_WORDS` - 1 are the image's `fxpages_info` (version 4: data only,
-/// the indices and the device numbers; the words 10, 11 and 49 to 60 held firmware addresses in version 3 and are 0 in the image: the service names the firmware and
-/// the port file resolves it; `bind` puts the two stock list words of the hooks' builder into 10 and 11); the words that point at state (the rows, the list, the counters)
-/// and the three computed words are this service's (`bind_table`): the state lives in this file's bss, next to the hooks that use it.
+/// Words of the table (byte offsets / 4); the value indices are bytes from byte 80. Words 0 to `IMAGE_WORDS` - 1 are made from the device facts (`DeviceFacts`: the indices and
+/// the device numbers), the service's own constants and the parameter codes of the blocks of `rows_info`; the words 10, 11 and 49 to 60 held firmware addresses once and are 0:
+/// the service names the firmware and the port file resolves it (`bind` puts the two stock list words of the hooks' builder into 10 and 11); the words that point at state (the
+/// rows, the list, the counters) and the three computed words are this service's (`bind_table`): the state lives in this file's bss, next to the hooks that use it.
 pub(super) mod w {
     pub const MAGIC: usize = 0;
     pub const DEVICE: usize = 2;
@@ -37,6 +23,7 @@ pub(super) mod w {
     pub const STOCK: usize = 10;
     pub const STOCK_N: usize = 11;
     pub const P_FIRST: usize = 12;
+    pub const KNOB_ROWS: usize = 13; // parameter rows for each effect row: 7 knobs and MIX
     pub const ARRAY_OFF: usize = 14;
     pub const VALUES_N: usize = 15;
     pub const TPL_PERCENT: usize = 16;
@@ -48,7 +35,6 @@ pub(super) mod w {
     pub const DEFS: usize = 29; // the default raw values (halfwords, one for each value index)
     pub const MARK_INDEX: usize = 37; // byte 148: the array index of the mark, and its value (word 38)
     pub const MARK_VALUE: usize = 38;
-    pub const VERSION: usize = 1;
     pub const LAST_LOAD: usize = 30;
     pub const NLOAD: usize = 31;
     pub const NSAVE: usize = 32;
@@ -56,8 +42,14 @@ pub(super) mod w {
     pub const LOAD_SRC: usize = 34;
     pub const SAVE_DST: usize = 35;
     pub const NINIT: usize = 36;
+    pub const SEND_CELLS: usize = 39;
     pub const SEND_ROW: usize = 40;
     pub const SEND_COUNT: usize = 41;
+    pub const P_SEND: usize = 42; // the parameter code of send cell 0; cell c is + c
+    pub const SEND_IDX: usize = 43; // the Sound array index of send cell 0 and 1
+    pub const SEND_TEMPLATE: usize = 45;
+    pub const SOUND_OFF: usize = 46;
+    pub const SOUND_STRIDE: usize = 47;
     pub const NSOUND: usize = 48;
     // words 49 to 60 were the return addresses and the stock key list (version 3); 61 to 63 are three device numbers
     pub const TRACK_PAGE: usize = 61;
@@ -111,9 +103,9 @@ pub(crate) fn bound() -> *const u32 {
     }
 }
 
-/// The table of the effect pages as this service reads it, or null (no `core/fxpages` in the image, another device, an older table than the hooks need). The first
-/// call copies the image table (`CoreApi::info`) into `DKRT_FXP_TAB` and fills the words that point at the state of the hooks; `Fx::start` makes that call (`bind`) before the
-/// file's hooks are installed. A later call after `unbind` binds with the file's firmware words again (a host test that changes the fake image table).
+/// The table of the effect pages as this service reads it, or null (no `rows_info` or no block of the effect pages in the image, no facts for this device, a build that holds
+/// no state for them). The first call makes the table (`bind_with`) in `DKRT_FXP_TAB` and fills the words that point at the state of the hooks; `Fx::start` makes that call
+/// (`bind`) before the file's hooks are installed. A later call after `unbind` binds again with the file's firmware words (a host test that changes the fake image).
 pub(crate) unsafe fn info<C: CoreApi>(core: &C) -> *const u32 {
     let tab = bound();
     if !tab.is_null() {
@@ -122,50 +114,95 @@ pub(crate) unsafe fn info<C: CoreApi>(core: &C) -> *const u32 {
     bind_with(core, firmware())
 }
 
-/// Copy the image table into the bound table, with `fw` as the firmware words (null: refused).
+/// Bind the facts of the core's device, with `fw` as the firmware words (null: refused).
 unsafe fn bind_with<C: CoreApi>(core: &C, fw: [u32; 2]) -> *const u32 {
-    let tab = addr_of_mut!(DKRT_FXP_TAB) as *mut u32;
-    let src = core.info(INFO_HASH);
-    if src.is_null() || !bind_table(core, src, tab, fw) {
-        return core::ptr::null();
+    match device_facts(core.device_id()) {
+        Some(f) => bind_facts_table(core, f, fw),
+        None => core::ptr::null(),
     }
-    tab
 }
 
-/// Is the image table `src` one this service can use, and its words copied to `tab` with the state words filled in.
+unsafe fn bind_facts_table<C: CoreApi>(core: &C, f: &DeviceFacts, fw: [u32; 2]) -> *const u32 {
+    let tab = addr_of_mut!(DKRT_FXP_TAB) as *mut u32;
+    if bind_table(core, f, tab, fw) {
+        tab
+    } else {
+        core::ptr::null()
+    }
+}
+
+/// Can `f` be bound in this image (the parameter blocks of `rows_info` hold its rows), and its words put into `tab` with the state words filled in.
 pub(super) unsafe fn bind_table<C: CoreApi>(
     core: &C,
-    src: *const u32,
+    f: &DeviceFacts,
     tab: *mut u32,
     fw: [u32; 2],
 ) -> bool {
-    if read_volatile(src.add(w::MAGIC)) != INFO_MAGIC
-        || read_volatile(src.add(w::VERSION)) < INFO_VERSION
-        || read_volatile(src.add(w::DEVICE)) != core.device_id()
-    {
+    // the codes of the parameter rows are the image's: the blocks `core/rows` reserved for the effect knobs and the send knobs
+    let rows = dkrt_svc_rows::rows_info(core);
+    if rows.is_null() {
         return false;
     }
-    let (cap, n_values) = (
-        read_volatile(src.add(w::LIST_CAP)),
-        read_volatile(src.add(w::VALUES_N)),
-    );
-    let slots = read_volatile(src.add(w::PAGES));
-    // the state is sized for the most the build supports: a table that asks for more is refused
-    if cap as usize > LIST_WORDS
-        || slots as usize > MAX_FX
-        || n_values as usize > DEFS_MAX
-        || (n_values as usize) / 8 > IDS_MAX
+    let (Some(knobs), Some(send)) = (
+        dkrt_svc_rows::block::block(rows, BLOCK_KNOBS),
+        dkrt_svc_rows::block::block(rows, BLOCK_SEND),
+    ) else {
+        return false;
+    };
+    // the state is sized for the most the build supports: facts that ask for more are refused, and so is an image whose blocks hold fewer rows than the facts use
+    let (n_values, slots) = (f.values_n as usize, f.slots as usize);
+    if slots > MAX_FX
+        || n_values > DEFS_MAX
+        || n_values / 8 > IDS_MAX
+        || n_values > f.value_indices.len()
+        || knobs.rows < (slots * WORDS) as u32
+        || send.rows < f.send_cells
     {
         return false;
     }
     let mut i = 0;
     while i < IMAGE_WORDS {
-        write_volatile(tab.add(i), read_volatile(src.add(i)));
+        write_volatile(tab.add(i), 0);
+        i += 1;
+    }
+    let consts = [
+        (w::DEVICE, f.device),
+        (w::ROW_SIZE, ROW_BYTES as u32),
+        (w::FIRST, f.page_first),
+        (w::PAGES, f.slots),
+        (w::LIST_CAP, LIST_WORDS as u32),
+        (w::P_FIRST, knobs.first),
+        (w::KNOB_ROWS, WORDS as u32),
+        (w::ARRAY_OFF, f.array_off),
+        (w::VALUES_N, f.values_n),
+        (w::TPL_PERCENT, f.template_percent),
+        (w::TPL_BIPOLAR, f.template_bipolar),
+        (w::TPL_MIX, f.template_mix),
+        (w::KIT_PTR, f.kit_ptr),
+        (w::MARK_INDEX, f.mark_index),
+        (w::MARK_VALUE, FXP_MARK),
+        (w::SEND_CELLS, f.send_cells),
+        (w::P_SEND, send.first),
+        (w::SEND_IDX, f.send_index[0]),
+        (w::SEND_IDX + 1, f.send_index[1]),
+        (w::SEND_TEMPLATE, f.send_template),
+        (w::SOUND_OFF, f.sound_off),
+        (w::SOUND_STRIDE, f.sound_stride),
+        (w::TRACK_PAGE, f.track_page),
+        (w::TAIL, f.tail_off),
+        (w::STORE_OFF, f.store_off),
+        (w::STOCK, fw[0]),
+        (w::STOCK_N, fw[1]),
+    ];
+    for (word, v) in consts {
+        write_volatile(tab.add(word), v);
+    }
+    i = 0;
+    while i < f.value_indices.len() {
+        write_volatile((tab as *mut u8).add(w::INDICES + i), f.value_indices[i]);
         i += 1;
     }
     let at = |p: usize| p as u32;
-    write_volatile(tab.add(w::STOCK), fw[0]);
-    write_volatile(tab.add(w::STOCK_N), fw[1]);
     let state = [
         (w::ROWS, addr_of_mut!(DKRT_FXP_ROWS) as usize),
         (w::LIST, addr_of_mut!(DKRT_FXP_LIST_BUF) as usize),
@@ -186,33 +223,24 @@ pub(super) unsafe fn bind_table<C: CoreApi>(
     for (word, addr) in state {
         write_volatile(tab.add(word), at(addr));
     }
-    write_volatile(tab.add(w::ROWS_N), n_values / 8);
-    write_volatile(
-        tab.add(w::ID_OFF),
-        read_volatile(src.add(w::STORE_OFF)) + 2 * n_values,
-    );
-    write_volatile(
-        tab.add(w::MARK_OFF),
-        2 * read_volatile(src.add(w::MARK_INDEX)),
-    );
+    write_volatile(tab.add(w::ROWS_N), f.values_n / 8);
+    write_volatile(tab.add(w::ID_OFF), f.store_off + 2 * f.values_n);
+    write_volatile(tab.add(w::MARK_OFF), 2 * f.mark_index);
     // the track FX key's list: the track FX page, then the send page (after the effect rows)
-    write_volatile(
-        addr_of_mut!(DKRT_FXP_KEY_LIST) as *mut u32,
-        read_volatile(src.add(w::TRACK_PAGE)),
-    );
+    write_volatile(addr_of_mut!(DKRT_FXP_KEY_LIST) as *mut u32, f.track_page);
     write_volatile(
         (addr_of_mut!(DKRT_FXP_KEY_LIST) as *mut u32).add(1),
-        read_volatile(src.add(w::FIRST)) + slots,
+        f.page_first + f.slots,
     );
     // the magic last: a table is usable only when every word is in
     write_volatile(tab.add(w::MAGIC), INFO_MAGIC);
     true
 }
 
-/// What `Fx::start` does before the file's hooks are installed: the table is bound with the firmware words `fw`, or the file is refused (`E_NO_REGISTRY`: no usable
-/// `core/fxpages` in the image).
+/// What `Fx::start` does before the file's hooks are installed: the table is bound for the core's device with the firmware words `fw`, or the file is refused
+/// (`E_NO_REGISTRY`: the image has no `rows_info` with the blocks of the effect pages, or this device has no effect pages).
 pub unsafe fn bind<C: CoreApi>(core: &C, fw: [u32; 2]) -> i32 {
-    // a second start (a reload of the file) keeps the live table: the image table is not copied over it
+    // a second start (a reload of the file) keeps the live table: it is not made again over it
     if !bound().is_null() {
         return OK;
     }
@@ -223,7 +251,16 @@ pub unsafe fn bind<C: CoreApi>(core: &C, fw: [u32; 2]) -> i32 {
     }
 }
 
-/// Forget the bound table: the next `info` reads the image table again (host tests that change the fake image table).
+/// Bind `f` instead of the facts of the core's device (the seam of host tests: facts of a small device, another kit layout); the table is made again over a bound one.
+pub unsafe fn bind_facts<C: CoreApi>(core: &C, f: &DeviceFacts, fw: [u32; 2]) -> i32 {
+    if bind_facts_table(core, f, fw).is_null() {
+        E_NO_REGISTRY
+    } else {
+        OK
+    }
+}
+
+/// Forget the bound table: the next `info` makes it again (host tests that change the fake image).
 pub unsafe fn unbind() {
     write_volatile(addr_of_mut!(DKRT_FXP_TAB) as *mut u32, 0);
 }
@@ -234,7 +271,7 @@ pub(super) unsafe fn value_index(inf: *const u32, k: usize, j: usize) -> u32 {
     read_volatile((inf as *const u8).add(w::INDICES + k * WORDS + j)) as u32
 }
 
-/// Whether this image can show effect pages at all (`core/fxpages` and `core/rows` are in it).
+/// Whether this image can show effect pages at all (`core/rows` has the blocks and this device has the facts).
 pub unsafe fn available<C: CoreApi>(core: &C) -> bool {
     !info(core).is_null()
 }

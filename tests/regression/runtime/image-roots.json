@@ -11,7 +11,7 @@
     },
     {
       "id": "coupled",
-      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/input", "core/dynfx", "core/fxpages"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/input", "core/dynfx"]
     },
     {
       "id": "ib",
@@ -61,16 +61,8 @@
       "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/dynfx"]
     },
     {
-      "id": "rt-dynfx-fxpages",
-      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/dynfx", "core/fxpages"]
-    },
-    {
-      "id": "rt-dynfx-fxpages-ui",
-      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui"]
-    },
-    {
-      "id": "fx-kit-persist",
-      "roots": ["core/runtime", "core/dynfx", "core/fxpages"]
+      "id": "rt-dynfx-ui",
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/dynfx", "core/ui"]
     }
   ]
 }

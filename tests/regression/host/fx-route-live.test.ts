@@ -161,16 +161,13 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
       const roots = ['core/runtime', 'core/rows', 'core/dyndsp'];
       const expectedSymbols = plain
         ? ['DKRT_BOOT']
-        : image === 'track-base'
+        : image === 'track-base' || image === 'track'
           ? [...commonSymbols, 'rows_info']
-          : image === 'track'
-            ? [...commonSymbols, 'rows_info', 'fxpages_info']
-            : [...commonSymbols, 'DKRT_HOST_DIR', 'fxpages_info'];
+          : [...commonSymbols, 'DKRT_HOST_DIR'];
       expect(requestedSymbols).toEqual(expectedSymbols);
       expect(requestedRoots).toEqual([
         ...roots,
         ...(plain ? [] : ['core/dynfx']),
-        ...(plain || image === 'track-base' ? [] : ['core/fxpages']),
         ...(image === 'routes' ? ['core/ui'] : []),
       ]);
       expect(seeds[0]!.contents).toEqual(ids);

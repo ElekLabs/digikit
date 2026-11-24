@@ -77,7 +77,7 @@ for (const device of DEVICES) {
       const context = withPreparedFxSession(device, 'FX pages stock/effect/deselect', {
         image: {
           name: 'fxpage',
-          modules: [...RT, 'core/fxpages'],
+          modules: RT,
           inventory,
           symbols: [
             'DKRT_BOOT',

@@ -45,7 +45,7 @@ Only the owner's private data (the builder's collection and gate, the guard's lo
 
 How it works:
 
-- `Fx::start` is the file's `init` step before the hooks are installed: it binds the image table of `core/fxpages` (`fxpage::bind`) or refuses the file with `E_NO_REGISTRY`. A file that
+- `Fx::start` is the file's `init` step before the hooks are installed: it binds the table of the effect pages (`fxpage::bind`: the generated device facts of the core's device, `facts.rs` and `tables.rs` written by `patchkit gen` from the device files' `[fx]`, and the two blocks of `rows_info` that `core/rows` reserved) or refuses the file with `E_NO_REGISTRY` (no `rows_info`, no block, a block with too few rows, a device without facts). A file that
   starts has a table, so the resident query reads it without a core (`fxsend::bound_slots`).
 - A module's `init` calls the builder exports; they reach the owner through `DK_SVC_OWNER.with` and fill its `Builder`. With no owner (before `init` or after `fini`) an export that
   opens a handle returns null and a setter does nothing. `Records::commit` checks and lowers the collection to `EFFECT` records and declares the route flags and defaults of the effect's

@@ -25,7 +25,7 @@ parameter table and the rows reserved in it:
   words (`[rows] caps`, keys of `[limits]`). The `[[info]]` names `cap_machine_rows`, `cap_param_rows`, `cap_page_rows` and `cap_send_slots` are the admission's: it reads `cap_<kind>` for each kind of
   `[capacity.kinds]` in `sdk/sdk.toml`, so the names stay.
 
-`fxpages_info` keeps its export until its user moves (RC4-2); it reads its block from that table, and the numbers in it come from the same device constants. The machine selection view is `core/ui`'s (`machine_view`).
+The fx service finds its two blocks (the effect knobs and the send knobs) by owner number with `dkrt_svc_rows::block::block`; no image point holds a table for it. The machine selection view is `core/ui`'s (`machine_view`).
 
 Checks: `pnpm nx:pilot run patchkit:rust-tests` (`tests/rows.rs`: the reserved counts, the row expressions and write ops against an independent row builder,
 `pf_t2` on the ColdFire core, `rows_info` against the device file; `tests/machines_fw.rs`: the dispatch and the machines hooks on the ColdFire core and the copies of the stock tables). Evidence: `docs/findings/02-machines-and-parameters.md` (the stock parameter table), `docs/findings/158-service-entry-survey.md`.

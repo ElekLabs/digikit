@@ -25,7 +25,7 @@ pub struct FxpState {
     pub dsp: [[i32; WORDS]; MAX_FX],
     /// The record's default raw values (knob j, MIX): what a kit gets that holds no values of this effect.
     pub def: [[i32; WORDS]; MAX_FX],
-    /// The effect ID of each row (the record's; 0: no effect), as `fxp_ids` of core/fxpages has it for the kit hooks.
+    /// The effect ID of each row (the record's; 0: no effect), as the kit hooks have it.
     pub id: [u32; MAX_FX],
     /// The live kit pointer changed to a kit object that had the mark (a pattern change back to a kit we know).
     pub adopts: u32,

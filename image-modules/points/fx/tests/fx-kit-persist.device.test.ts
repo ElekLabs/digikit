@@ -53,7 +53,7 @@ for (const device of DEVICES) {
     const context = withPreparedFxSession(device, 'FX kit/project persistence', {
       image: {
         name: 'fx-kit-persist',
-        modules: ['core/runtime', 'core/dynfx', 'core/fxpages'],
+        modules: ['core/runtime', 'core/rows', 'core/dynfx'],
         inventory: [SINE, GAIN, GAIN_B],
         symbols: [
           'DKRT_BOOT',

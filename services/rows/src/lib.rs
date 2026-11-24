@@ -2,11 +2,12 @@
 //! (docs/design/digikit-registry.md). They read the row layout from `rows_info` (`inf`, the words of `rows_info::w`).
 //!
 //! The crate is compiled into `machines.dks` and `fx.dks`; neither service needs the other. Each writes only the rows its adapter reserves: the machines service
-//! the rows `core/rows` reserves (`P_DYN0` for `P_DYN_N` rows of `rows_info`), the fx service the rows `core/fxpages` reserves (`P_FIRST` for 9 per effect row and
-//! the send rows from `P_SEND` of `fxpages_info`). The two blocks of the one parameter table are disjoint (an assembly test reads both tables of the image).
+//! the rows `core/rows` reserves (`P_DYN0` for `P_DYN_N` rows of `rows_info`), the fx service the blocks of the effect knobs and the send knobs (`block::block` of `rows_info`:
+//! 8 rows for each effect row and the send rows). The blocks of the one parameter table are disjoint (an assembly test reads both tables of the image).
 #![no_std]
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::{cstr_len, iw, wr32, FwMem};
+pub mod block;
 pub mod builder;
 pub mod rows_info;
 use rows_info::{w, MACH_TEXT};
@@ -87,7 +88,7 @@ pub unsafe fn write_param_row(
     m.wr(reg_row + iw(inf, w::P_TEMPLATE_OFF) + 16, def);
 }
 
-/// A parameter row for an effect knob (`core/fxpages`): the lowering of `write_param_row` with the kit's effect value index as the mirror index and the template's
+/// A parameter row for an effect knob (a block of `core/rows`): the lowering of `write_param_row` with the kit's effect value index as the mirror index and the template's
 /// own kind and key words (the reserved machine rows' `0x10 + slot` ids would collide with stock effect parameters).
 pub unsafe fn write_fx_param_row(
     m: &impl FwMem,
@@ -113,7 +114,7 @@ pub unsafe fn write_fx_param_row(
     m.wr(row + 0x1c, m.rd(tpl + 0x1c));
 }
 
-/// A parameter row for a send knob (`core/fxpages`, finding 64): the lowering of `write_fx_param_row` with the value class of `class` (the display, and no p-lock: the
+/// A parameter row for a send knob (a block of `core/rows`, finding 64): the lowering of `write_fx_param_row` with the value class of `class` (the display, and no p-lock: the
 /// value class of the kit's Delay rows) and the owner of the stock send row `owner_of` (so the firmware's own set and get reach the current track's Sound array at `mirror`),
 /// and no CC and no NRPN (the row's word 6 is -1: `ParameterSet::vfunc_25` sends nothing).
 pub unsafe fn write_send_param_row(

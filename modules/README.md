@@ -514,7 +514,7 @@ A machine is a run-time module, not a patch-time row: write it with the builder 
 ### An effect: run-time module
 
 An effect is a run-time module (`dynamic = true`, a `.dkm`), like a machine. It builds its effect in `init` with builder calls (`dk_module_ctx_add_fx`, `dk_fx_routes`; `modules/fx/digikit/freqshift/src/module.c`, `[[fx]]` in `module.toml`)
-and takes one of the 3 free rows that `core/dynfx` reserves in the registry `fx` of `core/fx` (the effects adapter, `image-modules/points/fx/`); `core/fxpages` reserves the pages. The chain runs in module order, at most
+and takes one of the 3 free rows that `core/dynfx` reserves in the registry `fx` of `core/fx` (the effects adapter, `image-modules/points/fx/`); the fx service (`services/fx`) makes the pages. The chain runs in module order, at most
 `DK_FX_MAX` (4) effects. patchkit refuses an `[[entry]] registry = "fx"` of any module except `core/dynfx`. The routine, its `dk_fx_desc` and its state block are symbols of the module's DSP object
 (`<dk/gen/fx.h>`, [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), sections 5.4 and 7.2). An empty chain plays the stock audio.
 The format is `docs/design/digikit-dkm.md`; the design of the pages is "Effect pages" in `docs/design/digikit-registry.md`.

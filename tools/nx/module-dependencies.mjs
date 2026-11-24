@@ -20,7 +20,7 @@ export const createDependencies = (_opts, ctx) => {
       : [
           runtime,
           ...(type === 'machine' ? ['core/rows', 'core/dsp-voice'] : []),
-          ...(type === 'fx' ? ['core/dynfx', 'core/fxpages'] : []),
+          ...(type === 'fx' ? ['core/dynfx'] : []),
         ];
   const all = Object.values(ctx.projects);
   return all

@@ -2069,7 +2069,7 @@ DSP_COST_FX = { id = 6, capacity = "DSP_COST" }   # DSP instructions per block o
 modules = 8         # module records: the selection record holds SEL_MAX = 8 paths (record format, runtime/core/sdk/src/lib.rs)
 map_entries = 8     # sticky machine-type map entries: MAP_N = 8 (record format: bytes 28-31 and 480-507)
 fx_slots = 4        # effects in the chain: DK_FX_MAX of [fx] (kept equal by packages/patchkit/tests/sdkgen.rs)
-send_slots = 2      # effects on a send bus: the Sound array's free indices a send page can use, [fx] send_indices (at most SEND_MAX = 2 in core/fxpages)
+send_slots = 2      # effects on a send bus: the Sound array's free indices a send page can use, [fx] send_indices (at most SEND_MAX = 2 in the fx service)
 dsp_area_bytes = 524288  # the 17-bit word offset of a core/dsp-link chunk reaches 2^17 words
 param_rows = 16     # parameter rows core/rows reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
 page_rows = 8       # page rows core/rows reserves (Digitone II)

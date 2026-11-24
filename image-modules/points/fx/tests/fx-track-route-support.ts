@@ -13,7 +13,7 @@ import { symbolsOf } from '@digi/regression/runtime/service-symbols.ts';
 import type { Device } from '@digi/test-support';
 
 // Shared setup of the track FX send page device tests (fx-track-route-*.device.test.ts). Every file runs its legs from an overlay-free card
-// and ready snapshot and boots on its own; the image without core/fxpages closes before the regular image starts, and only artifacts cross that
+// and ready snapshot and boots on its own; the image without the fx service closes before the regular image starts, and only artifacts cross that
 // boundary. A file that compares pixels or PCM with the stock image (`base: true`) captures them first in this helper's base test.
 
 export const names = [FX, `${FX}-2`, `${FX}-3`];

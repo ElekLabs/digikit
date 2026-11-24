@@ -7,7 +7,6 @@ use std::string::{String, ToString};
 use std::sync::MutexGuard;
 use std::vec::Vec;
 
-const MAGIC: u32 = 0x4658_5047;
 const DEVICE: u32 = 1;
 
 /// The service's statics for one test: the table bound, the rows a test gives, and all of it cleared again when the test ends (also when it fails).
@@ -17,29 +16,26 @@ struct Arena {
 }
 
 impl Arena {
-    /// `cells` send cells in the image's table.
+    /// `cells` send cells on the device.
     fn new(cells: u32) -> Arena {
         let lock = crate::test_lock::hold();
-        let mut t = std::vec![0u32; 64];
-        t[0] = MAGIC;
-        t[1] = 4;
-        t[2] = DEVICE;
-        t[4] = 0x2c;
-        t[5] = 14;
-        t[6] = 3;
-        t[8] = 8;
-        t[15] = 32;
-        t[37] = 70;
-        t[38] = 0x46a7;
-        t[39] = cells;
-        t[61] = 13;
-        t[63] = 0x80;
         let mut core = FakeCore::new();
         core.device = DEVICE;
-        core.info_tables.push((fxpage::INFO_HASH, t));
+        core.set_rows_blocks(&[(2, 40, 24, 0x75), (3, 90, 2, 0x75)]);
+        let facts = fxpage::DeviceFacts {
+            device: DEVICE,
+            page_first: 14,
+            slots: 3,
+            values_n: 32,
+            mark_index: 70,
+            send_cells: cells,
+            track_page: 13,
+            store_off: 0x80,
+            ..Default::default()
+        };
         // SAFETY: the lock is held
         unsafe {
-            assert_eq!(fxpage::bind(&core, [0, 0]), OK);
+            assert_eq!(fxpage::bind_facts(&core, &facts, [0, 0]), OK);
         }
         Arena { _lock: lock, core }
     }

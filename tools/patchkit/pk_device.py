@@ -108,7 +108,7 @@ class Limits:
     arena_bytes: int  # the ColdFire module arena
     stage_bytes: int  # the staging buffer: the largest .dkm file
     fx_slots: int  # effects in the chain
-    send_slots: int  # of them effects on a send bus (the device file's limit; `effective_send_slots` is what an image reports)
+    send_slots: int  # of them effects on a send bus (the device file's limit)
     param_rows: int  # parameter rows core/rows reserves
     page_rows: int  # page rows core/rows reserves (0 on a device without)
     dsp_area_bytes: int  # the DSP run-time area
@@ -130,15 +130,6 @@ def effective_fx_slots(lim: Limits, plan: dict[str, Any]) -> int:
         if any(str(m).startswith("core/dynfx@") for m in plan["modules"])
         else 0
     )
-
-
-def effective_send_slots(short: str, plan: dict[str, Any]) -> int:
-    """The send slots an image of device SHORT reports in CAPACITY: the device's `send_slots` when the image has `core/fxpages` (the send page) and the device file has a send page
-    (`[fx] track_page`), else 0 (every Digitone II image until FX routing step 6)."""
-    has_page = any(str(m).startswith("core/fxpages@") for m in plan["modules"])
-    if not has_page or load(short).get("fx", {}).get("track_page", 0) == 0:
-        return 0
-    return limits(short).send_slots
 
 
 def limits(short: str) -> Limits:

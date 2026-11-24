@@ -11,7 +11,7 @@ import { record } from '@digi/regression/runtime/artifacts.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { symbolsOf } from '@digi/regression/runtime/service-symbols.ts';
 
-// The signed value template of core/fxpages on test/dyn-fx-gain-bipolar: a BIAS knob from -64 to +63 (default 0) whose float p0 gives the
+// The signed value template of the effect pages (services/fx) on test/dyn-fx-gain-bipolar: a BIAS knob from -64 to +63 (default 0) whose float p0 gives the
 // gain 1 + p0 / 64. This replaces the adapter legs of the frequency shifter test (docs/plans/ledgers/t2-fx-contract.md); the frequency shift
 // itself is proven on the SHARC rig.
 const FX = 'test/dyn-fx-gain-bipolar';
@@ -30,7 +30,7 @@ for (const device of DEVICES) {
     const context = withPreparedFxSession(device, 'FX contract bipolar', {
       image: {
         name: 'fx-bipolar',
-        modules: ['core/runtime', 'core/rows', 'core/dyndsp', 'core/dynfx', 'core/fxpages'],
+        modules: ['core/runtime', 'core/rows', 'core/dyndsp', 'core/dynfx'],
         inventory: [SINE, FX],
         symbols: [
           'DKRT_BOOT',
