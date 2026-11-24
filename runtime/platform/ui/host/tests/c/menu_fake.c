@@ -22,11 +22,6 @@ static struct {
     int scan_result, get_result;
     DkrtBootInfo boot;
     char boot_name[DKRT_SEL_MAX][28]; /* the file name the runtime holds each boot index under */
-    int fx_n;
-    DkrtFx fx[MAX_FXR];
-    uint32_t send_slots;
-    uint32_t query_choices, query_sends;
-    int query_present;
     uint32_t arena_free;
     int mod_n;
     DkrtModule mod[4];
@@ -117,7 +112,7 @@ uint32_t dkrt_capacity(DkrtCap *out, uint32_t max)
     if (max < 1)
         return 0;
     out[0].kind = DKRT_CAPK_SEND_SLOTS;
-    out[0].limit = fk.send_slots;
+    out[0].limit = 0;
     out[0].used = 0;
     out[0].largest = 0;
     return 1;
@@ -309,30 +304,6 @@ int32_t dkrt_module(uint32_t index, DkrtModule *out)
     return DKRT_OK;
 }
 
-int32_t dkrt_fx(uint32_t index, DkrtFx *out)
-{
-    if ((int)index >= fk.fx_n)
-        return DKRT_E_NOT_FOUND;
-    memcpy(out, &fk.fx[index], sizeof *out);
-    return DKRT_OK;
-}
-
-int32_t dkrt_service_query(uint32_t provider, uint32_t minimum, uint32_t op, const uint8_t *request,
-                           uint32_t request_size, uint8_t *reply, uint32_t reply_size)
-{
-    (void)provider;
-    (void)minimum;
-    (void)op;
-    if (!fk.query_present)
-        return DKRT_E_MISSING;
-    if (request_size != sizeof(DkFxRouteChoicesV1) || reply_size != sizeof(uint32_t))
-        return DKRT_E_CONTRACT;
-    const DkFxRouteChoicesV1 *choices = (const DkFxRouteChoicesV1 *)request;
-    fk.query_sends = choices->pending_sends;
-    memcpy(reply, &fk.query_choices, sizeof fk.query_choices);
-    return DKRT_OK;
-}
-
 int32_t dkrt_settings_put(const uint8_t *key, const uint8_t *value, uint32_t len)
 {
     (void)len;
@@ -476,34 +447,6 @@ static void fake_module_menu_call(uint32_t a, dk_ui_menu *m)
 {
     assert(a == 1);
     fake_module_menu(m);
-}
-
-void fk_fx(const char *id, uint32_t allowed, uint32_t saved)
-{
-    DkrtFx *f = &fk.fx[fk.fx_n];
-    memset(f, 0, sizeof *f);
-    f->row = (uint32_t)fk.fx_n++;
-    f->allowed = allowed;
-    f->saved = saved;
-    f->running = saved;
-    snprintf((char *)f->id, sizeof f->id, "%s", id);
-    snprintf((char *)f->tab, sizeof f->tab, "GAN");
-}
-
-void fk_route_choices(uint32_t mask)
-{
-    fk.query_present = 1;
-    fk.query_choices = mask;
-}
-
-uint32_t fk_route_query_sends(void)
-{
-    return fk.query_sends;
-}
-
-void fk_send_slots(uint32_t n)
-{
-    fk.send_slots = n;
 }
 
 void fk_restart_result(int r)

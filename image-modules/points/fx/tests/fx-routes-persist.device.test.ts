@@ -11,7 +11,6 @@ import { record } from '@digi/regression/runtime/artifacts.ts';
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
-import { packageSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { emulatorDk } from '@digi/regression/runtime/waits.ts';
 
 const routeKey = `fx/route/${SEND}`;
@@ -137,8 +136,6 @@ for (const device of DEVICES) {
         session.client.drainEvents();
         await runtime.ui.tap('YES', { until: { ms: 300, why: REDRAW } });
         expect(await ui.applies()).toBe(applies + 1);
-        expect(await word(session, await packageSymbol(session, plan, 'MENU_FXR_SET'))).toBe(0);
-        expect(await word(session, await packageSymbol(session, plan, 'MENU_FXR_FLUSH'))).toBe(0);
         runtime.dk.cancelPending();
         await rpc(session, 'run.mode', { mode: 'free' });
         const dk = emulatorDk(session);

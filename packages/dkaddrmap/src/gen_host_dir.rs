@@ -5,7 +5,7 @@ pub const HOST_DIR_MAGIC: u32 = 0x44484b44;
 /// `HostDir.ready` once the package has attached (`HOST_DIR_READY_MAGIC` of abi.toml).
 pub const HOST_DIR_READY: u32 = 0x52454459;
 /// The ids this build knows (`[[host_dir]]` of abi.toml).
-pub const HOST_COUNT: usize = 30;
+pub const HOST_COUNT: usize = 25;
 /// DKRT_DSP: the DSP loader's placement table (module ranges in the DSP area).
 pub const HOST_DSP: u32 = 0;
 /// DKRT_PROVIDERS: the records of the loaded service files (the layout of the module records of DKRT_STATE, without its header).
@@ -42,30 +42,20 @@ pub const HOST_MENU_MEM: u32 = 15;
 pub const HOST_MENU_MEM_N: u32 = 16;
 /// TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row.
 pub const HOST_MENU_TICK: u32 = 17;
-/// DK_FXR_PEND of the DIGIKIT menu: the pending routes of the loaded effects (1 master, 2 send).
-pub const HOST_MENU_FXR_PEND: u32 = 18;
-/// DK_FXR_SET of the DIGIKIT menu: the result of the last route write (`dkrt_settings_put`).
-pub const HOST_MENU_FXR_SET: u32 = 19;
-/// DK_FXR_FLUSH of the DIGIKIT menu: the result of the last settings flush.
-pub const HOST_MENU_FXR_FLUSH: u32 = 20;
 /// DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran.
-pub const HOST_MENU_APPLIES: u32 = 21;
-/// DK_ROUTE_N of the DIGIKIT menu: the number of routes the last ROUTE... choice offered.
-pub const HOST_MENU_ROUTE_N: u32 = 22;
-/// DK_ROUTE_ITEM of the DIGIKIT menu: the routes the last ROUTE... choice offered (1 master, 2 send), in the order shown.
-pub const HOST_MENU_ROUTE_ITEM: u32 = 23;
+pub const HOST_MENU_APPLIES: u32 = 18;
 /// LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads.
-pub const HOST_MENU_LOADED: u32 = 24;
+pub const HOST_MENU_LOADED: u32 = 19;
 /// DK_LINES of the DIGIKIT menu: the HEALTH page's rows as text (12 rows of 24 bytes).
-pub const HOST_MENU_LINES: u32 = 25;
+pub const HOST_MENU_LINES: u32 = 20;
 /// DK_REDRAWS of the DIGIKIT menu: how many times the HEALTH page redrew.
-pub const HOST_MENU_REDRAWS: u32 = 26;
+pub const HOST_MENU_REDRAWS: u32 = 21;
 /// DK_POLLS of the DIGIKIT menu: how many times the HEALTH page polled the runtime.
-pub const HOST_MENU_POLLS: u32 = 27;
+pub const HOST_MENU_POLLS: u32 = 22;
 /// DK_HEALTH of the DIGIKIT menu: the last DkrtHealth the HEALTH page read.
-pub const HOST_MENU_HEALTH: u32 = 28;
+pub const HOST_MENU_HEALTH: u32 = 23;
 /// DK_HEALTH_MENU of the DIGIKIT menu: the HEALTH page's menu object (the firmware's view is the pointer at +4).
-pub const HOST_MENU_HEALTH_MENU: u32 = 29;
+pub const HOST_MENU_HEALTH_MENU: u32 = 24;
 /// Every id with the name of the static it stands for, in id order.
 #[rustfmt::skip]
 pub const HOST_NAMES: [&str; HOST_COUNT] = [
@@ -87,12 +77,7 @@ pub const HOST_NAMES: [&str; HOST_COUNT] = [
     "DKRT_MENU_MEM",
     "DKRT_MENU_MEM_N",
     "DKRT_MENU_TICK",
-    "DKRT_MENU_FXR_PEND",
-    "DKRT_MENU_FXR_SET",
-    "DKRT_MENU_FXR_FLUSH",
     "DKRT_MENU_APPLIES",
-    "DKRT_MENU_ROUTE_N",
-    "DKRT_MENU_ROUTE_ITEM",
     "DKRT_MENU_LOADED",
     "DKRT_MENU_LINES",
     "DKRT_MENU_REDRAWS",

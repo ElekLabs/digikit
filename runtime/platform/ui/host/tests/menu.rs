@@ -10,13 +10,9 @@ extern "C" {
     fn fk_scan_result(r: c_int);
     fn fk_boot_safe();
     fn fk_loaded(path: *const c_char, name: *const c_char);
-    fn fk_fx(id: *const c_char, allowed: u32, saved: u32);
     fn fk_loaded_menu(path: *const c_char, name: *const c_char);
     fn fk_settings_runs() -> c_int;
     fn fk_settings_acts() -> c_int;
-    fn fk_send_slots(n: u32);
-    fn fk_route_choices(mask: u32);
-    fn fk_route_query_sends() -> u32;
     fn fk_restart_result(r: c_int);
     fn fk_open_digikit() -> c_int;
     fn fk_restarts() -> c_int;
@@ -24,6 +20,7 @@ extern "C" {
     fn fk_set_count() -> c_int;
     fn fk_set_path(i: c_int) -> *const c_char;
     fn fk_flushes() -> c_int;
+    fn fk_puts() -> c_int;
     fn fk_tick(i: c_int) -> c_int;
     fn fk_live_script(i: c_int, queue_result: c_int, job_result: c_int);
     fn fk_live_waits(n: c_int);
@@ -94,11 +91,6 @@ fn loaded_menu(path: &str, name: &str) {
     unsafe { fk_loaded_menu(p.as_ptr(), n.as_ptr()) }
 }
 
-fn fx(id: &str, allowed: u32, saved: u32) {
-    let i = CString::new(id).unwrap();
-    unsafe { fk_fx(i.as_ptr(), allowed, saved) }
-}
-
 fn cstr(p: *const c_char) -> String {
     unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
 }
@@ -121,7 +113,7 @@ fn open_modules() {
     assert_eq!(title(), "MODULES");
 }
 
-/// Three modules: a tool, an effect (loaded, with a route) and a machine too big for the arena.
+/// Three modules: a tool, an effect (loaded) and a machine too big for the arena.
 fn store_of_three() {
     add("modules/tool.dkm", OK, 20, 0, 0);
     add("modules/gain-fx.dkm", OK | LOADED, 100, 1, 0);
@@ -364,14 +356,12 @@ fn a_module_for_another_runtime_is_not_compatible() {
 }
 
 #[test]
-fn the_side_panel_has_load_route_and_info() {
+fn the_side_panel_has_load_and_info() {
     let _g = digikit();
     store_of_three();
     loaded("modules/gain-fx.dkm", "test/gain-fx");
-    fx("test/gain-fx", 3, 1);
     select("modules/gain-fx.dkm");
     open_modules();
-    // a tool and a machine have no route; an effect that is loaded has
     press_right(0);
     assert_eq!(render(), ["LOAD", "INFO"]);
     choose_panel_row(0); // LOAD checks the row
@@ -380,7 +370,7 @@ fn the_side_panel_has_load_route_and_info() {
     assert_eq!(render(), ["UNLOAD", "INFO"]);
     press_no();
     press_right(1);
-    assert_eq!(render(), ["UNLOAD", "ROUTE...", "INFO"]);
+    assert_eq!(render(), ["UNLOAD", "INFO"]);
     choose_panel_row(0); // UNLOAD
     assert_eq!(unsafe { fk_tick(1) }, 0);
     // LOAD on a row that does not fit is refused as YES is
@@ -395,16 +385,15 @@ fn a_loaded_module_with_a_menu_gets_settings_in_the_side_panel() {
     store_of_three();
     loaded_menu("modules/tool.dkm", "digikit/tool");
     loaded("modules/gain-fx.dkm", "test/gain-fx");
-    fx("test/gain-fx", 3, 1);
     select("modules/tool.dkm");
     select("modules/gain-fx.dkm");
     open_modules();
-    // only the module with a menu function has the row; a loaded effect without one does not
+    // only the module with a menu function has the row; a loaded effect has no route row: fx owns FX ROUTING in SETTINGS
     press_right(0);
     assert_eq!(render(), ["UNLOAD", "SETTINGS...", "INFO"]);
     press_no();
     press_right(1);
-    assert_eq!(render(), ["UNLOAD", "ROUTE...", "INFO"]);
+    assert_eq!(render(), ["UNLOAD", "INFO"]);
     press_no();
     // a module that is in the store but not loaded has none
     press_right(2);
@@ -462,76 +451,32 @@ fn info_page_shows_the_module() {
 }
 
 #[test]
-fn route_choice_is_limited_to_what_the_effect_allows() {
+fn an_effects_info_has_no_route_line_and_its_unload_counts_one_module_change() {
     let _g = digikit();
-    add("modules/both.dkm", OK | LOADED, 10, 1, 0);
-    add("modules/master-only.dkm", OK | LOADED, 10, 1, 0);
-    loaded("modules/both.dkm", "test/both");
-    loaded("modules/master-only.dkm", "test/master-only");
-    fx("test/both", 3, 1);
-    fx("test/master-only", 1, 1);
-    unsafe { fk_send_slots(2) };
+    store_of_three();
+    loaded("modules/gain-fx.dkm", "test/gain-fx");
+    select("modules/gain-fx.dkm");
     open_modules();
-    press_right(0);
-    choose_panel_row(1);
-    let (kind, title, _, items) = dialog().unwrap();
-    assert_eq!((kind, title.as_str()), (DialogKind::Choice, "ROUTE"));
-    assert_eq!(items, ["SEND", "MASTER"]);
-    pick_choice(0);
-    // a change of the route is a pending change
+    press_right(1);
+    choose_panel_row(1); // INFO
+    assert!(
+        !render().iter().any(|l| l.starts_with("ROUTE")),
+        "{:?}",
+        render()
+    );
+    press_no();
+    // UNLOAD is the only change: no route is counted, nothing is written, no restart
+    press_yes(1);
     press_no();
     let (_, title, text, _) = dialog().unwrap();
     assert_eq!(
         (title.as_str(), text.as_str()),
-        ("APPLY & RESTART?", "1 CHANGE")
+        ("APPLY 1 CHANGE?", "NO RESTART")
     );
-    answer_confirm(false);
-    // the second effect allows the master only
-    open_modules();
-    press_right(1);
-    choose_panel_row(1);
-    assert_eq!(dialog().unwrap().3, ["MASTER"]);
-}
-
-#[test]
-fn the_route_picker_uses_the_provider_reply_and_passes_pending_edits() {
-    let _g = digikit();
-    add("modules/a.dkm", OK | LOADED, 10, 1, 0);
-    add("modules/b.dkm", OK | LOADED, 10, 1, 0);
-    loaded("modules/a.dkm", "test/a");
-    loaded("modules/b.dkm", "test/b");
-    fx("test/a", 3, 1);
-    fx("test/b", 3, 1);
-    // The provider can return a different result than the menu's fallback.
-    unsafe { fk_route_choices(2) };
-    open_modules();
-    press_right(1);
-    choose_panel_row(1);
-    assert_eq!(dialog().unwrap().3, ["SEND"]);
-    pick_choice(0);
-    unsafe { fk_route_choices(1) };
-    press_right(0);
-    choose_panel_row(1);
-    assert_eq!(dialog().unwrap().3, ["MASTER"]);
-    assert_eq!(unsafe { fk_route_query_sends() }, 2);
-}
-
-#[test]
-fn send_is_not_offered_when_every_send_slot_is_taken() {
-    let _g = digikit();
-    add("modules/a.dkm", OK | LOADED, 10, 1, 0);
-    add("modules/b.dkm", OK | LOADED, 10, 1, 0);
-    loaded("modules/a.dkm", "test/a");
-    loaded("modules/b.dkm", "test/b");
-    fx("test/a", 3, 2); // on the send bus already
-    fx("test/b", 3, 1); // on the master
-    unsafe { fk_send_slots(1) };
-    open_modules();
-    press_right(1);
-    choose_panel_row(1);
-    assert_eq!(dialog().unwrap().3, ["MASTER"]);
-    press_no(); // NO closes a choice without an answer
-    assert!(dialog().is_none());
+    answer_confirm(true);
+    assert_eq!(unsafe { fk_puts() }, 0);
+    assert_eq!(unsafe { fk_flushes() }, 0);
+    assert_eq!(unsafe { fk_restarts() }, 0);
 }
 
 #[test]
@@ -575,7 +520,6 @@ fn no_with_changes_asks_to_apply_and_runs_it_live() {
     assert_eq!(unsafe { fk_selection_sets() }, 1);
     assert_eq!(unsafe { fk_set_count() }, 1);
     assert_eq!(cstr(unsafe { fk_set_path(0) }), "modules/gain-fx.dkm");
-    assert_eq!(unsafe { fk_flushes() }, 1);
     // gain-fx is loaded already: the only job is the unload of tool, and the device does not restart
     poll_until_idle();
     assert_eq!(unsafe { fk_live_calls() }, 1);
@@ -696,27 +640,6 @@ fn the_text_of_each_live_refusal() {
         refused_batch(0, code);
         assert_eq!(dialog().unwrap().2, text, "code {code}");
     }
-}
-
-#[test]
-fn a_route_change_restarts_directly() {
-    let _g = digikit();
-    add("modules/both.dkm", OK | LOADED, 10, 1, 0);
-    loaded("modules/both.dkm", "test/both");
-    fx("test/both", 3, 1);
-    unsafe { fk_send_slots(2) };
-    select("modules/both.dkm");
-    open_modules();
-    press_right(0);
-    choose_panel_row(1);
-    pick_choice(0); // SEND
-    press_no();
-    assert_eq!(dialog().unwrap().1, "APPLY & RESTART?");
-    answer_confirm(true);
-    assert_eq!(
-        (unsafe { fk_restarts() }, unsafe { fk_live_calls() }),
-        (1, 0)
-    );
 }
 
 #[test]
@@ -877,26 +800,18 @@ fn a_failed_unload_and_a_failed_load_leave_marks_in_the_list() {
 }
 
 #[test]
-fn a_refused_restart_after_the_save_keeps_the_marks_visible() {
+fn a_refused_restart_leaving_safe_mode_shows_the_reason() {
     let _g = digikit();
-    add("modules/both.dkm", OK | LOADED, 10, 1, 0);
-    loaded("modules/both.dkm", "test/both");
-    fx("test/both", 3, 1);
-    add("modules/tool.dkm", OK | LOADED, 20, 0, 0);
-    select("modules/both.dkm");
+    add("modules/tool.dkm", OK, 20, 0, 0);
     select("modules/tool.dkm");
-    unsafe { fk_send_slots(2) };
+    unsafe { fk_boot_safe() };
     unsafe { fk_restart_result(-43) };
-    open_modules();
-    press_yes(1); // unselect tool
-    press_right(0);
-    choose_panel_row(1);
-    pick_choice(0); // and a route change: this restarts directly
+    open_digikit();
+    answer_confirm(false); // the safe-mode notice
+    press_yes(MODULES + 1);
     press_no();
     answer_confirm(true);
     assert_eq!(dialog().unwrap().2, "CARD BUSY");
-    answer_confirm(false);
-    assert!(render()[1].starts_with("  ~TOOL"), "{:?}", render());
 }
 
 #[test]

@@ -1071,34 +1071,9 @@ owner = "package"
 doc = "TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row."
 
 [[host_dir]]
-name = "MENU_FXR_PEND"
-owner = "package"
-doc = "DK_FXR_PEND of the DIGIKIT menu: the pending routes of the loaded effects (1 master, 2 send)."
-
-[[host_dir]]
-name = "MENU_FXR_SET"
-owner = "package"
-doc = "DK_FXR_SET of the DIGIKIT menu: the result of the last route write (`dkrt_settings_put`)."
-
-[[host_dir]]
-name = "MENU_FXR_FLUSH"
-owner = "package"
-doc = "DK_FXR_FLUSH of the DIGIKIT menu: the result of the last settings flush."
-
-[[host_dir]]
 name = "MENU_APPLIES"
 owner = "package"
 doc = "DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran."
-
-[[host_dir]]
-name = "MENU_ROUTE_N"
-owner = "package"
-doc = "DK_ROUTE_N of the DIGIKIT menu: the number of routes the last ROUTE... choice offered."
-
-[[host_dir]]
-name = "MENU_ROUTE_ITEM"
-owner = "package"
-doc = "DK_ROUTE_ITEM of the DIGIKIT menu: the routes the last ROUTE... choice offered (1 master, 2 send), in the order shown."
 
 [[host_dir]]
 name = "MENU_LOADED"
