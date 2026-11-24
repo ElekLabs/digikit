@@ -29,6 +29,8 @@ export async function activateSystemPackage(
     repair?: boolean;
     check: () => void;
     signal?: AbortSignal;
+    /** Capture independent restart evidence before sending the guest RESTART command. */
+    beforeRestart?: () => Promise<() => Promise<void>>;
     progress?: (fraction: number | undefined, detail: string) => void;
   },
 ): Promise<boolean> {
@@ -89,6 +91,7 @@ export async function activateSystemPackage(
   progress?.(undefined, 'Checking system package');
   const store = systemPackageStore(session, pkg.bytes, { info: initial, check: checkTarget });
   const actions = await plan(await store.verifiedOnCard());
+  let waitForRestart: (() => Promise<void>) | undefined;
   for (const action of actions) {
     checkTarget();
     if (action === 'put' || action === 'retry' || action === 'restart') {
@@ -100,12 +103,14 @@ export async function activateSystemPackage(
     }
     switch (action) {
       case 'put':
+        progress?.(0, 'Uploading system package');
         await store.put((sent, total) => {
           checkTarget();
           progress?.(sent / total, 'Uploading system package');
         });
         break;
       case 'verify':
+        progress?.(undefined, 'Verifying system package');
         await store.verify();
         break;
       case 'retry':
@@ -113,11 +118,16 @@ export async function activateSystemPackage(
         break;
       case 'restart':
         progress?.(undefined, 'Restarting for system package');
+        if (options.beforeRestart) {
+          waitForRestart = await options.beforeRestart();
+          checkTarget();
+        }
         await session.restart();
         break;
       case 'wait_for_boot':
         try {
-          await session.waitForBoot(90_000, { signal, requireBootEvidence: true });
+          if (waitForRestart) await waitForRestart();
+          else await session.waitForBoot(90_000, { signal, requireBootEvidence: true });
         } catch (error) {
           if (!(error instanceof DkError && error.kind === 'timeout')) throw error;
           throw new Error(
@@ -127,6 +137,7 @@ export async function activateSystemPackage(
         }
         break;
       case 'confirm_support':
+        progress?.(undefined, 'Confirming module support');
         await pollBoot(
           async () => {
             const current = await info();

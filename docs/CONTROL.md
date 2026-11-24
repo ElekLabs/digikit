@@ -242,6 +242,7 @@ resolved (known: DT2 1.16 and 1.17, DN2 1.11 and 1.12). While the next call is n
 (the audio interrupt), the batched fast path and the analytic idle skip run as they do with no input queued, up to the instruction at
 which the call is handed over (they ran one instruction at a time with any USB input queued, 135 ns an instruction; finding 43, "Upload speed"). The
 instruction at which each call is handed over, and the guest state, are the same (`state.digest {"arch": true}` equal at every checked point).
+For `midi.usb.in`, optional `epoch` must match the current controller epoch and the controller must be idle. A stale epoch or active job rejects the call before it queues bytes.
 
 `usb.bulk.in {bytes | file, period?, connect?}` is the host side of the vendor bulk endpoint of `core/usb-bulk` (EP2 OUT; the controller is not modelled). The host's
 512-byte packets fill the dTDs the guest has queued on EP2 OUT (through each dTD's page array: page 0 pointer with its start offset, then the pages); a dTD completes when its count is used up or a packet shorter than 512 bytes, a zero-length one too, ends the transfer, and a partly filled dTD stays active. One dTD per delivery `period` instructions apart (default 49,500, one 16 KiB high-speed transfer), by reading
@@ -264,6 +265,11 @@ for the container area `0x80000..0x380000` (any other flash write runs the firmw
 `hle_flash_read` also serves. `flash.status` is `{erases, programs, bytes}` since the boot; `flash.read` returns bytes of the model as hex (at most 4 MiB). At the
 soft reset after such a write the controller boots the container the guest wrote (`flash.booted` event, or `flash.invalid` when it does not read back as a
 firmware) instead of the image it had loaded. `patchkit flash STOCK.syx --emulator SOCKET` drives it (finding 75).
+
+`status.flash_boot` records the guest flash that installed the current image. It contains `from_epoch` (the epoch
+before the flash reboot), `container_sha256` (the sealed flash container) and `syx_sha256` (the reconstructed
+boot image). An explicit firmware load clears the receipt. Desktop Workbench checks the receipt, the new boot
+epoch and firmware readiness when flashing or restoring the Emulator target. See [Patching](PATCHING.md#flash-the-desktop-emulator).
 
 `pcm.tap` needs the sharc build and a DSP session. `capture` and `capture_stop` have no wrapper.
 

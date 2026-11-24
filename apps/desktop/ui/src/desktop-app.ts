@@ -51,6 +51,6 @@ export function createDesktopApps(
     ...tools,
     emulatorActions,
     app,
-    firmware: createFirmwareApp(createDesktopFirmwareEnv(host, getApp, tools.logWriter), app),
+    firmware: createFirmwareApp(createDesktopFirmwareEnv(host, getApp, tools.logWriter, emulatorActions), app),
   };
 }

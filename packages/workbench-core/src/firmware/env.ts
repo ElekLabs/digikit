@@ -3,8 +3,11 @@
 // ports, open, close), so the target selector and the connection indicator are the same on every page.
 //   desktop: apps/desktop/ui/src/desktop-firmware.ts (patchkit in process through a Tauri command, the system's save dialog)
 //   site:    apps/web/src/firmware/web-env.ts (patchkit.wasm in a worker, a download link)
+import type { DkSession } from '@digi/dk-session';
 import type { SystemPackage } from '../runtime/activate-system-package';
 import type { FlashSender, PreparedFlash, RpcMachine } from '../patch/patchkit-core';
+import type { TargetApp } from '../transfer/target';
+import type { DeviceState, FlashState } from './firmware-core';
 import type { DefaultModuleEntry, DefaultProgress } from './default-modules-core';
 
 /** One run of the page (a flash, a restore, a download), for the app's log. */
@@ -15,7 +18,23 @@ export interface FirmwareRun {
   detail?: string;
 }
 
+type Binding = Pick<ReturnType<TargetApp['bindSession']>, 'target' | 'check'> & {
+  session(): Promise<Pick<DkSession, 'reserveTransport'>>;
+};
+
+/** The desktop controller can verify a guest flash against the prepared container and the new boot. */
+export interface EmulatorFlash {
+  probe(binding: Binding): Promise<DeviceState>;
+  flash(
+    binding: Binding,
+    p: PreparedFlash,
+    signal: AbortSignal,
+    report: (state: FlashState) => void,
+  ): Promise<{ state: FlashState; beforePackageRestart?: () => Promise<() => Promise<void>> }>;
+}
+
 export interface FirmwareEnv {
+  emulatorFlash?: EmulatorFlash;
   /**
    * Which devices' patched images this app offers. The public site passes its own list (apps/web/src/firmware/site-policy.ts: a publication decision, not a device
    * fact); the Firmware page then prepares no patched image for another device (restoring stock stays available for every device). The desktop workbench leaves

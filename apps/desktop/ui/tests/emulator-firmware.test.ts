@@ -350,3 +350,21 @@ test('an imported patched emulator image is left alone', async () => {
   expect(read).not.toHaveBeenCalled();
   expect(session).not.toHaveBeenCalled();
 });
+
+test('reset holds the emulator job group until the restart finishes', async () => {
+  const { jobs, firmware, runtime } = mountFirmware();
+  let finish!: (value: RuntimeSnapshot) => void;
+  runtime.restart.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const reset = firmware.reset();
+  expect(jobs.busy('emulator')).toBe(true);
+  await firmware.reset();
+  expect(runtime.restart).toHaveBeenCalledOnce();
+  finish(snapshot);
+  await reset;
+  expect(jobs.busy('emulator')).toBe(false);
+});

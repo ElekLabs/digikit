@@ -10,6 +10,7 @@ import { hostWasmSource } from './desktop-wasm';
 import { flashEntry } from './log-core';
 import type { LogWriter } from './log-state';
 import { readSystemPackage } from './system-package';
+import { createEmulatorFlash } from './emulator-flash';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 
 /** The answer of `firmware_prepare`: 4 bytes of JSON length (big endian), the summary JSON, the image. */
@@ -29,10 +30,13 @@ export function createDesktopFirmwareEnv(
   host: Host,
   app: () => TransferApp,
   writer: Pick<LogWriter, 'logInput'>,
+  emulator: Parameters<typeof createEmulatorFlash>[2],
 ): FirmwareEnv {
   /** The sender needs no firmware or modules: an empty bundle. */
   const kit = senderKit(hostWasmSource(host));
+  const rpc: FirmwareEnv['rpc'] = async (image, chunk) => (await kit()).rpcFlash(image, chunk);
   return {
+    emulatorFlash: createEmulatorFlash(host.rpc, rpc, emulator),
     async prepare(stock, restore, set = '') {
       const raw = new Uint8Array(await host.firmware.prepare(stock, { restore, set }));
       const { summary, image } = unpack(raw);
@@ -43,9 +47,7 @@ export function createDesktopFirmwareEnv(
       return (await kit()).sender(total);
     },
     // the same state machine as the site, from the same wasm (the desktop app moves the bytes over midir)
-    async rpc(image, chunk) {
-      return (await kit()).rpcFlash(image, chunk);
-    },
+    rpc,
     async saveImage(name, bytes) {
       return (await host.firmware.save(bytes, name)) ?? undefined;
     },

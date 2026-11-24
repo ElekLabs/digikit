@@ -67,6 +67,8 @@ export interface PreparedFlash {
   os: string;
   shaStock: string;
   shaImage: string;
+  /** SHA-256 of the decoded container, when supplied by native preparation. */
+  containerSha256?: string;
   /** The id the runtime's INFO reports after the flash (16 hex digits); null for a restore. */
   imageId: string | null;
   /** The runtime version the patch carries (`0.5.2`); null for a restore. */
@@ -85,6 +87,7 @@ export interface FlashSummary {
   os: string;
   sha_stock: string;
   sha_image: string;
+  container_sha256?: string;
   image_id: string | null;
   runtime: string | null;
   pace_ms: number;
@@ -100,6 +103,7 @@ export function preparedFromSummary(j: FlashSummary, image: Uint8Array): Prepare
     os: j.os,
     shaStock: j.sha_stock,
     shaImage: j.sha_image,
+    ...(j.container_sha256 === undefined ? {} : { containerSha256: j.container_sha256 }),
     imageId: j.image_id,
     runtime: j.runtime,
     paceMs: j.pace_ms,

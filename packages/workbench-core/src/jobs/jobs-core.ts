@@ -43,7 +43,7 @@ export function addJob(
 export function updateJob(
   s: JobsState,
   id: number,
-  patch: Pick<Partial<Job>, 'progress' | 'detail' | 'label'>,
+  patch: Pick<Partial<Job>, 'progress' | 'detail' | 'label' | 'cancel'>,
 ): JobsState {
   // An update that changes nothing returns the same state, so no reader is notified.
   const job = s.list.find((j) => j.id === id);

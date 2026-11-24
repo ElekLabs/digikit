@@ -1,5 +1,6 @@
 // The page reads by itself (refresh-core.ts says when): when the window is shown or gets the focus, every few seconds for the folder on the
-// computer (a cheap listing), and the MIDI ports are listed again with each tick. Nothing here starts while a job runs. No visible parts.
+// computer (a cheap listing), and the MIDI ports are listed again with each tick. Pages can also opt in to read on a tick.
+// Nothing here starts while a job runs. No visible parts.
 import { onCleanup, onMount, type JSX } from 'solid-js';
 import { useTransferApp } from '../../src/transfer/app-context';
 import { canAutoRefresh, focusReadDue, POLL_MS } from '../../src/transfer/refresh-core';
@@ -9,6 +10,8 @@ export default function AutoRefresh(props: {
   busy: () => string;
   /** Read both sides now. */
   read: () => void;
+  /** Also read on a visible, idle poll when this returns true. */
+  readOnPoll?: () => boolean;
   /** The target selector lists the MIDI ports again. */
   rescanPorts: () => void;
 }): JSX.Element | null {
@@ -30,6 +33,7 @@ export default function AutoRefresh(props: {
     polling = true;
     try {
       props.rescanPorts();
+      if (props.readOnPoll?.()) props.read();
       const samples = env.extras?.samples;
       if (activeMode() !== 'samples' || !samples) return;
       const changed = await samples.localChanged();

@@ -397,6 +397,17 @@ When replacing an already active package, Workbench needs fresh boot events from
 Without them, the package write can be verified on the card and activation can still time out. Restart the device
 manually, then check module support in Transfer. For core-only recovery, the return of module support confirms activation.
 
+### Flash the desktop emulator
+
+Open your stock `.syx` on the **Emulator** page and let the firmware finish booting. Select **Emulator** under
+Target, open **Firmware**, and choose the same stock file. Use **Flash emulator** to install digikit or choose
+**Restore stock** and click **Restore stock on emulator** to go back to the stock OS.
+
+The running guest writes its flash and restarts. Workbench verifies the prepared container against the new boot
+before setting up the system package and any selected default modules. You can cancel while the image is being
+sent. After Workbench commits the flash, wait for verification and setup to finish.
+The flash changes the running emulator session. Reopening Workbench and using Open or Reload still select firmware through the usual startup and source settings.
+
 ### Repair module support from the command line
 
 Use this when the running firmware has booted in core-only mode. It works over a connected USB MIDI port or a running

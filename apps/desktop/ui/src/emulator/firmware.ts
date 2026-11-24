@@ -220,6 +220,22 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
       if (!signal.aborted) setInfo(undefined);
     }
   };
+  /** The guest installed a new image in the same controller session. */
+  const refreshAfterFlash = (next: FirmwareInfo) => {
+    if (signal.aborted) return;
+    setEmulatorGeneration((n) => n + 1);
+    resetHealth();
+    if (target().kind === 'emulator') {
+      clearInventory();
+      noteConnection({ type: 'target' });
+    }
+    setInfo(next);
+    setEmulatorRuntime(next.runtime ? 'yes' : 'no');
+    if (target().kind === 'emulator' && !next.runtime)
+      noteConnection({ type: 'noruntime', reason: EMULATOR_NO_RUNTIME });
+    bumpCardRefresh();
+    refreshCardAfterQuietPeriod();
+  };
   /** Start a new firmware session through the controller's `firmware.load`. */
   const boot = async (path: string, file: EmuSource | null, choices: { runtime: boolean; card?: string }) => {
     const r = runtime();
@@ -468,27 +484,31 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
   };
   const reset = async () => {
     if (signal.aborted || busy('emulator')) return;
-    // a boot or reset of the emulator: the indicator asks again
-    if (target().kind === 'emulator') noteConnection({ type: 'target' });
-    resetHealth();
-    const began = performance.now();
     try {
-      const s = await runtime()?.restart();
-      if (signal.aborted) return;
-      if (s) {
-        setEmulatorGeneration((n) => n + 1);
-        update({ type: 'snapshot', snapshot: s });
-      }
-      setPaused(false);
-      await refreshInfo();
-      if (signal.aborted) return;
-      if (target().kind === 'emulator' && emulatorRuntime() === 'no')
-        noteConnection({ type: 'noruntime', reason: EMULATOR_NO_RUNTIME });
-      logEvent('reset', 'info', `emulator reset · ${duration(performance.now() - began)}`);
-      bumpCardRefresh();
-      refreshCardAfterQuietPeriod();
+      await runJob('Resetting the emulator', { group: 'emulator' }, () =>
+        untrack(async () => {
+          // The indicator asks again after reset.
+          if (target().kind === 'emulator') noteConnection({ type: 'target' });
+          resetHealth();
+          const began = performance.now();
+          const s = await runtime()?.restart();
+          if (signal.aborted) return;
+          if (s) {
+            setEmulatorGeneration((n) => n + 1);
+            update({ type: 'snapshot', snapshot: s });
+          }
+          setPaused(false);
+          await refreshInfo();
+          if (signal.aborted) return;
+          if (target().kind === 'emulator' && emulatorRuntime() === 'no')
+            noteConnection({ type: 'noruntime', reason: EMULATOR_NO_RUNTIME });
+          logEvent('reset', 'info', `emulator reset · ${duration(performance.now() - began)}`);
+          bumpCardRefresh();
+          refreshCardAfterQuietPeriod();
+        }),
+      );
     } catch (e) {
-      if (signal.aborted) return;
+      if (signal.aborted || e instanceof JobBusyError) return;
       setError(message(e));
       logInput(failureEntry('reset', 'reset', message(e)));
     }
@@ -522,6 +542,7 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
     openFirmware,
     reload,
     reloadWithRuntime,
+    refreshAfterFlash,
     reloadModules,
     pause: () => setEmulatorPaused(true),
     resume: () => setEmulatorPaused(false),

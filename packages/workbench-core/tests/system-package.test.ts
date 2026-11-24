@@ -262,7 +262,13 @@ test('core-only activation verifies before restarting and waits for module suppo
   const { session, check, pkg } = setupActivation();
   session.info.mockResolvedValue(info);
   session.modules.mockRejectedValueOnce(pkgAbsent()).mockRejectedValueOnce(pkgAbsent());
-  expect(await activateSystemPackage(session, pkg, { check })).toBe(true);
+  const progress = vi.fn();
+  const put = session.put.getMockImplementation()!;
+  session.put.mockImplementation(async (...args) => {
+    expect(progress).toHaveBeenLastCalledWith(0, 'Uploading system package');
+    await put(...args);
+  });
+  expect(await activateSystemPackage(session, pkg, { check, progress })).toBe(true);
   expect(session.verify).toHaveBeenCalledBefore(session.restart);
   expect(pkg.plan).toHaveBeenCalledExactlyOnceWith({
     repair: false,

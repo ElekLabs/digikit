@@ -31,7 +31,12 @@ pub fn prepare(root: &Path, stock: &[u8], restore: bool, set: &str) -> Result<Ve
     {
         eprintln!("firmware_prepare: the address map was not kept: {e}");
     }
-    Ok(pack(&p.summary_json().to_string(), &p.image))
+    let mut summary = p.summary_json();
+    if p.ok() {
+        let container = patchkit::flash::container_of(&p.image).map_err(|e| e.0)?;
+        summary["container_sha256"] = patchkit::error::sha256_hex(&container).into();
+    }
+    Ok(pack(&summary.to_string(), &p.image))
 }
 
 pub(crate) fn body(request: &tauri::ipc::Request<'_>) -> Result<Vec<u8>, String> {
