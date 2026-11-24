@@ -101,7 +101,7 @@ export function comparePcmAligned(
 }
 
 /**
- * The factor of the part that a send adds (port of `added_factor` of tools/patchkit/pk_digikit_fxsend.py): `out` is the dry note times (1 + f), possibly started a few frames later
+ * The factor of the part that a send adds (port of `added_factor` of efcc91f7e:tools/patchkit/pk_digikit_fxsend.py): `out` is the dry note times (1 + f), possibly started a few frames later
  * than `dry` (the note's start in the coupled run depends on how many DSP instructions the blocks before it cost, so a heavier hook starts it later). The least-squares gain of
  * `out` over `dry` at the best sample shift (even offsets, up to 512 samples either way; the shift that leaves the smallest residue, which is 0 for a note that starts together)
  * is 1 + f. A median of ratios is noisy where the sound is quiet. Both captures are interleaved samples; the window skips 600 samples at each end.

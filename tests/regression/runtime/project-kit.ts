@@ -104,7 +104,7 @@ export interface SeededSettings {
 }
 
 /**
- * Seed settings copy A of an existing, caller-owned card whose two settings copies are empty (port of `seed_card` of tools/patchkit/pk_digikit_fxroutes.py). `entries` are the
+ * Seed settings copy A of an existing, caller-owned card whose two settings copies are empty (port of `seed_card` of efcc91f7e:tools/patchkit/pk_digikit_fxroutes.py). `entries` are the
  * key and the hex value of each setting, in the order the runtime keeps them. The result is a function of the device, the entries and the card's bytes only, so a card cache key
  * of those (`cardKey`) names it.
  */
@@ -787,7 +787,7 @@ export function pattern0Changes(
 export type LockOverlays = Record<'base' | 'none' | 'amount' | 'send', string>;
 
 /**
- * The project-byte oracles of the track SEND lock turns (port of `lock_check` of tools/patchkit/pk_digikit_fxroute.py): the project-slot sectors the four overlays touch, each read
+ * The project-byte oracles of the track SEND lock turns (port of `lock_check` of efcc91f7e:tools/patchkit/pk_digikit_fxroute.py): the project-slot sectors the four overlays touch, each read
  * from `card` with its overlay laid over it, then how many bytes of pattern 0 the trig and the held send turn changed and where the amount turn differs from the send turn.
  */
 export function lockCheck(device: Device, card: string, overlays: LockOverlays) {

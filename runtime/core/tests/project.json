@@ -29,9 +29,13 @@
         "firmwareOnly": "the audio of an effect and of the send bus across reload, unload and load, the real effect rows and the page frame",
         "dsp": "sharc",
         "tags": ["C:loading", "C:dsp", "A:core/fx"],
-        "modules": ["digikit/debug", "test/sine", "test/dyn-fx-gain", "test/dyn-fx-gain-send", "core/services/machines", "core/services/fx"],
-        "sources": [
-          "tools/patchkit/pk_digikit_fxroutes.py"
+        "modules": [
+          "digikit/debug",
+          "test/sine",
+          "test/dyn-fx-gain",
+          "test/dyn-fx-gain-send",
+          "core/services/machines",
+          "core/services/fx"
         ]
       },
       {
@@ -125,9 +129,7 @@
         "devices": ["dt2"],
         "tags": ["C:storage", "S:samples"],
         "modules": [],
-        "sources": [
-          "packages/workbench-core/src/transfer/sample-upload.ts"
-        ],
+        "sources": ["packages/workbench-core/src/transfer/sample-upload.ts"],
         "plusdrive": true,
         "dksampleWasm": true
       },
@@ -143,9 +145,7 @@
         "devices": ["dn2"],
         "tags": ["C:storage", "S:samples"],
         "modules": [],
-        "sources": [
-          "packages/workbench-core/src/transfer/sample-upload.ts"
-        ],
+        "sources": ["packages/workbench-core/src/transfer/sample-upload.ts"],
         "dksampleWasm": true
       },
       {
@@ -167,7 +167,6 @@
         "dsp": "sharc",
         "tags": ["C:layout", "C:storage", "C:transport"],
         "modules": ["test/sine", "core/services/machines"],
-        "sources": ["tools/patchkit/pk_digikit_fxroutes.py"],
         "plusdrive": true
       },
       {
@@ -240,7 +239,14 @@
         "files": ["memaudit.device.test.ts"],
         "dsp": "sharc",
         "tags": ["C:layout"],
-        "modules": ["test/c-demo", "test/dyn-demo", "test/dyn-demo-stray", "test/dyn-dn2", "test/sine", "core/services/machines"],
+        "modules": [
+          "test/c-demo",
+          "test/dyn-demo",
+          "test/dyn-demo-stray",
+          "test/dyn-dn2",
+          "test/sine",
+          "core/services/machines"
+        ],
         "plusdrive": true
       }
     ],

@@ -19,7 +19,6 @@
         "aliases": {
           "test/dyn-fx-gain-send-3": "test/dyn-fx-gain-send"
         },
-        "sources": ["tools/patchkit/pk_digikit_fxroute.py", "tools/patchkit/pk_digikit_fxroutes.py"],
         "plusdrive": true
       },
       {
@@ -28,12 +27,7 @@
         "dsp": "sharc",
         "tags": ["A:core/fx", "C:state"],
         "modules": ["test/dyn-fx-gain-bipolar", "test/sine", "core/services/machines", "core/services/fx"],
-        "sources": [
-          "tools/patchkit/hook_ab.py",
-          "tools/patchkit/pk_digikit_fxroute.py",
-          "tools/patchkit/pk_digikit_fxroutes.py",
-          "tools/patchkit/pk_digikit_fxsend.py"
-        ],
+        "sources": ["tools/patchkit/hook_ab.py"],
         "plusdrive": true
       },
       {
@@ -48,7 +42,6 @@
           "core/services/fx",
           "core/services/machines"
         ],
-        "sources": ["tools/patchkit/pk_digikit_fxroute.py", "tools/patchkit/pk_digikit_fxroutes.py"],
         "plusdrive": true
       },
       {
@@ -57,7 +50,6 @@
         "dsp": "sharc",
         "tags": ["A:core/fx"],
         "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
-        "sources": ["tools/patchkit/pk_digikit_fxroute.py", "tools/patchkit/pk_digikit_fxroutes.py"],
         "plusdrive": true
       },
       {
@@ -70,12 +62,7 @@
           "test/dyn-fx-gain-both-2": "test/dyn-fx-gain-both",
           "test/dyn-fx-gain-both-3": "test/dyn-fx-gain-both"
         },
-        "sources": [
-          "tools/patchkit/hook_ab.py",
-          "tools/patchkit/pk_digikit_fxroute.py",
-          "tools/patchkit/pk_digikit_fxroutes.py",
-          "tools/patchkit/pk_digikit_fxsend.py"
-        ],
+        "sources": ["tools/patchkit/hook_ab.py"],
         "plusdrive": true
       },
       {
@@ -84,7 +71,7 @@
         "dsp": "sharc",
         "tags": ["A:core/fx"],
         "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
-        "sources": ["tools/patchkit/hook_ab.py", "tools/patchkit/pk_digikit_fxsend.py"],
+        "sources": ["tools/patchkit/hook_ab.py"],
         "plusdrive": true
       },
       {
@@ -93,7 +80,7 @@
         "dsp": "sharc",
         "tags": ["A:core/fx"],
         "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
-        "sources": ["tools/patchkit/hook_ab.py", "tools/patchkit/pk_digikit_fxsend.py"],
+        "sources": ["tools/patchkit/hook_ab.py"],
         "plusdrive": true
       },
       {

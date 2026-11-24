@@ -9,7 +9,7 @@ import { addedFactor } from '../runtime/pcm-compare.ts';
 import { decodeSettings, lockCheck, seedSettingsCard, SLOT0, STAMP } from '../runtime/project-kit.ts';
 import { encodeOverlay } from '../runtime/write-safety.ts';
 
-// The data and analysis helpers of the FX route suites, which were the Python tools pk_digikit_fx*.py: the device facts, the settings seed of a pristine card, the lock leg's project
+// The data and analysis helpers of the FX route suites, which were the Python tools efcc91f7e:tools/patchkit/pk_digikit_fx*.py: the device facts, the settings seed of a pristine card, the lock leg's project
 // bytes and the send's added factor. Each is checked against the device files or an independent computation.
 
 const SECTOR = 512;
