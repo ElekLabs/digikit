@@ -18,7 +18,12 @@ export function OpenProfileButton(props: { open(file: File | undefined): Promise
   );
 }
 
-export function ReferenceView(props: { name?: string; pcs?: SavedProfile['pcs']; error: string }): JSX.Element {
+export function ReferenceView(props: {
+  name?: string;
+  pcs?: SavedProfile['pcs'];
+  error: string;
+  openReview?(path: string, sha256: string, entry: number): Promise<void>;
+}): JSX.Element {
   return (
     <>
       <Show when={props.pcs} keyed>
@@ -31,10 +36,22 @@ export function ReferenceView(props: { name?: string; pcs?: SavedProfile['pcs'];
                 </span>
               </div>
               <Show when={pcs.cf.length}>
-                <HotspotTable title="ColdFire PCs" rows={pcs.cf} />
+                <HotspotTable title="ColdFire PCs" rows={pcs.cf} openReview={props.openReview} />
               </Show>
               <Show when={pcs.sharc.length}>
-                <HotspotTable title="SHARC PCs" rows={pcs.sharc} />
+                <HotspotTable title="SHARC PCs" rows={pcs.sharc} openReview={props.openReview} />
+                <Show
+                  when={
+                    props.openReview &&
+                    pcs.sharc.some((row) => row.owner === 'firmware') &&
+                    !pcs.sharc.some((row) => row.review?.url)
+                  }
+                >
+                  <div class="hint">
+                    No catalog links for these hotspots. Generate the SHARC review for this firmware and refresh
+                    Firmware symbols in Settings. Links appear for functions included in the review.
+                  </div>
+                </Show>
               </Show>
             </div>
           </Show>

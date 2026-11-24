@@ -21,6 +21,7 @@ export default function SidePanels(props: {
   liveDsp?: boolean;
   profileGeneration?: number;
   onSpanRecording?(recording?: SpanRecording): void;
+  openCatalog?(path: string, sha256: string, entry: number): void;
   metrics?: JSX.Element;
   source: TargetBinding;
 }): JSX.Element {
@@ -161,6 +162,7 @@ export default function SidePanels(props: {
             liveDsp={props.liveDsp}
             collectSpans={props.collectSpans && (props.active ?? true)}
             onSpanRecording={props.onSpanRecording}
+            openCatalog={props.openCatalog}
             source={props.source}
             host={props.host}
             hub={hub}

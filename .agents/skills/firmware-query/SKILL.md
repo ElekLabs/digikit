@@ -190,6 +190,11 @@ and supports search by group title, name, anchor, role and hint. Store review
 JSONL in the DSP core's `labels/` folder. The legacy
 `out/atlas/labels/sharc/<image>/` folder is a fallback.
 
+For offline profile-to-catalog lookup, use the
+[structured CLI report](../../../docs/ADDRMAP.md#open-a-profile-hotspot).
+Add `--format json` to `fw cost` to read loop body sizes, trip symbols,
+unresolved calls and estimates without parsing the text report.
+
 `fw.py cost ADDR [--vars R2=32] [--vars-all R2=32]` gives a static instruction count with DO-loop trip counts (literal or symbolic) and callees. It is an upper bound over all paths with no stall model, and the unit of `dsp_cost_voice` and `patchkit budget`. Trip symbols name the register and the function that reads it, `R2@1cd286`: a callee's R2 is not the caller's. `--vars NAME=V` sets the entry function's register, `NAME@FN=V` one function's, `--vars-all NAME=V` every function's; an unknown name is an error that lists the symbols present. Jumps to another function (conditional too) count as tail calls whose targets are summed (upper bound); with `--vars` the output also gives the tighter total taking the largest target. A zero or missing DO count is `trip?@fn`; notes list what was not handled.
 
 ### From a candidate to a declaration

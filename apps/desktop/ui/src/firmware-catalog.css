@@ -1,0 +1,51 @@
+.firmware-workspace,
+.firmware-catalog {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.firmware-tabs,
+.firmware-catalog-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.firmware-workspace > .firmware-page {
+  flex: 1 1 0;
+  min-height: 0;
+}
+.firmware-catalog-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.firmware-catalog-controls button,
+.firmware-catalog-controls select {
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s);
+  color: var(--ink);
+  background: var(--panel-2);
+}
+.firmware-catalog p {
+  padding: 12px;
+  color: var(--ink-2);
+}
+.firmware-catalog .catalog-error {
+  color: var(--bad);
+}
+.firmware-catalog iframe {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--panel);
+}

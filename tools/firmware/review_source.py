@@ -97,6 +97,7 @@ def review_from_syx(
         )
         if alternate:
             outputs.extend(catalog_page.review_paths(primary, args.out))
+    outputs += [catalog_page.review_map_path(html) for html in outputs[::2]]
     sections = {name: Path(ROOT) / "out" / "sections" / name for name in sources}
     check_paths(sources, sections, outputs)
 

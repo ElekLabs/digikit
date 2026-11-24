@@ -22,6 +22,11 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DkProf } from '../../packages/dk-session/src/dkprof.ts';
+import {
+  readProfileHotspots,
+  resolveProfileHotspots,
+  verifiedProfileMaps,
+} from '../../packages/workbench-core/src/profile/hotspots.ts';
 import { SPAN_PHASES } from '../../packages/dk-session/src/gen_proto.ts';
 import { expandCaptures } from '../../packages/workbench-core/src/profile/calibration-view.ts';
 import {
@@ -61,7 +66,26 @@ export async function loadProf(root, fail) {
 function mapsOf(opts) {
   const files = [...(opts.map ?? [])];
   if (opts.image) files.push(opts.image.replace(/\.syx$/, '') + '.addrmap.json');
-  return files.map((f) => readJson(f));
+  return files.map((f) => {
+    const map = readJson(f);
+    const review = map.review;
+    delete map.review;
+    if (
+      typeof review?.file === 'string' &&
+      path.basename(review.file) === review.file &&
+      /\.html?$/i.test(review.file) &&
+      Array.isArray(review.entries) &&
+      typeof review.html_sha256 === 'string'
+    ) {
+      const html = path.resolve(path.dirname(f), review.file);
+      try {
+        if (sha256(html) === review.html_sha256) map.review = { ...review, path: html };
+      } catch {
+        // An absent or unreadable catalog still leaves valid function names.
+      }
+    }
+    return map;
+  });
 }
 
 function parseAddr(text, defaultCpu, fail) {
@@ -114,8 +138,18 @@ export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
   }
   if (cmd === 'profile' && sub === 'report') {
     if (rest.length !== 1) fail('profile report FILE [--top N]');
-    const req = { profile: readJson(rest[0]), maps: mapsOf(opts), format };
-    if (opts.top !== undefined) req.top = Number(opts.top);
+    const profile = readJson(rest[0]);
+    const top = opts.top === undefined ? undefined : Number(opts.top);
+    const evidence = readProfileHotspots(profile, top);
+    const maps = mapsOf(opts);
+    const verified = new Set(verifiedProfileMaps(evidence, maps));
+    // Existing aggregate reports can use an explicit module map for captures that predate pack hashes.
+    // Navigable hotspot evidence below always requires a matching pack hash.
+    const reportMaps = evidence.sha256
+      ? maps.filter((map) => verified.has(map) || (map.kind === 'module' && !evidence.moduleHashes.length))
+      : maps;
+    const req = { profile, maps: reportMaps, format };
+    if (top !== undefined) req.top = top;
     if (opts.loads) req.loads = readJson(opts.loads);
     for (const spec of opts.analyse ?? []) {
       const at = spec.indexOf('=');
@@ -127,6 +161,20 @@ export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
       );
     }
     const rep = prof.profileReport(req);
+    const hotspots =
+      format === 'json'
+        ? resolveProfileHotspots(
+            {
+              ...evidence,
+              loads: req.loads
+                ? { modules: [...(evidence.loads?.modules ?? []), ...req.loads.modules] }
+                : evidence.loads,
+            },
+            maps,
+            prof,
+          )
+        : undefined;
+    if (hotspots) rep.hotspots = hotspots;
     if (opts.calibration) {
       const cal = readJson(opts.calibration);
       const est = prof.calibrateReport({ calibration: cal, profile: req.profile, estimate_only: true, format });

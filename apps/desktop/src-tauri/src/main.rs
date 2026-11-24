@@ -673,6 +673,14 @@ fn main() {
         },
     };
     let app = tauri::Builder::default()
+        .manage(symbols::catalog::CatalogFrame::default())
+        .register_uri_scheme_protocol(symbols::catalog::SCHEME, |context, request| {
+            use tauri::Manager;
+            context
+                .app_handle()
+                .state::<symbols::catalog::CatalogFrame>()
+                .response(request)
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(host)
@@ -722,6 +730,9 @@ fn main() {
             firmware::firmware_save,
             symbols::symbols_pick,
             symbols::symbols_read,
+            symbols::symbols_releases,
+            symbols::catalog::symbols_open_review,
+            symbols::catalog::symbols_catalog_frame,
             log_save::log_save,
             library::lib_scan,
             library::lib_build,

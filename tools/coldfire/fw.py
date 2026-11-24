@@ -401,6 +401,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="NAME=V,...: set a register name in every function, e.g. R2=32",
     )
     sp.add_argument("--no-calls", action="store_true", help="do not add callees")
+    sp.add_argument("--format", choices=("text", "json"), default="text")
     sp = common(
         sub.add_parser(
             "stores",
@@ -642,7 +643,12 @@ def run(
             return "error: cost is SHARC only"
         return capped(
             sharc.cmd_cost(
-                img, args.target, args.vars, not args.no_calls, args.vars_all
+                img,
+                args.target,
+                args.vars,
+                not args.no_calls,
+                args.vars_all,
+                as_json=args.format == "json",
             ),
             cap,
         )

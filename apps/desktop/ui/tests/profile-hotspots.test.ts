@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
-import type { DkProf } from '@digi/dk-session/dkprof';
+import { DkProf } from '@digi/dk-session/dkprof';
 import { hotspotLabel, readSavedProfile, resolveSavedHotspots } from '../src/profile/hotspots';
 
 const hash = 'ab'.repeat(32);
@@ -70,4 +71,68 @@ test('legacy or unmatched captures keep raw addresses; profiles without spans st
   assert.equal(await resolveSavedHotspots(legacy, { maps }, prof), legacy.pcs);
   assert.equal(await resolveSavedHotspots(noMaps, { maps }, prof), noMaps.pcs);
   assert.equal(lookups, 0);
+});
+
+test('shared dkprof resolves stock links and relocated modules from saved evidence', async () => {
+  const prof = await DkProf.create(
+    new Uint8Array(readFileSync(new URL('../../../web/public/dkprof.wasm', import.meta.url))),
+  );
+  const stock = {
+    format: 'dk-addrmap',
+    version: 1,
+    kind: 'dev',
+    key: { image_sha256: hash },
+    entries: [{ cpu: 'sharc', addr: 0x100, size: 4, name: 'biquad', layer: 'fw' }],
+    review: { cpu: 'sharc', path: '/tmp/review.html', url: 'file:///tmp/review.html', entries: [0x100] },
+  };
+  const moduleHash = 'ef'.repeat(32);
+  const packed = (h: string) => ({
+    format: 'dk-addrmap',
+    version: 1,
+    kind: 'module',
+    key: { module: 'test/effect', dkm_sha256: h },
+    entries: [{ cpu: 'sharc', addr: 4, size: 4, name: 'render', layer: 'our', module: 'test/effect' }],
+  });
+  const profile = readSavedProfile({
+    schema: 'dk.profile/1',
+    clock: { unit: 'insn' },
+    run: {
+      target: 'fixture',
+      firmware_sha256: hash,
+      module_sha256: [moduleHash],
+      loads: {
+        modules: [
+          { id: 'test/effect', base: 0x2000, dsp_base: 0x250 },
+          { id: 'test/effect', base: 0x2400, dsp_base: 0x300 },
+        ],
+      },
+    },
+    raw: [
+      { cpu: 'sharc', addr: 0x101, count: 6 },
+      { cpu: 'sharc', addr: 0x305, count: 4 },
+    ],
+  });
+  const result = await resolveSavedHotspots(profile, { maps: async () => [stock] }, async () => prof, {
+    readMaps: async () => ({ ships: [], modules: [{ id: 'test/effect', json: JSON.stringify(packed(moduleHash)) }] }),
+  });
+  assert.deepEqual(result.sharc[0]?.review, {
+    path: '/tmp/review.html',
+    url: 'file:///tmp/review.html',
+    sha256: hash,
+    entry: 0x100,
+    fragment: 'r-0x100',
+  });
+  assert.equal(result.sharc[0]?.unit, 'insn');
+  assert.equal(result.sharc[0]?.owner, 'firmware');
+  assert.equal(result.sharc[1]?.entry, 0x304);
+  assert.equal(result.sharc[1]?.module_base, 0x300);
+  assert.equal(result.sharc[1]?.module_entry, 4);
+  assert.equal(result.sharc[1]?.owner, 'test/effect');
+  assert.equal(result.sharc[1]?.offset, 1);
+
+  const wrong = await resolveSavedHotspots(profile, { maps: async () => [stock] }, async () => prof, {
+    readMaps: async () => ({ ships: [], modules: [{ id: 'test/effect', json: JSON.stringify(packed(otherHash)) }] }),
+  });
+  assert.equal(wrong.sharc[1]?.addr, 0x305);
+  assert.equal(wrong.sharc[1]?.name, undefined);
 });

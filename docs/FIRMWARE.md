@@ -34,13 +34,20 @@ builds both catalogs and writes both review pages in their default locations.
 An optional `--out` adds an alternate copy of the first review in paired mode. Add `--format json` for a
 `reviews` array on stdout with one record per page, including `release`, `core`,
 `cpu`, `firmware_sha256`, `peer` (null for standalone SHARC), and absolute
-`database`, `html` and `tsv` paths. Build progress goes to stderr. Register the
+`database`, `html`, `tsv` and SHARC `addrmap` paths. Build progress goes to stderr. Register the
 reported `firmware.sqlite` in [Workbench → Settings → Firmware symbols](ADDRMAP.md#firmware-symbols-in-desktop-settings).
 
-Function links end in `#r-0x<entry>`, using the entry address shown in the review
+Search the HTML by address, name or role. **Address map (JSON)** opens the same
+symbol data used by the CLI. Function links end in `#r-0x<entry>`, using the entry address shown in the review
 TSV. Keep the two review paths relative to each other when moving paired
 pages. If the catalogs already exist, [re-export the HTML](#find-and-open-the-output)
 with the release key.
+
+SHARC rows show a static estimate for one call of the function itself,
+with loop body size, literal or symbolic trip counts, and unresolved calls.
+Use `fw cost ADDR -i RELEASE --core dsp --format json` to include callees or
+substitute trip counts. Values are instruction estimates. Board cycles
+require a profile from hardware. [Firmware cost and symbol workflow](ADDRMAP.md#open-a-profile-hotspot)
 
 ## Build the databases
 

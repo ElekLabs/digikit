@@ -44,6 +44,8 @@ import type { DesktopApps } from './desktop-app';
 import WorkbenchDrawer from './WorkbenchDrawer';
 import LogPanel from './LogPanel';
 import FirmwareSymbols from './FirmwareSymbols';
+import FirmwareCatalog, { type CatalogSelection } from './FirmwareCatalog';
+import Segmented from '@digi/workbench-core/ui/components/Segmented.tsx';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
@@ -107,6 +109,15 @@ export default function WorkbenchShell(
   const [dockDrag, setDockDrag] = createSignal(false);
   const [page, setPage] = createSignal<Page>(props.initialPage ?? 'run');
   const [moduleId, setModuleId] = createSignal('');
+  const [firmwareTab, setFirmwareTab] = createSignal<'flash' | 'catalog'>('flash');
+  const [catalogSelection, setCatalogSelection] = createSignal<CatalogSelection>();
+  const [fromProfile, setFromProfile] = createSignal(false);
+  function openCatalog(selection: CatalogSelection) {
+    setCatalogSelection(selection);
+    setFromProfile(selection.path !== undefined && selection.entry !== undefined);
+    setFirmwareTab('catalog');
+    setPage('firmware');
+  }
   const filePages = moduleFilePages(app);
   const runtimePage = runtimeModulePages(app, (id, schema, open) => moduleFilePage(app, id, schema, open));
   const modulePages = createMemo(() => {
@@ -579,6 +590,11 @@ export default function WorkbenchShell(
                     }
                     profileGeneration={isEmulator() ? emulatorGeneration() : 1}
                     onSpanRecording={setSpanRecording}
+                    openCatalog={
+                      props.host.symbols?.catalogFrame
+                        ? (path, sha256, entry) => openCatalog({ path, sha256, entry })
+                        : undefined
+                    }
                     active={!isEmulator() || !!status()}
                     source={source}
                     metrics={
@@ -608,7 +624,12 @@ export default function WorkbenchShell(
             {(view) => <ModulePageView page={view} current={() => modulePage() === view} />}
           </Show>
           <Show when={page() === 'transfer'}>
-            <TransferPage onFlash={() => setPage('firmware')} />
+            <TransferPage
+              onFlash={() => {
+                setFirmwareTab('flash');
+                setPage('firmware');
+              }}
+            />
           </Show>
           <Show when={page() === 'files' && !app.target.switching() && selected()} keyed>
             {(ops) => (
@@ -630,7 +651,35 @@ export default function WorkbenchShell(
             )}
           </Show>
           <Show when={page() === 'firmware'}>
-            <FirmwarePage />
+            <div class="firmware-workspace">
+              <Show when={props.host.symbols?.catalogFrame}>
+                <div class="firmware-tabs">
+                  <Segmented
+                    label="Firmware view"
+                    options={
+                      [
+                        { id: 'flash', label: 'Flash' },
+                        { id: 'catalog', label: 'Catalog' },
+                      ] as const
+                    }
+                    value={firmwareTab()}
+                    onChange={setFirmwareTab}
+                  />
+                </div>
+              </Show>
+              <Show when={firmwareTab() === 'catalog' && props.host.symbols?.catalogFrame} fallback={<FirmwarePage />}>
+                <FirmwareCatalog
+                  symbols={props.host.symbols!}
+                  selection={catalogSelection()}
+                  source={symbolSource()}
+                  imageRevision={isEmulator() ? info() : connectionState()}
+                  imageFor={(source) => selectedSymbolImage(props.host, source)}
+                  select={setCatalogSelection}
+                  settings={() => setPage('settings')}
+                  back={fromProfile() ? () => setPage('run') : undefined}
+                />
+              </Show>
+            </div>
           </Show>
           <main class="appearance-page" hidden={page() !== 'settings'} aria-label="Settings">
             <section>
@@ -655,6 +704,7 @@ export default function WorkbenchShell(
                   imageRevision={isEmulator() ? info() : connectionState()}
                   imageFor={(binding) => selectedSymbolImage(props.host, binding)}
                   targetName={targetLabel(target())}
+                  openCatalog={props.host.symbols?.catalogFrame ? (sha256) => openCatalog({ sha256 }) : undefined}
                 />
               )}
             </Show>

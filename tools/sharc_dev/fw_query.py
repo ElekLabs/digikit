@@ -638,8 +638,10 @@ def cmd_cost(
     vars_text: str | None = None,
     follow_calls: bool = True,
     vars_all_text: str | None = None,
+    *,
+    as_json: bool = False,
 ) -> list[str]:
-    from tools.sharc_dev.sharc_cost import fn_cost, split_sym
+    from tools.sharc_dev.sharc_cost import cost_evidence, fn_cost, split_sym
 
     pairs = _cost_pairs(vars_text, "--vars")
     pairs_all = _cost_pairs(vars_all_text, "--vars-all")
@@ -672,7 +674,21 @@ def cmd_cost(
             )
         for x in hit:
             values[x] = val
-    c_max = fn_cost(img.db, img.image, entry, follow_calls=follow_calls, values=values)
+    c_max = (
+        fn_cost(img.db, img.image, entry, follow_calls=follow_calls, values=values)
+        if values
+        else c
+    )
+    if as_json:
+        evidence = cost_evidence(c, follow_calls)
+        evidence.update(
+            image=img.image,
+            name=img.label(entry),
+            variables=values,
+            evaluated=str(c.total.evaluate(values)) if values else None,
+            tail_max=str(c_max.total_max) if c_max.total_max is not None else None,
+        )
+        return [json.dumps(evidence)]
     out = ["%s insns %d self %s" % (img.label(entry), c.n_insns, c.self_cost)]
     for lp in c.loops:
         out.append(

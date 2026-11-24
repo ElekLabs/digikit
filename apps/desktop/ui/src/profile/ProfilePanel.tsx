@@ -50,6 +50,7 @@ export default function ProfilePanel(props: {
   collectSpans?: boolean;
   liveDsp?: boolean;
   onSpanRecording?(recording?: SpanRecording): void;
+  openCatalog?(path: string, sha256: string, entry: number): void;
   source: TargetBinding;
   host?: Host;
   /** What the Profile and Calibration tabs share (a run in progress, the active calibration). */
@@ -112,7 +113,7 @@ export default function ProfilePanel(props: {
   onCleanup(() => props.onSpanRecording?.(undefined));
   const reference = createProfileReference({
     visible: () => props.visible,
-    resolve: (profile) => resolveSavedHotspots(profile, host?.symbols, prof),
+    resolve: (profile) => resolveSavedHotspots(profile, host?.symbols, prof, host?.library),
   });
   const comparison = () => reference.selection()?.profile.shares;
   const referenceShare = (name: string) => {
@@ -443,7 +444,16 @@ export default function ProfilePanel(props: {
             <OpenProfileButton open={reference.open} />
           </div>
         </Show>
-        <ReferenceView name={reference.selection()?.name} pcs={reference.pcs()} error={reference.error()} />
+        <ReferenceView
+          name={reference.selection()?.name}
+          pcs={reference.pcs()}
+          error={reference.error()}
+          openReview={
+            props.openCatalog
+              ? async (path, sha256, entry) => props.openCatalog?.(path, sha256, entry)
+              : host?.symbols?.openReview
+          }
+        />
         <Show when={error()}>
           <p class="err" role="alert">
             {error()}

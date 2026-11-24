@@ -3,7 +3,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { createFirmwareSymbols } from '../firmware-symbols';
 import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
-import type { EmuRpc, Host, SymbolImageMap } from '@digi/workbench-core/host/host.ts';
+import type { EmuRpc, Host, SymbolImageMap, SymbolRelease } from '@digi/workbench-core/host/host.ts';
 
 const timeout = (ms: number) => ({ timeoutMs: Math.max(1, Math.round(ms)) });
 
@@ -23,11 +23,24 @@ export function createTauriHost(): Host {
     );
     return result;
   }
+  // Catalog requests stay ordered across tab unmounts so an older request cannot replace the active frame.
+  let catalogTail = Promise.resolve();
+  function catalogFrame(path: string, sha256: string, entry?: number) {
+    const result = catalogTail.then(() => invoke<string>('symbols_catalog_frame', { path, sha256, entry }));
+    catalogTail = result.then(
+      () => {},
+      () => {},
+    );
+    return result;
+  }
   return {
     rpc,
     symbols: createFirmwareSymbols(localStorageKeyValue(), {
       pick: (kind) => invoke<string | null>('symbols_pick', { kind }),
       read: (kind, path) => invoke<SymbolImageMap[]>('symbols_read', { kind, path }),
+      releases: () => invoke<SymbolRelease[]>('symbols_releases'),
+      catalogFrame,
+      openReview: (path, sha256, entry) => invoke<void>('symbols_open_review', { path, sha256, entry }),
     }),
     analyzer: {
       open: (source) => analyzerCall('analyzer_open', { source }),

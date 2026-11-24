@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import html
 import json
 import os
 import sqlite3
 import sys
+import tomllib
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import closing, suppress
@@ -23,7 +25,7 @@ from urllib.parse import quote
 from tools.firmware import config, device
 from tools.firmware.artifacts import FirmwareArtifacts
 from tools.firmware.catalog import group_edges, parse_counts
-from tools.firmware.query_db import ATLAS_DIR, FwError, _has, open_ro, short_image
+from tools.firmware.query_db import ATLAS_DIR, ROOT, FwError, _has, open_ro, short_image
 from tools.firmware.query_target import known_release, select_core, select_image
 
 Row = dict[str, str]
@@ -55,6 +57,7 @@ class ReviewOutput(NamedTuple):
     tsv: Path
     peer: str
     summary: str
+    addrmap: Path | None
 
 
 def format_reviews(reviews: Sequence[ReviewOutput], output_format: str) -> str:
@@ -78,6 +81,7 @@ def format_reviews(reviews: Sequence[ReviewOutput], output_format: str) -> str:
                 "database": str(database.absolute()) if database.is_file() else None,
                 "html": str(review.html.absolute()),
                 "tsv": str(review.tsv.absolute()),
+                "addrmap": str(review.addrmap.absolute()) if review.addrmap else None,
             }
         )
     return json.dumps({"reviews": results}, indent=2)
@@ -434,6 +438,8 @@ def build_payload(
                 key: r.get(key, "")
                 for key in ("bytes", "callers", "callees", "loops", "do", "prof_insns")
             }
+            if r.get("cost"):
+                out_rows[-1]["dsp"]["cost"] = json.loads(r["cost"])
 
     out_groups: list[dict[str, Any]] = []
     for g in keep_groups:
@@ -629,6 +635,89 @@ def review_paths(artifacts: FirmwareArtifacts, output: str | None) -> tuple[Path
     return artifacts.review, artifacts.review_tsv
 
 
+def review_map_path(html: Path) -> Path:
+    return html.with_suffix(".addrmap.json")
+
+
+def sharc_review_map(
+    artifacts: FirmwareArtifacts, html: Path, rows: list[Row]
+) -> dict[str, Any] | None:
+    release = known_release(artifacts.directory.parent.name)
+    if release is None:
+        return None
+    dev, firmware = release
+    port_file = Path(ROOT) / "ports" / f"{artifacts.directory.parent.name}.toml"
+    if not port_file.is_file():
+        return None
+    port = tomllib.loads(port_file.read_text(encoding="utf-8"))["port"]
+    with closing(open_ro(str(artifacts.database_path()))) as db:
+        db.execute("BEGIN")
+        if not (_has(db, "functions") and _has(db, "meta")):
+            return None
+        meta = dict(
+            db.execute("SELECT key,value FROM meta WHERE image=?", (artifacts.image,))
+        )
+        if (
+            meta.get("image") != artifacts.image
+            or meta.get("cpu", "sharc") != "sharc"
+            or meta.get("image_sha256") != port.get("dsp_sha256")
+            or not port.get("dsp_sha256")
+        ):
+            raise FwError(
+                f"{artifacts.image}: SHARC database does not match the registered firmware"
+            )
+        name = "f.name"
+        if _has(db, "function_names"):
+            name = (
+                "COALESCE((SELECT n.name FROM function_names n WHERE n.image=f.image "
+                "AND n.entry=f.entry_sw AND n.name<>'' "
+                "ORDER BY n.source='cf_names' DESC,n.name LIMIT 1), f.name)"
+            )
+        entries = [
+            {
+                "cpu": "sharc",
+                "addr": entry,
+                "size": end - entry,
+                "name": symbol or label or f"FUN_{entry:06x}",
+                "layer": "fw",
+            }
+            for entry, end, symbol, label in db.execute(
+                f"SELECT f.entry_sw,f.end_sw,{name},f.label FROM functions f "
+                "WHERE f.image=? AND f.end_sw>f.entry_sw ORDER BY f.entry_sw",
+                (artifacts.image,),
+            )
+        ]
+    return {
+        "format": "dk-addrmap",
+        "version": 1,
+        "kind": "dev",
+        "key": {
+            "device": dev.short,
+            "firmware": firmware.version,
+            "image_sha256": firmware.sha256,
+        },
+        "entries": entries,
+        "review": {
+            "cpu": "sharc",
+            "file": html.name,
+            "entries": sorted(int(row["addr"], 16) for row in rows),
+        },
+    }
+
+
+def add_sharc_costs(artifacts: FirmwareArtifacts, rows: list[Row]) -> None:
+    from tools.sharc_dev.sharc_cost import cost_evidence, fn_cost
+
+    with closing(open_ro(str(artifacts.database_path()))) as db:
+        if not _has(db, "insn"):
+            return
+        for row in rows:
+            cost = fn_cost(
+                db, artifacts.image, int(row["addr"], 16), follow_calls=False
+            )
+            row["cost"] = json.dumps(cost_evidence(cost, follow_calls=False))
+
+
 def export_review(
     image: str | None,
     core: str | None,
@@ -644,6 +733,8 @@ def export_review(
     cpu = cpu or "cf"
     artifacts = FirmwareArtifacts(image, cpu)
     rows, groups, edges, peer = read_catalog(artifacts)
+    if cpu == "sharc":
+        add_sharc_costs(artifacts, rows)
     other = default_peer if peer is None else peer
     if args.other:
         requested = (
@@ -699,11 +790,16 @@ def export_review(
         cpu,
         pair_page=os.path.relpath(other_page, out.parent) if other_page else None,
     )
+    address_map = sharc_review_map(artifacts, out, rows) if cpu == "sharc" else None
+    addrmap = review_map_path(out) if address_map is not None else None
+    if addrmap is not None:
+        payload["address_map_url"] = quote(addrmap.name)
     template = Path(TEMPLATE).read_text(encoding="utf-8")
     sub = subtitle(image, other)
     page = render(template, payload, ("SHARC · " if cpu == "sharc" else "") + sub)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(page, encoding="utf-8")
+    page_bytes = page.encode("utf-8")
+    out.write_bytes(page_bytes)
     tsv.parent.mkdir(parents=True, exist_ok=True)
     write_review_tsv(
         str(tsv),
@@ -722,7 +818,13 @@ def export_review(
         f"{len(payload['groups'])} groups, {len(payload['rows'])} rows, "
         f"{labelled} labelled → {out}\nReview TSV → {tsv}"
     )
-    return ReviewOutput(artifacts, out, tsv, other, summary)
+    if addrmap is not None and address_map is not None:
+        address_map["review"]["html_sha256"] = hashlib.sha256(page_bytes).hexdigest()
+        addrmap.write_text(
+            json.dumps(address_map, separators=(",", ":")) + "\n", encoding="utf-8"
+        )
+        summary += f"\nReview address map → {addrmap}"
+    return ReviewOutput(artifacts, out, tsv, other, summary, addrmap)
 
 
 def main(argv: list[str] | None = None) -> int:

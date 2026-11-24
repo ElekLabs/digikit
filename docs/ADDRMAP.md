@@ -161,11 +161,60 @@ Only the source of the ship map differs. **Hardware proof is a later, explicit s
 
 ### Firmware symbols in desktop Settings
 
-Open **Settings → Firmware symbols** and add a ColdFire SQLite database, a SHARC SQLite database or an exported `.dev.json` symbol map. Each source lists the firmware it covers. Select a Target to see whether its image matches. **Refresh** rereads the registered files and **Remove** forgets a path. Workbench remembers paths locally and opens databases read-only.
+Open **Settings → Firmware symbols**. Digitakt II OS 1.17 and Digitone II OS 1.12
+have separate profiles. Each uses these files from the checkout that launched
+Workbench when no custom path is set.
 
-For SQLite sources, Workbench checks the ColdFire main section or SHARC DSP image digest against the firmware port records. For exported maps it uses the declared stock SysEx SHA-256. Register the relevant `out/firmware/<image>/<core>/firmware.sqlite`, built with the [firmware query CLI](FIRMWARE.md). Workbench prefers names published for the exact function entry and falls back to the database's decoded names. A CPU-specific database takes precedence over an exported map for that CPU. Within each source type, the last file added takes precedence.
+| Source | Default under `out/firmware/<release>/` |
+| --- | --- |
+| ColdFire database | `main/firmware.sqlite` |
+| SHARC database | `dsp/firmware.sqlite` |
+| SHARC catalog | `dsp/review.html` with `dsp/review.addrmap.json` beside it |
+
+**Choose…** checks a custom file against the release and remembers the path.
+**Use default** clears that override. **Refresh sources** rereads the files
+after a rebuild or move. Existing matching database registrations carry over.
+Additional developer maps can still be imported with **Add Symbol map…**.
+
+Workbench checks a SQLite database's main or DSP digest against its firmware
+port, and a developer map's stock SysEx hash against the same port. Catalog
+links also require the HTML digest recorded in the sibling review map. A
+catalog's map can supply SHARC names when the database is unavailable.
+Workbench prefers names from a verified database for that CPU.
 
 The Log can name fixed firmware PCs even when the debug module cannot supply a module load table. Profile shows names beside sampled ColdFire and SHARC addresses. When reopening a capture, Profile uses the firmware hash recorded in the capture to find matching registered symbols. Captures without a verified image and addresses outside known ranges keep their numeric addresses.
+
+## Open a profile hotspot
+
+Generate the [SHARC review and its sibling address map](FIRMWARE.md#generate-a-sharc-catalog-from-a-syx).
+Use that map for the offline CLI report:
+
+```sh
+node tools/devtools/wb.mjs --format json profile report CAPTURE.json \
+  --map out/firmware/dt2-1.17/dsp/review.addrmap.json
+```
+
+`hotspots` keeps the sampled PC, owner, function entry, offset, measurement
+unit and, for catalog candidates, the HTML path and fragment. ColdFire
+addresses count bytes and SHARC PCs count short words. Match the map to
+the capture's stock firmware hash. Supply module maps with another `--map`
+and keep the capture's load table and the `.dkm` hashes for those maps. The
+hotspots display unresolved addresses numerically when identity is unavailable.
+The legacy CLI aggregate supports explicitly supplied maps for older captures.
+Workbench recordings and some older CLI captures lack verified pack hashes,
+so their module PCs still appear without a verified hotspot link.
+
+In Workbench, open **Firmware → Catalog** or click **Open catalog** on a release
+in Settings. When you open a saved capture in Profile, click an underlined
+hotspot to inspect its function in the matching catalog. The capture's hash
+selects the release. **Back to profile** returns to the inspector. Use **Open in
+browser** to open the original HTML, which supports local review decisions and
+JSONL import/export. The in-app catalog is read-only. A paired function link
+uses the peer release's configured catalog.
+
+Expand a verified module hotspot to see its loaded address and module-relative
+entry. The CLI can also add module loop
+analysis using `--analyse` as described in [Instrumentation](INSTRUMENTATION.md#profiles).
 
 ## Consumers
 

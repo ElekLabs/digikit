@@ -1,9 +1,11 @@
 """Row selection of tools/firmware/catalog_page.py, on synthetic inputs."""
 
 import csv
+import hashlib
 import json
 import sqlite3
 import subprocess
+import tomllib
 import unittest
 from pathlib import Path
 from urllib.parse import unquote
@@ -263,6 +265,27 @@ def test_sharc_review_reads_the_canonical_database(tmp_path, monkeypatch):
             pair_addr=pair, role="master/fx", anchors="dsp.master.fn.q31_converter"
         )
         with sqlite3.connect(path) as db:
+            port_file = Path(catalog_page.ROOT) / "ports" / f"{current}.toml"
+            dsp_hash = tomllib.loads(port_file.read_text())["port"]["dsp_sha256"]
+            db.execute("CREATE TABLE meta (image TEXT, key TEXT, value TEXT)")
+            db.executemany(
+                "INSERT INTO meta VALUES (?,?,?)",
+                [
+                    (current, "image", current),
+                    (current, "cpu", "sharc"),
+                    (current, "image_sha256", dsp_hash),
+                ],
+            )
+            db.execute(
+                "CREATE TABLE functions (image TEXT, entry_sw INTEGER, end_sw INTEGER, name TEXT, label TEXT)"
+            )
+            db.executemany(
+                "INSERT INTO functions VALUES (?,?,?,?,?)",
+                [
+                    (current, addr, addr + 1, "recovered_function", ""),
+                    (current, addr + 1, addr + 2, "helper", ""),
+                ],
+            )
             catalog._write_table(db, "catalog", sharc_catalog.CATALOG_COLUMNS, rows)
             catalog._write_table(
                 db,
@@ -286,11 +309,26 @@ def test_sharc_review_reads_the_canonical_database(tmp_path, monkeypatch):
     target = artifacts.FirmwareArtifacts(other, "sharc")
     output = current.review
     encoded_page = output.read_bytes()
-    assert b'<meta charset="utf-8">' in encoded_page[:1024]
+    assert b'<meta charset="utf-8"' in encoded_page[:1024]
     page = encoded_page.decode("utf-8")
     assert "SHARC ·" in page
     data = json.loads(page.split("const DATA = ", 1)[1].split(";\n", 1)[0])
     assert data["cpu"] == "sharc" and data["full_inventory"]
+    assert data["address_map_url"] == "review.addrmap.json"
+    symbol_map = json.loads(output.with_suffix(".addrmap.json").read_text())
+    assert symbol_map["review"] == {
+        "cpu": "sharc",
+        "file": output.name,
+        "html_sha256": hashlib.sha256(encoded_page).hexdigest(),
+        "entries": [0x10, 0x11],
+    }
+    assert symbol_map["entries"][0] == {
+        "cpu": "sharc",
+        "addr": 0x10,
+        "size": 1,
+        "name": "recovered_function",
+        "layer": "fw",
+    }
     assert data["rows"][0]["pair_url"] == f"../../{other}/dsp/review.html#r-0x40"
     assert data["rows"][0]["nb"] == [["0x11", "recovered_function", True, 2]]
     exported = catalog_page.read_tsv(str(current.review_tsv))
@@ -302,6 +340,10 @@ def test_sharc_review_reads_the_canonical_database(tmp_path, monkeypatch):
         href, _ = exported[0][link_field].split("#r-")
         assert (current.review_tsv.parent / unquote(href)).resolve() == page_path
         assert page_path.is_file()
+    with sqlite3.connect(current.database) as db:
+        db.execute("UPDATE meta SET value='unknown' WHERE key='image_sha256'")
+    assert fw.main(["review", "-i", image, "--core", "dsp"]) == 1
+    assert output.read_bytes() == encoded_page
 
 
 @pytest.mark.parametrize("with_peer", [False, True])

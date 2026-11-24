@@ -306,6 +306,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.profile-panel .catalog-link {
+  color: var(--action);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.profile-panel .catalog-link:hover,
+.profile-panel .catalog-link:focus-visible {
+  text-decoration-thickness: 2px;
+}
 .profile-panel .cf-row .mono {
   flex: 0 0 64px;
   text-align: right;
