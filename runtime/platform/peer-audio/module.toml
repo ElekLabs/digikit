@@ -1,0 +1,26 @@
+[module]
+id = "core/peer-audio"
+version = "0.1.0"
+name = "Peer audio"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Publishes PCM to the Syntakt peer at runtime and keeps a playing generation resident"
+ports = ["st-1.42"]
+requires = ["core/peer-image", "core/runtime", "core/card-guard"]
+conflicts = ["test/peer-sample"]
+
+[targets]
+"st-1.42" = "experimental"
+
+[[object]]
+path = "build/peer-audio.dko.json"
+sources = ["src/peer/entry.s", "src/peer/frame.c", "src/peer/end.s", "src/main/image.c"]
+place = "cf.expansion"
+
+[[object]]
+path = "build/peer-audio-main.dko.json"
+sources = ["Cargo.toml"]
+place = "cf.expansion"

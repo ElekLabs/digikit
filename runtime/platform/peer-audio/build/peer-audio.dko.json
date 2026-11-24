@@ -1,0 +1,241 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.peer_audio",
+   "symbol": "peer_audio_end",
+   "type": "cf.pc16"
+  },
+  {
+   "addend": 0,
+   "offset": 128,
+   "section": ".text.peer_audio",
+   "symbol": "peer_audio_frame",
+   "type": "cf.pc16"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_end",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_entry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 50,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_render",
+   "type": "cf.32"
+  },
+  {
+   "addend": 28,
+   "offset": 70,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 76,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 88,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 94,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 20,
+   "offset": 108,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 114,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 130,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": ".sec..text.load_word",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 140,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 156,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 16,
+   "offset": 172,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 184,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_entry",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 194,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 24,
+   "offset": 202,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 208,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_mailbox",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 214,
+   "section": ".text.dk_peer_image_extend",
+   "symbol": "peer_audio_layout",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "4000040040001070480000004000107c4000168e40000abe47fdf00047fdfc0010000600",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 36
+  },
+  {
+   "align": 4,
+   "hex": "4feffff048d7030341fa003a43fa000020099088e488227c47fdf00022d8538066fa227c47fdfc00223c000001004299538166fa4cd703034fef00104ef9400010704e712f2f00142f2f00142f2f00142f2f00142f2f00144eb94000168e4fef00144feffff048d70303487947fe00002f2f0018487947fdfc0048780600610000004fef00104cd703034fef00104e754fefffc8206f004048d77cfc226f003c2a6f00484aa80020662442a90004700142a9000842a9002442a9002842a9002c42a9003022bc44504101214000202a2900042c290008bc85676c2029001072012e290014246900182829001c2429000cb280650001084a876700010222007603266800105281b682662ab7c1660000eee788beb00800660000e40c8400000100620000da2141001442a800182144001c4280600eb7c16708b2a800146600008470fe23400020242800144a82675220027820e78826680018287008fc2e0c9e8bb88764027e202028001c260d246f00444281e1882f400030200206800000ffff48404240d6802c434bf6ba00be81660000c8d28b21410018b9c1660442a8001420280014b480660000f0bc85670000f42342002823680010002423450008600000e27601b6826668220453810c81000000df6228b5fc000080006220223c00008000928ab28465144a8a67162200e789b5f018046606beb01800670670ff6000ff422200448102810001000047f51800428147f3aa0036f11a345281b28466f6e788d5c421870800218a08046000ff0255824a8266c6e788beb0080066be4a8467bab8b0080466b4214100102347002c234400306000feda715d262f003028124c030800b1842600d6922f44002c2803b1842f440034282f002c4684c8af00344a846c0cd0809180263c7fffffffb18324c352816000fef623400028bc856600ff144cd77cfc4fef00384e75",
+   "kind": "text",
+   "name": ".text.peer_audio",
+   "size": 684
+  },
+  {
+   "align": 2,
+   "hex": "206f000420104e75",
+   "kind": "text",
+   "name": ".text.load_word",
+   "size": 8
+  },
+  {
+   "align": 2,
+   "hex": "4fefffe448d71c3c242f0024222f0028246f0020b282650000ca203c0000000092822a00048500000000ba81620000b4048000000000670000aa7603c6804a83660000a022390000000092b900000000b0816200008e26790000000097f900000000200b5880b480657828390000000098b90000000020045880b48065642f0a49f9000000004e94588fb0b9000000006650d7ca2f0b4e94588fb0b9000000006640d88a2f044e94588fb0b900000000663041f2280043f900000000ba83662e26b900000000204420b900000000207900000000287900000000d9c2248c4290d48320024cd71c3c4fef001c4e7549f1380011943800528360c2",
+   "kind": "text",
+   "name": ".text.dk_peer_image_extend",
+   "size": 250
+  }
+ ],
+ "source_sha256": "1943056e28f381075133141a95ce9e5df62f024ab21f6c35d0865e43340ab7a7",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..text.load_word",
+   "section": ".text.load_word",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_peer_image_extend",
+   "section": ".text.dk_peer_image_extend",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "load_word",
+   "section": ".text.load_word",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_audio_end",
+   "section": ".text.peer_audio",
+   "value": 684
+  },
+  {
+   "global": true,
+   "name": "peer_audio_entry",
+   "section": ".text.peer_audio",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_audio_frame",
+   "section": ".text.peer_audio",
+   "value": 144
+  },
+  {
+   "global": true,
+   "name": "peer_audio_layout",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_audio_mailbox",
+   "section": ".rodata",
+   "value": 32
+  },
+  {
+   "global": true,
+   "name": "peer_audio_render",
+   "section": ".text.peer_audio",
+   "value": 68
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "292",
+  "isa_check": "f8b11b12cbf3c0561fa9e91b9e2079343d921ed0cc3585a085133c5c34baf217",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

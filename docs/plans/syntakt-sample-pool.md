@@ -32,7 +32,13 @@ Phase 2 verified a 40 ms pool sample through the Syntakt 1.42 emulator's stereo 
 
 Start with the peer contract. Define how MAIN publishes a bounded PCM buffer, sends a trigger and parameters, and gets acknowledgment when the peer has retired a sample generation. Keep the file lease and card I/O on MAIN. The first checkpoint is one mono file published and triggered at runtime through this contract, with a safe replacement while a voice still references the previous sample.
 
+- [x] Verify runtime publication, triggering and replacement in the Syntakt emulator. See [the runtime publication finding](../findings/161-syntakt-live-peer-audio.md).
+- [ ] Bind a selected digital machine and its note event to the peer renderer, then admit the peer payload from a module package.
+- [ ] Verify the Syntakt Shot package and Workbench installation.
+
 Keep the `digikit/shot` module ID and `shot` machine ID. Share parameter and picker code where the machine contract permits. Keep the SHARC renderer for DT2/DN2 and add a Syntakt peer ColdFire renderer. Put firmware-facing code in the platform adapter. Reuse shared Rust file identity and lifecycle logic where its contract fits, with peer-specific memory and publication behind the adapter.
+
+Shot's shared sources use the SDK. Keep the target renderer in `src/dsp/` and declare support in the manifest. Keep stock addresses, machine hooks, mailbox layout and mixer routing in the platform adapter. Test lease ownership, bounds and retirement on the host. Use emulator runs for the firmware and audio seams.
 
 Extend Patchkit's per-device packing and runtime admission for the versioned peer payload. Add the Syntakt port to Shot once the payload can load. Derive Nx pack targets from the device registry and use the existing Workbench device library. Expose the required playback capability so an older Syntakt image gives a clear refusal. Verify that wrong-target and unsupported payloads are refused, then select Syntakt in Workbench, upload and verify Shot, enable it and trigger the uploaded sample. Run the existing DT2 and DN2 Shot checks for any shared code that changes. Scope additional Shot playback and page features against the peer contract and record their support in the module target status.
 

@@ -1,0 +1,20 @@
+[module]
+id = "test/peer-audio"
+version = "0.1.0"
+name = "Peer audio proof"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Drives the peer audio adapter in the stock UI task"
+ports = ["st-1.42"]
+requires = ["core/peer-audio"]
+
+[targets]
+"st-1.42" = "experimental"
+
+[[object]]
+path = "build/peer-audio-proof.dko.json"
+sources = ["src/command.c"]
+place = "cf.expansion"

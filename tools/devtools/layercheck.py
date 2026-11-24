@@ -85,6 +85,8 @@ FOLDER_ROLES = {
     "image-modules/points": "adapter",
     "tests/fixtures/modules/dsp-stereo-proof": "adapter",
     "tests/fixtures/modules/file-catalog-proof": "adapter",
+    "tests/fixtures/modules/peer-audio": "adapter",
+    "tests/fixtures/modules/peer-sample": "adapter",
     "tests/fixtures/modules/storage-fault-proof": "adapter",
 }
 # Content modules that patch the firmware themselves (they have [[op]] and anchor externs by design: patchkit's own
@@ -160,7 +162,7 @@ def classify(root: Path, m: Module) -> str:
     r = rel(root, m.dir)
     if r.split("/", 1)[0] in CORE_ROOTS:
         return "core"
-    # The three private firmware proofs keep their manifests (category core, role adapter) in the fixtures root.
+    # Private firmware proofs keep their manifests (category core, role adapter) in the fixtures root.
     if r.startswith("tests/fixtures/modules/") and m.mod.get("category") == "core":
         return "core"
     return "content"

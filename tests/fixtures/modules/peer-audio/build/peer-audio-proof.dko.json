@@ -1,0 +1,118 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 14,
+   "section": ".text.peer_audio_proof",
+   "symbol": ".sec..bss.peer_audio_proof_result",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text.peer_audio_proof",
+   "symbol": ".sec..bss.peer_audio_proof_result",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 92,
+   "section": ".text.peer_audio_proof",
+   "symbol": ".sec..bss.peer_audio_proof_result",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 118,
+   "section": ".text.peer_audio_proof",
+   "symbol": ".sec..bss.peer_audio_proof_result",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text.peer_audio_proof",
+   "symbol": "dk_peer_audio_load",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 84,
+   "section": ".text.peer_audio_proof",
+   "symbol": "dk_peer_audio_trigger",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 112,
+   "section": ".text.peer_audio_proof",
+   "symbol": "dk_peer_audio_status",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 2,
+   "hex": "2f0272fb202f000c206f000823c1000000004a80672673907450b48166227202b28064184a3008ff6612486800014eb900000000588f23c000000000241f4e757454b481661c53804a8066f04878010042a74eb900000000508f23c00000000060da7453b48166d453804a8066ce4eb90000000023c00000000060c0",
+   "kind": "text",
+   "name": ".text.peer_audio_proof",
+   "size": 124
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.peer_audio_proof_result",
+   "size": 4
+  }
+ ],
+ "source_sha256": "ba061daa71b7e3146d06e191b7594b46e5800ff45def4e97ba0c5aab279ffc05",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.peer_audio_proof_result",
+   "section": ".bss.peer_audio_proof_result",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_peer_audio_load",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_peer_audio_status",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_peer_audio_trigger",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_audio_proof",
+   "section": ".text.peer_audio_proof",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_audio_proof_result",
+   "section": ".bss.peer_audio_proof_result",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "43",
+  "isa_check": "be0d51f44be629ad9378432fc5ed9f9fd773d0af296ebfa9f150c2f52c22e37f",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

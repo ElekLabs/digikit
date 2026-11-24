@@ -1,0 +1,19 @@
+[package]
+name = "dk-peer-audio"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+path = "src/main/lib.rs"
+
+[workspace]
+
+[dependencies]
+dkrt-sdk = { path = "../../core/sdk" }
+
+[profile.release]
+opt-level = "s"
+panic = "abort"
+codegen-units = 1
