@@ -4,11 +4,12 @@
 #include <stdint.h>
 
 enum {
-    PEER_AUDIO_V1 = 0x44504101,
+    PEER_AUDIO_V2 = 0x44504102,
     PEER_AUDIO_BANKS = 2,
     PEER_AUDIO_BANK_FRAMES = 32768,
     PEER_AUDIO_CHUNK_FRAMES = 224,
     PEER_AUDIO_BLOCK_FRAMES = 32,
+    PEER_AUDIO_TRACKS = 8,
     PEER_AUDIO_GAIN_ONE = 256,
 };
 
@@ -16,6 +17,7 @@ enum PeerAudioCommand {
     PEER_AUDIO_WRITE = 1,
     PEER_AUDIO_PUBLISH,
     PEER_AUDIO_TRIGGER,
+    PEER_AUDIO_SELECT_TRACK,
 };
 
 enum PeerAudioReply {
@@ -41,8 +43,10 @@ typedef struct PeerAudioWire {
     uint32_t published_generation;
     uint32_t frames;
     int16_t pcm[PEER_AUDIO_CHUNK_FRAMES];
+    uint32_t selected_track;
+    uint32_t note_starts;
 } PeerAudioWire;
 
-_Static_assert(sizeof(PeerAudioWire) == 500, "peer audio mailbox fits in window 0x600..0x7ff");
+_Static_assert(sizeof(PeerAudioWire) == 508, "peer audio mailbox fits in window 0x600..0x7ff");
 
 #endif

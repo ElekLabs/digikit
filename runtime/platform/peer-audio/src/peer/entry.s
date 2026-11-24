@@ -47,12 +47,14 @@ peer_audio_render:
     lea     20(%sp),%sp
     lea     -16(%sp),%sp
     movem.l %d0-%d1/%a0-%a1,(%sp)
+    /* The stock render call already has its unmuted note mask as its third argument. */
+    move.l  28(%sp),-(%sp)
     pea     PCM_BANKS
-    move.l  24(%sp),-(%sp)
+    move.l  28(%sp),-(%sp)
     pea     RECEIVER_STATE
     pea     PEER_MAILBOX
     bsr.w   peer_audio_frame
-    lea     16(%sp),%sp
+    lea     20(%sp),%sp
     movem.l (%sp),%d0-%d1/%a0-%a1
     lea     16(%sp),%sp
     rts

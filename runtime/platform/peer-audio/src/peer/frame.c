@@ -5,16 +5,28 @@ static inline __attribute__((always_inline)) int32_t
 command(volatile PeerAudioWire *wire, PeerAudioState *state,
         int16_t pcm[PEER_AUDIO_BANKS][PEER_AUDIO_BANK_FRAMES])
 {
+    uint32_t op = wire->command;
+    uint32_t count = wire->count;
+    if (op == PEER_AUDIO_SELECT_TRACK) {
+        if (count > PEER_AUDIO_TRACKS)
+            return PEER_AUDIO_INVALID;
+        if (state->selected_track != count) {
+            state->selected_track = count;
+            state->playing = 0;
+            wire->selected_track = count;
+        }
+        return PEER_AUDIO_OK;
+    }
     uint32_t bank = wire->bank;
     uint32_t generation = wire->generation;
     uint32_t offset = wire->offset;
-    uint32_t count = wire->count;
-    uint32_t op = wire->command;
     if (bank >= PEER_AUDIO_BANKS || generation == 0)
         return PEER_AUDIO_INVALID;
     PeerAudioBank *slot = &state->banks[bank];
     uint32_t ref = bank + 1;
     if (op == PEER_AUDIO_TRIGGER) {
+        if (state->selected_track)
+            return PEER_AUDIO_IN_USE;
         if (ref != state->published || slot->generation != generation ||
             count > PEER_AUDIO_GAIN_ONE)
             return PEER_AUDIO_INVALID;
@@ -52,7 +64,7 @@ command(volatile PeerAudioWire *wire, PeerAudioState *state,
 __attribute__((section(".text.peer_audio")))
 #endif
 void peer_audio_frame(volatile PeerAudioWire *wire, PeerAudioState *state, int32_t *output,
-                      int16_t pcm[PEER_AUDIO_BANKS][PEER_AUDIO_BANK_FRAMES])
+                      int16_t pcm[PEER_AUDIO_BANKS][PEER_AUDIO_BANK_FRAMES], uint32_t notes)
 {
     if (!state->ready) {
         wire->request = 0;
@@ -61,7 +73,9 @@ void peer_audio_frame(volatile PeerAudioWire *wire, PeerAudioState *state, int32
         wire->playing = 0;
         wire->published_generation = 0;
         wire->frames = 0;
-        wire->version = PEER_AUDIO_V1;
+        wire->selected_track = 0;
+        wire->note_starts = 0;
+        wire->version = PEER_AUDIO_V2;
         state->ready = 1;
     }
     uint32_t request = wire->request;
@@ -69,6 +83,20 @@ void peer_audio_frame(volatile PeerAudioWire *wire, PeerAudioState *state, int32
     if (request != response)
         wire->result = command(wire, state, pcm);
 
+    uint32_t previous_playing = state->playing;
+    uint32_t selected = state->selected_track;
+    if (selected) {
+        uint32_t lane = selected - 1;
+        output += lane * PEER_AUDIO_BLOCK_FRAMES;
+        for (uint32_t i = 0; i < PEER_AUDIO_BLOCK_FRAMES; ++i)
+            output[i] = 0;
+        if (state->published && (notes & (1u << lane))) {
+            state->playing = state->published;
+            state->cursor = 0;
+            state->gain = PEER_AUDIO_GAIN_ONE;
+            wire->note_starts++;
+        }
+    }
     uint32_t playing = state->playing;
     if (playing) {
         uint32_t cursor = state->cursor;
@@ -88,7 +116,7 @@ void peer_audio_frame(volatile PeerAudioWire *wire, PeerAudioState *state, int32
         if (state->cursor == limit)
             state->playing = 0;
     }
-    if (playing != state->playing || request != response)
+    if (previous_playing != state->playing || request != response)
         wire->playing = state->playing;
     if (request != response) {
         wire->published = state->published;

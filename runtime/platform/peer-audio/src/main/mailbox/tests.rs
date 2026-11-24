@@ -16,6 +16,8 @@ fn wire() -> Wire {
         published_generation: 0,
         frames: 0,
         pcm: [0; CHUNK_FRAMES],
+        selected_track: 0,
+        note_starts: 0,
     }
 }
 
@@ -69,4 +71,23 @@ fn a_stale_handle_cannot_start_the_replacement() {
     assert_eq!(wire.request, 0);
     assert_eq!(mailbox.trigger(3, 256), Ok(()));
     assert_eq!((wire.request, wire.bank, wire.generation), (1, 1, 3));
+}
+
+#[test]
+fn track_selection_is_bounded_and_manual_triggers_are_excluded() {
+    let mut wire = wire();
+    let mailbox = Mailbox(&raw mut wire);
+    assert_eq!(mailbox.select_track(TRACKS + 1), Err(E_FORMAT));
+    assert_eq!(wire.request, 0);
+    assert_eq!(mailbox.select_track(2), Ok(()));
+    assert_eq!(wire.command, Command::SelectTrack as u32);
+    assert_eq!(wire.count, 2);
+    assert_eq!(mailbox.select_track(0), Err(E_BUSY));
+    unsafe {
+        write_volatile(addr_of_mut!(wire.selected_track), 2);
+        write_volatile(addr_of_mut!(wire.response), wire.request);
+    }
+    assert_eq!(mailbox.trigger(0, 256), Err(E_BUSY));
+    assert_eq!(mailbox.select_track(0), Ok(()));
+    assert_eq!(wire.count, 0);
 }

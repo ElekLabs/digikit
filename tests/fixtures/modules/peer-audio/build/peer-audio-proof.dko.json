@@ -11,21 +11,21 @@
   },
   {
    "addend": 0,
-   "offset": 56,
+   "offset": 54,
    "section": ".text.peer_audio_proof",
    "symbol": ".sec..bss.peer_audio_proof_result",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 92,
+   "offset": 90,
    "section": ".text.peer_audio_proof",
    "symbol": ".sec..bss.peer_audio_proof_result",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 118,
+   "offset": 144,
    "section": ".text.peer_audio_proof",
    "symbol": ".sec..bss.peer_audio_proof_result",
    "type": "cf.32"
@@ -39,14 +39,21 @@
   },
   {
    "addend": 0,
-   "offset": 84,
+   "offset": 82,
    "section": ".text.peer_audio_proof",
    "symbol": "dk_peer_audio_trigger",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 112,
+   "offset": 118,
+   "section": ".text.peer_audio_proof",
+   "symbol": "dk_peer_audio_select_track",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
    "section": ".text.peer_audio_proof",
    "symbol": "dk_peer_audio_status",
    "type": "cf.32"
@@ -55,10 +62,10 @@
  "sections": [
   {
    "align": 2,
-   "hex": "2f0272fb202f000c206f000823c1000000004a80672673907450b48166227202b28064184a3008ff6612486800014eb900000000588f23c000000000241f4e757454b481661c53804a8066f04878010042a74eb900000000508f23c00000000060da7453b48166d453804a8066ce4eb90000000023c00000000060c0",
+   "hex": "2f0272fb202f000c206f000823c1000000004a80674873907450b48166207202b280643a4a3008ff6634486800014eb90000000023c000000000588f60207454b481661e53804a8066144878010042a74eb900000000508f23c000000000241f4e757441b481661455804a8066f071a800012f004eb90000000060b87453b48166dc53804a8066d64eb90000000023c00000000060c8",
    "kind": "text",
    "name": ".text.peer_audio_proof",
-   "size": 124
+   "size": 150
   },
   {
    "align": 2,
@@ -68,7 +75,7 @@
    "size": 4
   }
  ],
- "source_sha256": "ba061daa71b7e3146d06e191b7594b46e5800ff45def4e97ba0c5aab279ffc05",
+ "source_sha256": "93d71ba11c45bc4117dae82466221ecffaf38d1ee81c44c1c0ce733902439f8a",
  "symbols": [
   {
    "global": false,
@@ -79,6 +86,12 @@
   {
    "global": true,
    "name": "dk_peer_audio_load",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_peer_audio_select_track",
    "section": null,
    "value": 0
   },
@@ -111,8 +124,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "43",
-  "isa_check": "be0d51f44be629ad9378432fc5ed9f9fd773d0af296ebfa9f150c2f52c22e37f",
+  "instructions_redecoded": "53",
+  "isa_check": "774b7dc995eb68ce81f4b70499caf684466f0c80cf7428355526c0fb18eae356",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

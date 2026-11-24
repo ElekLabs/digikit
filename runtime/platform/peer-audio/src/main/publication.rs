@@ -155,6 +155,18 @@ pub unsafe extern "C" fn dk_peer_audio_trigger(generation: u32, gain: u32) -> i3
         .unwrap_or(0)
 }
 
+/// Bind native notes on a digital track to the peer voice. Zero restores the stock output.
+#[no_mangle]
+pub unsafe extern "C" fn dk_peer_audio_select_track(track: u32) -> i32 {
+    if (*(&raw const PUBLISHER)).pending.is_some() {
+        return E_BUSY;
+    }
+    Mailbox::ready()
+        .and_then(|mailbox| mailbox.select_track(track))
+        .err()
+        .unwrap_or(0)
+}
+
 /// Positive generation on completion, zero before the first load, or a runtime error.
 #[no_mangle]
 pub unsafe extern "C" fn dk_peer_audio_status() -> i32 {

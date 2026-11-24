@@ -2,6 +2,8 @@
 
 An opt-in Syntakt 1.42 adapter. The [finding](../../../docs/findings/161-syntakt-live-peer-audio.md) describes the versioned mailbox, DDR reservation and remaining machine integration. The firmware entry, mailbox and stock program operands live here. A content module uses the eventual SDK machine and sample contracts.
 
+The adapter can bind the published sample to one digital track. The peer consumes that track's stock note events and replaces its contribution to the mixer. Releasing the assignment restores the stock signal. The [normal note proof](../../../docs/findings/162-syntakt-peer-note-dispatch.md) uses a test fixture for the assignment and DIN MIDI for the notes.
+
 Run the host checks from the repository root.
 
 ```sh

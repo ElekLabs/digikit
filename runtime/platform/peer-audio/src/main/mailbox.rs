@@ -1,8 +1,9 @@
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_sdk::{E_BUSY, E_CONTRACT, E_FORMAT, E_NOT_FOUND};
 
-const VERSION: u32 = 0x4450_4101;
+const VERSION: u32 = 0x4450_4102;
 const GAIN_ONE: u32 = 256;
+const TRACKS: u32 = 8;
 pub const BANK_FRAMES: usize = 32_768;
 pub const CHUNK_FRAMES: usize = 224;
 
@@ -10,6 +11,10 @@ pub const CHUNK_FRAMES: usize = 224;
 struct Bank(u32);
 
 impl Bank {
+    fn index(self) -> u32 {
+        self.0 - 1
+    }
+
     fn spare(published: u32, playing: u32) -> Option<Self> {
         [1, 2]
             .into_iter()
@@ -23,6 +28,7 @@ enum Command {
     Write = 1,
     Publish = 2,
     Trigger = 3,
+    SelectTrack = 4,
 }
 
 /// Big-endian, shared with the peer's `wire.h`. Each CPU publishes its sequence word last.
@@ -42,9 +48,11 @@ struct Wire {
     published_generation: u32,
     frames: u32,
     pcm: [i16; CHUNK_FRAMES],
+    selected_track: u32,
+    note_starts: u32,
 }
 
-const _: () = assert!(core::mem::size_of::<Wire>() == 500);
+const _: () = assert!(core::mem::size_of::<Wire>() == 508);
 
 extern "C" {
     static peer_audio_mailbox: *mut Wire;
@@ -95,12 +103,12 @@ impl Mailbox {
         unsafe { read_volatile(addr_of!((*self.0).published_generation)) }
     }
 
-    fn send(&self, cmd: Command, bank: Bank, generation: u32, offset: usize, count: usize) {
+    fn send(&self, cmd: Command, bank: u32, generation: u32, offset: usize, count: usize) {
         let wire = self.0;
         unsafe {
             let seq = read_volatile(addr_of!((*wire).request)).wrapping_add(1);
             write_volatile(addr_of_mut!((*wire).command), cmd as u32);
-            write_volatile(addr_of_mut!((*wire).bank), bank.0 - 1);
+            write_volatile(addr_of_mut!((*wire).bank), bank);
             write_volatile(addr_of_mut!((*wire).generation), generation);
             write_volatile(addr_of_mut!((*wire).offset), offset as u32);
             write_volatile(addr_of_mut!((*wire).count), count as u32);
@@ -116,15 +124,18 @@ impl Mailbox {
             let value = i16::from_be_bytes([sample[0], sample[1]]);
             unsafe { write_volatile(dest.add(i), value) };
         }
-        self.send(Command::Write, bank.0, generation, start, count);
+        self.send(Command::Write, bank.0.index(), generation, start, count);
     }
 
     pub fn publish(&self, bank: &FreeBank, generation: u32, frames: usize) {
-        self.send(Command::Publish, bank.0, generation, 0, frames);
+        self.send(Command::Publish, bank.0.index(), generation, 0, frames);
     }
 
     pub fn trigger(&self, generation: u32, gain: u32) -> Result<(), i32> {
         if !self.idle() {
+            return Err(E_BUSY);
+        }
+        if unsafe { read_volatile(addr_of!((*self.0).selected_track)) } != 0 {
             return Err(E_BUSY);
         }
         let current = self.generation();
@@ -135,7 +146,24 @@ impl Mailbox {
         if gain > GAIN_ONE {
             return Err(E_FORMAT);
         }
-        self.send(Command::Trigger, Bank(bank), current, 0, gain as usize);
+        self.send(
+            Command::Trigger,
+            Bank(bank).index(),
+            current,
+            0,
+            gain as usize,
+        );
+        Ok(())
+    }
+
+    pub fn select_track(&self, track: u32) -> Result<(), i32> {
+        if track > TRACKS {
+            return Err(E_FORMAT);
+        }
+        if !self.idle() {
+            return Err(E_BUSY);
+        }
+        self.send(Command::SelectTrack, 0, 0, 0, track as usize);
         Ok(())
     }
 }
