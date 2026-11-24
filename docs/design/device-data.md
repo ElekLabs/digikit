@@ -10,7 +10,7 @@ only shrinks (`node tools/nx/device-literals.mjs --write` after a removal).
 
 What counts as a literal: a device name word (`digitakt`, `syntakt`, bounded by non-alphanumerics) and an id of three or more
 characters (`dt2`) anywhere. An id of two characters (`st`) is an ordinary word, so it counts only at the start of a string token:
-as the whole string (`"st"`) or followed by `-`, `_` or `${` (`"st-1.42"`, `` `st-${v}` ``). Not counted: `devices/` and `docs/`, a
+as the whole string (`"st"`) or followed by `-`, `_` or `${` (`"st-1.42"`, `` `st-${v}` ``). Not counted: `devices/` and `docs/`, the generated files under `ports/bindings/` (`patchkit gen` writes them from the port files), a
 path that has a token equal to an id or name word (`foo_dt2.py`, `dt2/`), a file with the comment line `device-literals: allow` in
 its first 5 lines, and in a `.toml` file the table headers and the values of `ports =` and `devices =`.
 
