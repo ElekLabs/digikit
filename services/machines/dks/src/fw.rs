@@ -118,7 +118,7 @@ pub unsafe extern "C" fn dks_page_turn(view: *const u8, ev: *const u8) -> u32 {
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_param_get(track: u32, word: u32) -> i32 {
     crate::DK_SVC_OWNER
-        .with(|m| m.clicks().param_get(&ImportCore, &DkFw, track, word))
+        .with(|m| m.param_get(&ImportCore, &DkFw, track, word))
         .unwrap_or(paramapi::E_STATE)
 }
 
@@ -126,6 +126,6 @@ pub unsafe extern "C" fn dk_param_get(track: u32, word: u32) -> i32 {
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_param_set(track: u32, word: u32, raw: i32) -> i32 {
     crate::DK_SVC_OWNER
-        .with(|m| m.clicks().param_set(&ImportCore, &DkFw, track, word, raw))
+        .with(|m| m.param_set(&ImportCore, &DkFw, track, word, raw))
         .unwrap_or(paramapi::E_STATE)
 }

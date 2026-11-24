@@ -72,17 +72,18 @@ const STOCK_FILTER_TYPES: u32 = 6;
 /// Import `dk_debug_setup`: set the machine type (`op` 1) or the filter type (`op` 2) of a track through the firmware's own kit commit. `E_RANGE` for an op, a
 /// track or a type no chooser offers, else what `Platform::set_track_type` reports. Run it in the UI task.
 pub(crate) unsafe extern "C" fn debug_setup(op: u32, track: u32, ty: u32) -> i32 {
-    if !setup_args_ok(&platform::profile(), &|ty| unsafe { hooks::machine_type_loaded(ty) }, op, track, ty) {
+    if !setup_args_ok(&platform::profile(), op, track, ty) {
         return E_RANGE;
     }
     crate::platform::PLATFORM.set_track_type(op, track, ty)
 }
 
-/// A machine type is one of the device's stock types (`0 .. stock_machine_types`) or a run-time type of a loaded module (`loaded`): the built-in rows between them,
-/// the gap rows and the run-time rows nobody loaded are offered by no chooser. A filter type is a stock one.
-fn setup_args_ok(p: &dkrt_abi::platform::DeviceProfile, loaded: &dyn Fn(u32) -> bool, op: u32, track: u32, ty: u32) -> bool {
+/// A machine type is one of the device's stock types (`0 .. stock_machine_types`) or a run-time type of the profile: the built-in rows between them and the gap rows are
+/// offered by no chooser. Whether a module has loaded a run-time type is the host's check (the machines section of the MODULES reply, before SETUP): a row nobody loaded plays as
+/// type 0. A filter type is a stock one.
+fn setup_args_ok(p: &dkrt_abi::platform::DeviceProfile, op: u32, track: u32, ty: u32) -> bool {
     let ty_ok = match op {
-        1 => ty < p.stock_machine_types || (p.is_dyn_type(ty) && loaded(ty)),
+        1 => ty < p.stock_machine_types || p.is_dyn_type(ty),
         2 => ty < STOCK_FILTER_TYPES,
         _ => false,
     };
@@ -95,21 +96,20 @@ mod setup_tests {
     use dkrt_abi::profiles;
 
     #[test]
-    fn setup_takes_stock_and_loaded_run_time_machine_types_and_stock_filter_types() {
+    fn setup_takes_stock_and_run_time_machine_types_and_stock_filter_types() {
         for p in [profiles::DT2, profiles::DN2] {
-            let loaded = |t: u32| t == p.dyn_type_first + 1;
             let first_dyn = p.dyn_type_first;
-            assert!(setup_args_ok(&p, &loaded, 1, 0, 0));
-            assert!(setup_args_ok(&p, &loaded, 1, 15, p.stock_machine_types - 1), "the last stock type");
-            assert!(!setup_args_ok(&p, &loaded, 1, 0, p.stock_machine_types), "the first row after the stock types is built-in or a gap");
-            assert!(!setup_args_ok(&p, &loaded, 1, 0, first_dyn - 1), "a gap row below the run-time range");
-            assert!(setup_args_ok(&p, &loaded, 1, 0, first_dyn + 1), "a loaded run-time row");
-            assert!(!setup_args_ok(&p, &loaded, 1, 0, first_dyn), "a run-time row nobody loaded");
-            assert!(!setup_args_ok(&p, &|_| true, 1, 0, first_dyn + p.dyn_types), "past the run-time range");
-            assert!(setup_args_ok(&p, &loaded, 2, 1, 5));
-            assert!(!setup_args_ok(&p, &loaded, 2, 1, 6), "a filter type above the stock ones has no row");
-            assert!(!setup_args_ok(&p, &loaded, 1, 16, 0), "track 16 does not exist");
-            assert!(!setup_args_ok(&p, &loaded, 0, 0, 0) && !setup_args_ok(&p, &loaded, 3, 0, 0), "op is 1 or 2");
+            assert!(setup_args_ok(&p, 1, 0, 0));
+            assert!(setup_args_ok(&p, 1, 15, p.stock_machine_types - 1), "the last stock type");
+            assert!(!setup_args_ok(&p, 1, 0, p.stock_machine_types), "the first row after the stock types is built-in or a gap");
+            assert!(!setup_args_ok(&p, 1, 0, first_dyn - 1), "a gap row below the run-time range");
+            assert!(setup_args_ok(&p, 1, 0, first_dyn), "the first run-time type: whether a module has it is the host's check");
+            assert!(setup_args_ok(&p, 1, 0, first_dyn + p.dyn_types - 1), "the last run-time type");
+            assert!(!setup_args_ok(&p, 1, 0, first_dyn + p.dyn_types), "past the run-time range");
+            assert!(setup_args_ok(&p, 2, 1, 5));
+            assert!(!setup_args_ok(&p, 2, 1, 6), "a filter type above the stock ones has no row");
+            assert!(!setup_args_ok(&p, 1, 16, 0), "track 16 does not exist");
+            assert!(!setup_args_ok(&p, 0, 0, 0) && !setup_args_ok(&p, 3, 0, 0), "op is 1 or 2");
         }
         assert_eq!((profiles::DT2.stock_machine_types, profiles::DN2.stock_machine_types), (7, 5));
     }

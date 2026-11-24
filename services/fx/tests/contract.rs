@@ -27,7 +27,7 @@ mod stubs;
 // the service file's source: its `service!` call is the one place that lists the parts
 #[path = "../dks/src/lib.rs"]
 pub mod file;
-pub use file::{builder, rt, DK_SVC_OWNER};
+pub use file::{builder, DK_SVC_OWNER};
 
 /// The parts the file adopts, read from the row its `service!` call declares.
 struct FxRecipe;

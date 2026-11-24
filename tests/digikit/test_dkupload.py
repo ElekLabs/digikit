@@ -206,22 +206,25 @@ def test_modules_pages_by_start_index_and_decodes_the_records():
     from tools.firmware.build import encode_8in7
 
     def record(index: int, name: str, types: list[int], faults: int, off: int) -> bytes:
+        # the fixed part ends at dsp_len; then `u8 n_sections` and the machines section (five words: rows, faults, nt | guard_off << 8, types 0-3, types 4-7)
+        packed = [
+            sum(t << (8 * i) for i, t in enumerate(types[k : k + 4])) for k in (0, 4)
+        ]
+        words = [
+            1 << index if off else 0,
+            faults,
+            len(types) | (0x100 if faults >= 8 else 0),
+            *packed,
+        ]
         return (
             bytes([index])
             + name.encode().ljust(32, b"\0")
             + struct.pack(">I", 0x010203)
             + struct.pack(">II", 0x000700, 0)
-            + struct.pack(
-                ">IIIII",
-                0x1000 + index,
-                0x40,
-                off,
-                0x100 if off else 0,
-                1 << index if off else 0,
-            )
-            + bytes([len(types), *types])
-            + struct.pack(">I", faults)
-            + bytes([1 if faults >= 8 else 0])
+            + struct.pack(">IIII", 0x1000 + index, 0x40, off, 0x100 if off else 0)
+            + bytes([1])
+            + struct.pack(">IB", D.modules_reply.service_hash("machines"), len(words))
+            + struct.pack(">5I", *words)
         )
 
     recs = [record(1, "a/one", [16], 0, 0x40), record(3, "b/two", [17, 18], 8, 0)]

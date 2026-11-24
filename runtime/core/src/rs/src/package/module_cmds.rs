@@ -7,29 +7,74 @@ use dkrt_sdk::proto::*;
 use dkrt_sdk::OK;
 use crate::package::resident::transport::{rbody, reply};
 
-/// Does a loaded module have machine type `ty` (a run-time type some module owns)? The machines service answers per module (`module_info`, the same export the
-/// MODULES reply reads). A row nobody loaded is a gap row: it plays as type 0.
-pub(crate) fn machine_type_loaded(ty: u32) -> bool {
-    let s = crate::package::resident::state::st();
-    let mut i = 0;
-    while i < dkrt_abi::MAX_MODULES {
-        if s.modules[i].used != 0 {
-            if let Some(mm) = unsafe { crate::package::handlers::exports::module_info(i as u8 + 1) } {
-                if mm.types[..(mm.nt as usize).min(8)].iter().any(|t| *t as u32 == ty) {
-                    return true;
-                }
-            }
+/// The sections of module record `owner` (a record index + 1) in a MODULES reply, into `out`: `u8 n_sections`, then per section `u32 service name hash, u8 n, n words` (big
+/// endian), in the table's order. A service that has no word for the record gives no section. The core reads no meaning into the words. The length written, or `None` when the
+/// sections do not fit `out` (the caller ends the page before the record).
+pub(crate) unsafe fn put_sections(table: &dkrt_abi::service::ServiceTable, owner: u8, out: &mut [u8]) -> Option<usize> {
+    let mut at = 1usize;
+    let mut n = 0u8;
+    let mut fits = !out.is_empty();
+    table.describe(owner, |name, words| {
+        let end = at + 5 + 4 * words.len();
+        if !fits || end > out.len() || n == u8::MAX {
+            fits = false;
+            return;
         }
-        i += 1;
+        out[at..at + 4].copy_from_slice(&name.to_be_bytes());
+        out[at + 4] = words.len() as u8;
+        let mut k = 0;
+        while k < words.len() {
+            out[at + 5 + 4 * k..at + 9 + 4 * k].copy_from_slice(&words[k].to_be_bytes());
+            k += 1;
+        }
+        at = end;
+        n += 1;
+    });
+    if !fits {
+        return None;
     }
-    false
+    out[0] = n;
+    Some(at)
+}
+
+/// The fixed part of a MODULES record: `u8 index` to `u32 dsp_len`.
+pub(crate) struct Fixed {
+    pub(crate) index: u8,
+    pub(crate) name: [u8; 32],
+    pub(crate) version: u32,
+    /// The runtime version the module needs.
+    pub(crate) needs: u32,
+    /// The module's Workbench instance token (0: it has no descriptor).
+    pub(crate) token: u32,
+    pub(crate) cf_base: u32,
+    pub(crate) cf_size: u32,
+    pub(crate) dsp_off: u32,
+    pub(crate) dsp_len: u32,
+}
+
+/// One record of the MODULES reply into `out`: the fixed part (61 bytes) and the sections of module record `fixed.index` (`put_sections`). The length written, or `None` when it does
+/// not fit `out`.
+pub(crate) unsafe fn put_record(table: &dkrt_abi::service::ServiceTable, fixed: &Fixed, out: &mut [u8]) -> Option<usize> {
+    if out.len() <= RECORD_FIXED {
+        return None;
+    }
+    let sections = put_sections(table, fixed.index + 1, &mut out[RECORD_FIXED..])?;
+    out[0] = fixed.index;
+    out[1..33].copy_from_slice(&fixed.name);
+    let words = [fixed.version, fixed.needs, fixed.token, fixed.cf_base, fixed.cf_size, fixed.dsp_off, fixed.dsp_len];
+    let mut k = 0;
+    while k < words.len() {
+        out[33 + 4 * k..37 + 4 * k].copy_from_slice(&words[k].to_be_bytes());
+        k += 1;
+    }
+    Some(RECORD_FIXED + sections)
 }
 
 /// MODULES: the loaded modules and what they hold. Body: `u8 start` (a module record index). Reply: `u32 arena_free, arena_largest, dsp_free,
 /// dsp_largest`, `u8 total` (loaded modules), `u8 n` (records in this reply), then per record `u8 index`, `name[32]`, `u32 version`, 8 bytes (`u32` the runtime
-/// version the module needs, then its Workbench instance token, 0 if it has no descriptor), `u32 cf_base, cf_size, dsp_off, dsp_len, rows` (voice rows as a mask), `u8 n_types` and that many machine
-/// type bytes (at most 8: the machine rows of the module, then its voice rows' types), `u32 faults` (the guard's count for those types), `u8 flags` (bit 0:
-/// the guard switched one of them off). A reply holds the records from `start` on that fit; the host asks again from the last index + 1 until it has `total`.
+/// version the module needs, then its Workbench instance token, 0 if it has no descriptor), `u32 cf_base, cf_size, dsp_off, dsp_len` (the fixed part ends here, 61 bytes), `u8 n_sections`
+/// and per section `u32 service name hash, u8 n, n words` (`put_sections`: what the loaded services hold for the record, by their `Describe` part; a service with nothing gives
+/// no section; the core reads no meaning into the words). A reply holds the records from `start` on that fit; the host asks again from the last index + 1 until it has `total`.
 pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 {
     if blen < 1 {
         return reply(CMD_MODULES, seq, E_MSG, 0);
@@ -52,6 +97,8 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
         i += 1;
     }
     *rb.add(16) = total;
+    let room = dkrt_abi::command::REPLY_BODY_MAX - 1;
+    let table = crate::package::handlers::services();
     let mut at = 18usize;
     let mut n = 0u8;
     let d = crate::package::dsp::ds();
@@ -62,38 +109,31 @@ pub(crate) unsafe fn cmd_modules(seq: u32, body: *const u8, blen: usize) -> i32 
             i += 1;
             continue;
         }
-        // the machines of the module (the machines service: voice rows, types, guard counts; none without the service file)
-        let mm = crate::package::handlers::exports::module_info(i as u8 + 1).unwrap_or_default();
-        let nt = (mm.nt as usize).min(8);
-        if at + 71 + nt > dkrt_abi::command::REPLY_BODY_MAX - 1 {
+        let fixed = Fixed {
+            index: i as u8,
+            name: m.name,
+            version: m.version,
+            needs: (*crate::package::resident::state::module_runtime())[i],
+            token: crate::package::module_ui::instance(i),
+            cf_base: m.base,
+            cf_size: m.size,
+            dsp_off: d.mod_off[i],
+            dsp_len: d.mod_len[i],
+        };
+        // a record whose sections do not fit ends the page
+        let Some(len) = put_record(&table, &fixed, core::slice::from_raw_parts_mut(rb.add(at), room.saturating_sub(at))) else {
             break;
-        }
-        *rb.add(at) = i as u8;
-        dkrt_abi::mem::copy(rb.add(at + 1), m.name.as_ptr(), 32);
-        wr32(rb.add(at + 33), m.version);
-        // the version of the runtime the module needs, then its Workbench instance token
-        wr32(rb.add(at + 37), (*crate::package::resident::state::module_runtime())[i]);
-        wr32(rb.add(at + 41), crate::package::module_ui::instance(i));
-        wr32(rb.add(at + 45), m.base);
-        wr32(rb.add(at + 49), m.size);
-        wr32(rb.add(at + 53), d.mod_off[i]);
-        wr32(rb.add(at + 57), d.mod_len[i]);
-        wr32(rb.add(at + 61), mm.rows);
-        *rb.add(at + 65) = nt as u8;
-        let mut j = 0;
-        while j < nt {
-            *rb.add(at + 66 + j) = mm.types[j];
-            j += 1;
-        }
-        wr32(rb.add(at + 66 + nt), mm.faults);
-        *rb.add(at + 70 + nt) = (mm.guard_off != 0) as u8;
-        at += 71 + nt;
+        };
+        at += len;
         n += 1;
         i += 1;
     }
     *rb.add(17) = n;
     reply(CMD_MODULES, seq, OK, at)
 }
+
+/// The bytes of the fixed part of a MODULES record: `u8 index` to `u32 dsp_len`.
+const RECORD_FIXED: usize = 61;
 
 /// LOADS: what this boot's selection did. Body: none. Reply (version 2, `dkrt_abi::state::loads_v2`): `u8 version` (2), `u8 n` (the modules of the selection, at
 /// most 8), then per module in selection order `i32 result` (`OK`, a negative `E_*`, or LOADING while its DSP part is going), `u8 state` (`[load.state]`),
@@ -273,6 +313,145 @@ pub unsafe fn release_cmds(owner: u8) {
 
 #[cfg(test)]
 mod tests {
+    /// Section tests: the encoder of the MODULES reply over the fake table of two services (`handlers::tests`: service 1 has two words for every consumer, service 2 one word for
+    /// consumer 3 and none for the others).
+    mod sections {
+        use super::*;
+        use crate::package::handlers::tests::two;
+        use dkrt_abi::provider::name_hash;
+
+        fn put(owner: u8, room: usize) -> Option<std::vec::Vec<u8>> {
+            let mut buf = [0xeeu8; 64];
+            let n = unsafe { put_sections(&two(), owner, &mut buf[..room]) }?;
+            Some(buf[..n].to_vec())
+        }
+
+        fn section(name: &str, words: &[u32]) -> std::vec::Vec<u8> {
+            let mut v = name_hash(name).to_be_bytes().to_vec();
+            v.push(words.len() as u8);
+            for w in words {
+                v.extend_from_slice(&w.to_be_bytes());
+            }
+            v
+        }
+
+        #[test]
+        fn a_service_with_words_for_the_record_gives_a_section_and_a_silent_one_gives_none() {
+            // consumer 1: only service 1 has words
+            let mut want = std::vec![1u8];
+            want.extend(section("fake1", &[0x1101, 2]));
+            assert_eq!(put(1, 64), Some(want));
+            // consumer 3: both, in table order
+            let mut want = std::vec![2u8];
+            want.extend(section("fake1", &[0x1103, 6]));
+            want.extend(section("fake2", &[0x2203]));
+            assert_eq!(put(3, 64), Some(want));
+        }
+
+        #[test]
+        fn sections_that_do_not_fit_are_refused_whole() {
+            // consumer 3 needs 1 + (4 + 1 + 8) + (4 + 1 + 4) = 23 bytes
+            assert_eq!(put(3, 23).map(|v| v.len()), Some(23));
+            assert_eq!(put(3, 22), None, "the second section is cut: none of the record is written");
+            assert_eq!(put(1, 14).map(|v| v.len()), Some(14));
+            assert_eq!(put(1, 13), None);
+            assert_eq!(put(1, 0), None, "no room for the count");
+        }
+    }
+
+    /// The machines service itself (the crate of the packed file, over the table that `machines_row` builds), through the encoder: a module that owns a voice row has the machines
+    /// section of five words, one that owns nothing has none. The host runs no ColdFire code and loads no DSP, so no module registers a machine or a voice row here (the assembly tests
+    /// cannot show it): the voice row mask is set as a DSP load would.
+    #[test]
+    fn the_machines_service_gives_a_section_to_a_module_with_a_voice_row_and_none_to_one_without() {
+        use crate::package::fixture_provider::table;
+        let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+        let t = unsafe { table(std::vec![crate::package::handlers::test_seams::machines_row().resolve().unwrap()]) };
+        unsafe {
+            crate::package::handlers::test_seams::set_voice_rows(0, Some(0b1));
+            let sections = |owner: u8| {
+                let mut buf = [0u8; 128];
+                let n = put_sections(&t, owner, &mut buf).unwrap();
+                buf[..n].to_vec()
+            };
+            let with = sections(1);
+            assert_eq!(with[0], 1, "one section for the module with a voice row: {with:x?}");
+            assert_eq!(with[1..5], dkrt_abi::provider::name_hash("machines").to_be_bytes(), "it is the machines section");
+            assert_eq!(with[5], 5, "five words");
+            assert_eq!(u32::from_be_bytes(with[6..10].try_into().unwrap()), 0b1, "the first is the voice rows of the module");
+            assert_eq!(sections(2), [0], "a module with nothing has no section");
+            crate::package::handlers::test_seams::set_voice_rows(0, None);
+        }
+    }
+
+    /// The reply the host decoders read: `tests/fixtures/protocol/modules-reply.json` holds the bytes of two records (the `machines` service has five words for the first, the
+    /// `fx` service two for the second, and each is silent for the other record) and what a host reads from them; the TypeScript and Python decoders test against the same file.
+    /// `DIGI_WRITE_FIXTURES=1` writes it again.
+    mod fixture {
+        use super::*;
+        use crate::package::handlers::tests::{fake, set_describe, KINDS_1, KINDS_2, LOCK};
+        use crate::package::fixture_provider::table;
+        use dkrt_abi::provider::name_hash;
+
+        const MACHINES: [u32; 5] = [0b101, 3, 2 | 1 << 8, 0x1e10, 0];
+        const FX: [u32; 2] = [0x13_1200, 0x11_1101];
+
+        fn record(index: u8, name: &str, base: u32) -> Fixed {
+            let mut n = [0u8; 32];
+            n[..name.len()].copy_from_slice(name.as_bytes());
+            Fixed { index, name: n, version: 0x0001_0203, needs: 0x000b_0400, token: if index == 0 { 0 } else { 7 }, cf_base: base, cf_size: 0x1000, dsp_off: 0x40 * index as u32, dsp_len: 0x200 }
+        }
+
+        fn reply() -> std::vec::Vec<u8> {
+            let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+            set_describe(Some(&[(1, 1, &MACHINES), (2, 2, &FX)]));
+            let t = table(std::vec![fake::<1>("machines", &KINDS_1), fake::<2>("fx", &KINDS_2)]);
+            let mut body = std::vec::Vec::new();
+            for w in [1000u32, 500, 2000, 1500] {
+                body.extend_from_slice(&w.to_be_bytes());
+            }
+            body.extend_from_slice(&[2, 2]);
+            for r in [record(0, "sine", 0x4000_0000), record(1, "gain", 0x4000_2000)] {
+                let mut buf = [0u8; 200];
+                let n = unsafe { put_record(&t, &r, &mut buf) }.unwrap();
+                body.extend_from_slice(&buf[..n]);
+            }
+            set_describe(None);
+            body
+        }
+
+        fn hex(b: &[u8]) -> String {
+            b.iter().map(|x| std::format!("{x:02x}")).collect()
+        }
+
+        fn json(body: &[u8]) -> String {
+            let (m, f) = (std::format!("{:08x}", name_hash("machines")), std::format!("{:08x}", name_hash("fx")));
+            let words = |w: &[u32]| w.iter().map(|x| x.to_string()).collect::<std::vec::Vec<_>>().join(", ");
+            std::format!(
+                "{{\n  \"hex\": \"{}\",\n  \"total\": 2,\n  \"modules\": [\n    {{\"index\": 0, \"name\": \"sine\", \"version\": 66051, \"needs\": 721920, \"uiInstance\": null, \"cf_base\": 1073741824, \"cf_size\": 4096, \"dsp_off\": 0, \"dsp_len\": 512,\n     \"sections\": {{\"{m}\": [{}]}},\n     \"rows\": 5, \"types\": [16, 30], \"faults\": 3, \"guard_off\": true, \"effects\": []}},\n    {{\"index\": 1, \"name\": \"gain\", \"version\": 66051, \"needs\": 721920, \"uiInstance\": 7, \"cf_base\": 1073750016, \"cf_size\": 4096, \"dsp_off\": 64, \"dsp_len\": 512,\n     \"sections\": {{\"{f}\": [{}]}},\n     \"rows\": 0, \"types\": [], \"faults\": 0, \"guard_off\": false,\n     \"effects\": [{{\"row\": 0, \"running\": 2, \"saved\": 1, \"allowed\": 3, \"dflt\": 1}}, {{\"row\": 1, \"running\": 1, \"saved\": 1, \"allowed\": 1, \"dflt\": 1}}]}}\n  ]\n}}\n",
+                hex(body),
+                words(&MACHINES),
+                words(&FX),
+            )
+        }
+
+        #[test]
+        fn the_reply_bytes_are_the_fixture_the_host_decoders_read() {
+            let body = reply();
+            // layout: 18 bytes of header, then each record: 61 fixed bytes, `u8 n_sections`, `u32 hash, u8 n, n words` per section
+            assert_eq!(body.len(), 18 + (61 + 1 + 4 + 1 + 20) + (61 + 1 + 4 + 1 + 8));
+            assert_eq!(&body[16..18], [2, 2], "total, n");
+            assert_eq!(body[18 + 61], 1, "one section for the first record");
+            assert_eq!(&body[18 + 62..18 + 66], name_hash("machines").to_be_bytes());
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../tests/fixtures/protocol/modules-reply.json");
+            let want = json(&body);
+            if std::env::var_os("DIGI_WRITE_FIXTURES").is_some() {
+                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                std::fs::write(&path, &want).unwrap();
+            }
+            assert_eq!(std::fs::read_to_string(&path).expect("tests/fixtures/protocol/modules-reply.json (DIGI_WRITE_FIXTURES=1 writes it)"), want);
+        }
+    }
     use super::*;
     use crate::test_lock::LOCK;
     use crate::transport::{dkrt_midi_rx, pack, DKRT_UPLOAD_LAST, RBODY};

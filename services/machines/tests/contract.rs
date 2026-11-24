@@ -13,9 +13,9 @@ use dkrt_sdk::limits;
 use dkrt_sdk::records::KINDS_MACHINES;
 use dkrt_svc_machines::dsp::dyndsp;
 use dkrt_svc_machines::machines::Machines;
-use dkrt_svc_machines::records::{rstate, types_of};
+use dkrt_svc_machines::records::{mach_owner, types_of};
 use dkrt_svc_machines::rows::{self, vrows, VoiceRows};
-use dkrt_svc_rows::dynreg::w;
+use dkrt_svc_rows::dynreg::{w, RegState};
 use dkrt_test_support::contract::{Dsp, Fixture, Init, Late, Lifecycle, Module, Rows};
 use dkrt_test_support::{
     provider_contract, subject, Driver, FakeCore, Provided, Recipe, RowBuilder,
@@ -28,7 +28,20 @@ mod stubs;
 // the service file's source: its `service!` call is the one place that lists the parts
 #[path = "../dks/src/lib.rs"]
 pub mod file;
-pub use file::{builder, fw, rt, DK_SVC_OWNER};
+pub use file::{builder, fw, DK_SVC_OWNER};
+
+/// The registry state of the owner the suite's driver started: the owners of the parameter and page rows, and the strings the firmware's rows point at. The owner lives as long as the
+/// `Lifecycle` of the test that calls this, and nothing changes it while the test reads.
+fn reg() -> &'static RegState {
+    // SAFETY: the instance is the driver's, live while the test's `Lifecycle` is; the test is the only caller of the owner then
+    subject::<Machines, _>(|m| unsafe { &*(m.reg() as *const RegState) })
+}
+
+/// A pointer into the owner as a snapshot holds it (`OWNER_PTR_TAG | offset in the owner`): the words of the firmware's rows that point at strings of the owner.
+fn tagged(address: usize) -> u32 {
+    let base = subject::<Machines, _>(|m| m as *mut Machines as usize);
+    dkrt_test_support::contract::OWNER_PTR_TAG | (address - base) as u32
+}
 
 /// The parts the file adopts, read from the row its `service!` call declares.
 struct MachinesRecipe;
@@ -209,14 +222,14 @@ const ENABLE: [(u32, u32, u32); 4] = [
 ///   (0x70) is the free machine `PG_FREE` (0xff).
 fn kept(_core: &FakeCore, addr: u32, value: u32) -> bool {
     const EMPTY: u32 = 0x50_0000;
-    let rep = addr_of!(rstate().empty_rep) as u32 + 12;
+    let rep = tagged(addr_of!(reg().empty_rep) as usize + 12);
     let in_rows = |base: u32, size: u32, n: usize| {
         (addr >= base && ((addr - base) / size) < n as u32).then(|| (addr - base) % size)
     };
     if let Some(off) = in_rows(0x30_0000, 0x100, limits::MACHINE_ROWS) {
-        let s = &rstate().s;
+        let s = &reg().s;
         let inside =
-            |base: usize, size: usize| value >= base as u32 && value < base as u32 + size as u32;
+            |base: usize, size: usize| value >= tagged(base) && value < tagged(base) + size as u32;
         return match off {
             0 => value == EMPTY,
             0x4c => inside(
@@ -261,9 +274,9 @@ fn kept(_core: &FakeCore, addr: u32, value: u32) -> bool {
     }
     let names = 0x40_0000 + 12 * DYN_TYPE_FIRST;
     if let Some(off) = in_rows(names, 12, limits::MACHINE_ROWS) {
-        let s = &rstate().s;
+        let s = &reg().s;
         let inside =
-            |base: usize, size: usize| value >= base as u32 && value < base as u32 + size as u32;
+            |base: usize, size: usize| value >= tagged(base) && value < tagged(base) + size as u32;
         return match off {
             0 => {
                 value == EMPTY
@@ -428,8 +441,10 @@ fn image(core: &mut FakeCore) {
 
 /// The service's own view: who owns the machine, parameter and page rows, and the type numbers each owner has.
 fn state(core: &FakeCore) -> Vec<u32> {
-    let s = rstate();
-    let mut v: Vec<u32> = s.mach_owner.iter().map(|o| *o as u32).collect();
+    let s = reg();
+    let mut v: Vec<u32> = (0..limits::MACHINE_ROWS)
+        .map(|k| mach_owner(core, k) as u32)
+        .collect();
     v.extend(s.param_owner.iter().map(|o| *o as u32));
     v.extend(s.page_owner.iter().map(|o| *o as u32));
     for owner in 1..=3u8 {
@@ -1103,7 +1118,7 @@ fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_ru
 
 /// The machine row of the first run-time type: (its list name is empty, its long name reads MISSING, own_dsp is 1).
 fn missing_row(core: &FakeCore) -> (bool, bool, bool) {
-    let s = &rstate().s;
+    let s = &reg().s;
     let inf = unsafe { dkrt_svc_rows::dynreg(core) };
     let (empty, own, name) = unsafe {
         let row = dkrt_abi::mem::iw(inf, w::M_ROWS)
@@ -1309,7 +1324,7 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
     l.core.live_op.set(1);
     l.unload(0);
-    let s = &rstate().s;
+    let s = &reg().s;
     let text = |b: &[u8]| {
         String::from_utf8_lossy(&b[..b.iter().position(|c| *c == 0).unwrap()]).into_owned()
     };

@@ -12,7 +12,7 @@ pub mod file;
 use file::builder::{
     dk_fx_add_page, dk_fx_mix, dk_fx_routes, dk_module_ctx_add_fx, dk_page_add_fx_param,
 };
-pub use file::{builder, rt, DK_SVC_OWNER};
+pub use file::{builder, DK_SVC_OWNER};
 use file::{dk_service_query_v1, dk_svc_start, dk_svc_stop};
 
 // the core imports (`dkc_*`) of the service file, as host functions (this test links no runtime)

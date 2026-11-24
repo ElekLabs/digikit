@@ -447,7 +447,7 @@ fn the_rows_read_the_consumers_record_as_the_boot_index_in_apply_and_remove_duri
         assert_eq!(idx(), u32::MAX, "the index is as it was");
         crate::package::provider_rows::remove(odd);
         crate::package::provider_rows::remove(even);
-        crate::package::provider_rows::add(machines, crate::package::handlers::exports::machines_row(), Some(200));
+        crate::package::provider_rows::add(machines, crate::package::handlers::test_seams::machines_row(), Some(200));
     }
 }
 
@@ -501,7 +501,7 @@ fn attach_walks_every_apply_then_the_records_in_file_order_across_the_services_a
         assert_eq!(walked(), [(1, 0), (2, 0), (1, 3), (1, 99), (2, 1004), (1, 1004)]);
         crate::package::provider_rows::remove(odd);
         crate::package::provider_rows::remove(even);
-        crate::package::provider_rows::add(machines, crate::package::handlers::exports::machines_row(), Some(200));
+        crate::package::provider_rows::add(machines, crate::package::handlers::test_seams::machines_row(), Some(200));
     }
 }
 

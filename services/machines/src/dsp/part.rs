@@ -27,7 +27,10 @@ impl<C: CoreApi> DspPart<C> for Machines {
         // SAFETY: `job` is the loader's job: its voice entries lie in the section checked before
         status(unsafe {
             // the machine rows the parking state is told about are this crate's registry
-            super::make_room(core, job, &mut |t| self.parking_mut().give_way(core, t))
+            {
+                let (parking, reg) = self.parking_and_reg();
+                super::make_room(core, job, &mut |t| parking.give_way(core, reg, t))
+            }
         })
     }
 

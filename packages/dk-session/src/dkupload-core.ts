@@ -6,6 +6,7 @@
 // the same framing and every command of the protocol (INFO, LIST, upload, DELETE, CLEAR, ABORT, MODULES, CAPACITY, READ, VERIFY, SELECT,
 // RESTART, LOG), with the numbers generated from sdk/sdk.toml (`gen_proto.ts`). The desktop app uses it (no wasm, no Python).
 import { wireModuleSettings } from './module-settings.ts';
+import { decodeModulesPage } from './modules-reply.ts';
 import {
   CAP as GCAP,
   CAPACITY_KINDS,
@@ -785,10 +786,29 @@ export interface DkModule {
   cf_size: number;
   dsp_off: number;
   dsp_len: number;
+  /** What each loaded service holds for the module: the words of its section, by the 8-digit hex of the service name hash (`serviceHash`); a service with nothing has no entry. */
+  sections: Record<string, number[]>;
+  /** From the `machines` section: the voice rows the module owns (mask). */
   rows: number;
+  /** From the `machines` section: the machine types of the module. */
   types: number[];
+  /** From the `machines` section: the guard's fault count for those types. */
   faults: number;
+  /** From the `machines` section: the guard switched one of them off. */
   guard_off: boolean;
+  /** From the `fx` section: a row for each effect row of the module that has a page. */
+  effects: DkEffectRow[];
+}
+
+/** One effect row of a module: the routes are bit masks (1 master, 2 send). */
+export interface DkEffectRow {
+  row: number;
+  /** The route it runs on in this boot. */
+  running: number;
+  /** The route the settings give it now: differs from `running` after a pick that waits for its reload. */
+  saved: number;
+  allowed: number;
+  dflt: number;
 }
 
 export interface DkLogEvent {
@@ -1402,30 +1422,12 @@ export class DkSession {
     let start = 0;
     for (;;) {
       const b = await this.ok(GCMD.MODULES, 'modules', Uint8Array.of(start), quick);
-      const total = b[16]!;
-      const n = b[17]!;
-      let at = 18;
-      for (let i = 0; i < n; i++) {
-        const nt = b[at + 65]!;
-        const name = new TextDecoder().decode(b.subarray(at + 1, at + 33)).split('\0')[0]!;
-        out.push({
-          index: b[at]!,
-          name,
-          version: u32(b, at + 33),
-          needs: u32(b, at + 37),
-          ...(u32(b, at + 41) ? { uiInstance: u32(b, at + 41) } : {}),
-          cf_base: u32(b, at + 45),
-          cf_size: u32(b, at + 49),
-          dsp_off: u32(b, at + 53),
-          dsp_len: u32(b, at + 57),
-          rows: u32(b, at + 61),
-          types: Array.from(b.subarray(at + 66, at + 66 + nt)),
-          faults: u32(b, at + 66 + nt),
-          guard_off: (b[at + 70 + nt]! & 1) !== 0,
-        });
-        start = b[at]! + 1;
-        at += 71 + nt;
+      const { total, modules } = decodeModulesPage(b);
+      for (const m of modules) {
+        out.push(m);
+        start = m.index + 1;
       }
+      const n = modules.length;
       if (out.length >= total || n === 0) return out;
     }
   }

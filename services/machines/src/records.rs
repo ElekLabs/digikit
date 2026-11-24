@@ -14,7 +14,7 @@ use dkrt_abi::service::{check_step, CheckCtx, ModuleCommitCtx, Problem};
 use dkrt_sdk::*;
 
 pub use crate::modules::{module_info, types_of};
-pub use crate::registry::{param_first, param_owners, rstate, DKRT_REG};
+pub use crate::registry::{clear_mach_owners, mach_owner, param_first, set_mach_owner};
 
 /// The rule for the parameter, machine, page and action records of one module (`validate::Acc`); a native page kind and a kind of another service are accepted.
 /// `Records::validate` is this function, and a host tool that has no core (`patchkit records --check`) calls it directly.
@@ -33,7 +33,7 @@ impl<C: CoreApi> Records<C> for Machines {
 
     fn commit(&mut self, core: &C, module: usize, c: &ModuleCommitCtx) -> Result<(), Status> {
         // SAFETY: `c.sink` and `c.keys` are the loader's
-        status(unsafe { self.builder().commit(core, module, c) })
+        status(unsafe { self.commit_builder(core, module, c) })
     }
 
     fn check(&mut self, core: &C, step: u32, c: &CheckCtx) -> Result<(), Status> {
@@ -54,6 +54,7 @@ impl<C: CoreApi> Records<C> for Machines {
                 reg: c.reg,
                 image_size: c.image_size,
                 inf,
+                state: self.reg(),
             };
             status(if step == st::COUNTS {
                 ck_counts(c)

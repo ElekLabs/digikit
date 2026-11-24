@@ -230,11 +230,6 @@ pub(crate) fn real() -> *mut Real {
     addr_of_mut!(LOADER)
 }
 
-/// The address a loaded service file published for the export `hash`, if any (`handlers::exports::find_export`).
-pub fn find_export(hash: u32) -> Option<u32> {
-    loader().exports.resolve(hash)
-}
-
 /// Copy the query address out of the loader before entering provider code. Both run on the UI task.
 pub fn resident_query(provider: u32, minimum: u32) -> Result<u32, i32> {
     loader().resident_query(provider, minimum)

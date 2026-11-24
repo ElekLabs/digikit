@@ -146,6 +146,9 @@ fn excuses_equal_loads(stateless: bool, salt_same: &[(&str, &str)]) -> bool {
             .all(|area| salt_same.iter().any(|(a, _)| a == area))
 }
 
+/// The tag of a memory word in a snapshot that held a pointer into the owner object: `OWNER_PTR_TAG | offset in the object` (`Driver::owner_range`).
+pub const OWNER_PTR_TAG: u32 = 0xc0de_0000;
+
 /// What a service gives the suite: the profile, the kinds it owns (`[records.kinds]`), the image tables its core has, its modules and a view of its own state.
 pub struct Fixture {
     pub name: &'static str,
@@ -668,13 +671,22 @@ impl<'f, S: Subject> Lifecycle<'f, S> {
                 self.f.name
             );
         }
+        // a word that holds a pointer into the owner object (the firmware's rows point at strings of it) is its offset with the tag: another driver's owner is at another address
+        let owner = self
+            .driver
+            .owner_range()
+            .map(|(lo, hi)| (lo as u32, hi as u32));
+        let relative = |v: u32| match owner {
+            Some((lo, hi)) if v >= lo && v < hi => OWNER_PTR_TAG | (v - lo),
+            _ => v,
+        };
         Snapshot {
             mem: core
                 .mem
                 .borrow()
                 .iter()
                 .filter(|(_, v)| **v != 0)
-                .map(|(k, v)| (*k, *v))
+                .map(|(k, v)| (*k, relative(*v)))
                 .collect(),
             dsp,
             rows: (self.f.rows.bytes)(),
@@ -1057,7 +1069,8 @@ impl<'f, S: Subject> Lifecycle<'f, S> {
         };
         let (rows, held) = absent(&self.core);
         assert_eq!(
-            rows, held,
+            rows,
+            held,
             "{} ({}): placeholder rows against the numbers held for absent modules at an idle point",
             self.f.name,
             profile(self.f)

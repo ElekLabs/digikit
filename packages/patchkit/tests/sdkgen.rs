@@ -286,9 +286,8 @@ fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
     assert!(!machines.contains("fn dk_param_get"));
     assert!(machines.contains("const _: api::DkParamGetFn = crate::fw::dk_param_get;"));
     assert!(machines.contains("const _: api::DkPageCanvasFn = crate::builder::dk_page_canvas;"));
-    // an `internal` export is in the list and has no `api` type (it is in no header): the runtime-only export of the machines file
-    assert!(machines.contains("crate::rt::dk_machines_module_info as *const u8"));
-    assert!(!machines.contains("api::DkMachinesModuleInfoFn"));
+    // the runtime asks the machines file nothing by name (the MODULES reply uses its `Describe` part): no runtime-only export
+    assert!(!machines.contains("crate::rt::"));
     assert!(
         machines.find("\"dk_param_get\"").unwrap()
             < machines.find("\"dk_page_bind_local\"").unwrap()

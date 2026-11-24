@@ -302,12 +302,14 @@ impl ProviderHandle {
             None => 0,
         }
     }
-    /// The words the service contributes for consumer `owner`, into `out`: the count written.
-    pub unsafe fn describe(&self, owner: u8, out: &mut [u32]) -> usize {
+    /// Does the service adopt the describe part?
+    pub fn has_describe(&self) -> bool {
+        !self.describe.is_null()
+    }
+    /// The words the service holds for consumer `owner`, into `out`: the count written. Runs in the caller's task, never inside the owner.
+    pub unsafe fn describe(&self, core: *const c_void, owner: u8, out: &mut [u32]) -> usize {
         match self.describe.as_ref() {
-            Some(d) => {
-                (d.describe)(self.instance, owner, out.as_mut_ptr(), out.len() as u32) as usize
-            }
+            Some(d) => (d.describe)(core, owner, out.as_mut_ptr(), out.len() as u32) as usize,
             None => 0,
         }
     }

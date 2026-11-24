@@ -1,11 +1,11 @@
 //! Parking of absent machine numbers: a number the sticky map holds that no module has reads MISSING and plays silence; the state of the passes, and the events for a number without a placeholder.
 use crate::dsp;
-use crate::registry::{rstate, MAX_MACH};
+use crate::registry::{mach_owner, mach_owners, MAX_MACH};
 use crate::selection_view::refresh_view;
 use crate::unload::reset_machine_row;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::iw;
-use dkrt_svc_rows::dynreg::w;
+use dkrt_svc_rows::dynreg::{w, RegState};
 
 #[cfg(test)]
 mod tests;
@@ -108,15 +108,15 @@ impl Parking {
 
     /// A real load took the placeholder of type `t` (`dsp::make_room`): its machine row falls back to the gap row (the stock sound) and the event says so; the number is parked
     /// again when a row frees (`park_absent`).
-    pub(crate) unsafe fn give_way<C: CoreApi>(&mut self, core: &C, t: u32) {
+    pub(crate) unsafe fn give_way<C: CoreApi>(&mut self, core: &C, reg: &mut RegState, t: u32) {
         let inf = dkrt_svc_rows::dynreg(core);
         let d0 = iw(inf, w::M_DYN0);
         if inf.is_null() || t < d0 || (t - d0) as usize >= MAX_MACH {
             return;
         }
         let k = (t - d0) as usize;
-        if rstate().mach_owner[k] == 0 {
-            reset_machine_row(core, inf, k, false);
+        if mach_owner(core, k) == 0 {
+            reset_machine_row(core, reg, inf, k, false);
             self.log_gap(core, k, t, WHY_GAVE_WAY);
         }
     }
@@ -125,12 +125,12 @@ impl Parking {
     /// loaded at boot, or failed before its rows were written, has no unload to leave them. Called from every UI-loop pass. The voice row is parked when the boot's loads are over
     /// (`boot_index` is `u32::MAX` again) and the DSP loader is idle, a free row exists and the write is taken; only then the machine row reads MISSING. A number that cannot be
     /// parked (no free row, or the write failed `PARK_MAX` passes in a row) keeps the gap row and one error event says why. Nothing runs during a live operation.
-    pub(crate) unsafe fn park_absent<C: CoreApi>(&mut self, core: &C) {
+    pub(crate) unsafe fn park_absent<C: CoreApi>(&mut self, core: &C, reg: &mut RegState) {
         let inf = dkrt_svc_rows::dynreg(core);
         if inf.is_null() || core.live_op() != 0 || core.boot_index() != u32::MAX {
             return;
         }
-        let s = rstate();
+        let owners = mach_owners(core);
         let mut changed = false;
         let idle = dsp::loader_idle(core);
         self.busy_passes = if idle {
@@ -148,7 +148,7 @@ impl Parking {
                 continue;
             }
             let k = (t - d0) as usize;
-            if s.mach_owner[k] != 0 || dsp::module_of_type(core, t).is_some() {
+            if owners[k] != 0 || dsp::module_of_type(core, t).is_some() {
                 continue;
             }
             let mut parked = dsp::has_voice_row(core, t);
@@ -178,12 +178,12 @@ impl Parking {
             if parked {
                 self.logged &= !(1 << k);
                 if !reads_missing(core, inf, t) {
-                    reset_machine_row(core, inf, k, true);
+                    reset_machine_row(core, reg, inf, k, true);
                     changed = true;
                 }
             } else if why != 0 {
                 if reads_missing(core, inf, t) {
-                    reset_machine_row(core, inf, k, false);
+                    reset_machine_row(core, reg, inf, k, false);
                     changed = true;
                 }
                 self.log_gap(core, k, t, why);

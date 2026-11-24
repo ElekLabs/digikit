@@ -53,6 +53,12 @@ pub fn page_owner(k: usize) -> u8 {
     }
 }
 
+/// Host tests: effect row `k` belongs to module record `owner` - 1 (0: free), as `apply` leaves it.
+#[cfg(test)]
+pub(crate) fn set_page_owner_for_test(k: usize, owner: u8) {
+    fs().owner[k] = owner;
+}
+
 /// The tab label of the page of effect row `k` (up to 3 characters) into `out`.
 #[inline]
 pub fn tab_of(k: usize, out: &mut [u8; 8]) {

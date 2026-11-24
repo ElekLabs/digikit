@@ -159,13 +159,17 @@ impl Slots {
 
     /// The queued click, taken for the UI pass: its callback, and the argument it was registered with. The flow of `param_get` and `param_set` is open from here until the
     /// page gets input again, so the list the action opens can set the value when the user picks. `None`: nothing queued, or the row was unloaded.
-    unsafe fn take_click<C: CoreApi>(&mut self, core: &C) -> Option<(Pending, (bool, u32))> {
+    unsafe fn take_click<C: CoreApi>(
+        &mut self,
+        core: &C,
+        owners: &[u8],
+    ) -> Option<(Pending, (bool, u32))> {
         let p = self.pending;
         if p.callback == 0 {
             return None;
         }
         self.pending = NO_CLICK;
-        let ctx = click_context(core, &p)?;
+        let ctx = click_context(core, owners, &p)?;
         self.held.begin(ctx);
         let arg = self.args[(p.code.wrapping_sub(crate::records::param_first(core))) as usize
             % limits::PARAM_ROWS];
@@ -174,8 +178,8 @@ impl Slots {
 
     /// The UI loop pass: run the queued action (`void fn(u32 track)`). The callback is the last thing that runs: it may call `dk_param_get` and `dk_param_set`, which reach
     /// the flow through the owner again.
-    pub unsafe fn tick<C: CoreApi>(&mut self, core: &C) {
-        let Some((p, (with_arg, arg))) = self.take_click(core) else {
+    pub unsafe fn tick<C: CoreApi>(&mut self, core: &C, owners: &[u8]) {
+        let Some((p, (with_arg, arg))) = self.take_click(core, owners) else {
             return;
         };
         if with_arg {
@@ -192,13 +196,14 @@ impl Slots {
         &self,
         core: &C,
         fw: &F,
+        owners: &[u8],
         track: u32,
         word: u32,
     ) -> i32 {
         paramapi::get(
             fw,
             self.held.ctx(),
-            crate::records::param_owners(),
+            owners,
             crate::records::param_first(core),
             track,
             word,
@@ -210,6 +215,7 @@ impl Slots {
         &self,
         core: &C,
         fw: &F,
+        owners: &[u8],
         track: u32,
         word: u32,
         raw: i32,
@@ -217,7 +223,7 @@ impl Slots {
         paramapi::set(
             fw,
             self.held.ctx(),
-            crate::records::param_owners(),
+            owners,
             crate::records::param_first(core),
             track,
             word,
@@ -256,10 +262,6 @@ pub fn context(p: &Pending, owners: &[u8], first: u32) -> Option<Ctx> {
 }
 
 /// The context of the queued click: the owner is read from the core's parameter rows.
-pub fn click_context<C: CoreApi>(c: &C, p: &Pending) -> Option<Ctx> {
-    context(
-        p,
-        crate::records::param_owners(),
-        crate::records::param_first(c),
-    )
+pub fn click_context<C: CoreApi>(c: &C, owners: &[u8], p: &Pending) -> Option<Ctx> {
+    context(p, owners, crate::records::param_first(c))
 }

@@ -802,7 +802,7 @@ pub mod sig {
     /// The index-th loaded module (in load-slot order); OK, or E_NOT_FOUND past the end.
     pub type dkrt_module = unsafe extern "C" fn(index: u32, out: *mut DkrtModule) -> i32;
 
-    /// The index-th loaded effect that has a page (row order): tab, module id, allowed routes, default, the route it runs on and the route the settings give it; OK, or E_NOT_FOUND past the end.
+    /// Removed: the effects of a module are the fx service's words in the MODULES reply (its Describe part). The slot stays (the table is append-only) and answers E_NOT_FOUND.
     pub type dkrt_fx = unsafe extern "C" fn(index: u32, out: *mut DkrtFx) -> i32;
 
     /// Resident query v1. UI task only, synchronous. Use the provider's typed wrapper. E_MISSING means the provider or facet is absent, E_CONTRACT an incompatible provider or invalid call, E_CONTEXT outside the UI task, E_BUSY for a nested call.

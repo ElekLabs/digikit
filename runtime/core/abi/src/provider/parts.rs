@@ -116,8 +116,10 @@ pub trait Describe<C: CoreApi>: Sized {
     fn table_check(&self, _core: &C, _used: u32, _out: &mut TableFault) -> u32 {
         0
     }
-    /// The words a consumer contributes to diagnostics.
-    fn describe(&self, _who: ConsumerId, _out: &mut WordSink) {}
+    /// The words this service holds for consumer `who` (a module record + 1): read-only, opaque to the core, which copies them into a section of the MODULES reply. It has no
+    /// object: it runs in the task of the caller (the MODULES command handler), outside the owner's busy state, so it answers while the owner is busy in another call. It reads state
+    /// the service published for that purpose in a `Shared` cell (or a table whose reads tolerate a task switch), and does no I/O and no call out.
+    fn describe(_core: &C, _who: ConsumerId, _out: &mut WordSink) {}
 }
 
 /// The events a service takes while one of its own calls is running (the part `Reentry` of `service!`; it has no table in the row).

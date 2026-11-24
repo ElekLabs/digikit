@@ -252,12 +252,11 @@ pub unsafe extern "C" fn dkrt_module(index: u32, out: *mut DkrtModule) -> i32 {
     E_NOT_FOUND
 }
 
-/// The `index`th loaded effect that has a page (row order) into `out`: its tab, module id, allowed routes, default route, the route it runs on and the route the settings
-/// give it (DIGIKIT > FX ROUTES). 0, or `E_NOT_FOUND` past the end. UI task.
+/// Removed: the effect list of DIGIKIT > FX ROUTES now comes from the fx service's `Describe` words in the MODULES reply. The slot stays (the table of exports is append-only):
+/// it lists no effect.
 #[no_mangle]
-pub unsafe extern "C" fn dkrt_fx(index: u32, out: *mut DkrtFx) -> i32 {
-    init_once();
-    hooks::fx_entry(index, out)
+pub unsafe extern "C" fn dkrt_fx(_index: u32, _out: *mut DkrtFx) -> i32 {
+    E_NOT_FOUND
 }
 
 

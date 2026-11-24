@@ -90,12 +90,70 @@ fn route_choices_use_pending_sends_and_the_image_slot_limit() {
     assert_eq!(allowed_choices(ROUTE_MASTER, 2, 0, 2), ROUTE_MASTER.into());
 }
 
-/// `fx_entry` lists the effects that have a page in row order and answers "no fx" past the end: here no page is owned.
+/// The describe words of an effect module: one word for each of its rows that has a page, in row order: the row (bits 0 to 7), then the route it runs on, the route the settings
+/// give it, the routes it allows and its default, four bits each. A module with no such row gets no word.
 #[test]
-fn fx_entry_without_a_page_answers_no_fx() {
+fn describe_gives_one_word_for_each_effect_row_of_the_consumer() {
+    use dkrt_abi::provider::{ConsumerId, Describe, WordSink};
     use dkrt_test_support::FakeCore;
     let _g = crate::test_lock::hold();
     let core = FakeCore::new();
-    let mut out: DkrtFx = unsafe { core::mem::zeroed() };
-    assert_eq!(unsafe { fx_entry(&core, 0, &mut out) }, E_NOT_FOUND);
+    let both = ROUTE_MASTER | ROUTE_SEND;
+    unsafe {
+        let s = ss();
+        for (k, owner, allow, running_send) in [
+            (0, 2u8, both, true),
+            (2, 2, ROUTE_MASTER, false),
+            (3, 3, both, false),
+        ] {
+            crate::fxpage::set_page_owner_for_test(k, owner);
+            s.id[k][..2].copy_from_slice(&[b'm', b'0' + k as u8]);
+            s.idlen[k] = 2;
+            s.allow[k] = allow;
+            s.dflt[k] = ROUTE_MASTER;
+            s.route[k] = running_send as _;
+        }
+        // row 0 is saved as master while it runs on the send bus (a change waiting for its reload)
+        core.settings
+            .borrow_mut()
+            .push((b"fx/route/m0".to_vec(), std::vec![0]));
+    }
+    let words = |who: u8| {
+        let mut buf = [0u32; 8];
+        let mut sink = WordSink::new(&mut buf);
+        <crate::fx::Fx as Describe<FakeCore>>::describe(&core, ConsumerId::new(who), &mut sink);
+        sink.words().to_vec()
+    };
+    let word = |row: u32, running: u8, saved: u8, allowed: u8, dflt: u8| {
+        row | (running as u32) << 8
+            | (saved as u32) << 12
+            | (allowed as u32) << 16
+            | (dflt as u32) << 20
+    };
+    assert_eq!(
+        words(2),
+        std::vec![
+            word(0, ROUTE_SEND, ROUTE_MASTER, both, ROUTE_MASTER),
+            word(2, ROUTE_MASTER, ROUTE_MASTER, ROUTE_MASTER, ROUTE_MASTER),
+        ]
+    );
+    assert_eq!(
+        words(3),
+        std::vec![word(3, ROUTE_MASTER, ROUTE_MASTER, both, ROUTE_MASTER)]
+    );
+    assert_eq!(
+        words(9),
+        std::vec::Vec::<u32>::new(),
+        "no row of that consumer: no section"
+    );
+    assert_eq!(
+        words(0),
+        std::vec::Vec::<u32>::new(),
+        "a free row has owner 0, which is no consumer"
+    );
+    unsafe {
+        for k in [0, 2, 3] {
+            crate::fxpage::set_page_owner_for_test(k, 0);
+        }
+    }
 }

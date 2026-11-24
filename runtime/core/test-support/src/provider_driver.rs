@@ -218,6 +218,10 @@ impl<R: Recipe> Driver for ProviderDriver<R> {
             _r: core::marker::PhantomData,
         }
     }
+    fn owner_range(&self) -> Option<(usize, usize)> {
+        let at = self.started.handle.instance() as usize;
+        Some((at, at + core::mem::size_of::<R::P>()))
+    }
     fn validate_records(&self, kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
         (self.started.validate)(kind, bodies, report)
     }

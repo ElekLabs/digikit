@@ -9,6 +9,9 @@ use core::ffi::c_void;
 use dkrt_sdk::fault::DIAG_WORDS;
 use dkrt_sdk::OK;
 
+/// The most words one service writes for one consumer (the size of the buffer `ServiceTable::describe` gives each row; words past it are dropped).
+pub const DESCRIBE_WORDS: usize = 16;
+
 /// The table of services, in the order the core calls them: the walks below run the rows in table order (removal runs the other way). `core` is the `&C` that
 /// each row's functions cast back.
 #[derive(Clone, Copy)]
@@ -159,6 +162,22 @@ impl ServiceTable {
         let mut i = 0;
         while i < self.rows.len() {
             self.rows[i].diag(self.core, words);
+            i += 1;
+        }
+    }
+    /// What each service holds for consumer `owner` (a module record + 1): `visit(name hash, words)` for every row of the table, in table order, that adopts the describe part
+    /// and wrote at least one word (at most `DESCRIBE_WORDS` of them). The core reads no meaning into the words. Runs in the caller's task: a row's describe never enters its owner.
+    #[inline]
+    pub unsafe fn describe(&self, owner: u8, mut visit: impl FnMut(u32, &[u32])) {
+        let mut i = 0;
+        while i < self.rows.len() {
+            if self.rows[i].has_describe() {
+                let mut words = [0u32; DESCRIBE_WORDS];
+                let n = self.rows[i].describe(self.core, owner, &mut words);
+                if n > 0 {
+                    visit(self.rows[i].name(), &words[..n]);
+                }
+            }
             i += 1;
         }
     }

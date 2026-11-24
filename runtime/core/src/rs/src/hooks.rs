@@ -152,11 +152,6 @@ pub(crate) unsafe fn module_extra(i: usize) -> ModuleExtra {
     out
 }
 
-/// `dkrt_fx`. Default: `E_NOT_FOUND`: no effect has a page.
-pub(crate) unsafe fn fx_entry(index: u32, out: *mut DkrtFx) -> i32 {
-    call!(module.fx_entry(index, out), E_NOT_FOUND)
-}
-
 /// `dkrt_module_header`. Default: `E_NOT_FOUND`: no module file is read.
 pub(crate) unsafe fn module_header(first: u32, out: *mut DkrtModuleHeader) -> i32 {
     call!(module.read_header(first, out), E_NOT_FOUND)
@@ -165,11 +160,6 @@ pub(crate) unsafe fn module_header(first: u32, out: *mut DkrtModuleHeader) -> i3
 /// Does the module with record index `i` have a `tick`? Default: no.
 pub(crate) unsafe fn module_has_tick(i: usize) -> bool {
     call!(module.has_tick(i as u32), false)
-}
-
-/// Does a loaded module have machine type `ty`? Default: no.
-pub(crate) unsafe fn machine_type_loaded(ty: u32) -> bool {
-    call!(module.machine_type_loaded(ty), false)
 }
 
 // ---- the menu's exports --------------------------------------------------------------------------------------------------

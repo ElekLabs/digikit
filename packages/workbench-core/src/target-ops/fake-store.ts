@@ -163,10 +163,12 @@ export function demoStore(): StoreOps {
     cf_size: 24 * KIB,
     dsp_off: 0,
     dsp_len: 0,
+    sections: {},
     rows: 1,
     types: [1],
     faults,
     guard_off: false,
+    effects: [],
   });
   return fakeStoreOps(files, {
     free: 1440 * KIB,

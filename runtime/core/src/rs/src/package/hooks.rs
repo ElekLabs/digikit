@@ -8,7 +8,7 @@ use dkrt_abi::resident::{Refusal, ResidentTable};
 use crate::package::resident;
 use dkrt_sdk::sel::Record;
 use dkrt_sdk::proto::E_PROTO;
-use dkrt_sdk::{DkrtFx, DkrtModuleHeader, E_BUSY, E_CONTRACT};
+use dkrt_sdk::{DkrtModuleHeader, E_BUSY, E_CONTRACT};
 
 /// The package's table, in the one binary of the runtime.
 pub(crate) static HOOKS: PackageHooks = PackageHooks {
@@ -19,10 +19,10 @@ pub(crate) static HOOKS: PackageHooks = PackageHooks {
         ctx_owner: Some(ctx_owner),
         load_file: Some(load_file),
         read_extra: Some(module_extra),
-        fx_entry: Some(fx_entry),
+        fx_entry: None,
         read_header: Some(module_header),
         has_tick: Some(module_has_tick),
-        machine_type_loaded: Some(machine_type_loaded),
+        machine_type_loaded: None,
     },
     menu: MenuHooks {
         scan: Some(scan::dkrt_scan),
@@ -162,20 +162,12 @@ unsafe extern "C" fn module_extra(i: u32, out: *mut ModuleExtra) {
     *out = ModuleExtra { dsp_size: dsp::ds().mod_len[i], ctx: entry::ctx_addr(i).get() };
 }
 
-unsafe extern "C" fn fx_entry(index: u32, out: *mut DkrtFx) -> i32 {
-    handlers::exports::fx_entry(index, &mut *out)
-}
-
 unsafe extern "C" fn module_header(first: u32, out: *mut DkrtModuleHeader) -> i32 {
     scan::module_header(first, out)
 }
 
 unsafe extern "C" fn module_has_tick(i: u32) -> bool {
     entry::has_tick(i as usize)
-}
-
-unsafe extern "C" fn machine_type_loaded(ty: u32) -> bool {
-    module_cmds::machine_type_loaded(ty)
 }
 
 // ---- diagnostics ---------------------------------------------------------------------------------------------------------

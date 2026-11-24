@@ -25,10 +25,8 @@ fn the_package_table_has_every_hook() {
         ("module.ctx_owner", t.module.ctx_owner.is_none()),
         ("module.load_file", t.module.load_file.is_none()),
         ("module.read_extra", t.module.read_extra.is_none()),
-        ("module.fx_entry", t.module.fx_entry.is_none()),
         ("module.read_header", t.module.read_header.is_none()),
         ("module.has_tick", t.module.has_tick.is_none()),
-        ("module.machine_type_loaded", t.module.machine_type_loaded.is_none()),
         ("menu.scan", t.menu.scan.is_none()),
         ("menu.scan_reads", t.menu.scan_reads.is_none()),
         ("menu.fit", t.menu.fit.is_none()),
@@ -49,6 +47,8 @@ fn the_package_table_has_every_hook() {
     ];
     let gone: std::vec::Vec<&str> = missing.iter().filter(|(_, none)| *none).map(|(n, _)| *n).collect();
     assert!(gone.is_empty(), "hooks the package does not give: {gone:?}");
+    // two words of the table were removed (E1 step 4: the effect list and the loaded-type check come from the services' `Describe` words and the host); they stay as null words
+    assert!(t.module.fx_entry.is_none() && t.module.machine_type_loaded.is_none());
 }
 
 #[test]
@@ -74,10 +74,8 @@ fn with_no_package_every_hook_has_its_default() {
         // modules
         assert_eq!(ctx_owner(0x1000), E_CONTRACT);
         assert_eq!(module_extra(0), ModuleExtra::default());
-        assert_eq!(fx_entry(0, core::ptr::null_mut()), E_NOT_FOUND);
         assert_eq!(module_header(0, core::ptr::null_mut()), E_NOT_FOUND);
         assert!(!module_has_tick(0));
-        assert!(!machine_type_loaded(7));
         // the menu's exports
         assert_eq!(scan(core::ptr::null_mut(), 4), E_NOT_FOUND);
         assert_eq!(scan_reads(), 0);

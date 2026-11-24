@@ -377,3 +377,75 @@ fn the_pre_tick_step_runs_before_the_owner_is_entered_so_its_events_come_before_
         "a dead owner counts nothing"
     );
 }
+
+/// A provider file that adopts the Describe part: its words come from a `Shared` cell outside the owner, as a service that answers the MODULES reply from another task does.
+mod described {
+    use crate::Shared;
+    use dkrt_abi::provider::{ConsumerId, Describe, Provider, Status, WordSink};
+
+    pub static PUBLISHED: Shared<[u32; 2]> = Shared::new([0; 2]);
+
+    pub struct S;
+    impl Provider<crate::ImportCore> for S {
+        fn start(_: &crate::ImportCore) -> Result<S, Status> {
+            Ok(S)
+        }
+    }
+    impl Describe<crate::ImportCore> for S {
+        fn describe(core: &crate::ImportCore, who: ConsumerId, out: &mut WordSink) {
+            let [a, b] = PUBLISHED.with(core, |w| *w);
+            if who.get() == 1 {
+                out.push(a);
+                out.push(b);
+            }
+        }
+    }
+    crate::service!(
+        S,
+        "described",
+        &[],
+        parts = [Describe],
+        hooks = [],
+        fills = [],
+        exports = []
+    );
+    pub unsafe fn start() {
+        assert_eq!(dk_svc_init(0x1234 as *mut u8), 0);
+    }
+    pub fn row() -> &'static dkrt_abi::provider::ProviderRow {
+        &DK_SVC_ROW
+    }
+}
+
+#[test]
+fn describe_answers_while_the_owner_is_busy_and_while_there_is_none() {
+    use dkrt_abi::provider::ProviderHandle;
+    let handle = unsafe {
+        ProviderHandle::resolve(described::row(), whole(), 0x1234 as *mut core::ffi::c_void)
+    }
+    .unwrap();
+    assert!(handle.has_describe());
+    let core = &ImportCore as *const ImportCore as *const core::ffi::c_void;
+    described::PUBLISHED.with(&ImportCore, |w| *w = [7, 9]);
+    let mut words = [0u32; 4];
+    // no owner yet: the words are still there (they are not the owner's)
+    assert_eq!(unsafe { handle.describe(core, 1, &mut words) }, 2);
+    assert_eq!(words[..2], [7, 9]);
+    unsafe { described::start() };
+    // inside a call of the owner (the UI task busy in a tick, a window or a hook) the table's other parts refuse; describe answers
+    let busy = described::DK_SVC_OWNER.with(|_| {
+        let mut w = [0u32; 4];
+        (unsafe { handle.describe(core, 1, &mut w) }, [w[0], w[1]])
+    });
+    assert_eq!(busy, Some((2, [7, 9])));
+    assert_eq!(
+        described::DK_SVC_OWNER.refused(),
+        0,
+        "it never asked the owner"
+    );
+    // a consumer the service holds nothing for: no word
+    assert_eq!(unsafe { handle.describe(core, 2, &mut words) }, 0);
+    // a short buffer drops the words that do not fit
+    let mut one = [0u32; 1];
+    assert_eq!(unsafe { handle.describe(core, 1, &mut one) }, 1);
+}

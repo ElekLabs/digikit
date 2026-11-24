@@ -77,22 +77,33 @@ fn text(b: &mut [u8], at: usize, field: usize, s: &[u8]) {
     b[at..at + s.len()].copy_from_slice(s);
 }
 
-fn check(f: unsafe fn(&Ctx) -> i32, recs: &[Rec], pages: bool) -> i32 {
+/// A registry state with no row owned (the owner's field, here made alone).
+fn state() -> dkrt_svc_rows::dynreg::RegState {
+    // SAFETY: all-zero bytes are the state of a registry with no row owned
+    unsafe { core::mem::zeroed() }
+}
+
+fn check(f: for<'a> unsafe fn(&Ctx<'a>) -> i32, recs: &[Rec], pages: bool) -> i32 {
     let (s, inf) = (section(recs), info(pages));
     unsafe {
         f(&Ctx {
             reg: s.as_ptr(),
             image_size: 100,
             inf: inf.as_ptr(),
+            state: &state(),
         })
     }
 }
 
-fn check_core(f: unsafe fn(&FakeCore, &Ctx) -> i32, recs: &[Rec], pages: bool) -> i32 {
+fn check_core(f: for<'a> unsafe fn(&FakeCore, &Ctx<'a>) -> i32, recs: &[Rec], pages: bool) -> i32 {
     check_core_with(f, recs, info(pages))
 }
 
-fn check_core_with(f: unsafe fn(&FakeCore, &Ctx) -> i32, recs: &[Rec], inf: Vec<u32>) -> i32 {
+fn check_core_with(
+    f: for<'a> unsafe fn(&FakeCore, &Ctx<'a>) -> i32,
+    recs: &[Rec],
+    inf: Vec<u32>,
+) -> i32 {
     let mut core = FakeCore::new();
     // the run-time machine types are the device profile's: any profile that has them
     core.device = dkrt_abi::profiles::ALL
@@ -108,6 +119,7 @@ fn check_core_with(f: unsafe fn(&FakeCore, &Ctx) -> i32, recs: &[Rec], inf: Vec<
                 reg: s.as_ptr(),
                 image_size: 100,
                 inf: inf.as_ptr(),
+                state: &state(),
             },
         )
     }

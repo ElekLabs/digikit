@@ -156,7 +156,7 @@ or CAPACITY request yet; it gets the generated numbers only (P5).
 
 ## Workbench settings
 
-Runtime 0.11.4 advertises the `MODULE_UI` capability in INFO. Each enrolled module has a nonzero `ui_instance` in MODULES. Command `0x00` addresses its public settings by `u8 verb, u8 slot, u32 instance`. Numbers are big-endian.
+Runtime 0.11.5 advertises the `MODULE_UI` capability in INFO. Each enrolled module has a nonzero `ui_instance` in MODULES. Command `0x00` addresses its public settings by `u8 verb, u8 slot, u32 instance`. Numbers are big-endian.
 
 | Verb | Additional request bytes | Reply body on success |
 | --- | --- | --- |
@@ -186,15 +186,23 @@ the DSP loader). A record, big endian:
  49   4  u32 cf_size
  53   4  u32 dsp_off        its range in the DSP area (byte offset into the area; 0 and 0 without DSP code)
  57   4  u32 dsp_len
- 61   4  u32 rows           the DSP voice rows it owns, as a bit mask
- 65   1  u8 n_types         0 to 8
- 66  nt  type bytes         the machine types it has: its machine rows (the types the boot assigned, in type order), then its voice rows' types not listed yet (a pinned voice type)
- 66+nt 4 u32 faults        the DSP guard's fault count for those types since the boot
- 70+nt 1 u8 flags          bit 0: the guard has switched one of them off
+ 61   1  u8 n_sections      runtime 0.11.5 and later; the fixed part above ends at dsp_len (61 bytes)
+ 62   .  sections           per section: u32 service name hash, u8 n, n words (u32)
 ```
 
-A record is 71 + `n_types` bytes. `faults` and the flag come from the guard words the runtime polls once a second (`DSP_DIAG` words 17 to 23): they name only the type of the *last* fault and of the last type switched off,
-so the count is exact for one faulting type and, when two types fault inside one poll, goes to the last one. `dkupload --port NAME modules` (`mise run dk:store -- --port NAME modules`) prints a header with the free space and one line per module.
+From runtime 0.11.5 the record ends with the sections: what each loaded service holds for the module, by the `Describe` part of its provider row (`runtime/core/abi/src/provider/parts.rs`). The runtime asks every
+row that adopts the part, in table order, with the module record index + 1; a service with no word for the module gives no section, and the runtime reads no meaning into the words (at most 16 words
+a section; a record whose sections do not fit ends the page). The hash is the service name's FNV-1a 32 (`dkneeds::keys::name_hash`). A host reads the sections of the services it knows:
+
+- `machines`, five words: the DSP voice rows the module owns (bit mask); the DSP guard's fault count for its types since the boot; `nt` (bits 0 to 7, at most 8) with bit 8 set when the guard has switched
+  one of them off; the types 0 to 3 and the types 4 to 7, one byte each, type `i` in byte `i % 4` counted from the least significant. The types are the module's machine rows (the types the boot
+  assigned, in type order), then its voice rows' types not listed yet (a pinned voice type). The fault count and the flag come from the guard words the runtime polls once a second (`DSP_DIAG` words 17 to 23): they name only
+  the type of the *last* fault and of the last type switched off, so the count is exact for one faulting type and, when two types fault inside one poll, goes to the last one. A module with no voice row, no type and no fault has no section.
+- `fx`, one word for each effect row of the module that has a page, in row order: the row (bits 0 to 7), then four bits each: the route it runs on, the route the settings give it now, the routes its
+  record allows and its default (1 master, 2 send).
+
+Runtime 0.11.4 and earlier ended a record with `u32 rows`, `u8 n_types`, the type bytes, `u32 faults` and `u8 flags` instead (71 + `n_types` bytes); the hosts read only the new layout (`packages/dk-session/src/modules-reply.ts`,
+`tools/device/modules_reply.py`; both test against `tests/fixtures/protocol/modules-reply.json`, which the encoder test of the runtime writes). `dkupload --port NAME modules` (`mise run dk:store -- --port NAME modules`) prints a header with the free space and one line per module.
 
 ## The debug log (LOG and PEEK; finding 46)
 

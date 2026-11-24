@@ -52,10 +52,13 @@ pub fn check_commit(b: &Build, p: &Profile, keys: &KeysCopy, free: &Free) -> i32
 }
 
 /// The free reserved machine, parameter and page rows of the registry.
-pub unsafe fn free_rows(inf: *const u32) -> Free {
-    let s = crate::records::rstate();
+pub unsafe fn free_rows<C: dkrt_abi::core_api::CoreApi>(
+    core: &C,
+    s: &dkrt_svc_rows::dynreg::RegState,
+    inf: *const u32,
+) -> Free {
     Free {
-        machine_rows: capacity::free_rows(&s.mach_owner, iw(inf, w::M_DYN_N)),
+        machine_rows: capacity::free_rows(&crate::registry::mach_owners(core), iw(inf, w::M_DYN_N)),
         param_rows: capacity::free_rows(&s.param_owner, iw(inf, w::P_DYN_N)),
         page_rows: capacity::free_rows(&s.page_owner, iw(inf, w::PG_DYN_N)),
     }

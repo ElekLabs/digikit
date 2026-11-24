@@ -13,6 +13,12 @@ pub trait Driver: Sized {
     /// A fresh service over `core` (the image of the fixture is in it): the instance a provider's `start` makes.
     fn start(core: &FakeCore) -> Self;
 
+    /// The address range of the owner object the driver started (`None`: no object, or the driver cannot tell). A snapshot compares a memory word that holds a pointer into it by its
+    /// offset (`OWNER_PTR_TAG`), because the owner of a second driver is at another address and a service whose firmware rows point at strings of its owner would differ for that reason only.
+    fn owner_range(&self) -> Option<(usize, usize)> {
+        None
+    }
+
     /// The rule for the records of kind `kind`: `Records::validate`, which the part table does not hold.
     fn validate_records(&self, kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem));
     unsafe fn teardown_refusal(&self, core: &FakeCore, owner: u8) -> i32;

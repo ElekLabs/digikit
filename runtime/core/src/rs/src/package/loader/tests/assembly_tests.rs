@@ -614,7 +614,7 @@ impl Drop for Clean {
             for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
                 crate::package::provider_rows::remove(rec);
             }
-            crate::package::provider_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200));
+            crate::package::provider_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::test_seams::machines_row(), Some(200));
         }
     }
 }
@@ -1839,13 +1839,7 @@ fn the_header_exports_of_a_service_file_are_its_provided_imports() {
                 .filter(|entry| entry.b & dkneeds::keys::EXPORT_QUERY == 0)
                 .map(|entry| entry.a)
                 .collect();
-            use crate::package::handlers::exports::{FX_ROUTES_ENTRY, MACHINES_MODULE_INFO};
-            let internal: &[&str] = match service {
-                "fx" => &[FX_ROUTES_ENTRY],
-                "machines" => &[MACHINES_MODULE_INFO],
-                _ => &[],
-            };
-            let want: std::collections::BTreeSet<u32> = builders_of(service).into_iter().chain(internal.iter().copied()).map(name_hash).collect();
+            let want: std::collections::BTreeSet<u32> = builders_of(service).into_iter().map(name_hash).collect();
             assert!(!want.is_empty(), "{service} provides nothing in sdk/sdk.toml");
             assert_eq!(listed, want, "{} {service}.dks: header EXPORTS differ from the provided imports", dev.name);
         }
@@ -2219,7 +2213,12 @@ fn the_modules_reply_carries_the_version_and_the_needed_runtime_of_each_loaded_f
                 assert_eq!(word(33), be(&file, 0x34), "{}: {}: the version of the header", dev.name, m.leaf);
                 assert_eq!(word(37), be(&file, 0x30) & 0x7fff_ffff, "{}: {}: the runtime version the file needs", dev.name, m.leaf);
                 needs.push(word(37));
-                at += 71 + *rb.add(at + 65) as usize;
+                // the fixed part ends at dsp_len (61 bytes); then `u8 n_sections` and `u32 hash, u8 n, n words` for each (the lfo shapes and the local-ping user have no machine)
+                let mut p = at + 62;
+                for _ in 0..*rb.add(at + 61) {
+                    p += 5 + 4 * *rb.add(p + 4) as usize;
+                }
+                at = p;
             }
             assert_ne!(needs[0], needs[1], "{}: the two fixtures need different runtime versions, so a swapped or constant field shows", dev.name);
         }

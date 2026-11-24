@@ -99,13 +99,13 @@ pub struct ModuleHooks {
     pub load_file: Option<unsafe extern "C" fn(path: *const u8) -> i32>,
     /// Read the DSP size and the context of the module with record index `i`.
     pub read_extra: Option<unsafe extern "C" fn(i: u32, out: *mut ModuleExtra)>,
-    /// `dkrt_fx`: the `index`th effect that has a page; `E_NOT_FOUND` past the end.
+    /// Removed (E1 step 4: the effects of a module are the fx service's `Describe` words in the MODULES reply): the word stays, always null; `dkrt_fx` answers `E_NOT_FOUND`.
     pub fx_entry: Option<unsafe extern "C" fn(index: u32, out: *mut DkrtFx) -> i32>,
     /// `dkrt_module_header`: read the header fields of the `.dkm` at store sector `first`.
     pub read_header: Option<unsafe extern "C" fn(first: u32, out: *mut DkrtModuleHeader) -> i32>,
     /// Does the module with record index `i` have a `tick`?
     pub has_tick: Option<unsafe extern "C" fn(i: u32) -> bool>,
-    /// Does a loaded module have machine type `ty`?
+    /// Removed (E1 step 4: `dk_debug_setup` takes any run-time type of the profile, and the host checks that a module has loaded it from the MODULES reply): the word stays, always null.
     pub machine_type_loaded: Option<unsafe extern "C" fn(ty: u32) -> bool>,
 }
 

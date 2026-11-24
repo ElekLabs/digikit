@@ -7,7 +7,7 @@ use crate::fxpage;
 use crate::fxsend;
 use crate::routing::{self, Routing};
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::provider::{ConsumerId, Describe, Provider, Reentry, Status, Ticker};
+use dkrt_abi::provider::{ConsumerId, Describe, Provider, Reentry, Status, Ticker, WordSink};
 use dkrt_abi::service::{tick_phase, TableFault};
 use dkrt_sdk::proto::{CAPK_FX_SLOTS, CAPK_SEND_SLOTS};
 
@@ -118,5 +118,11 @@ impl<C: CoreApi> Describe<C> for Fx {
     fn table_check(&self, _core: &C, used: u32, out: &mut TableFault) -> u32 {
         // SAFETY: reads the rows this crate owns
         unsafe { crate::dsp::table_check(used, out) }
+    }
+
+    /// One word for each effect row of module record `who` - 1 that has a page (`fxsend::describe`); none for a module with no such row.
+    fn describe(core: &C, who: ConsumerId, out: &mut WordSink) {
+        // SAFETY: reads the tables this crate owns, outside the owner (see `fxsend::describe`)
+        unsafe { fxsend::describe(core, who.get(), out) }
     }
 }

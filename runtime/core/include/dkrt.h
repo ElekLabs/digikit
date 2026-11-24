@@ -737,7 +737,7 @@ void dkrt_live_state(DkrtLive *out);
 /* The index-th loaded module (in load-slot order); OK, or E_NOT_FOUND past the end. */
 int32_t dkrt_module(uint32_t index, DkrtModule *out);
 
-/* The index-th loaded effect that has a page (row order): tab, module id, allowed routes, default, the route it runs on and the route the settings give it; OK, or E_NOT_FOUND past the end. */
+/* Removed: the effects of a module are the fx service's words in the MODULES reply (its Describe part). The slot stays (the table is append-only) and answers E_NOT_FOUND. */
 int32_t dkrt_fx(uint32_t index, DkrtFx *out);
 
 /* Resident query v1. UI task only, synchronous. Use the provider's typed wrapper. E_MISSING means the provider or facet is absent, E_CONTRACT an incompatible provider or invalid call, E_CONTEXT outside the UI task, E_BUSY for a nested call. */

@@ -1,9 +1,10 @@
-//! The route of an effect: record flags, saved setting and the FX ROUTES entry.
+//! The route of an effect: record flags, saved setting and the describe words.
 
 use super::*;
 use crate::fxpage;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp;
+use dkrt_abi::provider::WordSink;
 use dkrt_sdk::*;
 
 /// The routes of a record's flags word: (allowed `ROUTE_*` bits, default `ROUTE_*`). The loader has checked the word.
@@ -46,31 +47,31 @@ pub(super) unsafe fn saved_route<C: CoreApi>(core: &C, k: usize) -> u8 {
     s.dflt[k]
 }
 
-/// Effect `index` (0 ..) in row order, among the rows that have a page: the entry for DIGIKIT > FX ROUTES. 0, or `E_NOT_FOUND` past the end. UI task.
-pub unsafe fn fx_entry<C: CoreApi>(core: &C, index: u32, out: &mut DkrtFx) -> i32 {
+/// The words of the MODULES reply for module record `owner` (1 ..): one for each effect row of the module that has a page, in row order (the `Describe` of the service). Bits 0 to 7
+/// the row, then four bits each: the route it runs on, the route the settings give it now (differs from the running one after a pick that waits for its reload), the routes its
+/// record allows and its default (`ROUTE_*`). It runs on the MODULES command handler's task, outside the owner: it reads the tables of the service by name and one settings value;
+/// each is a byte or a word that a task switch cannot tear.
+pub unsafe fn describe<C: CoreApi>(core: &C, owner: u8, out: &mut WordSink) {
+    if owner == 0 {
+        return;
+    }
     let s = ss();
-    let mut seen = 0;
     let mut k = 0;
     while k < dsp::MAX_FX {
-        if fxpage::page_owner(k) != 0 {
-            if seen == index {
-                out.row = k as u32;
-                out.allowed = s.allow[k] as u32;
-                out.dflt = s.dflt[k] as u32;
-                out.running = if s.route[k] != 0 {
-                    ROUTE_SEND as u32
-                } else {
-                    ROUTE_MASTER as u32
-                };
-                out.saved = saved_route(core, k) as u32;
-                out.tab = [0; 8];
-                fxpage::tab_of(k, &mut out.tab);
-                out.id = s.id[k];
-                return OK;
-            }
-            seen += 1;
+        if fxpage::page_owner(k) == owner {
+            let running = if s.route[k] != 0 {
+                ROUTE_SEND
+            } else {
+                ROUTE_MASTER
+            };
+            out.push(
+                k as u32
+                    | (running as u32) << 8
+                    | (saved_route(core, k) as u32) << 12
+                    | (s.allow[k] as u32) << 16
+                    | (s.dflt[k] as u32) << 20,
+            );
         }
         k += 1;
     }
-    E_NOT_FOUND
 }

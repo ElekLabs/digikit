@@ -39,7 +39,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from tools.device import dkproto
+from tools.device import dkproto, modules_reply
 from tools.device.dkproto import (
     CAP,
     CMD_ABORT,
@@ -455,54 +455,20 @@ class Uploader:
 
     def modules(self) -> dict[str, Any]:
         """MODULES (runtime 0.2.0, capability MODULES): the arena and DSP-area figures and the loaded modules, every page. Returns
-        `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`; a module is `{index, name, version, needs
-        (the runtime version it needs, packed major << 16 | minor << 8 | patch), cf_base, cf_size, dsp_off, dsp_len, rows (voice-row mask), types (assigned machine
-        types), faults (the guard's count for those types), guard_off (the guard switched one of them off)}`."""
+        `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`; a module is what `modules_reply.decode_page` reads: the record's fixed part
+        (`index, name, version, needs, cf_base, cf_size, dsp_off, dsp_len`), `sections` (what each loaded service holds for it, by the hex of its name hash) and, read from
+        the `machines` and `fx` sections, `rows`, `types`, `faults`, `guard_off` and `effects` (runtime 0.11.5 and later)."""
         out: dict[str, Any] = {"modules": []}
         start = 0
         while True:
-            b = self._ok(CMD_MODULES, "modules", bytes((start,)))
-            af, al, df, dl = struct.unpack_from(">IIII", b, 0)
-            total, n = b[16], b[17]
-            out.update(
-                arena_free=af,
-                arena_largest=al,
-                dsp_free=df,
-                dsp_largest=dl,
-                total=total,
+            page = modules_reply.decode_page(
+                self._ok(CMD_MODULES, "modules", bytes((start,)))
             )
-            at = 18
-            for _ in range(n):
-                idx = b[at]
-                name = b[at + 1 : at + 33].split(b"\0")[0].decode()
-                version = struct.unpack_from(">I", b, at + 33)[0]
-                needs = struct.unpack_from(">I", b, at + 37)[0]
-                cf_base, cf_size, dsp_off, dsp_len, rows = struct.unpack_from(
-                    ">IIIII", b, at + 45
-                )
-                nt = b[at + 65]
-                types = list(b[at + 66 : at + 66 + nt])
-                faults = struct.unpack_from(">I", b, at + 66 + nt)[0]
-                flags = b[at + 70 + nt]
-                out["modules"].append(
-                    {
-                        "index": idx,
-                        "name": name,
-                        "version": version,
-                        "needs": needs,
-                        "cf_base": cf_base,
-                        "cf_size": cf_size,
-                        "dsp_off": dsp_off,
-                        "dsp_len": dsp_len,
-                        "rows": rows,
-                        "types": types,
-                        "faults": faults,
-                        "guard_off": bool(flags & 1),
-                    }
-                )
-                at += 71 + nt
-                start = idx + 1
-            if len(out["modules"]) >= total or n == 0:
+            out.update({k: v for k, v in page.items() if k != "modules"})
+            for m in page["modules"]:
+                out["modules"].append(m)
+                start = m["index"] + 1
+            if len(out["modules"]) >= page["total"] or not page["modules"]:
                 return out
 
     def capacity(self) -> dict[str, dict[str, int]]:
