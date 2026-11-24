@@ -35,8 +35,8 @@ Raw dot entries are recorded and omitted only for the ReadDir comparison.
 Prepare with existing tools, with no implicit patchkit/daemon build:
 
 ```text
-patchkit --root REPO build image-modules/proofs/file-catalog-proof
-patchkit --root REPO build image-modules/proofs/file-catalog-proof --check
+patchkit --root REPO build tests/fixtures/modules/file-catalog-proof
+patchkit --root REPO build tests/fixtures/modules/file-catalog-proof --check
 DIGI_CATALOG_EMUD=ABS/PREBUILT/digi-emud
 DIGI_PATCHKIT_BIN=ABS/PREBUILT/patchkit
 DIGI_CATALOG_CARD=ABS/PREBUILT/dt2.img
