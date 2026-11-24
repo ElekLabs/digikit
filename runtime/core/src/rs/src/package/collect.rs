@@ -217,8 +217,23 @@ fn is_generic(kind: u32) -> bool {
 
 /// What `init` declared (`dk_service_declare_*`, addresses in the loaded image at `base`) with the entries that are addresses made image offsets, as the header table
 /// has them.
-fn declared_offsets(c: &Collect, base: u32) -> Declare {
+fn declared_offsets(c: &Collect, keys: &KeysCopy, base: u32) -> Declare {
     let mut d = c.decl;
+    let (mut i, mut kept) = (0, 0);
+    // a service declares every hook it has, plain: one that the table lists for another device only is not this device's (the item would match nothing); a patch is a hook item
+    // with the patch entry. A declaration the table also lists for this device stays.
+    while i < d.n {
+        let it = d.items[i];
+        let entry = if it.tag == Declare::PATCH { dkneeds::keys::HOOK_ENTRY_PATCH } else { it.b.wrapping_sub(base) };
+        if (it.tag == Declare::HOOK || it.tag == Declare::PATCH) && keys.lists_for_other_device(it.a, entry) && !table_has_hook(keys, it.a, entry) {
+            i += 1;
+            continue;
+        }
+        d.items[kept] = it;
+        kept += 1;
+        i += 1;
+    }
+    d.n = kept;
     let mut i = 0;
     while i < d.n {
         let DeclItem { tag, a, b, c: e } = d.items[i];
@@ -240,10 +255,23 @@ fn declared_offsets(c: &Collect, base: u32) -> Declare {
     d
 }
 
+/// Whether the table's items for this device hold the hook (`hash`, `entry`).
+fn table_has_hook(keys: &KeysCopy, hash: u32, entry: u32) -> bool {
+    let mut k = 0;
+    while k < keys.decl.n {
+        let t = keys.decl.items[k];
+        if t.tag == Declare::HOOK && t.a == hash && t.b == entry {
+            return true;
+        }
+        k += 1;
+    }
+    false
+}
+
 /// Whether what `init` declared (`dk_service_declare_*`, addresses in the loaded image at `base`) is what the header table carries (declare-check-commit):
 /// the same kinds with the same lengths and handlers, slots, hooks, exports and resources. A module that declares nothing and has no such entries passes.
 pub fn decl_matches(c: &Collect, keys: &KeysCopy, base: u32) -> bool {
-    declared_offsets(c, base).same_as(&keys.decl)
+    declared_offsets(c, keys, base).same_as(&keys.decl)
 }
 
 /// The first item that `a` and `b` do not both hold (the row items of `a` are left out, as in `Declare::same_as`): the item, and whether it is `a`'s (else it is `b`'s).
@@ -278,7 +306,7 @@ fn first_unmatched(a: &Declare, b: &Declare) -> Option<(DeclItem, bool)> {
 /// `None` when `decl_matches`; else the first item that `init` and the header table do not both hold: (its tag, its first word), with 0x100 added to the tag when only
 /// the header table has it. A difference without such an item (a full collection) is `(0, 0)` with a tag of 1.
 pub fn decl_diff(c: &Collect, keys: &KeysCopy, base: u32) -> Option<(u32, u32)> {
-    let d = declared_offsets(c, base);
+    let d = declared_offsets(c, keys, base);
     if d.same_as(&keys.decl) {
         return None;
     }

@@ -223,3 +223,54 @@ fn the_generic_records_are_appended_to_the_block_the_services_write_in_the_order
     assert_eq!(buf[at + 8 + 3], 7);
     assert_eq!(buf[at + LEN_LFO_SHAPE as usize + 8 + 3], 9);
 }
+
+/// A service declares every hook it has under one plain name; the table lists a name for each of disjoint devices, and the commit takes the declaration that matches the entry of
+/// the device it runs on.
+#[test]
+fn a_plain_hook_declaration_matches_the_entry_of_the_table_for_its_own_device() {
+    use dkneeds::keys::HOOK_DEVICES_SHIFT;
+    let base = 0x1000;
+    // the table: one name with an entry for each of two devices (ids 1 and 2), a hook of the first only, a hook for every device
+    let table = |device: u32| {
+        let mut k = KeysCopy::empty();
+        k.decl.add(Declare::HOOK, 7, 0x40 | 1 << HOOK_DEVICES_SHIFT, 0);
+        k.decl.add(Declare::HOOK, 7, 0x44 | 2 << HOOK_DEVICES_SHIFT, 0);
+        k.decl.add(Declare::HOOK, 8, 0x50 | 1 << HOOK_DEVICES_SHIFT, 0);
+        k.decl.add(Declare::HOOK, 9, 0x60, 0);
+        k.set_aside_foreign_hooks(device);
+        k
+    };
+    let plain = || {
+        let mut c = Collect::new();
+        c.decl.add(Declare::HOOK, 7, base + 0x40, 0);
+        c.decl.add(Declare::HOOK, 7, base + 0x44, 0);
+        c.decl.add(Declare::HOOK, 8, base + 0x50, 0);
+        c.decl.add(Declare::HOOK, 9, base + 0x60, 0);
+        c
+    };
+    for device in [1, 2] {
+        let keys = table(device);
+        assert!(decl_matches(&plain(), &keys, base), "device {device}: every hook declared, the other device's dropped");
+        assert_eq!(decl_diff(&plain(), &keys, base), None);
+    }
+    // the table of device 2 has no entry for hook 8: its declaration is dropped, and a wrong entry for an own hook is a mismatch
+    let keys = table(2);
+    assert_eq!(keys.decl.n, 2);
+    let mut wrong = plain();
+    wrong.decl.items[1].b = base + 0x48;
+    assert!(!decl_matches(&wrong, &keys, base), "an entry that no item of the table has");
+    assert_eq!(decl_diff(&wrong, &keys, base), Some((Declare::HOOK as u32, 7)));
+    // a hook that no device's item lists is refused, also when only another device lists a different one
+    let mut extra = plain();
+    extra.decl.add(Declare::HOOK, 10, base + 0x70, 0);
+    assert!(!decl_matches(&extra, &keys, base));
+    // an own hook that the file forgot is a mismatch, a foreign one it forgot is not
+    let mut missing = plain();
+    missing.decl.items[3] = missing.decl.items[2];
+    missing.decl.n = 3;
+    assert!(!decl_matches(&missing, &keys, base), "hook 9 (every device) is not declared");
+    let mut no_foreign = Collect::new();
+    no_foreign.decl.add(Declare::HOOK, 7, base + 0x44, 0);
+    no_foreign.decl.add(Declare::HOOK, 9, base + 0x60, 0);
+    assert!(decl_matches(&no_foreign, &keys, base), "a file may leave out the hooks of other devices");
+}

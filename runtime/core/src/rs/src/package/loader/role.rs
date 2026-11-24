@@ -260,6 +260,8 @@ unsafe fn service_check<P: PackagePlatform, M: Images, R: Registry>(l: &mut Load
 #[inline(never)]
 pub(super) unsafe fn filter_hooks<P: PackagePlatform, M: Images, R: Registry>(l: &Loader<P, M, R>, keys: &mut crate::package::collect::KeysCopy) {
     let port = l.port_keys();
+    // the hooks of another device are kept aside: a service declares all its hooks, and the commit drops the declarations that the table lists for another device only
+    keys.set_aside_foreign_hooks(l.p.device_id());
     let d = &mut keys.decl;
     let (mut from, mut to) = (0, 0);
     while from < d.n {
@@ -275,9 +277,6 @@ pub(super) unsafe fn filter_hooks<P: PackagePlatform, M: Images, R: Registry>(l:
             it.b &= !dkneeds::keys::SLOT_DEVICES_MASK;
         }
         if it.tag == tag::HOOKS {
-            if !dkneeds::keys::hook_for_device(it.b, l.p.device_id()) {
-                continue;
-            }
             it.b &= dkneeds::keys::HOOK_ENTRY_MASK;
             let gone = match &port {
                 Some((p, ..)) => matches!(p.find_site(it.a), Some(s) if s.flags & FLAG_ABSENT != 0),

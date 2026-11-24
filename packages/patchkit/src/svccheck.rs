@@ -659,9 +659,18 @@ fn check_dks(
             ("[[patch]]", "patch", "patches", &patches),
         ] {
             let c = called(key);
+            // a hook with no device named is declared plain: the loader drops it on a device whose manifest entry is for another, so it needs an entry on some device
+            let plain = |n: &String| key == "hooks" && c.iter().any(|(x, d)| x == n && d.is_empty());
+            let anywhere: BTreeSet<String> = entries.iter().map(|(n, _)| n.clone()).collect();
             for dev in ["dt2", "dn2"] {
                 let (m, c) = (hook_set(entries, dev), hook_set(&c, dev));
                 for n in c.difference(&m) {
+                    if plain(n) {
+                        if !anywhere.contains(n) && dev == "dt2" {
+                            out.push(format!("dks/src/lib.rs: service! takes the {noun} `{n}`, but dks/module.toml has no {what} for it"));
+                        }
+                        continue;
+                    }
                     out.push(format!("dks/src/lib.rs: service! takes the {noun} `{n}` on {dev}, but dks/module.toml has no {what} for it"));
                 }
                 for n in m.difference(&c) {

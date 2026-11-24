@@ -2137,6 +2137,18 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
                     }
                 }
             }
+            // a service may declare a hook plain that the table lists for another device only: the loader drops that declaration at the commit (`declared_offsets`), so it is not
+            // compared. Per name, as many declarations go as the table has items of other devices for it, never more than the file declared above the table's own.
+            for i in 0..header.n {
+                let h = header.items[i];
+                if h.tag == Declare::HOOK && !dkneeds::keys::hook_for_device(h.b, dev.profile.id) {
+                    let (g, w) = (got.iter().filter(|x| x.0 == Declare::HOOK && x.1 == h.a).count(), want.iter().filter(|x| x.0 == Declare::HOOK && x.1 == h.a).count());
+                    if g > w {
+                        let at = got.iter().position(|x| x.0 == Declare::HOOK && x.1 == h.a).unwrap();
+                        got.remove(at);
+                    }
+                }
+            }
             got.sort();
             want.sort();
             let show = |v: &[(u16, u32, u32)], other: &[(u16, u32, u32)]| {
