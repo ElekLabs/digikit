@@ -220,7 +220,7 @@ test:subset: S:lfo
 test:subset: pnpm nx:pilot run-many -t test-device--dt2,test-device--dn2,smoke,pins -p core/runtime-refusal-tests,core/runtime-lfo-tests,gate-smoke,gate-pins
 ```
 
-The mechanism tags `C:device-facts` (the device facts the runtime reads at run time: `platform-contract`), `C:fault` (the crash and fault records: `crash-capture`, `fault-trace`) and `C:types` (the machine type words and the dynamic registry: `machine-rows-dt2`, `machine-rows-dn2`, the dynreg `equiv` and `roundtrip`) are finer than the areas: a change to one mechanism selects only the tests that observe it. `--why` adds a line to each selected file with the given tags it has and, with `--base`, the changed files that selected it:
+The mechanism tags `C:device-facts` (the device facts the runtime reads at run time: `platform-contract`), `C:fault` (the crash and fault records: `crash-capture`, `fault-trace`) and `C:types` (the machine type words and the dynamic registry: `machine-rows-dt2`, `machine-rows-dn2`, the machines `equiv` and `roundtrip`) are finer than the areas: a change to one mechanism selects only the tests that observe it. `--why` adds a line to each selected file with the given tags it has and, with `--base`, the changed files that selected it:
 
 ```text
 $ mise run test:subset -- C:fault C:device-facts --why

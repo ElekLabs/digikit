@@ -23,7 +23,7 @@ const ctx = {
   portUsers: (file: string) =>
     ({
       'ports/fw/lfo.toml': ['core/services/lfo'],
-      'ports/fw/dynreg.toml': ['core/rows', 'core/services/machines'],
+      'ports/fw/param.toml': ['core/rows', 'core/services/machines'],
       'ports/fw/machine.toml': ['core/services/machines', 'core/runtime'],
     })[file] ?? [],
   deviceOf: (file: string) => (file.startsWith('devices/x-device') ? 'xd' : undefined),
@@ -88,7 +88,7 @@ it('gives a test source none, and every other path without an area unknown', () 
 
 it('maps the port file of one plug-in point to the areas of its users, or to unknown when a user has none', () => {
   expect(areasOfPath('ports/fw/lfo.toml', ctx)).toEqual({ areas: ['S:lfo'] });
-  expect(areasOfPath('ports/fw/dynreg.toml', ctx)).toEqual({ areas: ['A:core/rows', 'S:machines'] });
+  expect(areasOfPath('ports/fw/param.toml', ctx)).toEqual({ areas: ['A:core/rows', 'S:machines'] });
   expect(areasOfPath('ports/fw/machine.toml', ctx)).toMatchObject({ unknown: expect.stringContaining('core/runtime') });
   expect(areasOfPath('ports/fw/other.toml', ctx)).toHaveProperty('unknown');
 });

@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "gate-device-smoke",
-  "description": "Fixed device smoke set on DT2 and DN2, plus the card-guard boot on ST (the one device test with an ST half) (docs/TESTING.md \"Device smoke set\"): boot-restart, live, services providers, dynreg equiv, settings-api, safe-mode, transfer-live and the digikit-menu zero menu test. Runs only the existing per-file device targets; adds no test code.",
+  "description": "Fixed device smoke set on DT2 and DN2, plus the card-guard boot on ST (the one device test with an ST half) (docs/TESTING.md \"Device smoke set\"): boot-restart, live, services providers, machines equiv, settings-api, safe-mode, transfer-live and the digikit-menu zero menu test. Runs only the existing per-file device targets; adds no test code.",
   "targets": {
     "device": {
       "executor": "nx:noop",
@@ -45,13 +45,13 @@
         },
         {
           "projects": [
-            "core/rows"
+            "core/runtime-machines-tests"
           ],
           "target": "test-device--equiv--dt2"
         },
         {
           "projects": [
-            "core/rows"
+            "core/runtime-machines-tests"
           ],
           "target": "test-device--equiv--dn2"
         },
