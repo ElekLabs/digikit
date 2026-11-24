@@ -8786,7 +8786,7 @@
         "rust": "dkfw::page::FX_KEY_LIST"
       },
       "cpu": "cf",
-      "doc": "The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. core/fxpages substitutes its own list.",
+      "doc": "The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. The fx service substitutes its own list.",
       "file": "devices/fw/page.toml",
       "kind": "data",
       "mark": "D",
@@ -9090,7 +9090,7 @@
         "rust": "dkfw::page::page_desc"
       },
       "cpu": "cf",
-      "doc": "The page descriptor accessor `row = f(int page)`: entry `moveq N,D1; move.l 4(SP),D0` (6 bytes), then the bound check, the row address and rts. core/fxpages hooks it.",
+      "doc": "The page descriptor accessor `row = f(int page)`: entry `moveq N,D1; move.l 4(SP),D0` (6 bytes), then the bound check, the row address and rts. The fx service hooks it.",
       "file": "devices/fw/page.toml",
       "kind": "fn",
       "mark": "D",
@@ -10043,7 +10043,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "Common exit of the kit's effect value array initialiser, `movem.l (SP),{D2 A2-A5}; lea (0x20,SP),SP` (8 bytes; a2 = the array); core/fxpages gives each effect row its defaults here.",
+      "doc": "Common exit of the kit's effect value array initialiser, `movem.l (SP),{D2 A2-A5}; lea (0x20,SP),SP` (8 bytes; a2 = the array); the fx service gives each effect row its defaults here.",
       "file": "devices/fw/page.toml",
       "kind": "site",
       "mark": "D",
@@ -10235,7 +10235,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "The `moveq N,D1` (2 bytes) in the FX view builder that pushes the stock page count, N in the byte at +1; core/fxpages reads it as the stock count.",
+      "doc": "The `moveq N,D1` (2 bytes) in the FX view builder that pushes the stock page count, N in the byte at +1; the fx service reads it as the stock count.",
       "file": "devices/fw/page.toml",
       "kind": "site",
       "mark": "D",

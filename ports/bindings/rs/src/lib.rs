@@ -524,7 +524,7 @@ pub mod page {
     }
 
     unsafe extern "C" {
-        /// The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. core/fxpages substitutes its own list.
+        /// The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. The fx service substitutes its own list.
         #[link_name = "cf.page.data.fx_key_list"]
         pub static FX_KEY_LIST: u8;
     }

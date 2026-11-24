@@ -9,7 +9,7 @@ rule.dt2 = { kind = "cf_ptr", hash = "7160f06f3d6124dc745cdb7c75628c47", offset 
 rule.dn2 = { kind = "cf_ptr", hash = "8fb9057131b85c6b6ab80d28a4e37a8b", offset = 0x67c, len = 4 }
 mark = "D"
 users = ["core/services/fx"]
-doc = "The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. core/fxpages substitutes its own list."
+doc = "The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. The fx service substitutes its own list."
 
 [[data]]
 name = "cf.page.data.fx_view_list"
@@ -32,7 +32,7 @@ rule.dt2 = { kind = "cf_func", hash = "2f139e6b0d70fdc22d64ca72a71f88c9", offset
 rule.dn2 = { kind = "cf_func", hash = "78edf1e40ff808780fc20e11fa31d3b4", offset = 0x0, len = 6 }
 mark = "D"
 users = ["core/services/fx"]
-doc = "The page descriptor accessor `row = f(int page)`: entry `moveq N,D1; move.l 4(SP),D0` (6 bytes), then the bound check, the row address and rts. core/fxpages hooks it."
+doc = "The page descriptor accessor `row = f(int page)`: entry `moveq N,D1; move.l 4(SP),D0` (6 bytes), then the bound check, the row address and rts. The fx service hooks it."
 
 # ---- the machine's SRC page (Digitakt II SourcePageView, Digitone II MultiSourcePageView): the encoder click ----
 [[fn]]
@@ -84,7 +84,7 @@ rule.dt2 = { kind = "cf_func", hash = "8d1db0c6e713e00d9191111226e258ae", offset
 rule.dn2 = { kind = "cf_func", hash = "77836acd2395bf50b1af9bcd04bbbe1e", offset = 0x5c, len = 8 }
 mark = "D"
 users = ["core/services/fx"]
-doc = "Common exit of the kit's effect value array initialiser, `movem.l (SP),{D2 A2-A5}; lea (0x20,SP),SP` (8 bytes; a2 = the array); core/fxpages gives each effect row its defaults here."
+doc = "Common exit of the kit's effect value array initialiser, `movem.l (SP),{D2 A2-A5}; lea (0x20,SP),SP` (8 bytes; a2 = the array); the fx service gives each effect row its defaults here."
 
 # The loader of the kit's effect value array (FUN_400daf54(array, storage), called by the kit loader FUN_400db898 for Load Kit, a pattern's kit and a project load):
 # after its table loop, `move.l (0x98,A0),(0x8e,A1)` (6 bytes; A0 = the storage record, A1 = the array). The hook restores the effect values (persistence).
@@ -135,7 +135,7 @@ rule.dt2 = { kind = "cf_func", hash = "7160f06f3d6124dc745cdb7c75628c47", offset
 rule.dn2 = { kind = "cf_func", hash = "8fb9057131b85c6b6ab80d28a4e37a8b", offset = 0x7a4, len = 2 }
 mark = "D"
 users = ["core/services/fx"]
-doc = "The `moveq N,D1` (2 bytes) in the FX view builder that pushes the stock page count, N in the byte at +1; core/fxpages reads it as the stock count."
+doc = "The `moveq N,D1` (2 bytes) in the FX view builder that pushes the stock page count, N in the byte at +1; the fx service reads it as the stock count."
 
 [[site]]
 name = "cf.page.site.fx_view_list.load"
@@ -173,7 +173,7 @@ mark = "D"
 users = ["core/services/fx"]
 doc = "FxPageView's tab label (FUN_40074d88): `move.b #0xd,D1b; cmp.l D0,D1` (6 bytes) of the third page test (DEL), the `bne.b` after it is the stock one."
 
-# Hook points. Contracts are read from the core/fxpages stubs (mark D). All resume at the site end or another address in
+# Hook points. Contracts are read from the fx service stubs (mark D). All resume at the site end or another address in
 # the function, not at a tail.
 
 [[hook]]
