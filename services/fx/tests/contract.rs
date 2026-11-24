@@ -47,11 +47,11 @@ impl Recipe for FxRecipe {
             has(PART_RECORDS, RECORDS_NEWEST)
                 && has(PART_DSP, DSP_NEWEST)
                 && has(PART_TICK, TICK_NEWEST)
-                && has(PART_QUERY, QUERY_NEWEST)
-                && has(PART_DESCRIBE, DESCRIBE_NEWEST),
-            "the file adopts the five parts this recipe builds"
+                && has(PART_DESCRIBE, DESCRIBE_NEWEST)
+                && !matches!(row.part(PART_QUERY, QUERY_NEWEST), PartLookup::Found { .. }),
+            "the file adopts the four parts this recipe builds and no Query part"
         );
-        b.records(&KINDS_FX).dsp().tick().query().describe()
+        b.records(&KINDS_FX).dsp().tick().describe()
     }
 }
 

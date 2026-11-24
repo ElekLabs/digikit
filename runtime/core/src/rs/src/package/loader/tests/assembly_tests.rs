@@ -1849,45 +1849,43 @@ fn the_header_exports_of_a_service_file_are_its_provided_imports() {
 /// The packed query is associated with the live provider, not the import table. The host calls the
 /// same typed export natively because it cannot execute the packed ColdFire address.
 #[test]
-fn the_fx_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher() {
+fn the_service_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher() {
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
-        let file = service_file(*dev, "fx", "core/services/fx");
+        let file = service_file(*dev, LOCAL_PING.leaf, LOCAL_PING.nx);
         let table = table_of(&file);
         let keys = Keys::parse(&table).unwrap();
-        let name = name_hash("fx");
+        let name = name_hash("local-ping");
         let query = name_hash(dkrt_sdk::RESIDENT_QUERY_ENTRY);
-        let export = keys.exports().find(|e| e.a == query).expect("fx has a query entry");
+        let export = keys.exports().find(|e| e.a == query).expect("local-ping has a query entry");
         assert_eq!(export.b & dkneeds::keys::EXPORT_FLAGS, dkneeds::keys::EXPORT_FLAGS);
-        assert_eq!(be(&file, dkneeds::H_RUNTIME) & 0x00ff_ffff, 0x000c02);
-        let fx_version = keys.words(tag::PROVIDES, 0).unwrap().1;
+        let version = keys.words(tag::PROVIDES, 0).unwrap().1;
         unsafe {
-            let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
-            let _dsp = dsp_env(*dev, &l, &plan);
-            assert_eq!(l.resident_query(name, fx_version), Err(E_MISSING));
-            let _run = boot_run(&mut l, &plan, &[&FX_GAIN], true);
-            let j = (0..plan.np).find(|j| l.found.path(*j) == b"services/fx.dks").unwrap();
+            let (mut l, plan) = planned(*dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            assert_eq!(l.resident_query(name, version), Err(E_MISSING));
+            let _run = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], true);
+            let j = (0..plan.np).find(|j| l.found.path(*j) == b"services/local-ping.dks").unwrap();
             let base = records::module(MAX_MODULES + j).base;
-            assert_eq!(l.resident_query(name, fx_version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
-            assert_eq!(l.resident_query(name, fx_version + 1), Err(E_CONTRACT));
-            assert_eq!(l.resident_query(name_hash("machines"), fx_version), Err(E_MISSING));
+            assert_eq!(l.resident_query(name, version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
+            assert_eq!(l.resident_query(name, version + 1), Err(E_CONTRACT));
+            assert_eq!(l.resident_query(name_hash("machines"), version), Err(E_MISSING));
             assert_eq!(l.exports.owned(query), None);
             // An ordinary legacy export with the same hash cannot change which entry the broker uses.
             l.exports.publish_with_scope(MAX_MODULES + j + 1, query, base, true).unwrap();
-            assert_eq!(l.resident_query(name, fx_version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
+            assert_eq!(l.resident_query(name, version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
 
-            let ask = crate::package::handlers::dks_decls::FX_QUERY;
-            let request = [0u32, 0];
-            let mut reply = u32::MAX;
-            let out = (&mut reply as *mut u32).cast();
-            // the entry answers from the owner in the file's cell: this case runs no `init`, so it starts the owner as `init` does, and ends it after
-            assert_eq!(ask(1, request.as_ptr().cast(), 8, out, 4), E_MISSING, "no owner, no provider");
-            crate::package::handlers::dks_decls::fx_start().expect("the owner starts");
-            assert_eq!(ask(1, request.as_ptr().cast(), 4, out, 4), E_CONTRACT);
-            assert_eq!(ask(1, request.as_ptr().cast(), 8, out, 4), E_NOT_FOUND);
-            crate::package::handlers::dks_decls::fx_stop();
-            assert_eq!(reply, u32::MAX, "the service has no loaded FX page to report");
+            // the entry answers from the owner in the file's cell: the boot's `init` started it, so stop it for the "no provider" answer and start it as `init` does
+            let ask = dkrt_fixture_local_ping::dk_service_query_v1;
+            let mut reply = [0u8; dkrt_fixture_local_ping::COUNTERS_LEN];
+            let out = reply.as_mut_ptr().cast();
+            let len = reply.len() as u32;
+            dkrt_fixture_local_ping::dk_svc_stop();
+            assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS, core::ptr::null(), 0, out, len), E_MISSING, "no owner, no provider");
+            dkrt_fixture_local_ping::dk_svc_start().expect("the owner starts");
+            assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS, core::ptr::null(), 0, out, len), len as i32, "the reply is the counters");
+            assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS + 1, core::ptr::null(), 0, out, len), E_NOT_FOUND);
+            assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS, core::ptr::null(), 0, out, len - 1), E_TOO_BIG);
         }
         clean_state();
     }

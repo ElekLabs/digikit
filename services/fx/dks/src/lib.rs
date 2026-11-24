@@ -18,7 +18,7 @@ dkrt_svc_rt::service!(
     Fx,
     "fx",
     &KINDS_FX,
-    parts = [Records, Dsp, Tick, Query, Describe, Reentry],
+    parts = [Records, Dsp, Tick, Describe, Reentry],
     hooks = [
         ("cf.page.hook.page_desc", hooks::fxp_acc),
         ("cf.page.hook.tab_label_test", hooks::fxp_label),

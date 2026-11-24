@@ -98,7 +98,6 @@
   "image-modules/points/fx/src/dsp/fxsend-stub.inc": 3,
   "image-modules/points/fx/src/dsp/fxsend.s": 4,
   "image-modules/points/fx/tests/dsp-stats.rig.test.ts": 6,
-  "image-modules/points/fx/tests/fx-routes-panel.device.test.ts": 1,
   "image-modules/points/fx/tests/fx-routes-persist.device.test.ts": 4,
   "image-modules/points/fx/tests/fx-send.device.test.ts": 5,
   "image-modules/points/fx/tests/fx-send.rig.test.ts": 1,

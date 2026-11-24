@@ -14,7 +14,6 @@ src/builder.rs    the builder calls (`dk_module_ctx_add_fx`, `dk_fx_add_page`, `
 src/rule.rs       the rule for the effect records (`effects`), shared by `Records::check` and `validate`
 src/dsp/          the effect rows of the DSP loader (`mod.rs`) and the `DspPart` of the owner (`part.rs`: check_sections, check_rows, claim, release, clear, row_step, attribute, diag)
 src/routing.rs    FX ROUTING: the SETTINGS list of the effects, the routes offered and what a pick does, over `CoreApi` and the `Ui` trait (`routing/tests.rs`: FakeCore and a fake UI)
-src/queries.rs    the `Query` part: the route choices the FX ROUTES menu asks for (operation 1)
 src/fxpage/       the effect pages: page rows, parameter rows, the kit's values, the page list and the tick that sends changed values (`DKRT_FXP`, `DKRT_FXP_*`)
 src/fxsend/       the send route and send amounts: cells, settings, the tick over the 16 Sound objects (`DKRT_FXS`), and `describe`: the MODULES words of an effect module
 src/rows.rs       the effect rows of the chain (`DKRT_FROWS`)
@@ -22,7 +21,7 @@ src/slots.rs      docs only: the file fills no pointer slot (`patchkit service-c
 src/lib.rs        docs, `mod` only
 dks/              the service file: `lib.rs` (the `service!` call), `hooks.rs` (the nine hooks, assembler), `builder.rs` (the builder exports, which reach the owner), `ui.rs` (the FX ROUTING row; its three callbacks hand an `Event` to the owner's `Reentry` queue, so a pick that arrives while the service is busy runs after it, and a full queue shows `BUSY: TRY AGAIN`). A pick saves the route, queues the reload and shows its toast when the job ends (`Routing::poll_job` from the tick): `NAME: ROUTE`, or `NAME: ROUTE ON STOP` when the transport plays (the runtime then reloads the module at stop: `dkc_reload_when_possible`; no toast follows that reload), or `NAME: RESTART TO APPLY`; the job is matched by its serial (`DkrtLive::serial`), and a wait ends when the effect is torn down by anything but that job (`Routing::effect_gone` from `detach`). Picking the saved route while its reload is queued shows `NAME: ROUTE PENDING`. A pick while the reload is deferred to the stop saves a changed route, calls `dkc_reload_when_possible` again (the runtime ignores it while the module is queued and marks it again when its queue gave up, so no second reload job starts) and shows `NAME: ROUTE ON STOP`. `gen_exports.rs` (generated: never edit); `dsp/*.s` is the effect dispatch of the DSP
 tests/            host tests over `FakeCore`: `contract.rs` (the shared suite through `provider_contract`, and the cases of reload and park), `records.rs` (apply, tick, detach, check,
-                  DSP steps), `builder.rs` (the collection, the lowering and the commit), `queries.rs` (the `Query` part), `table.rs` and `fxpage_checks.rs` (the image table, the record
+                  DSP steps), `builder.rs` (the collection, the lowering and the commit), `table.rs` and `fxpage_checks.rs` (the image table, the record
                   rule), `guard.rs` (diagnostics, table check, attribute, section check), `file.rs` (the file's code over the owner cell); `stubs/` (the `dkc_*` imports as host functions)
 ```
 
@@ -54,7 +53,7 @@ How it works:
 - `Provider::detach` is the teardown of an effect module, whatever route it runs on: page, list entry, send cell and defaults go back (the `DspPart::clear` before it frees the DSP row).
   `can_stop` keeps its default: the service never holds up a reload. The route and the send amounts are settings keyed by the module id, so the next load of the module gets them back; the
   knob values stay in the kit's array.
-- The resident query answers `0` on success, as `dk_fx_route_choices` (`sdk/include/dk/fx/route-query.h`) checks for it, and writes the allowed routes into the reply word only on success. It stays so to keep RC3 behaviour-neutral; the E1 step deletes it.
+- fx has no `Query` part: the FX ROUTING list asks its own rule (`fxsend::effect`). The `local-ping` fixture proves the Query part and `dkrt_service_query`.
 
 Describe (the MODULES reply): `Describe::describe` (`fxsend::describe`) gives one word for each effect row of module record `who` - 1 that has a page, in row order: the row (bits 0 to 7), then four bits
 each of the route it runs on, the route the settings give it now, the routes its record allows and its default (1 master, 2 send). It has no object and runs on the MODULES command handler's task outside

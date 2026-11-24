@@ -1,7 +1,7 @@
 use super::*;
 use dkrt_sdk::*;
 
-/// The offsets that the device tests read from `DKRT_FXS` (`fx-routes-ui.ts`, `fx-track-route.device.test.ts`).
+/// The offsets that the device tests read from `DKRT_FXS` (`fx-track-route.device.test.ts`).
 #[test]
 fn the_layout_the_device_tests_read_is_unchanged() {
     assert_eq!(core::mem::offset_of!(SendState, restores), 16);
