@@ -263,6 +263,11 @@ sound_off = 0x34
 sound_stride = 0x450
 # The number of s16 parameter words in a Sound object's array (the stock getter's bound; finding 02): the debug log's parameter watch reads them.
 sound_words = 71
+# The firmware's second per-code table: one value-class object of 0x44 bytes for each parameter code (the display and lock flags a knob row copies from its template; the accessor of the
+# port anchor cf.param.fn.value_class reads it). The tests read the class of a row from it.
+value_classes = 0x4293c040
+# The firmware's kit library: sector ranges (hi exclusive) that the kit and project saves of the firmware write; the FX write-safety policies allow them.
+kit_areas = [[0x16000, 0x17000]]
 # The array the LFO tick adds its output to, track 1 word 0 (finding 149, "Where the output lands": the smoother's return value plus 0x22; word i at +2 i, track t at +2 * sound_words * t),
 # and the phase accumulator (u32) of LFO 1 of voice slot 0 in the tick's state. The device tests of the LFO read them.
 # The LFO state belongs to a voice slot, not a track: slot s is at lfo_phase + lfo_phase_stride * s. This device has one voice per track (track 1 uses slot 0).

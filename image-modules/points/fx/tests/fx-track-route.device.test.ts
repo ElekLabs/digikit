@@ -2,7 +2,7 @@ import path from 'node:path';
 import { button, encoder } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import {
-  analysisJson,
+  addedFactorOf,
   bounded,
   compare,
   frames,
@@ -23,6 +23,7 @@ import {
   trackNote,
 } from '@digi/regression/runtime/fx-track-ui.ts';
 import { record } from '@digi/regression/runtime/artifacts.ts';
+import { lockCheck } from '@digi/regression/runtime/project-kit.ts';
 import { overlayWrites } from '@digi/regression/runtime/write-safety.ts';
 import { names, routeKey, sendKey, trackRouteSuite } from './fx-track-route-support.ts';
 
@@ -168,12 +169,8 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
           const file = path.join(artifacts, 'send.wav');
           await trackNote(runtime, file, (await frames(session)) + 300);
           pcm.set('send', file);
-          const result = await analysisJson<{ added_factor: number }>(
-            'tools.patchkit.pk_digikit_fxsend',
-            ['added-factor', pcm.get('dry')!, file],
-            artifacts,
-            'send-added-factor',
-          );
+          const result = { added_factor: addedFactorOf(pcm.get('dry')!, file) };
+          record(artifacts, 'send-added-factor', result);
           const want = 0.5 * (40 / 127) ** 2;
           expect(Math.abs(result.added_factor / want - 1)).toBeLessThan(0.02);
           await context.evidence(runtime, 'send-audible', true);
@@ -318,30 +315,20 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
             locks.set(turn, { overlay, cc: cc!.hex, shown });
             record(artifacts, `lock-${turn}-result`, { overlay, cc: cc!.hex, shown });
             if (turn === 'send') {
-              const result = await analysisJson<{
-                trig_changed_bytes: number;
-                send_changed_bytes: number;
-                amount_diff: { differ_bytes: Record<string, number> };
-              }>(
-                'tools.patchkit.pk_digikit_fxroute',
-                [
-                  'lock-check',
-                  '--device',
-                  device,
-                  '--card',
-                  context.baseline('send').cardImage!,
-                  ...['base', 'none', 'amount', 'send'].flatMap((tag) => [`--${tag}`, locks.get(tag)!.overlay]),
-                ],
-                artifacts,
-                'lock-project-byte-oracles',
-              );
+              const result = lockCheck(device, context.baseline('send').cardImage!, {
+                base: locks.get('base')!.overlay,
+                none: locks.get('none')!.overlay,
+                amount: locks.get('amount')!.overlay,
+                send: locks.get('send')!.overlay,
+              });
+              record(artifacts, 'lock-project-byte-oracles', result);
               expect(result.trig_changed_bytes, 'panel script records a trig: method control').toBeGreaterThan(0);
               // The legacy script could not produce a stock-knob lock control. Preserve
               // its bounded claim: same pattern bytes, supported by the class flag above.
               expect(result.send_changed_bytes, 'held send turn saves no lock bytes').toBe(0);
               expect(locks.get('amount')!.shown).toBe(40);
               expect(
-                (result.amount_diff.differ_bytes.kit ?? 0) + (result.amount_diff.differ_bytes.pool ?? 0),
+                (result.amount_diff.differBytes.kit ?? 0) + (result.amount_diff.differBytes.pool ?? 0),
                 'amount saves no kit or Sound record bytes',
               ).toBe(0);
               expect(locks.get('send')!.cc, 'send knob emits no MIDI CC').toBe('');

@@ -4,7 +4,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import type { Device } from '@digi/test-support';
 import { cardStore, uploadStore } from '../runtime/device-data.ts';
-import { KIT_AREAS, overlayWrites, runtimeSafety, type SafetyPolicy } from '../runtime/write-safety.ts';
+import { kitAreas } from '../runtime/device-data.ts';
+import { overlayWrites, runtimeSafety, type SafetyPolicy } from '../runtime/write-safety.ts';
 
 const directories: string[] = [];
 afterEach(() => {
@@ -56,7 +57,7 @@ const check = (
 
 describe.each(['dt2', 'dn2'] as const)('runtime safety on %s', (device) => {
   const store = cardStore(device);
-  const [kitLo, kitHi] = KIT_AREAS[device][0]!;
+  const [kitLo, kitHi] = kitAreas(device)[0]!;
 
   test('passes with clean logs and allowed sectors', () => {
     const { output, overlay } = run([store.selA, store.selB, 0x58000], 2);

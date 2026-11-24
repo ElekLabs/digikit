@@ -4,13 +4,13 @@ import { button, waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { REDRAW, SETTLE, analysisJson, bounded, captureNote, frames, pickSine, readFloatWav, rpc, stableFrameHash, word } from '@digi/regression/runtime/fx-live.ts';
+import { REDRAW, SETTLE, bounded, captureNote, frames, pickSine, readFloatWav, rpc, stableFrameHash, word } from '@digi/regression/runtime/fx-live.ts';
 import { createFxKitUi } from '@digi/regression/runtime/fx-kit-ui.ts';
 import { kitMenu, kitSlotOne } from '@digi/regression/runtime/fx-track-ui.ts';
 import { serviceSymbol } from '@digi/regression/runtime/service-symbols.ts';
 import { effectPage, mainPage, pageKit } from '@digi/regression/runtime/fx-pages-ui.ts';
 import { wordBase } from '@digi/regression/runtime/memory.ts';
-import type { FxProfile } from '@digi/regression/runtime/fx-session.ts';
+import { fxProfile } from '@digi/regression/runtime/device-data.ts';
 import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
@@ -134,7 +134,7 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
   expect(Math.abs(wet2 / wet - 1), `the level after the load (${wet2.toFixed(4)}) is the level before (${wet.toFixed(4)})`).toBeLessThan(0.03);
 
   // the GAIN knob in the kit's array: the user's value stays through a reload, an unload and a load
-  const profile = await analysisJson<FxProfile>('tools.patchkit.pk_digikit_fxroutes', ['profile', '--device', device], artifacts, 'profile');
+  const profile = fxProfile(device);
   const kit = pageKit(rt, profile);
   await kit.poke(profile.fx.value_indices[0]!, HALF_RAW);
   await rt.ui.wait({ ms: 200, why: 'the UI loop sends the changed knob to the DSP row (no observable state of the transfer)' });
@@ -242,7 +242,7 @@ async function pokeHalf(rt: TestRuntime, at: number, value: number): Promise<voi
 
 async function expectFxSend(rt: TestRuntime): Promise<void> {
   const { artifacts, plan, epoch, device, file: SEND_PATH } = await prepare(rt, 'reload-fx-send', SEND_ID);
-  const profile = await analysisJson<FxProfile>('tools.patchkit.pk_digikit_fxroutes', ['profile', '--device', device], artifacts, 'profile');
+  const profile = fxProfile(device);
   // the send amount of track 1 for cell 0 is the Sound array value `amount << 8`, as the firmware's knob writes it; the service reads it as a turn
   const sound = (await word(rt.session, profile.fx.kit_ptr)) + profile.fx.sound_off;
   await pokeHalf(rt, sound + 0x14 + 2 * profile.fx.send_indices[0]!, 127 << 8);

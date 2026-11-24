@@ -5,6 +5,7 @@ import { CMD, READ_MAX } from '@digi/dk-session/gen_proto';
 import { button, encoder, pollUntil, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import { postRaw, readSectors } from './card-kit.ts';
+import { cardStore, TRACK_OBJ_WORD } from './device-data.ts';
 import { REDRAW, SETTLE, bounded, dspBytes, pickSine, word, type Rt } from './fx-live.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { serviceSymbol } from './service-symbols.ts';
@@ -19,6 +20,7 @@ import { overlayRecords } from './write-safety.ts';
 // ---- the settings record (port of tools/device/dksettings.py; vectors in runtime/core/vectors/settings-vectors.json) -------------------------
 
 const HEADER = 18;
+const SECTOR = 512;
 /** One settings copy: 16 sectors (sdk/sdk.toml [settings]). */
 export const SETTINGS_AREA = 16 * 512;
 export const SETTINGS_KEY_MAX = 47;
@@ -90,6 +92,56 @@ export function encodeSettings(seq: number, entries: SettingsEntry[]): Buffer {
   const crc = Buffer.alloc(4);
   crc.writeUInt32BE(zlib.crc32(Buffer.concat([head, body])));
   return Buffer.concat([head, crc, body]);
+}
+
+/** What `seedSettingsCard` wrote: where, how many bytes, and the entries. */
+export interface SeededSettings {
+  card: string;
+  sector: number;
+  bytes: number;
+  seq: number;
+  entries: number;
+}
+
+/**
+ * Seed settings copy A of an existing, caller-owned card whose two settings copies are empty (port of `seed_card` of tools/patchkit/pk_digikit_fxroutes.py). `entries` are the
+ * key and the hex value of each setting, in the order the runtime keeps them. The result is a function of the device, the entries and the card's bytes only, so a card cache key
+ * of those (`cardKey`) names it.
+ */
+export function seedSettingsCard(
+  card: string,
+  device: Device,
+  entries: [key: string, valueHex: string][],
+): SeededSettings {
+  const pairs: SettingsEntry[] = entries.map(([key, valueHex]) => {
+    if (!/^[\x21-\x7e]+$/.test(key) || !/^([0-9a-fA-F]{2})*$/.test(valueHex))
+      throw new Error('entry needs an ASCII key and hexadecimal value');
+    const value = Buffer.from(valueHex, 'hex');
+    if (key.length > SETTINGS_KEY_MAX || value.length > SETTINGS_VALUE_MAX)
+      throw new Error('entry exceeds settings key or value limits');
+    return [key, value];
+  });
+  const record = encodeSettings(1, pairs);
+  const reason = settingsWhy(record);
+  if (reason !== 'ok') throw new Error(`invalid settings record: ${reason}`);
+  const padded = Buffer.concat([record, Buffer.alloc((((record.length + 511) >> 9) << 9) - record.length)]);
+  const store = cardStore(device);
+  const area = store.setCopySectors * SECTOR;
+  if (padded.length > area) throw new Error("settings record exceeds the device's copy area");
+  const fd = fs.openSync(card, 'r+');
+  try {
+    if (fs.fstatSync(fd).size < (store.setB + store.setCopySectors) * SECTOR)
+      throw new Error('card is too small for the device settings copies');
+    for (const sector of [store.setA, store.setB]) {
+      const copy = Buffer.alloc(area);
+      fs.readSync(fd, copy, 0, area, sector * SECTOR);
+      if (copy.some((b) => b !== 0)) throw new Error('card settings copies must be empty before seeding');
+    }
+    fs.writeSync(fd, padded, 0, padded.length, store.setA * SECTOR);
+  } finally {
+    fs.closeSync(fd);
+  }
+  return { card, sector: store.setA, bytes: padded.length, seq: 1, entries: pairs.length };
 }
 
 export const settingsMap = (rec: SettingsRecord | null) =>
@@ -634,15 +686,13 @@ export async function sweepMachineList(rt: Rt, positions: number): Promise<void>
 
 export const SLOT0 = 0x58000;
 const SLOT_SECTORS = 0x8000;
-const SECTOR = 512;
 /** soundStorage_v3: magic, version 3. */
 const SOUND_HEAD = Buffer.from('beefbace00000003', 'hex');
 /** The one word of the slot that the first save of a project sets differently from every later save (finding 39): offset 0x18, 4 bytes. */
 export const STAMP: [number, number][] = [[0x18, 4]];
 /** The machine type byte of a sound record (DT2 0xd2, DN2 0xf4). */
 export const typeAt = (device: Device) => (device === 'dt2' ? 0xd2 : 0xf4);
-/** Word of DT2 track 1 whose third byte is the machine type; the tracks lie 0x450 apart (finding 02). */
-export const TRACK_OBJ_WORD = 0x4265338c;
+export { TRACK_OBJ_WORD };
 
 /** The project-slot sectors of an overlay file, with the bytes the guest wrote laid over zeros. */
 export function slotSectors(overlayFile: string): Map<number, Buffer> {
@@ -656,8 +706,9 @@ export function slotSectors(overlayFile: string): Map<number, Buffer> {
   return out;
 }
 
-export const slotImage = (card: string, touched: Iterable<number>) =>
-  new Map([...touched].sort((a, b) => a - b).map((s) => [s, readSectors(card, s, 1)] as const));
+/** The sectors `touched` of the card, with the optional `overlay` blob (a session's writes) laid over it. */
+export const slotImage = (card: string, touched: Iterable<number>, overlay?: Buffer) =>
+  new Map([...touched].sort((a, b) => a - b).map((s) => [s, readSectors(card, s, 1, overlay)] as const));
 
 /** (byte offset of the record, machine type) for each sound record in the written sectors (runs of adjacent sectors are joined). */
 export function soundRecords(blob: Map<number, Buffer>, at: number): [number, number][] {
@@ -730,6 +781,25 @@ export function pattern0Changes(
       if (x[i] !== y[i]) out.push([sec * SECTOR - SLOT0 * SECTOR + i - 0x200, x[i]!, y[i]!]);
   }
   return out.filter((o) => o[0] < n);
+}
+
+/** The overlay files of the four turns of the track SEND lock leg (`lockCheck`). */
+export type LockOverlays = Record<'base' | 'none' | 'amount' | 'send', string>;
+
+/**
+ * The project-byte oracles of the track SEND lock turns (port of `lock_check` of tools/patchkit/pk_digikit_fxroute.py): the project-slot sectors the four overlays touch, each read
+ * from `card` with its overlay laid over it, then how many bytes of pattern 0 the trig and the held send turn changed and where the amount turn differs from the send turn.
+ */
+export function lockCheck(device: Device, card: string, overlays: LockOverlays) {
+  const blobs = Object.fromEntries(Object.entries(overlays).map(([name, file]) => [name, fs.readFileSync(file)]));
+  const touched = new Set<number>();
+  for (const file of Object.values(overlays)) for (const sector of slotSectors(file).keys()) touched.add(sector);
+  const image = (name: keyof LockOverlays) => slotImage(card, touched, blobs[name]);
+  return {
+    trig_changed_bytes: pattern0Changes(image('base'), image('none')).length,
+    send_changed_bytes: pattern0Changes(image('none'), image('send')).length,
+    amount_diff: diffSlot(image('send'), image('amount'), device, STAMP),
+  };
 }
 
 /** The machine type byte of a DT2 track's sound. */

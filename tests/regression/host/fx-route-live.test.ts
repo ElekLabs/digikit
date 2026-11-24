@@ -2,15 +2,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import type { Session } from '@digi/test-support';
+import type { Device, Session } from '@digi/test-support';
 import { DkSession } from '@digi/dk-session';
 import { withWaitApi, type PatchedSession } from '../support.ts';
+import { fxProfile } from '../runtime/device-data.ts';
 import type { RuntimePlan } from '../runtime/runtime-plan.ts';
 
 const fake = vi.hoisted(() => ({
   fixture: vi.fn(),
   prepare: vi.fn(),
-  analysis: vi.fn(),
+  seed: vi.fn(),
+  render: vi.fn(),
   watchEnv: vi.fn(),
   safety: vi.fn(),
   evidence: vi.fn(),
@@ -39,9 +41,14 @@ vi.mock('../runtime/write-safety.ts', () => ({ runtimeWatchEnv: fake.watchEnv, r
 vi.mock('../runtime/fx-live.ts', async (original) => ({
   ...(await original<object>()),
   options: (device: string) => ({ device, firmware: device === 'dt2' ? '1.17' : '1.12' }),
-  analysisJson: fake.analysis,
   evidence: fake.evidence,
 }));
+// the host card builder makes no card file to seed, and no OLED frames exist to render: what these tests observe is what they are given
+vi.mock('../runtime/project-kit.ts', async (original) => ({
+  ...(await original<object>()),
+  seedSettingsCard: fake.seed,
+}));
+vi.mock('@digi/test-support', async (original) => ({ ...(await original<object>()), renderShots: fake.render }));
 vi.mock('../runtime/ready.ts', async (original) => ({ ...(await original<object>()), expectRuntimeUi: fake.ready }));
 import { withRouteFxSession } from '../runtime/fx-route-live.ts';
 import { fakeClock } from './fake-status.ts';
@@ -99,10 +106,11 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
       modules: plan.modules,
     };
     fake.prepare.mockResolvedValue({ plan, preparedImage, planFile: '/prepared.plan.json', syx: '/prepared.syx' });
-    fake.analysis.mockImplementation(async (_module: string, args: string[]) => {
-      if (args[0] === 'seed-card') settings.push(JSON.parse(fs.readFileSync(args[5]!, 'utf8')));
-      return args[0] === 'profile' ? { fx_slots: 3, send_slots: 2, track_type_word: 1234 } : {};
+    fake.seed.mockImplementation((_card: string, _device: string, entries: [string, string][]) => {
+      settings.push(entries.map(([key, value_hex]) => ({ key, value_hex })));
+      return {};
     });
+    fake.render.mockReturnValue({ files: [], count: 0 });
     fake.watchEnv.mockReturnValue({ DIGI_WRITE_WATCH: '0x1000-0x2000' });
     fake.safety.mockReturnValue({ pass: true });
     // The card is built in a work directory that is gone afterwards: read what the build is given when it runs.
@@ -151,9 +159,11 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
       expect(settings).toEqual([[{ key: 'fx/route/test/effect', value_hex: '01' }]]);
       expect(result.baseline('wet').preparedImage).toBe(preparedImage);
       expect(() => result.baseline('absent')).toThrow('unknown');
-      expect(result.slots).toBe(3);
-      expect(result.sendSlots).toBe(2);
-      expect(result.profile.track_type_word).toBe(1234);
+      // the profile is the device data's (`fxProfile`), not a fake
+      const profile = fxProfile(plan.base.device as Device);
+      expect(result.slots).toBe(profile.fx_slots);
+      expect(result.sendSlots).toBe(profile.send_slots);
+      expect(result.profile).toEqual(profile);
       expect(fake.prepare).toHaveBeenCalledTimes(1);
       const requestedSymbols = fake.prepare.mock.calls[0]![3];
       const requestedRoots = fake.prepare.mock.calls[0]![4].modules;
@@ -193,10 +203,10 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
             if (failing === 'runtime-check') throw new Error('runtime-check failed');
             return { pass: true };
           });
-          fake.analysis.mockImplementation(async (_module: string, args: string[]) => {
-            observed.push(args[0]!);
-            if (args[0] === failing) throw new Error(`${failing} failed`);
-            return { pass: true };
+          fake.render.mockImplementation(() => {
+            observed.push('render-shots');
+            if (failing === 'render-shots') throw new Error(`${failing} failed`);
+            return { files: [], count: 0 };
           });
           await expect(lifecycle.afterClose()).rejects.toThrow(`${failing} failed`);
           expect(observed).toContain('runtime-check');

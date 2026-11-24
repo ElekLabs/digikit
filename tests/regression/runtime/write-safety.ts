@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { cloneFile, type Device } from '@digi/test-support';
 import { writeIdFile } from './card-cache.ts';
-import { cardStore, deviceProfile, expansionRegion, uploadStore } from './device-data.ts';
+import { cardStore, deviceProfile, expansionRegion, kitAreas, uploadStore } from './device-data.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 
 /** Write-watch and card-overlay safety of the runtime proofs. */
@@ -14,13 +14,6 @@ const SECTOR = 512;
 const RECORD = 8 + 64 + SECTOR;
 // Sectors of one settings copy (tools/device/dkproto.py SETTINGS_SECTORS).
 const SETTINGS_SECTORS = 16;
-// Kit-library sector ranges of the firmware (hi exclusive), allowed by the fx-kit and fx-routes policies.
-export const KIT_AREAS: Record<Device, [number, number][]> = {
-  dt2: [[0x16000, 0x17000]],
-  dn2: [[0x2000, 0x2100]],
-  st: [],
-};
-
 export type SafetyPolicy = 'default' | 'fx-kit' | 'fx-routes';
 
 export function* overlayRecords(blob: Buffer) {
@@ -237,7 +230,7 @@ function runtimePolicy(device: Device, name: SafetyPolicy, cardServices: readonl
   const store = cardStore(device);
   return {
     name,
-    firmware_areas: name === 'default' ? [] : KIT_AREAS[device],
+    firmware_areas: name === 'default' ? [] : kitAreas(device),
     store_extra: name === 'fx-routes' || cardServices.includes('machines') ? [store.setA, store.setB] : [],
   };
 }

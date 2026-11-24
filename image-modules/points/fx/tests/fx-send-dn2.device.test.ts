@@ -3,7 +3,8 @@ import { button } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { withWaitApi, type PatchedSession } from '@digi/regression/support.ts';
 import {
-  analysisJson,
+  addedFactorOf,
+  pcmStats,
   bounded,
   captureNote,
   dspBytes,
@@ -24,7 +25,6 @@ import { record } from '@digi/regression/runtime/artifacts.ts';
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 
-const analyzer = 'tools.patchkit.pk_digikit_fxsend';
 // Sine list position from the legacy DN2 fxsend scenario.
 const sineHint = 5;
 
@@ -137,23 +137,15 @@ describeOn('dn2', `DN2 ${FIRMWARE.dn2} FX send voice slots`, () => {
         expect(n1 - n0).toBeLessThanOrEqual(110);
       } else {
         // Legacy idle checks call activity but deliberately does not constrain the delta.
-        const pcm = await analysisJson<{ samples: number; finite: boolean; peak: number }>(
-          analyzer,
-          ['pcm', file],
-          artifacts,
-          'idle-pcm',
-        );
+        const pcm = pcmStats(file);
+        record(artifacts, 'idle-pcm', pcm);
         expect(pcm.samples).toBeGreaterThan(1000);
         expect(pcm.finite).toBe(true);
         expect(pcm.peak, 'free slots contribute no signal').toBe(0);
       }
     }
-    const factor = await analysisJson<{ added_factor: number }>(
-      analyzer,
-      ['added-factor', files.chordzero!, files.chordfull!],
-      artifacts,
-      'chord-added-factor',
-    );
+    const factor = { added_factor: addedFactorOf(files.chordzero!, files.chordfull!) };
+    record(artifacts, 'chord-added-factor', factor);
     expect(Math.abs(factor.added_factor / 0.5 - 1), 'send return carries half the sum of the chord slots').toBeLessThan(
       0.001,
     );

@@ -99,3 +99,27 @@ export function comparePcmAligned(
   const n = Math.min(ref.length - a, run.length - b);
   return { ...comparePcm(ref.subarray(a, a + n), run.subarray(b, b + n), gain, relBound), shift: b - a };
 }
+
+/**
+ * The factor of the part that a send adds (port of `added_factor` of tools/patchkit/pk_digikit_fxsend.py): `out` is the dry note times (1 + f), possibly started a few frames later
+ * than `dry` (the note's start in the coupled run depends on how many DSP instructions the blocks before it cost, so a heavier hook starts it later). The least-squares gain of
+ * `out` over `dry` at the best sample shift (even offsets, up to 512 samples either way; the shift that leaves the smallest residue, which is 0 for a note that starts together)
+ * is 1 + f. A median of ratios is noisy where the sound is quiet. Both captures are interleaved samples; the window skips 600 samples at each end.
+ */
+export function addedFactor(dry: Float32Array, out: Float32Array): number {
+  const pad = 600;
+  const n = Math.min(dry.length, out.length) - 2 * pad;
+  let dd = 0;
+  for (let i = 0; i < n; i++) dd += dry[pad + i]! * dry[pad + i]!;
+  let best: [number, number] = [Infinity, 0];
+  for (let shift = -512; shift <= 512; shift += 2) {
+    let od = 0;
+    for (let i = 0; i < n; i++) od += out[pad + shift + i]! * dry[pad + i]!;
+    const gain = od / dd;
+    let residue = 0;
+    for (let i = 0; i < n; i++) residue = Math.max(residue, Math.abs(out[pad + shift + i]! - gain * dry[pad + i]!));
+    // the least residue; the smaller factor of two equal residues (as the tuple minimum of the Python it replaces)
+    if (residue < best[0] || (residue === best[0] && gain - 1 < best[1])) best = [residue, gain - 1];
+  }
+  return best[1];
+}

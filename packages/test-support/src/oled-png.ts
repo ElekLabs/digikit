@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { crc32, deflateSync } from 'node:zlib';
 
 import { OLED_FRAME_BYTES, OLED_HEIGHT, OLED_WIDTH, oledPixel } from '@digi/workbench-core/oled-frame.ts';
@@ -33,4 +35,38 @@ export function oledPng(frame: Uint8Array, scale = 4): Buffer {
     chunk('IDAT', deflateSync(raw)),
     chunk('IEND', Buffer.alloc(0)),
   ]);
+}
+
+/** What `renderShots` wrote: the PNG files and their count. */
+export interface RenderedShots {
+  files: string[];
+  count: number;
+}
+
+/**
+ * Render the raw OLED frames (`*.oled`, 1024 bytes each) saved in `directory` as PNG files next to them (3 times the size), in the order of their names. With `copyTo` (the
+ * `DIGIKIT_SHOTS` directory of a run) each PNG is copied there too. A frame of another size, or a missing directory, is an error and nothing is written.
+ */
+export function renderShots(directory: string, copyTo: string | undefined = process.env.DIGIKIT_SHOTS): RenderedShots {
+  if (!fs.existsSync(directory) || !fs.statSync(directory).isDirectory())
+    throw new Error(`not a shots directory: ${directory}`);
+  const frames = fs
+    .readdirSync(directory)
+    .filter((name) => name.endsWith('.oled'))
+    .sort()
+    .map((name) => ({ name, raw: fs.readFileSync(path.join(directory, name)) }));
+  for (const { name, raw } of frames)
+    if (raw.length !== OLED_FRAME_BYTES)
+      throw new Error(`${path.join(directory, name)}: expected ${OLED_FRAME_BYTES} OLED bytes, got ${raw.length}`);
+  if (copyTo) fs.mkdirSync(copyTo, { recursive: true });
+  const files = frames.map(({ name, raw }) => {
+    const destination = path.join(directory, `${name.slice(0, -'.oled'.length)}.png`);
+    fs.writeFileSync(destination, oledPng(raw, 3));
+    if (copyTo) {
+      const copied = path.join(copyTo, path.basename(destination));
+      if (path.resolve(copied) !== path.resolve(destination)) fs.copyFileSync(destination, copied);
+    }
+    return destination;
+  });
+  return { files, count: files.length };
 }
