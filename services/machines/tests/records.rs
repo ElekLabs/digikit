@@ -75,6 +75,16 @@ fn machines_info(native_pages: bool) -> Vec<u32> {
     t
 }
 
+/// The first run-time machine type of the device the fake core stands for.
+fn first_type() -> u32 {
+    let device = core().device;
+    dkrt_abi::profiles::ALL
+        .iter()
+        .find(|p| p.id == device)
+        .unwrap()
+        .dyn_type_first
+}
+
 fn core() -> FakeCore {
     let mut c = FakeCore::new();
     c.set_dynreg(table());
@@ -437,7 +447,7 @@ fn the_machine_types_of_a_module_are_its_machine_rows_in_type_order() {
     set_mach_owner(&core, 5, 4);
     set_mach_owner(&core, 2, 9);
     let mut out = [0u8; limits::MACHINE_ROWS];
-    let first = dkrt_abi::profiles::DT2.dyn_type_first as u8;
+    let first = first_type() as u8;
     assert_eq!(types_of(&core, 4, &mut out), 2);
     assert_eq!(&out[..2], [first + 1, first + 5]);
     assert_eq!(types_of(&core, 7, &mut out), 0);
@@ -451,7 +461,7 @@ fn the_machines_of_a_module_are_its_rows_its_types_and_the_guard_counts_for_them
     let _lock = dkrt_test_support::contract::locked();
     let core = core();
     dkrt_svc_machines::rows::reset();
-    let first = dkrt_abi::profiles::DT2.dyn_type_first;
+    let first = first_type();
     // module record 1 (owner 2) has a machine row (type first + 3) and a voice row of another type (a DSP-only machine) and one of the type of its machine row
     set_mach_owner(&core, 3, 2);
     let v = dkrt_svc_machines::rows::vrows();
@@ -500,11 +510,7 @@ fn the_describe_words_of_a_module_are_its_rows_faults_types_and_guard_flag() {
     let _lock = dkrt_test_support::contract::locked();
     let core = core();
     dkrt_svc_machines::rows::reset();
-    let first = dkrt_abi::profiles::ALL
-        .iter()
-        .find(|p| p.id == core.device)
-        .unwrap()
-        .dyn_type_first;
+    let first = first_type();
     let words = |who: u8| {
         let mut buf = [0u32; 8];
         let mut sink = WordSink::new(&mut buf);
@@ -590,7 +596,7 @@ fn apply_refuses_a_machine_without_a_run_time_type_number_instead_of_indexing_th
 fn module_info_is_one_state_when_the_rows_change_between_its_reads() {
     let _tl = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let _lock = dkrt_test_support::contract::locked();
-    let first = dkrt_abi::profiles::DT2.dyn_type_first;
+    let first = first_type();
     let before = |core: &FakeCore| {
         dkrt_svc_machines::rows::reset();
         set_mach_owner(core, 3, 2);
@@ -633,4 +639,24 @@ fn module_info_is_one_state_when_the_rows_change_between_its_reads() {
         set_mach_owner(&core, 3, 0);
     }
     assert_eq!(seen, 6);
+}
+
+/// `rows::reset` is the host tests' return to the start: the MODULES view published before it is gone too, so a later `Describe` does not answer with the rows of the run before.
+#[test]
+fn reset_forgets_the_published_machines_of_a_module() {
+    let _tl = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _lock = dkrt_test_support::contract::locked();
+    let core = core();
+    dkrt_svc_machines::rows::reset();
+    set_mach_owner(&core, 3, 2);
+    let v = dkrt_svc_machines::rows::vrows();
+    v.row_owner[0] = 2;
+    v.row_type[0] = 0x1e;
+    v.mod_rows[1] = 0b1;
+    dkrt_svc_machines::records::publish(&core);
+    assert_eq!(module_info(&core, 2).rows, 0b1, "published");
+    dkrt_svc_machines::rows::reset();
+    let m = module_info(&core, 2);
+    assert_eq!((m.rows, m.nt), (0, 0), "reset forgot the published entry");
+    set_mach_owner(&core, 3, 0);
 }

@@ -213,3 +213,29 @@ fn describe_is_one_state_when_the_effect_changes_between_its_reads() {
         }
     }
 }
+
+/// `rows::reset` is the host tests' return to the start: the table published before it is gone too, so a later `describe` does not answer with the effects of the run before.
+#[test]
+fn reset_forgets_the_published_effect_words() {
+    use dkrt_abi::provider::{ConsumerId, Describe, WordSink};
+    use dkrt_test_support::FakeCore;
+    let _g = crate::test_lock::hold();
+    let core = FakeCore::new();
+    unsafe {
+        let s = ss();
+        crate::fxpage::set_page_owner_for_test(0, 2);
+        s.allow[0] = ROUTE_MASTER;
+        s.dflt[0] = ROUTE_MASTER;
+        publish(&core);
+    }
+    let words = |core: &FakeCore| {
+        let mut buf = [0u32; 8];
+        let mut sink = WordSink::new(&mut buf);
+        <crate::fx::Fx as Describe<FakeCore>>::describe(core, ConsumerId::new(2), &mut sink);
+        sink.words().len()
+    };
+    assert_eq!(words(&core), 1, "published");
+    crate::rows::reset();
+    assert_eq!(words(&core), 0, "reset forgot the published table");
+    unsafe { crate::fxpage::set_page_owner_for_test(0, 0) };
+}

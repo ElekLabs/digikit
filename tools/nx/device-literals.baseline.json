@@ -607,7 +607,7 @@
   "services/machines/tests/build.rs": 51,
   "services/machines/tests/contract.rs": 40,
   "services/machines/tests/guard.rs": 1,
-  "services/machines/tests/records.rs": 4,
+  "services/machines/tests/records.rs": 1,
   "services/project/dks/module.toml": 2,
   "services/samples/dks/module.toml": 2,
   "services/samples/src/files.rs": 5,
