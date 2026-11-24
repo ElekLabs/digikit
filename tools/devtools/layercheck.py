@@ -83,7 +83,9 @@ FOLDER_ROLES = {
     "image-modules/adapters": "adapter",
     "image-modules/fixes": "adapter",
     "image-modules/points": "adapter",
-    "image-modules/proofs": "adapter",
+    "tests/fixtures/modules/dsp-stereo-proof": "adapter",
+    "tests/fixtures/modules/file-catalog-proof": "adapter",
+    "tests/fixtures/modules/storage-fault-proof": "adapter",
 }
 # Content modules that patch the firmware themselves (they have [[op]] and anchor externs by design: patchkit's own
 # example of a hook; the test service takes a raw hook like a core service file does). They are exempt from the objects and apps rules.
@@ -157,6 +159,9 @@ def classify(root: Path, m: Module) -> str:
     """Core or content according to its repository root."""
     r = rel(root, m.dir)
     if r.split("/", 1)[0] in CORE_ROOTS:
+        return "core"
+    # The three private firmware proofs keep their manifests (category core, role adapter) in the fixtures root.
+    if r.startswith("tests/fixtures/modules/") and m.mod.get("category") == "core":
         return "core"
     return "content"
 

@@ -162,7 +162,7 @@ export const moduleRigConformance = (workspaceRoot, file, manifest) => {
 // the code in, the SDK, the device profiles, the hashes of the two binaries it runs and the hash of the stock DSP section (or "absent":
 // the stock-image suites skip without the firmware). The synthetic shadow-replay fixtures of tests/fixtures/dsp are inputs of the stereo proof's
 // shadow replay test.
-const STEREO_PROOF_ROOT = 'image-modules/proofs/dsp-stereo-proof';
+const STEREO_PROOF_ROOT = 'tests/fixtures/modules/dsp-stereo-proof';
 
 export const rigTarget = (root, moduleInputs) => ({
   executor: 'nx:run-commands',
