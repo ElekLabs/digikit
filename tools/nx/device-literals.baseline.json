@@ -312,7 +312,7 @@
   "packages/patchkit/src/aplib.rs": 2,
   "packages/patchkit/src/budget_cli.rs": 3,
   "packages/patchkit/src/build/sharc_legal.rs": 2,
-  "packages/patchkit/src/devdata.rs": 50,
+  "packages/patchkit/src/devdata.rs": 47,
   "packages/patchkit/src/devgen.rs": 36,
   "packages/patchkit/src/dkm.rs": 4,
   "packages/patchkit/src/dkmdsp.rs": 2,

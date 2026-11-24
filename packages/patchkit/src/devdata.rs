@@ -667,7 +667,12 @@ mod tests {
 
     #[test]
     fn the_rows_blocks_give_the_sizes_a_reservation_count_reads() {
-        let dev = parse(&[("rows.toml", DT2)]).unwrap().remove(0);
+        let dev_file = DEVICE_FILES
+            .iter()
+            .find(|(_, t)| t.contains("[[rows.block]]"))
+            .unwrap()
+            .1;
+        let dev = parse(&[("rows.toml", dev_file)]).unwrap().remove(0);
         assert_eq!(dev.limit_of("rows_b1"), dev.limit_of("param_rows"));
         assert_eq!(
             dev.limit_of("rows_b2"),
@@ -675,13 +680,17 @@ mod tests {
         );
         assert_eq!(dev.limit_of("rows_b3"), dev.limit_of("send_rows"));
         // a device file without `[rows]` parses and has no block sizes
-        let text = DT2
+        let text = dev_file
             .replace("[rows]", "[rows_gone]")
             .replace("[[rows.block]]", "[[rows_gone.block]]");
         let dev = parse(&[("norows.toml", text.as_str())]).unwrap().remove(0);
         assert!(dev.limit_of("rows_b1").is_none());
         // a block that names no `[limits]` key is refused at load
-        let text = edit(DT2, "limit = \"param_rows\"", "limit = \"no_such_limit\"");
+        let text = edit(
+            dev_file,
+            "limit = \"param_rows\"",
+            "limit = \"no_such_limit\"",
+        );
         let e = parse(&[("rows.toml", text.as_str())])
             .unwrap_err()
             .to_string();
