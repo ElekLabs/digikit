@@ -9,6 +9,7 @@ import { emulatorClock, repoRoot, waitClock, type Device, type Session } from '@
 import { cardStore } from './device-data.ts';
 import { rpc, word } from './guest-access.ts';
 import { installSystemPackage } from './system-package.ts';
+import { stateName } from './load-states.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { cardOverlay, encodeOverlay, layOver, linkCard, mergeOverlays, overlayFile } from './write-safety.ts';
 
@@ -341,14 +342,18 @@ export async function bootInfo(session: Session, plan: RuntimePlan) {
 /** The offset of `DkrtBootInfo.states` (after the 10 words before `results`, the results, core_cause, stable and `needs`; asserted by `abi.toml`'s layout check). */
 const BI_STATES_AT = 176;
 
+/** The states of a module that has not finished its load: not planned, planned, `init` running, or the DSP part still going (`[load.state]`). */
+const UNSETTLED_STATES = new Set(['SELECTED', 'PLANNED', 'INIT', 'DSP_LOADING']);
+
 /**
- * `bootInfo` once no selected module is still LOADING (1): the DSP part of a module follows its ColdFire part over the first UI-loop
- * passes. Steps 100 emulated ms at a time, up to `ms` (Python `wait_dsp`); the session must be paused.
+ * `bootInfo` once every selected module has a final state (`DkrtBootInfo.states`: ACTIVE, REFUSED, FAILED, SKIPPED or UNLOADED): the boot has finished loading
+ * its selection. The result words do not tell this: 0 is also the unwritten initial value, so a module not yet started reads 0 like a loaded one. The DSP part of a
+ * module follows its ColdFire part over the first UI-loop passes. Steps 100 emulated ms at a time, up to `ms`; the session must be paused.
  */
 export async function bootInfoLoaded(session: Session, plan: RuntimePlan, ms = 5000) {
   for (let i = 0; i < ms / 100; i++) {
     const info = await bootInfo(session, plan);
-    if (!info.results.includes(1)) return info;
+    if (!info.states.some((n) => UNSETTLED_STATES.has(stateName(n)))) return info;
     await waitClock(emulatorClock(session), 100);
   }
   return bootInfo(session, plan);
