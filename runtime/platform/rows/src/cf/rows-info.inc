@@ -1,6 +1,6 @@
 | core/rows: `rows_info`, the table of the parameter reservation (docs/ARCHITECTURE.md "rows"). One body for every device: the rows-info-<dev>.s files include the device constants, then this file.
 |
-| The image makes room for rows and the loaded services fill their blocks. The platform knows the blocks by number only: every number is
+| The image makes room for rows and each block's owner fills it. The platform knows the blocks by number only: every number is
 | the device file's `[rows]` and `[limits]` (through build/gen/device-<dev>.inc) or an address the packer placed (the externs of module.toml).
 | All words big endian. Layout (the tests of packages/patchkit/tests/rows.rs read it by these word numbers):
 |
@@ -11,7 +11,7 @@
 | 10 number of blocks, then 4 words for each block: owner number, first code, rows, template code of a free row
 | 23 reserved rows (the sum of the blocks)
 | 24 .. 38 the recipe of a row: how each of the 15 words is made (the device file's `[rows] recipe`)
-| 39 .. 42 the capacity words the admission reads before a service loads (`[[info]] cap_<kind>` of module.toml point at them; the kind
+| 39 .. 42 the capacity words the admission reads before an owner loads (`[[info]] cap_<kind>` of module.toml point at them; the kind
 |    names are the admission's, the values are the `[rows] caps` keys of `[limits]`)
 
     .section .rodata

@@ -7,7 +7,7 @@ role = "adapter"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "The parameter rows of the Digitakt II and Digitone II MAIN OS: a copy of the parameter table with one row appended per parameter (descriptors: names, range, default, formatter), every reader repointed and bounded, and the reserved rows that services fill, in numbered blocks (rows_info)"
+summary = "The parameter rows of the Digitakt II and Digitone II MAIN OS: a copy of the parameter table with one row appended per parameter (descriptors: names, range, default, formatter), every reader repointed and bounded, and the reserved rows that their owners fill, in numbered blocks (rows_info)"
 requires = []
 conflicts = []
 
@@ -25,17 +25,16 @@ conflicts = []
 #     max = 0x7f00
 #     default = 0x4000
 #
-# The code of a parameter is `params.first + k` (symbol params.<id>.index); a machine's fields name it. Finding 02,
+# The code of a parameter is `params.first + k` (symbol params.<id>.index); an owner's records name it. Finding 02,
 # "core.params": the table is copied at patch time from the image (nothing of the firmware is stored here), the
 # references and bounds are anchors (cf.param.sites.descriptor_table.ref.N, cf.param.sites.descriptor_table.bound.N) found by tools/patchkit/port_resolve.py.
-# Digitone II: the same, with the slot = the sound-array slot itself (25 .. 64; a slot a machine's pages map with the
-# `pages` registry of core/machines), template a stock code of the 321 rows (e.g. 0xd5, A Env Decay: a plain 0 .. 127
+# Digitone II: the same, with the slot = the sound-array slot itself (25 .. 64; a slot the firmware's own parameter pages map), template a stock code of the 321 rows (e.g. 0xd5, A Env Decay: a plain 0 .. 127
 # word), and the table is 321 rows.
 # Loops that visit every code (the defaults refresh, the per-owner lookup maps, the owner enumeration of the modulation
 # destination list) end on `bne`/`beq`, not on a clamp, and keep the stock count: the new rows do not enter them.
 
 # The reservation. The image makes room: `[[entry]]` with a `count` stands for that many rows, the count an expression over the device file's
-# `[limits]` (module.toml of the patchkit manifest, docs/PATCHING.md). Three blocks, in this order, so a code is `params.<id>0.index + k` (the ids
+# `[limits]` and the block sizes `rows_b1`, `rows_b2`, `rows_b3` (each `[[rows.block]]` of the device file: `per` times its `limit`; one source, docs/design/device-data.md). Three blocks, in this order, so a code is `params.<id>0.index + k` (the ids
 # dp, fp and fs are the symbols the users link by). The platform knows the blocks by number: each block's owner number, size (a `[limits]` key times a
 # factor) and template come from the device file's `[rows]` and `[[rows.block]]` (the device file says what each block is for).
 # Each owner fills its block at load and clears it at unload; the template is a stock row that is valid for the value-class lookup. No
@@ -307,7 +306,7 @@ resource = "cf.params.sites"
 [[entry]]
 registry = "params"
 id = "dp"
-count = "param_rows"
+count = "rows_b1"
 name = ""
 short = ""
 template = 0xd1
@@ -320,7 +319,7 @@ devices = ["dt2"]
 [[entry]]
 registry = "params"
 id = "dp"
-count = "param_rows"
+count = "rows_b1"
 name = ""
 short = ""
 template = 0xd5       # A Env Decay: a plain 0 .. 127 word on the sound-array slot 25
@@ -330,11 +329,11 @@ max = 0
 default = 0
 devices = ["dn2"]
 
-# The template is a placeholder (Delay "Feedback HPF"); a service writes the row from its record.
+# The template is a placeholder (a stock row valid for the value-class lookup); the block's owner writes each row from its record.
 [[entry]]
 registry = "params"
 id = "fp"
-count = "8 * fx_slots"
+count = "rows_b2"
 name = ""
 short = ""
 template = 0x75
@@ -347,7 +346,7 @@ devices = ["dt2", "dn2"]
 [[entry]]
 registry = "params"
 id = "fs"
-count = "send_rows"
+count = "rows_b3"
 name = ""
 short = ""
 template = 0x75
@@ -393,7 +392,7 @@ _rw_b3 = "params.fs0.index"
 
 # The table of this module, in the image's info table (`dkrt_info_table`), and the capacity limits it reserves, as `cap_<kind>` entries: the admission
 # requires these exact names (the kinds of `[capacity.kinds]` in sdk/sdk.toml) and finds the limit of a kind there; each
-# points at the u32 word that holds the limit, so the planner knows the limit before any service file is loaded (docs/PATCHING.md).
+# points at the u32 word that holds the limit, so the planner knows the limit before any owner's file is loaded (docs/PATCHING.md).
 [[info]]
 name = "rows_info"
 devices = ["dt2", "dn2"]

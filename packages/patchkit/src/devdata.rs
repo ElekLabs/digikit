@@ -182,6 +182,23 @@ impl DeviceInfo {
 /// Names a registry's `limit` may use.
 pub const LIMIT_NAMES: [&str; 1] = ["fx_slots"];
 
+/// The part of `[rows]` a reservation count reads: each `[[rows.block]]` is `per` times the `[limits]` key `limit`, named `rows_b<N>` (N from 1,
+/// in file order) in a count expression. The other keys of `[rows]` and of a block belong to `patchkit gen` (`devgen.rs`).
+#[derive(Deserialize)]
+struct RowsBlocksDoc {
+    #[serde(default)]
+    block: Vec<RowsBlockSize>,
+}
+#[derive(Deserialize)]
+struct RowsBlockSize {
+    limit: String,
+    #[serde(default = "one")]
+    per: u64,
+}
+fn one() -> u64 {
+    1
+}
+
 #[derive(Deserialize)]
 struct File {
     device: Option<Dev>,
@@ -196,6 +213,7 @@ struct File {
     #[serde(default)]
     firmware: Vec<FirmwareDoc>,
     limits: Option<LimitsDoc>,
+    rows: Option<RowsBlocksDoc>,
     #[serde(default)]
     patch_sets: BTreeMap<String, Vec<String>>,
     protect: Option<ProtectDoc>,
@@ -478,7 +496,19 @@ fn parse_all(files: &[(&str, &str)]) -> Result<(Vec<Identity>, Vec<DeviceInfo>)>
             },
             modules: f.limits.as_ref().and_then(|l| l.0.get("modules").copied()),
             fx_slots: f.limits.as_ref().and_then(|l| l.0.get("fx_slots").copied()),
-            limits: f.limits.map(|l| l.0).unwrap_or_default(),
+            limits: {
+                let mut limits = f.limits.map(|l| l.0).unwrap_or_default();
+                for (i, b) in f.rows.iter().flat_map(|r| &r.block).enumerate() {
+                    let base = limits.get(&b.limit).copied().ok_or_else(|| {
+                        err!(
+                            "devices/{n}: [[rows.block]] names {:?}, which is no key of [limits]",
+                            b.limit
+                        )
+                    })?;
+                    limits.insert(format!("rows_b{}", i + 1), b.per * base);
+                }
+                limits
+            },
             patch_sets: f.patch_sets,
             dsp_clock_hz: f.board.as_ref().and_then(|b| b.dsp_clock_hz),
             dsp_blocks_per_second: f.board.as_ref().and_then(|b| b.dsp_blocks_per_second),
@@ -633,6 +663,29 @@ mod tests {
         );
         let text = edit(dev_file, "param_rows = 16", "param_rows = -1");
         assert!(parse(&[("limits.toml", text.as_str())]).is_err());
+    }
+
+    #[test]
+    fn the_rows_blocks_give_the_sizes_a_reservation_count_reads() {
+        let dev = parse(&[("rows.toml", DT2)]).unwrap().remove(0);
+        assert_eq!(dev.limit_of("rows_b1"), dev.limit_of("param_rows"));
+        assert_eq!(
+            dev.limit_of("rows_b2"),
+            dev.limit_of("fx_slots").map(|n| 8 * n)
+        );
+        assert_eq!(dev.limit_of("rows_b3"), dev.limit_of("send_rows"));
+        // a device file without `[rows]` parses and has no block sizes
+        let text = DT2
+            .replace("[rows]", "[rows_gone]")
+            .replace("[[rows.block]]", "[[rows_gone.block]]");
+        let dev = parse(&[("norows.toml", text.as_str())]).unwrap().remove(0);
+        assert!(dev.limit_of("rows_b1").is_none());
+        // a block that names no `[limits]` key is refused at load
+        let text = edit(DT2, "limit = \"param_rows\"", "limit = \"no_such_limit\"");
+        let e = parse(&[("rows.toml", text.as_str())])
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("[[rows.block]] names \"no_such_limit\""), "{e}");
     }
 
     #[test]

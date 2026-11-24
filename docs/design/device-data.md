@@ -140,8 +140,33 @@ The runtime object is built once and used on every device, so it has no device v
 (`DeviceProfile::by_id(core.device_id())`, `abi/src/profiles.rs`; the `rust-profiles` kind writes the table from the same facts as the object, so the two
 cannot differ). The sizes of the runtime's static arrays (`ARENA_BYTES`, `STAGE_BYTES`, `MACHINE_ROWS` and the selection's `SEL_MAX`) are constants of
 `abi.toml`; `gen` checks that the device files' `[limits]` agree with them, and the runtime checks at start that the device's machine type count fits
-(`dev::valid`). The parameter rows of the image are the file's `[limits]` too: `core/rows` reserves `param_rows` rows for run-time machines, `8 * fx_slots` for the
-effect pages and `send_rows` (at least `send_slots`) for the send page, and generates `rows_info` and the cap words from them (`LIMIT_PARAM_ROWS`, `LIMIT_PAGE_ROWS`, `LIMIT_SEND_ROWS`).
+(`dev::valid`). The parameter rows of the image are device data too: the file's `[rows]` and `[[rows.block]]` (below) reserve them from `[limits]`, and `patchkit gen` writes `rows_info` and the cap words from them (`ROWS_*` in `core/rows` `build/gen/device-<dev>.inc`).
+
+`[rows]` (only a device with a parameter table has it; the Syntakt has none and gets no `ROWS_*` constants):
+
+| Key | Meaning |
+| --- | --- |
+| `recipe` | 15 words: how a row is made from the template's row (0 to 0x3c copy that word of the template; 0x100 min, 0x101 max, 0x102 default, 0x103 name pointer, 0x104 short pointer; 0x105 to 0x108 computed words) |
+| `caps` | 4 `[limits]` keys whose values are the capacity words the admission reads, in the order of the module's `cap_<kind>` info entries |
+| `[[rows.block]]` | exactly 3 blocks, in order: `owner` (the number the owner is known by), `limit` (a `[limits]` key), `per` (factor, default 1; rows = `per * limit`), `template` (the stock code whose row a free row copies) |
+
+The block sizes have one source: a reservation `count` in a manifest reads them as `rows_b1`, `rows_b2`, `rows_b3` (the same `per * limit`), so the entries and `rows_info` cannot differ.
+
+```toml
+[rows]
+recipe = [0x00, 0x108, 0x100, 0x101, 0x102, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x103, 0x2c, 0x104, 0x34, 0x38]
+caps = ["machine_rows", "param_rows", "page_rows", "send_slots"]
+[[rows.block]]
+owner = 1
+limit = "param_rows"
+template = 0xd5
+[[rows.block]]
+owner = 2
+limit = "fx_slots"
+per = 8
+template = 0x75
+```
+(a third block follows the same way)
 
 `uses = [...]` is required on the kinds `gas` and `sharc`: it lists the constant names the module reads.
 A trailing `*` matches a family by prefix (`FX_VALUE_*`). The generator writes only the listed names, in its own order. It refuses:
