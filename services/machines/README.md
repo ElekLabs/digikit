@@ -32,7 +32,7 @@ lives). Four tables stay named statics of the crate (D7 of the RC3 briefs), each
 | `DKRT_GUARD` (`guard.rs`) | the MODULES reply (`Describe`), on another task than the poll that writes it |
 | `DKRT_MF_TAB` (`info.rs`) | the assembler hooks (`T_*` offsets of `hooks-*.s`) |
 | `MACH_OWNER` (`registry.rs`, a `Shared<[u8; MAX_MACH]>`) | `Describe` on the MODULES task, and the owner (`attach`, `detach`, the parking pass, the load check) |
-| `DKRT_MF_LIST`, `DKRT_MF_RANK`, `DKRT_MF_RANKN` (`list.rs`) | the list builder's patched operands (addresses), and the rank hook `mf_rank` (`hooks-dt2.s`) |
+| `DKRT_MF_LIST`, `DKRT_MF_RANK`, `DKRT_MF_RANKN` (`list.rs`) | the list builder's patched operands (addresses), and the rank hook `mf_rank` (the ColdFire hook file of the device that has the sort) |
 
 `Describe::describe` (`modules::describe`) gives the five words of the MODULES reply for a module record: the voice rows it owns (mask); the guard's fault count; `nt` with the guard-off flag in bit 8;
 the types 0 to 3 and 4 to 7 (one byte each, type `i` in byte `i % 4`). It has no object and never enters the owner (`Describe::describe` has no `&self`): the command handler may ask while the UI task is
