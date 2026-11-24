@@ -94,8 +94,17 @@ export function routingUi(runtime: Rt, plan: RuntimePlan, artifacts: string, slo
       }),
     countCell: () => word(session, sym('fxp_send_count')),
     sendUsed: async () => (await withPausedFxProtocol(runtime, (dk) => dk.capacity())).SEND_SLOTS,
-    /** The state of the last live job (`phase` 2 when it ended; `result` 0 is ok; `op` 3 is a reload). */
-    job: () => withPausedFxProtocol(runtime, (dk) => dk.reloadState()),
+    /** Wait until the live job of the last pick ended, and give its state (`result` 0 is ok; `op` 3 is a reload). */
+    job: async () => {
+      let last: { phase: number; result: number; step: number; unloaded: boolean; op: number } | undefined;
+      await runtime.ui.wait({
+        state: async () => (last = await withPausedFxProtocol(runtime, (dk) => dk.reloadState())),
+        done: (job?: { phase: number }) => job?.phase === 2,
+        withinMs: 30_000,
+        what: 'the reload job of the pick ended',
+      });
+      return last!;
+    },
     epoch: async () => (await session.status()).epoch as number,
     shot: (tag: string) => shot(session, artifacts, tag),
     /** The current OLED as a PNG in the run's artifacts; the path. */
