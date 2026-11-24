@@ -1,55 +1,44 @@
-import { expect } from 'vitest';
-import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
-import { word } from '@digi/regression/runtime/fx-live.ts';
-import { DEBUG_MODULE, installModules, moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
-import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
-import { nameHash } from '../refusal/dkm-patch.ts';
+import { pollUntil } from '@digi/test-support';
+import { expect, test } from 'vitest';
+import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
+import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
+import { pickSine, word } from '@digi/regression/runtime/fx-live.ts';
+import { dynType } from '@digi/regression/runtime/project-kit.ts';
+import { DN2_TX_TYPE_TRACK1_112, expectLoaded, tableSymbols } from './machines-kit.ts';
 
 /**
- * The first proof of a pointer slot on a device (docs/plans/runtime-and-services.md, R12-6): the interrupt site of the Digitone II's frame builder (`frametype`) jumps to an
- * image stub that loads the slot word `frametype`. The word is 0 after a boot without the machines service (the stub runs the stock instructions), and the loader fills it
- * with the address of the service file's routine when `services/machines.dks` loads. The slot is found as a service finds it: by the name hash in the image's one info table
- * `dkrt_info_table` (`{magic "DKIT", count}`, then `{hash, address, kind}`). The machine fixture needs the service, so the harness puts the bound file on the card.
- *
- * Two boots: the plain runtime, then one with the service file and `test/dyn-dn2`. No SHARC audio is judged here (the machine suites do that); the DSP is on because the
- * fixture has a DSP part.
+ * The frame type hook of the Digitone II (`cf.machine.hook.frametype`, an interrupt site of the frame builder; the routine `mf_frametype` of `machines.dks`): the firmware
+ * writes the machine type of track 1 into the halfword at TX frame word 0x94 of the DSP frame. Without the service the stock code runs and the frame holds FM TONE's type 0;
+ * with `machines.dks` and a machine with its own DSP part (`test/dyn-dn2`) the frame holds the machine's own type, not its clone_of. Only the TX frame shows this.
+ * Two boots: the plain runtime, then the card with the machine. The rest of the machine (rows, pages, knobs) is `machine-rows-dn2`.
  */
 const ID = 'test/dyn-dn2';
-const INFO_MAGIC = 0x444b4954;
 
-async function slotWord(session: Parameters<typeof word>[0], table: number, hash: number): Promise<number> {
-  expect(await word(session, table), 'the info table has its magic').toBe(INFO_MAGIC);
-  const count = await word(session, table + 4);
-  for (let i = 0; i < count; i++) {
-    if ((await word(session, table + 8 + 12 * i)) === hash) return word(session, await word(session, table + 12 + 12 * i));
-  }
-  throw new Error(`no entry ${hash.toString(16)} in the info table`);
-}
+describeOn('dn2', `DN2 ${FIRMWARE.dn2} frame type hook`, () => {
+  const run = cardRig('dn2', 'frametype-slot', {
+    dsp: 'sharc',
+    roots: RT,
+    symbols: tableSymbols('dn2'),
+    initial: () => ({}),
+  });
 
-runtimeTests(
-  'the frame type slot is empty on a plain boot and holds the service routine when machines.dks is loaded',
-  async (runtime) => {
-    const { session, dk } = runtime;
-    await expectRuntimeReady(session);
-    const device = session.options.device;
-    const plan = await prepareRuntimePlan(session, liveArtifacts(session, 'frametype-slot'), ['dkrt_info_table']);
-    // `dkrt_info_table` is the image's table itself (a data symbol)
-    const table = planSymbol(plan, 'dkrt_info_table');
-    const hash = nameHash('frametype');
-    expect(await slotWord(session, table, hash), 'no service: the stub falls through to the stock code').toBe(0);
+  test('the TX frame holds type 0 on a plain boot and the own type of a machine with its own DSP part when machines.dks is loaded', async () => {
+    const plain = await run.first();
+    expect((await word(plain.session, DN2_TX_TYPE_TRACK1_112)) >>> 16, 'no service: the stock code sends FM TONE type').toBe(0);
 
-    await installModules(dk, [
-      { id: ID, artifact: moduleArtifact(device, ID) },
-      { id: DEBUG_MODULE, artifact: moduleArtifact(device, DEBUG_MODULE) },
-    ], { device, session });
-    expect(await dk.loadFailures(), 'the service and the machine loaded').toEqual([]);
-    expect(
-      (await dk.modules()).map((m) => m.name),
-      'the machine fixture is loaded',
-    ).toContain(ID);
-    const filled = await slotWord(session, table, hash);
-    expect(filled, 'the slot holds an address inside the card-loaded service (above the image)').toBeGreaterThan(0x4000_0000);
-  },
-  { dsp: 'sharc', devices: ['dn2'] },
-);
+    const rt = await run.load('with-machines', { modules: [ID], selection: [run.mod(ID).name] });
+    const { session } = rt;
+    await expectLoaded(rt, run);
+    const type = await dynType(session, run.plan, ID, 'dyn_pluck');
+    expect(type, 'a run-time type (the range of core/rows)').toBeGreaterThanOrEqual(16);
+    // FUN+SRC, five DOWN, YES, YES as in machine-rows-dn2; the TRIG sends the type to the audio side
+    await pickSine(rt, 5);
+    await rt.ui.tap('TRIG 1', { until: { drained: true } });
+    const tx = await pollUntil(rt.clock, () => word(session, DN2_TX_TYPE_TRACK1_112), (w) => w >>> 16 === type, {
+      withinMs: 3000,
+      message: 'the TX frame carries the machine type of track 1',
+      intervalMs: 50,
+    });
+    expect(tx >>> 16, 'the hook leaves the own type in the frame').toBe(type);
+  });
+});

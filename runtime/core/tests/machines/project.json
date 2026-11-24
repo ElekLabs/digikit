@@ -22,10 +22,10 @@
           "C:loading"
         ],
         "modules": [
-          "digikit/debug",
           "test/dyn-dn2",
           "core/services/machines"
-        ]
+        ],
+        "plusdrive": true
       },
       {
         "files": [

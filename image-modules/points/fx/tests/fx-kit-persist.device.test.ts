@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
 import { withWaitApi, type TestRuntime } from '@digi/regression/support.ts';
+import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 import { bounded, compare, pcmMetrics, frames, rows, rpc, word, REDRAW, SETTLE } from '@digi/regression/runtime/fx-live.ts';
 import { GAIN, SINE } from '@digi/regression/runtime/fixtures.ts';
 import { createFxKitUi, watchFxKitRows, type FxKitObservation } from '@digi/regression/runtime/fx-kit-ui.ts';
@@ -53,7 +54,7 @@ for (const device of DEVICES) {
     const context = withPreparedFxSession(device, 'FX kit/project persistence', {
       image: {
         name: 'fx-kit-persist',
-        modules: ['core/runtime', 'core/rows', 'core/dynfx'],
+        modules: rootsOf('rt-dynfx'),
         inventory: [SINE, GAIN, GAIN_B],
         symbols: [
           'DKRT_BOOT',
