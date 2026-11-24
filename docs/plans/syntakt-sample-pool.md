@@ -28,8 +28,18 @@ Phase 2 verified a 40 ms pool sample through the Syntakt 1.42 emulator's stereo 
 
 ## Phase 3 — Build, transfer and load Shot
 
-- [ ] Install Shot from Workbench on a compatible Syntakt image and trigger a file uploaded to the pool.
+- [ ] Install Shot from Workbench on a compatible Syntakt image and trigger a mono file uploaded to the pool.
+
+Start with the peer contract. Define how MAIN publishes a bounded PCM buffer, sends a trigger and parameters, and gets acknowledgment when the peer has retired a sample generation. Keep the file lease and card I/O on MAIN. The first checkpoint is one mono file published and triggered at runtime through this contract, with a safe replacement while a voice still references the previous sample.
 
 Keep the `digikit/shot` module ID and `shot` machine ID. Share parameter and picker code where the machine contract permits. Keep the SHARC renderer for DT2/DN2 and add a Syntakt peer ColdFire renderer. Put firmware-facing code in the platform adapter. Reuse shared Rust file identity and lifecycle logic where its contract fits, with peer-specific memory and publication behind the adapter.
 
 Extend Patchkit's per-device packing and runtime admission for the versioned peer payload. Add the Syntakt port to Shot once the payload can load. Derive Nx pack targets from the device registry and use the existing Workbench device library. Expose the required playback capability so an older Syntakt image gives a clear refusal. Verify that wrong-target and unsupported payloads are refused, then select Syntakt in Workbench, upload and verify Shot, enable it and trigger the uploaded sample. Run the existing DT2 and DN2 Shot checks for any shared code that changes. Scope additional Shot playback and page features against the peer contract and record their support in the module target status.
+
+## Follow-up — Stereo Shot playback on Syntakt
+
+- [ ] Play a stereo sample from the digikit pool with distinct left and right channels at the Syntakt's output.
+
+Reuse the stereo PCM16 files Workbench already preserves in the pool. Determine how the peer can deliver separate left and right signals to MAIN's mixer, and measure the impact on available digital voices, peer memory and frame time. Extend the Shot renderer and the publication contract to carry both channels. Keep centered playback for mono files and preserve the stock mixer and slot behavior.
+
+Verify with an asymmetric stereo fixture that makes channel swaps and fold-down audible and measurable. Check both outputs in the emulator and on hardware, and record the voice and frame budgets before enabling stereo for the Syntakt target.
