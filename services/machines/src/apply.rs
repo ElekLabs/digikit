@@ -4,14 +4,16 @@
 use crate::build::ApplyArgs;
 use crate::nativepage;
 use crate::parking::Parking;
-use crate::registry::{copy_text, machine_text, rstate, KNOBS, KNOB_PARAM, MAX_PAGE, MAX_PARAM};
+use crate::registry::{
+    copy_text, machine_text, set_mach_owner, KNOBS, KNOB_PARAM, MAX_PAGE, MAX_PARAM,
+};
 use crate::slots::Slots;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::{iw, rd32};
 use dkrt_abi::provider::Consumer;
 use dkrt_sdk::records::{KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM};
 use dkrt_sdk::*;
-use dkrt_svc_rows::dynreg::{w, MACH_TEXT};
+use dkrt_svc_rows::dynreg::{w, RegState, MACH_TEXT};
 
 /// The parameter codes of the records `fill_rows` has written and the native pages seen so far: the state between `attach` and the per-record `apply` of one section (the
 /// registry applies one module at a time, in the UI task). It belongs to the owner.
@@ -56,11 +58,11 @@ impl Applied {
         consumer: &Consumer<'_>,
         inf: *const u32,
         args: Option<&ApplyArgs>,
+        s: &mut RegState,
         parking: &mut Parking,
         slots: &mut Slots,
     ) -> i32 {
         let (owner, base) = (consumer.id().get(), consumer.base());
-        let s = rstate();
         // a machine whose key has no run-time type number (none assigned, or one outside the range) is refused before any row is written, as `ck_rows` does at load: the rows are
         // indexed by the number
         let mut refused = OK;
@@ -208,7 +210,7 @@ impl Applied {
             core.wr(row + iw(inf, w::O_POS), rd32(b.add(8)));
             core.wr(row + iw(inf, w::O_OWN), rd32(b.add(12)));
             // strings
-            let (long, short) = machine_text(k, b.add(52), b.add(52 + MACH_TEXT), true);
+            let (long, short) = machine_text(s, k, b.add(52), b.add(52 + MACH_TEXT), true);
             core.wr(row + iw(inf, w::O_LONG), long);
             core.wr(row + iw(inf, w::O_SHORT), short);
             core.wr(row + iw(inf, w::O_SNAME), s.s.mach_short[k].as_ptr() as u32);
@@ -226,7 +228,7 @@ impl Applied {
                 core.wr8(pt + t, core.rd8(pt + clone));
             }
             // publish: the name pointer marks the row as used (one aligned store)
-            s.mach_owner[k] = owner;
+            set_mach_owner(core, k, owner);
             parking.row_filled(k);
             core.wr(row + iw(inf, w::O_NAME), s.s.mach_name[k].as_ptr() as u32);
         }

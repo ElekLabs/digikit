@@ -1,8 +1,9 @@
 //! The reload of modules whose settings changed behind their back. A service that changes what a module's settings return (the settings overlay, `settings_overlay.rs`)
 //! names the module with `dkc_settings_changed(owner)`; the module re-reads its settings in `init`, so the runtime reloads it (the live job of `reload/`).
 //!
-//! `ReloadQueue` keeps one `ModuleReload` per module record and runs one reload at a time, once per UI pass (`poll`). Only a loaded module that opened its settings
-//! (`dk_settings_open` in `init`) is reloaded; one that did not, or that is not loaded, reads nothing it could re-read. All calls run in the UI task.
+//! `ReloadQueue` keeps one `ModuleReload` per module record and runs one reload at a time, once per UI pass (`poll`). A module named by `dkc_settings_changed` is reloaded only when it
+//! opened its settings (`dk_settings_open` in `init`): one that did not, or that is not loaded, reads nothing it could re-read. A module named by `dkc_reload_when_possible` is reloaded
+//! when it is loaded, whatever it opened: the caller knows what the module's registration reads. All calls run in the UI task.
 //!
 //! The rules of a reload that does not go through:
 //!
@@ -116,6 +117,20 @@ impl ReloadQueue {
         m.generation = m.generation.wrapping_add(1);
     }
 
+    /// `dkc_reload_when_possible`: the loaded module `id` is to be reloaded, whether it opened its settings or not (a service changed something the module's registration reads).
+    /// It waits like a module whose settings changed: the same retries, load on stop, one job at a time.
+    pub fn reload_when_possible<S: System>(&mut self, sys: &S, id: &[u8]) {
+        let Some(rec) = sys.rec_of(id) else { return };
+        if self.queued.map(|q| q.0) == Some(rec) {
+            // its own reload is queued or running and carries what the caller saved before this call
+            return;
+        }
+        let m = &mut self.mods[rec];
+        m.pending = true;
+        m.tries = 0;
+        m.generation = m.generation.wrapping_add(1);
+    }
+
     /// Once per UI pass: the end of the running job, else the next reload. One live job at a time.
     pub unsafe fn poll<S: System>(&mut self, sys: &mut S) {
         if !self.mods.iter().any(|m| m.pending) {
@@ -210,6 +225,11 @@ impl System for Real {
 /// `dkc_settings_changed`.
 pub unsafe fn changed(id: &[u8]) {
     queue().changed(&Real, id)
+}
+
+/// `dkc_reload_when_possible`.
+pub unsafe fn reload_when_possible(id: &[u8]) {
+    queue().reload_when_possible(&Real, id)
 }
 
 /// The module of record `rec` opened its settings (`dk_settings_open` in `init`).
@@ -437,6 +457,82 @@ mod tests {
     }
 
     #[test]
+    fn a_module_marked_by_name_is_reloaded_at_stop_without_having_opened_its_settings() {
+        let mut f = Fake::new().with(0, b"test/a").with(1, b"test/b");
+        let mut q = ReloadQueue::new();
+        // neither module called `dk_settings_open`
+        q.reload_when_possible(&f, b"test/a");
+        q.reload_when_possible(&f, b"test/unknown");
+        assert!(q.mods[0].pending && !q.mods[1].pending);
+        unsafe {
+            // the transport plays: refused five times over, no try is counted
+            for _ in 0..5 {
+                q.poll(&mut f);
+                f.phase = 2;
+                f.result = E_RELOAD_PLAYING;
+                q.poll(&mut f);
+                wait_out(&mut q, &mut f);
+            }
+            assert!(q.mods[0].pending);
+            assert_eq!(q.mods[0].tries, 0);
+            // the transport stops
+            f.result = OK;
+            q.poll(&mut f);
+            f.phase = 2;
+            q.poll(&mut f);
+        }
+        assert!(!q.mods[0].pending);
+        assert_eq!(f.queued, [0, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn a_module_marked_by_name_follows_the_retry_count_of_other_refusals() {
+        let mut f = Fake::new().with(0, b"test/a");
+        let mut q = ReloadQueue::new();
+        q.reload_when_possible(&f, b"test/a");
+        f.queue_answer = dkrt_sdk::E_RELOAD_MENUS;
+        unsafe {
+            for _ in 0..3 {
+                assert!(q.mods[0].pending);
+                q.poll(&mut f);
+                wait_out(&mut q, &mut f);
+            }
+        }
+        assert!(!q.mods[0].pending);
+        assert_eq!(f.queued.len(), 3);
+    }
+
+    #[test]
+    fn a_module_marked_again_after_its_reload_was_dropped_is_pending_and_reloads() {
+        let mut f = Fake::new().with(0, b"test/a");
+        let mut q = ReloadQueue::new();
+        q.reload_when_possible(&f, b"test/a");
+        f.queue_answer = dkrt_sdk::E_RELOAD_MENUS;
+        unsafe {
+            for _ in 0..3 {
+                q.poll(&mut f);
+                wait_out(&mut q, &mut f);
+            }
+        }
+        assert!(!q.mods[0].pending, "dropped after three tries");
+        assert_eq!(f.queued.len(), 3);
+        // a later change marks it again, and the refusal is gone
+        q.reload_when_possible(&f, b"test/a");
+        assert!(q.mods[0].pending);
+        assert_eq!(q.mods[0].tries, 0);
+        f.queue_answer = OK;
+        unsafe {
+            wait_out(&mut q, &mut f);
+            q.poll(&mut f);
+            f.phase = 2;
+            q.poll(&mut f);
+            q.poll(&mut f);
+        }
+        assert!(!q.mods[0].pending);
+        assert_eq!(f.queued.len(), 4);
+    }
+
+    #[test]
     fn a_module_that_is_gone_is_not_waited_for() {
         let mut f = Fake::new().with(0, b"test/a");
         let mut q = ReloadQueue::new();
@@ -445,5 +541,35 @@ mod tests {
         f.names[0] = None;
         unsafe { q.poll(&mut f) };
         assert!(!q.mods[0].pending && f.queued.is_empty());
+    }
+
+    #[test]
+    fn a_module_marked_when_possible_while_its_own_reload_runs_is_not_reloaded_again() {
+        // marked before its job starts: one reload
+        let mut f = Fake::new().with(0, b"test/a");
+        let mut q = ReloadQueue::new();
+        q.reload_when_possible(&f, b"test/a");
+        unsafe {
+            q.poll(&mut f);
+            f.phase = 2;
+            q.poll(&mut f);
+            q.poll(&mut f);
+        }
+        assert!(!q.mods[0].pending);
+        assert_eq!(f.queued, [0]);
+        // marked while its job runs (the key is saved before the mark, so the running job carries it): still one reload
+        let mut f = Fake::new().with(0, b"test/a");
+        let mut q = ReloadQueue::new();
+        q.note_opened(0);
+        q.changed(&f, b"test/a");
+        unsafe {
+            q.poll(&mut f);
+            q.reload_when_possible(&f, b"test/a");
+            f.phase = 2;
+            q.poll(&mut f);
+            q.poll(&mut f);
+        }
+        assert!(!q.mods[0].pending, "the end of the running job clears the wait");
+        assert_eq!(f.queued, [0], "no second reload");
     }
 }

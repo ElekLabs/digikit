@@ -43,7 +43,7 @@ struct Abi {
 struct HostDirToml {
     /// The id's name without a prefix (`DSP`): the symbol `DKRT_<name>` of the package static it names.
     name: String,
-    /// Who fills the entry: `package` or `core`.
+    /// Who fills the entry: `package`, `core`, or `removed` (a tombstone: the id stays reserved and resolves to nothing).
     owner: String,
     doc: String,
 }
@@ -295,8 +295,10 @@ fn host_ids(abi: &Abi) -> Result<&[HostDirToml]> {
         if h.doc.is_empty() || h.doc.contains("*/") {
             return Err(err!("{SOURCE}: {what}: needs a doc without a comment end"));
         }
-        if h.owner != "core" && h.owner != "package" {
-            return Err(err!("{SOURCE}: {what}: owner is \"core\" or \"package\""));
+        if h.owner != "core" && h.owner != "package" && h.owner != "removed" {
+            return Err(err!(
+                "{SOURCE}: {what}: owner is \"core\", \"package\" or \"removed\""
+            ));
         }
         if abi.host_dir[..i].iter().any(|o| o.name == h.name) {
             return Err(err!("{SOURCE}: {what}: the name is twice"));
@@ -318,12 +320,12 @@ fn host_ts(abi: &Abi, ids: &[HostDirToml]) -> String {
         ids.len()
     );
     s.push_str("/** The package statics that tools read by name, and their ids in the host directory (`DKRT_HOST_DIR`). */\nexport const HOST_ID = {\n");
-    for (i, h) in ids.iter().enumerate() {
+    for (i, h) in ids.iter().enumerate().filter(|(_, h)| h.owner != "removed") {
         let _ = writeln!(s, "  {}: {i},", h.name);
     }
     s.push_str("} as const;\n");
     s.push_str("/** Who fills each entry of the directory: the package at its entry, or the core before it starts the package. */\nexport const HOST_OWNER = {\n");
-    for h in ids {
+    for h in ids.iter().filter(|h| h.owner != "removed") {
         let _ = writeln!(s, "  {}: '{}',", h.name, h.owner);
     }
     s.push_str("} as const;\n");
@@ -360,17 +362,20 @@ fn host_rs(abi: &Abi, ids: &[HostDirToml]) -> String {
         "/// The ids this build knows (`[[host_dir]]` of abi.toml).\npub const HOST_COUNT: usize = {};",
         ids.len()
     );
-    for (i, h) in ids.iter().enumerate() {
+    for (i, h) in ids.iter().enumerate().filter(|(_, h)| h.owner != "removed") {
         let _ = writeln!(s, "/// {}\npub const HOST_{}: u32 = {i};", h.doc, h.name);
     }
-    s.push_str("/// Every id with the name of the static it stands for, in id order.\n#[rustfmt::skip]\npub const HOST_NAMES: [&str; HOST_COUNT] = [\n");
+    s.push_str("/// Every id with the name of the static it stands for, in id order; a removed id (tombstone) has \"\", it resolves to nothing.\n#[rustfmt::skip]\npub const HOST_NAMES: [&str; HOST_COUNT] = [\n");
     for h in ids {
-        let _ = writeln!(s, "    \"DKRT_{}\",", h.name);
+        if h.owner == "removed" {
+            s.push_str("    \"\",\n");
+        } else {
+            let _ = writeln!(s, "    \"DKRT_{}\",", h.name);
+        }
     }
     s.push_str("];\n");
     s
 }
-
 /// A const as Rust text: a magic number in hex, the rest in decimal.
 fn const_value(c: &ConstToml) -> String {
     if c.name.ends_with("_MAGIC") {
@@ -405,7 +410,12 @@ fn rust(abi: &Abi, lays: &[Layout], fns: &[(&FnToml, Sig)], inputs: &AbiInputs) 
         "/// Paths of the selection (`[limits.max] modules` of sdk/sdk.toml).\npub const SEL_MAX: usize = {};",
         inputs.sel_max
     );
-    for (i, h) in abi.host_dir.iter().enumerate() {
+    for (i, h) in abi
+        .host_dir
+        .iter()
+        .enumerate()
+        .filter(|(_, h)| h.owner != "removed")
+    {
         let _ = writeln!(s, "/// {}\npub const HOST_{}: u32 = {i};", h.doc, h.name);
     }
     let _ = writeln!(
@@ -413,7 +423,7 @@ fn rust(abi: &Abi, lays: &[Layout], fns: &[(&FnToml, Sig)], inputs: &AbiInputs) 
         "/// The ids of the host directory this build knows (`[[host_dir]]` of abi.toml).\npub const HOST_COUNT: usize = {};",
         abi.host_dir.len()
     );
-    for owner in ["package", "core"] {
+    for owner in ["package", "core", "removed"] {
         let ids: Vec<String> = abi
             .host_dir
             .iter()
@@ -423,7 +433,7 @@ fn rust(abi: &Abi, lays: &[Layout], fns: &[(&FnToml, Sig)], inputs: &AbiInputs) 
             .collect();
         let _ = writeln!(
             s,
-            "/// The ids of the host directory the {owner} fills (`owner = \"{owner}\"` of `[[host_dir]]`).\npub const HOST_{}_OWNED: [u32; {}] = [{}];",
+            "/// The ids of the host directory the {owner} fills (`owner = \"{owner}\"` of `[[host_dir]]`; for `removed`, the reserved ids that resolve to nothing).\npub const HOST_{}_OWNED: [u32; {}] = [{}];",
             owner.to_uppercase(),
             ids.len(),
             ids.join(", ")
@@ -510,7 +520,12 @@ fn c_header(abi: &Abi, lays: &[Layout], fns: &[(&FnToml, Sig)], inputs: &AbiInpu
         inputs.sel_max
     );
     s.push_str("\n/* Ids of the host directory (`DKRT_HOST_DIR`): the package statics that host tools read, by id. */\n");
-    for (i, h) in abi.host_dir.iter().enumerate() {
+    for (i, h) in abi
+        .host_dir
+        .iter()
+        .enumerate()
+        .filter(|(_, h)| h.owner != "removed")
+    {
         let _ = writeln!(
             s,
             "/* {} */\n#define DKRT_HOST_{} {i}",

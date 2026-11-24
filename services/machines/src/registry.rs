@@ -1,17 +1,39 @@
 //! The registry state of the machines service (`DKRT_REG`: who owns each reserved machine, parameter and page row), its row counts and the texts of a machine row.
-use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::iw;
+use dkrt_abi::shared::Shared;
 use dkrt_sdk::*;
 use dkrt_svc_rows::dynreg::{w, RegState, MACH_TEXT};
 
-/// The registry's state: who owns each reserved machine, parameter and page row (module record index + 1, 0 free) and the strings the rows use. One machines
-/// service, one state: a static of this crate, so it lives in `machines.dks` (the symbol stays for the test tools).
-#[no_mangle]
-pub static mut DKRT_REG: RegState = unsafe { core::mem::zeroed() };
+/// Who owns each reserved machine row (module record index + 1, 0 free). It is the one table of the registry that is read outside the owner: the MODULES reply asks
+/// `Describe::describe` on the command handler's task, which must answer while the owner is busy in another call (the owner's guard would refuse it). So it is a `Shared`
+/// cell of this crate, written by the owner in short sections (a copy of one byte), and read the same way. The rest of the registry state (`RegState`) is a field of the owner.
+static MACH_OWNER: Shared<[u8; MAX_MACH]> = Shared::new([0; MAX_MACH]);
 
-pub fn rstate() -> &'static mut RegState {
-    unsafe { &mut *addr_of_mut!(DKRT_REG) }
+/// The owner of machine row `k` (0: free, or `k` past the rows).
+pub fn mach_owner<C: CoreApi>(core: &C, k: usize) -> u8 {
+    MACH_OWNER.with(core, |o| if k < MAX_MACH { o[k] } else { 0 })
+}
+
+/// Machine row `k` belongs to module record `owner` - 1 (0: it is free). The owner's `attach` and `detach` write it; a host test sets it to stand for a module.
+pub fn set_mach_owner<C: CoreApi>(core: &C, k: usize, owner: u8) {
+    MACH_OWNER.with(core, |o| {
+        if k < MAX_MACH {
+            o[k] = owner;
+        }
+    });
+    crate::modules::publish(core);
+}
+
+/// A copy of the owners of all machine rows, one short section.
+pub(crate) fn mach_owners<C: CoreApi>(core: &C) -> [u8; MAX_MACH] {
+    MACH_OWNER.with(core, |o| *o)
+}
+
+/// Every machine row is free (the reset of a host test; the service starts with all rows free).
+pub fn clear_mach_owners<C: CoreApi>(core: &C) {
+    MACH_OWNER.with(core, |o| *o = [0; MAX_MACH]);
+    crate::modules::publish(core);
 }
 
 /// The code of the first run-time parameter row (a row `k` has code `param_first + k`); `u32::MAX` without a registry.
@@ -26,18 +48,12 @@ pub fn param_first<C: CoreApi>(core: &C) -> u32 {
     }
 }
 
-/// The owner of each run-time parameter row.
-pub fn param_owners() -> &'static [u8] {
-    unsafe { &(*addr_of!(DKRT_REG)).param_owner }
-}
-
 /// The reserved machine, parameter and page rows as (rows the registry has, rows in use); (0, 0) without a registry (for CAPACITY).
-pub(crate) unsafe fn counts<C: CoreApi>(core: &C) -> [(u32, u32); 3] {
+pub(crate) unsafe fn counts<C: CoreApi>(core: &C, s: &RegState) -> [(u32, u32); 3] {
     let inf = dkrt_svc_rows::dynreg(core);
     if inf.is_null() {
         return [(0, 0); 3];
     }
-    let s = rstate();
     let used = |o: &[u8]| {
         let mut n = 0;
         let mut k = 0;
@@ -50,7 +66,7 @@ pub(crate) unsafe fn counts<C: CoreApi>(core: &C) -> [(u32, u32); 3] {
         n
     };
     [
-        (iw(inf, w::M_DYN_N), used(&s.mach_owner)),
+        (iw(inf, w::M_DYN_N), used(&mach_owners(core))),
         (iw(inf, w::P_DYN_N), used(&s.param_owner)),
         (iw(inf, w::PG_DYN_N), used(&s.page_owner)),
     ]
@@ -66,12 +82,12 @@ pub(crate) const KNOBS: usize = limits::PAGE_KNOBS;
 /// (upper-cased when `upper`). Returns the representations. One copy of the code for a module's rows and for the MISSING placeholder.
 #[inline(never)]
 pub(crate) unsafe fn machine_text(
+    s: &mut RegState,
     k: usize,
     long: *const u8,
     short: *const u8,
     upper: bool,
 ) -> (u32, u32) {
-    let s = rstate();
     copy_text(s.s.mach_name[k].as_mut_ptr(), long, MACH_TEXT);
     copy_text(s.s.mach_short[k].as_mut_ptr(), short, MACH_TEXT);
     (

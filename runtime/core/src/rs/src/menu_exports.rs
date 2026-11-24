@@ -45,6 +45,12 @@ pub unsafe extern "C" fn dkrt_live_state(out: *mut DkrtLive) {
     hooks::live_state(out)
 }
 
+/// `dkrt_record_name(owner, out)`: core/ui asks the package for the name of a record (`ui.record_name`).
+#[no_mangle]
+pub unsafe extern "C" fn dkrt_record_name(owner: u32, out: *mut u8) -> i32 {
+    hooks::ui_record_name(owner, out)
+}
+
 /// `dkrt_ui_settings_rows(settings_menu)`: the end of the SETTINGS rebuild (`core/ui`) asks the package for its rows (`ui.settings_rows`).
 #[no_mangle]
 pub unsafe extern "C" fn dkrt_ui_settings_rows(settings_menu: *mut u8) {

@@ -84,6 +84,11 @@ pub struct Job {
     pub torn: bool,
     /// `LIVE_LOAD`, `LIVE_UNLOAD` or `LIVE_RELOAD` of the last job (0: none yet).
     pub op: u8,
+    /// Counts the jobs queued; the job these fields describe is this one.
+    pub serial: u32,
+    /// The serial and result of the last job that finished: the job that started after it overwrote `phase` and `result`.
+    pub done_serial: u32,
+    pub done_result: i32,
     path: [u8; 64],
     rec: usize,
     sel: usize,
@@ -118,7 +123,7 @@ impl Job {
     }
 
     pub const fn new() -> Job {
-        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0 }
+        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, serial: 0, done_serial: 0, done_result: OK, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0 }
     }
 
     /// Queue job `op` for the module at `path` (NUL terminated, at most 63 bytes): a load of a file that no loaded module came from, or an unload or a reload of the module
@@ -154,6 +159,11 @@ impl Job {
             self.path[i] = if i < n { *path.add(i) } else { 0 };
             i += 1;
         }
+        if self.phase == 2 {
+            self.done_serial = self.serial;
+            self.done_result = self.result;
+        }
+        self.serial = self.serial.wrapping_add(1);
         self.phase = 1;
         self.op = op as u8;
         self.step = step::CHECK;

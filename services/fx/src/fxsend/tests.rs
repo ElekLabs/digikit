@@ -1,7 +1,7 @@
 use super::*;
 use dkrt_sdk::*;
 
-/// The offsets that the device tests read from `DKRT_FXS` (`fx-routes-ui.ts`, `fx-track-route.device.test.ts`).
+/// The offsets that the device tests read from `DKRT_FXS` (`fx-track-route.device.test.ts`).
 #[test]
 fn the_layout_the_device_tests_read_is_unchanged() {
     assert_eq!(core::mem::offset_of!(SendState, restores), 16);
@@ -54,7 +54,7 @@ fn settings_keys_carry_the_module_id() {
 #[test]
 fn the_saved_route_falls_back_to_the_default() {
     use dkrt_test_support::FakeCore;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_lock::hold();
     let core = FakeCore::new();
     unsafe {
         let s = ss();
@@ -90,14 +90,152 @@ fn route_choices_use_pending_sends_and_the_image_slot_limit() {
     assert_eq!(allowed_choices(ROUTE_MASTER, 2, 0, 2), ROUTE_MASTER.into());
 }
 
-/// `fx_entry` lists the effects that have a page in row order and answers "no fx" past the end: here no page is owned.
+/// The describe words of an effect module: one word for each of its rows that has a page, in row order: the row (bits 0 to 7), then the route it runs on, the route the settings
+/// give it, the routes it allows and its default, four bits each. A module with no such row gets no word.
 #[test]
-fn fx_entry_without_a_page_answers_no_fx() {
+fn describe_gives_one_word_for_each_effect_row_of_the_consumer() {
+    use dkrt_abi::provider::{ConsumerId, Describe, WordSink};
     use dkrt_test_support::FakeCore;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _g = crate::test_lock::hold();
     let core = FakeCore::new();
-    let mut out: DkrtFx = unsafe { core::mem::zeroed() };
-    assert_eq!(unsafe { fx_entry(&core, 0, &mut out) }, E_NOT_FOUND);
+    let both = ROUTE_MASTER | ROUTE_SEND;
+    unsafe {
+        let s = ss();
+        for (k, owner, allow, running_send) in [
+            (0, 2u8, both, true),
+            (2, 2, ROUTE_MASTER, false),
+            (3, 3, both, false),
+        ] {
+            crate::fxpage::set_page_owner_for_test(k, owner);
+            s.id[k][..2].copy_from_slice(&[b'm', b'0' + k as u8]);
+            s.idlen[k] = 2;
+            s.allow[k] = allow;
+            s.dflt[k] = ROUTE_MASTER;
+            s.route[k] = running_send as _;
+        }
+        // row 0 is saved as master while it runs on the send bus (a change waiting for its reload)
+        core.settings
+            .borrow_mut()
+            .push((b"fx/route/m0".to_vec(), std::vec![0]));
+        publish(&core);
+    }
+    let words = |who: u8| {
+        let mut buf = [0u32; 8];
+        let mut sink = WordSink::new(&mut buf);
+        <crate::fx::Fx as Describe<FakeCore>>::describe(&core, ConsumerId::new(who), &mut sink);
+        sink.words().to_vec()
+    };
+    let word = |row: u32, running: u8, saved: u8, allowed: u8, dflt: u8| {
+        row | (running as u32) << 8
+            | (saved as u32) << 12
+            | (allowed as u32) << 16
+            | (dflt as u32) << 20
+    };
+    assert_eq!(
+        words(2),
+        std::vec![
+            word(0, ROUTE_SEND, ROUTE_MASTER, both, ROUTE_MASTER),
+            word(2, ROUTE_MASTER, ROUTE_MASTER, ROUTE_MASTER, ROUTE_MASTER),
+        ]
+    );
+    assert_eq!(
+        words(3),
+        std::vec![word(3, ROUTE_MASTER, ROUTE_MASTER, both, ROUTE_MASTER)]
+    );
+    assert_eq!(
+        words(9),
+        std::vec::Vec::<u32>::new(),
+        "no row of that consumer: no section"
+    );
+    assert_eq!(
+        words(0),
+        std::vec::Vec::<u32>::new(),
+        "a free row has owner 0, which is no consumer"
+    );
+    unsafe {
+        for k in [0, 2, 3] {
+            crate::fxpage::set_page_owner_for_test(k, 0);
+        }
+        crate::fxsend::reset_published();
+    }
 }
 
-static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// `describe` runs on the MODULES command handler's task and can be preempted by the task that removes or re-routes an effect. At each point where a task switch can fall in (each
+/// time the interrupt mask is given back), the words are those of the state before or after the change, never the owner of one with the route or the limits of the other.
+#[test]
+fn describe_is_one_state_when_the_effect_changes_between_its_reads() {
+    use dkrt_abi::provider::{ConsumerId, Describe, WordSink};
+    use dkrt_test_support::FakeCore;
+    let _g = crate::test_lock::hold();
+    let both = ROUTE_MASTER | ROUTE_SEND;
+    let words = |core: &FakeCore| {
+        let mut buf = [0u32; 8];
+        let mut sink = WordSink::new(&mut buf);
+        <crate::fx::Fx as Describe<FakeCore>>::describe(core, ConsumerId::new(2), &mut sink);
+        sink.words().to_vec()
+    };
+    let word = |running: u8, allowed: u8| {
+        0u32 | (running as u32) << 8
+            | (ROUTE_MASTER as u32) << 12
+            | (allowed as u32) << 16
+            | (ROUTE_MASTER as u32) << 20
+    };
+    // before: effect row 0 of record 1 runs on the send bus and allows both; after: another module (record 2) holds the row, on the master, allowing the master only
+    fn state(owner: u8, send: bool, allow: u8) {
+        unsafe {
+            let s = ss();
+            crate::fxpage::set_page_owner_for_test(0, owner);
+            s.id[0][..2].copy_from_slice(b"m0");
+            s.idlen[0] = 2;
+            s.allow[0] = allow;
+            s.dflt[0] = ROUTE_MASTER;
+            s.route[0] = send as _;
+        }
+    }
+    for at in 1..=6 {
+        let core = FakeCore::new();
+        state(2, true, both);
+        unsafe { publish(&core) };
+        assert_eq!(words(&core), std::vec![word(ROUTE_SEND, both)]);
+        core.host.interrupt_at_restore(at, || {
+            let core = FakeCore::new();
+            state(3, false, ROUTE_MASTER);
+            unsafe { publish(&core) };
+        });
+        let got = words(&core);
+        assert!(
+            got == std::vec![word(ROUTE_SEND, both)] || got.is_empty(),
+            "restore {at}: {got:x?} is a mix of the two states"
+        );
+        unsafe {
+            crate::fxpage::set_page_owner_for_test(0, 0);
+            crate::fxsend::reset_published();
+        }
+    }
+}
+
+/// `rows::reset` is the host tests' return to the start: the table published before it is gone too, so a later `describe` does not answer with the effects of the run before.
+#[test]
+fn reset_forgets_the_published_effect_words() {
+    use dkrt_abi::provider::{ConsumerId, Describe, WordSink};
+    use dkrt_test_support::FakeCore;
+    let _g = crate::test_lock::hold();
+    let core = FakeCore::new();
+    unsafe {
+        let s = ss();
+        crate::fxpage::set_page_owner_for_test(0, 2);
+        s.allow[0] = ROUTE_MASTER;
+        s.dflt[0] = ROUTE_MASTER;
+        publish(&core);
+    }
+    let words = |core: &FakeCore| {
+        let mut buf = [0u32; 8];
+        let mut sink = WordSink::new(&mut buf);
+        <crate::fx::Fx as Describe<FakeCore>>::describe(core, ConsumerId::new(2), &mut sink);
+        sink.words().len()
+    };
+    assert_eq!(words(&core), 1, "published");
+    crate::rows::reset();
+    assert_eq!(words(&core), 0, "reset forgot the published table");
+    unsafe { crate::fxpage::set_page_owner_for_test(0, 0) };
+}

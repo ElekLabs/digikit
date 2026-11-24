@@ -11,7 +11,13 @@ use dkrt_svc_rows::dynreg::w;
 /// The commit of module record `rec` (`Records::commit`): `PREPARE` checks the collection and measures its records, `WRITE` writes them, counts the rows and keeps the callback
 /// arguments for `apply`; `DECLARE` (after the registry walker's check) declares the voice rows' ranges. The collection is closed after the `DECLARE` pass.
 impl Builder {
-    pub unsafe fn commit<C: CoreApi>(&mut self, core: &C, rec: usize, c: &ModuleCommitCtx) -> i32 {
+    pub unsafe fn commit<C: CoreApi>(
+        &mut self,
+        core: &C,
+        reg: &dkrt_svc_rows::dynreg::RegState,
+        rec: usize,
+        c: &ModuleCommitCtx,
+    ) -> i32 {
         let b = &self.build;
         if !b.gate.is_open_for(rec) {
             return OK; // no `module_begin` for this record: nothing was collected
@@ -36,7 +42,7 @@ impl Builder {
         let voice = voices(core, rec, b, c.keys);
         let sink = &mut *c.sink;
         if c.phase == commit_phase::PREPARE {
-            let r = check_commit(b, &p, c.keys, &free_rows(inf));
+            let r = check_commit(b, &p, c.keys, &free_rows(core, reg, inf));
             if r != OK {
                 return r;
             }

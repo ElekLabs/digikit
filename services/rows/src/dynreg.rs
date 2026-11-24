@@ -84,11 +84,11 @@ pub struct Strings {
     pub rep_ptitle: [[u8; REP_SIZE]; MAX_PAGE],
 }
 
-/// The registry's state: who owns each reserved row (module record index + 1, 0 = free) and the strings the rows use.
+/// The registry's state that only the owner of the machines service reads: who owns each reserved parameter and page row (module record index + 1, 0 = free) and the strings
+/// the rows use. The owner of each machine row is not here: it is read outside the owner (the MODULES reply), so it is a `Shared` cell of the service (`registry::MACH_OWNER`).
 #[repr(C, align(4))]
 pub struct RegState {
     pub magic: u32,
-    pub mach_owner: [u8; MAX_MACH],
     pub param_owner: [u8; MAX_PARAM],
     pub page_owner: [u8; MAX_PAGE],
     /// An empty std::string representation (length 0, capacity 0, reference count -1, NUL) for a free machine row.

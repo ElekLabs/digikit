@@ -34,10 +34,6 @@ reason = "needs a RESOURCES header entry that the packer cannot write from a man
 
 # Provided by a service file for the runtime's own handlers (sdk.toml `internal = true`): the runtime calls them by name, no module imports them.
 [[allow]]
-name = "dk_fx_routes_entry"
-reason = "provided by fx.dks, called by the runtime's FX ROUTES page handler (handlers.rs); no module imports it"
-
-[[allow]]
 name = "dk_machines_guard_state"
 reason = "provided by machines.dks, called by the runtime's MODULES reply (handlers.rs); no module imports it"
 

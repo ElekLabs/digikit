@@ -79,7 +79,7 @@ pub static mut DKRT_POLLS: [usize; POLLS] = [0; POLLS];
 pub static mut DKRT_POLL_OWNER: [u8; POLLS] = [POLL_OWNER_RUNTIME; POLLS];
 pub const POLL_OWNER_RUNTIME: u8 = 0xff;
 
-/// Functions of `dkrt_unload_observer_add`: called with the owner of each content module that is unloaded, after its `fini`.
+/// Functions of `dkrt_unload_observer_add`: called with the owner of each record, content module or service file, that is unloaded, after its `fini`.
 pub const OBSERVERS: usize = 4;
 #[no_mangle]
 pub static mut DKRT_UNLOAD_OBSERVERS: [usize; OBSERVERS] = [0; OBSERVERS];

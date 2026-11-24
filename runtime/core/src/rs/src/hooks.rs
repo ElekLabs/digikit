@@ -152,11 +152,6 @@ pub(crate) unsafe fn module_extra(i: usize) -> ModuleExtra {
     out
 }
 
-/// `dkrt_fx`. Default: `E_NOT_FOUND`: no effect has a page.
-pub(crate) unsafe fn fx_entry(index: u32, out: *mut DkrtFx) -> i32 {
-    call!(module.fx_entry(index, out), E_NOT_FOUND)
-}
-
 /// `dkrt_module_header`. Default: `E_NOT_FOUND`: no module file is read.
 pub(crate) unsafe fn module_header(first: u32, out: *mut DkrtModuleHeader) -> i32 {
     call!(module.read_header(first, out), E_NOT_FOUND)
@@ -165,11 +160,6 @@ pub(crate) unsafe fn module_header(first: u32, out: *mut DkrtModuleHeader) -> i3
 /// Does the module with record index `i` have a `tick`? Default: no.
 pub(crate) unsafe fn module_has_tick(i: usize) -> bool {
     call!(module.has_tick(i as u32), false)
-}
-
-/// Does a loaded module have machine type `ty`? Default: no.
-pub(crate) unsafe fn machine_type_loaded(ty: u32) -> bool {
-    call!(module.machine_type_loaded(ty), false)
 }
 
 // ---- the menu's exports --------------------------------------------------------------------------------------------------
@@ -201,7 +191,7 @@ pub(crate) unsafe fn live(op: u32, path: *const u8) -> i32 {
 
 /// `dkrt_live_state`. Default: an idle job (all words 0).
 pub(crate) unsafe fn live_state(out: *mut DkrtLive) {
-    call!(menu.live_state(out), *out = DkrtLive { phase: 0, result: OK, step: 0, unloaded: 0, op: 0 })
+    call!(menu.live_state(out), *out = DkrtLive { phase: 0, result: OK, step: 0, unloaded: 0, op: 0, serial: 0, done_serial: 0, done_result: OK })
 }
 
 // ---- diagnostics ---------------------------------------------------------------------------------------------------------
@@ -285,6 +275,15 @@ pub(crate) unsafe fn provider_query(provider: u32, minimum: u32) -> Result<u32, 
 pub(crate) unsafe fn ui_settings_rows(menu: *mut u8) {
     if has_group(dkrt_abi::hooks::UI_HOOKS_SINCE) {
         call!(ui.settings_rows(menu), ())
+    }
+}
+
+/// The name of the loaded record `owner` (core/ui keys what an owner holds by it). Default: `E_NOT_FOUND` (no package, a package built before the entry, or a null entry).
+pub(crate) unsafe fn ui_record_name(owner: u32, out: *mut u8) -> i32 {
+    if has_group(dkrt_abi::hooks::UI_RECORD_NAME_SINCE) {
+        call!(ui.record_name(owner, out), E_NOT_FOUND)
+    } else {
+        E_NOT_FOUND
     }
 }
 

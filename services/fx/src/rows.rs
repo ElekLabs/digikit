@@ -45,4 +45,5 @@ pub fn bytes() -> &'static [u8] {
 /// Back to the start: the rows are zero. The host tests' reset between two cores (the guard's memory is the owner's, so a new owner has seen nothing).
 pub fn reset() {
     unsafe { core::ptr::write_bytes(addr_of_mut!(DKRT_FROWS), 0, 1) }
+    crate::fxsend::reset_published();
 }

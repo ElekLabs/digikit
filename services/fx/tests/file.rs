@@ -1,8 +1,8 @@
 //! The service file's own code over the owner cell, on the host: the builder exports reach the owner through `DK_SVC_OWNER.with` and answer the neutral way when there is none (a
-//! null handle, no effect), the file's `init` step refuses an image without the effect pages and leaves the cell empty, and the resident query entry is the owner's `Query` part.
+//! null handle, no effect), the file's `init` step refuses an image without the effect pages and leaves the cell empty, and the owner's row is guarded.
 //! The imports of the file (`dkc_*`) are stubs here, and the stub image has no tables.
 use core::ptr::null_mut;
-use dkrt_sdk::{E_MISSING, E_NOT_FOUND, E_NO_REGISTRY};
+use dkrt_sdk::E_NO_REGISTRY;
 use dkrt_svc_fx::fx::Fx;
 use std::sync::Mutex;
 
@@ -12,8 +12,8 @@ pub mod file;
 use file::builder::{
     dk_fx_add_page, dk_fx_mix, dk_fx_routes, dk_module_ctx_add_fx, dk_page_add_fx_param,
 };
-pub use file::{builder, rt, DK_SVC_OWNER};
-use file::{dk_service_query_v1, dk_svc_start, dk_svc_stop};
+pub use file::{builder, DK_SVC_OWNER};
+use file::{dk_svc_start, dk_svc_stop};
 
 // the core imports (`dkc_*`) of the service file, as host functions (this test links no runtime)
 #[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
@@ -46,7 +46,7 @@ impl Drop for Started {
 const NAME: *const u8 = b"A\0".as_ptr();
 
 #[test]
-fn without_an_owner_a_builder_call_has_no_handle_and_the_query_has_no_provider() {
+fn without_an_owner_a_builder_call_has_no_handle() {
     let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
     assert!(DK_SVC_OWNER.with(|_| ()).is_none());
     // SAFETY: the calls read nothing when the cell is empty
@@ -56,10 +56,6 @@ fn without_an_owner_a_builder_call_has_no_handle_and_the_query_has_no_provider()
         assert!(dk_page_add_fx_param(null_mut(), NAME, NAME, 1, 0.0, 1.0, 0.5).is_null());
         dk_fx_routes(null_mut(), 1, 1);
         dk_fx_mix(null_mut(), 5);
-        assert_eq!(
-            dk_service_query_v1(1, core::ptr::null(), 0, null_mut(), 0),
-            E_MISSING
-        );
     }
 }
 
@@ -71,7 +67,7 @@ fn the_file_refuses_an_image_without_the_effect_pages_and_keeps_no_owner() {
 }
 
 #[test]
-fn the_exports_reach_the_started_owner_and_the_resident_query_is_its_part() {
+fn the_exports_reach_the_started_owner() {
     let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
     let started = Started::new();
     // the owner judges the calls: no `begin`, so its gate is closed and the placeholder comes back (not null)
@@ -80,11 +76,6 @@ fn the_exports_reach_the_started_owner_and_the_resident_query_is_its_part() {
     unsafe {
         assert_eq!(dk_module_ctx_add_fx(null_mut(), 0, NAME, NAME), ph);
         assert_eq!(dk_fx_add_page(ph, NAME, NAME), ph);
-        // an operation the part does not know is its own refusal, not the cell's
-        assert_eq!(
-            dk_service_query_v1(2, core::ptr::null(), 0, null_mut(), 0),
-            E_NOT_FOUND
-        );
     }
     drop(started);
     assert!(DK_SVC_OWNER.with(|_| ()).is_none());
@@ -101,4 +92,26 @@ fn the_row_reaches_the_object_through_the_owner_guard() {
         },
         &|| DK_SVC_OWNER.refused(),
     );
+}
+
+#[test]
+fn a_pick_that_arrives_while_the_owner_is_busy_is_queued_and_a_full_queue_says_busy() {
+    use dkrt_svc_fx::routing::Event;
+    use dkrt_svc_rt::Post;
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let _started = Started::new();
+    DK_SVC_OWNER
+        .with(|_| {
+            // the queue holds the picks of one call, none is lost
+            for _ in 0..4 {
+                assert_eq!(file::ui::submit(Event::Route(0)), Post::Queued);
+            }
+            assert_eq!(file::ui::submit(Event::Route(0)), Post::Full);
+        })
+        .expect("owner");
+    assert_eq!(file::ui::refusal(Post::Full), Some("BUSY: TRY AGAIN"));
+    assert_eq!(file::ui::refusal(Post::Queued), None);
+    assert_eq!(file::ui::refusal(Post::Ran), None);
+    // idle: the event runs at once
+    assert_eq!(file::ui::submit(Event::List), Post::Ran);
 }

@@ -44,3 +44,4 @@ const _: sig::dkrt_speed_flags = crate::speed::dkrt_speed_flags;
 const _: sig::dkrt_aux_run = crate::aux::dkrt_aux_run;
 const _: sig::dkrt_aux_wait = crate::aux::dkrt_aux_wait;
 const _: sig::dkrt_ui_settings_rows = crate::menu_exports::dkrt_ui_settings_rows;
+const _: sig::dkrt_record_name = crate::menu_exports::dkrt_record_name;

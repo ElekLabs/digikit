@@ -77,6 +77,9 @@ pub trait CoreApi: crate::mem::FwMem {
     /// The effective settings of module `id` changed behind the module's back (the overlay's values differ from what the module read): the runtime reloads the module when it
     /// opened its settings (`settings_reload`).
     unsafe fn settings_changed(&self, id: &[u8]);
+    /// Reload the loaded module `id` when possible, whether or not it opened its settings: the runtime waits for the transport to stop and retries as it does for `settings_changed`
+    /// (`settings_reload`). Nothing for a module that is not loaded. UI task only.
+    unsafe fn reload_when_possible(&self, id: &[u8]);
     /// Queue a live job (`LIVE_LOAD`, `LIVE_UNLOAD` or `LIVE_RELOAD` of the file at `path`, NUL terminated): `dkrt_live`, with its refusals. UI task only.
     unsafe fn live(&self, op: u32, path: *const u8) -> i32;
     /// The live job's state (`dkrt_live_state`). UI task only.

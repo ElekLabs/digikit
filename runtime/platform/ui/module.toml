@@ -26,7 +26,7 @@ needs_device = ["input.keys"]
 # modules which require core/ui import by name. The module's one firmware hook is the end of the SETTINGS item list rebuild: it calls the runtime's dkrt_ui_settings_rows, which asks the system package for its rows (the `ui.settings_rows` hook).
 [[object]]
 path = "build/ui.dko.json"
-sources = ["src/ui.c", "src/settings_rows.c", "src/view_pool.c", "src/panel_keys.c", "src/key_map.c", "src/key_defer.c", "src/canvas_map.c", "src/text_input.c", "src/shim.s"]
+sources = ["src/ui.c", "src/settings_rows.c", "src/dialog_slot.c", "src/view_pool.c", "src/panel_keys.c", "src/key_map.c", "src/key_defer.c", "src/canvas_map.c", "src/text_input.c", "src/shim.s"]
 place = "cf.expansion"
 
 [object.externs]

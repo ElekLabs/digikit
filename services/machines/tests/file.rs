@@ -15,7 +15,7 @@ use file::builder::{
     dk_page_bind_local, dk_param_glyph, dk_param_latched, dk_param_range,
 };
 use file::fw::{dk_param_get, dk_param_set, dks_page_key, dks_page_turn};
-pub use file::{builder, fw, rt, DK_SVC_OWNER};
+pub use file::{builder, fw, DK_SVC_OWNER};
 use file::{dk_svc_start, dk_svc_stop};
 
 #[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
@@ -108,4 +108,49 @@ fn the_row_reaches_the_object_through_the_owner_guard() {
         },
         &|| DK_SVC_OWNER.refused(),
     );
+}
+
+/// The MODULES reply asks `Describe` on the command handler's task, which may run while the UI task is inside a call of the owner (a tick, a hook, a window): the words are
+/// answered at once, from the cells outside the owner, and the owner's guard is never asked.
+#[test]
+fn describe_answers_while_the_owner_is_busy_in_another_call() {
+    use dkrt_abi::provider::ProviderHandle;
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let _o = Started::new();
+    // SAFETY: the row is a static of the file; the instance is the one `Started` made
+    let handle = unsafe {
+        ProviderHandle::resolve(
+            file::dk_svc_row(),
+            0..usize::MAX,
+            DK_SVC_OWNER.instance() as *mut core::ffi::c_void,
+        )
+    }
+    .unwrap();
+    let core =
+        &dkrt_svc_rt::ImportCore as *const dkrt_svc_rt::ImportCore as *const core::ffi::c_void;
+    dkrt_svc_machines::rows::reset();
+    dkrt_svc_machines::rows::vrows().mod_rows[1] = 0b101;
+    dkrt_svc_machines::records::publish(&dkrt_svc_rt::ImportCore);
+    let ask = || {
+        let mut w = [0u32; 8];
+        // SAFETY: `core` is the file's `ImportCore`, a zero-sized value
+        let n = unsafe { handle.describe(core, 2, &mut w) };
+        w[..n].to_vec()
+    };
+    let idle = ask();
+    assert_eq!(
+        idle,
+        std::vec![0b101, 0, 0, 0, 0],
+        "the voice rows of the module, nothing else"
+    );
+    // the owner is inside a call: a call into it is refused, the words are not
+    let busy = DK_SVC_OWNER.with(|_| {
+        assert!(
+            DK_SVC_OWNER.with(|_| ()).is_none(),
+            "the guard refuses a nested call"
+        );
+        ask()
+    });
+    assert_eq!(busy, Some(idle));
+    dkrt_svc_machines::rows::reset();
 }

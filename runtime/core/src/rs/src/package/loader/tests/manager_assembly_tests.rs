@@ -88,6 +88,47 @@ fn the_manager_brings_up_the_packed_local_ping_fixtures_and_takes_them_down_with
     }
 }
 
+static mut GONE: Vec<u32> = Vec::new();
+unsafe extern "C" fn observer(owner: u32) {
+    (*core::ptr::addr_of_mut!(GONE)).push(owner);
+}
+
+/// A packed service file is an owner for core/ui as a module is: its context names its record (`dkrt_ctx_owner`) and the unload observers are told when it goes down, after
+/// the consumers. One that fits (the service with its consumer) and the typical refusal (the context of a record that is not loaded).
+#[test]
+fn a_packed_service_is_an_owner_and_its_unload_reaches_the_observers() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, _plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            let path = std::format!("modules/{}.dkm\0", LOCAL_PING_USER.leaf).into_bytes();
+            let mut at = [None; MAX_MODULES];
+            at[0] = Some(path.as_ptr());
+            let mut s = Session::new(&mut l as *mut _, at);
+            let manifest = RtManifest::of(&mut s, 1);
+            let (placer, linker, installers, host) = s.seams();
+            let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
+            let (user, service) = (id(0), id(MAX_MODULES));
+            (*core::ptr::addr_of_mut!(GONE)).clear();
+            assert_eq!(crate::api::dkrt_unload_observer_add(observer as *const () as usize), dkrt_sdk::OK);
+            let report = pm.boot(&[user]).unwrap();
+            assert_eq!(report.brought_up().as_slice(), [service, user], "{}", dev.name);
+
+            let ctx_of = |rec: usize| core::ptr::addr_of!(crate::package::entry::DKRT_CTXS[rec]) as usize;
+            assert_eq!(crate::api::dkrt_ctx_owner(ctx_of(MAX_MODULES)), MAX_MODULES as i32, "{}: the service's context names its record", dev.name);
+            assert_eq!(crate::api::dkrt_ctx_owner(ctx_of(MAX_MODULES) + 1), dkrt_sdk::E_CONTRACT, "{}: a pointer into the context is none", dev.name);
+
+            let report = pm.unload(user).unwrap();
+            assert_eq!(report.taken_down().as_slice(), [user, service], "{}", dev.name);
+            assert_eq!(*core::ptr::addr_of!(GONE), [0, MAX_MODULES as u32], "{}: the observer heard the module, then the service", dev.name);
+            crate::api::dkrt_unload_observer_remove(observer as *const () as usize);
+            assert_eq!(crate::api::dkrt_ctx_owner(ctx_of(MAX_MODULES)), dkrt_sdk::E_CONTRACT, "{}: a record that is gone has no owner", dev.name);
+        }
+        clean_state();
+    }
+}
+
 #[test]
 fn the_manager_installs_the_hooks_of_a_service_and_the_firmware_is_stock_after_the_unload() {
     let _g = clean();

@@ -80,6 +80,8 @@ macro_rules! core_imports {
             fn dk_provider_declare_row(ctx: *mut u8, row: *const $crate::provider::ProviderRow, instance: *mut u8) -> i32;
             // A service panicked: the runtime's panic (crash capture, safe mode on the next boot). Never returns.
             fn dkc_panic() -> !;
+            // ---- appended: reload the loaded module `id` (`id_len` bytes) when possible, whether it opened its settings or not (`CoreApi::reload_when_possible`)
+            fn dkc_reload_when_possible(id: *const u8, id_len: u32);
         }
     };
 }

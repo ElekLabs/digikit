@@ -18,6 +18,7 @@ fn a_package_publishes_its_own_ids_only_and_clear_empties_all() {
         assert!(publish_package(HOST_DSP, 0x4000_1230));
         assert_eq!((entry(HOST_DSP), entry(HOST_PROVIDERS)), (Some(0x4000_1230), None));
         assert!(!publish_package(HOST_COUNT as u32, 4), "an id this core does not know");
+        assert!(!publish_package(dkrt_sdk::HOST_REMOVED_OWNED[0], 4), "a removed id resolves to nothing");
         assert!(!publish_package(HOST_PACKAGE_LO, 4), "a core-owned id is not the package's to write");
         assert_eq!(entry(HOST_PACKAGE_LO), None);
         complete();

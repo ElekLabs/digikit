@@ -3924,6 +3924,17 @@ mark = "D"
 rule = "fw/window:cf_ptr"
 
 [[anchor]]
+name = "cf.window.site.multichoice_vptr_lit"
+cpu = "cf"
+kind = "data"
+addr = 0x4021d428
+src = 0x40116b52
+len = 4
+sha256 = "bca10c4ec14498aba194128549268dd34824f437a9b1825bc31062f01c36638f"
+mark = "D"
+rule = "fw/window:cf_ptr"
+
+[[anchor]]
 name = "cf.window.site.name_cb_vptr_lit"
 cpu = "cf"
 kind = "data"

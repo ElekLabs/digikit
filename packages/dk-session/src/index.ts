@@ -13,6 +13,7 @@ export { ProcessTransport } from './process-transport.ts';
 export * from './fault.ts';
 export * from './host-directory.ts';
 export * from './loads.ts';
+export * from './modules-reply.ts';
 export * from './runtime-log.ts';
 export * from './runtime-events.ts';
 export * from './setup.ts';

@@ -84,7 +84,8 @@ typedef struct dk_ui_menu_desc {
 dk_ui_menu *dk_ui_menu_new(dk_ui *ui, const dk_ui_menu_desc *desc);
 
 /* A choice of `n` items. `done(arg, index)` gets the index; NO closes the dialog without calling `done`. Returns 0 when shown, a negative code when not
-   (out of memory, or another dialog is open). `title` up to 80 characters. Context: ui. Since api 2.11. */
+   (out of memory, or another dialog is open). `title` is cut to DK_UI_ROW - 1 (23) characters and every item to DK_UI_LIST_TEXT - 1 (79); the stock popup shows what fits.
+   A tab in an item starts a second column: "NAME\tREST" is drawn with REST at the same pixel column in every item (core/ui pads the shorter NAMEs). Context: ui. Since api 2.11. */
 int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int32_t n,
                      dk_ui_choice_fn *done, void *arg);
 
@@ -140,7 +141,8 @@ dk_ui_view *dk_ui_view_open(dk_ui *ui, const dk_ui_view_desc *desc);
 /* ---- A row in SETTINGS ----
    `dk_ui_settings_row(ui, text, open, arg)`, in `init` only: adds a row `text` (up to DK_UI_ROW - 1 characters) at the end of the SETTINGS list.
    `open(arg)` runs on YES, in the UI task. Rows are in load order, after the rows of the DIGIKIT menu. Room for DK_UI_SETTINGS_ROWS rows in the image.
-   The row goes away when the module unloads. Returns 0, DK_E_CONTRACT (no `text` or `open`) or DK_E_NOMEM (no room). */
+   The row goes away when the module or service unloads. The owner is a module or a service file: its record name keys the row. Returns 0, DK_E_CONTRACT (no `text` or `open`, or a `ui` that is
+   not an owner's handle: the core handle of dk_ui_core_handle has no record, so no row) or DK_E_NOMEM (no room). */
 #define DK_UI_SETTINGS_ROWS 4
 
 /* ---- The stock naming screen ----

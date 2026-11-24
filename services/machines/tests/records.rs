@@ -18,7 +18,7 @@ use std::rc::Rc;
 use std::sync::Mutex;
 use std::vec::Vec;
 
-/// The tests that drive the tables the crate keeps by name (the registry state `DKRT_REG`) take this lock.
+/// The tests that drive the tables the crate keeps by name (the owners of the machine rows, the voice rows, the guard) take this lock.
 static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 const P_FIRST: u32 = 100;
@@ -73,6 +73,16 @@ fn machines_info(native_pages: bool) -> Vec<u32> {
         t[info::w::N_TURN] = N_TURN;
     }
     t
+}
+
+/// The first run-time machine type of the device the fake core stands for.
+fn first_type() -> u32 {
+    let device = core().device;
+    dkrt_abi::profiles::ALL
+        .iter()
+        .find(|p| p.id == device)
+        .unwrap()
+        .dyn_type_first
 }
 
 fn core() -> FakeCore {
@@ -282,25 +292,25 @@ fn apply_fills_the_parameter_rows_and_arms_the_click_and_remove_gives_them_back(
     // the parameters sit in the first free rows, with their ranges and the owner
     assert_eq!(row_words(&core, P_DYN0), [0, 255, 17]);
     assert_eq!(row_words(&core, P_DYN0 + 1), [-64i32 as u32, 63, 0]);
-    assert_eq!(&rstate().param_owner[..3], [OWNER, OWNER, 0]);
+    assert_eq!(&owner.reg().param_owner[..3], [OWNER, OWNER, 0]);
     assert_eq!(
         Describe::cap(&*owner, &core, dkrt_sdk::proto::CAPK_PARAM_ROWS),
         Some((16, 2))
     );
     // the first parameter has no action: the stock click, nothing is queued
-    assert_eq!(&rstate().param_owner[..3], [OWNER, OWNER, 0]);
+    assert_eq!(&owner.reg().param_owner[..3], [OWNER, OWNER, 0]);
     assert_eq!(click(&mut owner, &core, P_DYN0 as i32, 6, 1).callback, 0);
     // a click on the second parameter queues the callback at the module's load address plus its image offset
     let p = click(&mut owner, &core, (P_DYN0 + 1) as i32, 6, 0);
     assert_eq!((p.callback, p.track, p.code), (BASE + 8, 6, P_DYN0 + 1));
     assert_eq!(
-        slots::click_context(&core, &p).map(|c| c.owner),
+        slots::click_context(&core, &owner.reg().param_owner, &p).map(|c| c.owner),
         Some(OWNER)
     );
     // remove: the rows are free, the action is disarmed and the queued click of the unloaded module is dropped
     core.calls.borrow_mut().clear();
     Provider::detach(&mut *owner, &core, ConsumerId::new(OWNER));
-    assert_eq!(&rstate().param_owner[..3], [0, 0, 0]);
+    assert_eq!(&owner.reg().param_owner[..3], [0, 0, 0]);
     assert_eq!(
         (row_words(&core, P_DYN0), row_words(&core, P_DYN0 + 1)),
         ([0, 0, 0], [0, 0, 0]),
@@ -399,7 +409,7 @@ fn the_capacity_counts_need_a_registry_and_the_ui_pass_runs_the_click_last() {
     let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut core = FakeCore::new();
     let mut owner = Box::new(Machines::new());
-    rstate().mach_owner = [0; limits::MACHINE_ROWS]; // other tests leave rows owned in the static state
+    clear_mach_owners(&core); // other tests leave rows owned in the shared cell
     for kind in [
         dkrt_sdk::proto::CAPK_MACHINE_ROWS,
         dkrt_sdk::proto::CAPK_PARAM_ROWS,
@@ -433,16 +443,15 @@ fn the_capacity_counts_need_a_registry_and_the_ui_pass_runs_the_click_last() {
 fn the_machine_types_of_a_module_are_its_machine_rows_in_type_order() {
     let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = core();
-    let s = rstate();
-    s.mach_owner[1] = 4;
-    s.mach_owner[5] = 4;
-    s.mach_owner[2] = 9;
+    set_mach_owner(&core, 1, 4);
+    set_mach_owner(&core, 5, 4);
+    set_mach_owner(&core, 2, 9);
     let mut out = [0u8; limits::MACHINE_ROWS];
-    let first = dkrt_abi::profiles::DT2.dyn_type_first as u8;
+    let first = first_type() as u8;
     assert_eq!(types_of(&core, 4, &mut out), 2);
     assert_eq!(&out[..2], [first + 1, first + 5]);
     assert_eq!(types_of(&core, 7, &mut out), 0);
-    s.mach_owner = [0; limits::MACHINE_ROWS];
+    clear_mach_owners(&core);
 }
 
 #[test]
@@ -452,15 +461,16 @@ fn the_machines_of_a_module_are_its_rows_its_types_and_the_guard_counts_for_them
     let _lock = dkrt_test_support::contract::locked();
     let core = core();
     dkrt_svc_machines::rows::reset();
-    let first = dkrt_abi::profiles::DT2.dyn_type_first;
+    let first = first_type();
     // module record 1 (owner 2) has a machine row (type first + 3) and a voice row of another type (a DSP-only machine) and one of the type of its machine row
-    rstate().mach_owner[3] = 2;
+    set_mach_owner(&core, 3, 2);
     let v = dkrt_svc_machines::rows::vrows();
     for (k, t) in [(0usize, first + 3), (1, 0x1e)] {
         v.row_owner[k] = 2;
         v.row_type[k] = t;
     }
     v.mod_rows[1] = 0b11;
+    dkrt_svc_machines::records::publish(&core);
     let m = dkrt_svc_machines::records::module_info(&core, 2);
     assert_eq!(
         (m.rows, m.nt, m.types[0], m.types[1]),
@@ -485,8 +495,72 @@ fn the_machines_of_a_module_are_its_rows_its_types_and_the_guard_counts_for_them
         v.row_owner[k] = 2;
         v.row_type[k] = 0x40 + k as u32;
     }
+    dkrt_svc_machines::records::publish(&core);
     assert_eq!(dkrt_svc_machines::records::module_info(&core, 2).nt, 8);
-    rstate().mach_owner[3] = 0;
+    set_mach_owner(&core, 3, 0);
+    dkrt_svc_machines::rows::reset();
+}
+
+/// The five describe words of a module (what the MODULES reply carries for the machines service): the voice rows, the guard's faults, `nt` with the guard-off flag in bit 8, the
+/// types 0 to 3 and the types 4 to 7 (type `i` in byte `i % 4`, least significant first); none for a module with nothing.
+#[test]
+fn the_describe_words_of_a_module_are_its_rows_faults_types_and_guard_flag() {
+    use dkrt_abi::provider::WordSink;
+    let _tl = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _lock = dkrt_test_support::contract::locked();
+    let core = core();
+    dkrt_svc_machines::rows::reset();
+    let first = first_type();
+    let words = |who: u8| {
+        let mut buf = [0u32; 8];
+        let mut sink = WordSink::new(&mut buf);
+        <Machines as Describe<FakeCore>>::describe(&core, ConsumerId::new(who), &mut sink);
+        sink.words().to_vec()
+    };
+    assert_eq!(words(2), Vec::<u32>::new(), "nothing loaded: no word");
+    // module record 1 (owner 2): a machine row (type first + 3), a voice row of another type and one of the machine row's type
+    set_mach_owner(&core, 3, 2);
+    let v = dkrt_svc_machines::rows::vrows();
+    for (k, t) in [(0usize, first + 3), (1, 0x1e)] {
+        v.row_owner[k] = 2;
+        v.row_type[k] = t;
+    }
+    v.mod_rows[1] = 0b11;
+    dkrt_svc_machines::records::publish(&core);
+    assert_eq!(
+        words(2),
+        std::vec![0b11, 0, 2, (first + 3) | 0x1e << 8, 0],
+        "rows, no fault, two types and the guard on, the types packed from the low byte"
+    );
+    // the guard counted 3 faults on the type 0x1e and switched it off
+    let mut g = [0u32; dkrt_sdk::fault::DIAG_WORDS];
+    g[17] = 3 | 1 << 24;
+    g[18] = 0x1e;
+    g[23] = 0x1e;
+    DspPart::diag(&mut Machines::new(), &core, &g);
+    assert_eq!(
+        words(2),
+        std::vec![0b11, 3, 2 | 1 << 8, (first + 3) | 0x1e << 8, 0]
+    );
+    // eight types (the machine row's, then seven voice rows'): the second word holds types 4 to 7
+    for k in 0..8 {
+        v.row_owner[k] = 2;
+        v.row_type[k] = 0x40 + k as u32;
+    }
+    dkrt_svc_machines::records::publish(&core);
+    let w = words(2);
+    assert_eq!(
+        (w[2] & 0xff, w[3], w[4]),
+        (
+            8,
+            u32::from_le_bytes([first as u8 + 3, 0x40, 0x41, 0x42]),
+            u32::from_le_bytes([0x43, 0x44, 0x45, 0x46])
+        )
+    );
+    // another module and a record past the table have none
+    assert_eq!(words(5), Vec::<u32>::new());
+    assert_eq!(words(200), Vec::<u32>::new());
+    set_mach_owner(&core, 3, 0);
     dkrt_svc_machines::rows::reset();
 }
 
@@ -499,6 +573,7 @@ fn apply_refuses_a_machine_without_a_run_time_type_number_instead_of_indexing_th
     inf[w::M_DYN_N] = 8;
     let mut core = core();
     core.set_dynreg(inf);
+    let mut owner = Machines::new();
     // a machine key that `assign` has no number for (nothing was planned for the module being loaded: the boot index is not the module's), and a pinned number below the range
     for key in [0x1100u32, 0x5] {
         let mut b = std::vec![0u8; LEN_MACHINE as usize - 8];
@@ -507,10 +582,81 @@ fn apply_refuses_a_machine_without_a_run_time_type_number_instead_of_indexing_th
         put(&mut b, 8, 255);
         let reg = section(&[param(0, SLOT_BASE, 0, 255, 0, "LEVEL"), (KIND_MACHINE, b)]);
         assert_eq!(
-            attach(&mut Machines::new(), &core, &reg),
+            attach(&mut owner, &core, &reg),
             E_TYPE_RANGE,
             "key {key:#x}"
         );
-        assert_eq!(&rstate().param_owner[..2], [0, 0], "nothing was written");
+        assert_eq!(&owner.reg().param_owner[..2], [0, 0], "nothing was written");
     }
+}
+
+/// `Describe` runs on the MODULES command handler's task and can be preempted by the task that frees a module's rows. At each point where a task switch can fall in (each time the
+/// interrupt mask is given back), the module's entry is the state before or the state after the change, never a mix of the machine row of one and the voice rows of the other.
+#[test]
+fn module_info_is_one_state_when_the_rows_change_between_its_reads() {
+    let _tl = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _lock = dkrt_test_support::contract::locked();
+    let first = first_type();
+    let before = |core: &FakeCore| {
+        dkrt_svc_machines::rows::reset();
+        set_mach_owner(core, 3, 2);
+        let v = dkrt_svc_machines::rows::vrows();
+        v.row_owner[0] = 2;
+        v.row_type[0] = 0x1e;
+        v.mod_rows[1] = 0b1;
+        dkrt_svc_machines::records::publish(core);
+    };
+    // the module's machine row and voice row go away together
+    let after = || {
+        let core = core();
+        let v = dkrt_svc_machines::rows::vrows();
+        v.row_owner[0] = 0;
+        v.row_type[0] = dkrt_abi::dsp::FREE_TYPE;
+        v.mod_rows[1] = 0;
+        set_mach_owner(&core, 3, 0);
+    };
+    let mut seen = 0;
+    for at in 1..=6 {
+        let core = core();
+        before(&core);
+        let m = module_info(&core, 2);
+        assert_eq!(
+            (m.rows, m.nt, m.types[0], m.types[1]),
+            (0b1, 2, first as u8 + 3, 0x1e),
+            "the state before"
+        );
+        core.host.interrupt_at_restore(at, after);
+        let m = module_info(&core, 2);
+        let got = (m.rows, m.nt);
+        assert!(
+            got == (0b1, 2) || got == (0, 0),
+            "restore {at}: rows {:#x} with {} types is a mix of the two states",
+            got.0,
+            got.1
+        );
+        seen += 1;
+        dkrt_svc_machines::rows::reset();
+        set_mach_owner(&core, 3, 0);
+    }
+    assert_eq!(seen, 6);
+}
+
+/// `rows::reset` is the host tests' return to the start: the MODULES view published before it is gone too, so a later `Describe` does not answer with the rows of the run before.
+#[test]
+fn reset_forgets_the_published_machines_of_a_module() {
+    let _tl = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _lock = dkrt_test_support::contract::locked();
+    let core = core();
+    dkrt_svc_machines::rows::reset();
+    set_mach_owner(&core, 3, 2);
+    let v = dkrt_svc_machines::rows::vrows();
+    v.row_owner[0] = 2;
+    v.row_type[0] = 0x1e;
+    v.mod_rows[1] = 0b1;
+    dkrt_svc_machines::records::publish(&core);
+    assert_eq!(module_info(&core, 2).rows, 0b1, "published");
+    dkrt_svc_machines::rows::reset();
+    let m = module_info(&core, 2);
+    assert_eq!((m.rows, m.nt), (0, 0), "reset forgot the published entry");
+    set_mach_owner(&core, 3, 0);
 }

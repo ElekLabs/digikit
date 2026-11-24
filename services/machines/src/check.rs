@@ -1,6 +1,6 @@
 //! The load check of a `register` section: the seven steps of `Records::check` (counts, actions, native pages, device, records, owners, rows).
 use crate::nativepage;
-use crate::registry::{rstate, KNOBS, KNOB_PARAM, MAX_MACH, MAX_PAGE, MAX_PARAM};
+use crate::registry::{mach_owner, KNOBS, KNOB_PARAM, MAX_MACH, MAX_PAGE, MAX_PARAM};
 use crate::validate::{body_len, Acc};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::{iw, rd32};
@@ -8,13 +8,14 @@ use dkrt_abi::registry::each;
 use dkrt_abi::service::Problem;
 use dkrt_sdk::records::{KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM};
 use dkrt_sdk::*;
-use dkrt_svc_rows::dynreg::w;
+use dkrt_svc_rows::dynreg::{w, RegState};
 
-/// What the checks read: the section and the words of `dynreg_info`.
-pub(crate) struct Ctx {
+/// What the checks read: the section, the words of `dynreg_info` and the owner's registry state.
+pub(crate) struct Ctx<'a> {
     pub(crate) reg: *const u8,
     pub(crate) image_size: u32,
     pub(crate) inf: *const u32,
+    pub(crate) state: &'a RegState,
 }
 
 /// The table must fit this registry's state (a table that says more rows than the state has would index past it).
@@ -46,7 +47,7 @@ pub(crate) unsafe fn counts_of(reg: *const u8) -> (u32, u32, u32, u32, u32) {
 /// The records meet the rule of `validate::Acc` (row counts, sizes, fields, texts, a machine key and an action's parameter once), and the native pages are at most two a machine.
 /// The first problem's code is the refusal.
 #[allow(unused_variables)]
-pub(crate) unsafe fn ck_counts(c: &Ctx) -> i32 {
+pub(crate) unsafe fn ck_counts(c: &Ctx<'_>) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let mut acc = Acc::new();
     let mut first = OK;
@@ -76,7 +77,7 @@ pub(crate) unsafe fn ck_counts(c: &Ctx) -> i32 {
 
 /// An action names a parameter of the file and code inside the image (that a parameter has one action at most is the rule of `ck_counts`).
 #[allow(unused_variables)]
-pub(crate) unsafe fn ck_actions(c: &Ctx) -> i32 {
+pub(crate) unsafe fn ck_actions(c: &Ctx<'_>) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
     let mut bad_act = OK;
@@ -90,7 +91,7 @@ pub(crate) unsafe fn ck_actions(c: &Ctx) -> i32 {
 
 /// Native pages: each record, the claimed pages, the bindings against the machine's parameters.
 #[allow(unused_variables)]
-pub(crate) unsafe fn ck_native<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
+pub(crate) unsafe fn ck_native<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
     let mut native_set = nativepage::PageSet::<MAX_MACH>::new();
@@ -177,7 +178,7 @@ pub(crate) unsafe fn ck_native<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
 
 /// Pages need a device that has page rows.
 #[allow(unused_variables)]
-pub(crate) unsafe fn ck_device(c: &Ctx) -> i32 {
+pub(crate) unsafe fn ck_device(c: &Ctx<'_>) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
     // pages need a device that has page rows
@@ -190,10 +191,9 @@ pub(crate) unsafe fn ck_device(c: &Ctx) -> i32 {
 
 /// The parameter, page and machine records, in file order.
 #[allow(unused_variables)]
-pub(crate) unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
+pub(crate) unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
-    let s = rstate();
     // pass 2: the records
     let has_pages = iw(inf, w::PG_ROWS) != 0;
     let (p_first, knobs, slot_base) = (
@@ -257,7 +257,7 @@ pub(crate) unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
             let k = (t - dyn0) as usize;
             let row = iw(inf, w::M_ROWS) + (t - m_first) * iw(inf, w::M_ROW_SIZE);
             let name = core.rd(row + iw(inf, w::O_NAME));
-            if s.mach_owner[k] != 0 || (name != 0 && core.rd8(name) != 0) {
+            if mach_owner(core, k) != 0 || (name != 0 && core.rd8(name) != 0) {
                 bad = E_TYPE_USED;
                 return;
             }
@@ -285,7 +285,7 @@ pub(crate) unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
 
 /// A page belongs to a machine of the same file.
 #[allow(unused_variables)]
-pub(crate) unsafe fn ck_owners<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
+pub(crate) unsafe fn ck_owners<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
     // a page belongs to a machine of the same file
@@ -311,10 +311,10 @@ pub(crate) unsafe fn ck_owners<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
 
 /// Free reserved page and parameter rows.
 #[allow(unused_variables)]
-pub(crate) unsafe fn ck_rows<C: CoreApi>(core: &C, c: &Ctx) -> i32 {
+pub(crate) unsafe fn ck_rows<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
-    let s = rstate();
+    let s = c.state;
     // free reserved page and parameter rows
     return capacity::registry_rows(
         ng,

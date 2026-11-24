@@ -6,12 +6,11 @@ import { compare, bounded, frames, pickSine, rpc, runToFrame, word, REDRAW, SETT
 import { SEND, SINE, triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import { withRouteFxSession } from '@digi/regression/runtime/fx-route-live.ts';
 import { inspectFxBoot, withPausedFxProtocol } from '@digi/regression/runtime/fx-session.ts';
-import { MASTER, routeUi, SEND_ROUTE } from '@digi/regression/runtime/fx-routes-ui.ts';
+import { listLine, MASTER, routingUi, SEND_ROUTE } from '@digi/regression/runtime/fx-routing-ui.ts';
 import { record } from '@digi/regression/runtime/artifacts.ts';
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
-import { packageSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { emulatorDk } from '@digi/regression/runtime/waits.ts';
 
 const routeKey = `fx/route/${SEND}`;
@@ -53,7 +52,7 @@ for (const device of DEVICES) {
       requireAudible: true,
     });
 
-    test('menu YES persists both route directions and restarts into the matching audio and FX pages', async () => {
+    test('a pick in FX ROUTING persists both route directions and a restart boots into the matching audio and FX pages', async () => {
       const { fixture, plan, artifacts, slots, rememberEpoch } = context;
       const inspect = async (runtime: TestRuntime, tag: string, effect: boolean, afterEpoch?: number) => {
         const state = await inspectFxBoot(runtime, plan, effect ? [SINE, SEND] : [SINE], artifacts, tag, undefined, {
@@ -103,13 +102,13 @@ for (const device of DEVICES) {
         return file;
       };
       const expectRoute = async (runtime: TestRuntime, send: boolean) => {
-        const ui = routeUi(runtime, plan, artifacts, slots);
+        const ui = routingUi(runtime, plan, artifacts, slots);
         expect(await ui.routes(1)).toEqual([send ? 1 : 0]);
         expect(await ui.countCell()).toBe(send ? 2 : 0);
         expect((await ui.sendUsed())!.used).toBe(send ? 1 : 0);
       };
       const pages = async (runtime: TestRuntime, tag: string, send: boolean) => {
-        const ui = routeUi(runtime, plan, artifacts, slots);
+        const ui = routingUi(runtime, plan, artifacts, slots);
         await runtime.ui.tap('FX', { until: { ms: 400, why: REDRAW } });
         const first = await ui.shot(`${tag}-fx1`);
         await runtime.ui.tap('FX', { until: { ms: 400, why: REDRAW } });
@@ -118,48 +117,41 @@ for (const device of DEVICES) {
       };
       const apply = async (runtime: TestRuntime, tag: 'apply' | 'back', send: boolean) => {
         const { session } = runtime;
-        const ui = routeUi(runtime, plan, artifacts, slots);
-        await ui.toModules();
-        expect((await ui.pending())[0]).toBe(send ? MASTER : SEND_ROUTE);
-        expect(await ui.routeChoice(2)).toEqual([SEND_ROUTE, MASTER]);
+        const ui = routingUi(runtime, plan, artifacts, slots);
+        // the pick: the effect leaves the route it runs on for the other one, at once (a reload of its module, no restart)
+        const list = await ui.open();
+        expect(list.items).toEqual([listLine(SEND, send ? MASTER : SEND_ROUTE)]);
+        await ui.shot(`${tag}-list`);
+        expect((await ui.pickEffect(0, SEND)).items).toEqual(['SEND', 'MASTER']);
         await ui.shot(`${tag}-choice`);
-        await ui.pick(send ? 0 : 1);
-        expect((await ui.pending())[0]).toBe(send ? SEND_ROUTE : MASTER);
-        const applies = await ui.applies();
-        await runtime.ui.tap('NO', { until: { ms: 700, why: REDRAW } });
-        await ui.shot(`${tag}-question`);
-        expect(await ui.popup()).toEqual(['APPLY & RESTART?', '1 CHANGE']);
-        expect(await ui.applies()).toBe(applies);
+        const before = await ui.epoch();
+        await ui.pickRoute(send ? 0 : 1);
+        await ui.waitRoutes(1, [send ? SEND_ROUTE : MASTER]);
+        expect(await ui.job()).toMatchObject({ phase: 2, result: 0, op: 3 });
+        expect(await ui.epoch(), 'the pick restarts nothing').toBe(before);
+        await ui.leave();
+        await ui.shot(`${tag}-picked`);
         await context.evidence(runtime, `${tag}-before-restart`, tag === 'apply');
-        const before = (await bounded(() => session.status())).epoch;
-        expect(typeof before).toBe('number');
         rememberEpoch(before);
         session.client.drainEvents();
-        await runtime.ui.tap('YES', { until: { ms: 300, why: REDRAW } });
-        expect(await ui.applies()).toBe(applies + 1);
-        expect(await word(session, await packageSymbol(session, plan, 'MENU_FXR_SET'))).toBe(0);
-        expect(await word(session, await packageSymbol(session, plan, 'MENU_FXR_FLUSH'))).toBe(0);
-        runtime.dk.cancelPending();
         await rpc(session, 'run.mode', { mode: 'free' });
+        await bounded(() => runtime.dk.restart());
+        runtime.dk.cancelPending();
         const dk = emulatorDk(session);
         const reboot = withWaitApi({ session, dk, close: runtime.close });
         try {
-          await expectRuntimeUi(session, plan, artifacts, { afterEpoch: Number(before) });
+          await expectRuntimeUi(session, plan, artifacts, { afterEpoch: before });
           await bounded(() => session.client.guardSet(context.baseline(tag).guard));
-          await inspect(reboot, `${tag}-restarted`, true, Number(before));
+          await inspect(reboot, `${tag}-restarted`, true, before);
           await expectRoute(reboot, send);
           expect(await storedRoute(reboot, artifacts, tag)).toBe(send ? 'send' : 'master');
           const file = await capture(reboot, tag === 'apply' ? 'master' : 'send1');
           await pages(reboot, `${tag}-after`, send);
           await context.evidence(reboot, `${tag}-after-restart`);
-          if (!send) {
-            const afterUi = routeUi(reboot, plan, artifacts, slots);
-            await afterUi.toModules();
-            expect((await afterUi.pending())[0]).toBe(MASTER);
-            const popups = await afterUi.popups();
-            await runtime.ui.tap('NO', { until: { ms: 400, why: REDRAW } });
-            expect(await afterUi.popups()).toBe(popups);
-          }
+          // the list shows the route the settings gave the restarted boot
+          const afterUi = routingUi(reboot, plan, artifacts, slots);
+          expect((await afterUi.open()).items).toEqual([listLine(SEND, send ? SEND_ROUTE : MASTER)]);
+          await afterUi.leave();
           return file;
         } finally {
           dk.cancelPending();

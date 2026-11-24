@@ -1,7 +1,17 @@
 // SETUP in the pure TypeScript client against a fake debug module: the request is op, track, type; the wait is on SETUP_DONE with the request's seq.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
-import { DkError, DkSession, SetupRefused, decode8in7, encode8in7, runtimeEvent, trackSetup } from '@digi/dk-session';
+import {
+  DkError,
+  DkSession,
+  SetupRefused,
+  decode8in7,
+  encode8in7,
+  runtimeEvent,
+  trackSetup,
+  RUN_TIME_TYPE_FIRST,
+} from '@digi/dk-session';
 import { LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 const PREFIX = [0xf0, 0x7d, 0x64, 0x6b, 1];
@@ -94,4 +104,53 @@ test('with a clock the request is repeated while the module answers E_STATE (its
   );
   refused = 1000;
   await assert.rejects(t.setMachine(0, 1), /E_STATE/);
+});
+
+test('a run-time machine type that no loaded module has is refused before SETUP is sent; a stock type, a loaded one and a filter are not asked about', async () => {
+  const sent: string[] = [];
+  const dk = {
+    setup: async (what: string, track: number, type: number) => {
+      sent.push(`${what} ${track} ${type}`);
+      return 7;
+    },
+  };
+  const events = { until: async () => done(7, 0) };
+  let reads = 0;
+  const modules = async () => {
+    reads++;
+    return [{ types: [16, 18] }, { types: [] }];
+  };
+  const t = trackSetup(dk as never, events as never, { runTime: { first: 16, modules } });
+  await t.setMachine(0, 3);
+  assert.equal(reads, 0, 'a stock type needs no MODULES read');
+  await t.setMachine(0, 18);
+  await t.setFilter(0, 17);
+  await assert.rejects(t.setMachine(0, 17), (e: unknown) => e instanceof SetupRefused && e.status === -46);
+  assert.deepEqual(sent, ['machine 0 3', 'machine 0 18', 'filter 0 17'], 'the refused type was never sent');
+  assert.equal(reads, 2);
+});
+
+test('without options trackSetup checks a run-time machine type against the MODULES reply: an unloaded one is refused before SETUP, runTime: false turns it off', async () => {
+  const sent: string[] = [];
+  const dk = {
+    setup: async (what: string, track: number, type: number) => {
+      sent.push(`${what} ${track} ${type}`);
+      return 7;
+    },
+    modules: async () => [{ types: [16, 18] }],
+  };
+  const events = { until: async () => done(7, 0) };
+  const t = trackSetup(dk as never, events as never);
+  await t.setMachine(0, 18);
+  await assert.rejects(t.setMachine(0, 17), (e: unknown) => e instanceof SetupRefused && e.status === -46);
+  assert.deepEqual(sent, ['machine 0 18']);
+  await trackSetup(dk as never, events as never, { runTime: false }).setMachine(0, 17);
+  assert.deepEqual(sent, ['machine 0 18', 'machine 0 17']);
+});
+
+test('RUN_TIME_TYPE_FIRST is dynamic_first of the machines type table', () => {
+  const toml = readFileSync(new URL('../../../image-modules/points/machines/types.toml', import.meta.url), 'utf8');
+  const firsts = [...toml.matchAll(/^dynamic_first\s*=\s*(\d+)/gm)].map((m) => Number(m[1]));
+  assert.ok(firsts.length > 0);
+  for (const f of firsts) assert.equal(f, RUN_TIME_TYPE_FIRST);
 });

@@ -54,6 +54,19 @@ static const ui_row_key *key_of(ui_settings_rows *s, const char *name, uint32_t 
     return free_key;
 }
 
+int ui_owner_name(uintptr_t handle, ui_record_name_fn *record_name, char out[DK_UI_MODULE_NAME])
+{
+    uint8_t name[DK_UI_MODULE_NAME];
+    out[0] = 0;
+    if (handle == 0 || record_name((uint32_t)(handle - 1), name) != 0)
+        return 0;
+    if (name[DK_UI_MODULE_NAME - 1] != 0)
+        return 0;
+    for (uint32_t k = 0; k < DK_UI_MODULE_NAME; k++)
+        out[k] = (char)name[k];
+    return 1;
+}
+
 int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, const char *name, int in_init,
                     const char *text, dk_ui_settings_open_fn *open, void *arg)
 {
@@ -62,14 +75,14 @@ int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, const char *name, int 
     uint32_t i = 0, index = 0;
     if (!in_init)
         return DK_E_CONTEXT;
-    if (!text || !open)
+    if (!text || !open || !name || !name[0])
         return DK_E_CONTRACT;
     if (s->n == DK_UI_SETTINGS_ROWS)
         return DK_E_NOMEM;
     for (i = 0; i < s->n; i++)
         if (s->row[i].owner == owner)
             index++;
-    key = key_of(s, name ? name : "", index);
+    key = key_of(s, name, index);
     if (!key)
         return DK_E_NOMEM;
     r = &s->row[s->n];

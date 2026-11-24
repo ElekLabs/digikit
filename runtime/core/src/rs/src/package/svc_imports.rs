@@ -106,6 +106,10 @@ pub mod shims {
         REAL_CORE.settings_changed(core::slice::from_raw_parts(id, id_len as usize))
     }
     #[cfg_attr(test, no_mangle)]
+    pub unsafe extern "C" fn dkc_reload_when_possible(id: *const u8, id_len: u32) {
+        REAL_CORE.reload_when_possible(core::slice::from_raw_parts(id, id_len as usize))
+    }
+    #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_live(op: u32, path: *const u8) -> i32 {
         REAL_CORE.live(op, path)
     }

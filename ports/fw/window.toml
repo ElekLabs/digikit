@@ -110,6 +110,16 @@ users = ["core/ui"]
 doc = "MultiChoiceWindow (OverlayWindow base, Observer sub-object at +0x58), 0xd8 bytes; the make_shared block is 0xe8. items is a vector of COW strings (4 bytes each), title the title lines, cb `std::function<void(int)>`, selected the index passed to cb."
 
 [[site]]
+name = "cf.window.site.multichoice_vptr_lit"
+cpu = "cf"
+devices = ["dt2", "dn2"]
+rule = { kind = "cf_ptr", hash = "5bc8260b138a22a9ca43e729c072f871", offset = 0x34, len = 4 }
+mark = "D"
+users = ["tests/regression"]
+codegen = false
+doc = "The vtable pointer that the MultiChoiceWindow constructor stores at +0 of its object (the immediate of `move.l #vptr,(A6)` after the base constructors); the anchor is that vtable. A device test recognises a choice popup (`dk_ui_choice`) on top of the view stack by it."
+
+[[site]]
 name = "cf.window.site.confirm_vptr_lit"
 cpu = "cf"
 devices = ["dt2"]

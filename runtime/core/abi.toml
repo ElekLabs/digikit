@@ -571,6 +571,9 @@ fields = [
     "u32 step // 0 idle, 1 check, 2 quiesce, 3 unload, 4 load, 5 DSP part, 6 done",
     "u32 unloaded // 1: the module was torn down, so it is not loaded unless the job was a load or reload that ended with result 0",
     "u32 op // LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD of the last job (0: none yet)",
+    "u32 serial // counts the jobs queued (the first is 1, 0: none yet): the job these words describe",
+    "u32 done_serial // the serial of the last job that finished (0: none), so a caller whose job ended and another started still finds its end",
+    "i32 done_result // the result of that job",
 ]
 
 [[struct]]
@@ -790,7 +793,7 @@ at = "api"
 [[fn]]
 name = "dkrt_fx"
 sig = "i32 dkrt_fx(u32 index, DkrtFx *out)"
-doc = "The index-th loaded effect that has a page (row order): tab, module id, allowed routes, default, the route it runs on and the route the settings give it; OK, or E_NOT_FOUND past the end."
+doc = "Removed: the effects of a module are the fx service's words in the MODULES reply (its Describe part). The slot stays (the table is append-only) and answers E_NOT_FOUND."
 at = "api"
 
 [[fn]]
@@ -837,7 +840,7 @@ at = "api"
 [[fn]]
 name = "dkrt_unload_observer_add"
 sig = "i32 dkrt_unload_observer_add(usize f)"
-doc = "Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The observer ends what it holds for that owner; the module's code and memory are still there during the call, so it may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0."
+doc = "Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module or service file that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The observer ends what it holds for that owner; the module's code and memory are still there during the call, so it may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0."
 at = "api"
 
 [[fn]]
@@ -855,7 +858,7 @@ at = "api"
 [[fn]]
 name = "dkrt_ctx_owner"
 sig = "i32 dkrt_ctx_owner(usize ctx)"
-doc = "The owner id of a module context (`dk_module_ctx *`): the module's record index, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded content module (a service file has a context too, but its record is never given out: the observers are for content modules)."
+doc = "The owner id of a module context (`dk_module_ctx *`): the record index of a content module or of a service file, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded module or service file."
 at = "api"
 
 [[fn]]
@@ -1068,19 +1071,19 @@ owner = "package"
 doc = "TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row."
 
 [[host_dir]]
-name = "MENU_FXR_PEND"
-owner = "package"
-doc = "DK_FXR_PEND of the DIGIKIT menu: the pending routes of the loaded effects (1 master, 2 send)."
+name = "REMOVED_18"
+owner = "removed"
+doc = "Removed in E1 (it was DK_FXR_PEND of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
 
 [[host_dir]]
-name = "MENU_FXR_SET"
-owner = "package"
-doc = "DK_FXR_SET of the DIGIKIT menu: the result of the last route write (`dkrt_settings_put`)."
+name = "REMOVED_19"
+owner = "removed"
+doc = "Removed in E1 (it was DK_FXR_SET of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
 
 [[host_dir]]
-name = "MENU_FXR_FLUSH"
-owner = "package"
-doc = "DK_FXR_FLUSH of the DIGIKIT menu: the result of the last settings flush."
+name = "REMOVED_20"
+owner = "removed"
+doc = "Removed in E1 (it was DK_FXR_FLUSH of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
 
 [[host_dir]]
 name = "MENU_APPLIES"
@@ -1088,14 +1091,14 @@ owner = "package"
 doc = "DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran."
 
 [[host_dir]]
-name = "MENU_ROUTE_N"
-owner = "package"
-doc = "DK_ROUTE_N of the DIGIKIT menu: the number of routes the last ROUTE... choice offered."
+name = "REMOVED_22"
+owner = "removed"
+doc = "Removed in E1 (it was DK_ROUTE_N of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
 
 [[host_dir]]
-name = "MENU_ROUTE_ITEM"
-owner = "package"
-doc = "DK_ROUTE_ITEM of the DIGIKIT menu: the routes the last ROUTE... choice offered (1 master, 2 send), in the order shown."
+name = "REMOVED_23"
+owner = "removed"
+doc = "Removed in E1 (it was DK_ROUTE_ITEM of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
 
 [[host_dir]]
 name = "MENU_LOADED"
@@ -1126,3 +1129,9 @@ doc = "DK_HEALTH of the DIGIKIT menu: the last DkrtHealth the HEALTH page read."
 name = "MENU_HEALTH_MENU"
 owner = "package"
 doc = "DK_HEALTH_MENU of the DIGIKIT menu: the HEALTH page's menu object (the firmware's view is the pointer at +4)."
+
+[[fn]]
+name = "dkrt_record_name"
+sig = "i32 dkrt_record_name(u32 owner, u8 *out)"
+doc = "Called by core/ui: the name of the loaded record `owner` (the number `dkrt_ctx_owner` gave: a content module or a service file) into `out`, 32 bytes, NUL padded, as the file's header has it. core/ui keys the SETTINGS rows of an owner by it. OK, or E_NOT_FOUND for a record that is not loaded, with no package, or with a package built before the entry."
+at = "menu_exports"

@@ -1,5 +1,5 @@
 //! The `fx` service as a service file (`services/fx.dks`): the `service!` call and the exports. The nine hooks of the effect pages are assembler in `hooks.rs`; the builder calls of the
-//! effects are the exports of `builder.rs` (they reach the owner), the entry of the FX ROUTES list is in `rt.rs`, and `gen_exports.rs` (written by `patchkit gen`) lists them.
+//! effects are the exports of `builder.rs` (they reach the owner), and `gen_exports.rs` (written by `patchkit gen`) lists them.
 // a host build (the assembly test of the runtime) has std; the file is `no_std` on the ColdFire
 #![cfg_attr(target_arch = "m68k", no_std)]
 // `global_asm!` on ColdFire is an experimental architecture of the compiler
@@ -12,13 +12,13 @@ use dkrt_svc_fx::fx::Fx;
 mod gen_exports;
 pub mod builder;
 mod hooks;
-pub mod rt;
+pub mod ui;
 
 dkrt_svc_rt::service!(
     Fx,
     "fx",
     &KINDS_FX,
-    parts = [Records, Dsp, Tick, Query, Describe],
+    parts = [Records, Dsp, Tick, Describe, Reentry],
     hooks = [
         ("cf.page.hook.page_desc", hooks::fxp_acc),
         ("cf.page.hook.tab_label_test", hooks::fxp_label),

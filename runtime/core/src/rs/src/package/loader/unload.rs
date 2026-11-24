@@ -63,9 +63,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
         drop_registrations(rec, m.base, m.size);
         // the unload observers end what they hold for the module (`dkrt_unload_observer_add`): the code and memory are still there, but nothing may call into the module
-        if module {
-            crate::package::resident::api::notify_unload(rec, m.base, m.size);
-        }
+        crate::package::resident::api::notify_unload(rec, m.base, m.size);
         // the machine row first, then the DSP voice rows, then the range in the DSP area
         if self.torn[rec] & TORN_UNDO == 0 {
             self.torn[rec] |= TORN_UNDO;

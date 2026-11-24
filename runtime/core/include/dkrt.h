@@ -191,18 +191,8 @@
 #define DKRT_HOST_MENU_MEM_N 16
 /* TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row. */
 #define DKRT_HOST_MENU_TICK 17
-/* DK_FXR_PEND of the DIGIKIT menu: the pending routes of the loaded effects (1 master, 2 send). */
-#define DKRT_HOST_MENU_FXR_PEND 18
-/* DK_FXR_SET of the DIGIKIT menu: the result of the last route write (`dkrt_settings_put`). */
-#define DKRT_HOST_MENU_FXR_SET 19
-/* DK_FXR_FLUSH of the DIGIKIT menu: the result of the last settings flush. */
-#define DKRT_HOST_MENU_FXR_FLUSH 20
 /* DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran. */
 #define DKRT_HOST_MENU_APPLIES 21
-/* DK_ROUTE_N of the DIGIKIT menu: the number of routes the last ROUTE... choice offered. */
-#define DKRT_HOST_MENU_ROUTE_N 22
-/* DK_ROUTE_ITEM of the DIGIKIT menu: the routes the last ROUTE... choice offered (1 master, 2 send), in the order shown. */
-#define DKRT_HOST_MENU_ROUTE_ITEM 23
 /* LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads. */
 #define DKRT_HOST_MENU_LOADED 24
 /* DK_LINES of the DIGIKIT menu: the HEALTH page's rows as text (12 rows of 24 bytes). */
@@ -418,6 +408,9 @@ typedef struct DkrtLive {
     uint32_t step;                               /* 0 idle, 1 check, 2 quiesce, 3 unload, 4 load, 5 DSP part, 6 done */
     uint32_t unloaded;                           /* 1: the module was torn down, so it is not loaded unless the job was a load or reload that ended with result 0 */
     uint32_t op;                                 /* LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD of the last job (0: none yet) */
+    uint32_t serial;                             /* counts the jobs queued (the first is 1, 0: none yet): the job these words describe */
+    uint32_t done_serial;                        /* the serial of the last job that finished (0: none), so a caller whose job ended and another started still finds its end */
+    int32_t done_result;                         /* the result of that job */
 } DkrtLive;
 
 /* dkrt_module result: one loaded module. */
@@ -624,12 +617,15 @@ _Static_assert(sizeof(DkrtStoreFile) == 40, "DkrtStoreFile size");
 _Static_assert(offsetof(DkrtStoreFile, first) == 0, "DkrtStoreFile.first");
 _Static_assert(offsetof(DkrtStoreFile, size) == 4, "DkrtStoreFile.size");
 _Static_assert(offsetof(DkrtStoreFile, sha) == 8, "DkrtStoreFile.sha");
-_Static_assert(sizeof(DkrtLive) == 20, "DkrtLive size");
+_Static_assert(sizeof(DkrtLive) == 32, "DkrtLive size");
 _Static_assert(offsetof(DkrtLive, phase) == 0, "DkrtLive.phase");
 _Static_assert(offsetof(DkrtLive, result) == 4, "DkrtLive.result");
 _Static_assert(offsetof(DkrtLive, step) == 8, "DkrtLive.step");
 _Static_assert(offsetof(DkrtLive, unloaded) == 12, "DkrtLive.unloaded");
 _Static_assert(offsetof(DkrtLive, op) == 16, "DkrtLive.op");
+_Static_assert(offsetof(DkrtLive, serial) == 20, "DkrtLive.serial");
+_Static_assert(offsetof(DkrtLive, done_serial) == 24, "DkrtLive.done_serial");
+_Static_assert(offsetof(DkrtLive, done_result) == 28, "DkrtLive.done_result");
 _Static_assert(sizeof(DkrtModule) == 124, "DkrtModule size");
 _Static_assert(offsetof(DkrtModule, name) == 0, "DkrtModule.name");
 _Static_assert(offsetof(DkrtModule, version) == 32, "DkrtModule.version");
@@ -741,7 +737,7 @@ void dkrt_live_state(DkrtLive *out);
 /* The index-th loaded module (in load-slot order); OK, or E_NOT_FOUND past the end. */
 int32_t dkrt_module(uint32_t index, DkrtModule *out);
 
-/* The index-th loaded effect that has a page (row order): tab, module id, allowed routes, default, the route it runs on and the route the settings give it; OK, or E_NOT_FOUND past the end. */
+/* Removed: the effects of a module are the fx service's words in the MODULES reply (its Describe part). The slot stays (the table is append-only) and answers E_NOT_FOUND. */
 int32_t dkrt_fx(uint32_t index, DkrtFx *out);
 
 /* Resident query v1. UI task only, synchronous. Use the provider's typed wrapper. E_MISSING means the provider or facet is absent, E_CONTRACT an incompatible provider or invalid call, E_CONTEXT outside the UI task, E_BUSY for a nested call. */
@@ -765,7 +761,7 @@ int32_t dkrt_poll_add(uintptr_t f);
 /* Remove a function added with dkrt_poll_add; no effect when it is not in the table. */
 void dkrt_poll_remove(uintptr_t f);
 
-/* Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The observer ends what it holds for that owner; the module's code and memory are still there during the call, so it may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0. */
+/* Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module or service file that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The observer ends what it holds for that owner; the module's code and memory are still there during the call, so it may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0. */
 int32_t dkrt_unload_observer_add(uintptr_t f);
 
 /* Remove a function added with dkrt_unload_observer_add; no effect when it is not in the table. */
@@ -774,7 +770,7 @@ void dkrt_unload_observer_remove(uintptr_t f);
 /* What the running module code is: 0 none (the call is not from a module), PHASE_INIT (1) its `init`, 2 its `tick`, 3 its `fini`, 4 a callback (a host command handler, a job or I/O step, an intro frame, a menu action). An adapter uses it to refuse a call that is allowed only in `init`. UI task. */
 uint32_t dkrt_phase(void);
 
-/* The owner id of a module context (`dk_module_ctx *`): the module's record index, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded content module (a service file has a context too, but its record is never given out: the observers are for content modules). */
+/* The owner id of a module context (`dk_module_ctx *`): the record index of a content module or of a service file, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded module or service file. */
 int32_t dkrt_ctx_owner(uintptr_t ctx);
 
 /* A menu object was built for a module (core/ui calls it from dk_ui_menu_new with the descriptor's fill function and the descriptor): the module record whose loaded range holds `code`, else `data`, owns one more menu, and a menu keeps pointers into the module's code and data, so the runtime refuses to unload or reload that module (E_RELOAD_MENUS) until the next boot. Neither address in a module (the firmware image, and the DIGIKIT menu, whose own menus count against no content module): no effect. */
@@ -848,5 +844,8 @@ int32_t dkrt_aux_wait(void);
 
 /* Called by core/ui at the end of the SETTINGS rebuild (the `ui.settings_rows` hook of the system package): the package adds its rows to the stock menu `settings_menu` (the menu object the rebuild's hook gets) with dk_ui_stock_row. With no package, a package built before the hook, or a null hook entry, it does nothing: the stock menu stays as it is. */
 void dkrt_ui_settings_rows(uint8_t *settings_menu);
+
+/* Called by core/ui: the name of the loaded record `owner` (the number `dkrt_ctx_owner` gave: a content module or a service file) into `out`, 32 bytes, NUL padded, as the file's header has it. core/ui keys the SETTINGS rows of an owner by it. OK, or E_NOT_FOUND for a record that is not loaded, with no package, or with a package built before the entry. */
+int32_t dkrt_record_name(uint32_t owner, uint8_t *out);
 
 #endif /* DKRT_H */

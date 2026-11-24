@@ -177,12 +177,17 @@ pub struct FakeCore {
     pub settings_overlay: Cell<*const dkrt_abi::service::SettingsOverlay>,
     /// The module ids `CoreApi::settings_changed` named, in order.
     pub settings_changed: RefCell<Vec<Vec<u8>>>,
+    /// The module ids `CoreApi::reload_when_possible` named, in order.
+    pub reload_when_possible: RefCell<Vec<Vec<u8>>>,
     /// The live jobs asked for (`CoreApi::live`): the op and the path without its NUL, in order.
     pub live_calls: RefCell<Vec<(u32, Vec<u8>)>>,
     /// What `CoreApi::live` answers; `OK` is a queued job: the state reads phase 1 until a test sets `live_job`.
     pub live_result: Cell<i32>,
     /// The words `CoreApi::live_state` reports: phase, result, step, unloaded, op.
     pub live_job: Cell<[u32; 5]>,
+    /// The serial of the job `live_job` describes (`CoreApi::live` counts one for each queued job), and the serial and result of the last job that finished.
+    pub live_serial: Cell<u32>,
+    pub live_done: Cell<(u32, i32)>,
     /// The paths `CoreApi::selection_add` was given, in order, and what it answers.
     pub selection_adds: RefCell<Vec<Vec<u8>>>,
     pub selection_result: Cell<i32>,
@@ -267,9 +272,12 @@ impl FakeCore {
             host: FakeHost::new(),
             settings_overlay: Cell::new(core::ptr::null()),
             settings_changed: RefCell::new(Vec::new()),
+            reload_when_possible: RefCell::new(Vec::new()),
             live_calls: RefCell::new(Vec::new()),
             live_result: Cell::new(0),
             live_job: Cell::new([0; 5]),
+            live_serial: Cell::new(0),
+            live_done: Cell::new((0, 0)),
             selection_adds: RefCell::new(Vec::new()),
             selection_result: Cell::new(0),
             loaded: RefCell::new(Vec::new()),
@@ -475,6 +483,9 @@ impl CoreApi for FakeCore {
     unsafe fn settings_overlay_set(&self, overlay: *const dkrt_abi::service::SettingsOverlay) {
         self.settings_overlay.set(overlay);
     }
+    unsafe fn reload_when_possible(&self, id: &[u8]) {
+        self.reload_when_possible.borrow_mut().push(id.to_vec());
+    }
     unsafe fn settings_changed(&self, id: &[u8]) {
         self.settings_changed.borrow_mut().push(id.to_vec());
     }
@@ -485,6 +496,11 @@ impl CoreApi for FakeCore {
             .push((op, core::slice::from_raw_parts(path, n).to_vec()));
         let r = self.live_result.get();
         if r == 0 {
+            let [phase, result, ..] = self.live_job.get();
+            if phase == 2 {
+                self.live_done.set((self.live_serial.get(), result as i32));
+            }
+            self.live_serial.set(self.live_serial.get() + 1);
             self.live_job.set([1, 0, 1, 0, op]);
         }
         r
@@ -501,6 +517,17 @@ impl CoreApi for FakeCore {
             step,
             unloaded,
             op,
+            serial: self.live_serial.get(),
+            done_serial: if phase == 2 {
+                self.live_serial.get()
+            } else {
+                self.live_done.get().0
+            },
+            done_result: if phase == 2 {
+                result as i32
+            } else {
+                self.live_done.get().1
+            },
         }
     }
     unsafe fn log(&self, kind: u16, flags: u16, args: [u32; 5]) {

@@ -349,3 +349,23 @@ test('`module#n` sets the n-th machine type of the module in the order of the MO
   await assert.rejects(setup('machine', 1, 'a/b#0'), /counts from 1/);
   await assert.rejects(setup('machine', 1, 'a/missing#2'), /not loaded/);
 });
+
+test('the production setup refuses a run-time machine type number that no module has loaded, before SETUP', async () => {
+  const sent: number[] = [];
+  const session = {
+    modules: async () => [{ name: 'a/b', types: [17] }],
+    setup: async (_what: string, _track: number, type: number) => {
+      sent.push(type);
+      return sent.length;
+    },
+  };
+  const clock: Clock = { now: async () => 0, pause: async () => {} };
+  const events = {
+    until: async () => ({ fields: { seq: sent.length, status: 0 } }),
+    tryUntil: async () => undefined,
+  };
+  const setup = sessionSetup(session as never, events as never, clock);
+  await setup('machine', 1, 17);
+  await assert.rejects(setup('machine', 1, 20), (e: unknown) => (e as { status?: number }).status === -46);
+  assert.deepEqual(sent, [17]);
+});

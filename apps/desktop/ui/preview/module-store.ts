@@ -83,10 +83,12 @@ function bootModules(files: Map<string, Uint8Array>, selected: Map<string, Uint8
         cf_size: view.getUint32(0x64),
         dsp_off: 0,
         dsp_len: 0,
+        sections: {},
         rows: 1,
         types: [1],
         faults: 0,
         guard_off: false,
+        effects: [],
       });
     }
   }

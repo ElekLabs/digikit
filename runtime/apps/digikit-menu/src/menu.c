@@ -2,12 +2,12 @@
  *
  * DIGIKIT is a menu: ABOUT, HEALTH and MEMORY (text pages), and MODULES (a list). MODULES has one
  * row per .dkm file of the store. The check mark of a row means "loaded"; it starts from the saved selection.
- * RIGHT opens the side panel (LOAD or UNLOAD, ROUTE... for a loaded effect, SETTINGS... for a loaded module that has a menu function, INFO).
+ * RIGHT opens the side panel (LOAD or UNLOAD, SETTINGS... for a loaded module that has a menu function, INFO).
  * The check mark is the only on/off of a module. Nothing is saved until NO leaves the list with
  * changes pending and APPLY n CHANGES? is answered with YES. The change then runs live: the selection is saved, the unloads are queued
  * and then the loads (dkrt_live, one job at a time; the row of the running job reads LOADING or UNLOADING), and the list is scanned again
  * after each job. A job the runtime refuses or that fails ends the batch with "<NAME> NOT APPLIED" and RESTART TO APPLY?. A restart is
- * direct only for an effect route change, and to leave safe mode (APPLY & RESTART?).
+ * direct only to leave safe mode (APPLY & RESTART?).
  *
  * The runtime does the work of the old menu: dkrt_scan (the files, their needs), dkrt_fit (what fits next to the checked ones)
  * and the selection and settings calls. This file keeps the pending state and builds the screens.
@@ -18,14 +18,11 @@
 #include <stddef.h>
 #include <dk/platform/ui.h>
 #include <dk_ui_core.h>
+#include <dk/platform/ui_text.h>
 #include <dk/gen/limits.h>
-#include <dk/fx/route-query.h>
 #include "dkrt.h"
 
 #define MAX_ENT DKRT_SCAN_MAX
-#define MAX_FXR DK_MAX_FX
-#define ROUTE_MASTER 1
-#define ROUTE_SEND 2
 #define NAME_COLS 12
 
 /* ---- state read by the proofs ---------------------------------------------------------------------------------------- */
@@ -60,17 +57,11 @@ uint32_t DK_APPLIES;
 /* The live apply: the jobs queued so far, and the last failure (result of dkrt_live or of the job; 0 when none). */
 uint32_t DK_LIVE_JOBS;
 int32_t DK_LIVE_RESULT;
-/* The routes of the loaded effects (1 master, 2 send), as pending; the results of the last settings writes. */
-uint8_t DK_FXR_PEND[MAX_FXR];
-int32_t DK_FXR_SET;
-int32_t DK_FXR_FLUSH;
-/* Changes pending as the last NO counted them (selection and routes). */
+/* Changes pending as the last NO counted them. */
 uint32_t DK_PENDING;
-/* The rows of the last side panel as text, and the routes the last ROUTE... choice offered (1 master, 2 send), in the order shown. */
+/* The rows of the last side panel as text. */
 uint8_t DK_PANEL[4][24];
 uint32_t DK_PANEL_N;
-uint32_t DK_ROUTE_N;
-uint8_t DK_ROUTE_ITEM[2];
 DkrtHealth DK_HEALTH;
 /* The HEALTH page's menu (a core/ui object: its Menu view is the pointer at +4); the health proof reads the view's own flags. */
 dk_ui_menu *DK_HEALTH_MENU;
@@ -83,17 +74,12 @@ static DkrtScan g_ent[MAX_ENT];
 static DkrtFitOut g_fit;
 static DkrtSelection g_sel;
 static DkrtBootInfo g_boot;
-static DkrtFx g_fx[MAX_FXR];
-static uint32_t g_fx_n;
-static uint8_t g_fx_saved[MAX_FXR];
-static int8_t g_row_fx[MAX_ENT]; /* the first effect of a loaded row's module, -1: none */
 static uint8_t g_saved[MAX_ENT];
 static int8_t g_sel_of
     [MAX_ENT]; /* the boot index the runtime holds the row's file name at (dkrt_boot_name; the boot's results and needs are by that index), -1: none */
 static uint32_t g_saved_extra;
 static int32_t g_selection_error;
 static int g_info_row;
-static int g_route_row;
 static uint32_t g_safe_shown, g_seen, g_last, g_calls;
 static char g_empty_text[24];
 static int
@@ -208,28 +194,9 @@ static txt *t_int(txt *t, int32_t v)
     return t_num(t, (uint32_t)v);
 }
 
-/* The list font is not monospace: a letter, a digit, '-' or '_' takes 4 pixels, a space 3, '.' 2 and '~' 5 (measured on the DT2 1.16 list
-   font). Character 0x01 draws nothing and takes 4 pixels, so it pads a column the width of one letter. */
-#define PAD '\x01'
-
-static int px_of(const char *s)
-{
-    int w = 0;
-    for (; *s; s++)
-        w += *s == ' ' ? 3 : *s == '.' ? 2 : *s == '~' ? 5 : 4;
-    return w;
-}
-
-/* Spaces are three pixels wide and PAD is four. */
 static void t_pad_px(txt *t, int px)
 {
-    int rest = px - px_of(t->b);
-    while (rest >= 3 && rest % 4) {
-        t_c(t, ' ');
-        rest -= 3;
-    }
-    for (; rest >= 4; rest -= 4)
-        t_c(t, PAD);
+    t->n = dk_ui_pad_px(t->b, t->n, (int)sizeof t->b, px);
 }
 
 static char upper(char c)
@@ -247,7 +214,7 @@ static void keep(uint8_t *dst, const char *s)
 {
     int n = 0;
     while (n < 23 && s[n]) {
-        dst[n] = (uint8_t)(s[n] == PAD ? ' ' : s[n]);
+        dst[n] = (uint8_t)(s[n] == DK_UI_PAD ? ' ' : s[n]);
         n++;
     }
     while (n < 24)
@@ -585,17 +552,6 @@ static void map_boot_names(void)
     }
 }
 
-/* The loaded effects and the routes the settings give them. Pending routes start as the saved ones. */
-static void read_fx(void)
-{
-    g_fx_n = 0;
-    while (g_fx_n < MAX_FXR && dkrt_fx(g_fx_n, &g_fx[g_fx_n]) == DKRT_OK) {
-        g_fx_saved[g_fx_n] = (uint8_t)g_fx[g_fx_n].saved;
-        DK_FXR_PEND[g_fx_n] = (uint8_t)g_fx[g_fx_n].saved;
-        g_fx_n++;
-    }
-}
-
 static int same_text(const uint8_t *a, const uint8_t *b, int max)
 {
     for (int i = 0; i < max; i++) {
@@ -605,25 +561,6 @@ static int same_text(const uint8_t *a, const uint8_t *b, int max)
             return 1;
     }
     return 1;
-}
-
-/* For each row of a loaded module: its first effect (a module's effects share one route setting). */
-static void match_fx(void)
-{
-    for (uint32_t i = 0; i < MAX_ENT; i++)
-        g_row_fx[i] = -1;
-    for (uint32_t k = 0;; k++) {
-        static DkrtModule mod;
-        if (dkrt_module(k, &mod) != DKRT_OK)
-            break;
-        for (uint32_t i = 0; i < NENT; i++) {
-            if (!same_text(g_ent[i].path, mod.path, 63))
-                continue;
-            for (uint32_t j = 0; j < g_fx_n; j++)
-                if (g_row_fx[i] < 0 && same_text(g_fx[j].id, mod.name, 32))
-                    g_row_fx[i] = (int8_t)j;
-        }
-    }
 }
 
 /* Scans the store: the runtime lists the .dkm files under modules/ with their header verdict, needs and loaded state. */
@@ -669,29 +606,18 @@ static int wont(int i)
     return g_fit.rows[i].wont != 0;
 }
 
-/* Changes since the saved state: rows checked or unchecked, effects with another route, and safe mode (a restart leaves it). */
+/* Changes since the saved state: rows checked or unchecked. */
 static uint32_t changes(void)
 {
     uint32_t n = 0;
     for (uint32_t i = 0; i < NENT; i++)
         n += TICK[i] != g_saved[i];
-    for (uint32_t j = 0; j < g_fx_n; j++)
-        n += DK_FXR_PEND[j] != g_fx_saved[j];
     return n;
 }
 
 static int restart_pending(void)
 {
     return changes() > 0 || g_boot.safe != 0;
-}
-
-/* Effects with another route than the saved one: a route takes effect at a restart. */
-static uint32_t route_changes(void)
-{
-    uint32_t n = 0;
-    for (uint32_t j = 0; j < g_fx_n; j++)
-        n += DK_FXR_PEND[j] != g_fx_saved[j];
-    return n;
 }
 
 /* ---- the DIGIKIT menu ------------------------------------------------------------------------------------------------ */
@@ -1166,7 +1092,7 @@ static void module_text(int i, txt *t)
 {
     t_init(t);
     if (g_lead)
-        t_c(t, dashed(i) ? '-' : unloads_at_restart(i) ? '~' : PAD);
+        t_c(t, dashed(i) ? '-' : unloads_at_restart(i) ? '~' : DK_UI_PAD);
     const uint8_t *path = g_ent[i].path;
     if (i == g_busy_row) { /* the job of this row runs, or waits for the runtime's job slot */
         t_s(t, g_lq_state == LQ_START                  ? "WAITING"
@@ -1177,7 +1103,7 @@ static void module_text(int i, txt *t)
         return;
     }
     name_of(path, stem_len(path), 63, 1, t);
-    int kind_x = px_of(t->b) + 4;
+    int kind_x = dk_ui_px_of(t->b) + 4;
     if (kind_x < (NAME_COLS + 1) * 4)
         kind_x = (NAME_COLS + 1) * 4;
     t_pad_px(t, kind_x);
@@ -1192,7 +1118,7 @@ static void module_text(int i, txt *t)
         t_b(&sz, g_fit.rows[i].mem, DKRT_FIT_MEM);
     else
         bytes_text(&sz, g_ent[i].size);
-    t_pad_px(t, kind_x + (4 + 1 + 5) * 4 - px_of(sz.b));
+    t_pad_px(t, kind_x + (4 + 1 + 5) * 4 - dk_ui_px_of(sz.b));
     t_s(t, sz.b);
 }
 
@@ -1318,71 +1244,6 @@ static void panel_load(void *ctx, int32_t row)
     (void)ctx;
     if (row >= 0 && row < (int)NENT)
         set_tick(row, !TICK[row]);
-}
-
-static void route_done(void *ctx, int32_t index)
-{
-    (void)ctx;
-    if (index < 0 || (uint32_t)index >= DK_ROUTE_N || g_route_row < 0)
-        return;
-    int j = g_row_fx[g_route_row];
-    if (j < 0)
-        return;
-    for (uint32_t k = 0; k < g_fx_n; k++)
-        if (same_text(g_fx[k].id, g_fx[j].id, 32))
-            DK_FXR_PEND[k] = DK_ROUTE_ITEM[index];
-}
-
-/* Preserve editing with a provider that predates the resident query. */
-static uint32_t legacy_route_choices(int j)
-{
-    uint32_t allowed = g_fx[j].allowed;
-    if (!(allowed & ROUTE_SEND) || DK_FXR_PEND[j] == ROUTE_SEND)
-        return allowed;
-    uint32_t sends = 0;
-    for (uint32_t k = 0; k < g_fx_n; k++)
-        if (DK_FXR_PEND[k] == ROUTE_SEND)
-            sends++;
-    DkrtCap caps[DKRT_CAP_MAX];
-    uint32_t n = dkrt_capacity(caps, DKRT_CAP_MAX);
-    for (uint32_t k = 0; k < n; k++)
-        if (caps[k].kind == DKRT_CAPK_SEND_SLOTS && sends < caps[k].limit)
-            return allowed;
-    return allowed & ~ROUTE_SEND;
-}
-
-/* ROUTE...: the provider decides the options. The menu supplies its uncommitted choices. */
-static void panel_route(void *ctx, int32_t row)
-{
-    (void)ctx;
-    if (g_lq_state != LQ_IDLE) /* a live apply runs; a rescan during it would drop a route choice */
-        return;
-    int j = row >= 0 && row < (int)NENT ? g_row_fx[row] : -1;
-    if (j < 0)
-        return;
-    static const char *items[2];
-    DK_ROUTE_N = 0;
-    g_route_row = row;
-    DkFxRouteChoicesV1 request = {g_fx[j].row, 0};
-    for (uint32_t k = 0; k < g_fx_n; k++)
-        if (DK_FXR_PEND[k] == ROUTE_SEND && g_fx[k].row < MAX_FXR)
-            request.pending_sends |= 1u << g_fx[k].row;
-    uint32_t allowed;
-    int32_t result = dk_fx_route_choices(&request, &allowed);
-    if (result == DKRT_E_MISSING)
-        allowed = legacy_route_choices(j);
-    else if (result != DKRT_OK)
-        return;
-    if (allowed & ROUTE_SEND) {
-        items[DK_ROUTE_N] = "SEND";
-        DK_ROUTE_ITEM[DK_ROUTE_N++] = ROUTE_SEND;
-    }
-    if (allowed & ROUTE_MASTER) {
-        items[DK_ROUTE_N] = "MASTER";
-        DK_ROUTE_ITEM[DK_ROUTE_N++] = ROUTE_MASTER;
-    }
-    if (DK_ROUTE_N)
-        dk_ui_choice(g_ui, "ROUTE", items, (int)DK_ROUTE_N, route_done, 0);
 }
 
 /* The loaded module of a store row that has a menu function: its dkrt_module index, or -1. */
@@ -1525,8 +1386,6 @@ static void modules_panel(dk_ui_menu *p, int32_t row, void *ctx)
         g_lq_state != LQ_IDLE) /* no side panel while a live apply runs */
         return;
     prow(p, TICK[row] ? "UNLOAD" : "LOAD", panel_load, row);
-    if (g_row_fx[row] >= 0)
-        prow(p, "ROUTE...", panel_route, row);
     DkrtModule mod;
     if (settings_module(row, &mod) >= 0)
         prow(p, "SETTINGS...", panel_settings, row);
@@ -1639,13 +1498,6 @@ static void fill_info(dk_ui_menu *m, void *ctx)
         t_s(&t, TICK[i] ? "LOADS AT RESTART" : "UNLOADS AT RESTART");
         irow(m, &t);
     }
-    int j = g_row_fx[i];
-    if (j >= 0) {
-        t_init(&t);
-        t_s(&t, "ROUTE ");
-        t_s(&t, DK_FXR_PEND[j] == ROUTE_SEND ? "SEND" : "MASTER");
-        irow(m, &t);
-    }
     /* the next fill of the list shows the verdicts of the checked set again */
     refit();
 }
@@ -1682,14 +1534,11 @@ static int row_by_path(const uint8_t *p)
     return -1;
 }
 
-/* Scans again after a job: the runtime's counters, which rows are loaded, the effects and their routes; the list shows it. A route choice cannot be pending:
-   a route change restarts instead of running live, and the side panel is off during a batch. */
+/* Scans again after a job: the runtime's counters and which rows are loaded; the list shows it. */
 static void live_rescan(void)
 {
     read_boot();
     scan_store();
-    read_fx();
-    match_fx();
     dk_ui_menu_refresh(g_modules);
 }
 
@@ -1788,7 +1637,7 @@ static void live_plan(void)
             live_add(i, DKRT_LIVE_LOAD);
 }
 
-/* Saves the selection and the changed routes. A route change, or leaving safe mode, restarts (dkrt_restart returns only when it refuses); every other
+/* Saves the selection. Leaving safe mode restarts (dkrt_restart returns only when it refuses); every other
    change runs live: the unloads, then the loads, polled from the UI loop. */
 static void apply(void)
 {
@@ -1821,33 +1670,10 @@ static void apply(void)
         fail_text("NOT SAVED", r);
         return;
     }
-    for (uint32_t j = 0; j < g_fx_n; j++) {
-        if (DK_FXR_PEND[j] != g_fx_saved[j]) {
-            txt key;
-            t_init(&key);
-            t_s(&key, "fx/route/");
-            t_b(&key, g_fx[j].id, 32);
-            uint8_t v = DK_FXR_PEND[j] == ROUTE_SEND;
-            r = dkrt_settings_put((const uint8_t *)key.b, &v, 1);
-            DK_FXR_SET = r;
-            if (r != DKRT_OK) {
-                fail_text("NOT SAVED", r);
-                return;
-            }
-        }
-    }
-    r = dkrt_settings_flush();
-    DK_FXR_FLUSH = r;
-    if (r != DKRT_OK) {
-        fail_text("NOT SAVED", r);
-        return;
-    }
-    int restart = g_boot.safe != 0 || route_changes() > 0;
+    int restart = g_boot.safe != 0;
     live_plan();
     for (uint32_t i = 0; i < MAX_ENT; i++)
         g_saved[i] = TICK[i];
-    for (uint32_t j = 0; j < g_fx_n; j++)
-        g_fx_saved[j] = DK_FXR_PEND[j];
     g_saved_extra = 0;
     if (restart) {
         r = dkrt_restart();
@@ -1876,8 +1702,6 @@ static void discard(void)
 {
     for (uint32_t i = 0; i < MAX_ENT; i++)
         TICK[i] = g_saved[i];
-    for (uint32_t j = 0; j < g_fx_n; j++)
-        DK_FXR_PEND[j] = g_fx_saved[j];
     dk_ui_menu_close(g_modules);
 }
 
@@ -1901,7 +1725,7 @@ static int32_t modules_back(void *ctx)
         return 0;
     txt t;
     t_init(&t);
-    if (g_boot.safe == 0 && route_changes() == 0) {
+    if (g_boot.safe == 0) {
         t_s(&t, "APPLY ");
         t_num(&t, n);
         t_s(&t, n == 1 ? " CHANGE?" : " CHANGES?");
@@ -1924,8 +1748,6 @@ static void open_modules(void *ctx, int32_t arg)
     (void)arg;
     read_boot();
     scan_store();
-    read_fx();
-    match_fx();
     dk_ui_menu_select(g_modules,
                       STORE == 1 && NENT > 0 &&
                           g_boot.safe != 0); /* the first module, below the safe-mode header */

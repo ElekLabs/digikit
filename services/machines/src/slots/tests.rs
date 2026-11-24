@@ -209,8 +209,8 @@ fn a_click_reads_the_parameter_rows_through_the_core() {
     let mut t = std::vec![0; 96];
     t[dkrt_svc_rows::dynreg::w::P_DYN0] = 200;
     core.set_dynreg(t);
-    crate::records::rstate().param_owner = [0; limits::PARAM_ROWS];
-    crate::records::rstate().param_owner[..4].copy_from_slice(&[0, 0, 3, 0]);
+    let mut owners = [0u8; limits::PARAM_ROWS];
+    owners[..4].copy_from_slice(&[0, 0, 3, 0]);
     let p = |code| Pending {
         callback: 1,
         track: 5,
@@ -219,7 +219,7 @@ fn a_click_reads_the_parameter_rows_through_the_core() {
     };
     // row 2 (code 202) belongs to module record 2 (owner 3)
     assert_eq!(
-        click_context(&core, &p(202)),
+        click_context(&core, &owners, &p(202)),
         Some(Ctx {
             view: V,
             track: 5,
@@ -227,8 +227,8 @@ fn a_click_reads_the_parameter_rows_through_the_core() {
         })
     );
     // a free row, a code below the first row and a code past the table have no context
-    assert_eq!(click_context(&core, &p(201)), None);
-    assert_eq!(click_context(&core, &p(199)), None);
-    assert_eq!(click_context(&core, &p(204)), None);
+    assert_eq!(click_context(&core, &owners, &p(201)), None);
+    assert_eq!(click_context(&core, &owners, &p(199)), None);
+    assert_eq!(click_context(&core, &owners, &p(204)), None);
     assert!(core.calls().is_empty(), "reading rows writes nothing");
 }

@@ -13,6 +13,7 @@ extern "C" {
     fn sr_key(i: u32) -> usize;
     fn sr_run(key: usize) -> c_int;
     fn sr_calls(tag: c_int) -> c_int;
+    fn sr_owner_name(handle: usize, out: *mut c_char) -> c_int;
 }
 
 const E_CONTRACT: c_int = -48;
@@ -176,4 +177,77 @@ fn a_row_added_outside_init_is_refused_with_the_context_error() {
     assert_eq!(unsafe { sr_add_outside_init(1, c"A".as_ptr()) }, E_CONTEXT);
     assert_eq!(unsafe { sr_count() }, 0);
     assert_eq!(add(1, "A", 0), 0, "init still works");
+}
+
+/// A service file is an owner like a module: two services each get a row of their own, keyed by their own names, and the unload of one takes only its row.
+#[test]
+fn two_services_keep_their_own_keys_and_an_unload_takes_only_its_own_row() {
+    let _g = session();
+    unsafe { sr_reset() };
+    // the handles of two service records (owner id + 1, after the content modules' records)
+    let (a, b) = (41, 42);
+    assert_eq!(add_of(a, "services/a", "A", 0), 0);
+    assert_eq!(add_of(b, "services/b", "B", 1), 0);
+    let (key_a, key_b) = (unsafe { sr_key(0) }, unsafe { sr_key(1) });
+    assert_ne!(key_a, key_b, "two services never share a row key");
+    assert_eq!(unsafe { sr_remove(a) }, 1);
+    assert_eq!(texts(), ["B"]);
+    assert_eq!(
+        unsafe { sr_run(key_a) },
+        0,
+        "the stock row of the unloaded service does nothing"
+    );
+    assert_eq!(unsafe { sr_run(key_b) }, 1);
+    assert_eq!((unsafe { sr_calls(0) }, unsafe { sr_calls(1) }), (0, 1));
+}
+
+/// An owner whose name could not be found gets no row: two such owners would otherwise share the key of the empty name and one would run the other's row.
+#[test]
+fn an_owner_without_a_name_gets_no_row() {
+    let _g = session();
+    unsafe { sr_reset() };
+    assert_eq!(add_of(41, "", "A", 0), E_CONTRACT);
+    assert_eq!(unsafe { sr_count() }, 0);
+    assert_eq!(
+        unsafe { sr_add(41, std::ptr::null(), c"A".as_ptr(), 0) },
+        E_CONTRACT
+    );
+    assert_eq!(unsafe { sr_count() }, 0);
+}
+
+/// The row name of an owner handle (record index + 1): the record behind it, a name of 31 characters whole, no row for the core handle, an unloaded record or a name of 32 bytes.
+#[test]
+fn owner_name_follows_the_handle_to_its_record() {
+    let _g = session();
+    let name_of = |handle: usize| {
+        let mut out = [0x7f as c_char; 32];
+        let ok = unsafe { sr_owner_name(handle, out.as_mut_ptr()) };
+        (
+            ok,
+            unsafe { CStr::from_ptr(out.as_ptr()) }
+                .to_string_lossy()
+                .into_owned(),
+        )
+    };
+    assert_eq!(
+        name_of(3),
+        (1, "svc.two".to_string()),
+        "handle 3 is record 2"
+    );
+    assert_eq!(
+        name_of(4),
+        (1, "a".repeat(31)),
+        "31 characters are kept whole"
+    );
+    assert_eq!(name_of(2), (0, String::new()), "record 1 is not loaded");
+    assert_eq!(
+        name_of(0),
+        (0, String::new()),
+        "the core handle has no record"
+    );
+    assert_eq!(
+        name_of(5),
+        (0, String::new()),
+        "a name of 32 bytes could share a key"
+    );
 }

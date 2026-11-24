@@ -9078,7 +9078,7 @@
   },
   {
    "align": 2,
-   "hex": "4fefffec2f0e2c484878000141ef00084eb9000000002caf00082d6f000c00042d6f00180008588f200e2c5f4fef00144e75",
+   "hex": "4fefffe02f0e2c484878000141ef00084eb9000000002caf00082d6f000c00042d6f00180008588f200e2c5f4fef00204e75",
    "kind": "text",
    "name": ".text._RNvXNtNtCsc1Zn0JYKBJt_20dkrt_svc_project_dks4glue3envNtNtB4_4host6DkHostNtNtNtCsgKDWfuAt9QT_16dkrt_svc_project6engine3env3Env8live_job",
    "size": 50
@@ -9421,7 +9421,7 @@
   },
   {
    "align": 2,
-   "hex": "ebacd4e5",
+   "hex": "349c5fb8",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -9533,10 +9533,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffec2f0e2c48486f00044eb900000000224e22ef000822ef000c22ef001022ef001422af0018588f200e2c5f4fef00144e75",
+   "hex": "4fefffe02f0e2c48486f00044eb900000000224e22ef000822ef000c22ef001022ef001422ef001822ef001c22ef002022af0024588f200e2c5f4fef00204e75",
    "kind": "text",
    "name": ".text._RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi10live_state",
-   "size": 52
+   "size": 64
   },
   {
    "align": 2,
@@ -10687,7 +10687,7 @@
    "size": 24
   }
  ],
- "source_sha256": "5023c172936692b0589de31327fe810b3aa726463ba2b8f2d4e6617a6425f266",
+ "source_sha256": "26b66c03f00a7aad32b82774ed9eb42ad4c9d00ed500cd0a8546103eaebf2940",
  "symbols": [
   {
    "global": false,
@@ -13050,8 +13050,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_PROJECT_PENDING dk_module dk_project_current dk_project_status dk_svc_abi project_hook_clear_many project_hook_clear_one project_hook_paste project_hook_save project_hook_slot",
-  "instructions_redecoded": "13878",
-  "isa_check": "bf889f7bc5d7230cbe9c85ee7ac88050260f2abb1f77a668ef5f42e68d431ae3",
+  "instructions_redecoded": "13881",
+  "isa_check": "78796dd9227a7990fbbe27628fedd955d96b2dd56c146f0b11fd53b27ace089a",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

@@ -159,22 +159,6 @@ fn the_send_limit_is_the_cells_of_the_table_up_to_what_the_service_holds() {
     }
 }
 
-#[test]
-fn the_routes_entry_answers_no_fx_when_the_service_has_no_page() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    unsafe {
-        fxpage::unbind();
-        let core = core_with(table(4, DEVICE, 2));
-        assert_eq!(fxpage::bind(&core, [0, 0]), OK);
-        let mut out: dkrt_sdk::DkrtFx = core::mem::zeroed();
-        assert_eq!(
-            dkrt_svc_fx::fxsend::fx_entry(&core, 0, &mut out),
-            dkrt_sdk::E_NOT_FOUND
-        );
-        let _ = core.device_id();
-    }
-}
-
 /// The byte offsets the assembler of the hooks names (`.equ T_NAME, offset` in `dks/src/hooks.rs`) are the word indexes of the table (`fxpage::ASM_OFFSETS`).
 #[test]
 fn the_offsets_the_hooks_name_are_the_word_indexes_of_the_table() {

@@ -614,7 +614,7 @@ impl Drop for Clean {
             for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
                 crate::package::provider_rows::remove(rec);
             }
-            crate::package::provider_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200));
+            crate::package::provider_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::test_seams::machines_row(), Some(200));
         }
     }
 }
@@ -1282,6 +1282,39 @@ fn a_packed_module_is_reloaded_twice_through_the_plan_and_a_service_file_is_refu
     }
 }
 
+/// The seam of the FX ROUTING pick (E1): a pick saves `fx/route/<id>` and reloads the effect's module, so the real packed effect `dyn-fx-gain` must pass the reload check against the live
+/// set (with the fx service up), be taken down and be loaded again into its record, twice. The host runs no module code, so what the load registers (the route read at `apply`) is the
+/// service's unit test (`dkrt-svc-fx` `routing`) and the device test; the job's other refusals (a menu built for the module, DSP rows that stay held) are facts of the module, here none.
+#[test]
+fn a_packed_effect_module_is_reloaded_twice_through_the_plan() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        unsafe {
+            let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
+            // the host models no DSP rows and no effect registry: the file without its DSP part, as the boot-effects scenario takes it
+            swap_module(&mut l, 0, FX_GAIN.leaf, without_dsp(*dev, &FX_GAIN));
+            let _dsp = dsp_env(*dev, &l, &plan);
+            let path = "modules/dyn-fx-gain.dkm\0";
+            let rec = boot_record(&["dyn-fx-gain"]);
+            let mut rt = Box::new(crate::package::lifecycle::Rt::new(&mut l as *mut _));
+            rt.boot_with(&rec, &capacity(&l.p));
+            assert_eq!(crate::boot::info().results[0], OK, "{}", dev.name);
+            crate::package::boot_idx::set(u32::MAX);
+            l.phase = Phase::Closed;
+            let mut caps = capacity(&l.p);
+            crate::package::loader::live_caps(&mut caps, crate::package::loader::own_use(0));
+            for round in 0..2 {
+                assert_eq!(l.reload_check(0, path.as_ptr(), &caps), OK, "{} round {round}", dev.name);
+                assert_eq!(rt.unload(0), OK, "{} round {round}", dev.name);
+                assert_eq!(rt.reload_load_with(0, path.as_ptr(), &live_cap(&l)), OK, "{} round {round}", dev.name);
+                assert_eq!((records::module(0).used, l.sel_of(0)), (1, 0), "{} round {round}", dev.name);
+            }
+        }
+        let _ = clean_state();
+    }
+}
+
 /// The live seam (docs/plans/extension-model.md E5c): a real packed module of the boot is taken down, its file is loaded again at run time under a new path at a new
 /// selection index, taken down, and loaded again at its own path and index, each time through the file checks and the plan over the live set. A file whose name is loaded
 /// is refused first.
@@ -1806,13 +1839,7 @@ fn the_header_exports_of_a_service_file_are_its_provided_imports() {
                 .filter(|entry| entry.b & dkneeds::keys::EXPORT_QUERY == 0)
                 .map(|entry| entry.a)
                 .collect();
-            use crate::package::handlers::exports::{FX_ROUTES_ENTRY, MACHINES_MODULE_INFO};
-            let internal: &[&str] = match service {
-                "fx" => &[FX_ROUTES_ENTRY],
-                "machines" => &[MACHINES_MODULE_INFO],
-                _ => &[],
-            };
-            let want: std::collections::BTreeSet<u32> = builders_of(service).into_iter().chain(internal.iter().copied()).map(name_hash).collect();
+            let want: std::collections::BTreeSet<u32> = builders_of(service).into_iter().map(name_hash).collect();
             assert!(!want.is_empty(), "{service} provides nothing in sdk/sdk.toml");
             assert_eq!(listed, want, "{} {service}.dks: header EXPORTS differ from the provided imports", dev.name);
         }
@@ -1822,45 +1849,43 @@ fn the_header_exports_of_a_service_file_are_its_provided_imports() {
 /// The packed query is associated with the live provider, not the import table. The host calls the
 /// same typed export natively because it cannot execute the packed ColdFire address.
 #[test]
-fn the_fx_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher() {
+fn the_service_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher() {
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
-        let file = service_file(*dev, "fx", "core/services/fx");
+        let file = service_file(*dev, LOCAL_PING.leaf, LOCAL_PING.nx);
         let table = table_of(&file);
         let keys = Keys::parse(&table).unwrap();
-        let name = name_hash("fx");
+        let name = name_hash("local-ping");
         let query = name_hash(dkrt_sdk::RESIDENT_QUERY_ENTRY);
-        let export = keys.exports().find(|e| e.a == query).expect("fx has a query entry");
+        let export = keys.exports().find(|e| e.a == query).expect("local-ping has a query entry");
         assert_eq!(export.b & dkneeds::keys::EXPORT_FLAGS, dkneeds::keys::EXPORT_FLAGS);
-        assert_eq!(be(&file, dkneeds::H_RUNTIME) & 0x00ff_ffff, 0x000c02);
-        let fx_version = keys.words(tag::PROVIDES, 0).unwrap().1;
+        let version = keys.words(tag::PROVIDES, 0).unwrap().1;
         unsafe {
-            let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
-            let _dsp = dsp_env(*dev, &l, &plan);
-            assert_eq!(l.resident_query(name, fx_version), Err(E_MISSING));
-            let _run = boot_run(&mut l, &plan, &[&FX_GAIN], true);
-            let j = (0..plan.np).find(|j| l.found.path(*j) == b"services/fx.dks").unwrap();
+            let (mut l, plan) = planned(*dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            assert_eq!(l.resident_query(name, version), Err(E_MISSING));
+            let _run = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], true);
+            let j = (0..plan.np).find(|j| l.found.path(*j) == b"services/local-ping.dks").unwrap();
             let base = records::module(MAX_MODULES + j).base;
-            assert_eq!(l.resident_query(name, fx_version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
-            assert_eq!(l.resident_query(name, fx_version + 1), Err(E_CONTRACT));
-            assert_eq!(l.resident_query(name_hash("machines"), fx_version), Err(E_MISSING));
+            assert_eq!(l.resident_query(name, version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
+            assert_eq!(l.resident_query(name, version + 1), Err(E_CONTRACT));
+            assert_eq!(l.resident_query(name_hash("machines"), version), Err(E_MISSING));
             assert_eq!(l.exports.owned(query), None);
             // An ordinary legacy export with the same hash cannot change which entry the broker uses.
             l.exports.publish_with_scope(MAX_MODULES + j + 1, query, base, true).unwrap();
-            assert_eq!(l.resident_query(name, fx_version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
+            assert_eq!(l.resident_query(name, version), Ok(base + (export.b & !dkneeds::keys::EXPORT_FLAGS)));
 
-            let ask = crate::package::handlers::dks_decls::FX_QUERY;
-            let request = [0u32, 0];
-            let mut reply = u32::MAX;
-            let out = (&mut reply as *mut u32).cast();
-            // the entry answers from the owner in the file's cell: this case runs no `init`, so it starts the owner as `init` does, and ends it after
-            assert_eq!(ask(1, request.as_ptr().cast(), 8, out, 4), E_MISSING, "no owner, no provider");
-            crate::package::handlers::dks_decls::fx_start().expect("the owner starts");
-            assert_eq!(ask(1, request.as_ptr().cast(), 4, out, 4), E_CONTRACT);
-            assert_eq!(ask(1, request.as_ptr().cast(), 8, out, 4), E_NOT_FOUND);
-            crate::package::handlers::dks_decls::fx_stop();
-            assert_eq!(reply, u32::MAX, "the service has no loaded FX page to report");
+            // the entry answers from the owner in the file's cell: the boot's `init` started it, so stop it for the "no provider" answer and start it as `init` does
+            let ask = dkrt_fixture_local_ping::dk_service_query_v1;
+            let mut reply = [0u8; dkrt_fixture_local_ping::COUNTERS_LEN];
+            let out = reply.as_mut_ptr().cast();
+            let len = reply.len() as u32;
+            dkrt_fixture_local_ping::dk_svc_stop();
+            assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS, core::ptr::null(), 0, out, len), E_MISSING, "no owner, no provider");
+            dkrt_fixture_local_ping::dk_svc_start().expect("the owner starts");
+            assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS, core::ptr::null(), 0, out, len), len as i32, "the reply is the counters");
+            assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS + 1, core::ptr::null(), 0, out, len), E_NOT_FOUND);
+            assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS, core::ptr::null(), 0, out, len - 1), E_TOO_BIG);
         }
         clean_state();
     }
@@ -2177,7 +2202,7 @@ fn the_modules_reply_carries_the_version_and_the_needed_runtime_of_each_loaded_f
             assert_eq!(*rb.add(16), 2, "{}: the total of loaded modules", dev.name);
             assert_eq!(*rb.add(17), 2, "{}: both records are in the reply", dev.name);
             let mut at = 18usize;
-            let mut needs = Vec::new();
+            let mut versions = Vec::new();
             for m in selection {
                 let file = packed(*dev, m.leaf, "dkm", m.nx);
                 let word = |off: usize| u32::from_be_bytes(core::slice::from_raw_parts(rb.add(at + off), 4).try_into().unwrap());
@@ -2185,10 +2210,17 @@ fn the_modules_reply_carries_the_version_and_the_needed_runtime_of_each_loaded_f
                 assert_eq!(name, m.nx, "{}: the module's name", dev.name);
                 assert_eq!(word(33), be(&file, 0x34), "{}: {}: the version of the header", dev.name, m.leaf);
                 assert_eq!(word(37), be(&file, 0x30) & 0x7fff_ffff, "{}: {}: the runtime version the file needs", dev.name, m.leaf);
-                needs.push(word(37));
-                at += 71 + *rb.add(at + 65) as usize;
+                versions.push(word(33));
+                // the fixed part ends at dsp_len (61 bytes); then `u8 n_sections` and `u32 hash, u8 n, n words` for each (the lfo shapes and the local-ping user have no machine)
+                let mut p = at + 62;
+                for _ in 0..*rb.add(at + 61) {
+                    p += 5 + 4 * *rb.add(p + 4) as usize;
+                }
+                at = p;
             }
-            assert_ne!(needs[0], needs[1], "{}: the two fixtures need different runtime versions, so a swapped or constant field shows", dev.name);
+            // every packed file needs at least the runtime's `[runtime] table` floor, so two files need the same version unless one links a newer import; the two fixtures
+            // differ in their own version, so a swapped or constant version field shows
+            assert_ne!(versions[0], versions[1], "{}: the two fixtures have different versions, so a swapped or constant field shows", dev.name);
         }
         let _ = clean_state();
     }

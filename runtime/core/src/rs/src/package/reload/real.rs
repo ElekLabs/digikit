@@ -22,12 +22,17 @@ pub struct State {
     pub step: u8,
     pub torn: bool,
     pub op: u8,
+    pub serial: u32,
+    pub done_serial: u32,
+    pub done_result: i32,
 }
 
 /// The state of the job.
 pub fn state() -> State {
     let j = job();
-    State { phase: j.phase, result: j.result, step: j.step, torn: j.torn, op: j.op }
+    // a job that finished is its own last finished job
+    let (done_serial, done_result) = if j.phase == 2 { (j.serial, j.result) } else { (j.done_serial, j.done_result) };
+    State { phase: j.phase, result: j.result, step: j.step, torn: j.torn, op: j.op, serial: j.serial, done_serial, done_result }
 }
 
 /// `dkrt_live(op, path)`: queue a live job from the DIGIKIT menu (the UI task). The same refusals as the SysEx commands: an open upload or a store write in flight is `E_STATE`.
@@ -42,7 +47,7 @@ pub unsafe extern "C" fn dkrt_live(op: u32, path: *const u8) -> i32 {
 /// `dkrt_live_state(out)`: the phase, result, step and teardown flag of the live job.
 pub unsafe extern "C" fn dkrt_live_state(out: *mut DkrtLive) {
     let s = state();
-    *out = DkrtLive { phase: s.phase as u32, result: s.result, step: s.step as u32, unloaded: s.torn as u32, op: s.op as u32 };
+    *out = DkrtLive { phase: s.phase as u32, result: s.result, step: s.step as u32, unloaded: s.torn as u32, op: s.op as u32, serial: s.serial, done_serial: s.done_serial, done_result: s.done_result };
 }
 
 /// One step of the job, once per UI pass (`dkrt_tick`).

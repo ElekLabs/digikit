@@ -306,10 +306,19 @@ fn a_module_context_names_its_owner() {
         assert_eq!(crate::api::dkrt_ctx_owner(0), E_CONTRACT);
         assert_eq!(crate::api::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[3]) as usize), E_CONTRACT, "record 3 is not loaded");
         crate::package::entry::unbind(2);
-        // a service file's record has a context too, but no owner id is given out for it
-        crate::package::entry::bind(dkrt_abi::MAX_MODULES);
-        assert_eq!(crate::api::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[dkrt_abi::MAX_MODULES]) as usize), E_CONTRACT);
-        crate::package::entry::unbind(dkrt_abi::MAX_MODULES);
+        // a service file's record is an owner like any other: its context gives its record index, and an unbound service record gives none
+        let svc = dkrt_abi::MAX_MODULES + 1;
+        let svc_ctx = core::ptr::addr_of!(entry::DKRT_CTXS[svc]) as usize;
+        assert_eq!(crate::api::dkrt_ctx_owner(svc_ctx), E_CONTRACT, "not bound yet");
+        crate::package::entry::bind(svc);
+        assert_eq!(crate::api::dkrt_ctx_owner(svc_ctx), svc as i32);
+        crate::package::entry::unbind(svc);
+        assert_eq!(crate::api::dkrt_ctx_owner(svc_ctx), E_CONTRACT, "unbound again");
+        // the last record is the last owner; the table ends there
+        let last = crate::state::REC_MAX - 1;
+        crate::package::entry::bind(last);
+        assert_eq!(crate::api::dkrt_ctx_owner(core::ptr::addr_of!(entry::DKRT_CTXS[last]) as usize), last as i32);
+        crate::package::entry::unbind(last);
         reset(0, 5);
     }
 }
@@ -438,4 +447,30 @@ fn in_range_is_a_half_open_u32_interval() {
     assert!(in_range(0xFFFF_FFFF, 0xFFFF_FF00, 0x100), "last address");
     assert!(in_range(0xFFFF_FF00, 0xFFFF_FF00, 0x100), "base near the top");
     assert!(!in_range(0xFFFF_FEFF, 0xFFFF_FF00, 0x100), "just below a base near the top");
+}
+
+/// `dkrt_record_name` (the package's `ui.record_name`) gives the 32 name bytes of a loaded record, for a module and for a service file alike, and refuses a record that is not
+/// loaded and a number past the table.
+#[test]
+fn a_loaded_record_gives_its_name_whether_module_or_service() {
+    let _g = TestArena::lock();
+    unsafe {
+        reset(0, 5);
+        let svc = dkrt_abi::MAX_MODULES + 1;
+        for (rec, name) in [(2usize, &b"digikit/demo"[..]), (svc, &b"services/local-ping"[..])] {
+            let m = crate::package::loader::records::module(rec);
+            m.used = 1;
+            m.name = [0; 32];
+            m.name[..name.len()].copy_from_slice(name);
+            let mut out = [0xffu8; 32];
+            assert_eq!(crate::menu_exports::dkrt_record_name(rec as u32, out.as_mut_ptr()), OK);
+            assert_eq!(&out[..name.len()], name);
+            assert_eq!(&out[name.len()..], &[0u8; 32][name.len()..], "NUL padded");
+            m.used = 0;
+            assert_eq!(crate::menu_exports::dkrt_record_name(rec as u32, out.as_mut_ptr()), dkrt_sdk::E_NOT_FOUND, "an unloaded record has none");
+        }
+        let mut out = [0u8; 32];
+        assert_eq!(crate::menu_exports::dkrt_record_name(crate::state::REC_MAX as u32, out.as_mut_ptr()), dkrt_sdk::E_NOT_FOUND);
+        reset(0, 5);
+    }
 }

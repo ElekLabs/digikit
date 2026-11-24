@@ -13,8 +13,8 @@ pub struct DescribeV1 {
     /// `out` points at two words: limit, used.
     pub cap: unsafe extern "C" fn(*mut c_void, *const c_void, u8, *mut u32) -> bool,
     pub table_check: unsafe extern "C" fn(*mut c_void, *const c_void, u32, *mut TableFault) -> u32,
-    /// The consumer's owner id, then `cap` words at `out`: the count of words written.
-    pub describe: unsafe extern "C" fn(*mut c_void, u8, *mut u32, u32) -> u32,
+    /// The core, the consumer's owner id, then `cap` words at `out`: the count of words written. It never enters the owner (`Describe::describe` has no object): it runs in any task.
+    pub describe: unsafe extern "C" fn(*const c_void, u8, *mut u32, u32) -> u32,
 }
 
 // A table is immutable static data.
@@ -65,7 +65,7 @@ unsafe extern "C" fn table_check<C: CoreApi, P: Provider<C> + Describe<C>, G: En
 }
 
 unsafe extern "C" fn describe<C: CoreApi, P: Provider<C> + Describe<C>, G: Enter<P>>(
-    inst: *mut c_void,
+    core: *const c_void,
     who: u8,
     out: *mut u32,
     cap: u32,
@@ -76,8 +76,6 @@ unsafe extern "C" fn describe<C: CoreApi, P: Provider<C> + Describe<C>, G: Enter
         core::slice::from_raw_parts_mut(out, cap as usize)
     };
     let mut sink = WordSink::new(words);
-    G::enter(inst, (), |p: &mut P| {
-        p.describe(ConsumerId::new(who), &mut sink)
-    });
+    P::describe(&*(core as *const C), ConsumerId::new(who), &mut sink);
     sink.words().len() as u32
 }

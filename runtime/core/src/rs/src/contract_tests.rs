@@ -105,7 +105,7 @@ struct MachinesBack(bool);
 impl Drop for MachinesBack {
     fn drop(&mut self) {
         if self.0 {
-            unsafe { crate::package::provider_rows::add(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200)) };
+            unsafe { crate::package::provider_rows::add(dkrt_abi::MAX_MODULES + dkrt_sdk::PROVIDER_MAX - 1, crate::package::handlers::test_seams::machines_row(), Some(200)) };
         }
     }
 }
@@ -128,9 +128,9 @@ fn check_with(f: &[u8], device: u32, fx: bool, machines: bool) -> (i32, Job) {
     let n = machine_keys_of_file(f, &mut keys);
     unsafe {
         let _info = ct::VoiceInfoGuard::set(info.as_ptr());
-        crate::package::handlers::exports::seed_for_test(&keys[..n], dkrt_abi::core_api::CoreApi::boot_index(&crate::package::core_api::REAL_CORE));
+        crate::package::handlers::test_seams::seed_for_test(&keys[..n], dkrt_abi::core_api::CoreApi::boot_index(&crate::package::core_api::REAL_CORE));
         let r = dsp::check(f.as_ptr(), off, size, f.len() as u32, &mut job);
-        crate::package::handlers::exports::seed_for_test(&[], 0);
+        crate::package::handlers::test_seams::seed_for_test(&[], 0);
         (r, job)
     }
 }

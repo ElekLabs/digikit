@@ -30,7 +30,7 @@ digikit patches your own copy of the stock firmware once, with a small runtime. 
 ## Features
 
 - New machine types next to the stock ones, with their own parameters and DSP code
-- Up to 3 effects of your own, each with its own FX page, as a master insert or as a send effect with a send amount per track (SETTINGS > DIGIKIT > FX ROUTES)
+- Up to 3 effects of your own, each with its own FX page, as a master insert or as a send effect with a send amount per track (SETTINGS > FX ROUTING)
 - Modules load from the card at boot: install or change them over USB without flashing again
 - Boot-loop protection: after two failed starts, the box starts without modules and shows why
 - Safe mode: hold RECORD at power-on to start without modules

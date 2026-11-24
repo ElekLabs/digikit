@@ -27,7 +27,7 @@ mod stubs;
 // the service file's source: its `service!` call is the one place that lists the parts
 #[path = "../dks/src/lib.rs"]
 pub mod file;
-pub use file::{builder, rt, DK_SVC_OWNER};
+pub use file::{builder, DK_SVC_OWNER};
 
 /// The parts the file adopts, read from the row its `service!` call declares.
 struct FxRecipe;
@@ -47,11 +47,11 @@ impl Recipe for FxRecipe {
             has(PART_RECORDS, RECORDS_NEWEST)
                 && has(PART_DSP, DSP_NEWEST)
                 && has(PART_TICK, TICK_NEWEST)
-                && has(PART_QUERY, QUERY_NEWEST)
-                && has(PART_DESCRIBE, DESCRIBE_NEWEST),
-            "the file adopts the five parts this recipe builds"
+                && has(PART_DESCRIBE, DESCRIBE_NEWEST)
+                && !matches!(row.part(PART_QUERY, QUERY_NEWEST), PartLookup::Found { .. }),
+            "the file adopts the four parts this recipe builds and no Query part"
         );
-        b.records(&KINDS_FX).dsp().tick().query().describe()
+        b.records(&KINDS_FX).dsp().tick().describe()
     }
 }
 
@@ -365,7 +365,7 @@ fn fixture(device: u32) -> Fixture {
             ..Rows::NONE
         },
         absent_rows: None,
-        // the route of an effect is a setting of the FX ROUTES menu; a module load never writes one
+        // the route of an effect is a setting of the FX ROUTING popup; a module load never writes one
         live: LIVE,
         stateless: false,
         salt_same: &[("settings", "a load writes no setting")],

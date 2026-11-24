@@ -6,7 +6,7 @@ use crate::package::registry::{apply_with, check_with, each, remove_with};
 use dkrt_sdk::proto::CAPK_FX_SLOTS;
 use crate::package::core_api::CoreApi;
 use crate::package::fixture_provider::{table, Fixture};
-use dkrt_abi::provider::{Consumer, ConsumerId, Describe, DspPart, Provider, Records, Status, Ticker};
+use dkrt_abi::provider::{Consumer, ConsumerId, Describe, DspPart, Provider, Records, Status, Ticker, WordSink};
 use std::vec::Vec;
 
 /// Serializes the tests that use the fake's log and the registry's state.
@@ -31,6 +31,14 @@ static mut LOG: Vec<Call> = Vec::new();
 static mut REFUSE: (u8, u32) = (0, 0);
 /// The service whose `apply` fails.
 static mut FAIL_APPLY: (u8, u32) = (0, 0);
+/// `(service, consumer, words)`: what the fakes describe, instead of the default words (`None`: the default).
+static mut DESCRIBE: Option<Vec<(u8, u8, Vec<u32>)>> = None;
+
+/// The fakes describe exactly `words` (`(service, consumer, words)`); `None`: the default words again.
+pub(crate) fn set_describe(words: Option<&[(u8, u8, &[u32])]>) {
+    unsafe { *core::ptr::addr_of_mut!(DESCRIBE) = words.map(|w| w.iter().map(|(s, c, v)| (*s, *c, v.to_vec())).collect()) };
+}
+
 /// The service whose `table_check` reports a mismatch (0: none).
 static mut BAD_TABLE: u8 = 0;
 
@@ -131,6 +139,25 @@ impl<const N: u8, C: CoreApi> Describe<C> for Fake<N> {
         (kind == CAPK_FX_SLOTS).then_some((10 * N as u32, N as u32))
     }
 
+    /// By default service 1 holds two words for every consumer and service 2 one word for consumer 3 only (it is silent for the others); `set_describe` replaces that.
+    fn describe(_: &C, who: ConsumerId, out: &mut WordSink) {
+        let set = unsafe { &*core::ptr::addr_of!(DESCRIBE) };
+        if let Some(words) = set {
+            for (svc, consumer, w) in words {
+                if *svc == N && *consumer == who.get() {
+                    w.iter().for_each(|x| {
+                        out.push(*x);
+                    });
+                }
+            }
+        } else if N == 1 {
+            out.push(0x1100 + who.get() as u32);
+            out.push(2 * who.get() as u32);
+        } else if who.get() == 3 {
+            out.push(0x2200 + who.get() as u32);
+        }
+    }
+
     fn table_check(&self, _: &C, used: u32, out: &mut dkrt_abi::service::TableFault) -> u32 {
         log().push(Call::TableCheck { svc: N, used });
         if unsafe { BAD_TABLE } == N {
@@ -142,10 +169,10 @@ impl<const N: u8, C: CoreApi> Describe<C> for Fake<N> {
 }
 
 /// Fake service `N` owns record kind `100 + N`, a record of `8 + 4 * N` bytes.
-static KINDS_1: [(u32, u32); 1] = [(101, 12)];
-static KINDS_2: [(u32, u32); 1] = [(102, 16)];
+pub(crate) static KINDS_1: [(u32, u32); 1] = [(101, 12)];
+pub(crate) static KINDS_2: [(u32, u32); 1] = [(102, 16)];
 
-fn fake<const N: u8>(name: &'static str, kinds: &'static [(u32, u32)]) -> dkrt_abi::provider::ProviderHandle {
+pub(crate) fn fake<const N: u8>(name: &'static str, kinds: &'static [(u32, u32)]) -> dkrt_abi::provider::ProviderHandle {
     Fixture::of::<Fake<N>>(name).records::<Fake<N>>(kinds).dsp::<Fake<N>>().tick::<Fake<N>>().describe::<Fake<N>>().handle()
 }
 
@@ -445,46 +472,5 @@ mod table {
             assert_eq!(one_b.cap(3), Some((6, 1)));
             assert_eq!(one_b.cap(4), None);
         }
-    }
-}
-
-/// What only the runtime asks of a service file goes through the loader's export table by name: the effect list of DIGIKIT > FX ROUTES, the guard counts and the
-/// machine types of the MODULES reply. With no file loaded (nothing published) the answers are "no fx", "no counts" and "no types"; with a file loaded the export answers.
-#[test]
-fn the_runtime_only_exports_answer_from_the_service_file_and_say_nothing_without_one() {
-    use super::exports::*;
-    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
-    extern "C" fn fx(index: u32, out: *mut u8) -> i32 {
-        if index < 2 {
-            unsafe { (*(out as *mut DkrtFx)).row = 7 + 2 * index };
-            OK
-        } else {
-            E_NOT_FOUND
-        }
-    }
-    extern "C" fn info(owner: u32, out: *mut u8) -> u32 {
-        let m = dkrt_abi::service::ModuleMachines { rows: 1 << owner, nt: 1, types: [16 + owner as u8, 0, 0, 0, 0, 0, 0, 0], faults: owner + 1, guard_off: (owner == 3) as u32 };
-        unsafe { *(out as *mut dkrt_abi::service::ModuleMachines) = m };
-        (owner < 8) as u32
-    }
-    unsafe {
-        let mut out: DkrtFx = core::mem::zeroed();
-        TEST_EXPORTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
-        assert_eq!(fx_entry(0, &mut out), E_NOT_FOUND, "no fx without the service file");
-        assert!(module_info(1).is_none(), "no machines without the service file");
-        {
-            let mut t = TEST_EXPORTS.lock().unwrap_or_else(|e| e.into_inner());
-            t.push((dkneeds::keys::name_hash(FX_ROUTES_ENTRY), fx as usize));
-            t.push((dkneeds::keys::name_hash(MACHINES_MODULE_INFO), info as usize));
-        }
-        assert_eq!(fx_entry(0, &mut out), OK);
-        assert_eq!(out.row, 7);
-        assert_eq!(fx_entry(1, &mut out), OK);
-        assert_eq!(out.row, 9);
-        assert_eq!(fx_entry(2, &mut out), E_NOT_FOUND, "past the end");
-        let m = module_info(3).unwrap();
-        assert_eq!((m.rows, m.nt, m.types[0], m.faults, m.guard_off), (8, 1, 19, 4, 1));
-        assert!(module_info(9).is_none(), "an owner the service does not answer for");
-        TEST_EXPORTS.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 }

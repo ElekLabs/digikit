@@ -25,10 +25,8 @@ fn the_package_table_has_every_hook() {
         ("module.ctx_owner", t.module.ctx_owner.is_none()),
         ("module.load_file", t.module.load_file.is_none()),
         ("module.read_extra", t.module.read_extra.is_none()),
-        ("module.fx_entry", t.module.fx_entry.is_none()),
         ("module.read_header", t.module.read_header.is_none()),
         ("module.has_tick", t.module.has_tick.is_none()),
-        ("module.machine_type_loaded", t.module.machine_type_loaded.is_none()),
         ("menu.scan", t.menu.scan.is_none()),
         ("menu.scan_reads", t.menu.scan_reads.is_none()),
         ("menu.fit", t.menu.fit.is_none()),
@@ -49,6 +47,8 @@ fn the_package_table_has_every_hook() {
     ];
     let gone: std::vec::Vec<&str> = missing.iter().filter(|(_, none)| *none).map(|(n, _)| *n).collect();
     assert!(gone.is_empty(), "hooks the package does not give: {gone:?}");
+    // two words of the table were removed (E1 step 4: the effect list and the loaded-type check come from the services' `Describe` words and the host); they stay as null words
+    assert!(t.module.fx_entry.is_none() && t.module.machine_type_loaded.is_none());
 }
 
 #[test]
@@ -74,19 +74,18 @@ fn with_no_package_every_hook_has_its_default() {
         // modules
         assert_eq!(ctx_owner(0x1000), E_CONTRACT);
         assert_eq!(module_extra(0), ModuleExtra::default());
-        assert_eq!(fx_entry(0, core::ptr::null_mut()), E_NOT_FOUND);
         assert_eq!(module_header(0, core::ptr::null_mut()), E_NOT_FOUND);
         assert!(!module_has_tick(0));
-        assert!(!machine_type_loaded(7));
         // the menu's exports
         assert_eq!(scan(core::ptr::null_mut(), 4), E_NOT_FOUND);
         assert_eq!(scan_reads(), 0);
         assert_eq!(fit(core::ptr::null(), 0, core::ptr::null(), core::ptr::null_mut()), E_NOT_FOUND);
         assert_eq!(capacity(core::ptr::null_mut(), 8), 0);
         assert_eq!(live(1, core::ptr::null()), E_STATE);
-        let mut state = DkrtLive { phase: 9, result: 9, step: 9, unloaded: 9, op: 9 };
+        let mut state = DkrtLive { phase: 9, result: 9, step: 9, unloaded: 9, op: 9, serial: 9, done_serial: 9, done_result: 9 };
         live_state(&mut state);
         assert_eq!((state.phase, state.result, state.step, state.unloaded, state.op), (0, OK, 0, 0, 0));
+        assert_eq!((state.serial, state.done_serial, state.done_result), (0, 0, OK));
         // diagnostics
         watch_diag(&[0; DIAG_WORDS]);
         assert_eq!(watch_attribute(1, 2), None);
@@ -163,7 +162,7 @@ unsafe extern "C" fn record_rows(menu: *mut u8) {
 }
 
 static RECORDING: PackageHooks = PackageHooks {
-    ui: dkrt_abi::hooks::UiHooks { settings_rows: Some(record_rows) },
+    ui: dkrt_abi::hooks::UiHooks { settings_rows: Some(record_rows), record_name: None },
     ..unsafe { core::mem::zeroed() }
 };
 
@@ -199,5 +198,42 @@ fn the_settings_rows_hook_reaches_the_package_and_has_a_null_default() {
 
         without_package(|| ui_settings_rows(0x1234 as *mut u8));
         assert_eq!(RECORDED.load(SeqCst), 0, "no package: nothing");
+    }
+}
+
+// ---- ui.record_name ------------------------------------------------------------------------------------------------------
+
+unsafe extern "C" fn name_of_seven(owner: u32, out: *mut u8) -> i32 {
+    if owner != 7 {
+        return E_NOT_FOUND;
+    }
+    *out = b'x';
+    0
+}
+
+static NAMING: PackageHooks = PackageHooks {
+    ui: dkrt_abi::hooks::UiHooks { record_name: Some(name_of_seven), ..unsafe { core::mem::zeroed() } },
+    ..unsafe { core::mem::zeroed() }
+};
+
+/// The name of a record is asked through the hook: the owner and the buffer arrive as they are. No package, a null entry and a package built before the entry each answer
+/// `E_NOT_FOUND` (no write, no fault).
+#[test]
+fn the_record_name_hook_reaches_the_package_and_refuses_without_one() {
+    use dkrt_abi::hooks::UI_RECORD_NAME_SINCE;
+    let _g = locked();
+    unsafe {
+        let mut out = [0u8; 32];
+        assert_eq!(with_table(&NAMING, UI_RECORD_NAME_SINCE, || ui_record_name(7, out.as_mut_ptr())), 0);
+        assert_eq!(out[0], b'x', "the package wrote the name");
+        assert_eq!(with_table(&NAMING, UI_RECORD_NAME_SINCE, || ui_record_name(8, out.as_mut_ptr())), E_NOT_FOUND);
+
+        out[0] = 0;
+        assert_eq!(with_table(&NAMING, UI_RECORD_NAME_SINCE - 1, || ui_record_name(7, out.as_mut_ptr())), E_NOT_FOUND, "a package built before the entry has none to read");
+        assert_eq!(out[0], 0);
+
+        static EMPTY: PackageHooks = unsafe { core::mem::zeroed() };
+        assert_eq!(with_table(&EMPTY, UI_RECORD_NAME_SINCE, || ui_record_name(7, out.as_mut_ptr())), E_NOT_FOUND, "a null entry");
+        assert_eq!(without_package(|| ui_record_name(7, out.as_mut_ptr())), E_NOT_FOUND, "no package");
     }
 }

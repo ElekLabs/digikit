@@ -10,6 +10,8 @@ use crate::slots::Slots;
 use crate::{assign, dsp, info, registry, selection_view, unload};
 use core::mem::MaybeUninit;
 use dkrt_abi::core_api::CoreApi;
+use dkrt_abi::fw::Fw;
+use dkrt_abi::provider::WordSink;
 use dkrt_abi::provider::{Consumer, ConsumerId, Describe, Provider, Status, Ticker};
 use dkrt_abi::service::{tick_phase, SettleCtx, TableFault};
 use dkrt_sdk::proto::{
@@ -17,9 +19,12 @@ use dkrt_sdk::proto::{
 };
 use dkrt_sdk::records::KINDS_MACHINES;
 use dkrt_sdk::{E_NO_REGISTRY, OK};
+use dkrt_svc_rows::dynreg::RegState;
 
 /// The machines service: nothing collected, no click queued, nothing parked. The file's cell holds the one instance (`Provider::start_in`).
 pub struct Machines {
+    /// The registry state only the owner reads: the owners of the parameter and page rows and the strings the firmware's rows point at.
+    reg: RegState,
     builder: Builder,
     clicks: Slots,
     parking: Parking,
@@ -30,6 +35,8 @@ impl Machines {
     /// An owner with nothing collected, no action set and the gate closed; no image table is bound (`start` binds it).
     pub fn new() -> Machines {
         Machines {
+            // SAFETY: all-zero bytes are the state of a registry with no row owned
+            reg: unsafe { core::mem::zeroed() },
             builder: Builder::new(),
             clicks: Slots::new(),
             parking: Parking::new(),
@@ -42,6 +49,60 @@ impl Machines {
         &mut self.builder
     }
 
+    /// The registry state (the owners of the parameter and page rows, the strings of the machine, parameter and page rows).
+    pub fn reg(&self) -> &RegState {
+        &self.reg
+    }
+
+    /// The parking passes and the registry state, for the DSP part (`dsp/part.rs`): one borrow of each field.
+    pub(crate) fn parking_and_reg(&mut self) -> (&mut Parking, &mut RegState) {
+        (&mut self.parking, &mut self.reg)
+    }
+
+    /// The commit of the open module's collection: the free rows it needs are read from the registry state.
+    ///
+    /// # Safety
+    /// `c` is the loader's commit context.
+    pub(crate) unsafe fn commit_builder<C: CoreApi>(
+        &mut self,
+        core: &C,
+        module: usize,
+        c: &dkrt_abi::service::ModuleCommitCtx,
+    ) -> i32 {
+        self.builder.commit(core, &self.reg, module, c)
+    }
+
+    /// `dk_param_get` of the file: the value of a parameter word in the flow of a click (the owner of the parameter rows is the registry state).
+    ///
+    /// # Safety
+    /// As `Slots::param_get`.
+    pub unsafe fn param_get<C: CoreApi, F: Fw>(
+        &mut self,
+        core: &C,
+        fw: &F,
+        track: u32,
+        word: u32,
+    ) -> i32 {
+        self.clicks
+            .param_get(core, fw, &self.reg.param_owner, track, word)
+    }
+
+    /// `dk_param_set`, as `param_get`.
+    ///
+    /// # Safety
+    /// As `Slots::param_set`.
+    pub unsafe fn param_set<C: CoreApi, F: Fw>(
+        &mut self,
+        core: &C,
+        fw: &F,
+        track: u32,
+        word: u32,
+        raw: i32,
+    ) -> i32 {
+        self.clicks
+            .param_set(core, fw, &self.reg.param_owner, track, word, raw)
+    }
+
     /// The click state of the machine page: the file's hooks and the exports `dk_param_get` and `dk_param_set` reach it here.
     pub fn clicks(&mut self) -> &mut Slots {
         &mut self.clicks
@@ -50,11 +111,6 @@ impl Machines {
     /// The parking passes of absent numbers (read only).
     pub fn parking(&self) -> &Parking {
         &self.parking
-    }
-
-    /// The parking passes, for the DSP part of the owner (`dsp/part.rs`).
-    pub(crate) fn parking_mut(&mut self) -> &mut Parking {
-        &mut self.parking
     }
 
     /// One native page record of a consumer that came up (`Records::apply`): the walk's state and the last commit's callback arguments are the owner's.
@@ -138,6 +194,7 @@ impl<C: CoreApi> Provider<C> for Machines {
                 consumer,
                 inf,
                 self.builder.args(),
+                &mut self.reg,
                 &mut self.parking,
                 &mut self.clicks,
             )
@@ -149,7 +206,15 @@ impl<C: CoreApi> Provider<C> for Machines {
     fn detach(&mut self, core: &C, consumer: ConsumerId) {
         self.builder.end();
         // SAFETY: the rows are the registry's; `consumer` is a module record + 1
-        unsafe { unload::remove(core, consumer.get(), &mut self.parking, &mut self.clicks) }
+        unsafe {
+            unload::remove(
+                core,
+                &mut self.reg,
+                consumer.get(),
+                &mut self.parking,
+                &mut self.clicks,
+            )
+        }
     }
 
     fn settle(&mut self, core: &C, s: &SettleCtx) {
@@ -168,11 +233,12 @@ impl<C: CoreApi> Provider<C> for Machines {
             // number the map holds stays MISSING (E5d), and `tick` parks its voice row if it has none.
             let inf = dkrt_svc_rows::dynreg(core);
             if !inf.is_null() {
-                let s = registry::rstate();
                 let mut k = 0;
                 while k < registry::MAX_MACH {
-                    if self.parking.missing_rows() & (1 << k) != 0 && s.mach_owner[k] == 0 {
-                        unload::reset_machine_row(core, inf, k, false);
+                    if self.parking.missing_rows() & (1 << k) != 0
+                        && registry::mach_owner(core, k) == 0
+                    {
+                        unload::reset_machine_row(core, &mut self.reg, inf, k, false);
                     }
                     k += 1;
                 }
@@ -189,8 +255,8 @@ impl<C: CoreApi> Ticker<C> for Machines {
         if phase == tick_phase::LAST {
             // SAFETY: the UI task runs the tick; the queued action is code of a loaded module (`detach` drops the click of a module before its image goes)
             unsafe {
-                self.clicks.tick(core);
-                self.parking.park_absent(core);
+                self.clicks.tick(core, &self.reg.param_owner);
+                self.parking.park_absent(core, &mut self.reg);
             }
         }
     }
@@ -202,13 +268,13 @@ impl<C: CoreApi> Describe<C> for Machines {
         unsafe {
             // an if chain, not a `match`: a dense match becomes a PC-relative jump table, which is not ColdFire code
             if kind == CAPK_MACHINE_ROWS {
-                Some(registry::counts(core)[0])
+                Some(registry::counts(core, &self.reg)[0])
             } else if kind == CAPK_VOICE_ROWS {
                 Some(dsp::rows_counts(core))
             } else if kind == CAPK_PARAM_ROWS {
-                Some(registry::counts(core)[1])
+                Some(registry::counts(core, &self.reg)[1])
             } else if kind == CAPK_PAGE_ROWS {
-                Some(registry::counts(core)[2])
+                Some(registry::counts(core, &self.reg)[2])
             } else if kind == CAPK_MAP_ENTRIES {
                 Some((dkrt_sdk::sel::MAP_N as u32, assign::map_used()))
             } else {
@@ -220,5 +286,10 @@ impl<C: CoreApi> Describe<C> for Machines {
     fn table_check(&self, _core: &C, used: u32, out: &mut TableFault) -> u32 {
         // SAFETY: reads the rows this crate owns
         unsafe { dsp::table_check(used, out) }
+    }
+
+    /// The five words of the MODULES reply for module record `who` - 1 (`modules::describe`); none for a module with no voice row, no machine type and no guard count.
+    fn describe(core: &C, who: ConsumerId, out: &mut WordSink) {
+        crate::modules::describe(core, who.get(), out)
     }
 }

@@ -44,6 +44,7 @@ pub(crate) unsafe fn clear_rows<C: CoreApi>(core: &C, rec: usize) -> bool {
                 seq.push(WIN_VOICES, at, FREE_TYPE);
             }
             if !core.link_run(Owner::Core, &seq) {
+                crate::modules::publish(core);
                 return false;
             }
             if park {
@@ -56,6 +57,7 @@ pub(crate) unsafe fn clear_rows<C: CoreApi>(core: &C, rec: usize) -> bool {
         }
         k += 1;
     }
+    crate::modules::publish(core);
     true
 }
 

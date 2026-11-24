@@ -28,13 +28,19 @@ def _abi() -> dict:
 
 
 def ids() -> dict[str, int]:
-    """The id of each name (`DSP`, `PROVIDERS`, ...): the order of `[[host_dir]]` in abi.toml."""
-    return {h["name"]: i for i, h in enumerate(_abi()["host_dir"])}
+    """The id of each name (`DSP`, `PROVIDERS`, ...): the order of `[[host_dir]]` in abi.toml. A removed id (tombstone) has no name here: it resolves to nothing."""
+    return {
+        h["name"]: i
+        for i, h in enumerate(_abi()["host_dir"])
+        if h["owner"] != "removed"
+    }
 
 
 def owners() -> dict[str, str]:
     """`core` or `package` per name: who fills the entry."""
-    return {h["name"]: h["owner"] for h in _abi()["host_dir"]}
+    return {
+        h["name"]: h["owner"] for h in _abi()["host_dir"] if h["owner"] != "removed"
+    }
 
 
 def _const(name: str) -> int:
@@ -43,7 +49,7 @@ def _const(name: str) -> int:
 
 def directory_bytes() -> int:
     """The bytes of the directory a rig reads."""
-    return HEADER + 4 * len(ids())
+    return HEADER + 4 * len(_abi()["host_dir"])
 
 
 def entry_address(name: str, directory_at: int) -> int:

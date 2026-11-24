@@ -10,6 +10,11 @@ use dkrt_abi::mem::{cstr_len, iw};
 /// Effect row `k` (module record `owner - 1`, tab string `tab`) has been registered: read its route and amounts from the settings and, for a send effect within the limit, give it a
 /// cell of the send page. The route and the four amount words go to the DSP with the row (`dsp::fx_set_route`).
 pub unsafe fn apply<C: CoreApi>(core: &C, k: usize, owner: u8, tab: *const u8) {
+    apply_row(core, k, owner, tab);
+    publish(core);
+}
+
+unsafe fn apply_row<C: CoreApi>(core: &C, k: usize, owner: u8, tab: *const u8) {
     if k >= dsp::MAX_FX || owner == 0 {
         return;
     }
@@ -128,6 +133,11 @@ unsafe fn release<C: CoreApi>(core: &C, inf: *const u32, k: usize) {
 
 /// The effect row `k` is gone (its module was removed): its cell and its state.
 pub unsafe fn remove<C: CoreApi>(core: &C, k: usize) {
+    remove_row(core, k);
+    publish(core);
+}
+
+unsafe fn remove_row<C: CoreApi>(core: &C, k: usize) {
     if k >= dsp::MAX_FX {
         return;
     }

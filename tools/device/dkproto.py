@@ -309,6 +309,7 @@ CAP: dict[str, int] = {
     "FW_ID": 18,
     "LIVE": 19,
     "MODULE_UI": 20,
+    "MODULE_SECTIONS": 21,
 }
 
 RANGES: dict[str, tuple[int, int]] = {

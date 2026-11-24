@@ -45,4 +45,13 @@ impl<T> Shared<T> {
         core.irq_restore(sr);
         r
     }
+
+    /// Replace the value with no mask: for the reset of a host test or a start before any other task runs. Not a section: nothing else may touch the cell meanwhile.
+    ///
+    /// # Safety
+    /// No task or interrupt uses the cell while this runs.
+    pub unsafe fn set_unmasked(&self, value: T) {
+        assert!(!self.held.get(), "set inside a section of the same Shared");
+        *self.value.get() = value;
+    }
 }

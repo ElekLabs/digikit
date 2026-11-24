@@ -192,7 +192,7 @@ pub fn has(name: &str) -> bool {
 pub fn test_machines() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| unsafe {
-        add(dkrt_abi::MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200));
+        add(dkrt_abi::MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::test_seams::machines_row(), Some(200));
     });
 }
 

@@ -89,6 +89,9 @@ impl CoreApi for RealCore {
     unsafe fn settings_overlay_set(&self, overlay: *const dkrt_abi::service::SettingsOverlay) {
         crate::package::settings_overlay::set(overlay)
     }
+    unsafe fn reload_when_possible(&self, id: &[u8]) {
+        crate::package::settings_reload::reload_when_possible(id)
+    }
     unsafe fn settings_changed(&self, id: &[u8]) {
         crate::package::settings_reload::changed(id)
     }

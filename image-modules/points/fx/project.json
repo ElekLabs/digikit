@@ -4,9 +4,9 @@
   "metadata": {
     "runtimeAcceptance": [
       {
-        "firmwareOnly": "the menu route panel drawn with the firmware views, the persisted route on the card and the restarted audio and FX pages",
+        "firmwareOnly": "the FX ROUTING row in the stock SETTINGS list, the stock choice popup that returns the picked index, an effect moved to the send bus without a restart, the send bus that is full, the persisted route on the card and the restarted audio and FX pages",
         "files": [
-          "tests/fx-routes-panel.device.test.ts",
+          "tests/fx-routing.device.test.ts",
           "tests/fx-routes-persist.device.test.ts"
         ],
         "dsp": "sharc",

@@ -4,9 +4,6 @@
 /// `dk_svc_declare` of a service file: the declarations of `init` without `setup`, for the device that `device` gives.
 pub type DeclareFn = unsafe fn(*mut u8, fn() -> u32) -> i32;
 
-/// Host entry of the FX service's resident query: the entry of the file over the owner in its cell (`E_MISSING` before `fx_start`). The packed ColdFire entry is tested before this host call.
-pub const FX_QUERY: dkrt_sdk::ResidentQueryV1 = dkrt_svc_fx_dks::dk_service_query_v1;
-
 /// The row of the fx file: what its `service!` call declares.
 pub fn fx_row() -> &'static dkrt_abi::provider::ProviderRow {
     dkrt_svc_fx_dks::dk_svc_row()

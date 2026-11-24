@@ -184,18 +184,8 @@ pub const HOST_MENU_MEM: u32 = 15;
 pub const HOST_MENU_MEM_N: u32 = 16;
 /// TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row.
 pub const HOST_MENU_TICK: u32 = 17;
-/// DK_FXR_PEND of the DIGIKIT menu: the pending routes of the loaded effects (1 master, 2 send).
-pub const HOST_MENU_FXR_PEND: u32 = 18;
-/// DK_FXR_SET of the DIGIKIT menu: the result of the last route write (`dkrt_settings_put`).
-pub const HOST_MENU_FXR_SET: u32 = 19;
-/// DK_FXR_FLUSH of the DIGIKIT menu: the result of the last settings flush.
-pub const HOST_MENU_FXR_FLUSH: u32 = 20;
 /// DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran.
 pub const HOST_MENU_APPLIES: u32 = 21;
-/// DK_ROUTE_N of the DIGIKIT menu: the number of routes the last ROUTE... choice offered.
-pub const HOST_MENU_ROUTE_N: u32 = 22;
-/// DK_ROUTE_ITEM of the DIGIKIT menu: the routes the last ROUTE... choice offered (1 master, 2 send), in the order shown.
-pub const HOST_MENU_ROUTE_ITEM: u32 = 23;
 /// LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads.
 pub const HOST_MENU_LOADED: u32 = 24;
 /// DK_LINES of the DIGIKIT menu: the HEALTH page's rows as text (12 rows of 24 bytes).
@@ -210,10 +200,12 @@ pub const HOST_MENU_HEALTH: u32 = 28;
 pub const HOST_MENU_HEALTH_MENU: u32 = 29;
 /// The ids of the host directory this build knows (`[[host_dir]]` of abi.toml).
 pub const HOST_COUNT: usize = 30;
-/// The ids of the host directory the package fills (`owner = "package"` of `[[host_dir]]`).
-pub const HOST_PACKAGE_OWNED: [u32; 28] = [0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29];
-/// The ids of the host directory the core fills (`owner = "core"` of `[[host_dir]]`).
+/// The ids of the host directory the package fills (`owner = "package"` of `[[host_dir]]`; for `removed`, the reserved ids that resolve to nothing).
+pub const HOST_PACKAGE_OWNED: [u32; 23] = [0, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 21, 24, 25, 26, 27, 28, 29];
+/// The ids of the host directory the core fills (`owner = "core"` of `[[host_dir]]`; for `removed`, the reserved ids that resolve to nothing).
 pub const HOST_CORE_OWNED: [u32; 2] = [4, 5];
+/// The ids of the host directory the removed fills (`owner = "removed"` of `[[host_dir]]`; for `removed`, the reserved ids that resolve to nothing).
+pub const HOST_REMOVED_OWNED: [u32; 5] = [18, 19, 20, 22, 23];
 /// Provider slots of the boot plan (`[limits.format] provider_max` of sdk/sdk.toml), separate from the selection.
 pub const PROVIDER_MAX: usize = 8;
 
@@ -483,13 +475,22 @@ pub struct DkrtLive {
     pub unloaded: u32,
     /// LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD of the last job (0: none yet)
     pub op: u32,
+    /// counts the jobs queued (the first is 1, 0: none yet): the job these words describe
+    pub serial: u32,
+    /// the serial of the last job that finished (0: none), so a caller whose job ended and another started still finds its end
+    pub done_serial: u32,
+    /// the result of that job
+    pub done_result: i32,
 }
-const _: () = assert!(size_of::<DkrtLive>() == 20, "DkrtLive size");
+const _: () = assert!(size_of::<DkrtLive>() == 32, "DkrtLive size");
 const _: () = assert!(offset_of!(DkrtLive, phase) == 0, "DkrtLive.phase");
 const _: () = assert!(offset_of!(DkrtLive, result) == 4, "DkrtLive.result");
 const _: () = assert!(offset_of!(DkrtLive, step) == 8, "DkrtLive.step");
 const _: () = assert!(offset_of!(DkrtLive, unloaded) == 12, "DkrtLive.unloaded");
 const _: () = assert!(offset_of!(DkrtLive, op) == 16, "DkrtLive.op");
+const _: () = assert!(offset_of!(DkrtLive, serial) == 20, "DkrtLive.serial");
+const _: () = assert!(offset_of!(DkrtLive, done_serial) == 24, "DkrtLive.done_serial");
+const _: () = assert!(offset_of!(DkrtLive, done_result) == 28, "DkrtLive.done_result");
 
 /// dkrt_module result: one loaded module.
 #[repr(C)]
@@ -801,7 +802,7 @@ pub mod sig {
     /// The index-th loaded module (in load-slot order); OK, or E_NOT_FOUND past the end.
     pub type dkrt_module = unsafe extern "C" fn(index: u32, out: *mut DkrtModule) -> i32;
 
-    /// The index-th loaded effect that has a page (row order): tab, module id, allowed routes, default, the route it runs on and the route the settings give it; OK, or E_NOT_FOUND past the end.
+    /// Removed: the effects of a module are the fx service's words in the MODULES reply (its Describe part). The slot stays (the table is append-only) and answers E_NOT_FOUND.
     pub type dkrt_fx = unsafe extern "C" fn(index: u32, out: *mut DkrtFx) -> i32;
 
     /// Resident query v1. UI task only, synchronous. Use the provider's typed wrapper. E_MISSING means the provider or facet is absent, E_CONTRACT an incompatible provider or invalid call, E_CONTEXT outside the UI task, E_BUSY for a nested call.
@@ -825,7 +826,7 @@ pub mod sig {
     /// Remove a function added with dkrt_poll_add; no effect when it is not in the table.
     pub type dkrt_poll_remove = unsafe extern "C" fn(f: usize);
 
-    /// Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The observer ends what it holds for that owner; the module's code and memory are still there during the call, so it may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0.
+    /// Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module or service file that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The observer ends what it holds for that owner; the module's code and memory are still there during the call, so it may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0.
     pub type dkrt_unload_observer_add = unsafe extern "C" fn(f: usize) -> i32;
 
     /// Remove a function added with dkrt_unload_observer_add; no effect when it is not in the table.
@@ -834,7 +835,7 @@ pub mod sig {
     /// What the running module code is: 0 none (the call is not from a module), PHASE_INIT (1) its `init`, 2 its `tick`, 3 its `fini`, 4 a callback (a host command handler, a job or I/O step, an intro frame, a menu action). An adapter uses it to refuse a call that is allowed only in `init`. UI task.
     pub type dkrt_phase = unsafe extern "C" fn() -> u32;
 
-    /// The owner id of a module context (`dk_module_ctx *`): the module's record index, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded content module (a service file has a context too, but its record is never given out: the observers are for content modules).
+    /// The owner id of a module context (`dk_module_ctx *`): the record index of a content module or of a service file, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded module or service file.
     pub type dkrt_ctx_owner = unsafe extern "C" fn(ctx: usize) -> i32;
 
     /// A menu object was built for a module (core/ui calls it from dk_ui_menu_new with the descriptor's fill function and the descriptor): the module record whose loaded range holds `code`, else `data`, owns one more menu, and a menu keeps pointers into the module's code and data, so the runtime refuses to unload or reload that module (E_RELOAD_MENUS) until the next boot. Neither address in a module (the firmware image, and the DIGIKIT menu, whose own menus count against no content module): no effect.
@@ -908,4 +909,7 @@ pub mod sig {
 
     /// Called by core/ui at the end of the SETTINGS rebuild (the `ui.settings_rows` hook of the system package): the package adds its rows to the stock menu `settings_menu` (the menu object the rebuild's hook gets) with dk_ui_stock_row. With no package, a package built before the hook, or a null hook entry, it does nothing: the stock menu stays as it is.
     pub type dkrt_ui_settings_rows = unsafe extern "C" fn(settings_menu: *mut u8);
+
+    /// Called by core/ui: the name of the loaded record `owner` (the number `dkrt_ctx_owner` gave: a content module or a service file) into `out`, 32 bytes, NUL padded, as the file's header has it. core/ui keys the SETTINGS rows of an owner by it. OK, or E_NOT_FOUND for a record that is not loaded, with no package, or with a package built before the entry.
+    pub type dkrt_record_name = unsafe extern "C" fn(owner: u32, out: *mut u8) -> i32;
 }

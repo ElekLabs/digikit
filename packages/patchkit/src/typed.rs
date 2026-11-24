@@ -330,7 +330,7 @@ pub struct FxDef {
     /// Where the effect runs when the settings do not say otherwise: `"master"` (the default) or `"send"` (a send bus: one amount for each track).
     #[serde(default)]
     pub route: Option<String>,
-    /// The routes the user may choose in DIGIKIT > FX ROUTES, a non-empty list of `"master"` and `"send"`. Left out: `["master"]`, or `["send", "master"]`
+    /// The routes the user may choose in SETTINGS > FX ROUTING, a non-empty list of `"master"` and `"send"`. Left out: `["master"]`, or `["send", "master"]`
     /// when `route = "send"` (see `register::fx_routes`).
     #[serde(default)]
     pub routes: Option<Vec<String>>,

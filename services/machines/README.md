@@ -14,27 +14,29 @@ src/slots.rs      the page's click state (`Slots`), with `slots/` the detector a
 src/parking.rs    the parking passes of absent numbers (`Parking`)
 src/info.rs       the image table `machines_info`: layout, binding into `DKRT_MF_TAB`
 dks/              the service file: `lib.rs` (the `service!` call), `hooks.rs` and `hooks-*.s` (the machine framework's hooks), `fw.rs` (the firmware calls, the page's key and turn
-                  entries, `dk_param_get`, `dk_param_set`), `builder.rs` (the builder exports, which reach the owner), `rt.rs`, `gen_exports.rs` (generated)
+                  entries, `dk_param_get`, `dk_param_set`), `builder.rs` (the builder exports, which reach the owner), `gen_exports.rs` (generated)
 tests/            host tests over `FakeCore`: `state.rs` (the owner), `records.rs`, `build.rs`, `assign.rs`, `guard.rs`, `file.rs` (the file's code over the cell), `contract.rs` (the
                   shared suite on both profiles through `provider_contract`, and the placeholder and parking cases over its `Lifecycle`)
 ```
 
-State: the owner holds the collection of the builder calls, the click state, the parking passes and the state between `attach` and the per-record `apply`. Four tables stay named
-statics of the crate (D7 of the RC3 briefs), each with its reader:
+State: the owner holds the collection of the builder calls, the click state, the parking passes, the state between `attach` and the per-record `apply`, and the registry state
+(`RegState`: the owners of the parameter and page rows, and the strings that the firmware's registry rows point at; they are valid while the service is loaded, which is as long as the owner
+lives). Four tables stay named statics of the crate (D7 of the RC3 briefs), each with its reader, and one cell is shared:
 
 | Static | Reader |
 | --- | --- |
-| `DKRT_REG` (`registry.rs`) | device tests and tools by symbol; the registry rows' owners and texts |
 | `DKRT_ASSIGN` (`assign.rs`) | device tests by symbol (`machines-kit`, `fx-live`); the sticky map |
-| `DKRT_VROWS` (`rows.rs`) | the runtime's DSP code (`abi/dsp.rs`); the voice rows |
-| `DKRT_GUARD` (`guard.rs`) | the MODULES reply, on another task than the poll that writes it |
+| `DKRT_VROWS` (`rows.rs`) | the runtime's DSP code (`abi/dsp.rs`); the voice rows; `Describe` on the MODULES task |
+| `DKRT_GUARD` (`guard.rs`) | the MODULES reply (`Describe`), on another task than the poll that writes it |
 | `DKRT_MF_TAB` (`info.rs`) | the assembler hooks (`T_*` offsets of `hooks-*.s`) |
+| `MACH_OWNER` (`registry.rs`, a `Shared<[u8; MAX_MACH]>`) | `Describe` on the MODULES task, and the owner (`attach`, `detach`, the parking pass, the load check) |
 
-`DKRT_REG` stays a static for RC3 for one reason: `mach_owner` is read by `dk_machines_module_info` (`dks/src/rt.rs:11` -> `modules.rs:52`) on the MODULES reply task, outside the
-owner, so it must not sit behind the `Owner` guard (a call made while the owner is busy is refused and the reply would lose the module's machine types). The registry strings (`mach_name`,
-`mach_short`, the `empty_rep` placeholder that `remove` and `reset_machine_row` write as a row's name pointer) are pointed at by the firmware's registry rows only while the service is up, so
-they alone would be safe in the owner. The free functions of `unload.rs`, `parking.rs`, `check.rs`, `apply.rs` and `modules.rs` reach the static through `rstate()`. The owner keeps the rest
-(the collection, the click state, the parking passes, the slots). E1 step 4 (Describe replaces dk_machines_module_info) moves mach_owner into a Shared cell and the rest into the owner.
+`Describe::describe` (`modules::describe`) gives the five words of the MODULES reply for a module record: the voice rows it owns (mask); the guard's fault count; `nt` with the guard-off flag in bit 8;
+the types 0 to 3 and 4 to 7 (one byte each, type `i` in byte `i % 4`). It has no object and never enters the owner (`Describe::describe` has no `&self`): the command handler may ask while the UI task is
+inside a call of the owner (a tick, a hook), and the owner's guard would refuse it. It reads `MACH_OWNER` (`Shared`: one byte copied per row, eight rows at most: the longest section is a copy of 8 bytes
+under the interrupt mask), `DKRT_VROWS` and `DKRT_GUARD` (read by words: a task switch cannot tear a word). A module with no voice row, no type and no fault gets no word, so no section.
+The registry state moved into the owner in E1 step 4 (it was the static `DKRT_REG`; no tool reads it by symbol any more). The free functions of `unload.rs`, `parking.rs`, `check.rs`, `apply.rs` and
+`build/` take the registry state from the owner's methods.
 
 Without an owner (before `init` made it, after `fini`) the file's calls answer the neutral way: a builder call returns null or does nothing, `dk_param_get` and
 `dk_param_set` answer `E_STATE` (no flow), the key hook passes the event and the turn hook consumes nothing. The turn hook ends the click flow in the owner, then runs the page's
