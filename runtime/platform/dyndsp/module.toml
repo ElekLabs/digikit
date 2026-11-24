@@ -86,8 +86,8 @@ _fxs_slotmap = "dsp.fx.value.send.slot_map"
 _fxs_fadetab = "dsp.fx.value.send.slot_fade_flags"
 _fxs_return = "dsp.fx.value.send.return_bus"
 
-# The DSP's machine selector (Digitakt II): the table that maps a machine type to the word that picks the sample renderer is in the DSP's memory, and no load-time path writes there, so it stays
-# in the image. The copy has one word per type, the rows of core/rows appended with their clone's word; the literal that loads the table's address follows. (The Digitone II has no such table.)
+# The DSP's machine selector (a device whose DSP memory holds it): the table that maps a machine type to the word that picks the sample renderer is in the DSP's memory, and no load-time path writes there, so it stays
+# in the image. The copy has one word per type, the rows of core/rows appended with their clone's word; the literal that loads the table's address follows. (A device without the table has no such patch.)
 [[section]]
 name = "mf_selector"
 region = "dsp.l2"

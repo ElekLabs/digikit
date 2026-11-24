@@ -664,11 +664,11 @@ fn check_dks(
                 matches!(key, "hooks" | "patches") && c.iter().any(|(x, d)| x == n && d.is_empty())
             };
             let anywhere: BTreeSet<String> = entries.iter().map(|(n, _)| n.clone()).collect();
-            for dev in ["dt2", "dn2"] {
+            for (first, dev) in ["dt2", "dn2"].into_iter().enumerate() {
                 let (m, c) = (hook_set(entries, dev), hook_set(&c, dev));
                 for n in c.difference(&m) {
                     if plain(n) {
-                        if !anywhere.contains(n) && dev == "dt2" {
+                        if !anywhere.contains(n) && first == 0 {
                             out.push(format!("dks/src/lib.rs: service! takes the {noun} `{n}`, but dks/module.toml has no {what} for it"));
                         }
                         continue;

@@ -193,7 +193,7 @@ fn the_image_keeps_only_the_machine_hooks_that_stay_in_it() {
         // a machine is a run-time module: the registry has only the reserved rows the machines service fills (`[limits] machine_rows`)
         assert_eq!(
             reg(&p, "machines")["entries"].as_array().unwrap().len() as u64,
-            patchkit::devdata::by_short("dn2")
+            patchkit::devdata::by_syx_id(Firmware::parse(&image(file).unwrap()).unwrap().device_id)
                 .and_then(|d| d.limit_of("machine_rows"))
                 .unwrap()
         );

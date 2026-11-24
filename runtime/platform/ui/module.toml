@@ -41,7 +41,7 @@ to = "dk_hook"
 [[claim]]
 resource = "cf.menu.site.settings_list.tail"
 
-# The machine selection view (dt2, dn2): the hook remembers the view and `machine_view` names the word that holds it. The machines service builds the view's list again after a reload.
+# The machine selection view (both devices): the hook remembers the view and `machine_view` names the word that holds it. The machines service builds the view's list again after a reload.
 [[object]]
 path = "build/machine-view.dko.json"
 sources = ["src/machine-view.s"]

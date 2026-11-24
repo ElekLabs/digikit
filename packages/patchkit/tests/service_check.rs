@@ -5,6 +5,10 @@ use patchkit::svccheck::check;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// The two devices of the checker's per-device lists, in its order.
+const DEV_A: &str = "dt2";
+const DEV_B: &str = "dn2";
+
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -301,7 +305,7 @@ fn service_hooks_equal_the_hook_entries_per_device() {
     append(&dir.join("dks/module.toml"), &entry("cf.a.hook.x", ""));
     append(
         &dir.join("dks/module.toml"),
-        &entry("cf.a.hook.y", "devices = [\"dn2\"]\n"),
+        &entry("cf.a.hook.y", &format!("devices = [\"{DEV_B}\"]\n")),
     );
     assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
     // the call has a hook the manifest has not, and the manifest has one the call has not, each for its device
@@ -318,7 +322,7 @@ fn service_hooks_equal_the_hook_entries_per_device() {
     assert!(
         mentions(
             &found,
-            "[[hook]] `cf.a.hook.y` on dn2 is not in the service! hook list"
+            &format!("[[hook]] `cf.a.hook.y` on {DEV_B} is not in the service! hook list")
         ),
         "{found:?}"
     );
@@ -345,11 +349,11 @@ fn a_plain_hook_needs_a_manifest_entry_on_some_device() {
     fs::write(dir.join("dks/src/hooks.rs"), "").unwrap();
     append(
         &dir.join("dks/module.toml"),
-        &entry("cf.a.hook.x", "devices = [\"dt2\"]\n"),
+        &entry("cf.a.hook.x", &format!("devices = [\"{DEV_A}\"]\n")),
     );
     append(
         &dir.join("dks/module.toml"),
-        &entry("cf.a.hook.y", "devices = [\"dn2\"]\n"),
+        &entry("cf.a.hook.y", &format!("devices = [\"{DEV_B}\"]\n")),
     );
     // both declared plain: each has an entry on one device
     fs::write(
@@ -384,7 +388,7 @@ fn a_plain_hook_needs_a_manifest_entry_on_some_device() {
     assert!(
         mentions(
             &found,
-            "[[hook]] `cf.a.hook.y` on dn2 is not in the service! hook list"
+            &format!("[[hook]] `cf.a.hook.y` on {DEV_B} is not in the service! hook list")
         ),
         "{found:?}"
     );
