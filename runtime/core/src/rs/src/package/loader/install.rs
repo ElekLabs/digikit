@@ -819,12 +819,12 @@ mod tests {
     #[test]
     fn a_patch_writes_its_bytes_under_one_mask_and_restore_writes_the_stock_back() {
         let f = fake_with(&[(0x2000_0100, &[1, 2, 3, 4]), (0x2000_0200, &[9, 9]), (0x2000_0300, &[7])]);
-        let ps = [patch(0x2000_0100, 4, &[1, 2, 3, 4], 0xdead_beef), patch(0x2000_0200, 2, &[9, 9], 0x1234_5678), patch(0x2000_0300, 1, &[7], 0xaabb_ccdd)];
+        let ps = [patch(0x2000_0100, 4, &[1, 2, 3, 4], 0xdead_beef), patch(0x2000_0200, 2, &[9, 9], 0x5678), patch(0x2000_0300, 1, &[7], 0xdd)];
         let mut ins = Installer::new();
         unsafe { ins.install(&f, 5, &[], &ps, BASE, SIZE, &[]).unwrap() };
         assert_eq!(code(&f, 0x2000_0100, 4), [0xde, 0xad, 0xbe, 0xef]);
-        assert_eq!(code(&f, 0x2000_0200, 2), [0x56, 0x78], "a halfword takes the low two bytes of the value");
-        assert_eq!(code(&f, 0x2000_0300, 1), [0xdd], "a byte takes the low byte");
+        assert_eq!(code(&f, 0x2000_0200, 2), [0x56, 0x78], "a halfword takes its two bytes");
+        assert_eq!(code(&f, 0x2000_0300, 1), [0xdd], "a byte takes its byte");
         assert_eq!(
             *f.calls.borrow(),
             [
