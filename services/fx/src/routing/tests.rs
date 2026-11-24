@@ -214,3 +214,39 @@ fn a_list_or_effect_pick_says_busy_when_a_dialog_is_already_open() {
     routing.pick_effect(&a.core, &mut ui, 0);
     assert_eq!(ui.toasts, ["BUSY: TRY AGAIN", "BUSY: TRY AGAIN"]);
 }
+
+#[test]
+fn a_send_only_effect_with_no_cell_free_offers_nothing_and_says_so() {
+    let a = Arena::new(1);
+    a.effect(0, "fx/gain-send", SEND, Some(1));
+    a.effect(1, "fx/send-only", SEND, Some(0));
+    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
+    routing.list(&a.core, &mut ui);
+    // the second effect is the second row of the list: its only route is taken by the first
+    routing.pick_effect(&a.core, &mut ui, 1);
+    assert_eq!(ui.choices.len(), 1, "no route popup, only the list");
+    assert_eq!(ui.toasts.len(), 1);
+    assert!(
+        ui.toasts[0].contains("SEND-ONLY") && ui.toasts[0].ends_with("NO ROUTE FREE"),
+        "{:?}",
+        ui.toasts
+    );
+    assert_eq!(
+        a.setting("fx/send-only"),
+        Some(std::vec![0]),
+        "nothing is saved"
+    );
+}
+
+#[test]
+fn a_send_only_effect_with_a_cell_free_offers_the_send_route_alone() {
+    let a = Arena::new(2);
+    a.effect(0, "fx/gain-send", SEND, Some(1));
+    a.effect(1, "fx/send-only", SEND, Some(0));
+    let (mut routing, mut ui) = (Routing::new(), FakeUi::default());
+    routing.list(&a.core, &mut ui);
+    routing.pick_effect(&a.core, &mut ui, 1);
+    assert_eq!(ui.choices.len(), 2);
+    assert_eq!(ui.choices[1].2, Step::Route);
+    assert_eq!(ui.choices[1].1, ["SEND"]);
+}
