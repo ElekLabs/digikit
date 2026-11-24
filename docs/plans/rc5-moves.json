@@ -1,0 +1,9 @@
+{
+  "image-modules/adapters/card-guard": "runtime/platform/card-guard",
+  "image-modules/adapters/peer-image": "runtime/platform/peer-image",
+  "image-modules/adapters/plusdrive-write": "runtime/platform/plusdrive-write",
+  "image-modules/adapters/sdhc-large": "runtime/platform/sdhc-large",
+  "image-modules/adapters/usb-bulk-audio": "runtime/platform/usb-bulk-audio",
+  "image-modules/adapters/usb-bulk": "runtime/platform/usb-bulk",
+  "image-modules/fixes/introblank": "runtime/platform/introblank"
+}
