@@ -31,7 +31,7 @@ struct Host {
     /// Where firmware files picked with Open... are put for `firmware.load` (`<run dir>/open`).
     open_dir: PathBuf,
     /// The firmware file the console shows, reloads and watches: the startup file, or the file set with `emu_set_source`
-    /// (Open, Load on start).
+    /// (Open, Auto-load firmware).
     source: std::sync::Mutex<Option<PathBuf>>,
     launch: Launch,
 }
@@ -717,6 +717,8 @@ fn main() {
             emu_card_load,
             card_open_folder,
             firmware::firmware_prepare,
+            firmware::system_package,
+            firmware::system_package_plan,
             firmware::firmware_save,
             symbols::symbols_pick,
             symbols::symbols_read,

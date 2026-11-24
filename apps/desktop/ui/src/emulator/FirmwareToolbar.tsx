@@ -103,16 +103,19 @@ export default function FirmwareToolbar(props: {
         </Show>
       </span>
       <span class="sp" />
-      <label class="tag opt" title="Boot this firmware file when the app opens (a file named on the command line wins)">
+      <label
+        class="tag opt"
+        title="Reopen the last opened firmware when Workbench starts (a command-line file takes precedence)"
+      >
         <input type="checkbox" checked={loadOnStart()} onChange={(e) => chooseLoadOnStart(e.currentTarget.checked)} />
-        <span class="long">Load on start</span>
-        <span class="short">On start</span>
+        <span class="long">Auto-load firmware</span>
+        <span class="short">Auto-load</span>
       </label>
       <label
         class="tag opt"
         title={
           runtimeHere()
-            ? 'Patch the digikit runtime into a stock firmware when it is opened or reloaded (the next Open or Reload)'
+            ? 'At Open or Reload, Patchkit applies the digikit runtime and Workbench puts the system package on the card for module support.'
             : `${deviceNameOf(props.device)} has no digikit runtime: not available on this device`
         }
       >

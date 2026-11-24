@@ -9,6 +9,7 @@ import { createDesktopDefaultModules } from './default-modules';
 import { hostWasmSource } from './desktop-wasm';
 import { flashEntry } from './log-core';
 import type { LogWriter } from './log-state';
+import { readSystemPackage } from './system-package';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 
 /** The answer of `firmware_prepare`: 4 bytes of JSON length (big endian), the summary JSON, the image. */
@@ -37,6 +38,7 @@ export function createDesktopFirmwareEnv(
       const { summary, image } = unpack(raw);
       return preparedFromSummary(summary, image);
     },
+    systemPackage: host.firmware.systemPackage && (() => readSystemPackage(host.firmware)),
     async sender(total) {
       return (await kit()).sender(total);
     },

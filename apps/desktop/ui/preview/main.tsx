@@ -36,6 +36,7 @@ export function createWorkbenchEnvironment(): WorkbenchEnvironment {
   };
   const host = {
     ...base,
+    firmware: { ...base.firmware, systemPackage: undefined },
     rpc,
     library: fixture.library,
     analyzer: createPreviewAnalyzer(),

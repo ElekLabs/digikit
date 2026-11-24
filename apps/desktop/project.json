@@ -26,6 +26,10 @@
       "dependsOn": [
         "build:ui",
         {
+          "projects": ["core/runtime"],
+          "target": "package"
+        },
+        {
           "projects": ["@digi/web"],
           "target": "patchkit-wasm"
         },
@@ -39,7 +43,8 @@
             "core/services/fx",
             "core/services/lfo",
             "core/services/samples",
-            "core/services/project"
+            "core/services/project",
+            "core/services/shortcuts"
           ],
           "target": "pack"
         }

@@ -13,6 +13,12 @@ use dkrt_sdk::syspkg::Header;
 use dkrt_sdk::syspkg::body::{BodyHeader, HEADER_BYTES};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::path::Path;
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
+
+mod install_plan;
+pub use install_plan::{InstallAction, InstallRefusal, install_plan};
 
 /// The entry function the package exports.
 pub const ENTRY: &str = "dkpkg_entry";
@@ -195,6 +201,277 @@ pub fn pack(body: &[u8], table_major: u16, table_minor: u16) -> Result<Vec<u8>> 
     Ok(file)
 }
 
+/// Check the built system package's resident-table requirement and body integrity.
+pub fn validate(file: &[u8], resident: (u16, u16)) -> Result<()> {
+    checked_header(file, resident).map(|_| ())
+}
+
+fn checked_header(file: &[u8], (resident_major, resident_minor): (u16, u16)) -> Result<Header> {
+    let header = Header::decode(file).map_err(|e| err!("invalid system package header: {e:?}"))?;
+    if !header.compatible(resident_major, resident_minor) {
+        return Err(err!(
+            "system package requires resident table {}.{}, this build provides {}.{}",
+            header.table_major(),
+            header.table_minor(),
+            resident_major,
+            resident_minor,
+        ));
+    }
+    let body = &file[dkrt_sdk::syspkg::HEADER_BYTES..];
+    if body.len() != header.size() as usize {
+        return Err(err!("system package body size differs from its header"));
+    }
+    let digest: [u8; 32] = Sha256::digest(body).into();
+    if !header.body_matches(header.size(), &digest) {
+        return Err(err!("system package body checksum differs from its header"));
+    }
+    Ok(header)
+}
+
+/// A system package checked against this build's resident ABI.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug)]
+pub struct Artifact {
+    bytes: Vec<u8>,
+    header: Header,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub struct Metadata {
+    table: (u16, u16),
+    bytes: usize,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Metadata {
+    /// The packed runtime version the package is prepared for.
+    pub fn runtime_version(&self) -> u32 {
+        crate::dkm::runtime_version()
+    }
+
+    /// The package's required resident table major and minor.
+    pub fn table(&self) -> (u16, u16) {
+        self.table
+    }
+
+    /// The complete file size.
+    pub fn bytes(&self) -> usize {
+        self.bytes
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Artifact {
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self> {
+        use dkrt_abi::resident::{RESIDENT_MAJOR, RESIDENT_MINOR};
+        let header = checked_header(&bytes, (RESIDENT_MAJOR, RESIDENT_MINOR))?;
+        let body = &bytes[dkrt_sdk::syspkg::HEADER_BYTES..];
+        let placed =
+            BodyHeader::decode(body).map_err(|e| err!("invalid system package body: {e:?}"))?;
+        if placed.placed_bytes() > dkrt_sdk::PACKAGE_BYTES as u64 {
+            return Err(err!(
+                "the system package body does not fit in the package block"
+            ));
+        }
+        let mut image = body[HEADER_BYTES..HEADER_BYTES + placed.image as usize].to_vec();
+        dkrt_sdk::syspkg::body::relocate(&mut image, placed.reloc_table(body), 0)
+            .map_err(|e| err!("invalid system package relocations: {e:?}"))?;
+        Ok(Self { bytes, header })
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn metadata(&self) -> Metadata {
+        Metadata {
+            table: (self.header.table_major(), self.header.table_minor()),
+            bytes: self.bytes.len(),
+        }
+    }
+}
+
+/// Link the same committed system package and menu objects used by `core/runtime:package`.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_from_repo(root: &Path) -> Result<Artifact> {
+    build_from_runtime_object(root, &root.join("runtime/core/build/package.dko.json"))
+}
+
+/// Build the companion of the selected runtime object with the repository's menu object.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_from_runtime_object(root: &Path, object: &Path) -> Result<Artifact> {
+    let menu = root.join("runtime/apps/digikit-menu/build/digikit-menu.dko.json");
+    let (bytes, _, _) = build_files(object, [menu.as_path()])?;
+    Artifact::from_bytes(bytes)
+}
+
+/// Save an image and, when it contains the resident runtime, its sibling system package.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn save_firmware(
+    path: &Path,
+    image: &[u8],
+    package: Option<&Artifact>,
+) -> Result<Option<PathBuf>> {
+    use std::fs;
+
+    let Some(package) = package else {
+        fs::write(path, image).map_err(|e| err!("{}: {e}", path.display()))?;
+        return Ok(None);
+    };
+    let companion = companion_path(path)?;
+    let image_path = resolve_output(path).unwrap_or_else(|| path.to_path_buf());
+    let companion_path = resolve_output(&companion).unwrap_or_else(|| companion.clone());
+    let (staged_image, replaces_image) =
+        stage_output(&image_path, image).map_err(|e| err!("{}: {e}", path.display()))?;
+    let (staged_package, _) = stage_output(&companion_path, package.bytes())
+        .map_err(|e| err!("{}: {e}", companion.display()))?;
+
+    // Keep the old image available until the companion has been published.
+    let backup = if replaces_image {
+        let dir = tempfile::tempdir_in(output_parent(&image_path))
+            .map_err(|e| err!("backing up {}: {e}", path.display()))?;
+        let old = dir.path().join("image");
+        fs::hard_link(&image_path, &old)
+            .or_else(|_| fs::copy(&image_path, &old).map(|_| ()))
+            .map_err(|e| err!("backing up {}: {e}", path.display()))?;
+        Some(dir)
+    } else {
+        None
+    };
+    staged_image
+        .persist(&image_path)
+        .map_err(|e| err!("{}: {}", path.display(), e.error))?;
+    if let Err(e) = staged_package.persist(&companion_path) {
+        let restore = match &backup {
+            Some(dir) => fs::rename(dir.path().join("image"), &image_path),
+            None => fs::remove_file(&image_path),
+        };
+        if let Err(restore) = restore {
+            let saved = backup.map(|dir| dir.keep().join("image"));
+            let location = saved.map_or_else(String::new, |p| {
+                format!("; previous image saved at {}", p.display())
+            });
+            return Err(err!(
+                "{}: {}; restoring {} failed: {restore}{location}",
+                companion.display(),
+                e.error,
+                path.display(),
+            ));
+        }
+        return Err(err!("{}: {}", companion.display(), e.error));
+    }
+    Ok(Some(companion))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn stage_output(path: &Path, bytes: &[u8]) -> std::io::Result<(tempfile::NamedTempFile, bool)> {
+    use std::fs::{self, OpenOptions};
+    use std::io::{Error, ErrorKind, Write};
+
+    let previous = match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => {
+            OpenOptions::new().write(true).open(path)?;
+            Some(metadata.permissions())
+        }
+        Ok(_) => {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "output is not a regular file",
+            ));
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => None,
+        Err(e) => return Err(e),
+    };
+    let mut builder = tempfile::Builder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(fs::Permissions::from_mode(0o666));
+    }
+    let mut staged = builder.tempfile_in(output_parent(path))?;
+    staged.write_all(bytes)?;
+    let replacing = previous.is_some();
+    if let Some(permissions) = previous {
+        staged.as_file().set_permissions(permissions)?;
+    }
+    staged.as_file().sync_all()?;
+    Ok((staged, replacing))
+}
+
+/// Find the sibling system package output, rejecting paths that alias the image.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn companion_path(image: &Path) -> Result<PathBuf> {
+    let package = image.with_extension("dksp");
+    if image
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("dksp"))
+        || paths_alias(image, &package)
+    {
+        return Err(err!(
+            "firmware and system package paths coincide at {}; choose a firmware output with a different extension",
+            package.display()
+        ));
+    }
+    Ok(package)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn paths_alias(a: &Path, b: &Path) -> bool {
+    if a == b {
+        return true;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if let (Ok(a), Ok(b)) = (std::fs::metadata(a), std::fs::metadata(b)) {
+            return a.dev() == b.dev() && a.ino() == b.ino();
+        }
+    }
+    matches!((resolve_output(a), resolve_output(b)), (Some(a), Some(b))
+        if a == b || (a.parent() == b.parent()
+            && a.file_name().zip(b.file_name()).is_some_and(|(a, b)| a.eq_ignore_ascii_case(b))))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn output_parent(path: &Path) -> &Path {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn resolve_output(path: &Path) -> Option<PathBuf> {
+    let mut path = path.to_path_buf();
+    for _ in 0..40 {
+        if let Ok(existing) = path.canonicalize() {
+            return Some(existing);
+        }
+        let parent = output_parent(&path);
+        match std::fs::read_link(&path) {
+            Ok(target) => path = parent.join(target),
+            Err(_) => return Some(parent.canonicalize().ok()?.join(path.file_name()?)),
+        }
+    }
+    None
+}
+
+fn build_files<'a>(
+    object: &Path,
+    parts: impl IntoIterator<Item = &'a Path>,
+) -> Result<(Vec<u8>, u16, u16)> {
+    let read_object = |path: &Path| {
+        let text = std::fs::read_to_string(path).map_err(|e| err!("{}: {e}", path.display()))?;
+        Dko::parse(&text).map_err(|e| err!("{}: {e}", path.display()))
+    };
+    let mut obj = read_object(object)?;
+    for p in parts {
+        let part = read_object(p)?;
+        obj = with_part(&obj, &part).map_err(|e| err!("{}: {e}", p.display()))?;
+    }
+    let (body, major, minor) = body(&obj).map_err(|e| err!("{}: {e}", object.display()))?;
+    Ok((pack(&body, major, minor)?, major, minor))
+}
+
 fn table(s: &str) -> Result<(u16, u16)> {
     let (major, minor) = s
         .split_once('.')
@@ -235,15 +512,7 @@ pub fn run(args: &[String]) -> Result<()> {
                 "syspkg build takes the table version from the package"
             ));
         }
-        let text = std::fs::read_to_string(body).map_err(|e| err!("{body}: {e}"))?;
-        let mut obj = Dko::parse(&text).map_err(|e| err!("{body}: {e}"))?;
-        for p in &parts {
-            let text = std::fs::read_to_string(p).map_err(|e| err!("{p}: {e}"))?;
-            let part = Dko::parse(&text).map_err(|e| err!("{p}: {e}"))?;
-            obj = with_part(&obj, &part).map_err(|e| err!("{p}: {e}"))?;
-        }
-        let (b, major, minor) = self::body(&obj).map_err(|e| err!("{body}: {e}"))?;
-        (pack(&b, major, minor)?, major, minor)
+        build_files(Path::new(body), parts.iter().map(Path::new))?
     } else {
         if !parts.is_empty() {
             return Err(err!("--part belongs to syspkg build"));

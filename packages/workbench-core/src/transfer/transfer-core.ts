@@ -57,8 +57,17 @@ export function available(view: TransferView, showTests: boolean): { group: Grou
   }));
 }
 
+/** Dependency refusals to show alongside the visible library rows. */
+export function visibleRefusals(view: TransferView, showTests: boolean): ServiceRefusal[] {
+  const refusals = view.refusals ?? [];
+  if (showTests || !refusals.length) return refusals;
+  const testIds = new Set(view.modules.filter((r) => r.test).map((r) => r.id));
+  return refusals.filter((r) => !testIds.has(r.module));
+}
+
 /** The module ids to install: the ticked library modules, in list order. (Ticks mean "install these"; nothing else.) */
 export function installModules(view: TransferView, ticks: Set<string>): string[] {
+  if (view.coreOnly) return [];
   return view.modules.filter((r) => r.id && ticks.has(rowKey(r))).map((r) => r.id as string);
 }
 

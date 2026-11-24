@@ -3,6 +3,8 @@
 // apps/desktop/src-tauri/src/main.rs (`generate_handler!`) and its command modules. The shapes here follow the Rust signatures and
 // carry no UI types, so the folder can move into a shared package (the browser app would implement the same interface).
 
+import type { SystemPackage } from '../runtime/activate-system-package';
+
 /** The emulator control RPC (`emu_call`): one protocol method of the controller (docs/CONTROL.md). */
 export interface EmuRpc {
   /** `session`: the session token of the webview; the controller refuses the call when it is no longer the current one (`firmware.load` and `restart` start the session they carry). */
@@ -144,6 +146,9 @@ export interface FirmwareHost {
   prepare(stock: Uint8Array, options: { restore: boolean; set: string }): Promise<ArrayBuffer>;
   /** The system's save dialog for an image; the path, or null when the user cancels. */
   save(bytes: Uint8Array, name: string): Promise<string | null>;
+  /** The built system package, prefixed by the packed runtime version (4 bytes, big endian). */
+  systemPackage?(): Promise<ArrayBuffer>;
+  systemPackagePlan?: SystemPackage['plan'];
   patchkitWasm(): Promise<ArrayBuffer>;
   /** `dkprof.wasm`: address lookup and load table decoding (the Log pane's names). */
   dkprofWasm(): Promise<ArrayBuffer>;

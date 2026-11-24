@@ -20,6 +20,7 @@ import {
   type ModuleStateName,
 } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '@digi/dk-session/gen_proto';
+import { systemPackageReads } from '../runtime/system-package.ts';
 import { fitsNow, keyWarnings, type Caps, type Needs } from './fit.ts';
 import {
   PORT_NAME,
@@ -87,6 +88,8 @@ export interface TransferView {
   loaded: string[];
   /** CAPACITY of the device (null: it has none): the figures the fit of each module is judged by. */
   capacity?: Caps | null;
+  /** The resident core is running without the system package. */
+  coreOnly?: boolean;
   modules: TransferRow[];
   card_only: TransferRow[];
   /** Keep service files selectable when incomplete card reads prevent automatic service cleanup. */
@@ -783,9 +786,12 @@ async function cardFacts(
   return { needs, provides, portFw, unread };
 }
 
-export async function readLoadedModules(s: DkSession, info: DkInfoFull): Promise<DkModule[]> {
-  if (!hasCap(info, 'MODULES')) return [];
-  const modules = await s.modules();
+export async function readLoadedModules(
+  s: DkSession,
+  info: DkInfoFull,
+  pkg = systemPackageReads(info),
+): Promise<DkModule[]> {
+  const modules = (await pkg.command('MODULES', () => s.modules())) ?? [];
   if (hasCap(info, 'MODULE_UI')) return modules;
   return modules.map(({ uiInstance: _reserved, ...module }) => module);
 }
@@ -804,18 +810,27 @@ export async function buildView(
   const info = options.info ?? (await s.info());
   requireRuntime(info);
   const modules = await listModules(s, info);
+  const pkg = systemPackageReads(info);
   const readLoaded = options.readLoaded ?? readLoadedModules;
-  const loaded = (await readLoaded(s, info)).map((m) => m.name);
-  const identity = { device: info.port, runtime: fmtVersion(info.runtime), loaded };
+  let loaded = (await readLoaded(s, info, pkg)).map((m) => m.name);
+  const identity = { device: info.port, runtime: fmtVersion(info.runtime) };
   options.showModules?.({
     ...identity,
+    loaded,
     free_bytes: storeFree(info, null).free,
     capacity: null,
+    ...(pkg.coreOnly ? { coreOnly: true } : {}),
     ...mergeView(library, modules, loaded, null, {}),
   });
   const card = [...modules, ...(await listServices(s, info)), ...(await listPorts(s, info))];
-  const cap = hasCap(info, 'CAPACITY') ? await s.capacity() : null;
-  const states = hasCap(info, 'LOADS') ? await s.loadStates() : [];
+  const capacity = await pkg.command('CAPACITY', () => s.capacity());
+  const states = (await pkg.command('LOADS', () => s.loadStates())) ?? [];
+  const cap = pkg.coreOnly ? null : (capacity ?? null);
+  // If the package disappeared after MODULES, clear the inventory without sending another package command.
+  if (pkg.coreOnly && loaded.length > 0) {
+    await readLoaded(s, info, pkg);
+    loaded = [];
+  }
   const mine = new Set(library.map((m) => m.path));
   const headers: Record<string, Uint8Array | null> = {};
   if (hasCap(info, 'READ')) {
@@ -864,8 +879,10 @@ export async function buildView(
   }
   return {
     ...identity,
+    loaded,
     free_bytes: storeFree(info, cap).free,
     capacity: cap,
+    ...(pkg.coreOnly ? { coreOnly: true } : {}),
     ...merged,
     ...(incompleteCardNeeds ? { incomplete_card_needs: true } : {}),
     ...(deps ? { refusals: refused } : {}),

@@ -1,3 +1,5 @@
+import { DkError, fileHashHex, wallClock, type DkInfoFull, type Quick } from '@digi/dk-session';
+import { CAP } from '@digi/dk-session/gen_proto';
 import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import type { FirmwareEnv } from '@digi/workbench-core/firmware/env.ts';
 import { createFakeHost } from '@digi/workbench-core/host/fake-host.ts';
@@ -39,7 +41,11 @@ function file(path: string, modified_ms = 1): EmuSource {
   return { name: path.split('/').at(-1)!, path, bytes: 1024, modified_ms, device };
 }
 
-function mountFirmware(initial: Record<string, string> = {}, initialTarget: Target = { kind: 'emulator' }) {
+function mountFirmware(
+  initial: Record<string, string> = {},
+  initialTarget: Target = { kind: 'emulator' },
+  systemPackage?: Parameters<typeof createEmulatorFirmware>[0]['systemPackage'],
+) {
   const host = createFakeHost({ 'emu.setSource': (path: string) => file(path) });
   const storage = memoryKeyValue(initial);
   const lifetime = new AbortController();
@@ -84,6 +90,7 @@ function mountFirmware(initial: Record<string, string> = {}, initialTarget: Targ
       target: { target, emulatorRuntime, setEmulatorRuntime, setEmulatorAvailable: vi.fn() },
       connection: { noteConnection: vi.fn() },
       defaults,
+      systemPackage,
       logWriter,
       page,
       ...callbacks,
@@ -279,4 +286,67 @@ test('the reload action only reaches the shell registered in its own window', ()
   expect(closed).toHaveBeenCalledTimes(1);
   expect(reopened).toHaveBeenCalledTimes(1);
   expect(otherWindow).toHaveBeenCalledTimes(1);
+});
+
+test('stock patched in Workbench activates the emulator package before defaults with a MIDI target selected', async () => {
+  const runtimeVersion = 0x001f00;
+  const bytes = Uint8Array.of(1, 2, 3);
+  let ready = false;
+  const session = {
+    clock: wallClock,
+    probe: <T>(read: (quick: Quick) => Promise<T>, quick: Quick = true) => read(quick),
+    info: vi.fn(
+      async () =>
+        ({
+          port: device,
+          runtime: runtimeVersion,
+          caps: 1 << CAP.MODULES,
+          safe_mode: !ready,
+          image_id: 'fixture',
+          card_read_only: false,
+        }) as DkInfoFull,
+    ),
+    modules: vi.fn(async () => {
+      if (!ready) throw new DkError({ error: 'Package hook unavailable', kind: 'device', status: 'E_PROTO' });
+      return [];
+    }),
+    list: vi.fn(async () => []),
+    put: vi.fn(async () => {}),
+    verify: vi.fn(async () => fileHashHex(bytes)),
+    retry: vi.fn(async () => {}),
+    restart: vi.fn(async () => void (ready = true)),
+    waitForBoot: vi.fn(async () => {}),
+  };
+  const plan = vi.fn(async () => ['put', 'verify', 'restart', 'confirm_support'] as const);
+  const systemPackage = {
+    read: vi.fn(async () => ({ runtime: runtimeVersion, bytes, plan })),
+    session: vi.fn(async () => session),
+  };
+  const { firmware, runtime, defaults, jobs } = mountFirmware({}, { kind: 'midi', port: 'USB' }, systemPackage);
+  defaults.tickedFor.mockReturnValue(['test/module']);
+  session.put.mockImplementation(async () => {
+    expect(jobs.busy('target')).toBe(true);
+    expect(jobs.busy('emulator')).toBe(true);
+  });
+  await firmware.bootPath('/tmp/stock.syx', 'Loaded at');
+  await vi.waitFor(() => expect(defaults.install).toHaveBeenCalledOnce());
+  expect(runtime.loadPath).toHaveBeenCalledBefore(systemPackage.read);
+  expect(session.verify).toHaveBeenCalledBefore(session.restart);
+  expect(session.restart).toHaveBeenCalledBefore(defaults.install);
+  expect(session.modules).toHaveBeenCalledTimes(2);
+});
+
+test('an imported patched emulator image is left alone', async () => {
+  const read = vi.fn(async () => {
+    throw new Error('unexpected package read');
+  });
+  const session = vi.fn(async () => {
+    throw new Error('unexpected session');
+  });
+  const { firmware, runtime } = mountFirmware({}, { kind: 'emulator' }, { read, session });
+  runtime.firmwareInfo.mockResolvedValue({ runtime: { patched: false } });
+  await firmware.bootPath('/tmp/imported.syx', 'Loaded at');
+  expect(firmware.status()).toBe(snapshot.status);
+  expect(read).not.toHaveBeenCalled();
+  expect(session).not.toHaveBeenCalled();
 });

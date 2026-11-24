@@ -131,7 +131,8 @@ export function createPaneSelect(o: PaneSelectOptions) {
     const el = pane;
     if (!el || e.button !== 0 || o.disabled()) return;
     const t = e.target as Element;
-    if (t.closest('li, button, input, select, label, a, form, progress, .colhead, .devhead, .crumbs')) return;
+    if (t.closest('li, button, input, select, label, a, form, progress, .colhead, .devhead, .crumbs, [role="alert"]'))
+      return;
     // empty space: no text selection and no native drag from here; keys go to this pane
     e.preventDefault();
     el.focus({ preventScroll: true });

@@ -3,6 +3,7 @@
 // ports, open, close), so the target selector and the connection indicator are the same on every page.
 //   desktop: apps/desktop/ui/src/desktop-firmware.ts (patchkit in process through a Tauri command, the system's save dialog)
 //   site:    apps/web/src/firmware/web-env.ts (patchkit.wasm in a worker, a download link)
+import type { SystemPackage } from '../runtime/activate-system-package';
 import type { FlashSender, PreparedFlash, RpcMachine } from '../patch/patchkit-core';
 import type { DefaultModuleEntry, DefaultProgress } from './default-modules-core';
 
@@ -29,6 +30,8 @@ export interface FirmwareEnv {
    * `device-introblank` with the Custom boot screen toggle.
    */
   prepare(stock: Uint8Array, restore: boolean, set?: string): Promise<PreparedFlash>;
+  /** The desktop build’s system package, read before sending a runtime image. */
+  systemPackage?(): Promise<SystemPackage>;
   /** The Rust sender (`flash::Sender`) for this many messages: the pacing has one source of truth. */
   sender(total: number): Promise<FlashSender>;
   /** The RPC flash machine (`flash_rpc::RpcFlash`) for the image: the one state machine of the default route. `chunk` 0 is the default size. */

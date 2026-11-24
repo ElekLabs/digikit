@@ -89,6 +89,7 @@ def build(env: B.Env, name: str, root: Path | None) -> B.Img:
             "--root",
             str(root),
             "apply",
+            "--image-only",
             "--firmware",
             str(env.stock),
             "--modules",

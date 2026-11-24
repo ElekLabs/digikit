@@ -7,6 +7,8 @@ import { memoryKeyValue } from '../src/storage.ts';
 import { createDefaultModules } from '../src/firmware/default-modules-state.ts';
 import type { FirmwareEnv } from '../src/firmware/env.ts';
 import type { TransferApp } from '../src/transfer/app.ts';
+import { createJobs } from '../src/jobs/jobs.ts';
+import type { SystemPackage } from '../src/runtime/activate-system-package.ts';
 
 // devices the registry does not have: one with no `device` patch set, one with a set that the site's policy does not list; the registry and the file identity answer for them
 const fake = vi.hoisted(() => {
@@ -39,13 +41,15 @@ vi.mock('../src/data/device-profiles.ts', async (importOriginal) => {
 vi.mock('../src/runtime/local-inputs.ts', () => ({ sha256Hex: async () => '0'.repeat(64) }));
 
 /** The Firmware page state over a fake env; `prepare` answers like patchkit would. */
-function page(over: Partial<FirmwareEnv>) {
+function page(over: Partial<FirmwareEnv>, target?: TransferApp['target']) {
   const prepare = vi.fn(
-    async () => ({ ok: true, restore: false, device: 'locked', image: new Uint8Array(0) }) as never,
+    async () =>
+      ({ ok: true, restore: false, device: 'locked', imageId: '0123456789abcdef', image: new Uint8Array(0) }) as never,
   );
   const env = { log: () => {}, prepare, ...over } as unknown as FirmwareEnv;
   const transfer = {
-    target: { target: () => ({ kind: 'emulator' }) },
+    target: target ?? { target: () => ({ kind: 'emulator' }) },
+    jobs: createJobs(),
     connection: { asked: async () => ({}), noteConnection: () => {} },
     stock: { remember: async () => {} },
   } as unknown as TransferApp;
@@ -90,3 +94,38 @@ test('the site prepares no patched image of a device outside its list; the workb
   await vi.waitFor(() => expect(workbench.prepare).toHaveBeenCalledTimes(1));
   assert.notEqual(workbench.state.prepared().kind, 'error');
 });
+
+test.each(['firmware', 'route'] as const)(
+  'changing the %s while reading the package stops the flash before transport',
+  async (changed) => {
+    fake.chosen = 'locked';
+    let finishPackage!: (pkg: SystemPackage) => void;
+    const pending = new Promise<SystemPackage>((resolve) => {
+      finishPackage = resolve;
+    });
+    const systemPackage = vi.fn(() => pending);
+    const portTransport = vi.fn();
+    const rpc = vi.fn();
+    const sender = vi.fn();
+    const target = {
+      target: () => ({ kind: 'midi', port: 'Test MIDI' }),
+      bindSession: () => ({ check: () => {} }),
+      portTransport,
+    } as unknown as TransferApp['target'];
+    const { state } = page({ systemPackage, rpc, sender }, target);
+
+    await pick(state);
+    const flashing = state.startFlash();
+    expect(systemPackage).toHaveBeenCalledOnce();
+
+    if (changed === 'firmware') await pick(state);
+    else state.setRoute('menu');
+    finishPackage({ runtime: 0, bytes: new Uint8Array(), plan: async () => [] });
+    await flashing;
+
+    expect(state.run()).toMatchObject({ phase: 'failed', message: expect.stringMatching(/flash route changed/) });
+    expect(rpc).not.toHaveBeenCalled();
+    expect(sender).not.toHaveBeenCalled();
+    expect(portTransport).not.toHaveBeenCalled();
+  },
+);

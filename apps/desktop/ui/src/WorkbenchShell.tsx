@@ -12,6 +12,7 @@ import {
   onMount,
   untrack,
 } from 'solid-js';
+import CopyErrorButton from '@digi/workbench-core/ui/components/CopyErrorButton.tsx';
 import ModulePageView from '@digi/workbench-core/ui/module-ui/ModulePageView.tsx';
 import { moduleFilePage, moduleFilePages } from './module-file-pages';
 import { runtimeModulePages } from './runtime-module-pages';
@@ -144,6 +145,10 @@ export default function WorkbenchShell(
     jobs: app.jobs,
     target: app.target,
     connection: app.connection,
+    systemPackage: fw.env.systemPackage && {
+      read: fw.env.systemPackage,
+      session: emulatorSession,
+    },
     defaults: { tickedFor: fw.defaults.tickedFor, install: fw.env.defaultModules!.install },
     logWriter,
     page,
@@ -487,6 +492,9 @@ export default function WorkbenchShell(
     </div>
   );
 
+  const alertText = () =>
+    outsideApp() ? 'This page is the desktop app’s console; start it with mise run workbench.' : error();
+
   return (
     <div
       class="console"
@@ -498,17 +506,18 @@ export default function WorkbenchShell(
     >
       <TitleBar onError={(m) => setError(m)} />
 
-      <Show when={error() || outsideApp()}>
-        <p class="alert" role="alert">
-          <span>
-            {outsideApp() ? 'This page is the desktop app’s console; start it with mise run workbench.' : error()}
-          </span>
-          <Show when={error()}>
-            <button type="button" class="dismiss" aria-label="Dismiss" onClick={() => setError('')}>
-              ×
-            </button>
-          </Show>
-        </p>
+      <Show when={alertText()}>
+        {(message) => (
+          <p class="alert" role="alert">
+            <span>{message()}</span>
+            <CopyErrorButton class="tb" text={message()} />
+            <Show when={error()}>
+              <button type="button" class="dismiss" aria-label="Dismiss" onClick={() => setError('')}>
+                ×
+              </button>
+            </Show>
+          </p>
+        )}
       </Show>
 
       <div class="shell">
@@ -534,8 +543,8 @@ export default function WorkbenchShell(
               busy={busy('emulator')}
               reloadKey={reloadKey}
               modulesKey={modulesKey}
-              canPause={!!status() && !app.target.switching() && !!selected().run.pause}
-              canReset={!!status() && !app.target.switching() && !!selected().run.reset}
+              canPause={!!status() && !app.target.switching() && !busy('emulator') && !!selected().run.pause}
+              canReset={!!status() && !app.target.switching() && !busy('emulator') && !!selected().run.reset}
               onTogglePause={() => void runControl(paused() ? 'resume' : 'pause')}
               onReset={() => void runControl('reset')}
               onSaveDiagnostics={() => void saveDiagnostics()}

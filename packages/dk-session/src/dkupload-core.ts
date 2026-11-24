@@ -833,6 +833,8 @@ export interface BootWaitOptions {
    * where the firmware may never reach its UI loop. `waitForRestart` always waits for 'ready'.
    */
   until?: 'boot' | 'ready';
+  /** Require fresh boot events. An INFO reply after a missed probe is insufficient. */
+  requireBootEvidence?: boolean;
 }
 
 /** See `DkSessionOptions.emulatedProbe`. */
@@ -2085,8 +2087,8 @@ export class DkSession {
    * boot's log holds the RESTART request (an UPLOAD event whose first argument is the command), the new boot's log starts with BOOT_START and never saw
    * it; then FW_READY (first UI-loop pass, the stock MidiRpc service answers). A runtime older than FW_READY logs only UI_FIRST: FW_READY_GRACE_MS of
    * clock time after UI_FIRST without FW_READY ends the wait. `opts.until: 'boot'` ends the wait at BOOT_START instead (a test of a crash, a fault or the boot itself). Without the
-   * log (INFO has no LOG capability) the device is taken as booted when it answers again after a failed read (the port is silent while it resets). Every
-   * request goes through `probe` (2 s emulated on the emulator, 1 s on hardware), so a request lost while the device resets costs one probe, not
+   * log (INFO has no LOG capability) the device is taken as booted when it answers again after a failed read (the port is silent while it resets), unless
+   * `opts.requireBootEvidence` is set. Every request goes through `probe` (2 s emulated on the emulator, 1 s on hardware), so a request lost while the device resets costs one probe, not
    * `timeoutMs` of the session. Time is the session clock (`timeoutMs` in its ms; default `wallClock`).
    * `opts.signal` cancels the wait; `opts.stillBooting()` extends the deadline.
    */
@@ -2178,7 +2180,8 @@ export class DkSession {
             if (untilBoot || ready || (uiFirstAt !== undefined && elapsed - uiFirstAt >= FW_READY_GRACE_MS)) return;
             last = 'the new boot has not reached its UI loop';
           } else last = 'the old boot still runs';
-        } else if (silent) return;
+        } else if (opts.requireBootEvidence) last = 'INFO answered without a boot log';
+        else if (silent) return;
         else last = 'the old boot still runs';
       } catch (e) {
         if (e instanceof DkError && e.kind === 'cancelled') throw e;

@@ -1,7 +1,7 @@
 //! `patchkit::syspkg::pack` writes what the runtime's header type reads back: the header fields, the body after it, and a digest that matches the body.
 
 use dkrt_sdk::syspkg::{HEADER_BYTES, Header};
-use patchkit::syspkg::pack;
+use patchkit::syspkg::{pack, validate};
 use sha2::{Digest, Sha256};
 
 #[test]
@@ -18,6 +18,25 @@ fn a_packed_file_reads_back_through_the_shared_header() {
     assert!(h.body_matches(body.len() as u32, &digest));
     // the table version it was built against decides who can load it
     assert!(h.compatible(2, 5) && h.compatible(2, 6) && !h.compatible(2, 4) && !h.compatible(3, 5));
+}
+
+#[test]
+fn artifact_validation_refuses_truncation_and_corruption() {
+    let mut file = pack(b"package body", 2, 5).unwrap();
+    assert!(validate(&file, (2, 5)).is_ok());
+    assert!(validate(&file[..file.len() - 1], (2, 5)).is_err());
+    file[HEADER_BYTES] ^= 1;
+    assert!(validate(&file, (2, 5)).is_err());
+}
+
+#[test]
+fn artifact_validation_requires_a_compatible_resident_table() {
+    let file = pack(b"package body", 2, 5).unwrap();
+    assert!(validate(&file, (2, 6)).is_ok());
+    for resident in [(3, 5), (2, 4)] {
+        let error = validate(&file, resident).unwrap_err().to_string();
+        assert!(error.contains("requires resident table 2.5"), "{error}");
+    }
 }
 
 mod build {
@@ -167,6 +186,123 @@ mod artifact {
     /// The committed package object with the DIGIKIT menu linked into it, as `patchkit syspkg build --part` makes the artifact.
     fn package_object() -> Dko {
         super::menu_part::linked()
+    }
+
+    #[test]
+    fn saving_firmware_pairs_it_with_the_cli_built_package() {
+        use patchkit::syspkg::{build_from_repo, save_firmware};
+        use std::fs;
+        use std::process::Command;
+
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let dir = std::env::temp_dir().join(format!("pk-syspkg-test-{}", std::process::id()));
+        fs::create_dir(&dir).unwrap();
+        let cli_path = dir.join("system.dksp");
+        let cli = Command::new(env!("CARGO_BIN_EXE_patchkit"))
+            .current_dir(&root)
+            .args([
+                "syspkg",
+                "build",
+                "runtime/core/build/package.dko.json",
+                "--part",
+                "runtime/apps/digikit-menu/build/digikit-menu.dko.json",
+                "--out",
+            ])
+            .arg(&cli_path)
+            .output()
+            .unwrap();
+        assert!(
+            cli.status.success(),
+            "{}",
+            String::from_utf8_lossy(&cli.stderr)
+        );
+        let expected = fs::read(cli_path).unwrap();
+        let artifact = build_from_repo(&root).unwrap();
+        assert_eq!(artifact.bytes(), expected);
+        let metadata = artifact.metadata();
+        let header = dkrt_sdk::syspkg::Header::decode(&expected).unwrap();
+        assert_eq!(
+            metadata.table(),
+            (header.table_major(), header.table_minor())
+        );
+        assert_eq!(metadata.bytes(), expected.len());
+
+        let image = dir.join("updated.os.syx");
+        let companion = dir.join("updated.os.dksp");
+        assert_eq!(
+            save_firmware(&image, b"patched image", Some(&artifact)).unwrap(),
+            Some(companion.clone())
+        );
+        assert_eq!(fs::read(&image).unwrap(), b"patched image");
+        assert_eq!(fs::read(&companion).unwrap(), expected);
+        assert!(save_firmware(&companion, b"wrong path", Some(&artifact)).is_err());
+        assert_eq!(fs::read(&companion).unwrap(), expected);
+
+        #[cfg(unix)]
+        {
+            let aliased = dir.join("aliased.syx");
+            let aliased_companion = aliased.with_extension("dksp");
+            fs::hard_link(&image, &aliased).unwrap();
+            fs::hard_link(&image, &aliased_companion).unwrap();
+            assert!(save_firmware(&aliased, b"wrong path", Some(&artifact)).is_err());
+            assert_eq!(fs::read(&aliased).unwrap(), b"patched image");
+
+            let missing_image = dir.join("missing.syx");
+            std::os::unix::fs::symlink("missing.syx", missing_image.with_extension("dksp"))
+                .unwrap();
+            assert!(save_firmware(&missing_image, b"wrong path", Some(&artifact)).is_err());
+            assert!(!missing_image.exists());
+        }
+
+        let blocked_image = dir.join("blocked-image.syx");
+        let previous_package = blocked_image.with_extension("dksp");
+        fs::create_dir(&blocked_image).unwrap();
+        fs::write(&previous_package, b"previous system package").unwrap();
+        assert!(save_firmware(&blocked_image, b"new image", Some(&artifact)).is_err());
+        assert!(blocked_image.is_dir());
+        assert_eq!(
+            fs::read(previous_package).unwrap(),
+            b"previous system package"
+        );
+
+        let previous_image = dir.join("blocked-package.syx");
+        let blocked_package = previous_image.with_extension("dksp");
+        fs::write(&previous_image, b"previous image").unwrap();
+        fs::create_dir(&blocked_package).unwrap();
+        assert!(save_firmware(&previous_image, b"new image", Some(&artifact)).is_err());
+        assert_eq!(fs::read(previous_image).unwrap(), b"previous image");
+        assert!(blocked_package.is_dir());
+
+        let stock = dir.join("stock.syx");
+        assert_eq!(save_firmware(&stock, b"stock image", None).unwrap(), None);
+        assert_eq!(fs::read(&stock).unwrap(), b"stock image");
+        assert!(!stock.with_extension("dksp").exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn reserves_case_variant_package_paths_before_they_exist() {
+        use patchkit::syspkg::{companion_path, paths_alias};
+
+        let root = tempfile::tempdir().unwrap();
+        let companion = companion_path(&root.path().join("out.syx")).unwrap();
+        let reserved = root.path().join("./OUT.DKSP");
+        assert!(!companion.exists());
+        assert!(!reserved.exists());
+        assert!(paths_alias(&companion, &reserved));
+    }
+
+    #[test]
+    fn native_validation_rejects_a_body_that_stage_one_cannot_place() {
+        use dkrt_abi::resident::{RESIDENT_MAJOR, RESIDENT_MINOR};
+        use patchkit::syspkg::{Artifact, pack};
+        let file = pack(b"not a linked body", RESIDENT_MAJOR, RESIDENT_MINOR).unwrap();
+        assert!(
+            Artifact::from_bytes(file)
+                .unwrap_err()
+                .to_string()
+                .contains("invalid system package body")
+        );
     }
 
     #[test]

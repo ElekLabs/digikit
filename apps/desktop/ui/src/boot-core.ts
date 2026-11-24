@@ -21,7 +21,7 @@ export function bootingStatus(b: Booting): string {
 export type TargetKind = Target['kind'];
 
 /**
- * Does the app boot a firmware at once when it starts? A command-line file always does. The last firmware of "Load on start" only when the target is
+ * Does the app boot a firmware at once when it starts? A command-line file always does. The last firmware of "Auto-load firmware" only when the target is
  * the emulator: with a device as target the emulator waits for the first visit of its page (`bootOnEmulatorPage`).
  */
 export function shouldBootOnStart(

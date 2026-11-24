@@ -2,6 +2,7 @@
 //! browser build does it in patchkit.wasm) and the system's save dialog for the image. The MIDI side is `midi_port.rs`; the page paces the
 //! messages with the Rust sender through patchkit.wasm, like the site. `prepare` also keeps the ship map and the load-table symbol addresses of the
 //! image (`library::store_ship`), so the Log pane can name addresses of a device that runs it.
+use patchkit::syspkg::{self, InstallAction, InstallRefusal};
 use std::path::Path;
 
 /// The answer of `firmware_prepare`: the length of the summary JSON as 4 bytes big endian, the JSON (`Prepared::summary_json`), the image.
@@ -62,6 +63,38 @@ pub async fn firmware_prepare(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The checkout's built system package, prefixed by its packed runtime version (big endian).
+#[tauri::command]
+pub async fn system_package() -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let root = digi_control::runtime_patch::find_root(None)?;
+        let package = syspkg::build_from_repo(&root).map_err(|e| {
+            format!("Could not build the system package ({e}). Rebuild Workbench inputs.")
+        })?;
+        let mut response = Vec::with_capacity(4 + package.bytes().len());
+        response.extend_from_slice(&package.metadata().runtime_version().to_be_bytes());
+        response.extend_from_slice(package.bytes());
+        Ok(tauri::ipc::Response::new(response))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The package actions for the observed target and card state.
+#[tauri::command]
+pub fn system_package_plan(
+    repair: bool,
+    module_support: bool,
+    verified_package_on_card: bool,
+) -> Result<&'static [InstallAction], String> {
+    syspkg::install_plan(repair, module_support, verified_package_on_card).map_err(|refusal| match refusal {
+        InstallRefusal::AlreadyHealthy => refusal.to_string(),
+        InstallRefusal::RecoveryRequired => {
+            "The verified system package needs a retry. Choose Transfer → Modules → Install system package.".into()
+        }
+    })
 }
 
 /// The save dialog for the image in the raw body; `x-name` (percent-encoded) is the suggested file name. The path written, or `None` when the

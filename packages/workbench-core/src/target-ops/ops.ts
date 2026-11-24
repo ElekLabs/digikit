@@ -33,6 +33,8 @@ export interface StoreSnapshot {
   usage: StoreUsage;
   modules: DkModule[];
   states: ModuleState[];
+  /** The resident core is running without the system package. */
+  coreOnly?: boolean;
 }
 
 /** Read-only access to the card store of a target. */

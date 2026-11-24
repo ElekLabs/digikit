@@ -34,7 +34,7 @@ describe('loading state', () => {
   it('puts the error in the failure line', () => {
     expect(loadFailure('a.syx', 'bad image')).toBe('Loading a.syx failed: bad image');
   });
-  it('boots at start for a command-line file, or for Load on start with the emulator as target', () => {
+  it('boots at start for a command-line file, or for Auto-load firmware with the emulator as target', () => {
     expect(shouldBootOnStart('a.syx', false, 'midi')).toBe(true);
     expect(shouldBootOnStart('a.syx', false, 'emulator')).toBe(true);
     expect(shouldBootOnStart(null, true, 'emulator')).toBe(true);

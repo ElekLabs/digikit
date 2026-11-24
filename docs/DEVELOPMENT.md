@@ -65,15 +65,23 @@ It needs the shared core (`mise run gen:core`). The files go to the `[acceptance
 ## Desktop emulator
 
 ```sh
-mise run workbench                # build once and open the app with no firmware loaded (`-- --build-only` builds only)
-mise run workbench -- FILE.syx    # load that firmware at start (else the Emulator page's "Load on start" tick loads the last opened file)
-mise run workbench:inputs         # the UI dist, the wasm files and the packed services, from the Nx cache when unchanged (the workbench runs it first)
+mise run workbench                # build once and open the app (`-- --build-only` builds only)
+mise run workbench -- FILE.syx    # load that firmware at start (else the Emulator page's "Auto-load firmware" tick loads the last opened file)
+mise run workbench:inputs         # prepare the Workbench artifacts (the workbench runs it first)
 mise run wasm:dkprof              # only public/dkprof.wasm (`wb` addrmap, module and profile commands load it)
 mise run workbench -- --cf-only --plus-drive DIR firmware/Digitakt_II_OS1.17.syx   # a +Drive folder (default: plus_drive/<device>/; --samples is the same option)
 mise run workbench -- --dsp-patch FILE  # overlay a DSP patch (DN2 audio)
 mise run workbench -- --cf-only   # ColdFire only: no DSP, no audio (a build without the DSP core)
 mise run workbench -- --no-dsp    # start with the "DSP" tick off: ColdFire only, a peer CPU is replaced by the mailbox responder; the tick turns it on again
 ```
+
+`mise run workbench:inputs` builds the desktop UI in `apps/desktop/ui/dist`, the Patchkit, upload and sample Wasm
+files in `apps/web/public`, the port files in `dist/ports`, the production services in `dist/modules/<device>`,
+and the system package at `dist/syspkg/runtime/system.dksp` for card construction and testing. Nx restores unchanged
+artifacts from cache. Desktop Workbench and the native Patchkit CLI link their install package from the checkout's
+runtime package and DIGIKIT menu objects. Both drive the actions from `patchkit::syspkg::install_plan` over their own
+device sessions. See [Patching](PATCHING.md#patch-a-firmware) for paired firmware and package outputs and
+[package-only repair](PATCHING.md#repair-module-support-from-the-command-line).
 
 With the ready inputs present, a firmware loaded in `mise run workbench` plays audio. Without them it
 starts the ColdFire-only emulator. If the default firmware file is missing, the desktop window still opens and you can choose a firmware file there. The DSP needs about 1.6 CPU seconds per audio second

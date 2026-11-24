@@ -15,6 +15,11 @@ Make the desktop Workbench easier to navigate and safer to change. Each feature 
 | Inspector collapse | Committed as `b169084ce` | The compact inspector reserves space for the collapse button on Memory and Metrics. Preview scenes exercise all four tabs in expanded and collapsed states. |
 | Analyzer organization | Complete | Feature files live in `src/analyzer/`. The desktop build emitted the worker and lazy chunks. Scope and Spectrum preview scenes passed. |
 | Remote organization | Complete | Feature files live in `src/remote/` and the firmware INFO-port lookup lives with shared device profiles. Host, target-switch, unidentified-device, and wide and narrow preview checks passed. The stock preview wait remains open. |
+| System package and firmware controls | Implemented on the desktop | Open and Reload can prepare the card for module support. Desktop flash and explicit Transfer recovery use Patchkit's system package artifact and install planner. The native CLI uses the same planner for flash and package-only repair. The emulator exposes separate Auto-load firmware and Boot with runtime controls. |
+| Copyable errors and Transfer visibility | Implemented | The shell, Files and Transfer copy the displayed errors. Transfer filters dependency refusals using the same test-module visibility setting as the library. |
+
+System package setup and recovery in the browser remain deferred. Full reconnect after a renamed MIDI port on the
+second reboot remains a follow-up. Physical hardware validation of desktop package setup and recovery remains open.
 
 ## Ownership and dependencies
 

@@ -1,18 +1,9 @@
 // `StoreOps` over a `DkSession`: the same code reads the store of the emulator and of a device.
-import { DkError, READ_MAX, storeSpace, type DkSession } from '@digi/dk-session';
+import { READ_MAX, storeFree, type DkSession } from '@digi/dk-session';
+import { systemPackageReads } from '../runtime/system-package';
 import type { TargetApp } from '../transfer/target';
 import { factsOf, type RunOps, type StoreOps, type TargetOps } from './ops';
 import { parseDkmHeader, usageOf } from './store';
-
-/** E_PROTO: the runtime does not know the command (an older runtime). Other errors, timeouts included, are not swallowed. */
-async function orEmpty<T>(call: () => Promise<T[]>): Promise<T[]> {
-  try {
-    return await call();
-  } catch (e) {
-    if (e instanceof DkError && e.status === 'E_PROTO') return [];
-    throw e;
-  }
-}
 
 export function sessionStoreOps(session: () => Promise<DkSession>, check?: () => void): StoreOps {
   async function read<T>(call: () => Promise<T>): Promise<T> {
@@ -27,10 +18,18 @@ export function sessionStoreOps(session: () => Promise<DkSession>, check?: () =>
       // one request at a time: SysEx replies come on one stream
       const info = await read(() => s.info());
       const entries = await read(() => s.list());
-      const space = await read(() => storeSpace(s, info));
-      const modules = await read(() => orEmpty(() => s.modules()));
-      const states = await read(() => orEmpty(() => s.loadStates()));
-      return { facts: factsOf(info), entries, usage: usageOf(entries, space), modules, states };
+      const pkg = systemPackageReads(info);
+      const cap = await read(() => pkg.command('CAPACITY', () => s.capacity()));
+      const modules = await read(() => pkg.command('MODULES', () => s.modules()));
+      const states = await read(() => pkg.command('LOADS', () => s.loadStates()));
+      return {
+        facts: factsOf(info),
+        entries,
+        usage: usageOf(entries, storeFree(info, pkg.coreOnly ? null : (cap ?? null))),
+        modules: pkg.coreOnly ? [] : (modules ?? []),
+        states: states ?? [],
+        ...(pkg.coreOnly ? { coreOnly: true } : {}),
+      };
     },
     async header(path) {
       const s = await session();

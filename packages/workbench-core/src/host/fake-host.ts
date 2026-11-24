@@ -107,6 +107,8 @@ export function createFakeHost(replies: Record<string, Reply> = {}): FakeHost {
     },
     firmware: {
       prepare: leaf('firmware.prepare'),
+      systemPackage: leaf('firmware.systemPackage'),
+      systemPackagePlan: leaf('firmware.systemPackagePlan'),
       save: leaf('firmware.save'),
       patchkitWasm: leaf('firmware.patchkitWasm'),
       dkprofWasm: leaf('firmware.dkprofWasm'),

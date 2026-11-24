@@ -10,6 +10,7 @@ import { Dynamic } from 'solid-js/web';
 import Segmented from '../components/Segmented';
 import AutoRefresh from './AutoRefresh';
 import ConnectionBadge from './ConnectionBadge';
+import CopyErrorButton from '../components/CopyErrorButton';
 import { useTransferApp } from '../../src/transfer/app-context';
 import ModulesMode from './ModulesMode';
 import SourcePanel from './SourcePanel';
@@ -166,17 +167,20 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
       />
 
       <Show when={error()}>
-        <p class="err" role="alert">
-          <span class="msg">{error()}</span>
-          <button type="button" class="act small" disabled={!!busy()} onClick={readNow}>
-            Try again
-          </button>
-          <Show when={noRuntime() && target().kind === 'emulator' && env.extras?.reloadWithRuntime}>
-            <button type="button" class="act small" onClick={() => env.extras?.reloadWithRuntime?.()}>
-              Reload with runtime
+        {(message) => (
+          <p class="err" role="alert">
+            <span class="msg">{message()}</span>
+            <CopyErrorButton text={message()} />
+            <button type="button" class="act small" disabled={!!busy()} onClick={readNow}>
+              Try again
             </button>
-          </Show>
-        </p>
+            <Show when={noRuntime() && target().kind === 'emulator' && env.extras?.reloadWithRuntime}>
+              <button type="button" class="act small" onClick={() => env.extras?.reloadWithRuntime?.()}>
+                Reload with runtime
+              </button>
+            </Show>
+          </p>
+        )}
       </Show>
 
       <Switch>

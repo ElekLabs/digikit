@@ -6,6 +6,7 @@ import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import type { SamplesSlot, TransferEnv } from '@digi/workbench-core/transfer/env.ts';
 import type { Target } from '@digi/workbench-core/transfer/target.ts';
 import { bumpCardRefresh } from './card-state';
+import { readSystemPackage } from './system-package';
 import { hostWasmSource } from './desktop-wasm';
 import { TauriBulkLink } from '@digi/workbench-core/host/bulk-link.ts';
 import { EmuUsbTransport, emulatorMode } from '@digi/workbench-core/host/emu-transport.ts';
@@ -105,6 +106,7 @@ export function createDesktopEnv(
     extras: {
       samples,
       reloadWithRuntime,
+      systemPackage: host.firmware.systemPackage && (() => readSystemPackage(host.firmware)),
       onJobEnd() {
         // the card-folder strip reads the folder now and again after the emulator's quiet period (the folder follows the card about 2 s later)
         bumpCardRefresh();

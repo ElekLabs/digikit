@@ -1,11 +1,13 @@
 // The state of the Firmware page for the life of the window, and the actions on it (the page is FirmwarePage.tsx; the rules are in
 // firmware-core.ts, the run in firmware-flow.ts). Signals, so the desktop app keeps a half-finished flash screen while another page is shown.
 import { createSignal } from 'solid-js';
+import { fmtVersion } from '@digi/dk-session';
 import type { DeviceRecord } from '@digi/devices/vite';
 import { registry } from '../data/device-profiles';
 import { JobBusyError } from '../jobs/jobs';
 import { identify } from '../patch/identify';
 import { sha256Hex } from '../runtime/local-inputs';
+import { activateSystemPackage } from '../runtime/activate-system-package';
 import type { TransferApp } from '../transfer/app';
 import type { DefaultModulesApp } from './default-modules-state';
 import type { FirmwareEnv } from './env';
@@ -199,11 +201,15 @@ export function createFirmwareState({
     const p = prep.p;
     const log = env.log;
     const what = p.restore ? 'restore' : 'flash';
-    const rpc = route() === 'rpc';
+    const flashRoute = route();
+    const fileChoice = choosing;
+    const rpc = flashRoute === 'rpc';
     let final: FlashState = IDLE;
     try {
       final = await transfer.jobs.runJob('Flashing firmware', { group: 'target', cancel: cancelFlash }, async (job) => {
         controller = new AbortController();
+        const { signal } = controller;
+        const initialBinding = transfer.target.bindSession();
         log({
           level: 'info',
           text: `${what} ${p.device} OS ${p.os} to ${t.port}: ${rpc ? `${p.image.length} bytes (MidiRpc)` : `${p.ends.length} messages (OS UPGRADE menu)`}`,
@@ -211,16 +217,55 @@ export function createFirmwareState({
         setNotice('');
         defaults.resetPostRun();
         const report = (s: FlashState): void => {
-          setRun(s);
+          if (s.phase !== 'done' || !env.systemPackage || !leavesRuntime(p)) setRun(s);
           if (s.phase === 'sending') {
             const v = progressView(s);
             job.progress(v.fraction, v.text);
           } else job.progress(undefined, s.phase === 'rebooting' ? 'restarting' : undefined);
         };
         try {
-          return rpc
-            ? await runRpcFlash(rpcPortOps(), p, controller.signal, report)
-            : await runFlash(portOps(), p, controller.signal, report);
+          const pkg = leavesRuntime(p) ? await env.systemPackage?.() : undefined;
+          initialBinding.check();
+          signal.throwIfAborted();
+          if (prepared() !== prep || route() !== flashRoute || choosing !== fileChoice)
+            throw new Error('The firmware or flash route changed. Review your selection and try again.');
+          if (pkg && fmtVersion(pkg.runtime) !== p.runtime)
+            throw new Error('The Workbench system package version differs from the prepared firmware.');
+          const ops = rpc ? rpcPortOps() : portOps();
+          let flashed: FlashState;
+          try {
+            flashed =
+              'machine' in ops ? await runRpcFlash(ops, p, signal, report) : await runFlash(ops, p, signal, report);
+          } finally {
+            transfer.target.finishRawTransport();
+          }
+          if (flashed.phase !== 'done' || !pkg) return flashed;
+          let packageReady = false;
+          try {
+            const binding = transfer.target.bindSession();
+            if (binding.target.kind !== 'midi' || binding.target.port !== ops.port)
+              throw new Error('The selected target changed.');
+            const changed = await activateSystemPackage(await binding.session(), pkg, {
+              identity: { device: p.device, imageId: p.imageId },
+              check: binding.check,
+              signal,
+              progress: job.progress,
+            });
+            flashed.lines.push(changed ? 'System package verified and active.' : 'System package already active.');
+            packageReady = true;
+          } catch (e) {
+            const detail = signal.aborted
+              ? 'Setup was stopped. The package may already be on the card.'
+              : e instanceof Error
+                ? e.message
+                : String(e);
+            const message = `System package setup failed. ${detail} If the target is still core-only, choose Transfer → Modules → Install system package. Otherwise check the device and restart it.`;
+            flashed.lines.push(message);
+            log({ level: 'error', text: message });
+          }
+          setRun(flashed);
+          if (packageReady) await finishRuntime(p.device);
+          return flashed;
         } catch (e) {
           const failed: FlashState = {
             phase: 'failed',
@@ -229,8 +274,6 @@ export function createFirmwareState({
           };
           setRun(failed);
           return failed;
-        } finally {
-          transfer.target.finishRawTransport();
         }
       });
     } catch (e) {
@@ -250,22 +293,21 @@ export function createFirmwareState({
         detail: final.message,
       });
     else if (final.phase === 'failed') log({ level: 'error', text: `${what} failed: ${final.message}` });
-    // a patch without the runtime (`imageId` is null: the runtime's INFO has nothing to report) leaves no runtime to bind services to or to install modules on
-    const followUp = leavesRuntime(p);
-    // the flash is done: the services and port files on the card are replaced for the new runtime and the unused ones go (the same code on the desktop and the site)
-    if (final.phase === 'done' && followUp) {
-      try {
-        const replaced = await transfer.backend.refreshServices(p.device, () => {});
-        if (replaced.length) log({ level: 'info', text: `services replaced: ${replaced.join(', ')}` });
-      } catch (e) {
-        log({
-          level: 'error',
-          text: `Services: ${e instanceof Error ? e.message : String(e)}. The firmware flash is done; Install on the Transfer page replaces them.`,
-        });
-      }
+    if (final.phase === 'done' && leavesRuntime(p) && !env.systemPackage) await finishRuntime(p.device);
+  }
+
+  /** Replace the runtime's services and install the selected defaults after the device is ready. */
+  async function finishRuntime(deviceId: string): Promise<void> {
+    try {
+      const replaced = await transfer.backend.refreshServices(deviceId, () => {});
+      if (replaced.length) env.log({ level: 'info', text: `services replaced: ${replaced.join(', ')}` });
+    } catch (e) {
+      env.log({
+        level: 'error',
+        text: `Services: ${e instanceof Error ? e.message : String(e)}. The firmware flash is done; Install on the Transfer page replaces them.`,
+      });
     }
-    // the flash is done and the runtime answered: the default modules follow in the same run (the flash stays done when one fails)
-    if (final.phase === 'done' && followUp) await defaults.installAfterFlash(p.device);
+    await defaults.installAfterFlash(deviceId);
   }
 
   function cancelFlash(): void {

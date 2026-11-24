@@ -3,6 +3,7 @@ import { registry, runtimeDeviceIds } from '@digi/workbench-core/data/device-pro
 import type { EmuLaunch, EmuSource, Host } from '@digi/workbench-core/host/host.ts';
 import { JobBusyError, type JobsApp } from '@digi/workbench-core/jobs/jobs.ts';
 import { isCancelled } from '@digi/workbench-core/modules/backend.ts';
+import { activateSystemPackage, type SystemPackage } from '@digi/workbench-core/runtime/activate-system-package.ts';
 import { reloadError, reloadLine } from '@digi/workbench-core/runtime/reload.ts';
 import type { FirmwareInfo, RuntimeSnapshot, RuntimeUpdate } from '@digi/workbench-core/runtime/runtime.ts';
 import type { KeyValue } from '@digi/workbench-core/storage.ts';
@@ -41,10 +42,11 @@ type FirmwareOptions = {
   storage: KeyValue;
   runtime: () => FirmwareRuntime | undefined;
   signal: AbortSignal;
-  jobs: Pick<JobsApp, 'runJob'>;
+  jobs: Pick<JobsApp, 'runJob' | 'busy'>;
   target: Pick<TargetApp, 'target' | 'emulatorRuntime' | 'setEmulatorRuntime' | 'setEmulatorAvailable'>;
   connection: Pick<ConnectionApp, 'noteConnection'>;
   defaults: DefaultModules;
+  systemPackage?: { read(): Promise<SystemPackage>; session(): Promise<Parameters<typeof activateSystemPackage>[0]> };
   logWriter: Pick<LogWriter, 'logEvent' | 'logInput'>;
   page: () => Page;
   showSnapshot: (snapshot: RuntimeSnapshot) => void;
@@ -67,6 +69,7 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
     runtime,
     signal,
     defaults,
+    systemPackage: packageSource,
     page,
     showSnapshot,
     releaseHeldKeys,
@@ -79,7 +82,7 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
     clearInventory,
     bumpCardRefresh,
   } = options;
-  const { runJob } = options.jobs;
+  const { runJob, busy } = options.jobs;
   const { target, emulatorRuntime, setEmulatorRuntime, setEmulatorAvailable } = options.target;
   const { noteConnection } = options.connection;
   const { logInput, logEvent } = options.logWriter;
@@ -162,7 +165,7 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
     setEmulatorAvailable(emulatorLoaded() && runtimeHere());
   });
 
-  // The "Load on start" boot that the start deferred because the target was a device.
+  // The "Auto-load firmware" boot that the start deferred because the target was a device.
   const [deferredBoot, setDeferredBoot] = createSignal<string>();
   createEffect(() => {
     const path = deferredBoot();
@@ -287,17 +290,64 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
     if (signal.aborted) return;
     const withRuntime = options.runtime ?? bootRuntime();
     const base = path.split(/[\\/]/).pop() || path;
+    const packageAbort = new AbortController();
+    const packageSignal = AbortSignal.any([signal, packageAbort.signal]);
+    const cancel = () => {
+      packageAbort.abort();
+      cancelControllerJob();
+    };
     try {
-      const loaded = await runJob(`Loading ${base}`, { group: 'emulator', cancel: cancelControllerJob }, async () => {
+      const loaded = await runJob(`Loading ${base}`, { group: 'emulator', cancel }, async () => {
         if (signal.aborted) return false;
         const file = await emu.setSource(path);
         if (signal.aborted) return false;
         setSource(file ?? undefined);
         lastModified = file?.modified_ms;
+        const rBeforeLoad = runtime();
         const ok = await untrack(() => boot(path, file, { runtime: withRuntime, card: options.card }));
         if (ok && !signal.aborted) {
           writePref(LAST_FIRMWARE_KEY, path);
           setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
+        }
+        const device = status()?.device;
+        if (ok && device && info()?.runtime?.patched && packageSource && !signal.aborted) {
+          const generation = emulatorGeneration();
+          const check = () => {
+            if (generation !== emulatorGeneration() || rBeforeLoad !== runtime())
+              throw new Error('The emulator firmware changed.');
+          };
+          try {
+            const changed = await runJob('Installing system package', { group: 'target', cancel }, async (job) => {
+              const pkg = await packageSource.read();
+              packageSignal.throwIfAborted();
+              check();
+              return activateSystemPackage(await packageSource.session(), pkg, {
+                identity: { device },
+                signal: packageSignal,
+                check,
+                progress: job.progress,
+              });
+            });
+            logInput({
+              source: 'firmware',
+              level: 'info',
+              text: changed ? 'System package verified and active.' : 'System package already active.',
+            });
+          } catch (e) {
+            if (!signal.aborted) {
+              const problem = packageSignal.aborted
+                ? 'Setup was stopped. The package may already be on the card.'
+                : e instanceof JobBusyError
+                  ? 'The target is busy.'
+                  : message(e);
+              const detail = `${problem} If the target is still core-only, choose Transfer → Modules → Install system package. Otherwise reload the firmware again.`;
+              setReloadNote(`System package setup failed. ${detail}`);
+              logInput(failureEntry('firmware', 'system package setup', detail));
+            }
+            return false;
+          } finally {
+            if (!signal.aborted) bumpCardRefresh();
+          }
         }
         return ok;
       });
@@ -393,7 +443,7 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
       if (dspIsPending()) await reload(`Started with DSP ${dsp ? 'on' : 'off'} at`);
       return;
     }
-    // A command-line file, else the last opened file when "Load on start" is ticked and the target is the emulator, boots now.
+    // A command-line file, else the last opened file when "Auto-load firmware" is ticked and the target is the emulator, boots now.
     // With a device as target the last file waits for the first visit of the Emulator page.
     const last = readPref(LAST_FIRMWARE_KEY);
     if (shouldBootOnStart(launch.syx, loadOnStart(), target().kind)) {
@@ -410,14 +460,14 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
 
   const setEmulatorPaused = (pause: boolean) => {
     const r = runtime();
-    if (signal.aborted || !r) return;
+    if (signal.aborted || !r || busy('emulator')) return;
     if (pause) r.pause();
     else r.resume();
     setPaused(pause);
     logEvent('emulator', 'info', paused() ? 'paused' : 'resumed');
   };
   const reset = async () => {
-    if (signal.aborted) return;
+    if (signal.aborted || busy('emulator')) return;
     // a boot or reset of the emulator: the indicator asks again
     if (target().kind === 'emulator') noteConnection({ type: 'target' });
     resetHealth();

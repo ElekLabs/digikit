@@ -78,6 +78,8 @@ export function createTauriHost(): Host {
       prepare: (stock, { restore, set }) =>
         invoke('firmware_prepare', stock, { headers: { 'x-restore': restore ? '1' : '0', 'x-set': set } }),
       save: (bytes, name) => invoke('firmware_save', bytes, { headers: { 'x-name': encodeURIComponent(name) } }),
+      systemPackage: () => invoke('system_package'),
+      systemPackagePlan: (input) => invoke('system_package_plan', { ...input }),
       patchkitWasm: () => invoke('patchkit_wasm'),
       dkprofWasm: () => invoke('dkprof_wasm'),
       sampleWasm: () => invoke('sample_wasm'),

@@ -6,6 +6,7 @@
 // ticked files from the card; a loaded module stays loaded until the restart.
 import WaitNotice from './WaitNotice';
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
+import CopyErrorButton from '../components/CopyErrorButton';
 import Segmented, { type SegmentedOption } from '../components/Segmented';
 import { errorLine, formatBytes } from '../../src/modules/backend';
 import {
@@ -19,6 +20,7 @@ import {
   type ChipStatus,
   type PageCtx,
 } from './TransferParts';
+import { activateSystemPackage } from '../../src/runtime/activate-system-package';
 import { noteActivity } from '../../src/transfer/activity';
 import ModuleFilesArea from './ModuleFilesArea';
 import type { ModuleFileClient } from '../../src/module-ui/module-files';
@@ -29,6 +31,7 @@ import {
   applyEvent,
   applyVerified,
   available,
+  visibleRefusals,
   countLabel,
   DONE_ON_CARD,
   deleteDoneText,
@@ -64,6 +67,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     browsing,
     delTicks,
     lastView,
+    jobProgress,
     progress,
     readingAfterJob,
     setBrowseDevice,
@@ -79,6 +83,36 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     verified,
   } = app.state;
   let input: HTMLInputElement | undefined;
+  const coreOnly = () => lastView()?.coreOnly === true && !browsing();
+  const systemPackage = env.extras?.systemPackage;
+  const emulatorBusy = () => app.target.target().kind === 'emulator' && app.jobs.busy('emulator');
+
+  const installSystemPackage = () =>
+    run('Installing system package', async () => {
+      if (!systemPackage || !coreOnly()) return;
+      setLog([]);
+      setProgress(undefined);
+      const binding = app.target.bindSession();
+      const install = async () => {
+        const pkg = await systemPackage();
+        const controller = new AbortController();
+        const unbind = binding.beforeLeave(async () => controller.abort());
+        try {
+          await activateSystemPackage(await binding.session(), pkg, {
+            repair: true,
+            check: binding.check,
+            signal: controller.signal,
+            progress: jobProgress,
+          });
+        } finally {
+          unbind();
+        }
+      };
+      if (binding.target.kind === 'emulator')
+        await app.jobs.runJob('Installing system package', { group: 'emulator' }, install);
+      else await install();
+      setLog(['System package verified and active.']);
+    });
 
   const onEvent = (e: TransferEvent) => {
     noteActivity();
@@ -103,7 +137,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
   const install = () =>
     run('Installing', async () => {
       const v = lastView();
-      if (!v) return;
+      if (!v || coreOnly()) return;
       const modules = installModules(v, ticks());
       const services = installServices(v, ticks());
       setProgress(
@@ -189,6 +223,11 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     const v = lastView();
     return v ? available(v, showTests()).flatMap((g) => g.rows.filter((r) => r.id).map(rowKey)) : [];
   };
+  const refusals = createMemo(() => {
+    const v = lastView();
+    return v ? visibleRefusals(v, showTests()) : [];
+  });
+  const refusalMessages = createMemo(() => refusals().map(serviceRefusalText));
   const deviceRows = createMemo(() => {
     const v = lastView();
     return v ? onDeviceWithPending(v, progress(), busy() === 'Installing') : [];
@@ -251,7 +290,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     <SplitPane id="transfer">
       <LocalPane
         onDrop={(f) => {
-          if (addToList() || !localOnly()) void addFiles(f);
+          if (!coreOnly() && (addToList() || !localOnly())) void addFiles(f);
         }}
         select={lsel}
         selectAll={
@@ -292,7 +331,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
             <button
               type="button"
               class="act small"
-              disabled={!!busy() || (!addToList() && localOnly())}
+              disabled={!!busy() || coreOnly() || (!addToList() && localOnly())}
               title={
                 addToList()
                   ? 'Add module files from your computer to this list, then install them'
@@ -335,15 +374,16 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
         <Show when={lastView()} fallback={<p class="empty">{busy() ? `${busy()}…` : 'No module list yet.'}</p>}>
           {(v) => (
             <>
-              <Show when={v().refusals?.length}>
+              <Show when={refusalMessages().length}>
                 <div class="err refusals" role="alert">
                   <div class="msg">
-                    <For each={v().refusals}>{(r) => <div>{serviceRefusalText(r)}</div>}</For>
+                    <For each={refusalMessages()}>{(message) => <div>{message}</div>}</For>
                   </div>
+                  <CopyErrorButton text={refusalMessages().join('\n')} />
                   <Show
                     when={
                       props.onFlash &&
-                      v().refusals?.some(
+                      refusals().some(
                         (r) =>
                           r.kind === 'fingerprint' ||
                           r.kind === 'no-port' ||
@@ -445,7 +485,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
           actions={
             <>
               <DeleteButton
-                n={browsing() ? 0 : nDelete()}
+                n={browsing() || coreOnly() ? 0 : nDelete()}
                 busy={busy()}
                 confirming={confirm.confirming()}
                 title="Delete the ticked files from the device (a loaded module stays loaded until the next restart)"
@@ -454,7 +494,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
               <button
                 type="button"
                 class="act"
-                disabled={!!busy() || !lastView() || browsing()}
+                disabled={!!busy() || !lastView() || browsing() || coreOnly()}
                 title="RESTART the device (it loads what its MODULES menu has selected)"
                 onClick={() => void restart()}
               >
@@ -524,8 +564,26 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
 
   return (
     <>
+      <Show when={coreOnly()}>
+        <div class="err" role="status">
+          <span class="msg">
+            The target is running in core-only mode.
+            <Show when={systemPackage}> Install the system package to restore module support.</Show>
+          </span>
+          <Show when={systemPackage}>
+            <button
+              type="button"
+              class="act small"
+              disabled={!!busy() || emulatorBusy()}
+              onClick={() => void installSystemPackage()}
+            >
+              Install system package
+            </button>
+          </Show>
+        </div>
+      </Show>
       {lists}
-      <Show when={!localOnly() && selectedId()} keyed>
+      <Show when={!localOnly() && !coreOnly() && selectedId()} keyed>
         {(id) => (
           <Show when={env.moduleFiles?.(id)}>
             {(spec) => (
