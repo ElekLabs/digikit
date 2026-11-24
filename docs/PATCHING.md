@@ -568,7 +568,7 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
   (a table address, a count): the values exist only at run time, so `init` declares them with `dk_service_declare_patch` (a service-only import, beside `dk_service_declare_hook`) and the header table holds only
   a `HOOKS` item whose entry word is `HOOK_ENTRY_PATCH` (the low 24 bits set; the device mask works as for a hook). The installer takes hooks and patches of a file together: the layout (overlaps, at most
   `install_patches` over all providers), the stock copy of each site and its check value are checked outside the interrupt mask, nothing is written when one differs (`E_HOOK_STOCK`, or `E_FORMAT` for a declared
-  length that is not the site's, `E_RANGE` for a patch on a hook site or a hook on a patch site), and one mask holds only the compare of the live bytes with the saved copy, the writes and the flush. The restore
+  length that is not the site's, `E_RANGE` for a patch on a hook site, a hook on a patch site, or a value wider than its length), and one mask holds only the compare of the live bytes with the saved copy, the writes and the flush. The restore
   writes the saved bytes back, the patches in the reverse of the order they went in, then the hooks, before the service's `fini`. `patchkit service-check` compares `[[patch]]` and `patches` per device.
 - **Hooks per device.** One `.dks` serves both devices. `[[hook]]` in the module's `module.toml` has `devices`; the `service!`
   call lists `(name, entry)` for every device, `(name, entry, dt2)` or `(name, entry, dn2)` for one, and declares at `init` those of

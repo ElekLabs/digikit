@@ -1,5 +1,5 @@
 //! The patch entries of a service over the runtime's real seams (docs/plans/runtime-contract-and-lifecycle.md, RC4-0): the packed fixture `local-patch` (a service that takes one
-//! `[[patch]]`, two bytes of the chooser's order vector allocation) and its user, as `patchkit pack` leaves them, with the port file of the test image on `FakePlatform`.
+//! `[[patch]]`, two bytes of a dead size bound of the chooser's order vector copy) and its user, as `patchkit pack` leaves them, with the port file of the test image on `FakePlatform`.
 //! What the host cannot show stays out: the service's `init` is replayed from its header table (the value is `PATCH_TEST_VALUE`), so the unit tests of `svc-rt` own the declaration
 //! and `install.rs` owns the installer; here the one case that fits and the refusals of the seams: the stock check of the port file and the length of the site.
 //!
@@ -11,7 +11,7 @@ use dkrt_lifecycle::{LifecycleError, PackageId, PackageManager};
 
 /// The site of the patch on `dev`: its address and stock bytes, from the port file of the test image and the local firmware.
 fn patch_site(dev: Dev) -> (u32, Vec<u8>) {
-    stock_sites(dev).remove(&dkneeds::keys::name_hash("cf.filter.hook.test_list_size_patch")).expect("the port set lists the test patch")
+    stock_sites(dev).remove(&dkneeds::keys::name_hash("cf.filter.hook.test_bound_patch")).expect("the port set lists the test patch")
 }
 
 fn bytes_at(l: &Boot, addr: u32, n: usize) -> Vec<u8> {
@@ -30,7 +30,7 @@ fn a_service_with_a_patch_installs_it_and_the_firmware_is_stock_after_the_unload
     for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
         let image = Image::read(dev, "emulator");
         let (site, stock) = patch_site(dev);
-        assert_eq!(stock, [0x00, 0x18], "{}: the site is the operand of `pea (0x18).w`", dev.name);
+        assert_eq!(stock, [0xff, 0xff], "{}: the site is the low word of the immediate of `cmpi.l #0x3fffffff,D1`", dev.name);
         unsafe {
             let (mut l, _plan) = planned(dev, &image, &[], &[&LOCAL_PATCH_USER], &[LOCAL_PATCH]);
             assert_eq!(l.found.n, 2, "{}: the search finds the service and the port file its patch names", dev.name);
@@ -54,7 +54,7 @@ fn a_service_with_a_patch_installs_it_and_the_firmware_is_stock_after_the_unload
             assert_eq!(bytes_at(&l, site, 2), (PATCH_TEST_VALUE as u16).to_be_bytes(), "{}: the patch bytes are at the site", dev.name);
             let patched = l.p.code.borrow().clone();
             let changed: Vec<u32> = patched.iter().filter(|(a, b)| before.get(a) != Some(b)).map(|(a, _)| *a).collect();
-            assert_eq!(changed, [site + 1], "{}: only the second byte of the site changed (0x18 to 0x20)", dev.name);
+            assert_eq!(changed, [site + 1], "{}: only the second byte of the site changed (0xff to 0xfe)", dev.name);
 
             let report = pm.unload(user).unwrap();
             assert_eq!(report.taken_down().as_slice(), [user, service, port], "{}", dev.name);
@@ -84,7 +84,7 @@ fn a_patch_site_that_is_not_stock_refuses_the_service_with_the_stock_status_and_
         unsafe {
             let (mut l, _plan) = planned(dev, &image, &[], &[&LOCAL_PATCH_USER], &[LOCAL_PATCH]);
             // another firmware revision, or another patch, left other bytes at the site
-            l.p.put_code(site, &[0x00, 0x19]);
+            l.p.put_code(site, &[0xff, 0xfd]);
             let before = l.p.code.borrow().clone();
             let path = std::format!("modules/{}.dkm\0", LOCAL_PATCH_USER.leaf).into_bytes();
             let mut at = [None; MAX_MODULES];

@@ -122,7 +122,7 @@ impl Installer {
         self.np
     }
 
-    /// The layout of the items, no platform call: capacity, lengths and entries, and that no site overlaps an installed one or another item of the batch. Errors: `E_RANGE` (length,
+    /// The layout of the items, no platform call: capacity, lengths and entries, and that no site overlaps an installed one or another item of the batch. Errors: `E_RANGE` (length, a patch value wider than its length,
     /// entry), `E_PLAN_FIT` (no room in the site table or the patch log), `E_PLAN_OWNER` (an installed site or patch, or an earlier item, overlaps).
     #[inline(never)]
     fn layout(&self, hooks: &[HookItem], patches: &[PatchItem], image_size: u32) -> Result<(), i32> {
@@ -154,6 +154,10 @@ impl Installer {
         while i < patches.len() {
             let b = &patches[i];
             if b.len != 1 && b.len != 2 && b.len != 4 {
+                return Err(E_RANGE);
+            }
+            // the value has to fit the declared length: a longer one would be cut to its low bytes
+            if b.len < 4 && b.value >> (8 * b.len) != 0 {
                 return Err(E_RANGE);
             }
             if self.taken(b.addr, b.len) {
@@ -964,6 +968,23 @@ mod tests {
         assert_eq!(unsafe { ins.install(&f, 2, &[], &[patch(0x2000_0003, 1, &stock, 1)], BASE, SIZE, &[]) }, Err(E_PLAN_OWNER));
         for len in [0u32, 3, 8] {
             assert_eq!(unsafe { ins.check(&f, &[], &[patch(0x3000_0000, len, &[0; 8], 1)], SIZE) }, Err(E_RANGE), "len {len}");
+        }
+    }
+
+    #[test]
+    fn a_patch_value_that_does_not_fit_its_length_is_out_of_range_and_nothing_is_written() {
+        let stock = [1u8, 2, 3, 4];
+        let f = fake_with(&[(0x2000_0100, &stock)]);
+        let mut ins = Installer::new();
+        for (len, value) in [(1u32, 0x120u32), (2, 0x1_0000), (1, 0xffff_ffff)] {
+            assert_eq!(unsafe { ins.install(&f, 0, &[], &[patch(0x2000_0100, len, &stock, value)], BASE, SIZE, &[]) }, Err(E_RANGE), "len {len} value {value:#x}");
+        }
+        assert!(f.calls.borrow().is_empty(), "no platform call before the refusal");
+        assert_eq!((ins.patch_count(), code(&f, 0x2000_0100, 4)), (0, stock.to_vec()));
+        // the largest value of each length is accepted
+        for (len, value) in [(1u32, 0xffu32), (2, 0xffff), (4, 0xffff_ffff)] {
+            assert_eq!(unsafe { ins.install(&f, 1, &[], &[patch(0x2000_0100, len, &stock, value)], BASE, SIZE, &[]) }, Ok(()), "len {len}");
+            unsafe { ins.restore(&f, 1) };
         }
     }
 

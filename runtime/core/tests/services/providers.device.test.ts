@@ -29,11 +29,11 @@ const E_MISSING = loadCode('E_MISSING');
 /** The hook the fixture takes, and what the stock site holds (the displaced `movea.l (a2),a0` and `pea (2).w`). */
 const HOOK = 'cf.menu.hook.settings_list.test';
 const STOCK_SITE = [0x2052, 0x4878, 0x0002];
-/** The patch the fixture `test/local-patch` takes (ports/fw/filter.toml): the two bytes of `pea (0x18).w` that give the allocation size of the chooser's order vector. */
-const PATCH = 'cf.filter.hook.test_list_size_patch';
-const STOCK_ALLOCATION = 0x0018;
-/** What `LocalPatch::start` computes (tests/fixtures/modules/local-patch): a larger allocation, so the firmware does what it did. */
-const PATCHED_ALLOCATION = 0x0020;
+/** The patch the fixture `test/local-patch` takes (ports/fw/filter.toml): the low word of the immediate of `cmpi.l #0x3fffffff,D1` in the chooser's order vector copy (D1 is always 6: the bound is dead). */
+const PATCH = 'cf.filter.hook.test_bound_patch';
+const STOCK_BOUND = 0xffff;
+/** What `LocalPatch::start` computes (tests/fixtures/modules/local-patch): a bound one below the stock, which the firmware never reaches. */
+const PATCHED_BOUND = 0xfffe;
 /** The kind of a patch site in the port file (`SITE_PATCH`). */
 const KIND_PATCH = 3;
 /** The tags of the header table. */
@@ -275,18 +275,18 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
     const rt = await h.load('local-patch', { modules: [debug, client, provider, port], selection: [debug.name, client.name] });
     const log = await h.usb(rt, (dk) => dk.readLog());
     expect(providerOf(log, nameHash('local-patch')).map((p) => p.result), 'the service with the patch loaded').toEqual([0]);
-    expect(await halfwordAt(rt, site), 'the bytes the service computed are at the site').toBe(PATCHED_ALLOCATION);
+    expect(await halfwordAt(rt, site), 'the bytes the service computed are at the site').toBe(PATCHED_BOUND);
     await rt.session.expectNoFault('patched site');
 
     // the live job takes a module down and leaves the services up (a service is taken down by the package manager's unload, which the host assembly test runs: the site is stock after
     // `pm.unload`): so the patch stays after the user unloads, and a safe boot (no provider loads, the installers stay disarmed) leaves the site stock
     const end = await h.usb(rt, (dk) => dk.unloadAndWait(client.name));
     expect(end, 'the unload of the user').toEqual({ result: 0, unloaded: true });
-    expect(await halfwordAt(rt, site), 'the service stays up for the next user, so its patch stays').toBe(PATCHED_ALLOCATION);
+    expect(await halfwordAt(rt, site), 'the service stays up for the next user, so its patch stays').toBe(PATCHED_BOUND);
     const selection = [debug.name, client.name];
     const safe = await h.boot(await h.card({ modules: [debug, client, provider, port], selection, flags: 1 }));
     expect(await h.ready(true), 'safe mode by the flag').toMatchObject({ safe: 1, loaded: 0 });
     await safe.session.client.call('run.mode', { mode: 'paused' });
-    expect(await halfwordAt(safe, site), 'safe mode leaves the patch site stock').toBe(STOCK_ALLOCATION);
+    expect(await halfwordAt(safe, site), 'safe mode leaves the patch site stock').toBe(STOCK_BOUND);
   });
 });

@@ -606,17 +606,17 @@
       "at": {
         "dn2-1.11": [
           {
-            "addr": "0x4004db0e"
+            "addr": "0x4004db8e"
           }
         ],
         "dn2-1.12": [
           {
-            "addr": "0x4004db0e"
+            "addr": "0x4004db8e"
           }
         ],
         "dt2-1.17": [
           {
-            "addr": "0x40052cc4"
+            "addr": "0x40052d44"
           }
         ]
       },
@@ -625,18 +625,18 @@
         "dt2",
         "dn2"
       ],
-      "doc": "Test only: a patch site of two bytes, the operand of `pea (0x18).w` in the order vector's first-call path. The fixture patches it to a larger allocation and the loader restores it at unload.",
+      "doc": "Test only: a patch site of two bytes, the low word of the immediate of `cmpi.l #0x3fffffff,D1` in the order vector copy. D1 is always 6 there, so the bound is dead; the fixture patches it and the loader restores it at unload.",
       "file": "devices/fw/filter.toml",
       "kind": "hook",
       "mark": "D",
       "mode": "replace",
-      "name": "cf.filter.hook.test_list_size_patch",
+      "name": "cf.filter.hook.test_bound_patch",
       "offset": 2,
       "regs": {
         "clobbers": [],
         "in": []
       },
-      "site": "cf.filter.site.list_size",
+      "site": "cf.filter.site.test_bound",
       "subsystem": "filter",
       "users": [
         "test/local-patch"
@@ -865,6 +865,51 @@
       "subsystem": "filter",
       "users": [
         "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004db8c",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004db8c",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052d42",
+            "len": 4
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The immediate of `cmpi.l #0x3fffffff,D1; bls` in the order vector copy (DT2 0x40052d40, DN2 0x4004db8a): the size bound before the allocation, never reached by the six-element vector. A patch site of the test fixture only.",
+      "file": "devices/fw/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.filter.site.test_bound",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 170
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 170
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "test/local-patch"
       ],
       "was": []
     },
@@ -25688,7 +25733,7 @@
       "name": "draw"
     },
     {
-      "count": 12,
+      "count": 13,
       "cpu": "cf",
       "file": "devices/fw/filter.toml",
       "meaning": "the filter type: accessor, getter and setter, list, name, graph, loader bound",

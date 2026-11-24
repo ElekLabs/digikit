@@ -10,17 +10,14 @@ type = "raw"
 author = "digikit"
 status = "experimental"
 summary = "Fixture for a service that takes a patch of the firmware: two bytes, written at load with a value its start computed, and the stock bytes back before stop"
+ports = ["dt2-1.17", "dn2-1.12"]
 requires = []
 conflicts = []
 
-[targets]
-"dt2-1.17" = "experimental"
-"dn2-1.12" = "experimental"
-
-# The patch it takes (ports/fw/filter.toml, listed by the port file of the test image): the operand of the `pea (0x18).w` that allocates the chooser's order vector. `init` repeats it
+# The patch it takes (ports/fw/filter.toml, listed by the port file of the test image): the low word of the dead size bound of `cmpi.l #0x3fffffff,D1` in the order vector copy. `init` repeats it
 # with dk_service_declare_patch (`patches` of `service!`).
 [[patch]]
-name = "cf.filter.hook.test_list_size_patch"
+name = "cf.filter.hook.test_bound_patch"
 
 [[export]]
 name = "local_patch_value"

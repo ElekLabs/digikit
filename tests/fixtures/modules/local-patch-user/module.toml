@@ -7,12 +7,9 @@ type = "raw"
 author = "digikit"
 status = "experimental"
 summary = "Fixture for a hard need on a service that takes a patch of the firmware"
+ports = ["dt2-1.17", "dn2-1.12"]
 requires = []
 conflicts = []
-
-[targets]
-"dt2-1.17" = "experimental"
-"dn2-1.12" = "experimental"
 
 [[service_import]]
 service = "local-patch"

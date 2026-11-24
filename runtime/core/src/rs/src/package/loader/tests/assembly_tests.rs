@@ -81,8 +81,8 @@ fn service_file(dev: Dev, leaf: &str, nx: &str) -> Vec<u8> {
     packed(dev, leaf, "dks", nx)
 }
 
-/// The bytes the fixture `local-patch` declares for its patch (`LIST_SIZE_PATCH` of tests/fixtures/modules/local-patch/src/lib.rs): `init` is replayed here, so the value is the test's.
-pub(super) const PATCH_TEST_VALUE: u32 = 0x20;
+/// The bytes the fixture `local-patch` declares for its patch (`BOUND_PATCH` of tests/fixtures/modules/local-patch/src/lib.rs): `init` is replayed here, so the value is the test's.
+pub(super) const PATCH_TEST_VALUE: u32 = 0xfffe;
 
 /// The stock bytes of every hook site a service takes, from the local firmware (`patchkit port stock`, which reads the image and the committed port data; the bytes go
 /// into a fake firmware here and are written nowhere): hook name hash to (site address, displaced bytes). The port file holds only their check values.
@@ -643,7 +643,7 @@ pub(super) const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo
 const LFO_SHAPE_B: Fixture = Fixture { leaf: "lfo-shape-b", nx: "test/lfo-shape-b" };
 pub(super) const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
 /// The test service with ColdFire hooks in the port file of the test image, and its user.
-/// A service that takes one patch of the firmware (two bytes, the chooser's order vector allocation) and the module that needs it.
+/// A service that takes one patch of the firmware (two bytes, a dead size bound of the chooser's order vector copy) and the module that needs it.
 pub(super) const LOCAL_PATCH: Fixture = Fixture { leaf: "local-patch", nx: "test/local-patch" };
 pub(super) const LOCAL_PATCH_USER: Fixture = Fixture { leaf: "local-patch-user", nx: "test/local-patch-user" };
 pub(super) const SVC_TEST: Fixture = Fixture { leaf: "svc-test", nx: "test/svc-test" };
