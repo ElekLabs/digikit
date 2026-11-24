@@ -12,9 +12,9 @@ export function createModuleInventory() {
   }
   function reader(): typeof readLoadedModules {
     const connection = generation;
-    return async (session, info) => {
+    return async (session, info, pkg) => {
       const request = connection === generation ? ++sequence : -1;
-      const loaded = await readLoadedModules(session, info);
+      const loaded = await readLoadedModules(session, info, pkg);
       if (connection === generation && request === sequence) setModules(loaded);
       return loaded;
     };

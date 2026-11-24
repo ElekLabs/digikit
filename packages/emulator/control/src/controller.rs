@@ -522,6 +522,47 @@ fn with_build(mut reply: Value, build: &Option<Value>) -> Value {
 /// The modules `dev.reload` swaps without a boot, besides every module that requires `core/ui`.
 const SWAP_DEFAULT: &[&str] = &["core/ui", "core/digikit-menu"];
 
+/// Identity of an image recovered from guest-programmed flash and installed by a soft reset.
+struct FlashBoot {
+    from_epoch: u64,
+    container_sha256: String,
+    syx_sha256: String,
+    runtime_info: Option<Value>,
+}
+
+impl FlashBoot {
+    fn read(
+        flash: &[u8],
+        like: &[u8],
+        from_epoch: u64,
+    ) -> patchkit::error::Result<(Vec<u8>, Self)> {
+        let image = patchkit::flash::image_from_flash(flash, like)?;
+        // This is the container just validated and reconstructed from flash, without the erased tail.
+        let container = patchkit::flash::container_of(&image)?;
+        let boot = Self {
+            from_epoch,
+            container_sha256: firmware::sha256_hex(&container),
+            syx_sha256: firmware::sha256_hex(&image),
+            runtime_info: patch_runtime_info(&image),
+        };
+        Ok((image, boot))
+    }
+
+    fn receipt(&self) -> Value {
+        json!({
+            "from_epoch": self.from_epoch,
+            "container_sha256": self.container_sha256,
+            "syx_sha256": self.syx_sha256,
+        })
+    }
+}
+
+fn patch_runtime_info(image: &[u8]) -> Option<Value> {
+    patchkit::verify::patch_record(image).ok().flatten().map(|record| {
+        json!({"patched": true, "modules": record.modules, "base_sha256": record.base_sha256})
+    })
+}
+
 struct Loaded {
     /// The .syx the DSP audio profile and the device profile belong to, when
     /// known (a first load of an already patched .syx has none).
@@ -632,6 +673,8 @@ enum JobKind {
 
 struct Job {
     kind: JobKind,
+    /// A ColdFire-only guest flash publishes its receipt when the boot reaches ready.
+    flash_boot: Option<FlashBoot>,
     reply: RpcReply,
     started: Instant,
     wall_limit: Option<f64>,
@@ -763,8 +806,10 @@ struct Actor {
     /// Taken by the first load that mounts a card image.
     startup_card_folder: Option<CardSource>,
     repo_root: Option<PathBuf>,
-    /// What `firmware.load {runtime}` did to the image now running (`status.firmware.runtime`): the patch report, or null.
+    /// The patch report for the image now running (`status.firmware.runtime`), or null.
     runtime_info: Option<Value>,
+    /// The last guest flash that installed the current image. Explicit loads drop the receipt.
+    flash_boot: Option<FlashBoot>,
     /// The ready state `dev.reload` restores before it writes module code (see `rpc_dev_reload`).
     reload: Option<ReloadState>,
     /// The `runtime.maps` answer for the image with this SHA-256 (the apply that makes it takes about a second).
@@ -898,6 +943,7 @@ impl Actor {
             startup_card_folder: config.card_folder,
             repo_root: config.repo_root,
             runtime_info: None,
+            flash_boot: None,
             reload: None,
             maps_cache: None,
             quit: false,
@@ -946,52 +992,69 @@ impl Actor {
     /// guest left it (its writes laid over the image), with coupled DSP audio when available.
     fn soft_reset(&mut self) {
         // The guest rewrote the flash container (the OS upgrade): the bootstrap boots what it wrote, so the emulator does too.
-        let flashed = self.runtime.as_ref().and_then(|r| {
-            (r.flash_writes().programs > 0)
-                .then(|| r.flash_bytes(0x80000, 0x300000).map(<[u8]>::to_vec))
-                .flatten()
-        });
-        if let (Some(flash), Some(loaded)) = (flashed, self.loaded.as_mut()) {
-            match patchkit::flash::image_from_flash(&flash, &loaded.current) {
-                Ok(image) => {
-                    let sha = firmware::sha256_hex(&image);
-                    loaded.current = image;
-                    loaded.current_analysis = None;
-                    self.emit("flash.booted", json!({"sha256": sha}));
+        let installed_flash = self.flash_boot.take();
+        let mut flash_boot = self
+            .job
+            .as_mut()
+            .and_then(|job| job.flash_boot.take())
+            .or(installed_flash);
+        let mut flashed_image = None;
+        if let (Some(runtime), Some(loaded)) = (&self.runtime, &self.loaded) {
+            let writes = runtime.flash_writes();
+            if writes.erases > 0 || writes.programs > 0 {
+                flash_boot = None;
+            }
+            if writes.programs > 0
+                && let Some(flash) = runtime.flash_bytes(0x80000, 0x300000)
+            {
+                match FlashBoot::read(flash, &loaded.current, self.epoch) {
+                    Ok((image, boot)) => {
+                        self.emit("flash.booted", json!({"sha256": boot.syx_sha256}));
+                        flashed_image = Some(image);
+                        flash_boot = Some(boot);
+                    }
+                    Err(e) => self.emit("flash.invalid", json!({"reason": e.to_string()})),
                 }
-                Err(e) => self.emit("flash.invalid", json!({"reason": e.to_string()})),
             }
         }
         // A firmware given on the command line is loaded as stock, without an analysis: make it here.
         let analysed = match self.loaded.as_mut() {
-            Some(loaded) => loaded.find_base().and_then(|()| loaded.ensure_analysis()),
+            Some(loaded) => loaded.find_base().and_then(|()| {
+                if let Some(image) = &flashed_image {
+                    return Analysis::of(image);
+                }
+                loaded.ensure_analysis()?;
+                Ok(loaded
+                    .current_analysis
+                    .clone()
+                    .expect("ensure_analysis made it"))
+            }),
             None => Err("no firmware loaded".into()),
         };
-        if let Err(reason) = analysed {
-            self.reset_overlay = None;
-            self.reset_ram = None;
-            self.emit(
-                "cpu.reset",
-                json!({"restart": "unsupported", "reason": reason}),
-            );
-            self.finish_job(Err(RpcError::new(
-                code::GUEST_FAULT,
-                "boot loop: the restart failed",
-            )));
-            self.mode = Mode::Paused;
-            return;
-        }
+        let new = match analysed {
+            Ok(new) => new,
+            Err(reason) => {
+                self.reset_overlay = None;
+                self.reset_ram = None;
+                self.emit(
+                    "cpu.reset",
+                    json!({"restart": "unsupported", "reason": reason}),
+                );
+                self.finish_job(Err(RpcError::new(
+                    code::GUEST_FAULT,
+                    "boot loop: the restart failed",
+                )));
+                self.mode = Mode::Paused;
+                return;
+            }
+        };
         let loaded = self.loaded.as_ref().expect("checked above");
         let (bytes, card, base_sha, base_bytes) = (
-            loaded.current.clone(),
+            flashed_image.unwrap_or_else(|| loaded.current.clone()),
             loaded.card.clone(),
             loaded.base_sha.clone(),
             loaded.base.clone(),
         );
-        let new = loaded
-            .current_analysis
-            .clone()
-            .expect("ensure_analysis made it");
         self.reset_overlay = self.runtime.as_ref().map(|r| r.card_overlay());
         self.reset_ram = self
             .keep_ram_range()
@@ -1015,12 +1078,11 @@ impl Actor {
             reply,
         ) {
             Ok(true) => {
-                // CF boot runs as a controller job and resumes free running. A coupled
-                // worker preserves the caller's mode, including paused RPC boundaries.
-                if matches!(
-                    self.job.as_ref().map(|job| &job.kind),
-                    Some(JobKind::Boot { .. })
-                ) {
+                // A coupled worker preserves the caller's mode. A ColdFire boot job resumes free running.
+                if let Some(job) = &mut self.patch_job {
+                    job.flash_boot = flash_boot;
+                } else if let Some(job) = &mut self.job {
+                    job.flash_boot = flash_boot;
                     self.mode = Mode::Free;
                 }
                 self.emit("cpu.reset", json!({"restart": "cold boot started"}));
@@ -1046,6 +1108,15 @@ impl Actor {
                 self.mode = Mode::Paused;
                 let _ = reply.send(Err(e));
             }
+        }
+    }
+
+    fn install_flash_boot(&mut self, boot: Option<FlashBoot>) {
+        if let (Some(boot), Some(loaded)) = (boot, &self.loaded)
+            && boot.syx_sha256 == firmware::sha256_hex(&loaded.current)
+        {
+            self.runtime_info = boot.runtime_info.clone();
+            self.flash_boot = Some(boot);
         }
     }
 
@@ -1332,6 +1403,7 @@ impl Actor {
             runtime.observe_pcm_windows(source);
         }
         self.runtime = Some(runtime);
+        self.flash_boot = None;
         self.overlay_set_aside = false;
         self.read_error = error;
         if std::mem::take(&mut self.want_auto_no) {
@@ -1712,8 +1784,12 @@ impl Actor {
                 .unwrap_or_else(|| loaded.current.clone()),
             loaded.card.clone(),
         );
+        let image_changed = loaded.current != bytes;
         let synced = self.card_synced(image.as_deref());
         let (runtime, error) = runtime_from(&bytes, image, self.audio.as_ref(), synced)?;
+        if image_changed {
+            self.runtime_info = patch_runtime_info(&bytes);
+        }
         self.session = next_session;
         self.loaded = self.loaded.take().map(|mut l| {
             l.current = bytes;
@@ -2012,6 +2088,9 @@ impl Actor {
             error.data = Some(error.data.take().unwrap_or(status));
             error
         });
+        if result.is_ok() {
+            self.install_flash_boot(job.flash_boot);
+        }
         if label == "firmware.load" {
             let ok = result.is_ok();
             self.emit("firmware.loaded", json!({"ok": ok, "seconds": seconds}));
@@ -2199,6 +2278,7 @@ impl Actor {
             RpcError::new(code::FIRMWARE_REJECTED, format!("{}: {e}", path.display()))
         })?;
         runtime.resume_watch();
+        self.flash_boot = None;
         self.held_frame = None;
         self.held_leds = None;
         self.epoch += 1;
@@ -2220,6 +2300,7 @@ impl Actor {
         }
         self.job = Some(Job {
             kind,
+            flash_boot: None,
             reply: reply.clone(),
             started: Instant::now(),
             wall_limit,
@@ -2270,7 +2351,7 @@ impl Actor {
         };
         let scheduled = self.schedule.len();
         let Some(runtime) = self.runtime.as_mut() else {
-            return Ok(json!({"firmware": null, "job": job}));
+            return Ok(json!({"firmware": null, "job": job, "flash_boot": null}));
         };
         let status = runtime.status();
         let cf = serde_json::to_value(&status).unwrap_or(Value::Null);
@@ -2281,7 +2362,7 @@ impl Actor {
         Ok(json!({
             "controller_cpu_ns": elektron_native_boot::thread_cpu_ns(),
             "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "dsp_enabled": self.dsp, "dsp_flag": self.dsp_flag, "job": job,
-            "scheduled_inputs": scheduled, "frame_revision": frame,
+            "scheduled_inputs": scheduled, "frame_revision": frame, "flash_boot": self.flash_boot.as_ref().map(FlashBoot::receipt),
             "heartbeat": {"mainloop_hits": cf["mainloop_hits"], "stalled": self.health.stalled(),
                           "stall_count": self.health.stall_count, "stall_ms": self.health.stall_ms,
                           "underrun_count": self.health.underrun_count,
@@ -2802,15 +2883,31 @@ impl Actor {
 
     /// `midi.in {bytes | file, period?}` queues bytes on the MIDI DIN input (UART9), one per `period` instructions
     /// (default 42,240: the 31250 baud wire rate; 0 = as fast as the firmware takes its interrupts).
-    /// `midi.usb.in {bytes | file, chunk?, period?}` hands the bytes to the firmware's USB MIDI receive callback (USB itself is not
+    /// `midi.usb.in {bytes | file, chunk?, period?, epoch?}` hands the bytes to the firmware's USB MIDI receive callback (USB itself is not
     /// modelled; docs/CONTROL.md) in calls of `chunk` bytes (1 to 384, default 64) `period` instructions apart (default 132,000, a
     /// full-speed frame; 16,500 is a high-speed microframe). `bytes` is a hex string (spaces allowed) or an array of numbers.
+    /// When given, `epoch` requires the same idle runtime before any bytes are queued.
     fn rpc_midi_in(&mut self, method: &str, p: &Params) -> RpcResult {
+        let usb = method == "midi.usb.in";
+        if usb && let Some(epoch) = p.opt_u64("epoch")? {
+            if epoch != self.epoch {
+                return Err(RpcError::new(code::STALE_SESSION, "stale emulator epoch"));
+            }
+            if self.reset_pending
+                || self.patch_job.is_some()
+                || self.card_job.is_some()
+                || self.job.is_some()
+            {
+                return Err(RpcError::new(
+                    code::BUSY,
+                    "a job is running; wait for it before sending USB MIDI",
+                ));
+            }
+        }
         let data = bytes_param(p)?;
         let period = p
             .opt_u64("period")?
             .unwrap_or(elektron_native_boot::midi::WIRE_PERIOD);
-        let usb = method == "midi.usb.in";
         let usb_chunk = p.opt_u64("chunk")?.map(|n| n as usize);
         let usb_period = p.opt_u64("period")?;
         let queued = self.with_runtime(|r| {
@@ -3727,6 +3824,8 @@ impl Actor {
         let result = self.firmware_load_inner(p, bytes, reply);
         if result.is_err() {
             self.dsp = before;
+        } else {
+            self.flash_boot = None;
         }
         result
     }
@@ -4176,6 +4275,9 @@ impl Actor {
             report["audio"] = self.runtime.as_ref().is_some_and(Runtime::has_audio).into();
         }
         if let Some(loaded) = self.loaded.as_mut() {
+            if loaded.current != bytes {
+                self.flash_boot = None;
+            }
             loaded.current = bytes;
             loaded.current_analysis = Some(new);
         }
@@ -4438,6 +4540,7 @@ struct PatchJob {
     /// The boot phase: `PHASE_DSP`, `PHASE_COLDFIRE`, or `PHASE_STARTING` before the first callback.
     phase: Arc<AtomicU8>,
     install: PatchInstall,
+    flash_boot: Option<FlashBoot>,
     /// The card writes of a boot that ended in a soft reset (see `digi_coupled::cold::SOFT_RESET`).
     reset_out: Arc<Mutex<Option<Vec<emmc_card::CardOverlaySector>>>>,
     /// The kept RAM range of a boot that ended in a soft reset (see `digi_coupled::cold::KeepRam`).
@@ -4859,6 +4962,7 @@ impl Actor {
             fraction,
             phase,
             install,
+            flash_boot: None,
             reset_out,
             keep_out,
         });
@@ -4988,7 +5092,10 @@ impl Actor {
                     initial_buttons.as_deref(),
                     &reply,
                 ) {
-                    Ok(CoupledLoad::Started) => return,
+                    Ok(CoupledLoad::Started) => {
+                        self.patch_job.as_mut().expect("started").flash_boot = job.flash_boot;
+                        return;
+                    }
                     _ => {
                         let _ = reply.send(Err(RpcError::new(
                             code::GUEST_FAULT,
@@ -5015,6 +5122,9 @@ impl Actor {
             }
         };
         let installed = result.is_ok();
+        if installed {
+            self.install_flash_boot(job.flash_boot);
+        }
         let cancelled = matches!(&result, Err(e) if e.code == code::CANCELLED);
         self.emit(
             "firmware.loaded",
@@ -5999,6 +6109,107 @@ mod initial_button_tests {
 #[cfg(test)]
 mod reset_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires DT2 1.17 and DN2 1.12 firmware"]
+    fn guest_flash_receipt_identifies_the_sealed_container_and_its_boot_image() {
+        let firmware_dir = std::env::var_os("DIGI_FIRMWARE_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../firmware"));
+        for filename in ["Digitakt_II_OS1.17.syx", "Digitone_II_OS1.12.syx"] {
+            let stock = std::fs::read(firmware_dir.join(filename)).unwrap();
+            let mut flash = patchkit::flash::container_of(&stock).unwrap();
+            let container_sha256 = firmware::sha256_hex(&flash);
+            flash.extend(std::iter::repeat_n(0xff, 0x10000));
+            let (image, boot) = FlashBoot::read(&flash, &stock, 13).unwrap();
+            assert_eq!(image, stock);
+            assert_eq!(
+                boot.runtime_info, None,
+                "stock restores clear the patch report"
+            );
+            assert_eq!(
+                boot.receipt(),
+                json!({
+                    "from_epoch": 13,
+                    "container_sha256": container_sha256,
+                    "syx_sha256": firmware::sha256_hex(&stock),
+                })
+            );
+            flash[0x400] ^= 1;
+            assert!(FlashBoot::read(&flash, &stock, 14).is_err());
+        }
+    }
+
+    #[test]
+    fn cold_fire_publishes_a_guest_flash_receipt_only_after_a_successful_boot() {
+        let (_commands, rx) = mpsc::channel();
+        let mut controller = Actor::new(rx, Config::new(None));
+        controller.runtime_info = Some(json!({"patched": true}));
+        let (reply, _result) = mpsc::channel();
+        let flashed = b"flashed image";
+        for (image, result, publishes) in [
+            (
+                flashed.as_slice(),
+                Err(RpcError::new(code::GUEST_FAULT, "boot failed")),
+                false,
+            ),
+            (b"replacement image", Ok(json!({"booted": true})), false),
+            (flashed, Ok(json!({"booted": true})), true),
+        ] {
+            controller.loaded = Some(Loaded::stock(image.to_vec(), None));
+            controller
+                .start_job(
+                    JobKind::Boot {
+                        cache: None,
+                        limit: BOOT_LIMIT,
+                    },
+                    &reply,
+                    None,
+                    json!({}),
+                    "firmware.load",
+                )
+                .unwrap();
+            controller.job.as_mut().unwrap().flash_boot = Some(FlashBoot {
+                from_epoch: 7,
+                container_sha256: "a".repeat(64),
+                syx_sha256: firmware::sha256_hex(flashed),
+                runtime_info: None,
+            });
+            assert!(controller.flash_boot.is_none());
+            controller.finish_job(result);
+            assert_eq!(controller.flash_boot.is_some(), publishes);
+            assert_eq!(controller.runtime_info.is_none(), publishes);
+        }
+    }
+
+    #[test]
+    fn usb_midi_with_an_epoch_requires_the_same_idle_runtime() {
+        let (_commands, rx) = mpsc::channel();
+        let mut controller = Actor::new(rx, Config::new(None));
+        controller.epoch = 4;
+        let current = json!({"epoch": 4, "bytes": "f0f7"});
+        let stale = json!({"epoch": 3, "bytes": "f0f7"});
+        let unscoped = json!({"bytes": "f0f7"});
+        let (reply, _result) = mpsc::channel();
+        controller
+            .start_job(JobKind::Steps { end: 1 }, &reply, None, json!({}), "step")
+            .unwrap();
+
+        for (method, params, expected) in [
+            ("midi.usb.in", &stale, code::STALE_SESSION),
+            ("midi.usb.in", &current, code::BUSY),
+            ("midi.usb.in", &unscoped, code::NO_FIRMWARE),
+            ("midi.in", &stale, code::NO_FIRMWARE),
+        ] {
+            let error = controller.rpc_midi_in(method, &Params(params)).unwrap_err();
+            assert_eq!(error.code, expected);
+        }
+        controller.job = None;
+        let error = controller
+            .rpc_midi_in("midi.usb.in", &Params(&current))
+            .unwrap_err();
+        assert_eq!(error.code, code::NO_FIRMWARE);
+    }
 
     #[test]
     fn job_cancel_ends_a_stepping_job_with_cancelled() {

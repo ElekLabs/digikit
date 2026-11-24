@@ -1,4 +1,4 @@
-// The pure part of the loading state in Console.tsx: what the status bar and the Log say while a firmware starts.
+// The pure part of the emulator loading state: what the status bar and the Log say while a firmware starts.
 // Host tests: apps/desktop/ui/tests/boot.test.ts.
 import { deviceNameOf, type DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import type { Target } from '@digi/workbench-core/transfer/target.ts';
@@ -21,7 +21,7 @@ export function bootingStatus(b: Booting): string {
 export type TargetKind = Target['kind'];
 
 /**
- * Does the app boot a firmware at once when it starts? A command-line file always does. The last firmware of "Load on start" only when the target is
+ * Does the app boot a firmware at once when it starts? A command-line file always does. The last firmware of "Auto-load firmware" only when the target is
  * the emulator: with a device as target the emulator waits for the first visit of its page (`bootOnEmulatorPage`).
  */
 export function shouldBootOnStart(

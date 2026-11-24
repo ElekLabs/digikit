@@ -49,6 +49,12 @@ export function newestReleasesText(ids: readonly string[] = runtimeDeviceIds): s
 /** Is `id` a device of the registry? */
 export const isDeviceId = (id: string): id is DeviceId => deviceIds.includes(id);
 
+/** The device id from a firmware INFO port, reported as `<id>` or `<id>-<version>`. */
+export function deviceOfInfoPort(port: string): DeviceId | undefined {
+  const id = port.split('-')[0] ?? '';
+  return isDeviceId(id) ? id : undefined;
+}
+
 /** Which device a MIDI port name belongs to: the first word of a device name in the port name ("Elektron A II" is the device named "A II"). */
 export function deviceOfPort(port: string): DeviceId | undefined {
   const p = port.toLowerCase();

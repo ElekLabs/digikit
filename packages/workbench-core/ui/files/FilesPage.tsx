@@ -2,6 +2,7 @@
 // and an info pane with the .dkm header, the load state and the library match. The emulator and a device go through the same StoreOps
 // (src/target-ops/ops.ts); nothing is written. The tree rows are the Transfer page's ListRow.
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
+import CopyErrorButton from '../components/CopyErrorButton';
 import { useTransferApp } from '../../src/transfer/app-context';
 import { targetLabel } from '../../src/transfer/target';
 import { failureLine } from '../../src/transfer/wait-core';
@@ -551,14 +552,26 @@ export default function FilesPage(props: FilesPageProps): JSX.Element {
           </p>
         )}
       </Show>
+      <Show when={snap()?.coreOnly}>
+        <p class="note">
+          The target is running in core-only mode.
+          <Show when={app.env.extras?.systemPackage}>
+            {' '}
+            Choose Transfer → Modules → Install system package to restore module support.
+          </Show>
+        </p>
+      </Show>
       <Show when={props.halted?.()}>{(why) => <p class="note">{why()}</p>}</Show>
       <Show when={error()}>
-        <p class="err" role="alert">
-          <span class="msg">{error()}</span>
-          <button type="button" class="act small" disabled={busy()} onClick={() => void load()}>
-            Try again
-          </button>
-        </p>
+        {(message) => (
+          <p class="err" role="alert">
+            <span class="msg">{message()}</span>
+            <CopyErrorButton text={message()} />
+            <button type="button" class="act small" disabled={busy()} onClick={() => void load()}>
+              Try again
+            </button>
+          </p>
+        )}
       </Show>
       <Show when={snap()?.usage}>
         {(u) => (

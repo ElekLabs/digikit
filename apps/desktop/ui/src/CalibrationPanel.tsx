@@ -9,7 +9,7 @@ import type { Host } from '@digi/workbench-core/host/host.ts';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { cardRefresh } from './card-state';
 import { createDkProfLoader } from './dkprof-env';
-import { deviceOfPort } from './remote-core';
+import { deviceOfInfoPort } from '@digi/workbench-core/data/device-profiles.ts';
 import CalibrationSection from './CalibrationSection';
 import { calibrationTexts } from './calibration-data';
 import { createCalibrator } from './calibration-backend';
@@ -50,7 +50,7 @@ export default function CalibrationPanel(props: {
         .catch(() => latest === mine && setPort(''));
     });
   });
-  const device = () => deviceOfPort(port());
+  const device = () => deviceOfInfoPort(port());
   const deviceName = () => {
     const d = device();
     const version = port().slice(port().indexOf('-') + 1);
@@ -91,9 +91,7 @@ export default function CalibrationPanel(props: {
     emulator: onEmulator,
     visible: () => props.visible,
     blocked: () => app.jobs.busy('target'),
-    onRunning: (r) => {
-      props.hub.setCalibrating(r);
-    },
+    onRunning: untrack(() => props.hub.setCalibrating),
   });
   onCleanup(() => calibration.dispose());
 

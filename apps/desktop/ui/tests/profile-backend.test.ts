@@ -1,4 +1,4 @@
-// The Profile pane's recorder (src/profile-backend.ts) over a fake session, a fake controller rpc and a fake library: what it reads, what Start,
+// The Profile pane's recorder (src/profile/recorder.ts) over a fake session, a fake controller rpc and a fake library: what it reads, what Start,
 // Stop, Reset and Export do on the emulator and on a device.
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
@@ -8,7 +8,7 @@ import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import type { EmuRpc } from '@digi/workbench-core/host/host.ts';
 import { ownerName } from '@digi/workbench-core/profile/profile-core.ts';
 import type { LibraryModule } from '@digi/workbench-core/modules/dktransfer.ts';
-import { cfView, createRecorder, isDebugMissing, type ProfileSession } from '../src/profile-backend.ts';
+import { cfView, createRecorder, isDebugMissing, type ProfileSession } from '../src/profile/recorder.ts';
 
 /** A device of the registry without a DSP (its profile has no sharc.profile). */
 const noDsp = registry.devices.find((d) => d.capabilities.dsp !== 'sharc')!;

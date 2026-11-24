@@ -2,7 +2,7 @@
 // over Web MIDI, in the desktop app over midir, and run headless against the emulator). Rust paces it: `flash::Sender` (through patchkit.wasm)
 // says when the next message goes out. The device sends no reply while it receives (finding 75), so the verdict comes from the restart:
 // the port goes away and comes back, then INFO (runtime and image id) or, for a restore, SoftwareVersion.
-import type { FlashSender, PreparedFlash, RpcMachine } from '../patch/patchkit-core';
+import type { FlashSender, PreparedFlash, RpcFailCode, RpcMachine } from '../patch/patchkit-core';
 import {
   CANCEL_TEXT,
   NO_ANSWER_TEXT,
@@ -282,14 +282,13 @@ export async function afterSend(
 // ---- the RPC route ---------------------------------------------------------------------------------------------------------------
 
 /** The operations of the RPC route: the state machine (Rust, `flash_rpc::RpcFlash`) and a port that sends one message and reads the next. */
-export interface RpcOps extends Pick<
-  FlowOps,
-  'send' | 'now' | 'sleep' | 'release' | 'ports' | 'ask' | 'port' | 'moved' | 'log'
-> {
+export interface RpcExchange extends Pick<FlowOps, 'send' | 'now'> {
   machine(image: Uint8Array, chunk: number): Promise<RpcMachine>;
   /** The next message the device sent within `timeoutMs`, or null; ends early (null) when `signal` aborts. */
   recv(timeoutMs: number, signal?: AbortSignal): Promise<Uint8Array | null>;
 }
+
+export interface RpcOps extends RpcExchange, Omit<FlowOps, 'sender'> {}
 
 /**
  * Send the image through the RPC route, commit when the device has checked it, and wait for the restart. All decisions (what to send, how often to repeat a chunk, when a
@@ -304,6 +303,19 @@ export async function runRpcFlash(
   limits: FlowLimits = LIMITS,
   chunk = 0,
 ): Promise<FlashState> {
+  return driveRpcFlash(ops, p, signal, set, () => afterSend(ops, p, signal, set, limits, true), chunk);
+}
+
+/** Drive the same RPC exchange when reboot evidence comes from the emulator controller. */
+export async function driveRpcFlash(
+  ops: RpcExchange,
+  p: PreparedFlash,
+  signal: AbortSignal,
+  set: (s: FlashState) => void,
+  afterCommit: () => Promise<FlashState>,
+  chunk = 0,
+  emulator?: { commit(): void; failure(code: RpcFailCode, message: string): string },
+): Promise<FlashState> {
   const done = (s: FlashState): FlashState => {
     set(s);
     return s;
@@ -312,6 +324,7 @@ export async function runRpcFlash(
   const m = await ops.machine(p.image, chunk);
   const startedMs = ops.now();
   let rebooting = false;
+  let committing = false;
   try {
     let shown = Number.NEGATIVE_INFINITY;
     let cancelled = false;
@@ -333,7 +346,7 @@ export async function runRpcFlash(
     };
     set({ phase: 'sending', sent: 0, total, startedMs, nowMs: startedMs, unit: 'bytes' });
     for (;;) {
-      if (signal.aborted && !cancelled) {
+      if (signal.aborted && !cancelled && !(committing && emulator)) {
         cancelled = true;
         m.cancel();
       }
@@ -341,6 +354,7 @@ export async function runRpcFlash(
       if (a.kind === 'send') {
         // the long timeout is the last Write: the device checks the whole image before it answers
         if (a.timeoutMs >= 10_000 && !cancelled) progress(true);
+        if (committing) emulator?.commit();
         try {
           await ops.send(a.bytes);
         } catch (e) {
@@ -353,13 +367,20 @@ export async function runRpcFlash(
         // wait for the reply to this request: the message is ours (the machine says so), or the time is up, or the user aborts
         const wait = async (sig: AbortSignal | undefined): Promise<'got' | 'timeout' | 'aborted'> => {
           for (let left = end - ops.now(); left > 0; left = end - ops.now()) {
-            const r = await ops.recv(left, sig);
+            let r: Uint8Array | null;
+            try {
+              r = await ops.recv(left, sig);
+            } catch (error) {
+              if (!emulator) throw error;
+              portError = text(error);
+              return 'timeout';
+            }
             if (r && m.reply(r)) return 'got';
             if (!r && sig?.aborted) return 'aborted';
           }
           return 'timeout';
         };
-        let r = await wait(cancelled ? undefined : signal);
+        let r = await wait(cancelled || (committing && emulator) ? undefined : signal);
         if (r === 'aborted') {
           cancelled = true;
           // End with commit 0 follows. When it is too late (End with commit 1 is in flight) the reply is still awaited.
@@ -367,25 +388,32 @@ export async function runRpcFlash(
           r = await wait(undefined);
         }
         if (r === 'timeout') m.timeout();
-        if (r === 'got') progress(false);
+        if (r === 'got' && !(committing && emulator)) progress(false);
       } else if (a.kind === 'ask') {
         // the Flash click was the yes: the device validated the image, so the commit follows at once (a cancel that arrived until now still wins)
         set({ phase: 'sending', sent: m.taken(), total, startedMs, nowMs: ops.now(), unit: 'bytes', flashing: true });
-        m.confirm(!signal.aborted);
+        committing = !signal.aborted;
+        m.confirm(committing);
       } else if (a.kind === 'reboot') {
         rebooting = true;
         break;
       } else if (a.kind === 'done') {
         break;
       } else {
+        // An unanswered commit may still have reached the guest. Only the controller can prove that boot.
+        if (committing && emulator && a.code === 'timeout') {
+          rebooting = true;
+          break;
+        }
         const reason = a.code === 'cancelled' ? 'cancelled' : 'error';
+        const message = emulator?.failure(a.code, a.message) ?? a.message;
         return done({
           phase: 'stopped',
           reason,
           sent: a.taken,
           total,
           unit: 'bytes',
-          message: portError && reason === 'error' ? `${a.message} (${portError})` : a.message,
+          message: portError && reason === 'error' ? `${message} (${portError})` : message,
         });
       }
     }
@@ -393,6 +421,6 @@ export async function runRpcFlash(
     m.free();
   }
   return rebooting
-    ? afterSend(ops, p, signal, set, limits, true)
+    ? afterCommit()
     : done({ phase: 'failed', code: 'send', message: 'The device did not start the flash.' });
 }

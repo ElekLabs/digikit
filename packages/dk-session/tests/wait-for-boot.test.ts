@@ -91,6 +91,16 @@ test('without the debug module an answer after a silent spell is the new boot', 
   assert.equal(clock.pauses, 3);
 });
 
+test('a dropped INFO probe does not prove a fresh boot when boot evidence is required', async () => {
+  const dev = new Device();
+  const clock = fakeClock((n) => {
+    dev.silent = n === 2;
+  });
+  const s = new DkSession(dev, { timeoutMs: 200, retries: 0, clock });
+  await s.restart();
+  await assert.rejects(s.waitForBoot(2500, { requireBootEvidence: true }), /no new boot.*without a boot log/);
+});
+
 test('with the debug module the log shows the new boot: BOOT_START, no RESTART request, then FW_READY', async () => {
   const dev = new Device();
   dev.debug = true;
@@ -99,7 +109,7 @@ test('with the debug module the log shows the new boot: BOOT_START, no RESTART r
   });
   const s = new DkSession(dev, { timeoutMs: 200, retries: 0, clock });
   await s.restart();
-  await s.waitForBoot(5000);
+  await s.waitForBoot(5000, { requireBootEvidence: true });
   assert.equal(clock.pauses, 3);
 });
 

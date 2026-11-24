@@ -9,7 +9,7 @@ import {
   type AnalyzerInput,
   type Meter,
   type Stereo,
-} from './analyzer-frame';
+} from './frame';
 
 const SPECTRUM_POINTS = 384;
 

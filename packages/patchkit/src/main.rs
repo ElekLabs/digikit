@@ -19,7 +19,9 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
 
   inspect X.syx                          device, version, port, patch record
   check   --firmware X.syx [--modules a,b]  which modules fit, and why not
-  apply   --firmware X.syx [--modules a,b | --set NAME] [-o OUT.syx] [--plan plan.json] [--addrmap map.json] [--no-record (oracles only)] [--no-flash-cap (image for the emulator, not for flashing)]
+  apply   --firmware X.syx [--modules a,b | --set NAME] [-o OUT.syx] [--image-only] [--plan plan.json] [--addrmap map.json] [--no-record (oracles only)] [--no-flash-cap (image for the emulator, not for flashing)]
+                                         writes OUT.dksp alongside OUT.syx when the runtime declares a system package
+                                         --image-only: skip OUT.dksp for image-only workflows such as historical benchmarks
                                          --addrmap: the ship address map (names of the code the patch placed and of the port's anchors)
                                          without --modules: the device's patch set (devices/*.toml [patch_sets]), `device` by default
   (any command that reads modules: [--modules-dir DIR], PATCHKIT_MODULES=dir:dir for extra module roots)
@@ -97,6 +99,8 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          the system package from the package object (`core/runtime` `build/package.dko.json`) and the objects linked into it (the DIGIKIT menu's): header, image, bss size and relocations
   syspkg pack BODY --out FILE --table MAJOR.MINOR
                                          the system package: the 48-byte header (`dkrt_sdk::syspkg`) in front of BODY
+  syspkg install [FILE.dksp] (--port NAME | --emulator SOCKET)
+                                         recover module support on a matching core-only runtime; use this build's package when FILE.dksp is omitted
   owners RUNTIME.dko.json [--owners runtime/core/owners.toml] --out DIR
                                          one sha256 file per owner of the runtime object (docs/TESTING.md, Owner hashes)
   dko show FILE.dko.json [--relocs]      arch, toolchain record, sections, symbols and relocations of an object
@@ -108,7 +112,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          compile, link at BASE against the symbols, ISA-check (unit tests of C routines)
   flash   STOCK.syx (--port NAME | --emulator SOCKET) [--restore] [--set NAME] [--dry-run] [--save OUT.syx] [--yes]
                                          patch the stock file with the device's patch set, check the image and the messages the way the
-                                         device's OS UPGRADE receiver does, then send it (USB MIDI) and read INFO after the restart;
+                                         device's OS UPGRADE receiver does, send and verify the image, then install its system package when the image includes the runtime;
                                          --restore sends the stock file itself; --dry-run only checks (docs/PATCHING.md, \"Flashing\")
   list                                   modules under the repository roots and ports under ports/
   catalog-check                          validate all committed module manifests and requires;
@@ -328,6 +332,10 @@ fn run(a: Args) -> Result<()> {
             patchkit::owners::run(rest)?;
         }
         "service-check" => patchkit::svccheck::run(rest)?,
+        #[cfg(not(target_arch = "wasm32"))]
+        "syspkg" if rest.first().is_some_and(|arg| arg == "install") => {
+            flash_cli::recover_system_package(&a.root, &rest[1..])?;
+        }
         "syspkg" => patchkit::syspkg::run(rest)?,
         #[cfg(not(target_arch = "wasm32"))]
         "services" => patchkit::services::run(&a.root, rest)?,
@@ -404,7 +412,39 @@ fn run(a: Args) -> Result<()> {
                     flash_cap: !rest.iter().any(|a| a == "--no-flash-cap"),
                 };
                 let out = apply::apply_with(&raw, &reg, &lib, &ids, opts)?;
+                let plan = flag(rest, "--plan");
+                let addrmap = flag(rest, "--addrmap");
                 if let Some(o) = flag(rest, "-o") {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        use patchkit::syspkg;
+                        let path = Path::new(&o);
+                        let package = if !rest.iter().any(|arg| arg == "--image-only")
+                            && let Some(object) = lib.system_package_object(&ids)
+                        {
+                            let companion = syspkg::companion_path(path)?;
+                            for reserved in [Some(&fwp), plan.as_ref(), addrmap.as_ref()]
+                                .into_iter()
+                                .flatten()
+                            {
+                                if syspkg::paths_alias(Path::new(reserved), &companion) {
+                                    return Err(Error(format!(
+                                        "system package output {} conflicts with {reserved}",
+                                        companion.display()
+                                    )));
+                                }
+                            }
+                            Some(syspkg::build_from_runtime_object(&a.root, &object)?)
+                        } else {
+                            None
+                        };
+                        if let Some(companion) =
+                            syspkg::save_firmware(path, &out.syx, package.as_ref())?
+                        {
+                            println!("system package written to {}", companion.display());
+                        }
+                    }
+                    #[cfg(target_arch = "wasm32")]
                     write(&o, &out.syx)?;
                     println!(
                         "{o}: {} bytes, sha256 {}",
@@ -412,11 +452,11 @@ fn run(a: Args) -> Result<()> {
                         sha256_hex(&out.syx)
                     );
                 }
-                if let Some(p) = flag(rest, "--plan") {
+                if let Some(p) = plan {
                     let j = serde_json::to_string_pretty(&out.plan)?;
                     write(&p, (j + "\n").as_bytes())?;
                 }
-                if let Some(p) = flag(rest, "--addrmap") {
+                if let Some(p) = addrmap {
                     write(
                         &p,
                         patchkit::addrmap::ship_map(&out.plan).to_json().as_bytes(),
@@ -438,9 +478,7 @@ fn run(a: Args) -> Result<()> {
         }
         #[cfg(not(target_arch = "wasm32"))]
         "flash" => {
-            let reg = registry(&a.root)?;
-            let lib = library(&a.root, rest)?;
-            flash_cli::run(&reg, &lib, rest)?;
+            flash_cli::run(&a.root, &library_source(rest), rest)?;
         }
         "gen" => {
             let check = rest.iter().any(|a| a == "--check");

@@ -18,6 +18,7 @@ use crate::syx;
 use crate::verify;
 use dt2_firmware_loader as loader;
 use std::ops::Range;
+use std::path::PathBuf;
 
 /// The reply-driven route through the MidiRpc requests (the default); this file's `Sender` is the menu route.
 pub use crate::flash_rpc::{
@@ -161,6 +162,15 @@ fn info_of(short: &str) -> Result<&'static DeviceInfo> {
 
 /// Patch the stock image with the device file's patch set `set` and check the result for sending.
 pub fn prepare(stock: &[u8], reg: &Registry, lib: &Library, set: &str) -> Result<Prepared> {
+    prepare_with_package(stock, reg, lib, set).map(|(prepared, _)| prepared)
+}
+
+fn prepare_with_package(
+    stock: &[u8],
+    reg: &Registry,
+    lib: &Library,
+    set: &str,
+) -> Result<(Prepared, Option<PathBuf>)> {
     let sfw = Firmware::parse(stock)?;
     let port = known_port(&sfw, stock, reg)?;
     let (device, os) = (port.port.device.clone(), port.port.version.clone());
@@ -243,7 +253,7 @@ pub fn prepare(stock: &[u8], reg: &Registry, lib: &Library, set: &str) -> Result
             ),
         }),
     }
-    Ok(p)
+    Ok((p, lib.system_package_object(&ids)))
 }
 
 /// `prepare` or `restore` for a checkout: the registry, the module library and the device files are read from `root` (the desktop app).
@@ -254,17 +264,49 @@ pub fn prepare_in_repo(
     restore_stock: bool,
     set: &str,
 ) -> Result<Prepared> {
+    prepare_with_library(root, stock, restore_stock, set, |roots| {
+        let mut lib = Library::scan_repo_for(root, false, Some(roots))?;
+        lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
+        Ok(lib)
+    })
+    .map(|(prepared, _)| prepared)
+}
+
+/// Prepare a flash using the CLI's library sources and build only the selected closure.
+/// Also return the selected runtime's companion object path, when it declares one.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn prepare_in_repo_with_source(
+    root: &std::path::Path,
+    stock: &[u8],
+    restore_stock: bool,
+    set: &str,
+    source: &crate::module::LibrarySource,
+) -> Result<(Prepared, Option<PathBuf>)> {
+    prepare_with_library(root, stock, restore_stock, set, |roots| {
+        use crate::module::selected_library;
+        let manifests = selected_library(root, source, false, &[], roots)?;
+        let (ids, _) = manifests.with_requires(roots)?;
+        selected_library(root, source, false, &ids, roots)
+    })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn prepare_with_library(
+    root: &std::path::Path,
+    stock: &[u8],
+    restore_stock: bool,
+    set: &str,
+    library: impl FnOnce(&[String]) -> Result<Library>,
+) -> Result<(Prepared, Option<PathBuf>)> {
     let reg = Registry::from_dir(&root.join("ports"))?;
     if restore_stock {
-        return restore(stock, &reg);
+        return restore(stock, &reg).map(|prepared| (prepared, None));
     }
-    // the patch set is `core/*` modules: their objects are committed, no content module is built
     let fw = Firmware::parse(stock)?;
-    let device = known_port(&fw, stock, &reg)?.port.device.clone();
-    let roots = info_of(&device)?.patch_set(set)?.to_vec();
-    let mut lib = Library::scan_repo_for(root, false, Some(&roots))?;
-    lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
-    prepare(stock, &reg, &lib, set)
+    let port = known_port(&fw, stock, &reg)?;
+    let roots = info_of(&port.port.device)?.patch_set(set)?;
+    let lib = library(roots)?;
+    prepare_with_package(stock, &reg, &lib, set)
 }
 
 /// The stock file itself, through the same checks (a way back from a patched image). It needs no patch and carries no record.

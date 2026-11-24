@@ -530,7 +530,7 @@ body {
   background: var(--ink);
 }
 
-/* The Metrics tab of the right-hand column (Console.tsx, SidePanels.tsx). */
+/* The Metrics tab of the right-hand column (WorkbenchShell.tsx, SidePanels.tsx). */
 .metrics .poll {
   margin: 0;
   font-family: var(--font-mono);

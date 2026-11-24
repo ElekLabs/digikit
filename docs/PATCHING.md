@@ -44,7 +44,9 @@ mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx -
 ```
 
 This writes `out/patch/fx.syx` and `out/patch/fx.plan.json` (every write with its owner, diffable). Without `-o` the
-name is `out/patch/<firmware>+<modules>.syx`. The command verifies the result before it reports success. Notes:
+name is `out/patch/<firmware>+<modules>.syx`. A patch that includes the resident runtime also writes a sibling
+`.dksp` with the same base name. Keep it with the `.syx` for [package-only repair](#repair-module-support-from-the-command-line).
+The command verifies the result before it reports success. Notes:
 
 - Without `--modules` the device's patch set is applied: `device` by default, `--set NAME` for another (`devices/*.toml`
   `[patch_sets]`, roots only). `device` and `emulator` are both the flash-image modules of the rt021 images for now
@@ -54,6 +56,9 @@ name is `out/patch/<firmware>+<modules>.syx`. The command verifies the result be
   modules they `requires`, like the web gallery, and says so (`added by requires: core/machines, ...`). A module that
   is not in the library, a missing requirement and a `requires` cycle are refused.
 - Modules apply in a fixed order (dependencies first, then by id), whatever order you write them in.
+- When the selected runtime declares a system package, `patchkit apply -o OUT.syx` also saves the companion
+  `OUT.dksp` and prints its path. Pass `--image-only` for workflows that only need the image, such as historical
+  emulator benchmarks using a runtime with a different resident ABI.
 - The input must be a stock image. A patched image is refused.
 - Everything under `out/` is derived from firmware and is never committed.
 
@@ -375,6 +380,52 @@ displaced length, kind, check value). Its image is an `rts` and its bss holds th
 firmware references are outside the port set and how many hooks are not listed, and exits 1 on any. A `patchkit apply` image carries the `fw_id` entry, and the INFO reply
 of the runtime carries it too (capability `FW_ID`), which is how Transfer picks the port file for a device.
 
+### Flash from desktop Workbench
+
+1. Run `mise run workbench`, select the device’s USB MIDI port under Target, and open **Firmware**.
+2. Choose **Patch and flash** and select your stock `.syx`. Review the image checks and the selected device before
+   confirming **Flash**.
+3. Leave the device connected through the firmware reboot and system package setup. Workbench builds and validates
+   the checkout's system package before sending the firmware. The package must match the runtime in the prepared
+   image and fit its resident table ABI. After the firmware reboots, Workbench uploads and verifies `digikit/system.dksp`, restarts the target
+   when needed, and checks that module support is active before installing any selected default modules.
+4. If the target is still in core-only mode, choose **Transfer → Modules → Install system package** to retry setup.
+   Keep the target connected through the restart and check that Transfer shows module support again. If the MIDI port
+   name changes on the package reboot, reselect the port under Target before checking Transfer.
+
+When replacing an already active package, Workbench needs fresh boot events from the debug log to confirm activation.
+Without them, the package write can be verified on the card and activation can still time out. Restart the device
+manually, then check module support in Transfer. For core-only recovery, the return of module support confirms activation.
+
+### Flash the desktop emulator
+
+Open your stock `.syx` on the **Emulator** page and let the firmware finish booting. Select **Emulator** under
+Target, open **Firmware**, and choose the same stock file. Use **Flash emulator** to install digikit or choose
+**Restore stock** and click **Restore stock on emulator** to go back to the stock OS.
+
+The running guest writes its flash and restarts. Workbench verifies the prepared container against the new boot
+before setting up the system package and any selected default modules. You can cancel while the image is being
+sent. After Workbench commits the flash, wait for verification and setup to finish.
+The flash changes the running emulator session. Reopening Workbench and using Open or Reload still select firmware through the usual startup and source settings.
+
+### Repair module support from the command line
+
+Use this when the running firmware has booted in core-only mode. It works over a connected USB MIDI port or a running
+emulator's control socket.
+
+```sh
+mise exec -- pnpm nx:pilot run patchkit:cli
+dist/patchkit/patchkit syspkg install --port Digitakt
+dist/patchkit/patchkit syspkg install out/patch/digikit-dt2.dksp --port Digitakt
+dist/patchkit/patchkit syspkg install --emulator /path/to/control.sock
+```
+
+With no file, Patchkit builds the package from this checkout. A supplied file must match that package byte for byte.
+The command checks the running runtime version and resident module capability before accessing the card. It verifies
+the full file at `digikit/system.dksp`, uploads and verifies replacement bytes when needed, and retries an identical
+package already on the card. It then restarts the target and confirms that the same firmware answers module commands.
+An already healthy target is refused before card access. The command leaves the firmware image on the target as is.
+
 ### Web gallery
 
 ```sh
@@ -387,7 +438,8 @@ starts the patched image in the browser core (screen and controls, no DSP audio 
 `/transfer/`. The page reads module.toml at build time. `patchkit.wasm` reads
 `public/modules/bundle.json`, which `apps/web/scripts/gen-modules.mjs` generates from the committed `modules/` and
 `ports/` (never from `out/`). `patchkit.wasm` produces the same bytes as the command line (`apps/web/tests/patchkit.wasm.test.ts`). The
-first `pnpm dev` in a fresh tree compiles the browser cores and takes several minutes.
+first `pnpm dev` in a fresh tree compiles the browser cores and takes several minutes. Use desktop Workbench or
+the native Patchkit CLI for system package setup and core-only recovery. The browser's firmware flow ends after the flash.
 
 ## How it works
 
@@ -772,11 +824,18 @@ INFO: the runtime version and the image id must match. The default route is **Mi
 chunks of 2048 bytes, answers every chunk, and checks the whole image. The program asks once, before it sends anything: `Flash Digitakt II OS 1.17 (stock) now? [y/N]` (for a patch: `... OS 1.17 with digikit runtime 0.5.2 now?`); only `y` (or `--yes`) starts. When the device has checked the whole image, the program commits at once and the device erases and writes its flash. `n` sends nothing.
 
 ```sh
-uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --dry-run     # patch and check, send nothing (--save F keeps the image)
+mkdir -p out/patch
+uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --dry-run --save out/patch/digikit-dt2.syx
 uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --port Digitakt
 uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --port Digitakt --restore   # the stock file back
 uv run python -m tools.patchkit.patchkit flash firmware/Digitakt_II_OS1.17.syx --port Digitakt --route menu   # the OS UPGRADE menu route (below)
 ```
+
+With `--dry-run --save`, Patchkit checks the firmware and writes the `.syx` plus a sibling `.dksp` for an image with
+the resident runtime. A live flash prepares the package before sending firmware, waits for matching post-flash
+identity, then verifies and activates the package. If the flash completes but package activation fails, use
+[package-only repair](#repair-module-support-from-the-command-line) on the core-only target. A stock restore skips
+package setup. The package activation flow still needs physical hardware validation.
 
 `--chunk N` sets the stream bytes per chunk (the largest size a real device takes is not known). It prints the checks and the steps for the device (power
 adapter, the cable stays in), asks once, and sends. With `--route menu` it prints the old steps (SETTINGS > SYSTEM > OS UPGRADE until WAITING FOR SYSEX),

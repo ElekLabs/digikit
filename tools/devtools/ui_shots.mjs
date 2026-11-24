@@ -44,6 +44,43 @@ const fold = (p) =>
   p.eval(
     "(() => { const f = document.querySelector('.side-fold'); if (f && f.getAttribute('aria-expanded') === 'true') f.click(); })()",
   );
+async function checkInspectorFold(p) {
+  const inspector = '.side-col:not([hidden])';
+  await p.until(`document.querySelector('${inspector} .side-fold')`, 'Inspector did not appear');
+  await p.eval(`document.querySelector('${inspector} .side-fold[aria-expanded="false"]')?.click()`);
+  for (const tab of ['Memory', 'Metrics', 'Profile', 'Calibration']) {
+    const waitForState = (expanded) =>
+      p.until(
+        `(() => {
+          const column = document.querySelector('${inspector}');
+          const selected = column?.querySelector('${expanded ? '.side-tab[aria-selected="true"]' : '.side-rail-tab.on'}');
+          return column?.querySelector('.side-fold')?.getAttribute('aria-expanded') === '${expanded}'
+            && selected?.textContent.trim() === ${JSON.stringify(tab)}
+            && !column.getAnimations().some(animation => animation.playState === 'running');
+        })()`,
+        `${tab}: inspector did not settle ${expanded ? 'open' : 'collapsed'} with the tab selected`,
+      );
+    await p.click(tab, `${inspector} .side-tab`);
+    for (const expanded of [true, false]) {
+      await waitForState(expanded);
+      const point = await p.eval(`(() => {
+        const head = document.querySelector('${inspector} .side-head');
+        const button = head.querySelector('.side-fold');
+        const header = head.getBoundingClientRect();
+        const box = button.getBoundingClientRect();
+        const x = box.left + box.width / 2;
+        const y = box.top + box.height / 2;
+        return box.left >= header.left && box.right <= header.right
+          && box.top >= header.top && box.bottom <= header.bottom
+          && button.contains(document.elementFromPoint(x, y)) ? [x, y] : null;
+      })()`);
+      if (!point) throw new Error(`${tab}: ${expanded ? 'fold' : 'reopen'} button is clipped or cannot be clicked`);
+      await p.mouse('mousePressed', ...point);
+      await p.mouse('mouseReleased', ...point);
+    }
+    await waitForState(true);
+  }
+}
 /** Three files uploaded in a row (the fallback scenes switch the link at the second). */
 const upload3 = async (p) => {
   for (const n of ['kick', 'snare', 'hat']) await p.tick(`^Upload ${n}`);
@@ -908,9 +945,11 @@ const SCENES = [
       p.say(`Up row: ${await crumb()} (expect Samples)`);
       await p.clickRow('loops', { clicks: 2 });
       await p.wait(400);
-      await p.click('Samples');
+      await p.click('Samples', 'nav.crumbs[aria-label="Folder on your computer"] button');
       await p.wait(400);
-      p.say(`breadcrumb: ${await crumb()}`);
+      const root = await crumb();
+      if (root !== 'Samples') throw new Error(`The computer breadcrumb did not return to Samples: ${root}`);
+      p.say(`breadcrumb: ${root}`);
       await p.clickRow('loops', { clicks: 2 });
       await p.wait(400);
       await p.clickRow('breaks', { clicks: 2 });
@@ -1127,8 +1166,74 @@ const SCENES = [
     size: WIDE,
     steps: async (p) => {
       await p.wait(2600);
+      const [local, target] = await p.eval(
+        `['On your computer', 'On device'].map((pane) => document.querySelectorAll('section[aria-label="' + pane + '"] li[data-key]').length)`,
+      );
+      if (!local || target) throw new Error('Samples should show only local rows while the target waits.');
     },
   },
+  {
+    name: 'samples-timeout-first-read-after-remount',
+    q: 'mode=samples&dev=noreply',
+    size: WIDE,
+    steps: async (p) => {
+      await p.until(
+        `window.__sim.counts.deviceRead === 1 && document.querySelector('.transfer-page .head .meta')`,
+        'Samples did not start its first device read.',
+      );
+      await p.click(/^Settings$/);
+      await p.click(/^Transfer$/);
+      if (!(await p.eval(`document.querySelector('.transfer-page .head .meta')`)))
+        throw new Error('The first Samples read finished before returning to Transfer.');
+      await p.until(
+        `!document.querySelector('.transfer-page .head .meta') && document.querySelector('.transfer-page .err .msg')?.textContent.includes('No reply')`,
+        'Samples did not go idle with a No reply error.',
+      );
+      if ((await p.eval('window.__sim.counts.deviceRead')) !== 1)
+        throw new Error('Returning to Samples queued a second device read.');
+    },
+  },
+  ...[false, true].map((remount) => ({
+    name: remount ? 'samples-failed-target-remount' : 'samples-failed-target-first-read',
+    q: 'mode=samples&dev=slow',
+    size: WIDE,
+    steps: async (p) => {
+      const localRows = `document.querySelectorAll('section[aria-label="On your computer"] li[data-key]').length`;
+      const deviceRows = `document.querySelectorAll('section[aria-label="On device"] li[data-key]').length`;
+      await p.until(localRows, 'Samples did not show local rows during the first listing.');
+      if (await p.eval(deviceRows)) throw new Error('The first Samples listing already finished.');
+      if (remount) await p.click(/^Settings$/);
+      const original = await p.eval(`(() => {
+        const select = document.querySelector('select[aria-label="Target"]');
+        if (!select || select.disabled || window.__sim.counts.deviceRead !== 1) return null;
+        const { value, text } = select.selectedOptions[0];
+        // Keep the in-flight read slow and let the recovery use normal preview timing.
+        window.__sim.sim.dev = 'ok';
+        const missing = new Option('Unavailable MIDI port');
+        select.add(missing);
+        select.value = missing.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return { value, text };
+      })()`);
+      if (!original) throw new Error('Could not switch targets during the first Samples listing.');
+      await p.until(
+        `!document.querySelector('select[aria-label="Target"]').disabled`,
+        'The MIDI target switch did not settle.',
+      );
+      if (remount) await p.click(/^Transfer$/);
+      if (!(await p.eval(localRows))) throw new Error('The failed switch cleared local rows.');
+      await p.until(deviceRows, 'Samples did not recover the original device listing after the failed switch.');
+      const connection = await p.eval(`document.querySelector('.transfer-page .conn')?.textContent`);
+      if (!connection?.includes(original.text)) throw new Error(`Target changed: ${connection}`);
+      if ((await p.eval('window.__sim.counts.deviceRead')) !== 2)
+        throw new Error('The failed switch should cause exactly one recovery read.');
+      await p.eval(`(() => {
+        const select = document.querySelector('select[aria-label="Target"]');
+        select.querySelector('option:last-child').remove();
+        select.value = ${JSON.stringify(original.value)};
+      })()`);
+    },
+  })),
   {
     name: 'upload-not-waiting',
     q: 'mode=samples&speed=0.3',
@@ -1592,6 +1697,8 @@ const SCENES = [
       await p.wait(400);
     },
   },
+  { name: 'inspector-fold', q: 'page=emulator', size: [1120, 800], steps: checkInspectorFold },
+  { name: 'inspector-fold-narrow', q: 'page=emulator', size: MIN, steps: checkInspectorFold },
   // ---- the Log drawer over fake runtime logs (apps/desktop/ui/preview/runtime-log-mock.ts); logspeed makes the script run faster than real time ----
   ...[
     ['log-both-wide', 'page=log&log=both&logspeed=3&logh=640', WIDE, 5500],

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { DkProf } from '@digi/dk-session/dkprof';
-import { hotspotLabel, readSavedProfile, resolveSavedHotspots } from '../src/profile-hotspots';
+import { hotspotLabel, readSavedProfile, resolveSavedHotspots } from '../src/profile/hotspots';
 
 const hash = 'ab'.repeat(32);
 const otherHash = 'cd'.repeat(32);

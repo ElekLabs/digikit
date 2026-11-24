@@ -13,7 +13,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, 
 import { panels } from '@digi/workbench-core/data/faceplates.ts';
 import { isCancelled, isNoRuntime } from '@digi/workbench-core/modules/backend.ts';
 import { cardRefresh } from './card-state';
-import { deviceOfPort } from './remote-core';
+import { deviceOfInfoPort } from '@digi/workbench-core/data/device-profiles.ts';
 import { freeTitle, moduleRows, noteText, segmentTitle, slotCells, usedText, widthPct } from './memory-core';
 import { readMemory, type MemoryReading } from './memory-backend';
 import { createReadGate } from './read-gate-core';
@@ -21,7 +21,6 @@ import { focusReadDue } from '@digi/workbench-core/transfer/refresh-core.ts';
 import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
-import { reloadWithRuntime } from './emulator-actions';
 import './card-panel.css';
 import './memory-panel.css';
 
@@ -112,7 +111,7 @@ export default function MemoryPanel(props: {
   });
 
   const device = () => {
-    const d = deviceOfPort(reading()?.port ?? '');
+    const d = deviceOfInfoPort(reading()?.port ?? '');
     return d ? panels[d].name : '';
   };
 
@@ -235,7 +234,7 @@ export default function MemoryPanel(props: {
         </Show>
         <Show when={noRuntime() && emulatorRead()}>
           <div class="acts">
-            <button type="button" class="act small" onClick={() => reloadWithRuntime()}>
+            <button type="button" class="act small" onClick={() => app.env.extras?.reloadWithRuntime?.()}>
               Reload with runtime
             </button>
           </div>

@@ -6,7 +6,6 @@ import { readFault, type CardLogState, type DkSession, type LogConfig } from '@d
 import type { LogInput, Origin } from './log-core.ts';
 import { changeLevel, configOf, readLevels, type LevelChange, type LevelView } from './log-level-core.ts';
 import { LogFollower, POLL_MS, pace, type FollowSession, type OriginStatus } from './log-follow-core.ts';
-import { logInputs } from './log-state.ts';
 import type { LogNames } from '@digi/dk-session/log-names';
 
 /** The protocol session as the follower uses it. */
@@ -34,7 +33,7 @@ export interface FollowEnv {
     present(): Promise<boolean>;
     makeNames?(): LogNames;
   };
-  push?(inputs: LogInput[]): void;
+  push(inputs: LogInput[]): void;
   /** The window is on screen (default: yes). A hidden window asks nothing of the device. */
   shown?(): boolean;
   /** The Log drawer is open (default: yes). A closed drawer reads the device less often. */
@@ -80,7 +79,6 @@ export function createLogFollow(env: FollowEnv): LogFollow {
   const setCfg = (origin: Origin, cfg: LogConfig) => setConfig((all) => ({ ...all, [origin]: cfg }));
   const now = env.now ?? Date.now;
   const sleep = env.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const push = env.push ?? logInputs;
   const set = (origin: Origin, s: OriginStatus) =>
     setStatus((all) => (all[origin] === s ? all : { ...all, [origin]: s }));
   // a follower keeps where it was when Follow is turned off and on again: the log is not read twice
@@ -110,7 +108,7 @@ export function createLogFollow(env: FollowEnv): LogFollow {
           names: source.makeNames?.(),
           now,
           out: {
-            push,
+            push: env.push,
             status: (s) => set(origin, s),
             modules: (names) => setModules((all) => ({ ...all, [origin]: names })),
             config: (cfg) => setCfg(origin, cfg),

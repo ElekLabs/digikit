@@ -1,6 +1,6 @@
-// The state and handlers of the Calibration section, owned by the Profile pane (ProfilePanel.tsx), not by the section: a run that installs modules and
-// restarts the target resets the pane's reading and unmounts what is drawn from it, and the run must go on with its captures. No module state: the
-// pane builds one with its calibrator and disposes it with the pane (`dispose` aborts a run in progress). Host tests: tests/calibration-state.test.ts.
+// The Calibration tab (CalibrationPanel.tsx) owns the run state and handlers. The run keeps its captures when the tab is hidden or a target restart
+// resets readings. The tab creates this state with its calibrator and disposes it when unmounted, aborting any run in progress.
+// Host tests live in tests/calibration-state.test.ts.
 import { createMemo, createResource, createSignal } from 'solid-js';
 import {
   fitView,

@@ -16,12 +16,12 @@ description = "Install the Python and web dependencies"
 alias = "wb"
 depends = ["workbench:inputs"]
 run = "uv run python -m tools.emulator.native_emu"
-description = "Build once and open the desktop app with nothing loaded (DN2 and DT2 audio engines when both local input sets are ready; DIGI_EMU_SECOND_CORE=0 selects one device). `mise run workbench -- FILE.syx` loads that firmware at start, else the Emulator page's \"Load on start\" tick loads the last opened file. The digikit runtime is patched in unless `-- --no-runtime` (otherwise the \"Boot with runtime\" tick decides); `-- --build-only` builds without launching. The +Drive is plus_drive/<device>/ when it exists (`-- --plus-drive DIR` picks another folder, `--samples DIR` is the same option; the firmware's changes are exported back to the folder on exit, `-- --no-sync` turns that off)"
+description = "Build once and open the desktop app with DN2 and DT2 audio engines when both local input sets are ready. Set DIGI_EMU_SECOND_CORE=0 to select one device. `mise run workbench -- FILE.syx` opens that firmware at startup. Without a launch file, Auto-load firmware reopens the last opened file. Boot with runtime controls patching unless the command line specifies `--runtime` or `--no-runtime`. Pass `-- --build-only` to build without opening Workbench. The +Drive uses plus_drive/<device>/ when present. Pick a different folder with `--plus-drive DIR` or `--samples DIR`, and use `--no-sync` to skip exporting changes on exit."
 
 ["workbench:inputs"]
 hide = true
 run = "pnpm nx:pilot run @digi/desktop:workbench-inputs --output-style=stream"
-description = "Build what the workbench app reads, from the Nx cache when unchanged: the desktop UI (apps/desktop/ui/dist), apps/web/public/{patchkit,dkupload,dksample}.wasm. Also packs the services the Transfer page offers (dist/modules/<device>/*.dks, the `pack` targets for services/*/dks)"
+description = "Build the desktop UI, Patchkit and transfer Wasm files, port files, production services (dist/modules/<device>/*.dks), and the system package (dist/syspkg/runtime/system.dksp). Nx restores unchanged outputs from cache."
 
 ["emu:serve"]
 run = "uv run python -m tools.emulator.native_emu --daemon"

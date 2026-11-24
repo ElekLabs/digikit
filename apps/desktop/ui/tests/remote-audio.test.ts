@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { createRemoteAudio, matchedInput } from '../src/remote-audio';
+import { createRemoteAudio, matchedInput } from '../src/remote/audio';
 import { createFakeTransferApp } from '@digi/workbench-core/transfer/fake-app.ts';
 import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 

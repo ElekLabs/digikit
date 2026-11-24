@@ -188,6 +188,7 @@ const DAEMON_BUILD_SOURCES = [
   '{workspaceRoot}/packages/dksample/**/*',
   '{workspaceRoot}/packages/dkupload/**/*',
   '{workspaceRoot}/packages/patchkit/**/*',
+  '{workspaceRoot}/runtime/core/abi/{Cargo.toml,src/**/*}',
   '{workspaceRoot}/runtime/core/fit/{Cargo.toml,build.rs,src/**/*}',
   '{workspaceRoot}/runtime/core/sdk/{Cargo.toml,build.rs,src/**/*}',
   // Test sources (config/test-source-patterns.json): `#[cfg(test)]` modules that the release build does not compile.

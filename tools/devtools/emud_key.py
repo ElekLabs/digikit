@@ -54,6 +54,8 @@ SOURCE_GLOBS = (
     "packages/patchkit/**",
     # patchkit compiles in the test-source patterns (include_str! in src/build/test_source.rs), and this key reads them
     "config/test-source-patterns.json",
+    "runtime/core/abi/Cargo.toml",
+    "runtime/core/abi/src/**",
     "runtime/core/fit/Cargo.toml",
     "runtime/core/fit/build.rs",
     "runtime/core/fit/src/**",

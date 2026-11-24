@@ -80,6 +80,8 @@ export interface DeviceFacts {
   model: DeviceId | undefined;
   /** The OS version the stock firmware reports (SoftwareVersion), when it answered. */
   os?: string;
+  /** Stock base of the loaded emulator; physical targets do not report it. */
+  baseSha256?: string;
   /** The runtime version, when the digikit runtime answered INFO. */
   runtime?: string;
   /** The id of the flashed image INFO reports. */
@@ -117,6 +119,9 @@ export function matchView(p: PreparedFlash | undefined, dev: DeviceState): Match
   if (d.model !== p.device) {
     return { state: 'mismatch', text: `This is a ${have}. The image is for a ${want}: it would not start.` };
   }
+  if (d.baseSha256 !== undefined && d.baseSha256 !== p.shaStock) {
+    return { state: 'mismatch', text: 'Load the same stock firmware on the Emulator page before flashing this image.' };
+  }
   const os = d.os ? `The device runs OS ${d.os}. ` : '';
   const installs = p.restore
     ? `The image installs OS ${p.os} (stock).`
@@ -149,7 +154,9 @@ export type FlashState =
       flashing?: boolean;
     }
   | { phase: 'stopped'; reason: 'cancelled' | 'error'; sent: number; total: number; message: string; unit?: 'bytes' }
-  | { phase: 'rebooting'; stage: 'leaving' | 'returning' | 'asking'; sinceMs: number; nowMs: number; rpc?: true }
+  | ({ phase: 'rebooting'; sinceMs: number; nowMs: number; rpc?: true } & (
+      { stage: 'leaving' | 'returning' } | { stage: 'asking'; setup?: { text: string; fraction?: number } }
+    ))
   | { phase: 'done'; message: string; lines: string[] }
   | { phase: 'failed'; code: FailCode; message: string };
 

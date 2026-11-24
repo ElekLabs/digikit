@@ -7,6 +7,7 @@ import type { JSX } from 'solid-js';
 import type { BulkOpener } from '@digi/dk-session/bulk-select';
 import type { DkTransport } from '@digi/dk-session';
 import type { WasmSource } from '../wasm-source';
+import type { SystemPackage } from '../runtime/activate-system-package';
 import type { Target } from './target';
 import type { BarInfo } from './transfer-core';
 import type { PageCtx } from '../../ui/transfer/TransferParts';
@@ -91,10 +92,10 @@ export interface SamplesSlot {
   Mode: (props: { ctx: PageCtx }) => JSX.Element;
   /** Read both sides of the mode (throws when either fails). */
   read(): Promise<void>;
+  /** The current read has lost its target binding or started while the target was switching. */
+  readInterrupted(): boolean;
   /** Refresh only local files, without contacting the target. */
   readLocal(): Promise<void>;
-  /** Another target: forget what was read. */
-  reset(): void;
   /** The bar along the bottom for a running or finished upload. */
   bar(busy: string): { info: BarInfo; running: boolean } | undefined;
   /** One line per file of the last upload run, for the Log. */
@@ -132,6 +133,8 @@ export interface TransferEnv {
   /** Only the desktop app has these; the pane shows a part only when it is given. */
   extras?: {
     samples?: SamplesSlot;
+    /** The trusted build artifact for system package recovery. */
+    systemPackage?(): Promise<SystemPackage>;
     /** A job ended (the Files page and its card-folder strip read the folder now and again after its quiet period). */
     onJobEnd?(): void;
     /** Reload the emulator with the digikit runtime (the desktop): offered next to an "emulator runs without the runtime" error. */

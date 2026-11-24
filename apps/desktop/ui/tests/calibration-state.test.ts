@@ -1,5 +1,5 @@
-// The Calibration state the Profile pane owns (src/calibration-state.ts): a run does not depend on what the pane draws, so a target restart in the
-// middle of it (the pane's reading resets) neither aborts it nor loses its captures; only disposing the pane stops it.
+// The Calibration tab owns the run state (src/calibration-state.ts). A run keeps its captures when the tab is hidden or a target restart
+// resets readings. Disposing the state aborts the run.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createRoot, onCleanup } from 'solid-js';

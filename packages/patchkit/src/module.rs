@@ -14,6 +14,8 @@ pub struct Manifest {
     pub targets: BTreeMap<String, String>,
     #[serde(default)]
     pub object: Vec<ObjectRef>,
+    /// The external object paired with the resident runtime, when the manifest declares one.
+    pub system_package: Option<SystemPackageRef>,
     /// Resolution rules for `tools/patchkit/port_resolve.py`; patchkit does not read them.
     #[serde(default)]
     pub anchor_rule: Vec<toml::Value>,
@@ -832,6 +834,11 @@ impl ModuleInfo {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+pub struct SystemPackageRef {
+    pub path: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct ObjectRef {
     pub path: String,
     /// Port region the object is placed in: `dsp.l2`, `cf.expansion`, `cf.flash_cave`.
@@ -1059,6 +1066,14 @@ pub struct Library {
 impl Library {
     pub fn get(&self, id: &str) -> Option<&Module> {
         self.modules.iter().find(|m| m.id() == id)
+    }
+
+    /// The system package object that accompanies this selection's resident runtime.
+    pub fn system_package_object(&self, ids: &[String]) -> Option<std::path::PathBuf> {
+        let id = ids.iter().find(|id| *id == "core/runtime")?;
+        let runtime = self.get(id)?;
+        let package = runtime.manifest.system_package.as_ref()?;
+        Some(runtime.dir.join(&package.path))
     }
 
     /// Lower the typed sections of every module with the device models (`crate::typed`).

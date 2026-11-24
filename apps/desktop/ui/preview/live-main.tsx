@@ -1,10 +1,10 @@
-// The live preview's entry: a small desktop shell (the sidebar of src/Console.tsx, its page switch and its panels) over a running emulator
+// The live preview's entry: a small desktop shell (the sidebar of src/shell/Navigation.tsx, its page switch and its panels) over a running emulator
 // (live.vite.config.ts). What the real Console does that the pages feel is kept: the faceplate stays mounted behind the other pages, the
 // Memory panels are shown only on the Emulator page, and `status` is set once per display frame, as the runtime's pump sets it (a
 // new object each time), so a panel that reads on every change of `status` is as busy here as in the app. The daemon is asked for the
 // status twice a second only: a real call per frame would load it more than the app's pump does.
 //   live.html?page=emulator|transfer|remote[&idle=1][&log=1]   window.__live: { page(name), frames() }
-// `log=1` adds the Log drawer, following the running emulator's own runtime log (the device side has no port here).
+// `log=1` keeps the Log drawer visible and follows the running emulator's runtime log for the duration of the preview.
 // `idle=1` leaves the panels out (the status ticks stay): the baseline a measurement of the panels is compared with.
 import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -19,7 +19,7 @@ import { createTauriHost } from '../src/host/tauri-host';
 import { installNativeFeel } from '../src/native';
 import LivePanel from '@digi/workbench-core/ui/components/LivePanel.tsx';
 import { panels } from '@digi/workbench-core/data/faceplates.ts';
-import RemotePage from '../src/RemotePage';
+import RemotePage from '../src/remote/RemotePage';
 import SidePanels from '../src/SidePanels';
 import AppProvider from '@digi/workbench-core/ui/transfer/AppProvider.tsx';
 import { createLogFollow, followSession } from '../src/log-follow';
@@ -65,7 +65,7 @@ function Shell() {
     requestAnimationFrame(frame);
   };
   frame();
-  // as Console.tsx: a memo, so the panels hear of a change of this value only
+  // as WorkbenchShell.tsx: a memo, so the panels hear of a change of this value only
   const shown = createMemo(() => page() === 'emulator' && !!status());
   const device = () => (status()?.device === 'dt2' ? 'dt2' : 'dn2');
   const panel = () => panels[device()];
@@ -76,6 +76,7 @@ function Shell() {
   const follow = withLog
     ? createLogFollow({
         follow: () => true,
+        push: apps.logWriter.logInputs,
         flashing: () => false,
         emulator: { running: () => !!status(), session: async () => followSession(await emulatorSession()) },
         device: {
@@ -124,6 +125,8 @@ function Shell() {
           <LogPanel
             host={host}
             follow={follow!}
+            log={apps.log}
+            close={() => {}}
             emulatorRunning={() => !!status()}
             devicePort={() => undefined}
             toggleKey="⌘J"
