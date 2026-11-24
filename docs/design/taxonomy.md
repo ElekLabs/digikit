@@ -71,7 +71,7 @@ fixed sectors outside the table, two copies each: the settings record, the selec
 
 ## Repo layout
 
-The E8 move uses the [directory map](../plans/e8-moves.json). Firmware plug-in points live in `image-modules/points/`, shared libraries in `services/{bitmap,rows}/` and proofs in `image-modules/proofs/`. See the [manifest roles](../ARCHITECTURE.md#roles) and [plug-in point inventory](../ARCHITECTURE.md#firmware-plug-in-points) for current ownership.
+The E8 move uses the [directory map](../plans/e8-moves.json). Firmware plug-in points live in `image-modules/points/`, shared libraries in `services/{bitmap,rows}/` and proofs in `tests/fixtures/modules/`. See the [manifest roles](../ARCHITECTURE.md#roles) and [plug-in point inventory](../ARCHITECTURE.md#firmware-plug-in-points) for current ownership.
 
 The following tree and table preserve the original E8 proposal and its proposed follow-up moves.
 
@@ -100,7 +100,7 @@ devices/*.toml  sdk/  packages/  tools/  apps/  tests/  docs/          unchanged
 | adapter `lfo` | `services/lfo/image-halves/` |
 | adapters `usb-bulk` (with `usb-bulk-audio` merged in), `plusdrive-write`, `sdhc-large` | `image-modules/adapters/` |
 | adapters `overdrive`, `introblank` | `image-modules/fixes/` |
-| adapters `storage-fault-proof`, `file-catalog-proof` | `image-modules/proofs/` |
+| adapters `storage-fault-proof`, `file-catalog-proof` | `tests/fixtures/modules/` |
 | adapter `dsp-stereo-proof` | the tests of `dsp-voice` |
 | `devices/ports`, `devices/fw`, `modules/core/fw` | `ports/`, `ports/fw`, `ports/bindings` |
 | `modules/machines/<name>` (analog, bd, pd: id `fadedlimes/<name>`; pluck, shot: `digikit/<name>`; tb303: `tom/tb303`) | `modules/machine/<module id>` |
