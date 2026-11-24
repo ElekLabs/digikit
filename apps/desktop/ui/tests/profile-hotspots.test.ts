@@ -20,9 +20,8 @@ const doc = {
   ],
 };
 
-test('saved hotspots use the capture SHA and preserve span comparison, CPU and raw addresses', async () => {
+test('saved hotspots use the capture SHA and preserve CPU and raw addresses', async () => {
   const profile = readSavedProfile(doc);
-  assert.equal(profile.shares?.get('early'), 0.1);
   const maps = async (sha: string) => {
     assert.equal(sha, hash);
     return [map, { key: { image_sha256: otherHash } }];
@@ -67,7 +66,6 @@ test('legacy or unmatched captures keep raw addresses; profiles without spans st
   });
   const maps = async () => [{ key: { image_sha256: otherHash } }];
   assert.equal(legacy.sha256, undefined);
-  assert.equal(noMaps.shares, undefined);
   assert.equal((await resolveSavedHotspots(legacy, { maps }, prof)).pcs, legacy.pcs);
   assert.equal((await resolveSavedHotspots(noMaps, { maps }, prof)).pcs, noMaps.pcs);
   assert.equal(lookups, 0);

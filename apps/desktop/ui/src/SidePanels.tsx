@@ -4,6 +4,7 @@ import { For, Show, createEffect, createSignal, on, type JSX } from 'solid-js';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import MemoryPanel from './MemoryPanel';
 import type { SpanRecording } from './span-recording';
+import type { PerformanceView } from './PerformancePanel';
 import type { PerformanceCapture } from '@digi/workbench-core/profile/performance-capture.ts';
 import ProfilePanel from './profile/ProfilePanel';
 import CalibrationPanel from './CalibrationPanel';
@@ -21,7 +22,7 @@ export default function SidePanels(props: {
   collectSpans?: boolean;
   liveDsp?: boolean;
   savedCapture?: PerformanceCapture;
-  showCaptureControls?(view?: 'DSP blocks' | 'Timeline'): void;
+  showCaptureControls?(view?: PerformanceView): void;
   profileGeneration?: number;
   onSpanRecording?(recording?: SpanRecording): void;
   openCatalog?(path: string, sha256: string, entry: number): void;

@@ -1,41 +1,15 @@
 import { For, Show, type JSX } from 'solid-js';
-import { fmtShare } from '@digi/workbench-core/profile/profile-core.ts';
 import HotspotTable from './HotspotTable';
 import type { SavedEvidence } from './hotspots';
+import { processorLabels } from '@digi/workbench-core/profile/processor.ts';
 
 export function ReferenceView(props: {
   name?: string;
   evidence?: SavedEvidence;
-  shares?: ReadonlyMap<string, number>;
   openReview?(path: string, sha256: string, entry: number): Promise<void>;
 }): JSX.Element {
   return (
     <>
-      <Show when={props.shares?.size ? props.shares : undefined}>
-        {(shares) => (
-          <div class="prof-sec ruled">
-            <div class="sec-head">
-              <span class="title" title={props.name}>
-                Saved spans · {props.name}
-              </span>
-            </div>
-            <div class="cf-paths" role="table" aria-label="Saved span shares">
-              <div class="cf-row head" role="row">
-                <span class="name">Owner</span>
-                <span class="mono">share</span>
-              </div>
-              <For each={[...shares()].sort((a, b) => b[1] - a[1])}>
-                {([owner, share]) => (
-                  <div class="cf-row" role="row">
-                    <span class="name">{owner}</span>
-                    <span class="mono">{fmtShare(share)}</span>
-                  </div>
-                )}
-              </For>
-            </div>
-          </div>
-        )}
-      </Show>
       <Show when={props.evidence} keyed>
         {({ pcs, sharc }) => (
           <Show
@@ -52,14 +26,14 @@ export function ReferenceView(props: {
                 {(costs) => (
                   <>
                     <SharcCostsTable
-                      title="SHARC functions"
+                      title="DSP functions"
                       unit={costs().unit}
                       rows={costs().functions}
                       label={(row) => row.name}
                       detail={(row) => row.module ?? row.layer}
                     />
                     <SharcCostsTable
-                      title="SHARC loops"
+                      title="DSP loops"
                       unit={costs().unit}
                       rows={costs().loops ?? []}
                       label={(row) => row.function ?? row.module}
@@ -69,10 +43,10 @@ export function ReferenceView(props: {
                 )}
               </Show>
               <Show when={pcs.cf.length}>
-                <HotspotTable title="ColdFire PCs" rows={pcs.cf} openReview={props.openReview} />
+                <HotspotTable title={`${processorLabels.main} PCs`} rows={pcs.cf} openReview={props.openReview} />
               </Show>
               <Show when={pcs.sharc.length}>
-                <HotspotTable title="SHARC PCs" rows={pcs.sharc} openReview={props.openReview} />
+                <HotspotTable title={`${processorLabels.dsp} PCs`} rows={pcs.sharc} openReview={props.openReview} />
                 <Show
                   when={
                     props.openReview &&
@@ -81,8 +55,8 @@ export function ReferenceView(props: {
                   }
                 >
                   <div class="hint">
-                    No catalog links for these hotspots. Generate the SHARC review for this firmware and refresh
-                    Firmware symbols in Settings. Links appear for functions included in the review.
+                    No catalog links for these hotspots. Generate the DSP review for this firmware and refresh Firmware
+                    symbols in Settings. Links appear for functions included in the review.
                   </div>
                 </Show>
               </Show>

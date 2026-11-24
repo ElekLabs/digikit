@@ -37,7 +37,7 @@ export default function TraceTimeline(props: { trace?: TraceCapture; names: Read
   };
 
   return (
-    <section class="trace-timeline" aria-label="ColdFire trace timeline">
+    <section class="trace-timeline" aria-label="Main CPU trace timeline">
       <Show when={props.trace} fallback={<p class="trace-timeline-empty">No trace captured</p>}>
         {(trace) => (
           <Show
@@ -461,7 +461,7 @@ function TimelinePlot(props: { model: TraceModel; trace: TraceCapture; names: Re
       </div>
       <div class="trace-timeline-frame" style={{ '--trace-lane-height': `${LANE_HEIGHT}px` }}>
         <div class="trace-timeline-ruler" aria-hidden="true">
-          <span class="trace-timeline-ruler-label">ColdFire owner</span>
+          <span class="trace-timeline-ruler-label">Main CPU owner</span>
           <div class="trace-timeline-ruler-scale" style={{ width: `${size().width}px` }}>
             <For each={ruler().ticks}>
               {(tick) => (

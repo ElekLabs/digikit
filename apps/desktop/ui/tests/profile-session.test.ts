@@ -28,6 +28,7 @@ function reading(elapsed: number, running = true): ProfileReading {
     port: 'fake-device-0.0',
     emulator: true,
     traceSupported: true,
+    capabilities: { hasDsp: true, dspBlocks: true, dspHotspots: true, mainHotspots: true },
     observedAt: elapsed * 1000,
     modules: [],
     snap: { running, hz: 1000, elapsedTicks: BigInt(elapsed * 1000), spans: [] },
@@ -221,9 +222,9 @@ test('target leave and disposal share one DSP release after a recording action s
   const { owner, dispose } = open(f.deps);
   try {
     await vi.advanceTimersByTimeAsync(0);
-    expect(owner.recording.includeSharc()).toBe(false);
+    expect(owner.recording.includeDspHotspots()).toBe(false);
     owner.recording.setIncludeDsp(true);
-    owner.recording.setIncludeSharc(true);
+    owner.recording.setIncludeDspHotspots(true);
     owner.recording.toggle();
     await vi.advanceTimersByTimeAsync(0);
     expect(recorder.start).toHaveBeenCalledWith(true, true);

@@ -35,6 +35,7 @@ import { createDspBlockRecording } from '../dsp-block-recording';
 import type { DspBlockCapture } from '@digi/workbench-core/profile/dsp-blocks.ts';
 import type { FrozenTrace } from '../span-recording';
 import { sampledPcs, type Hotspot } from './hotspots';
+import { createCaptureCapabilities, type CaptureCapabilities } from './capabilities';
 
 /** The part of the session the pane uses. */
 export type ProfileSession = Pick<
@@ -116,13 +117,12 @@ export type ProfileReading =
       modules: ModuleRef[];
       /** Emulator: the modules' DSP per block (undefined when `sharc.profile` is off or the daemon lacks it). */
       dsp?: DspView;
-      sharcRequested?: boolean;
+      dspHotspotsRequested?: boolean;
+      capabilities: CaptureCapabilities;
       /** Hardware: the newest HEALTH event, when the ring holds one. */
       deviceDsp?: DeviceDsp;
       /** Emulator: the ColdFire paths and heaviest PCs of `cf.profile` since Start (undefined when it is off or the daemon lacks it). */
       cf?: CfView;
-      /** The emulated device has no DSP: the pane has no DSP section. */
-      noDsp?: boolean;
       /** What the emulator's two instruction profiles could not give (the daemon lacks the feature), one line. */
       note?: string;
     };
@@ -158,17 +158,10 @@ const METHOD_NOT_FOUND = -32601;
 export const isBuiltWithout = (e: unknown): boolean =>
   (e as { code?: number } | null)?.code === METHOD_NOT_FOUND || /built without|method not found/i.test(asFault(e));
 
-/** A device file says the device has no DSP; a device the registry does not know is taken to have one. */
-export const deviceHasDsp = (device: string): boolean =>
-  !registry.ids.includes(device) || registry.get(device).capabilities.dsp === 'sharc';
-
-export const NO_DSP_NOTE = 'no DSP on this device';
-
 /** What the emulator's instruction profiles could not give: methods the daemon lacks, other errors, no DSP. */
 interface ProfileFaults {
   without: string[];
   other: string[];
-  noDsp?: boolean;
 }
 
 function addFault(f: ProfileFaults, method: string, e: unknown): void {
@@ -181,7 +174,6 @@ function noteOf(f: ProfileFaults): string | undefined {
   if (f.without.length)
     lines.push(`${f.without.join(' and ')} not available: the emulator daemon was built without it (docs/CONTROL.md).`);
   lines.push(...f.other);
-  if (f.noDsp) lines.push(`sharc.profile: ${NO_DSP_NOTE}.`);
   return lines.length ? lines.join(' ') : undefined;
 }
 
@@ -201,7 +193,7 @@ export interface Recorder {
   /** Read the state, the spans and the modules (and, on the emulator, the DSP per block). */
   read(detail?: 'full' | 'spans', liveDsp?: boolean): Promise<ProfileReading>;
   /** Reset and start spans, optional DSP block costs, and emulator instruction counts. */
-  start(withDspBlocks?: boolean, withSharc?: boolean): Promise<void>;
+  start(withDspBlocks?: boolean, withDspHotspots?: boolean): Promise<void>;
   /** Stop the spans; on the emulator, keep the instruction profiles of the recording for Export. */
   stop(): Promise<void>;
   /** Zero the counters (both states); the recording window starts again. */
@@ -224,7 +216,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   /** The emulator sources that started for the running recording (each one that failed to start is in `instructionNote`). */
   let active: { cf?: Source<Part>; sharc?: Source<Part> } = {};
   const counting = (): boolean => active.cf !== undefined || active.sharc !== undefined;
-  let sharcRequested = false;
+  let dspHotspotsRequested = false;
   let instructionNote: string | undefined;
   /** Per source: how often the daemon started a new runtime during the recording (its counters restart with each). */
   let restarts: { cf?: number; sharc?: number } = {};
@@ -343,7 +335,9 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     return deps.rpc.call<T>(method, params);
   };
 
-  const hasDsp = (): boolean => deviceHasDsp(device);
+  const measurement = createCaptureCapabilities(deps.rpc);
+  const imageKey = (info: { port?: string | null; image_id?: string | null; fw_id?: string | null }) =>
+    [info.port, info.image_id, info.fw_id].join('/');
 
   /** The message for an E_PROTO of PROFILE_STATE: the debug module is loaded (PEEK) but has no span clock, or it is not loaded. */
   const stateFault = (e: unknown, info: { port?: string | null; caps: number | null }): unknown => {
@@ -404,7 +398,6 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         addFault(faults, `${key}.profile`, e);
       }
     }
-    if (!hasDsp()) faults.noDsp = true;
     for (const key of ['cf', 'sharc'] as const) {
       const n = restarts[key];
       if (n)
@@ -513,16 +506,17 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         port,
         emulator: !!deps.rpc,
         observedAt,
-        sharcRequested,
+        dspHotspotsRequested,
+        capabilities: await measurement.inspect(device, s, imageKey(info), !dspBlocks.armed()),
         imageId: info.image_id,
         snap,
         modules,
       };
-      if (!hasDsp()) r.noDsp = true;
       if (!all.running) r.dspBlocks = dspBlocks.capture();
-      r.dspBlockNote = !hasDsp()
-        ? 'This target has no SHARC DSP.'
-        : dspBlocks.note() || (all.running && !dspBlocks.armed() ? DSP_BLOCKS_NOT_ARMED : '');
+      r.dspBlockNote =
+        r.capabilities.dspBlocks !== true
+          ? r.capabilities.dspBlocks
+          : dspBlocks.note() || (all.running && !dspBlocks.armed() ? DSP_BLOCKS_NOT_ARMED : '');
       if (all.running && liveDsp && dspBlocks.armed()) {
         try {
           r.dspBlocks = await dspBlocks.live(s, !!deps.rpc);
@@ -547,7 +541,6 @@ export function createRecorder(deps: ProfileDeps): Recorder {
           }
           if (parts.cf) r.cf = await cfViewOf(parts.cf, info);
         }
-        if (!hasDsp()) r.noDsp = true;
         if (instructionNote) r.note = instructionNote;
       } else {
         const h = await latestDeviceHealth(s).catch(() => undefined);
@@ -556,9 +549,8 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       return r;
     },
 
-    async start(withDspBlocks = false, withSharc = true) {
+    async start(withDspBlocks = false, withDspHotspots = true) {
       const s = await deps.session();
-      sharcRequested = withSharc;
       kept = {};
       stoppedCapture = undefined;
       frozenTrace = undefined;
@@ -566,19 +558,20 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       captureImage = undefined;
       const info = await s.info();
       device = (info.port ?? '').split('-')[0] || device;
+      const capabilities = await measurement.inspect(device, s, imageKey(info), false);
+      dspHotspotsRequested = withDspHotspots && capabilities.dspHotspots === true;
       dspBlocks.reset();
       await spansSource(s).start();
-      if (withDspBlocks) await dspBlocks.start(s, hasDsp());
+      if (withDspBlocks && capabilities.dspBlocks === true) await dspBlocks.start(s);
       await captureIdentity(s, info);
       restarts = {};
       if (!deps.rpc) return;
       active = {};
       const faults: ProfileFaults = { without: [], other: [] };
-      const wanted: [keyof typeof active, string, Source<Part>][] = [['cf', 'cf.profile', cfSource()]];
-      if (withSharc) {
-        if (hasDsp()) wanted.push(['sharc', 'sharc.profile', sharcSource()]);
-        else faults.noDsp = true;
-      }
+      const wanted: [keyof typeof active, string, Source<Part>][] = [];
+      if (capabilities.mainHotspots === true) wanted.push(['cf', 'cf.profile', cfSource()]);
+      if (dspHotspotsRequested) wanted.push(['sharc', 'sharc.profile', sharcSource()]);
+      else if (withDspHotspots && capabilities.dspHotspots !== true) faults.other.push(capabilities.dspHotspots);
       for (const [key, method, src] of wanted) {
         try {
           await src.start();

@@ -1066,6 +1066,10 @@ mod emu_call_tests {
         let (handle, _controller) = spawn(Config::new(None));
         // A method round trip: no firmware yet.
         assert!(call_method(&handle, "status", None, None).unwrap()["firmware"].is_null());
+        let profiling = call_method(&handle, "profile.capabilities", None, Some(0)).unwrap();
+        assert_eq!(profiling["dsp_active"], false);
+        assert!(profiling["dsp_pc"].is_boolean());
+        assert!(profiling["main_pc"].is_boolean());
         // The current session (0 before the first load) passes; another one is stale and nothing runs.
         assert!(call_method(&handle, "status", None, Some(0)).is_ok());
         assert_eq!(

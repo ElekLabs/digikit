@@ -23,12 +23,8 @@ export function createDspBlockRecording() {
     note = '';
   }
 
-  async function start(session: Session, supported: boolean) {
+  async function start(session: Session) {
     reset();
-    if (!supported) {
-      note = 'This target has no SHARC DSP.';
-      return;
-    }
     try {
       const cleared = await session.profileDsp('clear');
       owner = session;

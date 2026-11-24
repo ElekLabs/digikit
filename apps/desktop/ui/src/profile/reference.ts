@@ -25,5 +25,5 @@ export function createProfileReference(deps: {
     });
   });
 
-  return { profile, evidence };
+  return { evidence };
 }

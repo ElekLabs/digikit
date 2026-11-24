@@ -33,10 +33,9 @@ export function createProfileSession(deps: ProfileSessionDeps) {
   const label = targetLabel(source.target);
   const [reading, setReading] = createSignal<ProfileReading>();
   const [dsp, setDsp] = createSignal<DspView>();
-  const [failure, setFailure] = createSignal<{ message: string; during: 'read' | 'action' }>();
-  const error = () => failure()?.message ?? '';
+  const [error, setError] = createSignal('');
   const [includeDsp, setIncludeDsp] = createSignal(false);
-  const [includeSharc, setIncludeSharc] = createSignal(false);
+  const [includeDspHotspots, setIncludeDspHotspots] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [acting, setActing] = createSignal<Action>();
   const [noRuntime, setNoRuntime] = createSignal(false);
@@ -81,7 +80,7 @@ export function createProfileSession(deps: ProfileSessionDeps) {
             if (next.dsp) setDsp(next.dsp);
           }
           setReading(next);
-          setFailure(undefined);
+          setError('');
           setNoRuntime(false);
         });
         if (!current()) return true;
@@ -92,7 +91,7 @@ export function createProfileSession(deps: ProfileSessionDeps) {
         if (!current()) return true;
         spans.break();
         if (isCancelled(e)) return true;
-        setFailure({ message: failureLine(e, label), during: 'read' });
+        setError(failureLine(e, label));
         if (!isNoRuntime(e)) return false;
         setNoRuntime(true);
         return true;
@@ -161,9 +160,9 @@ export function createProfileSession(deps: ProfileSessionDeps) {
     setActing(action);
     try {
       await pending;
-      if (!leaving()) setFailure(undefined);
+      if (!leaving()) setError('');
     } catch (e) {
-      if (!leaving()) setFailure({ message: failureLine(e, label), during: 'action' });
+      if (!leaving()) setError(failureLine(e, label));
     } finally {
       pending = undefined;
       if (!leaving()) setActing(undefined);
@@ -180,8 +179,8 @@ export function createProfileSession(deps: ProfileSessionDeps) {
       const file = await recorder.exportFile();
       await save(file);
     });
-  const dspAvailable = () => !!ok() && !ok()?.noDsp;
-  const sharcAvailable = () => onEmulator && dspAvailable();
+  const dspAvailable = () => ok()?.capabilities.dspBlocks === true;
+  const dspHotspotsAvailable = () => ok()?.capabilities.dspHotspots === true;
   const recording: SpanRecording = {
     dspBlocks: () => ok()?.dspBlocks,
     dspBlockStatus: () => {
@@ -203,7 +202,7 @@ export function createProfileSession(deps: ProfileSessionDeps) {
       if (!r.traceSupported)
         return 'Individual events require digikit runtime 0.11.3 or later and the updated debug module.';
       if (r.snap.running) return 'Stop recording to view the captured events.';
-      return r.traceSummary || 'Start a recording to capture ColdFire events.';
+      return r.traceSummary || 'Start a recording to capture Main CPU events.';
     },
     intervals,
     running,
@@ -225,10 +224,10 @@ export function createProfileSession(deps: ProfileSessionDeps) {
     setIncludeDsp: (value) => {
       if (!locked() && !running()) setIncludeDsp(value);
     },
-    includeSharc,
-    sharcAvailable,
-    setIncludeSharc: (value) => {
-      if (!locked() && !running()) setIncludeSharc(value);
+    includeDspHotspots,
+    dspHotspotsAvailable,
+    setIncludeDspHotspots: (value) => {
+      if (!locked() && !running()) setIncludeDspHotspots(value);
     },
     canSave: () => !!save && !running() && !locked() && (ok()?.snap.elapsedTicks ?? 0n) > 0n,
     save: exportFile,
@@ -244,7 +243,7 @@ export function createProfileSession(deps: ProfileSessionDeps) {
           clearRecording();
           await recorder.start(
             untrack(() => dspAvailable() && includeDsp()),
-            untrack(() => sharcAvailable() && includeSharc()),
+            untrack(() => dspHotspotsAvailable() && includeDspHotspots()),
           );
         });
     },
@@ -257,7 +256,6 @@ export function createProfileSession(deps: ProfileSessionDeps) {
     busy,
     noRuntime,
     error,
-    readError: () => failure()?.during === 'read',
     locked,
     acting,
     recording,

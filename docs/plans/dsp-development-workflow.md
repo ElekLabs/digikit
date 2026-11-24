@@ -10,6 +10,17 @@ Work phase by phase on `work/freqshift-workflow` in the `freqshift-workflow` wor
 
 Keep firmware, captures, generated catalogs and listening WAVs local under ignored output paths. Arrange hardware sessions with Em. Use the repository's owner checks during iteration and its affected merge gate before merging.
 
+## Status on this branch
+
+| Phase | State | Evidence and remaining work |
+| --- | --- | --- |
+| 1. Catalog from stock firmware | Committed in `2f3cae241` | The [firmware guide](../FIRMWARE.md) has the one-file command and generated output paths. |
+| 2. Profile-to-catalog links | Committed in `1de16dc5c` | Workbench and the CLI share symbol resolution. Firmware symbol settings and catalog navigation are documented in [Addrmap](../ADDRMAP.md). |
+| 3. Workload replay | Committed in `7716df71d` | Machine and effect cases replay on the two emulator targets. Saved Timeline shows retained events, markers and loss. Hardware timing and focused state probes are follow-ups when needed. |
+| 4. SDK workflow and unified capture | Committed in `8e8f8d372` | The [SDK example](../../sdk/dsp/README.md) compares PLUCK on both rigs with byte-identical audio. Rigs export function and loop evidence for effects too. Workbench shares recording, opening and run selection across views. This is rig and emulator evidence, not board timing. |
+| 4a. Saved spans and processor boundaries | Complete | Offline Spans, per-run CLI reports and target-aware recording options are implemented. See the verification below. |
+| 5. FREQ SHIFT listening and performance proof | Pending | The current effect is a baseline. Stereo spread, drift, cost and the listening comparison are still to do. |
+
 ## 1. Generate a catalog from one firmware file
 
 - Put the SHARC quick start in [Firmware analysis](../FIRMWARE.md) and link it directly from the root README. Keep Ghidra prerequisites for ColdFire in that guide. Link to it from [Development](../DEVELOPMENT.md), [Tools](../TOOLS.md) and the [firmware-query skill](../../.agents/skills/firmware-query/SKILL.md). Keep review labels and the query reference in their owning docs.
@@ -29,7 +40,7 @@ Keep firmware, captures, generated catalogs and listening WAVs local under ignor
 
 ## 3. Replay and compare machine and effect workloads
 
-- Extend the existing calibration runner where needed to replay a user-selected machine or effect case. Use the existing remote and debug paths for setup and observation. The current effect case is skipped because debug `SETUP` handles machines and filters. Build a general effect setup path around the existing routing and input interfaces. Verify the selected route and dispatch before accepting an effect capture. Use event or target-state waits and the runner's teardown.
+- Replay a user-selected machine or effect case through the calibration runner. Use the existing remote and debug paths for setup and observation. Effect cases use the routing and input interfaces because debug `SETUP` handles machines and filters. Verify the selected route and dispatch before accepting an effect capture. Use event or target-state waits and the runner's teardown.
 - Save the case and input identity, firmware and build hashes, route and settings, clocks, relevant markers and loss counts with the capture. Reuse `dk.profile/1` and its existing reporting path. Keep emulator SHARC instructions, hardware dispatch or block cycles, and ColdFire spans in their recorded units. Reopen saved traces in the existing PixiJS Timeline with their recorded owners and case markers where available.
 - Add a named state capture when a mismatch requires it. Use debug `PEEK` for ColdFire, emulator DSP reads for SHARC state in the model, and the existing probe path for selected hardware DSP values. Record the address space and capture boundary for each value.
 
@@ -42,6 +53,18 @@ Keep firmware, captures, generated catalogs and listening WAVs local under ignor
 - Give shared kernels an explicit numerical, state, buffer and register contract and a reference case. Extract a primitive into `sdk/dsp/` when shared use and the checks justify it.
 
 **Exit check.** Starting from the docs, a second caller can use the CLI to run a different existing case, identify its DSP cost and compare two builds. The method covers a machine or effect with the same tooling and produces artifacts Workbench can inspect. The worked example separates static instruction estimates, observed instructions and measured hardware cycles.
+
+## 4a. Make saved profiling and processor roles consistent
+
+1. **Fix saved Spans first.** Use the selected run's span totals in both Profile and Performance → Spans. Show owner, calls, total and max time, and CPU share in a clearly labeled saved summary. Only draw an over-time chart when the run actually has interval history. Timeline shows recorded events and any loss. Do not infer missing intervals from totals or a partial trace. Saved views work offline and do not surface errors from the live target.
+2. **Separate processor identity from measurement support.** Use the device registry for roles and architecture. DT2 and DN2 have a ColdFire main CPU and SHARC+ DSP. Syntakt has a ColdFire main CPU and a separate ColdFire audio peer. Use **Main CPU**, **DSP**, and **Audio peer** in general views, with architecture and address-space details in symbol settings and analysis. Let each backend advertise what it can record for the active target, runtime and emulator build. Keep Syntakt main-CPU debug spans independent of peer profiling, which is not currently available. Distinguish unavailable, available but not recorded, and recorded zero.
+3. **Keep state and reporting shared by responsibility.** The capture session owns private live and saved state and exposes actions such as `start`, `stop`, `save`, `open`, `selectRun`, and `returnToLive`. Collectors own transport and architecture-specific commands. Views consume read-only data grouped by measurement (spans, trace, DSP blocks and hotspots). Share report data with `wb profile` through the existing core and `dkprof` rather than computing it again in UI components. Verify that the same export produces matching span summaries and hotspot reports without a device connected. CLI collectors may keep their existing entry points. Store clocks, units and address spaces with their evidence. Keep `dk.profile/1` CPU keys and existing files readable. Add processor instance IDs to the format when a producer needs them to distinguish, for example, two ColdFire cores.
+
+Use one **Open capture** and one **Record / Stop** flow in Workbench. A file can contain multiple independent runs, but switching views must not silently combine their measurements. For example, the local `out/runs/dsp-workflow/phase4/freqshift-dt2-review.captures.json` has a send replay with span totals, trace and DSP dispatch costs, and a separate rig run with function and loop hotspots. Keep profiling off by default. Automatic boundary measurements should not require module edits. Module authors may add optional internal probes for questions the existing measurements cannot answer, and builds that omit those probes must not pay for them.
+
+**Exit check.** With no device connected, open the DT2 example (or a checked-in synthetic equivalent). Profile and the drawer agree on the span totals. Timeline shows trace loss, and the send run does not borrow the rig run's hotspots. The CLI reports the same recorded evidence. Check capabilities for DT2, DN2 and Syntakt, including a Syntakt debug-span target and an emulator build without DSP PC sampling. Existing captures still load. Leave audio-peer instrumentation and a new capture schema out of this phase.
+
+**Verified.** The offline Workbench preview opens a two-run fixture, keeps span totals and trace loss on the send run, and moves to the rig's PCs without carrying over the send data. The CLI reports 15 span rows and 392 dropped events on the DT2 send replay, and function counts on its separate rig run. Host tests cover DT2, DN2, the Syntakt audio-peer topology and legacy debug runtimes. A native RPC test passed on the build without the DSP sampler. No physical device was used.
 
 ## 5. Apply the workflow to FREQ SHIFT
 

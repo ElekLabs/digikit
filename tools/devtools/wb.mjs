@@ -132,6 +132,7 @@ for (let i = 0; i < args.length; i++) {
       '--top',
       '--seconds',
       '--run-dir',
+      '--run-id',
     ].includes(a)
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);

@@ -21,9 +21,9 @@ export interface SpanRecording {
   includeDsp(): boolean;
   dspAvailable(): boolean;
   setIncludeDsp(value: boolean): void;
-  includeSharc(): boolean;
-  sharcAvailable(): boolean;
-  setIncludeSharc(value: boolean): void;
+  includeDspHotspots(): boolean;
+  dspHotspotsAvailable(): boolean;
+  setIncludeDspHotspots(value: boolean): void;
   toggle(): void;
   canSave(): boolean;
   save(): Promise<void>;

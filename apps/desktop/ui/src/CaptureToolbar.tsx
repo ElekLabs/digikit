@@ -26,9 +26,9 @@ export default function CaptureToolbar(props: {
             includeDsp={!!props.recording?.includeDsp()}
             dspAvailable={!!props.recording?.dspAvailable()}
             setIncludeDsp={(value) => props.recording?.setIncludeDsp(value)}
-            includeSharc={!!props.recording?.includeSharc()}
-            sharcAvailable={!!props.recording?.sharcAvailable()}
-            setIncludeSharc={(value) => props.recording?.setIncludeSharc(value)}
+            includeDspHotspots={!!props.recording?.includeDspHotspots()}
+            dspHotspotsAvailable={!!props.recording?.dspHotspotsAvailable()}
+            setIncludeDspHotspots={(value) => props.recording?.setIncludeDspHotspots(value)}
             onToggle={() => props.recording?.toggle()}
           />
           <button
@@ -72,7 +72,7 @@ export default function CaptureToolbar(props: {
                     <select
                       value={props.saved.index()}
                       onChange={(event) => {
-                        const capture = props.saved.select(Number(event.currentTarget.value));
+                        const capture = props.saved.selectRun(Number(event.currentTarget.value));
                         if (capture) props.onSelect(capture);
                       }}
                     >
@@ -87,7 +87,7 @@ export default function CaptureToolbar(props: {
                     View hotspots
                   </button>
                 </Show>
-                <button type="button" onClick={props.saved.clear}>
+                <button type="button" onClick={props.saved.returnToLive}>
                   Show current target
                 </button>
               </>

@@ -13,12 +13,12 @@ export function createSavedPerformance() {
     index,
     error,
     current: () => file()?.[index()],
-    select(value: number) {
+    selectRun(value: number) {
       const capture = file()?.[value];
       if (capture) setIndex(value);
       return capture;
     },
-    clear() {
+    returnToLive() {
       revision++;
       batch(() => {
         setFile(undefined);

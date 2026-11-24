@@ -55,7 +55,7 @@ import RemotePage from './remote/RemotePage';
 import RemoteAudio from './remote/RemoteAudio';
 import type { WorkerFactory } from '@digi/workbench-core/workers.ts';
 import { useFirmwareApp, useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
-import { dspLine } from './dsp-core';
+import { audioProcessorLabel, dspLine } from './dsp-core';
 import { running as flashRunning } from '@digi/workbench-core/firmware/firmware-core.ts';
 import FirmwarePage from '@digi/workbench-core/ui/firmware/FirmwarePage.tsx';
 import FirmwareToolbar from './emulator/FirmwareToolbar';
@@ -215,6 +215,8 @@ export default function WorkbenchShell(
     return d !== undefined && Object.hasOwn(panels, d) ? d : defaultFaceplate;
   });
   const panel = () => panels[device()];
+  const audioProcessor = () =>
+    audioProcessorLabel(registry.ids.includes(device()) ? registry.get(device()) : undefined);
   const inventoryConnected = createMemo(() => connectionState() === 'connected');
   // Keep loaded modules available to the shell while Transfer is closed. Transfer's own
   // read publishes to the same inventory when it is open.
@@ -299,7 +301,7 @@ export default function WorkbenchShell(
 
   const [performanceView, setPerformanceView] = createSignal<PerformanceView>('Utilization');
   const [spanRecording, setSpanRecording] = createSignal<SpanRecording>();
-  const showCaptureControls = (view?: 'DSP blocks' | 'Timeline') => {
+  const showCaptureControls = (view?: PerformanceView) => {
     if (view) setPerformanceView(view);
     drawer.select('Performance');
   };
@@ -449,8 +451,8 @@ export default function WorkbenchShell(
         <dd>{status() ? `${status()!.device} ${status()!.version} · ${phase()}` : '—'}</dd>
         <dt>Instructions</dt>
         <dd>{status()?.icount.toLocaleString() ?? '—'}</dd>
-        <dt>DSP</dt>
-        <dd>{dspLine(info()?.dsp)}</dd>
+        <dt>{audioProcessor()}</dt>
+        <dd>{dspLine(info()?.dsp, audioProcessor())}</dd>
         <dt>Audio output</dt>
         <dd>{audio()?.output_device ?? (audio()?.setup_needed ? 'no audio for this firmware' : '—')}</dd>
         <dt>Speed</dt>
@@ -595,7 +597,7 @@ export default function WorkbenchShell(
                   <SidePanels
                     host={props.host}
                     visible={sidePanelsShown()}
-                    liveDsp={performanceOpen() && performanceView() === 'DSP blocks'}
+                    liveDsp={performanceOpen() && performanceView() === 'DSP blocks' && !savedPerformance.current()}
                     savedCapture={savedPerformance.current()}
                     showCaptureControls={showCaptureControls}
                     collectSpans={performanceOpen() && source.target.kind !== 'none'}

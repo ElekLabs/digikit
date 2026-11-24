@@ -141,6 +141,12 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         noDebug: false,
         port,
         emulator,
+        capabilities: {
+          hasDsp: true,
+          dspBlocks: true,
+          dspHotspots: emulator || 'DSP hotspot recording requires the emulator.',
+          mainHotspots: emulator || 'Main CPU hotspot recording requires the emulator.',
+        },
         observedAt: Date.now(),
         snap: snap(),
         modules,

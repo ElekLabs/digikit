@@ -63,6 +63,7 @@ Wrapper is the `Emu` method in `tools/control/digi_client.py`. `hello` reports a
 |---|---|---|
 | `hello` | `connect` | (automatic) |
 | `status` | `status` | `status` |
+| `profile.capabilities` (read-only) | | `call` |
 | `run.mode` (`ui`, `paused`, `free`) | | `call` |
 | `step` | `step` | `step` |
 | `run_until` | `run_until` | `call` |
@@ -272,6 +273,13 @@ boot image). An explicit firmware load clears the receipt. Desktop Workbench che
 epoch and firmware readiness when flashing or restoring the Emulator target. See [Patching](PATCHING.md#flash-the-desktop-emulator).
 
 `pcm.tap` needs the sharc build and a DSP session. `capture` and `capture_stop` have no wrapper.
+
+## Profiling capabilities (`profile.capabilities`)
+
+The read-only reply reports `main_pc` and `dsp_pc` for the samplers built into the host.
+`dsp_active` is true only when the loaded emulator session has a running DSP, not a stand-in
+or an audio peer. These fields do not say whether the debug runtime can record spans or DSP block
+costs. Workbench checks those channels separately.
 
 ## CPU load (`status.load`)
 

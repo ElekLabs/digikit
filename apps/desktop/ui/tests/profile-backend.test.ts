@@ -252,7 +252,10 @@ describe('the emulator', () => {
     });
     await rec.start();
     assert.deepEqual(st.calls, ['state:reset', 'state:start']);
-    assert.deepEqual(rpcCalls, ['cf.profile {"enable":true}', 'sharc.profile {"enable":true}']);
+    assert.deepEqual(
+      rpcCalls.filter((call) => call.includes('enable')),
+      ['cf.profile {"enable":true}', 'sharc.profile {"enable":true}'],
+    );
   });
 
   test('leaves the SHARC counter off when hotspots are not requested', async () => {
@@ -266,7 +269,7 @@ describe('the emulator', () => {
     await rec.start(false, false);
     const reading = await rec.read();
     assert.ok(!reading.noDebug);
-    assert.equal(reading.sharcRequested, false);
+    assert.equal(reading.dspHotspotsRequested, false);
     assert.equal(reading.dsp, undefined);
     await rec.stop();
     assert.ok(!rpcCalls.some((call) => call.startsWith('sharc.profile')));
@@ -578,8 +581,8 @@ describe('the emulator', () => {
     st.running = true;
     const r = await rec.read();
     assert.ok(!r.noDebug);
-    if (!r.noDebug) assert.match(r.note ?? '', /no DSP on this device/);
-    if (!r.noDebug) assert.equal(r.noDsp, true);
+    if (!r.noDebug) assert.match(r.note ?? '', /no DSP on this device/i);
+    if (!r.noDebug) assert.equal(r.capabilities.hasDsp, false);
     if (!r.noDebug) assert.doesNotMatch(r.note ?? '', /built without/);
   });
 
@@ -763,7 +766,7 @@ describe('DSP block recording', () => {
         overruns: 2,
         rows: [{ row: 8, kind: 'effect', calls: 120, meanBlock: 80, maxCall: 65, maxBlock: 110 }],
       });
-      assert.deepEqual(steps, ['clear', 'start', 'get', 'clear', 'get']);
+      assert.deepEqual(steps, ['clear', 'start', 'get', 'clear', 'get', 'get']);
       const doc = JSON.parse((await rec.exportFile()).text);
       assert.equal(doc.dsp.unit, emulator ? 'insn' : 'cycles');
       assert.equal(doc.dsp_rows[0].sum_cycles, 3200);

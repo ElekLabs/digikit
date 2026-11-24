@@ -2127,6 +2127,11 @@ impl Actor {
         }
         let outcome: Result<Option<Value>, RpcError> = match method {
             "status" => self.rpc_status().map(Some),
+            "profile.capabilities" => Ok(Some(json!({
+                "main_pc": cfg!(feature = "cf-profile"),
+                "dsp_pc": cfg!(feature = "sharc-profile"),
+                "dsp_active": self.runtime.as_ref().is_some_and(|r| r.companion_kind().as_str() == "sharc"),
+            }))),
             "run.mode" => self.rpc_run_mode(&p).map(Some),
             "step" => self.rpc_step(&p, &reply),
             "run_until" => self.rpc_run_until(&p, &reply),

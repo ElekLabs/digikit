@@ -1,13 +1,14 @@
 import { expandCaptures } from './calibration-view.ts';
 import { readDspBlocks } from './dsp-blocks.ts';
 import { readProfileHotspots } from './hotspots.ts';
-import { readReference } from './profile-core.ts';
+import { readSpanSummary, type SpanSummary } from './span-summary.ts';
 import { readTrace } from './trace.ts';
 
 export interface PerformanceCapture {
   label: string;
   document: Record<string, unknown>;
   hasHotspots: boolean;
+  spans?: SpanSummary;
   trace?: ReturnType<typeof readTrace>;
   dsp?: ReturnType<typeof readDspBlocks>;
 }
@@ -19,9 +20,10 @@ export function readPerformanceCaptures(doc: unknown, filename: string): Perform
     const profile = entry as Record<string, unknown>;
     const trace = readTrace(profile);
     const dsp = readDspBlocks(profile);
+    const spans = readSpanSummary(profile);
     const { pcs } = readProfileHotspots(profile, 1);
     const hasHotspots = !!(pcs.cf.length || pcs.sharc.length);
-    if (!trace && !dsp && !hasHotspots && !readReference(profile)?.size) return [];
+    if (!trace && !dsp && !hasHotspots && !spans) return [];
     const run = profile.run;
     const info = run && typeof run === 'object' ? (run as { label?: unknown; id?: unknown }) : undefined;
     const label = typeof info?.label === 'string' ? info.label : typeof info?.id === 'string' ? info.id : undefined;
@@ -30,6 +32,7 @@ export function readPerformanceCaptures(doc: unknown, filename: string): Perform
         label: label || (index ? filename + ' · ' + (index + 1) : filename),
         document: profile,
         hasHotspots,
+        spans,
         trace,
         dsp,
       },

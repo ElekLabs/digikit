@@ -91,7 +91,7 @@ test('clearing a saved profile invalidates in-flight file and symbol reads', asy
   try {
     await saved.open({ name: 'saved.json', text: async () => profileText(1) });
     const pending = saved.open({ name: 'pending.json', text: () => file.promise });
-    saved.clear();
+    saved.returnToLive();
 
     symbols.resolve({ pcs: namedPc(1, 'late symbol') });
     file.resolve(profileText(2));

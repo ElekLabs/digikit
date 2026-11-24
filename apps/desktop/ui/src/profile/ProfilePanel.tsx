@@ -31,6 +31,10 @@ import HotspotTable from './HotspotTable';
 import { fmtPct, resolveSavedHotspots } from './hotspots';
 import { createProfileReference } from './reference';
 import { ReferenceView } from './ReferenceView';
+import SavedSpanSummary from '../SavedSpanSummary';
+import { formatSpanShare } from '@digi/workbench-core/profile/span-summary.ts';
+import { processorLabels } from '@digi/workbench-core/profile/processor.ts';
+import type { PerformanceView } from '../PerformancePanel';
 import type { SpanRecording } from '../span-recording';
 import type { PerformanceCapture } from '@digi/workbench-core/profile/performance-capture.ts';
 import {
@@ -51,7 +55,7 @@ export default function ProfilePanel(props: {
   collectSpans?: boolean;
   liveDsp?: boolean;
   savedCapture?: PerformanceCapture;
-  showCaptureControls?(view?: 'DSP blocks' | 'Timeline'): void;
+  showCaptureControls?(view?: PerformanceView): void;
   onSpanRecording?(recording?: SpanRecording): void;
   openCatalog?(path: string, sha256: string, entry: number): void;
   source: TargetBinding;
@@ -75,42 +79,28 @@ export default function ProfilePanel(props: {
     names: host && prof ? (onEmulator ? createEmulatorNames : createDeviceNames)(host, prof) : undefined,
   });
 
-  const {
-    reading,
-    ok,
-    dsp,
-    error,
-    readError,
-    noRuntime,
-    busy,
-    locked,
-    acting,
-    recording,
-    columns,
-    markers,
-    nowShare,
-    addDebug,
-  } = createProfileSession({
-    source,
-    recorder,
-    visible: () => props.visible && (props.active ?? true),
-    collectSpans: () => props.collectSpans,
-    liveDsp: () => props.liveDsp,
-    checkRuntime,
-    emulatorRuntime,
-    cardRefresh,
-    calibrating: () => props.hub.calibrating(),
-    noteReply,
-    save: host ? ({ text, name }) => host.fs.saveLog(new TextEncoder().encode(text), name, 'profile') : undefined,
-    installDebug: (current) =>
-      app.jobs.runJob('Install debug module', { group: 'target' }, async () => {
-        source.check();
-        await app.backend.install([DEBUG_MODULE], () => {});
-        if (!current()) return;
-        source.check();
-        await app.backend.restart(() => {});
-      }),
-  });
+  const { reading, ok, dsp, error, noRuntime, busy, locked, acting, recording, columns, markers, nowShare, addDebug } =
+    createProfileSession({
+      source,
+      recorder,
+      visible: () => props.visible && (props.active ?? true),
+      collectSpans: () => props.collectSpans,
+      liveDsp: () => props.liveDsp,
+      checkRuntime,
+      emulatorRuntime,
+      cardRefresh,
+      calibrating: () => props.hub.calibrating(),
+      noteReply,
+      save: host ? ({ text, name }) => host.fs.saveLog(new TextEncoder().encode(text), name, 'profile') : undefined,
+      installDebug: (current) =>
+        app.jobs.runJob('Install debug module', { group: 'target' }, async () => {
+          source.check();
+          await app.backend.install([DEBUG_MODULE], () => {});
+          if (!current()) return;
+          source.check();
+          await app.backend.restart(() => {});
+        }),
+    });
   untrack(() => props.onSpanRecording?.(recording));
   onCleanup(() => props.onSpanRecording?.(undefined));
   const reference = createProfileReference({
@@ -119,11 +109,8 @@ export default function ProfilePanel(props: {
     resolve: (profile) => resolveSavedHotspots(profile, host?.symbols, prof, host?.library),
   });
   const showTargetStatus = () => !props.savedCapture;
-  const comparison = () => reference.profile()?.shares;
-  const referenceShare = (name: string) => {
-    const share = comparison()?.get(name);
-    return share === undefined ? '–' : fmtShare(share);
-  };
+  const comparison = () => props.savedCapture?.spans;
+  const referenceShare = (name: string) => formatSpanShare(comparison()?.rows.find((row) => row.name === name)?.share);
 
   const rows = createMemo(() => {
     const r = ok();
@@ -166,6 +153,11 @@ export default function ProfilePanel(props: {
               <button type="button" class="act quiet" onClick={() => show()()}>
                 Capture controls
               </button>
+              <Show when={props.savedCapture?.spans}>
+                <button type="button" class="act quiet" onClick={() => show()('Spans')}>
+                  View spans
+                </button>
+              </Show>
               <Show when={props.savedCapture?.dsp}>
                 <button type="button" class="act quiet" onClick={() => show()('DSP blocks')}>
                   View DSP blocks
@@ -288,19 +280,21 @@ export default function ProfilePanel(props: {
               <Show when={emu()}>
                 <div class="prof-sec ruled">
                   <div class="sec-head">
-                    <span class="title">{r().noDsp ? 'ColdFire profile (emulator)' : 'DSP per block (emulator)'}</span>
+                    <span class="title">
+                      {r().capabilities.hasDsp ? 'DSP per block (emulator)' : 'Main CPU profile (emulator)'}
+                    </span>
                     <Show when={dsp()}>{(v) => <span class="num">{dspText(v())}</span>}</Show>
                   </div>
                   <Show
                     when={dsp()}
                     fallback={
-                      <span class="hint" hidden={r().noDsp && !!r().cf}>
+                      <span class="hint" hidden={!r().capabilities.hasDsp && !!r().cf}>
                         {r().note ??
-                          (r().noDsp
-                            ? 'No DSP on this device.'
-                            : r().snap.running && r().sharcRequested
+                          (r().capabilities.dspHotspots !== true
+                            ? r().capabilities.dspHotspots
+                            : r().snap.running && r().dspHotspotsRequested
                               ? 'Waiting for the DSP counts…'
-                              : 'Select Include SHARC hotspots in Capture controls before recording.')}
+                              : 'Select Include DSP hotspots in Capture controls before recording.')}
                       </span>
                     }
                   >
@@ -370,12 +364,12 @@ export default function ProfilePanel(props: {
                   <Show when={r().cf}>
                     {(cf) => (
                       <div class="cf-view">
-                        <Show when={!r().noDsp}>
+                        <Show when={r().capabilities.hasDsp}>
                           <div class="sec-head">
-                            <span class="title">ColdFire (emulator)</span>
+                            <span class="title">{processorLabels.main} (emulator)</span>
                           </div>
                         </Show>
-                        <div class="cf-paths" role="table" aria-label="ColdFire paths">
+                        <div class="cf-paths" role="table" aria-label="Main CPU paths">
                           <div class="cf-row head" role="row">
                             <span class="name">path</span>
                             <span class="mono">host time</span>
@@ -392,7 +386,7 @@ export default function ProfilePanel(props: {
                           </For>
                         </div>
                         <Show when={cf().pcs.length > 0}>
-                          <HotspotTable title="ColdFire PCs" rows={cf().pcs} />
+                          <HotspotTable title="Main CPU PCs" rows={cf().pcs} />
                         </Show>
                       </div>
                     )}
@@ -436,10 +430,12 @@ export default function ProfilePanel(props: {
             </>
           )}
         </Show>
+        <Show when={comparison()}>
+          {(spans) => <SavedSpanSummary spans={spans()} label={props.savedCapture?.label} />}
+        </Show>
         <ReferenceView
           name={props.savedCapture?.label}
           evidence={reference.evidence()}
-          shares={ok() ? undefined : comparison()}
           openReview={
             props.openCatalog
               ? async (path, sha256, entry) => props.openCatalog?.(path, sha256, entry)
@@ -449,7 +445,7 @@ export default function ProfilePanel(props: {
         <Show when={showTargetStatus() && props.active === false}>
           <p class="empty">The emulator is not running.</p>
         </Show>
-        <Show when={(showTargetStatus() || !readError()) && error()}>
+        <Show when={showTargetStatus() && error()}>
           <p class="err" role="alert">
             {error()}
           </p>

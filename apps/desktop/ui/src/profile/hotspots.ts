@@ -7,17 +7,15 @@ import {
   type Hotspot,
   type ProfileHotspots,
 } from '@digi/workbench-core/profile/hotspots.ts';
-import { readReference } from '@digi/workbench-core/profile/profile-core.ts';
 
 export { sampledPcs, type Hotspot } from '@digi/workbench-core/profile/hotspots.ts';
 
 export interface SavedProfile extends ProfileHotspots {
-  shares?: Map<string, number>;
   document: unknown;
 }
 
 export function readSavedProfile(doc: unknown): SavedProfile {
-  return { ...readProfileHotspots(doc), shares: readReference(doc), document: doc };
+  return { ...readProfileHotspots(doc), document: doc };
 }
 
 interface SharcCostRow {
