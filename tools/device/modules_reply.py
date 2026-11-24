@@ -7,6 +7,17 @@ The runtime reads no meaning into the words; this module does, for the two servi
 import struct
 from typing import Any
 
+#: The INFO `caps` bit of a runtime whose records end with sections (`sdk/sdk.toml` `[caps]` `MODULE_SECTIONS`).
+CAP_MODULE_SECTIONS = 21
+
+#: What a host says when the device's MODULES records end at `dsp_len` (a runtime before 0.11.5 does not set the capability).
+OLD_MODULES = "Update the firmware: this runtime lists modules in an older layout"
+
+
+class OldModulesLayout(ValueError):
+    """The reply is of the older layout: the device does not report the `MODULE_SECTIONS` capability."""
+
+
 #: The bytes of a record before its sections (`u8 index` to `u32 dsp_len`).
 MODULE_FIXED = 61
 
@@ -52,12 +63,14 @@ def _effects(words: list[int]) -> list[dict[str, int]]:
     ]
 
 
-def decode_page(b: bytes) -> dict[str, Any]:
-    """One page of the MODULES reply (the body after the status): `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`.
+def decode_page(b: bytes, caps: int | None) -> dict[str, Any]:
+    """One page of the MODULES reply (the body after the status): `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`. `caps` is the INFO capability word: without the `MODULE_SECTIONS` bit the records are of the older layout and `OldModulesLayout` is raised.
 
     A module is `{index, name, version, needs (the runtime version it needs, packed major << 16 | minor << 8 | patch), uiInstance (only with a Workbench token), cf_base, cf_size,
     dsp_off, dsp_len, sections ({service hash in 8 hex digits: words}), rows (voice-row mask), types (machine types), faults (the guard's count for them), guard_off (the guard
     switched one off), effects ([{row, running, saved, allowed, dflt}])}`."""
+    if caps is None or not caps >> CAP_MODULE_SECTIONS & 1:
+        raise OldModulesLayout(OLD_MODULES)
     af, al, df, dl = struct.unpack_from(">IIII", b, 0)
     total, n = b[16], b[17]
     modules: list[dict[str, Any]] = []

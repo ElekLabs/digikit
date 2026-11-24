@@ -458,11 +458,14 @@ class Uploader:
         `{arena_free, arena_largest, dsp_free, dsp_largest, total, modules: [...]}`; a module is what `modules_reply.decode_page` reads: the record's fixed part
         (`index, name, version, needs, cf_base, cf_size, dsp_off, dsp_len`), `sections` (what each loaded service holds for it, by the hex of its name hash) and, read from
         the `machines` and `fx` sections, `rows`, `types`, `faults`, `guard_off` and `effects` (runtime 0.11.5 and later)."""
+        info = self.info()
+        if not has_cap(info, "MODULE_SECTIONS"):
+            raise UploadError(0, modules_reply.OLD_MODULES)
         out: dict[str, Any] = {"modules": []}
         start = 0
         while True:
             page = modules_reply.decode_page(
-                self._ok(CMD_MODULES, "modules", bytes((start,)))
+                self._ok(CMD_MODULES, "modules", bytes((start,))), info["caps"]
             )
             out.update({k: v for k, v in page.items() if k != "modules"})
             for m in page["modules"]:

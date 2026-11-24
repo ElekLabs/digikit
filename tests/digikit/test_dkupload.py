@@ -258,7 +258,9 @@ def test_modules_pages_by_start_index_and_decodes_the_records():
         def recv(self) -> bytes:
             return self.queue.pop(0)
 
-    m = D.Uploader(Fake()).modules()
+    up = D.Uploader(Fake())
+    up.info = lambda: {"caps": 1 << D.modules_reply.CAP_MODULE_SECTIONS, "runtime": 0}  # type: ignore[method-assign]
+    m = up.modules()
     assert starts == [0, 2]
     assert (
         m["arena_free"],
@@ -284,6 +286,13 @@ def test_modules_pages_by_start_index_and_decodes_the_records():
         True,
         0,
     )
+    # a device without the capability is refused before MODULES is sent
+    starts.clear()
+    old = D.Uploader(Fake())
+    old.info = lambda: {"caps": 1 << 5, "runtime": 0}  # type: ignore[method-assign]
+    with pytest.raises(D.UploadError, match="Update the firmware"):
+        old.modules()
+    assert starts == []
     lines = D.modules_lines(m)
     assert (
         lines[0].startswith("arena free 100")

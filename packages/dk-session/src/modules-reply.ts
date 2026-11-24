@@ -1,7 +1,11 @@
 // The MODULES reply (runtime 0.11.5): its fixed part per record ends at dsp_len, then `u8 n_sections` and per section `u32 service name hash, u8 n, n words`. The runtime reads no
 // meaning into the words; this file does, for the two services a host knows: `machines` (five words) and `fx` (one word per effect row). The fixture
 // tests/fixtures/protocol/modules-reply.json is written by the runtime's encoder test and read by every decoder (here and tools/device/dkupload.py).
+import { CAP } from './gen_proto.ts';
 import type { DkEffectRow, DkModule } from './dkupload-core.ts';
+
+/** What a host says when the device's MODULES records end at `dsp_len` (a runtime before 0.11.5 does not set the `MODULE_SECTIONS` capability). */
+export const OLD_MODULES = 'Update the firmware: this runtime lists modules in an older layout';
 
 /** FNV-1a 32 of a service name: the hash a section is named by (`dkneeds::keys::name_hash`). */
 export function serviceHash(name: string): number {
@@ -35,8 +39,12 @@ function effects(words: number[]): DkEffectRow[] {
   }));
 }
 
-/** One page of the MODULES reply (the body after the status): the number of loaded modules and the records of this page. */
-export function decodeModulesPage(b: Uint8Array): { total: number; modules: DkModule[] } {
+/**
+ * One page of the MODULES reply (the body after the status): the number of loaded modules and the records of this page. `caps` is the INFO capability word of the
+ * device: without the `MODULE_SECTIONS` bit the records are of the older layout and are refused with `OLD_MODULES`, never read as the new one.
+ */
+export function decodeModulesPage(b: Uint8Array, caps: number | null): { total: number; modules: DkModule[] } {
+  if (caps === null || ((caps >>> CAP.MODULE_SECTIONS) & 1) === 0) throw new Error(OLD_MODULES);
   const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
   const total = b[16]!;
   const n = b[17]!;

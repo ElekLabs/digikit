@@ -2010,6 +2010,7 @@ FW_ID = 18          # the INFO reply ends with `fw_id` after `svc_abi`: 8 bytes,
 LIVE = 19           # the LOAD and UNLOAD commands (a content module is loaded or unloaded without a boot); RELOAD_STATE reports them too
 
 MODULE_UI = 20      # loaded modules may expose public Workbench settings by instance
+MODULE_SECTIONS = 21 # a MODULES record ends with `u8 n_sections` and the sections of the services (runtime 0.11.5); a host that does not see this bit refuses the reply as an older layout
 
 [capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused.
                    # `fit = true`: a resource a fit looks at, with its `label` for a person (CAP_FIT in the generated code; a fit kind needs a label, a kind may have one without `fit`); every kind is in CAP_KINDS

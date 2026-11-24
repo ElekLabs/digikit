@@ -90,6 +90,7 @@ pub const CAP_RELOAD: u32 = 1 << 17;
 pub const CAP_FW_ID: u32 = 1 << 18;
 pub const CAP_LIVE: u32 = 1 << 19;
 pub const CAP_MODULE_UI: u32 = 1 << 20;
+pub const CAP_MODULE_SECTIONS: u32 = 1 << 21;
 pub const CAPK_MODULES: u8 = 1;
 pub const CAPK_SELECTION: u8 = 2;
 pub const CAPK_ARENA: u8 = 3;

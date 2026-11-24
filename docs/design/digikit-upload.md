@@ -201,7 +201,11 @@ a section; a record whose sections do not fit ends the page). The hash is the se
 - `fx`, one word for each effect row of the module that has a page, in row order: the row (bits 0 to 7), then four bits each: the route it runs on, the route the settings give it now, the routes its
   record allows and its default (1 master, 2 send).
 
-Runtime 0.11.4 and earlier ended a record with `u32 rows`, `u8 n_types`, the type bytes, `u32 faults` and `u8 flags` instead (71 + `n_types` bytes); the hosts read only the new layout (`packages/dk-session/src/modules-reply.ts`,
+The layout is versioned by INFO's `caps` bit 21 (`MODULE_SECTIONS`): a runtime that has the sections sets it, an older one (0.11.4 and earlier) does not. A host reads the reply as this layout only when the bit is set, and refuses
+a device without it with "Update the firmware: this runtime lists modules in an older layout" (`decodeModulesPage` and `modules_reply.decode_page` take the `caps` word; `DkSession.modules` and `Uploader.modules` read INFO first). The runtime version
+alone is not the gate: the bit is, like the other layout-changing capabilities (`FILEHASH` for the store format, `SVC_ABI`, `FW_ID`).
+
+Runtime 0.11.4 and earlier ended a record with `u32 rows`, `u8 n_types`, the type bytes, `u32 faults` and `u8 flags` instead (71 + `n_types` bytes); the hosts read only the new layout and refuse the old one (`packages/dk-session/src/modules-reply.ts`,
 `tools/device/modules_reply.py`; both test against `tests/fixtures/protocol/modules-reply.json`, which the encoder test of the runtime writes). `dkupload --port NAME modules` (`mise run dk:store -- --port NAME modules`) prints a header with the free space and one line per module.
 
 ## The debug log (LOG and PEEK; finding 46)

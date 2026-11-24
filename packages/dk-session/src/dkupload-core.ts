@@ -6,7 +6,7 @@
 // the same framing and every command of the protocol (INFO, LIST, upload, DELETE, CLEAR, ABORT, MODULES, CAPACITY, READ, VERIFY, SELECT,
 // RESTART, LOG), with the numbers generated from sdk/sdk.toml (`gen_proto.ts`). The desktop app uses it (no wasm, no Python).
 import { wireModuleSettings } from './module-settings.ts';
-import { decodeModulesPage } from './modules-reply.ts';
+import { decodeModulesPage, OLD_MODULES } from './modules-reply.ts';
 import {
   CAP as GCAP,
   CAPACITY_KINDS,
@@ -1002,6 +1002,8 @@ export class DkSession {
   private emulatedProbe: EmulatedProbe | undefined;
   private sessionClock: Clock;
   private fileHashOk = false;
+  /** The `caps` word of the last INFO (undefined before the first one): MODULES decodes by it without asking again. */
+  private lastCaps: number | null | undefined;
   private onLink?: DkSessionOptions['onLink'];
   private turn: Promise<unknown> = Promise.resolve();
   /** False from `restart()` until a stock MidiRpc request has been answered in the new boot (`waitRpcService`). */
@@ -1366,6 +1368,7 @@ export class DkSession {
       fault_found: (flags & 16) !== 0,
     };
     this.fileHashOk = hasCap(info, 'FILEHASH');
+    this.lastCaps = caps;
     return info;
   }
 
@@ -1418,11 +1421,13 @@ export class DkSession {
 
   /** The loaded modules with their ranges, needed runtime versions and faults (MODULES, runtime 0.2.0, capability MODULES), every page. */
   async modules(quick: Quick = false): Promise<DkModule[]> {
+    const caps = this.lastCaps !== undefined ? this.lastCaps : (await this.info(quick)).caps;
+    if (caps === null || ((caps >>> GCAP.MODULE_SECTIONS) & 1) === 0) throw new DkError({ error: OLD_MODULES, kind: 'request' });
     const out: DkModule[] = [];
     let start = 0;
     for (;;) {
       const b = await this.ok(GCMD.MODULES, 'modules', Uint8Array.of(start), quick);
-      const { total, modules } = decodeModulesPage(b);
+      const { total, modules } = decodeModulesPage(b, caps);
       for (const m of modules) {
         out.push(m);
         start = m.index + 1;

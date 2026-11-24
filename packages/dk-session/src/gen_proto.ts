@@ -256,6 +256,7 @@ export const CAP = {
   FW_ID: 18,
   LIVE: 19,
   MODULE_UI: 20,
+  MODULE_SECTIONS: 21,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */
