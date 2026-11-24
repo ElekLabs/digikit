@@ -17,10 +17,7 @@ export function withRouteFxSession(device: Device, scope: string, config: RouteF
     ...config,
     image: {
       name: config.image,
-      modules: [
-        ...RT,
-        ...(config.image === 'routes' ? ['core/ui'] : []),
-      ],
+      modules: [...RT, ...(config.image === 'routes' ? ['core/ui'] : [])],
       inventory: config.image === 'routes' ? [SINE, GAIN, SEND, SENDONLY, SEND3] : [SINE, FX, `${FX}-2`, `${FX}-3`],
       symbols: [
         'DKRT_BOOT',

@@ -1051,7 +1051,7 @@ fn an_effect_loads_with_the_fx_service_file() {
 
 /// No image point holds a table for the fx service (RC4-2): the patched image of every set has no `fxpages_info`, only the `rows_info` the service finds its parameter blocks in (the
 /// blocks themselves: `tests/rows.rs` of patchkit against the device files, `tests/table.rs` of the service), and the service file starts over it from its own device facts and loads an
-/// effect.
+/// effect (the facts of each device: `tests/table.rs` of the service).
 #[test]
 fn the_fx_service_file_loads_over_an_image_with_no_effect_pages_point() {
     let _g = clean();
@@ -1061,7 +1061,6 @@ fn the_fx_service_file_loads_over_an_image_with_no_effect_pages_point() {
             let has = |name: &str| image.entries.iter().any(|e| e.1 == name_hash(name) && e.2 == 0);
             assert!(!has("fxpages_info"), "{} {set}: the image has a table for the effect pages", dev.name);
             assert!(has("rows_info"), "{} {set}: no rows_info", dev.name);
-            assert!(dkrt_svc_fx::fxpage::device_facts(dev.profile.id).is_some(), "{}: the service has no effect page facts", dev.name);
             unsafe {
                 fits(*dev, set, &[&FX_GAIN], &["fx"]);
             }
