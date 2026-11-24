@@ -30,12 +30,37 @@ export interface Hotspot {
   module_entry?: number;
 }
 
+type RigEvidence = { map: AddrMapJson; analyses?: Record<string, unknown> };
+
 export interface ProfileHotspots {
+  rig?: RigEvidence;
   sha256?: string;
   target?: string;
   loads?: LoadTableJson;
   moduleHashes: string[];
   pcs: Record<Cpu, Hotspot[]>;
+}
+
+const record = (value: unknown): Record<string, unknown> | undefined =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+
+function rigEvidence(value: unknown, target?: string): RigEvidence | undefined {
+  const rig = record(value);
+  const map = record(rig?.map);
+  const key = record(map?.key);
+  if (
+    map?.kind !== 'rig' ||
+    map.format !== 'dk-addrmap' ||
+    map.version !== 1 ||
+    key?.device !== target ||
+    !Array.isArray(map.entries)
+  )
+    return undefined;
+  // A placement supplied by the rig names its own code only. It cannot attach catalog paths.
+  return {
+    map: { format: map.format, version: map.version, kind: map.kind, key: { device: target }, entries: map.entries },
+    analyses: record(rig?.analyses),
+  };
 }
 
 const fingerprint = (value: unknown) =>
@@ -59,7 +84,7 @@ export function sampledPcs(raw: unknown[], cpu: Cpu, top = 10): Hotspot[] {
 }
 
 export function readProfileHotspots(doc: unknown, top?: number): ProfileHotspots {
-  const { run, raw, clock } = (doc ?? {}) as {
+  const { run, raw, clock, rig } = (doc ?? {}) as {
     run?: {
       firmware_sha256?: unknown;
       stock_firmware_sha256?: unknown;
@@ -68,7 +93,8 @@ export function readProfileHotspots(doc: unknown, top?: number): ProfileHotspots
       module_sha256?: unknown[];
     };
     raw?: unknown[];
-    clock?: { unit?: string };
+    clock?: { unit?: string; source?: string };
+    rig?: unknown;
   };
   const rows = Array.isArray(raw) ? raw : [];
   const unit = typeof clock?.unit === 'string' ? clock.unit : undefined;
@@ -80,6 +106,7 @@ export function readProfileHotspots(doc: unknown, top?: number): ProfileHotspots
   const fullStock = fingerprint(run?.stock_firmware_sha256);
   const short = typeof firmware === 'string' && /^[a-f0-9]{16}$/i.test(firmware) ? firmware.toLowerCase() : undefined;
   return {
+    ...(clock?.source === 'sharc-rig.insn' ? { rig: rigEvidence(rig, run?.target) } : {}),
     sha256: fingerprint(firmware) ?? (short && fullStock?.startsWith(short) ? fullStock : undefined),
     target: run?.target,
     loads: Array.isArray(run?.loads?.modules) ? run.loads : undefined,
@@ -89,7 +116,7 @@ export function readProfileHotspots(doc: unknown, top?: number): ProfileHotspots
 }
 
 export function verifiedProfileMaps(profile: ProfileHotspots, maps: AddrMapJson[]): AddrMapJson[] {
-  if (!profile.sha256) return [];
+  if (!profile.sha256) return profile.rig ? [profile.rig.map] : [];
   return maps.filter((map) => {
     if (map.kind !== 'module') return stockImageHash(map) === profile.sha256;
     const key = map.key as { dkm_sha256?: string } | undefined;
@@ -105,7 +132,7 @@ export function resolveProfileHotspots(
 ): ProfileHotspots['pcs'] {
   const { pcs, loads, sha256 } = profile;
   const verified = verifiedProfileMaps(profile, maps);
-  if (!sha256 || !verified.length || !(pcs.cf.length || pcs.sharc.length)) return pcs;
+  if (!verified.length || !(pcs.cf.length || pcs.sharc.length)) return pcs;
   const addrs = [
     ...pcs.cf.map(({ addr }) => ({ cpu: 'cf' as const, addr })),
     ...pcs.sharc.map(({ addr }) => ({ cpu: 'sharc' as const, addr })),
@@ -132,7 +159,7 @@ export function resolveProfileHotspots(
           output.module_entry = entry - base;
         }
       }
-      if (hit.layer === 'fw') {
+      if (sha256 && hit.layer === 'fw') {
         const index = reviews.find((r) => r.cpu === hit.cpu && r.entries.includes(entry));
         if (index)
           output.review = {

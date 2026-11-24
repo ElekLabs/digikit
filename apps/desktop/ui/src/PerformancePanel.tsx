@@ -1,6 +1,7 @@
 import DspBlocks from './DspBlocks';
 import TraceTimeline from './TraceTimeline';
-import RecordingButton from './RecordingButton';
+import CaptureToolbar from './CaptureToolbar';
+import type { PerformanceCapture } from '@digi/workbench-core/profile/performance-capture.ts';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { Application, Graphics } from 'pixi.js';
 import 'pixi.js/unsafe-eval';
@@ -13,7 +14,7 @@ import {
 } from './utilization-history';
 import SpanBreakdown from './SpanBreakdown';
 import type { SpanRecording } from './span-recording';
-import type { createSavedTimeline } from './saved-timeline';
+import type { createSavedPerformance } from './saved-performance';
 import './performance-panel.css';
 
 const hoverPercent = (value: number | null) => (value === null ? '—' : `${value.toFixed(1)}%`);
@@ -31,13 +32,25 @@ interface PerformanceProps {
   estimated: boolean;
   view: PerformanceView;
   setView(view: PerformanceView): void;
+  showProfile(): void;
   recording?: SpanRecording;
   activeTarget: boolean;
-  savedTimeline: ReturnType<typeof createSavedTimeline>;
+  savedPerformance: ReturnType<typeof createSavedPerformance>;
 }
 
 export default function PerformancePanel(props: PerformanceProps) {
-  let traceFile!: HTMLInputElement;
+  const captureView = () => props.view === 'Timeline' || props.view === 'DSP blocks';
+  const saved = () => props.savedPerformance.current();
+  const trace = () => (saved() ? saved()?.trace : props.activeTarget ? props.recording?.frozenTrace() : undefined);
+  const dsp = () => (saved() ? saved()?.dsp : props.activeTarget ? props.recording?.dspBlocks() : undefined);
+  const liveStatus = (status?: string) =>
+    props.activeTarget ? (status ?? 'Reading target capabilities…') : 'Target unavailable';
+  const selectSaved = (capture: PerformanceCapture) => {
+    if (capture.hasHotspots || (!capture.dsp && !capture.trace)) props.showProfile();
+    if ((props.view === 'DSP blocks' && capture.dsp) || (props.view === 'Timeline' && capture.trace)) return;
+    if (capture.dsp) props.setView('DSP blocks');
+    else if (capture.trace) props.setView('Timeline');
+  };
   const latest = () => {
     const point = props.points.findLast((p) => p.at <= props.now);
     return point && utilizationIsFresh(props.now - point.at, props.estimated) ? point : undefined;
@@ -50,7 +63,10 @@ export default function PerformancePanel(props: PerformanceProps) {
   return (
     <section
       class="performance-panel"
-      classList={{ 'performance-panel-timeline': props.view === 'Timeline' }}
+      classList={{
+        'performance-panel-timeline': props.view === 'Timeline',
+        'performance-panel-dsp': props.view === 'DSP blocks',
+      }}
       aria-label="Performance"
     >
       <header class="performance-header">
@@ -63,23 +79,6 @@ export default function PerformancePanel(props: PerformanceProps) {
             )}
           </For>
         </div>
-        <Show when={props.view !== 'Utilization'}>
-          <div class="span-actions">
-            <Show when={props.activeTarget && props.recording?.available()}>
-              <RecordingButton
-                running={!!props.recording?.running()}
-                disabled={!!props.recording?.disabled()}
-                includeDsp={!!props.recording?.includeDsp()}
-                dspAvailable={!!props.recording?.dspAvailable()}
-                setIncludeDsp={(value) => props.recording?.setIncludeDsp(value)}
-                onToggle={() => props.recording?.toggle()}
-              />
-            </Show>
-            <Show when={props.view === 'Spans' || props.recording?.running()}>
-              <span role="status">{props.activeTarget ? props.recording?.status() : 'Target unavailable'}</span>
-            </Show>
-          </div>
-        </Show>
         <Show when={props.view === 'Spans' || props.view === 'Utilization'}>
           <dl class="performance-legend" aria-label="Latest utilization">
             <div class="performance-cf">
@@ -94,74 +93,39 @@ export default function PerformancePanel(props: PerformanceProps) {
           <span class="performance-source">{props.estimated ? 'Estimated utilization' : 'Measured utilization'}</span>
         </Show>
       </header>
-      <Show
-        when={props.view === 'Timeline'}
-        fallback={
-          <Show when={props.view === 'DSP blocks'} fallback={<UtilizationChart {...props} />}>
+      <CaptureToolbar
+        recording={props.recording}
+        activeTarget={props.activeTarget}
+        saved={props.savedPerformance}
+        onSelect={selectSaved}
+        showProfile={props.showProfile}
+      />
+      <Show when={captureView()} fallback={<UtilizationChart {...props} />}>
+        <Show
+          when={props.view === 'Timeline'}
+          fallback={
             <Show
-              when={props.activeTarget && props.recording?.dspBlocks()}
+              when={dsp()}
               fallback={
                 <p role="status">
-                  {props.activeTarget
-                    ? (props.recording?.dspBlockStatus() ?? 'Reading target capabilities…')
-                    : 'Target unavailable'}
+                  {saved() ? 'This capture has no DSP block counters.' : liveStatus(props.recording?.dspBlockStatus())}
                 </p>
               }
             >
               {(capture) => <DspBlocks capture={capture()} />}
             </Show>
-          </Show>
-        }
-      >
-        <div class="trace-timeline-controls" role="group" aria-label="Trace source">
-          <input
-            ref={traceFile}
-            type="file"
-            accept=".json,application/json"
-            hidden
-            onChange={(event) => {
-              void props.savedTimeline.open(event.currentTarget.files?.[0]);
-              event.currentTarget.value = '';
-            }}
-          />
-          <button type="button" onClick={() => traceFile.click()}>
-            Open trace…
-          </button>
-          <Show when={props.savedTimeline.file()}>
-            {(traces) => (
-              <>
-                <Show when={traces().length > 1} fallback={<span>{traces()[0]?.label}</span>}>
-                  <label>
-                    Capture
-                    <select
-                      value={props.savedTimeline.index()}
-                      onChange={(event) => props.savedTimeline.select(Number(event.currentTarget.value))}
-                    >
-                      <For each={traces()}>{(trace, index) => <option value={index()}>{trace.label}</option>}</For>
-                    </select>
-                  </label>
-                </Show>
-                <button type="button" onClick={props.savedTimeline.clear}>
-                  Show current target
-                </button>
-              </>
-            )}
-          </Show>
-        </div>
-        <Show when={props.savedTimeline.error()}>
-          <p role="alert">{props.savedTimeline.error()}</p>
-        </Show>
-        <Show
-          when={props.savedTimeline.current() ?? (props.activeTarget && props.recording?.frozenTrace())}
-          fallback={
-            <p role="status">
-              {props.activeTarget
-                ? (props.recording?.timelineStatus() ?? 'Reading target capabilities…')
-                : 'Target unavailable'}
-            </p>
           }
         >
-          {(capture) => <TraceTimeline trace={capture().trace} names={capture().names} />}
+          <Show
+            when={trace()}
+            fallback={
+              <p role="status">
+                {saved() ? 'This capture has no ColdFire trace.' : liveStatus(props.recording?.timelineStatus())}
+              </p>
+            }
+          >
+            {(capture) => <TraceTimeline trace={capture().trace} names={capture().names} />}
+          </Show>
         </Show>
       </Show>
     </section>

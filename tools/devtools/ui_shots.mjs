@@ -1549,9 +1549,9 @@ const SCENES = [
       await p.wait(500);
       await showTab(p, 'Profile');
       await p.wait(62000);
-      await p.eval(
-        "(() => { for (const b of document.querySelectorAll('.profile-panel .act')) if (b.textContent.trim() === 'Stop recording') b.click(); })()",
-      );
+      await p.click(/^Capture controls$/);
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.click(/^Performance$/);
       await p.wait(1500);
     },
   },

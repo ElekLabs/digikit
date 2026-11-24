@@ -1,7 +1,8 @@
 import { createRoot, createSignal } from 'solid-js';
 import { expect, test } from 'vitest';
-import type { SavedProfile } from '../src/profile/hotspots';
+import type { SavedEvidence, SavedProfile } from '../src/profile/hotspots';
 import { createProfileReference } from '../src/profile/reference';
+import { createSavedPerformance } from '../src/saved-performance';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -21,53 +22,84 @@ const namedPc = (addr: number, name: string): SavedProfile['pcs'] => ({
 });
 
 test('late file and symbol reads leave the latest selected comparison intact', async () => {
-  const firstSymbols = deferred<SavedProfile['pcs']>();
+  const firstSymbols = deferred<SavedEvidence>();
   const slowFile = deferred<string>();
   const latestPcs = namedPc(3, 'latest');
-  const { reference, dispose } = createRoot((dispose) => ({
-    dispose,
-    reference: createProfileReference({
+  const { reference, saved, dispose } = createRoot((dispose) => {
+    const saved = createSavedPerformance();
+    const reference = createProfileReference({
+      capture: saved.current,
       visible: () => true,
-      resolve: (profile) => (profile.pcs.cf[0].addr === 1 ? firstSymbols.promise : Promise.resolve(latestPcs)),
-    }),
-  }));
+      resolve: (profile) => (profile.pcs.cf[0].addr === 1 ? firstSymbols.promise : Promise.resolve({ pcs: latestPcs })),
+    });
+    return { dispose, saved, reference };
+  });
   try {
-    await reference.open({ name: 'first.json', text: async () => profileText(1) });
-    expect(reference.pcs()?.cf[0]).toMatchObject({ addr: 1 });
-    const pending = reference.open({ name: 'slow.json', text: () => slowFile.promise });
-    await reference.open({ name: 'latest.json', text: async () => profileText(3) });
+    await saved.open({ name: 'first.json', text: async () => profileText(1) });
+    expect(reference.evidence()?.pcs?.cf[0]).toMatchObject({ addr: 1 });
+    const pending = saved.open({ name: 'slow.json', text: () => slowFile.promise });
+    await saved.open({ name: 'latest.json', text: async () => profileText(3) });
 
-    firstSymbols.resolve(namedPc(1, 'first'));
+    firstSymbols.resolve({ pcs: namedPc(1, 'first') });
     slowFile.resolve(profileText(2));
     await pending;
-    expect(reference.selection()?.name).toBe('latest.json');
-    expect(reference.pcs()).toEqual(latestPcs);
-    expect(reference.error()).toBe('');
+    expect(saved.current()?.label).toBe('latest.json');
+    expect(reference.evidence()?.pcs).toEqual(latestPcs);
+    expect(saved.error()).toBe('');
   } finally {
     dispose();
   }
 });
 
 test('the file survives hiding Profile and late replies leave a disposed comparison intact', async () => {
-  const symbols = deferred<SavedProfile['pcs']>();
+  const symbols = deferred<SavedEvidence>();
   const file = deferred<string>();
   const [visible, setVisible] = createSignal(true);
-  const { reference, dispose } = createRoot((dispose) => ({
-    dispose,
-    reference: createProfileReference({ visible, resolve: () => symbols.promise }),
-  }));
-  await reference.open({ name: 'saved.json', text: async () => profileText(1) });
+  const { reference, saved, dispose } = createRoot((dispose) => {
+    const saved = createSavedPerformance();
+    const reference = createProfileReference({ capture: saved.current, visible, resolve: () => symbols.promise });
+    return { dispose, saved, reference };
+  });
+  await saved.open({ name: 'saved.json', text: async () => profileText(1) });
   setVisible(false);
-  expect(reference.selection()?.name).toBe('saved.json');
-  expect(reference.pcs()?.cf[0]).toEqual({ addr: 1, weight: 10, share: 1 });
+  expect(saved.current()?.label).toBe('saved.json');
+  expect(reference.evidence()?.pcs?.cf[0]).toEqual({ addr: 1, weight: 10, share: 1 });
   setVisible(true);
 
-  const pending = reference.open({ name: 'invalid.json', text: () => file.promise });
+  const pending = saved.open({ name: 'invalid.json', text: () => file.promise });
   dispose();
-  symbols.resolve(namedPc(1, 'late symbol'));
+  symbols.resolve({ pcs: namedPc(1, 'late symbol') });
   file.resolve('invalid JSON');
   await pending;
-  expect(reference.selection()?.name).toBe('saved.json');
-  expect(reference.pcs()?.cf[0]).toEqual({ addr: 1, weight: 10, share: 1 });
-  expect(reference.error()).toBe('');
+  expect(saved.current()?.label).toBe('saved.json');
+  expect(reference.evidence()?.pcs?.cf[0]).toEqual({ addr: 1, weight: 10, share: 1 });
+  expect(saved.error()).toBe('');
+});
+
+test('clearing a saved profile invalidates in-flight file and symbol reads', async () => {
+  const symbols = deferred<SavedEvidence>();
+  const file = deferred<string>();
+  const { reference, saved, dispose } = createRoot((dispose) => {
+    const saved = createSavedPerformance();
+    const reference = createProfileReference({
+      capture: saved.current,
+      visible: () => true,
+      resolve: () => symbols.promise,
+    });
+    return { dispose, saved, reference };
+  });
+  try {
+    await saved.open({ name: 'saved.json', text: async () => profileText(1) });
+    const pending = saved.open({ name: 'pending.json', text: () => file.promise });
+    saved.clear();
+
+    symbols.resolve({ pcs: namedPc(1, 'late symbol') });
+    file.resolve(profileText(2));
+    await pending;
+    expect(saved.current()).toBeUndefined();
+    expect(reference.evidence()).toBeUndefined();
+    expect(saved.error()).toBe('');
+  } finally {
+    dispose();
+  }
 });

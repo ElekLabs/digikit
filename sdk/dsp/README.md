@@ -13,6 +13,150 @@ Two forms:
 
 Style: [docs/sharc/style.md](../../docs/sharc/style.md), in particular section 5a (rules from the manuals).
 
+## Profile a module and compare two builds
+
+Start with a case that plays a known signal on the SHARC rig. Use ordinary function labels and keep the
+hardware loop's end label on its last instruction. The profiler counts the PCs and the symbol map
+and static loop analysis do the attribution. A module author does not need to add a timer or a profiling
+call to `note_on`, `render`, `process` or helpers.
+
+| What to measure | How to turn it on | What runs in a normal module build |
+| --- | --- | --- |
+| Dispatch cost per call and block | Workbench **Include DSP block costs** or `wb profile calibrate run` | The runtime measures calls at the adapter. When idle the adapter checks whether recording is enabled, with no extra instructions inside the module. |
+| SHARC hotspots per function and hardware loop | `rig_profile.ts` on an isolated case, or `wb profile record --cpu sharc` on a profiler-enabled emulator | The host counts instructions externally. No trace build or author-inserted probes are needed. |
+| A log or fault breadcrumb inside a module | Add `DK_TRACE_LOG` or `DK_STEP`, then pack with `--trace` | The markers compile out of the ordinary pack. `--trace` builds a separate pack and adds its own instructions. |
+
+The [trace API](../README.md#tracing) explains how to place a mark and choose its scratch register.
+The [instrumentation guide](../../docs/INSTRUMENTATION.md#profiles) covers Workbench recording and the CLI.
+Use the same instrumentation settings on both sides of a comparison. Measured instruction counts, static
+instruction bounds and board cycle measurements answer different questions.
+
+### Worked example: PLUCK
+
+**Instruction bound.** PLUCK's `_pk_render` has a 32-trip hardware loop ending at `_pk_loop`. Its
+baseline body has 23 instructions and executes 736 instructions per rendered block. Combining the
+peak update and the output store in the last instruction makes the body 22 instructions and the bound
+704. The store reads the already-computed sample in R8, and the ALU updates F13, so the float operation
+order and stored sample are the same. This bound covers the loop body. The note-on, coefficients,
+rest of the render routine and adapter have separate costs.
+
+From the repository root after setup, build the profiler inputs if they are missing:
+
+```sh
+pnpm nx:pilot run patchkit:cli
+pnpm nx:pilot run sharc-rig:build       # uses the shared core from mise run gen:core
+mise run wasm:dkprof
+```
+
+Run the named reference and sound checks first. The DT2 float32 model case plays note 60 against
+`ref/model-default.f32` with absolute tolerance `2e-5`. The two-note pins cover DT2 and DN2. The
+checks also cover a new note, quiet termination, pitch and state independence.
+
+```sh
+pnpm nx:pilot run digikit/pluck:test-dsp
+```
+
+For an A/B without editing the source checkout, make an ignored copy of the tracked source. Use a new
+output directory if the comparison has already been run. In the copy's
+`modules/machine/digikit/pluck/src/dsp/pluck.s`, combine the last two instructions of `_pk_loop` as
+shown. You can also point `DIGI_RIG_ROOT` at an existing checkout of build B.
+
+```sh
+comparison="$PWD/out/runs/dsp-workflow/phase4/pluck"
+variant="$comparison/B-source"
+mkdir -p "$variant/out"
+git archive HEAD | tar -x -C "$variant"
+ln -s "$PWD/out/tools" "$variant/out/tools"
+```
+
+```diff
+-        F13 = MAX(F13, F0);
+-_pk_loop: DM(I0, M6) = R8;
++_pk_loop: F13 = MAX(F13, F0), DM(I0, M6) = R8;
+```
+
+Profile the same two zero-based steady blocks on each target. Blocks 2 and 3 are after the trigger
+and note-on on both adapters. Keep the target, note, parameter words, block selection and rig binary
+matched for each A/B.
+
+```sh
+export DIGI_SHARC_RIG="$PWD/dist/bin/sharc-rig"
+export DIGI_PATCHKIT="$PWD/dist/patchkit/patchkit"
+for device in dt2 dn2; do
+  node tools/devtools/rig_profile.ts digikit/pluck --device "$device" \
+    --case limits/all-default/note60 --blocks 2,3 --out "$comparison/A/$device"
+  DIGI_RIG_ROOT="$variant" node tools/devtools/rig_profile.ts digikit/pluck --device "$device" \
+    --case limits/all-default/note60 --blocks 2,3 --out "$comparison/B/$device"
+done
+```
+
+The report names `_pk_run` as the hottest function label and the 32-trip loop in `_pk_render`
+as the biggest module loop. These are self counts of the modeled SHARC, per block.
+
+| Scope | DT2 A → B | DN2 A → B |
+| --- | ---: | ---: |
+| 32-trip string loop | 736 → 704 | 736 → 704 |
+| PLUCK code | 905 → 873 | 905 → 873 |
+| Full rig call, including adapter | 1,939 → 1,907 | 2,105 → 2,073 |
+
+Compare the two-note renders on each target with the existing rig report. The script below uses the
+same reporter as `DIGI_RIG_REPORT=1` and compares the float32 WAV files. Both builds matched their
+device's original audio pin and their samples were byte-identical on the rig. This experiment
+measured no board cycles. For a board timing claim, pair the same workload on hardware and follow
+the [calibration workflow](../../docs/INSTRUMENTATION.md#calibration-runs-wb-profile-calibrate-run).
+
+```sh
+for source in "$PWD" "$variant"; do
+  DIGI_RIG_ROOT="$source" node --input-type=module <<'JS'
+import { resolve } from 'node:path';
+import { reportRigFile } from './packages/sharc-rig-kit/src/soundcheck.ts';
+
+const file = resolve(process.env.DIGI_RIG_ROOT, 'modules/machine/digikit/pluck/tests/rig/equiv-note.toml');
+const results = await reportRigFile('digikit/pluck', file);
+console.log(results.join('\n'));
+if (results.length !== 2 || results.some((result) => !result.includes(': pin matches'))) process.exitCode = 1;
+JS
+done
+for device in dt2 dn2; do
+  key="digikit-pluck.$device.note-60-at-the-default-parameters-is-pinned-$device"
+  cmp "out/rig/$key/out.wav" "$variant/out/rig/$key/out.wav"
+done
+```
+
+Use **Performance → Open capture…** with either `profile.json`. Workbench shows its functions, loops
+and PCs in Profile, even with the emulator stopped. Use the same file at the CLI with `node tools/devtools/wb.mjs --format json profile report FILE`.
+Rig exports carry their own symbol placement and loop analysis when `dkprof.wasm` was available.
+For the original running-target captures, use **Performance → DSP blocks → Open capture…** to
+see each dispatch estimate and worst block. Switch to **Timeline** for the same capture's ColdFire
+events, if present.
+
+To repeat with an effect, use its named rig case. This example drives the master test chain with a
+fixed noise input and the middle knob value. To measure the effect on its actual send route, replay
+its calibration case on the emulator or a connected device.
+
+```sh
+node tools/devtools/rig_profile.ts digikit/freqshift --device dt2 \
+  --case params/all-mid/noise --blocks 2,3 --out out/runs/dsp-workflow/phase4/freqshift/dt2
+```
+
+### What to check on each target
+
+Use the [generated register contract](REGISTERS.md) on both devices. Keep an explicit numerical
+reference, state layout and initialization rules, buffer sizes and aliasing rules, and register
+clobbers with any shared kernel. Extract a kernel once more than one caller needs that contract.
+
+| Contract point | Digitakt II 1.17 | Digitone II 1.12 |
+| --- | --- | --- |
+| DSP area shared by modules | 512 KiB | 320 KiB |
+| Machine gate | The declared gate drops on release. | Gate stays high. The first trigger block stages the note and the next block calls `note_on`. |
+| Stereo machine output | The adapter routes R through the odd stock voice of the pair. | The adapter uses a per-slot R buffer and runs the stock stages on R. Above eight stereo slots in a block, excess slots play mono. |
+| Sample backing | The runtime uses stock sample slots. | The runtime uses reserved DDR. |
+
+Check those behaviours through the [machine contract](../../docs/MODULE-AUTHORING.md#71-machine-voice-dkgenmachineh),
+[sample API](../../docs/design/sample-api-1.5.md) and device profiles for
+[DT2](../../devices/digitakt-ii.toml) and [DN2](../../devices/digitone-ii.toml). Include note-on, tail or
+release, and stereo or sample boundaries where the module uses them.
+
 ## Build rules for DSP sources
 
 - **Data sections are 32-bit words.** `.SECTION/DM name;` is assembled as `.SECTION/DM/BW name;`. The assembler (the Selache fork) lays out a plain `/DM` section in 40-bit words (five bytes for each `.VAR`, symbols counted in words). A module stores 32-bit words in memory order: four little-endian bytes for each `.VAR`, symbols counted in bytes. `/BW` gives this layout. Write `.SECTION/DM name;` as before; `patchkit` makes the change (`byte_addressed_data` in `packages/patchkit/src/build/sharc_obj.rs`). A section that already names `BW` or `DOUBLE32` is not changed.

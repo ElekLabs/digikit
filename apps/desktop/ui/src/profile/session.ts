@@ -33,8 +33,10 @@ export function createProfileSession(deps: ProfileSessionDeps) {
   const label = targetLabel(source.target);
   const [reading, setReading] = createSignal<ProfileReading>();
   const [dsp, setDsp] = createSignal<DspView>();
-  const [error, setError] = createSignal('');
+  const [failure, setFailure] = createSignal<{ message: string; during: 'read' | 'action' }>();
+  const error = () => failure()?.message ?? '';
   const [includeDsp, setIncludeDsp] = createSignal(false);
+  const [includeSharc, setIncludeSharc] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [acting, setActing] = createSignal<Action>();
   const [noRuntime, setNoRuntime] = createSignal(false);
@@ -79,7 +81,7 @@ export function createProfileSession(deps: ProfileSessionDeps) {
             if (next.dsp) setDsp(next.dsp);
           }
           setReading(next);
-          setError('');
+          setFailure(undefined);
           setNoRuntime(false);
         });
         if (!current()) return true;
@@ -90,7 +92,7 @@ export function createProfileSession(deps: ProfileSessionDeps) {
         if (!current()) return true;
         spans.break();
         if (isCancelled(e)) return true;
-        setError(failureLine(e, label));
+        setFailure({ message: failureLine(e, label), during: 'read' });
         if (!isNoRuntime(e)) return false;
         setNoRuntime(true);
         return true;
@@ -159,9 +161,9 @@ export function createProfileSession(deps: ProfileSessionDeps) {
     setActing(action);
     try {
       await pending;
-      if (!leaving()) setError('');
+      if (!leaving()) setFailure(undefined);
     } catch (e) {
-      if (!leaving()) setError(failureLine(e, label));
+      if (!leaving()) setFailure({ message: failureLine(e, label), during: 'action' });
     } finally {
       pending = undefined;
       if (!leaving()) setActing(undefined);
@@ -179,6 +181,7 @@ export function createProfileSession(deps: ProfileSessionDeps) {
       await save(file);
     });
   const dspAvailable = () => !!ok() && !ok()?.noDsp;
+  const sharcAvailable = () => onEmulator && dspAvailable();
   const recording: SpanRecording = {
     dspBlocks: () => ok()?.dspBlocks,
     dspBlockStatus: () => {
@@ -222,12 +225,27 @@ export function createProfileSession(deps: ProfileSessionDeps) {
     setIncludeDsp: (value) => {
       if (!locked() && !running()) setIncludeDsp(value);
     },
+    includeSharc,
+    sharcAvailable,
+    setIncludeSharc: (value) => {
+      if (!locked() && !running()) setIncludeSharc(value);
+    },
+    canSave: () => !!save && !running() && !locked() && (ok()?.snap.elapsedTicks ?? 0n) > 0n,
+    save: exportFile,
+    reset: () =>
+      act('reset', async () => {
+        clearRecording();
+        await recorder.reset();
+      }),
     toggle: () => {
       if (running()) void act('stop', () => recorder.stop());
       else
         void act('start', async () => {
           clearRecording();
-          await recorder.start(untrack(() => dspAvailable() && includeDsp()));
+          await recorder.start(
+            untrack(() => dspAvailable() && includeDsp()),
+            untrack(() => sharcAvailable() && includeSharc()),
+          );
         });
     },
   };
@@ -239,18 +257,13 @@ export function createProfileSession(deps: ProfileSessionDeps) {
     busy,
     noRuntime,
     error,
+    readError: () => failure()?.during === 'read',
     locked,
     acting,
     recording,
     columns: () => (historyVersion(), history.columns()),
     markers: () => (historyVersion(), history.markers()),
     nowShare: () => (historyVersion(), history.now()),
-    reset: () =>
-      act('reset', async () => {
-        clearRecording();
-        await recorder.reset();
-      }),
-    exportFile,
     addDebug: () => act('add', () => deps.installDebug(() => !untrack(leaving))),
   };
 }

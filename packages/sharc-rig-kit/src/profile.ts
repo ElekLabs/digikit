@@ -25,6 +25,8 @@ export interface RigRun {
   blocks: number;
   /** SHA-256 of the rig binary */
   binarySha256?: string;
+  /** SHA-256 of the module pack used for loop analysis. */
+  moduleSha256?: string;
 }
 
 /**
@@ -43,13 +45,15 @@ export function rigProfile(run: RigRun, counts: ReadonlyMap<number, number>, mod
     run: {
       id: `rig:${run.module}:${run.device}:${run.caseName}`,
       target: run.device,
+      case_id: run.caseName,
+      ...(run.moduleSha256 ? { module_sha256: [run.moduleSha256] } : {}),
       ...(run.binarySha256 ? { binary_sha256: run.binarySha256 } : {}),
       loads: { modules: [{ id: run.module, base: 0, size: 0, dsp_base: moduleBase }] },
     },
     clock: {
       source: 'sharc-rig.insn',
       unit: 'instructions',
-      sampling: 'every instruction of the generated core, per pc; the steady blocks of the case added',
+      sampling: 'every instruction of the generated core, per pc; the selected blocks of the case added',
     },
     raw,
     metrics: [{ name: 'sharc.blocks', value: run.blocks, unit: 'blocks' }],

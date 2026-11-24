@@ -4,6 +4,7 @@ import { For, Show, createEffect, createSignal, on, type JSX } from 'solid-js';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import MemoryPanel from './MemoryPanel';
 import type { SpanRecording } from './span-recording';
+import type { PerformanceCapture } from '@digi/workbench-core/profile/performance-capture.ts';
 import ProfilePanel from './profile/ProfilePanel';
 import CalibrationPanel from './CalibrationPanel';
 import { createCalibrationHub } from './calibration-hub';
@@ -19,6 +20,8 @@ export default function SidePanels(props: {
   active?: boolean;
   collectSpans?: boolean;
   liveDsp?: boolean;
+  savedCapture?: PerformanceCapture;
+  showCaptureControls?(view?: 'DSP blocks' | 'Timeline'): void;
   profileGeneration?: number;
   onSpanRecording?(recording?: SpanRecording): void;
   openCatalog?(path: string, sha256: string, entry: number): void;
@@ -34,7 +37,8 @@ export default function SidePanels(props: {
     ...(props.host ? (['calibration'] as const) : []),
   ];
   const tab = () => shownTab(inspectorTab(), offered());
-  const reads = (t: InspectorTab) => props.visible && (props.active ?? true) && inspectorOpen() && tab() === t;
+  const shown = (t: InspectorTab) => props.visible && inspectorOpen() && tab() === t;
+  const reads = (t: InspectorTab) => shown(t) && (props.active ?? true);
   const tabpanel = (t: InspectorTab) =>
     offered().length > 1 ? { id: `side-panel-${t}`, labelledBy: `side-tab-${t}` } : undefined;
   const pick = (t: InspectorTab, focus = false) => {
@@ -151,15 +155,20 @@ export default function SidePanels(props: {
           </For>
         </div>
       </Show>
-      <Show when={props.visible && inspectorOpen() && !(props.active ?? true) && tab() !== 'metrics'}>
+      <Show
+        when={props.visible && inspectorOpen() && !(props.active ?? true) && tab() !== 'metrics' && tab() !== 'profile'}
+      >
         <p class="side-empty">The emulator is not running.</p>
       </Show>
       <MemoryPanel visible={reads('memory')} source={props.source} tabpanel={tabpanel('memory')} />
       <Show when={props.profileGeneration ?? 1} keyed>
         {(_generation) => (
           <ProfilePanel
-            visible={reads('profile')}
+            visible={shown('profile')}
+            active={props.active}
             liveDsp={props.liveDsp}
+            savedCapture={props.savedCapture}
+            showCaptureControls={props.showCaptureControls}
             collectSpans={props.collectSpans && (props.active ?? true)}
             onSpanRecording={props.onSpanRecording}
             openCatalog={props.openCatalog}

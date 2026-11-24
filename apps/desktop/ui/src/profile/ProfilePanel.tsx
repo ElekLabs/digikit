@@ -20,7 +20,6 @@ import {
   type DspView,
   type OwnerKind,
 } from '@digi/workbench-core/profile/profile-core.ts';
-import RecordingButton from '../RecordingButton';
 import { cardRefresh } from '../card-state';
 import { createDkProfLoader } from '../dkprof-env';
 import { createEmulatorNames, createDeviceNames } from '../log-names-backend';
@@ -31,8 +30,9 @@ import HistoryGraph from './HistoryGraph';
 import HotspotTable from './HotspotTable';
 import { fmtPct, resolveSavedHotspots } from './hotspots';
 import { createProfileReference } from './reference';
-import { OpenProfileButton, ReferenceView } from './ReferenceView';
+import { ReferenceView } from './ReferenceView';
 import type { SpanRecording } from '../span-recording';
+import type { PerformanceCapture } from '@digi/workbench-core/profile/performance-capture.ts';
 import {
   calibrationChip,
   estimateDsp,
@@ -47,8 +47,11 @@ const DEBUG_MODULE = 'digikit/debug';
 
 export default function ProfilePanel(props: {
   visible: boolean;
+  active?: boolean;
   collectSpans?: boolean;
   liveDsp?: boolean;
+  savedCapture?: PerformanceCapture;
+  showCaptureControls?(view?: 'DSP blocks' | 'Timeline'): void;
   onSpanRecording?(recording?: SpanRecording): void;
   openCatalog?(path: string, sha256: string, entry: number): void;
   source: TargetBinding;
@@ -77,6 +80,7 @@ export default function ProfilePanel(props: {
     ok,
     dsp,
     error,
+    readError,
     noRuntime,
     busy,
     locked,
@@ -85,13 +89,11 @@ export default function ProfilePanel(props: {
     columns,
     markers,
     nowShare,
-    reset,
-    exportFile,
     addDebug,
   } = createProfileSession({
     source,
     recorder,
-    visible: () => props.visible,
+    visible: () => props.visible && (props.active ?? true),
     collectSpans: () => props.collectSpans,
     liveDsp: () => props.liveDsp,
     checkRuntime,
@@ -112,10 +114,12 @@ export default function ProfilePanel(props: {
   untrack(() => props.onSpanRecording?.(recording));
   onCleanup(() => props.onSpanRecording?.(undefined));
   const reference = createProfileReference({
+    capture: () => props.savedCapture,
     visible: () => props.visible,
     resolve: (profile) => resolveSavedHotspots(profile, host?.symbols, prof, host?.library),
   });
-  const comparison = () => reference.selection()?.profile.shares;
+  const showTargetStatus = () => !props.savedCapture;
+  const comparison = () => reference.profile()?.shares;
   const referenceShare = (name: string) => {
     const share = comparison()?.get(name);
     return share === undefined ? '–' : fmtShare(share);
@@ -156,12 +160,31 @@ export default function ProfilePanel(props: {
       hidden={!props.visible}
     >
       <div class="card-body">
+        <Show when={props.showCaptureControls}>
+          {(show) => (
+            <div class="acts">
+              <button type="button" class="act quiet" onClick={() => show()()}>
+                Capture controls
+              </button>
+              <Show when={props.savedCapture?.dsp}>
+                <button type="button" class="act quiet" onClick={() => show()('DSP blocks')}>
+                  View DSP blocks
+                </button>
+              </Show>
+              <Show when={props.savedCapture?.trace}>
+                <button type="button" class="act quiet" onClick={() => show()('Timeline')}>
+                  View timeline
+                </button>
+              </Show>
+            </div>
+          )}
+        </Show>
         <Show when={device()}>
           <h3 class="device">
             {device()} · {where()}
           </h3>
         </Show>
-        <Show when={reading()?.noDebug}>
+        <Show when={showTargetStatus() && reading()?.noDebug}>
           <div class="prof-skeleton" aria-hidden="true">
             <div class="graph" />
             <span class="line" style={{ width: '70%' }} />
@@ -189,38 +212,16 @@ export default function ProfilePanel(props: {
                 <div class="line1">
                   <span class="state-line">
                     <span class="dot" classList={{ rec: r().snap.running }} />
+                    {props.savedCapture ? 'Live target · ' : ''}
                     {r().snap.running ? 'Recording' : r().snap.elapsedTicks > 0n ? 'Stopped after ' : 'Stopped'}
                     {!r().snap.running && r().snap.elapsedTicks > 0n
                       ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz)
                       : ''}
-                    {r().traceSummary ? ` · ${r().traceSummary}` : ''}
+                    {showTargetStatus() && r().traceSummary ? ` · ${r().traceSummary}` : ''}
                     {' · clock '}
                     {fmtMhz(r().snap.hz)} {emu() ? '(emulated time)' : '(device clock)'}
                   </span>
                   <span class="elapsed">{r().snap.running ? fmtElapsed(r().snap.elapsedTicks, r().snap.hz) : ''}</span>
-                </div>
-                <div class="acts">
-                  <RecordingButton
-                    includeDsp={recording.includeDsp()}
-                    dspAvailable={recording.dspAvailable()}
-                    setIncludeDsp={recording.setIncludeDsp}
-                    running={recording.running()}
-                    disabled={locked()}
-                    onToggle={recording.toggle}
-                  />
-                  <button type="button" class="act quiet" disabled={locked()} onClick={() => void reset()}>
-                    Reset
-                  </button>
-                  <span class="sp" />
-                  <OpenProfileButton open={reference.open} />
-                  <button
-                    type="button"
-                    class="act quiet"
-                    disabled={locked() || !props.host || r().snap.elapsedTicks === 0n}
-                    onClick={() => void exportFile()}
-                  >
-                    Export…
-                  </button>
                 </div>
               </div>
 
@@ -238,7 +239,7 @@ export default function ProfilePanel(props: {
                   <span class="r">mean µs</span>
                   <span class="r">max µs</span>
                   <Show when={comparison()}>
-                    <span class="r" title={reference.selection()?.name}>
+                    <span class="r" title={props.savedCapture?.label}>
                       file
                     </span>
                   </Show>
@@ -297,9 +298,9 @@ export default function ProfilePanel(props: {
                         {r().note ??
                           (r().noDsp
                             ? 'No DSP on this device.'
-                            : r().snap.running
+                            : r().snap.running && r().sharcRequested
                               ? 'Waiting for the DSP counts…'
-                              : 'Start records the DSP counts of the emulator with the spans.')}
+                              : 'Select Include SHARC hotspots in Capture controls before recording.')}
                       </span>
                     }
                   >
@@ -432,37 +433,31 @@ export default function ProfilePanel(props: {
                   </span>
                 </div>
               </Show>
-              <span class="foot">
-                Reads every second while this tab is open. Export writes dk.profile/1 (
-                {emu() ? 'spans, cf.profile, sharc.profile' : 'spans'}).
-              </span>
             </>
           )}
         </Show>
-        <Show when={!ok()}>
-          <div class="acts">
-            <OpenProfileButton open={reference.open} />
-          </div>
-        </Show>
         <ReferenceView
-          name={reference.selection()?.name}
-          pcs={reference.pcs()}
-          error={reference.error()}
+          name={props.savedCapture?.label}
+          evidence={reference.evidence()}
+          shares={ok() ? undefined : comparison()}
           openReview={
             props.openCatalog
               ? async (path, sha256, entry) => props.openCatalog?.(path, sha256, entry)
               : host?.symbols?.openReview
           }
         />
-        <Show when={error()}>
+        <Show when={showTargetStatus() && props.active === false}>
+          <p class="empty">The emulator is not running.</p>
+        </Show>
+        <Show when={(showTargetStatus() || !readError()) && error()}>
           <p class="err" role="alert">
             {error()}
           </p>
         </Show>
-        <Show when={noRuntime() && !reading()}>
+        <Show when={showTargetStatus() && noRuntime() && !reading()}>
           <p class="empty">The runtime is not loaded on this target.</p>
         </Show>
-        <Show when={busy() && !reading() && !error()}>
+        <Show when={showTargetStatus() && busy() && !reading() && !error()}>
           <p class="empty">Reading…</p>
         </Show>
       </div>

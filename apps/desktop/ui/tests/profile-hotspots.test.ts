@@ -49,7 +49,7 @@ test('saved hotspots use the capture SHA and preserve span comparison, CPU and r
       })),
     };
   };
-  const named = await resolveSavedHotspots(profile, { maps }, async () => ({ addrLookup }));
+  const { pcs: named } = await resolveSavedHotspots(profile, { maps }, async () => ({ addrLookup }));
   assert.deepEqual(named.cf.map(hotspotLabel), ['0x100 tick+0x4', '0x110']);
   assert.deepEqual(named.sharc.map(hotspotLabel), ['0x100 mix+0x1']);
   assert.equal(named.cf[0]?.share, 0.6);
@@ -68,8 +68,8 @@ test('legacy or unmatched captures keep raw addresses; profiles without spans st
   const maps = async () => [{ key: { image_sha256: otherHash } }];
   assert.equal(legacy.sha256, undefined);
   assert.equal(noMaps.shares, undefined);
-  assert.equal(await resolveSavedHotspots(legacy, { maps }, prof), legacy.pcs);
-  assert.equal(await resolveSavedHotspots(noMaps, { maps }, prof), noMaps.pcs);
+  assert.equal((await resolveSavedHotspots(legacy, { maps }, prof)).pcs, legacy.pcs);
+  assert.equal((await resolveSavedHotspots(noMaps, { maps }, prof)).pcs, noMaps.pcs);
   assert.equal(lookups, 0);
 });
 
@@ -112,7 +112,7 @@ test('shared dkprof resolves stock links and relocated modules from saved eviden
       { cpu: 'sharc', addr: 0x305, count: 4 },
     ],
   });
-  const result = await resolveSavedHotspots(profile, { maps: async () => [stock] }, async () => prof, {
+  const { pcs: result } = await resolveSavedHotspots(profile, { maps: async () => [stock] }, async () => prof, {
     readMaps: async () => ({ ships: [], modules: [{ id: 'test/effect', json: JSON.stringify(packed(moduleHash)) }] }),
   });
   assert.deepEqual(result.sharc[0]?.review, {
@@ -130,7 +130,7 @@ test('shared dkprof resolves stock links and relocated modules from saved eviden
   assert.equal(result.sharc[1]?.owner, 'test/effect');
   assert.equal(result.sharc[1]?.offset, 1);
 
-  const wrong = await resolveSavedHotspots(profile, { maps: async () => [stock] }, async () => prof, {
+  const { pcs: wrong } = await resolveSavedHotspots(profile, { maps: async () => [stock] }, async () => prof, {
     readMaps: async () => ({ ships: [], modules: [{ id: 'test/effect', json: JSON.stringify(packed(otherHash)) }] }),
   });
   assert.equal(wrong.sharc[1]?.addr, 0x305);
@@ -141,4 +141,35 @@ test('a calibration profile adds its full stock hash while retaining the short f
   const run = { firmware_sha256: hash.slice(0, 16), stock_firmware_sha256: hash };
   assert.equal(readSavedProfile({ ...doc, run }).sha256, hash);
   assert.equal(readSavedProfile({ ...doc, run: { ...run, stock_firmware_sha256: otherHash } }).sha256, undefined);
+});
+
+test('a rig export names SHARC instructions without a firmware identity or symbol files', async () => {
+  const prof = await DkProf.create(
+    new Uint8Array(readFileSync(new URL('../../../web/public/dkprof.wasm', import.meta.url))),
+  );
+  const rig = {
+    map: {
+      format: 'dk-addrmap',
+      version: 1,
+      kind: 'rig',
+      key: { device: 'dt2' },
+      entries: [{ cpu: 'sharc', addr: 4, size: 4, name: 'render', layer: 'our', module: 'test/rig' }],
+    },
+  };
+  const doc = {
+    schema: 'dk.profile/1',
+    clock: { source: 'sharc-rig.insn', unit: 'instructions', sampling: 'each instruction' },
+    run: { id: 'rig:test/rig', target: 'dt2', loads: { modules: [{ id: 'test/rig', base: 0, dsp_base: 0x300 }] } },
+    raw: [{ cpu: 'sharc', addr: 0x305, count: 6 }],
+    metrics: [{ name: 'sharc.blocks', value: 2, unit: 'blocks' }],
+    rig,
+  };
+  const named = await resolveSavedHotspots(readSavedProfile(doc), undefined, async () => prof);
+  assert.equal(named.pcs.sharc[0]?.name, 'render+0x1');
+  assert.equal(named.pcs.sharc[0]?.review, undefined);
+  assert.equal(named.sharc?.functions[0]?.module, 'test/rig');
+  assert.equal(named.sharc?.functions[0]?.per_block, 3);
+
+  const wrong = readSavedProfile({ ...doc, run: { ...doc.run, target: 'dn2' } });
+  assert.equal((await resolveSavedHotspots(wrong, undefined, async () => prof)).pcs.sharc[0]?.name, undefined);
 });

@@ -864,8 +864,11 @@ A call with `"profile": true` also returns `profile`, one `[pc, count]` row per 
 nothing is counted and the answer has no `profile` key. `MachineRig` takes `profile: true` and puts the rows in `MachineBlock.profile`. The rig is a producer for `wb profile report`
 ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)), the profiler of the emulator and the device: `packages/sharc-rig-kit/src/profile.ts` writes the counts as a `dk.profile/1` (`rigProfile`, raw SHARC counters
 per pc, metric `sharc.blocks`, clock unit `instructions`, the load of the module's DSP image) and the labels of the placed objects as a `dk-addrmap` (`rigAddrMap`; module labels relative to its DSP image).
-`tools/devtools/rig_profile.ts` runs one conformance case, adds the counts of its steady blocks (the blocks that are no note-on block), writes both files and the module's `.dkm` to `out/runs/rig-profile/<module>/<device>/`
-and runs `wb profile report` on them with `--analyse`, so the function rows follow the map and the loop rows follow `dksharc`. It needs `mise run wasm:dkprof` once; `--print` shows the command instead. SHARC core only (no emulator), a few seconds:
+`tools/devtools/rig_profile.ts` profiles one conformance case of a machine or effect. It adds the
+machine's steady blocks or the effect's master test-chain blocks, writes the profile, address map and
+module's `.dkm` to `out/runs/rig-profile/<module>/<device>/`, and runs `wb profile report`. The profile
+includes the map and the DO-loop analysis when `dkprof.wasm` is available. Run `mise run wasm:dkprof`
+once. `--print` prints the report command for later. SHARC core only, a few seconds:
 
 ```sh
 node tools/devtools/rig_profile.ts digikit/shot --device dt2 --case sample/stereo-fwd-oneshot/note60 --top 4

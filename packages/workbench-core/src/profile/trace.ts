@@ -1,5 +1,3 @@
-import { expandCaptures } from './calibration-view.ts';
-
 export interface TraceMarker {
   name: string;
   atTicks: string;
@@ -12,8 +10,7 @@ export interface TraceCapture {
   markers?: readonly TraceMarker[];
 }
 
-export interface SavedTrace {
-  label: string;
+export interface NamedTrace {
   trace: TraceCapture;
   names: ReadonlyMap<number, string>;
 }
@@ -25,9 +22,7 @@ const unsigned = (value: unknown): value is number =>
 const ticks = (value: unknown): value is string =>
   typeof value === 'string' && /^\d{1,20}$/.test(value) && BigInt(value) <= 0xffff_ffff_ffff_ffffn;
 
-function savedTrace(doc: unknown, label: string): SavedTrace | undefined {
-  if (!object(doc) || doc.schema !== 'dk.profile/1')
-    throw new Error('Expected a dk.profile/1 capture or a calibration capture set.');
+export function readTrace(doc: Record<string, unknown>): NamedTrace | undefined {
   const trace = doc.trace;
   if (trace === undefined) return;
   if (
@@ -58,9 +53,7 @@ function savedTrace(doc: unknown, label: string): SavedTrace | undefined {
         names.set(row.owner, row.name);
     }
   }
-  const id = object(doc.run) && typeof doc.run.id === 'string' && doc.run.id;
   return {
-    label: id || label,
     trace: {
       hz: trace.hz,
       dropped: trace.dropped,
@@ -73,14 +66,4 @@ function savedTrace(doc: unknown, label: string): SavedTrace | undefined {
     },
     names,
   };
-}
-
-/** Accept a Profile export or a saved calibration run. A set may include captures without a trace. */
-export function readSavedTraces(doc: unknown, filename: string): SavedTrace[] {
-  const traces = expandCaptures(doc, undefined, filename).flatMap((capture, index) => {
-    const found = savedTrace(capture, index ? filename + ' · ' + (index + 1) : filename);
-    return found ? [found] : [];
-  });
-  if (!traces.length) throw new Error('This capture has no retained ColdFire trace.');
-  return traces;
 }

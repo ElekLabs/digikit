@@ -1,19 +1,7 @@
 import { DkError, type DkSession } from '@digi/dk-session';
 import { dspStatsPart, type BuildInput } from '@digi/workbench-core/profile/profile-artifact.ts';
 
-export interface DspBlockCapture {
-  unit: 'cycles' | 'instructions';
-  blocks: number;
-  overruns: number;
-  rows: {
-    row: number;
-    kind: 'machine' | 'effect';
-    calls: number;
-    meanBlock: number;
-    maxBlock: number;
-    maxCall: number;
-  }[];
-}
+import { dspBlockCapture, type DspBlockCapture } from '@digi/workbench-core/profile/dsp-blocks.ts';
 
 type Session = Pick<DkSession, 'profileDsp'>;
 
@@ -63,33 +51,17 @@ export function createDspBlockRecording() {
     return dspStatsPart(reading.sweep, emulator ? 'insn' : 'cycles');
   }
 
-  function view(part: BuildInput['dsp'], emulator: boolean): DspBlockCapture | undefined {
-    if (!part || !part.header.blocks) return undefined;
-    return {
-      unit: emulator ? 'instructions' : 'cycles',
-      blocks: part.header.blocks,
-      overruns: part.header.overruns,
-      rows: part.rows.map((row) => ({
-        row: row.row,
-        kind: row.kind,
-        calls: row.calls,
-        meanBlock: row.sum_cycles / part.header.blocks,
-        maxBlock: row.max_block,
-        maxCall: row.max_call,
-      })),
-    };
-  }
-
   async function live(session: Session, emulator: boolean) {
     if (!startedOk) return undefined;
-    return view(await readSweep(session, emulator, true), emulator);
+    const part = await readSweep(session, emulator, true);
+    return part && dspBlockCapture(part.header, part.rows);
   }
 
   async function freeze(session: Session, emulator: boolean) {
     if (!startedOk) return;
     try {
       const part = await readSweep(session, emulator, false);
-      capture = view(part, emulator);
+      capture = part && dspBlockCapture(part.header, part.rows);
       if (capture) artifact = part;
       else note = 'No complete DSP sweep arrived before Stop. Record for longer and try again.';
     } catch (error) {

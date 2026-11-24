@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readSavedTraces } from '@digi/workbench-core/profile/trace.ts';
+import { readPerformanceCaptures } from '@digi/workbench-core/profile/performance-capture.ts';
 import {
   focusTraceEvent,
   formatTraceTicks,
@@ -107,7 +107,7 @@ describe('ColdFire trace timeline', () => {
 });
 
 it('keeps saved workload markers aligned with retained events in the same clock', () => {
-  const [saved] = readSavedTraces(
+  const [saved] = readPerformanceCaptures(
     {
       schema: 'dk.calcaptures/1',
       side: 'emu',
@@ -132,12 +132,12 @@ it('keeps saved workload markers aligned with retained events in the same clock'
     'run.json',
   );
   expect(saved.label).toBe('emu-fx-1');
-  expect(saved.names.get(256)).toBe('early');
-  expect(saved.trace.dropped).toBe(3);
-  const timeline = traceTimeline(saved.trace);
+  expect(saved.trace!.names.get(256)).toBe('early');
+  expect(saved.trace!.trace.dropped).toBe(3);
+  const timeline = traceTimeline(saved.trace!.trace);
   expect(timeline.end).toBe(100);
   expect(timeline.retained).toEqual({ start: 20, end: 25 });
   expect(timeline.lanes[0].events[0].start).toBe(20);
   expect(timeline.markers.map(({ offset }) => offset)).toEqual([0, 100]);
-  expect(() => readSavedTraces({ schema: 'dk.profile/1' }, 'no-trace.json')).toThrow('no retained ColdFire trace');
+  expect(() => readPerformanceCaptures({ schema: 'dk.profile/1' }, 'no-trace.json')).toThrow('no profiling data');
 });

@@ -7,6 +7,9 @@ export default function RecordingButton(props: {
   includeDsp: boolean;
   dspAvailable: boolean;
   setIncludeDsp(value: boolean): void;
+  includeSharc: boolean;
+  sharcAvailable: boolean;
+  setIncludeSharc(value: boolean): void;
 }) {
   return (
     <>
@@ -33,6 +36,17 @@ export default function RecordingButton(props: {
             onChange={(event) => props.setIncludeDsp(event.currentTarget.checked)}
           />
           Include DSP block costs
+        </label>
+      </Show>
+      <Show when={props.sharcAvailable}>
+        <label class="recording-option">
+          <input
+            type="checkbox"
+            checked={props.includeSharc}
+            disabled={props.disabled || props.running}
+            onChange={(event) => props.setIncludeSharc(event.currentTarget.checked)}
+          />
+          Include SHARC hotspots
         </label>
       </Show>
     </>

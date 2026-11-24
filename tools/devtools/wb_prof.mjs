@@ -147,10 +147,11 @@ export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
     // Navigable hotspot evidence below always requires a matching pack hash.
     const reportMaps = evidence.sha256
       ? maps.filter((map) => verified.has(map) || (map.kind === 'module' && !evidence.moduleHashes.length))
-      : maps;
-    const req = { profile, maps: reportMaps, format };
+      : [...verified, ...maps];
+    const req = { profile, maps: reportMaps, format, analyses: evidence.rig?.analyses };
     if (top !== undefined) req.top = top;
     if (opts.loads) req.loads = readJson(opts.loads);
+    if (opts.analyse?.length) req.analyses = { ...req.analyses };
     for (const spec of opts.analyse ?? []) {
       const at = spec.indexOf('=');
       const [dkm, dko] = (at < 0 ? '' : spec.slice(at + 1)).split(':');

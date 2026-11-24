@@ -255,6 +255,23 @@ describe('the emulator', () => {
     assert.deepEqual(rpcCalls, ['cf.profile {"enable":true}', 'sharc.profile {"enable":true}']);
   });
 
+  test('leaves the SHARC counter off when hotspots are not requested', async () => {
+    const st = state();
+    const rpcCalls: string[] = [];
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc(rpcCalls, { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+    });
+    await rec.start(false, false);
+    const reading = await rec.read();
+    assert.ok(!reading.noDebug);
+    assert.equal(reading.sharcRequested, false);
+    assert.equal(reading.dsp, undefined);
+    await rec.stop();
+    assert.ok(!rpcCalls.some((call) => call.startsWith('sharc.profile')));
+  });
+
   test('the DSP view appears while recording, with the device headroom, and names no module without maps', async () => {
     const st = state({ elapsed: 100n });
     const rec = createRecorder({
@@ -445,6 +462,31 @@ describe('the emulator', () => {
       JSON.parse((await rec.exportFile()).text).run.firmware_sha256,
       undefined,
       'the ship map is for the old image',
+    );
+  });
+
+  test.each([false, true])('export keeps the load table only when its capture boundaries agree (%s)', async (moved) => {
+    const hash = 'ab'.repeat(32);
+    const st = state({ imageId: 'ff'.repeat(8), fwId: hash.slice(0, 16) });
+    let base = 0x8000;
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc([], { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+      names: {
+        inputs: () => ({ maps: [], loads: { modules: [{ id: 'test/render', base, dsp_base: 0x301 }] } }),
+        imageHash: () => hash,
+        refresh: async () => {},
+      },
+    });
+    await rec.start();
+    if (moved) base += 0x1000;
+    await rec.stop();
+    const capture = JSON.parse((await rec.exportFile()).text);
+    assert.equal(capture.run.firmware_sha256, hash);
+    assert.deepEqual(
+      capture.run.loads,
+      moved ? undefined : { modules: [{ id: 'test/render', base, dsp_base: 0x301 }] },
     );
   });
 
@@ -657,8 +699,8 @@ test('a failed trace download retains the frozen aggregate and records the loss 
 });
 
 describe('DSP block recording', () => {
-  function setup(emulator = false) {
-    const st = state();
+  function setup(emulator = false, withTrace = false) {
+    const st = state({ traceVersion: withTrace ? 1 : undefined });
     const session = fakeSession(st);
     const steps: string[] = [];
     let generation = 80;
@@ -676,10 +718,23 @@ describe('DSP block recording', () => {
 
       return { on: st.running, generation, counts: { sweeps: 7, gaps: 0, ignored: 0 }, sweep: published };
     };
+    if (withTrace)
+      session.profileTrace = async () => ({
+        version: 1,
+        generation: 2,
+        hz: HZ,
+        dropped: 0,
+        events: [{ owner: 0x100, startTicks: '100', durationTicks: 10 }],
+      });
     const rec = createRecorder({
       session: async () => session,
       loadLibrary: library,
-      rpc: emulator ? fakeRpc([], { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }) : undefined,
+      rpc: emulator
+        ? fakeRpc([], {
+            'cf.profile': cfAnswer,
+            'sharc.profile': { ...sharcAnswer, raw: [{ cpu: 'sharc', addr: 0x123, count: 7, series: 'pc' }] },
+          })
+        : undefined,
     });
     return {
       rec,
@@ -716,6 +771,19 @@ describe('DSP block recording', () => {
       assert.equal(JSON.parse((await rec.exportFile()).text).dsp, undefined);
     });
   }
+  test('exports the selected collectors together in one stopped capture', async () => {
+    const { rec } = setup(true, true);
+    await rec.start(true, true);
+    await rec.stop();
+    const doc = JSON.parse((await rec.exportFile()).text);
+    assert.equal(doc.schema, 'dk.profile/1');
+    assert.equal(doc.dsp.unit, 'insn');
+    assert.equal(doc.dsp_rows[0].max_block, 110);
+    assert.equal(doc.trace.events[0].durationTicks, 10);
+    assert.ok(doc.spans.length);
+    assert.ok(doc.raw.some((row: { cpu: string }) => row.cpu === 'sharc'));
+  });
+
   test('ordinary recording and reset leave DSP streaming alone', async () => {
     const { rec, steps } = setup();
     await rec.start();

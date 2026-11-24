@@ -5,7 +5,7 @@
 import { latestDeviceHealth } from '../device-health';
 import { CAP } from '@digi/dk-session/gen_proto';
 import { DkError, type DkSession, type PollSlot } from '@digi/dk-session';
-import type { DkProf } from '@digi/dk-session/dkprof';
+import type { DkProf, LoadTableJson } from '@digi/dk-session/dkprof';
 import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import type { EmuRpc } from '@digi/workbench-core/host/host.ts';
 import type { LibraryModule } from '@digi/workbench-core/modules/dktransfer.ts';
@@ -31,7 +31,8 @@ import {
   type Snapshot,
 } from '@digi/workbench-core/profile/profile-core.ts';
 import { stockImageHash, type LogNames } from '@digi/dk-session/log-names';
-import { createDspBlockRecording, type DspBlockCapture } from '../dsp-block-recording';
+import { createDspBlockRecording } from '../dsp-block-recording';
+import type { DspBlockCapture } from '@digi/workbench-core/profile/dsp-blocks.ts';
 import type { FrozenTrace } from '../span-recording';
 import { sampledPcs, type Hotspot } from './hotspots';
 
@@ -115,6 +116,7 @@ export type ProfileReading =
       modules: ModuleRef[];
       /** Emulator: the modules' DSP per block (undefined when `sharc.profile` is off or the daemon lacks it). */
       dsp?: DspView;
+      sharcRequested?: boolean;
       /** Hardware: the newest HEALTH event, when the ring holds one. */
       deviceDsp?: DeviceDsp;
       /** Emulator: the ColdFire paths and heaviest PCs of `cf.profile` since Start (undefined when it is off or the daemon lacks it). */
@@ -198,8 +200,8 @@ export interface Recorder {
   releaseDsp(): Promise<void>;
   /** Read the state, the spans and the modules (and, on the emulator, the DSP per block). */
   read(detail?: 'full' | 'spans', liveDsp?: boolean): Promise<ProfileReading>;
-  /** Reset the counters and start the spans; on the emulator also `cf.profile` and `sharc.profile` count from now. */
-  start(withDspBlocks?: boolean): Promise<void>;
+  /** Reset and start spans, optional DSP block costs, and emulator instruction counts. */
+  start(withDspBlocks?: boolean, withSharc?: boolean): Promise<void>;
   /** Stop the spans; on the emulator, keep the instruction profiles of the recording for Export. */
   stop(): Promise<void>;
   /** Zero the counters (both states); the recording window starts again. */
@@ -222,6 +224,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   /** The emulator sources that started for the running recording (each one that failed to start is in `instructionNote`). */
   let active: { cf?: Source<Part>; sharc?: Source<Part> } = {};
   const counting = (): boolean => active.cf !== undefined || active.sharc !== undefined;
+  let sharcRequested = false;
   let instructionNote: string | undefined;
   /** Per source: how often the daemon started a new runtime during the recording (its counters restart with each). */
   let restarts: { cf?: number; sharc?: number } = {};
@@ -230,7 +233,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
 
   let namesImage: ProfileInfo | undefined;
   let namesRequest = 0;
-  let captureImage: { info: ProfileInfo; sha256: string } | undefined;
+  let captureImage: { info: ProfileInfo; sha256: string; loads?: LoadTableJson } | undefined;
   let traceGeneration: number | undefined;
   const dspBlocks = createDspBlockRecording();
   let frozenTrace: FrozenTrace | undefined;
@@ -254,11 +257,12 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   async function captureIdentity(s: ProfileSession, info: ProfileInfo): Promise<void> {
     captureImage = undefined;
     await refreshNames(s, info);
-    const ship = nameInputs(info)?.maps[0];
+    const inputs = nameInputs(info);
+    const ship = inputs?.maps[0];
     const sha256 = deps.names?.imageHash?.() ?? (ship && stockImageHash(ship));
     if (sha256 && info.image_id && (!info.fw_id || sha256.startsWith(info.fw_id.toLowerCase()))) {
       const current = await s.info().catch(() => undefined);
-      if (current && sameImage(info, current)) captureImage = { info, sha256 };
+      if (current && sameImage(info, current)) captureImage = { info, sha256, loads: inputs?.loads };
     }
   }
 
@@ -456,9 +460,15 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     const id = runId(deps.rpc ? 'emu' : 'dev', now());
     const target = (info.port ?? 'unknown').split('-')[0] ?? 'unknown';
     const run: BuildInput['run'] = { id, target };
-    if (captureImage && !restarts.cf && !restarts.sharc && sameImage(captureImage.info, info)) {
+    const start = captureImage;
+    if (start && !restarts.cf && !restarts.sharc && sameImage(start.info, info)) {
+      if (start.loads?.modules.length) await refreshNames(s, info);
       const current = await s.info().catch(() => undefined);
-      if (current && sameImage(info, current)) run.firmware_sha256 = captureImage.sha256;
+      if (current && sameImage(info, current)) {
+        run.firmware_sha256 = start.sha256;
+        const loads = nameInputs(current)?.loads;
+        if (start.loads?.modules.length && JSON.stringify(start.loads) === JSON.stringify(loads)) run.loads = loads;
+      }
     }
     const capture: BuildInput = { run, ...parts, spans, dsp: all.running ? undefined : dspBlocks.artifact() };
     if (traceGeneration !== undefined && !all.running) {
@@ -503,6 +513,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         port,
         emulator: !!deps.rpc,
         observedAt,
+        sharcRequested,
         imageId: info.image_id,
         snap,
         modules,
@@ -545,8 +556,9 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       return r;
     },
 
-    async start(withDspBlocks = false) {
+    async start(withDspBlocks = false, withSharc = true) {
       const s = await deps.session();
+      sharcRequested = withSharc;
       kept = {};
       stoppedCapture = undefined;
       frozenTrace = undefined;
@@ -563,8 +575,10 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       active = {};
       const faults: ProfileFaults = { without: [], other: [] };
       const wanted: [keyof typeof active, string, Source<Part>][] = [['cf', 'cf.profile', cfSource()]];
-      if (hasDsp()) wanted.push(['sharc', 'sharc.profile', sharcSource()]);
-      else faults.noDsp = true;
+      if (withSharc) {
+        if (hasDsp()) wanted.push(['sharc', 'sharc.profile', sharcSource()]);
+        else faults.noDsp = true;
+      }
       for (const [key, method, src] of wanted) {
         try {
           await src.start();

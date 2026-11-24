@@ -139,6 +139,8 @@ export interface FxBlock {
   stores: CallResult['stores'];
   /** the DM words asked for with `extraReads`, one row each (a word that nothing wrote is null) */
   extra: (number | null)[][];
+  /** Instructions executed per short-word PC, when profiling is enabled. */
+  profile: [pc: number, count: number][];
 }
 
 export interface FxRigOptions {
@@ -148,6 +150,7 @@ export interface FxRigOptions {
   /** record the stores of the module's code (true) or of all code (`all`) */
   recordStores?: boolean | 'all';
   device?: 'dt2' | 'dn2';
+  profile?: boolean;
   open?: RigOpener;
   /** the placed and linked code: built from `sources` by default (a host test passes a made-up one) */
   built?: FxBuilt;
@@ -162,6 +165,7 @@ export class FxRig {
   private readonly q = new OpQueue();
   private port!: RigPort;
   private readonly recordStores: boolean | 'all';
+  private readonly profile: boolean;
 
   private constructor(rows: Row[], o: FxRigOptions) {
     if (rows.length > MAX_ROWS) throw new Error(`a chain has at most ${MAX_ROWS} effects`);
@@ -170,6 +174,7 @@ export class FxRig {
     this.ctxRng = new PyRandom(o.seed ?? 0xd1617);
     this.stepLimit = o.stepLimit ?? 200_000;
     this.recordStores = o.recordStores ?? false;
+    this.profile = o.profile ?? false;
   }
 
   static async open(rows: Row[], o: FxRigOptions): Promise<FxRig> {
@@ -387,6 +392,7 @@ export class FxRig {
         max_steps: this.stepLimit,
         reads,
         read_regs: ['I6', 'I7', ...names, ...CONTEXT_REGS],
+        ...(this.profile ? { profile: true } : {}),
       },
     });
     const [res] = (await this.port.run(q.take())) as [CallResult];
@@ -415,6 +421,7 @@ export class FxRig {
         scratch === undefined ? [] : Array.from({ length: 64 }, (_, k) => w2f(res.reads[1 + MAX_ROWS]?.[k] ?? 0)),
       stores: res.stores,
       extra: extraReads.map((_, i) => res.reads[firstExtra + i] ?? []),
+      profile: res.profile ?? [],
     };
   }
 

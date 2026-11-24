@@ -262,9 +262,11 @@ export function readReference(doc: unknown): Map<string, number> | undefined {
     span_elapsed_ticks?: number;
   };
   if (!d || d.schema !== 'dk.profile/1') throw new Error('not a dk.profile/1 file');
-  if (!d.spans?.length || !d.span_elapsed_ticks || d.span_elapsed_ticks <= 0) return undefined;
+  if (!Array.isArray(d.spans) || !d.spans.length || !d.span_elapsed_ticks || d.span_elapsed_ticks <= 0)
+    return undefined;
   const out = new Map<string, number>();
-  for (const s of d.spans) if (s.name) out.set(s.name, (s.sum_ticks ?? 0) / d.span_elapsed_ticks);
+  for (const s of d.spans)
+    if (typeof s?.name === 'string' && s.name) out.set(s.name, (s.sum_ticks ?? 0) / d.span_elapsed_ticks);
   return out;
 }
 

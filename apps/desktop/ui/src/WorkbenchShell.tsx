@@ -30,7 +30,7 @@ import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { createTargetHealth } from './target-health';
 import type { SpanRecording } from './span-recording';
 import type { PerformanceView } from './PerformancePanel';
-import { createSavedTimeline } from './saved-timeline';
+import { createSavedPerformance } from './saved-performance';
 import { createUtilizationHistory } from './utilization-history';
 import { percent } from './device-health';
 import type { Page } from './page-core';
@@ -95,7 +95,7 @@ export default function WorkbenchShell(
   const { drawer, log, logWriter, emulatorActions } = untrack(() => props.tools);
   const { logEvent, logInput } = logWriter;
   const logOpen = () => drawer.active() === 'Log';
-  const savedTimeline = createSavedTimeline();
+  const savedPerformance = createSavedPerformance();
   const performanceOpen = () => drawer.active() === 'Performance';
   const toggleLog = () => drawer.toggle('Log');
   const { emulatorSession, lastMidiPort, lastMidiSession, target } = app.target;
@@ -299,6 +299,15 @@ export default function WorkbenchShell(
 
   const [performanceView, setPerformanceView] = createSignal<PerformanceView>('Utilization');
   const [spanRecording, setSpanRecording] = createSignal<SpanRecording>();
+  const showCaptureControls = (view?: 'DSP blocks' | 'Timeline') => {
+    if (view) setPerformanceView(view);
+    drawer.select('Performance');
+  };
+  const showProfile = () => {
+    setPage('run');
+    setInspectorTab('profile');
+    setInspectorOpen(true);
+  };
   const showMetrics = () => {
     setPage('run');
     setInspectorTab('metrics');
@@ -587,9 +596,9 @@ export default function WorkbenchShell(
                     host={props.host}
                     visible={sidePanelsShown()}
                     liveDsp={performanceOpen() && performanceView() === 'DSP blocks'}
-                    collectSpans={
-                      performanceOpen() && performanceView() !== 'Utilization' && source.target.kind !== 'none'
-                    }
+                    savedCapture={savedPerformance.current()}
+                    showCaptureControls={showCaptureControls}
+                    collectSpans={performanceOpen() && source.target.kind !== 'none'}
                     profileGeneration={isEmulator() ? emulatorGeneration() : 1}
                     onSpanRecording={setSpanRecording}
                     openCatalog={
@@ -740,8 +749,9 @@ export default function WorkbenchShell(
                 estimated={isEmulator()}
                 view={performanceView()}
                 setView={setPerformanceView}
+                showProfile={showProfile}
                 recording={spanRecording()}
-                savedTimeline={savedTimeline}
+                savedPerformance={savedPerformance}
                 activeTarget={selected().target.kind !== 'none' && (!isEmulator() || !!status())}
               />
             </Suspense>

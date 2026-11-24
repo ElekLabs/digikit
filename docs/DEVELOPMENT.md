@@ -262,6 +262,8 @@ mise run perf:cov             # fast-tier coverage per configuration
 Method and results: [finding 18](findings/18-dsp-performance.md). Every run tool
 writes `out/runs/<scenario-or-kind>/<UTC stamp>/` (report, audio, logs);
 [docs/INSTRUMENTATION.md](INSTRUMENTATION.md) lists the output and the switches.
+[Profile a DSP module and compare two builds](../sdk/dsp/README.md#profile-a-module-and-compare-two-builds)
+for a worked SHARC rig, Workbench and CLI example.
 The ColdFire PC probe (`coupled-run --pc-probe`, RPC `pc.probe.set`): [INSTRUMENTATION.md](INSTRUMENTATION.md#pc-probe-coldfire).
 
 ## Analysis tools

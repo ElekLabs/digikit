@@ -12,7 +12,7 @@ import {
   signalBlock,
 } from './checks.ts';
 import { fxCases, fxWordsAt, machineCases, wordsAt, type Case, type FxCase } from './cases.ts';
-import { P0, FxRig, type FxRigOptions } from './fx.ts';
+import { P0, FxRig, type FxBlock, type FxRigOptions } from './fx.ts';
 import { MachineRig, type MachineRigOptions } from './machine.ts';
 import type { RigOpener } from './ops.ts';
 import { buildFx, buildMachine } from './place.ts';
@@ -185,7 +185,9 @@ export async function conformMachine(sp: MachineSpec, o: ConformOptions = {}): P
   };
 }
 
-export type FxRigTest = Pick<FxRigOptions, 'open' | 'built'>;
+type FxCaseOptions = Pick<FxRigOptions, 'open' | 'built' | 'profile'> & {
+  onBlock?: (block: FxBlock, index: number) => void;
+};
 
 export async function runFxCase(
   sp: FxSpec,
@@ -193,14 +195,14 @@ export async function runFxCase(
   effectBudget: number,
   desc: number[],
   seed: number,
-  test: FxRigTest = {},
+  { onBlock, ...options }: FxCaseOptions = {},
 ): Promise<CaseResult> {
   const t0 = performance.now();
   const rig = await FxRig.open([{ pc: sp.process, state: sp.state, desc: sp.desc }], {
     sources: sp.sources,
     seed,
     recordStores: true,
-    ...test,
+    ...options,
   });
   try {
     const rng = new PyRandom(seed);
@@ -227,6 +229,7 @@ export async function runFxCase(
         failure = fxBudgetFailure(where, b.instructions, effectBudget);
       }
       if (failure) break;
+      onBlock?.(b, k);
     }
     return {
       group: c.group,
@@ -256,7 +259,7 @@ export function descriptionProblems(desc: readonly number[]): string[] {
 export async function conformFx(sp: FxSpec, o: ConformOptions = {}): Promise<FxReport> {
   const t0 = performance.now();
   const built = buildFx(sp.sources);
-  const desc = descriptionOf(built, sp.desc);
+  const desc = fxDescription(built, sp.desc);
   const buildSeconds = (performance.now() - t0) / 1000;
   const problems = descriptionProblems(desc);
   const effectBudget = fxBudget();
@@ -287,7 +290,7 @@ export async function conformFx(sp: FxSpec, o: ConformOptions = {}): Promise<FxR
   };
 }
 
-function descriptionOf(built: ReturnType<typeof buildFx>, symbol: string, n = 6): number[] {
+export function fxDescription(built: ReturnType<typeof buildFx>, symbol: string, n = 6): number[] {
   const at = built.data[symbol];
   for (const init of built.inits)
     if (at !== undefined && init.address <= at && at < init.address + init.bytes.length) {
