@@ -27,7 +27,7 @@ export function withRouteFxSession(device: Device, scope: string, config: RouteF
         'DKRT_BOOT',
         'fx.rows',
         '_dl_area',
-        ...(config.image === 'track' || config.image === 'track-base' ? ['dynreg_info'] : []),
+        ...(config.image === 'track' || config.image === 'track-base' ? ['rows_info'] : []),
         ...(config.image === 'track' ? ['fxpages_info'] : []),
         ...(config.image === 'routes' ? ['DKRT_HOST_DIR', 'fxpages_info'] : []),
       ],

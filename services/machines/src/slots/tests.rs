@@ -207,8 +207,8 @@ fn a_click_whose_row_was_unloaded_has_no_context() {
 fn a_click_reads_the_parameter_rows_through_the_core() {
     let mut core = FakeCore::new();
     let mut t = std::vec![0; 96];
-    t[dkrt_svc_rows::dynreg::w::P_DYN0] = 200;
-    core.set_dynreg(t);
+    t[dkrt_svc_rows::rows_info::w::P_DYN0] = 200;
+    core.set_rows_info(t);
     let mut owners = [0u8; limits::PARAM_ROWS];
     owners[..4].copy_from_slice(&[0, 0, 3, 0]);
     let p = |code| Pending {

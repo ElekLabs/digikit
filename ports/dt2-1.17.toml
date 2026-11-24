@@ -4469,12 +4469,6 @@ mode = "before"
 clobbers = ["d0", "ccr"]
 
 [[hook]]
-name = "cf.machine.hook.list.copy_target"
-site = "cf.machine.site.list.copy"
-mode = "retarget"
-clobbers = ["d0", "d1", "a0", "a1", "ccr"]
-
-[[hook]]
 name = "cf.machine.hook.list_rank_insert"
 site = "cf.machine.site.list_rank_insert"
 mode = "replace"
@@ -4518,6 +4512,15 @@ mode = "replace"
 len = 4
 kind = "patch"
 check = "b9978025e097a954"
+
+[[hook]]
+name = "cf.machine.hook.patch_list_copy"
+site = "cf.machine.site.list.copy"
+offset = 2
+mode = "replace"
+len = 4
+kind = "patch"
+check = "33970642e05bf171"
 
 [[hook]]
 name = "cf.machine.hook.patch_list_vector_end"

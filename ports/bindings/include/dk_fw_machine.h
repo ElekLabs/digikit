@@ -18,7 +18,7 @@ int32_t dk_fw_machine_set_kit(uint32_t kit, int32_t track, int32_t ty, int32_t f
 /* cf.machine.fn.type_reader: no sig yet */
 /* `void f(MachineSelectionView *)`: fills the items of the machine selection view from the list getter (it clears its items first); the view's constructor calls it once at boot. The list is cached in the view, so a reload calls it again on the stored view (the hook `cf.machine.hook.view.build` remembers the view). */
 void dk_fw_machine_view_build(uint32_t view) __asm__("cf.machine.fn.view.build");
-/* Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/machines copies it with the added types inserted. */
+/* Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/rows copies it with the added types inserted. */
 extern const uint8_t dk_fw_machine_list_table __asm__("cf.machine.data.list.table");
 /* Display-name table of the machines, 12 bytes per type (long name, short name, header hint); the anchor is the pointer operand at +0x12 of the long-name accessor. */
 extern const uint8_t dk_fw_machine_name_table __asm__("cf.machine.data.name.table");

@@ -3,7 +3,7 @@
 
     uv run python -m tools.coldfire.digikit_health_proof run [--image dt2-1.16] [--quick] [--no-cost]
 
-One coupled daemon on a patched image (core/runtime, core/dynreg, core/dyndsp, core/ui, core/health; the DIGIKIT menu is part of the system package), the write watch and
+One coupled daemon on a patched image (core/runtime, core/rows, core/dyndsp, core/ui, core/health; the DIGIKIT menu is part of the system package), the write watch and
 the flush check on. Everything is read from the guest's memory (the runtime's `DKRT_HEALTH` after the mailbox command `CMD_HEALTH`,
 the menu's `DK_LINES`, `DK_REDRAWS`, the module's counters), not from OLED pixels:
 
@@ -41,7 +41,7 @@ from tools.patchkit import pk_hostdir
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OUT = ROOT / "out" / "runs" / "lanes" / "r1-health"
 SHOTS = ROOT / "out" / "runs" / "lanes" / "r1-shots"
-RT = "core/runtime,core/dynreg,core/dyndsp"
+RT = "core/runtime,core/rows,core/dyndsp"
 MODULES = f"{RT},core/ui,core/health"
 CMD_HEALTH = 6
 HEALTH_FIELDS = [

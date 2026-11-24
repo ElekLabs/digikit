@@ -330,6 +330,66 @@ fn service_hooks_equal_the_hook_entries_per_device() {
     ));
 }
 
+/// A hook declared with no device is the loader's to match (it takes the entry of its own device and drops the declaration of a hook that the table lists for another device only): the
+/// manifest needs an entry for it on some device, and every manifest entry still needs its declaration.
+#[test]
+fn a_plain_hook_needs_a_manifest_entry_on_some_device() {
+    let call = |hooks: &str| {
+        format!(
+            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [Records], hooks = [{hooks}]);\n"
+        )
+    };
+    let entry =
+        |name: &str, dev: &str| format!("\n[[hook]]\nname = \"{name}\"\nentry = \"e\"\n{dev}");
+    let (dir, sdk) = service("hooks-plain", &[]);
+    fs::write(dir.join("dks/src/hooks.rs"), "").unwrap();
+    append(
+        &dir.join("dks/module.toml"),
+        &entry("cf.a.hook.x", "devices = [\"dt2\"]\n"),
+    );
+    append(
+        &dir.join("dks/module.toml"),
+        &entry("cf.a.hook.y", "devices = [\"dn2\"]\n"),
+    );
+    // both declared plain: each has an entry on one device
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call("(\"cf.a.hook.x\", hooks::x), (\"cf.a.hook.y\", hooks::y)"),
+    )
+    .unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    // a plain hook that no device's entry names is refused
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call(
+            "(\"cf.a.hook.x\", hooks::x), (\"cf.a.hook.y\", hooks::y), (\"cf.a.hook.z\", hooks::z)",
+        ),
+    )
+    .unwrap();
+    let found = problems(&dir, &sdk);
+    assert!(
+        mentions(
+            &found,
+            "service! takes the hook `cf.a.hook.z`, but dks/module.toml has no [[hook]] for it"
+        ),
+        "{found:?}"
+    );
+    // an entry the call leaves out is still refused, on its device
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call("(\"cf.a.hook.x\", hooks::x)"),
+    )
+    .unwrap();
+    let found = problems(&dir, &sdk);
+    assert!(
+        mentions(
+            &found,
+            "[[hook]] `cf.a.hook.y` on dn2 is not in the service! hook list"
+        ),
+        "{found:?}"
+    );
+}
+
 /// The service with an adapters folder beside it that declares `[[slot]] frametype` with the given `devices` line.
 fn adapters_with(test: &str, devices: &str) -> (PathBuf, PathBuf, PathBuf) {
     let (dir, sdk) = service(test, &[]);

@@ -3,7 +3,7 @@ use crate::shapes::highest;
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_sdk::*;
-use dkrt_svc_rows::{dynreg, set_stock_range, stock_range};
+use dkrt_svc_rows::{rows_info, set_stock_range, stock_range};
 
 /// The largest value of the LFO WAVE parameter (`wave << 8`) while shapes are loaded: the maximum of the WAVE rows follows the highest loaded wave number, so the
 /// encoder reaches no number above it. 0 when no shape is loaded: the stock maximum stays (finding 149, "Direct readers of the parameter table").
@@ -46,7 +46,7 @@ pub(crate) fn has_firmware() -> bool {
 /// parameter table. Nothing is written.
 pub(crate) unsafe fn wave_rows<C: CoreApi>(core: &C) -> Option<[(u32, u32); 3]> {
     let w = &*addr_of!(WAVE);
-    let inf = dynreg(core);
+    let inf = rows_info(core);
     let mut now = [(0, 0); 3];
     let mut i = 0;
     while i < 3 {
@@ -68,7 +68,7 @@ pub(crate) unsafe fn sync_range<C: CoreApi>(core: &C) -> i32 {
         Some(n) => n,
         None => return E_NO_REGISTRY,
     };
-    let inf = dynreg(core);
+    let inf = rows_info(core);
     let max = wave_max();
     if !w.armed {
         if max == 0 {

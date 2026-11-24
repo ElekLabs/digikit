@@ -20,7 +20,7 @@ use dkrt_sdk::proto::{
 };
 use dkrt_sdk::records::KINDS_MACHINES;
 use dkrt_sdk::{E_NO_REGISTRY, OK};
-use dkrt_svc_rows::dynreg::RegState;
+use dkrt_svc_rows::rows_info::RegState;
 
 /// The machines service: nothing collected, no click queued, nothing parked. The file's cell holds the one instance (`Provider::start_in`).
 pub struct Machines {
@@ -193,17 +193,17 @@ pub(crate) fn status(code: i32) -> Result<(), Status> {
 /// # Safety
 /// `core` gives the image tables.
 unsafe fn first_reserved<C: CoreApi>(core: &C) -> u32 {
-    let inf = dkrt_svc_rows::dynreg(core);
+    let inf = dkrt_svc_rows::rows_info(core);
     if inf.is_null() {
         0
     } else {
-        dkrt_abi::mem::iw(inf, dkrt_svc_rows::dynreg::w::M_DYN0)
+        dkrt_abi::mem::iw(inf, dkrt_svc_rows::rows_info::w::M_DYN0)
     }
 }
 
 impl<C: CoreApi> Provider<C> for Machines {
-    /// The file's `init`, before its hooks are installed: the image table `machines_info` is bound into `DKRT_MF_TAB` (the hooks read it), or the file is refused
-    /// (`E_NO_REGISTRY`: no usable `core/machines` in the image).
+    /// The file's `init`, before its hooks are installed: the registry words of `rows_info` are bound into `DKRT_MF_TAB` (the hooks read it), or the file is refused
+    /// (`E_NO_REGISTRY`: no usable `core/rows` in the image).
     fn start(core: &C) -> Result<Machines, Status> {
         // SAFETY: `DKRT_MF_TAB` is this crate's table; nothing reads it before the hooks are declared
         status(unsafe { info::bind(core) })?;
@@ -211,7 +211,7 @@ impl<C: CoreApi> Provider<C> for Machines {
         m.pages.set_first(unsafe { first_reserved(core) });
         m.listed = unsafe { info::build_list(core) }.ok_or(E_NO_REGISTRY)? as u32;
         // SAFETY: the registry is the image's; no module has filled a row yet
-        unsafe { crate::pagerows::init(core) };
+        unsafe { crate::pagerows::init(core, &mut m.reg) };
         Ok(m)
     }
 
@@ -230,7 +230,7 @@ impl<C: CoreApi> Provider<C> for Machines {
             (*at).listed = listed;
             (*at).pages.set_first(first_reserved(core));
             // no module has filled a row yet
-            crate::pagerows::init(core);
+            crate::pagerows::init(core, &mut (*at).reg);
         }
         Ok(())
     }
@@ -238,7 +238,7 @@ impl<C: CoreApi> Provider<C> for Machines {
     /// A module's records are in: the reserved parameter, action, page and machine rows are filled (the native pages follow, record by record: `Records::apply`).
     fn attach(&mut self, core: &C, consumer: &Consumer<'_>) -> Result<(), Status> {
         // SAFETY: the registry words come from the image through the core
-        let inf = unsafe { dkrt_svc_rows::dynreg(core) };
+        let inf = unsafe { dkrt_svc_rows::rows_info(core) };
         if inf.is_null() {
             return if KINDS_MACHINES
                 .iter()
@@ -283,8 +283,15 @@ impl<C: CoreApi> Provider<C> for Machines {
     /// The loader has put the firmware's sites back (the list patches and the rank hook restored) before `stop`: the machine selection view still caches the list it built with
     /// the patched list builder, so it is built again from the stock one. Nothing to do while the view does not exist.
     fn stop(&mut self, core: &C) {
-        // SAFETY: `refresh_view` reads the image's tables through the core and calls the firmware's builder
-        unsafe { selection_view::refresh_view(core) }
+        // SAFETY: the rows are the registry's; `refresh_view` reads the image's tables through the core and calls the firmware's builder
+        unsafe {
+            // no module is loaded: the descriptor strings of the rows were this file's buffers, which go with it
+            let inf = dkrt_svc_rows::rows_info(core);
+            if !inf.is_null() {
+                registry::forget_descriptor_strings(core, inf);
+            }
+            selection_view::refresh_view(core)
+        }
     }
 
     fn settle(&mut self, core: &C, s: &SettleCtx) {
@@ -301,7 +308,7 @@ impl<C: CoreApi> Provider<C> for Machines {
             dsp::free_placeholders(core);
             // the machine rows of a pinned number whose module did not come back (a MISSING row with no voice row would play the first stock machine's sound): gap rows. A
             // number the map holds stays MISSING (E5d), and `tick` parks its voice row if it has none.
-            let inf = dkrt_svc_rows::dynreg(core);
+            let inf = dkrt_svc_rows::rows_info(core);
             if !inf.is_null() {
                 let mut k = 0;
                 while k < registry::MAX_MACH {

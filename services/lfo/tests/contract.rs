@@ -98,7 +98,7 @@ fn image(core: &mut FakeCore) {
     t[20] = COPY;
     t[27] = 60;
     t[23] = 300;
-    core.set_dynreg(t);
+    core.set_rows_info(t);
     for (c, def) in CODES.iter().zip([0x100, 0, 0]) {
         unsafe {
             core.wr(COPY + 60 * c + 8, 0);

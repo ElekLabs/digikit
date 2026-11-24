@@ -3,53 +3,46 @@
   "sets": [
     {
       "id": "rt",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp"]
     },
     {
       "id": "rt-ui",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/ui"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/ui"]
     },
     {
       "id": "coupled",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/input", "core/dynfx", "core/fxpages"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/input", "core/dynfx", "core/fxpages"]
     },
     {
       "id": "ib",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/introblank"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/introblank"]
     },
     {
       "id": "rt-usb-bulk",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/usb-bulk"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/usb-bulk"]
     },
     {
       "id": "rt-usb-bulk-audio",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/usb-bulk", "core/usb-bulk-audio"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/usb-bulk", "core/usb-bulk-audio"]
     },
     {
       "id": "rt-usb-bulk-sdhc",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/usb-bulk", "core/sdhc-large"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/usb-bulk", "core/sdhc-large"]
     },
     {
       "id": "rt-usb-bulk-sdhc-pd",
-      "roots": [
-        "core/runtime",
-        "core/dynreg",
-        "core/dyndsp",
-        "core/usb-bulk",
-        "core/sdhc-large",
-        "core/plusdrive-write"
-      ],
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/usb-bulk", "core/sdhc-large", "core/plusdrive-write"],
       "devices": ["dt2"]
     },
     {
       "id": "usb-fast",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/usb-bulk", "core/usb-bulk-audio", "core/sdhc-large"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/usb-bulk", "core/usb-bulk-audio", "core/sdhc-large"]
     },
     {
       "id": "usb-fast-pd",
       "roots": [
         "core/runtime",
-        "core/dynreg",
+        "core/rows",
         "core/dyndsp",
         "core/usb-bulk",
         "core/usb-bulk-audio",
@@ -60,20 +53,20 @@
     },
     {
       "id": "rt-pd",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/plusdrive-write"],
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/plusdrive-write"],
       "devices": ["dt2"]
     },
     {
       "id": "rt-dynfx",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/dynfx"]
     },
     {
       "id": "rt-dynfx-fxpages",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/dynfx", "core/fxpages"]
     },
     {
       "id": "rt-dynfx-fxpages-ui",
-      "roots": ["core/runtime", "core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui"]
+      "roots": ["core/runtime", "core/rows", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui"]
     },
     {
       "id": "fx-kit-persist",

@@ -763,7 +763,7 @@ pub struct RegistryDef {
     /// The registry takes no entry from a patched-in module: its rows are made at run time. The text says why and is part of the error that a module with an entry gets.
     #[serde(default)]
     pub refuse_entries: Option<String>,
-    /// Modules that may still add entries to a registry with `refuse_entries` (`core/dynreg` reserves the rows that run-time machines fill).
+    /// Modules that may still add entries to a registry with `refuse_entries` (`core/rows` reserves the rows that run-time machines fill).
     #[serde(default)]
     pub refuse_entries_except: Vec<String>,
 }
@@ -782,7 +782,7 @@ pub struct DevAlloc {
     pub last: i64,
     #[serde(default)]
     pub alloc: BTreeMap<String, i64>,
-    /// First number of the range reserved for run-time modules (`core/dynreg` reserves `dynamic_first ..= last`).
+    /// First number of the range reserved for run-time modules (`core/rows` reserves `dynamic_first ..= last`).
     #[serde(default)]
     pub dynamic_first: Option<i64>,
     /// How many stock machine types the firmware has (types `0 .. stock_types`; the numbers up to `dynamic_first` that are not stock are built-in or gap rows).
@@ -824,11 +824,11 @@ impl DevAlloc {
         let Some(first) = self.dynamic_first else {
             return Ok(());
         };
-        // the range belongs to the run-time modules; `core/dynreg` reserves its rows there
+        // the range belongs to the run-time modules; `core/rows` reserves its rows there
         if let Some((k, v)) = self
             .alloc
             .iter()
-            .find(|(k, v)| **v >= first && !k.starts_with("core/dynreg:"))
+            .find(|(k, v)| **v >= first && !k.starts_with("core/rows:"))
         {
             return Err(err!(
                 "allocation table [{dev}]: {k} = {v} lies in the run-time range {first}.."
@@ -1376,12 +1376,12 @@ pub fn selected_library(
         selected,
     )?;
     lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
-    if lenient && lib.get("core/machines").is_none() {
+    if lenient && lib.get("core/rows").is_none() {
         for id in selected {
             let m = lib.get(id).unwrap();
             if !m.manifest.gens.is_empty() || !m.manifest.machine.is_empty() {
                 return Err(Error(format!(
-                    "{id}: generation requires --manifest for core/machines (machine allocations)"
+                    "{id}: generation requires --manifest for core/rows (machine allocations)"
                 )));
             }
         }
@@ -1529,7 +1529,7 @@ impl Library {
         // Validate the complete explicit selection before any objects are read or built.
         let headers = Self::read_headers(paths)?;
         headers.with_requires(selected)?;
-        // Support manifests (for example core/machines allocations) are explicit inputs too;
+        // Support manifests (for example core/rows allocations) are explicit inputs too;
         // validate their requirements rather than silently accepting a partial library.
         let ids: Vec<_> = headers.modules.iter().map(|m| m.id().to_string()).collect();
         headers.with_requires(&ids)?;

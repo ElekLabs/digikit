@@ -7,7 +7,7 @@ runtime interface). Code: `packages/patchkit/src/{typed,modgen}.rs`, `devices/*.
 ## What was decided and built
 
 - Modules are authored in typed TOML (Em, 2026-10-16): `[[machine]]`, `[[param]]`, `[[page]]`, `[[voice]]`. They are
-  lowered per device into the `[[entry]]` rows that `core/machines`, `core/rows` and `core/dsp-voice` already take,
+  lowered per device into the `[[entry]]` rows that `core/rows`, `core/rows` and `core/dsp-voice` already take,
   before patchkit's apply. The frameworks, anchors and the registry code are unchanged.
 - The device decides what a knob is (plan decision 8): `[modules.knobs]` and `[modules.frame]` in `devices/<device>.toml`.
   Digitakt II: knobs are descriptor fields `f0..f7` of the machine row (engine slots 0 to 7), level `f8`. Digitone II: knobs

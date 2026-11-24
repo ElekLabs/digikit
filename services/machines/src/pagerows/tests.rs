@@ -20,7 +20,7 @@ fn core(page_rows: u32, count: u32) -> FakeCore {
     t[w::PGO_MACH] = 0x2c;
     t[w::PG_FREE] = 0x7fff_ffff;
     let mut c = FakeCore::new();
-    c.set_dynreg(t);
+    c.set_rows_info(t);
     c
 }
 
@@ -35,8 +35,9 @@ fn init_makes_every_reserved_page_row_a_free_row_with_a_string_name() {
         c.mem.borrow_mut().insert(row + 0x2c, 5);
         c.mem.borrow_mut().insert(row + 8, 0xd5);
     }
-    unsafe { init(&c) };
-    let rep = addr_of!(rstate().empty_rep) as u32 + 12;
+    let mut s: RegState = unsafe { core::mem::zeroed() };
+    unsafe { init(&c, &mut s) };
+    let rep = addr_of!(s.empty_rep) as u32 + 12;
     for k in 0..3u32 {
         let row = ROWS + k * SIZE;
         let word = |off: u32| unsafe { c.rd(row + off) };
@@ -53,7 +54,7 @@ fn init_makes_every_reserved_page_row_a_free_row_with_a_string_name() {
         );
     }
     // a string representation: length 0, capacity 0, reference count -1 (leaked), then the characters
-    let h = rstate().empty_rep;
+    let h = s.empty_rep;
     assert_eq!((h[0], h[1], h[2]), (0, 0, 0xffff_ffff));
     assert!(
         c.calls().len() >= 3 * 12,
@@ -64,9 +65,10 @@ fn init_makes_every_reserved_page_row_a_free_row_with_a_string_name() {
 #[test]
 fn a_device_without_page_rows_or_without_the_registry_is_left_alone() {
     let c = core(0, 8);
-    unsafe { init(&c) };
+    let mut s: RegState = unsafe { core::mem::zeroed() };
+    unsafe { init(&c, &mut s) };
     assert!(c.calls().is_empty());
     let none = FakeCore::new();
-    unsafe { init(&none) };
+    unsafe { init(&none, &mut s) };
     assert!(none.calls().is_empty());
 }

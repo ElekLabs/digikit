@@ -2,7 +2,7 @@
 
 Status: built for Digitakt II 1.16 and 1.17 (2026-10-16) and Digitone II 1.11 and 1.12 (2026-10-17; pages, `own_dsp`, finding 33), ColdFire side only, emulator only. Plan: `docs/plans/digikit-runtime.md`
 (Phase 5, ColdFire side). **Since the Phase 6 archive commit the rows are filled by the boot-time load only**: the unload, the in-use refusal and the machine-view hook and rebuild described for hot reload below are archived (docs/plans/digikit-hot-reload.md, tag `digikit-hot-reload-v1`); the paragraphs that describe them are marked. Results and evidence: `docs/findings/30-runtime-machines.md` (Digitakt II) and `docs/findings/33-runtime-machines-dn2.md` (Digitone II, unload refusal). File: `docs/design/digikit-dkm.md`. Runtime:
-`docs/design/digikit-runtime.md`. Code: `image-modules/points/dynreg` (patch time), `runtime/core/src/rs/src/registry.rs` and `params.rs` (run time),
+`docs/design/digikit-runtime.md`. Code: `runtime/platform/rows` (patch time), `runtime/core/src/rs/src/registry.rs` and `params.rs` (run time),
 `packages/patchkit/src/register.rs` (machine keys, effect ids).
 
 A module declares its machines, parameters and pages by builder calls in `init`; the module architecture is in `docs/MODULES.md`. The runtime lowers the calls to the records below (`collect.rs`, `lower`). `clone_of` is fixed by the device profile and not written by authors.
@@ -10,7 +10,7 @@ A module declares its machines, parameters and pages by builder calls in `init`;
 ## What it does
 
 A loaded module's `init` declares typed machine and parameter records (builder calls). At commit the runtime lowers them to the records below, checks them and writes them into rows that
-`core/dynreg` reserved at patch time, before the firmware builds its machine view; the machine is then in the SRC machine list and can be put on a track. (`registry::remove` still gives the rows back when the DSP part of a boot-time load fails.)
+`core/rows` reserved at patch time, before the firmware builds its machine view; the machine is then in the SRC machine list and can be put on a track. (`registry::remove` still gives the rows back when the DSP part of a boot-time load fails.)
 Nothing is patched at run time: no firmware code is written, only rows, tables and one pointer.
 
 ## Records
@@ -69,10 +69,10 @@ The boot hook writes the record once after the loads (the boot counter's single-
 bytes. A card made by the store builder has a zero map, so a fresh card gets 16, 17, ... in load order. `DKRT_ASSIGN` (peekable) holds the boot's table; `dkupload modules`
 and the MODULES command show each module's assigned types. Scenario: `sticky-types`.
 
-## Reserved rows (patch time, `core/dynreg`)
+## Reserved rows (patch time, `core/rows`)
 
-`core/dynreg` requires `core/runtime`, `core/machines` and `core/rows`. It adds ordinary registry entries (so nothing in the frameworks changes
-and an image without `core/dynreg` is byte-identical to before):
+`core/rows` requires `core/runtime`, `core/rows` and `core/rows`. It adds ordinary registry entries (so nothing in the frameworks changes
+and an image without `core/rows` is byte-identical to before):
 
 | What | How many | Where | Looks like |
 | --- | --- | --- | --- |
@@ -81,19 +81,18 @@ and an image without `core/dynreg` is byte-identical to before):
 | page rows (Digitone II) | 8: `pages.dpg0.index` ... `dpg7` | `pages.rows` (84 bytes each) | empty name and title, no knobs, level 10, and a `machine` no type has (0x7fffffff; not -1, which a track without a sound reads) |
 
 So the machine tables span types 7 to 23 (`machines.count` 17): `mf_names`, `mf_permit`, `mf_pertype`, the DSP selector block, the persistence bound
-(`8 + N`), the name, permission and per-type bounds. The run-time type numbers 16 to 23 are the range of `types.toml` (`dynamic_first = 16`; `core/dynreg:dyn16 ...
+(`8 + N`), the name, permission and per-type bounds. The run-time type numbers 16 to 23 are the range of `types.toml` (`dynamic_first = 16`; `core/rows:dyn16 ...
 dyn23` hold the reservation); a patched machine never takes one, and the runtime picks a number from the range for each run-time machine at load. Numbers 10 to 15 are plain gap rows.
 
-`core/dynreg` exports `dynreg_info`, a table of the addresses and layouts the registry needs (`dynreg.s`, 264 bytes since version 2): the machine rows and their
+`core/rows` exports `rows_info`, a table of the addresses and layouts the registry needs (`rows-info.inc`; the words keep the numbers of the former `dynreg_info`, and the parameter blocks and capacity words follow them): the machine rows and their
 field offsets, the name, permission and per-type tables, the parameter table and registry rows, the first reserved type and parameter code, how to
 build a parameter row (a spec of 15 words: copy template word n, or min, max, default, name, short, mirror index, kind word, 0x80 + slot), the knob
-count, and from byte 200 the page rows and their layout and the value of a free page row. Words 192, 196 and 244 to 256 (the view variable and builder, the three firmware functions of the unload refusal and the track count) are 0 since the archive commit; the offsets stay. The runtime links to it with `[object] optional = ["dynreg_info"]` (patchkit resolves an optional
-undefined symbol to 0 when no selected module defines it); without `core/dynreg` a file with `register` records is refused (`E_NO_REGISTRY`) and a
+count, and from byte 200 the page rows and their layout and the value of a free page row. Words 48, 49 and 61 to 64 (the view variable and builder, the firmware functions of the unload refusal and the track count) are not used; the offsets stay (the machine selection view is `machine_view` of `core/ui`). The services find the table with `CoreApi::info`; without `core/rows` a file with `register` records is refused (`E_NO_REGISTRY`) and a
 file without records loads as before. The runtime's code names no device: the layouts are data.
 
 ## What is derived state, and how it is kept right
 
-The machine framework builds tables lazily (`mf_ensure`: list order, rank pairs, std::string representations of the upper-cased names) and the firmware
+The machine framework built tables lazily (`mf_ensure`: list order, rank pairs, std::string representations of the upper-cased names; the machines service builds them now: `services/machines/src/list.rs`, `registry.rs`) and the firmware
 builds more from them. What was found, and what the registry does (evidence in finding 30):
 
 | State | Who reads it | What the registry does |
@@ -155,7 +154,7 @@ effect-row order. Facts of the firmware and the measurements are in `docs/findin
 
 ## Digitone II
 
-Same rows and order, with differences that are data in `dynreg_info` or code in `core/machines` already:
+Same rows and order, with differences that are data in `rows_info` or code in `core/rows` already:
 
 - The machine's knobs are in its page rows (`pages`), read by the type maps; the machine row's `f0..f8` fields are not used for knobs (the PAGE record carries them).
 - No per-type byte table and no clone tests; the descriptor of a machine is its row; `own_dsp` is the row's `O_OWN`.

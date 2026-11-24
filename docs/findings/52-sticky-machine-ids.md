@@ -34,7 +34,7 @@ P3b-2 of the module SDK (docs/design/module-sdk.md 11.5 D7). Marks as in AGENTS.
 track 1 still said 18. **[D]** (seen on the device by Em; the cause read from `assign.rs`).
 
 **What.** A manifest may give a run-time machine a preferred number per device (`[machine.dt2] type_hint = 18`, or `type_hint` in a `[[machine]]` that has `devices`). The pack checks it against the
-device's range (16 to 23, `core/machines` types.toml) and writes it in the low byte of the machine key (`hash24 << 8 | hint`); the page and DSP voice records carry the same key; `dkm-info` prints
+device's range (16 to 23, `core/rows` types.toml) and writes it in the low byte of the machine key (`hash24 << 8 | hint`); the page and DSP voice records carry the same key; `dkm-info` prints
 `h<hash>+<hint>`. New modules leave it out. The hints set: Digitakt dyn-xslice `xslice_d` 16, dyn-params `dynp` 17, dyn-pluck `pluck` 18, dyn-dsp-hang `hang` 19, dyn-guard-nan `guardnan` 20;
 Digitone dyn-dn2 `dyn_pluck` 16, dyn-pluck `pluck` 17, dyn-guard-nan `guardnan` 18 (the numbers of `[<dev>.dynamic]` before P3b-2, no clash on a device). **[D]**
 

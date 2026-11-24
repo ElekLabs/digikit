@@ -1,4 +1,4 @@
-"""core/machines support tools: the card overlay applier and the anchor rules of the framework."""
+"""core/rows support tools: the card overlay applier and the anchor rules of the framework."""
 
 import os
 import tomllib

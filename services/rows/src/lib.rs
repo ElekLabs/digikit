@@ -1,24 +1,25 @@
 //! Parameter table rows of the run-time registry: the kind-free writers that machines, effect knobs and send knobs share
-//! (docs/design/digikit-registry.md). They read the row layout from `dynreg_info` (`inf`, the words of `dynreg::w`).
+//! (docs/design/digikit-registry.md). They read the row layout from `rows_info` (`inf`, the words of `rows_info::w`).
 //!
 //! The crate is compiled into `machines.dks` and `fx.dks`; neither service needs the other. Each writes only the rows its adapter reserves: the machines service
-//! the rows `core/dynreg` reserves (`P_DYN0` for `P_DYN_N` rows of `dynreg_info`), the fx service the rows `core/fxpages` reserves (`P_FIRST` for 9 per effect row and
+//! the rows `core/rows` reserves (`P_DYN0` for `P_DYN_N` rows of `rows_info`), the fx service the rows `core/fxpages` reserves (`P_FIRST` for 9 per effect row and
 //! the send rows from `P_SEND` of `fxpages_info`). The two blocks of the one parameter table are disjoint (an assembly test reads both tables of the image).
 #![no_std]
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::{cstr_len, iw, wr32, FwMem};
 pub mod builder;
-pub mod dynreg;
-use dynreg::{w, MACH_TEXT};
+pub mod rows_info;
+use rows_info::{w, MACH_TEXT};
 
-/// `DYNR`, the first word of `dynreg_info`.
-pub const DYNREG_MAGIC: u32 = 0x4459_4e52;
+/// `ROWS`, the first word of `rows_info`, and the version of the layout this crate reads (2: the machine and page rows; 1 had the parameter rows only).
+pub const ROWS_MAGIC: u32 = 0x524f_5753;
+pub const ROWS_VERSION: u32 = 2;
 
-/// The words of `dynreg_info` (`dynreg::w`), the table `core/dynreg` exports to the image's info table (`CoreApi::info`); null when the image has no such
+/// The words of `rows_info` (`rows_info::w`), the table `core/rows` exports to the image's info table (`CoreApi::info`); null when the image has no such
 /// table or it is not one.
-pub unsafe fn dynreg<C: CoreApi>(core: &C) -> *const u32 {
-    let t = core.info(dkneeds::keys::name_hash("dynreg_info"));
-    if t.is_null() || iw(t, w::MAGIC) != DYNREG_MAGIC {
+pub unsafe fn rows_info<C: CoreApi>(core: &C) -> *const u32 {
+    let t = core.info(dkneeds::keys::name_hash("rows_info"));
+    if t.is_null() || iw(t, w::MAGIC) != ROWS_MAGIC || iw(t, w::VERSION) != ROWS_VERSION {
         return core::ptr::null();
     }
     t
@@ -156,7 +157,7 @@ pub unsafe fn reset_param_row(m: &impl FwMem, inf: *const u32, code: u32) {
     );
 }
 
-/// The address in the RAM copy of the parameter table (`P_TABLE` of `dynreg_info`) of the stock row at `row`, where `table` is the address of the stock table (both firmware
+/// The address in the RAM copy of the parameter table (`P_TABLE` of `rows_info`) of the stock row at `row`, where `table` is the address of the stock table (both firmware
 /// addresses, resolved by the port file). `None` for a null `inf` or table, a row that is not on a row boundary of the stock table, and a row at or above `P_FIRST`: only a
 /// stock row has a stock address, the rows from `P_FIRST` on belong to the registry's writers.
 unsafe fn stock_row(inf: *const u32, table: u32, row: u32) -> Option<u32> {
@@ -257,8 +258,8 @@ mod tests {
         t[w::P_TABLE] = 0x8000;
         t[w::PF_SIZE] = 60;
         t[w::P_FIRST] = 100;
-        core.set_dynreg(t);
-        let inf = unsafe { dynreg(&core) };
+        core.set_rows_info(t);
+        let inf = unsafe { rows_info(&core) };
         let row = |code: u32| 0x1000 + 60 * code;
         unsafe {
             core.wr(0x8000 + 60 * 79 + 8, 0);
@@ -284,8 +285,8 @@ mod tests {
         t[w::P_TABLE] = 0x8000;
         t[w::PF_SIZE] = 60;
         t[w::P_FIRST] = 100;
-        core.set_dynreg(t);
-        let inf = unsafe { dynreg(&core) };
+        core.set_rows_info(t);
+        let inf = unsafe { rows_info(&core) };
         unsafe {
             // a registry row (code 100), a row off the 60-byte grid, below the table, no stock table
             for row in [0x1000 + 60 * 100, 0x1000 + 61, 0x0fff] {

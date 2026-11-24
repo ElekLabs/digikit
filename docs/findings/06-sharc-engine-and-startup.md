@@ -5683,7 +5683,7 @@ gate or note-on edge of its own (the frame carries none: pitch and velocity word
 cleared; the voice records at `0x241298 + ...` change at a trig but their flags stay set). A routine that needs the
 edge (a string) can use a change of the slot's pitch or velocity word (a second note goes to the next slot, so this
 works for 16 notes and then fails for a repeated note) **[O]**.
-The type words reach the DSP as the ColdFire sends them: `core/machines` on the Digitone II sends a clone of FM TONE as
+The type words reach the DSP as the ColdFire sends them: `core/rows` on the Digitone II sends a clone of FM TONE as
 type 0 (the engine renders it), a machine with `own_dsp = true` with its own number (finding 02).
 
 **Evidence** (`tools/patchkit/pk_proof_voice_dn2.py`; the proof starts every case from `restart`, TRIG 1 held for 1 s):

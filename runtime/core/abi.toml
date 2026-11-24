@@ -497,7 +497,7 @@ fields = [
     "u32 keep_base // [digikit] keep_base: RAM a soft reset is assumed to keep (the crash record)",
     "u32 keep_bytes // [digikit] keep_bytes",
     "u32 dsp_block_cycles // [board] dsp_clock_hz / dsp_blocks_per_second, rounded (0 without DEV_HAS_DSP)",
-    "u32 dyn_type_first // core/machines types.toml dynamic_first",
+    "u32 dyn_type_first // core/rows types.toml dynamic_first",
     "u32 dyn_types // run-time machine types (0 without DEV_HAS_DSP)",
     "u32 tracks // [digikit] tracks: the tracks of the device (0: not given)",
     "u32 key_codes[DEV_KEYS] // [input.keys]: the id of each logical key in the firmware's key events, indexed by the key's number (0: the device has no such key)",

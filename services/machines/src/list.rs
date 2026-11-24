@@ -1,4 +1,4 @@
-//! The machine list the firmware's list builder copies, and the rank pairs its sort comparator takes (RC4-3; they were `mf_ensure` of the image point).
+//! The machine list the firmware's list builder copies, and the rank pairs its sort comparator takes (RC4-3; they were `mf_ensure` of the image point), and the copy at the end of the list getter that leaves out the reserved rows with no name (RC4-4; it was `dynreg_copy`).
 //!
 //! The firmware builds the list of machine types once, from a buffer of types: the stock order with every entry of the registry inserted at its `position` (a position
 //! above the length is the end; position `0xffff_ffff` is a gap row, a number nobody selected, which the list does not show). `start` builds both tables here; the four
@@ -7,6 +7,7 @@
 //! `build` is pure; `from_image` reads the rows through the core.
 use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
+use dkrt_abi::mem::FwMem;
 
 /// The most machine types the list holds: the registry's `max` of 32 and the stock types.
 pub const MAX_TYPES: usize = 64;
@@ -84,6 +85,60 @@ pub unsafe fn from_image<C: CoreApi>(
     let n = build(&s[..first_n], &p[..count_n], first, list, rank);
     core::ptr::write_volatile(addr_of_mut!(DKRT_MF_RANKN), n as u32);
     Some(n)
+}
+
+/// The offset of the name pointer in a registry row (the field order of the machines registry in `runtime/platform/rows/module.toml`: `o_name` of `rows_info`).
+const O_NAME: u32 = 56;
+
+/// The registry words the list copy needs: the rows (`first`, `rows`, `row_size`) and the reserved types (`dyn0`, `dyn_n`).
+#[derive(Clone, Copy)]
+pub struct Reserved {
+    pub first: u32,
+    pub rows: u32,
+    pub row_size: u32,
+    pub dyn0: u32,
+    pub dyn_n: u32,
+}
+
+impl Reserved {
+    /// The words of the bound table `DKRT_MF_TAB`.
+    ///
+    /// # Safety
+    /// `bind` has run.
+    pub unsafe fn bound() -> Reserved {
+        let t = addr_of!(crate::info::DKRT_MF_TAB) as *const u32;
+        let word = |i: usize| core::ptr::read_volatile(t.add(i));
+        Reserved {
+            first: word(crate::info::w::FIRST),
+            rows: word(crate::info::w::ROWS),
+            row_size: word(crate::info::w::ROW_SIZE),
+            dyn0: word(crate::info::w::DYN0),
+            dyn_n: word(crate::info::w::DYN_N),
+        }
+    }
+}
+
+/// The copy at the end of the firmware's machine list getter (`std::copy(begin, end, dest)`, result the end of the copy): the types of `begin .. end` go to `dest` except those of
+/// the reserved rows that no module has filled (a row whose name is empty), so a gap row is not in the list the caller gets. Returns the end of the copy.
+///
+/// # Safety
+/// `begin .. end` is a vector of types, `dest` has room for as many, and the rows of `t` are the registry's.
+pub unsafe fn copy_listed(m: &impl FwMem, t: &Reserved, begin: u32, end: u32, dest: u32) -> u32 {
+    let (mut from, mut to) = (begin, dest);
+    while from < end {
+        let ty = m.rd(from);
+        from += 4;
+        if ty.wrapping_sub(t.dyn0) < t.dyn_n {
+            let row = t.rows + (ty - t.first) * t.row_size;
+            // an empty name: the row is free, leave the type out
+            if m.rd8(m.rd(row + O_NAME)) == 0 {
+                continue;
+            }
+        }
+        m.wr(to, ty);
+        to += 4;
+    }
+    to
 }
 
 /// The address of the list buffer and its size in bytes for `types` entries (the values of the list patches).

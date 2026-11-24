@@ -2411,8 +2411,8 @@ fn a_machine_index_that_the_keys_table_lacks_is_refused_with_e_decl_id_and_leave
             assert_eq!(Keys::parse(&table_of(&packed(*dev, SINE.leaf, "dkm", SINE.nx))).unwrap().keys_of(dkneeds::KIND_MACHINE).count(), 1, "the fixture has one machine key");
             swap_module(&mut l, 0, SINE.leaf, without_dsp(*dev, &SINE));
             // the machines service reads the image's registry table through the core
-            let dynreg = image.words("dynreg_info");
-            let _reg = crate::package::cleanup_tests::DynregInfoGuard::set(dynreg.as_ptr());
+            let rows_words = image.words("rows_info");
+            let _reg = crate::package::cleanup_tests::RowsInfoGuard::set(rows_words.as_ptr());
             l.m.init_calls = std::vec![Builder::Machine(1)];
             l.m.real_rows = true;
             let _dsp = dsp_env(*dev, &l, &plan);
@@ -2443,9 +2443,9 @@ fn a_machine_declared_beyond_its_uses_is_refused_with_e_decl_uses_and_leaves_not
             put(&mut f, item as u32 + 4, 0);
             swap_module(&mut l, 0, SINE.leaf, f);
             // the image lists the first words of the table; the machines service reads the profile words after them, which are zero here instead of what follows the vector in memory
-            let mut dynreg = image.words("dynreg_info");
-            dynreg.resize(128, 0);
-            let _reg = crate::package::cleanup_tests::DynregInfoGuard::set(dynreg.as_ptr());
+            let mut rows_words = image.words("rows_info");
+            rows_words.resize(128, 0);
+            let _reg = crate::package::cleanup_tests::RowsInfoGuard::set(rows_words.as_ptr());
             l.m.init_calls = std::vec![Builder::Machine(0)];
             l.m.real_rows = true;
             let _dsp = dsp_env(*dev, &l, &plan);

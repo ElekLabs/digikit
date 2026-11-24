@@ -167,7 +167,7 @@ pub unsafe fn remove<C: CoreApi>(core: &C, owner: u8) {
             while j < WORDS {
                 dkrt_svc_rows::reset_param_row(
                     core,
-                    dkrt_svc_rows::dynreg(core),
+                    dkrt_svc_rows::rows_info(core),
                     iw(inf, w::P_FIRST) + (k * WORDS + j) as u32,
                 );
                 s.cur[k][j] = 0;

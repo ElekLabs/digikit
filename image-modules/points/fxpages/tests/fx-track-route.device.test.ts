@@ -94,7 +94,7 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
           expect(row[0]).not.toBe(0xffffffff);
           expect(row.slice(18, 23)).toEqual([1, 0, 0, 0, 0]);
           const info = sym('fxpages_info');
-          const registry = sym('dynreg_info');
+          const registry = sym('rows_info');
           const [regRows, regSize, regFirst, templateOffset] = await Promise.all(
             [21, 22, 23, 28].map((index) => word(session, registry + index * 4)),
           );

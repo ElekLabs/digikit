@@ -1,6 +1,6 @@
 | machines.dks, the hooks both devices share: the machine page's draw, code, key and turn entries. Each continues in the stock code through the tail the port file makes
 | (`dk_tail_<hash of the hook>`) and leaves as `rts` through `jmp mf_ret_*` (`dk_ret_<hash>`; the aliases are the `[object.externs]` of module.toml), so the routines hold no
-| firmware bytes and one routine serves both devices. `DKRT_MF_TAB` is the image table `machines_info` (`info.rs`).
+| firmware bytes and one routine serves both devices. `DKRT_MF_TAB` holds the registry words of the image's `rows_info` (`info.rs`).
 
     .text
     .balignw 4, 0x4e71

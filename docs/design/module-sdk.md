@@ -10,7 +10,7 @@ Related: `docs/plans/digikit-runtime.md` (Phase 11), `docs/design/digikit-dkm.md
 
 | Kind | Example | What it is | Loaded how |
 | --- | --- | --- | --- |
-| framework | `core/runtime`, `core/dynreg`, `core/dyndsp`, `core/dsp-link`, `core/dsp-voice`, `core/machines`, `core/rows` | has firmware hooks, anchor rules, patch ops | patched into the image (`modules/core/*/module.toml`) |
+| framework | `core/runtime`, `core/rows`, `core/dyndsp`, `core/dsp-link`, `core/dsp-voice`, `core/rows`, `core/rows` | has firmware hooks, anchor rules, patch ops | patched into the image (`modules/core/*/module.toml`) |
 | content, patched in | `test/patched-pluck`, `test/xslice` | machine rows and a DSP routine, placed by patchkit | patched into the image |
 | content, run time | `digikit/pluck`, `test/dyn-xslice` | the same machine as a `.dkm` (`dynamic = true`) | `dkrt_load` at boot (`docs/design/digikit-runtime.md:161-183`) |
 | ColdFire tool | `test/c-demo`, `test/rust-demo` | the constant `dk_module` with `init`, `fini`, `tick`, `menu` (`docs/MODULES.md`) | `.dkm` |
@@ -72,7 +72,7 @@ Both devices block: 32 samples per call, 1500 blocks per second (`devices/*.toml
 | --- | --- | --- |
 | module records (name, base, size, slot mask, store path) | `State.modules`, `DKRT_PATHS` (`modules/core/runtime/src/rs/src/lib.rs:75-99`) | `MAX_MODULES = 8` (`lib.rs:39`) |
 | ColdFire arena | first fit, 16-byte blocks, `DKRT_ARENA` in bss (`arena.rs:1-22`) | `ARENA_BYTES` 512 KiB, `STAGE_BYTES` 128 KiB (`lib.rs:36-38`); the same on both devices |
-| run-time machine types | `core/dynreg` reserves rows 16-23 (`digikit-registry.md:42-50`) | 8 machine rows, 16 parameter rows, 8 page rows (DN2) (`:117-119`) |
+| run-time machine types | `core/rows` reserves rows 16-23 (`digikit-registry.md:42-50`) | 8 machine rows, 16 parameter rows, 8 page rows (DN2) (`:117-119`) |
 | voice rows (DSP) | `voices.rows` of `core/dsp-voice`, 16 words each (`module.toml` of dsp-voice :63-136) | at most 16 registered types (:63-68); run-time types 16-23 (`dsp.rs:23`, `types.toml:20-22`) |
 | DSP placement | `DKRT_DSP.mod_off/mod_len`, first fit, 64-byte granules, aligned (`dsp.rs:27, 260-285, 474`) | `dsp_area_bytes`: DT2 524288, DN2 327680 (`digitakt-ii.toml:94`, `digitone-ii.toml:88`) |
 | slots | 8 function pointers; slot 0 per UI pass (`digikit-runtime.md:87-94`) | 8 |
@@ -469,7 +469,7 @@ Not in SDK v1. The aim is that v1 does not make it harder.
 | --- | --- |
 | built | load and unload while the firmware runs, run-time machines on both devices, DSP code with atomic voice rows, unload refusal while a track uses the type (emulator only) (`docs/plans/digikit-hot-reload.md:8-22`) |
 | commits | tag `digikit-hot-reload-v1` = `928dc1d3` (2026-10-17); switch to boot-time loading `e8b3a04f`; hot-only code removed by `a12048c4` "digikit runtime: archive hot reload" (2026-10-17); `git revert a12048c4` restores it (`digikit-hot-reload.md:3-5, 24`) |
-| what was removed | `dkrt_unload`, the in-use scan, the machine-view rebuild, the load queue, the run-time DSP load path, four `core/dynreg` anchors and the view hook (`:24-47`) |
+| what was removed | `dkrt_unload`, the in-use scan, the machine-view rebuild, the load queue, the run-time DSP load path, four `core/rows` anchors and the view hook (`:24-47`) |
 | why set aside | decision 9 (`plans/digikit-runtime.md:41-47`): a load under an open, playing project needs a transport guard, an in-use scan of the whole project, write ordering under concurrent readers and a soak; a restart removes the class. Em agreed; "may return later, first for code-only modules" |
 | still needed | the seven items of the 2026-10-17 risk review (`digikit-hot-reload.md:49-62`) |
 

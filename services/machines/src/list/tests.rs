@@ -77,3 +77,56 @@ fn from_image_refuses_a_registry_that_does_not_fit_or_a_missing_stock_list() {
     assert!(unsafe { from_image(&core, 0, 7, 1, 0x4701_0000, 64, 48) }.is_none());
     assert!(unsafe { from_image(&core, 0x4700_0000, 40, 30, 0x4701_0000, 64, 48) }.is_none());
 }
+
+/// The list getter's copy leaves out the reserved rows that have no name, keeps the stock types and the filled rows, in order, and answers the end of what it wrote.
+#[test]
+fn the_list_copy_leaves_out_the_reserved_rows_that_have_no_name() {
+    use dkrt_test_support::FakeCore;
+    let core = FakeCore::new();
+    // types 0 .. 4 stock, 5 and 6 gap rows of the registry that are not reserved, 7 .. 9 reserved: 7 and 9 filled, 8 free
+    let t = Reserved {
+        first: 5,
+        rows: 0x4700_0000,
+        row_size: 64,
+        dyn0: 7,
+        dyn_n: 3,
+    };
+    let (empty, filled) = (0x4702_0000u32, 0x4702_0010u32);
+    let mut mem = core.mem.borrow_mut();
+    mem.insert(empty, 0);
+    mem.insert(filled, 0x5000_0000);
+    for (k, name) in [
+        (0u32, empty),
+        (1, empty),
+        (2, filled),
+        (3, empty),
+        (4, filled),
+    ] {
+        mem.insert(t.rows + k * 64 + 56, name);
+    }
+    let list = [3u32, 0, 1, 2, 4, 5, 7, 8, 9, 6];
+    for (i, ty) in list.iter().enumerate() {
+        mem.insert(0x4710_0000 + 4 * i as u32, *ty);
+    }
+    drop(mem);
+    // `rd8` of the fake reads the byte of the word
+    let end = unsafe {
+        copy_listed(
+            &core,
+            &t,
+            0x4710_0000,
+            0x4710_0000 + 4 * list.len() as u32,
+            0x4720_0000,
+        )
+    };
+    let got: Vec<u32> = (0..(end - 0x4720_0000) / 4)
+        .map(|i| core.mem.borrow()[&(0x4720_0000 + 4 * i)])
+        .collect();
+    // 5 and 6 are rows of the registry but not reserved: kept even though their names are empty; 8 is reserved and free: left out
+    assert_eq!(got, [3, 0, 1, 2, 4, 5, 7, 9, 6]);
+    // nothing to copy
+    assert_eq!(
+        unsafe { copy_listed(&core, &t, 0x4710_0000, 0x4710_0000, 0x4720_0100) },
+        0x4720_0100
+    );
+}

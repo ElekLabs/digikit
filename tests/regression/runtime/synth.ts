@@ -129,9 +129,10 @@ function abiConst(name: string): number {
 
 /** `dynamic_first ..= last` of the device in the machines `types.toml`: the run-time machine type numbers. */
 export function dynamicRange(device: Device): [number, number] {
-  const types = parse(
-    fs.readFileSync(path.join(repoRoot(), 'image-modules/points/machines/types.toml'), 'utf8'),
-  ) as Record<string, { dynamic_first: number; last: number }>;
+  const types = parse(fs.readFileSync(path.join(repoRoot(), 'runtime/platform/rows/types.toml'), 'utf8')) as Record<
+    string,
+    { dynamic_first: number; last: number }
+  >;
   return [types[device]!.dynamic_first, types[device]!.last];
 }
 

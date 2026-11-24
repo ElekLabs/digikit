@@ -7,7 +7,7 @@ role = "adapter"
 type = "framework"
 author = "digikit"
 status = "experimental"
-summary = "The parameter rows of the Digitakt II and Digitone II MAIN OS: a copy of the parameter table with one row appended per parameter (descriptors: names, range, default, formatter), every reader repointed and bounded, and the reserved rows that their owners fill, in numbered blocks (rows_info)"
+summary = "The rows of the Digitakt II and Digitone II MAIN OS that run-time modules fill: the parameter table with one row appended per parameter, the machine types (rows, names, permissions, per-type bytes, the dispatch of a type) and the Digitone II page rows, reserved in the image, with one table that says where they are (rows_info)"
 requires = []
 conflicts = []
 
@@ -44,7 +44,7 @@ conflicts = []
 [[gen]]
 kind = "gas"
 path = "build/gen/device-{dev}.inc"
-uses = ["DEVICE_ID", "ROWS_*"]
+uses = ["DEVICE_ID", "DYN_TYPES", "ROWS_*", "PROFILE_*"]
 
 [targets]
 "dt2-1.17" = "experimental"
@@ -373,6 +373,16 @@ _rw_count = "params.count"
 _rw_b1 = "params.dp0.index"
 _rw_b2 = "params.fp0.index"
 _rw_b3 = "params.fs0.index"
+_rw_m_rows = "machines.rows"
+_rw_m_row_size = "machines.row_size"
+_rw_m_first = "machines.first"
+_rw_m_count = "machines.count"
+_rw_m_entries = "machines.entries"
+_rw_m_dyn0 = "machines.dyn16.index"
+_rw_names = "mf_names"
+_rw_permit = "mf_permit"
+_rw_list_stock = "mf_list_stock"
+_rw_pertype = "mf_pertype"
 
 [[object]]
 path = "build/rows-info-dn2.dko.json"
@@ -389,6 +399,21 @@ _rw_count = "params.count"
 _rw_b1 = "params.dp0.index"
 _rw_b2 = "params.fp0.index"
 _rw_b3 = "params.fs0.index"
+_rw_m_rows = "machines.rows"
+_rw_m_row_size = "machines.row_size"
+_rw_m_first = "machines.first"
+_rw_m_count = "machines.count"
+_rw_m_entries = "machines.entries"
+_rw_m_dyn0 = "machines.dyn16.index"
+_rw_names = "mf_names"
+_rw_permit = "mf_permit"
+_rw_list_stock = "mf_list_stock"
+_rw_reader_real = "mf_reader_real"
+_rw_pg_rows = "pages.rows"
+_rw_pg_row_size = "pages.row_size"
+_rw_pg_first = "pages.first"
+_rw_pg_dyn0 = "pages.dpg0.index"
+_rw_pg_count = "pages.count"
 
 # The table of this module, in the image's info table (`dkrt_info_table`), and the capacity limits it reserves, as `cap_<kind>` entries: the admission
 # requires these exact names (the kinds of `[capacity.kinds]` in sdk/sdk.toml) and finds the limit of a kind there; each
@@ -399,25 +424,649 @@ devices = ["dt2", "dn2"]
 
 [[info]]
 name = "cap_machine_rows"
-symbol = "rows_info + 156"
+symbol = "rows_info + 424"
 devices = ["dt2", "dn2"]
 
 [[info]]
 name = "cap_param_rows"
-symbol = "rows_info + 160"
+symbol = "rows_info + 428"
 devices = ["dt2", "dn2"]
 
 [[info]]
 name = "cap_page_rows"
-symbol = "rows_info + 164"
+symbol = "rows_info + 432"
 devices = ["dt2", "dn2"]
 
 [[info]]
 name = "cap_send_slots"
-symbol = "rows_info + 168"
+symbol = "rows_info + 436"
 devices = ["dt2", "dn2"]
 
 # ---- anchor rules -------------------------------------------------------------------------------------------------------
 
 
 # ---- anchor rules (Digitone II) -------------------------------------------------------------------------------------------------------
+
+# ======================================================================================================================
+# Machine types and the Digitone II page rows
+# ======================================================================================================================
+
+# ---- the registry --------------------------------------------------------------------------------------------------
+
+[[registry]]
+name = "machines"
+first = "image.u8(cf.machine.fn.dispatch + 1) + 1"   # `moveq #last,D1` of the dispatch: the stock type count
+max = 32
+region = "cf.expansion"
+# Permanent type numbers (types.toml, finding 02 "Stable machine type numbers"): a machine's type is its number in that
+# table, never "the k-th selected machine". A number nobody selected is a gap row: a clone of type 0 that the machine
+# list does not show (position 0xffffffff) and nobody can pick; a stored project that names it plays as type 0.
+index_table = "types.toml"
+# A machine is a run-time module: machines.dks (R12-6) acts on its rows, and nothing loads that file for a patched-in row. patchkit refuses an [[entry]] of this registry.
+refuse_entries = "a machine is a run-time module (builder calls in init, packed as a .dkm); machines.dks needs a module that names the service"
+# core/rows reserves the rows that run-time machines fill (below).
+refuse_entries_except = ["core/rows"]
+
+[registry.gap]
+clone_of = 0
+position = 0xffffffff
+own_dsp = 0
+name = ""
+short = ""
+
+# 0, 1: the dispatch descriptor's long and short name (std::string characters), built at run time from name and short
+[[registry.field]]
+name = "d_long"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "d_short"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "f0"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "f1"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "f2"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "f3"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "f4"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "f5"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "f6"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "f7"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "f8"
+kind = "u32"
+default = 10
+[[registry.field]]
+name = "clone_of"
+kind = "u32"
+[[registry.field]]
+name = "position"
+kind = "u32"
+default = 255
+[[registry.field]]
+name = "own_dsp"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "name"
+kind = "cstr"
+max_len = 23
+[[registry.field]]
+name = "short"
+kind = "cstr"
+max_len = 23
+
+[[claim]]
+resource = "cf.machines.sites"
+
+# ---- own parameter pages (Digitone II) ---------------------------------------------------------------------------
+
+# One row per page of a machine with its own parameter pages (the page table of the firmware has a page descriptor of 44
+# bytes per page: two std::string characters pointers and nine parameter codes, the last one 10 = the track level).
+# Content modules add pages with
+#
+#     [[entry]]
+#     registry = "pages"
+#     machine = "machines.pluck.index"   # the type the page belongs to (pages are numbered in entry order)
+#     name = "PLUCK"                     # the short page name (SYN1 ...), at most 23 characters
+#     title = "Pluck"                    # the title shown on the page
+#     c0 = "params.pluck_decay.index"    # knob A .. H: a parameter code (a core/rows code, or a stock code); 0 = no knob
+#     s0 = 25                            # the sound-array slot (25 .. 64) of that code's row: slot -> code for the defaults
+#     ...                                # c8 = 10 (track level) by default
+#
+# A machine with at least one page gets: its own page count and descriptors, its own slot -> code mapping, and the page
+# and draw functions see its own type (not the clone's). A machine without a page row behaves as a clone.
+[[registry]]
+name = "pages"
+devices = ["dn2"]
+first = "0"
+max = 32
+region = "cf.expansion"
+
+[[registry.field]]
+name = "name"
+kind = "cstr"
+max_len = 23
+[[registry.field]]
+name = "title"
+kind = "cstr"
+max_len = 23
+[[registry.field]]
+name = "c0"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "c1"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "c2"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "c3"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "c4"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "c5"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "c6"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "c7"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "c8"
+kind = "u32"
+default = 10
+[[registry.field]]
+name = "machine"
+kind = "u32"
+[[registry.field]]
+name = "s0"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "s1"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "s2"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "s3"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "s4"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "s5"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "s6"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "s7"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "s8"
+kind = "u32"
+default = 0
+
+# ---- copies of the stock tables, one row appended per machine (the clone's row; names are ours) -------------------------
+
+# the displayed order of the stock list (the run-time builder inserts the machines at their positions)
+[[section]]
+name = "mf_list_stock"
+region = "cf.expansion"
+from = { anchor = "cf.machine.data.list.table", len = "(image.u8(cf.machine.fn.dispatch + 1) + 1) * 4" }
+
+# name table: {long, short, header hint} per type
+[[section]]
+name = "mf_names"
+region = "cf.expansion"
+from = { anchor = "cf.machine.data.name.table", len = "(image.u8(cf.machine.fn.dispatch + 1) + 1) * 12" }
+append = { registry = "machines", row = ["$name", "$short", "image.u32(cf.machine.data.name.table + 12 * $clone_of + 8)"] }
+
+# permission mask per type
+[[section]]
+name = "mf_permit"
+region = "cf.expansion"
+from = { anchor = "cf.machine.data.permit.table", len = "(image.u8(cf.machine.fn.dispatch + 1) + 1) * 4" }
+append = { registry = "machines", row = ["image.u32(cf.machine.data.permit.table + 4 * $clone_of)"] }
+
+# one byte per type (Digitakt II only)
+[[section]]
+name = "mf_pertype"
+region = "cf.expansion"
+devices = ["dt2"]
+from = { anchor = "cf.machine.data.pertype.table", len = "(image.u8(cf.machine.fn.dispatch + 1) + 1)" }
+append = { registry = "machines", row = ["u8:image.u8(cf.machine.data.pertype.table + $clone_of)"] }
+
+# the type reader of the Digitone II, copied: its callers that want the real type call this copy (the service's native pages read the type of a sound with it: `rows_info`)
+[[section]]
+name = "mf_reader_real"
+region = "cf.expansion"
+devices = ["dn2"]
+from = { anchor = "cf.machine.fn.type_reader", len = 48 }
+
+# ---- the dispatch ---------------------------------------------------------------------------------------------------
+
+[[object]]
+path = "build/machines-dt2.dko.json"
+sources = ["src/cf/machines-dt2.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[object.externs]
+_mf_first = "machines.first"
+_mf_count = "machines.count"
+_mf_rows = "machines.rows"
+_mf_t_dispatch = "hook.cf.machine.fn.dispatch.tail"
+
+[[object]]
+path = "build/machines-dn2.dko.json"
+sources = ["src/cf/machines-dn2.s"]
+place = "cf.expansion"
+devices = ["dn2"]
+
+[object.externs]
+_mf_first = "machines.first"
+_mf_count = "machines.count"
+_mf_rows = "machines.rows"
+_mf_t_dispatch = "hook.cf.machine.fn.dispatch.tail"
+
+# ---- patches: hooks (code in the objects above), bound writes and repointed table references ------------------------
+
+# dispatch: the descriptor of an added type is its registry row
+
+[[op]]
+op = "hook"
+hook = "cf.machine.hook.dispatch"
+to = "mf_dispatch"
+devices = ["dt2"]
+
+[[op]]
+op = "hook"
+hook = "cf.machine.hook.dispatch"
+to = "mf_dispatch"
+devices = ["dn2"]
+
+# The machine list builder's buffer and its sizes (4 patches), and the rank pairs of the sort comparator, are the machines service's (services/machines): it builds them in `start` and patches the
+# list builder at load.
+
+# group (Digitakt II): SLICE and its clones; (Digitone II: a hook, below). Bound = the last type, branch `bne` -> `bcs`
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.group"
+offset = 0x1
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.group"
+offset = 0x4
+value = "0x65"
+width = 1
+devices = ["dt2"]
+
+# names: three accessors (long, short, header hint), each bounded by `moveq #last,D1`, each reading a column of the table
+[[op]]
+op = "write"
+anchor = "cf.machine.fn.name.long"
+offset = 0x1
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2", "dn2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.fn.name.long"
+offset = 0x12
+value = "mf_names + 0"
+width = 4
+devices = ["dt2", "dn2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.name.short"
+offset = 0x1
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2", "dn2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.name.short"
+offset = 0x14
+value = "mf_names + 4"
+width = 4
+devices = ["dt2", "dn2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.name.hint"
+offset = 0x1
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2", "dn2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.name.hint"
+offset = 0x14
+value = "mf_names + 8"
+width = 4
+devices = ["dt2", "dn2"]
+
+# permission mask table (bound `moveq #last,D2`)
+
+[[op]]
+op = "write"
+anchor = "cf.machine.fn.permit"
+offset = 0x3
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2", "dn2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.fn.permit"
+offset = 0x1a
+value = "mf_permit"
+width = 4
+devices = ["dt2", "dn2"]
+
+# persistence: the sound loader keeps a stored machine type when (u8)(type + 1) < the immediate
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.sound_load_type_bound"
+offset = 0x1
+value = "image.u8(cf.machine.site.sound_load_type_bound + 1) + machines.count"
+width = 1
+devices = ["dt2", "dn2"]
+
+# per-type byte (Digitakt II): six bounds and six table references
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.0"
+offset = 0x1
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.0"
+offset = 0x8
+value = "mf_pertype"
+width = 4
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.1"
+offset = 0x1
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.1"
+offset = 0xc
+value = "mf_pertype"
+width = 4
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.2"
+offset = 0x1
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.2"
+offset = 0xc
+value = "mf_pertype"
+width = 4
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.3"
+offset = 0x1
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.3"
+offset = 0x10
+value = "mf_pertype"
+width = 4
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.4"
+offset = 0x1
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.4"
+offset = 0x8
+value = "mf_pertype"
+width = 4
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.5"
+offset = 0x1
+value = "machines.first + machines.count - 1"
+width = 1
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.pertype.5"
+offset = 0x22
+value = "mf_pertype"
+width = 4
+devices = ["dt2"]
+
+# type argument of the parameter mapping (Digitakt II)
+
+# Digitone II: type maps, frame type, type reader (a hook that drops the load and does it itself), owner test
+
+[[op]]
+op = "write"
+anchor = "cf.machine.site.type_reader.tail_jump"
+offset = 0x2
+value = "mf_reader_real"
+width = 4
+devices = ["dn2"]
+
+# ---- reserved rows -------------------------------------------------------------------------------------------------------
+
+# Machines: the permanent numbers are the run-time range of types.toml (key "core/rows:dyn<N>"). The rows read as gap rows (clone of type 0, no name) until the machines service fills them.
+[[entry]]
+registry = "machines"
+id = "dyn16"
+name = ""
+short = ""
+clone_of = 0
+devices = ["dt2", "dn2"]
+
+[[entry]]
+registry = "machines"
+id = "dyn17"
+name = ""
+short = ""
+clone_of = 0
+devices = ["dt2", "dn2"]
+
+[[entry]]
+registry = "machines"
+id = "dyn18"
+name = ""
+short = ""
+clone_of = 0
+devices = ["dt2", "dn2"]
+
+[[entry]]
+registry = "machines"
+id = "dyn19"
+name = ""
+short = ""
+clone_of = 0
+devices = ["dt2", "dn2"]
+
+[[entry]]
+registry = "machines"
+id = "dyn20"
+name = ""
+short = ""
+clone_of = 0
+devices = ["dt2", "dn2"]
+
+[[entry]]
+registry = "machines"
+id = "dyn21"
+name = ""
+short = ""
+clone_of = 0
+devices = ["dt2", "dn2"]
+
+[[entry]]
+registry = "machines"
+id = "dyn22"
+name = ""
+short = ""
+clone_of = 0
+devices = ["dt2", "dn2"]
+
+[[entry]]
+registry = "machines"
+id = "dyn23"
+name = ""
+short = ""
+clone_of = 0
+devices = ["dt2", "dn2"]
+
+# Digitone II pages: one per machine at most (8). A free row names a machine no type has (0x7fffffff, not -1: a track
+# without a sound reads -1), so the page code does not see it; `pages.dpg<N>.index` is the row.
+[[entry]]
+registry = "pages"
+id = "dpg0"
+name = ""
+title = ""
+machine = 0x7fffffff
+devices = ["dn2"]
+
+[[entry]]
+registry = "pages"
+id = "dpg1"
+name = ""
+title = ""
+machine = 0x7fffffff
+devices = ["dn2"]
+
+[[entry]]
+registry = "pages"
+id = "dpg2"
+name = ""
+title = ""
+machine = 0x7fffffff
+devices = ["dn2"]
+
+[[entry]]
+registry = "pages"
+id = "dpg3"
+name = ""
+title = ""
+machine = 0x7fffffff
+devices = ["dn2"]
+
+[[entry]]
+registry = "pages"
+id = "dpg4"
+name = ""
+title = ""
+machine = 0x7fffffff
+devices = ["dn2"]
+
+[[entry]]
+registry = "pages"
+id = "dpg5"
+name = ""
+title = ""
+machine = 0x7fffffff
+devices = ["dn2"]
+
+[[entry]]
+registry = "pages"
+id = "dpg6"
+name = ""
+title = ""
+machine = 0x7fffffff
+devices = ["dn2"]
+
+[[entry]]
+registry = "pages"
+id = "dpg7"
+name = ""
+title = ""
+machine = 0x7fffffff
+devices = ["dn2"]
+

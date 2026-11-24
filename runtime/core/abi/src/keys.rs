@@ -51,7 +51,9 @@ impl KeysCopy {
         while from < d.n {
             let it = d.items[from];
             from += 1;
-            if it.tag == dkneeds::keys::tag::HOOKS && !dkneeds::keys::hook_for_device(it.b, device_id) {
+            if it.tag == dkneeds::keys::tag::HOOKS
+                && !dkneeds::keys::hook_for_device(it.b, device_id)
+            {
                 if self.nforeign < KeysCopy::FOREIGN_MAX {
                     self.foreign[self.nforeign] = (it.a, it.b & dkneeds::keys::HOOK_ENTRY_MASK);
                     self.nforeign += 1;

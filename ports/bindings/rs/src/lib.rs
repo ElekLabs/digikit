@@ -151,7 +151,7 @@ pub mod machine {
     }
 
     unsafe extern "C" {
-        /// Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/machines copies it with the added types inserted.
+        /// Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/rows copies it with the added types inserted.
         #[link_name = "cf.machine.data.list.table"]
         pub static LIST_TABLE: u8;
     }

@@ -81,12 +81,12 @@ test.skipIf(!need)('wasm and CLI produce byte-identical output for core/fx', asy
 });
 
 test.skipIf(!need)(
-  'wasm and CLI produce byte-identical output for core/machines and core/rows on each device',
+  'wasm and CLI produce byte-identical output for core/rows and core/rows on each device',
   async () => {
     const work = workDir('pk-wasm-');
     const bundle = readFileSync(writeBundle(work));
     const { x, put, get, text } = await load();
-    const mods = 'core/machines,core/rows';
+    const mods = 'core/rows,core/rows';
     for (const dev of ['dt2', 'dn2'] as const) {
       const out = join(work, `${dev}-machines.syx`);
       const plan = join(work, `${dev}-machines.plan.json`);
@@ -115,7 +115,7 @@ test.skipIf(!need)(
 );
 
 test.skipIf(!need)(
-  'wasm adds core/machines and core/rows as requirements of core/dynreg like the CLI and the plan reserves the run-time rows',
+  'wasm adds core/rows and core/rows as requirements of core/rows like the CLI and the plan reserves the run-time rows',
   async () => {
     const work = workDir('pk-wasm-');
     const { x, put, get, text } = await load();
@@ -135,7 +135,7 @@ test.skipIf(!need)(
         '--firmware',
         images[dev],
         '--modules',
-        'core/dynreg',
+        'core/rows',
         '-o',
         out,
         '--plan',
@@ -143,7 +143,7 @@ test.skipIf(!need)(
       );
       assert.match(said, /added by requires: .*core\/machines/);
       const [fp, fl] = put(readFileSync(images[dev]));
-      const [ip, il] = put(Buffer.from('core/dynreg'));
+      const [ip, il] = put(Buffer.from('core/rows'));
       assert.equal(x.pk_apply(fp, fl, bp, bl, ip, il), 0, text(x.pk_err_ptr, x.pk_err_len));
       assert.ok(
         Buffer.from(get(x.pk_out_ptr, x.pk_out_len)).equals(readFileSync(out)),

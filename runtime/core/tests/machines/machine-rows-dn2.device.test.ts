@@ -99,7 +99,7 @@ describeOn('dn2', `DN2 ${FIRMWARE.dn2} machines.dks: the own page of a run-time 
     // FUNC+SRC, five DOWN from FM TONE (the list is FM TONE, FM DRUM, WAVETONE, SWARMER, MIDI, then the first run-time machine; the hint of the round-trip test), YES, YES;
     // a TRIG sends the type to the audio side. The TRIG press is the first note since the boot: it uses voice slot 0 (round robin from 0, finding 06)
     const type = await dynType(session, run.plan, ID, 'dyn_pluck');
-    expect(type, 'a run-time type (the range of core/dynreg)').toBeGreaterThanOrEqual(16);
+    expect(type, 'a run-time type (the range of core/rows)').toBeGreaterThanOrEqual(16);
     await pickSine(rt, 5);
     await rt.ui.tap('TRIG 1', { until: { drained: true } });
     const mirror = await pollUntil(rt.clock, () => word(session, DN2_AUDIO_MIRROR_112), (w) => w >>> 24 === type, {

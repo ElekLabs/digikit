@@ -234,7 +234,7 @@ pub(super) unsafe fn value_index(inf: *const u32, k: usize, j: usize) -> u32 {
     read_volatile((inf as *const u8).add(w::INDICES + k * WORDS + j)) as u32
 }
 
-/// Whether this image can show effect pages at all (`core/fxpages` and `core/dynreg` are in it).
+/// Whether this image can show effect pages at all (`core/fxpages` and `core/rows` are in it).
 pub unsafe fn available<C: CoreApi>(core: &C) -> bool {
     !info(core).is_null()
 }

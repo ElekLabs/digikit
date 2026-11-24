@@ -130,7 +130,7 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
       ? withPreparedFxSession('dt2', 'host plain', {
           image: {
             name: image,
-            modules: ['core/runtime', 'core/dynreg', 'core/dyndsp'],
+            modules: ['core/runtime', 'core/rows', 'core/dyndsp'],
             inventory: ['test/sine'],
             symbols: ['DKRT_BOOT'],
             policy: image === 'kit' ? 'fx-kit' : 'default',
@@ -158,13 +158,13 @@ for (const image of ['routes', 'track', 'track-base', 'plain', 'kit'] as const) 
       const requestedSymbols = fake.prepare.mock.calls[0]![3];
       const requestedRoots = fake.prepare.mock.calls[0]![4].modules;
       const commonSymbols = ['DKRT_BOOT', 'fx.rows', '_dl_area'];
-      const roots = ['core/runtime', 'core/dynreg', 'core/dyndsp'];
+      const roots = ['core/runtime', 'core/rows', 'core/dyndsp'];
       const expectedSymbols = plain
         ? ['DKRT_BOOT']
         : image === 'track-base'
-          ? [...commonSymbols, 'dynreg_info']
+          ? [...commonSymbols, 'rows_info']
           : image === 'track'
-            ? [...commonSymbols, 'dynreg_info', 'fxpages_info']
+            ? [...commonSymbols, 'rows_info', 'fxpages_info']
             : [...commonSymbols, 'DKRT_HOST_DIR', 'fxpages_info'];
       expect(requestedSymbols).toEqual(expectedSymbols);
       expect(requestedRoots).toEqual([

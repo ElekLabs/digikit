@@ -1,20 +1,18 @@
-| machines.dks on the Digitakt II (1.17): the ColdFire routines the service's hooks run. They were in core/machines (`src/cf/dt2/machines.s`).
+| machines.dks on the Digitakt II (1.17): the ColdFire routines the service's hooks run. The dispatch is the image's (`runtime/platform/rows/src/cf/machines-dt2.s`).
 |
 | Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (a hook of a service is raw: no trampoline). The routine takes the whole
 | control flow of the site and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, made by
 | the port file) or, when a branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `ports/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address the port file resolves:
 | the jump changes no register or flag). The aliases `mf_x_*`, `mf_spt` are the `[object.externs]` of module.toml.
-| `DKRT_MF_TAB` is the image table `machines_info` of core/machines, copied by `setup` (lib.rs); its words give the registry rows and counts and the addresses of the
-| adapter's routines. Offsets T_* below; the same layout is in hooks-dn2.s and in `image.rs`.
+| `DKRT_MF_TAB` holds the registry words of the image's `rows_info` (core/rows), bound by `start` (`info.rs`); its words give the registry rows and counts and the address of the slot map. Offsets T_* below; the same layout is in hooks-dn2.s and in `image.rs`.
 |
 | Hook convention: registers the stock site frees are scratch (`ports/fw/machine.toml` lists them per hook); everything else a routine saves.
-| The image keeps `mf_ensure` (the tables of the registry are built once, on first use), the machine list and rank hooks, and the dispatch hook: it is the one
-| routine `mf_ensure` is called through (`mf_call_ensure`).
+| The image keeps the dispatch hook (`mf_dispatch` of core/rows: it answers a type of the registry with its row).
 
     .text
     .balignw 4, 0x4e71
 
-| row layout (bytes), the field order of core/machines' [[registry.field]]
+| row layout (bytes), the field order of core/rows' [[registry.field]]
     .equ O_CLONE,  44
     .equ ROWSIZE,  64
 
@@ -23,7 +21,7 @@
     .equ T_FIRST, 12
     .equ T_COUNT, 16
     .equ T_ROWS, 24
-    .equ T_SLOTMAP, 32
+    .equ T_SLOTMAP, 28
 
 | mfd_row: d0 = index k (< count) -> a0 = &machines.rows[k]. Preserves every other register (not the flags).
 mfd_row:

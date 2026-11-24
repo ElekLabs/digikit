@@ -20,7 +20,7 @@ const machineAdapters = [
   '{workspaceRoot}/image-modules/points/dsp-voice/**/*',
   '{workspaceRoot}/runtime/platform/dsp-link/**/*',
   '{workspaceRoot}/services/machines/dks/{dsp,build/gen}/**/*',
-  '{workspaceRoot}/image-modules/points/machines/types.toml',
+  '{workspaceRoot}/runtime/platform/rows/types.toml',
 ];
 
 const fxAdapters = [

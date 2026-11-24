@@ -9,7 +9,10 @@ fn registration_rules() {
     let reg = |t: &mut PageTable, ty, idx, mode, flags, draw, words: &[u32]| {
         t.register(ty, idx, mode, flags, b"T", draw, 1, &b, words, 0, false)
     };
-    assert!(reg(&mut t, TYPES as u32, 1, 1, 0, 1, &[]).is_err(), "type bound");
+    assert!(
+        reg(&mut t, TYPES as u32, 1, 1, 0, 1, &[]).is_err(),
+        "type bound"
+    );
     assert!(reg(&mut t, 0, 2, 1, 0, 1, &[]).is_err(), "index bound");
     assert!(reg(&mut t, 0, 1, 1, 0, 0, &[]).is_err(), "draw required");
     assert!(
@@ -123,7 +126,10 @@ fn the_table_covers_the_reserved_types_from_the_first_one() {
     let mut t = PageTable::new(16);
     let reg = |t: &mut PageTable, ty| t.register(ty, 1, 1, 0, b"T", 1, 1, &b, &[], 0, false);
     assert!(reg(&mut t, 15).is_err(), "a stock type");
-    assert!(reg(&mut t, 16 + TYPES as u32).is_err(), "past the reserved range");
+    assert!(
+        reg(&mut t, 16 + TYPES as u32).is_err(),
+        "past the reserved range"
+    );
     assert!(reg(&mut t, 16).is_ok() && reg(&mut t, 16 + TYPES as u32 - 1).is_ok());
     assert!(t.page(16, 1).is_some() && t.page(15, 1).is_none() && t.page(0, 1).is_none());
     assert_eq!(t.page_count(16, 3), 4);

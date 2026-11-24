@@ -6,7 +6,7 @@ use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_sdk::*;
 use dkrt_svc_machines::build::*;
 use dkrt_svc_machines::machines::Machines;
-use dkrt_svc_rows::dynreg::w;
+use dkrt_svc_rows::rows_info::w;
 use dkrt_test_support::FakeCore;
 use std::boxed::Box;
 use std::vec::Vec;
@@ -568,8 +568,8 @@ fn sine() -> Box<Build> {
 
 // ---- the commit over a FakeCore ------------------------------------------------------------------------------------------------------
 
-/// The words of `dynreg_info` the commit reads: the profile of `p` (version 3) and the rows the registry has (8 machines, 16 parameters, 8 pages).
-fn dynreg(p: &Profile) -> Vec<u32> {
+/// The words of `rows_info` the commit reads: the profile of `p` (version 3) and the rows the registry has (8 machines, 16 parameters, 8 pages).
+fn rows_info(p: &Profile) -> Vec<u32> {
     let mut t = std::vec![0u32; 96];
     t[w::VERSION] = 3;
     t[w::DEVICE] = p.device;
@@ -634,7 +634,7 @@ fn collect_analog(owner: &mut Machines, core: &FakeCore) {
 fn the_commit_measures_then_writes_the_same_records_declares_the_rows_and_closes_the_collection() {
     let mut owner = Box::new(Machines::new());
     let mut core = FakeCore::new();
-    core.set_dynreg(dynreg(&DT2));
+    core.set_rows_info(rows_info(&DT2));
     collect_analog(&mut owner, &core);
     let k = keys(&[KEY], (1, 2, 0));
     let mut measured = RecordSink::measure();
@@ -684,7 +684,7 @@ fn the_commit_measures_then_writes_the_same_records_declares_the_rows_and_closes
 fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_with_machines() {
     let mut owner = Box::new(Machines::new());
     let k = keys(&[KEY], (1, 2, 0));
-    // no dynreg_info in the image
+    // no rows_info in the image
     let core = FakeCore::new();
     collect_analog(&mut owner, &core);
     assert_eq!(
@@ -700,7 +700,7 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
     unsafe { owner.builder().end() };
     // an error of the calls is the commit's result, before anything is checked
     let mut core = FakeCore::new();
-    core.set_dynreg(dynreg(&DT2));
+    core.set_rows_info(rows_info(&DT2));
     collect_analog(&mut owner, &core);
     unsafe {
         owner
@@ -733,7 +733,7 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
     assert_eq!((sink.count, sink.at), (0, RecordSink::HEADER));
     // a provider adds no machine row of its own
     let mut core = FakeCore::new();
-    core.set_dynreg(dynreg(&DT2));
+    core.set_rows_info(rows_info(&DT2));
     collect_analog(&mut owner, &core);
     unsafe {
         owner.builder().begin(dkrt_abi::MAX_MODULES);
@@ -914,7 +914,7 @@ fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_l
 ) {
     let mut owner = Box::new(Machines::new());
     let mut core = FakeCore::new();
-    core.set_dynreg(dynreg(&DN2));
+    core.set_rows_info(rows_info(&DN2));
     // a pinned number is a run-time type of the device's profile
     core.device = dkrt_abi::profiles::DN2.id;
     // the module DSP part claimed a voice row for the pinned machine type 0x12, which has a note_on routine

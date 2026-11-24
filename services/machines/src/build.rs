@@ -9,7 +9,7 @@
 //! A call never fails one by one: on overflow, on a bad argument, outside `init` or with a handle that is not ours it returns the placeholder handle (`placeholder`), the
 //! first error is kept, and the setters ignore a placeholder. The error is reported at the commit. A handle is the address of an element of the state.
 //!
-//! Device facts (knob positions of a machine's words, stock rows by glyph, clone_of, level) come from `Profile`, read from the `dynreg_info` table.
+//! Device facts (knob positions of a machine's words, stock rows by glyph, clone_of, level) come from `Profile`, read from the `rows_info` table.
 
 mod apply_args;
 mod builder;

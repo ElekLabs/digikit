@@ -1647,7 +1647,7 @@ adapter. A scoped diagnostic-only DN2 type 11 reservation
 `core/dsp-ddr-proof:ddr_proof` leaves all existing allocations and dynamic range
 16..23 unchanged. No default patch-set inclusion or public sample ABI is added.
 A declaration in a framework module is supported by existing typed lowering.
-The actual preflight closure is `core/dsp-voice`, `core/expansion`, `core/machines`,
+The actual preflight closure is `core/dsp-voice`, `core/expansion`, `core/rows`,
 `core/rows`, `core/dsp-ddr-proof`; `core/dsp-link` remains excluded.
 
 The six-word consumer admits READY at note-on, plays the fixed immutable 480,000-frame

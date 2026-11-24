@@ -29,7 +29,7 @@ Module types that load at run time today: machine (DSP), machine (data only) and
 | ColdFire arena | 512 KiB | 512 KiB | `[limits] arena_bytes` | `ARENA_BYTES` in pk_dkrt.py:58 |
 | staging buffer, file size | 64 KiB | 64 KiB | `[limits] stage_bytes` | none |
 | machine types, machine rows, voice rows | 8 | 8 | `[limits] machine_rows`, tied to types.toml by an assert (dsp.rs ~50) | none |
-| parameter rows, page rows | 16, 8 (DN2 only) | same | count of reserved `[[entry]]` rows in modules/core/dynreg/module.toml; read by the runtime from the device object (`P_DYN_N`, `PG_DYN_N`, registry.rs ~388-407) | none; not in `[limits]` |
+| parameter rows, page rows | 16, 8 (DN2 only) | same | count of reserved `[[entry]]` rows in modules/core/rows/module.toml; read by the runtime from the device object (`P_DYN_N`, `PG_DYN_N`, registry.rs ~388-407) | none; not in `[limits]` |
 | DSP run-time area | 512 KiB | 320 KiB | `[digikit] dsp_area_bytes` (PerDevice in devgen.rs) | `0x80000` and `0x20000` in modules/core/dsp-link/src/cf/dsp-link.c:37,135 |
 | effects in the chain | 4 | 4 | `DK_FX_MAX` | sdk/sdk.toml:47, sdk/include/dk/gen/fx.h:11, sdk/asm/dk_fx.inc, `max = 4` in modules/core/fx/module.toml:55, `FX_MAX` in tools/patchkit/pk_conform.py:417 |
 
@@ -62,7 +62,7 @@ The ColdFire-only rig exists and is cheap: `Ctx.rig(..., cf_only=True)` boots th
 
 Rule: the contract maximum lives in `sdk/sdk.toml`, the device count in `[limits]`; `patchkit gen` refuses a device value above the maximum (message names both).
 
-New table in sdk/sdk.toml, `[limits.max]` (names = `[limits]` keys): `modules` = 8 (the selection record holds 8 paths), `map_entries` = 8, `fx_slots` = 4 (= `DK_FX_MAX`, one source: the header copies stay and `sdkgen.rs` keeps checking them), `dsp_area_bytes` = 524288 (the 17-bit offset field of a link chunk), `param_rows` = 16 and `page_rows` = 8 (what core/dynreg reserves; a test ties them to the manifest), `machine_rows` = 8 (stays tied to types.toml by the existing assert).
+New table in sdk/sdk.toml, `[limits.max]` (names = `[limits]` keys): `modules` = 8 (the selection record holds 8 paths), `map_entries` = 8, `fx_slots` = 4 (= `DK_FX_MAX`, one source: the header copies stay and `sdkgen.rs` keeps checking them), `dsp_area_bytes` = 524288 (the 17-bit offset field of a link chunk), `param_rows` = 16 and `page_rows` = 8 (what core/rows reserves; a test ties them to the manifest), `machine_rows` = 8 (stays tied to types.toml by the existing assert).
 
 New keys in devices/digitakt-ii.toml and devices/digitone-ii.toml `[limits]`: `fx_slots` = 4, `param_rows` = 16, `page_rows` = 0 on the DT2 (it has no page rows) and 8 on the DN2. Existing keys stay.
 

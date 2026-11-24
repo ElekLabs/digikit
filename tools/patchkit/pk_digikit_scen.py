@@ -484,7 +484,7 @@ def decode_tables(rig: B.BootRig) -> dict[str, Any]:
     """The machine, parameter and page rows with a name, decoded without pointers or type numbers: parameters are named,
     knobs name their parameter (or keep a stock code), pages name their machine."""
     plan = rig.plan
-    o = "core/machines"
+    o = "core/rows"
     rows, count = M.sym(plan, o, "machines.rows"), M.sym(plan, o, "machines.count")
     first, size = M.sym(plan, o, "machines.first"), M.sym(plan, o, "machines.row_size")
     pf = M.sym(plan, "core/rows", "pf_table")

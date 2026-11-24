@@ -1025,7 +1025,7 @@ Addresses are 1.17; 1.16 resolves the same rules (the function hashes are equal 
 ### What the framework does
 
 Content modules declare `[[machine]] id, name, short, clone_of, position, fields (9 descriptor IDs), selector?` and
-`requires = ["core/machines"]`. patchkit (Rust, so the browser patcher has it too) assigns the types `7, 8, ...` in
+`requires = ["core/rows"]`. patchkit (Rust, so the browser patcher has it too) assigns the types `7, 8, ...` in
 canonical module order (the order of `plan.modules`, so any selection order gives the same bytes: tested) and
 generates, from the image being patched and from nothing stored in the repo:
 
@@ -1054,7 +1054,7 @@ Placement: **the shims and the tables both go to `cf.expansion`; `cf.flash_cave`
 **[C]** the first version put the shims in the cave because the emulator fetched ColdFire instructions from the MAIN OS image
 only, `UnsupportedGuestPc`; the native runtime executes from DDR and SRAM now, finding 07 "ColdFire code outside the MAIN
 image"). Hardware executes from DDR (ACR0 covers it); the loader copies the code before the caches are on. Region use on
-DT2 1.17 with `core/machines` + `test/xslice` + `test/machine-clone`: `cf.flash_cave` 56 of 2,108 bytes (the loader;
+DT2 1.17 with `core/rows` + `test/xslice` + `test/machine-clone`: `cf.flash_cave` 56 of 2,108 bytes (the loader;
 before: about 316 B of shim code for one type and about 80 B more per added type, 372 and 452 B with the loader, and the
 cave capped the number of types), `cf.expansion` 744 B (code and tables). Evidence **[D]**: the machine proofs (the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`)) on
 1.17 pass (one case fails, below), the smoke goldens of the XSLICE and XClone cells on 1.17 and 1.16 are unchanged
@@ -1095,7 +1095,7 @@ cave capped the number of types), `cf.expansion` 744 B (code and tables). Eviden
   `[object.externs] _my_type = "machines.<id>.type"`; patchkit resolves it to the assigned number (a plain absolute value,
   `sharc.abs32` or `cf.32` relocations) after the canonical assignment, so a DSP module's bytes change with the module
   set exactly as its type does. Machine ids are claims (`machine.id.<id>`, `machine.type.<n>`); two modules with one id
-  fail with a message. The module that supplies the machine requires `core/machines`; a DSP-only module that wants a
+  fail with a message. The module that supplies the machine requires `core/rows`; a DSP-only module that wants a
   type it did not declare needs a `[[machine]]` entry too (it may be the whole module).
 - For a **new render path** (not a clone): choose `selector = n` for an entry the DSP lane adds to its own dispatch
   (the array `0x8055c840` holds 15 entries; `n >= 6` is unused by stock types, finding 06), read the type from
@@ -1190,7 +1190,7 @@ canonical module order (selection order does not change the bytes: tested) and g
 The scan is part of the port: `tools/patchkit/port_resolve.py` records the **count and a sha256 of the site list** in the anchor
 `cf.params.sites` (kind `sites`), the table in `cf.params.t1` (found by the 36-byte signature of its reader, finding 02 above) and
 the accessor in `cf.params.t2` (`cf_func`); patchkit runs the same scan and refuses an image whose sites differ. Both firmwares: 111
-sites (56 + 55). Cost: 16,832 bytes of expansion for four rows (16,500 + 60 K + names + the `u32` map), 54 bytes of flash cave (the cave holds 2,108; core/machines
+sites (56 + 55). Cost: 16,832 bytes of expansion for four rows (16,500 + 60 K + names + the `u32` map), 54 bytes of flash cave (the cave holds 2,108; core/rows
 (216 B), core/rows and the loader use 328 together).
 
 ### Corrections to core.machines **[C]**
@@ -1220,7 +1220,7 @@ sites (56 + 55). Cost: 16,832 bytes of expansion for four rows (16,500 + 60 K + 
 | modulation destination picker (MOD page, DEST) | works: the SRC group lists the machine's own names (`Tune, Sample Level, Decay, Pick position, Brightness ...` for PLUCK) |
 | p-lock | **not shown in the emulator** [O]. Locks are stored by mirror index (lock id <= 76, `lock[track * 0x47 + idx]`, finding 02), so a new row in an existing slot should lock like the stock one; the hold-trig-and-turn gesture shows `Sample Level=90` on stock but no effect was seen in the TX frame or the audio even for stock SAMPLE, so the gesture is not harnessed |
 | MIDI CC and NRPN | **ignored on added types** (static): `0x400dab9e` and `0x400dac80` take the machine map only for `type < 7` (an added type falls to the filter and common arrays, no overrun), so CC 16..23 do nothing on a PLUCK track. To fix it needs a wrapper around the two lookups that maps the type to `clone_of` for the lookup and translates the returned code to the machine's own row (return address kept across the call), or the maps extended. Not built |
-| kit save/load, copy and paste of a sound | the persistence immediate and the permission rows are core/machines'; not exercised separately |
+| kit save/load, copy and paste of a sound | the persistence immediate and the permission rows are core/rows'; not exercised separately |
 
 ### PLUCK on DT2 (`tools/patchkit/pk_proof_pluck.py`, 1.17 and 1.16)
 
@@ -1259,7 +1259,7 @@ Emulator only, nothing flashed, one agent, not checked by a second one: **[D]** 
 per-type byte, clone tests and the DSP selector table are skipped on `dn2`), rules `c4d86e4e:tools/patchkit/pk_machine_rules_dn2.py`
 (`cf_func` hashes, 1.12 reference, 1.11 resolves every one), module `tests/fixtures/modules/dn2-clone` (a clone of FM TONE as
 type 5), proof the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`), tests in `a1cf1df^:native/patchkit/tests/machines.rs`
-(DN2 1.12 and 1.11 patch; the Digitakt output is byte-identical to the previous patchkit for `core/machines` +
+(DN2 1.12 and 1.11 patch; the Digitakt output is byte-identical to the previous patchkit for `core/rows` +
 `test/xslice` + `test/machine-clone` on 1.16 and 1.17). Addresses are 1.12; 1.11 is the same by function hash.
 
 **What is shared with the Digitakt framework, unchanged** (sites verified by byte shape): descriptor dispatch
@@ -1544,7 +1544,7 @@ The routine and its contract: finding 06, "DN2 voice routine: PLUCK". Evidence (
 | the edge, repeated notes | 20 notes of TRIG 1 150 ms apart: 20 plucks of note 60 (sampled in tune); 40 notes 110 ms apart (past 16 voice slots, 16 strings overlapping): 40 plucks; a note after the burst sounds |
 | sequencer | a step recorded on track 1 plucks on both passes of the pattern (onsets at 2.0 s and 4.0 s, the first at note 60: +0.24 cents) |
 | save and load | DECAY and BRIGHT edited, project saved, track set to FM TONE, loaded: PLUCK (row 4) and all four values back; the card's sound records hold type 5; stock loads the project (track 1 is FM TONE), no fault |
-| harness | `tests/patchkit_smoke` cell `dn2-1.12: core/machines, core/rows, core/dsp-voice, digikit/pluck` (select, own page, trig sounds, BRIGHT knob moves the page) |
+| harness | `tests/patchkit_smoke` cell `dn2-1.12: core/rows, core/rows, core/dsp-voice, digikit/pluck` (select, own page, trig sounds, BRIGHT knob moves the page) |
 
 **Differences from the Digitakt PLUCK [D].** No TUNE and no LEV rows (the engine's level is the last knob; pitch is the voice's pitch word);
 the note's end is the engine's amplitude envelope and gate, so a long DECAY is heard only while the key is held or the AMP release is long
@@ -1552,7 +1552,7 @@ the note's end is the engine's amplitude envelope and gate, so a long DECAY is h
 
 ## Stable machine type numbers (patchkit, lane b, 2026-10-14) **[D]**
 
-**Problem [C].** `core/machines` numbered the added machines `machines.first + k` in canonical module order. The number is
+**Problem [C].** `core/rows` numbered the added machines `machines.first + k` in canonical module order. The number is
 all a project stores ("Persistence of machine types", point 2), so the same project loaded as a different machine, or as
 type 0, as soon as another machine module was added or removed. The old rule is replaced.
 
@@ -1566,7 +1566,7 @@ and a number above `last`. `mise run patch:new -- machines/NAME --machine` appen
 | device | stock types | first number | `last` | why |
 |---|---|---|---|---|
 | Digitakt II 1.16 / 1.17 | 0..6 | 7 | 23 | the DSP type -> selector table was read to entry 23 (finding 06), the entries above are not known; the frame word of type t is `0x94 + 2t` |
-| Digitone II 1.11 / 1.12 | 0..4 | 5 | 23 | chosen, equal to the Digitakt's. Firmware bounds that were read: the persistence byte (`(u8)(type + 1) < imm`, so up to 254), page tables built per type by core/machines, the FM engine knows 0..4 and treats the rest as MIDI. No table that caps the type lower was found **[O]**: the DN2 limit is a choice, not a measurement |
+| Digitone II 1.11 / 1.12 | 0..4 | 5 | 23 | chosen, equal to the Digitakt's. Firmware bounds that were read: the persistence byte (`(u8)(type + 1) < imm`, so up to 254), page tables built per type by core/rows, the FM engine knows 0..4 and treats the rest as MIDI. No table that caps the type lower was found **[O]**: the DN2 limit is a choice, not a measurement |
 
 Allocated: Digitakt II `test/xslice:xslice` 7, `test/machine-clone:xclone` 8, `digikit/pluck:pluck` 9; Digitone II
 `test/dn2-clone:fmclone` 5, `test/dn2-pages:pages` 6, `test/dn2-sine:dn2sine` 7, `test/dn2-edge:dn2edge` 8, `digikit/pluck:pluck` 9.

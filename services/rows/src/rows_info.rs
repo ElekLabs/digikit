@@ -1,4 +1,4 @@
-//! The table `dynreg_info` of the dynreg adapter (its word indexes) and the state of the machines registry (`RegState`, the owner of each reserved row and the strings the rows use).
+//! The table `rows_info` of the rows_info adapter (its word indexes) and the state of the machines registry (`RegState`, the owner of each reserved row and the strings the rows use).
 //! The machines service owns the state; the parameter row writers read the words.
 use dkrt_sdk::*;
 
@@ -9,14 +9,15 @@ const MAX_PAGE: usize = limits::PAGE_ROWS;
 pub const MACH_TEXT: usize = 24;
 const REP_SIZE: usize = 48;
 
-/// Words of `dynreg_info` (byte offsets / 4). Words 48, 49 and 61 to 64 were the machine-view hook and the in-use functions of hot
-/// reload (archived, docs/plans/digikit-hot-reload.md); the table keeps them as zeros so the other offsets stay.
+/// Words of `rows_info` (byte offsets / 4; the layout is in `runtime/platform/rows/src/cf/rows-info.inc`). Words 48, 49 and 61 to 64 are not used: they were the machine selection view and
+/// the in-use functions of hot reload (archived, docs/plans/digikit-hot-reload.md); the table keeps them as zeros so the other offsets stay.
 pub mod w {
     pub const MAGIC: usize = 0;
     pub const DEVICE: usize = 2;
     pub const M_ROWS: usize = 3;
     pub const M_ROW_SIZE: usize = 4;
     pub const M_FIRST: usize = 5;
+    pub const M_COUNT: usize = 6;
     pub const M_DYN0: usize = 7;
     pub const M_DYN_N: usize = 8;
     pub const NAMES: usize = 9;
@@ -43,8 +44,6 @@ pub mod w {
     pub const KNOBS: usize = 45;
     pub const SLOT_BASE: usize = 46;
     pub const RESERVE_TEMPLATE: usize = 47;
-    pub const VIEW_VAR: usize = 48; // the address of the variable that holds the machine selection view (0 until it exists)
-    pub const VIEW_BUILD: usize = 49; // the function that builds that view's items: build(view)
     pub const PG_ROWS: usize = 50; // 0: the device keeps its knobs in the machine row
     pub const PG_ROW_SIZE: usize = 51;
     pub const PG_FIRST: usize = 52;
@@ -68,6 +67,18 @@ pub mod w {
     pub const P_NSLOTS: usize = 72;
     pub const P_SLOTS: usize = 73; // 8 words
     pub const P_TPL: usize = 81; // 6 words
+                                 // what the machines service needs of the registry besides the rows
+    pub const M_ENTRIES: usize = 87; // machines.entries
+    pub const SLOTMAP: usize = 88; // the descriptor field of mirror index 25 .. 34 (-1: none); 0 where the device has none
+    pub const READER_REAL: usize = 89; // the copy of the stock type reader; 0 on a device without a hooked reader
+    pub const LIST_STOCK: usize = 90; // the stock display order of the machine list: `M_FIRST` words, one type each
+    pub const PG_COUNT: usize = 91; // pages.count
+                                    // the parameter blocks (the device file's `[[rows.block]]`): the number of blocks, then owner, first code, rows and template of a free row for each
+    pub const BLOCKS: usize = 92;
+    pub const BLOCK_0: usize = 93;
+    pub const RESERVED: usize = 105; // reserved parameter rows, all blocks
+    pub const CAPS: usize = 106; // the four capacity words
+    pub const WORDS: usize = 110;
 }
 
 #[repr(C, align(4))]

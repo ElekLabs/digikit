@@ -209,10 +209,11 @@ impl FakeCore {
         k.push((at, kind, keys.to_vec()));
     }
 
-    /// The image has the table `dynreg_info` with these words (word 0, the magic, is set here): `dkrt_svc_rows::dynreg` finds it through `CoreApi::info`.
-    pub fn set_dynreg(&mut self, mut table: Vec<u32>) {
-        table[0] = 0x4459_4e52;
-        let hash = fnv1a("dynreg_info");
+    /// The image has the table `rows_info` with these words (word 0, the magic, and word 1, the version, are set here): `dkrt_svc_rows::rows_info` finds it through `CoreApi::info`.
+    pub fn set_rows_info(&mut self, mut table: Vec<u32>) {
+        table[0] = 0x524f_5753;
+        table[1] = 2;
+        let hash = fnv1a("rows_info");
         self.info_tables.retain(|(h, _)| *h != hash);
         self.info_tables.push((hash, table));
     }

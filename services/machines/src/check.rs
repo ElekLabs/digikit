@@ -8,9 +8,9 @@ use dkrt_abi::registry::each;
 use dkrt_abi::service::Problem;
 use dkrt_sdk::records::{KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM};
 use dkrt_sdk::*;
-use dkrt_svc_rows::dynreg::{w, RegState};
+use dkrt_svc_rows::rows_info::{w, RegState};
 
-/// What the checks read: the section, the words of `dynreg_info` and the owner's registry state.
+/// What the checks read: the section, the words of `rows_info` and the owner's registry state.
 pub(crate) struct Ctx<'a> {
     pub(crate) reg: *const u8,
     pub(crate) image_size: u32,

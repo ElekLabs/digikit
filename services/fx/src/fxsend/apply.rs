@@ -87,7 +87,7 @@ unsafe fn apply_row<C: CoreApi>(core: &C, k: usize, owner: u8, tab: *const u8) {
         let code = iw(inf, w::P_SEND) + c as u32;
         dkrt_svc_rows::write_send_param_row(
             core,
-            dkrt_svc_rows::dynreg(core),
+            dkrt_svc_rows::rows_info(core),
             code,
             iw(inf, w::TPL_PERCENT),
             iw(inf, w::TEMPLATE),
@@ -116,7 +116,7 @@ unsafe fn release<C: CoreApi>(core: &C, inf: *const u32, k: usize) {
     core.wr(iw(inf, w::ROW) + 8 + 4 * c as u32, 0);
     dkrt_svc_rows::reset_param_row(
         core,
-        dkrt_svc_rows::dynreg(core),
+        dkrt_svc_rows::rows_info(core),
         iw(inf, w::P_SEND) + c as u32,
     );
     s.row[c] = 0;

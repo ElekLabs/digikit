@@ -99,7 +99,7 @@ Levels (calls go down only): 5 `tick` and the `dkrt_*` entry points; 4 transport
 | `collect.rs` machines and fx part: builder state, the 15 builder calls, lowering, `check_commit`, `check_dsp_keys`, voice and fx declarations | `machines` and `fx` crates; the builder calls become provider EXPORTS |
 | `collect.rs` generic part: `dk_record_add`, `dk_service_declare_*`, keys copy, `decl_matches`, block store | stays: `loader/keys.rs`, `loader/records_walk.rs` |
 | `registry.rs` tables (`DKRT_REG`, `profile`, `free_rows`, `info`) | `machines`; the walker stays in `loader/records_walk.rs` |
-| `params.rs` (parameter row writers) | a shared crate compiled into `machines.dks` and `fx.dks`; each writes only the rows its adapter reserves (`core/dynreg` for machine rows, `core/fxpages` for fx rows), so neither service needs the other |
+| `params.rs` (parameter row writers) | a shared crate compiled into `machines.dks` and `fx.dks`; each writes only the rows its adapter reserves (`core/rows` for machine rows, `core/fxpages` for fx rows), so neither service needs the other |
 | `assign.rs` (sticky machine type numbers) | `machines`; the map moves from the selection record to a settings key owned by machines, with a migration read of the old field for one release |
 | `native.rs` (`mf_native_*`) | `machines`, through the function words of `machines_info` |
 | row methods `has_voice`, `declare_voice`, `declare_fx`; `fx_entry`; `machine_types_of` | internal to the services; `fx_entry` becomes the fx export `dk_fx_entry`; `machine_types_of` becomes a generic `owned_ids`, so the MODULES reply stays the same |

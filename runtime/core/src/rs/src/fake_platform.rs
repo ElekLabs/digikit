@@ -806,8 +806,8 @@ fn the_kernel_calls_go_to_the_platform() {
 #[test]
 fn the_info_tables_are_bytes_the_fake_hands_out() {
     let f = FakePlatform::new(profiles::DT2);
-    f.info.borrow_mut().insert("dynreg_info", std::vec![0x44, 0x4b, 0x52, 0x47]);
-    assert_eq!(f.info.borrow().get("dynreg_info").map(|v| v.len()), Some(4));
+    f.info.borrow_mut().insert("rows_info", std::vec![0x44, 0x4b, 0x52, 0x47]);
+    assert_eq!(f.info.borrow().get("rows_info").map(|v| v.len()), Some(4));
     assert!(f.info.borrow().get("dyndsp_info").is_none(), "a table that is not in the image is absent");
 }
 

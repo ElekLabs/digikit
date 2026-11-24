@@ -11,9 +11,9 @@ fn a_knob_gets_its_row_then_a_change_is_set_on_the_link() {
     core.set_dynfx(0, 0);
     // the parameter table of the firmware, as a fake: rows of 0x40 bytes at 0x1000, the mirror index in the second word
     let mut t = std::vec![0; 96];
-    t[dkrt_svc_rows::dynreg::w::P_TABLE] = 0x1000;
-    t[dkrt_svc_rows::dynreg::w::PF_SIZE] = 0x40;
-    core.set_dynreg(t);
+    t[dkrt_svc_rows::rows_info::w::P_TABLE] = 0x1000;
+    t[dkrt_svc_rows::rows_info::w::PF_SIZE] = 0x40;
+    core.set_rows_info(t);
     unsafe {
         s.min[2][1] = 0f32.to_bits();
         s.span[2][1] = 1f32.to_bits();

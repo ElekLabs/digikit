@@ -161,7 +161,7 @@ esdhc_base = 0xFC0CC000
 dsp_clock_hz = 1000000000
 dsp_blocks_per_second = 1500
 
-# The digikit runtime's view of this device. `id` is what the runtime, the registry (core/dynreg), the DSP table (core/dyndsp) and a
+# The digikit runtime's view of this device. `id` is what the runtime, the registry (core/rows), the DSP table (core/dyndsp) and a
 # .dkm file call the device; `name` is what the INFO reply of the upload protocol says (at most 3 characters).
 [digikit]
 id = 1
@@ -348,13 +348,13 @@ dsp_l2_excludes = [[0x200FA000, 0x200FE000]]
 # another). Both are the flash-image roots of the rt021 images for now. The two sets are the same
 # today (core/input and core/sample-pool, the stock sample pool adapter, are in both); a module such as digikit/remote is on exactly when its check mark in DIGIKIT > MODULES is set.
 [patch_sets]
-emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool"]
+emulator = ["core/rows", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool"]
 # Real-device image. core/usb-bulk (inert until the usb-fast module is selected) and core/plusdrive-write (the +Drive writes usb-fast uses) are in: usb-fast requires both. core/usb-bulk-audio is in too: the bulk OUT interface in USB AUDIO/MIDI, so usb-fast works without changing USB CONFIG.
-device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
+device = ["core/rows", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
 # `device` plus the optional black intro (core/introblank): the Workbench Firmware page picks it with its "Custom boot screen" toggle.
-device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
+device-introblank = ["core/rows", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
 # Same roots as `emulator`; the name stays for the per-track sample tests (API 1.5).
-sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool"]
+sample-tracks = ["core/rows", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool"]
 
 # The input backend core/input uses to press keys and turn encoders from software (docs/plans/remote-control.md). The profile chooses; `panel-uart`: the panel
 # MCU's UART packets are decoded by the firmware's own key and encoder decoders, which core/input calls (anchors by hash in the port files).

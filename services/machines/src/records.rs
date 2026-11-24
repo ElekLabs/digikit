@@ -40,7 +40,7 @@ impl<C: CoreApi> Records<C> for Machines {
         use check_step as st;
         // SAFETY: `c.reg` is the section the registry walker checked; `inf` is the registry's table
         unsafe {
-            let inf = dkrt_svc_rows::dynreg(core);
+            let inf = dkrt_svc_rows::rows_info(core);
             if inf.is_null() || !fits(inf) {
                 // the machine, parameter, page, action and native page records need this registry: a section without them does not
                 let none = counts_of(c.reg) == (0, 0, 0, 0, 0);

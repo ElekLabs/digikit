@@ -4547,6 +4547,9 @@ name = "cf.machine.hook.list.copy_call"
 site = "cf.machine.site.list.copy"
 mode = "replace"
 clobbers = ["d0", "d1", "a0", "a1", "ccr"]
+len = 6
+kind = "raw"
+check = "90c7fbe9c6489da2"
 
 [[hook]]
 name = "cf.machine.hook.owner_type_load"

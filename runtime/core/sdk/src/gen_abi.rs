@@ -304,7 +304,7 @@ pub struct DkrtDevice {
     pub keep_bytes: u32,
     /// [board] dsp_clock_hz / dsp_blocks_per_second, rounded (0 without DEV_HAS_DSP)
     pub dsp_block_cycles: u32,
-    /// core/machines types.toml dynamic_first
+    /// core/rows types.toml dynamic_first
     pub dyn_type_first: u32,
     /// run-time machine types (0 without DEV_HAS_DSP)
     pub dyn_types: u32,

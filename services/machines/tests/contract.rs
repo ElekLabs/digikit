@@ -1,6 +1,6 @@
 //! The service contract suite (`dkrt_test_support::contract`) for the machines service on both profiles. The call lists below stand for the shared fixture
 //! `tests/fixtures/modules/sine` (`src/module.c`: one machine with a page of one parameter) and a second machine with another key: each makes the builder calls through
-//! the service's `build::*`. The image tables are those of the device profiles (`Profile` of `tests/build.rs`) as `core/dynreg` writes them, over the fake core's memory.
+//! the service's `build::*`. The image tables are those of the device profiles (`Profile` of `tests/build.rs`) as `core/rows` writes them, over the fake core's memory.
 use core::ptr::addr_of;
 use dkneeds::keys::name_hash;
 use dkrt_abi::core_api::CoreApi;
@@ -15,7 +15,7 @@ use dkrt_svc_machines::dsp::dyndsp;
 use dkrt_svc_machines::machines::Machines;
 use dkrt_svc_machines::records::{mach_owner, types_of};
 use dkrt_svc_machines::rows::{self, vrows, VoiceRows};
-use dkrt_svc_rows::dynreg::{w, RegState};
+use dkrt_svc_rows::rows_info::{w, RegState};
 use dkrt_test_support::contract::{Dsp, Fixture, Init, Late, Lifecycle, Module, Rows};
 use dkrt_test_support::{
     provider_contract, subject, Driver, FakeCore, Provided, Recipe, RowBuilder,
@@ -322,11 +322,10 @@ fn keys_none() -> KeysCopy {
 const P_TABLE: u32 = 0x10_0000;
 const P_FIRST: u32 = 300;
 
-/// The words of `dynreg_info` the machines service reads, for the profile of `core.device`, and the voice rows of `dyndsp_info`.
+/// The words of `rows_info` the machines service reads, for the profile of `core.device`, and the voice rows of `dyndsp_info`.
 fn image(core: &mut FakeCore) {
     let dn2 = core.device == DN2.id;
     let mut t = vec![0u32; 96];
-    t[w::VERSION] = 3;
     t[w::DEVICE] = core.device;
     t[w::M_ROWS] = 0x30_0000;
     t[w::M_ROW_SIZE] = 0x100;
@@ -357,6 +356,7 @@ fn image(core: &mut FakeCore) {
     t[w::SPEC + 2] = 0x102;
     t[w::KNOBS] = 8;
     t[w::RESERVE_TEMPLATE] = 7;
+    t[w::LIST_STOCK] = 0x4700_0000;
     if dn2 {
         // the Digitone II keeps a machine's knobs in page rows
         t[w::SLOT_BASE] = 25;
@@ -392,7 +392,7 @@ fn image(core: &mut FakeCore) {
         [0xcc, 0xd1, 0x47, 0x32, 0xca, 0xcb]
     };
     t[w::P_TPL..w::P_TPL + 6].copy_from_slice(&tpl);
-    core.set_dynreg(t);
+    core.set_rows_info(t);
     // the per-type tables of the firmware hold the free row's words for every type, and the clone's (type 3) are other: a machine's rows take the clone's words,
     // and a release gives the free row's back
     {
@@ -413,18 +413,6 @@ fn image(core: &mut FakeCore) {
     }
     // `dyndsp_info`: the voice rows start at row 2 of the DSP's table and four are free
     core.set_dyndsp(0x10_0000, 2, 4);
-    // `machines_info`
-    let mut mi = vec![0u32; dkrt_svc_machines::info::WORDS];
-    mi[dkrt_svc_machines::info::w::MAGIC] = dkrt_svc_machines::info::MAGIC;
-    mi[dkrt_svc_machines::info::w::VERSION] = dkrt_svc_machines::info::VERSION;
-    // the owner binds the table at its start: the device it runs as, and the two words the hooks cannot do without
-    mi[dkrt_svc_machines::info::w::DEVICE] = core.device;
-    mi[dkrt_svc_machines::info::w::ENSURE] = 0x4000_1000;
-    mi[dkrt_svc_machines::info::w::ROWS] = 0x4200_0000;
-    mi[dkrt_svc_machines::info::w::LIST_STOCK] = 0x4700_0000;
-    mi[dkrt_svc_machines::info::w::ROW_SIZE] = 64;
-    mi[dkrt_svc_machines::info::w::O_POS] = 48;
-    core.info_tables.push((name_hash("machines_info"), mi));
 }
 
 /// The service's own view: who owns the machine, parameter and page rows, and the type numbers each owner has.
@@ -1106,7 +1094,7 @@ fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_ru
 /// The machine row of the first run-time type: (its list name is empty, its long name reads MISSING, own_dsp is 1).
 fn missing_row(core: &FakeCore) -> (bool, bool, bool) {
     let s = &reg().s;
-    let inf = unsafe { dkrt_svc_rows::dynreg(core) };
+    let inf = unsafe { dkrt_svc_rows::rows_info(core) };
     let (empty, own, name) = unsafe {
         let row = dkrt_abi::mem::iw(inf, w::M_ROWS)
             + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))
@@ -1331,7 +1319,7 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
         "the descriptor's long name is a firmware string of the text"
     );
     assert_eq!(rep(&s.rep_short[0]), (4, "MISS".to_string()));
-    let inf = unsafe { dkrt_svc_rows::dynreg(&l.core) };
+    let inf = unsafe { dkrt_svc_rows::rows_info(&l.core) };
     let row = unsafe {
         dkrt_abi::mem::iw(inf, w::M_ROWS)
             + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))
@@ -1343,8 +1331,8 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
     );
 }
 
-/// The machine selection view caches the machine list: a reload rebuilds it through `dynreg_info` words 48 (the variable that holds the view) and 49 (the builder), once
-/// the module's rows are in the DSP (`on_loaded`), and a load outside a reload does not.
+/// The machine selection view caches the machine list: a reload rebuilds it through the info table `machine_view` of core/ui (word 0: the variable that holds the view, word 1: the
+/// builder), once the module's rows are in the DSP (`on_loaded`), and a load outside a reload does not.
 #[test]
 fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
     use std::cell::RefCell;
@@ -1352,15 +1340,12 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
     const VAR: u32 = 0x7000_0000;
     const BUILD: u32 = 0x4006_0f50;
     let calls: Rc<RefCell<Vec<(u32, Vec<usize>)>>> = Rc::default();
-    let table = |var: u32, build: u32| {
-        let mut t = vec![0u32; 64];
-        t[w::VIEW_VAR] = var;
-        t[w::VIEW_BUILD] = build;
-        t
-    };
+    let table = |var: u32, build: u32| vec![var, build];
     let run = |words: Vec<u32>, view: u32, phase: u32| {
         let mut core = FakeCore::new();
-        core.set_dynreg(words);
+        core.set_rows_info(vec![0u32; 112]);
+        core.info_tables
+            .push((dkneeds::keys::name_hash("machine_view"), words));
         core.mem.borrow_mut().insert(VAR, view);
         core.live_op.set(phase);
         let log = calls.clone();
@@ -1403,11 +1388,10 @@ fn stop_builds_the_cached_machine_list_again() {
     const BUILD: u32 = 0x4006_0f50;
     let run = |var: u32, build: u32, view: u32| {
         let calls: Rc<RefCell<Vec<(u32, Vec<usize>)>>> = Rc::default();
-        let mut t = vec![0u32; 64];
-        t[w::VIEW_VAR] = var;
-        t[w::VIEW_BUILD] = build;
         let mut core = FakeCore::new();
-        core.set_dynreg(t);
+        core.set_rows_info(vec![0u32; 112]);
+        core.info_tables
+            .push((dkneeds::keys::name_hash("machine_view"), vec![var, build]));
         core.mem.borrow_mut().insert(VAR, view);
         let log = calls.clone();
         *core.on_call.borrow_mut() = Some(Box::new(move |a, args| {

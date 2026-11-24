@@ -106,31 +106,31 @@ impl Drop for NoFxInfoGuard {
     }
 }
 
-/// The `dynreg_info` table of an image (the assembly tests read it from the image's info file), while a `DynregInfoGuard` lives; the other host tests have none.
-static mut DYNREG_INFO_OVERRIDE: *const u32 = core::ptr::null();
+/// The `rows_info` table of an image (the assembly tests read it from the image's info file), while a `RowsInfoGuard` lives; the other host tests have none.
+static mut ROWS_INFO_OVERRIDE: *const u32 = core::ptr::null();
 
-/// Sets the `dynreg_info` table for its lifetime and clears it on drop, also when the test panics. Hold it under `LOCK`; `info` outlives the guard's use.
-pub(crate) struct DynregInfoGuard;
-impl DynregInfoGuard {
+/// Sets the `rows_info` table for its lifetime and clears it on drop, also when the test panics. Hold it under `LOCK`; `info` outlives the guard's use.
+pub(crate) struct RowsInfoGuard;
+impl RowsInfoGuard {
     pub(crate) unsafe fn set(info: *const u32) -> Self {
-        DYNREG_INFO_OVERRIDE = info;
-        DynregInfoGuard
+        ROWS_INFO_OVERRIDE = info;
+        RowsInfoGuard
     }
 }
-impl Drop for DynregInfoGuard {
+impl Drop for RowsInfoGuard {
     fn drop(&mut self) {
-        unsafe { DYNREG_INFO_OVERRIDE = core::ptr::null() }
+        unsafe { ROWS_INFO_OVERRIDE = core::ptr::null() }
     }
 }
 
-/// Runs `body` with no `dynreg_info` table: a host has no machine selection view, and the table's view variable is a firmware address that no host space maps (the machines file's
+/// Runs `body` with no `rows_info` table: a host has no machine selection view, and the table's view variable is a firmware address that no host space maps (the machines file's
 /// `stop` reads it).
-pub(crate) fn without_dynreg_info<R>(body: impl FnOnce() -> R) -> R {
+pub(crate) fn without_rows_info<R>(body: impl FnOnce() -> R) -> R {
     unsafe {
-        let saved = DYNREG_INFO_OVERRIDE;
-        DYNREG_INFO_OVERRIDE = core::ptr::null();
+        let saved = ROWS_INFO_OVERRIDE;
+        ROWS_INFO_OVERRIDE = core::ptr::null();
         let r = body();
-        DYNREG_INFO_OVERRIDE = saved;
+        ROWS_INFO_OVERRIDE = saved;
         r
     }
 }
@@ -153,8 +153,8 @@ pub unsafe fn fx_info() -> *const u32 {
 }
 /// The image's info table `name_hash` of the host tests: `dyndsp_info` and `dynfx_info` are the tables of this file (`voice_info`, `fx_info`); none for any other name.
 pub unsafe fn test_info(name_hash: u32) -> Option<*const u32> {
-    if name_hash == dkneeds::keys::name_hash("dynreg_info") && !DYNREG_INFO_OVERRIDE.is_null() {
-        Some(DYNREG_INFO_OVERRIDE)
+    if name_hash == dkneeds::keys::name_hash("rows_info") && !ROWS_INFO_OVERRIDE.is_null() {
+        Some(ROWS_INFO_OVERRIDE)
     } else if name_hash == dkneeds::keys::name_hash("dyndsp_info") {
         Some(voice_info())
     } else if name_hash == dkneeds::keys::name_hash("dynfx_info") {

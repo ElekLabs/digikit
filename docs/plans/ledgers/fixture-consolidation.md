@@ -6,7 +6,7 @@ Why: AGENTS.md "fixtures are DRY": one canonical fixture per contract feature, s
 
 ## Step 1: the patch-time effect path is deleted
 
-The registry `fx` of `core/fx` refuses an `[[entry]]` row of every module except `core/dynfx` (`refuse_entries`, `refuse_entries_except`; the pattern of `machines`/`core/dynreg`). Run-time effects fill the rows that `core/dynfx` reserves.
+The registry `fx` of `core/fx` refuses an `[[entry]]` row of every module except `core/dynfx` (`refuse_entries`, `refuse_entries_except`; the pattern of `machines`/`core/rows`). Run-time effects fill the rows that `core/dynfx` reserves.
 
 | Deleted | Old assertion | New location |
 | --- | --- | --- |

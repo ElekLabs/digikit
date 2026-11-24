@@ -11,7 +11,7 @@ use dkrt_svc_machines::info;
 use dkrt_svc_machines::machines::Machines;
 use dkrt_svc_machines::records::*;
 use dkrt_svc_machines::slots;
-use dkrt_svc_rows::dynreg::w;
+use dkrt_svc_rows::rows_info::w;
 use dkrt_test_support::{Call, FakeCore, FakeFw};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -27,7 +27,7 @@ const SLOT_BASE: u32 = 10;
 const OWNER: u8 = 3;
 const BASE: u32 = 0x4000;
 
-/// The words of `dynreg_info` that the parameter, action and native page parts read; no page rows (`PG_ROWS` 0).
+/// The words of `rows_info` that the parameter, action and native page parts read; no page rows (`PG_ROWS` 0).
 fn table() -> Vec<u32> {
     let mut t = std::vec![0u32; 96];
     t[w::M_DYN_N] = 8;
@@ -57,12 +57,11 @@ fn row_words(core: &FakeCore, code: u32) -> [u32; 3] {
     unsafe { [core.rd(a), core.rd(a + 4), core.rd(a + 8)] }
 }
 
-/// The image table `machines_info`: magic and version only (the native pages are the service's).
-fn machines_info() -> Vec<u32> {
-    let mut t = std::vec![0u32; info::WORDS];
-    t[info::w::MAGIC] = info::MAGIC;
-    t[info::w::VERSION] = info::VERSION;
-    t
+fn core() -> FakeCore {
+    let mut c = FakeCore::new();
+    c.set_rows_info(table());
+    c.device = dkrt_abi::profiles::DT2.id;
+    c
 }
 
 /// The first run-time machine type of the device the fake core stands for.
@@ -73,15 +72,6 @@ fn first_type() -> u32 {
         .find(|p| p.id == device)
         .unwrap()
         .dyn_type_first
-}
-
-fn core() -> FakeCore {
-    let mut c = FakeCore::new();
-    c.set_dynreg(table());
-    c.info_tables
-        .push((name_hash("machines_info"), machines_info()));
-    c.device = dkrt_abi::profiles::DT2.id;
-    c
 }
 
 fn put(b: &mut [u8], at: usize, v: u32) {
@@ -252,19 +242,19 @@ fn a_bad_action_a_bad_parameter_or_a_page_without_page_rows_is_refused() {
 fn a_table_with_more_rows_than_the_state_has_or_no_table_refuses_the_records_that_need_it() {
     let reg = section(&[param(0, SLOT_BASE, 0, 255, 17, "LEVEL")]);
     let mut core = FakeCore::new();
-    // an image without `dynreg_info`: the section needs a registry, one without machine records does not
+    // an image without `rows_info`: the section needs a registry, one without machine records does not
     assert_eq!(run_check(&core, check_step::COUNTS, &reg), E_NO_REGISTRY);
     assert_eq!(run_check(&core, check_step::COUNTS, &section(&[])), OK);
     assert_eq!(attach(&mut Machines::new(), &core, &reg), E_NO_REGISTRY);
     // a section with no machine record needs no registry
     assert_eq!(attach(&mut Machines::new(), &core, &section(&[])), OK);
     // a table that fits
-    core.set_dynreg(table());
+    core.set_rows_info(table());
     assert_eq!(run_check(&core, check_step::COUNTS, &reg), OK);
     // a table that says more parameter rows than the state has
     let mut inf = table();
     inf[w::P_DYN_N] = limits::PARAM_ROWS as u32 + 1;
-    core.set_dynreg(inf);
+    core.set_rows_info(inf);
     assert_eq!(run_check(&core, check_step::COUNTS, &reg), E_NO_REGISTRY);
 }
 
@@ -388,7 +378,7 @@ fn the_capacity_counts_need_a_registry_and_the_ui_pass_runs_the_click_last() {
         None,
         "a kind another service counts"
     );
-    core.set_dynreg(table());
+    core.set_rows_info(table());
     assert_eq!(
         Describe::cap(&*owner, &core, dkrt_sdk::proto::CAPK_MACHINE_ROWS),
         Some((8, 0))
@@ -534,7 +524,7 @@ fn apply_refuses_a_machine_without_a_run_time_type_number_instead_of_indexing_th
     inf[w::M_DYN0] = 16;
     inf[w::M_DYN_N] = 8;
     let mut core = core();
-    core.set_dynreg(inf);
+    core.set_rows_info(inf);
     let mut owner = Machines::new();
     // a machine key that `assign` has no number for (nothing was planned for the module being loaded: the boot index is not the module's), and a pinned number below the range
     for key in [0x1100u32, 0x5] {

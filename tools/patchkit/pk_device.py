@@ -109,8 +109,8 @@ class Limits:
     stage_bytes: int  # the staging buffer: the largest .dkm file
     fx_slots: int  # effects in the chain
     send_slots: int  # of them effects on a send bus (the device file's limit; `effective_send_slots` is what an image reports)
-    param_rows: int  # parameter rows core/dynreg reserves
-    page_rows: int  # page rows core/dynreg reserves (0 on a device without)
+    param_rows: int  # parameter rows core/rows reserves
+    page_rows: int  # page rows core/rows reserves (0 on a device without)
     dsp_area_bytes: int  # the DSP run-time area
 
 

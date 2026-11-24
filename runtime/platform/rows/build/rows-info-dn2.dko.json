@@ -6,54 +6,173 @@
    "addend": 0,
    "offset": 12,
    "section": ".rodata",
-   "symbol": "_rw_table",
+   "symbol": "_rw_m_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 16,
+   "section": ".rodata",
+   "symbol": "_rw_m_row_size",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 20,
    "section": ".rodata",
-   "symbol": "_rw_rows",
+   "symbol": "_rw_m_first",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 24,
    "section": ".rodata",
-   "symbol": "_rw_row_size",
+   "symbol": "_rw_m_count",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 32,
+   "offset": 28,
    "section": ".rodata",
-   "symbol": "_rw_first",
+   "symbol": "_rw_m_dyn0",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 36,
    "section": ".rodata",
+   "symbol": "_rw_names",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 40,
+   "section": ".rodata",
+   "symbol": "_rw_permit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 80,
+   "section": ".rodata",
+   "symbol": "_rw_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 84,
+   "section": ".rodata",
+   "symbol": "_rw_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".rodata",
+   "symbol": "_rw_row_size",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 92,
+   "section": ".rodata",
+   "symbol": "_rw_first",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".rodata",
    "symbol": "_rw_count",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 48,
+   "offset": 100,
    "section": ".rodata",
    "symbol": "_rw_b1",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 64,
+   "offset": 116,
+   "section": ".rodata",
+   "symbol": "mf_empty",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 200,
+   "section": ".rodata",
+   "symbol": "_rw_pg_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 204,
+   "section": ".rodata",
+   "symbol": "_rw_pg_row_size",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 208,
+   "section": ".rodata",
+   "symbol": "_rw_pg_first",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 212,
+   "section": ".rodata",
+   "symbol": "_rw_pg_dyn0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 348,
+   "section": ".rodata",
+   "symbol": "_rw_m_entries",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 356,
+   "section": ".rodata",
+   "symbol": "_rw_reader_real",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 360,
+   "section": ".rodata",
+   "symbol": "_rw_list_stock",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 364,
+   "section": ".rodata",
+   "symbol": "_rw_pg_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 376,
+   "section": ".rodata",
+   "symbol": "_rw_b1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 392,
    "section": ".rodata",
    "symbol": "_rw_b2",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 80,
+   "offset": 408,
    "section": ".rodata",
    "symbol": "_rw_b3",
    "type": "cf.32"
@@ -62,13 +181,13 @@
  "sections": [
   {
    "align": 4,
-   "hex": "524f57530000000100000002000000000000003c000000000000000000000008000000000000000000000003000000010000000000000010000000d500000002000000000000001800000075000000030000000000000002000000750000002a000000000000010800000100000001010000010200000014000000180000001c0000002000000024000001030000002c00000104000000340000003800000008000000100000000800000001",
+   "hex": "524f575300000002000000020000000000000000000000000000000000000000000000080000000000000000000000000000000000000004000000080000002c0000003000000034000000380000003c000000000000000000000000000000000000000000000000000000100000003c0000000800000000000000000000010800000100000001010000010200000014000000180000001c0000002000000024000001030000002c0000010400000034000000380000000800000019000000d5000000000000000000000000000000000000000000000000000000080000000000000004000000080000002c000000307fffffff00000000000000000000000000000000000000000000000a0000000100000000000000000000000000000000000000080000000100000002000000040000000500000006000000000000000300000007000000d5000000d700000047000000dd000000ee000000d5000000000000000000000000000000000000000000000003000000010000000000000010000000d500000002000000000000001800000075000000030000000000000002000000750000002a00000008000000100000000800000001",
    "kind": "data",
    "name": ".rodata",
-   "size": 172
+   "size": 440
   }
  ],
- "source_sha256": "c6b74e26ffd84fd0340a9f46b62e3b5fbd793a5845dc02e223cb915db3405588",
+ "source_sha256": "4514c4e9a5cfddc96989ac79eda7e54ae58769d06a9e0fbd173c9a0efd6c41ff",
  "symbols": [
   {
    "global": true,
@@ -102,6 +221,96 @@
   },
   {
    "global": true,
+   "name": "_rw_list_stock",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_m_count",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_m_dyn0",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_m_entries",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_m_first",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_m_row_size",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_m_rows",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_names",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_permit",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_pg_count",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_pg_dyn0",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_pg_first",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_pg_row_size",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_pg_rows",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_rw_reader_real",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "_rw_row_size",
    "section": null,
    "value": 0
@@ -120,6 +329,12 @@
   },
   {
    "global": true,
+   "name": "mf_empty",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "rows_info",
    "section": ".rodata",
    "value": 0
@@ -130,7 +345,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "4e4dcc86e384db9215b80ec71302aaf2757b34f509cb6f6db6fd27493320b865",
+  "isa_check": "27249074ec0a4d39c737917a776448da2db9a1700d086b47ad43e66a39287580",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

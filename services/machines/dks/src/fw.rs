@@ -114,6 +114,25 @@ pub unsafe extern "C" fn dks_page_turn(view: *const u8, ev: *const u8) -> u32 {
     }
 }
 
+/// The copy at the end of the firmware's machine list getter (C ABI `copy(begin, end, dest)`, result d0 = the end of the copy): the Digitakt II's `jsr` is pointed here by a patch
+/// (`list_copy_target`), the Digitone II's hook `mf_copy` calls it. It leaves out the reserved machine rows that have no name; it reads the registry words bound by `start` and
+/// needs no owner.
+#[no_mangle]
+pub unsafe extern "C" fn dks_list_copy(begin: u32, end: u32, dest: u32) -> u32 {
+    dkrt_svc_machines::list::copy_listed(
+        &ImportCore,
+        &dkrt_svc_machines::list::Reserved::bound(),
+        begin,
+        end,
+        dest,
+    )
+}
+
+/// The value of the patch that points the Digitakt II's list copy here (`service!`).
+pub fn list_copy_target(_: &dkrt_svc_machines::machines::Machines) -> u32 {
+    dks_list_copy as usize as u32
+}
+
 /// `dk_param_get` (an `[[export]]` of the file): the value of a parameter word in the flow of a click. Without an owner there is no flow (`E_STATE`).
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_param_get(track: u32, word: u32) -> i32 {

@@ -11,7 +11,7 @@ second agent has checked it against the image bytes). Digitone II and the unload
 
 | Step (DT2 1.16 and 1.17) | Result |
 | --- | --- |
-| patch `core/runtime` + `core/dynreg` (so `core/machines`, `core/rows`) | 633 512 of 1 396 736 bytes of `cf.expansion`; machine rows for types 7 to 23, 16 parameter rows; `dynreg_info` present |
+| patch `core/runtime` + `core/rows` (so `core/rows`, `core/rows`) | 633 512 of 1 396 736 bytes of `cf.expansion`; machine rows for types 7 to 23, 16 parameter rows; `dynreg_info` present |
 | pack `test/dyn-xslice` (a data-only clone of MANUAL SLICE, one parameter): `patchkit pack test/dyn-xslice --device dt2` | 372 bytes: header, a 4-byte image, 204 bytes of records |
 | eight edited copies of the file (wrong device, bad version, type 9, type 24, `clone_of` a run-time type, knob naming a missing parameter, knob not a stock code, position 3) | refused with -21, -5, -22, -22, -22, -5, -5, -5; **no byte of any row or table changes** |
 | the firmware's list getter (`FUN_40052a08`, called through a stub that loads `a0`) before the load | `0 1 2 3 6 4 5` (the built-in order); the static sorted vector holds 15 entries including 16 to 23 |
@@ -19,7 +19,7 @@ second agent has checked it against the image bytes). Digitone II and the unload
 | load a second file with type 16 | -23 (`E_TYPE_USED`), nothing written |
 | unload | 0; the machine rows, names, permission, per-type and parameter tables are byte for byte the start (but for the string-representation, name and short pointers of the free rows); the getter is back to `... 5` |
 | load, unload again; then `test/dyn-params` (eight parameters, one per slot) with `xslice-d` | all 0; the eight parameter rows equal the patch-time formulas of `core/rows` for every slot 0 to 7 (word by word, but the two string pointers); a third machine whose eight parameters do not fit (9 + 8 > 16): -24 (`E_PARAM_FULL`), nothing written |
-| write watch on the rows and tables, the runtime's code the only allowed writer | 34 events, all by `core/machines` (`mf_ensure`: the two representation pointers of each of 17 rows, at first use); control run (runtime not allowed): 648 more events, all the runtime's |
+| write watch on the rows and tables, the runtime's code the only allowed writer | 34 events, all by `core/rows` (`mf_ensure`: the two representation pointers of each of 17 rows, at first use); control run (runtime not allowed): 648 more events, all the runtime's |
 | flush check | 0 hits (1.03 M CPUSHL) |
 
 **[D]** On the panel (coupled daemon, FUNC+SRC, `tools/patchkit/pk_registry.py ui`, frames pinned in `tests/patchkit/registry_frames.json`): after the
@@ -44,10 +44,10 @@ every input. **[C]** (finding 33) The unload with the track on the machine is no
   every proof run (a load, an unload and a reload); the cursor and heap use across many rebuilds were not examined.
 - **[C]** Finding 02 says a stored type that names a gap row "loads and plays as type 0 (SAMPLE or FM TONE)". That holds for the permission, per-type byte
   and DSP selector word. The SRC page is not SAMPLE's: the descriptor fields of a gap row are zero, so the page shows eight empty knob boxes (the frame above).
-- **[D]** `core/dynreg` keeps every existing image byte-identical: `test/xslice` on DT2 1.16 is still `5c026883...` (finding 27's pin; the
+- **[D]** `core/rows` keeps every existing image byte-identical: `test/xslice` on DT2 1.16 is still `5c026883...` (finding 27's pin; the
   `typed` pins of `packages/patchkit/tests/typed.rs` run in the gate). Images with the runtime alone change only by the runtime's new code
   (`registry.rs`: about 6 KB, 2 KB of it state); with the optional link unresolved they are otherwise as before.
-- **[D]** A flush-check hit appeared on 1.17 only, at first: a variable of `core/dynreg` (the view pointer) shared a 16-byte line with a hook tail.
+- **[D]** A flush-check hit appeared on 1.17 only, at first: a variable of `core/rows` (the view pointer) shared a 16-byte line with a hook tail.
   The variable sits alone in a line now (no code shares a line the CPU writes to; harmless in itself, but the instrument cannot tell).
 - **[D]** Cost: `dynreg_copy` is 96 bytes, `dynreg_view_hook` 20, `dynreg_info` 200, the reserved rows 8 x 64 + 16 x (60 + 28) bytes; the
   runtime object grew by about 6 KB (`registry.rs`, 2 KB state). The filter adds a few instructions to each list build (once per boot, plus one per registry change).

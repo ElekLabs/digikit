@@ -1,4 +1,4 @@
-//! The walk over a validated `register` section. The words of `dynreg_info` and the machines registry's state are the services' (`dkrt_svc_rows::dynreg`).
+//! The walk over a validated `register` section. The words of `rows_info` and the machines registry's state are the services' (`dkrt_svc_rows::rows_info`).
 use crate::mem::rd32;
 
 /// Walk the records of a validated section. Calls `f(kind, body)` for each.

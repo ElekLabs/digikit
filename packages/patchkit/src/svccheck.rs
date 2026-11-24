@@ -660,7 +660,9 @@ fn check_dks(
         ] {
             let c = called(key);
             // a hook with no device named is declared plain: the loader drops it on a device whose manifest entry is for another, so it needs an entry on some device
-            let plain = |n: &String| key == "hooks" && c.iter().any(|(x, d)| x == n && d.is_empty());
+            let plain = |n: &String| {
+                matches!(key, "hooks" | "patches") && c.iter().any(|(x, d)| x == n && d.is_empty())
+            };
             let anywhere: BTreeSet<String> = entries.iter().map(|(n, _)| n.clone()).collect();
             for dev in ["dt2", "dn2"] {
                 let (m, c) = (hook_set(entries, dev), hook_set(&c, dev));

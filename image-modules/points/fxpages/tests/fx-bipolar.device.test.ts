@@ -30,7 +30,7 @@ for (const device of DEVICES) {
     const context = withPreparedFxSession(device, 'FX contract bipolar', {
       image: {
         name: 'fx-bipolar',
-        modules: ['core/runtime', 'core/dynreg', 'core/dyndsp', 'core/dynfx', 'core/fxpages'],
+        modules: ['core/runtime', 'core/rows', 'core/dyndsp', 'core/dynfx', 'core/fxpages'],
         inventory: [SINE, FX],
         symbols: [
           'DKRT_BOOT',

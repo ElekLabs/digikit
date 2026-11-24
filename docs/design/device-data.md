@@ -66,10 +66,10 @@ readers that scan `devices/` skip them. Which devices the public site offers is 
 | Short name, long name, firmware list (sha256, version) | `devices/<dev>.toml` `[device]`, `[[firmware]]` | everything | read directly |
 | DMA timer counters that the emulator runs free at the bus clock (a firmware that polls one without starting it) | `[emulator] free_running_dtcn` (channels 0..3; absent = none) | emulator boot (`device-profile` `free_running_dtcn_mask`); `DIGI_DTCN0=bus\|off` overrides channel 0 | read directly |
 | SysEx device byte of the `.syx` framing | `[device] syx_id` | patchkit (`syx.rs`, `devdata.rs`) | embedded by `packages/patchkit/build.rs` |
-| Device id and name digikit uses (runtime, `core/dynreg`, `core/dyndsp`, `.dkm`, the INFO reply) | `[digikit] id`, `name` (at most 3 characters) | patchkit `register.rs`, `dkmdsp.rs`; the device objects | `devdata.rs` (embedded); `DEVICE_ID`, `DEVICE_NAME_WORD` in `build/gen/device-<dev>.inc` |
+| Device id and name digikit uses (runtime, `core/rows`, `core/dyndsp`, `.dkm`, the INFO reply) | `[digikit] id`, `name` (at most 3 characters) | patchkit `register.rs`, `dkmdsp.rs`; the device objects | `devdata.rs` (embedded); `DEVICE_ID`, `DEVICE_NAME_WORD` in `build/gen/device-<dev>.inc` |
 | Module store: first sector, length (0 without `[card.store]`), header B, selection record copies | `[card.store]` | runtime (`dkrt_sdk::store`, `sel`), tools | `STORE_FIRST`, `STORE_SECTORS` in `build/gen/device-<dev>.inc`, laid out by `device.s` as `dkrt_store_first`, `dkrt_store_sectors`; Python: `tools/patchkit/pk_device.py` |
 | Working-project sector (firmware area above the store) | `[[card.regions]]` role `working-project` | `pk_digikit_scen.py` | `pk_device.working_project_sector()` |
-| Run-time machine type range (`dynamic_first ..= last`) and with it the number of reserved machine rows and voice rows | `image-modules/points/machines/types.toml` | runtime `dsp.rs`, `core/dynreg`, `core/dyndsp` | `dyn_type_first`, `dyn_types` of `dkrt_dev`; `DYN_TYPE_*` in the generated files of the other modules |
+| Run-time machine type range (`dynamic_first ..= last`) and with it the number of reserved machine rows and voice rows | `runtime/platform/rows/types.toml` | runtime `dsp.rs`, `core/rows`, `core/dyndsp` | `dyn_type_first`, `dyn_types` of `dkrt_dev`; `DYN_TYPE_*` in the generated files of the other modules |
 | DSP area size (window 0) and frame tail geometry | `[digikit] dsp_area_bytes`, `dsp_tail_off`, `dsp_tail_words` | `core/dsp-link` DSP object, `core/dyndsp` table | `DL_AREA_BYTES`, `DL_AREA_WORDS`, `DL_TAIL_*` in `build/gen/device-<dev>.inc` (SHARC `#define`s and gas `.equ`s) |
 | Console UART, DDR window and uncached alias, eSDHC controller (absent: no `DEV_HAS_SDHC`) | `[board]` | `tramp.s` (soft reset), `fault.rs`, `api.rs` (`card_busy`), `platform.rs` (`word_at_literal`), `fx` service (`kit`) | `dkrt_dev` (below): `RealPlatform` fills `DeviceProfile` from it; a service takes its profile by device id |
 | Safe-mode key (a firmware key index; absent: no `DEV_HAS_SAFE_KEY`) | `[digikit] safe_key` | runtime boot (`safe_mode.rs`) | `dkrt_dev`; `DeviceProfile::safe_key` |
@@ -196,10 +196,10 @@ has is not disabled; a missing anchor that is not listed still refuses the modul
    Rebuild patchkit (the device files are embedded). The code refuses a device whose `syx_id` or `[digikit] id` repeats.
 2. For `seal = "hmac"`: the container seal key of the device in `SEALS` (`packages/patchkit/src/syx.rs`); `validate` refuses
    an `hmac` device without an entry. A device with `seal = "none"` needs no key.
-3. `image-modules/points/machines/types.toml`: a `[<dev>]` table (`last`, `dynamic_first`, `alloc`, `dynamic`).
+3. `runtime/platform/rows/types.toml`: a `[<dev>]` table (`last`, `dynamic_first`, `alloc`, `dynamic`).
 4. Modules that have per-device sources add an `[[object]]` with `devices = ["<dev>"]` and a small source for the device (the
-   device objects of `core/runtime`, `core/dynreg`, `core/dyndsp`, `core/dsp-link` include the generated `device-<dev>.inc`).
-   `core/dynreg` and `core/dyndsp` need `DYN_TYPES` rows each (`tests/patchkit/test_pk_device.py` checks it).
+   device objects of `core/runtime`, `core/rows`, `core/dyndsp`, `core/dsp-link` include the generated `device-<dev>.inc`).
+   `core/rows` and `core/dyndsp` need `DYN_TYPES` rows each (`tests/patchkit/test_pk_device.py` checks it).
 5. `patchkit gen`, `uv run python -m tools.patchkit.pk_build build-all`, `uv run python -m tools.patchkit.port_resolve resolve-all`.
    The anchors of a new firmware are rules in `ports/fw/` ([firmware-decls.md](firmware-decls.md)).
 6. Still outside the data: `pk_harness.py` (firmware table, panel buttons), the `Fixed(...)` address tables of the emulator and the

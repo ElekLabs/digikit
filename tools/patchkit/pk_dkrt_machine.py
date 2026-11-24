@@ -37,7 +37,7 @@ STATE_IDLE, STATE_LOADING = 0, 1
 FREE_TYPE = 0xFFFF_FFFF
 L2_BYTE_BASE, L2_SW_BASE = 0x2000_0000, 0x00B8_0000
 TRACK_OBJ_WORD = 0x4265338C  # the type byte is the third byte of this word (finding 02)
-MODULES_STATIC = "core/runtime,core/dynreg,core/dyndsp"
+MODULES_STATIC = "core/runtime,core/rows,core/dyndsp"
 MODULE = "test/sine"
 MACHINE = "sine"  # its machine
 # DspState (runtime/core/abi/src/dsp.rs), byte offsets of the fields the proof reads
@@ -352,11 +352,11 @@ class Rig:
             "<II", raw
         )  # dsp_peek returns memory bytes: DSP words are little endian
 
-    # -- the firmware's machine rows (core/machines): the name pointer marks a row as used
+    # -- the firmware's machine rows (core/rows): the name pointer marks a row as used
     def machine_listed(self, typ: int) -> bool:
-        rows = sym(self.plan, "core/machines", "machines.rows")
-        first = sym(self.plan, "core/machines", "machines.first")
-        size = sym(self.plan, "core/machines", "machines.row_size")
+        rows = sym(self.plan, "core/rows", "machines.rows")
+        first = sym(self.plan, "core/rows", "machines.first")
+        size = sym(self.plan, "core/rows", "machines.row_size")
         name = self.w(rows + (typ - first) * size + 56)
         return bool(name) and (self.w(name) >> 24) != 0
 

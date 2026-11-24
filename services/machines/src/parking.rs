@@ -5,7 +5,7 @@ use crate::selection_view::refresh_view;
 use crate::unload::reset_machine_row;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::iw;
-use dkrt_svc_rows::dynreg::{w, RegState};
+use dkrt_svc_rows::rows_info::{w, RegState};
 
 #[cfg(test)]
 mod tests;
@@ -109,7 +109,7 @@ impl Parking {
     /// A real load took the placeholder of type `t` (`dsp::make_room`): its machine row falls back to the gap row (the stock sound) and the event says so; the number is parked
     /// again when a row frees (`park_absent`).
     pub(crate) unsafe fn give_way<C: CoreApi>(&mut self, core: &C, reg: &mut RegState, t: u32) {
-        let inf = dkrt_svc_rows::dynreg(core);
+        let inf = dkrt_svc_rows::rows_info(core);
         let d0 = iw(inf, w::M_DYN0);
         if inf.is_null() || t < d0 || (t - d0) as usize >= MAX_MACH {
             return;
@@ -126,7 +126,7 @@ impl Parking {
     /// (`boot_index` is `u32::MAX` again) and the DSP loader is idle, a free row exists and the write is taken; only then the machine row reads MISSING. A number that cannot be
     /// parked (no free row, or the write failed `PARK_MAX` passes in a row) keeps the gap row and one error event says why. Nothing runs during a live operation.
     pub(crate) unsafe fn park_absent<C: CoreApi>(&mut self, core: &C, reg: &mut RegState) {
-        let inf = dkrt_svc_rows::dynreg(core);
+        let inf = dkrt_svc_rows::rows_info(core);
         if inf.is_null() || core.live_op() != 0 || core.boot_index() != u32::MAX {
             return;
         }

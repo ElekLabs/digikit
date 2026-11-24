@@ -1999,8 +1999,8 @@ STAGE = { id = 4, fit = true, label = "file" }   # the staging buffer: the large
 DSP_AREA = { id = 5, fit = true, label = "DSP memory" }   # DSP run-time area bytes; used: taken, alignment gaps counted as free; largest: the largest free range
 MACHINE_ROWS = { id = 6, ceiling = "machine_rows", fit = true, label = "machine rows" }   # run-time machine types (registry machine rows) in use
 VOICE_ROWS = { id = 7, ceiling = "machine_rows", fit = true, label = "voice rows" }   # DSP voice rows in use
-PARAM_ROWS = { id = 8, ceiling = "param_rows", fit = true, label = "parameter rows" }   # parameter rows core/dynreg reserves, in use
-PAGE_ROWS = { id = 9, ceiling = "page_rows", fit = true, label = "page rows" }   # page rows core/dynreg reserves (Digitone II), in use
+PARAM_ROWS = { id = 8, ceiling = "param_rows", fit = true, label = "parameter rows" }   # parameter rows core/rows reserves, in use
+PAGE_ROWS = { id = 9, ceiling = "page_rows", fit = true, label = "page rows" }   # page rows core/rows reserves (Digitone II), in use
 FX_SLOTS = { id = 10, ceiling = "fx_slots", fit = true, label = "effect slots" }   # effects in the chain: the device's limit (`[limits] fx_slots`); used: run-time effects claimed (the effect rows of core/dynfx); largest: 0
 MAP_ENTRIES = { id = 11, ceiling = "map_entries" }   # sticky machine-type map entries in use
 STORE = { id = 12 }   # the module and sample store, in KiB (a store can be 22 GiB); used: KiB taken; largest: 0 (BEGIN says E_FULL with the free bytes)
@@ -2071,9 +2071,9 @@ map_entries = 8     # sticky machine-type map entries: MAP_N = 8 (record format:
 fx_slots = 4        # effects in the chain: DK_FX_MAX of [fx] (kept equal by packages/patchkit/tests/sdkgen.rs)
 send_slots = 2      # effects on a send bus: the Sound array's free indices a send page can use, [fx] send_indices (at most SEND_MAX = 2 in core/fxpages)
 dsp_area_bytes = 524288  # the 17-bit word offset of a core/dsp-link chunk reaches 2^17 words
-param_rows = 16     # parameter rows core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
-page_rows = 8       # page rows core/dynreg reserves (Digitone II)
-machine_rows = 8    # run-time machine types core/dynreg reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
+param_rows = 16     # parameter rows core/rows reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
+page_rows = 8       # page rows core/rows reserves (Digitone II)
+machine_rows = 8    # run-time machine types core/rows reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
 stage_bytes = 131072  # the runtime's staging buffer: the largest .dkm file (patchkit refuses a larger one)
 
 [limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, runtime/core/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language

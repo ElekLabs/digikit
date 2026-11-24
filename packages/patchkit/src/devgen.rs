@@ -1,7 +1,7 @@
 //! Constants from device data, for code that cannot read a file: `patchkit gen` writes them, `gen --check` keeps them current.
 //!
 //! The sources are the device files (`devices/*.toml`: `[board]`, `[digikit]`, `[card.store]`) and the run-time type range of
-//! `core/machines` (`types.toml`). A module asks for a file with a `[[gen]]` entry in its `module.toml` (`module::GenDef`):
+//! `core/rows` (`types.toml`). A module asks for a file with a `[[gen]]` entry in its `module.toml` (`module::GenDef`):
 //!
 //! - `gas-dkdv`: the runtime's per-device data object `dkrt_dev` (struct `DkrtDevice` of `core/runtime/abi.toml`) as ColdFire assembly
 //!   data, one file per device. The runtime is one image for all devices: what differs between devices is data that it reads from this
@@ -374,10 +374,12 @@ fn dsp_headroom(short: &str, b: &Board, voices: u64) -> u64 {
 fn dsp_headroom(_short: &str, _b: &Board, _voices: u64) -> u64 {
     0
 }
-/// The device facts of the builder commit (`core/runtime` reads them from `dynreg_info` version 3): what the packer took from `[modules]` and
+/// The device facts of the builder commit (the services read them from `rows_info`): what the packer took from `[modules]` and
 /// `[adapter.machine]` before modules declared through builder calls. All 0 on a device without `[modules]`.
 #[derive(Debug, Default)]
 struct ProfileF {
+    knobs: u64,
+    slot_base: u64,
     clone_of: u64,
     level: u64,
     own_dsp: u64,
@@ -414,6 +416,8 @@ fn profile_facts(short: &str, model: Option<&crate::typed::DeviceModel>) -> Resu
             .ok_or_else(|| err!("{short}: [modules.templates] has no `{g}`"))? as u64;
     }
     Ok(ProfileF {
+        knobs: kn.count as u64,
+        slot_base: kn.slot_base as u64,
         clone_of: kn.clone_of as u64,
         level: kn.level_default as u64,
         own_dsp: u64::from(kn.own_dsp),
@@ -1622,22 +1626,22 @@ fn c(name: &'static str, value: u64, note: &'static str) -> C {
     }
 }
 
-/// The run-time machine type range of a device: `dynamic_first ..= last` of `core/machines` types.toml.
+/// The run-time machine type range of a device: `dynamic_first ..= last` of `core/rows` types.toml.
 pub fn dyn_range(lib: &Library, dev: &str) -> Result<(i64, i64)> {
     let d = lib
-        .get("core/machines")
+        .get("core/rows")
         .and_then(|m| m.alloc.get("machines"))
         .and_then(|a| a.devices.get(dev))
-        .ok_or_else(|| err!("{dev}: no allocation table (core/machines types.toml)"))?;
+        .ok_or_else(|| err!("{dev}: no allocation table (core/rows types.toml)"))?;
     let first = d
         .dynamic_first
         .ok_or_else(|| err!("{dev}: types.toml has no dynamic_first"))?;
     Ok((first, d.last))
 }
 
-/// The number of stock machine types of a device: `stock_types` of `core/machines` types.toml.
+/// The number of stock machine types of a device: `stock_types` of `core/rows` types.toml.
 pub fn stock_types(lib: &Library, dev: &str) -> Result<i64> {
-    lib.get("core/machines")
+    lib.get("core/rows")
         .and_then(|m| m.alloc.get("machines"))
         .and_then(|a| a.devices.get(dev))
         .and_then(|d| d.stock_types)
@@ -1696,13 +1700,13 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     }
     if n > abi["MACHINE_ROWS"] {
         return Err(err!(
-            "{dev}: core/machines types.toml reserves {n} run-time machine types, more than the runtime's tables hold (MACHINE_ROWS {} of core/runtime/abi.toml)",
+            "{dev}: core/rows types.toml reserves {n} run-time machine types, more than the runtime's tables hold (MACHINE_ROWS {} of core/runtime/abi.toml)",
             abi["MACHINE_ROWS"]
         ));
     }
     if e.limits.machine_rows != n {
         return Err(err!(
-            "{dev}: [limits] machine_rows is {}, but core/machines types.toml reserves {n} run-time machine types (dynamic_first ..= last)",
+            "{dev}: [limits] machine_rows is {}, but core/rows types.toml reserves {n} run-time machine types (dynamic_first ..= last)",
             e.limits.machine_rows
         ));
     }
@@ -1743,22 +1747,22 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         c(
             "STOCK_MACHINE_TYPES",
             stock as u64,
-            "core/machines types.toml stock_types (0: no DSP)",
+            "core/rows types.toml stock_types (0: no DSP)",
         ),
         c(
             "DYN_TYPE_FIRST",
             first as u64,
-            "core/machines types.toml dynamic_first (0: no DSP)",
+            "core/rows types.toml dynamic_first (0: no DSP)",
         ),
         c(
             "DYN_TYPE_LAST",
             last as u64,
-            "core/machines types.toml last (0: no DSP)",
+            "core/rows types.toml last (0: no DSP)",
         ),
         c(
             "DYN_TYPES",
             n,
-            "run-time machine types; core/dynreg reserves one machine row and core/dyndsp one voice row for each",
+            "run-time machine types; core/rows reserves one machine row and core/dyndsp one voice row for each",
         ),
         c(
             "CONSOLE_UART_BASE",
@@ -2092,6 +2096,16 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     }
     let pf = &e.profile;
     for (name, value, note) in [
+        (
+            "PROFILE_KNOBS",
+            pf.knobs,
+            "[modules.knobs] count (knobs of a machine)",
+        ),
+        (
+            "PROFILE_SLOT_BASE",
+            pf.slot_base,
+            "[modules.knobs] slot_base (engine or sound-array slot of knob 0)",
+        ),
         ("PROFILE_CLONE_OF", pf.clone_of, "[modules.knobs] clone_of"),
         ("PROFILE_LEVEL", pf.level, "[modules.knobs] level_default"),
         (

@@ -76,7 +76,7 @@ impl Slots {
         }
     }
 
-    /// Set (`addr` != 0) or clear (0) the action of parameter row `k` (a row of core/dynreg). Called by `apply` and `remove`.
+    /// Set (`addr` != 0) or clear (0) the action of parameter row `k` (a row of core/rows). Called by `apply` and `remove`.
     pub fn set(&mut self, k: usize, addr: u32) {
         if k >= limits::PARAM_ROWS {
             return;

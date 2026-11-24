@@ -378,6 +378,13 @@ const EDITS: u32 = 0x9000;
 const TAIL: u32 = 0xa000;
 const ROW_SIZE: u32 = 28;
 const BASE: u64 = 0x1000;
+// where the test puts the machine registry: types `M_FIRST ..` in rows of `M_ROW_SIZE` bytes, the last `DYN_N` of them reserved from `M_DYN0`
+const M_ROWS: u64 = 0x4000;
+const M_ROW_SIZE: u64 = 64;
+const M_FIRST: u64 = 7;
+const M_COUNT: u64 = 17;
+const M_DYN0: u64 = 16;
+const PG_ROW_SIZE: u64 = 84;
 
 /// Registry row layouts of the manifest: the byte offset of a field.
 fn field_offset(m: &Module, registry: &str, field: &str) -> u32 {
@@ -554,23 +561,51 @@ fn the_row_layout_of_the_manifest_is_the_one_the_assembly_reads() {
 
 // ---- rows_info -----------------------------------------------------------------------------------------------------
 
-/// Byte offsets of `rows_info` (runtime/platform/rows README "rows_info").
+/// Word numbers of `rows_info` (runtime/platform/rows/src/cf/rows-info.inc has the layout).
 const W_MAGIC: usize = 0;
 const W_VERSION: usize = 1;
 const W_DEVICE: usize = 2;
-const W_TABLE: usize = 3;
-const W_TABLE_ROW: usize = 4;
-const W_SPEC_ROWS: usize = 5;
-const W_SPEC_ROW: usize = 6;
-const W_SPEC_TEMPLATE: usize = 7;
-const W_FIRST: usize = 8;
-const W_COUNT: usize = 9;
-const W_BLOCKS: usize = 10;
-const W_BLOCK0: usize = 11;
-const BLOCK_WORDS: usize = 4;
-const W_TOTAL: usize = W_BLOCK0 + 3 * BLOCK_WORDS;
-const W_RECIPE: usize = W_TOTAL + 1;
+const W_M_ROWS: usize = 3;
+const W_M_ROW_SIZE: usize = 4;
+const W_M_FIRST: usize = 5;
+const W_M_COUNT: usize = 6;
+const W_M_DYN0: usize = 7;
+const W_M_DYN_N: usize = 8;
+const W_NAMES: usize = 9;
+const W_PERMIT: usize = 10;
+const W_PERTYPE: usize = 11;
+const W_OFFSETS: usize = 12;
+const W_TABLE: usize = 20;
+const W_SPEC_ROWS: usize = 21;
+const W_SPEC_ROW: usize = 22;
+const W_FIRST: usize = 23;
+const W_COUNT: usize = 24;
+const W_DP0: usize = 25;
+const W_DP_ROWS: usize = 26;
+const W_TABLE_ROW: usize = 27;
+const W_SPEC_TEMPLATE: usize = 28;
+const W_EMPTY: usize = 29;
+const W_RECIPE: usize = 30;
 const RECIPE_WORDS: usize = 15;
+const W_KNOBS: usize = 45;
+const W_SLOT_BASE: usize = 46;
+const W_RESERVE_TEMPLATE: usize = 47;
+const W_PG_ROWS: usize = 50;
+const W_PG_ROW_SIZE: usize = 51;
+const W_PG_FIRST: usize = 52;
+const W_PG_DYN0: usize = 53;
+const W_PG_DYN_N: usize = 54;
+const W_PGO: usize = 55;
+const W_PG_FREE: usize = 60;
+const W_M_ENTRIES: usize = 87;
+const W_SLOTMAP: usize = 88;
+const W_READER_REAL: usize = 89;
+const W_LIST_STOCK: usize = 90;
+const W_PG_COUNT: usize = 91;
+const W_BLOCKS: usize = 92;
+const W_BLOCK0: usize = 93;
+const BLOCK_WORDS: usize = 4;
+const W_TOTAL: usize = 105;
 
 #[test]
 fn rows_info_states_the_reservation_of_the_device_file() {
@@ -603,18 +638,38 @@ fn rows_info_states_the_reservation_of_the_device_file() {
                     "params.rows" => 0x5000,
                     "params.row_size" => ROW_SIZE as u64,
                     "pf_table" => 0x6000,
+                    "machines.rows" => M_ROWS,
+                    "machines.row_size" => M_ROW_SIZE,
+                    "machines.first" => M_FIRST,
+                    "machines.count" => M_COUNT,
+                    "machines.entries" => M_COUNT,
+                    "machines.dyn16.index" => M_DYN0,
+                    "mf_names" => 0x7000,
+                    "mf_permit" => 0x7100,
+                    "mf_pertype" => 0x7200,
+                    "mf_list_stock" => 0x7300,
+                    "mf_reader_real" => 0x7400,
+                    "pages.rows" => 0x7500,
+                    "pages.row_size" => PG_ROW_SIZE,
+                    "pages.first" => 0,
+                    "pages.dpg0.index" => 0,
+                    "pages.count" => 8,
                     t => panic!("{dev}: rows_info takes {t}, which this test does not place"),
                 };
                 (name.clone(), v)
             })
             .collect();
+        // the two symbols the object takes by their own names (the dispatch object defines them)
+        let mut externs = externs;
+        externs.insert("mf_empty".into(), 0x7600);
+        externs.insert("mf_slotmap".into(), 0x7700);
         let l = linked(m, &dev, "rows-info", &externs);
         let at = l.symbols["rows_info"] as usize - BASE as usize;
         let w = |i: usize| {
             u32::from_be_bytes(l.image[at + 4 * i..at + 4 * i + 4].try_into().unwrap()) as u64
         };
         assert_eq!(w(W_MAGIC), 0x524f_5753, "{dev} 'ROWS'");
-        assert_eq!(w(W_VERSION), 1, "{dev}");
+        assert_eq!(w(W_VERSION), 2, "{dev}");
         assert_eq!(w(W_DEVICE), info.digikit_id.unwrap() as u64, "{dev}");
         assert_eq!((w(W_TABLE), w(W_TABLE_ROW)), (0x6000, 60), "{dev}");
         assert_eq!(
@@ -648,6 +703,117 @@ fn rows_info_states_the_reservation_of_the_device_file() {
             w(W_TOTAL),
             reserved(m, &dev, "dp") + reserved(m, &dev, "fp") + reserved(m, &dev, "fs"),
             "{dev}: the manifest reserves what rows_info states"
+        );
+        // the machine registry: where the rows are, the reserved types and the offsets of a row's fields (the field order of the registry, which the services and the assembly name)
+        let off = |f: &str| field_offset(m, "machines", f) as u64;
+        assert_eq!(
+            (
+                w(W_M_ROWS),
+                w(W_M_ROW_SIZE),
+                w(W_M_FIRST),
+                w(W_M_COUNT),
+                w(W_M_DYN0)
+            ),
+            (M_ROWS, M_ROW_SIZE, M_FIRST, M_COUNT, M_DYN0),
+            "{dev}"
+        );
+        assert_eq!(
+            m.manifest
+                .registry
+                .iter()
+                .find(|r| r.name == "machines")
+                .unwrap()
+                .field
+                .len() as u64
+                * 4,
+            M_ROW_SIZE,
+            "{dev}: the row size of the machines registry"
+        );
+        assert_eq!(w(W_M_DYN_N), limit(&dev, "machine_rows"), "{dev}");
+        assert_eq!(
+            (W_OFFSETS..W_OFFSETS + 8).map(w).collect::<Vec<_>>(),
+            [
+                "d_long", "d_short", "f0", "clone_of", "position", "own_dsp", "name", "short"
+            ]
+            .map(off),
+            "{dev}"
+        );
+        assert_eq!(
+            (w(W_NAMES), w(W_PERMIT), w(W_LIST_STOCK)),
+            (0x7000, 0x7100, 0x7300),
+            "{dev}"
+        );
+        assert_eq!(w(W_EMPTY), 0x7600, "{dev} an empty string of the image");
+        // parameters: the first block is the machines service's
+        assert_eq!((w(W_DP0), w(W_DP_ROWS)), (stock, dp), "{dev}");
+        assert_eq!(w(W_RESERVE_TEMPLATE), w(W_BLOCK0 + 3), "{dev}");
+        // the pages of a device that has them, and none on a device without
+        let pages = limit(&dev, "page_rows");
+        let page_words: Vec<u64> = (W_PG_ROWS..=W_PG_FREE).map(w).collect();
+        if pages == 0 {
+            assert!(page_words.iter().all(|x| *x == 0), "{dev}: no page rows");
+            assert_eq!(
+                (w(W_PG_COUNT), w(W_SLOTMAP) != 0),
+                (0, true),
+                "{dev}: a table of the Digitakt"
+            );
+        } else {
+            let pg = |f: &str| field_offset(m, "pages", f) as u64;
+            assert_eq!(
+                (
+                    w(W_PG_ROWS),
+                    w(W_PG_ROW_SIZE),
+                    w(W_PG_FIRST),
+                    w(W_PG_DYN0),
+                    w(W_PG_DYN_N)
+                ),
+                (0x7500, PG_ROW_SIZE, 0, 0, pages),
+                "{dev}"
+            );
+            assert_eq!(
+                m.manifest
+                    .registry
+                    .iter()
+                    .find(|r| r.name == "pages")
+                    .unwrap()
+                    .field
+                    .len() as u64
+                    * 4,
+                PG_ROW_SIZE,
+                "{dev}: the row size of the pages registry"
+            );
+            assert_eq!(
+                (W_PGO..W_PGO + 5).map(w).collect::<Vec<_>>(),
+                [pg("name"), pg("title"), pg("c0"), pg("machine"), pg("s0")],
+                "{dev}"
+            );
+            assert_eq!(
+                (w(W_PG_FREE), w(W_PG_COUNT), w(W_READER_REAL)),
+                (0x7fff_ffff, 8, 0x7400),
+                "{dev}"
+            );
+        }
+        // the knobs of a machine come from the device file's [modules.knobs]
+        let file = std::fs::read_dir(root().join("devices"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+            .filter_map(|p| {
+                toml::from_str::<toml::Value>(&std::fs::read_to_string(p).unwrap()).ok()
+            })
+            .find(|t| {
+                t.get("digikit").and_then(|d| d["id"].as_integer())
+                    == info.digikit_id.map(i64::from)
+            })
+            .expect("the device file");
+        let kn = &file["modules"]["knobs"];
+        assert_eq!(
+            (w(W_KNOBS), w(W_SLOT_BASE)),
+            (
+                kn["count"].as_integer().unwrap() as u64,
+                kn["slot_base"].as_integer().unwrap() as u64
+            ),
+            "{dev}"
         );
         // the cap words the admission reads before a service loads
         for (name, key) in [

@@ -507,7 +507,7 @@ fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
     };
     lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
         .unwrap();
-    let dynreg = lib.get("core/dynreg").unwrap();
+    let dynreg = lib.get("core/rows").unwrap();
     let count = |registry: &str, dev: &str| {
         dynreg
             .manifest
@@ -545,12 +545,12 @@ fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
         assert_eq!(
             count("pages", dev),
             l["page_rows"].as_integer().unwrap() as u64,
-            "{dev} page rows of core/dynreg"
+            "{dev} page rows of core/rows"
         );
         assert_eq!(
             count("machines", dev),
             l["machine_rows"].as_integer().unwrap() as u64,
-            "{dev} machine rows of core/dynreg"
+            "{dev} machine rows of core/rows"
         );
     }
 }
@@ -575,15 +575,13 @@ fn the_link_width_is_a_shared_c_header_from_the_contract_maximum() {
 }
 
 /// The modules of the rt021 flash images (`out/patch/rt021-dt2-1.17.plan.json`, `modules`), by id.
-const RT021_MODULES: [&str; 9] = [
+const RT021_MODULES: [&str; 7] = [
     "core/dsp-link",
     "core/dsp-voice",
     "core/dyndsp",
-    "core/dynreg",
+    "core/rows",
     "core/expansion",
     "core/health",
-    "core/machines",
-    "core/rows",
     "core/runtime",
 ];
 

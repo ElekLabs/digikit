@@ -1,0 +1,122 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text",
+   "symbol": "_mf_first",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text",
+   "symbol": "_mf_count",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text",
+   "symbol": "_mf_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 40,
+   "section": ".text",
+   "symbol": ".sec..rodata",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".text",
+   "symbol": "_mf_t_dispatch",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "202f00040480000000000c8000000000642472404c0108000680000000002f0820404a90660c223c00000000208121410004205f4e754ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 60
+  },
+  {
+   "align": 4,
+   "hex": "0000000000000000ffffffff0000000000000000000000080000000c0000001000000014ffffffffffffffff000000180000001c0000002000000024",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 60
+  }
+ ],
+ "source_sha256": "299c4a2dc0a15c905662441c033de1a64bd3eddd99ee154ca687d7c83cb4a241",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..rodata",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_mf_count",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_mf_first",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_mf_rows",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_mf_t_dispatch",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_dispatch",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_empty",
+   "section": ".rodata",
+   "value": 16
+  },
+  {
+   "global": true,
+   "name": "mf_empty_rep",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_slotmap",
+   "section": ".rodata",
+   "value": 20
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "17",
+  "isa_check": "d2b8b15fbec2ebbe19bb3c5ed3a72fdb6154d803861263d8aca4b4079e143299",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}
