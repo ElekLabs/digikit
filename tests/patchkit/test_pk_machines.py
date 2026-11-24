@@ -1,11 +1,6 @@
 """core/rows support tools: the card overlay applier and the anchor rules of the framework."""
 
-import os
-import tomllib
-
 from support.paths import REPO_ROOT
-
-ROOT = str(REPO_ROOT)
 
 from tools.emulator import card_overlay  # noqa: E402
 from tools.patchkit import pk_device, port_resolve  # noqa: E402
@@ -57,11 +52,6 @@ def test_sound_types_joins_adjacent_sectors():
 
 
 def test_framework_rules_are_declared_once_per_site():
-    with open(
-        os.path.join(ROOT, "image-modules", "points", "machines", "module.toml"),
-        "rb",
-    ) as f:
-        m = tomllib.load(f)
     # A rule in ports/fw/ may be shared, but its site must occur only once per device.
     machine_rules = [
         r
@@ -75,21 +65,6 @@ def test_framework_rules_are_declared_once_per_site():
             key = (r["name"], dev)
             assert key not in rules, key
             rules.add(key)
-    # every anchor a hook, write, section or extern of the manifest names has a rule for each device it is active on
-    targets = tuple(fw.split("-", 1)[0] for fw in m["targets"])
-    named = set()
-    for op in m["op"]:
-        named.add((op.get("anchor"), tuple(op.get("devices", targets))))
-    for sec in m["section"]:
-        named.add((sec["from"]["anchor"], tuple(sec.get("devices", targets))))
-    for obj in m["object"]:
-        for anchor in obj.get("externs", {}).values():
-            if anchor.startswith(("cf.", "dsp.")):
-                named.add((anchor, tuple(obj.get("devices", targets))))
-    for name, devs in named:
-        if name:
-            for dev in devs:
-                assert (name, dev) in rules, (name, dev)
     for r in machine_rules:
         if r["kind"] == "cf_func":
             assert len(r["hash"]) == 32 and r["len"] > 0

@@ -10,7 +10,7 @@ ROOT = REPO_ROOT
 
 from tools.patchkit import modroots  # noqa: E402
 
-TYPES = ROOT / "image-modules" / "points" / "machines" / "types.toml"
+TYPES = ROOT / "runtime" / "platform" / "rows" / "types.toml"
 STOCK_TYPES = {"dt2": 7, "dn2": 5}  # the first number that is not a stock type
 
 
