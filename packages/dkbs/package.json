@@ -15,7 +15,7 @@
     "@napi-rs/canvas": "1.1.0",
     "@types/node": "22.15.0",
     "typescript": "5.9.3",
-    "vite": "8.3.1",
+    "vite": "8.3.3",
     "vitest": "5.1.0"
   }
 }
