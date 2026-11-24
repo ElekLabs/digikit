@@ -77,6 +77,10 @@ pub struct Manifest {
     /// that handles each. Their name hashes and entry offsets go in the `HOOKS` entry of the header table; the port file gives each a trampoline.
     #[serde(default, rename = "hook")]
     pub hooks: Vec<ServiceHook>,
+    /// `[[patch]] name = "cf.machine.patch.list_alloc"`: a patch site of the port file (plain bytes of 1, 2 or 4, as a table pointer or a bound) that a service module writes
+    /// at load with a value its `start` computes (`patches = [..]` of `service!`) and restores at unload. The name hash goes in a `HOOKS` item with the patch entry.
+    #[serde(default, rename = "patch")]
+    pub patches: Vec<ServicePatch>,
     /// `[[fill]] slot = "frametype"`, `entry = "mf_frametype"`: a pointer slot of an image adapter (`[[slot]]` of its module.toml) that a service module fills with the address
     /// of a global function of the object when it is loaded (the loader finds the slot word by the hash of the name in the image's info table).
     #[serde(default, rename = "fill")]
@@ -211,10 +215,11 @@ impl Manifest {
                 || self.module.callback_order.is_some()
                 || !self.exports.is_empty()
                 || !self.hooks.is_empty()
+                || !self.patches.is_empty()
                 || !self.fills.is_empty()
             {
                 return Err(err!(
-                    "{id}: `service` or `callback_order` in [module], [[export]], [[hook]] and [[fill]] belong to a module with `role = \"service\"`"
+                    "{id}: `service` or `callback_order` in [module], [[export]], [[hook]], [[patch]] and [[fill]] belong to a module with `role = \"service\"`"
                 ));
             }
             return Ok(None);
@@ -302,6 +307,33 @@ impl Manifest {
             }
             hooks.push((h.name.clone(), h.entry.clone(), h.devices.clone()));
         }
+        let mut patches: Vec<(String, Vec<String>)> = vec![];
+        for h in &self.patches {
+            if h.name.is_empty() {
+                return Err(err!("{id}: [[patch]] needs a `name`, not empty"));
+            }
+            if patches.iter().any(|(n, d)| {
+                *n == h.name && (d.is_empty() || h.devices.is_empty() || d.iter().any(|x| h.devices.contains(x)))
+            }) {
+                return Err(err!("{id}: [[patch]] {:?} is declared twice for a common device", h.name));
+            }
+            if hooks.iter().any(|(n, _, _)| *n == h.name) {
+                return Err(err!("{id}: [[patch]] {:?} is also a [[hook]] (a name is one or the other)", h.name));
+            }
+            for d in &h.devices {
+                if crate::devdata::by_short(d).is_none() {
+                    return Err(err!("{id}: [[patch]] {:?}: device {d:?} is not one of {}", h.name, crate::devdata::short_list()));
+                }
+            }
+            patches.push((h.name.clone(), h.devices.clone()));
+        }
+        // per device, the file's patches stay within what the loader keeps from `init` to the install
+        for dev in std::iter::once(None).chain(crate::devdata::all().iter().map(|d| Some(d.short.as_str()))) {
+            let n = patches.iter().filter(|(_, d)| d.is_empty() || dev.is_some_and(|x| d.iter().any(|y| y == x))).count();
+            if n > dkneeds::SERVICE_PATCHES_MAX as usize {
+                return Err(err!("{id}: {n} [[patch]] entries, over the {} a service file may take", dkneeds::SERVICE_PATCHES_MAX));
+            }
+        }
         let mut fills: Vec<(String, String, Vec<String>)> = vec![];
         let mut dsp_fills: Vec<crate::dkm::DspFill> = vec![];
         for f in &self.fills {
@@ -362,6 +394,7 @@ impl Manifest {
             callback_order: self.module.callback_order,
             exports,
             hooks,
+            patches,
             fills,
             dsp_fills,
         }))
@@ -438,6 +471,16 @@ pub struct ServiceHook {
     pub entry: String,
     /// The devices the hook is for (`dt2`, `dn2`); empty: every device that declares it. `service!` lists the hooks of each device the same way
     /// (`hooks_dt2`, `hooks_dn2`, `hooks`), and `patchkit service-check` compares the two per device.
+    #[serde(default)]
+    pub devices: Vec<String>,
+}
+
+/// An entry of `[[patch]]` of a service: the patch site of the port files (`ports/`); the bytes are the service's own, given in `init`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ServicePatch {
+    pub name: String,
+    /// The devices the patch is for (`dt2`, `dn2`); empty: every device that declares it. `service!` lists the patches of each device the same way.
     #[serde(default)]
     pub devices: Vec<String>,
 }

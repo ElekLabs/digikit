@@ -2087,7 +2087,9 @@ dkm_header = 160    # 0xa0: the header of a `.dkm` (init, fini, menu and tick of
 # machine keys, effect ids and the keys of a service's kind), 4 KINDS (kind, length, handler entry: a service module's kinds), 5 SLOTS, 6 HOOKS, 7 EXPORTS, 8 RESOURCES,
 # and, in a version 2 table only: 9 PROVIDES (service name hash, version: the services the module provides), 10 BIND (site hash, address, stock length, trampoline offset,
 # then the stock bytes padded to 4, at most 64: the firmware sites a service binds), 11 FW (the firmware identity), and, in a version 3 table only (the port file): 12 FWNAMES
-# (hash, address, exit number, kind, flags), 13 SITES (hook hash, address, displaced length, kind, flags, check value). In a version 2 or 3 table a SLOTS item has 12 bytes (slot id, flags, entry).
+# (hash, address, exit number, kind, flags), 13 SITES (hook hash, address, displaced length, kind, flags, check value; a `patch` site has the length of its bytes, 1, 2 or 4, and the check value of those stock bytes).
+# A HOOKS item whose entry is `HOOK_ENTRY_PATCH` (the low 24 bits all set) is a patch: its site is a `patch` SITES item and the service gives the bytes in `init` (`dk_service_declare_patch`).
+# In a version 2 or 3 table a SLOTS item has 12 bytes (slot id, flags, entry).
 # A module that needs and keeps nothing has the 8-byte head. A file with no table, or another magic, is the format of runtime 0.7: E_CONTRACT.
 dsp_header = 64     # 0x40: the header of the DSP section
 max_records = 32    # records of the `register` table
@@ -2103,6 +2105,8 @@ table_magic = 1145787458  # 0x444b5442 "DKTB": the first word of the header tabl
 table_version = 3   # the newest version of the header table a reader accepts (1 to 3; a writer uses 2 for a table with PROVIDES, BIND or FW and 3 for the port file's FWNAMES and SITES; a change is a MINOR of the runtime)
 provider_max = 8    # provider slots of the boot plan (the services that provide; separate from the module records, SEL_MAX)
 install_sites = 48  # hook sites installed at once over all providers (the installer's table: machines 21 + fx 9 and room)
+install_patches = 16  # patch sites (plain bytes of 1, 2 or 4) installed at once over all providers (the installer's patch log)
+service_patches_max = 8  # `[[patch]]` entries of one service file (patchkit refuses more; the loader keeps their values from `init` to the install)
 slots_max = 16      # `[[slot]]` entries of one module (patchkit refuses more)
 info_max = 64       # entries of the image's one table `dkrt_info_table`: every `[[info]]` and `[[slot]]` of all adapters (patchkit refuses more; the core reads at most this many)
 collect_bytes = 1618  # `size_of::<Collect>()` of the runtime's collect.rs on the ColdFire: the generic records and the declarations of one `init`, held in an arena block until the commit (the runtime checks it at compile time; the host's struct has more padding)

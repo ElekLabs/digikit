@@ -22,6 +22,7 @@ use dkrt_abi::profiles;
 use dkrt_abi::storage::{DirEntry, Stat, Storage, ROOT_SAMPLES};
 use dkrt_sdk::store::Layout;
 use dkrt_sdk::*;
+use std::boxed::Box;
 use std::collections::BTreeMap;
 use std::vec::Vec;
 
@@ -76,6 +77,8 @@ pub info_dsp: RefCell<Vec<(u32, u32)>>,
     /// Code memory by address (a byte never written reads 0) and the log of the installer's calls, in order.
     pub code: RefCell<BTreeMap<u32, u8>>,
     pub calls: RefCell<Vec<Call>>,
+    /// A change that happens just before the next `irq_mask` (another actor writes code memory between the installer's read and its mask): run once, then cleared.
+    pub race_at_mask: RefCell<Option<Box<dyn Fn(&FakePlatform)>>>,
     /// The files of the two roots (`Storage`).
     pub storage: FakeStorage,
     /// The device addresses of host memory and code; `with_addresses` makes it the space of `DevAddr`.
@@ -133,6 +136,7 @@ impl FakePlatform {
             info_data: RefCell::new(Vec::new()),
 info_dsp: RefCell::new(Vec::new()),
             calls: RefCell::new(Vec::new()),
+            race_at_mask: RefCell::new(None),
             storage,
             addresses,
         }
@@ -173,6 +177,10 @@ impl Platform for FakePlatform {
         self.clock.get()
     }
     fn irq_mask(&self) -> u32 {
+        let race = self.race_at_mask.borrow_mut().take();
+        if let Some(f) = race {
+            f(self);
+        }
         self.calls.borrow_mut().push(Call::Mask);
         let old = self.sr.get();
         self.sr.set(7);

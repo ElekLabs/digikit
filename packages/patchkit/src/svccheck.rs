@@ -10,7 +10,8 @@
 //! - **The service file.** `dks/` holds `module.toml` (id `core/services/NAME`, `role = "service"`, `service = "NAME"`), `Cargo.toml`, `src/lib.rs` (the
 //!   `service!(...)` call and nothing else) and, when needed, `src/hooks.rs` (every hook as assembler; required when the module has `[[hook]]` entries) and
 //!   `src/fw.rs` (firmware calls). It is required when the service has a `[[service]]` row (the service is a file), and checked whenever it exists.
-//!   The `[[hook]]` entries of `dks/module.toml` equal the hooks of the `service!` call, per device (an entry with `devices`, and a call entry `(name, entry, dt2)`).
+//!   The `[[hook]]` entries of `dks/module.toml` equal the hooks of the `service!` call, per device (an entry with `devices`, and a call entry `(name, entry, dt2)`); so do the `[[patch]]`
+//!   entries and its `patches` list (`(name, length, function)` with the same optional device).
 //!   The exports of the file are the `provided = true` imports of the service in `sdk.toml`: `service!` takes `exports = gen_exports::exports()` (the file `patchkit gen`
 //!   writes) for SDK services. A service outside the SDK declares its export names in `dks/module.toml` and in the literal `exports` list.
 //!   Either can add a resident query with the reserved export name in the manifest and a typed `query` entry in `service!`.
@@ -269,8 +270,9 @@ fn service_list(lib: &str, key: &str) -> Option<Vec<(String, Option<String>)>> {
             _ => {}
         }
     }
+    // a patch entry has its length (1, 2 or 4) between the name and the function: `("name", 4, S::f)`
     let entry = Regex::new(
-        r#"\(\s*"([^"]+)"\s*,\s*[A-Za-z_]\w*(?:\s*::\s*\w+)*\s*(?:,\s*([A-Za-z0-9_]+)\s*)?\)"#,
+        r#"\(\s*"([^"]+)"\s*,\s*(?:[124]\s*,\s*)?[A-Za-z_]\w*(?:\s*::\s*\w+)*\s*(?:,\s*([A-Za-z0-9_]+)\s*)?\)"#,
     )
     .unwrap();
     Some(
@@ -377,6 +379,7 @@ fn check_dks(
         .and_then(|t| t.parse().ok());
     let mut hooks: Vec<(String, Vec<String>)> = vec![];
     let mut fills: Vec<(String, Vec<String>)> = vec![];
+    let mut patches: Vec<(String, Vec<String>)> = vec![];
     let mut local_exports = vec![];
     let mut has_query = false;
     if let Some(m) = &manifest {
@@ -495,6 +498,7 @@ fn check_dks(
             }
         }
         fills = list("fill", "slot");
+        patches = list("patch", "name");
         if !dsp_fills.is_empty() {
             fills.retain(|(n, _)| !dsp_fills.contains(n));
         }
@@ -652,6 +656,7 @@ fn check_dks(
         for (what, noun, key, entries) in [
             ("[[hook]]", "hook", "hooks", &hooks),
             ("[[fill]]", "fill", "fills", &fills),
+            ("[[patch]]", "patch", "patches", &patches),
         ] {
             let c = called(key);
             for dev in ["dt2", "dn2"] {

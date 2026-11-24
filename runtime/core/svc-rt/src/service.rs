@@ -21,9 +21,13 @@ macro_rules! hook_device {
 /// need the `Records` part. The macro emits the part tables, the row, the cell `DK_SVC_OWNER` (`Owner<Shortcuts>`: `init` makes the instance with `Provider::start` before the declarations,
 /// `fini` stops it), the module record `dk_module`, the data word `dk_svc_abi` and (on the ColdFire) the panic handler; `Query` also declares the resident query entry and points it at the part.
 ///
-/// After `parts`: `hooks = [...]`, `fills = [...]`, `exports = gen_exports::exports()` (the list `patchkit gen` writes for a service with `provided` imports in `sdk/sdk.toml`:
+/// After `parts`: `hooks = [...]`, `fills = [...]`, `patches = [...]`, `exports = gen_exports::exports()` (the list `patchkit gen` writes for a service with `provided` imports in `sdk/sdk.toml`:
 /// `[(name hash, entry); N]`) or, only in tests (`patchkit service-check` refuses it in a service crate), `exports = [("dk_param_get", fw::dk_param_get), ...]` (name, function: declared with the
 /// hash of the name) and `tick = f` (`unsafe extern "C" fn(*mut u8)`, the file's `tick`: once per UI pass, with the module context; only after `exports`), each optional list in this order.
+/// `patches = [("name", 4, f), ...]` lists the patches of the service (`[[patch]]` of its module.toml): the name of the patch, its length (1, 2 or 4, the length of the site in the port file) and
+/// `f`, a `fn(&Service) -> u32` that gives the bytes (the low `len` of the value) from the instance `Provider::start` made, so a table address or a count computed in `start` goes in.
+/// The runtime writes them at the site when the service loads and the stock bytes back before `stop`; an optional device name (`dt2`, `dn2`) as for a hook limits the entry. Only after
+/// `fills`, before `exports`.
 /// `parts = [..], hooks = [..], fills = [..]` with no `exports` is the form of a service with no `provided` imports (it declares no export). The macro also emits `dk_svc_declare(ctx, device)`: the
 /// declarations of `init` (the host test of the assembly runs it and compares the result with the header table).
 ///
@@ -32,26 +36,42 @@ macro_rules! hook_device {
 macro_rules! service {
     // ---- the provider form: `parts = [...]`
     ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?] $(,)?) => {
-        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [], fills = [], exports = $crate::service!(@exports), tick = None);
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [], fills = [], patches = [], exports = $crate::service!(@exports), tick = None);
     };
     ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*] $(,)?) => {
-        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports), tick = None);
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], patches = [], exports = $crate::service!(@exports), tick = None);
     };
     ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = [$($export:tt)*] $(,)?) => {
-        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*), tick = None);
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], patches = [], exports = $crate::service!(@exports $($export)*), tick = None);
     };
     ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = [$($export:tt)*], tick = $tick:path $(,)?) => {
-        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], exports = $crate::service!(@exports $($export)*), tick = Some($tick as $crate::TickFn));
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], patches = [], exports = $crate::service!(@exports $($export)*), tick = Some($tick as $crate::TickFn));
     };
     ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = $exports:expr $(,)?) => {
-        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], exports = $exports, tick = None);
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], patches = [], exports = $exports, tick = None);
     };
     ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*], exports = $exports:expr, tick = $tick:path $(,)?) => {
-        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], exports = $exports, tick = Some($tick as $crate::TickFn));
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], patches = [], exports = $exports, tick = Some($tick as $crate::TickFn));
+    };
+    ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*], patches = [$($patch:tt)*] $(,)?) => {
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], patches = [$($patch)*], exports = $crate::service!(@exports), tick = None);
+    };
+    ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*], patches = [$($patch:tt)*], exports = [$($export:tt)*] $(,)?) => {
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], patches = [$($patch)*], exports = $crate::service!(@exports $($export)*), tick = None);
+    };
+    ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*], patches = [$($patch:tt)*], exports = [$($export:tt)*], tick = $tick:path $(,)?) => {
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], patches = [$($patch)*], exports = $crate::service!(@exports $($export)*), tick = Some($tick as $crate::TickFn));
+    };
+    ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*], patches = [$($patch:tt)*], exports = $exports:expr $(,)?) => {
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], patches = [$($patch)*], exports = $exports, tick = None);
+    };
+    ($svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),* $(,)?], hooks = [$($hook:tt)*], fills = [$($fill:tt)*], patches = [$($patch:tt)*], exports = $exports:expr, tick = $tick:path $(,)?) => {
+        $crate::service!(@provider $svc, $name, $kinds, parts = [$($part),*], hooks = [$($hook)*], fills = [$($fill)*], patches = [$($patch)*], exports = $exports, tick = Some($tick as $crate::TickFn));
     };
     (@provider $svc:ty, $name:literal, $kinds:expr, parts = [$($part:ident),*],
      hooks = [$(($site:literal, $entry:path $(, $dev:ident)?)),* $(,)?],
      fills = [$(($slot:literal, $fill:path $(, $fdev:ident)?)),* $(,)?],
+     patches = [$(($pname:literal, $plen:literal, $pfn:path $(, $pdev:ident)?)),* $(,)?],
      exports = $exports:expr, tick = $tick:expr) => {
         const DK_SVC_KINDS: &[(u32, u32)] = $kinds;
         const DK_SVC_PARTS_ADOPTED: &[&str] = &[$(stringify!($part)),*];
@@ -110,6 +130,7 @@ macro_rules! service {
                 &$crate::service!(@hooks $(($site, $entry $(, $dev)?)),*),
                 &$crate::service!(@hooks $(($slot, $fill $(, $fdev)?)),*),
                 &$exports,
+                &$crate::service!(@patches $(($pname, $plen, $pfn $(, $pdev)?)),*),
             );
             if result == 0 {
                 return $crate::service!(@declare_query ctx, $($part),*);
@@ -290,6 +311,20 @@ macro_rules! service {
             $crate::name_hash($site),
             $entry as usize as *const u8,
             $crate::hook_device!($($dev)?),
+        )),*]
+    };
+    // each patch: the name hash of the patch site, the bytes `$pfn` computes from the started instance (`fn(&$svc) -> u32`, the low `$plen` bytes: 1, 2 or 4) and the device filter. Before
+    // `start` (the assembly test replays the declarations without an instance) the value is 0 with the declared length.
+    (@patches $(($pname:literal, $plen:literal, $pfn:path $(, $pdev:ident)?)),*) => {
+        [$((
+            $crate::name_hash($pname),
+            {
+                const _: () = assert!($plen == 1 || $plen == 2 || $plen == 4, "a patch is 1, 2 or 4 bytes");
+                let at = DK_SVC_OWNER.instance();
+                // SAFETY: the instance made by `start`, alive until `fini`; `init` runs on the one task that makes and drops it
+                $crate::Patch::new(if at.is_null() { 0 } else { $pfn(unsafe { &*at }) }, $plen)
+            },
+            $crate::hook_device!($($pdev)?),
         )),*]
     };
     (@exports $(($ename:literal, $efn:path)),* $(,)?) => {

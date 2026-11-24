@@ -13,6 +13,9 @@
 #![no_std]
 #![deny(improper_ctypes, improper_ctypes_definitions)]
 
+#[cfg(test)]
+extern crate std;
+
 mod declare;
 mod import_core;
 mod module_def;

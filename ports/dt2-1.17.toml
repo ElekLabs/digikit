@@ -4342,6 +4342,15 @@ mark = "D"
 rule = "fw/dsp/voice:sharc_literal"
 
 [[hook]]
+name = "cf.filter.hook.test_list_size_patch"
+site = "cf.filter.site.list_size"
+offset = 2
+mode = "replace"
+len = 2
+kind = "patch"
+check = "b5609376c87f00c6"
+
+[[hook]]
 name = "cf.input.hook.key_event"
 site = "cf.input.site.key_event_walk"
 mode = "replace"

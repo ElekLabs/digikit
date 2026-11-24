@@ -28,7 +28,7 @@ use crate::fwnames::{FwRef, eval_exit_with, parse_import};
 use crate::port::{Hook, Port, Registry};
 use crate::prim;
 use dkneeds::keys::{
-    FLAG_ABSENT, Keys, NameRec, Pair, SITE_RAW, SITE_STOCK, SITE_TAIL, SiteRec, Table, name_hash,
+    FLAG_ABSENT, Keys, NameRec, Pair, SITE_PATCH, SITE_RAW, SITE_STOCK, SITE_TAIL, SiteRec, Table, name_hash,
     table_size, write_table,
 };
 use sha2::{Digest, Sha256};
@@ -44,6 +44,8 @@ pub enum SiteKind {
     Raw = 0,
     Tail = 1,
     Stock = 2,
+    /// Plain bytes (1, 2 or 4) that a service replaces: no jump, no copy.
+    Patch = 3,
 }
 
 impl SiteKind {
@@ -52,12 +54,13 @@ impl SiteKind {
             "raw" => Ok(SiteKind::Raw),
             "tail" => Ok(SiteKind::Tail),
             "stock" => Ok(SiteKind::Stock),
-            k => Err(err!("site kind {k:?} is not raw, tail or stock")),
+            "patch" => Ok(SiteKind::Patch),
+            k => Err(err!("site kind {k:?} is not raw, tail, stock or patch")),
         }
     }
     /// Does the runtime copy the displaced bytes (a `tail` or a `stock` site)?
     pub fn copies(self) -> bool {
-        self != SiteKind::Raw
+        self == SiteKind::Tail || self == SiteKind::Stock
     }
 }
 
@@ -131,9 +134,11 @@ fn decl_for<'a>(hooks: &'a [HookDecl], name: &str, device: &str) -> Option<&'a H
         .find(|h| h.name == name && (h.devices.is_empty() || h.devices.iter().any(|d| d == device)))
 }
 
-/// The kind a declaration gives: `tail = true`, `stock = true`, else raw.
+/// The kind a declaration gives: `patch = N`, `tail = true`, `stock = true`, else raw.
 fn kind_of(h: &HookDecl) -> SiteKind {
-    if h.tail {
+    if h.patch.is_some() {
+        SiteKind::Patch
+    } else if h.tail {
         SiteKind::Tail
     } else if h.stock {
         SiteKind::Stock
@@ -157,8 +162,11 @@ pub fn site_facts(fw: &[u8], port_text: &str, decls: &[&str]) -> Result<Vec<Fact
         let Some(d) = decl_for(&hooks, &h.name, &device) else {
             continue;
         };
-        let site = crate::apply::resolve_hook_site(fw, &reg, &h.name)?;
         let kind = kind_of(d);
+        let site = match d.patch {
+            Some(n) => crate::apply::resolve_patch_site(fw, &reg, &h.name, n as usize)?,
+            None => crate::apply::resolve_hook_site(fw, &reg, &h.name)?,
+        };
         if kind.copies() {
             let tail = prim::cf_tail(&site.cf, 0, site.ret).map_err(|e| err!("{}: {e}", h.name))?;
             let mut want = site.old.clone();
@@ -341,14 +349,17 @@ fn build_from(
                 absent: true,
                 check: [0; 8],
             });
-            for n in 0..=most {
-                out.names.push(NameItem {
-                    hash,
-                    addr: 0,
-                    n: n as u16,
-                    kind: 1,
-                    absent: true,
-                });
+            // a patch has no exit names, hooks and their exits do
+            if d.patch.is_none() {
+                for n in 0..=most {
+                    out.names.push(NameItem {
+                        hash,
+                        addr: 0,
+                        n: n as u16,
+                        kind: 1,
+                        absent: true,
+                    });
+                }
             }
             continue;
         };
@@ -362,6 +373,10 @@ fn build_from(
         }
         let (site, ret) = site_of(port, h, decl, &who)?;
         out.sites.push(site);
+        if decl.patch.is_some() {
+            // plain bytes: no end of the site to leave to
+            continue;
+        }
         out.names.push(NameItem {
             hash,
             addr: ret,
@@ -419,7 +434,15 @@ fn site_of(port: &Port, h: &Hook, decl: &HookDecl, who: &str) -> Result<(SiteIte
             kind_of(decl)
         ));
     }
-    if len < 6 || len as usize > dkneeds::keys::BIND_STOCK_MAX {
+    if kind == SiteKind::Patch {
+        if decl.patch != Some(len) || !dkneeds::keys::PATCH_LENS.contains(&(len as u16)) {
+            return Err(err!(
+                "{who}: patch {}: site length {len}, the declaration says {:?} (1, 2 or 4)",
+                h.name,
+                decl.patch
+            ));
+        }
+    } else if len < 6 || len as usize > dkneeds::keys::BIND_STOCK_MAX {
         return Err(err!("{who}: hook {}: site length {len}", h.name));
     }
     let anchor = port
@@ -534,6 +557,7 @@ pub fn parse(file: &[u8]) -> Result<PortData> {
                 SITE_RAW => SiteKind::Raw,
                 SITE_TAIL => SiteKind::Tail,
                 SITE_STOCK => SiteKind::Stock,
+                SITE_PATCH => SiteKind::Patch,
                 k => return Err(err!("port file: site kind {k}")),
             },
             absent: x.flags & FLAG_ABSENT != 0,
@@ -565,6 +589,22 @@ pub fn unlisted_hooks(dks: &Dkm, data: &PortData) -> Result<Vec<u32>> {
         .hooks()
         .map(|p| p.a)
         .filter(|h| data.site(*h).is_none())
+        .collect())
+}
+
+/// The `HOOKS` items of a service file that the port file lists with the other kind: a patch item (the entry `HOOK_ENTRY_PATCH`) whose site is not a patch site, or a hook
+/// whose site is one. The loader refuses the file (`E_RANGE`). Absent sites are left out (they are skipped at load).
+pub fn wrong_kind_hooks(dks: &Dkm, data: &PortData) -> Result<Vec<u32>> {
+    let keys =
+        dkneeds::keys::Keys::parse(&dks.register).map_err(|e| err!("header table: {e:?}"))?;
+    Ok(keys
+        .hooks()
+        .filter(|p| {
+            data.site(p.a).is_some_and(|s| {
+                !s.absent && (s.kind == SiteKind::Patch) != dkneeds::keys::hook_is_patch(p.b)
+            })
+        })
+        .map(|p| p.a)
         .collect())
 }
 

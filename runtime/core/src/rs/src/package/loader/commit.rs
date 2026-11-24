@@ -14,6 +14,12 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             self.decl_diff = d;
             return E_DECL_KIND;
         }
+        // the values of the patches a service file declared (`dk_service_declare_patch`): the install reads them
+        if rec >= MAX_MODULES {
+            if let Err(e) = self.keep_patches(rec, c) {
+                return e;
+            }
+        }
         // a service file declares its row in `init` (`dk_provider_declare_row`, with the instance); a module declares none. `fail` takes whatever was
         // added down again
         let extent = self.m.image_extent(base, image_size);
@@ -60,6 +66,25 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         OK
     }
 
+
+    /// Keep the patches `init` of service `rec` declared (name hash, value, length) in its provider record, for `service_items`. More than `SERVICE_PATCHES_MAX` is `E_DECL_FULL`.
+    unsafe fn keep_patches(&mut self, rec: usize, c: &crate::package::collect::Collect) -> Result<(), i32> {
+        let pr = &mut self.provs[rec - MAX_MODULES];
+        pr.npatch = 0;
+        let mut i = 0;
+        while i < c.decl.n {
+            let d = c.decl.items[i];
+            if d.tag == dkrt_abi::service::Declare::PATCH {
+                if pr.npatch as usize == pr.patches.len() {
+                    return Err(E_DECL_FULL);
+                }
+                pr.patches[pr.npatch as usize] = (d.a, d.b, d.c as u8);
+                pr.npatch += 1;
+            }
+            i += 1;
+        }
+        Ok(())
+    }
 
     /// The commit of the services (`Records::commit`): a `PREPARE` pass checks and measures the records, the loader takes one arena block for them, a `WRITE` pass fills it
     /// (the generic records of the module follow the services' records), and the registry walker checks and applies it. Returns the block (address, size; 0, 0 when no record was

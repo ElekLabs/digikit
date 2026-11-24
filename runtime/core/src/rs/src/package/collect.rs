@@ -173,6 +173,23 @@ pub unsafe extern "C" fn dk_service_declare_slot(ctx: *mut u8, slot: u32, flags:
 pub unsafe extern "C" fn dk_service_declare_hook(ctx: *mut u8, site: u32, entry: *const u8) -> i32 {
     declare(ctx, Declare::HOOK, site, DevAddr::of_abi_ptr(entry).get(), 0)
 }
+/// `dk_service_declare_patch` (a service file's `init`, `SVC_IMPORTS` only): a patch the service takes: `len` (1, 2 or 4) bytes of `value` at the patch site `site` (the name hash).
+/// A length the port cannot have or a value that does not fit it is `E_FORMAT`, kept like every first error of `init`. The commit compares the item with the `HOOKS` item of the
+/// header table that has the patch entry, and keeps the value for the install (`Loader::keep_patches`).
+#[cfg_attr(test, no_mangle)]
+pub unsafe extern "C" fn dk_service_declare_patch(ctx: *mut u8, site: u32, value: u32, len: u32) -> i32 {
+    match active() {
+        Some(col) if crate::package::entry::is_ctx(ctx) => {
+            let fits = (len == 1 && value <= 0xff) || (len == 2 && value <= 0xffff) || len == 4;
+            if !fits {
+                col.fail(E_FORMAT);
+                return E_FORMAT;
+            }
+            declare(ctx, Declare::PATCH, site, value, len)
+        }
+        _ => E_CONTEXT,
+    }
+}
 #[cfg_attr(test, no_mangle)]
 pub unsafe extern "C" fn dk_service_declare_export(ctx: *mut u8, name_hash: u32, entry: *const u8) -> i32 {
     declare(ctx, Declare::EXPORT, name_hash, DevAddr::of_abi_ptr(entry).get(), 0)
@@ -212,6 +229,9 @@ fn declared_offsets(c: &Collect, base: u32) -> Declare {
             DeclItem { tag, a, b, c: e.wrapping_sub(base) }
         } else if tag == Declare::HOOK || tag == Declare::EXPORT {
             DeclItem { tag, a, b: b.wrapping_sub(base), c: e }
+        } else if tag == Declare::PATCH {
+            // the header table has a HOOKS item with the patch entry; the value is a run-time fact
+            DeclItem { tag: Declare::HOOK, a, b: dkneeds::keys::HOOK_ENTRY_PATCH, c: 0 }
         } else {
             DeclItem { tag, a, b, c: e }
         };

@@ -32,7 +32,7 @@
 //!   firmware address; the port file, role 2, carries it). The loader compares it with the `fw_id` entry of the image's info table; a file has at most one.
 //! - `FWNAMES` (12, version 3): u32 hash, u32 addr, u16 n, u8 kind, u8 flags: every firmware name (kind 0) and hook exit (kind 1) of one firmware, sorted by (kind,
 //!   hash, n); flag bit 0 `absent` (a name that only another device has: it resolves to 0).
-//! - `SITES` (20, version 3): u32 hook hash, u32 site address, u16 displaced length, u8 kind (0 raw, 1 tail, 2 stock), u8 flags (bit 0 absent; bits 4 to 7 the
+//! - `SITES` (20, version 3): u32 hook hash, u32 site address, u16 displaced length, u8 kind (0 raw, 1 tail, 2 stock, 3 patch: plain bytes, the length is 1, 2 or 4), u8 flags (bit 0 absent; bits 4 to 7 the
 //!   number of fixups that follow: reserved, 0), 8 bytes: the first 8 bytes of the SHA-256 of the displaced bytes. Sorted by hash.
 //! - `CALLBACK_ORDER` (8, version 2): the service name hash from `PROVIDES` and its unsigned callback order. A service file may have one item.
 //! - `SERVICE_IMPORTS` (8, versions 1 and 2): ColdFire import name hash and the service name hash that must own it.
@@ -84,6 +84,15 @@ pub const SITE_BYTES: usize = 20;
 /// device gives the site); the loader takes the items for its own device ([`hook_for_device`]) and drops the mask.
 pub const HOOK_ENTRY_MASK: u32 = 0x00ff_ffff;
 pub const HOOK_DEVICES_SHIFT: u32 = 24;
+/// The entry word of a `HOOKS` item that is a patch, not a hook: the low 24 bits are all set (no image has an entry there, `HOOK_ENTRY_MASK` is the largest offset a hook
+/// entry can have and the packer refuses an image that large). The item names a `patch` site of the port file; the service gives the bytes in `init`
+/// (`dk_service_declare_patch`). The device mask in the top byte works as for a hook.
+pub const HOOK_ENTRY_PATCH: u32 = HOOK_ENTRY_MASK;
+
+/// Whether the entry word of a `HOOKS` item (its device mask included) is that of a patch.
+pub fn hook_is_patch(entry: u32) -> bool {
+    entry & HOOK_ENTRY_MASK == HOOK_ENTRY_PATCH
+}
 
 /// Whether a `HOOKS` item with entry word `entry` is for the device with runtime id `device_id` (1 to 8).
 pub fn hook_for_device(entry: u32, device_id: u32) -> bool {
@@ -100,10 +109,14 @@ pub const FLAG_ABSENT: u8 = 1;
 /// The kinds of a `FWNAMES` item: a firmware name (`dk_fw_<hash>`) and an exit (`dk_exit_<hash>_<n>`).
 pub const NAME_FW: u8 = 0;
 pub const NAME_EXIT: u8 = 1;
-/// The kinds of a `SITES` item: a raw site, and the two whose displaced bytes the runtime copies from flash (a tail and a stock path).
+/// The kinds of a `SITES` item: a raw site, the two whose displaced bytes the runtime copies from flash (a tail and a stock path) and a patch site.
 pub const SITE_RAW: u8 = 0;
 pub const SITE_TAIL: u8 = 1;
 pub const SITE_STOCK: u8 = 2;
+/// The kind of a `SITES` item that is a patch site: plain bytes (`len` 1, 2 or 4) at `addr` that a service replaces with its own value; `check` is of the stock bytes. No copy is made.
+pub const SITE_PATCH: u8 = 3;
+/// The lengths a patch may have.
+pub const PATCH_LENS: [u16; 3] = [1, 2, 4];
 
 /// Bytes of one `FW` item (the first 8 bytes of the stock firmware's SHA-256).
 pub const FW_BYTES: usize = 8;

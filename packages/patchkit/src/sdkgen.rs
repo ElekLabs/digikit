@@ -412,6 +412,8 @@ struct FormatLimits {
     table_version: u32,
     provider_max: u32,
     install_sites: u32,
+    install_patches: u32,
+    service_patches_max: u32,
     slots_max: u32,
     info_max: u32,
 }
@@ -444,6 +446,8 @@ fn format_limits(sdk: &Sdk) -> Vec<(&'static str, u32)> {
         ("TABLE_VERSION", f.table_version),
         ("PROVIDER_MAX", f.provider_max),
         ("INSTALL_SITES", f.install_sites),
+        ("INSTALL_PATCHES", f.install_patches),
+        ("SERVICE_PATCHES_MAX", f.service_patches_max),
         ("SLOTS_MAX", f.slots_max),
         ("INFO_MAX", f.info_max),
         ("DSP_SLOT_WORDS", sdk.dsp.slots.words),

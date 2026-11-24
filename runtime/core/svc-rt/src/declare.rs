@@ -1,6 +1,6 @@
 //! What a service file declares to the runtime in `init`: its record kinds, its row, its hook sites, slot fills and exports (the `dk_service_declare_*` imports of
 //! `sdk.toml`), and the module context `init` was called with.
-use crate::import_core::sys::dk_provider_declare_row;
+use crate::import_core::sys::{dk_provider_declare_row, dk_service_declare_patch};
 use crate::import_core::ImportCore;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::ProviderRow;
@@ -27,13 +27,28 @@ const _: dkrt_sdk::api::DkServiceDeclareExportFn = dk_service_declare_export;
 
 pub use dkrt_abi::provider::name_hash;
 
+/// The bytes a patch writes: a byte, a halfword or a long word (the length of the patch site in the port file), as the value `start` computed. `service!` makes one for each `patches`
+/// entry; the runtime writes it at the site on load and the stock bytes back before `stop`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Patch {
+    pub value: u32,
+    pub len: u32,
+}
+
+impl Patch {
+    /// `len` bytes (1, 2 or 4) of `value`, big-endian, the low bytes of it.
+    pub const fn new(value: u32, len: u32) -> Patch {
+        Patch { value, len }
+    }
+}
+
 /// The `[digikit] id` of a device in the form `service!` takes for the device filter of a hook (`dt2`, `dn2`; no filter: 0, every device).
 #[doc(hidden)]
 pub const DEVICE_DT2: u32 = dkrt_abi::profiles::DT2.id;
 #[doc(hidden)]
 pub const DEVICE_DN2: u32 = dkrt_abi::profiles::DN2.id;
 
-/// The declarations of a service file (`service!`): each record kind in `kinds`, the row with the instance `Provider::start` made, then the hooks, fills and exports. `instance` is null before `start` (the host test of the assembly replays the
+/// The declarations of a service file (`service!`): each record kind in `kinds`, the row with the instance `Provider::start` made, then the hooks, fills, patches and exports. `instance` is null before `start` (the host test of the assembly replays the
 /// declarations without one; the runtime refuses such a row at the commit).
 ///
 /// # Safety
@@ -49,6 +64,7 @@ pub unsafe fn declare_provider(
     hooks: &[(u32, *const u8, u32)],
     fills: &[(u32, *const u8, u32)],
     exports: &[(u32, *const u8)],
+    patches: &[(u32, Patch, u32)],
 ) -> i32 {
     for &(kind, len) in kinds {
         let r = dk_service_declare_kind(ctx, kind, len, handler);
@@ -60,7 +76,7 @@ pub unsafe fn declare_provider(
     if r != 0 {
         return r;
     }
-    declare_entries(ctx, device, hooks, fills, exports)
+    declare_entries(ctx, device, hooks, fills, exports, patches)
 }
 
 #[inline(always)]
@@ -70,9 +86,10 @@ unsafe fn declare_entries(
     hooks: &[(u32, *const u8, u32)],
     fills: &[(u32, *const u8, u32)],
     exports: &[(u32, *const u8)],
+    patches: &[(u32, Patch, u32)],
 ) -> i32 {
     // the device is asked for only when an entry has a filter to compare with
-    let device = if hooks.is_empty() && fills.is_empty() {
+    let device = if hooks.is_empty() && fills.is_empty() && patches.is_empty() {
         0
     } else {
         device()
@@ -91,6 +108,15 @@ unsafe fn declare_entries(
             continue;
         }
         let r = dk_service_declare_slot(ctx, slot, 0, entry);
+        if r != 0 {
+            return r;
+        }
+    }
+    for &(site, patch, only) in patches {
+        if only != 0 && only != device {
+            continue;
+        }
+        let r = dk_service_declare_patch(ctx, site, patch.value, patch.len);
         if r != 0 {
             return r;
         }

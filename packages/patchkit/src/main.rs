@@ -1613,6 +1613,7 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
                             portfile::SiteKind::Raw => "raw",
                             portfile::SiteKind::Tail => "tail",
                             portfile::SiteKind::Stock => "stock",
+                            portfile::SiteKind::Patch => "patch",
                         },
                         "check": patchkit::error::hex(&f.check),
                     }),
@@ -1693,19 +1694,24 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
                     let d = patchkit::dkm::Dkm::parse(&bytes)?;
                     let outside = portfile::outside_set(&d, &data);
                     let unlisted = portfile::unlisted_hooks(&d, &data)?;
+                    let wrong = portfile::wrong_kind_hooks(&d, &data)?;
                     println!(
-                        "{} {f}: {} firmware reference(s) outside the port set, {} hook(s) not listed",
+                        "{} {f}: {} firmware reference(s) outside the port set, {} hook(s) not listed, {} hook(s) or patch(es) on a site of the other kind",
                         p.id(),
                         outside.len(),
-                        unlisted.len()
+                        unlisted.len(),
+                        wrong.len()
                     );
+                    for h in &wrong {
+                        println!("  {h:#010x}: a patch on a hook site or a hook on a patch site");
+                    }
                     for n in &outside {
                         println!("  {n} is outside the port set");
                     }
                     for h in &unlisted {
                         println!("  hook {h:#010x} is not listed");
                     }
-                    bad += outside.len() + unlisted.len();
+                    bad += outside.len() + unlisted.len() + wrong.len();
                 }
             }
             if bad != 0 {

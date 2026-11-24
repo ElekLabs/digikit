@@ -10,7 +10,7 @@
 //!
 //! A name that the firmware of the port lacks (flag `absent`, or a site of that flag) resolves to 0 and is accepted: the code that uses it never runs on this firmware.
 //! A name that the port file does not list is `Lookup::Unlisted`, which refuses the service file with `E_IMPORT`.
-use dkneeds::keys::{Keys, SiteRec, FLAG_ABSENT, NAME_EXIT, NAME_FW, SITE_RAW, SITE_STOCK};
+use dkneeds::keys::{Keys, SiteRec, FLAG_ABSENT, NAME_EXIT, NAME_FW, PATCH_LENS, SITE_PATCH, SITE_RAW, SITE_STOCK};
 
 /// The longest displaced run of a site (the longest stock run a bound file held).
 const SITE_LEN_MAX: u16 = 64;
@@ -115,12 +115,34 @@ pub fn parse_import(name: &[u8]) -> Option<Ref> {
 
 /// Does the site carry a copy of its displaced bytes (a tail or a stock path)?
 pub fn copies(s: &SiteRec) -> bool {
-    s.kind != SITE_RAW
+    s.kind != SITE_RAW && s.kind != SITE_PATCH
 }
 
-/// A site the runtime can use: a length of whole instructions that `jmp.l` fits in, a known kind and no fixups (the encoder is not there).
+/// A site the runtime can use: a length of whole instructions that `jmp.l` fits in, a known kind and no fixups (the encoder is not there). A patch site is plain bytes of
+/// 1, 2 or 4 (`patch_ok`); no hook takes it, and no tail is copied for it.
 pub fn site_ok(s: &SiteRec) -> bool {
+    if s.kind == SITE_PATCH {
+        return patch_ok(s);
+    }
     s.len >= SITE_LEN_MIN && s.len <= SITE_LEN_MAX && s.len % 2 == 0 && s.kind <= SITE_STOCK && s.flags >> 4 == 0
+}
+
+/// A patch site: kind patch, a length of 1, 2 or 4 and no fixups.
+pub fn patch_ok(s: &SiteRec) -> bool {
+    s.kind == SITE_PATCH && s.flags >> 4 == 0 && (s.len == PATCH_LENS[0] || s.len == PATCH_LENS[1] || s.len == PATCH_LENS[2])
+}
+
+/// The check value of stock bytes: the first 8 bytes of their SHA-256, the value the port file lists for the site.
+pub fn bytes_check(bytes: &[u8]) -> [u8; 8] {
+    let mut sha = dkrt_abi::sha256::Sha::new();
+    let mut out = [0u8; 32];
+    unsafe {
+        sha.update(bytes.as_ptr(), bytes.len() as u32);
+        sha.finish(out.as_mut_ptr());
+    }
+    let mut r = [0u8; 8];
+    r.copy_from_slice(&out[..8]);
+    r
 }
 
 /// The bytes of one copied site in the bss of the port file: the displaced run and the jump behind it.
@@ -196,13 +218,7 @@ fn name(keys: &Keys, kind: u8, hash: u32, n: u16) -> Lookup {
 pub unsafe fn site_check<P: dkrt_abi::package_platform::PackagePlatform>(p: &P, addr: u32, len: usize) -> [u8; 8] {
     let mut cur = [0u8; SITE_LEN_MAX as usize];
     p.read_code(addr, &mut cur[..len]);
-    let mut sha = dkrt_abi::sha256::Sha::new();
-    sha.update(cur.as_ptr(), len as u32);
-    let mut out = [0u8; 32];
-    sha.finish(out.as_mut_ptr());
-    let mut v = [0u8; 8];
-    v.copy_from_slice(&out[..8]);
-    v
+    bytes_check(&cur[..len])
 }
 
 #[cfg(test)]

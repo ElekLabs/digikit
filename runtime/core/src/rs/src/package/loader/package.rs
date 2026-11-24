@@ -10,10 +10,10 @@
 //! `package_free` (the memory of a record that was placed and not started, or whose start failed).
 use super::*;
 use dkrt_abi::provider::MAX_ENTRIES;
-use dkrt_lifecycle::{Cpu, Entry, SiteRef, SlotRef};
+use dkrt_lifecycle::{Cpu, Entry, PatchBytes, SiteRef, SlotRef};
 
-// every hook site and slot word that `service_items` can derive is an entry: the bound is the sum of their own bounds, whatever the file lists
-const _: () = assert!(MAX_ENTRIES >= SITES_MAX + dkneeds::SLOTS_MAX as usize);
+// every hook site, patch and slot word that `service_items` can derive is an entry: the bound is the sum of their own bounds, whatever the file lists
+const _: () = assert!(MAX_ENTRIES >= SITES_MAX + PATCHES_MAX + dkneeds::SLOTS_MAX as usize);
 
 /// What a package carries from its place to its start: the checked file (the staged bytes stay in the staging buffer until the next `stage`) and where the image went.
 pub(crate) struct Flight {
@@ -341,6 +341,15 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                 return e;
             }
         }
+        for p in &it.patches[..it.np] {
+            // the bytes are the low `len` of the value, big-endian
+            let Some(bytes) = PatchBytes::new(&p.value.to_be_bytes()[4 - p.len as usize..]) else {
+                return E_FORMAT;
+            };
+            if let Err(e) = out.push(Entry::Patch { site: SiteRef::new(Cpu::ColdFire, p.addr), bytes }) {
+                return e;
+            }
+        }
         for &(word, value) in &it.slots[..it.ns] {
             if let Err(e) = out.push(Entry::Slot { slot: SlotRef::new(Cpu::ColdFire, word), target: value }) {
                 return e;
@@ -374,8 +383,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         // the image of the package: a hook target must lie in it (a module has no hook: its image size is 0)
         let (base, image_size) = if rec >= MAX_MODULES { (records::module(rec).base, self.provs[rec - MAX_MODULES].image_size) } else { (0, 0) };
         let mut hooks = [role_hook(); SITES_MAX];
+        let mut patches = [install::PatchItem { addr: 0, len: 0, check: [0; 8], value: 0 }; PATCHES_MAX];
         let mut slots = [(0u32, 0u32); dkneeds::SLOTS_MAX as usize];
-        let (mut nh, mut ns) = (0, 0);
+        let (mut nh, mut np, mut ns) = (0, 0, 0);
         // the entries of this CPU; the others are another backend's
         for e in entries.iter().filter(|e| e.cpu() == Cpu::ColdFire) {
             match *e {
@@ -394,12 +404,25 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                     slots[ns] = (slot.slot(), target);
                     ns += 1;
                 }
-                // a table pointer or bound written as bytes: the installers of RC4 do it
-                Entry::Patch { .. } => return Err(E_FORMAT),
+                // a table pointer or bound written as bytes: the port file gives the site's length and the check value of its stock bytes; the entry has the bytes
+                Entry::Patch { site, bytes } => {
+                    let (len, check) = self.port_site_at(site.addr()).ok_or(E_IMPORT)?;
+                    let b = bytes.as_slice();
+                    if b.len() != len as usize || b.len() > 4 {
+                        return Err(E_FORMAT);
+                    }
+                    if np == patches.len() {
+                        return Err(E_PLAN_FIT);
+                    }
+                    let mut value = [0u8; 4];
+                    value[4 - b.len()..].copy_from_slice(b);
+                    patches[np] = install::PatchItem { addr: site.addr(), len, check, value: u32::from_be_bytes(value) };
+                    np += 1;
+                }
             }
         }
         // the entries carry absolute targets; the installer takes the offset in the image (a target before the image wraps past its size) and refuses one outside it
-        let cf = CfItems { hooks: &hooks[..nh], image_base: base, image_size, slots: &slots[..ns] };
+        let cf = CfItems { hooks: &hooks[..nh], patches: &patches[..np], image_base: base, image_size, slots: &slots[..ns] };
         Backend::install(&mut self.installer, &self.p, rec as u8, &cf)
     }
 

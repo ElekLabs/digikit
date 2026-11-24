@@ -421,6 +421,9 @@ pub struct Provided {
     /// device). The runtime installs a jump to the entry at the hook's site from the port file; the devices are the device mask in the top byte of the `HOOKS` entry
     /// ([`hook_device_mask`]).
     pub hooks: Vec<(String, String, Vec<String>)>,
+    /// The patches the service takes (`[[patch]]`): (patch name of the port, devices it is for; empty: every device). Each is a `HOOKS` item with the entry
+    /// `HOOK_ENTRY_PATCH` and the device mask in its top byte; the bytes come from the service's `init` (`dk_service_declare_patch`), not from the file.
+    pub patches: Vec<(String, Vec<String>)>,
     /// The pointer slots the service fills (`[[fill]]`): (slot name of the image adapter, global function of the object whose address goes in the slot).
     /// A `SLOTS` item of the table is the name hash and the entry offset. The third item lists the devices the fill is for (empty: every device); they are the device mask in the
     /// flags of the item ([`slot_device_flags`]), and the loader skips an item for another device, so one file serves every device.
@@ -831,6 +834,21 @@ fn pack_inner(
                 hk.push(dkneeds::keys::Pair {
                     a,
                     b: at | mask << dkneeds::keys::HOOK_DEVICES_SHIFT,
+                });
+            }
+            for (patch, devices) in &s.patches {
+                let a = dkneeds::keys::name_hash(patch);
+                let mask = hook_device_mask(devices)?;
+                let overlaps = |p: &dkneeds::keys::Pair| {
+                    let other = p.b >> dkneeds::keys::HOOK_DEVICES_SHIFT;
+                    p.a == a && (mask == 0 || other == 0 || mask & other != 0)
+                };
+                if hk.iter().any(overlaps) {
+                    return Err(err!("the service takes {patch} twice (a hook or a patch of that name already has the device)"));
+                }
+                hk.push(dkneeds::keys::Pair {
+                    a,
+                    b: dkneeds::keys::HOOK_ENTRY_PATCH | mask << dkneeds::keys::HOOK_DEVICES_SHIFT,
                 });
             }
             hk.sort_by_key(|p| p.a);
@@ -1407,6 +1425,7 @@ mod tests {
                 callback_order: None,
                 exports: vec![],
                 hooks: vec![],
+                patches: vec![],
                 fills: vec![],
                 dsp_fills: vec![],
             }),
@@ -1446,6 +1465,7 @@ mod tests {
                 callback_order: None,
                 exports: vec![],
                 hooks: vec![],
+                patches: vec![],
                 fills: vec![("frametype".into(), "tick_fn".into(), vec![])],
                 dsp_fills: vec![],
             }),
@@ -1464,6 +1484,7 @@ mod tests {
                 callback_order: None,
                 exports: vec![],
                 hooks: vec![],
+                patches: vec![],
                 fills: vec![("frametype".into(), "no_such_function".into(), vec![])],
                 dsp_fills: vec![],
             }),
@@ -1484,6 +1505,7 @@ mod tests {
                         callback_order: None,
                         exports: vec![],
                         hooks: vec![],
+                        patches: vec![],
                         fills: vec![
                             ("frametype".into(), "tick_fn".into(), vec!["dn2".into()]),
                             ("other".into(), "tick_fn".into(), vec![]),
@@ -1985,6 +2007,7 @@ mod tests {
             callback_order: None,
             exports: vec![],
             hooks: vec![],
+            patches: vec![],
             fills: vec![],
             dsp_fills: vec![],
         }

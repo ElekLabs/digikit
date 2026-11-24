@@ -12,7 +12,7 @@ use discover::Found;
 use dkrt_abi::plan::Verdict;
 use crate::package::handlers::{services, ServiceTable};
 use dkneeds::keys::Keys;
-use install::{Backend, CfItems, DspInstaller, Installer, SITES_MAX};
+use install::{Backend, CfItems, DspInstaller, Installer, PATCHES_MAX, SITES_MAX};
 use role::{PlaceArgs, RoleSteps};
 use exports::Exports;
 use crate::package::resident::platform::TablePlatform;
@@ -107,10 +107,23 @@ pub(crate) struct ProvRec {
     query_v1: u32,
     /// Bytes of the DSP image of the file (0: it has no DSP section): the bound of the entries of its DSP slot fills.
     pub dsp_image: u32,
+    /// The patches the file declared in `init` (`dk_service_declare_patch`): name hash, value, length. Kept by the commit for the install; `npatch` of them.
+    pub patches: [(u32, u32, u8); install::SERVICE_PATCHES_MAX],
+    pub npatch: u8,
 }
 
 impl ProvRec {
-    pub const EMPTY: ProvRec = ProvRec { block: None, len: 0, image_size: 0, provides: None, callback_order: None, query_v1: 0, dsp_image: 0 };
+    pub const EMPTY: ProvRec = ProvRec {
+        block: None,
+        len: 0,
+        image_size: 0,
+        provides: None,
+        callback_order: None,
+        query_v1: 0,
+        dsp_image: 0,
+        patches: [(0, 0, 0); install::SERVICE_PATCHES_MAX],
+        npatch: 0,
+    };
 }
 
 /// Which loads the loader accepts. The boot hook loads the module set; after it only a live job loads (docs/plans/extension-model.md E5c).

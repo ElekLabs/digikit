@@ -606,6 +606,47 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4004db0e"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004db0e"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052cc4"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Test only: a patch site of two bytes, the operand of `pea (0x18).w` in the order vector's first-call path. The fixture patches it to a larger allocation and the loader restores it at unload.",
+      "file": "devices/fw/filter.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.filter.hook.test_list_size_patch",
+      "offset": 2,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.filter.site.list_size",
+      "subsystem": "filter",
+      "users": [
+        "test/local-ping"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4006eca0",
             "len": 8
           }
@@ -25647,7 +25688,7 @@
       "name": "draw"
     },
     {
-      "count": 11,
+      "count": 12,
       "cpu": "cf",
       "file": "devices/fw/filter.toml",
       "meaning": "the filter type: accessor, getter and setter, list, name, graph, loader bound",

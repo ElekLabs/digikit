@@ -105,3 +105,18 @@ rule.dn2 = { kind = "cf_func", hash = "f766c42c6be0674aadb1177f3f536367", offset
 mark = "D"
 users = ["core/services/machines"]
 doc = "`move.b #7,D2b` in the sound loader (DT2 FUN_400db3b2 at 0x400db484, DN2 FUN_400dd34e at 0x400dd420): the bound of the next compare, which keeps a stored filter type below 7 and resets any other to 0 (the filter byte is rec[0xd3] on DT2 and rec[0xf5] on DN2; the machine byte uses an earlier bound). The immediate is the low byte of the word at +2."
+
+# A patch site, only for the test fixture `test/local-ping` (the port file of the test image lists it): the operand word of the `pea (0x18).w` of `cf.filter.site.list_size`. A value
+# above 0x18 only makes the chooser's order vector allocation larger than the copy needs, so the fixture's patch changes the bytes of a code site without changing what the firmware does.
+[[hook]]
+name = "cf.filter.hook.test_list_size_patch"
+site = "cf.filter.site.list_size"
+offset = 2
+cpu = "cf"
+mode = "replace"
+patch = 2
+regs = { in = [], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["test/local-ping"]
+doc = "Test only: a patch site of two bytes, the operand of `pea (0x18).w` in the order vector's first-call path. The fixture patches it to a larger allocation and the loader restores it at unload."

@@ -1,6 +1,7 @@
 //! The fixture of a service that provides an API of its own (`local_ping_value`) and the whole provider contract of RC3: an owner object with the lifecycle part (it counts
 //! the consumers that attach and detach), the tick part (it counts the passes) and the query part (it answers the counters). Its record kind, resource, hook and settings
-//! fields wait for header table v4 and the Settings part.
+//! fields wait for header table v4 and the Settings part. It takes one patch (`cf.filter.hook.test_list_size_patch`, the allocation size of the chooser's order vector, which the
+//! port file of the test image lists on both devices): the installer writes `LIST_SIZE_PATCH` there at load and the stock `0x0018` back before `stop`.
 #![no_std]
 
 use dkrt_svc_rt::dkrt_abi::core_api::CoreApi;
@@ -11,6 +12,9 @@ use dkrt_svc_rt::dkrt_sdk::{E_NOT_FOUND, E_TOO_BIG};
 pub const OP_COUNTERS: u32 = 1;
 /// The reply of `OP_COUNTERS`: attaches, detaches, ticks.
 pub const COUNTERS_LEN: usize = 12;
+
+/// The patch value: a two-byte allocation size above the stock `0x18`, so the firmware allocates more than it copies and nothing else changes.
+pub const LIST_SIZE_PATCH: u32 = 0x20;
 
 /// The owner object: what it saw since `start`.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +41,11 @@ impl LocalPing {
 
     pub fn last_attached(&self) -> u8 {
         self.last
+    }
+
+    /// The bytes of the `list_size` patch, computed from the started instance.
+    pub fn list_size(&self) -> u32 {
+        LIST_SIZE_PATCH
     }
 }
 
@@ -90,5 +99,6 @@ dkrt_svc_rt::service!(
     parts = [Tick, Query],
     hooks = [],
     fills = [],
+    patches = [("cf.filter.hook.test_list_size_patch", 2, LocalPing::list_size)],
     exports = [("local_ping_value", local_ping_value)]
 );

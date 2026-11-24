@@ -314,6 +314,9 @@ impl Declare {
     /// the next item (`PROVIDER_INSTANCE`, the same form). The header table has no such entry.
     pub const PROVIDER_ROW: u16 = 10;
     pub const PROVIDER_INSTANCE: u16 = 11;
+    /// A patch the service takes (`dk_service_declare_patch`): the name hash of the patch site in `a`, the value in `b` (its low `c` bytes, big-endian) and the length `c` (1, 2
+    /// or 4). The header table has a `HOOKS` item with the entry `HOOK_ENTRY_PATCH` for it (the value is a run-time fact and is not in the file); `Declare::as_table` maps it so.
+    pub const PATCH: u16 = 12;
 
     pub const fn new() -> Declare {
         Declare {
@@ -346,6 +349,10 @@ impl Declare {
     }
     pub fn resource(&mut self, id: u32, limit: u32) {
         self.add(Declare::RESOURCE, id, limit, 0);
+    }
+    /// A patch of `len` bytes (1, 2 or 4) with `value` at the patch site `site` (the name hash).
+    pub fn patch(&mut self, site: u32, value: u32, len: u32) {
+        self.add(Declare::PATCH, site, value, len);
     }
     /// The provider file's row and its instance.
     pub fn provider_row(&mut self, row: *const crate::provider::ProviderRow, instance: *mut u8) {

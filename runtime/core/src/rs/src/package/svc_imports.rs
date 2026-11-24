@@ -1,5 +1,5 @@
 //! The second import table, `SVC_IMPORTS`: what a service file (`.dks`, role 1) imports besides `IMPORTS`. It is interface C as C-shaped functions
-//! (`dkrt_abi::core_imports`: one `dkc_*` per `CoreApi` method) and the two imports only a service file makes (`dk_provider_declare_row`, `dkc_panic`). The
+//! (`dkrt_abi::core_imports`: one `dkc_*` per `CoreApi` method) and the imports only a service file makes (`dk_provider_declare_row`, `dkc_panic`, `dk_service_declare_patch`). The
 //! list is one macro in `dkrt-abi`; `dkrt-svc-rt` declares the same names and implements `CoreApi` over them (`ImportCore`).
 //!
 //! The table keeps the hash of each name, not the name (8 bytes an entry).
@@ -202,6 +202,9 @@ pub mod shims {
     /// The provider row a service file declares in `init` (the declarations of the collection).
     pub use crate::package::collect::dk_provider_declare_row;
 
+    /// A patch a service file takes, declared in `init` beside its hooks.
+    pub use crate::package::collect::dk_service_declare_patch;
+
     /// A service panicked: the runtime's panic (crash capture, safe mode on the next boot).
     #[cfg_attr(test, no_mangle)]
     pub unsafe extern "C" fn dkc_panic() -> ! {
@@ -304,7 +307,7 @@ mod tests {
         for n in dkrt_sdk::api::BUILTIN_NAMES.iter() {
             assert!(!SVC_NAMES.contains(n), "{n} is in both tables");
         }
-        assert!(SVC_NAMES.contains(&"dk_provider_declare_row") && SVC_NAMES.contains(&"dkc_panic"));
+        assert!(SVC_NAMES.contains(&"dk_provider_declare_row") && SVC_NAMES.contains(&"dkc_panic") && SVC_NAMES.contains(&"dk_service_declare_patch"));
         // the list is the one source of the table (a method added to it is checked by the loop above); the count is no pin
     }
 
