@@ -1,6 +1,6 @@
 /* The sample backing plug-in point, version 1. NOT an SDK contract: content modules never see it.
    The runtime (device-neutral) calls the optional symbols dkpool_* that a device adapter
-   exports (image-modules/points/sample-pool), and lists in its data table `sample_pool_info`; the adapter reports
+   exports (runtime/platform/sample-pool), and lists in its data table `sample_pool_info`; the adapter reports
    events through the pointer slots pool_done and pool_lost (src/cf/pool_events.h), which the samples service file fills.
    Without the adapter (or without the service) sample_pool_add returns DK_SAMPLE_E_CONTRACT. docs/design/sample-api-1.5.md, section 2.2.
    All calls run in the runtime's task context. `id` and `path` belong to the runtime;

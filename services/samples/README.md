@@ -1,7 +1,7 @@
 # samples service
 
 A service of the digikit runtime that gives a module its sample pool: the nine `dk_sample_pool_*` calls (`sdk/include/dk/platform/`), per-track stereo samples bound to a
-backing adapter (`image-modules/points/sample-pool`) and bounded peak windows for a picker. A module that has a track table in its DSP section (version 5, record kind 2) owns
+backing adapter (`runtime/platform/sample-pool`) and bounded peak windows for a picker. A module that has a track table in its DSP section (version 5, record kind 2) owns
 one client slot; its tracks are published to the DSP by queued link writes. It follows the template of [services/shortcuts](../shortcuts/README.md): one owner object, its
 concepts beside it. It differs from it in having no record kind (so no `Records` part) and a `DspPart`.
 
