@@ -155,7 +155,13 @@ describe('seedSettingsCard guards', () => {
   });
 
   test.each([
-    ['a duplicate key', [['a', '00'], ['a', '00']]],
+    [
+      'a duplicate key',
+      [
+        ['a', '00'],
+        ['a', '00'],
+      ],
+    ],
     ['a non-ASCII key', [['\u00e9', '']]],
     ['an empty key', [['', '00']]],
     ['a value past the limit', [['a', '00'.repeat(1025)]]],
@@ -249,7 +255,7 @@ describe('lockCheck refusals', () => {
 describe('capture guards (addedFactorOf, pcmStats)', () => {
   const wav = (samples: ArrayLike<number> | null, raw?: Buffer) => {
     const file = path.join(tmp(), 'x.wav');
-    if (raw) return fs.writeFileSync(file, raw), file;
+    if (raw) return (fs.writeFileSync(file, raw), file);
     const body = Buffer.from(Float32Array.from(samples!).buffer);
     const fmt = Buffer.alloc(16);
     fmt.writeUInt16LE(3, 0);
@@ -268,7 +274,8 @@ describe('capture guards (addedFactorOf, pcmStats)', () => {
     fs.writeFileSync(file, Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), chunks]));
     return file;
   };
-  const noise = (n: number) => Float32Array.from({ length: n }, (_, i) => Math.sin(i * 0.37) * Math.cos(i * 0.011) * 0.2);
+  const noise = (n: number) =>
+    Float32Array.from({ length: n }, (_, i) => Math.sin(i * 0.37) * Math.cos(i * 0.011) * 0.2);
 
   test('the factor is recovered from scaled, shifted captures', () => {
     const dry = noise(5000);
