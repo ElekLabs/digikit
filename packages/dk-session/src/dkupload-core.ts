@@ -922,7 +922,15 @@ export async function storeSpace(
   info?: DkInfoFull,
 ): Promise<{ free: number; total: number | null }> {
   const i = info ?? (await s.info());
-  return storeFree(i, hasCap(i, 'CAPACITY') ? await s.capacity() : null);
+  if (hasCap(i, 'CAPACITY')) {
+    try {
+      return storeFree(i, await s.capacity());
+    } catch (e) {
+      // The resident core advertises CAPACITY even when the card has no system package to handle it.
+      if (!(e instanceof DkError) || e.status !== 'E_PROTO') throw e;
+    }
+  }
+  return storeFree(i, null);
 }
 
 // ---- the firmware's own screenshot (stock MidiRpc type 0x04, docs/MIDI-SYSEX-RPC.md) ------------------------------------------------

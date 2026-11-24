@@ -88,7 +88,7 @@ export function createSampleDeviceSessions({ connection }: { connection: () => S
       },
       async put(folder, file, onProgress) {
         if (sim.link === 'fallback' && sent++ === 1 && current())
-          setLink({ state: 'fallback', reason: 'the device did not answer within 2 s' });
+          setLink(backend.kind, { state: 'fallback', reason: 'the device did not answer within 2 s' });
         if (sim.putfail && puts++ === 1) throw new Error(`open /tst/${file.name}: the device answered status 0`);
         const total = file.stored.length;
         const step = Math.max(1, Math.round(sim.speed * 1024 * 1024 * 0.1));
@@ -146,13 +146,21 @@ export function createSampleDeviceSessions({ connection }: { connection: () => S
     };
 
     return {
-      async open(purpose) {
+      async identify() {
+        return {
+          name: NAME,
+          runtime: '0.9.4',
+          locations: [{ kind: 'stock-rpc', label: '+Drive Samples', apply: 'live' }],
+        };
+      },
+      async open(kind, purpose) {
         if (purpose === 'read') control.counts.deviceRead++;
         const { asked, noteConnection } = connection();
         await asked(() => deviceRead(binding.session));
         check();
         if (sim.link !== 'none' && !(sim.link === 'fallback' && sent > 1))
           setLink(
+            kind,
             sim.link === 'sysex'
               ? { state: 'sysex' }
               : sim.link === 'wrongmode'
@@ -162,15 +170,7 @@ export function createSampleDeviceSessions({ connection }: { connection: () => S
                   : { state: 'bulk' },
           );
         noteConnection({ type: 'answered', device: { id: 'dt2', name: NAME, runtime: '0.5.2' } });
-        return {
-          name: NAME,
-          runtime: '0.9.4',
-          hasRuntime: true,
-          samples: 'stock-rpc',
-          apply: 'live',
-          backend,
-          link: 'sysex',
-        };
+        return backend;
       },
       async release() {},
     };

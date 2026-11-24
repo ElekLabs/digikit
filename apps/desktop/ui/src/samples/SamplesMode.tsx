@@ -35,12 +35,13 @@ export default function SamplesMode(props: { ctx: PageCtx; samples: SamplesApp }
 
   return (
     <SplitPane id="transfer">
-      <LocalSamplesPane ctx={props.ctx} source={source} upload={samples.uploadRows} />
+      <LocalSamplesPane ctx={props.ctx} source={source} canUpload={destination.writable} upload={samples.uploadRows} />
       <TargetSamplesPane
         ctx={props.ctx}
         destination={destination}
         onDrop={onDeviceDrop}
         open={samples.openDestination}
+        openLocation={samples.openLocation}
         createFolder={samples.createFolder}
         removeSelected={samples.removeSelected}
         restart={samples.restart}

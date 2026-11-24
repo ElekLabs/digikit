@@ -1,7 +1,7 @@
 // INFO: the flags byte (byte 16 of the body with a 3-character port id): bit 0 safe, 1 upload open, 2 card read-only, 3 log sink, 4 fault record found.
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { DkSession, decode8in7, encode8in7 } from '../src/index.ts';
+import { DkError, DkSession, decode8in7, encode8in7, storeSpace } from '../src/index.ts';
 import { CAP } from '../src/gen_proto.ts';
 
 const concat = (...p: Uint8Array[]) => Uint8Array.from(Buffer.concat(p.map((x) => Buffer.from(x))));
@@ -65,6 +65,17 @@ test('INFO appends the card capacity and state; an older runtime reports null', 
   const old = await read(0);
   assert.equal(old.card_sectors, null);
   assert.equal(old.card_state, null);
+});
+
+test('store space uses INFO when the resident core cannot answer CAPACITY', async () => {
+  const i = { ...(await read(0)), caps: 1 << CAP.CAPACITY, free_bytes: 512 * 1024 };
+  const session = {
+    info: async () => i,
+    async capacity() {
+      throw new DkError({ error: 'capacity: E_PROTO', kind: 'device', status: 'E_PROTO' });
+    },
+  };
+  assert.deepEqual(await storeSpace(session), { free: i.free_bytes, total: null });
 });
 
 /** A reply as the runtime writes it: the port id, flags, log range, image id (33), svc_abi (41), then fw_id (when FW_ID is set) and the card fields. */

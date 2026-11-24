@@ -53,10 +53,10 @@ fpga = 1
 readonly = [1, 2, 4, 6, 7, 8]
 repack = ["cf2"]
 
-# Where the Transfer page puts content (docs/plans/storage.md). `modules` is the digikit store (emulator proof only). `samples = "stock-slots"`: the
-# firmware keeps samples in numbered slots that only its MidiRpc Data API writes (finding 142); `[storage.slots]` says how.
+# Workbench shows the numbered slots and, with the runtime, the `samples/` folder of the digikit store.
+# The firmware plays the numbered slots. Its MidiRpc Data API writes them using the layout in [storage.slots].
 [storage]
-samples = "stock-slots"
+samples = ["stock-slots", "digikit"]
 modules = "digikit"
 
 # path: the Data API route of the slots (`/samples/N`, N = 1..count). count: slots. bytes_max: the most AUDIO bytes of one sample (the slot holds a 0x40-byte

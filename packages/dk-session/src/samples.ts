@@ -1,4 +1,4 @@
-// Samples on a device, one API over two backends (docs/plans/storage.md). The device profile's `[storage] samples` names the backend:
+// Samples on a device, one API over the backends named by the device profile's `[storage] samples` (docs/plans/storage.md).
 //   "stock-rpc"  the device's own MidiRpc file commands, the +Drive its sample browser lists (rpcfiles.ts; the Digitakt II)
 //   "digikit"    the `samples/` folder of the digikit store, the runtime's SysEx commands (`DkSession`; the Digitone II)
 //   "stock-slots"  the firmware's numbered sample slots, written through its MidiRpc Data API (slot-samples.ts)
@@ -14,6 +14,7 @@ import type { RpcPort } from './rpcfiles.ts';
 import { SlotSamples } from './slot-samples.ts';
 
 export type SamplesKind = 'stock-rpc' | 'digikit' | 'stock-slots';
+export { sampleLocations, type SampleLocation } from './sample-locations.ts';
 
 /** The converter a backend uses when it was opened without one: `prepare` refuses. */
 const noConverter: SampleConverter = {

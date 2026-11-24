@@ -108,12 +108,14 @@ describe('parse', () => {
   test('[storage] is optional, checked against its words, and refuses unknown keys', () => {
     expect(parse({ 'x.toml': identity('x') }).get('x').storage).toBeUndefined();
     const ok = identity('x', '[storage]\nsamples = "digikit"\nmodules = "digikit"\n');
-    expect(parse({ 'x.toml': ok }).get('x').storage).toEqual({ samples: 'digikit', modules: 'digikit' });
+    expect(parse({ 'x.toml': ok }).get('x').storage).toEqual({ samples: ['digikit'], modules: 'digikit' });
     expect(() => parse({ 'x.toml': ok.replace('samples = "digikit"', 'samples = "tape"') })).toThrow(
       /\[storage\] samples/,
     );
     expect(() => parse({ 'x.toml': ok + 'extra = 1\n' })).toThrow(/\[storage\] has an unknown key extra/);
     expect(() => parse({ 'x.toml': identity('x', '[storage]\nsamples = "digikit"\n') })).toThrow(/\[storage\] modules/);
+    expect(() => parse({ 'x.toml': ok.replace('"digikit"', '[]') })).toThrow(/samples must name/);
+    expect(() => parse({ 'x.toml': ok.replace('"digikit"', '["digikit", "digikit"]') })).toThrow(/each location once/);
   });
 
   test('[storage.slots] belongs to stock-slots, is checked, and refuses what the converter does not make', () => {
@@ -198,8 +200,11 @@ describe('the repository device files', () => {
     }
   });
 
-  test('the slot device keeps its samples in numbered slots', () => {
+  test('the slot device puts its numbered slots before the digikit pool', () => {
     const st = loadDevices().get('st').storage;
-    expect(st).toMatchObject({ samples: 'stock-slots', slots: { path: '/samples', count: 64, bytesMax: 0x7ffc0 } });
+    expect(st).toMatchObject({
+      samples: ['stock-slots', 'digikit'],
+      slots: { path: '/samples', count: 64, bytesMax: 0x7ffc0 },
+    });
   });
 });

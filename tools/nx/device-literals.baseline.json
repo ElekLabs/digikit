@@ -497,7 +497,7 @@
   "runtime/core/tests/memaudit.device.test.ts": 5,
   "runtime/core/tests/missing.device.test.ts": 23,
   "runtime/core/tests/modules-capacity.device.test.ts": 3,
-  "runtime/core/tests/project.json": 15,
+  "runtime/core/tests/project.json": 16,
   "runtime/core/tests/reload-fx.device.test.ts": 6,
   "runtime/core/tests/reload-project.device.test.ts": 9,
   "runtime/core/tests/reload.device.test.ts": 17,

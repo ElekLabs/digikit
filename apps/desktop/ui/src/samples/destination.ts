@@ -1,5 +1,6 @@
-import { createSignal } from 'solid-js';
-import type { SampleEntry } from '@digi/dk-session/samples';
+import { batch, createSignal } from 'solid-js';
+import type { SampleEntry, SamplesKind } from '@digi/dk-session/samples';
+import { errorLine, isTimeout } from '@digi/workbench-core/modules/backend.ts';
 import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import type { TargetApp } from '@digi/workbench-core/transfer/target.ts';
 import {
@@ -10,7 +11,9 @@ import {
   type Uploads,
 } from '@digi/workbench-core/transfer/sample-upload.ts';
 import { sampleRows, samplesBar } from '@digi/workbench-core/transfer/samples-core.ts';
-import type { SampleDeviceContext, SampleDeviceSession } from './device-session';
+import type { SampleDevice, SampleDeviceContext, SampleDeviceSession } from './device-session';
+
+const deviceIdentity = ({ name, runtime }: SampleDevice) => ({ name, runtime, hasRuntime: runtime !== null });
 
 export type SamplePageState = Pick<
   TransferApp['state'],
@@ -18,8 +21,12 @@ export type SamplePageState = Pick<
 >;
 
 function createPresentation() {
+  const [device, setDevice] = createSignal<SampleDevice>();
+  const [generation, setGeneration] = createSignal(0);
+  const [kind, setKind] = createSignal<SamplesKind>();
   const [folder, setFolder] = createSignal('');
   const [entries, setEntries] = createSignal<SampleEntry[]>();
+  const [locationError, setLocationError] = createSignal('');
   const [selected, select] = createSignal<Set<string>>(new Set());
   const [uploads, setUploads] = createSignal<Uploads>({});
   const [base, setBase] = createSignal<Uploads>({});
@@ -28,10 +35,18 @@ function createPresentation() {
   const [note, setNote] = createSignal('');
   const [deleting, setDeleting] = createSignal('');
   return {
+    device,
+    setDevice,
+    generation,
+    setGeneration,
+    kind,
+    setKind,
     folder,
     setFolder,
     entries,
     setEntries,
+    locationError,
+    setLocationError,
     selected,
     select,
     uploads,
@@ -53,6 +68,7 @@ export function createSamplesDestination(
   target: () => Pick<TargetApp, 'target' | 'switching' | 'bindSession'>,
   state: () => SamplePageState,
   makeSession: (context: SampleDeviceContext) => SampleDeviceSession,
+  emulatorGeneration = () => 0,
 ) {
   const emptyTicks = new Set<string>();
   const [scope, setScope] = createSignal<ReturnType<typeof bind>>();
@@ -65,10 +81,18 @@ export function createSamplesDestination(
   function bind(presentation = createPresentation()) {
     const binding = target().bindSession();
     const {
+      device,
+      setDevice,
+      generation,
+      setGeneration,
+      kind,
+      setKind,
       folder,
       setFolder,
       entries,
       setEntries,
+      locationError,
+      setLocationError,
       selected,
       select,
       uploads,
@@ -84,7 +108,15 @@ export function createSamplesDestination(
       deleting,
       setDeleting,
     } = presentation;
+    const firmwareGeneration = () => (binding.target.kind === 'emulator' ? emulatorGeneration() : 0);
+    const locations = () => (generation() === firmwareGeneration() ? device()?.locations : undefined);
+    const location = () => locations()?.find((item) => item.kind === kind());
+    const writable = () => {
+      const selected = location();
+      return !!selected && !selected.readOnly && !selected.unavailable && !!entries() && !locationError();
+    };
     let readGeneration = 0;
+    let navigation = 0;
     let released = false;
     const check = () => {
       if (released) throw new Error('The selected target changed.');
@@ -102,8 +134,10 @@ export function createSamplesDestination(
       binding,
       current,
       check,
-      setLink: (link) => {
-        if (current()) state().setSampleLink(link);
+      firmwareGeneration,
+      link: () => state().sampleLink(),
+      setLink: (sampleKind, link) => {
+        if (current() && location()?.kind === sampleKind) state().setSampleLink(link);
       },
     });
     const unbind = binding.beforeLeave(async () => {
@@ -114,35 +148,122 @@ export function createSamplesDestination(
       await session.release();
     });
 
-    function open(next: string) {
+    function changeFolder(next: string) {
+      batch(() => {
+        setFolder(next);
+        setEntries(undefined);
+        setLocationError('');
+        select(new Set<string>());
+        setNote('');
+      });
+    }
+
+    function changeLocation(next: SamplesKind | undefined) {
+      batch(() => {
+        setKind(next);
+        changeFolder('');
+        setUploads({});
+        setBase({});
+        setNotes([]);
+        setAverage(undefined);
+        const found = device();
+        state().setDeviceInfo(found && deviceIdentity(found));
+        state().setSampleLink(undefined);
+      });
+    }
+
+    function openFolder(next: string) {
+      if (!location() || next === folder()) return;
+      navigation++;
       readGeneration++;
-      setFolder(next);
-      select(new Set<string>());
-      setNote('');
+      changeFolder(next);
+    }
+
+    function openLocation(next?: SamplesKind) {
+      if (next === kind() || (next !== undefined && !locations()?.some((item) => item.kind === next))) return;
+      if (next === undefined && (locations()?.length ?? 0) < 2) return;
+      navigation++;
+      readGeneration++;
+      changeLocation(next);
     }
 
     async function read() {
-      const generation = ++readGeneration;
-      const path = folder();
-      const showing = () => current() && generation === readGeneration && state().activeMode() === 'samples';
+      const read = ++readGeneration;
+      const image = firmwareGeneration();
+      const showing = () =>
+        current() && read === readGeneration && image === firmwareGeneration() && state().activeMode() === 'samples';
       try {
-        const { name, runtime, hasRuntime, samples, apply, backend } = await session.open('read');
+        const found = await session.identify();
+        if (!showing()) return;
+        batch(() => {
+          if (generation() !== image) changeLocation(undefined);
+          setGeneration(image);
+          setDevice(found);
+          const next = found.locations.length === 1 ? found.locations[0]?.kind : location()?.kind;
+          if (next !== kind()) changeLocation(next);
+        });
+        const identity = deviceIdentity(found);
+        const selected = location();
+        if (!selected || selected.unavailable) {
+          state().setDeviceInfo(identity);
+          return;
+        }
+        const path = folder();
+        const { kind: samples, apply } = selected;
+        const backend = await session.open(samples, 'read');
         if (!showing()) return;
         const canMkdir = await backend.canMkdir();
         if (!showing()) return;
         const listed = await backend.list(path);
         if (!showing()) return;
-        setEntries(listed);
         let free: number | undefined;
         try {
           free = (await backend.space()).free;
         } catch {
           // The listing can still be used when the target does not report free space.
         }
-        if (showing()) state().setDeviceInfo({ name, runtime, hasRuntime, samples, canMkdir, free, apply });
+        if (showing()) {
+          batch(() => {
+            setEntries(listed);
+            setLocationError('');
+            state().setDeviceInfo({ ...identity, samples, canMkdir, free, apply });
+          });
+        }
       } catch (e) {
-        if (showing()) throw e;
+        if (!showing()) return;
+        if ((locations()?.length ?? 0) < 2) throw e;
+        setLocationError(errorLine(e));
       }
+    }
+
+    function write(path = folder()) {
+      const connected = device();
+      const selected = location();
+      if (!connected || !selected || !writable()) return undefined;
+      const version = navigation;
+      const image = firmwareGeneration();
+      const stillHere = () =>
+        current() && navigation === version && image === firmwareGeneration() && kind() === selected.kind;
+      return {
+        current: stillHere,
+        folder: path,
+        name: connected.name,
+        async open(purpose: 'write' | 'upload') {
+          if (!stillHere()) throw new Error('The sample destination changed.');
+          const backend = await session.open(selected.kind, purpose).catch((error) => {
+            // A timed-out write preflight skips the normal readback. Invalidate the writable view here.
+            if (stillHere() && isTimeout(error)) {
+              batch(() => {
+                setEntries(undefined);
+                state().setDeviceInfo(deviceIdentity(connected));
+              });
+            }
+            throw error;
+          });
+          if (!stillHere()) throw new Error('The sample destination changed.');
+          return backend;
+        },
+      };
     }
 
     return {
@@ -150,14 +271,19 @@ export function createSamplesDestination(
       presentation,
       current,
       check,
+      locations,
+      location,
+      locationError,
+      writable,
       folder,
       entries,
       rows: () => sampleRows(folder(), entries() ?? [], uploads()),
       selected,
       select,
-      open,
+      openFolder,
+      openLocation,
       read,
-      openSession: session.open,
+      write,
       note,
       setNote,
       deleting,
@@ -195,6 +321,10 @@ export function createSamplesDestination(
 
   return {
     capture,
+    locations: () => visible()?.locations(),
+    location: () => visible()?.location(),
+    locationError: () => visible()?.locationError() ?? '',
+    writable: () => !target().switching() && (visible()?.writable() ?? false),
     folder: () => visible()?.folder() ?? '',
     entries: () => visible()?.entries(),
     rows: () => visible()?.rows() ?? [],

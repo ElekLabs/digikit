@@ -6,13 +6,15 @@ Work through the phases in order. Record the checks and mark the phase complete 
 
 ## Phase 1 — Transfer samples and verify persistence
 
-- [ ] Expose **Sample Slots** and **digikit Sample Pool** in Workbench and prove storage on Syntakt 1.42.
+- [x] Expose **Sample Slots** and **digikit Sample Pool** in Workbench and prove storage on Syntakt 1.42.
 
 Declare the sample locations in device data. Resolve them against the connected session and reuse `SamplesBackend` for the stock Data API and the digikit `samples/` folder. A patched Syntakt shows both folders, and a stock Syntakt opens its single stock location directly. DT2 1.17 and DN2 1.12 continue to open their existing single locations. The same pane works with Emulator and USB. The pool folder describes file storage until playback is available. The stock slot view keeps its restart behavior.
 
 Give each operation an explicit destination consisting of the target binding, sample location and relative folder. Virtual roots are navigation. Uploads and mutations require an open, writable location. Refreshes and late replies stay with the location that initiated them. Use the existing native sample converter, backend hash verification and shared store capacity. This phase uses the firmware and guard already in the Syntakt patch set.
 
 Check host routing and stale reads, including an absent runtime and an unavailable or read-only store. Extend `core/runtime-tests:test-device--samples-store-live` to Syntakt. In the emulator, upload a generated WAV, verify the stored bytes, restart and verify again. Compare the stock slot listing across the pool operation. Repeat the transfer on a connected, already-patched Syntakt when available, using a dedicated test folder. Record hardware status at the review point.
+
+Phase 1 verification passed on the Syntakt 1.42 and Digitone II 1.12 emulator targets. The Syntakt run verified the stored hash before and after restart, matched the mirrored bytes against the upload, and compared all 64 stock slot entries across the operation. Host checks covered the two destinations, reloads, permission changes on the same MIDI session, and late replies. They also verified that a missed runtime INFO reply blocks pool writes while the stock slots remain usable. Physical USB verification is pending. The MIDI port scan found no connected Syntakt.
 
 ## Phase 2 — Prove sample playback on the peer
 

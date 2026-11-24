@@ -1,3 +1,4 @@
+import type { SamplesKind } from '@digi/dk-session/samples';
 import { errorLine, isCancelled } from '@digi/workbench-core/modules/backend.ts';
 import { restartDevice } from '@digi/workbench-core/modules/dktransfer.ts';
 import type { Host } from '@digi/workbench-core/host/host.ts';
@@ -35,6 +36,7 @@ import { createSampleSourceFiles, type SampleFileHost } from './source-files';
 interface Dependencies {
   fs: SampleFileHost;
   firmware: Pick<Host['firmware'], 'sampleWasm'>;
+  emulatorGeneration?: () => number;
   storage: KeyValue;
   getTarget: () => Pick<TargetApp, 'target' | 'switching' | 'bindSession'>;
   getState: () => SamplePageState;
@@ -47,6 +49,7 @@ interface Dependencies {
 export function createSamplesApp({
   fs,
   firmware,
+  emulatorGeneration,
   storage,
   getTarget,
   getState,
@@ -65,8 +68,10 @@ export function createSamplesApp({
       bulk: getBulk,
       writer,
     }),
+    emulatorGeneration,
   );
   type Scope = NonNullable<ReturnType<typeof destination.capture>>;
+  type Write = NonNullable<ReturnType<Scope['write']>>;
   let activeRead: { scope: Scope | undefined } | undefined;
 
   async function read() {
@@ -88,16 +93,16 @@ export function createSamplesApp({
 
   const stop = (scope: Scope) => !scope.current() || getState().stopWasAsked();
 
-  const send = async (scope: Scope, mkdirs: string[], items: UploadItem[]) => {
+  const send = async (scope: Scope, write: Write, mkdirs: string[], items: UploadItem[]) => {
     let done = false;
     await run('Uploading', async () => {
-      if (!scope.current()) return;
-      const { name, backend } = await scope.openSession('upload');
+      if (!write.current()) return;
+      const backend = await write.open('upload');
       scope.check();
       if (mkdirs.length) {
         const canMkdir = await backend.canMkdir();
         scope.check();
-        if (!canMkdir) throw new Error(noFoldersMessage(name));
+        if (!canMkdir) throw new Error(noFoldersMessage(write.name));
       }
       scope.beginUpload();
       const started = Date.now();
@@ -139,35 +144,37 @@ export function createSamplesApp({
 
   async function uploadRows(rows: LocalRow[] = source.picked(), folder?: string) {
     const scope = destination.capture();
-    if (!scope || !rows.length) return;
-    const targetPath = folder ?? scope.folder();
+    const write = scope?.write(folder);
+    if (!scope || !write || !rows.length) return;
     const snapshot = source.snapshot();
-    if (!(await whenIdle(scope))) return;
+    if (!(await whenIdle(scope)) || !write.current()) return;
     let plan;
     try {
-      plan = await planUpload(rows, targetPath, snapshot.list);
+      plan = await planUpload(rows, write.folder, snapshot.list);
     } catch (e) {
-      if (scope.current()) getState().setError(errorLine(e));
+      if (write.current()) getState().setError(errorLine(e));
       return;
     }
-    if (!scope.current() || getState().busy()) return;
+    if (!write.current() || getState().busy()) return;
     const items = plan.files.map((f): UploadItem => ({
       folder: f.folder,
       name: f.name,
       size: f.size,
       read: () => snapshot.bytes(f.rel, f.name, f.added),
     }));
-    if (await send(scope, plan.mkdirs, items)) snapshot.clearSelection();
+    if (await send(scope, write, plan.mkdirs, items)) snapshot.clearSelection();
   }
 
   async function uploadFiles(files: File[], folder: string) {
     const scope = destination.capture();
-    if (!scope || !files.length || !(await whenIdle(scope))) return;
+    const write = scope?.write(folder);
+    if (!scope || !write || !files.length || !(await whenIdle(scope)) || !write.current()) return;
     await send(
       scope,
+      write,
       [],
       files.map((f) => ({
-        folder,
+        folder: write.folder,
         name: f.name,
         size: f.size,
         read: async () => new Uint8Array(await f.arrayBuffer()),
@@ -179,22 +186,30 @@ export function createSamplesApp({
     if (writing(getState().busy())) return;
     const scope = destination.capture();
     if (!scope) return;
-    scope.open(folder);
+    scope.openFolder(folder);
     void run('Reading', async () => {});
+  }
+
+  function openLocation(kind?: SamplesKind) {
+    if (writing(getState().busy())) return;
+    const scope = destination.capture();
+    if (!scope) return;
+    scope.openLocation(kind);
+    return run('Reading', async () => {});
   }
 
   function createFolder(name: string): boolean {
     const scope = destination.capture();
-    if (!scope) return false;
+    const write = scope?.write();
+    if (!scope || !write) return false;
     const why = folderNameError(name, scope.entries() ?? []);
     if (why) {
       getState().setError(why);
       return false;
     }
-    const path = joinPath(scope.folder(), name);
+    const path = joinPath(write.folder, name);
     void run('Creating', async () => {
-      const { backend } = await scope.openSession('write');
-      scope.check();
+      const backend = await write.open('write');
       await backend.mkdir(path);
     });
     return true;
@@ -202,11 +217,12 @@ export function createSamplesApp({
 
   async function removeSelected() {
     const scope = destination.capture();
-    if (!scope) return;
+    const write = scope?.write();
+    if (!scope || !write) return;
     const gone = deleteRows(scope.rows(), scope.selected());
-    const folder = scope.folder();
+    const folder = write.folder;
     await run('Deleting', async () => {
-      const { backend } = await scope.openSession('write');
+      const backend = await write.open('write');
       scope.check();
       scope.setNote('');
       let done = 0;
@@ -248,7 +264,7 @@ export function createSamplesApp({
 
   async function restart() {
     const scope = destination.capture();
-    if (!scope) return;
+    if (scope?.location()?.apply !== 'restart') return;
     await run('Restarting', async () => {
       const { asked } = getConnection();
       const session = await asked(scope.binding.session);
@@ -286,6 +302,7 @@ export function createSamplesApp({
     uploadRows,
     uploadFiles,
     openDestination,
+    openLocation,
     createFolder,
     removeSelected,
     restart,

@@ -35,6 +35,7 @@ export function createDesktopApps(
   const samples = createSamplesApp({
     fs: host.fs,
     firmware: host.firmware,
+    emulatorGeneration: emulatorActions.emulatorGeneration,
     storage,
     getTarget: () => getApp().target,
     getState: () => getApp().state,

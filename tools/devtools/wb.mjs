@@ -199,7 +199,7 @@ function storageOf(id) {
 }
 
 /** The samples backend the device profile names (`[storage] samples`). */
-const kindOf = (id) => storageOf(id).samples;
+const kindOf = (id) => storageOf(id).samples[0];
 
 /**
  * The device's INFO and the samples backend its profile names. The device is identified through the stock MidiRpc Ping (dk-session `identifyDevice`),

@@ -26,7 +26,7 @@ export interface DeviceProfile {
   /** `[midi]`: `track_channels[n]` is the factory MIDI channel (1-16) of track n+1. */
   midi?: { track_channels: number[] };
   capabilities: { card: 'path-fs' | 'slots' | 'none' | 'unknown' } & Record<string, string>;
-  storage?: { samples?: string };
+  storage?: { samples: string | string[]; slots?: { count: number } };
   card: {
     regions?: { role: string; sector: number }[];
     store: {

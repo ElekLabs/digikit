@@ -13,7 +13,6 @@ import {
   writing,
   type PageCtx,
 } from '@digi/workbench-core/ui/transfer/TransferParts.tsx';
-import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
 import type { SamplesApp } from './app';
 
 interface Props {
@@ -22,12 +21,11 @@ interface Props {
     SamplesApp['source'],
     'folder' | 'path' | 'selected' | 'select' | 'rows' | 'picked' | 'read' | 'choose' | 'open' | 'add'
   >;
+  canUpload: () => boolean;
   upload: () => Promise<void>;
 }
 
 export default function LocalSamplesPane(props: Props): JSX.Element {
-  const { state, target } = useTransferApp();
-  const canUpload = () => !!state.deviceInfo() && target.target().kind !== 'none' && !target.switching();
   const { busy, setError } = untrack(() => props.ctx);
   const source = untrack(() => props.source);
   const {
@@ -109,7 +107,7 @@ export default function LocalSamplesPane(props: Props): JSX.Element {
           <button
             type="button"
             class="act primary"
-            disabled={!!busy() || picked().length === 0 || !canUpload()}
+            disabled={!!busy() || picked().length === 0 || !props.canUpload()}
             title={
               picked().length
                 ? 'Convert, upload and verify the selected files and folders into the open folder of the device'

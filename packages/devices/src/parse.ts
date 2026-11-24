@@ -34,7 +34,7 @@ export interface MidiMap {
   params: Readonly<Record<string, MidiParam>>;
 }
 
-/** `[storage.slots]`: how a device with numbered sample slots takes samples (`samples = "stock-slots"`). `bytesMax`: the most audio bytes of one sample.
+/** `[storage.slots]`: how a device with numbered sample slots takes samples. `bytesMax`: the most audio bytes of one sample.
  * `apply`: when the device uses a change (`restart`: at its next start). */
 export interface SlotStorage {
   path: string;
@@ -47,10 +47,11 @@ export interface SlotStorage {
   apply: 'live' | 'restart';
 }
 
-/** `[storage]`: the backend of each kind of content. `samples`: `stock-rpc` (the device's MidiRpc file commands), `digikit` (the digikit store) or `stock-slots`
- * (the firmware's numbered slots, written through its Data API; `slots` says how). */
+export type SampleStorage = (typeof SAMPLE_STORAGE)[number];
+
+/** `[storage]`: the sample locations in display order. The first is the default for commands that take one location. */
 export interface Storage {
-  samples: 'stock-rpc' | 'digikit' | 'stock-slots';
+  samples: readonly [SampleStorage, ...SampleStorage[]];
   modules: 'digikit';
   slots?: SlotStorage;
 }
@@ -123,10 +124,9 @@ const WORDS = {
   card: ['path-fs', 'slots', 'none', 'unknown'],
 } as const;
 
-const STORAGE_WORDS = {
-  samples: ['stock-rpc', 'digikit', 'stock-slots'],
-  modules: ['digikit'],
-} as const;
+const SAMPLE_STORAGE = ['stock-rpc', 'digikit', 'stock-slots'] as const;
+const isSampleStorage = (v: unknown): v is SampleStorage =>
+  typeof v === 'string' && (SAMPLE_STORAGE as readonly string[]).includes(v);
 
 type Table = Record<string, unknown>;
 
@@ -196,21 +196,20 @@ function storageSlots(file: string, t: unknown): SlotStorage {
 function storage(file: string, t: unknown): Storage | undefined {
   if (t === undefined) return undefined;
   const s = need(file, '[storage]', t, isTable);
-  const out: Table = {};
-  for (const key of Object.keys(STORAGE_WORDS) as (keyof typeof STORAGE_WORDS)[]) {
-    const v = s[key];
-    if (typeof v !== 'string' || !(STORAGE_WORDS[key] as readonly string[]).includes(v))
-      throw new Error(`devices/${file}: [storage] ${key} must be one of ${STORAGE_WORDS[key].join(', ')}`);
-    out[key] = v;
-  }
+  const [first, ...rest]: unknown[] = Array.isArray(s.samples) ? s.samples : [s.samples];
+  if (!isSampleStorage(first) || !rest.every(isSampleStorage))
+    throw new Error(`devices/${file}: [storage] samples must name one or more of ${SAMPLE_STORAGE.join(', ')}`);
+  const samples: Storage['samples'] = [first, ...rest];
+  if (new Set(samples).size !== samples.length)
+    throw new Error(`devices/${file}: [storage] samples must list each location once`);
+  if (s.modules !== 'digikit') throw new Error(`devices/${file}: [storage] modules must be digikit`);
   for (const key of Object.keys(s))
-    if (!(key in STORAGE_WORDS) && key !== 'slots')
+    if (key !== 'samples' && key !== 'modules' && key !== 'slots')
       throw new Error(`devices/${file}: [storage] has an unknown key ${key}`);
   const slots = s.slots === undefined ? undefined : storageSlots(file, s.slots);
-  if ((out.samples === 'stock-slots') !== (slots !== undefined))
-    throw new Error(`devices/${file}: [storage.slots] is needed by samples = "stock-slots" and by nothing else`);
-  if (slots) out.slots = slots;
-  return out as unknown as Storage;
+  if (samples.includes('stock-slots') !== (slots !== undefined))
+    throw new Error(`devices/${file}: [storage.slots] is needed by samples with "stock-slots" and by nothing else`);
+  return { samples, modules: 'digikit', ...(slots ? { slots } : {}) };
 }
 
 function container(file: string, t: unknown, caps: Capabilities): Container {

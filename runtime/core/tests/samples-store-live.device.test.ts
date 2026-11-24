@@ -8,26 +8,31 @@ import { timePhase } from '@digi/regression/timing.ts';
 import { liveArtifacts, liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
 import { sampleWav } from '@digi/regression/runtime/fixtures.ts';
 import { liveProtocol } from '@digi/regression/runtime/protocol.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { fileHashHex } from '@digi/dk-session';
 import { openSamples } from '@digi/dk-session/samples';
+import { RpcData } from '@digi/dk-session/rpcdata';
+import { expect } from 'vitest';
 import { expectRemoveTree, expectSkipOnUpload } from './samples-tree.ts';
 
 async function expectSamplesStore({ session }: PatchedSession): Promise<void> {
-  await expectRuntimeReady(session);
   const out = liveArtifacts(session, 'samples-store-live');
   const wav = sampleWav(2);
   const storage = 'digikit';
-  const profile = deviceProfile('dn2');
-  check('the device profile selects the digikit samples backend', profile.storage?.samples === 'digikit');
+  const profile = deviceProfile(session.options.device);
+  const locations = profile.storage?.samples;
+  check('the device profile offers the digikit samples backend', Array.isArray(locations) ? locations.includes(storage) : locations === storage);
   const totalKib = Math.floor((profile.card.store.header_b_sector - profile.card.store.first_sector) / 2);
   const sample = await Sample.create(
     Uint8Array.from(readFileSync(join(repoRoot(), 'apps/web/public/dksample.wasm'))),
   );
-  let protocol = liveProtocol(session);
+  const protocol = liveProtocol(session);
   try {
+    const slots = profile.storage?.slots;
+    const beforeSlots = slots && (await new RpcData(protocol).list());
+    if (slots) expect(beforeSlots).toHaveLength(slots.count);
     let dev = openSamples(storage, { session: protocol, hashOf: (b) => sample.hash(b) });
     check(`the backend for [storage] samples = "${storage}"`, dev.kind === storage, dev.kind);
 
@@ -109,10 +114,8 @@ async function expectSamplesStore({ session }: PatchedSession): Promise<void> {
     check('the file goes in again and verifies', (await dev.verify('drums', prep)).ok);
     check('the space is the same as after the first upload', (await dev.space()).free === space1.free);
 
-    // the store survives a restart: the guest's card writes are kept, the runtime finds its store again
+    // Keep the protocol session across the restart so its first stock request waits for the stock MidiRpc service.
     await timePhase('protocol.restart', () => protocol.restart());
-    protocol.cancelPending();
-    protocol = liveProtocol(session);
     await timePhase('protocol.waitForBoot', () => protocol.waitForBoot());
     dev = openSamples(storage, { session: protocol, hashOf: (b) => sample.hash(b) });
     const again = await pollEmulated(session, () => dev.list('drums'), () => true, {
@@ -129,6 +132,7 @@ async function expectSamplesStore({ session }: PatchedSession): Promise<void> {
     const after = await dev.verify('drums', prep);
     check('after the restart VERIFY still matches', after.ok && after.device === after.host, JSON.stringify(after));
     check('after the restart the space is the same', (await dev.space()).free === space1.free);
+    if (beforeSlots) expect(await new RpcData(protocol).list(), 'stock slots after the pool upload and restart').toEqual(beforeSlots);
 
     writeFileSync(
       join(out, 'result.json'),
@@ -156,6 +160,6 @@ async function expectSamplesStore({ session }: PatchedSession): Promise<void> {
   }
 }
 
-runtimeTests('samples-store-live conversion, upload and persistent card bytes', expectSamplesStore, { devices: ['dn2'],
-  mirror: true,
-});
+const title = 'samples-store-live conversion, upload and persistent card bytes';
+runtimeTests(title, expectSamplesStore, { devices: ['dn2'], mirror: true });
+runtimeTests(title, expectSamplesStore, { devices: ['st'], dsp: 'cold', mirror: true });

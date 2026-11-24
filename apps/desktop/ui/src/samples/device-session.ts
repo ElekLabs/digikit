@@ -1,38 +1,40 @@
-import { failureModule, hasCap, identifyDevice, type DkSession, type LoadFailure } from '@digi/dk-session';
+import { DkError, failureModule, hasCap, identifyDevice, type DkSession, type LoadFailure } from '@digi/dk-session';
+import type { Storage } from '@digi/devices';
 import { Sample, converterOf } from '@digi/dk-session/dksample';
 import {
   openSamples,
+  sampleLocations,
   samplesUseBulk,
+  type SampleLocation,
   type SamplesBackend,
+  type SamplesKind,
   type SamplesOptions,
-  type SlotsOptions,
 } from '@digi/dk-session/samples';
 import { chooseBulk, type BulkChoice } from '@digi/dk-session/bulk-select';
 import type { BulkLink } from '@digi/dk-session/bulk';
 import { registry } from '@digi/workbench-core/data/device-profiles.ts';
+import { errorLine, isCancelled } from '@digi/workbench-core/modules/backend.ts';
 import type { ConnectionApp } from '@digi/workbench-core/transfer/connection-state.ts';
 import type { TransferBulk } from '@digi/workbench-core/transfer/env.ts';
 import type { LinkState } from '@digi/workbench-core/transfer/link-core.ts';
 import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import type { LogWriter } from '../log-state';
 
-export interface OpenedSamples {
+export interface SampleDevice {
   name: string;
   runtime: string | null;
-  hasRuntime: boolean;
-  samples: string;
-  apply: 'live' | 'restart';
+  locations: readonly SampleLocation[];
+}
+
+interface OpenedSamples {
   backend: SamplesBackend;
   link: 'bulk' | 'sysex';
 }
 
-interface SessionCache {
+interface SessionCache extends SampleDevice {
   s: DkSession;
-  name: string;
-  runtime: string | null;
-  samples: string;
-  slots?: SlotsOptions;
-  apply: 'live' | 'restart';
+  generation: number;
+  storage: Storage;
   opened?: OpenedSamples;
   failure?: { usbFast?: LoadFailure };
   bulk?: BulkChoice;
@@ -45,7 +47,9 @@ export interface SampleDeviceContext {
   binding: TargetBinding;
   current(): boolean;
   check(): void;
-  setLink(link: LinkState): void;
+  firmwareGeneration(): number;
+  link(): LinkState | undefined;
+  setLink(kind: SamplesKind, link: LinkState): void;
 }
 
 export type SampleConnection = Pick<ConnectionApp, 'asked' | 'noteConnection'>;
@@ -58,7 +62,8 @@ interface Dependencies {
 }
 
 export interface SampleDeviceSession {
-  open(purpose: 'read' | 'write' | 'upload'): Promise<OpenedSamples>;
+  identify(): Promise<SampleDevice>;
+  open(kind: SamplesKind, purpose: 'read' | 'write' | 'upload'): Promise<SamplesBackend>;
   release(): Promise<void>;
 }
 
@@ -95,27 +100,33 @@ export function createSampleDeviceSessions({ sampleWasm, connection, bulk, write
     return sample;
   }
 
-  return ({ binding, current, check, setLink }: SampleDeviceContext): SampleDeviceSession => {
+  return ({ binding, current, check, firmwareGeneration, link, setLink }: SampleDeviceContext): SampleDeviceSession => {
     let last: SessionCache | undefined;
     let pending = Promise.resolve();
     let bulkWork: Promise<void> | undefined;
 
-    async function checked<T>(operation: () => Promise<T>): Promise<T> {
+    function checkGeneration(generation: number) {
       check();
+      if (generation !== firmwareGeneration())
+        throw new DkError({ error: 'The emulator firmware changed.', kind: 'cancelled' });
+    }
+
+    async function checked<T>(operation: () => Promise<T>, generation = firmwareGeneration()): Promise<T> {
+      checkGeneration(generation);
       try {
         const value = await operation();
-        check();
+        checkGeneration(generation);
         return value;
       } catch (e) {
-        check();
+        checkGeneration(generation);
         throw e;
       }
     }
 
-    const request =
-      <Args extends unknown[], Result>(f: (...args: Args) => Promise<Result>) =>
-      (...args: Args): Promise<Result> =>
-        checked(() => f(...args));
+    function request<Args extends unknown[], Result>(f: (...args: Args) => Promise<Result>) {
+      const generation = firmwareGeneration();
+      return (...args: Args): Promise<Result> => checked(() => f(...args), generation);
+    }
 
     function port(s: DkSession): SamplesOptions['session'] {
       return {
@@ -132,16 +143,20 @@ export function createSampleDeviceSessions({ sampleWasm, connection, bulk, write
       };
     }
 
-    async function checkedLink(open: () => Promise<BulkLink>, choosing: () => Promise<void>): Promise<BulkLink> {
-      check();
+    async function checkedLink(
+      open: () => Promise<BulkLink>,
+      choosing: () => Promise<void>,
+      generation: number,
+    ): Promise<BulkLink> {
+      checkGeneration(generation);
       // Once the native slot can be touched, release waits through the probe and its cleanup.
       bulkWork = choosing();
       const link = await open();
-      if (!current()) {
+      if (!current() || generation !== firmwareGeneration()) {
         try {
           await link.close();
         } finally {
-          check();
+          checkGeneration(generation);
         }
       }
       let closing: Promise<void> | undefined;
@@ -155,16 +170,16 @@ export function createSampleDeviceSessions({ sampleWasm, connection, bulk, write
       };
     }
 
-    async function updateBulk(cache: SessionCache, forRun: boolean, note: (line: string) => void) {
+    async function updateBulk(cache: SessionCache, useBulk: boolean, forRun: boolean, note: (line: string) => void) {
       const s = cache.s;
-      if (forRun && cache.bulk) {
+      if ((forRun || !useBulk) && cache.bulk) {
         const previous = cache.bulk;
         cache.bulk = undefined;
         bulkWork = close(previous);
         await bulkWork;
-        check();
+        checkGeneration(cache.generation);
       }
-      if (cache.bulk || cache.runtime === null || !samplesUseBulk(cache.samples)) return;
+      if (cache.bulk || !useBulk) return;
       const env = bulk();
       let choiceNote: string | undefined;
       if (env && binding.target.kind !== 'none') {
@@ -179,6 +194,7 @@ export function createSampleDeviceSessions({ sampleWasm, connection, bulk, write
               checkedLink(
                 () => env.open(id),
                 () => choosing,
+                cache.generation,
               ),
             outOnlyCandidates: env.outOnlyCandidates && request(env.outOnlyCandidates.bind(env)),
             openOutOnly:
@@ -187,6 +203,7 @@ export function createSampleDeviceSessions({ sampleWasm, connection, bulk, write
                 checkedLink(
                   () => env.openOutOnly!(id, poll),
                   () => choosing,
+                  cache.generation,
                 )),
           },
           (line) => {
@@ -197,7 +214,7 @@ export function createSampleDeviceSessions({ sampleWasm, connection, bulk, write
           cache.bulk = choice;
         });
         await choosing;
-        check();
+        checkGeneration(cache.generation);
       }
       cache.reason =
         choiceNote && !NOT_LOADED.test(choiceNote) ? choiceNote.replace(/^USB bulk link not used: /, '') : undefined;
@@ -205,30 +222,32 @@ export function createSampleDeviceSessions({ sampleWasm, connection, bulk, write
         !cache.bulk && binding.target.kind === 'midi' ? await checked(() => s.usbFastWrongMode()) : false;
     }
 
-    function linkOf(cache: SessionCache, link: OpenedSamples['link']): LinkState {
+    function linkOf(cache: SessionCache, link: OpenedSamples['link'], useBulk: boolean): LinkState {
+      if (!useBulk) return { state: 'sysex' };
       if (link === 'bulk') return { state: 'bulk' };
       if (cache.failure?.usbFast) return { state: 'sysex', failure: cache.failure.usbFast };
       if (cache.wrongMode) return { state: 'sysex', wrongMode: true };
       return cache.reason ? { state: 'sysex', reason: cache.reason } : { state: 'sysex' };
     }
 
-    async function open(forRun: boolean): Promise<OpenedSamples> {
+    async function identify(refreshStore?: 'read' | 'write'): Promise<SessionCache> {
       const { asked, noteConnection } = connection();
-      check();
-      const s = await asked(() => checked(binding.session));
-      check();
-      if (last && last.s !== s) {
+      const generation = firmwareGeneration();
+      const s = await asked(() => checked(binding.session, generation));
+      checkGeneration(generation);
+      if (last && (last.s !== s || last.generation !== generation)) {
         const old = last;
         last = undefined;
         bulkWork = close(old.bulk);
         await bulkWork;
-        check();
+        checkGeneration(generation);
       }
       if (!last) {
-        const who = await asked(() => checked(() => identifyDevice(port(s), registry)));
-        check();
+        const who = await asked(() => checked(() => identifyDevice(port(s), registry), generation));
+        checkGeneration(generation);
         const device = registry.get(who.id);
-        if (!device.storage) throw new Error(`the ${device.name} profile has no [storage]`);
+        const { storage } = device;
+        if (!storage) throw new Error(`the ${device.name} profile has no [storage]`);
         noteConnection({
           type: 'answered',
           device: {
@@ -240,14 +259,37 @@ export function createSampleDeviceSessions({ sampleWasm, connection, bulk, write
         });
         last = {
           s,
+          generation,
           name: device.name,
           runtime: who.runtime,
-          samples: device.storage.samples,
-          slots: device.storage.slots,
-          apply: device.storage.slots?.apply ?? 'live',
+          locations: sampleLocations(storage.samples, who.info, storage.slots?.apply),
+          storage,
         };
+      } else if (refreshStore && last.runtime !== null && last.storage.samples.includes('digikit')) {
+        const { samples, slots } = last.storage;
+        try {
+          const info = await asked(() => checked(() => s.info(true), generation));
+          last.locations = sampleLocations(samples, info, slots?.apply);
+        } catch (e) {
+          checkGeneration(generation);
+          if (refreshStore === 'write' || samples.length === 1 || isCancelled(e)) throw e;
+          const unavailable = `Could not check the digikit store. ${errorLine(e)}`;
+          last.locations = last.locations.map((item) => (item.kind === 'digikit' ? { ...item, unavailable } : item));
+        }
       }
-      const cache = last;
+      return last;
+    }
+
+    async function open(kind: SamplesKind, purpose: 'read' | 'write' | 'upload'): Promise<SamplesBackend> {
+      const cache = await identify(kind === 'digikit' && purpose !== 'read' ? 'write' : undefined);
+      checkGeneration(cache.generation);
+      const { s } = cache;
+      const location = cache.locations.find((candidate) => candidate.kind === kind);
+      if (!location || location.unavailable)
+        throw new Error(location?.unavailable ?? 'The sample location is unavailable.');
+      if (purpose !== 'read' && location.readOnly) throw new Error('The digikit store is read-only.');
+      const forRun = purpose === 'upload';
+      const useBulk = cache.runtime !== null && samplesUseBulk(kind);
       const note = (why: string) => {
         if (!current()) return;
         console.info(`[samples] ${why}`);
@@ -256,63 +298,62 @@ export function createSampleDeviceSessions({ sampleWasm, connection, bulk, write
         writer.logEvent('transfer', 'info', `samples: ${why}`);
       };
       const had = cache.bulk;
-      const hasRuntime = cache.runtime !== null;
-      if (!cache.bulk && !cache.failure) {
-        const failure = hasRuntime
-          ? await usbFastFailure({
-              info: request((...args) => s.info(...args)),
-              loadFailures: request(() => s.loadFailures()),
-            })
-          : undefined;
-        check();
+      if (useBulk && !cache.bulk && !cache.failure) {
+        const failure = await usbFastFailure({
+          info: request((...args) => s.info(...args)),
+          loadFailures: request(() => s.loadFailures()),
+        });
+        checkGeneration(cache.generation);
         cache.failure = { usbFast: failure };
       }
 
       // A run chooses again because the device expires its idle bulk session. A refresh keeps the current link and fallback pill.
-      await updateBulk(cache, forRun, note);
-      check();
-      if (cache.opened && had === cache.bulk) {
-        if (forRun) setLink(linkOf(cache, cache.opened.link));
-        return cache.opened;
+      await updateBulk(cache, useBulk, forRun, note);
+      checkGeneration(cache.generation);
+      if (cache.opened?.backend.kind === kind && had === cache.bulk) {
+        if (forRun || !link()) setLink(kind, linkOf(cache, cache.opened.link, useBulk));
+        return cache.opened.backend;
       }
 
-      const conv = await checked(converter);
-      check();
+      const conv = await checked(converter, cache.generation);
+      checkGeneration(cache.generation);
       const opened: OpenedSamples = {
-        name: cache.name,
-        runtime: cache.runtime,
-        hasRuntime,
-        samples: cache.samples,
-        apply: cache.apply,
-        backend: openSamples(cache.samples, {
+        backend: openSamples(kind, {
           session: port(s),
           hashOf: (d) => conv.hash(d),
           converter: converterOf(conv),
-          slots: cache.slots,
+          slots: cache.storage.slots,
           bulk: cache.bulk?.session,
           note,
           onFallback: (reason) => {
-            if (!current() || cache.opened !== opened) return;
+            if (!current() || cache.generation !== firmwareGeneration() || cache.opened !== opened) return;
             writer.logEvent('transfer', 'error', `samples: Fast USB stopped, the rest goes over SysEx: ${reason}`);
-            setLink({ state: 'fallback', reason });
+            setLink(kind, { state: 'fallback', reason });
           },
         }),
         link: cache.bulk ? 'bulk' : 'sysex',
       };
       cache.opened = opened;
-      setLink(linkOf(cache, opened.link));
+      setLink(kind, linkOf(cache, opened.link, useBulk));
+      return opened.backend;
+    }
+
+    function serial<T>(task: () => Promise<T>): Promise<T> {
+      const opened = pending.then(task);
+      pending = opened.then(
+        () => {},
+        () => {},
+      );
       return opened;
     }
 
     return {
-      open(purpose) {
-        const opening = pending.then(() => open(purpose === 'upload'));
-        pending = opening.then(
-          () => {},
-          () => {},
-        );
-        return opening;
-      },
+      identify: () =>
+        serial(async () => {
+          const { name, runtime, locations } = await identify('read');
+          return { name, runtime, locations };
+        }),
+      open: (kind, purpose) => serial(() => open(kind, purpose)),
       async release() {
         // Enumeration and the outgoing nonce cannot claim the slot after the binding has expired.
         await bulkWork?.catch(() => {});

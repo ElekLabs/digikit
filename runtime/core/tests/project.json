@@ -140,12 +140,13 @@
       },
       {
         "files": ["samples-store-live.device.test.ts"],
-        "devices": ["dn2"],
+        "devices": ["dn2", "st"],
         "tags": ["C:storage", "S:samples"],
         "modules": [],
         "sources": [
           "packages/workbench-core/src/transfer/sample-upload.ts"
         ],
+        "plusdrive": true,
         "dksampleWasm": true
       },
       {

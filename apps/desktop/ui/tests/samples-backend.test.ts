@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
-import { fileHashHex, RPC_PING, RPC_SOFTWARE_VERSION } from '@digi/dk-session';
+import { be32, fileHashHex, RPC_PING, RPC_SOFTWARE_VERSION } from '@digi/dk-session';
 import type { DkEntry } from '@digi/dk-session';
 import { FakeBulkDevice } from '@digi/dk-session/bulk-fake';
 import { RPC_FILE } from '@digi/dk-session/rpcfiles';
+import { DATA } from '@digi/dk-session/rpcdata';
 import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import {
   createFakeSessions,
@@ -49,6 +50,7 @@ function windowWith(
     logRun = (_run: TransferRun) => {},
     onJobEnd,
     bulk,
+    emulatorGeneration,
     openTarget = async () => silentTransport(),
   }: {
     folder?: string;
@@ -56,6 +58,7 @@ function windowWith(
     logRun?: (run: TransferRun) => void;
     onJobEnd?: () => void;
     bulk?: TransferBulk;
+    emulatorGeneration?: () => number;
     openTarget?: TransferTargets['open'];
   } = {},
 ) {
@@ -64,6 +67,7 @@ function windowWith(
   const samples = createSamplesApp({
     fs: host.fs,
     firmware: host.firmware,
+    emulatorGeneration,
     storage,
     getTarget: () => app.target,
     getState: () => app.state,
@@ -145,8 +149,9 @@ test('the light poll compares the open level and keeps the current listing if th
   );
 });
 
-const stock = registry.devices.find((d) => d.storage?.samples === 'stock-rpc')!;
-const store = registry.devices.find((d) => d.storage?.samples === 'digikit')!;
+const stock = registry.devices.find((d) => d.storage?.samples[0] === 'stock-rpc')!;
+const store = registry.devices.find((d) => d.storage?.samples[0] === 'digikit')!;
+const slots = registry.devices.find((d) => d.storage?.slots)!;
 const text = (...parts: string[]) => new TextEncoder().encode(parts.map((p) => p + '\0').join(''));
 const ping = (name: string) => Uint8Array.of(2, 1, 2, ...text(name, 'rev'));
 
@@ -229,6 +234,281 @@ function storeSession(list: (prefix?: string) => Promise<DkEntry[]>) {
 function entry(name: string): DkEntry {
   return { path: `samples/${name}`, size: 40, hash: 'file hash' };
 }
+
+function slotSession({ runtime = true, readOnly = false, tooSmall = false } = {}) {
+  return {
+    async rpc(type: number) {
+      if (type === RPC_PING) return ping(slots.name);
+      if (type === RPC_SOFTWARE_VERSION) return text('1.42');
+      if (type === DATA.LIST)
+        return Uint8Array.of(
+          1,
+          ...be32(0),
+          ...be32(2),
+          ...be32(1),
+          ...text('stock kick'),
+          0,
+          2,
+          ...be32(1),
+          ...be32(128),
+          0,
+          0x7e,
+          1,
+          0,
+        );
+      throw new Error(`unexpected rpc ${type}`);
+    },
+    async info() {
+      if (!runtime) throw Object.assign(new Error('no reply from the device'), { kind: 'timeout' });
+      return {
+        port: slots.id,
+        runtime: 1,
+        caps: 0,
+        free_bytes: 4096,
+        card_read_only: readOnly,
+        card_state: tooSmall ? 5 : 1,
+      };
+    },
+    usbFastWrongMode: async () => false,
+  };
+}
+
+test('the stock slot device opens its slots directly and never asks for a store listing', async () => {
+  const list = vi.fn(async () => []);
+  const sessions = createFakeSessions(() => ({ ...slotSession({ runtime: false }), list }));
+  const { samples, app } = windowWith(createFakeHost({ 'firmware.sampleWasm': new ArrayBuffer(0) }), {
+    folder: '',
+    sessions,
+  });
+  await samples.transfer.read();
+  assert.deepEqual(
+    samples.destination.locations()?.map((location) => location.label),
+    ['Sample Slots'],
+  );
+  assert.equal(samples.destination.entries()?.[0]?.slot, 1);
+  assert.equal(samples.destination.writable(), true);
+  assert.equal(app.state.deviceInfo()?.apply, 'restart');
+  assert.equal(app.state.deviceInfo()?.hasRuntime, false);
+  assert.equal(list.mock.calls.length, 0);
+});
+
+test('reloading the same emulator with runtime reveals the second location', async () => {
+  let generation = 0;
+  let runtime = false;
+  const sessions = createFakeSessions(() => ({
+    ...slotSession(),
+    info: () => slotSession({ runtime }).info(),
+  }));
+  const { samples, app } = windowWith(createFakeHost({ 'firmware.sampleWasm': new ArrayBuffer(0) }), {
+    folder: '',
+    sessions,
+    emulatorGeneration: () => generation,
+  });
+  await samples.transfer.read();
+  assert.equal(samples.destination.location()?.kind, 'stock-slots');
+  assert.equal(samples.destination.writable(), true);
+  runtime = true;
+  generation++;
+  assert.equal(samples.destination.writable(), false);
+  await samples.transfer.read();
+  assert.equal(app.sessions.made.length, 1);
+  assert.equal(samples.destination.location(), undefined);
+  assert.deepEqual(
+    samples.destination.locations()?.map((location) => location.kind),
+    ['stock-slots', 'digikit'],
+  );
+});
+
+test('the patched slot device writes only to the open sample location', async () => {
+  const files = new Map<string, Uint8Array>();
+  const list = vi.fn(async () =>
+    [...files].map(([path, data]) => ({ path, size: data.length, hash: fileHashHex(data) })),
+  );
+  const sessions = createFakeSessions(() => ({
+    ...slotSession(),
+    list,
+    async put(path: string, data: Uint8Array) {
+      files.set(path, data);
+    },
+    async verify(path: string) {
+      return fileHashHex(files.get(path)!);
+    },
+  }));
+  const { samples, app } = windowWith(createFakeHost({ 'firmware.sampleWasm': new ArrayBuffer(0) }), {
+    folder: '',
+    sessions,
+  });
+  await samples.transfer.read();
+  assert.deepEqual(
+    samples.destination.locations()?.map((location) => location.label),
+    ['Sample Slots', 'digikit Sample Pool'],
+  );
+  assert.equal(samples.destination.writable(), false);
+  const file = new File(['sample bytes'], 'kick.raw');
+  await samples.uploadFiles([file], '');
+  assert.deepEqual([...files], []);
+  assert.equal(list.mock.calls.length, 0);
+
+  await samples.openLocation('digikit');
+  assert.equal(samples.destination.writable(), true);
+  await samples.uploadFiles([file], '');
+  assert.deepEqual([...files.keys()], ['samples/kick.raw']);
+  assert.equal(samples.destination.rows()[0]?.status?.kind, 'ok');
+  assert.equal(app.state.deviceInfo()?.apply, 'live');
+
+  await samples.openLocation();
+  await samples.openLocation('stock-slots');
+  assert.deepEqual(
+    samples.destination.rows().map(({ name, slot }) => [name, slot]),
+    [['stock kick', 1]],
+  );
+  assert.equal(app.state.deviceInfo()?.apply, 'restart');
+});
+
+test.each([{ readOnly: true }, { tooSmall: true }])(
+  'a restricted digikit store leaves the stock slots writable (%j)',
+  async (flags) => {
+    const list = vi.fn(async () => [entry('from-store')]);
+    const sessions = createFakeSessions(() => ({ ...slotSession(flags), list }));
+    const { samples } = windowWith(createFakeHost({ 'firmware.sampleWasm': new ArrayBuffer(0) }), {
+      folder: '',
+      sessions,
+    });
+    await samples.transfer.read();
+    await samples.openLocation('digikit');
+    assert.equal(samples.destination.writable(), false);
+    if (flags.tooSmall) assert.match(samples.destination.location()?.unavailable ?? '', /too small/);
+    else assert.equal(samples.destination.entries()?.[0]?.name, 'from-store');
+    await samples.openLocation();
+    await samples.openLocation('stock-slots');
+    assert.equal(samples.destination.writable(), true);
+    assert.equal(samples.destination.entries()?.[0]?.slot, 1);
+  },
+);
+
+test('refresh updates the pool permissions on the same MIDI session', async () => {
+  let readOnly = true;
+  const put = vi.fn(async () => {});
+  const sessions = createFakeSessions(() => ({
+    ...slotSession(),
+    info: () => slotSession({ readOnly }).info(),
+    list: async () => [],
+    put,
+  }));
+  const { samples, app } = windowWith(createFakeHost({ 'firmware.sampleWasm': new ArrayBuffer(0) }), {
+    folder: '',
+    sessions,
+  });
+  await app.target.selectTarget({ kind: 'midi', port: 'Sample slots fixture' });
+  await samples.transfer.read();
+  await samples.openLocation('digikit');
+  assert.equal(samples.destination.writable(), false);
+  readOnly = false;
+  await samples.transfer.read();
+  assert.equal(samples.destination.writable(), true);
+  assert.equal(app.sessions.made.length, 1);
+
+  readOnly = true;
+  await samples.uploadFiles([new File(['sample bytes'], 'kick.raw')], '');
+  assert.equal(put.mock.calls.length, 0);
+  assert.equal(samples.destination.writable(), false);
+});
+
+test('a failed pool listing cannot show free space from the slots', async () => {
+  const sessions = createFakeSessions(() => ({
+    ...slotSession(),
+    async list() {
+      throw new Error('The store could not be read.');
+    },
+  }));
+  const { samples, app } = windowWith(createFakeHost({ 'firmware.sampleWasm': new ArrayBuffer(0) }), {
+    folder: '',
+    sessions,
+  });
+  await samples.transfer.read();
+  await samples.openLocation('stock-slots');
+  assert.notEqual(app.state.deviceInfo()?.free, undefined);
+  await samples.openLocation('digikit');
+  assert.match(samples.destination.locationError(), /store could not be read/);
+  assert.equal(app.state.deviceInfo()?.free, undefined);
+});
+
+test('a missed runtime INFO leaves the stock slots usable and blocks pool writes', async () => {
+  let replying = true;
+  const put = vi.fn(async () => {});
+  const sessions = createFakeSessions(() => ({
+    ...slotSession(),
+    info: () => slotSession({ runtime: replying }).info(),
+    list: async () => [],
+    put,
+  }));
+  const { samples } = windowWith(createFakeHost({ 'firmware.sampleWasm': new ArrayBuffer(0) }), {
+    folder: '',
+    sessions,
+  });
+  await samples.transfer.read();
+  await samples.openLocation('digikit');
+  assert.equal(samples.destination.writable(), true);
+
+  replying = false;
+  await samples.uploadFiles([new File(['sample bytes'], 'kick.raw')], '');
+  assert.equal(put.mock.calls.length, 0);
+  assert.equal(samples.destination.writable(), false);
+  await samples.openLocation('stock-slots');
+  assert.equal(samples.destination.entries()?.[0]?.slot, 1);
+  assert.equal(samples.destination.writable(), true);
+  await samples.openLocation('digikit');
+  assert.match(samples.destination.location()?.unavailable ?? '', /could not check the digikit store/i);
+});
+
+test('a late pool listing cannot replace the open stock slots', async () => {
+  const started = deferred<void>();
+  const late = deferred<DkEntry[]>();
+  let hold = false;
+  const sessions = createFakeSessions(() => ({
+    ...slotSession(),
+    async list() {
+      if (!hold) return [];
+      started.resolve();
+      return late.promise;
+    },
+  }));
+  const { samples } = windowWith(createFakeHost({ 'firmware.sampleWasm': new ArrayBuffer(0) }), {
+    folder: '',
+    sessions,
+  });
+  await samples.transfer.read();
+  await samples.openLocation('digikit');
+  hold = true;
+  const old = samples.transfer.read();
+  await started.promise;
+  await samples.openLocation();
+  await samples.openLocation('stock-slots');
+  late.resolve([entry('too late')]);
+  await old;
+  assert.equal(samples.destination.entries()?.[0]?.name, 'stock kick');
+});
+
+test('leaving the pool while it opens keeps the sample locations free of a link badge', async () => {
+  const started = deferred<void>();
+  const ready = deferred<ArrayBuffer>();
+  const sessions = createFakeSessions(() => ({ ...slotSession(), list: async () => [] }));
+  const host = createFakeHost({
+    'firmware.sampleWasm': () => {
+      started.resolve();
+      return ready.promise;
+    },
+  });
+  const { samples, app } = windowWith(host, { folder: '', sessions });
+  await samples.transfer.read();
+  const opening = samples.openLocation('digikit');
+  await started.promise;
+  await samples.openLocation();
+  ready.resolve(new ArrayBuffer(0));
+  await opening;
+  assert.equal(samples.destination.location(), undefined);
+  assert.equal(app.state.sampleLink(), undefined);
+});
 
 test.each(['reply', 'error'] as const)(
   'a delayed listing %s cannot publish after selecting A, B, then A',
@@ -497,7 +777,7 @@ test('an upload planned for an earlier selection cannot start after A, B, then A
   const { samples, app } = windowWith(host, { sessions });
   const a = { kind: 'midi', port: 'A' } as const;
   await app.target.selectTarget(a);
-  await samples.source.read();
+  await samples.transfer.read();
   samples.source.select(new Set(['drums']));
   const upload = samples.uploadRows();
   await started.promise;
@@ -506,7 +786,7 @@ test('an upload planned for an earlier selection cannot start after A, B, then A
   walk.resolve([{ name: 'new-file', kind: 'file', size: 0 }]);
   await upload;
   assert.deepEqual(writes, []);
-  assert.equal(app.sessions.made.length, 0);
+  assert.equal(app.sessions.made.length, 1);
   assert.equal(app.state.error(), '');
   assert.deepEqual([...samples.source.selected()], ['drums']);
 });
@@ -538,6 +818,8 @@ test('a failed port change keeps the open folder and lets it delete its selected
   });
   const a = { kind: 'midi', port: 'A' } as const;
   await app.target.selectTarget(a);
+  await samples.transfer.read();
+  calls.length = 0;
   samples.openDestination('drums');
   await firstRead.promise;
   samples.destination.select(new Set(['drums/nested']));
