@@ -74,12 +74,21 @@ function overlayOf(file: string): Records {
   return hit.records;
 }
 
+const blobs = new WeakMap<Buffer, Records>();
+
+/** The records of an overlay blob by sector, parsed once for each blob: a reader asks for one sector at a time (`slotImage` asks for thousands). */
+function blobRecords(blob: Buffer): Records {
+  let records = blobs.get(blob);
+  if (!records) {
+    records = new Map(Array.from(overlayRecords(blob), (r) => [r.sector, r]));
+    blobs.set(blob, records);
+  }
+  return records;
+}
+
 /** The sectors FIRST on of the card the guest sees: BUF holds the image bytes, the `overlay.bin` next to it and then the optional EXTRA overlay blob go over them. */
 export function layOver(buf: Buffer, first: number, card: string, extra?: Buffer): void {
-  const records = [
-    overlayOf(overlayFile(card)),
-    new Map(Array.from(overlayRecords(extra ?? Buffer.alloc(0)), (r) => [r.sector, r])),
-  ];
+  const records = [overlayOf(overlayFile(card)), extra ? blobRecords(extra) : new Map()];
   for (let n = 0; n * SECTOR < buf.length; n++)
     for (const map of records) {
       const r = map.get(first + n);
