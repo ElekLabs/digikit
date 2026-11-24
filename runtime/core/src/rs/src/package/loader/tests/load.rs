@@ -810,3 +810,26 @@ fn a_refused_load_while_a_worker_job_runs_is_busy_and_keeps_the_block() {
         crate::worker::test_reset();
     }
 }
+
+/// A service file packed for runtime 0.11 (its need word names that minor; a 0.11 runtime read a `HOOKS` entry mask as an index in device-file order, this one reads the
+/// runtime id) is refused by `load_provider` with `E_CONTRACT`: no block is kept, no hook site is taken. The same file packed for this runtime loads.
+#[test]
+fn a_service_file_packed_for_runtime_0_11_is_refused_by_load_provider() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    let packed_for = |need: u32| {
+        let mut f = service_file(&svc_table(), 0);
+        put(&mut f, dkneeds::H_RUNTIME, need);
+        seal(&mut f);
+        f
+    };
+    unsafe {
+        for old in [0x000b00, 0x000b03] {
+            let mut l = provider_loader(packed_for(old), svc_init());
+            assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_CONTRACT, "need word {old:#x}");
+            assert!(l.m.live.is_empty(), "no block is kept");
+            assert_eq!(site_bytes(&l, 6), STOCK[..6], "the site stays stock");
+        }
+        let mut l = provider_loader(packed_for(dkrt_sdk::RUNTIME_VERSION), svc_init());
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK, "the same file packed for this runtime");
+    }
+}
