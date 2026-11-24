@@ -788,6 +788,8 @@ exports from `init`. For Rust providers using `dkrt_svc_rt::service!`, use its
 object that implements `Provider` (and the traits of the parts it adopts); its `service!` call names
 them: `service!(MyService, "my-service", &[], parts = [Tick], hooks = [], fills = [], exports = [...])`.
 
+A hook name may appear once per disjoint device set (`devices` in `[[hook]]`): the loader takes the entry for its own device and refuses a duplicate.
+
 ```toml
 [[export]]
 name = "my_service_ping"
