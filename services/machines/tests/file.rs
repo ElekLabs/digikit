@@ -14,7 +14,7 @@ use file::builder::{
     dk_machine_add_page, dk_module_ctx_add_machine, dk_page_add_param, dk_page_bind,
     dk_page_bind_local, dk_param_glyph, dk_param_latched, dk_param_range,
 };
-use file::fw::{dk_param_get, dk_param_set, dks_page_key, dks_page_turn};
+use file::fw::{dk_param_get, dk_param_set, dks_page_key, dks_page_turn, page_key_with};
 pub use file::{builder, fw, native, DK_SVC_OWNER};
 use file::{dk_svc_start, dk_svc_stop};
 
@@ -153,4 +153,57 @@ fn describe_answers_while_the_owner_is_busy_in_another_call() {
     });
     assert_eq!(busy, Some(idle));
     dkrt_svc_machines::rows::reset();
+}
+
+/// A page whose code mapper enters the owner as the page's code hook does (`dks_native_code` looks a native page up in it): it maps encoder 1 to code 1, and answers -1 (the
+/// stock mapper) when the owner refuses the nested call.
+struct ReentrantFw;
+
+impl dkrt_abi::fw::Fw for ReentrantFw {
+    fn mode_key_held(&self) -> bool {
+        false
+    }
+    fn page_value(&self, _: usize, _: u32) -> i32 {
+        0
+    }
+    fn object(&self, _: usize, _: u32, _: u32) -> usize {
+        0
+    }
+    fn object_value(&self, _: usize, _: u32) -> i32 {
+        0
+    }
+    fn store(&self, _: usize, _: u32, _: i32, _: u32) {}
+    fn view_track(&self, _: usize) -> u32 {
+        5
+    }
+    fn param_code(&self, _: usize, enc: u32) -> i32 {
+        match DK_SVC_OWNER.with(|_| ()) {
+            Some(()) => enc as i32,
+            None => -1,
+        }
+    }
+}
+
+/// The key hook asks the page for the encoder code outside the owner: a code mapper that enters the owner is answered, so the click of a native page's bound knob reaches its action.
+#[test]
+fn a_click_maps_to_the_module_code_when_the_code_mapper_enters_the_owner() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let _o = Started::new();
+    // the stub image has no registry: the first parameter code is u32::MAX, so code 1 is action slot 2
+    DK_SVC_OWNER.with(|m| m.clicks().set(2, 0x4000)).unwrap();
+    let view = [0u32; 64];
+    let v = view.as_ptr() as *const u8;
+    let ev = |flags: u32| [0u32, 0, 0, 0x29 + 1, flags, 0];
+    let (press, release) = (ev(0x01), ev(0x10));
+    // SAFETY: the view and the events are zeroed words of the size the hook reads
+    unsafe {
+        page_key_with(&ReentrantFw, v, press.as_ptr() as *const u8);
+        page_key_with(&ReentrantFw, v, release.as_ptr() as *const u8);
+    }
+    let p = DK_SVC_OWNER.with(|m| m.clicks().pending()).unwrap();
+    assert_eq!(
+        (p.callback, p.track, p.code),
+        (0x4000, 5, 1),
+        "the click maps to the module's encoder code"
+    );
 }
