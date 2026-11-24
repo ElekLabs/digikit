@@ -14,7 +14,9 @@ test('the decoder reads the records and the sections of the fixture reply', () =
   const page = decodeModulesPage(body);
   assert.equal(page.total, fixture.total);
   // a record with no Workbench token has no `uiInstance` (the fixture says null)
-  const want = (fixture.modules as object[]).map((m) => Object.fromEntries(Object.entries(m).filter(([, v]) => v !== null)));
+  const want = (fixture.modules as object[]).map((m) =>
+    Object.fromEntries(Object.entries(m).filter(([, v]) => v !== null)),
+  );
   assert.deepEqual(JSON.parse(JSON.stringify(page.modules)), want);
 });
 

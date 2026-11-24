@@ -386,7 +386,7 @@ mod tests {
 
     /// The reply the host decoders read: `tests/fixtures/protocol/modules-reply.json` holds the bytes of two records (the `machines` service has five words for the first, the
     /// `fx` service two for the second, and each is silent for the other record) and what a host reads from them; the TypeScript and Python decoders test against the same file.
-    /// `DIGI_WRITE_FIXTURES=1` writes it again.
+    /// `UPDATE_GOLDENS=1` writes it again.
     mod fixture {
         use super::*;
         use crate::package::handlers::tests::{fake, set_describe, KINDS_1, KINDS_2, LOCK};
@@ -445,11 +445,11 @@ mod tests {
             assert_eq!(&body[18 + 62..18 + 66], name_hash("machines").to_be_bytes());
             let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../tests/fixtures/protocol/modules-reply.json");
             let want = json(&body);
-            if std::env::var_os("DIGI_WRITE_FIXTURES").is_some() {
+            if std::env::var_os("UPDATE_GOLDENS").is_some() {
                 std::fs::create_dir_all(path.parent().unwrap()).unwrap();
                 std::fs::write(&path, &want).unwrap();
             }
-            assert_eq!(std::fs::read_to_string(&path).expect("tests/fixtures/protocol/modules-reply.json (DIGI_WRITE_FIXTURES=1 writes it)"), want);
+            assert_eq!(std::fs::read_to_string(&path).expect("tests/fixtures/protocol/modules-reply.json (UPDATE_GOLDENS=1 writes it)"), want);
         }
     }
     use super::*;

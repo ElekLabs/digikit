@@ -73,7 +73,12 @@ export function trackSetup(
     }
   };
   const run = async (what: 'machine' | 'filter', track: number, type: number): Promise<SetupDone> => {
-    if (what === 'machine' && runTime && type >= runTime.first && !(await runTime.modules()).some((m) => m.types.includes(type)))
+    if (
+      what === 'machine' &&
+      runTime &&
+      type >= runTime.first &&
+      !(await runTime.modules()).some((m) => m.types.includes(type))
+    )
       throw new SetupRefused(what, track, type, E_RANGE);
     const seq = await request(what, track, type);
     const e = await events.until('SETUP_DONE', (x) => x.fields.seq === seq, { withinMs });
