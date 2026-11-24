@@ -1,22 +1,14 @@
-//! Host tests of the `__NAME__` service over `FakeCore`: what it declares and that it asks nothing of the core when it has nothing to do. Add a case
-//! for each handler the service overrides (check, apply_record, remove, tick, ...); the other services' `tests/` show the pattern.
-use dkrt_abi::service::{tick_phase, Declare, Service};
+//! Host tests of the `__NAME__` service over `FakeCore`: that it starts and asks nothing of the core when it has nothing to do. Add a case for each part method the
+//! service overrides (`Records::check`, `Provider::detach`, `Ticker::tick`, ...); the other services' `tests/` show the pattern, and `dkrt_test_support::provider_contract`
+//! runs the shared contract suite over a `Recipe` of the service.
+use dkrt_abi::provider::Provider;
 use dkrt_svc___NAME__::records::__CAMEL__;
 use dkrt_test_support::FakeCore;
 
 #[test]
-fn the_service_declares_what_the_manifest_gives_it() {
-    let mut d = Declare::new();
-    unsafe { <__CAMEL__ as Service<FakeCore>>::declare(&mut d) };
-    assert_eq!(d.n, 0, "no record kind yet: add one `d.kind` and one [records.kinds] entry together");
-}
-
-#[test]
-fn a_tick_and_a_removal_ask_nothing_of_the_core() {
+fn the_service_starts_without_asking_the_core() {
     let core = FakeCore::new();
-    unsafe {
-        <__CAMEL__ as Service<FakeCore>>::tick(&core, tick_phase::EARLY);
-        <__CAMEL__ as Service<FakeCore>>::remove(&core, 1);
-    }
+    let mut owner = <__CAMEL__ as Provider<FakeCore>>::start(&core).expect("start");
+    <__CAMEL__ as Provider<FakeCore>>::detach(&mut owner, &core, dkrt_abi::provider::ConsumerId::new(1));
     assert!(core.calls().is_empty());
 }

@@ -10,7 +10,7 @@ pub trait Ops {
     /// The selection index a load of the file at `path` takes (`boot::live_index`), or `E_SEL_COUNT`.
     unsafe fn alloc_index(&mut self, path: *const u8) -> Result<usize, i32>;
     /// The refusals before anything changes: `reload::refusal` over the facts of the system (safe mode, an open upload or a card transfer), and for the module `rec` (an
-    /// unload or a reload) its menus and `Service::teardown_refusal`.
+    /// unload or a reload) its menus and the services' `Provider::can_stop` (asked by the manager).
     unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32>;
     /// The checks of the file before anything changes: `Loader::reload_check` of a reload, `Loader::live_check_load` of a load at index `k`. An unload has no file to check.
     unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32;
@@ -41,9 +41,9 @@ pub trait Ops {
     unsafe fn dsp_result(&mut self, k: usize) -> Option<i32>;
     /// Give up the DSP part (`Loader::cancel_dsp`): the transfer is taken down as a failed one is, and the module is torn down.
     unsafe fn cancel_dsp(&mut self, rec: usize, code: i32) -> bool;
-    /// Every service: `Service::on_loaded` of module record `rec` (a module with no DSP gets it here; one with DSP got it from the DSP loader).
+    /// Every service: `DspPart::loaded` of module record `rec` (a module with no DSP gets it here; one with DSP got it from the DSP loader).
     unsafe fn on_loaded(&mut self, rec: usize);
-    /// The end of a job that got past the checks, whatever the result: `Service::live_done` on every service (placeholders freed, the machine rows of a module that is not
+    /// The end of a job that got past the checks, whatever the result: `Provider::reload_done` on every service (placeholders freed, the machine rows of a module that is not
     /// back written as gap rows, the machine list rebuilt), and the counter when the module was loaded or torn down (`changed`). A refusal before the checks skips it:
     /// nothing was touched.
     unsafe fn finish(&mut self, ok: bool, changed: bool);

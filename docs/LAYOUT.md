@@ -32,7 +32,7 @@ This file says who owns which part of the repository and which moves are planned
 | --- | --- | --- |
 | `runtime/core` | `runtime` | Loads `.dkm` modules, links their imports, owns store, selection and policy |
 | `services/NAME`, `services/NAME/dks` | `service` (in `dks/`) | A service crate and its boot-loaded package, whose manifest has ID `core/services/NAME`. Create one with `module:new -- service NAME` and check it with `module:check service/NAME`. |
-| `services/{bitmap,rows}` | none | Libraries shared by service crates. The crate in `services/rows` is named `dkrt-svc-params`. |
+| `services/{bitmap,rows}` | none | Libraries shared by service crates. The crate in `services/rows` is named `dkrt-svc-rows`. |
 | `runtime/platform/expansion` | `installer` | Reset-time installer of all patched-in code |
 | `ports/bindings` | none | Generated firmware bindings (a library, not a module) |
 | `runtime/platform/*` (except `expansion`) | `adapter` | Runtime platform modules, including UI, input, health and the DSP link |

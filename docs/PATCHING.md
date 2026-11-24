@@ -564,8 +564,8 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
 - **Hooks per device.** One `.dks` serves both devices. `[[hook]]` in the module's `module.toml` has `devices`; the `service!`
   call lists `(name, entry)` for every device, `(name, entry, dt2)` or `(name, entry, dn2)` for one, and declares at `init` those of
   the running device. The packer writes the device set of each hook into the file: an item of `HOOKS` is `{name hash, word}`,
-  and the top byte of the word is a device mask (bit `i` is device `i` of the device files in file-name order; 0: every device), the low
-  24 bits the entry's image offset. The loader drops the mask (`HOOK_ENTRY_MASK`): the port file's `absent` flag says which hooks the firmware has, and a hook that the port
+  and the top byte of the word is a device mask (bit `id - 1` of the runtime id of the device, `[digikit] id`; 0: every device), the low
+  24 bits the entry's image offset. A hook name may appear once per disjoint device set; the loader takes the entry for its own device (`HOOK_ENTRY_MASK`) and refuses a duplicate. The port file's `absent` flag says which hooks the firmware has, and a hook that the port
   file does not list at all refuses the service file (`E_IMPORT`).
   A reader of the file masks the word with `0x00ffffff`. `patchkit service-check` compares the manifest and the call per device.
   A `[[fill]]` of a ColdFire slot with `devices` works the same way: the `SLOTS` item keeps the device set in bits 16 to 23 of its flags (bit `id - 1` for the device with `[digikit] id` `id`;
@@ -664,7 +664,7 @@ SHA-256), that the stream fits `stage_end - dest`, and an in-place margin above 
 manifest, so `flash`, `preflight` and the wasm callers check it; with the library (the `verify` command, `apply`) the module's own `[[repack]]` must declare the same.
 A packed section without an entry is refused. This proves that the record is consistent with the image (the stored stream, its stock section and layout); it does not
 prove that the constants in MAIN's hook (the adapter's C code) match the record: `core/peer-image`'s host test and `tests/repack.rs` compare those with the manifest. The first user is `core/peer-image`
-([README](../image-modules/adapters/peer-image/README.md), [finding 151](findings/151-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
+([README](../runtime/platform/peer-image/README.md), [finding 151](findings/151-syntakt-section7-pack.md)): without it the Syntakt `emulator` set is
 over `container_max`; with it the container fits (`flash` and `verify` print the free space).
 
 ### The bootstrap's in-place unpack of MAIN

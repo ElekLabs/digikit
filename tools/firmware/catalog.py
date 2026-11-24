@@ -21,8 +21,11 @@ import sqlite3
 import sys
 import tomllib
 from collections.abc import Iterable, Sequence
+from contextlib import closing
 from pathlib import Path
 from typing import Any
+
+from tools.firmware.artifacts import FirmwareArtifacts
 
 # Rule kinds that find a function by its hash.
 FUNC_KINDS = ("cf_func", "sharc_func")
@@ -175,32 +178,33 @@ def catalog_group_rows(
 
 
 def _write_table(
-    db_path: str,
+    target: str | sqlite3.Connection,
     table: str,
     columns: Sequence[tuple[str, str]],
     rows: list[dict[str, Any]],
 ) -> None:
-    """Drop and recreate `table` in the sqlite file and fill it with `rows`."""
-    con = sqlite3.connect(db_path)
-    con.execute("DROP TABLE IF EXISTS %s" % table)
-    con.execute(
+    """Replace a generated table, joining the caller's transaction if supplied."""
+    if isinstance(target, str):
+        with closing(sqlite3.connect(target)) as con, con:
+            con.execute("BEGIN")
+            _write_table(con, table, columns, rows)
+        return
+    target.execute("DROP TABLE IF EXISTS %s" % table)
+    target.execute(
         "CREATE TABLE %s (%s)" % (table, ", ".join('"%s" %s' % c for c in columns))
     )
-    if rows:
-        quoted = ",".join('"%s"' % c for c, _t in columns)
-        con.executemany(
-            "INSERT INTO %s(%s) VALUES (%s)"
-            % (table, quoted, ",".join("?" * len(columns))),
-            [tuple(r[c] for c, _t in columns) for r in rows],
-        )
+    quoted = ",".join('"%s"' % c for c, _t in columns)
+    target.executemany(
+        "INSERT INTO %s(%s) VALUES (%s)"
+        % (table, quoted, ",".join("?" * len(columns))),
+        (tuple(r[c] for c, _t in columns) for r in rows),
+    )
     if table == "catalog":
-        con.execute("CREATE INDEX IF NOT EXISTS catalog_score ON catalog(score)")
-    con.commit()
-    con.close()
+        target.execute("CREATE INDEX IF NOT EXISTS catalog_score ON catalog(score)")
 
 
 def write_catalog(
-    db_path: str,
+    db_path: str | sqlite3.Connection,
     tsv_path: str,
     rows: list[dict[str, Any]],
     columns: Sequence[tuple[str, str]],
@@ -230,7 +234,7 @@ def write_catalog_groups(
     image: str,
     rows: list[dict[str, Any]],
     edges: dict[tuple[int, int], int],
-    db_path: str,
+    db_path: str | sqlite3.Connection,
     tsv_path: str,
     graph_path: str,
     addr_fmt: str = "0x%08x",
@@ -305,20 +309,25 @@ def rule_at(image: str, addr: int, length: int, cpu: str, root: Path) -> dict:
 
 def catalog_pair(image: str, cpu: str, entry: int, root: Path) -> int | None:
     """The function on the other device that the atlas catalogue pairs with the function at ENTRY, or None."""
-    name = f"{image}-dsp.sqlite" if cpu == "sharc" else f"{image}.sqlite"
-    db = root / "out" / "atlas" / name
-    if not db.exists():
-        return None
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        row = con.execute(
-            "SELECT pair_addr FROM catalog WHERE addr=?", (entry,)
-        ).fetchone()
-    except sqlite3.OperationalError:
-        return None
-    finally:
-        con.close()
-    return row[0] if row and row[0] is not None else None
+    out = root / "out"
+    paths = [FirmwareArtifacts(image, cpu, out).database_path()]
+    if cpu == "cf":
+        paths.append(out / "atlas" / f"{image}.sqlite")
+    for db in paths:
+        if not db.is_file():
+            continue
+        with closing(
+            sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)
+        ) as con:
+            exists = con.execute(
+                "SELECT 1 FROM sqlite_schema WHERE name='catalog'"
+            ).fetchone()
+            if exists:
+                row = con.execute(
+                    "SELECT pair_addr FROM catalog WHERE addr=?", (entry,)
+                ).fetchone()
+                return row[0] if row and row[0] is not None else None
+    return None
 
 
 def analyse(

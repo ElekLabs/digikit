@@ -68,7 +68,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   dkm-identity BEFORE_DIR AFTER_DIR      do two sets of .dkm (patchkit pack-all) differ only in the header table? (image, relocs, imports, DSP section compared)
   fit     --json -                       the fit rule (dkrt-fit): {caps, needs, empty?} on stdin -> {each, set, line}; exit 1 on a bad request
   records --json FILE|-                  the decoded records (counts, params, machines, pages, effects, and `problems`) of a committed record block
-  records --check FILE|-                 the block's records against the rule of the service that owns each kind (Service::validate_records); exit 1 with the problems
+  records --check FILE|-                 the block's records against the rule of the service that owns each kind (Records::validate); exit 1 with the problems
   needs   [--json] FILE.dkm...           what a load of each file takes (arena, DSP area, rows), inferred from its contents; `-` reads stdin;
                                          --json: one object, file -> the needs or {\"error\": text}; exit 1 when a file has none
   imports [--json] FILE.dkm...           the SDK imports (service calls and builder calls of init) each file links, from its import table

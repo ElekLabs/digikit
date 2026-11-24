@@ -44,12 +44,10 @@ pub(crate) static HOOKS: PackageHooks = PackageHooks {
     ui: UiHooks { settings_rows: Some(crate::package::menu::dk_app_settings_rows) },
 };
 
-/// The package's first-use setup (`init_once`): the package gets the resident table, the in-crate services declare their record kinds and the runtime compares them with
-/// the generated table (declare-check-commit), and the resident core gets the hooks. A resident table the package cannot use (`dkrt_abi::resident::check`) gives the
+/// The package's first-use setup (`init_once`): the package gets the resident table and the resident core gets the hooks. A resident table the package cannot use (`dkrt_abi::resident::check`) gives the
 /// reason and no hooks: the package does not run.
 pub(crate) unsafe fn attach(table: &'static ResidentTable) -> Result<&'static PackageHooks, Refusal> {
     resident::install(table)?;
-    handlers::check_declarations();
     // the core's directory of the package statics that host tools read: the package has no symbol in the image
     crate::package::host_dir::publish_all();
     Ok(&HOOKS)

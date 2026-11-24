@@ -266,13 +266,43 @@ The ColdFire PC probe (`coupled-run --pc-probe`, RPC `pc.probe.set`): [INSTRUMEN
 
 ## Analysis tools
 
-For the DSP, `uv run python -m tools.sharc_dev.sharcdb build out/sections/*/section_7_BLOB.bin`
-builds `out/sharcdb/<image>.sqlite`. `tools/sharc_dev/sharc.py` queries it: `sharc.load("dt2-1.17")`
-gives `func`, `callers`, `callees`, `reach`, `last_def`, `refs`, `trace` and `sql`, and
-`uv run python -m tools.sharc_dev.sharc dt2-1.17 "SQL"` runs one query. For the ColdFire OS, `tools/coldfire/ghidradump.py` exports a
-Ghidra project, `tools/coldfire/cfdb.py build` makes a database from the dump, and `tools/coldfire/cf.py`
-queries it. Decoding uses only public manuals ([docs/sharc/SOURCES.md](sharc/SOURCES.md)).
-All tools are indexed in [docs/TOOLS.md](TOOLS.md).
+Use [the firmware query CLI](TOOLS.md#firmware-query-cli-and-the-atlas) for both CPUs.
+The query backends are `tools/coldfire/fw_query.py` and `tools/sharc_dev/fw_query.py`.
+
+The [firmware guide](FIRMWARE.md) covers section extraction, database builds,
+the output layout, and browser review. DSP decoding uses the public manuals
+in [SHARC sources](sharc/SOURCES.md).
+
+### Syntakt main OS and DSP
+
+The firmware query CLI distinguishes the program role from its instruction
+set. `--device` and `--firmware` select the release. `--core main|dsp` selects
+the program. Syntakt's `[container].cf2` identifies a separate ColdFire
+program, while the DT2 and DN2 release profiles identify a SHARC DSP.
+
+Prepare the Syntakt 1.42 main and peer Ghidra dumps following
+[the analysis database workflow](findings/70-syntakt-1-42.md#analysis-databases).
+From the repository root:
+
+```sh
+uv run python -m tools.firmware.extract firmware/Syntakt_OS1.42.syx -o out/sections/st-1.42
+uv run python -m tools.coldfire.fw build --device syntakt --firmware 1.42
+uv run python -m tools.coldfire.fw fn 0x4000290e --device syntakt --firmware 1.42 --core dsp
+uv run python -m tools.coldfire.fw review --device syntakt --firmware 1.42 --core main --all
+uv run python -m tools.coldfire.fw review --device syntakt --firmware 1.42 --core dsp --all
+```
+
+The build reports separate catalog counts. Inspect the database and HTML
+for the core you selected:
+
+| Program | Database | Review page |
+| --- | --- | --- |
+| Main OS | `out/firmware/st-1.42/main/firmware.sqlite` | `out/firmware/st-1.42/main/review.html` |
+| DSP | `out/firmware/st-1.42/dsp/firmware.sqlite` | `out/firmware/st-1.42/dsp/review.html` |
+
+The main OS has the semantic atlas. The DSP catalog includes all recovered
+peer functions and uses the peer call graph. Workbench's current ColdFire
+symbol import resolves main OS addresses. Browse the DSP database directly or query it with `fw sql --core dsp`.
 
 Register local firmware databases and symbol maps from [desktop Settings](ADDRMAP.md#firmware-symbols-in-desktop-settings).
 
@@ -298,17 +328,41 @@ Usage of profiles (`wb profile report`, `wb profile record`, the `dk.profile/1` 
 After building both atlases and their catalogues, generate the complete inventories:
 
 ```sh
-uv run python -m tools.firmware.catalog_page dt2-1.17 --all
-uv run python -m tools.firmware.catalog_page dn2-1.12 --all
+uv run python -m tools.coldfire.fw review -i dt2-1.17 --core main --all
+uv run python -m tools.coldfire.fw review -i dn2-1.12 --core main --all
 ```
 
-Open `out/atlas/dt2-1.17-review.html` or `out/atlas/dn2-1.12-review.html` in a browser. Keep both files together with these names for paired-device links. `--all` includes every catalogue row, including anchored functions, small groups and the ungrouped bucket. The page renders only the active group's filtered rows; search also covers tags, existing anchors and labelled SDK uses. An address links directly to its row (`#r-0x...`), revealing it through active filters. Pairs outside the other candidate inventory retain their address and matching evidence without a broken row link.
+Open `out/firmware/dt2-1.17/main/review.html` or `out/firmware/dn2-1.12/main/review.html` in a browser. Paired links follow this release and core layout. `--all` includes every catalogue row, including anchored functions, small groups and the ungrouped bucket. The page renders only the active group's filtered rows; search also covers tags, existing anchors and labelled SDK uses. An address links directly to its row (`#r-0x...`), revealing it through active filters. Pairs outside the other candidate inventory retain their address and matching evidence without a broken row link.
 
-Each command also writes `out/atlas/<image>-review.tsv`, containing the **complete** catalogue, original evidence columns, flattened row/group labels and links to both review pages. This TSV is complete even without `--all`; omitting that option retains the curated visible selection. Curated pages keep omitted rows as lookup data so TSV and paired-device deep links can reveal any catalogue row on demand. `--labels FILE ...` replaces the discovered labels. Labels remain guesses [O] until checked against image bytes; stability, hash uniqueness, pair matches and rule agreement are shown separately.
+Each command also writes `out/firmware/<image>/main/exports/review.tsv`, containing the **complete** catalogue, original evidence columns, flattened row/group labels and links to both review pages. This TSV is complete even without `--all`; omitting that option retains the curated visible selection. Curated pages keep omitted rows as lookup data so TSV and paired-device deep links can reveal any catalogue row on demand. `--labels FILE ...` replaces the discovered labels. Labels remain guesses [O] until checked against image bytes; stability, hash uniqueness, pair matches and rule agreement are shown separately.
+
+Groups with review labels use those titles. Otherwise the page shows common
+classes for ColdFire and recorded roles, decoder hints, or anchors for SHARC.
+The detail panel gives the source of the title. You can search group titles
+alongside function names and anchors. Group IDs can change after a catalog build.
+To reuse review JSONL after reclustering, pass the previous catalog or review TSV
+for the same image and CPU with `--label-catalog FILE`, and the original JSONL
+with `--labels FILE ...`. The exporter attaches a group label when the member
+addresses match exactly. A label can also carry those addresses as a `members`
+array of hex strings in the JSONL. Function labels follow their addresses.
 
 Without Claude's database, Keep/Later/Skip uses local browser storage per firmware image. **Export decisions (JSONL)** saves `dt2-1.17-decisions.jsonl` or `dn2-1.12-decisions.jsonl`; **Import local decisions** merges a previous export for that image. Export before closing if browser storage is unavailable, and before moving or regenerating review files: storage for local files varies by browser. On a published Claude page, the existing database path remains in use; local imports are disabled there.
 
 The **Bitmap candidates** and **Parameter candidates** shortcuts search the existing function names, callees and anchor tags. The catalogue does not contain glyph IDs, glyph previews or bitmap asset metadata, so these are entry points for investigation rather than an asset gallery.
+
+### SHARC candidate review
+
+After building the DSP catalogs, run:
+
+```sh
+uv run python -m tools.coldfire.fw review -i dt2-1.17 --core dsp
+uv run python -m tools.coldfire.fw review -i dn2-1.12 --core dsp
+```
+
+The exporter reads the catalog and call edges from each DSP database and writes
+`out/firmware/<image>/dsp/review.html` and `dsp/exports/review.tsv`. The HTML opens in a browser
+and includes every DSP candidate by default. Use the search box to find an
+anchor, role, or DSP hint. Paired links follow the release and core layout.
 
 ## Patching
 
@@ -340,7 +394,7 @@ pnpm dev                                # the gallery at /patch: patch in the br
 id `core/services/NAME`, `src/lib.rs` with the `service!` call; add `src/hooks.rs` for hook assembler and `src/fw.rs` for firmware calls). It prints the steps that register it
 (workspace member, `[[service]]` row and `[records.kinds]` in `sdk/sdk.toml`). `mise run module:check -- service/NAME` runs `patchkit service-check services/NAME`
 (the layout of both crates, the id and the role; the `[[hook]]` entries equal to the `service!` hooks per device; assembler only in `dks/src/hooks.rs`; firmware names only under `dks/`;
-at most one exported symbol, `dk_module`; no row anchor of `ports/fw` (a `[[data]]` found by the words of a table row) that lists another service in `users`; the record kinds that `Service::declare` makes equal to the `[records.kinds]` entries of the service in `sdk/sdk.toml`), then the crate's
+at most one exported symbol, `dk_module`; no row anchor of `ports/fw` (a `[[data]]` found by the words of a table row) that lists another service in `users`; the kinds argument of the `service!` call equal to `KINDS_NAME`, the list `patchkit gen` writes from the `[records.kinds]` entries of the service in `sdk/sdk.toml`), then the crate's
 `rust-tests`. Example, run in the repository root:
 
 ```text

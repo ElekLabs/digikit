@@ -393,13 +393,29 @@ class SyntheticBuildTest(unittest.TestCase):
             self.assertEqual(len(returns), 1)
             db.close()
 
-    def test_skip_rebuild_when_sha256_and_version_match(self):
+    def test_skip_rebuild_only_when_build_inputs_match(self):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmp:
             self._build(tmp)
-            _stream_path, out_path, stats2 = self._build(tmp)
+            stream_path, out_path, stats2 = self._build(tmp)
             self.assertTrue(stats2["skipped"])
+            changed_depth = sharcdb.build_database(
+                stream_path, out_path, name="synthetic", min_depth=2, blocks=(0,)
+            )
+            self.assertFalse(changed_depth["skipped"])
+            in_db = sharcdb.read_meta(out_path)
+            self.assertEqual(in_db["min_depth"], "2")
+            with sqlite3.connect(out_path) as db:
+                db.execute("UPDATE meta SET value='old' WHERE key='build_input_sha256'")
+            rebuilt = sharcdb.build_database(
+                stream_path, out_path, name="synthetic", min_depth=2, blocks=(0,)
+            )
+            self.assertFalse(rebuilt["skipped"])
+            self.assertEqual(
+                sharcdb.read_meta(out_path)["build_input_sha256"],
+                in_db["build_input_sha256"],
+            )
             _stream_path, out_path, stats3 = self._build(tmp, force=True)
             self.assertFalse(stats3["skipped"])
 

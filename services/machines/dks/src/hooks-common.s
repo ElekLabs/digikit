@@ -1,6 +1,6 @@
 | machines.dks, the hooks both devices share: the machine page's draw, code, key and turn entries. Each continues in the stock code through the tail the port file makes
 | (`dk_tail_<hash of the hook>`) and leaves as `rts` through `jmp mf_ret_*` (`dk_ret_<hash>`; the aliases are the `[object.externs]` of module.toml), so the routines hold no
-| firmware bytes and one routine serves both devices. `MF_TAB` is the image table `machines_info` (`image.rs`).
+| firmware bytes and one routine serves both devices. `DKRT_MF_TAB` is the image table `machines_info` (`image.rs`).
 
     .text
     .balignw 4, 0x4e71
@@ -16,7 +16,7 @@
 mf_draw_hook:
     move.l  8(%sp),-(%sp)
     move.l  8(%sp),-(%sp)
-    movea.l MF_TAB+T_N_DRAW,%a0
+    movea.l DKRT_MF_TAB+T_N_DRAW,%a0
     jsr     (%a0)
     addq.l  #8,%sp
     tst.l   %d0
@@ -31,7 +31,7 @@ mf_draw_hook:
     addq.l  #8,%sp
     move.l  8(%sp),-(%sp)
     move.l  8(%sp),-(%sp)
-    movea.l MF_TAB+T_N_OVERLAY,%a0
+    movea.l DKRT_MF_TAB+T_N_OVERLAY,%a0
     jsr     (%a0)
     addq.l  #8,%sp
     jmp     mf_ret_draw
@@ -40,7 +40,7 @@ mf_draw_hook:
 mf_code_hook:
     move.l  8(%sp),-(%sp)
     move.l  8(%sp),-(%sp)
-    movea.l MF_TAB+T_N_CODE,%a0
+    movea.l DKRT_MF_TAB+T_N_CODE,%a0
     jsr     (%a0)
     addq.l  #8,%sp
     cmpi.l  #-1,%d0

@@ -194,7 +194,7 @@ const collectObjects = (root, scratch, projects, tracked) => {
   const declared = new Map();
   for (const project of projects.filter((p) => p.tags?.includes('module'))) {
     const manifest = read(root, join(project.root, 'module.toml'));
-    for (const object of manifest.object ?? []) {
+    for (const object of [...(manifest.object ?? []), manifest.system_package, manifest.package_part].filter(Boolean)) {
       const path = checkedPath(normalize(join(project.root, object.path)));
       addUnique(declared, path, { project, core: manifest.module.category === 'core', object }, 'Object declarations');
     }

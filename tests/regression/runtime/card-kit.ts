@@ -9,6 +9,7 @@ import { emulatorClock, repoRoot, waitClock, type Device, type Session } from '@
 import { cardStore } from './device-data.ts';
 import { rpc, word } from './guest-access.ts';
 import { installSystemPackage } from './system-package.ts';
+import { stateName } from './load-states.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { cardOverlay, encodeOverlay, layOver, linkCard, mergeOverlays, overlayFile } from './write-safety.ts';
 
@@ -262,6 +263,8 @@ const BI_FIELDS = [
   'loaded',
   'uiReached',
 ] as const;
+/** `DkrtBootInfo.magic`: 'DKBT'. */
+const BI_MAGIC = 0x444b4254;
 const SAFE_NAMES = ['none', 'counter', 'key', 'flag', 'dsp', 'panic', 'read'];
 const CARD_FIELDS = [
   'state',
@@ -341,17 +344,32 @@ export async function bootInfo(session: Session, plan: RuntimePlan) {
 /** The offset of `DkrtBootInfo.states` (after the 10 words before `results`, the results, core_cause, stable and `needs`; asserted by `abi.toml`'s layout check). */
 const BI_STATES_AT = 176;
 
+/** The states of a module that has not finished its load: not planned, planned, `init` running, or the DSP part still going (`[load.state]`). */
+const UNSETTLED_STATES = new Set(['SELECTED', 'PLANNED', 'INIT', 'DSP_LOADING']);
+
 /**
- * `bootInfo` once no selected module is still LOADING (1): the DSP part of a module follows its ColdFire part over the first UI-loop
- * passes. Steps 100 emulated ms at a time, up to `ms` (Python `wait_dsp`); the session must be paused.
+ * `bootInfo` once this boot has written its info and every selected module has a final state (`DkrtBootInfo.states`: ACTIVE, REFUSED, FAILED, SKIPPED or UNLOADED):
+ * the boot has finished loading its selection. The result words do not tell this: 0 is also the unwritten initial value, so a module not yet started reads 0 like a
+ * loaded one. Written means `magic` is valid (the boot sets it first) and `count` is set (the boot copies it from the selection record before any load, and `states`
+ * is cut to it, so a zero `count` before that would pass for an empty list); a boot with an empty selection has no later word, so there `uiReached` stands in.
+ * `expected` is the number of modules the caller selected, when it knows it. The DSP part of a module follows its ColdFire part over the first UI-loop passes. Steps 100
+ * emulated ms at a time, up to `ms`; the session must be paused. Throws, naming the states seen, when the boot is not settled by then.
  */
-export async function bootInfoLoaded(session: Session, plan: RuntimePlan, ms = 5000) {
-  for (let i = 0; i < ms / 100; i++) {
-    const info = await bootInfo(session, plan);
-    if (!info.results.includes(1)) return info;
+export async function bootInfoLoaded(session: Session, plan: RuntimePlan, ms = 5000, expected?: number) {
+  let info = await bootInfo(session, plan);
+  for (let i = 0; ; i++) {
+    const written = info.magic === BI_MAGIC && info.version !== 0 && (info.count > 0 || info.uiReached !== 0);
+    const counted = expected === undefined || info.count >= expected;
+    if (written && counted && !info.states.some((n) => UNSETTLED_STATES.has(stateName(n)))) return info;
+    if (i >= ms / 100) break;
     await waitClock(emulatorClock(session), 100);
+    info = await bootInfo(session, plan);
   }
-  return bootInfo(session, plan);
+  const seen = info.states.map((n) => stateName(n)).join(',') || 'none';
+  throw new Error(
+    `boot info not settled after ${ms} emulated ms: magic 0x${(info.magic >>> 0).toString(16)}, count ${info.count}` +
+      `${expected === undefined ? '' : ` (expected ${expected})`}, uiReached ${info.uiReached}, states [${seen}]`,
+  );
 }
 
 /** `DKRT_CARD`: state, the first non-blank sector, its crc32, writes refused and done. */

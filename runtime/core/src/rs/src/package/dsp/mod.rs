@@ -640,7 +640,7 @@ pub(crate) unsafe fn step_with(l: ServiceTable, slots: &mut dyn FnMut(usize) -> 
             }
             PH_ROWS => {
                 if d.ticket == 0 {
-                    // the next row of the module, in claim order, as one sequence (`Service::dsp_row_step` gives its steps; the last one publishes it)
+                    // the next row of the module, in claim order, as one sequence (`DspPart::row_step` gives its steps; the last one publishes it)
                     let mut seq = Sequence::new();
                     let mut n = 0u32;
                     loop {

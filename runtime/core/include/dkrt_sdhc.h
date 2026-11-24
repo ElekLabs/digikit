@@ -1,5 +1,5 @@
 /* The large card command plug-in point of core/sdhc-large. NOT an SDK contract: content modules use `dk_sdhc_large_*` of <dk/platform/sdhc_large.h>.
-   The runtime (store_writer.rs) calls the optional symbols sdhc_large_range and sdhc_large_ctl that image-modules/adapters/sdhc-large exports.
+   The runtime (store_writer.rs) calls the optional symbols sdhc_large_range and sdhc_large_ctl that runtime/platform/sdhc-large exports.
    Without the adapter the symbols resolve to 0: the range call is skipped and the switch reads as off. docs/findings/126-usb-fast-transfer-ceilings.md. */
 #ifndef DKRT_SDHC_H
 #define DKRT_SDHC_H

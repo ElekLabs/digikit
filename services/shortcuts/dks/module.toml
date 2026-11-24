@@ -20,7 +20,7 @@ conflicts = []
 # The functions the file exports to other modules are not listed here: they are the `provided = true` imports of the service in sdk/sdk.toml (`patchkit gen` writes
 # `dks/src/gen_exports.rs`, and `service!` takes `exports = gen_exports::exports()`).
 #
-# A hook (ports/fw/*.toml) for each device that has it: `entry` is the routine of `dks/src/hooks.rs`; without `devices` the hook is for every device. Each [[hook]]
+# A hook (ports/fw/*.toml) for each device that has it: `entry` is the routine of `dks/src/hooks.rs`; without `devices` the hook is for every device. A hook name may appear once per disjoint device set: the loader takes the entry for its own device and refuses a duplicate. Each [[hook]]
 # is also an entry of the `hooks = [...]` list of `service!`, with the same device filter (`patchkit service-check` compares both per device).
 #
 # [[hook]]

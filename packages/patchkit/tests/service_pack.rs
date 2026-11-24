@@ -231,16 +231,23 @@ fn local_service_packages_declare_the_export_order_and_a_bound_versioned_need() 
     let provider = Dkm::parse(&provider).unwrap();
     let keys = Keys::parse(&provider.register).unwrap();
     assert_eq!(keys.provides().collect::<Vec<_>>(), [(service, 0x010200)]);
-    assert_eq!(keys.exports().map(|e| e.a).collect::<Vec<_>>(), [symbol]);
+    // the exported function, then the resident query of the Query part
+    let query = name_hash(dkrt_sdk::RESIDENT_QUERY_ENTRY);
+    assert_eq!(
+        keys.exports().map(|e| e.a).collect::<Vec<_>>(),
+        [symbol, query]
+    );
     assert_eq!(keys.words(tag::CALLBACK_ORDER, 0), Some((service, 450, 0)));
     assert!(
         keys.exports()
+            .filter(|e| e.a == symbol)
             .all(|e| e.b & dkneeds::keys::EXPORT_BOUND != 0)
     );
     let floor = patchkit::sdkgen::service_registration_runtime();
+    // the resident query of the Query part raises the runtime the provider needs above the floor of a service
     assert!(
         keys.needs()
-            .any(|n| n.service == name_hash("runtime") && n.hard && n.min_version == floor)
+            .any(|n| n.service == name_hash("runtime") && n.hard && n.min_version >= floor)
     );
 
     let user = packed(

@@ -51,7 +51,7 @@ devices **[V]**): `4fef ffa0 48d7 7cfc` = `lea (-0x60,SP),SP ; movem.l {D2-D7 A2
   still ran: idle reset and the Brain+0x94 listeners see the event. No idle-counter fix is needed.
 - Argument access in the hook: `event` is 8(SP), `code = *(event+0xc)`, `flags = *(event+0x10)`. Held state without own state:
   `cf.input.fn.key_down(16)` for TRK.
-- No module code in the hook: the hook runs inside the walker, so the `shortcuts` service only decides (Pass or Swallow) and queues the module's `on` and `off`; its `Service::tick` (the UI pass, early phase) makes the calls in order. Nothing of a module and no view runs inside the walker. A queued call of a module that unloads is dropped.
+- No module code in the hook: the hook runs inside the walker, so the `shortcuts` service only decides (Pass or Swallow) and queues the module's `on` and `off`; its `Ticker::tick` (the UI pass, early phase) makes the calls in order. Nothing of a module and no view runs inside the walker. A queued call of a module that unloads is dropped.
 - Release hygiene: swallow the release of a swallowed press and pass the release of a passed press. Without that, the release
   map or a view's key-up state gets a release without a press, or never gets its own. TRK always passes (never swallow the
   modifier).

@@ -20,7 +20,7 @@ Replace or remove a service or module while the device runs, with no restart. It
 | Restore of stock bytes | Safe. A new stock-to-`jmp` write while running is unsafe. | Write the `jmp` only at boot, to the port-file routine (decision 1). |
 | Interrupt slots (DN2 frametype) | Safe now: clear the slot under the interrupt mask, then free. No task switch starts from an interrupt at IPL >= 2 (finding 132). | None. |
 | SHARC slots (R12-8) | Safe with rules: the stub reads the slot once per call; free after two confirmed blocks, not one; invalidate the DSP instruction cache before reuse **[O]**. | Rules in the R12-8 design. |
-| `ServiceRow` Registry add and remove | Unsafe with concurrent readers: remove shifts pointers. | Publish by one pointer swap, plus a per-record counter around thunk calls. |
+| `ProviderRow` Registry add and remove | Unsafe with concurrent readers: remove shifts pointers. | Publish by one pointer swap, plus a per-record counter around thunk calls. |
 | Machine, param and page rows | Missing: in-use scan, selection-view rebuild, MISSING placeholder. Today an empty row plays as type 0. | S4. |
 | Module DSP code | Quiesce exists. | Add the two-block wait. |
 | Arena | Free exists. A swap needs memory twice. | Fit check with old and new counted (decision 3). |

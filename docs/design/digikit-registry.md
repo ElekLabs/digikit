@@ -131,7 +131,7 @@ machine list, the descriptor dispatch and the parameter accessors are the UI tas
 
 ## Effect pages (Digitakt II, F4 step 2)
 
-`core/fxpages` (patch time) and `fxpage.rs` (run time) give each run-time effect row of `core/dynfx` a page after CHO in the FX view; DEL, REV, CHO and then the pages of the loaded effects in
+`core/fxpages` (patch time) and `services/fx/src/fxpage/` (run time) give each run-time effect row of `core/dynfx` a page after CHO in the FX view; DEL, REV, CHO and then the pages of the loaded effects in
 effect-row order. Facts of the firmware and the measurements are in `docs/findings/61-fx-pages.md`; this is the design.
 
 - **Reserved resources** (patch time): one page row for each effect slot (page numbers `[fx] page_first` and up, answered by a hook in the page accessor), the list the FX view reads its pages from

@@ -784,7 +784,11 @@ of the API it provides.
 
 The provider lists each exported global ColdFire function in its manifest and declares the same
 exports from `init`. For Rust providers using `dkrt_svc_rt::service!`, use its
-`exports = [("my_service_ping", api::my_service_ping)]` form.
+`exports = [("my_service_ping", api::my_service_ping)]` form. A provider that owns state is an owner
+object that implements `Provider` (and the traits of the parts it adopts); its `service!` call names
+them: `service!(MyService, "my-service", &[], parts = [Tick], hooks = [], fills = [], exports = [...])`.
+
+A hook name may appear once per disjoint device set (`devices` in `[[hook]]`): the loader takes the entry for its own device and refuses a duplicate.
 
 ```toml
 [[export]]

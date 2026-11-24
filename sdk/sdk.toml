@@ -5,10 +5,10 @@
 # and sample.h, sdk/dsp/REGISTERS.md and packages/dksharc/src/rules_table.rs from this file (`patchkit gen --check` fails when they are stale).
 
 [runtime]           # the digikit runtime release: the one version of the SDK (semantic version; packed major<<16 | minor<<8 | patch)
-table = "0.11.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
-service_registration = "0.11.1" # minimum runtime for callback ordering and service-local APIs
-resident_query = "0.11.2" # minimum runtime for the optional resident query facet
-version = "0.11.4"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+table = "0.12.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
+service_registration = "0.12.1" # minimum runtime for callback ordering and service-local APIs
+resident_query = "0.12.2" # minimum runtime for the optional resident query facet
+version = "0.12.4"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -753,6 +753,7 @@ doc = "The runtime's: what the MODULES reply says of the machines of module reco
 name = "dk_module_ctx_add_machine"
 service = "machines"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "dk_machine *(dk_module_ctx *ctx, u32 index, const char *name, const char *short_name)"
@@ -762,6 +763,7 @@ doc = "Declare a machine of this module: `index` is its DK_MACHINE_ID_<ID> (buil
 name = "dk_module_ctx_add_fx"
 service = "fx"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "dk_fx *(dk_module_ctx *ctx, u32 index, const char *name, const char *short_name)"
@@ -819,6 +821,7 @@ doc = "A service module declares a resource it adds, with its limit. See dk_serv
 name = "dk_machine_add_page"
 service = "machines"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "dk_page *(dk_machine *m, const char *name, const char *short_name)"
@@ -828,6 +831,7 @@ doc = "Add a page to the machine, after the pages already added: `name` is its t
 name = "dk_fx_add_page"
 service = "fx"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "dk_page *(dk_fx *fx, const char *name, const char *short_name)"
@@ -837,6 +841,7 @@ doc = "Add the effect's page: `name` is its title, `short_name` its tab label (3
 name = "dk_page_add_param"
 service = "machines"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "dk_param *(dk_page *p, const char *name, const char *short_name, u32 def)"
@@ -846,6 +851,7 @@ doc = "Add a machine parameter on the next knob of the page (word = order of dec
 name = "dk_page_add_fx_param"
 service = "fx"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "dk_param *(dk_page *p, const char *name, const char *short_name, u32 kind, float min, float max, float def)"
@@ -855,6 +861,7 @@ doc = "Add an effect parameter on the next knob of the page. `kind` is DK_PERCEN
 name = "dk_param_range"
 service = "machines"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "void (dk_param *prm, u32 min, u32 max)"
@@ -864,6 +871,7 @@ doc = "Set the range of a machine parameter (default 0 to 127)."
 name = "dk_param_glyph"
 service = "machines"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "void (dk_param *prm, u32 glyph)"
@@ -873,6 +881,7 @@ doc = "Set the glyph of a machine parameter (DK_GLYPH_*); its range must fit the
 name = "dk_param_latched"
 service = "machines"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "void (dk_param *prm)"
@@ -902,6 +911,7 @@ doc = "Make the page a native canvas page: `flags` are DK_PAGE_STOCK_OVERLAY or 
 name = "dk_page_bind"
 service = "machines"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "void (dk_page *p, dk_param *prm, u32 slot)"
@@ -911,6 +921,7 @@ doc = "On a canvas page, bind a shared parameter of the machine to the encoder `
 name = "dk_page_bind_local"
 service = "machines"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "void (dk_page *p, u32 local, u32 slot)"
@@ -920,6 +931,7 @@ doc = "On a canvas page, bind the page's local control number `local` to the enc
 name = "dk_fx_routes"
 service = "fx"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "void (dk_fx *fx, u32 allowed, u32 def)"
@@ -929,6 +941,7 @@ doc = "Set the routes the effect may run on (DK_ROUTE_MASTER, DK_ROUTE_SEND, or 
 name = "dk_fx_mix"
 service = "fx"
 provided = true
+wrapper = "builder"
 since = "0.7.0"
 context = "init"
 sig = "void (dk_fx *fx, u32 def)"
@@ -1433,6 +1446,7 @@ doc = "The tracks of the device (`[digikit] tracks` of its device file). 0 when 
 name = "dk_shortcut_add"
 service = "shortcuts"
 provided = true
+wrapper = "builder"
 since = "0.10.5"
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, const dk_shortcut_def *def)"
@@ -2017,12 +2031,8 @@ DSP_COST = { id = 15, fit = true, label = "DSP load" }   # DSP instructions per 
 DSP_VOICES = { id = 16, fit = true, label = "DSP voices" }   # voices the machine cost counts for (the generated profile); used and largest: 0; a fit reads the limit, it is not short of it
 PACKAGE = { id = 17, label = "system package" }   # the system package block (`[[const]] PACKAGE_BYTES` of runtime/core/abi.toml), outside the module arena (a label without `fit`: a host names it, a fit does not look at it); limit: its bytes; used: what the placed package takes (`State.package_bytes`, 0 at the core-only level); largest: 0
 
-# The in-crate services of the runtime, in the order the core calls them (samples first: its DSP-section checks and its track-table claim ran before the
-# voice and effect parts, and the unreserve of its table before theirs; machines before fx: the registry applies machines, pages and native pages before
-# effect pages, and the removal runs the other way round). `rust` is the full path of the type that implements `Service`: the type of a service crate linked into
-# the runtime (`dkrt_svc_NAME::records::Type`, `services/NAME`).
-# `patchkit gen` writes the static table of these rows (runtime/core/src/rs/src/gen_services.rs); a new service is a row here, its crate
-# and its `[records.kinds]`. Card services declare callback order in their own manifests.
+# The services of the runtime, provided by `.dks` files. A new service is a row here, its crate and its `[records.kinds]`; the callback order (samples first: its DSP-section
+# checks and its track-table claim run before the voice and effect parts; machines before fx; removal runs the other way round) is in the service's own manifest.
 [[service]]
 name = "samples"
 
@@ -2042,7 +2052,7 @@ name = "shortcuts"
 [[service]]
 name = "project"
 
-# A `[[service]]` without `rust` is provided by a `.dks` provider (a module with `role = "service"`), not by a runtime row: it is in no generated table.
+# Every `[[service]]` is provided by a `.dks` provider (a module with `role = "service"`); the runtime has no service row of its own.
 # `test = true`: a test-only service; it and its `[[import]]` rows (also `test = true`) are left out of the public SDK headers, docs and templates.
 [[service]]
 name = "svc-test"
@@ -2050,7 +2060,7 @@ test = true
 
 # The record kinds of the `register` section of a `.dkm` (docs/plans/runtime-and-services.md R7): one table for the runtime, dkneeds and patchkit
 # (`patchkit gen` writes `records::KINDS` and one `KIND_<NAME>` and `LEN_<NAME>` per kind into gen_sdk.rs and packages/dkneeds/src/gen_limits.rs).
-# `len` is the whole record, the 8-byte header (kind, length) included. `service` is the in-crate service that owns the kind: it checks, applies and
+# `len` is the whole record, the 8-byte header (kind, length) included. `service` is the service that owns the kind: it checks, applies and
 # removes the records. A number is never reused. A kind is added here and in its service only; the registry, the collector, the loader, dkneeds and
 # patchkit do not name it. `generic = true`: a module emits the record with `dk_record_add(ctx, kind, bytes, len)` (the typed kinds have their builders); the
 # owning service checks it at the commit.

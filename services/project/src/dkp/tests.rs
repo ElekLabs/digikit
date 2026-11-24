@@ -1,6 +1,8 @@
 //! The `.dkp` codec: the shared vectors, the edits and the limits of the project scope, the owner prefix.
 use super::json::{Parser, Value};
 use super::*;
+use dkrt_sdk::proto::{E_SET_FULL, E_SET_KEY, E_SET_NOKEY, E_SET_VALUE};
+use dkrt_sdk::settings::{entry_at, get32};
 use std::boxed::Box;
 use std::string::String;
 use std::vec::Vec;

@@ -268,12 +268,27 @@ fn the_row_a_service_file_declares_is_added_at_the_commit() {
         let rec = MAX_MODULES;
         let mut l = loader_of(Init::DeclaresRow, row_service_file());
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
-        assert_eq!(l.r.log, vec![Ev::AddRow(rec, &TEST_ROW)]);
+        assert_eq!(l.r.log, vec![Ev::AddProvider(rec, test_row(), test_instance())]);
         // (a provider record has no run-time unload: its row goes with a failed load, below)
         // a module declares no row: `init` cannot, the import is not in its table
         let mut l = loader(Init::Ok);
         assert_eq!(l.load(PATH.as_ptr()), OK);
         assert_eq!(l.r.log, vec![Ev::Add(0)]);
+    }
+}
+
+#[test]
+fn a_row_named_other_than_the_header_provides_refuses_the_load() {
+    use dkneeds::keys::{name_hash, Pair, Table};
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // the header says it provides "other"; `init` declares the row of "svc-test"
+        static PROVIDES: std::sync::OnceLock<[Pair; 1]> = std::sync::OnceLock::new();
+        let table = Table { provides: PROVIDES.get_or_init(|| [Pair { a: name_hash("other"), b: 0x000802 }]), ..Default::default() };
+        let mut l = loader_of(Init::DeclaresRow, service_file(&table, 0));
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_DECL_KIND);
+        assert!(l.m.live.is_empty());
+        assert!(!l.r.log.iter().any(|e| matches!(e, Ev::AddProvider(..))), "no row reached the registry: {:?}", l.r.log);
     }
 }
 
@@ -286,7 +301,7 @@ fn a_row_the_registry_refuses_undoes_the_load() {
         l.r.add_result = E_PLAN_OWNER;
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_PLAN_OWNER);
         assert!(l.m.live.is_empty());
-        assert_eq!(l.r.log, vec![Ev::AddRow(rec, &TEST_ROW), Ev::Remove(rec)]);
+        assert_eq!(l.r.log, vec![Ev::AddProvider(rec, test_row(), test_instance()), Ev::Remove(rec)]);
     }
 }
 
@@ -295,21 +310,21 @@ fn the_real_registry_puts_the_row_into_the_service_table_and_takes_it_out() {
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let mut r = RealRegistry;
-        // the host tests of the runtime run with the machines row loaded (`svc_rows::test_machines`): the loaded rows start at one
-        let fixed = crate::package::gen_services::STATIC + 1;
+        // the host tests of the runtime run with the machines row loaded (`provider_rows::test_machines`): the loaded rows start at one
+        let fixed = 1;
         assert_eq!(services().rows.len(), fixed);
         assert_eq!(r.add(0, None, None), OK);
-        assert_eq!(r.add(2, Some(&TEST_ROW), None), OK);
+        let source = || crate::package::provider_rows::RowSource { row: test_row(), instance: test_instance(), extent: 0..usize::MAX };
+        assert_eq!(r.add(2, Some(source()), None), OK);
         let t = services();
         assert_eq!(t.rows.len(), fixed + 1);
-        assert!(core::ptr::eq(t.rows[fixed], &TEST_ROW));
-        // the in-crate prefix and its failed mask are as before, and one row has one owner
-        assert_eq!(t.failed, services().failed);
-        assert_eq!(r.add(3, Some(&TEST_ROW), None), E_PLAN_OWNER);
+        assert_eq!(t.rows[fixed].name(), dkneeds::keys::name_hash("svc-test"));
+        // one row has one owner
+        assert_eq!(r.add(3, Some(source()), None), E_PLAN_OWNER);
         // (`RealRegistry::remove` also runs the registry's own remove, which the cleanup tests count: the row part alone here)
-        crate::package::svc_rows::remove(3);
+        crate::package::provider_rows::remove(3);
         assert_eq!(services().rows.len(), fixed + 1);
-        crate::package::svc_rows::remove(2);
+        crate::package::provider_rows::remove(2);
         assert_eq!(services().rows.len(), fixed);
     }
 }
@@ -640,14 +655,15 @@ fn an_export_name_another_provider_published_undoes_the_load_and_keeps_the_other
     }
 }
 
-/// The packer writes a device mask in the top byte of a `HOOKS` entry: the loader ignores it (the port file's `absent` flag does its work), compares the bare entry
-/// with what `init` declares and jumps to the bare entry.
+/// The packer writes a device mask in the top byte of a `HOOKS` entry (bit `id - 1` for the runtime id): the loader takes the item for its device, compares the bare
+/// entry with what `init` declares and jumps to the bare entry.
 #[test]
 fn the_device_mask_in_a_hooks_entry_is_dropped() {
-    use dkneeds::keys::{name_hash, Pair, Table};
+    use dkneeds::keys::{name_hash, Pair, Table, HOOK_DEVICES_SHIFT};
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
-        let hooks = [Pair { a: name_hash("hook.a"), b: 4 | 0x02 << 24 }];
+        let me = provider_loader(service_file(&svc_table(), 0), svc_init()).p.device_id();
+        let hooks = [Pair { a: name_hash("hook.a"), b: 4 | (1 << (me - 1)) << HOOK_DEVICES_SHIFT }];
         let table = Table { hooks: &hooks, ..svc_table() };
         let mut l = provider_loader(service_file(&table, 0), svc_init());
         assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
@@ -656,6 +672,61 @@ fn the_device_mask_in_a_hooks_entry_is_dropped() {
     }
 }
 
+/// One hook name with an entry for each device (disjoint masks): the loader installs the entry of its own device at the site of its port file, whichever order the items
+/// have, and `init` declares only that entry. A name whose only item is for another device is skipped (the firmware of this device has no such site).
+#[test]
+fn one_hook_name_with_an_entry_for_each_device_installs_the_entry_of_the_running_device() {
+    use dkneeds::keys::{name_hash, Pair, Table, HOOK_DEVICES_SHIFT};
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let me = provider_loader(service_file(&svc_table(), 0), svc_init()).p.device_id();
+        let other = if me == 1 { 2 } else { 1 };
+        let bit = |id: u32| (1u32 << (id - 1)) << HOOK_DEVICES_SHIFT;
+        for mine_first in [true, false] {
+            // this device's entry is 4 (what svc_init declares), the other's is 12
+            let mut hooks = vec![Pair { a: name_hash("hook.a"), b: 4 | bit(me) }, Pair { a: name_hash("hook.a"), b: 12 | bit(other) }];
+            if !mine_first {
+                hooks.reverse();
+            }
+            let hooks: &'static [Pair] = Box::leak(hooks.into_boxed_slice());
+            let table = Table { hooks, ..svc_table() };
+            let mut l = provider_loader(service_file(&table, 0), svc_init());
+            assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK, "mine first: {mine_first}");
+            let t = records::module(MAX_MODULES).base + 4;
+            assert_eq!(site_bytes(&l, 6), [0x4e, 0xf9, (t >> 24) as u8, (t >> 16) as u8, (t >> 8) as u8, t as u8], "mine first: {mine_first}");
+        }
+        // the only item is for the other device: no site is taken, and `init` (which declares `hook.a`) disagrees with the table
+        let hooks: &'static [Pair] = Box::leak(Box::new([Pair { a: name_hash("hook.a"), b: 4 | bit(other) }]));
+        let table = Table { hooks, ..svc_table() };
+        let mut l = provider_loader(service_file(&table, 0), Init::Declare(Box::leak(Box::new([(dkrt_abi::service::Declare::EXPORT, name_hash("dk_svctest_ping"), 8)]))));
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK);
+        assert_eq!(site_bytes(&l, 6), STOCK[..6], "the site stays stock");
+    }
+}
+
+/// A hand-built file with two `HOOKS` items of one name for the same device (two entries of that device, or an entry for every device and one for this device) is
+/// `E_FORMAT` before the installer takes a site: the packer never writes it, and which entry would win is not defined.
+#[test]
+fn two_hook_items_of_one_name_for_the_same_device_are_refused_before_a_site_is_taken() {
+    use dkneeds::keys::{name_hash, Pair, Table, HOOK_DEVICES_SHIFT};
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let me = provider_loader(service_file(&svc_table(), 0), svc_init()).p.device_id();
+        let bit = |id: u32| (1u32 << (id - 1)) << HOOK_DEVICES_SHIFT;
+        let a = name_hash("hook.a");
+        for (what, hooks) in [
+            ("two for this device", vec![Pair { a, b: 4 | bit(me) }, Pair { a, b: 12 | bit(me) }]),
+            ("every device and this device", vec![Pair { a, b: 4 }, Pair { a, b: 12 | bit(me) }]),
+            ("every device twice", vec![Pair { a, b: 4 }, Pair { a, b: 12 }]),
+        ] {
+            let hooks: &'static [Pair] = Box::leak(hooks.into_boxed_slice());
+            let table = Table { hooks, ..svc_table() };
+            let mut l = provider_loader(service_file(&table, 0), svc_init());
+            assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_FORMAT, "{what}");
+            assert_eq!(site_bytes(&l, 6), STOCK[..6], "{what}: the site stays stock");
+        }
+    }
+}
 
 #[test]
 fn the_name_of_a_module_event_is_the_part_of_the_id_after_the_slash_cut_to_the_log_width() {
@@ -675,3 +746,90 @@ fn the_name_of_a_module_event_is_the_part_of_the_id_after_the_slash_cut_to_the_l
     assert_eq!(super::name_part(&field(b"")), want(b""));
 }
 
+
+/// What a file's `init` leaves in the resident tables (a worker job, a poll function) is gone when the load is refused after `init`, for a provider and for a content
+/// module: the block is freed then, and a queued job or poll slot would call freed code.
+#[test]
+fn a_refused_commit_after_init_leaves_no_job_and_no_poll_of_the_file() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let polls = |lo: u32, hi: u32| (*core::ptr::addr_of!(crate::state::DKRT_POLLS)).iter().filter(|&&f| f >= lo as usize && f < hi as usize).count();
+        // a provider: init declares nothing, so the commit refuses (E_DECL_KIND)
+        let mut l = provider_loader(service_file(&svc_table(), 0), Init::PostsJobAndPoll);
+        let rec = MAX_MODULES;
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_DECL_KIND);
+        let m = records::module(rec);
+        assert_eq!((crate::worker::jobs_of(rec), polls(m.base, m.base + m.size)), (0, 0), "provider");
+        assert!(l.m.live.is_empty());
+        // a content module: the registry refuses the row
+        let mut l = loader(Init::PostsJobAndPoll);
+        l.r.add_result = E_NO_REGISTRY;
+        assert_eq!(l.load(PATH.as_ptr()), E_NO_REGISTRY);
+        let m = records::module(0);
+        assert_eq!((crate::worker::jobs_of(0), polls(m.base, m.base + m.size)), (0, 0), "module");
+        assert!(l.m.live.is_empty());
+    }
+}
+
+/// A provider file whose `init` succeeded and whose activation then refuses (here: another record already exports the name) gets its `fini`, like a refused commit: the
+/// owner `init` started is stopped, and a reload of the same file loads instead of answering `E_LOADED`.
+#[test]
+fn a_provider_refused_at_activation_is_finished_and_a_reload_loads() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
+        let rec = MAX_MODULES + 1;
+        let other = MAX_MODULES + 2;
+        l.exports.publish_with_scope(other, dkneeds::keys::name_hash("dk_svctest_ping"), 0x1234, false).unwrap();
+        assert_eq!(l.load_provider(PATH.as_ptr(), 1), E_PLAN_OWNER);
+        assert!(l.m.log.iter().any(|e| matches!(e, Ev::Fini(r, _) if *r == rec)), "the owner that init started is stopped by the provider's fini");
+        assert_eq!(records::module(rec).used, 0);
+        assert!(l.m.live.is_empty());
+        l.exports.withdraw(other);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 1), OK, "a reload of the same file is not E_LOADED");
+    }
+}
+
+/// A refused load retires the jobs of the file's code (`fail` runs `retire_jobs`): a job that is on the worker cannot be dropped, so the refusal answers `E_BUSY` and the
+/// block stays, as an unload does: freeing it would free code the worker runs. Once the flight ended the jobs are gone.
+#[test]
+fn a_refused_load_while_a_worker_job_runs_is_busy_and_keeps_the_block() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        crate::worker::test_reset();
+        // init declares nothing, so the commit refuses (E_DECL_KIND)
+        let mut l = provider_loader(service_file(&svc_table(), 0), Init::PostsRunningJob);
+        let rec = MAX_MODULES;
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_BUSY, "not the E_DECL_KIND of the commit");
+        assert_eq!(l.m.live.len(), 1, "the file's block is kept while the worker runs its job");
+        assert_eq!(crate::worker::jobs_of(rec), 1);
+        crate::worker::test_pump();
+        crate::worker::test_pump();
+        assert_eq!(crate::worker::jobs_of(rec), 0, "the flight ended: the job is gone");
+        assert!(crate::worker::retire(rec));
+        crate::worker::test_reset();
+    }
+}
+
+/// A service file packed for runtime 0.11 (its need word names that minor; a 0.11 runtime read a `HOOKS` entry mask as an index in device-file order, this one reads the
+/// runtime id) is refused by `load_provider` with `E_CONTRACT`: no block is kept, no hook site is taken. The same file packed for this runtime loads.
+#[test]
+fn a_service_file_packed_for_runtime_0_11_is_refused_by_load_provider() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    let packed_for = |need: u32| {
+        let mut f = service_file(&svc_table(), 0);
+        put(&mut f, dkneeds::H_RUNTIME, need);
+        seal(&mut f);
+        f
+    };
+    unsafe {
+        for old in [0x000b00, 0x000b03] {
+            let mut l = provider_loader(packed_for(old), svc_init());
+            assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_CONTRACT, "need word {old:#x}");
+            assert!(l.m.live.is_empty(), "no block is kept");
+            assert_eq!(site_bytes(&l, 6), STOCK[..6], "the site stays stock");
+        }
+        let mut l = provider_loader(packed_for(dkrt_sdk::RUNTIME_VERSION), svc_init());
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), OK, "the same file packed for this runtime");
+    }
+}

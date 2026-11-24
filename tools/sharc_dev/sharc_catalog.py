@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""sharc_catalog.py: candidate anchor functions of the DSP image, out/atlas/<image>-dsp.sqlite.
+"""sharc_catalog.py: candidate anchor functions in out/sharcdb/<image>.sqlite.
 
     uv run python -m tools.sharc_dev.sharc_catalog dt2-1.17 dn2-1.12
     uv run python -m tools.sharc_dev.sharc_catalog dt2-1.17 dn2-1.12 --profile dt2-1.17=out/prof.txt
     uv run python -m tools.coldfire.fw catalog -i dt2-1.17 --cpu sharc --grade
 
-Builds tables `catalog` and `catalog_groups` for both images and writes the TSV
+Builds the full function index and the `catalog` and `catalog_groups` tables
+for both images and writes the TSV
 and graph JSON files next to them. The rows are the functions near an existing
 anchor, on the voice, master or frame call path, hot in a profile, or called
 from many places. Inputs: out/sharcdb/<image>.sqlite (also of the old image),
@@ -20,13 +21,14 @@ import bisect
 import collections
 import os
 import re
+import sqlite3
 import sys
-import tomllib
 from collections.abc import Sequence
+from contextlib import closing
 from typing import Any, cast
 
-from tools.coldfire import fw
 from tools.firmware import catalog as shared
+from tools.firmware.artifacts import FirmwareArtifacts, database_path
 from tools.firmware.catalog import (
     STRONG_PAIR,
     catalog_grade,
@@ -34,6 +36,14 @@ from tools.firmware.catalog import (
     louvain_groups,
     suggest_rule,
 )
+from tools.firmware.query_db import (
+    FUNCTION_NAMES_SQL,
+    ROOT,
+    SHARC_DIR,
+    short_image,
+)
+from tools.sharc_dev.fw_query import Sharc, port_anchors
+from tools.sharc_dev.fw_query import anchor_sw as anchor_sw
 
 # The DSP image did not change 1.16 -> 1.17 or 1.11 -> 1.12 (finding 53), so compare with the release before.
 DSP_OLD = {"dt2-1.17": "dt2-1.15C", "dn2-1.12": "dn2-1.10E"}
@@ -44,8 +54,6 @@ DSP_ROOTS = {
 }
 # Call depth from each root that counts as on its path.
 PATH_DEPTH = {"voice": 6, "master": 6, "frame": 3}
-# Link address of short word 0 of the DSP code in the anchor files; one short word is 2 bytes.
-DSP_CODE_BASE = 0x28000000
 HOT_COUNT = 60  # the hottest functions of a profile get the tag `hot`
 HELPER_MIN_CALLERS = 8
 # A function paired by call shape needs a similar size: at most this far apart.
@@ -142,7 +150,7 @@ class DspImg:
     def owner(self, sw: int) -> int | None:
         """Entry of the function that contains short word `sw`."""
         i = bisect.bisect_right(self.starts, sw) - 1
-        if i >= 0 and sw <= self.fn[self.starts[i]][0]:
+        if i >= 0 and sw < self.fn[self.starts[i]][0]:
             return self.starts[i]
         return None
 
@@ -168,31 +176,14 @@ def count_insns(rows: Any) -> dict[int, collections.Counter[str]]:
     return dict(out)
 
 
-def anchor_sw(a: dict[str, Any]) -> int | None:
-    """Short word address of a SHARC anchor of a port file: its `pm`, else from the linked address."""
-    if "pm" in a:
-        return int(a["pm"])
-    x = a.get("src", a["addr"]) if a.get("kind") == "value" else a["addr"]
-    if x < DSP_CODE_BASE:
-        return None
-    return (x - DSP_CODE_BASE) // 2
-
-
 def anchor_functions(image: str, d: DspImg) -> dict[int, list[str]]:
-    """Existing SHARC anchors of ports/<image>.toml by containing function."""
-    path = os.path.join(fw.ROOT, "ports", image + ".toml")
-    if not os.path.exists(path):
-        return {}
-    with open(path, "rb") as fh:
-        port = tomllib.load(fh)
+    """Existing SHARC anchors of the port by containing function."""
     out: dict[int, list[str]] = {}
-    for a in port.get("anchor", []):
-        if a.get("cpu") != "sharc":
-            continue
-        sw = anchor_sw(a)
+    for anchor in port_anchors(image):
+        sw = anchor_sw(anchor)
         f = d.owner(sw) if sw is not None else None
         if f is not None:
-            out.setdefault(f, []).append(a["name"])
+            out.setdefault(f, []).append(anchor["name"])
     return out
 
 
@@ -202,8 +193,8 @@ def collect_dsp(image: str) -> DspImg:
 
     im = sharc.load(
         image,
-        sections_dir=os.path.join(fw.ROOT, "out", "sections"),
-        db_dir=fw.SHARC_DIR,
+        sections_dir=os.path.join(ROOT, "out", "sections"),
+        db_dir=SHARC_DIR,
     )
     db = im.db
     d = DspImg()
@@ -273,7 +264,7 @@ def collect_dsp(image: str) -> DspImg:
 def old_groups(image: str) -> dict[str, list[int]] | None:
     """Hash groups of the old image of `image`, None when its sharcdb is missing."""
     old = DSP_OLD.get(image)
-    if not old or not os.path.exists(os.path.join(fw.SHARC_DIR, old + ".sqlite")):
+    if not old or not os.path.exists(database_path(old, "sharc", SHARC_DIR)):
         return None
     return collect_dsp(old).groups
 
@@ -396,6 +387,26 @@ def dsp_tags(
     return dict(tags)
 
 
+def dsp_depths(image: str, d: DspImg) -> dict[str, dict[int, int]]:
+    roots = DSP_ROOTS[image]
+    for name, root in roots.items():
+        if root not in d.fn:
+            raise ValueError("%s: %s root 0x%x is not a function" % (image, name, root))
+    return {name: bfs(d, root, PATH_DEPTH[name]) for name, root in roots.items()}
+
+
+def function_role(
+    image: str, entry: int, label: str, depth: dict[str, dict[int, int]]
+) -> str:
+    return dsp_role(
+        label,
+        entry in depth["voice"],
+        entry in depth["master"],
+        entry in depth["frame"],
+        entry == DSP_ROOTS[image]["voice"],
+    )
+
+
 def dsp_rows(
     image: str,
     d: DspImg,
@@ -405,11 +416,7 @@ def dsp_rows(
     prof: collections.Counter[int],
 ) -> list[dict[str, Any]]:
     """Catalog rows of `d`; `pair` maps an address to (address on `other`, method)."""
-    roots = DSP_ROOTS[image]
-    for name, root in roots.items():
-        if root not in d.fn:
-            raise ValueError("%s: %s root 0x%x is not a function" % (image, name, root))
-    depth = {k: bfs(d, roots[k], PATH_DEPTH[k]) for k in ("voice", "master", "frame")}
+    depth = dsp_depths(image, d)
     hot = [f for f, _n in prof.most_common(HOT_COUNT)]
     tags = dsp_tags(d, depth, hot)
     rows = []
@@ -437,13 +444,7 @@ def dsp_rows(
                     both = int(okind == kind and oord == ordinal and oh == h)
         grade = catalog_grade(kind, stable, method, both)
         anchors = d.anch.get(f, [])
-        role = dsp_role(
-            label,
-            f in depth["voice"],
-            f in depth["master"],
-            f in depth["frame"],
-            f == roots["voice"],
-        )
+        role = function_role(image, f, label, depth)
         rows.append(
             {
                 "addr": f,
@@ -485,13 +486,18 @@ def dsp_rows(
 
 
 def write_dsp_catalog(
-    image: str, rows: list[dict[str, Any]], d: DspImg, out_dir: str
+    image: str,
+    rows: list[dict[str, Any]],
+    d: DspImg,
+    out_dir: str | None,
+    db: sqlite3.Connection,
 ) -> int:
     """Write tables, TSV and graph JSON of `image`; return the group count."""
-    db = os.path.join(out_dir, image + "-dsp.sqlite")
+    exports = FirmwareArtifacts(image, "sharc").catalog_exports(out_dir)
+    exports.catalog.parent.mkdir(parents=True, exist_ok=True)
     shared.write_catalog(
         db,
-        os.path.join(out_dir, image + "-dsp-catalog.tsv"),
+        str(exports.catalog),
         rows,
         CATALOG_COLUMNS,
         ADDR_FMT,
@@ -501,36 +507,120 @@ def write_dsp_catalog(
         rows,
         group_edges([r["addr"] for r in rows], d.callee_n),
         db,
-        os.path.join(out_dir, image + "-dsp-catalog-groups.tsv"),
-        os.path.join(out_dir, image + "-dsp-catalog-graph.json"),
+        str(exports.groups),
+        str(exports.graph),
         ADDR_FMT,
         class_col="role",
         hint_col="label",
     )
 
 
+def write_function_index(
+    image: str,
+    other: str,
+    d: DspImg,
+    pair: dict[int, tuple[int, str]],
+    db: sqlite3.Connection,
+) -> None:
+    """Publish the full inventory and annotations in the SHARC database."""
+    depth = dsp_depths(image, d)
+    with closing(Sharc(image)) as src:
+        anchors_by_entry = src.declared_anchors()
+        notes = src.note_records()
+        db.execute(FUNCTION_NAMES_SQL)
+        db.execute("DELETE FROM function_names WHERE image=?", (image,))
+        db.executemany(
+            "INSERT INTO function_names VALUES (?,?,?,?)",
+            (
+                (image, entry, name, "declared")
+                for entry, anchors in anchors_by_entry.items()
+                for name, site, _, _ in anchors
+                if site == entry and ".fn." in name
+            ),
+        )
+        db.execute("DROP TABLE IF EXISTS function_notes")
+        db.execute("""CREATE TABLE function_notes (
+            image TEXT, function_sw INTEGER, role TEXT, summary TEXT, reads TEXT,
+            writes TEXT, confidence TEXT, evidence TEXT, author TEXT, created TEXT,
+            PRIMARY KEY (image, function_sw)
+        )""")
+        db.executemany(
+            "INSERT INTO function_notes VALUES (?,?,?,?,?,?,?,?,?,?)",
+            ((image, *row) for row in notes.values()),
+        )
+        db.execute("DROP TABLE IF EXISTS function_index_meta")
+        db.execute(
+            "CREATE TABLE function_index_meta (key TEXT PRIMARY KEY, value TEXT)"
+        )
+        db.executemany(
+            "INSERT INTO function_index_meta VALUES (?,?)",
+            (
+                (k, src.meta.get(k))
+                for k in ("image_sha256", "build_input_sha256", "min_depth", "blocks")
+            ),
+        )
+        db.execute("DROP TABLE IF EXISTS function_index")
+        db.execute("""CREATE TABLE function_index (
+            addr INTEGER PRIMARY KEY, end_sw INTEGER, name TEXT, decoder_label TEXT,
+            anchors TEXT, note_role TEXT, note_summary TEXT, note_confidence TEXT,
+            inferred_role TEXT, pair_image TEXT, pair_addr INTEGER, pair_method TEXT
+        )""")
+        rows = []
+        for row in src.function_index(anchors_by_entry):
+            entry, _end, _name, label, *_notes = row
+            pair_addr, method = pair.get(entry, (None, None))
+            rows.append(
+                (
+                    *row,
+                    function_role(image, entry, label, depth),
+                    other if pair_addr is not None else None,
+                    pair_addr,
+                    method,
+                )
+            )
+        db.executemany(
+            "INSERT INTO function_index VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", rows
+        )
+        db.execute("DROP TABLE IF EXISTS function_anchors")
+        db.execute("""CREATE TABLE function_anchors (
+            function_sw INTEGER, site_sw INTEGER, name TEXT, mark TEXT, description TEXT,
+            PRIMARY KEY (function_sw, name, site_sw)
+        )""")
+        db.executemany(
+            "INSERT INTO function_anchors VALUES (?,?,?,?,?)",
+            (
+                (entry, site, name, mark, doc)
+                for entry, anchors in anchors_by_entry.items()
+                for name, site, mark, doc in anchors
+            ),
+        )
+
+
 def catalog(
     image: str,
     other_image: str,
-    out_dir: str = fw.ATLAS_DIR,
+    out_dir: str | None = None,
     profiles: dict[str, str] | None = None,
 ) -> int:
-    names = [fw.short_image(image), fw.short_image(other_image)]
+    names = [short_image(image), short_image(other_image)]
     for n in names:
         if n not in DSP_ROOTS:
             print("no DSP roots for %s: add it to DSP_ROOTS" % n)
             return 2
-        if not os.path.exists(os.path.join(fw.SHARC_DIR, n + ".sqlite")):
+        if not os.path.exists(database_path(n, "sharc", SHARC_DIR)):
             print("no sharcdb for %s: run sharc.load(%r) first" % (n, n))
             return 2
-    os.makedirs(out_dir, exist_ok=True)
     a, b = collect_dsp(names[0]), collect_dsp(names[1])
     fwd, rev = pair_up(a, b), pair_up(b, a)
     for n, d, o, pair in ((names[0], a, b, fwd), (names[1], b, a, rev)):
         path = (profiles or {}).get(n)
         prof = read_profile(path, d) if path else collections.Counter()
         rows = dsp_rows(n, d, o, pair, old_groups(n), prof)
-        n_groups = write_dsp_catalog(n, rows, d, out_dir)
+        peer = names[1] if n == names[0] else names[0]
+        with closing(sqlite3.connect(database_path(n, "sharc", SHARC_DIR))) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            n_groups = write_dsp_catalog(n, rows, d, out_dir, db)
+            write_function_index(n, peer, d, pair, db)
         counts: dict[str, int] = {}
         for r in rows:
             for t in r["tags"].split(","):
@@ -552,7 +642,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("image")
     ap.add_argument("other")
-    ap.add_argument("--out-dir", default=fw.ATLAS_DIR)
+    ap.add_argument(
+        "--out-dir", help="export with image-prefixed names in this directory"
+    )
     ap.add_argument(
         "--profile",
         action="append",
@@ -566,7 +658,7 @@ def main(argv: list[str] | None = None) -> int:
         name, sep, path = spec.partition("=")
         if not sep:
             ap.error("--profile needs IMAGE=PATH, got %r" % spec)
-        profiles[fw.short_image(name)] = path
+        profiles[short_image(name)] = path
     return catalog(args.image, args.other, args.out_dir, profiles)
 
 

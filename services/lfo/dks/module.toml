@@ -17,65 +17,65 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# The six interrupt hooks of the LFO tick and its second reader (ports/fw/lfo.toml, one set for each device): each runs in place of the six stock bytes of its site, in the interrupt (vector 191, IPL 5; the installer's IPL 7 mask keeps the tick out during the write).
+# The six interrupt hooks of the LFO tick and its second reader (ports/fw/lfo.toml). A hook name has one entry for each of disjoint `devices` (the stock code differs, so each entry is its own routine: `_a` and `_b`); the port file of a device gives the site and the exits, and the loader takes the entry of its device: each runs in place of the six stock bytes of its site, in the interrupt (vector 191, IPL 5; the installer's IPL 7 mask keeps the tick out during the write).
 [[hook]]
-name = "cf.lfo.hook.tick_call_dt2"
-entry = "lfo_dt2_tick_call"
+name = "cf.lfo.hook.tick_call"
+entry = "lfo_tick_call_a"
 devices = ["dt2"]
 
 [[hook]]
-name = "cf.lfo.hook.tick_slew_dt2"
-entry = "lfo_dt2_tick_slew"
+name = "cf.lfo.hook.tick_slew"
+entry = "lfo_tick_slew_a"
 devices = ["dt2"]
 
 [[hook]]
-name = "cf.lfo.hook.tick_start_dt2"
-entry = "lfo_dt2_tick_start"
+name = "cf.lfo.hook.tick_start"
+entry = "lfo_tick_start_a"
 devices = ["dt2"]
 
 [[hook]]
-name = "cf.lfo.hook.read_call_dt2"
-entry = "lfo_dt2_read_call"
+name = "cf.lfo.hook.read_call"
+entry = "lfo_read_call_a"
 devices = ["dt2"]
 
 [[hook]]
-name = "cf.lfo.hook.read_slew_dt2"
-entry = "lfo_dt2_read_slew"
+name = "cf.lfo.hook.read_slew"
+entry = "lfo_read_slew_a"
 devices = ["dt2"]
 
 [[hook]]
-name = "cf.lfo.hook.read_start_dt2"
-entry = "lfo_dt2_read_start"
+name = "cf.lfo.hook.read_start"
+entry = "lfo_read_start_a"
 devices = ["dt2"]
 
 [[hook]]
-name = "cf.lfo.hook.tick_call_dn2"
-entry = "lfo_dn2_tick_call"
+name = "cf.lfo.hook.tick_call"
+entry = "lfo_tick_call_b"
 devices = ["dn2"]
 
 [[hook]]
-name = "cf.lfo.hook.tick_slew_dn2"
-entry = "lfo_dn2_tick_slew"
+name = "cf.lfo.hook.tick_slew"
+entry = "lfo_tick_slew_b"
 devices = ["dn2"]
 
 [[hook]]
-name = "cf.lfo.hook.tick_start_dn2"
-entry = "lfo_dn2_tick_start"
+name = "cf.lfo.hook.tick_start"
+entry = "lfo_tick_start_b"
 devices = ["dn2"]
 
 [[hook]]
-name = "cf.lfo.hook.read_call_dn2"
-entry = "lfo_dn2_read_call"
+name = "cf.lfo.hook.read_call"
+entry = "lfo_read_call_b"
 devices = ["dn2"]
 
 [[hook]]
-name = "cf.lfo.hook.read_slew_dn2"
-entry = "lfo_dn2_read_slew"
+name = "cf.lfo.hook.read_slew"
+entry = "lfo_read_slew_b"
 devices = ["dn2"]
 
 [[hook]]
-name = "cf.lfo.hook.read_start_dn2"
-entry = "lfo_dn2_read_start"
+name = "cf.lfo.hook.read_start"
+entry = "lfo_read_start_b"
 devices = ["dn2"]
 
 # The UI hooks it takes (ports/fw/lfo.toml): UI-task sites of the MOD page, listed in the port file. They have no `handler`: each is a routine of this file (`src/hooks-ui.s`) that runs in
@@ -101,30 +101,18 @@ place = "cf.expansion"
 
 # The exits of the hooks of ports/fw/lfo.toml (`hook.<hook>.exit` is the end of the site, `.exit.N` the Nth entry of its `exits`), as aliases `patchkit pack` makes into imports.
 [object.externs]
-lfo_x_dt2_tick_call_end = "hook.cf.lfo.hook.tick_call_dt2.exit"
-lfo_x_dn2_tick_call_end = "hook.cf.lfo.hook.tick_call_dn2.exit"
-lfo_x_dt2_read_call_end = "hook.cf.lfo.hook.read_call_dt2.exit"
-lfo_x_dn2_read_call_end = "hook.cf.lfo.hook.read_call_dn2.exit"
-lfo_x_dt2_tick_rand = "hook.cf.lfo.hook.tick_call_dt2.exit.1"
-lfo_x_dn2_tick_rand = "hook.cf.lfo.hook.tick_call_dn2.exit.1"
-lfo_x_dt2_tick_done = "hook.cf.lfo.hook.tick_call_dt2.exit.2"
-lfo_x_dn2_tick_done = "hook.cf.lfo.hook.tick_call_dn2.exit.2"
-lfo_x_dt2_tick_slew = "hook.cf.lfo.hook.tick_slew_dt2.exit"
-lfo_x_dn2_tick_slew = "hook.cf.lfo.hook.tick_slew_dn2.exit"
-lfo_x_dt2_tick_start = "hook.cf.lfo.hook.tick_start_dt2.exit"
-lfo_x_dn2_tick_start = "hook.cf.lfo.hook.tick_start_dn2.exit"
-lfo_x_dt2_tick_start_rand = "hook.cf.lfo.hook.tick_start_dt2.exit.1"
-lfo_x_dn2_tick_start_rand = "hook.cf.lfo.hook.tick_start_dn2.exit.1"
-lfo_x_dt2_read_rand = "hook.cf.lfo.hook.read_call_dt2.exit.1"
-lfo_x_dn2_read_rand = "hook.cf.lfo.hook.read_call_dn2.exit.1"
-lfo_x_dt2_read_done = "hook.cf.lfo.hook.read_call_dt2.exit.2"
-lfo_x_dn2_read_done = "hook.cf.lfo.hook.read_call_dn2.exit.2"
-lfo_x_dt2_read_slew = "hook.cf.lfo.hook.read_slew_dt2.exit"
-lfo_x_dn2_read_slew = "hook.cf.lfo.hook.read_slew_dn2.exit"
-lfo_x_dt2_read_start = "hook.cf.lfo.hook.read_start_dt2.exit"
-lfo_x_dn2_read_start = "hook.cf.lfo.hook.read_start_dn2.exit"
-lfo_x_dt2_read_start_rand = "hook.cf.lfo.hook.read_start_dt2.exit.1"
-lfo_x_dn2_read_start_rand = "hook.cf.lfo.hook.read_start_dn2.exit.1"
+lfo_x_tick_call_end = "hook.cf.lfo.hook.tick_call.exit"
+lfo_x_read_call_end = "hook.cf.lfo.hook.read_call.exit"
+lfo_x_tick_rand = "hook.cf.lfo.hook.tick_call.exit.1"
+lfo_x_tick_done = "hook.cf.lfo.hook.tick_call.exit.2"
+lfo_x_tick_slew = "hook.cf.lfo.hook.tick_slew.exit"
+lfo_x_tick_start = "hook.cf.lfo.hook.tick_start.exit"
+lfo_x_tick_start_rand = "hook.cf.lfo.hook.tick_start.exit.1"
+lfo_x_read_rand = "hook.cf.lfo.hook.read_call.exit.1"
+lfo_x_read_done = "hook.cf.lfo.hook.read_call.exit.2"
+lfo_x_read_slew = "hook.cf.lfo.hook.read_slew.exit"
+lfo_x_read_start = "hook.cf.lfo.hook.read_start.exit"
+lfo_x_read_start_rand = "hook.cf.lfo.hook.read_start.exit.1"
 lfo_x_name4 = "hook.cf.lfo.hook.wave_name.exit"
 lfo_x_name3 = "hook.cf.lfo.hook.wave_name3.exit"
 lfo_wave_table = "cf.param.data.descriptor_table"

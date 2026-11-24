@@ -7,7 +7,7 @@
 //! Before this service owned it, the map was in the reserved bytes of the selection record: `legacy_state` is read when the settings key is not there yet,
 //! the map is saved to the key as soon as it is read, and the old bytes are zeroed once the key holds it (the migration, one release).
 //!
-//! `settle` (`Service::settle`) runs once per boot, after the services are loaded and before the first module: it reads the machine keys of every selected module,
+//! `settle` (`Provider::settle`) runs once per boot, after the services are loaded and before the first module: it reads the machine keys of every selected module,
 //! assigns all numbers in load order and leaves the table `resolve` answers from. Doing it for the whole selection first is what lets the eviction rule see which
 //! map entries belong to modules that load in this boot. The map is saved at once, and only when it changed (`dirty`).
 //!
@@ -147,7 +147,7 @@ unsafe fn save<C: CoreApi>(core: &C, map: &[u32; MAP_N]) -> bool {
     core.settings_put(SETTING, &raw) == OK
 }
 
-/// Assign the numbers of every machine of the selected modules (`Service::settle`).
+/// Assign the numbers of every machine of the selected modules (`Provider::settle`).
 pub unsafe fn plan<C: CoreApi>(core: &C, sel: &SettleCtx) {
     let a = st();
     a.magic = 0x444b_4153; // "DKAS"

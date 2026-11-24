@@ -8,8 +8,8 @@
 //! - [`SlotScan`] (`scan.rs`): the listing of the store for the files of one slot; it ends in a [`ScanResult`].
 //! - `plan.rs`: pure planners from a scan result and a [`BoundView`] to tasks and an [`Effect`].
 //! - [`TaskRun`] (`task.rs`): the file operations of one piece of work and how far the run is; a [`Task`] prepares its own job.
-//! - [`StoreWriter`] (`writer.rs`): the posted I/O job (`io_step` in the I/O task, `io_done` in the UI task); it only writes.
-//! - [`FileBuffer`] (`buffer.rs`): the one file-sized buffer, lent to one owner at a time.
+//! - [`StoreJob`] (`job.rs`): the cell of the posted I/O job, outside the service: its phase word hands the job's data (the [`StoreWriter`] steps, the [`FileBuffer`]) between the
+//!   UI task and the I/O task. The tick gets it as an argument.
 //! - [`BusyClock`] (`clock.rs`): the retry, deferral and deferred state of a busy store.
 //! - [`ModuleRestore`] (`restore.rs`): after a project's data is installed, the live load of the modules of its module list that are on the card and not loaded.
 //!
@@ -21,6 +21,7 @@ mod bound;
 mod buffer;
 mod clock;
 mod env;
+mod job;
 mod pending;
 mod plan;
 mod queue;
@@ -35,6 +36,7 @@ pub use bound::{
 pub use buffer::FileBuffer;
 pub use clock::{is_busy, BusyClock, BusyVerdict, DEFER_MS, RETRY_MS};
 pub use env::{stable_record, Env, Files, ListPoll, ListRow, SlotRecord};
+pub use job::StoreJob;
 pub use pending::{take_hook_records, HookRecords, Pending};
 pub use plan::Plan;
 pub use queue::{Work, WorkQueue, REC_WAIT_MS};
@@ -75,8 +77,6 @@ pub struct ProjectService {
     stage: Stage,
     scan: SlotScan,
     run: TaskRun,
-    writer: StoreWriter,
-    buffer: FileBuffer,
     clock: BusyClock,
     restore: ModuleRestore,
 }
@@ -89,8 +89,6 @@ impl ProjectService {
             stage: Stage::Idle,
             scan: SlotScan::new(),
             run: TaskRun::new(),
-            writer: StoreWriter::new(),
-            buffer: FileBuffer::new(),
             clock: BusyClock::new(),
             restore: ModuleRestore::new(),
         }
@@ -149,29 +147,29 @@ impl ProjectService {
     // ---- the tick --------------------------------------------------------------------------------------------------------------------
 
     /// One UI pass: take the hooks' record, finish a job that ended, then advance the stage. Never blocks: a listing is polled, a write is a job.
-    pub fn tick<E: Env + ?Sized>(&mut self, env: &mut E, pending: &Pending) {
+    pub fn tick<E: Env + ?Sized>(&mut self, env: &mut E, pending: &Pending, job: &StoreJob) {
         let records = take_hook_records(env, pending);
         if let Some(slot) = self.bound.start_slot(env, records.slot_set) {
             self.queue.add_load(slot);
         }
         self.queue.add(&records);
         self.restore.tick(env, &self.bound);
-        if !self.take_job_end(env) {
+        if !self.take_job_end(env, job) {
             return;
         }
         if self.stage == Stage::Idle {
             self.retry_failed_load(env);
-            self.start_next_work(env);
+            self.start_next_work(env, job);
         } else if self.stage == Stage::Listing {
-            self.advance_scan(env);
+            self.advance_scan(env, job);
         } else {
-            self.advance_run(env);
+            self.advance_run(env, job);
         }
     }
 
     /// Take the end of the posted job. `false` while the job still runs.
-    fn take_job_end<E: Env + ?Sized>(&mut self, env: &mut E) -> bool {
-        let polled = self.writer.poll();
+    fn take_job_end<E: Env + ?Sized>(&mut self, env: &mut E, job: &StoreJob) -> bool {
+        let polled = job.poll();
         if let JobPoll::Running = polled {
             return false;
         }
@@ -192,7 +190,7 @@ impl ProjectService {
     }
 
     /// Start the next piece of work the queue offers; work that was put back waits for its retry time.
-    fn start_next_work<E: Env + ?Sized>(&mut self, env: &mut E) {
+    fn start_next_work<E: Env + ?Sized>(&mut self, env: &mut E, job: &StoreJob) {
         if self.clock.must_wait(env.now_ms()) {
             return;
         }
@@ -203,12 +201,12 @@ impl ProjectService {
             self.scan.begin(scan_for, slot);
             self.stage = Stage::Listing;
         } else if let Work::Leave { setter_value } = work {
-            self.bound.leave(env, self.buffer.lend(), setter_value);
+            self.bound.leave(env, job.lend(), setter_value);
         }
     }
 
     /// One step of the listing; when it ended, plan the work of the slot and start its tasks.
-    fn advance_scan<E: Env + ?Sized>(&mut self, env: &mut E) {
+    fn advance_scan<E: Env + ?Sized>(&mut self, env: &mut E, job: &StoreJob) {
         let step = self.scan.step(env);
         if step == ScanStep::Waiting {
             return;
@@ -219,13 +217,13 @@ impl ProjectService {
             return;
         }
         if let ScanStep::Refused(status) = step {
-            self.scan_refused(env, status);
+            self.scan_refused(env, status, job);
             return;
         }
-        let result = match self.scan.finish(env, self.buffer.lend()) {
+        let result = match self.scan.finish(env, job.lend()) {
             Ok(result) => result,
             Err(status) => {
-                self.scan_refused(env, status);
+                self.scan_refused(env, status, job);
                 return;
             }
         };
@@ -240,10 +238,10 @@ impl ProjectService {
             return;
         };
         if let Some(effect) = plan.effect {
-            let applied = self.bound.apply(env, self.buffer.lend(), effect);
+            let applied = self.bound.apply(env, job.lend(), effect);
             if let Applied::Refused(status) = applied {
                 // the read of the winner's file was refused after the listing found it: the same answer as a refused listing
-                self.scan_refused(env, status);
+                self.scan_refused(env, status, job);
                 return;
             }
             if applied == Applied::Vanished {
@@ -257,7 +255,7 @@ impl ProjectService {
     /// then the work gives up: one DEFERRED event per deferral (`BusyClock`). Any other status is an answer: it logs IGNORED with the store reason and ends the work. A load that
     /// ends leaves the project failed (`BoundProject::fail_load`: module writes go to the settings record only, the next save into the slot, setter call or retry loads it
     /// again) and warns, except for a slot that failed before: that refusal is not logged or warned again (it is a quiet retry or the same answer).
-    fn scan_refused<E: Env + ?Sized>(&mut self, env: &mut E, status: i32) {
+    fn scan_refused<E: Env + ?Sized>(&mut self, env: &mut E, status: i32, job: &StoreJob) {
         self.stage = Stage::Idle;
         let slot = self.scan.slot();
         let load = self.scan.scan_for() == ScanFor::Load;
@@ -282,7 +280,7 @@ impl ProjectService {
         self.clock.answered();
         if load {
             let now = env.now_ms();
-            self.bound.fail_load(env, self.buffer.lend(), slot, now);
+            self.bound.fail_load(env, job.lend(), slot, now);
             if !repeat {
                 env.toast(Ignore::Store as u32);
             }
@@ -290,7 +288,7 @@ impl ProjectService {
     }
 
     /// Prepare the next task and post its job, or finish. A busy store waits for the retry time.
-    fn advance_run<E: Env + ?Sized>(&mut self, env: &mut E) {
+    fn advance_run<E: Env + ?Sized>(&mut self, env: &mut E, job: &StoreJob) {
         if self.clock.must_wait(env.now_ms()) {
             return;
         }
@@ -304,7 +302,7 @@ impl ProjectService {
             let prepared = self
                 .run
                 .current_mut()
-                .prepare(env, &mut self.bound, self.buffer.lend());
+                .prepare(env, &mut self.bound, job.lend());
             if let Prepared::Job(spec) = prepared {
                 break spec;
             }
@@ -314,9 +312,7 @@ impl ProjectService {
             }
             self.run.next_task();
         };
-        if self.writer.post(env, spec) {
-            self.buffer.give_to_job();
-        } else {
+        if !job.post(env, spec) {
             // the job table was full: try the post again in a tenth of the retry time
             self.clock.hold_for(env.now_ms(), RETRY_MS / 10);
         }
@@ -334,7 +330,6 @@ impl ProjectService {
 
     /// The job of the task being run ended with `status`.
     fn job_ended<E: Env + ?Sized>(&mut self, env: &mut E, status: i32) {
-        self.buffer.take_back();
         if self.stage != Stage::Running {
             return;
         }
@@ -352,26 +347,9 @@ impl ProjectService {
         }
     }
 
-    // ---- the I/O task ----------------------------------------------------------------------------------------------------------------
-
-    /// The write job's step (I/O task): the ops of the job in order; a busy store is `IO_MORE`, up to `BUSY_RERUNS` times, then `E_BUSY`.
-    pub fn io_step<F: Files + ?Sized>(&mut self, files: &mut F) -> i32 {
-        self.writer.io_step(files, &self.buffer)
-    }
-
-    /// The job ended (UI task): `status` is the last step's result, or the runtime's cancel code.
-    pub fn io_done(&mut self, status: i32) {
-        self.writer.io_done(status)
-    }
-
-    /// The job's open file session, if the job was cancelled in the middle (the runtime aborts it); for the host tests.
-    pub fn job_handle(&self) -> i32 {
-        self.writer.job_handle()
-    }
-
     /// Is there work in progress (a stage that is not idle, or a job that was not taken)? For a host test that drives the service by hand.
-    pub fn busy(&self) -> bool {
-        self.stage != Stage::Idle || self.writer.is_posted() || self.restore.busy()
+    pub fn busy(&self, job: &StoreJob) -> bool {
+        self.stage != Stage::Idle || job.is_posted() || self.restore.busy()
     }
 }
 

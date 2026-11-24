@@ -4,9 +4,12 @@
 //! `core/dsp-link`. It lives in a crate of its own, below the services and the runtime, so a service crate tests against it without naming the runtime.
 extern crate std;
 pub mod contract;
+mod driver;
 mod pool;
+mod provider_driver;
 pub mod routes;
 mod storage;
+mod subject;
 use core::cell::{Cell, RefCell};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::DspState;
@@ -15,10 +18,15 @@ use dkrt_abi::link::{LinkResult, Owner, Sequence, Slot, Stream, Ticket};
 use dkrt_link::fake::{link, FakeLink};
 use dkrt_link::Link;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
+pub use driver::{Driver, Subject};
+pub use provider_driver::{
+    provider_contract, Provided, ProviderDriver, Recipe, RowBuilder, Started,
+};
 use std::boxed::Box;
 use std::string::String;
 use std::vec::Vec;
 pub use storage::FakeStorage;
+pub use subject::subject;
 
 /// One call the service made, in order.
 #[derive(Clone, Debug, PartialEq)]
@@ -54,12 +62,16 @@ pub enum Call {
 }
 
 /// The platform facts of a `FakeCore` (`SampleHost`): the sample files in a `FakeStorage`, whether the pool adapter is in the image and whether the
-/// samples are files of the store (a DN2) or of the firmware's file system (a DT2). The interrupt mask is a counter: `masked` says how many masks are open.
+/// samples are files of the store (a DN2) or of the firmware's file system (a DT2). The interrupt mask is a counter: `masked` says how many masks are open, `masks_taken` how many were opened in all.
 pub struct FakeHost {
     pub storage: FakeStorage,
     pub pool: Cell<bool>,
     pub in_store: Cell<bool>,
     pub masked: Cell<u32>,
+    pub masks_taken: Cell<u32>,
+    /// The masks given back at depth 0 since `interrupt_at_restore` (the points where an unmasked CPU takes a pending interrupt), and the interrupt waiting for one.
+    restores: Cell<u32>,
+    isr: core::cell::RefCell<Option<(u32, std::boxed::Box<dyn FnOnce()>)>>,
 }
 
 impl FakeHost {
@@ -69,6 +81,9 @@ impl FakeHost {
             pool: Cell::new(true),
             in_store: Cell::new(false),
             masked: Cell::new(0),
+            masks_taken: Cell::new(0),
+            restores: Cell::new(0),
+            isr: core::cell::RefCell::new(None),
         }
     }
 }
@@ -83,10 +98,34 @@ impl FakeHost {
     /// Mask interrupts (a counter: `masked` says how many masks are open); the old status register.
     pub fn mask_irq(&self) -> u32 {
         self.masked.set(self.masked.get() + 1);
+        self.masks_taken.set(self.masks_taken.get() + 1);
         0x2700
     }
     pub fn restore_irq(&self, _sr: u32) {
         self.masked.set(self.masked.get() - 1);
+        if self.masked.get() != 0 {
+            return;
+        }
+        self.restores.set(self.restores.get() + 1);
+        let due = {
+            let mut isr = self.isr.borrow_mut();
+            match isr.take() {
+                Some((at, f)) if at == self.restores.get() => Some(f),
+                other => {
+                    *isr = other;
+                    None
+                }
+            }
+        };
+        if let Some(f) = due {
+            f();
+        }
+    }
+    /// An interrupt that runs `f` when the `at`-th mask (counted from now) is given back at depth 0: the moment a task switch or an interrupt can fall between two sections. `f` may
+    /// mask and give back again (the interrupt handler's own sections).
+    pub fn interrupt_at_restore(&self, at: u32, f: impl FnOnce() + 'static) {
+        self.restores.set(0);
+        *self.isr.borrow_mut() = Some((at, std::boxed::Box::new(f)));
     }
 }
 
@@ -164,7 +203,7 @@ impl FakeCore {
         k.push((at, kind, keys.to_vec()));
     }
 
-    /// The image has the table `dynreg_info` with these words (word 0, the magic, is set here): `dkrt_svc_params::dynreg` finds it through `CoreApi::info`.
+    /// The image has the table `dynreg_info` with these words (word 0, the magic, is set here): `dkrt_svc_rows::dynreg` finds it through `CoreApi::info`.
     pub fn set_dynreg(&mut self, mut table: Vec<u32>) {
         table[0] = 0x4459_4e52;
         let hash = fnv1a("dynreg_info");

@@ -552,7 +552,18 @@ mod tests {
             Outcome::AlreadyPatched => panic!("stock has no patch record"),
         };
         assert!(!first.cache_hit);
-        assert_eq!(first.modules.len(), 17); // the Digitakt II emulator set: 12 and core/dynfx, core/fx, core/fxpages, core/sample-pool, core/platform (the runtime requires it)
+        // every module of the device's emulator set is applied (requirements come with them)
+        let device = devdata::by_short("dt2").unwrap();
+        for id in device.patch_set("emulator").unwrap() {
+            assert!(
+                first
+                    .modules
+                    .iter()
+                    .any(|m| m.split('@').next() == Some(id.as_str())),
+                "{id} missing from {:?}",
+                first.modules
+            );
+        }
         assert!(first.cache_file.is_file());
         let record = verify::patch_record(&first.syx).unwrap().unwrap();
         assert_eq!(record.base_sha256, first.base_sha256);
@@ -561,6 +572,12 @@ mod tests {
             Outcome::AlreadyPatched => panic!("stock has no patch record"),
         };
         assert!(again.cache_hit);
+        let sorted = |p: &Patched| {
+            let mut m = p.modules.clone();
+            m.sort();
+            m
+        };
+        assert_eq!(sorted(&again), sorted(&first));
         assert_eq!(again.syx, first.syx);
         // The patched image goes on as it is.
         assert!(matches!(

@@ -1,13 +1,56 @@
-//! The service contract suite (`dkrt_test_support::contract`) for the samples service on both profiles. The service owns no record kind and its input is the
+//! The service contract suite (`dkrt_test_support::provider_contract`) for the samples service on both profiles. The service owns no record kind and its input is the
 //! track-table record of a module's DSP section (version 5), not builder calls: the modules below have such a record, as the sample-playback machine under `modules/machines` has
 //! for its `sample_records`, with local ids 1 and 2. The module that must be refused makes a record of a kind no service owns, which the loader refuses at the
 //! commit after the DSP rows were claimed, so the suite exercises the release of the track table.
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::profiles::ALL;
-use dkrt_svc_samples::records::Samples;
-use dkrt_svc_samples::tracks;
-use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module, Rows};
-use dkrt_test_support::FakeCore;
+use dkrt_svc_samples::samples::Samples;
+use dkrt_test_support::contract::{Dsp, Fixture, Init, Module, Rows};
+use dkrt_test_support::{provider_contract, subject, FakeCore, Recipe, RowBuilder};
+
+// the core imports of the file's code (no runtime is linked)
+// the core imports (`dkc_*`) of the service file, as host functions (this test links no runtime)
+#[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
+mod stubs;
+
+// the service file's source: its `service!` call is the one place that lists the parts
+#[path = "../dks/src/lib.rs"]
+pub mod file;
+pub use file::{glue, DK_SVC_OWNER};
+
+/// The parts the file adopts, read from the row its `service!` call declares.
+struct SamplesRecipe;
+
+impl Recipe for SamplesRecipe {
+    type P = Samples;
+    const NAME: &'static str = "samples";
+    fn parts(b: RowBuilder<Samples>) -> RowBuilder<Samples> {
+        use dkrt_abi::provider::{
+            check, PartLookup, DESCRIBE_NEWEST, DSP_NEWEST, PART_DESCRIBE, PART_DSP, PART_QUERY,
+            PART_RECORDS, PART_TICK, QUERY_NEWEST, RECORDS_NEWEST, TICK_NEWEST,
+        };
+        // SAFETY: the row is a static of this binary
+        let row = unsafe { check(file::dk_svc_row(), 0..usize::MAX) }.expect("a valid row");
+        let has = |tag, newest| matches!(row.part(tag, newest), PartLookup::Found { .. });
+        // a part this recipe cannot build (the service does not implement it) must not be in the row
+        assert!(
+            !has(PART_RECORDS, RECORDS_NEWEST)
+                && !has(PART_QUERY, QUERY_NEWEST)
+                && !has(PART_DESCRIBE, DESCRIBE_NEWEST),
+            "the recipe has no mapping for a part of the row"
+        );
+        let b = if has(PART_DSP, DSP_NEWEST) {
+            b.dsp()
+        } else {
+            b
+        };
+        if has(PART_TICK, TICK_NEWEST) {
+            b.tick()
+        } else {
+            b
+        }
+    }
+}
 
 fn nothing(_: &mut Init) {}
 
@@ -35,16 +78,18 @@ fn module(sel: u32, local: u32, init: fn(&mut Init)) -> Module {
 
 /// The service's own view: which module records hold a track table, and the handle each local id of a record has.
 fn state(core: &FakeCore) -> Vec<u32> {
-    let mut v = Vec::new();
-    for rec in 0..4 {
-        v.push(unsafe { tracks::has(rec) } as u32);
-        core.source.set(rec as u8 + 1);
-        for local in 1..=3 {
-            v.push(unsafe { tracks::tracks(core, local) } as u32);
+    subject::<Samples, _>(|s| {
+        let mut v = Vec::new();
+        for rec in 0..4 {
+            v.push(s.has_table(rec) as u32);
+            core.source.set(rec as u8 + 1);
+            for local in 1..=3 {
+                v.push(s.tracks(core, local) as u32);
+            }
         }
-    }
-    core.source.set(0);
-    v
+        core.source.set(0);
+        v
+    })
 }
 
 fn fixture(device: u32) -> Fixture {
@@ -65,6 +110,7 @@ fn fixture(device: u32) -> Fixture {
         rows: Rows::NONE,
         absent_rows: None,
         live: None,
+        stateless: false,
         salt_same: &[
             ("memory", "the track table is the service's own state, shown by the state view; no firmware word"),
             ("dsp", "a track-table record changes no DSP state"),
@@ -82,6 +128,20 @@ fn fixture(device: u32) -> Fixture {
 #[test]
 fn the_samples_service_passes_the_contract_on_every_device_with_a_dsp() {
     for p in ALL.iter().filter(|p| p.dyn_types > 0) {
-        contract::<Samples>(&fixture(p.id));
+        provider_contract::<SamplesRecipe>(&fixture(p.id));
+    }
+}
+
+/// The track tables are only claimed, loaded and released through the DSP part, and the tracks only step in the UI pass: the file must adopt both.
+#[test]
+fn the_file_adopts_the_dsp_and_tick_parts() {
+    use dkrt_abi::provider::{check, PartLookup, DSP_NEWEST, PART_DSP, PART_TICK, TICK_NEWEST};
+    // SAFETY: the row is a static of this binary
+    let row = unsafe { check(file::dk_svc_row(), 0..usize::MAX) }.expect("a valid row");
+    for (tag, newest) in [(PART_DSP, DSP_NEWEST), (PART_TICK, TICK_NEWEST)] {
+        assert!(
+            matches!(row.part(tag, newest), PartLookup::Found { .. }),
+            "part {tag}"
+        );
     }
 }

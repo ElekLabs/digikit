@@ -9,49 +9,49 @@ installer calls
   flush freed:blk1+0 214
   flush freed:blk1+0 214
   flush freed:blk1+4 210
-  flush freed:blk4+0 21876
-  flush freed:blk4+0 21876
+  flush freed:blk4+0 23138
+  flush freed:blk4+0 23138
   mask
+  write 0x40137932 6
   write 0x40137cc6 6
   write 0x4000766c 6
   write 0x4010e1b0 6
-  write 0x40137c40 6
   write 0x40137d1e 6
-  write 0x40137932 6
+  write 0x40137836 6
+  write 0x40137c40 6
   write 0x401378c4 6
   write 0x400e3610 6
-  write 0x40137836 6
+  flush 0x40137930 16
   flush 0x40137cc0 16
   flush 0x40007660 32
   flush 0x4010e1b0 16
-  flush 0x40137c40 16
   flush 0x40137d10 32
-  flush 0x40137930 16
+  flush 0x40137830 16
+  flush 0x40137c40 16
   flush 0x401378c0 16
   flush 0x400e3610 16
-  flush 0x40137830 16
   restore
   flush blk7+0 1760
   flush blk7+0 1760
   mask
-  write 0x40137cc6 6
-  flush 0x40137cc0 16
-  write 0x40137836 6
-  flush 0x40137830 16
+  write 0x40137932 6
+  flush 0x40137930 16
   write 0x400e3610 6
   flush 0x400e3610 16
   write 0x401378c4 6
   flush 0x401378c0 16
-  write 0x40137932 6
-  flush 0x40137930 16
-  write 0x40137d1e 6
-  flush 0x40137d10 32
   write 0x40137c40 6
   flush 0x40137c40 16
+  write 0x40137836 6
+  flush 0x40137830 16
+  write 0x40137d1e 6
+  flush 0x40137d10 32
   write 0x4010e1b0 6
   flush 0x4010e1b0 16
   write 0x4000766c 6
   flush 0x40007660 32
+  write 0x40137cc6 6
+  flush 0x40137cc0 16
   restore
 card writes
   sector 5094 512 bytes
@@ -60,9 +60,10 @@ card state 1 claims 0 writes 2 refused 0
 init and fini calls
   init 8
   init 2
+  fini 8
 events
   kind 2 flags 0x0004 args [2, ffffffff, 0, 0, 100000]
-  kind 1 flags 0x0004 args [b03, 1, 0, 1, 0]
+  kind 1 flags 0x0004 args [c04, 1, 0, 1, 0]
   kind 4 flags 0x0004 args [1, 0, 0, 3, 0]
   kind 44 flags 0x0004 args [fffffffe, 0, 0, 0, 0]
   kind 44 flags 0x0004 args [fffffffe, 0, 0, 0, 0]
@@ -166,7 +167,7 @@ card writes
 card state 1 claims 0 writes 4 refused 0
 init and fini calls
 events
-  kind 1 flags 0x0004 args [b03, 1, 0, 3, 0]
+  kind 1 flags 0x0004 args [c04, 1, 0, 3, 0]
   kind 4 flags 0x0004 args [3, 0, 0, 3, 1]
   kind 3 flags 0x0001 args [3, 0, 3, 0, 0]
 installed sites 0
@@ -182,7 +183,7 @@ card writes
 card state 1 claims 0 writes 6 refused 0
 init and fini calls
 events
-  kind 1 flags 0x0004 args [b03, 1, 0, 5, 2]
+  kind 1 flags 0x0004 args [c04, 1, 0, 5, 2]
   kind 4 flags 0x0004 args [5, 0, 2, 3, 0]
   kind 3 flags 0x0001 args [1, 2, 5, 0, 0]
 installed sites 0

@@ -422,7 +422,11 @@ fn memory_with_ready(
     let mut directory = words(&[
         gen_host_dir::HOST_DIR_MAGIC,
         gen_host_dir::HOST_COUNT as u32,
-        if ready { gen_host_dir::HOST_DIR_READY } else { 0 },
+        if ready {
+            gen_host_dir::HOST_DIR_READY
+        } else {
+            0
+        },
     ]);
     directory.extend(words(&[0; gen_host_dir::HOST_COUNT]));
     if package_loaded {
@@ -486,9 +490,11 @@ fn a_directory_that_is_not_ready_says_no_package_even_with_entries_filled() {
         "{err}"
     );
     let (loader, symbols, mem) = memory_with_ready(true, true);
-    assert!(loader
-        .collect(&symbols, |at, len| mem.peek(at, len))
-        .is_ok());
+    assert!(
+        loader
+            .collect(&symbols, |at, len| mem.peek(at, len))
+            .is_ok()
+    );
 }
 
 #[test]

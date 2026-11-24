@@ -1,0 +1,261 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text",
+   "symbol": "peer_ret",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 24,
+   "section": ".text",
+   "symbol": "peer_load",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text",
+   "symbol": "peer_status_fail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text.sha_block",
+   "symbol": ".sec..rodata.SHA_K",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 70,
+   "section": ".text.sha_block",
+   "symbol": ".sec..text.be32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 118,
+   "section": ".text.peer_sha256",
+   "symbol": ".sec..text.sha_block",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 194,
+   "section": ".text.peer_sha256",
+   "symbol": ".sec..text.sha_block",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.peer_load",
+   "symbol": "cf.peer.fn.nor_read",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 88,
+   "section": ".text.peer_load",
+   "symbol": "cf.peer.fn.nor_read",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.peer_load",
+   "symbol": ".sec..text.be32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 142,
+   "section": ".text.peer_load",
+   "symbol": "cf.peer.fn.depack",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 170,
+   "section": ".text.peer_load",
+   "symbol": ".sec..text.peer_sha256",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 182,
+   "section": ".text.peer_load",
+   "symbol": ".sec..rodata.PEER_SHA256",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "45fa00084ef9000000002f2f000c2f2f000c2f2f000c4eb9000000004fef000c4a8066024e754fef00104ef900000000",
+   "kind": "text",
+   "name": ".text",
+   "size": 48
+  },
+  {
+   "align": 2,
+   "hex": "206f000420104e75",
+   "kind": "text",
+   "name": ".text.be32",
+   "size": 8
+  },
+  {
+   "align": 2,
+   "hex": "4fefff70428048d77cfc286f00942c6f00984bef003041f4080072202b9008005880b28066f04283428245f9000000002002780fc88052827a0fba80650000e4487638004eb900000000588f2f803850222f004020012a014680caaf00447e1ac0af00482c01ec8e20467c0bbb802a01efad7e15d1c52a01ecad2c01efae7e19dc852a08bb862a01eeadef897e0d41ef004cd285bd812c2f00302a06d081d0af004c721ee3ad2206d0b23800d0b74c502806e48cd8852a06eead7e13efa92e06da81bb8472162a06e2ad720ae3afda87bb842e2f003422072a2f0038c2af0038bf85ca86bb81d88120a8fffc5988b1cd66f6d1af0040d0842f40003070405883b0826600ff2c4280223508007a20d3b408005880ba8066f04cd77cfc4fef00904e75720f7c0fc2822a371c502e05ee8f220006810000000ec2862c0506800000000920477e19efae7e1222371c50d1c62c05eeae7e0e2f46002c2c05e68defae2e0822462c2f002cdc89bf867e11bd857c0fc08620452a01edad20370c507c13d0b74c50d1c02001eea87e0dd0852a01ecad2c01efaeda86bb807a0aeaa9b380d1c02f884c506000fea8",
+   "kind": "text",
+   "name": ".text.sha_block",
+   "size": 426
+  },
+  {
+   "align": 2,
+   "hex": "4fefff40703f48d74c7c242f00c87ac0283cbb67ae85223c6a09e667c082ca82207c3c6ef3722f440024283c1f83d9ab262f00c4267ca54ff53a2f410020223c9b05688c2f480028207c5be0cd192f4400382c0f42842f4b002c2c40203c510e527f2f4000302f4100342f48003c06860000002045f900000000ba84620000d0224391c845ef0040d3c5bdc8660000d6708072371f80e840b28e650000d67640200e220352805181b081650000d0420041ef00c07815d1c32a0f0685000000204df9000000001f801840721d1140ff791140ff7a2002e2a8720d1140ff7b2002e8a81140ff7c2002e2a81140ff7d2002ea88e78a1140ff7e1142ff7f4282487228002f054e96508f2002ec8874404a8066767040b08365e6428072fc7403c28041ef00c0d1c122004681c2822428ff60206f00cce789e2aa7220118208005280b28066d64cd74c7c4fef00c04e752643487348002f064e92068400000040508f6000ff1847f188001593880052886000ff1a263c000000806000ff2642041584080052806000ff22203c000000806084",
+   "kind": "text",
+   "name": ".text.peer_sha256",
+   "size": 400
+  },
+  {
+   "align": 2,
+   "hex": "4fefffd0222f003c48d7440c202f0034242f00380c814f84f2c667142f012f022f004eb9000000004fef000c4280600e260251830c830005fff3630c70014cd7440c4fef00304e752c7c4f8af2c19dc22f0e2f022f004eb9000000002f0e45f9000000004e924fef0010b08366ce307c00084283b488667c486e00044e92588fb68066b82f3c4f84f2c62f0e4eb900000000508f0c800005db1066a0486f00102f002f3c4f84f2c64eb9000000004fef000c428041f90000000075b7081073b00800b2826600ff7652807220b28066ea4200720513c04f84f2c213c14f84f2c370db721013c04f84f2c413c14f84f2c56000ff3a71b688005288d6806000ff76",
+   "kind": "text",
+   "name": ".text.peer_load",
+   "size": 256
+  },
+  {
+   "align": 2,
+   "hex": "428a2f9871374491b5c0fbcfe9b5dba53956c25b59f111f1923f82a4ab1c5ed5d807aa9812835b01243185be550c7dc372be5d7480deb1fe9bdc06a7c19bf174e49b69c1efbe47860fc19dc6240ca1cc2de92c6f4a7484aa5cb0a9dc76f988da983e5152a831c66db00327c8bf597fc7c6e00bf3d5a7914706ca63511429296727b70a852e1b21384d2c6dfc53380d13650a7354766a0abb81c2c92e92722c85a2bfe8a1a81a664bc24b8b70c76c51a3d192e819d6990624f40e3585106aa07019a4c1161e376c082748774c34b0bcb5391c0cb34ed8aa4a5b9cca4f682e6ff3748f82ee78a5636f84c878148cc7020890befffaa4506cebbef9a3f7c67178f2",
+   "kind": "data",
+   "name": ".rodata.SHA_K",
+   "size": 256
+  },
+  {
+   "align": 1,
+   "hex": "daf6451cf9587c0b628e901b7bb6b25f4e2633d448c534c0c181dd35ec783bc2",
+   "kind": "data",
+   "name": ".rodata.PEER_SHA256",
+   "size": 32
+  }
+ ],
+ "source_sha256": "ba83abcc9eb534f68a6c02ddafe5d1353b8c5b0f8ebd6726a6f72994f2ed925f",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..rodata.PEER_SHA256",
+   "section": ".rodata.PEER_SHA256",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.SHA_K",
+   "section": ".rodata.SHA_K",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.be32",
+   "section": ".text.be32",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.peer_sha256",
+   "section": ".text.peer_sha256",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.sha_block",
+   "section": ".text.sha_block",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "PEER_SHA256",
+   "section": ".rodata.PEER_SHA256",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "SHA_K",
+   "section": ".rodata.SHA_K",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "be32",
+   "section": ".text.be32",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.peer.fn.depack",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.peer.fn.nor_read",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_load",
+   "section": ".text.peer_load",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_read",
+   "section": ".text",
+   "value": 10
+  },
+  {
+   "global": true,
+   "name": "peer_ret",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_sha256",
+   "section": ".text.peer_sha256",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_status_fail",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "sha_block",
+   "section": ".text.sha_block",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "388",
+  "isa_check": "df474dd2bace9ec238b6e217dff020456efe692426af2420f8e68206b3a8e608",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

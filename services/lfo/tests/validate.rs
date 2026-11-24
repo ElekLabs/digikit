@@ -1,7 +1,9 @@
-//! Host tests of the shape-set rule (`Lfo::validate_records`): one case per refusal, and the fixture's record.
-use dkrt_abi::service::{Problem, Service};
+//! Host tests of the shape-set rule (`Records::validate` of `Lfo`, the free `records::validate`): one case per refusal, and the fixture's record.
+use dkrt_abi::provider::Records;
+use dkrt_abi::service::Problem;
 use dkrt_sdk::records::KIND_LFO_SHAPE;
-use dkrt_svc_lfo::records::{Lfo, MAX_SHAPES};
+use dkrt_svc_lfo::lfo::Lfo;
+use dkrt_svc_lfo::records::MAX_SHAPES;
 use dkrt_svc_lfo::validate::{body_ok, what, BODY_LEN};
 use dkrt_test_support::FakeCore;
 
@@ -10,7 +12,7 @@ type Body = [u8; BODY_LEN];
 fn problems(set: &[Body]) -> Vec<Problem> {
     let refs: Vec<&[u8]> = set.iter().map(|b| &b[..]).collect();
     let mut out = Vec::new();
-    <Lfo as Service<FakeCore>>::validate_records(KIND_LFO_SHAPE, &refs, &mut |p| out.push(p));
+    <Lfo as Records<FakeCore>>::validate(KIND_LFO_SHAPE, &refs, &mut |p| out.push(p));
     out
 }
 
@@ -89,7 +91,7 @@ fn a_flat_or_all_zero_shape_is_refused() {
 #[test]
 fn a_kind_the_service_does_not_own_is_accepted() {
     let mut out = Vec::new();
-    <Lfo as Service<FakeCore>>::validate_records(0, &[], &mut |p| out.push(p));
+    <Lfo as Records<FakeCore>>::validate(0, &[], &mut |p| out.push(p));
     assert!(out.is_empty());
 }
 

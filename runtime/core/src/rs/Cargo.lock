@@ -18,6 +18,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-fit",
+ "dkrt-fixture-local-ping",
  "dkrt-lifecycle",
  "dkrt-link",
  "dkrt-sdk",
@@ -49,6 +50,13 @@ version = "0.1.0"
 dependencies = [
  "dkneeds",
  "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-fixture-local-ping"
+version = "0.1.0"
+dependencies = [
+ "dkrt-svc-rt",
 ]
 
 [[package]]
@@ -84,7 +92,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
- "dkrt-svc-params",
+ "dkrt-svc-rows",
 ]
 
 [[package]]
@@ -104,7 +112,7 @@ dependencies = [
  "dkrt-abi",
  "dkrt-sdk",
  "dkrt-svc-bitmap",
- "dkrt-svc-params",
+ "dkrt-svc-rows",
 ]
 
 [[package]]
@@ -123,7 +131,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
- "dkrt-svc-params",
+ "dkrt-svc-rows",
 ]
 
 [[package]]
@@ -135,15 +143,6 @@ dependencies = [
  "dkrt-sdk",
  "dkrt-svc-machines",
  "dkrt-svc-rt",
-]
-
-[[package]]
-name = "dkrt-svc-params"
-version = "0.1.0"
-dependencies = [
- "dkneeds",
- "dkrt-abi",
- "dkrt-sdk",
 ]
 
 [[package]]
@@ -163,6 +162,15 @@ dependencies = [
  "dkrt-sdk",
  "dkrt-svc-project",
  "dkrt-svc-rt",
+]
+
+[[package]]
+name = "dkrt-svc-rows"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
 ]
 
 [[package]]
@@ -199,7 +207,7 @@ dependencies = [
  "dkneeds",
  "dkrt-abi",
  "dkrt-sdk",
- "dkrt-svc-params",
+ "dkrt-svc-rows",
 ]
 
 [[package]]

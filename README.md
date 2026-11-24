@@ -80,7 +80,7 @@ mise run gen:core           # the shared generated core of the emulator's DSP
 
 ### Firmware files
 
-Put `Digitakt_II_OS1.17.syx` and `Digitone_II_OS1.12.syx` in `firmware/`. No Elektron firmware is in this repository: you supply your own.
+Put `Digitakt_II_OS1.17.syx` and `Digitone_II_OS1.12.syx` in `firmware/`. No Elektron firmware is in this repository. Supply your own files. See the [firmware guide](docs/FIRMWARE.md) to build and browse the analysis databases and catalogs.
 
 ### Flash from the command line
 

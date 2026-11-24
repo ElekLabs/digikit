@@ -5,6 +5,7 @@ import { bootInfo, E_LOADING } from '@digi/regression/runtime/card-kit.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import { pickSine, rpc, REDRAW, SETTLE, type Rt } from '@digi/regression/runtime/fx-live.ts';
 import { FIRMWARE, FULL_TIER, describeOn } from '@digi/regression/runtime/devices.ts';
+import { moduleStorePath } from '@digi/regression/runtime/install.ts';
 import {
   diffSlot,
   dynType,
@@ -77,7 +78,6 @@ const SCENARIOS: Scenario[] = [
   },
 ];
 
-const storeName = (id: string) => `modules/${id.split('/').at(-1)}.dkm`;
 
 /** The panel script that makes the project: the run-time machine on track 1 (and the second one on track 2), parameter values, a p-lock and a sound lock on step 1 of track 1. */
 async function buildProject(
@@ -139,7 +139,7 @@ for (const sc of SCENARIOS) {
   describeOn(sc.device, `${sc.device.toUpperCase()} ${FIRMWARE[sc.device]} ${sc.name}`, () => {
     const { device } = sc;
     const modules = [...new Set(Object.values(sc.sets).flat())];
-    const selectionOf = (set: string) => sc.sets[set]!.map(storeName);
+    const selectionOf = (set: string) => sc.sets[set]!.map((id) => moduleStorePath(device, id));
     // The first boot runs the DT2 filesystem check; a card the firmware saved a project on never does, so the later boots are a second daemon with the check relaxed
     // (the environment is the daemon's, as in Python where `Ctx.rig` relaxes used cards only). The stock firmware's project seeds the first card (Python `Env.card`).
     const base = { dsp: 'sharc' as const, roots: RT, symbols: [] };

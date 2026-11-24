@@ -51,7 +51,7 @@ pub const RULES_RS_OUT: &str = "packages/dksharc/src/rules_table.rs";
 pub const REGISTERS_MD_OUT: &str = "sdk/dsp/REGISTERS.md";
 /// The generated Rust format limits of the `.dkm` loader (re-exported by `dkneeds`), relative to the repository root.
 pub const LIMITS_RS_OUT: &str = "packages/dkneeds/src/gen_limits.rs";
-/// The generated static table of the runtime's in-crate services, relative to the repository root.
+/// The generated room of the runtime's row table, relative to the repository root.
 pub const SERVICES_RS_OUT: &str = "runtime/core/src/rs/src/package/gen_services.rs";
 /// The generated hash of the `dkrt-abi` boundary files (`SVC_ABI`, docs/plans/runtime-and-services.md section 13.2), relative to the repository root.
 pub const SVC_ABI_OUT: &str = "runtime/core/abi/src/gen_svc_abi.rs";
@@ -317,20 +317,16 @@ struct Records {
     kinds: BTreeMap<String, RecKind>,
     resources: BTreeMap<String, Resource>,
 }
-/// One in-crate service of the runtime: `[[service]]`.
+/// One service: `[[service]]`, provided by a `.dks` provider (a module with `role = "service"`).
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ServiceDecl {
     name: String,
-    /// The full path of the type that implements `Service` (`crate::services::NAME::...`, or a linked service crate). Without it the service is
-    /// provided by a `.dks` provider, not by a runtime row: it is in no generated table.
-    #[serde(default)]
-    rust: Option<String>,
     /// A test-only service: not in public SDK headers, docs or templates.
     #[serde(default)]
     test: bool,
 }
-/// One record kind: its number, the whole record's length (header included) and the in-crate service that owns it.
+/// One record kind: its number, the whole record's length (header included) and the service that owns it.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RecKind {
@@ -479,10 +475,10 @@ fn records_consts(sdk: &Sdk, indent: &str) -> String {
         let _ = writeln!(s, "{indent}    (KIND_{n}, LEN_{n}, {:?}),", k.service);
     }
     let _ = writeln!(s, "{indent}];");
-    // a table for each in-crate service and for each service file that owns a kind (the `service!` glue of a `.dks` declares them)
+    // a table for each service file that owns a kind (the `service!` glue of a `.dks` declares them)
     for d in sdk.service.iter() {
         let own: Vec<_> = kinds.iter().filter(|(_, k)| k.service == d.name).collect();
-        if d.rust.is_none() && own.is_empty() {
+        if own.is_empty() {
             continue;
         }
         let _ = writeln!(
@@ -564,47 +560,12 @@ fn records_consts(sdk: &Sdk, indent: &str) -> String {
     s
 }
 
-/// `runtime/core/src/rs/src/package/gen_services.rs`: the static table of the in-crate services (`[[service]]`).
-fn rust_services(sdk: &Sdk) -> String {
+/// `runtime/core/src/rs/src/package/gen_services.rs`: the room of the row table, one cell for each file that can provide a service at once.
+fn rust_services(_sdk: &Sdk) -> String {
     let mut s = format!("// {HEADER}\n\n");
-    s.push_str("use crate::package::core_api::{RealCore, REAL_CORE};\nuse dkrt_abi::service::{rows_with_tail, RowPtrs, ServiceRow, ServiceTable};\n\n");
-    s.push_str("/// The in-crate services in the order the core calls them (`[[service]]` of sdk/sdk.toml), each with the record kinds it owns.\n");
-    let rows: Vec<(&ServiceDecl, &String)> = sdk
-        .service
-        .iter()
-        .filter_map(|d| d.rust.as_ref().map(|r| (d, r)))
-        .collect();
-    let _ = writeln!(s, "pub static SERVICES: [ServiceRow; {}] = [", rows.len());
-    let n = rows.len();
-    for (d, rust) in rows {
-        let _ = writeln!(
-            s,
-            "    ServiceRow::of::<{}, RealCore>({:?}, &dkrt_sdk::records::KINDS_{}),",
-            rust,
-            d.name,
-            d.name.to_uppercase()
-        );
-    }
-    let _ = write!(
-        s,
-        "];\n\n/// The number of in-crate services: the static prefix of the table.\npub const STATIC: usize = {n};\n\n"
-    );
-    // Without in-crate rows there is no `HEAD`: a static of zero size has no section, and a pointer to it would be a relocation against nothing.
-    let (head, table) = if n == 0 {
-        (
-            String::new(),
-            "ServiceTable::new(&[], &REAL_CORE)".to_string(),
-        )
-    } else {
-        (
-            format!("static HEAD: RowPtrs<{n}> = RowPtrs::of(&SERVICES);\n\n"),
-            "ServiceTable::new(&HEAD.0, &REAL_CORE)".to_string(),
-        )
-    };
-    let _ = write!(
-        s,
-        "/// The length of the row table: the in-crate rows, then room for `PROVIDER_MAX` rows of loaded service files.\npub const ROWS_LEN: usize = STATIC + dkrt_sdk::PROVIDER_MAX;\n\n/// The row table: the in-crate rows first, then the loaded ones (written by `svc_rows.rs` only; the null tail is not part of any table).\npub static mut ROWS: [*const ServiceRow; ROWS_LEN] = rows_with_tail(&SERVICES);\n\n{head}/// The table of the in-crate rows alone (the declare check and `is_runtime_service`).\npub const TABLE: ServiceTable = {table};\n"
-    );
+    s.push_str("use dkrt_abi::provider::ProviderHandle;\n\n");
+    s.push_str("/// The length of the row table: room for `PROVIDER_MAX` rows of loaded service files.\npub const ROWS_LEN: usize = dkrt_sdk::PROVIDER_MAX;\n\n");
+    s.push_str("/// The row table: the loaded rows, in callback order (written by `provider_rows.rs` only; the empty tail is not part of any table).\npub static mut ROWS: [ProviderHandle; ROWS_LEN] = [ProviderHandle::EMPTY; ROWS_LEN];\n");
     s
 }
 
@@ -1550,13 +1511,13 @@ fn rust_proto(sdk: &Sdk) -> String {
     s
 }
 
-/// The `[handle] services` that the runtime image provides itself: those that are not a `[[service]]` supplied by a `.dks` (no `rust`).
+/// The `[handle] services` that the runtime image provides itself: those that are not a `[[service]]` supplied by a `.dks`.
 fn runtime_service_names(sdk: &Sdk) -> Vec<&str> {
     sdk.handle
         .services
         .iter()
         .map(String::as_str)
-        .filter(|n| !sdk.service.iter().any(|d| d.name == *n && d.rust.is_none()))
+        .filter(|n| !sdk.service.iter().any(|d| d.name == *n))
         .collect()
 }
 
@@ -2441,11 +2402,7 @@ fn imports_checked(sdk: &Sdk, with_test: bool) -> Result<Vec<(&Import, Option<Si
         match (&im.service, &im.since, &im.context) {
             (None, None, None) if im.kind.as_deref() == Some("helper") => {}
             (Some(svc), Some(since), Some(ctx)) => {
-                if !sdk.handle.services.contains(svc)
-                    && !sdk
-                        .service
-                        .iter()
-                        .any(|d| d.rust.is_none() && d.name == *svc)
+                if !sdk.handle.services.contains(svc) && !sdk.service.iter().any(|d| d.name == *svc)
                 {
                     return Err(err!("{SOURCE}: {what}: unknown service {svc:?}"));
                 }
@@ -2504,14 +2461,9 @@ fn imports_checked(sdk: &Sdk, with_test: bool) -> Result<Vec<(&Import, Option<Si
     Ok(v)
 }
 
-/// The services provided by a `.dks` (`[[service]]` without `rust`) in the `sdk/sdk.toml` this crate was built with.
+/// The services provided by a `.dks` (the `[[service]]` rows) in the `sdk/sdk.toml` this crate was built with.
 pub fn provider_services() -> std::collections::BTreeSet<String> {
-    sdk_embedded()
-        .service
-        .into_iter()
-        .filter(|d| d.rust.is_none())
-        .map(|d| d.name)
-        .collect()
+    sdk_embedded().service.into_iter().map(|d| d.name).collect()
 }
 
 /// Whether a name's identity belongs to the runtime or the SDK, including a collision with an SDK service.
@@ -2794,7 +2746,7 @@ fn gen_exports_rs(service: &str, imps: &[(&Import, Option<Sig>)]) -> String {
 fn gen_exports(sdk: &Sdk, root: &std::path::Path) -> Result<Vec<(String, String)>> {
     let imps = imports_checked(sdk, true)?;
     let mut out = vec![];
-    for d in sdk.service.iter().filter(|d| d.rust.is_none()) {
+    for d in sdk.service.iter() {
         let has = imps
             .iter()
             .any(|(im, _)| im.provided && im.service.as_deref() == Some(d.name.as_str()));

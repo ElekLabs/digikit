@@ -1,12 +1,17 @@
-//! `Shortcuts`: the state machine of the service. One key event goes in (`on_key`), the verdict says whether the stock firmware may see it.
+//! `Shortcuts`: the owner object of the service and its state machine. One key event goes in (`on_key`), the verdict says whether the stock firmware may see it.
 //!
 //! A binding is complete when its first key is held and its second key is pressed. The second key and its release (and its repeats) are swallowed: the stock views
 //! never see them, so a combination like [TRK]+[YES] does not also act as YES. The first key is never swallowed (the stock firmware needs [TRK] itself). `on` runs when
 //! the binding completes and `off` when either key is released; every other event passes, so a trig key pressed under [TRK] still selects a track.
 use crate::bindings::{Binding, BindingTable, Callback};
+use crate::builder::Builder;
 use crate::keys::KeyState;
 use core::ffi::c_void;
+use core::mem::MaybeUninit;
+use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::platform::DeviceProfile;
+use dkrt_abi::provider::{ConsumerId, Provider, Status, Ticker};
+use dkrt_abi::service::tick_phase;
 
 /// The bits of the `flags` of a key event.
 pub mod key_flags {
@@ -49,7 +54,8 @@ struct Pending {
     arg: *mut c_void,
 }
 
-/// All-zero bytes are the initial state (no key held, no binding, nothing active, nothing pending).
+/// The owner object of the service: no key held, no binding, nothing active, nothing pending. The file's cell holds the one instance (`Provider::start`), and everything
+/// that reaches it (the part functions, the key hook, the builder call) runs in the UI task, so the fields need no lock.
 pub struct Shortcuts {
     /// The calls to make, oldest first: `head` is the oldest and `len` the count (a ring).
     pending: [Pending; PENDING_MAX],
@@ -59,6 +65,8 @@ pub struct Shortcuts {
     table: BindingTable,
     /// The binding that is active (its `on` ran, no key of it has been released since): its index in `table` plus 1; 0 when none (so all-zero bytes are the initial state).
     active: usize,
+    /// The builder call `dk_shortcut_add` and its collection (`Records::begin`, `commit`).
+    builder: Builder,
 }
 
 /// No binding is active.
@@ -77,6 +85,7 @@ impl Shortcuts {
             held: KeyState::new(),
             table: BindingTable::new(),
             active: NONE,
+            builder: Builder::new(),
         }
     }
 
@@ -89,12 +98,12 @@ impl Shortcuts {
         }
     }
 
-    /// Make the calls the key events decided on, in the order of the events (`on`, then `off` of a fast tap). The UI pass calls this (`Service::tick`), never the key hook:
+    /// Make the calls the key events decided on, in the order of the events (`on`, then `off` of a fast tap). The UI pass calls this (`Ticker::tick`), never the key hook:
     /// the hook runs inside the firmware's key walker and must not run module code. Each call is taken out of the queue before it runs.
     ///
     /// # Safety
-    /// The callbacks are module code that is loaded (`remove` drops the calls of a module that unloads).
-    pub unsafe fn run_pending(&mut self) {
+    /// The callbacks are module code that is loaded (`detach` drops the calls of a module that unloads).
+    unsafe fn run_pending(&mut self) {
         while self.len > 0 {
             let p = self.pending[self.head];
             self.head = (self.head + 1) % PENDING_MAX;
@@ -121,7 +130,7 @@ impl Shortcuts {
     /// Drop the bindings of `owner` (its module unloads) and the calls of it that wait for `run_pending`. An active binding of the owner ends first, without calling `off`: its code is going away. The key state stays as it is,
     /// because the keys are still physically down: the first key stays held (a binding added later completes with it), and the press of the second key stays swallowed, so its release is
     /// swallowed once (the stock firmware never saw the press).
-    pub fn remove(&mut self, owner: u8) {
+    fn drop_owner(&mut self, owner: u8) {
         if let Some(b) = self.active() {
             if b.owner == owner {
                 self.active = NONE;
@@ -142,6 +151,20 @@ impl Shortcuts {
         self.pending = q;
         self.head = 0;
         self.len = kept;
+    }
+
+    /// The builder of `dk_shortcut_add` and the records' commit (`Builder::add`, `begin`, `commit`).
+    pub fn builder(&mut self) -> &mut Builder {
+        &mut self.builder
+    }
+
+    /// One key event of the panel for the dispatch hook: `code` is the key's id in the event, `flags` the event's flags word (read with `[input.key_flags]`) of the device
+    /// `core` runs as; a device the table does not know passes everything. It decides and queues the module's calls; it runs no module code (the UI pass does, `Ticker::tick`).
+    pub fn dispatch<C: CoreApi>(&mut self, core: &C, code: u32, flags: u32) -> Verdict {
+        match DeviceProfile::by_id(core.device_id()) {
+            Some(p) => self.on_key(&p, code, classify_flags(&p, flags)),
+            None => Verdict::Pass,
+        }
     }
 
     /// One key event of the panel: `code` is the device's panel code, `flags` are [`key_flags`]. A code that no logical key of the device has passes.
@@ -195,5 +218,36 @@ impl Shortcuts {
     /// The binding that is active now (for a hint or a test).
     pub fn active(&self) -> Option<&Binding> {
         self.active.checked_sub(1).and_then(|i| self.table.get(i))
+    }
+}
+
+impl<C: CoreApi> Provider<C> for Shortcuts {
+    fn start(_core: &C) -> Result<Shortcuts, Status> {
+        Ok(Shortcuts::new())
+    }
+
+    /// The state is made where it lives: all-zero bytes are the initial state (see `Shortcuts::new`; `tests/state.rs` checks it), so this is one fill and no copy of
+    /// the 1.4 kB through the stack.
+    fn start_in(_core: &C, slot: &mut MaybeUninit<Shortcuts>) -> Result<(), Status> {
+        // SAFETY: every field of `Shortcuts` is valid as zero bytes (integers, `None` callbacks, null pointers, the closed gate).
+        unsafe { slot.as_mut_ptr().write_bytes(0, 1) };
+        Ok(())
+    }
+
+    /// A module unloads (also one that never attached, or only in part): close its collection and drop its bindings and queued calls (`drop_owner`). It never calls module
+    /// code, `off` of an active binding included.
+    fn detach(&mut self, _core: &C, consumer: ConsumerId) {
+        self.builder.end();
+        self.drop_owner(consumer.get());
+    }
+}
+
+impl<C: CoreApi> Ticker<C> for Shortcuts {
+    /// The UI pass: make the `on` and `off` calls that the key hook queued, in order, in the early phase only.
+    fn tick(&mut self, _core: &C, phase: u32) {
+        if phase == tick_phase::EARLY {
+            // SAFETY: the queued callbacks are code of modules that are loaded: `detach` drops the calls of a module before its image goes.
+            unsafe { self.run_pending() };
+        }
     }
 }

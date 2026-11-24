@@ -11,25 +11,15 @@
 //! table range, the table walk and its parse.
 use super::role::role_ok;
 use super::{Images, Staged};
-use crate::package::handlers::ServiceTable;
 use super::TABLE_MAX;
 use dkneeds::keys::{name_hash, name_hash_bytes, tag, Keys};
 use dkrt_sdk::{DkrtStoreEntry, PROVIDER_MAX};
 
-/// Whether service name hash `h` is one the runtime provides itself (the `runtime` floor, the services of the image and the in-crate rows): a need of it is no provider's to meet,
+/// Whether service name hash `h` is one the runtime provides itself (the `runtime` floor and the services of the image): a need of it is no provider's to meet,
 /// and a provider file cannot take the name. The services that have handle types in the SDK but are service files (`fx`) are not here.
-pub(crate) fn is_runtime_service(h: u32, services: &ServiceTable) -> bool {
+pub(crate) fn is_runtime_service(h: u32) -> bool {
     if h == name_hash("runtime") {
         return true;
-    }
-    let mut i = 0;
-    // the static prefix only: the rows after it are loaded services
-    let n = if services.rows.len() < crate::package::gen_services::STATIC { services.rows.len() } else { crate::package::gen_services::STATIC };
-    while i < n {
-        if name_hash(unsafe { &*services.rows[i] }.name()) == h {
-            return true;
-        }
-        i += 1;
     }
     let mut k = 0;
     while k < dkrt_sdk::records::HANDLE_SERVICES.len() {
@@ -287,8 +277,8 @@ unsafe fn find_port<C: Cards>(cards: &mut C, fw: Option<[u8; 8]>, out: &mut Foun
 }
 
 /// Find the providers for the service hashes `want` (the unresolved hard needs of the selection); `fw` is the image's `fw_id`, which picks the port file. No `services/` folder, a busy store (`E_BUSY`) or any
-/// listing error finds nothing, without an error. `services` is the runtime's own table: a need of a runtime service is not searched for.
-pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32], fw: Option<[u8; 8]>, out: &mut Found) {
+/// listing error finds nothing, without an error. A need of a runtime service (`is_runtime_service`) is not searched for.
+pub unsafe fn find<C: Cards>(cards: &mut C, want: &[u32], fw: Option<[u8; 8]>, out: &mut Found) {
     out.n = 0;
     out.truncated = 0;
     if want.is_empty() {
@@ -334,7 +324,7 @@ pub unsafe fn find<C: Cards>(cards: &mut C, services: &ServiceTable, want: &[u32
                         let mut ni = 0;
                         while let Some(n) = t.words(tag::NEEDS, ni) {
                             ni += 1;
-                            if n.2 & 1 != 0 && !is_runtime_service(n.0, services) && !has(&out.search, ns, n.0) {
+                            if n.2 & 1 != 0 && !is_runtime_service(n.0) && !has(&out.search, ns, n.0) {
                                 if ns < WANT_MAX {
                                     out.search[ns] = n.0;
                                     ns += 1;
@@ -414,19 +404,9 @@ pub(crate) mod fake {
 mod tests {
     use super::fake::{cards, FakeCards};
     use super::*;
-    use crate::package::core_api::{CoreApi, REAL_CORE};
     use dkneeds::keys::{name_hash, write_table, Need, Pair, Table};
-    use dkrt_abi::service::{Service, ServiceRow};
     use std::vec;
     use std::vec::Vec;
-
-    struct S;
-    impl<C: CoreApi> Service<C> for S {
-        dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_teardown!();
-    }
-    static ROWS: [ServiceRow; 1] = [ServiceRow::of::<S, crate::package::core_api::RealCore>("machines", &[])];
-    static ROWS_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ROWS);
 
     const KEEP: Table<'static> =
         Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[], callback_order: None, service_imports: &[] };
@@ -459,10 +439,9 @@ mod tests {
     }
 
     fn run(c: &mut FakeCards, want: &[&str]) -> Found {
-        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let want: Vec<u32> = want.iter().map(|n| name_hash(n)).collect();
         let mut out = Found::new();
-        unsafe { find(c, &services, &want, None, &mut out) };
+        unsafe { find(c, &want, None, &mut out) };
         out
     }
 
@@ -479,10 +458,9 @@ mod tests {
     const FW_B: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
 
     fn run_fw(c: &mut FakeCards, want: &[&str], fw: Option<[u8; 8]>) -> Found {
-        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let want: Vec<u32> = want.iter().map(|n| name_hash(n)).collect();
         let mut out = Found::new();
-        unsafe { find(c, &services, &want, fw, &mut out) };
+        unsafe { find(c, &want, fw, &mut out) };
         out
     }
 
@@ -681,9 +659,8 @@ mod tests {
         assert_eq!(run(&mut fs, &["c0"]).truncated, 0);
         // more distinct needs than the search list holds
         let want: Vec<u32> = (0..WANT_MAX as u32 + 1).collect();
-        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let mut out = Found::new();
-        unsafe { find(&mut fs, &services, &want, None, &mut out) };
+        unsafe { find(&mut fs, &want, None, &mut out) };
         assert_eq!(out.truncated, TRUNC_NEEDS);
     }
 
@@ -720,10 +697,9 @@ mod tests {
     }
 
     fn run_counting(c: &mut Counting, want: &[&str]) -> Found {
-        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
         let want: Vec<u32> = want.iter().map(|n| name_hash(n)).collect();
         let mut out = Found::new();
-        unsafe { find(c, &services, &want, None, &mut out) };
+        unsafe { find(c, &want, None, &mut out) };
         out
     }
 

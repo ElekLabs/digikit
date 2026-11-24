@@ -1,27 +1,26 @@
 //! The `machines` service as a service file (`services/machines.dks`): the crate `dkrt-svc-machines` over the `dkc_*` imports, the hooks of the machine framework (`hooks.rs`),
-//! the click flow's firmware calls and the exports `dk_param_get` and `dk_param_set` (`fw.rs`), the two builder calls that take a callback (`builder.rs`), the exports that only the runtime calls (`rt.rs`) and the list of all exports (`gen_exports.rs`, written by `patchkit gen`); the image table `machines_info` is bound by `image::setup`
+//! the click flow's firmware calls and the exports `dk_param_get` and `dk_param_set` (`fw.rs`), the two builder calls that take a callback (`builder.rs`), the exports that only the runtime calls (`rt.rs`) and the list of all exports (`gen_exports.rs`, written by `patchkit gen`); the image table `machines_info` is bound by `Provider::start` of the owner (`info::bind`)
 //! (docs/plans/runtime-and-services.md section 13.2, R12-6).
 // a host build (the assembly test of the runtime) has std; the file is `no_std` on the ColdFire
 #![cfg_attr(target_arch = "m68k", no_std)]
 #![cfg_attr(target_arch = "m68k", feature(asm_experimental_arch))]
 
 use dkrt_sdk::records::KINDS_MACHINES;
-use dkrt_svc_machines::records::Machines;
+use dkrt_svc_machines::machines::Machines;
 
-mod builder;
-mod fw;
+pub mod builder;
+pub mod fw;
 #[rustfmt::skip]
 mod gen_exports;
 mod guard;
 mod hooks;
-mod image;
-mod rt;
+pub mod rt;
 
 dkrt_svc_rt::service!(
     Machines,
     "machines",
     &KINDS_MACHINES,
-    setup = image::setup::<dkrt_svc_rt::ImportCore>,
+    parts = [Records, Dsp, Tick, Describe],
     hooks = [
         ("cf.machine.hook.clone.5", hooks::mf_clone5, dt2),
         ("cf.machine.hook.param_code.args", hooks::mf_typearg, dt2),

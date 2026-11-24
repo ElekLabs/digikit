@@ -16,7 +16,8 @@ runtimeTests(
   async (runtime) => {
     const { session, dk } = runtime;
     await expectRuntimeReady(session);
-    await installModule(dk, 'test/native-page', moduleArtifact(session.options.device, 'test/native-page'));
+    const device = session.options.device;
+    await installModule(dk, 'test/native-page', moduleArtifact(device, 'test/native-page'), { device, session });
     const ui = panelKeys(runtime);
     const turns = scheduledTurns(session, runtime.clock);
     const artifacts = path.join(session.runDir, 'native-page-proof');

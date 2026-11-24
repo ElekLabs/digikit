@@ -661,3 +661,26 @@ fn retry_after_start_failures_gives_a_normal_boot_that_tries_the_package() {
         assert_eq!(counter(&f), 0);
     }
 }
+
+/// The record and the card writes of the boot counter on a blank card: the real boot raises the counter into copy A as the first record (seq 1, no
+/// selection), the clear writes it into copy B with the next sequence number. One card write each.
+#[test]
+fn the_boot_counter_writes_one_record_per_step_and_the_clear_takes_the_next_sequence_number() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let f = fresh_card();
+        boot(&f, End::Early);
+        let r = held(&f).unwrap();
+        assert_eq!((r.seq, r.boot_counter, r.flags, r.count), (1, 1, 0, 0), "the boot's record: no selection");
+        assert_eq!(*f.writes.borrow(), [(L.sel_a(), 512)], "one write for the boot, no header claim");
+        new_boot();
+        clear_counter_with(&f, 0, false);
+        let r = held(&f).unwrap();
+        assert_eq!((r.seq, r.boot_counter, r.flags, r.count), (2, 0, 0, 0), "the clear: next sequence number, counter at the floor");
+        assert_eq!(*f.writes.borrow(), [(L.sel_a(), 512), (L.sel_b(), 512)], "one more write, into the other copy");
+        // a counter already at the floor writes nothing
+        new_boot();
+        clear_counter_with(&f, 0, false);
+        assert_eq!(f.writes.borrow().len(), 2);
+    }
+}

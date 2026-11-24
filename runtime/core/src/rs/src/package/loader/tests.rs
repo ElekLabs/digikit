@@ -60,8 +60,7 @@ enum Ev {
     Init(usize, u32),
     Fini(usize, u32),
     Add(usize),
-    /// `add` with the service row of a file.
-    AddRow(usize, *const dkrt_abi::service::ServiceRow),
+    AddProvider(usize, *const dkrt_abi::provider::ProviderRow, *mut u8),
     Remove(usize),
     AbiOk(u32),
 }
@@ -79,17 +78,28 @@ enum Init {
     NeedsUsbBulk,
     /// Declares what the header table of a service says: (declare tag, first word, entry offset in the image) for a hook or an export, as `init` of a service does.
     Declare(&'static [(u16, u32, u32)]),
-    /// A service file: declares `TEST_ROW`.
+    /// A service file: declares `test_row()`.
     DeclaresRow,
+    /// Posts a worker job and adds a poll function at its own address, as the file's code would (`dk_job_post`, `dkrt_poll_add`), and returns `OK`.
+    PostsJobAndPoll,
+    /// Posts a worker job and lets one UI pass submit it, so it is on the worker (`RUNNING`) when `init` returns `OK`.
+    PostsRunningJob,
 }
 
-struct Nothing;
-impl<C: dkrt_abi::core_api::CoreApi> dkrt_abi::service::Service<C> for Nothing {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
+unsafe extern "C" fn probe_step(_: *mut u8) -> i32 {
+    0
 }
+
 /// The row a service file declares in these tests; `svc-test` is a `[[service]]` that no runtime row owns.
-static TEST_ROW: dkrt_abi::service::ServiceRow = dkrt_abi::service::ServiceRow::of::<Nothing, crate::package::core_api::RealCore>("svc-test", &[]);
+fn test_row() -> &'static dkrt_abi::provider::ProviderRow {
+    static ROW: std::sync::OnceLock<&'static dkrt_abi::provider::ProviderRow> = std::sync::OnceLock::new();
+    ROW.get_or_init(|| crate::package::fixture_provider::Nothing::named("svc-test").row())
+}
+/// The instance block of that row (its owner is zero-size).
+static TEST_INSTANCE: [u8; 8] = [0; 8];
+fn test_instance() -> *mut u8 {
+    TEST_INSTANCE.as_ptr() as *mut u8
+}
 
 struct FakeImages {
     files: BTreeMap<Vec<u8>, Vec<u8>>,
@@ -180,6 +190,10 @@ impl Images for FakeImages {
         }
         k as i32
     }
+    fn image_extent(&mut self, _: u32, _: u32) -> core::ops::Range<usize> {
+        // the rows of a host test are statics of the test binary, in no package image
+        0..usize::MAX
+    }
     unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32 {
         self.log.push(Ev::Init(rec, init));
         order("init");
@@ -192,8 +206,18 @@ impl Images for FakeImages {
         match self.init {
             Init::Ok => OK,
             // (`ctx` is the context address as a u32: not a host pointer)
-            Init::DeclaresRow => crate::package::collect::dk_service_declare_row(core::ptr::addr_of_mut!(crate::package::entry::DKRT_CTXS[rec]) as *mut u8, &TEST_ROW),
+            Init::DeclaresRow => crate::package::collect::dk_provider_declare_row(core::ptr::addr_of_mut!(crate::package::entry::DKRT_CTXS[rec]) as *mut u8, test_row(), test_instance()),
             Init::Fails(e) => e,
+            Init::PostsJobAndPoll => {
+                assert!(crate::worker::post(rec as u8 + 1, Some(probe_step), None, core::ptr::null_mut()) > 0);
+                assert_eq!(crate::api::dkrt_poll_add(init as usize), OK);
+                OK
+            }
+            Init::PostsRunningJob => {
+                assert!(crate::worker::post(rec as u8 + 1, Some(probe_step), None, core::ptr::null_mut()) > 0);
+                crate::worker::tick();
+                OK
+            }
             Init::NeedsUsbBulk => {
                 stub_missing("core/usb-bulk");
                 E_MISSING
@@ -264,10 +288,10 @@ impl Registry for FakeRegistry {
         self.asked.borrow_mut().push(Ev::AbiOk(fingerprint));
         self.abi
     }
-    unsafe fn add(&mut self, rec: usize, row: Option<&dkrt_abi::service::ServiceRow>, _order: Option<u32>) -> i32 {
+    unsafe fn add(&mut self, rec: usize, row: Option<crate::package::provider_rows::RowSource<'_>>, _order: Option<u32>) -> i32 {
         self.log.push(match row {
             None => Ev::Add(rec),
-            Some(r) => Ev::AddRow(rec, r as *const _),
+            Some(crate::package::provider_rows::RowSource { row, instance, .. }) => Ev::AddProvider(rec, row as *const _, instance),
         });
         self.add_result
     }

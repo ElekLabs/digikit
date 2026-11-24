@@ -23,7 +23,7 @@ pub const LOG_INFO: u16 = dkrt_sdk::logk::L_INFO << dkrt_sdk::logk::LEVEL_SHIFT;
 
 pub trait CoreApi: crate::mem::FwMem {
     // ---- the registry's rows ---------------------------------------------------------------------------------------------
-    /// The selection index of the module being loaded (`u32::MAX` outside a module load): a service that planned something per selected module (`Service::settle`) finds
+    /// The selection index of the module being loaded (`u32::MAX` outside a module load): a service that planned something per selected module (`Provider::settle`) finds
     /// the module's part by it.
     fn boot_index(&self) -> u32;
     /// The 32 bytes of the selection record's reserved area that a service kept its state in before it had a settings key (all 0: none), read once to migrate them. Removed one
@@ -38,7 +38,7 @@ pub trait CoreApi: crate::mem::FwMem {
     /// The module that a live operation changes (`reload::phase`): its owner (module record index + 1), or 0 when none runs. Today the only operation is a reload (E5); E5c
     /// (enable and disable from the menu) will extend the value to say which operation runs. From the checks of the new file until the job ends. A service
     /// leaves that module's own rows out of "used by another module" in its checks of the new file (voice types, rows), parks what the module held in the teardown instead of
-    /// freeing it, and at the end of the job (`Service::live_done`) gives back what the new version did not take over.
+    /// freeing it, and at the end of the job (`Provider::reload_done`) gives back what the new version did not take over.
     fn live_op(&self) -> u32;
 
     // ---- the device ------------------------------------------------------------------------------------------------------

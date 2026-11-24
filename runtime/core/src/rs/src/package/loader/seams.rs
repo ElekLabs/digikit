@@ -3,7 +3,8 @@
 
 use dkrt_abi::module::Ctx;
 use dkrt_abi::dev_addr::DevAddr;
-use dkrt_abi::service::{ModuleCommitCtx, ServiceRow};
+use crate::package::provider_rows::RowSource;
+use dkrt_abi::service::ModuleCommitCtx;
 
 /// A staged file: `size` bytes at `ptr`, valid until the next `stage`.
 #[derive(Clone, Copy)]
@@ -28,7 +29,7 @@ pub trait Images {
     unsafe fn free(&mut self, addr: DevAddr);
     /// The address of the import `name` (NUL-terminated), 0 when the runtime has none (`import_addr`).
     unsafe fn import_addr(&mut self, name: *const u8) -> u32;
-    /// The address of the service-only import `name` (`SVC_IMPORTS`: the `dkc_*` of interface C, `dk_service_declare_row`, `dkc_panic`), 0 when there is none. The loader
+    /// The address of the service-only import `name` (`SVC_IMPORTS`: the `dkc_*` of interface C, `dk_provider_declare_row`, `dkc_panic`), 0 when there is none. The loader
     /// asks only for a file of role 1, after `import_addr`.
     unsafe fn svc_import_addr(&mut self, _name: *const u8) -> u32 {
         0
@@ -38,6 +39,11 @@ pub trait Images {
     /// The files of the store whose path starts with `prefix` (NUL-terminated), in path order, at most `max` into `out`: the count, or a negative code (`E_BUSY`).
     unsafe fn list(&mut self, prefix: *const u8, out: *mut dkrt_sdk::DkrtStoreEntry, max: u32) -> i32;
     /// Call `init` of module record `rec` (the address `init` in module memory) with its context; its result.
+    /// The address range of the package image loaded at `base` (`size` bytes): the extent a provider row and its part tables must lie in. The device's is the image itself; a host
+    /// test's rows are statics of the test binary, so its fakes answer the whole address space.
+    fn image_extent(&mut self, base: u32, size: u32) -> core::ops::Range<usize> {
+        base as usize..(base as usize).saturating_add(size as usize)
+    }
     unsafe fn enter_init(&mut self, rec: usize, init: u32, ctx: *const Ctx) -> i32;
     unsafe fn enter_fini(&mut self, rec: usize, fini: u32, ctx: *const Ctx);
 }
@@ -46,13 +52,14 @@ pub trait Images {
 pub trait Registry {
     /// Does the runtime accept a service file with this ABI fingerprint (header word 0x3c)? 0: the file uses neither interface B nor C.
     fn abi_ok(&self, fingerprint: u32) -> bool;
-    /// Publish the service row that `init` of record `rec` declared (`None`: it declared none, as every module today).
-    unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>, order: Option<u32>) -> i32;
+    /// Publish the service row that `init` of record `rec` declared (`None`: it declared none, as every module today): a `ProviderRow` that is resolved
+    /// against the part versions this core knows (`E_SVC_ABI` for a newer one).
+    unsafe fn add(&mut self, rec: usize, row: Option<RowSource<'_>>, order: Option<u32>) -> i32;
     /// Take everything record `rec` published down (idempotent).
     unsafe fn remove(&mut self, rec: usize);
-    /// The `init` of record `rec` is about to run: every service forgets what an earlier module collected (`Service::module_begin`).
+    /// The `init` of record `rec` is about to run: every service forgets what an earlier module collected (`Records::begin`).
     unsafe fn module_begin(&mut self, rec: usize);
-    /// The services' commit of record `rec` (`Service::module_commit`): the first refusal is the result.
+    /// The services' commit of record `rec` (`Records::commit`): the first refusal is the result.
     unsafe fn module_commit(&mut self, rec: usize, c: &ModuleCommitCtx) -> i32;
 }
 
@@ -132,17 +139,17 @@ impl Images for RealImages {
     }
 }
 
-/// The runtime's own registry: the machine, parameter and page rows of a module's records, and the service row of a service file (`svc_rows.rs`).
+/// The runtime's own registry: the machine, parameter and page rows of a module's records, and the service row of a service file (`provider_rows.rs`).
 pub struct RealRegistry;
 
 impl Registry for RealRegistry {
     fn abi_ok(&self, fingerprint: u32) -> bool {
         fingerprint == 0 || fingerprint == dkrt_abi::service::SVC_ABI
     }
-    unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>, order: Option<u32>) -> i32 {
+    unsafe fn add(&mut self, rec: usize, row: Option<RowSource<'_>>, order: Option<u32>) -> i32 {
         match row {
             None => dkrt_sdk::OK,
-            Some(row) => crate::package::svc_rows::add(rec, row, order),
+            Some(row) => crate::package::provider_rows::add(rec, row, order),
         }
     }
     unsafe fn remove(&mut self, rec: usize) {
@@ -153,7 +160,7 @@ impl Registry for RealRegistry {
             #[cfg(not(test))]
             crate::package::registry::remove(rec as u8 + 1);
         }
-        crate::package::svc_rows::remove(rec);
+        crate::package::provider_rows::remove(rec);
     }
     unsafe fn module_begin(&mut self, rec: usize) {
         crate::package::handlers::services().module_begin(rec)

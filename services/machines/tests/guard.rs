@@ -1,14 +1,15 @@
-//! Host tests of what the machines service owns of the DSP diagnostics and the table checks: the machine guard's words (`Service::diag`), the check of the voice table
-//! against the module records (`Service::table_check`), the fault site (`Service::attribute`), the state bytes of a DSP section (`dsp_check_sections`) and what a reset
+//! Host tests of what the machines service owns of the DSP diagnostics and the table checks: the machine guard's words (`DspPart::diag`), the check of the voice table
+//! against the module records (`Describe::table_check`), the fault site (`DspPart::attribute`), the state bytes of a DSP section (`dsp_check_sections`) and what a reset
 //! of the service's statics clears.
 use dkrt_abi::dsp::{
     DspSec, Job, MAX_ROWS, PLACEHOLDER_OWNER, VOICE_NOTE_ON, VOICE_STATE_BYTES, VOICE_V3,
     VOICE_VOICES,
 };
-use dkrt_abi::service::{Service, TableFault};
+use dkrt_abi::provider::{Describe, DspPart};
+use dkrt_abi::service::TableFault;
 use dkrt_sdk::fault::{DIAG_WORDS, SITE_FX_MASTER, SITE_VOICE};
 use dkrt_sdk::logk;
-use dkrt_svc_machines::records::Machines;
+use dkrt_svc_machines::machines::Machines;
 use dkrt_svc_machines::rows::{self, vrows};
 use dkrt_test_support::contract::locked;
 use dkrt_test_support::{Call, FakeCore};
@@ -16,8 +17,6 @@ use std::sync::MutexGuard;
 
 /// The module record (index) that owns voice row 1 in these tests.
 const REC: usize = 3;
-
-type S = Machines;
 
 /// A core, the service's statics at the start (rows and guard memory), and voice row 1 owned by module record `REC` with machine type 17.
 fn core() -> (MutexGuard<'static, ()>, FakeCore) {
@@ -34,7 +33,7 @@ fn core() -> (MutexGuard<'static, ()>, FakeCore) {
 }
 
 fn diag(core: &FakeCore, words: &[u32; DIAG_WORDS]) {
-    unsafe { <S as Service<FakeCore>>::diag(core, words) }
+    DspPart::<FakeCore>::diag(&mut Machines::new(), core, words)
 }
 
 fn logs(core: &FakeCore) -> Vec<(u16, u16, [u32; 5])> {
@@ -134,7 +133,8 @@ fn the_effect_words_of_the_block_are_not_the_machine_guards() {
 #[test]
 fn the_voice_site_names_the_module_of_the_machine_type_and_no_other_site_is_the_machines() {
     let (_g, core) = core();
-    let at = |site: u32, id: u32| unsafe { <S as Service<FakeCore>>::attribute(&core, site, id) };
+    let at =
+        |site: u32, id: u32| DspPart::<FakeCore>::attribute(&mut Machines::new(), &core, site, id);
     assert_eq!(at(SITE_VOICE, 17), Some(REC));
     assert_eq!(at(SITE_VOICE, 18), None);
     assert_eq!(at(SITE_FX_MASTER, 17), None);
@@ -146,7 +146,7 @@ fn the_voice_site_names_the_module_of_the_machine_type_and_no_other_site_is_the_
 
 fn check(core: &FakeCore, used: u32) -> (u32, TableFault) {
     let mut f = TableFault::default();
-    let r = unsafe { <S as Service<FakeCore>>::table_check(core, used, &mut f) };
+    let r = Describe::<FakeCore>::table_check(&Machines::new(), core, used, &mut f);
     (r, f)
 }
 
@@ -260,7 +260,10 @@ fn section(n: u32, voices: u32, state: u32) -> (Vec<u8>, DspSec) {
 }
 
 fn check_sections(core: &FakeCore, sec: &DspSec, job: &mut Job) -> i32 {
-    unsafe { <S as Service<FakeCore>>::dsp_check_sections(core, sec, job) }
+    match DspPart::<FakeCore>::check_sections(&mut Machines::new(), core, sec, job) {
+        Ok(()) => 0,
+        Err(code) => code,
+    }
 }
 
 #[test]

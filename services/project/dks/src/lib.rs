@@ -3,24 +3,29 @@
 #![cfg_attr(target_arch = "m68k", no_std)]
 #![cfg_attr(target_arch = "m68k", feature(asm_experimental_arch))]
 
-use dkrt_svc_project::ProjectSvc;
+use glue::Owner;
 
 #[rustfmt::skip]
 mod gen_exports;
-mod glue;
-mod hooks;
+pub mod glue;
+pub mod hooks;
 
 dkrt_svc_rt::service!(
-    ProjectSvc,
+    Owner,
     "project",
-    // the service owns no record kind of the `register` section
     &[],
-    setup = glue::setup,
+    parts = [],
     hooks = [
         ("cf.project.hook.slot_set", hooks::project_hook_slot),
         ("cf.project.hook.save_exit", hooks::project_hook_save),
-        ("cf.project.hook.clear_one_exit", hooks::project_hook_clear_one),
-        ("cf.project.hook.clear_many_exit", hooks::project_hook_clear_many),
+        (
+            "cf.project.hook.clear_one_exit",
+            hooks::project_hook_clear_one
+        ),
+        (
+            "cf.project.hook.clear_many_exit",
+            hooks::project_hook_clear_many
+        ),
         ("cf.project.hook.paste_exit", hooks::project_hook_paste),
     ],
     fills = [],

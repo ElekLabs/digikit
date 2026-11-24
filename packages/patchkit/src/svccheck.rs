@@ -4,11 +4,12 @@
 //! `sdk.toml`; it builds nothing and runs nothing. It reports every problem, one line each, and the exit status is 1 when there is one.
 //!
 //! - **Layout.** `Cargo.toml` (package `dkrt-svc-NAME`), `src/lib.rs`, `src/records.rs`, `src/slots.rs` (required when `dks/module.toml` declares a `[[fill]]`, declared as `pub mod slots;` when present) and `tests/` with at least one `.rs` file. A folder
-//!   `src/dsp/` has a `mod.rs`, and a service whose `Service` impl has `dsp_*` handlers has the folder. `lib.rs` declares `pub mod records` (and `pub mod slots` when the file exists)
-//!   (and `pub mod dsp` with the folder). Other modules in `src/` are the service's own.
+//!   `src/dsp/` has a `mod.rs`. `lib.rs` declares `pub mod records` (and `pub mod slots` when the file exists)
+//!   (and `pub mod dsp` with the folder). A service whose manifest gives it no record kind needs no `records.rs` and no `slots.rs`.
+//!   Other modules in `src/` are the service's own.
 //! - **The service file.** `dks/` holds `module.toml` (id `core/services/NAME`, `role = "service"`, `service = "NAME"`), `Cargo.toml`, `src/lib.rs` (the
 //!   `service!(...)` call and nothing else) and, when needed, `src/hooks.rs` (every hook as assembler; required when the module has `[[hook]]` entries) and
-//!   `src/fw.rs` (firmware calls). It is required when the service's `[[service]]` row has no `rust` (the service is a file), and checked whenever it exists.
+//!   `src/fw.rs` (firmware calls). It is required when the service has a `[[service]]` row (the service is a file), and checked whenever it exists.
 //!   The `[[hook]]` entries of `dks/module.toml` equal the hooks of the `service!` call, per device (an entry with `devices`, and a call entry `(name, entry, dt2)`).
 //!   The exports of the file are the `provided = true` imports of the service in `sdk.toml`: `service!` takes `exports = gen_exports::exports()` (the file `patchkit gen`
 //!   writes) for SDK services. A service outside the SDK declares its export names in `dks/module.toml` and in the literal `exports` list.
@@ -16,12 +17,11 @@
 //!   Assembler (`asm!`, `global_asm!`, `naked`) is only in `dks/src/hooks.rs`, and firmware names (`cf.` hook and anchor names, `dkfw`) only under `dks/`.
 //! - **Fills equal the slots.** A `[[fill]]` of `dks/module.toml` names a `[[slot]]` of an image adapter (`image-modules/**/module.toml`). When the
 //!   slot must exist (a typo is an error). When the slot exists only on some devices (`devices` in its `[[slot]]`), the fill names `devices` too and only devices the slot has.
-//! - **One entry.** The crate exports at most one entry symbol, `dk_module`: the entry that carries the service's `ServiceRow` (interface B). A service
-//!   linked into the runtime exports none yet (the runtime names its row in the generated table); a second export of any other name is a second row
+//! - **One entry.** The crate exports at most one entry symbol, `dk_module`: the entry that carries the service's `ProviderRow` (interface B); a second export of any other name is a second row
 //!   symbol. The state a device test reads by name (`DKRT_FXP`, `DKRT_FXS`: a `static` named `DKRT_*`) is state, not an entry, and is allowed.
-//! - **Declarations equal the manifest.** The manifest of a service is its `[[service]]` row in `sdk.toml` (the row's `rust` path is in the crate) and its
-//!   `[records.kinds]` entries (`service = "NAME"`). The record kinds that `Service::declare` makes (`d.kind(KIND_X, LEN_X)`) are those entries, no
-//!   more and no fewer; `declare` makes no slot, hook, export or resource declaration (the manifest has no place for them yet).
+//! - **Declarations equal the manifest.** The manifest of a service is its `[[service]]` row in `sdk.toml` and its
+//!   `[records.kinds]` entries (`service = "NAME"`). The `service!(Owner, "NAME", KINDS, parts = [...])` call of `dks/src/lib.rs` takes its kinds from `KINDS_NAME`, the list `patchkit gen`
+//!   writes from those entries (`&[]` for a service without kinds); any other expression is a problem.
 
 use crate::error::*;
 use regex_lite::Regex;
@@ -145,58 +145,39 @@ fn exports(text: &str) -> Vec<String> {
     out
 }
 
-/// The text of the body of `fn declare(` in `text`, if there is one.
-fn declare_body(text: &str) -> Option<&str> {
-    let at = text.find("fn declare(")?;
-    let open = at + text[at..].find('{')?;
-    let mut depth = 0usize;
-    for (i, c) in text[open..].char_indices() {
-        match c {
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(&text[open + 1..open + i]);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
+/// The kinds a service file declares: its `service!(Owner, "name", KINDS, parts = [...])` takes them from the `KINDS_<NAME>` list that `patchkit gen` writes from the
+/// manifest (`&[]` for none), so they are the manifest's by construction; any other expression is a problem. `None` when the call has no `parts = [...]` list.
+fn provider_kinds(
+    dks_lib: &str,
+    name: &str,
+    manifest: &BTreeSet<String>,
+) -> Option<(BTreeSet<String>, Vec<String>)> {
+    // line comments between the arguments are not part of the kinds expression
+    let dks_lib = Regex::new(r"//[^\n]*").unwrap().replace_all(dks_lib, "");
+    let call =
+        Regex::new(r#"service!\s*\(\s*[A-Za-z_]\w*\s*,\s*"[^"]*"\s*,\s*([^,]*?)\s*,\s*parts\s*="#)
+            .unwrap();
+    let kinds = call.captures(&dks_lib)?[1].to_string();
+    let list = format!("&KINDS_{}", name.to_uppercase());
+    let own = kinds
+        .strip_prefix('&')
+        .is_some_and(|k| k.rsplit("::").next() == Some(&list[1..]));
+    Some(if kinds == "&[]" {
+        (BTreeSet::new(), vec![])
+    } else if own {
+        (manifest.clone(), vec![])
+    } else {
+        (
+            BTreeSet::new(),
+            vec![format!(
+                "dks/src/lib.rs: the kinds argument of service! is `{kinds}`: a provider takes `{list}`, the list `patchkit gen` writes from the manifest"
+            )],
+        )
+    })
 }
 
-/// What `declare` declares: the names `X` of its `d.kind(KIND_X, LEN_X)` calls, and the calls that have no manifest entry.
-fn declared(text: &str) -> (BTreeSet<String>, Vec<String>) {
-    let mut kinds = BTreeSet::new();
-    let mut other = vec![];
-    let Some(body) = declare_body(text) else {
-        return (kinds, other);
-    };
-    let call = Regex::new(r"\bd\s*\.\s*(kind|slot|hook|export|resource)\s*\(([^)]*)\)").unwrap();
-    for c in call.captures_iter(body) {
-        if &c[1] != "kind" {
-            other.push(c[1].to_string());
-            continue;
-        }
-        let args: Vec<&str> = c[2].split(',').map(str::trim).collect();
-        let name = |a: Option<&&str>, prefix: &str| {
-            a.and_then(|s| s.rsplit("::").next())
-                .and_then(|s| s.strip_prefix(prefix))
-                .map(str::to_string)
-        };
-        match (name(args.first(), "KIND_"), name(args.get(1), "LEN_")) {
-            (Some(k), Some(l)) if k == l => {
-                kinds.insert(k);
-            }
-            _ => other.push(format!("kind({})", c[2].trim())),
-        }
-    }
-    (kinds, other)
-}
-
-/// The record kinds the manifest gives to service `name`, and whether it has a `[[service]]` row in this crate.
-/// The record kinds of the service and its `[[service]]` row: `None` without a row, `Some(None)` for a row without `rust` (a service file, `.dks`).
-fn manifest(sdk: &Path, name: &str) -> Result<(BTreeSet<String>, Option<Option<String>>)> {
+/// The record kinds the manifest gives to service `name`, and whether it has a `[[service]]` row (a service file, `.dks`) in this crate.
+fn manifest(sdk: &Path, name: &str) -> Result<(BTreeSet<String>, bool)> {
     let text = std::fs::read_to_string(sdk).map_err(|e| err!("{}: {e}", sdk.display()))?;
     let v: toml::Table = text.parse().map_err(|e| err!("{}: {e}", sdk.display()))?;
     let row = v
@@ -205,8 +186,7 @@ fn manifest(sdk: &Path, name: &str) -> Result<(BTreeSet<String>, Option<Option<S
         .into_iter()
         .flatten()
         .filter_map(|r| r.as_table())
-        .find(|r| r.get("name").and_then(|n| n.as_str()) == Some(name))
-        .map(|r| r.get("rust").and_then(|r| r.as_str()).map(str::to_string));
+        .any(|r| r.get("name").and_then(|n| n.as_str()) == Some(name));
     let kinds = v
         .get("records")
         .and_then(|r| r.get("kinds"))
@@ -600,10 +580,20 @@ fn check_dks(
         if !only_service_call(lib) {
             out.push("dks/src/lib.rs is not the `service!(...)` call alone (attributes, `use` and `mod` lines are allowed)".into());
         }
-        let query = Regex::new(r"\bquery\s*=\s*(?:[A-Za-z_]\w*\s*::\s*)*([A-Za-z_]\w*)")
+        // `parts = [...]`: the resident query is the `Query` part, not a `query =` entry, and what `setup =` did is the owner's `start`
+        let parts = Regex::new(r"\bparts\s*=\s*\[([^\]]*)\]")
             .unwrap()
             .captures(lib)
-            .and_then(|c| c.get(1).map(|name| name.as_str()));
+            .map(|c| c[1].to_string());
+        let named_query = Regex::new(r"\bquery\s*=").unwrap().is_match(lib);
+        if parts.is_some() && (named_query || Regex::new(r"\bsetup\s*=").unwrap().is_match(lib)) {
+            out.push("dks/src/lib.rs: service! with `parts = [...]` takes no `query =` (the Query part) and no `setup =` (the owner's `start`)".into());
+        }
+        let query = parts.as_ref().and_then(|list| {
+            list.split(',')
+                .any(|p| p.trim() == "Query")
+                .then_some(dkrt_sdk::RESIDENT_QUERY_ENTRY)
+        });
         if query != has_query.then_some(dkrt_sdk::RESIDENT_QUERY_ENTRY) {
             out.push("dks/src/lib.rs: service! query must match the dk_service_query_v1 export in dks/module.toml".into());
         }
@@ -906,9 +896,14 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
                 .and_then(|f| f.as_array().map(|a| !a.is_empty()))
         })
         .unwrap_or(false);
-    let mut files = vec!["src/lib.rs", "src/records.rs"];
-    if has_fills {
-        files.push("src/slots.rs");
+    // a service with no record kinds (the manifest gives it none) has no records.rs and no slot tables: its parts sit with the owner
+    let kindless = manifest(sdk, &name)?.0.is_empty();
+    let mut files = vec!["src/lib.rs"];
+    if !kindless {
+        files.push("src/records.rs");
+        if has_fills {
+            files.push("src/slots.rs");
+        }
     }
     for f in files {
         if !dir.join(f).is_file() {
@@ -930,13 +925,12 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
     if dsp_dir.is_dir() && !dsp_dir.join("mod.rs").is_file() {
         problem("src/dsp/ has no mod.rs".into());
     }
-    let records = get("src/records.rs").unwrap_or("");
-    if records.contains("fn dsp_") && !dsp_dir.is_dir() {
-        problem("records.rs has dsp_* handlers but the crate has no src/dsp/ folder".into());
-    }
     if let Some(lib) = get("src/lib.rs") {
-        let mut mods = vec!["records"];
-        if has_fills || dir.join("src/slots.rs").is_file() {
+        let mut mods = vec![];
+        if !kindless {
+            mods.push("records");
+        }
+        if (has_fills && !kindless) || dir.join("src/slots.rs").is_file() {
             mods.push("slots");
         }
         if dsp_dir.is_dir() {
@@ -968,7 +962,7 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
     for (p, n) in &names {
         if n != ENTRY && !state(n) {
             problem(format!(
-                "{p} exports `{n}`: the only exported entry of a service is `{ENTRY}`, which carries its ServiceRow (no second row symbol)"
+                "{p} exports `{n}`: the only exported entry of a service is `{ENTRY}`, which carries its ProviderRow (no second row symbol)"
             ));
         }
     }
@@ -979,13 +973,7 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
     // declarations equal the manifest
     let (kinds, row) = manifest(sdk, &name)?;
     let provided = provided_imports(sdk, &name)?;
-    for p in check_dks(
-        dir,
-        matches!(row, Some(None)),
-        &provided,
-        row.is_none(),
-        &srcs,
-    ) {
+    for p in check_dks(dir, row, &provided, !row, &srcs) {
         problem(p);
     }
     for p in fill_problems(dir, adapters) {
@@ -994,34 +982,29 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
     for p in row_anchor_problems(&name, &adapters.join("../ports/fw")) {
         problem(p);
     }
-    match row {
-        None if !dir.join("dks/module.toml").is_file() => problem(format!(
+    if !row && !dir.join("dks/module.toml").is_file() {
+        problem(format!(
             "{} has no [[service]] row named `{name}`",
             sdk.display()
-        )),
-        Some(Some(r)) if !r.starts_with(&format!("{}::", want_pkg.replace('-', "_"))) => {
-            problem(format!(
-                "the [[service]] row `{name}` has rust = \"{r}\": the type is not in the crate `{}`",
-                want_pkg.replace('-', "_")
-            ))
+        ));
+    }
+    // the service takes its kinds from the `service!` call (`Provider` has no `declare`)
+    let dks_lib = std::fs::read_to_string(dir.join("dks/src/lib.rs")).unwrap_or_default();
+    match provider_kinds(&dks_lib, &name, &kinds) {
+        Some((decl, bad)) => {
+            for b in bad {
+                problem(b);
+            }
+            for k in kinds.difference(&decl) {
+                problem(format!(
+                    "the manifest gives the record kind {k} to `{name}`, but the service! call does not declare it"
+                ));
+            }
         }
-        _ => {}
-    }
-    let (decl, other) = declared(records);
-    for o in other {
-        problem(format!(
-            "records.rs declares `{o}`: the manifest has no place for it"
-        ));
-    }
-    for k in decl.difference(&kinds) {
-        problem(format!(
-            "records.rs declares the record kind {k}, which the manifest does not give to `{name}` ([records.kinds] in sdk.toml)"
-        ));
-    }
-    for k in kinds.difference(&decl) {
-        problem(format!(
-            "the manifest gives the record kind {k} to `{name}`, but records.rs does not declare it"
-        ));
+        None if !dks_lib.is_empty() => problem(format!(
+            "dks/src/lib.rs has no `service!(Owner, \"{name}\", KINDS, parts = [...])` call"
+        )),
+        None => {}
     }
     Ok(out)
 }

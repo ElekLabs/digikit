@@ -1,15 +1,18 @@
 //! Host tests of the `lfo` service through the runtime (the crate `dkrt-svc-lfo` has its own over `FakeCore`): the proof that a kind the registry, the collector, the loader, dkneeds and patchkit do not name works end to end
 //! (R7): a fixture's record goes through `dk_record_add`'s collector, the `register` section, the registry walkers and the planner.
-use super::exports::{number_of, owner_of, shape, used, Lfo, MAX_SHAPES, SAMPLES};
+use super::exports::{owner_of, shape, used, MAX_SHAPES, SAMPLES};
 use crate::package::collect::Collect;
 use super::tests::LOCK;
 use crate::package::admission::Admission;
 use crate::package::registry;
 use dkneeds::keys::{write_table, KeyGroup, Keys, Table};
 use crate::package::core_api::RealCore;
-use crate::package::svc_rows;
+use crate::package::provider_rows::{self, RowSource};
 use dkrt_abi::plan::{Reason, Verdict};
-use dkrt_abi::service::{RecordSink, ServiceRow, SettleCtx};
+use dkrt_abi::provider::Provider;
+use dkrt_abi::service::{RecordSink, SettleCtx};
+use dkrt_svc_lfo::lfo::Lfo;
+use dkrt_svc_lfo_dks::{dk_svc_row, dk_svc_start, dk_svc_stop, DK_SVC_OWNER};
 use dkrt_sdk::proto::*;
 use dkrt_sdk::records::{KIND_LFO_SHAPE, KINDS_LFO, LEN_LFO_SHAPE};
 use dkrt_sdk::*;
@@ -46,8 +49,8 @@ fn section(shapes: &[(u32, i16)]) -> Vec<u8> {
     buf
 }
 
-/// The lfo service as the runtime has it: a service file (`lfo.dks`), not a row of the image. Its row joins the table as `Registry::add` does at the commit of the
-/// loaded file, and leaves it as `Registry::remove` does at the unload.
+/// The lfo service as the runtime has it: a service file (`lfo.dks`), not a row of the image. The file's `init` makes the owner object (`dk_svc_start`), its row joins the
+/// table as `Registry::add` does at the commit of the loaded file, and leaves it as `Registry::remove` does at the unload; `fini` stops the owner (`dk_svc_stop`).
 pub(crate) struct Loaded;
 
 /// The module record of the service file.
@@ -55,15 +58,17 @@ const FILE_REC: usize = 0;
 
 impl Loaded {
     pub(crate) fn new() -> Loaded {
-        static ROW: ServiceRow = ServiceRow::of::<Lfo, RealCore>("lfo", &KINDS_LFO);
-        assert_eq!(unsafe { svc_rows::add(FILE_REC, &ROW, None) }, OK);
+        let instance = dk_svc_start().expect("the owner starts");
+        let row = RowSource { row: dk_svc_row(), instance, extent: 0..usize::MAX };
+        assert_eq!(unsafe { provider_rows::add(FILE_REC, row, None) }, OK);
         Loaded
     }
 }
 
 impl Drop for Loaded {
     fn drop(&mut self) {
-        unsafe { svc_rows::remove(FILE_REC) };
+        unsafe { provider_rows::remove(FILE_REC) };
+        dk_svc_stop();
     }
 }
 
@@ -73,9 +78,14 @@ fn settle(keys: &[u32]) {
     let mut sel = SettleCtx::new();
     sel.count = 1;
     unsafe {
-        <Lfo as dkrt_abi::service::Service<RealCore>>::settle(&crate::package::core_api::REAL_CORE, &sel);
+        DK_SVC_OWNER.with(|l| Provider::<RealCore>::settle(l, &crate::package::core_api::REAL_CORE, &sel)).expect("the owner is started");
         crate::package::boot_idx::set(0);
     }
+}
+
+/// The wave number the owner gave the key `key` of the module at selection index `at`.
+fn number_of(at: u32, key: u32) -> u32 {
+    DK_SVC_OWNER.with(|l: &mut Lfo| l.number_of(at, key)).expect("the owner is started")
 }
 
 fn clear() {

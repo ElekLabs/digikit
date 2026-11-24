@@ -21,7 +21,7 @@ use dkrt_lifecycle::{LifecycleError, PackageId, Report, State};
 use dkneeds::keys::{name_hash, tag, Keys};
 use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::profiles;
-use dkrt_abi::service::{Declare, Service, ServiceRow};
+use dkrt_abi::service::Declare;
 use dkrt_sdk::proto::*;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -147,12 +147,12 @@ impl Registry for DeviceRegistry {
     fn abi_ok(&self, fingerprint: u32) -> bool {
         fingerprint == 0 || self.runtime.contains(&std::format!("0c80{fingerprint:08x}"))
     }
-    unsafe fn add(&mut self, rec: usize, row: Option<&ServiceRow>, order: Option<u32>) -> i32 {
+    unsafe fn add(&mut self, rec: usize, row: Option<crate::package::provider_rows::RowSource<'_>>, order: Option<u32>) -> i32 {
         RealRegistry.add(rec, row, order)
     }
     unsafe fn remove(&mut self, rec: usize) {
         // a module's registry rows are the scripted cleanup tests' (`registry_remove` asserts their event order); a provider's row is real
-        crate::package::svc_rows::remove(rec)
+        crate::package::provider_rows::remove(rec)
     }
     unsafe fn module_begin(&mut self, rec: usize) {
         RealRegistry.module_begin(rec)
@@ -310,10 +310,27 @@ pub(super) unsafe fn capacity(p: &FakePlatform) -> Vec<DkrtCap> {
 
 // ---- the loader over a card ---------------------------------------------------------------------------------------------------
 
-struct Nothing;
-impl<C: dkrt_abi::core_api::CoreApi> Service<C> for Nothing {
-    dkrt_abi::accepts_records!();
-    dkrt_abi::accepts_teardown!();
+/// The row of the provider fixture with a tick part one version newer than the core knows.
+fn newer_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
+    use dkrt_abi::provider::{LifecycleV1, PartRef, ProviderRow, TickV1, LIFECYCLE_NEWEST, PART_LIFECYCLE, PART_TICK, TICK_NEWEST};
+    use crate::package::core_api::RealCore;
+    static LIFE: LifecycleV1 = LifecycleV1::of::<dkrt_fixture_local_ping::LocalPing, RealCore>();
+    static TICK: TickV1 = TickV1::of::<dkrt_fixture_local_ping::LocalPing, RealCore>();
+    static PARTS: [PartRef; 2] = [
+        PartRef::new(PART_LIFECYCLE, LIFECYCLE_NEWEST, &LIFE as *const _ as *const ()),
+        PartRef::new(PART_TICK, TICK_NEWEST + 1, &TICK as *const _ as *const ()),
+    ];
+    static ROW: ProviderRow = ProviderRow::new(dkrt_abi::provider::name_hash("local-ping"), &PARTS);
+    &ROW
+}
+
+fn other_name_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
+    use dkrt_abi::provider::{LifecycleV1, PartRef, ProviderRow, LIFECYCLE_NEWEST, PART_LIFECYCLE};
+    use crate::package::core_api::RealCore;
+    static LIFE: LifecycleV1 = LifecycleV1::of::<dkrt_fixture_local_ping::LocalPing, RealCore>();
+    static PARTS: [PartRef; 1] = [PartRef::new(PART_LIFECYCLE, LIFECYCLE_NEWEST, &LIFE as *const _ as *const ())];
+    static ROW: ProviderRow = ProviderRow::new(dkrt_abi::provider::name_hash("local-pong"), &PARTS);
+    &ROW
 }
 
 /// The store and the arena of a card: every import resolves against the runtime's own tables (`RealImages`); `init` of a service file replays what its header
@@ -336,6 +353,13 @@ pub(super) struct Card {
     pub(super) skew_kind_handler: bool,
     /// The `init` and `fini` the loader entered, in order: `(is_fini, record)`.
     pub(super) hooks: Vec<(bool, usize)>,
+    /// The records whose service file provides a `ProviderRow` (the fixture `local-ping`, linked into the test binary): their `fini` stops the instance.
+    provider_recs: Vec<usize>,
+    /// The provider fixture declares a row whose tick part is a version newer than this core knows (a thin variant of the fixture: the host runs no file code, so the row is the
+    /// test's).
+    pub(super) newer_parts: bool,
+    /// The `local-ping` row declares another service name than the file PROVIDES.
+    pub(super) wrong_name: bool,
     /// The device addresses of the runtime's functions that the imports of a service file name (`svc_import_addr`).
     imports: crate::fake_platform::address_map::AddressMap,
 }
@@ -372,6 +396,9 @@ impl Card {
             real_rows: false,
             skew_kind_handler: false,
             hooks: Vec::new(),
+            provider_recs: Vec::new(),
+            newer_parts: false,
+            wrong_name: false,
             imports: crate::fake_platform::address_map::AddressMap::new(),
         }
     }
@@ -478,6 +505,9 @@ impl Images for Card {
         for i in 0..keys.decl.n {
             let mut d = keys.decl.items[i];
             if d.tag == Declare::HOOK {
+                if !dkneeds::keys::hook_for_device(d.b, self.device) {
+                    continue;
+                }
                 d.b &= dkneeds::keys::HOOK_ENTRY_MASK;
                 if port.as_ref().is_some_and(|p| p.find_site(d.a).is_some_and(|x| x.flags & dkneeds::keys::FLAG_ABSENT != 0)) {
                     continue;
@@ -507,26 +537,52 @@ impl Images for Card {
         // the row: the name of the file, the kinds of its table
         let stem = String::from_utf8(self.staged_path.clone()).unwrap();
         let stem = stem.trim_start_matches("services/").trim_end_matches(".dks").to_string();
+        if stem == "local-ping" {
+            // the file provides a `ProviderRow` over an owner object: the fixture's own row and instance (`dk_svc_start` is what its `init` does before the declarations)
+            // a card load is a fresh file: an instance that an earlier case left (a boot that ended without the unload) is not this file's
+            dkrt_fixture_local_ping::dk_svc_stop();
+            let instance = dkrt_fixture_local_ping::dk_svc_start().expect("the instance of local-ping starts");
+            self.provider_recs.push(rec);
+            let row = if self.wrong_name { other_name_ping_row() } else if self.newer_parts { newer_ping_row() } else { dkrt_fixture_local_ping::dk_svc_row() };
+            return crate::package::collect::dk_provider_declare_row(ctx, row, instance);
+        }
         let name: &'static str = Box::leak(stem.into_boxed_str());
         let kinds: &'static [(u32, u32)] = Box::leak(kinds.into_boxed_slice());
-        let row: &'static ServiceRow = if self.real_rows && name == "fx" {
-            crate::package::handlers::fx_fixture::row()
-        } else if self.real_rows && name == "machines" {
-            crate::package::handlers::exports::machines_row()
-        } else {
-            Box::leak(Box::new(ServiceRow::of::<Nothing, crate::package::core_api::RealCore>(name, kinds)))
-        };
-        crate::package::collect::dk_service_declare_row(ctx, row)
+        if self.real_rows && name == "fx" {
+            // the fx file provides a `ProviderRow` over its owner: the file's own row and an instance (what its `init` makes before the declarations)
+            crate::package::handlers::dks_decls::fx_stop();
+            let instance = crate::package::handlers::dks_decls::fx_start().expect("the owner of the fx file starts");
+            self.provider_recs.push(rec);
+            return crate::package::collect::dk_provider_declare_row(ctx, crate::package::handlers::dks_decls::fx_row(), instance);
+        }
+        if self.real_rows && name == "machines" {
+            // the machines file provides a `ProviderRow` over its owner, as the fx file does
+            let instance = crate::package::handlers::dks_decls::machines_start();
+            self.provider_recs.push(rec);
+            return crate::package::collect::dk_provider_declare_row(ctx, crate::package::handlers::dks_decls::machines_file_row(), instance);
+        }
+        // any other file: a provider that owns the kinds of its table and does nothing with them
+        crate::package::collect::dk_provider_declare_row(ctx, crate::package::fixture_provider::Nothing::owning(name, kinds).row(), crate::package::fixture_provider::instance())
+    }
+    fn image_extent(&mut self, _: u32, _: u32) -> core::ops::Range<usize> {
+        // the rows of a host test are statics of the test binary, in no package image
+        0..usize::MAX
     }
     unsafe fn enter_fini(&mut self, rec: usize, _: u32, _: *const Ctx) {
         self.hooks.push((true, rec));
+        if let Some(at) = self.provider_recs.iter().position(|r| *r == rec) {
+            self.provider_recs.remove(at);
+            dkrt_fixture_local_ping::dk_svc_stop();
+            crate::package::handlers::dks_decls::fx_stop();
+            crate::package::handlers::dks_decls::machines_stop();
+        }
     }
 }
 
 pub(super) type Boot = Loader<FakePlatform, Card, DeviceRegistry>;
 
 /// The runtime tables of the host tests as a device has them before the boot loads anything: no loaded service (the other tests of the runtime run with the
-/// machines row of `svc_rows::test_machines`; it is put back when the guard goes), no module, no DSP load.
+/// machines row of `provider_rows::test_machines`; it is put back when the guard goes), no module, no DSP load.
 pub(super) struct Clean(std::sync::MutexGuard<'static, ()>);
 
 pub(super) fn clean() -> Clean {
@@ -534,13 +590,17 @@ pub(super) fn clean() -> Clean {
     unsafe {
         let _ = crate::package::handlers::services(); // the first call adds the test row
         for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
-            crate::package::svc_rows::remove(rec);
+            crate::package::provider_rows::remove(rec);
         }
         *st() = core::mem::zeroed();
         records::reset();
         *dsp::ds() = core::mem::zeroed();
         dsp::init_once();
         CALLED_NEED = [0; NEEDS_LEN];
+        // a case that ended early left the instance of the provider fixture started
+        dkrt_fixture_local_ping::dk_svc_stop();
+        crate::package::handlers::dks_decls::fx_stop();
+        crate::package::handlers::dks_decls::machines_stop();
         // the link script is a static: a test with no DSP part never calls `script_link`, and would see the strict tick drop of the initial value or the state of
         // whichever test ran before it
         crate::package::cleanup_tests::lenient_tick_drop();
@@ -552,9 +612,9 @@ impl Drop for Clean {
     fn drop(&mut self) {
         unsafe {
             for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
-                crate::package::svc_rows::remove(rec);
+                crate::package::provider_rows::remove(rec);
             }
-            crate::package::svc_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), None);
+            crate::package::provider_rows::add(MAX_MODULES + PROVIDER_MAX - 1, crate::package::handlers::exports::machines_row(), Some(200));
         }
     }
 }
@@ -743,7 +803,11 @@ fn binds_of(dev: Dev, l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
         let t = table_of(file);
         let keys = Keys::parse(&t).unwrap();
         for i in 0..keys.count(tag::HOOKS) {
-            let hash = keys.words(tag::HOOKS, i).unwrap().0;
+            let (hash, entry, _) = keys.words(tag::HOOKS, i).unwrap();
+            // the entry of another device (one name may have an entry for each device)
+            if !dkneeds::keys::hook_for_device(entry, dev.profile.id) {
+                continue;
+            }
             let site = port.find_site(hash).expect("the port file lists the hook");
             if site.flags & dkneeds::keys::FLAG_ABSENT == 0 {
                 out.push((hash, site.addr));
@@ -862,9 +926,8 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
         );
     }
     // the rows the files declared are in the table of the services
-    let rows: Vec<&str> = crate::package::svc_rows::rows().iter().map(|r| unsafe { (**r).name() }).collect();
     for w in want {
-        assert!(rows.contains(w), "{what}: no row {w} in {rows:?}");
+        assert!(crate::package::provider_rows::has(w), "{what}: no row {w} in the table");
     }
     // the hook sites of the files: one `jmp` written for each hook of a service file that the port lists as present, at its address, under one mask
     let binds = binds_of(dev, &l, &plan);
@@ -920,13 +983,13 @@ fn a_selected_consumer_loads_a_service_declared_outside_the_sdk() {
             let different_major = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], false);
             assert_eq!(different_major.verdict(0), Verdict::Refused(Reason::NeedVersion));
             // a module the graph refuses brings up none of its services
-            assert!(!crate::package::svc_rows::rows().iter().any(|row| (**row).name() == "local-ping"));
+            assert!(!crate::package::provider_rows::has("local-ping"));
 
             l.capture(0, &packed(dev, LOCAL_PING_USER.leaf, "dkm", LOCAL_PING_USER.nx));
             let run = boot_run(&mut l, &plan, &[&LOCAL_PING_USER], false);
             assert_eq!(run.verdict(0), Verdict::Accepted);
             assert!(run.is_up(PackageId(MAX_MODULES as u8)));
-            assert!(crate::package::svc_rows::rows().iter().any(|row| (**row).name() == "local-ping"));
+            assert!(crate::package::provider_rows::has("local-ping"));
             assert!(run.is_up(PackageId(0)), "the consumer loads against the provider: {:?}", run.refusal(0));
         }
         clean_state();
@@ -1001,8 +1064,8 @@ fn an_lfo_loads_with_the_lfo_service_file() {
         let stock = stock_sites(*dev);
         let mut got = Vec::new();
         for i in 0..keys.count(tag::HOOKS) {
-            let hash = keys.words(tag::HOOKS, i).unwrap().0;
-            if port.find_site(hash).is_some_and(|s| s.flags & dkneeds::keys::FLAG_ABSENT == 0) {
+            let (hash, entry, _) = keys.words(tag::HOOKS, i).unwrap();
+            if dkneeds::keys::hook_for_device(entry, dev.profile.id) && port.find_site(hash).is_some_and(|s| s.flags & dkneeds::keys::FLAG_ABSENT == 0) {
                 got.push((hash, stock[&hash].1.clone()));
             }
         }
@@ -1010,7 +1073,7 @@ fn an_lfo_loads_with_the_lfo_service_file() {
         let mut want: Vec<(u32, Vec<u8>)> = LFO_TICK_SITES
             .iter()
             .filter(|s| s.0 == dev.name)
-            .map(|s| (name(std::format!("{}_{}", s.1, dev.name).as_str()), s.2.to_vec()))
+            .map(|s| (name(s.1), s.2.to_vec()))
             .collect();
         want.extend(std::vec![
             (name("wave_name"), std::vec![0x4e, 0x56, 0xff, 0xe4, 0x70, 0x06]),
@@ -1061,7 +1124,7 @@ fn the_lfo_tick_hooks_patch_their_stock_sites_and_the_unload_restores_them() {
             let sites: Vec<(u32, [u8; 6])> = LFO_TICK_SITES
                 .iter()
                 .filter(|s| s.0 == dev.name)
-                .map(|s| (stock[&name_hash(std::format!("cf.lfo.hook.{}_{}", s.1, dev.name).as_str())].0, s.2))
+                .map(|s| (stock[&name_hash(std::format!("cf.lfo.hook.{}", s.1).as_str())].0, s.2))
                 .collect();
             assert_eq!(sites.len(), 6, "{}", dev.name);
             let read = |l: &Boot, addr: u32| {
@@ -1093,7 +1156,7 @@ fn lfo_sites_are_stock(dev: Dev, l: &Boot) {
     let stock = stock_sites(dev);
     let mut n = 0;
     for s in LFO_TICK_SITES.iter().filter(|s| s.0 == dev.name) {
-        let (addr, _) = stock[&name_hash(std::format!("cf.lfo.hook.{}_{}", s.1, dev.name).as_str())];
+        let (addr, _) = stock[&name_hash(std::format!("cf.lfo.hook.{}", s.1).as_str())];
         let mut b = [0u8; 6];
         unsafe { l.p.read_code(addr, &mut b) };
         assert_eq!(b, s.2, "{}: {addr:#x} is not stock", dev.name);
@@ -1770,7 +1833,7 @@ fn the_fx_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher() {
         let query = name_hash(dkrt_sdk::RESIDENT_QUERY_ENTRY);
         let export = keys.exports().find(|e| e.a == query).expect("fx has a query entry");
         assert_eq!(export.b & dkneeds::keys::EXPORT_FLAGS, dkneeds::keys::EXPORT_FLAGS);
-        assert_eq!(be(&file, dkneeds::H_RUNTIME) & 0x00ff_ffff, 0x000b02);
+        assert_eq!(be(&file, dkneeds::H_RUNTIME) & 0x00ff_ffff, 0x000c02);
         let fx_version = keys.words(tag::PROVIDES, 0).unwrap().1;
         unsafe {
             let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
@@ -1791,8 +1854,12 @@ fn the_fx_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher() {
             let request = [0u32, 0];
             let mut reply = u32::MAX;
             let out = (&mut reply as *mut u32).cast();
+            // the entry answers from the owner in the file's cell: this case runs no `init`, so it starts the owner as `init` does, and ends it after
+            assert_eq!(ask(1, request.as_ptr().cast(), 8, out, 4), E_MISSING, "no owner, no provider");
+            crate::package::handlers::dks_decls::fx_start().expect("the owner starts");
             assert_eq!(ask(1, request.as_ptr().cast(), 4, out, 4), E_CONTRACT);
             assert_eq!(ask(1, request.as_ptr().cast(), 8, out, 4), E_NOT_FOUND);
+            crate::package::handlers::dks_decls::fx_stop();
             assert_eq!(reply, u32::MAX, "the service has no loaded FX page to report");
         }
         clean_state();
@@ -1995,6 +2062,7 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
                     let d = header.items[*i];
                     // a slot fill of another device's image is skipped by the loader
                     !(d.tag == Declare::HOOK && port.find_site(d.a).is_some_and(|x| x.flags & dkneeds::keys::FLAG_ABSENT != 0))
+                        && !(d.tag == Declare::HOOK && !dkneeds::keys::hook_for_device(d.b, dev.profile.id))
                         && !(d.tag == Declare::SLOT && !dkneeds::keys::slot_for_device(d.b, dev.profile.id))
                 })
                 .map(|i| plain(header.items[i].tag, header.items[i].a, header.items[i].b & !dkneeds::keys::SLOT_DEVICES_MASK))
@@ -2010,7 +2078,8 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
                 assert_eq!(r, OK, "{} {}: init refused its own declarations", dev.name, s.leaf);
                 for i in 0..col.decl.n {
                     let d = col.decl.items[i];
-                    if d.tag != Declare::ROW {
+                    // the row and the provider's instance are the core's own, not entries of the header table
+                    if d.tag != Declare::PROVIDER_ROW && d.tag != Declare::PROVIDER_INSTANCE {
                         got.push(plain(d.tag, d.a, d.b));
                     }
                 }
@@ -2036,7 +2105,7 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
 pub(super) fn clean_state() {
     unsafe {
         for rec in MAX_MODULES..MAX_MODULES + PROVIDER_MAX {
-            crate::package::svc_rows::remove(rec);
+            crate::package::provider_rows::remove(rec);
         }
         *st() = core::mem::zeroed();
         records::reset();
@@ -2227,8 +2296,7 @@ pub(super) fn without_dsp(dev: Dev, m: &Fixture) -> Vec<u8> {
 unsafe fn nothing_left(l: &Boot, what: &str) {
     assert!(l.m.live.is_empty(), "{what}: arena blocks are live");
     assert_eq!((st().modules[0].used, st().loads), (0, 0), "{what}: a module record is used");
-    let rows: Vec<&str> = crate::package::svc_rows::rows().iter().map(|r| (**r).name()).collect();
-    assert!(!rows.iter().any(|n| ["fx", "machines", "lfo"].contains(n)), "{what}: service rows are left: {rows:?}");
+    assert!(!["fx", "machines", "lfo"].iter().any(|n| crate::package::provider_rows::has(n)), "{what}: service rows are left");
 }
 
 /// E_DECL_ID through the real path: the packed module goes through the loader and the real effects service (its builder and its commit check); `init` declares the effect
@@ -2242,13 +2310,19 @@ fn an_effect_index_that_the_keys_table_lacks_is_refused_with_e_decl_id_and_leave
         unsafe {
             let (mut l, plan) = planned(*dev, &image, &[], &[&FX_GAIN], &SERVICES);
             assert_eq!(dkneeds::keys::Keys::parse(&table_of(&packed(*dev, FX_GAIN.leaf, "dkm", FX_GAIN.nx))).unwrap().keys_of(dkneeds::KIND_EFFECT).count(), 1, "the fixture has one effect id");
-            swap_module(&mut l, 0, FX_GAIN.leaf, without_dsp(*dev, &FX_GAIN));
+            let mut f = without_dsp(*dev, &FX_GAIN);
+            // the module has a `fini` (the host runs no code: the entry is the `init` offset)
+            let init = be(&f, dkneeds::H_INIT);
+            put(&mut f, dkneeds::H_FINI, init);
+            swap_module(&mut l, 0, FX_GAIN.leaf, f);
             l.m.init_calls = std::vec![Builder::Fx(1)];
             l.m.real_rows = true;
             let _dsp = dsp_env(*dev, &l, &plan);
             let run = boot_run(&mut l, &plan, &[&FX_GAIN], false);
             assert_eq!(run.code(0), E_DECL_ID, "{}: {:?}", dev.name, run.refusal(0));
             nothing_left(&l, dev.name);
+            // `init` returned OK and the commit refused: a content module's `fini` does not run (only a provider file's does)
+            assert!(!l.m.hooks.iter().any(|(fini, rec)| *fini && *rec < MAX_MODULES), "{}: no fini of a content module", dev.name);
         }
         let _ = clean_state();
     }

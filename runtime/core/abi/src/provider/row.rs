@@ -6,6 +6,19 @@ use dkrt_sdk::E_FORMAT;
 /// Changes only when [`ProviderRow`] or [`PartRef`] changes.
 pub const PROVIDER_ABI: u32 = 1;
 
+/// The 32-bit hash of a service name (FNV-1a, the one of `dkneeds::keys::name_hash`): the `name` of a [`ProviderRow`] and the identity of a hook site or export.
+pub const fn name_hash(s: &str) -> u32 {
+    let b = s.as_bytes();
+    let mut h: u32 = 0x811c_9dc5;
+    let mut i = 0;
+    while i < b.len() {
+        h ^= b[i] as u32;
+        h = h.wrapping_mul(0x0100_0193);
+        i += 1;
+    }
+    h
+}
+
 /// The lifecycle part (required): the function table of `Provider`.
 pub const PART_LIFECYCLE: u32 = 1;
 pub const PART_RECORDS: u32 = 2;
@@ -122,11 +135,13 @@ impl CheckedRow<'_> {
         self.name
     }
 
-    /// Find the part with `tag`. `newest` is the newest version of that part the core knows.
+    /// Find the part with `tag`. `newest` is the newest version of that part the core knows; version 0 does not exist and is refused like a newer one.
     pub fn part(&self, tag: u32, newest: u16) -> PartLookup {
         match self.parts.iter().find(|p| p.tag == tag) {
             None => PartLookup::Missing,
-            Some(p) if p.version > newest => PartLookup::TooNew { version: p.version },
+            Some(p) if p.version == 0 || p.version > newest => {
+                PartLookup::TooNew { version: p.version }
+            }
             Some(p) => PartLookup::Found {
                 table: p.table,
                 version: p.version,

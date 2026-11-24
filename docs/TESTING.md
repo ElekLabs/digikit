@@ -155,7 +155,7 @@ outcomes and skip reasons test by test after moving tests.
 
 ### Service contract suite
 
-`dkrt_test_support::contract::contract::<S>(&Fixture)` (`runtime/core/test-support/src/contract.rs`) proves for a `Service` that a module can be loaded, unloaded and loaded again (docs/plans/extension-model.md 3.5). Each service crate runs it in `tests/contract.rs` for the DT2 and the DN2 profile; it is part of the crate's `rust-tests` (about a second): `pnpm nx:pilot run dkrt-svc-lfo:rust-tests` (and `-fx`, `-machines`, `-samples`).
+`dkrt_test_support::provider_contract::<Recipe>(&Fixture)` (`runtime/core/test-support/src/contract.rs`) proves for a service (an owner object behind the part tables of its row) that a module can be loaded, unloaded and loaded again (docs/plans/extension-model.md 3.5). Each service crate runs it in `tests/contract.rs` for the DT2 and the DN2 profile; it is part of the crate's `rust-tests` (about a second): `pnpm nx:pilot run dkrt-svc-lfo:rust-tests` (and `-fx`, `-machines`, `-samples`).
 
 After editing the shared contract suite or rebasing such an edit, run the affected Rust targets against the gate base. `mise run test:changed` omits `rust-tests`. The merge gate includes them.
 
@@ -501,6 +501,8 @@ reuses a fixture before it adds one. Layers: **host** (Vitest or pytest, no devi
 | `dyn-fx-gain-send` | Routes: master and send allowed, default send; the FX ROUTES panel; wrapper of the DSP of `dyn-fx-gain` | assembly, device |
 | `dyn-fx-gain-sendonly` | Routes: send only; wrapper of the DSP of `dyn-fx-gain` | assembly, device |
 | `commit-demo` | A multi-feature commit: a machine with three parameters (latched, click action) and an effect with routes; the golden lowered records; refusals | device, rig |
+| `local-ping` | The provider fixture: a `.dks` of the service `local-ping` (export `local_ping_value`, resident query `dk_service_query_v1`) over an owner object with the lifecycle, tick and query parts; it counts the consumers that attach and detach, the ticks, and answers the counters | host (`provider_contract`), assembly, device |
+| `local-ping-user`, `local-ping-user-b`, `local-ping-old-user` | Consumers of `local-ping` (the NEED path; the old user has a minimum version the service does not meet) | assembly, device |
 | `svc-test` | The service fixture: a `.dks` of the test-only service `svc-test` with exports `dk_svctest_ping` and `dk_svctest_hits` and one hook | host, assembly, device |
 | `svc-test-user` | A module with a hard NEED on `svc-test` (the provider and NEED path of the loader) | host, assembly, device |
 | `lfo-shape` | A service-type module that emits one `lfo_shape` record (key from `DK_KEY_SHAPE`); a test makes a second file with the same key by renaming a copy | assembly, device |
@@ -1068,7 +1070,7 @@ test: `tests/patchkit/test_pk_dsp_budget.py`.
 
 ### SDK-surface coverage
 
-`patchkit imports` lists the SDK imports each `.dkm` links (its import table; the builder calls of `init`, such as `dk_machine_add_page`, `dk_page_add_param` and `dk_fx_routes`, are imports too, so one table covers them). `patchkit coverage` compares the union over the packed modules with the `[[import]]` list of `sdk/sdk.toml`, by service. An import that no packed module links fails the run, unless `sdk/coverage-allow.toml` lists it with a reason; an allow-list entry that a module links, or that is not in `sdk.toml`, fails too. A linked name that sdk.toml does not list is an error, except in a service file (`.dks`) for its own link names (`dkc_*`, `dk_fw_*`, `dk_exit_*`, `dk_tail_*`, `dk_ret_*`, `dk_stock_*`, `dk_service_declare_row`; `SERVICE_LINK_PREFIXES` in `coverage_cli.rs`). An `[[import]]` marked `internal = true` is called by the runtime, so it needs an allow-list entry. Not observable from a pack: the values a call passes (glyphs, routes, parameter kinds, the constants of `[machine]`, `[fx]` and `[page]`) and whether a linked call runs. The fixture calls that close a gap are compiled and linked, and some never run (the `probe` flag of `test/entry-demo`).
+`patchkit imports` lists the SDK imports each `.dkm` links (its import table; the builder calls of `init`, such as `dk_machine_add_page`, `dk_page_add_param` and `dk_fx_routes`, are imports too, so one table covers them). `patchkit coverage` compares the union over the packed modules with the `[[import]]` list of `sdk/sdk.toml`, by service. An import that no packed module links fails the run, unless `sdk/coverage-allow.toml` lists it with a reason; an allow-list entry that a module links, or that is not in `sdk.toml`, fails too. A linked name that sdk.toml does not list is an error, except in a service file (`.dks`) for its own link names (`dkc_*`, `dk_fw_*`, `dk_exit_*`, `dk_tail_*`, `dk_ret_*`, `dk_stock_*`, `dk_provider_declare_row`; `SERVICE_LINK_PREFIXES` in `coverage_cli.rs`). An `[[import]]` marked `internal = true` is called by the runtime, so it needs an allow-list entry. Not observable from a pack: the values a call passes (glyphs, routes, parameter kinds, the constants of `[machine]`, `[fx]` and `[page]`) and whether a linked call runs. The fixture calls that close a gap are compiled and linked, and some never run (the `probe` flag of `test/entry-demo`).
 
 ```sh
 pnpm nx:pilot run patchkit:sdk-coverage     # packs every module (cached), then the report; not cached itself

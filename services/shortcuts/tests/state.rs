@@ -1,10 +1,14 @@
-//! Host tests of the owner objects: `KeyState`, `BindingTable` and `Shortcuts` (no core, no module). The callbacks append to a log that the binding's `arg` points to.
+//! Host tests of the owner objects: `KeyState`, `BindingTable` and `Shortcuts` (no module; the owner's `Provider` and `Ticker` parts over a `FakeCore`). The callbacks append to a
+//! log that the binding's `arg` points to.
 use core::ffi::c_void;
 use dkrt_abi::platform::{DeviceProfile, KEY_SLOTS};
 use dkrt_abi::profiles::ALL;
+use dkrt_abi::provider::{ConsumerId, Provider, Ticker};
+use dkrt_abi::service::tick_phase;
 use dkrt_svc_shortcuts::bindings::{Added, Binding, BindingTable, MAX_BINDINGS};
 use dkrt_svc_shortcuts::keys::KeyState;
 use dkrt_svc_shortcuts::shortcuts::{key_flags, Shortcuts, Verdict};
+use dkrt_test_support::FakeCore;
 
 // logical key numbers of these tests, and the panel codes they have on the test device
 const TRK: u8 = 1;
@@ -50,10 +54,20 @@ fn binding(owner: u8, keys: [u8; 2], log: &mut Log) -> Binding {
     b
 }
 
+/// The UI pass of a phase: `Ticker::tick`.
+fn pass(s: &mut Shortcuts, phase: u32) {
+    Ticker::tick(s, &FakeCore::new(), phase);
+}
+
+/// The module of `owner` unloads: `Provider::detach`.
+fn detach(s: &mut Shortcuts, owner: u8) {
+    Provider::detach(s, &FakeCore::new(), ConsumerId::new(owner));
+}
+
 /// One key event and the UI pass after it; the verdict. (`event` below does not run the pass.)
 fn key(s: &mut Shortcuts, p: &DeviceProfile, code: u32, flags: u32) -> Verdict {
     let v = s.on_key(p, code, flags);
-    unsafe { s.run_pending() };
+    pass(s, tick_phase::EARLY);
     v
 }
 
@@ -218,12 +232,12 @@ fn a_key_the_device_lacks_leaves_the_shortcut_inactive() {
 }
 
 #[test]
-fn removing_the_owner_of_the_active_binding_ends_it_without_calling_its_code() {
+fn detaching_the_owner_of_the_active_binding_ends_it_without_calling_its_code() {
     let p = device();
     let (mut s, log) = with_shortcut(&p);
     key(&mut s, &p, C_TRK, 0);
     key(&mut s, &p, C_YES, 0);
-    s.remove(1);
+    detach(&mut s, 1);
     assert!(s.active().is_none() && s.table().len() == 0);
     assert_eq!(*log, ["on"], "the module's code is gone: no `off`");
     // the key state stays (the keys are still down): the second key's release is swallowed once, as the stock firmware never saw the press
@@ -239,7 +253,7 @@ fn removing_the_owner_of_the_active_binding_ends_it_without_calling_its_code() {
     assert_eq!(key(&mut s, &p, C_YES, 0), Verdict::Swallow);
     assert_eq!(*log2, ["on"]);
     // nothing is bound once that module is gone too
-    s.remove(2);
+    detach(&mut s, 2);
     assert_eq!(key(&mut s, &p, C_YES, RELEASE), Verdict::Swallow);
     assert_eq!(key(&mut s, &p, C_YES, 0), Verdict::Pass);
 }
@@ -253,7 +267,7 @@ fn a_binding_that_is_not_active_is_not_ended_by_another_owner_leaving() {
     s.table_mut().add(binding(2, [TRK, OTHER], &mut log));
     key(&mut s, &p, C_TRK, 0);
     key(&mut s, &p, C_YES, 0);
-    s.remove(2);
+    detach(&mut s, 2);
     assert!(s.active().is_some_and(|b| b.owner == 1));
     key(&mut s, &p, C_YES, RELEASE);
     assert_eq!(*log, ["on", "off"]);
@@ -280,17 +294,17 @@ fn only_one_binding_is_active_and_the_first_owner_of_a_pair_is_the_one_called() 
 }
 
 #[test]
-fn all_zero_bytes_are_the_initial_state_of_the_service_static() {
-    // the service keeps `Shortcuts` in a zeroed static (`.bss`): nothing may be active in it
+fn start_makes_an_owner_with_nothing_bound_held_or_queued_and_a_closed_builder() {
+    let core = FakeCore::new();
+    let mut s = <Shortcuts as Provider<FakeCore>>::start(&core).unwrap();
+    assert!(s.active().is_none() && s.table().len() == 0 && s.pending() == 0);
     let p = device();
     let mut log = Box::new(Log::new());
-    let mut s: Shortcuts = unsafe { core::mem::zeroed() };
-    assert!(s.active().is_none() && s.table().len() == 0);
     s.table_mut().add(binding(1, [TRK, YES], &mut log));
     assert_eq!(
         key(&mut s, &p, C_YES, 0),
         Verdict::Pass,
-        "the second key alone passes"
+        "the second key alone passes: no key is held"
     );
     assert!(s.active().is_none());
     key(&mut s, &p, C_YES, RELEASE);
@@ -311,15 +325,15 @@ fn the_hook_runs_no_module_code_the_ui_pass_makes_the_calls_in_order() {
     assert_eq!(event(&mut s, &p, C_YES, RELEASE), Verdict::Swallow);
     assert!(log.is_empty());
     assert_eq!(s.pending(), 2);
-    unsafe { s.run_pending() };
+    pass(&mut s, tick_phase::EARLY);
     assert_eq!(*log, ["on", "off"]);
     assert_eq!(s.pending(), 0);
-    unsafe { s.run_pending() };
+    pass(&mut s, tick_phase::EARLY);
     assert_eq!(*log, ["on", "off"], "each call is made once");
 }
 
 #[test]
-fn an_unload_drops_the_calls_of_that_owner_that_wait() {
+fn a_detach_drops_the_calls_of_that_owner_that_wait() {
     let p = device();
     let mut log = Box::new(Log::new());
     let mut log2 = Box::new(Log::new());
@@ -331,9 +345,9 @@ fn an_unload_drops_the_calls_of_that_owner_that_wait() {
     event(&mut s, &p, C_YES, RELEASE);
     event(&mut s, &p, C_OTHER, 0);
     assert_eq!(s.pending(), 3);
-    s.remove(1);
+    detach(&mut s, 1);
     assert_eq!(s.pending(), 1, "only the calls of owner 2 are left");
-    unsafe { s.run_pending() };
+    pass(&mut s, tick_phase::EARLY);
     assert!(log.is_empty(), "owner 1's code is gone: nothing of it runs");
     assert_eq!(*log2, ["on"]);
 }
@@ -385,4 +399,61 @@ fn the_firmware_flags_become_release_repeat_or_press() {
             p.name
         );
     }
+}
+
+#[test]
+fn the_tick_makes_the_queued_calls_in_order_in_the_early_phase_only() {
+    let p = device();
+    let (mut s, log) = with_shortcut(&p);
+    event(&mut s, &p, C_TRK, 0);
+    event(&mut s, &p, C_YES, 0);
+    event(&mut s, &p, C_YES, RELEASE);
+    assert_eq!(s.pending(), 2);
+    for phase in [tick_phase::LATE, tick_phase::LAST] {
+        pass(&mut s, phase);
+        assert!(log.is_empty(), "phase {phase}: no call is made");
+        assert_eq!(s.pending(), 2);
+    }
+    pass(&mut s, tick_phase::EARLY);
+    assert_eq!(*log, ["on", "off"], "on before off, as the events came");
+    assert_eq!(s.pending(), 0);
+}
+
+#[test]
+fn a_detach_of_an_owner_that_never_attached_changes_nothing() {
+    let p = device();
+    let (mut s, log) = with_shortcut(&p);
+    event(&mut s, &p, C_TRK, 0);
+    event(&mut s, &p, C_YES, 0);
+    detach(&mut s, 7);
+    assert_eq!((s.table().len(), s.pending()), (1, 1));
+    assert!(s.active().is_some());
+    pass(&mut s, tick_phase::EARLY);
+    assert_eq!(*log, ["on"]);
+}
+
+#[test]
+fn start_in_gives_the_initial_state_over_whatever_the_slot_held() {
+    use core::mem::MaybeUninit;
+    let core = FakeCore::new();
+    let mut slot = MaybeUninit::<Shortcuts>::uninit();
+    // a slot that holds the bytes of an earlier life
+    unsafe { slot.as_mut_ptr().write_bytes(0xA5, 1) };
+    <Shortcuts as Provider<FakeCore>>::start_in(&core, &mut slot).unwrap();
+    // SAFETY: `start_in` initialised the slot.
+    let s = unsafe { slot.assume_init_mut() };
+    assert_eq!((s.pending(), s.table().len()), (0, 0));
+    assert!(s.active().is_none());
+    // the builder gate is closed: a call outside `init` is refused
+    assert_eq!(
+        unsafe {
+            s.builder()
+                .add(&core, core::ptr::null_mut(), core::ptr::null())
+        },
+        dkrt_sdk::E_CONTEXT
+    );
+    // and it works like a state made by `start`
+    let mut log = Log::new();
+    s.table_mut().add(binding(1, [TRK, YES], &mut log));
+    assert_eq!(s.table().len(), 1);
 }

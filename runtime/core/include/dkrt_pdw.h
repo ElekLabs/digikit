@@ -1,5 +1,5 @@
 /* The +Drive write plug-in point, version 1 (DT2). NOT an SDK contract: content modules never see it. The runtime (store_writer.rs) calls the
-   optional symbols dkpw_* that image-modules/adapters/plusdrive-write exports, behind the SDK's file_* calls on DK_FILES_SAMPLES. Without the
+   optional symbols dkpw_* that runtime/platform/plusdrive-write exports, behind the SDK's file_* calls on DK_FILES_SAMPLES. Without the
    adapter the symbols resolve to 0 and those calls return E_CONTRACT. docs/plans/usb-fast.md 3.1, docs/findings/120-dt2-plusdrive-c-file-api.md.
 
    All calls run in a task (the I/O task, or the UI task for dkpw_abort and dkpw_recover) and may block on the firmware's filesystem mutex: never in an

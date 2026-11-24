@@ -89,6 +89,7 @@ pub(crate) use plan::{boot_caps, live_settle_ctx};
 #[cfg(test)]
 pub(crate) use plan::test_accept;
 pub(crate) use unload::retire_sdk;
+use unload::{drop_registrations, retire_jobs};
 pub use seams::{Block, Images, RealImages, RealRegistry, Registry, Staged};
 pub(crate) use seams::{DeviceImages, DEVICE_IMAGES};
 

@@ -76,7 +76,7 @@ where
     }
 
     /// Asks every package of `order` whether it may stop; the first refusal is the answer. A service answers for itself; a module answers for what its services hold
-    /// for it (the host asks each service's `teardown_refusal` for the module).
+    /// for it (the host asks every service's `can_stop`).
     pub(super) fn ask_can_stop(&mut self, order: &Steps) -> Result<(), LifecycleError> {
         for &p in order.as_slice() {
             self.host

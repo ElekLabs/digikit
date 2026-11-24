@@ -182,7 +182,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
         let r = (steps.activate)(self, rec);
         if r != OK {
-            return self.fail(rec, r);
+            // `init` ran and its commit passed: a provider file's `fini` gives the owner back, as for a refused commit
+            return self.fail_started(rec, r);
         }
         self.go_live(rec, tick);
         OK
@@ -224,7 +225,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         let r = self.commit(rec, &*(block as *const crate::package::collect::Collect), keys, image_size);
         self.m.free(blk.addr);
         if r != OK {
-            return self.fail(rec, r);
+            return self.fail_started(rec, r);
         }
         OK
     }
@@ -246,6 +247,21 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
     }
 
+    /// `fail` for a record whose `init` returned `OK` and whose commit or entry derivation then refused: a provider file's `fini` runs first, so what `init` made (its owner
+    /// object, `Owner::stop`) is given back, as the unload does. A content module's `fini` does not run (it never did on this path).
+    ///
+    /// The other steps of `unload_body` are not needed here: the record never ticked (`go_live` publishes the tick), has no DSP part claimed (`dsp::quiesce` is for a module's
+    /// rows) and is not attached, so no tick, no intro, no unload observer and no resident entry point at it. The listing client, the SDK jobs, the commands and sinks, and the
+    /// role's undo are `fail`'s own, the same ones `unload_body` runs.
+    pub(super) unsafe fn fail_started(&mut self, rec: usize, r: i32) -> i32 {
+        let fini = records::module(rec).fini;
+        if self.roles[rec] == 1 && fini != 0 {
+            let ctx = crate::package::entry::ctx_ptr(rec);
+            self.m.enter_fini(rec, fini, ctx);
+        }
+        self.fail(rec, r)
+    }
+
     /// Undo what `init` and the checks before the commit did for record `rec`; `r` is the result to return (`E_BUSY` when a step of the module is still running).
     pub(super) unsafe fn fail(&mut self, rec: usize, r: i32) -> i32 {
         let module = rec < MAX_MODULES;
@@ -253,9 +269,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             crate::package::resident::intro::discard(rec);
             crate::package::module_ui::withdraw(rec);
         }
-        let held = !crate::package::files::retire(rec) | !retire_sdk(rec);
-        crate::package::module_cmds::release_cmds(rec as u8 + 1);
-        crate::package::resident::dlog::release_sinks(rec);
+        let held = !retire_jobs(rec);
+        let m: &Module = records::module(rec);
+        drop_registrations(rec, m.base, m.size);
         (RoleSteps::<P, M, R>::of(self.roles[rec] as u32).undo)(self, rec);
         self.r.remove(rec);
         if module && !dsp::release(rec) || held {
@@ -266,6 +282,6 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
 
     /// A file or I/O step of the record still runs, or the DSP loader keeps a module's rows: the record must not be freed yet.
     pub(super) unsafe fn cannot_retire(&mut self, rec: usize) -> bool {
-        (rec < MAX_MODULES && dsp::retained()) || !crate::package::files::retire(rec) || !retire_sdk(rec)
+        (rec < MAX_MODULES && dsp::retained()) || !retire_jobs(rec)
     }
 }
