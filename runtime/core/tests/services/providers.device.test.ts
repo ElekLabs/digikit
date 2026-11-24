@@ -253,7 +253,7 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
     ]);
     expect(logged(log, 'svctest-ping'), 'dk_svctest_ping() ran once, for the first user').toEqual([42]);
   });
-  test('a service with a patch writes its bytes at the site when it loads and the site is stock after the unload', async () => {
+  test('a service with a patch writes its bytes at the site when it loads; the live unload of its user keeps them and a safe boot leaves the site stock', async () => {
     const { debug } = modules();
     const client = h.mod('test/local-patch-user', 'local-patch-user');
     const file = moduleArtifact(h.device, 'test/local-patch');
@@ -278,10 +278,15 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
     expect(await halfwordAt(rt, site), 'the bytes the service computed are at the site').toBe(PATCHED_ALLOCATION);
     await rt.session.expectNoFault('patched site');
 
-    // the last user goes, the orphaned service goes with it: the installer writes the stock bytes back before the service stops
+    // the live job takes a module down and leaves the services up (a service is taken down by the package manager's unload, which the host assembly test runs: the site is stock after
+    // `pm.unload`): so the patch stays after the user unloads, and a safe boot (no provider loads, the installers stay disarmed) leaves the site stock
     const end = await h.usb(rt, (dk) => dk.unloadAndWait(client.name));
     expect(end, 'the unload of the user').toEqual({ result: 0, unloaded: true });
-    expect(await halfwordAt(rt, site), 'the site is stock after the unload').toBe(STOCK_ALLOCATION);
-    await rt.session.expectNoFault('patch restored');
+    expect(await halfwordAt(rt, site), 'the service stays up for the next user, so its patch stays').toBe(PATCHED_ALLOCATION);
+    const selection = [debug.name, client.name];
+    const safe = await h.boot(await h.card({ modules: [debug, client, provider, port], selection, flags: 1 }));
+    expect(await h.ready(true), 'safe mode by the flag').toMatchObject({ safe: 1, loaded: 0 });
+    await safe.session.client.call('run.mode', { mode: 'paused' });
+    expect(await halfwordAt(safe, site), 'safe mode leaves the patch site stock').toBe(STOCK_ALLOCATION);
   });
 });
