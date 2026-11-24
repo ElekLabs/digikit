@@ -18,12 +18,12 @@ pub const KIND_PANIC: u32 = 3;
 /// Words asked of `dl_diag`, and the word of its output that the DSP counts up while it runs (the heartbeat). The layout is `core/dsp-link`'s
 /// (its README): word 0 is `0xD1A6` with the count in the high half, word 1 the link hook's block beat, word 2 the voice hook's, words 3 to 13 the
 /// context registers, word 14 the last breadcrumb (stage | voice << 8 | machine type << 16), word 15 the dispatches to registered machine types, word 16 the routines that returned,
-/// words 17 to 23 the guard of `core/dsp-voice` (finding 51; the machines service logs them, `Service::diag`): 17 faults (16 bits) | kind << 16 | machine types disabled << 24, 18 type | voice << 16 of the last fault, 19 to 22 the
+/// words 17 to 23 the guard of `core/dsp-voice` (finding 51; the machines service logs them, `DspPart::diag`): 17 faults (16 bits) | kind << 16 | machine types disabled << 24, 18 type | voice << 16 of the last fault, 19 to 22 the
 /// eight parameter words of that call in pairs, 23 the type disabled last. The fault table (always, even without `core/dsp-voice`): 24 `last` of `core/fx`
 /// (stage | site << 8 | row byte offset << 16: stage 4 the core is about to call the module, 5 it returned; site 2 master, 3 send), 25 the module step (`DK_STEP`: the block tail copies the module's static word `_dk_step` into every record),
 /// 26 and 27 the module calls of the master and the send route, 28 effect faults (16 bits) | row of the last fault (byte offset + 1) << 16, 29 and 30 the
 /// addresses of this and of the previous reply record, 31 the effect row switched off last (byte offset + 1; words 28 and 31 are the fx service's). The core keeps the heartbeat,
-/// the breadcrumb words 14, 24 and 25 and the raw log of the block; each service reads the words it owns in `Service::diag`.
+/// the breadcrumb words 14, 24 and 25 and the raw log of the block; each service reads the words it owns in `DspPart::diag`.
 /// If it moves the heartbeat, change `DIAG_HEARTBEAT` here and nothing else.
 pub const DIAG_WORDS: usize = 32;
 

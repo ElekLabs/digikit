@@ -57,9 +57,9 @@ pub trait Registry {
     unsafe fn add(&mut self, rec: usize, row: Option<RowSource<'_>>, order: Option<u32>) -> i32;
     /// Take everything record `rec` published down (idempotent).
     unsafe fn remove(&mut self, rec: usize);
-    /// The `init` of record `rec` is about to run: every service forgets what an earlier module collected (`Service::module_begin`).
+    /// The `init` of record `rec` is about to run: every service forgets what an earlier module collected (`Records::begin`).
     unsafe fn module_begin(&mut self, rec: usize);
-    /// The services' commit of record `rec` (`Service::module_commit`): the first refusal is the result.
+    /// The services' commit of record `rec` (`Records::commit`): the first refusal is the result.
     unsafe fn module_commit(&mut self, rec: usize, c: &ModuleCommitCtx) -> i32;
 }
 

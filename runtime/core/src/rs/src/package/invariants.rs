@@ -7,7 +7,7 @@
 //! The invariants (the number is what `check` returns and the `TABLE_BAD` event carries):
 //! 1. a used record's ColdFire range lies inside the arena, and its DSP range (when it has one) inside the DSP area;
 //! 2. the ColdFire ranges of used records are pairwise disjoint, and so are their DSP ranges;
-//! 3. an unused record has no DSP range; the tables of every service agree with the record table (`Service::table_check`: the voice rows and the effect rows each
+//! 3. an unused record has no DSP range; the tables of every service agree with the record table (`Describe::table_check`: the voice rows and the effect rows each
 //!    follow one rule: every owned row belongs to a used record whose row mask has the row's bit, and every bit of a used record's mask is a row it owns; an unused
 //!    record has no rows).
 //! 4. no two used records have the same name.
@@ -161,7 +161,7 @@ mod tests {
         }
     }
 
-    /// The core runs the table checks of the loaded services with the mask of the used records (`Service::table_check`): an effect row of a record that is not used, and a
+    /// The core runs the table checks of the loaded services with the mask of the used records (`Describe::table_check`): an effect row of a record that is not used, and a
     /// `mod_fx` bit of such a record, are invariant 3 with the numbers the fx service reports; with no service file loaded the effect rows are not the core's to check.
     #[test]
     fn the_core_runs_the_table_checks_of_the_services_and_logs_what_they_report() {

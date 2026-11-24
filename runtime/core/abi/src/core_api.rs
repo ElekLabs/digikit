@@ -23,7 +23,7 @@ pub const LOG_INFO: u16 = dkrt_sdk::logk::L_INFO << dkrt_sdk::logk::LEVEL_SHIFT;
 
 pub trait CoreApi: crate::mem::FwMem {
     // ---- the registry's rows ---------------------------------------------------------------------------------------------
-    /// The selection index of the module being loaded (`u32::MAX` outside a module load): a service that planned something per selected module (`Service::settle`) finds
+    /// The selection index of the module being loaded (`u32::MAX` outside a module load): a service that planned something per selected module (`Provider::settle`) finds
     /// the module's part by it.
     fn boot_index(&self) -> u32;
     /// The 32 bytes of the selection record's reserved area that a service kept its state in before it had a settings key (all 0: none), read once to migrate them. Removed one

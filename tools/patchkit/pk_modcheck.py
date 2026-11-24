@@ -113,7 +113,7 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
     """For a module with `[[machine]]`, `[[fx]]` or a `[[record]]` (an LFO shape): load it on the emulated device, read the records it committed
     (tools/devtools/commit_records.ts, decoded and judged by `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from
     them (docs/plans/sdk.md 6.1 and 6.4). The conformance suite that runs next reads that gallery.json. The records must pass the rule of the service that owns
-    their kind (`patchkit records --check`, `Service::validate_records`): a problem stops the check. A tool or a service has no rows to commit and is left alone:
+    their kind (`patchkit records --check`, `Records::validate`): a problem stops the check. A tool or a service has no rows to commit and is left alone:
     returns False."""
     moddir = modroots.module_dir(mid)
     manifest_path = moddir / "module.toml"

@@ -182,7 +182,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
         let r = (steps.activate)(self, rec);
         if r != OK {
-            return self.fail(rec, r);
+            // `init` ran and its commit passed: a provider file's `fini` gives the owner back, as for a refused commit
+            return self.fail_started(rec, r);
         }
         self.go_live(rec, tick);
         OK

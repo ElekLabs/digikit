@@ -1,6 +1,6 @@
 //! The generic part of a module's `init`: the records it adds with `dk_record_add` and the declarations of a service file (`dk_service_declare_*`), and the module's header
 //! table against them (declare-check-commit). The builder calls that name machines and effects are the exports of the services that own them (`machines.dks`, `fx.dks`);
-//! each service keeps its own collection and writes its records at the commit (`Service::module_commit`).
+//! each service keeps its own collection and writes its records at the commit (`Records::commit`).
 //!
 //! During `init` every `dk_record_add` and `dk_service_declare_*` call appends to a `Collect`, one block in the module's arena share (`begin` .. `end`). A call never fails one
 //! by one: on overflow, on a bad argument or outside `init` it returns an error and the first error is kept. The commit (`loader::commit`) reports it, compares the declarations

@@ -137,7 +137,7 @@ pub(crate) unsafe fn check_types<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
 
 // ---- the check of the table ------------------------------------------------------------------------------------------------
 
-/// The voice table against the module records (`Service::table_check`): an owned row belongs to a used record whose `mod_rows` has its bit (a MISSING placeholder,
+/// The voice table against the module records (`Describe::table_check`): an owned row belongs to a used record whose `mod_rows` has its bit (a MISSING placeholder,
 /// `PLACEHOLDER_OWNER`, belongs to none), and every bit of `mod_rows` is a row the record owns and the record is used. The mismatch is in `out` as (record, row, the
 /// row's owner).
 pub(crate) unsafe fn table_check(used: u32, out: &mut TableFault) -> u32 {

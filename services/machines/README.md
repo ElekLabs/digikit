@@ -30,6 +30,10 @@ statics of the crate (D7 of the RC3 briefs), each with its reader:
 | `DKRT_GUARD` (`guard.rs`) | the MODULES reply, on another task than the poll that writes it |
 | `DKRT_MF_TAB` (`info.rs`) | the assembler hooks (`T_*` offsets of `hooks-*.s`) |
 
+`DKRT_REG` also holds the strings that the machine and page rows of the firmware's registry tables point at (`mach_name`, `mach_short`, the `empty_rep` placeholder that `remove` and
+`reset_machine_row` write as a row's name pointer): firmware reads them by address, so they live in one fixed, named object, and the free functions of `unload.rs`, `parking.rs`,
+`check.rs`, `apply.rs` and `modules.rs` reach it through `rstate()`. The owner keeps what firmware does not read (the collection, the click state, the parking passes, the slots).
+
 Without an owner (before `init` made it, after `fini`) the file's calls answer the neutral way: a builder call returns null or does nothing, `dk_param_get` and
 `dk_param_set` answer `E_STATE` (no flow), the key hook passes the event and the turn hook consumes nothing. The turn hook ends the click flow in the owner, then runs the page's
 native handler outside it (a handler may call back into the file).

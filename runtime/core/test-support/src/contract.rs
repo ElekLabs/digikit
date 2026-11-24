@@ -617,7 +617,7 @@ impl<'f, S: Subject> Lifecycle<'f, S> {
         l
     }
 
-    /// Run `Service::settle` again over the keys of `mods`, the modules that are loaded now, in selection order: what a reload does before it loads the new file.
+    /// Run `Provider::settle` again over the keys of `mods`, the modules that are loaded now, in selection order: what a reload does before it loads the new file.
     pub fn settle_over(&self, mods: &[&Module]) {
         let mut sel = SettleCtx::new();
         for (i, m) in mods.iter().enumerate() {
@@ -694,7 +694,7 @@ impl<'f, S: Subject> Lifecycle<'f, S> {
         }
     }
 
-    /// The core's check of the services' tables (invariant 3, `Service::table_check`) with the records that are loaded now: the loader runs it at the end of every load
+    /// The core's check of the services' tables (invariant 3, `Describe::table_check`) with the records that are loaded now: the loader runs it at the end of every load
     /// attempt and every unload, and so does the suite. A mismatch fails the case.
     fn tables_agree(&self, after: &str) {
         let mut fault = TableFault::default();

@@ -714,3 +714,43 @@ fn a_refused_commit_after_init_leaves_no_job_and_no_poll_of_the_file() {
         assert!(l.m.live.is_empty());
     }
 }
+
+/// A provider file whose `init` succeeded and whose activation then refuses (here: another record already exports the name) gets its `fini`, like a refused commit: the
+/// owner `init` started is stopped, and a reload of the same file loads instead of answering `E_LOADED`.
+#[test]
+fn a_provider_refused_at_activation_is_finished_and_a_reload_loads() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = provider_loader(service_file(&svc_table(), 0), svc_init());
+        let rec = MAX_MODULES + 1;
+        let other = MAX_MODULES + 2;
+        l.exports.publish_with_scope(other, dkneeds::keys::name_hash("dk_svctest_ping"), 0x1234, false).unwrap();
+        assert_eq!(l.load_provider(PATH.as_ptr(), 1), E_PLAN_OWNER);
+        assert!(l.m.log.iter().any(|e| matches!(e, Ev::Fini(r, _) if *r == rec)), "the owner that init started is stopped by the provider's fini");
+        assert_eq!(records::module(rec).used, 0);
+        assert!(l.m.live.is_empty());
+        l.exports.withdraw(other);
+        assert_eq!(l.load_provider(PATH.as_ptr(), 1), OK, "a reload of the same file is not E_LOADED");
+    }
+}
+
+/// A refused load retires the jobs of the file's code (`fail` runs `retire_jobs`): a job that is on the worker cannot be dropped, so the refusal answers `E_BUSY` and the
+/// block stays, as an unload does: freeing it would free code the worker runs. Once the flight ended the jobs are gone.
+#[test]
+fn a_refused_load_while_a_worker_job_runs_is_busy_and_keeps_the_block() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        crate::worker::test_reset();
+        // init declares nothing, so the commit refuses (E_DECL_KIND)
+        let mut l = provider_loader(service_file(&svc_table(), 0), Init::PostsRunningJob);
+        let rec = MAX_MODULES;
+        assert_eq!(l.load_provider(PATH.as_ptr(), 0), E_BUSY, "not the E_DECL_KIND of the commit");
+        assert_eq!(l.m.live.len(), 1, "the file's block is kept while the worker runs its job");
+        assert_eq!(crate::worker::jobs_of(rec), 1);
+        crate::worker::test_pump();
+        crate::worker::test_pump();
+        assert_eq!(crate::worker::jobs_of(rec), 0, "the flight ended: the job is gone");
+        assert!(crate::worker::retire(rec));
+        crate::worker::test_reset();
+    }
+}

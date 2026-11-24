@@ -61,7 +61,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     }
 
 
-    /// The commit of the services (`Service::module_commit`): a `PREPARE` pass checks and measures the records, the loader takes one arena block for them, a `WRITE` pass fills it
+    /// The commit of the services (`Records::commit`): a `PREPARE` pass checks and measures the records, the loader takes one arena block for them, a `WRITE` pass fills it
     /// (the generic records of the module follow the services' records), and the registry walker checks and applies it. Returns the block (address, size; 0, 0 when no record was
     /// written) and the rows the module uses. Nothing stays allocated on an error; the caller's undo gives the services their `remove`.
     unsafe fn commit_services(&mut self, rec: usize, c: &crate::package::collect::Collect, keys: &crate::package::collect::KeysCopy, base: u32, image_size: u32) -> Result<(u32, u32, (u32, u32, u32)), i32> {

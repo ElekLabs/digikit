@@ -462,7 +462,7 @@ pub(crate) unsafe fn row_step<C: CoreApi>(
 /// Bytes of a row of the effect table, as the DSP reports a row (its byte offset in the table).
 const ROW_BYTES: u32 = FX_ROW_WORDS * 4;
 
-/// The effect table against the module records (`Service::table_check`): an owned row belongs to a used record whose `mod_fx` has its bit, and every bit of `mod_fx` is
+/// The effect table against the module records (`Describe::table_check`): an owned row belongs to a used record whose `mod_fx` has its bit, and every bit of `mod_fx` is
 /// a row the record owns and the record is used. The mismatch is in `out` as (record, `0x400 | row`, the row's owner).
 pub(crate) unsafe fn table_check(used: u32, out: &mut TableFault) -> u32 {
     let r = frows();

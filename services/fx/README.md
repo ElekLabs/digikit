@@ -36,6 +36,11 @@ through that concept's functions, because something outside the service reads th
 | `DKRT_FXS` | `src/fxsend/state.rs` | the device test `fx-track-route` (`allow`, `dflt`) |
 | `DKRT_FXP_TAB`, `DKRT_FXP_ROWS`, `DKRT_FXP_LIST_BUF`, `DKRT_FXP_COUNT`, `DKRT_FXP_IDS`, `DKRT_FXP_DEFS`, `DKRT_FXP_*` counters and cells | `src/fxpage/symbols.rs` | the assembler of the nine hooks (`dks/src/hooks.rs`) |
 
+`DKRT_FXP` and `DKRT_FXS` hold more than the counters the device tests read: the strings (`tab`, `title`, `name`, `short`, the `rep_*` placeholders) that the page and parameter rows
+of the firmware's tables point at, and the values the tick and the nine assembler hooks reach by symbol with no owner object in hand. The firmware, the DSP and the hooks read them by
+address, so the address must be one fixed, named object (not an instance block that `start` could place elsewhere). `DKRT_FROWS` is read by the DSP code through `core/dsp-link`.
+Only the owner's private data (the builder's collection and gate, the guard's log) is in the owner object.
+
 `DKRT_FXP_FW` is the other way: two words of the hooks' assembler (the stock page list of the FX view and the `moveq` of its builder, resolved by the port file) that `Fx::start` copies into
 `DKRT_FXP_TAB` (`fxpage::firmware`). A host build has none.
 

@@ -82,6 +82,8 @@ enum Init {
     DeclaresRow,
     /// Posts a worker job and adds a poll function at its own address, as the file's code would (`dk_job_post`, `dkrt_poll_add`), and returns `OK`.
     PostsJobAndPoll,
+    /// Posts a worker job and lets one UI pass submit it, so it is on the worker (`RUNNING`) when `init` returns `OK`.
+    PostsRunningJob,
 }
 
 unsafe extern "C" fn probe_step(_: *mut u8) -> i32 {
@@ -209,6 +211,11 @@ impl Images for FakeImages {
             Init::PostsJobAndPoll => {
                 assert!(crate::worker::post(rec as u8 + 1, Some(probe_step), None, core::ptr::null_mut()) > 0);
                 assert_eq!(crate::api::dkrt_poll_add(init as usize), OK);
+                OK
+            }
+            Init::PostsRunningJob => {
+                assert!(crate::worker::post(rec as u8 + 1, Some(probe_step), None, core::ptr::null_mut()) > 0);
+                crate::worker::tick();
                 OK
             }
             Init::NeedsUsbBulk => {

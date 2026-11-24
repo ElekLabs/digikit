@@ -1,4 +1,4 @@
-//! The load check of a `register` section: the seven steps of `Service::check` (counts, actions, native pages, device, records, owners, rows).
+//! The load check of a `register` section: the seven steps of `Records::check` (counts, actions, native pages, device, records, owners, rows).
 use crate::nativepage;
 use crate::registry::{rstate, KNOBS, KNOB_PARAM, MAX_MACH, MAX_PAGE, MAX_PARAM};
 use crate::validate::{body_len, Acc};

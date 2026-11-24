@@ -141,7 +141,7 @@ pub struct ModuleMachines {
     pub guard_off: u32,
 }
 
-/// The first mismatch `Service::table_check` found: the module record index, and two numbers that say which row and what it held (the service's own). The core
+/// The first mismatch `Describe::table_check` found: the module record index, and two numbers that say which row and what it held (the service's own). The core
 /// logs them as the numbers of a `TABLE_BAD` event and reads no meaning into them.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[repr(C)]
@@ -443,7 +443,7 @@ impl Declare {
     }
 }
 
-/// One refusal of a set of records, from `Service::validate_records`. The same value serves the load path (`code` is what the loader returns) and a build-time
+/// One refusal of a set of records, from `Records::validate`. The same value serves the load path (`code` is what the loader returns) and a build-time
 /// check (`module:check` prints it): one rule, two callers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Problem {

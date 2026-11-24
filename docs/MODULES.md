@@ -254,7 +254,7 @@ Why the DSP check and reserve stay before `init`: they need only the static DSP 
 
 A refused module writes no byte into the firmware tables. The module's rows are written only at commit, and a failure at or after `init` undoes everything that was taken: the boot animation, the module's files, host commands, registry rows (`registry::remove`), the DSP reservation (`dsp::release`) and the arena block.
 
-The caveat: if something cannot be given back (the DSP part is still in use, or files are not retired), the load returns `E_BUSY` and not the original reason. The module memory then stays allocated.
+The caveat: if something cannot be given back (the DSP part is still in use, or files are not retired), the load returns `E_BUSY` and not the original reason. The module memory then stays allocated. A worker job (`dk_job_post`) that is on the worker when a load is refused is such a case: the refusal retires the file's jobs, cancels the running one and answers `E_BUSY`, because freeing the block would free code the worker runs.
 
 ### States, planned
 

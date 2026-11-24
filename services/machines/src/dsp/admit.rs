@@ -1,4 +1,4 @@
-//! `Service::dsp_admit`: a real load always wins a voice row.
+//! `DspPart::admit`: a real load always wins a voice row.
 use super::*;
 use crate::rows::vrows;
 use dkrt_abi::core_api::CoreApi;
@@ -7,7 +7,7 @@ use dkrt_abi::link::{Owner, Sequence};
 use dkrt_abi::mem::{iw, rd32};
 use dkrt_sdk::*;
 
-/// `Service::dsp_admit`: a real load always wins a voice row. When fewer free rows exist than voices that have no placeholder or own row of their type, the placeholders of
+/// `DspPart::admit`: a real load always wins a voice row. When fewer free rows exist than voices that have no placeholder or own row of their type, the placeholders of
 /// other numbers are freed (the type word first, then the disabled word) until the rows are there, and `gave` is told each type: the caller turns its machine row into a gap
 /// row and logs it. `E_BUSY` when the DSP did not take a write (nothing is reserved yet; the load is tried again).
 pub(crate) unsafe fn make_room<C: CoreApi>(core: &C, job: &Job, gave: &mut dyn FnMut(u32)) -> i32 {

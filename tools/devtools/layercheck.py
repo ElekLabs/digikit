@@ -37,7 +37,7 @@ Rules:
             call (the `provided` imports of the services machines and fx in sdk/sdk.toml, but for those with `wrapper = "fw"`: `dk_module_ctx_add_machine`, `dk_page_add_param` ...), no record kind of a machine or an effect (`KIND_MACHINE`, `KIND_PARAM`, `KIND_PAGE`,
             `KIND_ACTION`, `KIND_NATIVE_PAGE*`, `KIND_EFFECT`, `KINDS_MACHINES`, `KINDS_FX`), no table of an image adapter that only a service reads (`dynreg_info`, `machines_info`,
             `fxpages_info`, `mf_native_*`) and no state of the machines registry (`RegState`, `DKRT_REG`, `DKRT_ASSIGN`). The services own them: the machines and fx service files
-            export the builder calls and write their records in `Service::module_commit`; the loader only runs the generic part (docs/plans/runtime-slimming.md, RS-C).
+            export the builder calls and write their records in `Records::commit`; the loader only runs the generic part (docs/plans/runtime-slimming.md, RS-C).
   platform  Inside the runtime crate, only `platform.rs` (the real platform, L1) and `fw.rs` at the crate's source root (the declared adapter of
             `dkrt_abi::fw::Fw`: it must contain `impl Fw for`) name the firmware crate dkfw; the rest of the core and the services use the `Platform`
             trait and the `Fw` trait (`dkrt-abi`). No runtime file but `platform.rs` compares the device id with a number

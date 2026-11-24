@@ -26,4 +26,9 @@ State that is not in the owner (the rule: only what an interrupt, an assembler h
 | `graph::GRAPHS`, `graph::MASK` | the graph hook of the MOD page | `graph::publish`, `graph::retract` |
 | `wave::WAVE` | `sync_range` and `Records::check` | `wave::set_firmware` (at `start_in`), `sync_range` |
 
+Why these stay statics: the interrupt hook of the LFO tick (`dk_lfo_eval`) runs under the interrupt mask and cannot reach an owner object (the owner cell is entered on the UI task);
+the graph hook and the UI formatter hooks of the MOD page are assembler entries of the file that find the table by symbol. `WAVE` is read only on the UI task (`sync_range`,
+`Records::check`) and by device tests by symbol: it stays beside `SHAPES` because it is the same concept (the WAVE maximum follows the shape table) and one name for the table keeps the test
+tools' lookup unchanged.
+
 The tests of the crate share these statics, so each takes a lock; the owner itself is one per test.

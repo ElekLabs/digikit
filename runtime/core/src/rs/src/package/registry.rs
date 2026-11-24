@@ -1,4 +1,4 @@
-//! The registry walker of a module's `register` section: the records the services write at the commit (`Service::module_commit`) are checked and applied by the services that own
+//! The registry walker of a module's `register` section: the records the services write at the commit (`Records::commit`) are checked and applied by the services that own
 //! their kinds. The walker checks the layout against the lengths the services declare (kind and length of each record, the section's header and device) and calls each service in
 //! table order: `check` once per step over all services (the order of the steps is the order of the old single body), `apply`, then `apply_record` for each record in file order,
 //! and `remove` in reverse order. It names no service and no table of an adapter; what a service needs of the image it finds itself (`CoreApi::info`). Everything here runs in the
