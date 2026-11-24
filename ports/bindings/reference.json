@@ -3664,6 +3664,72 @@
     },
     {
       "at": {
+        "st-1.42": [
+          {
+            "addr": "0x400f9e68",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_machine_peer_picker_menu_select",
+        "rust": "dkfw::machine::peer_picker_menu_select"
+      },
+      "cpu": "cf",
+      "doc": "Looks up a MenuItem by ID and moves the stock cursor and viewport. Alignment mode zero keeps the cursor within the viewport.",
+      "file": "devices/fw/machine.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.machine.fn.peer_picker.menu_select",
+      "rule": {
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "u32 (u8 *menu, u32 row_id, u32 align)",
+      "subsystem": "machine",
+      "users": [
+        "core/peer-audio"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x4002f2ae",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_machine_peer_picker_stock_select",
+        "rust": "dkfw::machine::peer_picker_stock_select"
+      },
+      "cpu": "cf",
+      "doc": "Refreshes the native type and cursor and invalidates the view. The input is always a stock type.",
+      "file": "devices/fw/machine.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.machine.fn.peer_picker.stock_select",
+      "rule": {
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        }
+      },
+      "sig": "void (u8 *view, u32 machine_type)",
+      "subsystem": "machine",
+      "users": [
+        "core/peer-audio"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dn2-1.11": [
           {
             "addr": "0x400dc19a",
@@ -4326,6 +4392,105 @@
       "subsystem": "machine",
       "users": [
         "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x4002f346"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "st"
+      ],
+      "doc": "A successful peer selection takes the stock cancel path to restore the stock preview. A refused selection keeps the list open.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.machine.hook.peer_picker.confirm",
+      "regs": {
+        "clobbers": [
+          "d0-d1",
+          "a0-a1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.machine.site.peer_picker.confirm",
+      "subsystem": "machine",
+      "users": [
+        "core/peer-audio"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40031052"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "st"
+      ],
+      "doc": "Takes the stock view and type as stack arguments, then forwards to stock_select.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "retarget",
+      "name": "cf.machine.hook.peer_picker.install",
+      "regs": {
+        "clobbers": [
+          "d0-d1",
+          "a0-a1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.machine.site.peer_picker.install",
+      "subsystem": "machine",
+      "users": [
+        "core/peer-audio"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40031242"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "st"
+      ],
+      "doc": "May change the delta before jumping to the original callback, or return after moving the cursor to the peer row.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.machine.hook.peer_picker.move",
+      "regs": {
+        "clobbers": [
+          "d0-d1",
+          "a0-a1",
+          "ccr"
+        ],
+        "in": []
+      },
+      "site": "cf.machine.site.peer_picker.move",
+      "subsystem": "machine",
+      "users": [
+        "core/peer-audio"
       ],
       "was": []
     },
@@ -5150,6 +5315,90 @@
     },
     {
       "at": {
+        "st-1.42": [
+          {
+            "addr": "0x4002f346",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Entry of the stock list close routine before its stack setup. The second stack argument is zero for cancel or one for confirm.",
+      "file": "devices/fw/machine.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.machine.site.peer_picker.confirm",
+      "rule": {
+        "st": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "subsystem": "machine",
+      "users": [
+        "core/peer-audio"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40031052",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The absolute call to stock_select when a newly constructed list has its rows and is about to be pushed. Subsequent preview updates use another call site.",
+      "file": "devices/fw/machine.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.machine.site.peer_picker.install",
+      "rule": {
+        "st": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 332
+        }
+      },
+      "subsystem": "machine",
+      "users": [
+        "core/peer-audio"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "st-1.42": [
+          {
+            "addr": "0x40031242",
+            "len": 8
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "Entry of the native movement callback before its stack setup. The stack holds the closure storage and a signed move delta.",
+      "file": "devices/fw/machine.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.machine.site.peer_picker.move",
+      "rule": {
+        "st": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        }
+      },
+      "subsystem": "machine",
+      "users": [
+        "core/peer-audio"
+      ],
+      "was": []
+    },
+    {
+      "at": {
         "dt2-1.17": [
           {
             "addr": "0x40016da4",
@@ -5948,6 +6197,67 @@
         "cf.machine.site.reader_tail",
         "cf.machines.reader_tail"
       ]
+    },
+    {
+      "bindings": {
+        "c": "PeerMachineList",
+        "gas": "PeerMachineList_size",
+        "rust": "PeerMachineList"
+      },
+      "cpu": "cf",
+      "doc": "The first 0x204 bytes of Syntakt's MachineListView. The constructor stores the zero-based track, Menu and stock type. The movement callback is invoked with the address of its std::function storage in the view.",
+      "fields": [
+        {
+          "name": "menu",
+          "off": 76,
+          "type": "u8"
+        },
+        {
+          "name": "items_begin",
+          "off": 80,
+          "type": "ptr"
+        },
+        {
+          "name": "items_end",
+          "off": 84,
+          "type": "ptr"
+        },
+        {
+          "name": "items_capacity",
+          "off": 88,
+          "type": "ptr"
+        },
+        {
+          "name": "selected",
+          "off": 92,
+          "type": "u32"
+        },
+        {
+          "name": "stock_type",
+          "off": 460,
+          "type": "u32"
+        },
+        {
+          "name": "move_callback",
+          "off": 492,
+          "type": "u8"
+        },
+        {
+          "name": "track",
+          "off": 512,
+          "type": "u32"
+        }
+      ],
+      "file": "devices/fw/machine.toml",
+      "kind": "struct",
+      "mark": "D",
+      "name": "cf.machine.struct.PeerMachineList",
+      "size": 516,
+      "subsystem": "machine",
+      "users": [
+        "core/peer-audio"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -25736,7 +26046,7 @@
       "name": "link"
     },
     {
-      "count": 65,
+      "count": 74,
       "cpu": "cf",
       "file": "devices/fw/machine.toml",
       "meaning": "the machine framework: dispatch, names, per-type tables, the run-time registry",

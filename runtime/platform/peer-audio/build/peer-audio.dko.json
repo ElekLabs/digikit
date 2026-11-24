@@ -4,6 +4,41 @@
  "relocs": [
   {
    "addend": 0,
+   "offset": 10,
+   "section": ".text",
+   "symbol": "peer_picker_move",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text",
+   "symbol": "peer_picker_move_tail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 42,
+   "section": ".text",
+   "symbol": "peer_picker_confirm",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text",
+   "symbol": "peer_picker_confirm_tail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 72,
+   "section": ".text",
+   "symbol": "peer_picker_copy_label",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 14,
    "section": ".text.peer_audio",
    "symbol": "peer_audio_end",
@@ -141,9 +176,233 @@
    "section": ".text.dk_peer_image_extend",
    "symbol": "peer_audio_layout",
    "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.dk_peer_picker_offer",
+   "symbol": ".sec..bss.machine_label",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text.peer_picker_copy_label",
+   "symbol": ".sec..bss.machine_label",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 26,
+   "section": ".text.peer_picker_copy_label",
+   "symbol": "cf.string.fn.std_string.ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 18,
+   "section": ".text.peer_picker_install",
+   "symbol": "cf.machine.fn.peer_picker.stock_select",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 44,
+   "section": ".text.peer_picker_install",
+   "symbol": ".sec..bss.machine_label",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 68,
+   "section": ".text.peer_picker_install",
+   "symbol": ".sec..bss.machine_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 84,
+   "section": ".text.peer_picker_install",
+   "symbol": ".sec..rodata.empty.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 90,
+   "section": ".text.peer_picker_install",
+   "symbol": ".sec..rodata.empty.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 96,
+   "section": ".text.peer_picker_install",
+   "symbol": ".sec..rodata.empty.0",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 102,
+   "section": ".text.peer_picker_install",
+   "symbol": ".sec..rodata.label.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 108,
+   "section": ".text.peer_picker_install",
+   "symbol": ".sec..bss.machine_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 114,
+   "section": ".text.peer_picker_install",
+   "symbol": "cf.menu.fn.item_ctor",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
+   "section": ".text.peer_picker_install",
+   "symbol": ".sec..bss.machine_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 150,
+   "section": ".text.peer_picker_install",
+   "symbol": "dk_peer_audio_requested_track",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 176,
+   "section": ".text.peer_picker_install",
+   "symbol": "cf.machine.fn.peer_picker.menu_select",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 194,
+   "section": ".text.peer_picker_install",
+   "symbol": "cf.view.fn.invalidate",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 132,
+   "section": ".text.peer_picker_move",
+   "symbol": "cf.machine.fn.peer_picker.menu_select",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 140,
+   "section": ".text.peer_picker_move",
+   "symbol": "cf.view.fn.invalidate",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 204,
+   "section": ".text.peer_picker_move",
+   "symbol": "cf.machine.fn.peer_picker.menu_select",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 212,
+   "section": ".text.peer_picker_move",
+   "symbol": "cf.view.fn.invalidate",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text.peer_picker_confirm",
+   "symbol": "dk_peer_audio_status",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 72,
+   "section": ".text.peer_picker_confirm",
+   "symbol": "dk_ui_core_handle",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 78,
+   "section": ".text.peer_picker_confirm",
+   "symbol": ".sec..rodata.peer_picker_confirm.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 86,
+   "section": ".text.peer_picker_confirm",
+   "symbol": "dk_ui_toast",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 100,
+   "section": ".text.peer_picker_confirm",
+   "symbol": "dk_peer_audio_select_track",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 112,
+   "section": ".text.peer_picker_confirm",
+   "symbol": "dk_ui_core_handle",
+   "type": "cf.32"
+  },
+  {
+   "addend": 19,
+   "offset": 118,
+   "section": ".text.peer_picker_confirm",
+   "symbol": ".sec..rodata.peer_picker_confirm.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 126,
+   "section": ".text.peer_picker_confirm",
+   "symbol": "dk_peer_audio_requested_track",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
+   "section": ".text.peer_picker_confirm",
+   "symbol": "dk_peer_audio_select_track",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 8,
+   "section": ".rodata.label.1",
+   "symbol": ".sec..text.label_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".rodata.label.1",
+   "symbol": "peer_picker_label",
+   "type": "cf.32"
   }
  ],
  "sections": [
+  {
+   "align": 4,
+   "hex": "2f2f00082f2f00084eb900000000508f4a80672e2f4000084ef9000000004a2f000b67182f2f00044eb900000000588f4a8067085380660a42af00084ef9000000004e752f084eb900000000588f4e75",
+   "kind": "text",
+   "name": ".text",
+   "size": 80
+  },
   {
    "align": 4,
    "hex": "4000040040001070480000004000107c4000168e40000abe47fdf00047fdfc0010000600",
@@ -171,14 +430,175 @@
    "kind": "text",
    "name": ".text.dk_peer_image_extend",
    "size": 250
+  },
+  {
+   "align": 2,
+   "hex": "42804e75",
+   "kind": "text",
+   "name": ".text.label_manager",
+   "size": 4
+  },
+  {
+   "align": 2,
+   "hex": "226f0004428041f90000000012310800670c118108005280720fb28066ee4201118108004e75",
+   "kind": "text",
+   "name": ".text.dk_peer_picker_offer",
+   "size": 38
+  },
+  {
+   "align": 2,
+   "hex": "42004e56fffc486effff4879000000002f2e00081d40ffff4eb9000000004fef000c4e5e4e75",
+   "kind": "text",
+   "name": ".text.peer_picker_copy_label",
+   "size": 38
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f02242f0010246f000c2f022f0a4eb900000000508f7007b0aa0200650000a67223b2826700009e4a390000000067000094202a0058b0aa005463000088722db2b9000000006730487800084878002d4879000000004879000000004879000000004879000000004879000000004eb9000000004fef001c42804281206a005420802141000420bc000000005088254800544eb900000000222a02005281b280662242a74878002d486a004c4eb9000000004fef000c2f4a000c241f245f4ef900000000241f245f4e75",
+   "kind": "text",
+   "name": ".text.peer_picker_install",
+   "size": 204
+  },
+  {
+   "align": 2,
+   "hex": "4fefffec48d73c04266f0018246f001c206bfe64226bfe68b3c867322869fff8702db0ac0004662620095180224093c82409e682222bfe70b48165124a8a670ee789d288b08166124a8a6f5895ca200a4cd73c044fef00144e754a8a6df0204149ebfe1450889bcdb0886240b081664c45f5a8014a8a66d642a72f2bffe0486c004c4eb9000000002f0c4eb9000000004fef001060b82250242bffe0b4a9000467be5088b08862ee66b660a2225074ffb4a900046702528d508860acb5cd6f8e42a74878002d486c004c4eb9000000002f0c4eb9000000004fef00106000ff6e",
+   "kind": "text",
+   "name": ".text.peer_picker_move",
+   "size": 224
+  },
+  {
+   "align": 1,
+   "hex": "53414d504c4520554e415641494c41424c450053414d504c45204255535900",
+   "kind": "data",
+   "name": ".rodata.peer_picker_confirm.str1.1",
+   "size": 31
+  },
+  {
+   "align": 2,
+   "hex": "2f0a2f02226f000c2229005020690054b1c166084280241f245f4e752468fff8702db0aa000466ec518820089081e680242902005282b0a9005c66404eb9000000004a806e1a4eb9000000004879000000002f004eb900000000508f700260b62f024eb900000000588f4a80672a4eb90000000048790000000060d64eb900000000b480668e42a74eb900000000588f4a8066da6000ff7e70016000ff7a",
+   "kind": "text",
+   "name": ".text.peer_picker_confirm",
+   "size": 158
+  },
+  {
+   "align": 2,
+   "hex": "00000000000000000000000000000000",
+   "kind": "data",
+   "name": ".rodata.empty.0",
+   "size": 16
+  },
+  {
+   "align": 2,
+   "hex": "00000000000000000000000000000000",
+   "kind": "data",
+   "name": ".rodata.label.1",
+   "size": 16
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.machine_row",
+   "size": 84
+  },
+  {
+   "align": 1,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.machine_label",
+   "size": 16
   }
  ],
- "source_sha256": "224f6366513c5644cc439895b6e6eccd49cdf2789c464ce7718ad8b4232255a3",
+ "source_sha256": "0eab9089e403793dd390af50a166059a2b781ed1cc1e1cc893b0fdf0badaca94",
  "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss.machine_label",
+   "section": ".bss.machine_label",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..bss.machine_row",
+   "section": ".bss.machine_row",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.empty.0",
+   "section": ".rodata.empty.0",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.label.1",
+   "section": ".rodata.label.1",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..rodata.peer_picker_confirm.str1.1",
+   "section": ".rodata.peer_picker_confirm.str1.1",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.label_manager",
+   "section": ".text.label_manager",
+   "value": 0
+  },
   {
    "global": false,
    "name": ".sec..text.load_word",
    "section": ".text.load_word",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.machine.fn.peer_picker.menu_select",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.machine.fn.peer_picker.stock_select",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.menu.fn.item_ctor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.string.fn.std_string.ctor",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "cf.view.fn.invalidate",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_peer_audio_requested_track",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_peer_audio_select_track",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_peer_audio_status",
+   "section": null,
    "value": 0
   },
   {
@@ -188,9 +608,57 @@
    "value": 0
   },
   {
+   "global": true,
+   "name": "dk_peer_picker_offer",
+   "section": ".text.dk_peer_picker_offer",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_core_handle",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_toast",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "empty.0",
+   "section": ".rodata.empty.0",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "label.1",
+   "section": ".rodata.label.1",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "label_manager",
+   "section": ".text.label_manager",
+   "value": 0
+  },
+  {
    "global": false,
    "name": "load_word",
    "section": ".text.load_word",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "machine_label",
+   "section": ".bss.machine_label",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "machine_row",
+   "section": ".bss.machine_row",
    "value": 0
   },
   {
@@ -228,14 +696,68 @@
    "name": "peer_audio_render",
    "section": ".text.peer_audio",
    "value": 68
+  },
+  {
+   "global": true,
+   "name": "peer_picker_confirm",
+   "section": ".text.peer_picker_confirm",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_picker_confirm_hook",
+   "section": ".text",
+   "value": 30
+  },
+  {
+   "global": true,
+   "name": "peer_picker_confirm_tail",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_picker_copy_label",
+   "section": ".text.peer_picker_copy_label",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_picker_install",
+   "section": ".text.peer_picker_install",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_picker_label",
+   "section": ".text",
+   "value": 68
+  },
+  {
+   "global": true,
+   "name": "peer_picker_move",
+   "section": ".text.peer_picker_move",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_picker_move_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "peer_picker_move_tail",
+   "section": null,
+   "value": 0
   }
  ],
  "toolchain": {
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "332",
-  "isa_check": "ca1d897c7f519b778d0740baf65919595ffb32a4cd152086de34746b76702588",
+  "instructions_redecoded": "570",
+  "isa_check": "96f8c34b05205fe41fec3c4c67409e9ca2bace976889f597c3ec25ad4a585faa",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

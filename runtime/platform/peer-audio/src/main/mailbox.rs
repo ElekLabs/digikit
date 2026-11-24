@@ -99,6 +99,20 @@ impl Mailbox {
         Bank::spare(published, playing).map(FreeBank).ok_or(E_BUSY)
     }
 
+    pub fn requested_track(&self) -> u32 {
+        let wire = self.0;
+        unsafe {
+            // MAIN is the sole request writer. A pending selection is authoritative
+            // for UI decisions as the peer can finish it before the next UI event.
+            if !self.idle()
+                && read_volatile(addr_of!((*wire).command)) == Command::SelectTrack as u32
+            {
+                return read_volatile(addr_of!((*wire).count));
+            }
+            read_volatile(addr_of!((*wire).selected_track))
+        }
+    }
+
     pub fn generation(&self) -> u32 {
         unsafe { read_volatile(addr_of!((*self.0).published_generation)) }
     }

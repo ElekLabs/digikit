@@ -683,3 +683,97 @@ devices = ["dn2"]
 mark = "D"
 users = ["core/dynreg"]
 doc = "The getter's `jsr (A3); move.l D0,(4,A2)` (6 bytes; a2 = the vector being returned); both are replaced by a routine that copies without unfilled reserved machine types."
+
+# Native machine list on the MAIN CPU of the peer-audio port.
+
+[[struct]]
+name = "cf.machine.struct.PeerMachineList"
+size = 0x204
+fields = [
+  { name = "menu", off = 0x4c, type = "u8" },
+  { name = "items_begin", off = 0x50, type = "ptr" },
+  { name = "items_end", off = 0x54, type = "ptr" },
+  { name = "items_capacity", off = 0x58, type = "ptr" },
+  { name = "selected", off = 0x5c, type = "u32" },
+  { name = "stock_type", off = 0x1cc, type = "u32" },
+  { name = "move_callback", off = 0x1ec, type = "u8" },
+  { name = "track", off = 0x200, type = "u32" },
+]
+mark = "D"
+users = ["core/peer-audio"]
+doc = "The first 0x204 bytes of Syntakt's MachineListView. The constructor stores the zero-based track, Menu and stock type. The movement callback is invoked with the address of its std::function storage in the view."
+
+[[fn]]
+name = "cf.machine.fn.peer_picker.stock_select"
+cpu = "cf"
+sig = "void (u8 *view, u32 machine_type)"
+rule.st = { kind = "cf_func", hash = "f20f94d586491a5cd0d03e36e454a5b9", offset = 0, len = 4 }
+mark = "D"
+users = ["core/peer-audio"]
+doc = "Refreshes the native type and cursor and invalidates the view. The input is always a stock type."
+
+[[fn]]
+name = "cf.machine.fn.peer_picker.menu_select"
+cpu = "cf"
+sig = "u32 (u8 *menu, u32 row_id, u32 align)"
+rule.st = { kind = "cf_func", hash = "ba3d5a9e3be1c29c3dd1a067ee2b366e", offset = 0, len = 4 }
+mark = "D"
+users = ["core/peer-audio"]
+doc = "Looks up a MenuItem by ID and moves the stock cursor and viewport. Alignment mode zero keeps the cursor within the viewport."
+
+[[site]]
+name = "cf.machine.site.peer_picker.install"
+cpu = "cf"
+rule.st = { kind = "cf_func", hash = "490282c0b5a32cba03e873fc93062212", offset = 0x14c, len = 6 }
+mark = "D"
+users = ["core/peer-audio"]
+doc = "The absolute call to stock_select when a newly constructed list has its rows and is about to be pushed. Subsequent preview updates use another call site."
+
+[[hook]]
+name = "cf.machine.hook.peer_picker.install"
+site = "cf.machine.site.peer_picker.install"
+cpu = "cf"
+devices = ["st"]
+mode = "retarget"
+regs = { in = [], clobbers = ["d0-d1", "a0-a1", "ccr"] }
+mark = "D"
+users = ["core/peer-audio"]
+doc = "Takes the stock view and type as stack arguments, then forwards to stock_select."
+
+[[site]]
+name = "cf.machine.site.peer_picker.move"
+cpu = "cf"
+rule.st = { kind = "cf_func", hash = "0befb1d388e675b56a99e799f635e8d0", offset = 0, len = 8 }
+mark = "D"
+users = ["core/peer-audio"]
+doc = "Entry of the native movement callback before its stack setup. The stack holds the closure storage and a signed move delta."
+
+[[hook]]
+name = "cf.machine.hook.peer_picker.move"
+site = "cf.machine.site.peer_picker.move"
+cpu = "cf"
+devices = ["st"]
+mode = "before"
+regs = { in = [], clobbers = ["d0-d1", "a0-a1", "ccr"] }
+mark = "D"
+users = ["core/peer-audio"]
+doc = "May change the delta before jumping to the original callback, or return after moving the cursor to the peer row."
+
+[[site]]
+name = "cf.machine.site.peer_picker.confirm"
+cpu = "cf"
+rule.st = { kind = "cf_func", hash = "34fd17ea1fe3f9b21b8b1e8d4ca4edfa", offset = 0, len = 8 }
+mark = "D"
+users = ["core/peer-audio"]
+doc = "Entry of the stock list close routine before its stack setup. The second stack argument is zero for cancel or one for confirm."
+
+[[hook]]
+name = "cf.machine.hook.peer_picker.confirm"
+site = "cf.machine.site.peer_picker.confirm"
+cpu = "cf"
+devices = ["st"]
+mode = "before"
+regs = { in = [], clobbers = ["d0-d1", "a0-a1", "ccr"] }
+mark = "D"
+users = ["core/peer-audio"]
+doc = "A successful peer selection takes the stock cancel path to restore the stock preview. A refused selection keeps the list open."

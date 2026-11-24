@@ -79,7 +79,10 @@ fn track_selection_is_bounded_and_manual_triggers_are_excluded() {
     let mailbox = Mailbox(&raw mut wire);
     assert_eq!(mailbox.select_track(TRACKS + 1), Err(E_FORMAT));
     assert_eq!(wire.request, 0);
+    assert_eq!(mailbox.requested_track(), 0);
     assert_eq!(mailbox.select_track(2), Ok(()));
+    assert_eq!(mailbox.requested_track(), 2);
+    assert_eq!(wire.selected_track, 0);
     assert_eq!(wire.command, Command::SelectTrack as u32);
     assert_eq!(wire.count, 2);
     assert_eq!(mailbox.select_track(0), Err(E_BUSY));
@@ -88,6 +91,9 @@ fn track_selection_is_bounded_and_manual_triggers_are_excluded() {
         write_volatile(addr_of_mut!(wire.response), wire.request);
     }
     assert_eq!(mailbox.trigger(0, 256), Err(E_BUSY));
+    assert_eq!(mailbox.requested_track(), 2);
     assert_eq!(mailbox.select_track(0), Ok(()));
+    assert_eq!(mailbox.requested_track(), 0);
+    assert_eq!(wire.selected_track, 2);
     assert_eq!(wire.count, 0);
 }

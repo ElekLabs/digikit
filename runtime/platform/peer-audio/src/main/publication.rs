@@ -167,6 +167,12 @@ pub unsafe extern "C" fn dk_peer_audio_select_track(track: u32) -> i32 {
         .unwrap_or(0)
 }
 
+/// Latest requested one-based digital track, including an outstanding selection, or zero for stock.
+#[no_mangle]
+pub unsafe extern "C" fn dk_peer_audio_requested_track() -> u32 {
+    Mailbox::ready().map_or(0, |mailbox| mailbox.requested_track())
+}
+
 /// Positive generation on completion, zero before the first load, or a runtime error.
 #[no_mangle]
 pub unsafe extern "C" fn dk_peer_audio_status() -> i32 {

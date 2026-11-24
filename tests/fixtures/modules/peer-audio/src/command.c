@@ -4,6 +4,7 @@ extern int32_t dk_peer_audio_load(const uint8_t *path);
 extern int32_t dk_peer_audio_trigger(uint32_t generation, uint32_t gain);
 extern int32_t dk_peer_audio_select_track(uint32_t track);
 extern int32_t dk_peer_audio_status(void);
+extern void dk_peer_picker_offer(const char *label);
 
 volatile int32_t peer_audio_proof_result;
 
@@ -19,6 +20,9 @@ void peer_audio_proof(const uint8_t *bytes, uint32_t length)
         peer_audio_proof_result = dk_peer_audio_trigger(0, 256);
     else if (bytes[0] == 'A' && length == 2)
         peer_audio_proof_result = dk_peer_audio_select_track(bytes[1]);
-    else if (bytes[0] == 'S' && length == 1)
+    else if (bytes[0] == 'M' && length == 1) {
+        dk_peer_picker_offer("SHOT");
+        peer_audio_proof_result = 0;
+    } else if (bytes[0] == 'S' && length == 1)
         peer_audio_proof_result = dk_peer_audio_status();
 }

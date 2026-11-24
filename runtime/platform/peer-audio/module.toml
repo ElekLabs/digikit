@@ -9,7 +9,7 @@ author = "digikit"
 status = "experimental"
 summary = "Publishes PCM to the Syntakt peer at runtime and keeps a playing generation resident"
 ports = ["st-1.42"]
-requires = ["core/peer-image", "core/runtime", "core/card-guard"]
+requires = ["core/peer-image", "core/runtime", "core/card-guard", "core/ui"]
 conflicts = ["test/peer-sample"]
 
 [targets]
@@ -17,10 +17,29 @@ conflicts = ["test/peer-sample"]
 
 [[object]]
 path = "build/peer-audio.dko.json"
-sources = ["src/peer/entry.s", "src/peer/frame.c", "src/peer/end.s", "src/main/image.c"]
+sources = ["src/peer/entry.s", "src/peer/frame.c", "src/peer/end.s", "src/main/image.c", "src/main/picker.c", "src/main/picker.s"]
 place = "cf.expansion"
+
+[object.externs]
+peer_picker_move_tail = "hook.cf.machine.site.peer_picker.move.tail"
+peer_picker_confirm_tail = "hook.cf.machine.site.peer_picker.confirm.tail"
 
 [[object]]
 path = "build/peer-audio-main.dko.json"
 sources = ["Cargo.toml"]
 place = "cf.expansion"
+
+[[op]]
+op = "hook"
+hook = "cf.machine.hook.peer_picker.install"
+to = "peer_picker_install"
+
+[[op]]
+op = "hook"
+hook = "cf.machine.hook.peer_picker.move"
+to = "peer_picker_move_hook"
+
+[[op]]
+op = "hook"
+hook = "cf.machine.hook.peer_picker.confirm"
+to = "peer_picker_confirm_hook"

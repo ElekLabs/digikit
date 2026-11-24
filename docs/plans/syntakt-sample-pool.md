@@ -34,7 +34,8 @@ Start with the peer contract. Define how MAIN publishes a bounded PCM buffer, se
 
 - [x] Verify runtime publication, triggering and replacement in the Syntakt emulator. See [the runtime publication finding](../findings/161-syntakt-live-peer-audio.md).
 - [x] Bind the peer voice to a digital track and verify that normal notes on that track start the sample. See [the note dispatch finding](../findings/162-syntakt-peer-note-dispatch.md).
-- [ ] Make the machine selectable from the Syntakt machine list and admit the peer renderer from a module package.
+- [x] Prove selection from the native Syntakt machine list with the peer audio fixture. See [the picker finding](../findings/163-syntakt-peer-machine-list.md).
+- [ ] Register the machine with the machines service and admit and retire the peer renderer from a module package.
 - [ ] Verify the Syntakt Shot package and Workbench installation.
 
 Keep the `digikit/shot` module ID and `shot` machine ID. Share parameter and picker code where the machine contract permits. Keep the SHARC renderer for DT2/DN2 and add a Syntakt peer ColdFire renderer. Put firmware-facing code in the platform adapter. Reuse shared Rust file identity and lifecycle logic where its contract fits, with peer-specific memory and publication behind the adapter.

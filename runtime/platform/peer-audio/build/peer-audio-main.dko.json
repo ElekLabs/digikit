@@ -318,6 +318,13 @@
    "type": "cf.32"
   },
   {
+   "addend": 0,
+   "offset": 8,
+   "section": ".text.dk_peer_audio_requested_track",
+   "symbol": ".sec..text._RNvMs_NtCsaC4ErqI8IAy_13dk_peer_audio7mailboxNtB4_7Mailbox5ready",
+   "type": "cf.32"
+  },
+  {
    "addend": 578,
    "offset": 4,
    "section": ".text.dk_peer_audio_select_track",
@@ -734,6 +741,13 @@
   },
   {
    "align": 2,
+   "hex": "518f41ef00024eb9000000004a6f000267064280508f4e75206f000420280008b0a8000467087004b0a8000c6706202801f460e02028001c60da",
+   "kind": "text",
+   "name": ".text.dk_peer_audio_requested_track",
+   "size": 58
+  },
+  {
+   "align": 2,
    "hex": "518f71b9000000000c80000000ff670670f4508f4e7541ef00024eb900000000206f00044a6f00026704200860e47008b0af000c640470fb60d822280008b2a8000466cc20280004528072042141000c42a8001042a8001442a80018222f000c2141001c21400004428060a6",
    "kind": "text",
    "name": ".text.dk_peer_audio_select_track",
@@ -943,7 +957,7 @@
    "size": 28
   }
  ],
- "source_sha256": "005aa3d4110f517a5c24e78adca1212146729b0fba171b6f720e9dd7f3709591",
+ "source_sha256": "555464750b2c3b259f3507a75391be6f626fa6d9e4235abe01e973236d09a371",
  "symbols": [
   {
    "global": false,
@@ -1133,6 +1147,12 @@
   },
   {
    "global": true,
+   "name": "dk_peer_audio_requested_track",
+   "section": ".text.dk_peer_audio_requested_track",
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "dk_peer_audio_select_track",
    "section": ".text.dk_peer_audio_select_track",
    "value": 0
@@ -1193,9 +1213,9 @@
   }
  ],
  "toolchain": {
-  "exports": "dk_peer_audio_load dk_peer_audio_select_track dk_peer_audio_status dk_peer_audio_trigger",
-  "instructions_redecoded": "1621",
-  "isa_check": "142d047dd7110a7e9930446c0721731d1f99b5d8b7f04e5d036114b5deca8381",
+  "exports": "dk_peer_audio_load dk_peer_audio_requested_track dk_peer_audio_select_track dk_peer_audio_status dk_peer_audio_trigger",
+  "instructions_redecoded": "1640",
+  "isa_check": "6b6de843c73fb65c8d87d2ce2f8485777ff1208210d21ce564e53eb0087e5e01",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

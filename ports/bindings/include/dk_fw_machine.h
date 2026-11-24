@@ -6,10 +6,40 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/* The first 0x204 bytes of Syntakt's MachineListView. The constructor stores the zero-based track, Menu and stock type. The movement callback is invoked with the address of its std::function storage in the view. */
+typedef struct PeerMachineList {
+    uint8_t _pad0[76];
+    uint8_t menu;
+    uint8_t _pad1[3];
+    uint32_t items_begin;
+    uint32_t items_end;
+    uint32_t items_capacity;
+    uint32_t selected;
+    uint8_t _pad2[364];
+    uint32_t stock_type;
+    uint8_t _pad3[28];
+    uint8_t move_callback;
+    uint8_t _pad4[19];
+    uint32_t track;
+} PeerMachineList;
+_Static_assert(sizeof(PeerMachineList) == 0x204, "PeerMachineList size");
+_Static_assert(offsetof(PeerMachineList, menu) == 0x4c, "PeerMachineList.menu offset");
+_Static_assert(offsetof(PeerMachineList, items_begin) == 0x50, "PeerMachineList.items_begin offset");
+_Static_assert(offsetof(PeerMachineList, items_end) == 0x54, "PeerMachineList.items_end offset");
+_Static_assert(offsetof(PeerMachineList, items_capacity) == 0x58, "PeerMachineList.items_capacity offset");
+_Static_assert(offsetof(PeerMachineList, selected) == 0x5c, "PeerMachineList.selected offset");
+_Static_assert(offsetof(PeerMachineList, stock_type) == 0x1cc, "PeerMachineList.stock_type offset");
+_Static_assert(offsetof(PeerMachineList, move_callback) == 0x1ec, "PeerMachineList.move_callback offset");
+_Static_assert(offsetof(PeerMachineList, track) == 0x200, "PeerMachineList.track offset");
+
 /* cf.machine.fn.current_track_type: no sig yet */
 /* cf.machine.fn.dispatch: no sig yet */
 /* cf.machine.fn.list.entry: no sig yet */
 /* cf.machine.fn.name.long: no sig yet */
+/* Looks up a MenuItem by ID and moves the stock cursor and viewport. Alignment mode zero keeps the cursor within the viewport. */
+uint32_t dk_fw_machine_peer_picker_menu_select(uint8_t *menu, uint32_t row_id, uint32_t align) __asm__("cf.machine.fn.peer_picker.menu_select");
+/* Refreshes the native type and cursor and invalidates the view. The input is always a stock type. */
+void dk_fw_machine_peer_picker_stock_select(uint8_t *view, uint32_t machine_type) __asm__("cf.machine.fn.peer_picker.stock_select");
 /* cf.machine.fn.permit: no sig yet */
 /* The KitActive set-machine wrapper the machine chooser commits through: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15, calls the machine setter on the track object (k + 0x6c + track * 0x3c0; the setter checks the permit and sends the change), and updates the mask of tracks that hold the special type. DT2 0x40036798, DN2 0x40031880. Finding 150. The debug module's SETUP command calls it from the UI task. */
 int32_t dk_fw_machine_set_kit(uint32_t kit, int32_t track, int32_t ty, int32_t flag4, int32_t flag5) __asm__("cf.machine.fn.set_kit");

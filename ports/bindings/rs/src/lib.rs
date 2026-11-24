@@ -120,6 +120,36 @@ pub mod link {
 }
 
 pub mod machine {
+    /// The first 0x204 bytes of Syntakt's MachineListView. The constructor stores the zero-based track, Menu and stock type. The movement callback is invoked with the address of its std::function storage in the view.
+    #[repr(C)]
+    pub struct PeerMachineList {
+        pub _pad0: [u8; 76],
+        pub menu: u8,
+        pub _pad1: [u8; 3],
+        pub items_begin: u32,
+        pub items_end: u32,
+        pub items_capacity: u32,
+        pub selected: u32,
+        pub _pad2: [u8; 364],
+        pub stock_type: u32,
+        pub _pad3: [u8; 28],
+        pub move_callback: u8,
+        pub _pad4: [u8; 19],
+        pub track: u32,
+    }
+    #[cfg(target_arch = "m68k")]
+    const _: () = {
+        assert!(core::mem::size_of::<PeerMachineList>() == 0x204);
+        assert!(core::mem::offset_of!(PeerMachineList, menu) == 0x4c);
+        assert!(core::mem::offset_of!(PeerMachineList, items_begin) == 0x50);
+        assert!(core::mem::offset_of!(PeerMachineList, items_end) == 0x54);
+        assert!(core::mem::offset_of!(PeerMachineList, items_capacity) == 0x58);
+        assert!(core::mem::offset_of!(PeerMachineList, selected) == 0x5c);
+        assert!(core::mem::offset_of!(PeerMachineList, stock_type) == 0x1cc);
+        assert!(core::mem::offset_of!(PeerMachineList, move_callback) == 0x1ec);
+        assert!(core::mem::offset_of!(PeerMachineList, track) == 0x200);
+    };
+
     // cf.machine.fn.current_track_type: no sig yet
 
     // cf.machine.fn.dispatch: no sig yet
@@ -127,6 +157,18 @@ pub mod machine {
     // cf.machine.fn.list.entry: no sig yet
 
     // cf.machine.fn.name.long: no sig yet
+
+    unsafe extern "C" {
+        /// Looks up a MenuItem by ID and moves the stock cursor and viewport. Alignment mode zero keeps the cursor within the viewport.
+        #[link_name = "cf.machine.fn.peer_picker.menu_select"]
+        pub fn peer_picker_menu_select(menu: *mut u8, row_id: u32, align: u32) -> u32;
+    }
+
+    unsafe extern "C" {
+        /// Refreshes the native type and cursor and invalidates the view. The input is always a stock type.
+        #[link_name = "cf.machine.fn.peer_picker.stock_select"]
+        pub fn peer_picker_stock_select(view: *mut u8, machine_type: u32);
+    }
 
     // cf.machine.fn.permit: no sig yet
 

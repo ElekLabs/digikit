@@ -20,6 +20,6 @@ The two result words at `0x100007f4` are binding and stock-note starts, in that 
 
 ## Native selection
 
-**[D]** MAIN opens a `MachineListView` via `0x40030f06`. Its constructor at `0x4002f868` builds stock machine rows and formats names using `0x400a6704`, which bounds the type to less than `0x2d`. The selection routine at `0x4002f2ae` only selects a stock type within that range. The confirm callback at `0x40031242` applies a normal selection through `0x400265c4` and emits a kit change. The peer also clamps stock types before its dispatch lookup.
+**[D]** MAIN opens a `MachineListView` via `0x40030f06`. Its constructor at `0x4002f868` builds stock machine rows and formats names using `0x400a6704`, which bounds the type to less than `0x2d`. The selection routine at `0x4002f2ae` only selects a stock type within that range. The movement callback at `0x40031242` applies a stock preview through `0x400265c4` and emits a kit change. The peer also clamps stock types before its dispatch lookup.
 
-**[O]** The track assignment in this proof comes from `test/peer-audio`. Native selection needs a separate module assignment path alongside these stock checks. Verify that it previews, confirms, cancels and clears the assignment correctly and preserves a valid stock fallback when a module unloads, the kit changes, or the device restarts. Note pitch and velocity delivery to a loadable Shot payload and physical playback remain open.
+**[O]** The track assignment in this proof comes from `test/peer-audio`. The [native picker proof](163-syntakt-peer-machine-list.md) drives this assignment through stock panel controls. Note pitch and velocity delivery to a loadable Shot payload and physical playback remain open.

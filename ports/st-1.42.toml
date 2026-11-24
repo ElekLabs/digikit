@@ -118,6 +118,56 @@ mark = "D"
 rule = "fw/input:cf_func"
 
 [[anchor]]
+name = "cf.machine.fn.peer_picker.menu_select"
+cpu = "cf"
+kind = "code"
+addr = 0x400f9e68
+len = 4
+sha256 = "7694646addf9bf72b639ece8ba990d8e101955de2d4cecd4d9e1bd66b670ef41"
+mark = "D"
+rule = "fw/machine:cf_func"
+
+[[anchor]]
+name = "cf.machine.fn.peer_picker.stock_select"
+cpu = "cf"
+kind = "code"
+addr = 0x4002f2ae
+len = 4
+sha256 = "7b530b25939fbe347fbdca9bc607e4240a2f48c532375707069ec848ec2b38ca"
+mark = "D"
+rule = "fw/machine:cf_func"
+
+[[anchor]]
+name = "cf.machine.site.peer_picker.confirm"
+cpu = "cf"
+kind = "code"
+addr = 0x4002f346
+len = 8
+sha256 = "79c3e0188dac76991f52e409d6bcb734c15a384e8f8c21b652d1ee0c5c27d2e3"
+mark = "D"
+rule = "fw/machine:cf_func"
+
+[[anchor]]
+name = "cf.machine.site.peer_picker.install"
+cpu = "cf"
+kind = "code"
+addr = 0x40031052
+len = 6
+sha256 = "89107bcffb4e1a8823a57829522adb50d08e4fe96dbb713db71c172c2d5cf247"
+mark = "D"
+rule = "fw/machine:cf_func"
+
+[[anchor]]
+name = "cf.machine.site.peer_picker.move"
+cpu = "cf"
+kind = "code"
+addr = 0x40031242
+len = 8
+sha256 = "9b78b6778f56449ca9429e734d2140df96316ae0e9eea0b9d6eea089f82ddbd0"
+mark = "D"
+rule = "fw/machine:cf_func"
+
+[[anchor]]
 name = "cf.main"
 cpu = "cf"
 kind = "code"
@@ -1325,6 +1375,24 @@ len = 4
 sha256 = "8eec9a3b88ec1a2c27362042d5db3189319dcecf6cb1a3a36c63eb1a75ca2e08"
 mark = "O"
 rule = "fw/window:cf_ptr"
+
+[[hook]]
+name = "cf.machine.hook.peer_picker.confirm"
+site = "cf.machine.site.peer_picker.confirm"
+mode = "before"
+clobbers = ["d0-d1", "a0-a1", "ccr"]
+
+[[hook]]
+name = "cf.machine.hook.peer_picker.install"
+site = "cf.machine.site.peer_picker.install"
+mode = "retarget"
+clobbers = ["d0-d1", "a0-a1", "ccr"]
+
+[[hook]]
+name = "cf.machine.hook.peer_picker.move"
+site = "cf.machine.site.peer_picker.move"
+mode = "before"
+clobbers = ["d0-d1", "a0-a1", "ccr"]
 
 [[hook]]
 name = "cf.menu.hook.settings_list.tail"

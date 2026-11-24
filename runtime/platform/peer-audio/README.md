@@ -29,3 +29,20 @@ DIGI_CF_IPS=190000000 node tools/nx/rust-env.mjs -- \
 ```
 
 The status calls return generations 1 and 2. During the busy check the mailbox lists published bank 2 and playing bank 1, and the proof result is `fffffff4` (busy). The next snapshot shows playing bank zero, and the replacement trigger returns zero.
+
+To verify native selection, use the same proof image, `proof` and `result` symbols, and card. The fixture's `M` command offers the label. The panel selects it. `0x4002f352` records the stock confirm flag in the low byte of D2, and the mailbox reports the bound track and note start count.
+
+```sh
+open_picker='tap:20,tap:20,wait:140M'
+down=$(printf 'tap:30,%.0s' {1..50})
+up=$(printf 'tap:40,%.0s' {1..50})
+binding='peek:0x100007f4:8'
+mkdir -p out/st-picker
+DIGI_CF_IPS=190000000 node tools/nx/rust-env.mjs -- \
+  cargo run --release -p elektron-native-boot --example panel_drive -- \
+  out/st-live-peer-audio.syx --after 111M --hold 8M --max 6000M --card-image out/st-card.img \
+  --call-at 0x4000b2d8 --call-fn "$proof" --regs-at 0x4002f352 --out out/st-picker \
+  --steps "send:5073616d706c65732f6e65787400,wait:100M,send:53,peek:$result:4,send:4d,$open_picker,${down}wait:180M,frame:shot,$binding,tap:28,wait:130M,$binding,$open_picker,${down}wait:180M,tap:39,wait:160M,$binding,pcmreset,midi:903c64,wait:18M,$binding,wav:out/st-picker/shot.wav,midi:803c00,wait:20M,$open_picker,${up}wait:180M,tap:39,wait:150M,$binding,pcmreset,midi:903c64,wait:18M,$binding,wav:out/st-picker/stock.wav,peer"
+```
+
+The peer row is appended on digital audio tracks. The list on analog tracks and tracks already configured as MIDI keeps its stock choices. Peer confirmation restores the original stock preview and keeps the assignment in the peer adapter until another selection or reset. The test fixture stands in for service registration while the Syntakt Shot package is in development.
