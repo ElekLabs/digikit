@@ -1,7 +1,7 @@
 // A fake digikit device that speaks the SysEx protocol of docs/design/digikit-upload.md byte for byte (framing included), as a `DkTransport` for
 // `DkSession`: files, a selection, a log, modules, and a RESTART that is silent for a while and then boots again. Shared by the site's dktransfer.test.ts and
 // the screenshot runs of the site's Transfer page (tools/devtools/web_transfer_shots.mjs).
-import { decode8in7, encode8in7, fileHash, type DkTransport } from '@digi/dk-session';
+import { decode8in7, encode8in7, fileHash, serviceHash, type DkTransport } from '@digi/dk-session';
 import { CAP, CAPACITY_KINDS, CMD, LOG_KIND, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 
 /** The store's hash slot of a file (the host's `fileHash`: what the real runtime keeps in its table). */
@@ -253,10 +253,15 @@ export class FakeDevice implements DkTransport {
             be32(256),
             be32(0),
             be32(0),
+            // one section, `machines` (rows, faults, a count of 1 type, the type 17 in the low byte of the first type word, the second word 0)
+            [1],
+            be32(serviceHash('machines')),
+            [5],
             be32(1),
-            [1, 17],
             be32(0),
-            [0],
+            be32(1),
+            be32(17),
+            be32(0),
           );
         };
         return ok(
