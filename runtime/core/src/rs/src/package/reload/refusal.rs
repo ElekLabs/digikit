@@ -40,7 +40,7 @@ pub(crate) unsafe fn refusal_for<P: PackagePlatform>(p: &P, rec: Option<usize>, 
 
 /// The refusal of a live job (a load, an unload or a reload), or `None` when it may go on. One function, one order: safe mode, the firmware's transport (playing, paused, or not
 /// readable), an open upload, card operations, menus of the module (`Facts::menus`: false for a load, which has no module yet). The first that holds names the status.
-/// The services' own refusals (`Service::teardown_refusal`: a service that cannot give back the module's state now) come after it, for an unload and a reload: the manager asks them
+/// The services' own refusals (`Provider::can_stop`: a service that cannot give back the module's state now) come after it, for an unload and a reload: the manager asks them
 /// (`RtHost::can_stop`).
 pub unsafe fn refusal<P: PackagePlatform>(p: &P, f: &Facts) -> Option<i32> {
     if f.safe_mode {

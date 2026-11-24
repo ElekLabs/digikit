@@ -108,7 +108,7 @@ devices/*.toml  sdk/  packages/  tools/  apps/  tests/  docs/          unchanged
 | `modules/lfo/lfo_shapes_1` (`digikit/lfo_shapes_1`) | `modules/lfo-shape/digikit/lfo_shapes_1` |
 | `modules/tools/<name>` (debug, probe, remote, usb-fast: `digikit/<name>`; bootscreen: id `tools/bootscreen`) | `modules/tool/<module id>`; bootscreen is the one id whose first part is not its author (author `digikit`), so its folder is `modules/tool/tools/bootscreen`; its id stays |
 
-What does not move or change name: module ids, Nx project names (a module id or a crate name), crate names (the rename of crate `dkrt-svc-params` to `dkrt-svc-rows` is a later PR with an objdiff proof, because Rust symbol names may reach the objects), the `dkrt-sdk` name, `tests/fixtures/modules`, `devices/*.toml`, the text of findings and handovers.
+What does not move or change name: module ids, Nx project names (a module id or a crate name), crate names (the rename of crate `dkrt-svc-rows` to `dkrt-svc-rows` is a later PR with an objdiff proof, because Rust symbol names may reach the objects), the `dkrt-sdk` name, `tests/fixtures/modules`, `devices/*.toml`, the text of findings and handovers.
 
 Code that reads the paths and must change with the move: `tools/nx/modules.mjs` (the glob and `startsWith('modules/')`), `tools/devtools/layercheck.py`, literal paths in `modules/core/runtime/project.json`, Cargo path dependencies, the patchkit manifest roots. Before the move, check that the Rust objects embed no source path.
 

@@ -1,22 +1,17 @@
-//! Host tests of the shortcuts service over `FakeCore`: the builder call and its commit, the rule for the records, `check`, `apply_record` and `remove`, and the entry for the
-//! key-dispatch hook. The statics of the crate (the collection, the gate and the state) are shared, so each test takes `LOCK` and starts clean.
+//! Host tests of the shortcuts service over `FakeCore`: the builder call and its commit, the rule for the records, `Records::check` and `Records::apply`, `Provider::detach`, and
+//! the entry for the key-dispatch hook. Each test starts its own owner object (`Provider::start`): nothing is shared between tests.
 use core::ffi::c_void;
 use dkrt_abi::profiles::ALL;
-use dkrt_abi::service::{
-    check_step, commit_phase, ApplyCtx, CheckCtx, Declare, ModuleCommitCtx, RecordSink, Service,
-};
+use dkrt_abi::provider::{Consumer, ConsumerId, Provider, Records, Ticker};
+use dkrt_abi::service::{check_step, commit_phase, CheckCtx, ModuleCommitCtx, RecordSink};
 use dkrt_sdk::records::{KIND_SHORTCUT, LEN_SHORTCUT};
 use dkrt_sdk::*;
 use dkrt_svc_shortcuts::bindings::Callback;
-use dkrt_svc_shortcuts::build::{begin, end, shortcut_add, ShortcutDef};
-use dkrt_svc_shortcuts::records::{on_key, state, ShortcutsService};
-use dkrt_svc_shortcuts::shortcuts::Verdict;
-use dkrt_svc_shortcuts::validate::{at, check_set, BODY_LEN};
+use dkrt_svc_shortcuts::builder::ShortcutDef;
+use dkrt_svc_shortcuts::rule::{at, check_set, BODY_LEN};
+use dkrt_svc_shortcuts::shortcuts::{Shortcuts, Verdict};
 use dkrt_test_support::{Call, FakeCore};
-use std::sync::{Mutex, MutexGuard};
-
-static LOCK: Mutex<()> = Mutex::new(());
-type Svc = ShortcutsService;
+use std::sync::Mutex;
 
 const BASE: u32 = 0x4000;
 const IMAGE: u32 = 0x1000;
@@ -60,8 +55,7 @@ fn hint() -> ShortcutDef {
     )
 }
 
-fn fresh() -> (MutexGuard<'static, ()>, FakeCore) {
-    let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+fn fresh() -> (Shortcuts, FakeCore) {
     let mut core = FakeCore::new();
     // a device that has the keys of these tests
     core.device = ALL
@@ -69,21 +63,27 @@ fn fresh() -> (MutexGuard<'static, ()>, FakeCore) {
         .find(|p| [TRK, YES, OTHER].iter().all(|k| p.key_code(*k) != 0))
         .expect("a profile with key names")
         .id;
-    for owner in 0..=8u8 {
-        unsafe { <Svc as Service<FakeCore>>::remove(&core, owner) };
-    }
-    assert_eq!(state().table().len(), 0);
-    (g, core)
+    let s = <Shortcuts as Provider<FakeCore>>::start(&core).unwrap();
+    assert_eq!(s.table().len(), 0);
+    (s, core)
+}
+
+/// The module of `owner` unloads: `Provider::detach`.
+fn detach(s: &mut Shortcuts, core: &FakeCore, owner: u8) {
+    Provider::detach(s, core, ConsumerId::new(owner));
 }
 
 /// `init` of module record `rec` is open and its code runs.
-fn open(core: &FakeCore, rec: usize) {
-    begin(rec);
+fn open(s: &mut Shortcuts, core: &FakeCore, rec: usize) {
+    Records::begin(s, core, rec);
     core.running.set(rec as u8 + 1);
 }
 
-fn add(core: &FakeCore, d: &ShortcutDef) -> i32 {
-    unsafe { shortcut_add(core, 4 as *mut u8, d as *const ShortcutDef as *const u8) }
+fn add(s: &mut Shortcuts, core: &FakeCore, d: &ShortcutDef) -> i32 {
+    unsafe {
+        s.builder()
+            .add(core, 4 as *mut u8, d as *const ShortcutDef as *const u8)
+    }
 }
 
 fn ctx(phase: u32, sink: *mut RecordSink) -> ModuleCommitCtx<'static> {
@@ -98,31 +98,17 @@ fn ctx(phase: u32, sink: *mut RecordSink) -> ModuleCommitCtx<'static> {
 }
 
 /// The commit of module record `rec`: the first refusal, or the bytes of the records it wrote.
-fn commit(core: &FakeCore, rec: usize) -> Result<Vec<u8>, i32> {
+fn commit(s: &mut Shortcuts, core: &FakeCore, rec: usize) -> Result<Vec<u8>, i32> {
     let mut measure = RecordSink::measure();
-    let r = unsafe {
-        <Svc as Service<FakeCore>>::module_commit(
-            core,
-            rec,
-            &ctx(commit_phase::PREPARE, &mut measure),
-        )
-    };
-    if r != OK {
-        return Err(r);
-    }
+    Records::commit(s, core, rec, &ctx(commit_phase::PREPARE, &mut measure))?;
     let mut buf = vec![0u8; measure.at];
     let mut sink = RecordSink::over(buf.as_mut_ptr(), buf.len());
-    let r = unsafe {
-        <Svc as Service<FakeCore>>::module_commit(core, rec, &ctx(commit_phase::WRITE, &mut sink))
-    };
-    assert_eq!(r, OK);
+    Records::commit(s, core, rec, &ctx(commit_phase::WRITE, &mut sink)).unwrap();
     assert_eq!(
         sink.at, measure.at,
         "the measuring and the writing pass agree"
     );
-    unsafe {
-        <Svc as Service<FakeCore>>::module_commit(core, rec, &ctx(commit_phase::DECLARE, &mut sink))
-    };
+    Records::commit(s, core, rec, &ctx(commit_phase::DECLARE, &mut sink)).unwrap();
     Ok(buf[RecordSink::HEADER..].to_vec())
 }
 
@@ -131,29 +117,25 @@ fn word(b: &[u8], at: usize) -> u32 {
 }
 
 #[test]
-fn the_service_declares_the_shortcut_kind() {
-    let mut d = Declare::new();
-    unsafe { <Svc as Service<FakeCore>>::declare(&mut d) };
-    assert_eq!(d.n, 1);
-}
-
-#[test]
 fn a_call_outside_init_or_from_another_module_is_refused() {
-    let (_g, core) = fresh();
-    end();
-    assert_eq!(add(&core, &hint()), E_CONTEXT, "no init is open");
-    begin(0);
+    let (mut s, core) = fresh();
+    detach(&mut s, &core, 9);
+    assert_eq!(add(&mut s, &core, &hint()), E_CONTEXT, "no init is open");
+    Records::begin(&mut s, &core, 0);
     core.running.set(2);
-    assert_eq!(add(&core, &hint()), E_CONTEXT, "another module's code runs");
-    end();
+    assert_eq!(
+        add(&mut s, &core, &hint()),
+        E_CONTEXT,
+        "another module's code runs"
+    );
 }
 
 #[test]
 fn the_commit_writes_the_record_with_the_callbacks_as_image_offsets() {
-    let (_g, core) = fresh();
-    open(&core, 0);
-    assert_eq!(add(&core, &hint()), OK);
-    let bytes = commit(&core, 0).unwrap();
+    let (mut s, core) = fresh();
+    open(&mut s, &core, 0);
+    assert_eq!(add(&mut s, &core, &hint()), OK);
+    let bytes = commit(&mut s, &core, 0).unwrap();
     assert_eq!(bytes.len(), LEN_SHORTCUT as usize);
     assert_eq!(
         (word(&bytes, 0), word(&bytes, 4)),
@@ -171,53 +153,62 @@ fn the_commit_writes_the_record_with_the_callbacks_as_image_offsets() {
 
 #[test]
 fn a_shortcut_without_off_has_the_offset_zero() {
-    let (_g, core) = fresh();
-    open(&core, 0);
+    let (mut s, core) = fresh();
+    open(&mut s, &core, 0);
     assert_eq!(
-        add(&core, &def(b"x\0", b"X\0", [TRK, YES], code(0x100), None)),
+        add(
+            &mut s,
+            &core,
+            &def(b"x\0", b"X\0", [TRK, YES], code(0x100), None)
+        ),
         OK
     );
-    let bytes = commit(&core, 0).unwrap();
+    let bytes = commit(&mut s, &core, 0).unwrap();
     assert_eq!(word(&bytes[8..], at::OFF), 0);
 }
 
 #[test]
 fn a_module_without_shortcuts_commits_nothing() {
-    let (_g, core) = fresh();
-    open(&core, 0);
-    assert_eq!(commit(&core, 0).unwrap().len(), 0);
+    let (mut s, core) = fresh();
+    open(&mut s, &core, 0);
+    assert_eq!(commit(&mut s, &core, 0).unwrap().len(), 0);
 }
 
 #[test]
 fn the_commit_refuses_a_bad_call_with_the_first_error() {
     // a fifth shortcut
-    let (_g, core) = fresh();
-    open(&core, 0);
+    let (mut s, core) = fresh();
+    open(&mut s, &core, 0);
     for k in 0..4u32 {
         assert_eq!(
             add(
+                &mut s,
                 &core,
                 &def(b"a\0", b"A\0", [TRK, 10 + k], code(0x100), None)
             ),
             OK
         );
     }
-    assert_eq!(add(&core, &hint()), E_DECL_FULL);
-    assert_eq!(commit(&core, 0), Err(E_DECL_FULL));
+    assert_eq!(add(&mut s, &core, &hint()), E_DECL_FULL);
+    assert_eq!(commit(&mut s, &core, 0), Err(E_DECL_FULL));
     // no id, no struct
-    open(&core, 0);
+    open(&mut s, &core, 0);
     assert_eq!(
-        add(&core, &def(b"", b"A\0", [TRK, YES], code(0x100), None)),
+        add(
+            &mut s,
+            &core,
+            &def(b"", b"A\0", [TRK, YES], code(0x100), None)
+        ),
         E_FORMAT
     );
-    assert_eq!(commit(&core, 0), Err(E_FORMAT));
-    open(&core, 0);
+    assert_eq!(commit(&mut s, &core, 0), Err(E_FORMAT));
+    open(&mut s, &core, 0);
     assert_eq!(
-        unsafe { shortcut_add(&core, 4 as *mut u8, core::ptr::null()) },
+        unsafe { s.builder().add(&core, 4 as *mut u8, core::ptr::null()) },
         E_FORMAT
     );
-    assert_eq!(commit(&core, 0), Err(E_FORMAT));
-    // the rule of `validate`: no `on`, a key that is NONE, the same key twice, the same keys twice, an id twice
+    assert_eq!(commit(&mut s, &core, 0), Err(E_FORMAT));
+    // the rule of `rule::check_set`: no `on`, a key that is NONE, the same key twice, the same keys twice, an id twice
     for (what, bad) in [
         ("no on", def(b"a\0", b"A\0", [TRK, YES], None, None)),
         ("key none", def(b"a\0", b"A\0", [0, YES], code(0x100), None)),
@@ -230,27 +221,46 @@ fn the_commit_refuses_a_bad_call_with_the_first_error() {
             def(b"a\0", b"A\0", [TRK, 64], code(0x100), None),
         ),
     ] {
-        open(&core, 0);
+        open(&mut s, &core, 0);
         assert_eq!(
-            add(&core, &bad),
+            add(&mut s, &core, &bad),
             OK,
             "{what}: the call collects, the commit judges"
         );
-        assert_eq!(commit(&core, 0), Err(E_FORMAT), "{what}");
+        assert_eq!(commit(&mut s, &core, 0), Err(E_FORMAT), "{what}");
     }
-    open(&core, 0);
-    add(&core, &def(b"a\0", b"A\0", [TRK, YES], code(0x100), None));
-    add(&core, &def(b"b\0", b"B\0", [TRK, YES], code(0x100), None));
-    assert_eq!(commit(&core, 0), Err(E_FORMAT), "same keys twice");
-    open(&core, 0);
-    add(&core, &def(b"a\0", b"A\0", [TRK, YES], code(0x100), None));
-    add(&core, &def(b"a\0", b"B\0", [TRK, OTHER], code(0x100), None));
-    assert_eq!(commit(&core, 0), Err(E_FORMAT), "same id twice");
+    open(&mut s, &core, 0);
+    add(
+        &mut s,
+        &core,
+        &def(b"a\0", b"A\0", [TRK, YES], code(0x100), None),
+    );
+    add(
+        &mut s,
+        &core,
+        &def(b"b\0", b"B\0", [TRK, YES], code(0x100), None),
+    );
+    assert_eq!(commit(&mut s, &core, 0), Err(E_FORMAT), "same keys twice");
+    open(&mut s, &core, 0);
+    add(
+        &mut s,
+        &core,
+        &def(b"a\0", b"A\0", [TRK, YES], code(0x100), None),
+    );
+    add(
+        &mut s,
+        &core,
+        &def(b"a\0", b"B\0", [TRK, OTHER], code(0x100), None),
+    );
+    assert_eq!(commit(&mut s, &core, 0), Err(E_FORMAT), "same id twice");
     // a callback outside the image
-    open(&core, 0);
-    add(&core, &def(b"a\0", b"A\0", [TRK, YES], code(IMAGE), None));
-    assert_eq!(commit(&core, 0), Err(E_FORMAT));
-    end();
+    open(&mut s, &core, 0);
+    add(
+        &mut s,
+        &core,
+        &def(b"a\0", b"A\0", [TRK, YES], code(IMAGE), None),
+    );
+    assert_eq!(commit(&mut s, &core, 0), Err(E_FORMAT));
 }
 
 /// A `register` section of the records the commit wrote.
@@ -261,39 +271,44 @@ fn section(records: &[u8], n: u32) -> Vec<u8> {
     s
 }
 
-fn check(core: &FakeCore, step: u32, sec: &[u8]) -> i32 {
+fn check(s: &mut Shortcuts, core: &FakeCore, step: u32, sec: &[u8]) -> i32 {
     let c = CheckCtx {
         reg: sec.as_ptr(),
         image_size: IMAGE,
     };
-    unsafe { <Svc as Service<FakeCore>>::check(core, step, &c) }
+    Records::check(s, core, step, &c).err().unwrap_or(OK)
 }
 
-fn apply(core: &FakeCore, owner: u8, records: &[u8]) -> i32 {
-    let c = ApplyCtx {
-        owner,
-        reg: core::ptr::null(),
-        base: BASE,
-    };
-    unsafe {
-        <Svc as Service<FakeCore>>::apply_record(core, KIND_SHORTCUT, records[8..].as_ptr(), &c)
-    }
+/// A consumer of module `owner` comes up with the SHORTCUT records `records` (the bytes the commit wrote) loaded at `BASE`: `Records::apply` for each record, as the loader does.
+fn apply(s: &mut Shortcuts, core: &FakeCore, owner: u8, records: &[u8]) -> i32 {
+    let sec = section(records, 1);
+    // SAFETY: `sec` is a section of the layout the registry walker checks, and lives for the call.
+    let consumer = unsafe { Consumer::of_section(ConsumerId::new(owner), sec.as_ptr(), BASE) };
+    Records::apply(s, core, KIND_SHORTCUT, &records[8..], &consumer)
+        .err()
+        .unwrap_or(OK)
 }
 
-fn one_record(core: &FakeCore, d: &ShortcutDef) -> Vec<u8> {
-    open(core, 0);
-    assert_eq!(add(core, d), OK);
-    commit(core, 0).unwrap()
+fn one_record(s: &mut Shortcuts, core: &FakeCore, d: &ShortcutDef) -> Vec<u8> {
+    open(s, core, 0);
+    assert_eq!(add(s, core, d), OK);
+    commit(s, core, 0).unwrap()
 }
 
 #[test]
-fn apply_makes_a_binding_with_the_callbacks_resolved_against_the_base_and_remove_drops_it() {
-    let (_g, core) = fresh();
-    let rec = one_record(&core, &hint());
-    assert_eq!(check(&core, check_step::RECORDS, &section(&rec, 1)), OK);
-    assert_eq!(check(&core, check_step::ROWS, &section(&rec, 1)), OK);
-    assert_eq!(apply(&core, 1, &rec), OK);
-    let b = state().table().get(0).unwrap();
+fn apply_makes_a_binding_with_the_callbacks_resolved_against_the_base_and_detach_drops_it() {
+    let (mut s, core) = fresh();
+    let rec = one_record(&mut s, &core, &hint());
+    assert_eq!(
+        check(&mut s, &core, check_step::RECORDS, &section(&rec, 1)),
+        OK
+    );
+    assert_eq!(
+        check(&mut s, &core, check_step::ROWS, &section(&rec, 1)),
+        OK
+    );
+    assert_eq!(apply(&mut s, &core, 1, &rec), OK);
+    let b = s.table().get(0).unwrap();
     assert_eq!(
         (b.owner, b.keys, b.disabled),
         (1, [TRK as u8, YES as u8], false)
@@ -308,17 +323,17 @@ fn apply_makes_a_binding_with_the_callbacks_resolved_against_the_base_and_remove
     );
     assert_eq!(b.arg as usize, 0x77);
     assert_eq!(&b.id[..5], b"hint\0");
-    unsafe { <Svc as Service<FakeCore>>::remove(&core, 1) };
-    assert_eq!(state().table().len(), 0);
+    detach(&mut s, &core, 1);
+    assert_eq!(s.table().len(), 0);
 }
 
 #[test]
 fn a_second_module_with_the_same_keys_loads_with_its_shortcut_disabled_and_a_log_entry() {
-    let (_g, core) = fresh();
-    let rec = one_record(&core, &hint());
-    assert_eq!(apply(&core, 1, &rec), OK);
+    let (mut s, core) = fresh();
+    let rec = one_record(&mut s, &core, &hint());
+    assert_eq!(apply(&mut s, &core, 1, &rec), OK);
     assert!(core.calls().iter().all(|c| !matches!(c, Call::Log { .. })));
-    assert_eq!(apply(&core, 2, &rec), OK, "a clash is no refusal");
+    assert_eq!(apply(&mut s, &core, 2, &rec), OK, "a clash is no refusal");
     let logs: Vec<_> = core
         .calls()
         .into_iter()
@@ -328,70 +343,61 @@ fn a_second_module_with_the_same_keys_loads_with_its_shortcut_disabled_and_a_log
         })
         .collect();
     assert_eq!(logs, [(logk::SHORTCUT_CLASH, [2, 1, TRK, YES, 0])]);
-    assert!(state().table().get(1).unwrap().disabled);
-    unsafe { <Svc as Service<FakeCore>>::remove(&core, 1) };
-    assert_eq!(state().table().len(), 1);
+    assert!(s.table().get(1).unwrap().disabled);
+    detach(&mut s, &core, 1);
+    assert_eq!(s.table().len(), 1);
     assert!(
-        !state().table().get(1).unwrap().disabled,
+        !s.table().get(1).unwrap().disabled,
         "the second module's shortcut works once the first module is gone"
     );
-    unsafe { <Svc as Service<FakeCore>>::remove(&core, 2) };
+    detach(&mut s, &core, 2);
 }
 
 #[test]
 fn check_refuses_a_record_that_breaks_the_rule_or_points_outside_the_image_and_a_full_table() {
-    let (_g, core) = fresh();
-    let mut rec = one_record(&core, &hint());
+    let (mut s, core) = fresh();
+    let rec = one_record(&mut s, &core, &hint());
     let mut bad = rec.clone();
     bad[8 + at::ON..8 + at::ON + 4].copy_from_slice(&IMAGE.to_be_bytes());
     assert_eq!(
-        check(&core, check_step::RECORDS, &section(&bad, 1)),
+        check(&mut s, &core, check_step::RECORDS, &section(&bad, 1)),
         E_FORMAT
     );
     let mut bad = rec.clone();
     bad[8 + at::KEY0..8 + at::KEY0 + 4].copy_from_slice(&0u32.to_be_bytes());
     assert_eq!(
-        check(&core, check_step::RECORDS, &section(&bad, 1)),
+        check(&mut s, &core, check_step::RECORDS, &section(&bad, 1)),
         E_FORMAT
     );
     // the table is full: 16 bindings of other owners
     for i in 0..16u32 {
         let mut r = rec.clone();
         r[8 + at::KEY1..8 + at::KEY1 + 4].copy_from_slice(&(10 + i).to_be_bytes());
-        assert_eq!(apply(&core, 5, &r), OK);
+        assert_eq!(apply(&mut s, &core, 5, &r), OK);
     }
     assert_eq!(
-        check(&core, check_step::ROWS, &section(&rec, 1)),
+        check(&mut s, &core, check_step::ROWS, &section(&rec, 1)),
         E_TABLE_FULL
     );
-    assert_eq!(apply(&core, 6, &rec), E_TABLE_FULL);
+    assert_eq!(apply(&mut s, &core, 6, &rec), E_TABLE_FULL);
     // while a reload of that owner gives its bindings back first
     core.live_op.set(5);
-    assert_eq!(check(&core, check_step::ROWS, &section(&rec, 1)), OK);
-    unsafe { <Svc as Service<FakeCore>>::remove(&core, 5) };
-    rec.clear();
+    assert_eq!(
+        check(&mut s, &core, check_step::ROWS, &section(&rec, 1)),
+        OK
+    );
+    detach(&mut s, &core, 5);
 }
 
 #[test]
 fn a_record_of_another_kind_is_ignored() {
-    let (_g, core) = fresh();
-    let c = ApplyCtx {
-        owner: 1,
-        reg: core::ptr::null(),
-        base: BASE,
-    };
+    let (mut s, core) = fresh();
+    let consumer = Consumer::new(ConsumerId::new(1), &[]);
     assert_eq!(
-        unsafe {
-            <Svc as Service<FakeCore>>::apply_record(
-                &core,
-                KIND_SHORTCUT + 1,
-                [0u8; 60].as_ptr(),
-                &c,
-            )
-        },
-        OK
+        Records::apply(&mut s, &core, KIND_SHORTCUT + 1, &[0u8; 60], &consumer),
+        Ok(())
     );
-    assert_eq!(state().table().len(), 0);
+    assert_eq!(s.table().len(), 0);
 }
 
 #[test]
@@ -421,13 +427,13 @@ fn the_rule_reports_each_fault_of_a_record_and_judges_only_this_kind() {
     assert_eq!(faults(&[&bad]), 1, "a label with no room for the NUL");
     // other kinds are not this service's to judge
     let mut n = 0;
-    Svc::validate(KIND_SHORTCUT + 1, &[&[0u8; 3]], &mut |_| n += 1);
+    dkrt_svc_shortcuts::records::validate(KIND_SHORTCUT + 1, &[&[0u8; 3]], &mut |_| n += 1);
     assert_eq!(n, 0);
 }
 
 #[test]
 fn the_dispatch_entry_translates_the_panel_code_with_the_device_profile() {
-    let (_g, mut core) = fresh();
+    let (mut s, mut core) = fresh();
     let p = ALL
         .iter()
         .find(|p| p.key_code(TRK) != 0 && p.key_code(YES) != 0);
@@ -451,43 +457,43 @@ fn the_dispatch_entry_translates_the_panel_code_with_the_device_profile() {
     b.keys = [trk as u8, yes as u8];
     b.on = Some(on);
     b.off = Some(off);
-    state().table_mut().add(b);
-    let pass = |phase: u32| unsafe { <Svc as Service<FakeCore>>::tick(&core, phase) };
+    s.table_mut().add(b);
+    let pass = |s: &mut Shortcuts, phase: u32| Ticker::tick(s, &core, phase);
     // the firmware's flags word, read with the device's bits
     let (down, up) = (1u32 << p.key_flags.press, 1u32 << p.key_flags.release);
-    assert_eq!(on_key(&core, p.key_code(trk), down), Verdict::Pass);
-    assert_eq!(on_key(&core, p.key_code(yes), down), Verdict::Swallow);
+    assert_eq!(s.dispatch(&core, p.key_code(trk), down), Verdict::Pass);
+    assert_eq!(s.dispatch(&core, p.key_code(yes), down), Verdict::Swallow);
     assert!(
         CALLS.lock().unwrap().is_empty(),
         "the hook runs no module code"
     );
     // the UI pass makes the calls (the early phase)
-    pass(dkrt_abi::service::tick_phase::LAST);
+    pass(&mut s, dkrt_abi::service::tick_phase::LAST);
     assert!(CALLS.lock().unwrap().is_empty());
-    pass(dkrt_abi::service::tick_phase::EARLY);
+    pass(&mut s, dkrt_abi::service::tick_phase::EARLY);
     assert_eq!(*CALLS.lock().unwrap(), ["on"]);
-    assert_eq!(on_key(&core, p.key_code(yes), up), Verdict::Swallow);
-    assert_eq!(on_key(&core, p.key_code(trk), up), Verdict::Pass);
-    pass(dkrt_abi::service::tick_phase::EARLY);
+    assert_eq!(s.dispatch(&core, p.key_code(yes), up), Verdict::Swallow);
+    assert_eq!(s.dispatch(&core, p.key_code(trk), up), Verdict::Pass);
+    pass(&mut s, dkrt_abi::service::tick_phase::EARLY);
     assert_eq!(*CALLS.lock().unwrap(), ["on", "off"]);
     // a device the table does not know passes everything
     core.device = 999;
-    assert_eq!(on_key(&core, p.key_code(yes), down), Verdict::Pass);
-    unsafe { <Svc as Service<FakeCore>>::remove(&core, 1) };
+    assert_eq!(s.dispatch(&core, p.key_code(yes), down), Verdict::Pass);
+    detach(&mut s, &core, 1);
 }
 
 #[test]
 fn a_binding_with_a_key_the_device_lacks_is_disabled_and_never_keeps_the_pair() {
-    let (_g, mut core) = fresh();
-    let rec = one_record(&core, &hint());
+    let (mut s, mut core) = fresh();
+    let rec = one_record(&mut s, &core, &hint());
     // a device with no key names: the keys have no panel code
     let bare = ALL
         .iter()
         .find(|p| p.key_code(TRK) == 0)
         .expect("a profile without key names");
     core.device = bare.id;
-    assert_eq!(apply(&core, 1, &rec), OK, "the module loads");
-    let b = state().table().get(0).unwrap();
+    assert_eq!(apply(&mut s, &core, 1, &rec), OK, "the module loads");
+    let b = s.table().get(0).unwrap();
     assert!(b.disabled && b.inactive);
     let logs = |core: &FakeCore| -> Vec<(u16, [u32; 5])> {
         core.calls()
@@ -508,15 +514,66 @@ fn a_binding_with_a_key_the_device_lacks_is_disabled_and_never_keeps_the_pair() 
         .find(|p| p.key_code(TRK) != 0 && p.key_code(YES) != 0)
         .expect("a profile with key names");
     core.device = full.id;
-    assert_eq!(apply(&core, 2, &rec), OK);
-    let t = state().table();
+    assert_eq!(apply(&mut s, &core, 2, &rec), OK);
+    let t = s.table();
     assert!(!t.get(1).unwrap().disabled, "the later binding works");
     assert!(
         logs(&core).iter().all(|l| l.0 != logk::SHORTCUT_CLASH),
         "no clash is logged for the inactive binding"
     );
     // removing the keeper does not enable the inactive binding
-    unsafe { <Svc as Service<FakeCore>>::remove(&core, 2) };
-    assert!(state().table().get(0).unwrap().disabled);
-    unsafe { <Svc as Service<FakeCore>>::remove(&core, 1) };
+    detach(&mut s, &core, 2);
+    assert!(s.table().get(0).unwrap().disabled);
+    detach(&mut s, &core, 1);
+}
+
+#[test]
+fn the_records_of_a_module_become_bindings_in_file_order() {
+    let (mut s, core) = fresh();
+    open(&mut s, &core, 0);
+    for (id, label, keys, on) in [
+        (&b"hint\0"[..], &b"HINT\0"[..], [TRK, YES], 0x100),
+        (b"other\0", b"OTHER\0", [TRK, OTHER], 0x120),
+        (b"third\0", b"THIRD\0", [YES, OTHER], 0x140),
+    ] {
+        let d = def(id, label, keys, code(on), None);
+        assert_eq!(add(&mut s, &core, &d), OK);
+    }
+    let bytes = commit(&mut s, &core, 0).unwrap();
+    // the loader walks the consumer's records of the kind, in file order, after its attach
+    let sec = section(&bytes, 3);
+    let consumer = unsafe { Consumer::of_section(ConsumerId::new(2), sec.as_ptr(), BASE) };
+    for body in consumer.records(KIND_SHORTCUT) {
+        Records::apply(&mut s, &core, KIND_SHORTCUT, body, &consumer).unwrap();
+    }
+    let table = s.table();
+    assert_eq!(table.len(), 3);
+    let at = |i: usize| {
+        let b = table.get(i).unwrap();
+        (b.owner, b.keys, b.on.map(|f| f as *const () as usize))
+    };
+    assert_eq!(
+        [at(0), at(1), at(2)],
+        [
+            (2, [TRK as u8, YES as u8], Some((BASE + 0x100) as usize)),
+            (2, [TRK as u8, OTHER as u8], Some((BASE + 0x120) as usize)),
+            (2, [YES as u8, OTHER as u8], Some((BASE + 0x140) as usize)),
+        ],
+        "the first record is the first binding"
+    );
+}
+
+#[test]
+fn apply_refuses_a_body_shorter_than_a_record() {
+    let (mut s, core) = fresh();
+    let rec = one_record(&mut s, &core, &hint());
+    let sec = section(&rec, 1);
+    // SAFETY: as in `apply` above.
+    let consumer = unsafe { Consumer::of_section(ConsumerId::new(1), sec.as_ptr(), BASE) };
+    let short = &rec[8..8 + BODY_LEN - 1];
+    assert_eq!(
+        Records::apply(&mut s, &core, KIND_SHORTCUT, short, &consumer),
+        Err(E_FORMAT)
+    );
+    assert_eq!(s.table().len(), 0, "a refused record binds nothing");
 }

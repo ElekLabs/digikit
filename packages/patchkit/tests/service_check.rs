@@ -45,9 +45,7 @@ fn service(test: &str, kinds: &[&str]) -> (PathBuf, PathBuf) {
     let root = scratch(test);
     let dir = root.join("sweep");
     copy_tree(&repo().join("sdk/templates/service"), &dir);
-    let mut sdk = String::from(
-        "[[service]]\nname = \"sweep\"\nrust = \"dkrt_svc_sweep::records::Sweep\"\n\n[records.kinds]\n",
-    );
+    let mut sdk = String::from("[[service]]\nname = \"sweep\"\n\n[records.kinds]\n");
     for k in kinds {
         sdk.push_str(&format!(
             "{k} = {{ id = 9, len = 16, service = \"sweep\" }}\n"
@@ -86,7 +84,7 @@ fn a_missing_file_or_folder_of_the_layout_fails() {
         ("src/records.rs", "src/records.rs is missing"),
         ("Cargo.toml", "Cargo.toml is missing"),
     ] {
-        let (dir, sdk) = service("layout-file", &[]);
+        let (dir, sdk) = service("layout-file", &["SWEEP_KIND"]);
         // slots.rs is required of a service that fills slots
         append(
             &dir.join("dks/module.toml"),
@@ -107,7 +105,7 @@ fn a_missing_file_or_folder_of_the_layout_fails() {
 #[test]
 fn slots_rs_is_required_only_for_a_service_with_fills() {
     // no fills: the file may be absent (and its `pub mod` need not be declared)
-    let (dir, sdk) = service("slots-optional", &[]);
+    let (dir, sdk) = service("slots-optional", &["SWEEP_KIND"]);
     fs::remove_file(dir.join("src/slots.rs")).unwrap();
     fs::write(dir.join("src/lib.rs"), "#![no_std]\npub mod records;\n").unwrap();
     let found = problems(&dir, &sdk);
@@ -144,13 +142,8 @@ fn the_layout_ties_the_crate_name_the_modules_and_the_dsp_folder() {
         "does not declare `pub mod slots;`"
     ));
 
-    // a service with DSP handlers has the dsp/ folder, and the folder has a mod.rs
+    // the dsp/ folder has a mod.rs and is declared
     let (dir, sdk) = service("layout-dsp", &[]);
-    append(
-        &dir.join("src/records.rs"),
-        "impl Sweep {\n    unsafe fn dsp_admit() {}\n}\n",
-    );
-    assert!(mentions(&problems(&dir, &sdk), "has no src/dsp/ folder"));
     fs::create_dir(dir.join("src/dsp")).unwrap();
     let found = problems(&dir, &sdk);
     assert!(mentions(&found, "src/dsp/ has no mod.rs"), "{found:?}");
@@ -219,57 +212,12 @@ fn the_one_exported_entry_is_dk_module_and_a_second_export_fails() {
 }
 
 #[test]
-fn a_declaration_that_differs_from_the_manifest_fails() {
-    // declared but not in the manifest
-    let (dir, sdk) = service("decl-extra", &[]);
-    let rec = fs::read_to_string(dir.join("src/records.rs")).unwrap().replace("unsafe fn declare(_d: &mut Declare) {}", "unsafe fn declare(d: &mut Declare) {\n        d.kind(KIND_SWEEP_STEP, LEN_SWEEP_STEP);\n    }");
-    fs::write(dir.join("src/records.rs"), rec).unwrap();
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "declares the record kind SWEEP_STEP, which the manifest does not give"
-    ));
-
-    // in the manifest but not declared
-    let (dir, sdk) = service("decl-missing", &["SWEEP_STEP"]);
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "gives the record kind SWEEP_STEP to `sweep`, but records.rs does not declare it"
-    ));
-
-    // declared and in the manifest: equal; another service's kind is not this one's
-    let (dir, sdk) = service("decl-equal", &["SWEEP_STEP"]);
-    let rec = fs::read_to_string(dir.join("src/records.rs")).unwrap().replace("unsafe fn declare(_d: &mut Declare) {}", "unsafe fn declare(d: &mut Declare) {\n        d.kind(dkrt_sdk::records::KIND_SWEEP_STEP, dkrt_sdk::records::LEN_SWEEP_STEP);\n    }");
-    fs::write(dir.join("src/records.rs"), rec).unwrap();
-    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
-
-    // a length of another kind, and a declaration that has no manifest entry at all
-    let (dir, sdk) = service("decl-pair", &["SWEEP_STEP"]);
-    let rec = fs::read_to_string(dir.join("src/records.rs")).unwrap().replace("unsafe fn declare(_d: &mut Declare) {}", "unsafe fn declare(d: &mut Declare) {\n        d.kind(KIND_SWEEP_STEP, LEN_OTHER);\n        d.slot(1, 0, 0);\n    }");
-    fs::write(dir.join("src/records.rs"), rec).unwrap();
-    let found = problems(&dir, &sdk);
-    assert!(
-        mentions(&found, "declares `kind(KIND_SWEEP_STEP, LEN_OTHER)`"),
-        "{found:?}"
-    );
-    assert!(mentions(&found, "declares `slot`"), "{found:?}");
-}
-
-#[test]
-fn a_service_needs_local_exports_or_an_sdk_row_with_a_type_of_its_crate() {
+fn a_service_needs_local_exports_or_an_sdk_row() {
     let (dir, sdk) = service("row-missing", &[]);
     fs::write(&sdk, "[records.kinds]\n").unwrap();
     assert!(mentions(
         &problems(&dir, &sdk),
         "needs at least one [[export]]"
-    ));
-    fs::write(
-        &sdk,
-        "[[service]]\nname = \"sweep\"\nrust = \"crate::services::sweep::Sweep\"\n",
-    )
-    .unwrap();
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "the type is not in the crate `dkrt_svc_sweep`"
     ));
 }
 
@@ -307,16 +255,16 @@ fn the_service_file_layout_id_and_role_are_checked() {
     )
     .unwrap();
     assert!(mentions(&problems(&dir, &sdk), "`role` is not \"service\""));
-    // a service whose row has no `rust` is a file: dks/ is required
+    // a service with a row is a file: dks/ is required
     let (dir, sdk) = service("dks-required", &[]);
     fs::remove_dir_all(dir.join("dks")).unwrap();
-    assert_eq!(
-        problems(&dir, &sdk),
-        Vec::<String>::new(),
-        "a linked-in service has no dks/"
-    );
-    fs::write(&sdk, "[[service]]\nname = \"sweep\"\n").unwrap();
     assert!(mentions(&problems(&dir, &sdk), "dks/ is missing"));
+    // without a row and without dks/ there is no service at all
+    fs::write(&sdk, "[records.kinds]\n").unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "has no [[service]] row named `sweep`"
+    ));
 }
 
 #[test]
@@ -337,7 +285,7 @@ fn dks_lib_rs_is_the_service_call_alone() {
 fn service_hooks_equal_the_hook_entries_per_device() {
     let call = |hooks: &str| {
         format!(
-            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, setup = hooks::setup, hooks = [{hooks}]);\n"
+            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [Records], hooks = [{hooks}]);\n"
         )
     };
     let entry =
@@ -401,7 +349,7 @@ fn call_with(dir: &Path, extra: &str) {
     fs::write(
         dir.join("dks/src/lib.rs"),
         format!(
-            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, setup = hooks::setup, hooks = [], {extra});\n"
+            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [Records], hooks = [], {extra});\n"
         ),
     )
     .unwrap();
@@ -411,7 +359,7 @@ fn call_with(dir: &Path, extra: &str) {
 fn service_fills_equal_the_manifest_entries() {
     let call = |extra: &str| {
         format!(
-            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, setup = hooks::setup, hooks = [], {extra});\n"
+            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [Records], hooks = [], {extra});\n"
         )
     };
     let (dir, sdk, adapters) = adapters_with("fills", "devices = [\"dn2\"]");
@@ -442,7 +390,7 @@ fn service_fills_equal_the_manifest_entries() {
 fn service_exports_are_the_generated_list_of_the_provided_imports() {
     let call = |exports: &str| {
         format!(
-            "#![no_std]\nmod hooks;\nmod gen_exports;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, setup = hooks::setup, hooks = [], fills = []{exports});\n"
+            "#![no_std]\nmod hooks;\nmod gen_exports;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [Records], hooks = [], fills = []{exports});\n"
         )
     };
     let provided = "\n[[import]]\nname = \"dk_sweep_go\"\nservice = \"sweep\"\nprovided = true\n\n[[import]]\nname = \"dk_other\"\nservice = \"elsewhere\"\nprovided = true\n";
@@ -545,7 +493,7 @@ mod api;
 dkrt_svc_rt::service!(
     Sweep, "sweep", &[],
     // This opening block-comment marker is part of a line comment: /*
-    setup = api::setup,
+    parts = [],
     hooks = [],
     fills = [],
     exports = [
@@ -840,4 +788,111 @@ fn a_row_anchor_has_one_service_in_its_users() {
     );
     // a missing folder is no problem
     assert!(patchkit::svccheck::row_anchor_problems("lfo", &fw.join("none")).is_empty());
+}
+
+#[test]
+fn the_provider_form_takes_its_resident_query_from_the_query_part() {
+    let call = |parts: &str, extra: &str| {
+        format!(
+            "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [{parts}]{extra}, hooks = [], fills = []);\n"
+        )
+    };
+    let (dir, sdk) = service("provider-query", &[]);
+    let entry = dir.join("dks/src/lib.rs");
+    // no Query part and no export of the query: the call is accepted
+    fs::write(&entry, call("Tick", "")).unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    // a Query part with no export in the manifest is refused
+    fs::write(&entry, call("Tick, Query", "")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "service! query must match the dk_service_query_v1 export"
+    ));
+    // with the export it is accepted, and the export without the part is refused
+    append(
+        &dir.join("dks/module.toml"),
+        "\n[[export]]\nname = \"dk_service_query_v1\"\n",
+    );
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    fs::write(&entry, call("Tick", "")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "service! query must match the dk_service_query_v1 export"
+    ));
+    // `query =` and `setup =` are gone: the Query part and the owner's `start` do their work
+    fs::write(&entry, call("Query", ", query = rt::dk_service_query_v1")).unwrap();
+    assert!(mentions(&problems(&dir, &sdk), "takes no `query =`"));
+}
+
+#[test]
+fn a_provider_takes_its_kinds_from_the_generated_list_not_from_a_declare() {
+    let call = |kinds: &str| {
+        format!(
+            "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", {kinds}, parts = [Records], hooks = [], fills = []);\n"
+        )
+    };
+    // the manifest gives one kind and records.rs (the template's, which has no `declare` of it) says nothing: the old form would be refused
+    let (dir, sdk) = service("provider-kinds", &["SWEEP_KIND"]);
+    let entry = dir.join("dks/src/lib.rs");
+    fs::write(&entry, call("&KINDS_SWEEP")).unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    fs::write(&entry, call("&dkrt_sdk::records::KINDS_SWEEP")).unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    // another list than the generated one, or none while the manifest has a kind
+    fs::write(&entry, call("&KINDS_OTHER")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "a provider takes `&KINDS_SWEEP`"
+    ));
+    fs::write(&entry, call("&[]")).unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "the manifest gives the record kind SWEEP_KIND to `sweep`"
+    ));
+}
+
+#[test]
+fn a_provider_without_record_kinds_needs_no_records_file_and_one_with_kinds_does() {
+    let call = "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", &[], parts = [Tick], hooks = [], fills = []);\n";
+    // no kind in the manifest: no records.rs, no `pub mod records`, no slots.rs
+    let (dir, sdk) = service("kindless-provider", &[]);
+    let commented = call.replace("&[],", "// no record kind\n    &[],");
+    fs::write(dir.join("dks/src/lib.rs"), commented).unwrap();
+    fs::remove_file(dir.join("src/records.rs")).unwrap();
+    fs::remove_file(dir.join("src/slots.rs")).unwrap();
+    fs::write(dir.join("src/lib.rs"), "#![no_std]\npub mod sweep;\n").unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    // a provider with kinds keeps them: the file and its declaration
+    let (dir, sdk) = service("provider-with-kinds", &["SWEEP_KIND"]);
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [Records], hooks = [], fills = []);\n",
+    )
+    .unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    fs::remove_file(dir.join("src/records.rs")).unwrap();
+    assert!(mentions(&problems(&dir, &sdk), "src/records.rs is missing"));
+    fs::write(dir.join("src/lib.rs"), "#![no_std]\n").unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "does not declare `pub mod records;`"
+    ));
+}
+
+#[test]
+fn a_service_file_needs_the_service_call_with_its_parts() {
+    // a call with no `parts = [...]` is not a service any more: the check names it
+    let (dir, sdk) = service("no-parts", &[]);
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP);\n",
+    )
+    .unwrap();
+    assert!(mentions(
+        &problems(&dir, &sdk),
+        "has no `service!(Owner, \"sweep\", KINDS, parts = [...])` call"
+    ));
+    // a row of the manifest that still has `rust =` is no reason for a refusal here (patchkit gen refuses the key), the service file is what is checked
+    let (dir, sdk) = service("with-parts", &[]);
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
 }

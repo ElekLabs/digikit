@@ -44,8 +44,10 @@ pub mod scan;
 pub(crate) mod settings_overlay;
 pub(crate) mod settings_reload;
 pub(crate) mod svc_imports;
-pub(crate) mod svc_rows;
+pub(crate) mod provider_rows;
 #[cfg(test)]
 pub(crate) mod cleanup_tests;
+#[cfg(test)]
+pub(crate) mod fixture_provider;
 #[cfg(test)]
 pub(crate) mod fake_checked_images;

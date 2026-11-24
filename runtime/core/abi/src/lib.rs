@@ -2,7 +2,7 @@
 //!
 //! - `core_api`: interface C, `CoreApi`: what a service calls in the core (parameter rows, the module table, settings, the log, jobs, the DSP link).
 //! - `core_imports`: interface C as the `dkc_*` imports of a service file (one macro list; `dkrt-svc-rt` and the runtime expand it).
-//! - `service`: interface B, `Service`, `ServiceRow` and `ServiceTable`: what the core calls on a service, with the context types of those calls.
+//! - `service`: interface B, `ServiceTable` (the walks over the loaded `ProviderHandle`s) and the context types of the calls; `provider`: the `ProviderRow` of part tables over an owner object.
 //! - `platform`: `Platform`, the interface to the device and the firmware under the core, with `DeviceProfile` (`profiles`: one generated constant per device file).
 //! - `plan`: `Verdict` and `Reason`, the boot planner's answer for a module (R7).
 //! - `state`: the state of each module of the boot selection (R11: `BootStates`, `classify`) and the `LOADS` v2 reply bytes.
@@ -30,6 +30,7 @@ pub mod dsp;
 pub mod fw;
 pub mod fw_id;
 pub mod gen_svc_abi;
+pub mod handoff;
 pub mod hooks;
 pub mod host_dir;
 pub mod image;
@@ -49,7 +50,9 @@ pub mod registry;
 pub mod resident;
 pub mod runtime_state;
 pub mod service;
+mod service_table;
 pub mod sha256;
+pub mod shared;
 pub mod state;
 pub mod storage;
 pub mod store_path;

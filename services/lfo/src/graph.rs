@@ -12,7 +12,8 @@
 //!
 //! The row of a sample `v` (Q31) is `7 - round(7 v)` (round half up): 0 for +1, 7 (the middle row) for 0, 14 for -1. A unipolar shape has rows 0 to 7 (and 7 to 14 mirrored), as the stock EXPO and RAMP.
 //!
-use crate::records::{highest, interp, MAX_SHAPES, RANGE, SAMPLES};
+use crate::records::{MAX_SHAPES, RANGE, SAMPLES};
+use crate::shapes::{highest, interp};
 use core::ptr::{addr_of_mut, read_volatile, write_volatile};
 use dkrt_svc_bitmap as bitmap;
 use dkrt_svc_bitmap::{Graph, NONE};
@@ -113,7 +114,7 @@ unsafe fn at(i: usize) -> *mut Graph {
 /// Builds the graph of the shape in slot `i` and publishes it (the tile store and handshake are `dkrt_svc_bitmap::publish`).
 ///
 /// # Safety
-/// `i < MAX_SHAPES`; one writer at a time (the service's apply and remove).
+/// `i < MAX_SHAPES`; one writer at a time (`Records::apply` and `Provider::detach`).
 pub unsafe fn publish(i: usize, samples: &[i16; SAMPLES], unipolar: bool) {
     let g = at(i);
     bitmap::retract(g);

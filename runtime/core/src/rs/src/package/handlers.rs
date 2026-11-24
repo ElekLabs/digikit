@@ -1,11 +1,11 @@
 //! Interface B of docs/ARCHITECTURE.md: what the core calls on a service, and only what the service declared.
 //!
-//! A service implements `Service`. The core keeps one static table of the in-crate services (`gen_services.rs`, written by `patchkit gen`
-//! from `[[service]]` and `[records.kinds]` of sdk/sdk.toml) and walks it through `ServiceTable`: a row is the service's name, its record
-//! kinds and one function pointer per method; no `dyn`, no table in RAM. The core never names a service outside the generated table.
+//! A service is a provider: the core keeps one table of the rows of the loaded service files (`provider_rows.rs`, in the room `gen_services.rs` gives it) and walks it through
+//! `ServiceTable`: a row is the service's name hash, its record kinds and its part tables over an owner object; no `dyn`. The core names a service outside the table in two
+//! export lookups only (`exports`).
 //!
 //! What a service declares:
-//! - record kinds of the `register` section (the row's `kinds`: kind and length from sdk.toml), and their `check`, `apply` and `remove` (the registry walker calls them);
+//! - record kinds of the `register` section (the records part: kind and length from sdk.toml), and their `check`, `apply` and `remove` (the registry walker calls them);
 //! - the DSP section parts it owns: `dsp_check_*`, `dsp_admit`, `dsp_claim`, `dsp_release`, `dsp_clear`, `dsp_row_step`
 //!   (the DSP loader in `dsp/mod.rs` keeps the area, the row table and the state machine);
 //! - capacity counts (`cap`, per capacity kind), the module behind a fault site (`attribute`);
@@ -15,28 +15,11 @@ pub use dkrt_abi::service::*;
 /// The table over the runtime's own core.
 pub type ServiceTable = dkrt_abi::service::ServiceTable;
 
-/// The rows whose declare check failed (`check_declarations`): bit `i` for row `i`.
-static mut FAILED: u32 = 0;
-
-/// The services in the order the core calls them: the in-crate ones (`[[service]]` of sdk/sdk.toml with `rust =`: samples, fx), then the rows of
-/// loaded service files (`svc_rows.rs`), with the mask of the in-crate ones that failed their declare check.
+/// The services in the order the core calls them: the rows of the loaded service files (`provider_rows.rs`).
 pub fn services() -> ServiceTable {
     #[cfg(test)]
-    crate::package::svc_rows::test_machines();
-    crate::package::svc_rows::table(ServiceTable { failed: unsafe { core::ptr::read_volatile(core::ptr::addr_of!(FAILED)) }, ..crate::package::gen_services::TABLE })
-}
-
-/// Declare-check-commit of the in-crate services (the runtime's init): each service declares its kinds, the runtime compares them with the generated
-/// table of the service. A service that differs is FAILED: its kinds are unknown to the registry (a record of the kind is `E_FORMAT`), and the
-/// event log says which (`E_DECL_KIND`). Returns the mask.
-pub unsafe fn check_declarations() -> u32 {
-    let failed = crate::package::gen_services::TABLE.check_declarations();
-    core::ptr::write_volatile(core::ptr::addr_of_mut!(FAILED), failed);
-    if failed != 0 {
-        // a MOD_LOAD of selection index 0xffffffff (no module): the result and the mask of the failed rows
-        crate::package::resident::dlog::ev(dkrt_sdk::logk::MOD_LOAD, dkrt_sdk::logk::F_ERROR, [u32::MAX, dkrt_sdk::E_DECL_KIND as u32, failed, 0, 0]);
-    }
-    failed
+    crate::package::provider_rows::test_machines();
+    crate::package::provider_rows::table()
 }
 
 /// The C-ABI entry points of the services that the core links into its own tables (interface A: the imports of `sdk.toml` and the events the adapters
@@ -87,18 +70,18 @@ pub mod exports {
             None
         }
     }
-    /// Host tests only: the type numbers of the machines service for the module being loaded, and its row as a loaded service file has it (`svc_rows::test_machines`).
+    /// Host tests only: the type numbers of the machines service for the module being loaded, and its row as a loaded service file has it (`provider_rows::test_machines`).
     #[cfg(test)]
     pub(crate) use dkrt_svc_machines::assign::seed_for_test;
     #[cfg(test)]
-    pub(crate) fn machines_row() -> &'static dkrt_abi::service::ServiceRow {
-        static ROW: dkrt_abi::service::ServiceRow =
-            dkrt_abi::service::ServiceRow::of::<dkrt_svc_machines::records::Machines, crate::package::core_api::RealCore>("machines", &dkrt_sdk::records::KINDS_MACHINES);
-        &ROW
+    pub(crate) fn machines_row() -> crate::package::provider_rows::RowSource<'static> {
+        crate::package::handlers::dks_decls::machines_source()
     }
     /// The shapes of the lfo service, for the runtime's own tests of the record path.
     #[cfg(test)]
-    pub(crate) use dkrt_svc_lfo::records::{number_of, owner_of, shape, used, Lfo, MAX_SHAPES, SAMPLES};
+    pub(crate) use dkrt_svc_lfo::records::{MAX_SHAPES, SAMPLES};
+    #[cfg(test)]
+    pub(crate) use dkrt_svc_lfo::shapes::{owner_of, shape, used};
 }
 
 /// The length of a record of `kind`; `E_FORMAT`-worthy kinds are `None`. For the builder lowering (`collect`).

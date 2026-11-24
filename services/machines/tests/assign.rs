@@ -1,11 +1,12 @@
 //! The sticky machine type numbers over a `FakeCore`: the plan of `settle` from the keys of the selection, the stored map (settings key, migration of the selection
 //! record's old bytes) and the answer of `resolve` for the module being loaded. The assignment rules themselves are tested in `dkrt_sdk::sticky`.
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::service::{Service, SettleCtx};
+use dkrt_abi::provider::Provider;
+use dkrt_abi::service::SettleCtx;
 use dkrt_sdk::sel::MAP_N;
 use dkrt_sdk::{E_BUSY, OK};
 use dkrt_svc_machines::assign::{map_used, resolve, SETTING};
-use dkrt_svc_machines::records::Machines;
+use dkrt_svc_machines::machines::Machines;
 use dkrt_test_support::{Call, FakeCore};
 use std::sync::Mutex;
 use std::vec::Vec;
@@ -66,7 +67,7 @@ fn saved(core: &FakeCore) -> Vec<[u32; MAP_N]> {
 }
 
 fn settle(core: &FakeCore, sel: &SettleCtx) {
-    unsafe { <Machines as Service<FakeCore>>::settle(core, sel) }
+    Provider::<FakeCore>::settle(&mut Machines::new(), core, sel)
 }
 
 #[test]

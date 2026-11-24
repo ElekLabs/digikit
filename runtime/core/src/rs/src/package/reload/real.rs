@@ -66,7 +66,7 @@ impl Ops for RealOps {
         crate::package::resident::boot::live_index(path, &crate::package::loader::live_indices())
     }
     unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32> {
-        // the service-specific refusals come from `can_stop` of the manager (each service's `teardown_refusal` for the module)
+        // the service-specific refusals come from `can_stop` of the manager (every service's `can_stop`)
         refusal_for(&crate::package::resident::platform::PLATFORM, rec, crate::package::resident::api::card_busy(), |r| crate::package::lifecycle::get().and_then(|rt| rt.refusal(r)))
     }
     unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
@@ -139,7 +139,7 @@ impl Ops for RealOps {
         crate::package::handlers::services().on_loaded(rec)
     }
     unsafe fn finish(&mut self, ok: bool, changed: bool) {
-        crate::package::handlers::services().live_done();
+        crate::package::handlers::services().reload_done();
         if ok || changed {
             note_reloaded();
         }

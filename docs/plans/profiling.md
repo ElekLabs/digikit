@@ -322,7 +322,7 @@ Items marked [inferred] or [open] were not checked.
 
 **P8c, ColdFire dispatcher spans (about 1 day).**
 
-- Dispatch points: spans sit at the interface-B boundary, one instrumentation point for all services and modules, the same for linked crates and `.dks` files. (1) Service calls: where the core calls a service through its `ServiceRow` in the service table dispatch (`ServiceTable`), owner `0x100 | svc<<4 | phase`, one span per service and phase; hook calls through the `ServiceRow` (page key and page turn) use owner `0x300|hook`. (2) Module entry calls: where the core calls a module's `dk_module` entry. (3) Module ticks and polls are unchanged.
+- Dispatch points: spans sit at the interface-B boundary, one instrumentation point for all services and modules, the same for linked crates and `.dks` files. (1) Service calls: where the core calls a service through its `ProviderRow` (`ProviderHandle` resolves the parts and calls them), owner `0x100 | svc<<4 | phase`, one span per service and phase; hook calls through the `ProviderRow` (page key and page turn) use owner `0x300|hook`. (2) Module entry calls: where the core calls a module's `dk_module` entry. (3) Module ticks and polls are unchanged.
 - Service x phase spans replace the phase spans. The host sums the rows of a phase to get the phase total. Overlapping spans may not be added (section 9).
 - Record format unchanged: `(owner, cycles)` on the span channel.
 - Debug module: `span_row` gains the hook class and the service x phase rows. PROFILE_STATE reports its class counts (modules, service-phases, hooks, polls); today the host hard-codes `rows - 7`, and a tail after the poll slots would parse as more polls. This is a format change: the debug module and dk-session change in one PR.

@@ -22,8 +22,10 @@ pub extern "C" fn shortcuts_key_hook() {}
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_shortcuts_key(code: u32, flags: u32) -> u32 {
     use dkrt_svc_shortcuts::shortcuts::Verdict;
-    match dkrt_svc_shortcuts::records::on_key(&dkrt_svc_rt::ImportCore, code, flags) {
-        Verdict::Swallow => 1,
-        Verdict::Pass => 0,
+    // no owner (before `init` or after `fini`), or a call of the service is running already (a module's callback that reaches the key walker): the stock walker runs and the service never
+    // sees the key; the second case is counted in `DK_SVC_OWNER.refused()`.
+    match crate::DK_SVC_OWNER.with(|s| s.dispatch(&dkrt_svc_rt::ImportCore, code, flags)) {
+        Some(Verdict::Swallow) => 1,
+        _ => 0,
     }
 }

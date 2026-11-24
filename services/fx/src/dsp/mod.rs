@@ -1,12 +1,13 @@
-//! Effect-row part of the DSP loader: the chain rows, their owners, one-word writes and the clearing of a module's effect rows.
+//! Effect-row part of the DSP loader (the `DspPart` of the owner is in `part.rs`): the chain rows, their owners, one-word writes and the clearing of a module's effect rows.
+mod part;
 use crate::rows::frows;
-use core::ptr::addr_of_mut;
 use dkneeds::fx;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::Job;
 use dkrt_abi::dsp::*;
 use dkrt_abi::link::{Owner, Sequence, Slot};
 use dkrt_abi::mem::{iw, rd32};
+use dkrt_abi::provider::Status;
 use dkrt_abi::service::{Claim, RowWrite, TableFault};
 use dkrt_sdk::fault::{DIAG_WORDS, SITE_VOICE};
 use dkrt_sdk::*;
@@ -240,11 +241,15 @@ unsafe fn area_bytes<C: CoreApi>(core: &C) -> u32 {
 
 /// DSP section, effect records: the count and the table inside the section, entries and descriptor inside the image, the descriptor says what the record says.
 /// The state of each effect (rounded to 8) is added to `job.state_bytes`.
-pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec, job: &mut Job) -> i32 {
+pub(crate) unsafe fn check_sections<C: CoreApi>(
+    core: &C,
+    sec: &DspSec,
+    job: &mut Job,
+) -> Result<(), Status> {
     let (s, fx_off, nfx, image_size, image_off) =
         (sec.s, sec.fx_off, sec.nfx, sec.image_size, sec.image_off);
     if nfx as usize > MAX_FX || !in_sec(fx_off, nfx * FX_REC, sec.size) {
-        return E_DSP_FORMAT;
+        return Err(E_DSP_FORMAT);
     }
     let mut i = 0;
     while i < nfx {
@@ -263,12 +268,12 @@ pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec, job: &mu
             || state > area_bytes(core)
             || np > FX_MAX_PARAMS
         {
-            return E_DSP_FORMAT;
+            return Err(E_DSP_FORMAT);
         }
         // the routes: send allowed (bit 0), master not allowed (bit 1), default send (bit 2); the default must be an allowed route (0 is a record before the routes)
         let fl = rd32(e.add(FX_FLAGS as usize));
         if fl & !7 != 0 || (fl & 6 != 0 && fl & 1 == 0) || (fl & 2 != 0 && fl & 4 == 0) {
-            return E_DSP_FORMAT;
+            return Err(E_DSP_FORMAT);
         }
         let dd = s.add((image_off + desc) as usize);
         if rd32le(dd.add(fx::DK_FX_DESC_MAGIC as usize)) != FX_DESC_MAGIC
@@ -276,13 +281,13 @@ pub(crate) unsafe fn check_sections<C: CoreApi>(core: &C, sec: &DspSec, job: &mu
             || rd32le(dd.add(fx::DK_FX_DESC_N_PARAMS as usize)) != np
             || rd32le(dd.add(fx::DK_FX_DESC_STATE_BYTES as usize)) != state
         {
-            return E_DSP_FORMAT;
+            return Err(E_DSP_FORMAT);
         }
         job.state_bytes += (state + 7) & !7;
         i += 1;
     }
     job.accepted += nfx;
-    OK
+    Ok(())
 }
 
 /// The effect rows (below the image's limit) that the module being reloaded owns (`CoreApi::live_op`: its record + 1; 0 when no live job runs).
@@ -300,22 +305,22 @@ unsafe fn own_rows<C: CoreApi>(core: &C) -> u32 {
 }
 
 /// DSP section: the image must have the chain's table, and a free row for each record.
-pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> i32 {
+pub(crate) unsafe fn check_rows<C: CoreApi>(core: &C, sec: &DspSec) -> Result<(), Status> {
     let nfx = sec.nfx;
     let d = frows();
     // effect rows: the image must have the chain's table, and a free row for each record
     if nfx > 0 {
         if dynfx(core).is_null() {
-            return E_NO_DSP;
+            return Err(E_NO_DSP);
         }
         // the module being reloaded (`CoreApi::live_op`) still owns its rows at the check: the teardown that comes before the load frees them, so they count as free
         let free = capacity::free_rows(&d.fx_owner, fx_free_rows(core)) + own_rows(core);
         let r = capacity::dsp_rows(nfx, free);
         if r != OK {
-            return r;
+            return Err(r);
         }
     }
-    OK
+    Ok(())
 }
 
 /// Claim the effect rows (lowest free ones first); the states follow the voice states, in record order.
@@ -457,7 +462,7 @@ pub(crate) unsafe fn row_step<C: CoreApi>(
 /// Bytes of a row of the effect table, as the DSP reports a row (its byte offset in the table).
 const ROW_BYTES: u32 = FX_ROW_WORDS * 4;
 
-/// The effect table against the module records (`Service::table_check`): an owned row belongs to a used record whose `mod_fx` has its bit, and every bit of `mod_fx` is
+/// The effect table against the module records (`Describe::table_check`): an owned row belongs to a used record whose `mod_fx` has its bit, and every bit of `mod_fx` is
 /// a row the record owns and the record is used. The mismatch is in `out` as (record, `0x400 | row`, the row's owner).
 pub(crate) unsafe fn table_check(used: u32, out: &mut TableFault) -> u32 {
     let r = frows();
@@ -523,23 +528,15 @@ pub(crate) unsafe fn attribute<C: CoreApi>(core: &C, site: u32, id: u32) -> Opti
 const D_FXFAULT: usize = 28;
 const D_FXDIS: usize = 31;
 
-/// What `diag` has logged already: the fault count and the row switched off last.
-#[repr(C)]
+/// What `diag` has logged already: the fault count and the row switched off last. The owner `Fx` holds it.
 pub struct FxGuard {
-    pub faults_seen: u32,
-    pub disabled_seen: u32,
+    faults_seen: u32,
+    disabled_seen: u32,
 }
 
-#[no_mangle]
-pub static mut DKRT_FXGUARD: FxGuard = FxGuard {
-    faults_seen: 0,
-    disabled_seen: 0,
-};
-
-/// Forget what `diag` has seen (host tests, between two cores).
-pub fn guard_reset() {
-    unsafe {
-        *addr_of_mut!(DKRT_FXGUARD) = FxGuard {
+impl FxGuard {
+    pub(crate) const fn new() -> FxGuard {
+        FxGuard {
             faults_seen: 0,
             disabled_seen: 0,
         }
@@ -548,8 +545,7 @@ pub fn guard_reset() {
 
 /// The effect guard's words: a new fault is an `FX_FAULT`, a row switched off an `FX_DISABLED`, each with the source of the module that owns the row. The poll is a
 /// second apart, so a burst is one event whose fault count says how many.
-pub(crate) unsafe fn diag<C: CoreApi>(core: &C, buf: &[u32; DIAG_WORDS]) {
-    let g = &mut *addr_of_mut!(DKRT_FXGUARD);
+pub(crate) unsafe fn diag<C: CoreApi>(core: &C, g: &mut FxGuard, buf: &[u32; DIAG_WORDS]) {
     let faults = buf[D_FXFAULT] & 0xffff;
     if faults != g.faults_seen {
         g.faults_seen = faults;

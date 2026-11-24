@@ -14,16 +14,15 @@ use dkrt_sdk::OK;
 ///   manifest's pools are too (RC3 packs them).
 /// - `activate` (`Loader::package_activate`) runs after the entries are installed: a service publishes its exports and resident query entry, and the package is live
 ///   (tick, listing client, intro). `deactivate` undoes it before the entries are restored.
-/// - `attach` applies the records of the consumer module, once, over the rows of the services it needs (`Loader::package_attach`): every row's `apply` in the order of the table,
-///   then each record in file order to the row that owns its kind: the walk of the old registry apply, so rows the services share are numbered in the order of the file. The
+/// - `attach` applies the records of the consumer module, once, over the rows of the services it needs (`Loader::package_attach`): every row's `attach` in the order of the table,
+///   then each record in file order to the row that owns its kind (`Records::apply`), so rows the services share are numbered in the order of the file. The
 ///   module's `start` only keeps its section. A module's needs cover the services that own its record kinds (patchkit packs a hard need for each loaded owner of a kind of its
-///   `KEYS`), and the in-crate services are always in the walk. The services' `module_commit` (the records' check, measure and write) still runs for every row in `start`;
-///   RC3's `attach` carries it.
+///   `KEYS`). The services' `module_commit` (the records' check, measure and write) still runs for every row in `start`.
 /// - `start_dsp` hands the DSP part of an active package to the DSP loader (`Loader::package_start_dsp`); it comes over the UI passes (`Rt::dsp_step`).
-/// - `detach` is the `remove` of the same rows for the consumer's owner id, the last row first: the services free what they hold for it. The consumer's `stop` repeats it for
+/// - `detach` is `Provider::detach` of the same rows for the consumer's owner id, the last row first: the services free what they hold for it. The consumer's `stop` repeats it for
 ///   every row; it is idempotent.
-/// - `can_stop` of a module asks every row `teardown_refusal` for it (a routed effect refuses): the service-specific refusal of each consumer in the closure, since the
-///   manager asks every package it would take down. A service has no refusal of its own yet.
+/// - `can_stop` of a module asks every row `Provider::can_stop` (a routed effect refuses): the manager asks every package it would take down. `can_stop` names no
+///   consumer, and no service refuses yet.
 /// - `stop` is `fini` and the rest of the unload (`Loader::package_stop`); it cannot refuse, so a record that still has a file or I/O step answers busy and the placer's
 ///   `free` repeats it.
 pub struct RtHost<P: PackagePlatform, M: Images, R: Registry>(Handle<P, M, R>);
@@ -71,7 +70,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> ProviderHost for RtHost<P, M, R
     }
 
     fn attach_rank(&self, service: PackageId) -> u32 {
-        crate::package::svc_rows::rank_of(service.0 as usize)
+        crate::package::provider_rows::rank_of(service.0 as usize)
     }
 
     fn attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<(), Status> {
@@ -93,7 +92,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> ProviderHost for RtHost<P, M, R
         if package.0 as usize >= dkrt_abi::MAX_MODULES {
             return Ok(());
         }
-        match unsafe { services().teardown_refusal(package.0 + 1) } {
+        match unsafe { services().can_stop() } {
             OK => Ok(()),
             status => Err(status),
         }

@@ -8,15 +8,106 @@ use dkrt_abi::dsp::{FREE_TYPE, I_VFIRST, I_VFREE, ROW_WORDS, WIN_VOICES};
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::{DN2, DT2};
+use dkrt_abi::provider::Provider;
 use dkrt_sdk::limits;
 use dkrt_sdk::records::KINDS_MACHINES;
-use dkrt_svc_machines::build;
 use dkrt_svc_machines::dsp::dyndsp;
-use dkrt_svc_machines::records::{rstate, types_of, Machines};
+use dkrt_svc_machines::machines::Machines;
+use dkrt_svc_machines::records::{rstate, types_of};
 use dkrt_svc_machines::rows::{self, vrows, VoiceRows};
-use dkrt_svc_params::dynreg::w;
-use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Late, Module, Rows};
-use dkrt_test_support::FakeCore;
+use dkrt_svc_rows::dynreg::w;
+use dkrt_test_support::contract::{Dsp, Fixture, Init, Late, Lifecycle, Module, Rows};
+use dkrt_test_support::{
+    provider_contract, subject, Driver, FakeCore, Provided, Recipe, RowBuilder,
+};
+
+// the core imports of the file's code (no runtime is linked)
+#[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
+mod stubs;
+
+// the service file's source: its `service!` call is the one place that lists the parts
+#[path = "../dks/src/lib.rs"]
+pub mod file;
+pub use file::{builder, fw, rt, DK_SVC_OWNER};
+
+/// The parts the file adopts, read from the row its `service!` call declares.
+struct MachinesRecipe;
+
+impl Recipe for MachinesRecipe {
+    type P = Machines;
+    const NAME: &'static str = "machines";
+    fn parts(b: RowBuilder<Machines>) -> RowBuilder<Machines> {
+        use dkrt_abi::provider::{
+            check, PartLookup, DESCRIBE_NEWEST, DSP_NEWEST, PART_DESCRIBE, PART_DSP, PART_QUERY,
+            PART_RECORDS, PART_TICK, QUERY_NEWEST, RECORDS_NEWEST, TICK_NEWEST,
+        };
+        // SAFETY: the row is a static of this binary
+        let row = unsafe { check(file::dk_svc_row(), 0..usize::MAX) }.expect("a valid row");
+        let has = |tag, newest| matches!(row.part(tag, newest), PartLookup::Found { .. });
+        assert!(
+            has(PART_RECORDS, RECORDS_NEWEST)
+                && has(PART_DSP, DSP_NEWEST)
+                && has(PART_TICK, TICK_NEWEST)
+                && has(PART_DESCRIBE, DESCRIBE_NEWEST)
+                && !has(PART_QUERY, QUERY_NEWEST),
+            "the file adopts the four parts this recipe builds, and no Query"
+        );
+        b.records(&KINDS_MACHINES).dsp().tick().describe()
+    }
+}
+
+/// The builder calls of a module's `init`, on the owner that the suite's driver started.
+mod build {
+    use super::*;
+
+    pub unsafe fn add_machine(
+        core: &FakeCore,
+        ctx: *mut u8,
+        index: u32,
+        name: *const u8,
+        short: *const u8,
+    ) -> *mut u8 {
+        subject::<Machines, _>(|m| m.builder().add_machine(core, ctx, index, name, short))
+    }
+
+    pub unsafe fn machine_add_page(
+        core: &FakeCore,
+        mach: *mut u8,
+        name: *const u8,
+        short: *const u8,
+    ) -> *mut u8 {
+        subject::<Machines, _>(|m| m.builder().machine_add_page(core, mach, name, short))
+    }
+
+    pub unsafe fn page_add_param(
+        core: &FakeCore,
+        p: *mut u8,
+        name: *const u8,
+        short: *const u8,
+        def: u32,
+    ) -> *mut u8 {
+        subject::<Machines, _>(|m| m.builder().page_add_param(core, p, name, short, def))
+    }
+
+    pub unsafe fn param_range(core: &FakeCore, prm: *mut u8, min: u32, max: u32) {
+        subject::<Machines, _>(|m| m.builder().param_range(core, prm, min, max))
+    }
+
+    pub unsafe fn page_canvas(
+        core: &FakeCore,
+        p: *mut u8,
+        flags: u32,
+        draw: u32,
+        event: u32,
+        arg: u32,
+    ) {
+        subject::<Machines, _>(|m| m.builder().page_canvas(core, p, flags, draw, event, arg))
+    }
+
+    pub unsafe fn page_bind(core: &FakeCore, p: *mut u8, prm: *mut u8, slot: u32) {
+        subject::<Machines, _>(|m| m.builder().page_bind(core, p, prm, slot))
+    }
+}
 
 /// The first run-time machine type (the same on both devices of the suite).
 const DYN_TYPE_FIRST: u32 = DT2.dyn_type_first;
@@ -326,6 +417,10 @@ fn image(core: &mut FakeCore) {
     let mut mi = vec![0u32; dkrt_svc_machines::info::WORDS];
     mi[dkrt_svc_machines::info::w::MAGIC] = dkrt_svc_machines::info::MAGIC;
     mi[dkrt_svc_machines::info::w::VERSION] = dkrt_svc_machines::info::VERSION;
+    // the owner binds the table at its start: the device it runs as, and the two words the hooks cannot do without
+    mi[dkrt_svc_machines::info::w::DEVICE] = core.device;
+    mi[dkrt_svc_machines::info::w::ENSURE] = 0x4000_1000;
+    mi[dkrt_svc_machines::info::w::ROWS] = 0x4200_0000;
     mi[dkrt_svc_machines::info::w::N_REGISTER] = 0x6000_0010;
     mi[dkrt_svc_machines::info::w::N_REGISTER_V2] = 0x6000_0020;
     core.info_tables.push((name_hash("machines_info"), mi));
@@ -505,6 +600,7 @@ fn fixture(device: u32) -> Fixture {
         absent_rows: Some(absent_rows),
         // the machines service queues no live value for its rows
         live: None,
+        stateless: false,
         salt_same: &[
             ("settings", "a load writes no setting"),
             (
@@ -526,12 +622,12 @@ fn fixture(device: u32) -> Fixture {
 
 #[test]
 fn the_machines_service_passes_the_contract_on_the_dt2() {
-    contract::<Machines>(&fixture(DT2.id));
+    provider_contract::<MachinesRecipe>(&fixture(DT2.id));
 }
 
 #[test]
 fn the_machines_service_passes_the_contract_on_the_dn2() {
-    contract::<Machines>(&fixture(DN2.id));
+    provider_contract::<MachinesRecipe>(&fixture(DN2.id));
 }
 
 // ---- the MISSING placeholder (docs/plans/extension-model.md E5 item 7) -------------------------------------------------------------------
@@ -561,7 +657,7 @@ fn rows_owned_by(_core: &FakeCore, owner: u8) -> Vec<usize> {
 
 /// The sticky map forgets every number, then holds those of `mods` only (a boot that does not know the module, or a number the map dropped): the settings key is zeroed and
 /// `settle` runs over `mods`.
-fn forget_numbers_but(l: &dkrt_test_support::contract::Lifecycle<Machines>, mods: &[&Module]) {
+fn forget_numbers_but(l: &Lifecycle<Provided<MachinesRecipe>>, mods: &[&Module]) {
     l.core
         .settings
         .borrow_mut()
@@ -573,11 +669,11 @@ fn forget_numbers_but(l: &dkrt_test_support::contract::Lifecycle<Machines>, mods
 fn a_voice_row_of_an_absent_module_is_a_disabled_placeholder_that_keeps_its_type_while_the_map_holds_its_number(
 ) {
     use dkrt_abi::dsp::{PLACEHOLDER_OWNER, PLACEHOLDER_PC};
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     for dev in [DT2.id, DN2.id] {
         let f = fixture(dev);
-        let l = Lifecycle::<Machines>::new(&f);
+        let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
         assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
         let row = rows_owned_by(&l.core, 1)[0];
         let ty = vrows().row_type[row];
@@ -603,15 +699,10 @@ fn a_voice_row_of_an_absent_module_is_a_disabled_placeholder_that_keeps_its_type
         );
         assert_eq!(voice_row_word(&l.core, row, 1), Some(PLACEHOLDER_PC));
         // a placeholder row is no row in use in the CAPACITY figure (it gives way to a real load, so the planner counts it free): the device test reads that figure against the row masks
-        let used = |l: &dkrt_test_support::contract::Lifecycle<Machines>| {
-            unsafe {
-                <Machines as dkrt_abi::service::Service<FakeCore>>::cap(
-                    &l.core,
-                    dkrt_sdk::proto::CAPK_VOICE_ROWS,
-                )
-            }
-            .unwrap()
-            .1
+        let used = |l: &Lifecycle<Provided<MachinesRecipe>>| {
+            unsafe { l.driver.cap(&l.core, dkrt_sdk::proto::CAPK_VOICE_ROWS) }
+                .unwrap()
+                .1
         };
         assert_eq!(
             (used(&l), vrows().mod_rows[0]),
@@ -619,7 +710,7 @@ fn a_voice_row_of_an_absent_module_is_a_disabled_placeholder_that_keeps_its_type
             "a parked row is not in use and in no module's row mask"
         );
         // the reload ended without the module: its number is in the sticky map, so the row stays parked (the module is absent: MISSING and silent, E5d)
-        unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::live_done(&l.core) };
+        unsafe { l.driver.live_done(&l.core) };
         let d = vrows();
         assert_eq!((d.row_owner[row], d.row_type[row]), (PLACEHOLDER_OWNER, ty));
         assert_eq!(used(&l), 0);
@@ -627,7 +718,7 @@ fn a_voice_row_of_an_absent_module_is_a_disabled_placeholder_that_keeps_its_type
         assert_eq!(voice_row_word(&l.core, row, 10), Some(ty));
         // the number leaves the map (settings forgotten, a settle that does not name it): the next end of a reload frees the row, in the DSP too
         forget_numbers_but(&l, &[]);
-        unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::live_done(&l.core) };
+        unsafe { l.driver.live_done(&l.core) };
         let d = vrows();
         assert_eq!((d.row_owner[row], d.row_type[row]), (0, FREE_TYPE));
         assert_eq!(used(&l), 0);
@@ -639,10 +730,10 @@ fn a_voice_row_of_an_absent_module_is_a_disabled_placeholder_that_keeps_its_type
 #[test]
 fn a_plain_unload_parks_the_voice_row_and_shows_missing_while_the_map_holds_the_number() {
     use dkrt_abi::dsp::{PLACEHOLDER_OWNER, PLACEHOLDER_PC};
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
     let row = rows_owned_by(&l.core, 1)[0];
     let ty = vrows().row_type[row];
@@ -667,10 +758,10 @@ fn a_plain_unload_parks_the_voice_row_and_shows_missing_while_the_map_holds_the_
 
 #[test]
 fn a_plain_unload_of_a_number_the_map_does_not_hold_frees_the_voice_row_and_leaves_a_gap_row() {
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
     forget_numbers_but(&l, &[]);
     // a pinned number is in no map entry
     let pinned = module(0, keys_pinned, sine, 1);
@@ -692,14 +783,14 @@ fn a_plain_unload_of_a_number_the_map_does_not_hold_frees_the_voice_row_and_leav
 #[test]
 fn a_number_in_the_map_that_no_module_has_reads_missing_and_is_parked_once_the_loader_is_idle() {
     use dkrt_abi::dsp::{PH_IDLE, PLACEHOLDER_OWNER, PLACEHOLDER_PC};
-    use dkrt_abi::service::{tick_phase, Service};
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_abi::service::tick_phase;
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     for dev in [DT2.id, DN2.id] {
         let f = fixture(dev);
         // the boot's settle numbered A and B (the map holds both), and neither loaded: a module not on the card, or one that failed before its rows were written
-        let l = Lifecycle::<Machines>::new(&f);
-        let tick = || unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+        let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
+        let tick = || unsafe { l.driver.tick(&l.core, tick_phase::LAST) };
         // the loader is busy with a module: the machine rows are written, the voice rows wait
         l.core.dsp().phase = PH_IDLE + 1;
         tick();
@@ -755,12 +846,12 @@ fn a_number_in_the_map_that_no_module_has_reads_missing_and_is_parked_once_the_l
 #[test]
 fn a_removal_writes_missing_only_when_a_voice_row_is_parked_and_a_busy_loader_is_bounded() {
     use dkrt_abi::dsp::{PH_IDLE, PLACEHOLDER_OWNER};
-    use dkrt_abi::service::{tick_phase, Service};
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_abi::service::tick_phase;
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
-    let tick = || unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
+    let tick = || unsafe { l.driver.tick(&l.core, tick_phase::LAST) };
     let whys = || {
         l.core
             .calls
@@ -810,15 +901,42 @@ fn a_removal_writes_missing_only_when_a_voice_row_is_parked_and_a_busy_loader_is
     );
 }
 
+/// The parking passes belong to a plan of the numbers: a new plan (`settle`) starts them again, and the end of a reload (`reload_done`) forgets the tries.
+#[test]
+fn settle_forgets_the_parking_state_of_the_earlier_plan() {
+    use dkrt_abi::dsp::PH_IDLE;
+    use dkrt_abi::service::{tick_phase, SettleCtx};
+    use dkrt_test_support::contract::locked;
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    let row = rows_owned_by(&l.core, 1)[0];
+    vrows().row_pub[row] = 0;
+    l.unload(0);
+    // a busy loader: every pass counts
+    l.core.dsp().phase = PH_IDLE + 1;
+    for _ in 0..3 {
+        unsafe { l.driver.tick(&l.core, tick_phase::LAST) };
+    }
+    let seen = || {
+        l.driver
+            .with_instance(|m| (m.parking().busy_passes(), m.parking().tries()))
+    };
+    assert_eq!(seen().0, 3, "the passes are counted");
+    unsafe { l.driver.settle(&l.core, &SettleCtx::new()) };
+    assert_eq!(seen(), (0, 0), "a new plan starts them again");
+}
+
 #[test]
 fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_when_a_row_frees() {
     use dkrt_abi::dsp::PLACEHOLDER_OWNER;
-    use dkrt_abi::service::{tick_phase, Service};
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_abi::service::tick_phase;
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
-    let tick = || unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
+    let tick = || unsafe { l.driver.tick(&l.core, tick_phase::LAST) };
     // every row is a placeholder: the boot's numbers (A, B and the two refused modules) are absent
     tick();
     let held = dkrt_svc_machines::assign::map_used() as usize;
@@ -884,15 +1002,15 @@ fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_whe
 #[test]
 fn a_boot_that_fits_exactly_loads_every_selected_module_beside_a_parked_number() {
     use dkrt_abi::dsp::PLACEHOLDER_OWNER;
-    use dkrt_abi::service::{tick_phase, Service};
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_abi::service::tick_phase;
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
     let free = unsafe { dkrt_abi::mem::iw(dyndsp(&l.core), I_VFREE) } as usize;
     // the first passes: the boot's loads are not over (a load is in flight), nothing is parked, so no placeholder stands in the way of a later module
     l.core.boot_index.set(0);
-    unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    unsafe { l.driver.tick(&l.core, tick_phase::LAST) };
     assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
     l.core.boot_index.set(u32::MAX);
     // `free` modules fill every row: the boot fits exactly, and one more number is held for an absent module
@@ -905,7 +1023,7 @@ fn a_boot_that_fits_exactly_loads_every_selected_module_beside_a_parked_number()
     assert_eq!(l.load(2, &p1), dkrt_sdk::OK);
     assert_eq!(l.load(3, &p2), dkrt_sdk::OK);
     assert_eq!(free, 4);
-    unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    unsafe { l.driver.tick(&l.core, tick_phase::LAST) };
     assert!(
         rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty(),
         "no free row: no placeholder, every module loaded"
@@ -919,12 +1037,12 @@ fn a_boot_that_fits_exactly_loads_every_selected_module_beside_a_parked_number()
 fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_runs_during_a_live_operation(
 ) {
     use dkrt_abi::dsp::PLACEHOLDER_OWNER;
-    use dkrt_abi::service::{tick_phase, Service};
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_abi::service::tick_phase;
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
-    let tick = || unsafe { <Machines as Service<FakeCore>>::tick(&l.core, tick_phase::LAST) };
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
+    let tick = || unsafe { l.driver.tick(&l.core, tick_phase::LAST) };
     // a live operation: nothing is written
     l.core.live_op.set(1);
     tick();
@@ -986,7 +1104,7 @@ fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_ru
 /// The machine row of the first run-time type: (its list name is empty, its long name reads MISSING, own_dsp is 1).
 fn missing_row(core: &FakeCore) -> (bool, bool, bool) {
     let s = &rstate().s;
-    let inf = unsafe { dkrt_svc_params::dynreg(core) };
+    let inf = unsafe { dkrt_svc_rows::dynreg(core) };
     let (empty, own, name) = unsafe {
         let row = dkrt_abi::mem::iw(inf, w::M_ROWS)
             + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))
@@ -1003,10 +1121,10 @@ fn missing_row(core: &FakeCore) -> (bool, bool, bool) {
 #[test]
 fn the_module_of_the_same_number_takes_its_placeholder_row_and_another_module_leaves_it() {
     use dkrt_abi::dsp::PLACEHOLDER_OWNER;
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
     let row = rows_owned_by(&l.core, 1)[0];
     l.core.live_op.set(1);
@@ -1030,7 +1148,7 @@ fn the_module_of_the_same_number_takes_its_placeholder_row_and_another_module_le
     );
     assert_eq!(voice_row_word(&l.core, row, 0), Some(d.row_type[row]));
     // that the row's enable words and what the service holds are those of the first load is the contract suite's case 12b; nothing is left to free at the end
-    unsafe { <Machines as dkrt_abi::service::Service<FakeCore>>::live_done(&l.core) };
+    unsafe { l.driver.live_done(&l.core) };
     assert!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).is_empty());
     l.core.live_op.set(0);
     l.unload(0);
@@ -1039,13 +1157,12 @@ fn the_module_of_the_same_number_takes_its_placeholder_row_and_another_module_le
 
 #[test]
 fn many_types_loaded_and_reloaded_do_not_use_up_the_voice_rows() {
-    use dkrt_abi::service::Service;
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
-    let used = |l: &Lifecycle<Machines>| {
-        unsafe { <Machines as Service<FakeCore>>::cap(&l.core, dkrt_sdk::proto::CAPK_VOICE_ROWS) }
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
+    let used = |l: &Lifecycle<Provided<MachinesRecipe>>| {
+        unsafe { l.driver.cap(&l.core, dkrt_sdk::proto::CAPK_VOICE_ROWS) }
             .unwrap()
             .1
     };
@@ -1065,7 +1182,7 @@ fn many_types_loaded_and_reloaded_do_not_use_up_the_voice_rows() {
                 l.load(rec, if rec == 0 { &f.a } else { &f.b }),
                 dkrt_sdk::OK
             );
-            unsafe { <Machines as Service<FakeCore>>::live_done(&l.core) };
+            unsafe { l.driver.live_done(&l.core) };
             l.core.live_op.set(0);
         }
         assert_eq!(
@@ -1086,11 +1203,10 @@ fn many_types_loaded_and_reloaded_do_not_use_up_the_voice_rows() {
 #[test]
 fn a_placeholder_is_a_free_row_for_a_real_load() {
     use dkrt_abi::dsp::{DspSec, VOICE_TYPE, VOICE_V3};
-    use dkrt_abi::service::Service;
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
     assert_eq!(l.load(1, &f.b), dkrt_sdk::OK); // one row
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK); // one row, which the reload parks
     l.core.live_op.set(1);
@@ -1121,7 +1237,7 @@ fn a_placeholder_is_a_free_row_for_a_real_load() {
             bank_off: 0,
         };
         l.core.boot_index.set(0);
-        let r = unsafe { <Machines as Service<FakeCore>>::dsp_check_rows(&l.core, &sec) };
+        let r = unsafe { l.driver.dsp_check_rows(&l.core, &sec) };
         l.core.boot_index.set(u32::MAX);
         r
     };
@@ -1135,7 +1251,7 @@ fn a_placeholder_is_a_free_row_for_a_real_load() {
         check(&[0x00cc_0000, 0x00dd_0000, 0x00ee_0000, 0x00ff_0000]),
         dkrt_sdk::E_DSP_ROWS
     );
-    unsafe { <Machines as Service<FakeCore>>::live_done(&l.core) };
+    unsafe { l.driver.live_done(&l.core) };
     l.core.live_op.set(0);
     l.unload(1);
 }
@@ -1143,11 +1259,10 @@ fn a_placeholder_is_a_free_row_for_a_real_load() {
 #[test]
 fn a_failed_publication_into_a_reused_placeholder_row_disables_it_again() {
     use dkrt_abi::dsp::{PLACEHOLDER_OWNER, ROW_STEPS, ROW_WORDS};
-    use dkrt_abi::service::Service;
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
     let row = rows_owned_by(&l.core, 1)[0];
     let ty = vrows().row_type[row];
@@ -1164,7 +1279,7 @@ fn a_failed_publication_into_a_reused_placeholder_row_disables_it_again() {
     // the steps: word 10 (step ROW_STEPS - 2) carries the mark and the undo that disables the row again; the type write has neither
     let step = |want: u32| {
         let mut w = want;
-        unsafe { <Machines as Service<FakeCore>>::dsp_row_step(&l.core, 0, &mut w, true) }.unwrap()
+        unsafe { l.driver.dsp_row_step(&l.core, 0, &mut w, true) }.unwrap()
     };
     let (live, last) = (step(ROW_STEPS - 2), step(ROW_STEPS - 1));
     assert_eq!((live.word % ROW_WORDS, live.value), (10, 0));
@@ -1175,9 +1290,9 @@ fn a_failed_publication_into_a_reused_placeholder_row_disables_it_again() {
     );
     assert!(last.last && !last.has_undo && last.published.is_none());
     // a publication that failed after the claim: the teardown parks the row again (a reload) or frees it (not)
-    unsafe { <Machines as Service<FakeCore>>::dsp_clear(&l.core, 0) };
+    unsafe { l.driver.dsp_clear(&l.core, 0) };
     assert_eq!(vrows().row_owner[row], PLACEHOLDER_OWNER, "parked again");
-    unsafe { <Machines as Service<FakeCore>>::live_done(&l.core) };
+    unsafe { l.driver.live_done(&l.core) };
     assert_eq!(
         rows_owned_by(&l.core, PLACEHOLDER_OWNER),
         vec![row],
@@ -1187,10 +1302,10 @@ fn a_failed_publication_into_a_reused_placeholder_row_disables_it_again() {
 
 #[test]
 fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DN2.id);
-    let l = Lifecycle::<Machines>::new(&f);
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
     l.core.live_op.set(1);
     l.unload(0);
@@ -1214,7 +1329,7 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
         "the descriptor's long name is a firmware string of the text"
     );
     assert_eq!(rep(&s.rep_short[0]), (4, "MISS".to_string()));
-    let inf = unsafe { dkrt_svc_params::dynreg(&l.core) };
+    let inf = unsafe { dkrt_svc_rows::dynreg(&l.core) };
     let row = unsafe {
         dkrt_abi::mem::iw(inf, w::M_ROWS)
             + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))
@@ -1230,7 +1345,6 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
 /// the module's rows are in the DSP (`on_loaded`), and a load outside a reload does not.
 #[test]
 fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
-    use dkrt_abi::service::Service;
     use std::cell::RefCell;
     use std::rc::Rc;
     const VAR: u32 = 0x7000_0000;
@@ -1252,7 +1366,7 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
             log.borrow_mut().push((a, args.to_vec()));
             0
         }));
-        unsafe { <Machines as Service<FakeCore>>::live_done(&core) };
+        Provider::reload_done(&mut Machines::new(), &core);
         let got = calls.borrow().clone();
         calls.borrow_mut().clear();
         got
@@ -1282,11 +1396,10 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
 #[test]
 fn the_dsp_checks_of_a_reload_leave_the_module_being_replaced_out_of_used_by_another_module() {
     use dkrt_abi::dsp::{DspSec, VOICE_ENTRY, VOICE_TYPE, VOICE_V3};
-    use dkrt_abi::service::Service;
-    use dkrt_test_support::contract::{locked, Lifecycle};
+    use dkrt_test_support::contract::locked;
     let _g = locked();
     let f = fixture(DT2.id);
-    let l = Lifecycle::<Machines>::new(&f);
+    let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
     assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK); // A holds a published voice row
     let sec_of = |keys: &[u32]| {
@@ -1323,9 +1436,9 @@ fn the_dsp_checks_of_a_reload_leave_the_module_being_replaced_out_of_used_by_ano
         l.core.live_op.set(phase);
         let r = unsafe {
             if rows {
-                <Machines as Service<FakeCore>>::dsp_check_rows(&l.core, &sec)
+                l.driver.dsp_check_rows(&l.core, &sec)
             } else {
-                <Machines as Service<FakeCore>>::dsp_check_types(&l.core, &sec)
+                l.driver.dsp_check_types(&l.core, &sec)
             }
         };
         l.core.boot_index.set(u32::MAX);

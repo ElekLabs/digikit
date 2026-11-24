@@ -13,7 +13,7 @@ const SERVICE_PATH = 'services/lfo.dks';
 /** What only the firmware shows: with the service file on the card the hooks install into the real image (the six interrupt hooks per device and the UI hooks, patched
  * in the lfo tick that vector 191 runs), a fixture that emits `lfo_shape` loads and shows in MODULES and CAPACITY, and unloading it restores both with no fault. The
  * refusals (second owner E_PLAN_KEY, another ABI E_SVC_ABI, a kind table init does not declare E_DECL_KIND, no service file E_MISSING) and the restore of the stock
- * bytes are assembly tests (`runtime/core/src/rs/src/loader/tests/assembly_tests.rs`). No SHARC is needed. */
+ * bytes are assembly tests (`runtime/core/src/rs/src/package/loader/tests/assembly_tests.rs`). No SHARC is needed. */
 async function expectLfoShapes({ session, dk }: PatchedSession): Promise<void> {
   expect(['zero', 'none'], 'the registry proof runs without the DSP').toContain((await session.status()).dsp);
   await expectRuntimeReady(session);

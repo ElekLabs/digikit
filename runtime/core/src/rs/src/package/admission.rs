@@ -297,7 +297,7 @@ impl Admission {
         let mut k = 0;
         while let Some(x) = t.words(tag::PROVIDES, k) {
             k += 1;
-            if is_runtime_service(x.0, services) {
+            if is_runtime_service(x.0) {
                 return Verdict::Refused(Reason::DuplicateOwner(x.0));
             }
         }
@@ -345,20 +345,16 @@ mod tests {
     use super::*;
     use dkneeds::keys::{name_hash, write_table, KeyGroup, KindDecl, Pair, Slot, Table, Use};
     use dkneeds::{KIND_EFFECT, KIND_MACHINE, RES_DSP_COST_FX, RES_DSP_COST_VOICE, RES_MACHINE_ROWS};
-    use crate::package::core_api::{CoreApi, REAL_CORE};
-    use dkrt_abi::service::{Service, ServiceRow};
+    use crate::package::fixture_provider::{table, Nothing};
     use dkrt_sdk::proto::*;
     use dkrt_sdk::{E_PLAN_FIT, E_PLAN_KIND, E_PLAN_OWNER};
     use std::vec;
     use std::vec::Vec;
 
-    struct S;
-    impl<C: CoreApi> Service<C> for S {
-        dkrt_abi::accepts_records!();
-        dkrt_abi::accepts_teardown!();
+    /// The services of the runtime's tables: the machines service, which owns the machine and effect kinds.
+    fn services() -> ServiceTable {
+        table(std::vec![Nothing::owning("machines", &[(KIND_MACHINE, 0x6c), (KIND_EFFECT, 0x1a4)]).handle()])
     }
-    static ROWS: [ServiceRow; 1] = [ServiceRow::of::<S, crate::package::core_api::RealCore>("machines", &[(KIND_MACHINE, 0x6c), (KIND_EFFECT, 0x1a4)])];
-    static ROWS_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ROWS);
 
     fn bytes(t: &Table) -> Vec<u8> {
         let mut b = vec![0u8; dkneeds::keys::table_size(t)];
@@ -388,7 +384,7 @@ mod tests {
 
     /// The providers in index order, then the modules in index order: the order of a bring-up of a graph with no needs.
     fn admit(mods: &[Option<Vec<u8>>], provs: &[Option<Vec<u8>>], c: Vec<DkrtCap>) -> Plan {
-        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
+        let services = services();
         fn parse(t: &[Option<Vec<u8>>]) -> Vec<Option<Keys<'_>>> {
             t.iter().map(|t| t.as_ref().map(|b| Keys::parse(b).unwrap())).collect()
         }
@@ -443,7 +439,7 @@ mod tests {
         // a provider whose kind the service table owns already (its own row, loaded): a boot's judgment refuses it as a second owner, a live admission keeps it
         let provider = bytes(&Table { provides: &[Pair { a: 6, b: 0 }], kinds: &[KindDecl { kind: KIND_MACHINE, len: 0x6c, entry: 0 }], uses: &[Use { resource: RES_MACHINE_ROWS, count: 3 }], ..KEEP });
         let two = bytes(&Table { uses: &[Use { resource: RES_MACHINE_ROWS, count: 2 }], ..KEEP });
-        let services = ServiceTable::new(&ROWS_P.0, &REAL_CORE);
+        let services = services();
         let (p, m) = ([Some(Keys::parse(&provider).unwrap())], [Some(Keys::parse(&two).unwrap())]);
         let c = caps();
         let mut boot = Admission::new(&c);

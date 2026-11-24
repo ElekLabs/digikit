@@ -12,26 +12,6 @@ global_asm!(include_str!("hooks-dn2.s"));
 #[cfg(target_arch = "m68k")]
 global_asm!(include_str!("hooks-ui.s"));
 
-#[cfg(target_arch = "m68k")]
-extern "C" {
-    /// Four words of the asm of `hooks-ui.s`: the stock parameter table and the rows of the three WAVE parameters (`dk_fw_` words, resolved by the port file).
-    static DKRT_LFO_FW: [u32; 4];
-}
-
-/// The first step of `init`: give the service the firmware addresses of the WAVE rows (the hooks are named by `hooks`). A host build has no firmware: nothing is set and no row is written.
-pub unsafe fn setup(_core: &dkrt_svc_rt::ImportCore) -> i32 {
-    #[cfg(target_arch = "m68k")]
-    dkrt_svc_lfo::records::set_firmware(
-        core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[0])),
-        [
-            core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[1])),
-            core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[2])),
-            core::ptr::read_volatile(core::ptr::addr_of!(DKRT_LFO_FW[3])),
-        ],
-    );
-    0
-}
-
 macro_rules! entries {
     ($($name:ident,)*) => {
         $(
@@ -68,7 +48,7 @@ entries! {
 /// a stock wave; the routines call it for a wave of 7 to 14. C calling convention; the routines of the hooks call it with the phase and the wave on the stack.
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub extern "C" fn dk_lfo_eval(phase: u32, wave: u32) -> i32 {
-    dkrt_svc_lfo::records::eval(wave, phase)
+    dkrt_svc_lfo::shapes::eval(wave, phase)
 }
 
 /// The name of the shape that the WAVE parameter value `value` (`wave << 8`) names, written to `buf` (`width` characters at most, then a NUL): the number of characters, 0 when no
@@ -79,7 +59,7 @@ pub extern "C" fn dk_lfo_eval(phase: u32, wave: u32) -> i32 {
 #[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_lfo_name(value: i32, buf: *mut u8, width: u32) -> u32 {
-    dkrt_svc_lfo::records::name_into(value, buf, width as usize) as u32
+    dkrt_svc_lfo::shapes::name_into(value, buf, width as usize) as u32
 }
 
 /// The vector of tiles the MOD page draws for the LFO wave `wave` (the unclamped wave argument of its cell), 0 when no loaded shape has that number; stores the unipolar byte at `flag`.

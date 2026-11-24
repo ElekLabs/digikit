@@ -4,7 +4,7 @@
 |   consume: `moveq #1,d0; rts`. The stack is as the caller left it, so nothing of the displaced code has to be undone; d0 = 1 is the stock "a view took the key" value, which the caller ignores.
 |   pass: `jmp shortcuts_t_key`, the tail of the site (the displaced instructions, then the stock walker).
 | At the entry 4(sp) = vc and 8(sp) = ev (+0xc key code, +0x10 flags: bit 0 set on a press). The decision is `dk_shortcuts_key(code, flags)` of hooks.rs (the crate's `Shortcuts::on_key`); it
-| only decides and queues the module's `on` and `off`: no module code and no view runs inside the walker (the UI pass makes the calls, `Service::tick`). Registers (strict liveness, tools.coldfire.liveness on the three firmwares): at the tail only the flags are dead and d0, d1, a0 and a1 are live, so the four are saved around the call and restored
+| only decides and queues the module's `on` and `off`: no module code and no view runs inside the walker (the UI pass makes the calls, `Ticker::tick`). Registers (strict liveness, tools.coldfire.liveness on the three firmwares): at the tail only the flags are dead and d0, d1, a0 and a1 are live, so the four are saved around the call and restored
 | on every path; the flags are not restored. The hook never runs in interrupt context: the status register is read first, and a non-zero interrupt mask goes to the stock walker.
 
     .text

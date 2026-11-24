@@ -1,19 +1,15 @@
 //! The builder calls of the machines and their commit over a `FakeCore`: the collection, its refusals, the lowering to the records of the `register` section (the records the packer
 //! wrote before builders, and `tests/fixtures/records/lowered.golden`, recorded before the collect moved into the services), and the two passes of `module_commit`.
 use dkrt_abi::keys::KeysCopy;
-use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink, Service};
-use dkrt_sdk::records::*;
+use dkrt_abi::provider::{ConsumerId, Provider, Records};
+use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_sdk::*;
-use dkrt_svc_machines::build::{self, *};
-use dkrt_svc_machines::records::Machines;
-use dkrt_svc_params::dynreg::w;
+use dkrt_svc_machines::build::*;
+use dkrt_svc_machines::machines::Machines;
+use dkrt_svc_rows::dynreg::w;
 use dkrt_test_support::FakeCore;
 use std::boxed::Box;
-use std::sync::Mutex;
 use std::vec::Vec;
-
-/// The tests that drive the statics of the crate (the open collection) take this lock.
-static LOCK: Mutex<()> = Mutex::new(());
 
 fn c(s: &'static [u8]) -> *const u8 {
     assert_eq!(s.last(), Some(&0));
@@ -111,57 +107,72 @@ fn lower_err(b: &Build, p: &Profile, k: &KeysCopy) -> Result<(), i32> {
 
 #[test]
 fn a_call_outside_init_returns_the_placeholder_and_changes_nothing() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut owner = Box::new(Machines::new());
+    let ph = owner.builder().placeholder();
     let core = FakeCore::new();
     unsafe {
-        build::end();
+        owner.builder().end();
         assert_eq!(
-            build::add_machine(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")),
-            placeholder()
+            owner
+                .builder()
+                .add_machine(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")),
+            ph
         );
         assert_eq!(
-            build::machine_add_page(&core, placeholder(), c(b"A\0"), c(b"S\0")),
-            placeholder()
+            owner
+                .builder()
+                .machine_add_page(&core, ph, c(b"A\0"), c(b"S\0")),
+            ph
         );
         assert_eq!(
-            build::page_add_param(&core, placeholder(), c(b"A\0"), c(b"A\0"), 1),
-            placeholder()
+            owner
+                .builder()
+                .page_add_param(&core, ph, c(b"A\0"), c(b"A\0"), 1),
+            ph
         );
-        build::param_range(&core, placeholder(), 1, 2);
-        build::param_latched(&core, placeholder());
-        build::page_bind_local(&core, placeholder(), 0, 1);
+        owner.builder().param_range(&core, ph, 1, 2);
+        owner.builder().param_latched(&core, ph);
+        owner.builder().page_bind_local(&core, ph, 0, 1);
         // inside init a context that is not the running module's is no builder either (`module_of` answers 0)
-        build::begin(0);
+        owner.builder().begin(0);
         assert_eq!(
-            build::add_machine(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")),
-            placeholder()
+            owner
+                .builder()
+                .add_machine(&core, core::ptr::null_mut(), 0, c(b"A\0"), c(b"A\0")),
+            ph
         );
         assert_eq!(
-            (build::build().nm, build::build().err),
+            (owner.builder().build().nm, owner.builder().build().err),
             (0, 0),
             "a call with a context that is not live records nothing"
         );
         // the running module's context opens a machine
         core.running.set(1);
         core.source.set(1);
-        let m = build::add_machine(&core, 4 as *mut u8, 0, c(b"A\0"), c(b"A\0"));
-        assert_ne!(m, placeholder());
-        assert_eq!(build::build().nm, 1);
+        let m = owner
+            .builder()
+            .add_machine(&core, 4 as *mut u8, 0, c(b"A\0"), c(b"A\0"));
+        assert_ne!(m, ph);
+        assert_eq!(owner.builder().build().nm, 1);
         // the code of another module (or of no module) that holds the handle changes nothing while this module's `init` is open
         core.source.set(2);
         assert_eq!(
-            build::machine_add_page(&core, m, c(b"A\0"), c(b"S\0")),
-            placeholder()
+            owner
+                .builder()
+                .machine_add_page(&core, m, c(b"A\0"), c(b"S\0")),
+            ph
         );
-        assert_eq!(build::build().np, 0);
+        assert_eq!(owner.builder().build().np, 0);
         core.source.set(1);
         // the collection is closed: the handle is no more taken
-        build::end();
+        owner.builder().end();
         assert_eq!(
-            build::machine_add_page(&core, m, c(b"A\0"), c(b"S\0")),
-            placeholder()
+            owner
+                .builder()
+                .machine_add_page(&core, m, c(b"A\0"), c(b"S\0")),
+            ph
         );
-        assert_eq!(build::build().np, 0);
+        assert_eq!(owner.builder().build().np, 0);
     }
 }
 
@@ -171,7 +182,10 @@ fn a_ninth_knob_is_an_error_kept_for_the_commit() {
     let m = b.add_machine(0, c(b"A\0"), c(b"A\0"));
     let p = b.machine_add_page(m, c(b"A\0"), c(b"S\0"));
     for _ in 0..limits::PAGE_KNOBS {
-        assert_ne!(b.page_add_param(p, c(b"P\0"), c(b"P\0"), 0), placeholder());
+        assert_ne!(
+            b.page_add_param(p, c(b"P\0"), c(b"P\0"), 0),
+            b.placeholder()
+        );
     }
     assert_eq!(b.err, 0);
     b.page_add_param(p, c(b"P\0"), c(b"P\0"), 0);
@@ -195,13 +209,13 @@ fn the_collection_is_bounded_by_max_records_and_the_call_past_it_returns_the_pla
     for _ in 0..(MAX_PA - MAX_M - MAX_PG) {
         assert_ne!(
             b.page_add_param(first, c(b"P\0"), c(b"P\0"), 0),
-            placeholder()
+            b.placeholder()
         );
     }
     assert_eq!(b.err, 0, "exactly MAX_PA records fit");
     assert_eq!(b.records(), MAX_PA);
     let over = b.page_add_param(first, c(b"P\0"), c(b"P\0"), 0);
-    assert_eq!(over, placeholder());
+    assert_eq!(over, b.placeholder());
     assert_eq!(b.err, E_DECL_FULL);
     // setters on it and a call that takes it change nothing
     let before = (b.np, b.nparam, b.records());
@@ -213,13 +227,13 @@ fn the_collection_is_bounded_by_max_records_and_the_call_past_it_returns_the_pla
     b.page_bind(over, over, 0);
     assert_eq!(
         b.page_add_param(over, c(b"X\0"), c(b"X\0"), 1),
-        placeholder()
+        b.placeholder()
     );
     assert_eq!((b.np, b.nparam, b.records()), before);
     // a 17th page is the same
     assert_eq!(
         b.machine_add_page(machines[0], c(b"G\0"), c(b"S\0")),
-        placeholder()
+        b.placeholder()
     );
 }
 
@@ -231,7 +245,7 @@ fn a_bad_text_is_an_error_at_commit_not_a_failed_call() {
         c(b"A very long machine name that does not fit\0"),
         c(b"A\0"),
     );
-    assert_ne!(h, placeholder());
+    assert_ne!(h, b.placeholder());
     assert_eq!(b.err, E_FORMAT);
     assert_eq!(
         check_commit(&b, &DT2, &keys(&[KEY], (1, 0, 0)), &FREE),
@@ -247,7 +261,7 @@ fn a_handle_of_another_service_is_refused_where_a_machine_call_needs_its_own() {
     let mut b = analog();
     assert_eq!(
         b.page_add_param(foreign, c(b"P\0"), c(b"P\0"), 0),
-        placeholder()
+        b.placeholder()
     );
     assert_eq!(b.err, E_FORMAT);
     let mut b = analog();
@@ -256,8 +270,8 @@ fn a_handle_of_another_service_is_refused_where_a_machine_call_needs_its_own() {
     // the placeholder itself and a null handle are what an earlier refusal gave: the error is kept already, nothing new is added
     let mut b = analog();
     assert_eq!(
-        b.page_add_param(placeholder(), c(b"P\0"), c(b"P\0"), 0),
-        placeholder()
+        b.page_add_param(b.placeholder(), c(b"P\0"), c(b"P\0"), 0),
+        b.placeholder()
     );
     b.param_on_click(core::ptr::null_mut(), 4, 8);
     assert_eq!(b.err, 0);
@@ -577,7 +591,13 @@ fn dynreg(p: &Profile) -> Vec<u32> {
     t
 }
 
-fn commit(core: &FakeCore, phase: u32, k: &KeysCopy, sink: &mut RecordSink) -> i32 {
+fn commit(
+    owner: &mut Machines,
+    core: &FakeCore,
+    phase: u32,
+    k: &KeysCopy,
+    sink: &mut RecordSink,
+) -> i32 {
     let ctx = ModuleCommitCtx {
         phase,
         base: 0x1000,
@@ -585,32 +605,43 @@ fn commit(core: &FakeCore, phase: u32, k: &KeysCopy, sink: &mut RecordSink) -> i
         keys: k,
         sink,
     };
-    unsafe { <Machines as Service<FakeCore>>::module_commit(core, 0, &ctx) }
+    Records::commit(owner, core, 0, &ctx).err().unwrap_or(OK)
 }
 
 /// Fill the open collection of the service with the builder calls of `analog`.
-fn collect_analog(core: &FakeCore) {
+fn collect_analog(owner: &mut Machines, core: &FakeCore) {
     unsafe {
-        build::begin(0);
+        owner.builder().begin(0);
         core.running.set(1);
         core.source.set(1);
-        let m = build::add_machine(core, 8 as *mut u8, 0, c(b"Analog\0"), c(b"ANLG\0"));
-        let p = build::machine_add_page(core, m, c(b"Analog\0"), c(b"S\0"));
-        build::page_add_param(core, p, c(b"Tone\0"), c(b"TONE\0"), 64);
-        let go = build::page_add_param(core, p, c(b"Go\0"), c(b"GO\0"), 0);
-        build::param_on_click(core, go, 0x2000, 5);
+        let m = owner
+            .builder()
+            .add_machine(core, 8 as *mut u8, 0, c(b"Analog\0"), c(b"ANLG\0"));
+        let p = owner
+            .builder()
+            .machine_add_page(core, m, c(b"Analog\0"), c(b"S\0"));
+        owner
+            .builder()
+            .page_add_param(core, p, c(b"Tone\0"), c(b"TONE\0"), 64);
+        let go = owner
+            .builder()
+            .page_add_param(core, p, c(b"Go\0"), c(b"GO\0"), 0);
+        owner.builder().param_on_click(core, go, 0x2000, 5);
     }
 }
 
 #[test]
 fn the_commit_measures_then_writes_the_same_records_declares_the_rows_and_closes_the_collection() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut owner = Box::new(Machines::new());
     let mut core = FakeCore::new();
     core.set_dynreg(dynreg(&DT2));
-    collect_analog(&core);
+    collect_analog(&mut owner, &core);
     let k = keys(&[KEY], (1, 2, 0));
     let mut measured = RecordSink::measure();
-    assert_eq!(commit(&core, commit_phase::PREPARE, &k, &mut measured), OK);
+    assert_eq!(
+        commit(&mut owner, &core, commit_phase::PREPARE, &k, &mut measured),
+        OK
+    );
     // 2 params, 1 machine, 1 action
     assert_eq!(
         (measured.count, measured.at),
@@ -622,7 +653,10 @@ fn the_commit_measures_then_writes_the_same_records_declares_the_rows_and_closes
     );
     let mut buf = std::vec![0u8; measured.at];
     let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
-    assert_eq!(commit(&core, commit_phase::WRITE, &k, &mut out), OK);
+    assert_eq!(
+        commit(&mut owner, &core, commit_phase::WRITE, &k, &mut out),
+        OK
+    );
     assert_eq!((out.count, out.at, out.rows), (4, measured.at, [1, 2, 0]));
     let act = 16 + 2 * 0x50 + 0x6c;
     assert_eq!(
@@ -631,57 +665,83 @@ fn the_commit_measures_then_writes_the_same_records_declares_the_rows_and_closes
         "the action of the second param, as an image offset"
     );
     // the callback argument waits for `apply`
-    assert_eq!(build::args().map(|a| a.click[0]), Some(5));
+    assert_eq!(owner.builder().args().map(|a| a.click[0]), Some(5));
     // the declare pass (after the walker's check) closes the collection
-    assert_eq!(commit(&core, commit_phase::DECLARE, &k, &mut out), OK);
+    assert_eq!(
+        commit(&mut owner, &core, commit_phase::DECLARE, &k, &mut out),
+        OK
+    );
     // the collection is closed: another builder call is refused until the next `module_begin`
     unsafe {
-        let m = build::add_machine(&core, 8 as *mut u8, 1, c(b"X\0"), c(b"X\0"));
-        assert_eq!(m, placeholder());
+        let m = owner
+            .builder()
+            .add_machine(&core, 8 as *mut u8, 1, c(b"X\0"), c(b"X\0"));
+        assert_eq!(m, owner.builder().placeholder());
     }
 }
 
 #[test]
 fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_with_machines() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut owner = Box::new(Machines::new());
     let k = keys(&[KEY], (1, 2, 0));
     // no dynreg_info in the image
     let core = FakeCore::new();
-    collect_analog(&core);
+    collect_analog(&mut owner, &core);
     assert_eq!(
-        commit(&core, commit_phase::PREPARE, &k, &mut RecordSink::measure()),
+        commit(
+            &mut owner,
+            &core,
+            commit_phase::PREPARE,
+            &k,
+            &mut RecordSink::measure()
+        ),
         E_NO_REGISTRY
     );
-    unsafe { build::end() };
+    unsafe { owner.builder().end() };
     // an error of the calls is the commit's result, before anything is checked
     let mut core = FakeCore::new();
     core.set_dynreg(dynreg(&DT2));
-    collect_analog(&core);
+    collect_analog(&mut owner, &core);
     unsafe {
-        build::page_add_param(&core, core::ptr::null_mut(), c(b"P\0"), c(b"P\0"), 0);
-        let m = build::add_machine(&core, 8 as *mut u8, 1, core::ptr::null(), c(b"A\0"));
-        assert_ne!(m, placeholder());
+        owner
+            .builder()
+            .page_add_param(&core, core::ptr::null_mut(), c(b"P\0"), c(b"P\0"), 0);
+        let m = owner
+            .builder()
+            .add_machine(&core, 8 as *mut u8, 1, core::ptr::null(), c(b"A\0"));
+        assert_ne!(m, owner.builder().placeholder());
     }
     assert_eq!(
-        commit(&core, commit_phase::PREPARE, &k, &mut RecordSink::measure()),
+        commit(
+            &mut owner,
+            &core,
+            commit_phase::PREPARE,
+            &k,
+            &mut RecordSink::measure()
+        ),
         E_FORMAT
     );
-    unsafe { build::end() };
+    unsafe { owner.builder().end() };
     // a module that declared no machine commits nothing and needs no registry
     let core = FakeCore::new();
-    unsafe { build::begin(0) };
+    unsafe { owner.builder().begin(0) };
     let mut sink = RecordSink::measure();
-    assert_eq!(commit(&core, commit_phase::PREPARE, &k, &mut sink), OK);
+    assert_eq!(
+        commit(&mut owner, &core, commit_phase::PREPARE, &k, &mut sink),
+        OK
+    );
     assert_eq!((sink.count, sink.at), (0, RecordSink::HEADER));
     // a provider adds no machine row of its own
     let mut core = FakeCore::new();
     core.set_dynreg(dynreg(&DT2));
-    collect_analog(&core);
+    collect_analog(&mut owner, &core);
     unsafe {
-        build::begin(dkrt_abi::MAX_MODULES);
+        owner.builder().begin(dkrt_abi::MAX_MODULES);
         core.running.set(dkrt_abi::MAX_MODULES as u8 + 1);
         core.source.set(dkrt_abi::MAX_MODULES as u8 + 1);
-        build::add_machine(&core, 8 as *mut u8, 0, c(b"A\0"), c(b"A\0"));
+        owner
+            .builder()
+            .add_machine(&core, 8 as *mut u8, 0, c(b"A\0"), c(b"A\0"));
     }
     let ctx = ModuleCommitCtx {
         phase: commit_phase::PREPARE,
@@ -691,12 +751,12 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
         sink: &mut RecordSink::measure(),
     };
     assert_eq!(
-        unsafe {
-            <Machines as Service<FakeCore>>::module_commit(&core, dkrt_abi::MAX_MODULES, &ctx)
-        },
+        Records::commit(&mut *owner, &core, dkrt_abi::MAX_MODULES, &ctx)
+            .err()
+            .unwrap_or(OK),
         E_FORMAT
     );
-    unsafe { build::end() };
+    unsafe { owner.builder().end() };
 }
 
 // ---- golden lowered records -----------------------------------------------------------------------------------------------------
@@ -852,8 +912,7 @@ fn the_lowered_records_of_the_golden_cases_are_the_recorded_bytes() {
 #[test]
 fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_leaves_them_as_they_were(
 ) {
-    use dkrt_abi::core_api::CoreApi;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut owner = Box::new(Machines::new());
     let mut core = FakeCore::new();
     core.set_dynreg(dynreg(&DN2));
     // a pinned number is a run-time type of the device's profile
@@ -870,21 +929,33 @@ fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_l
         d.row_latched[0] = 0;
     }
     unsafe {
-        build::begin(0);
+        owner.builder().begin(0);
         core.running.set(1);
         core.source.set(1);
-        let m = build::add_machine(&core, 8 as *mut u8, 0, c(b"Analog\0"), c(b"ANLG\0"));
-        let p = build::machine_add_page(&core, m, c(b"Analog\0"), c(b"S\0"));
-        let q = build::page_add_param(&core, p, c(b"Decay\0"), c(b"DECAY\0"), 80);
-        build::param_range(&core, q, 0, 100);
-        build::param_latched(&core, q);
+        let m = owner
+            .builder()
+            .add_machine(&core, 8 as *mut u8, 0, c(b"Analog\0"), c(b"ANLG\0"));
+        let p = owner
+            .builder()
+            .machine_add_page(&core, m, c(b"Analog\0"), c(b"S\0"));
+        let q = owner
+            .builder()
+            .page_add_param(&core, p, c(b"Decay\0"), c(b"DECAY\0"), 80);
+        owner.builder().param_range(&core, q, 0, 100);
+        owner.builder().param_latched(&core, q);
     }
     let k = keys(&[PINNED], (1, 1, 1));
     let mut measured = RecordSink::measure();
-    assert_eq!(commit(&core, commit_phase::PREPARE, &k, &mut measured), OK);
+    assert_eq!(
+        commit(&mut owner, &core, commit_phase::PREPARE, &k, &mut measured),
+        OK
+    );
     let mut buf = std::vec![0u8; measured.at];
     let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
-    assert_eq!(commit(&core, commit_phase::WRITE, &k, &mut out), OK);
+    assert_eq!(
+        commit(&mut owner, &core, commit_phase::WRITE, &k, &mut out),
+        OK
+    );
     // the loader's walker refuses the block here: it never gives the declare pass, and the rows are as they were
     assert_eq!(
         (
@@ -893,7 +964,7 @@ fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_l
         ),
         ([0; 8], 0)
     );
-    unsafe { <Machines as Service<FakeCore>>::remove(&core, 1) };
+    Provider::detach(&mut *owner, &core, ConsumerId::new(1));
     assert_eq!(
         (
             dkrt_svc_machines::rows::vrows().row_rng[0],
@@ -903,16 +974,28 @@ fn nothing_of_the_rows_is_declared_before_the_declare_pass_and_a_refused_block_l
     );
     // a block that passes: the declare pass puts the ranges and the latch in the row
     unsafe {
-        build::begin(0);
-        let m = build::add_machine(&core, 8 as *mut u8, 0, c(b"Analog\0"), c(b"ANLG\0"));
-        let p = build::machine_add_page(&core, m, c(b"Analog\0"), c(b"S\0"));
-        let q = build::page_add_param(&core, p, c(b"Decay\0"), c(b"DECAY\0"), 80);
-        build::param_range(&core, q, 0, 100);
-        build::param_latched(&core, q);
+        owner.builder().begin(0);
+        let m = owner
+            .builder()
+            .add_machine(&core, 8 as *mut u8, 0, c(b"Analog\0"), c(b"ANLG\0"));
+        let p = owner
+            .builder()
+            .machine_add_page(&core, m, c(b"Analog\0"), c(b"S\0"));
+        let q = owner
+            .builder()
+            .page_add_param(&core, p, c(b"Decay\0"), c(b"DECAY\0"), 80);
+        owner.builder().param_range(&core, q, 0, 100);
+        owner.builder().param_latched(&core, q);
     }
     let mut out = RecordSink::over(buf.as_mut_ptr(), buf.len());
-    assert_eq!(commit(&core, commit_phase::WRITE, &k, &mut out), OK);
-    assert_eq!(commit(&core, commit_phase::DECLARE, &k, &mut out), OK);
+    assert_eq!(
+        commit(&mut owner, &core, commit_phase::WRITE, &k, &mut out),
+        OK
+    );
+    assert_eq!(
+        commit(&mut owner, &core, commit_phase::DECLARE, &k, &mut out),
+        OK
+    );
     assert_eq!(dkrt_svc_machines::rows::vrows().row_latched[0], 1);
     assert_eq!(
         dkrt_svc_machines::rows::vrows().row_rng[0][1],

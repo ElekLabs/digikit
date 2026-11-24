@@ -1,5 +1,6 @@
 //! The commit of a loaded file: its declarations, the services' records and the DSP rows (`Loader::commit`).
 use super::*;
+use crate::package::provider_rows::RowSource;
 
 impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
 
@@ -13,15 +14,21 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             self.decl_diff = d;
             return E_DECL_KIND;
         }
-        // a service file declares its row in `init` (`dk_service_declare_row`); a module declares none. `fail` takes whatever was added down again
-        let row = c.decl.row_ptr().map(|p| &*p);
+        // a service file declares its row in `init` (`dk_provider_declare_row`, with the instance); a module declares none. `fail` takes whatever was
+        // added down again
+        let extent = self.m.image_extent(base, image_size);
+        let row = c.decl.provider_row_ptr().map(|(row, instance)| RowSource { row: &*row, instance, extent });
         let mut order = None;
-        if let Some(row) = row {
+        if let Some(row) = &row {
             if rec < MAX_MODULES {
                 return E_DECL_KIND;
             }
             let provider = &self.provs[rec - MAX_MODULES];
-            if provider.provides.map(|p| p.0) != Some(dkneeds::keys::name_hash(row.name())) {
+            let name = match row.name_hash() {
+                Ok(name) => name,
+                Err(e) => return e,
+            };
+            if provider.provides.map(|p| p.0) != Some(name) {
                 return E_DECL_KIND;
             }
             order = provider.callback_order;
@@ -54,7 +61,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     }
 
 
-    /// The commit of the services (`Service::module_commit`): a `PREPARE` pass checks and measures the records, the loader takes one arena block for them, a `WRITE` pass fills it
+    /// The commit of the services (`Records::commit`): a `PREPARE` pass checks and measures the records, the loader takes one arena block for them, a `WRITE` pass fills it
     /// (the generic records of the module follow the services' records), and the registry walker checks and applies it. Returns the block (address, size; 0, 0 when no record was
     /// written) and the rows the module uses. Nothing stays allocated on an error; the caller's undo gives the services their `remove`.
     unsafe fn commit_services(&mut self, rec: usize, c: &crate::package::collect::Collect, keys: &crate::package::collect::KeysCopy, base: u32, image_size: u32) -> Result<(u32, u32, (u32, u32, u32)), i32> {

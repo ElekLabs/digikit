@@ -833,3 +833,24 @@ fn peak_handles_require_the_current_ready_generation() {
     assert!(c.peak_handle(0, 0, next).is_err());
     assert!(c.peak_handle(0, 16, next).is_err());
 }
+
+#[test]
+fn pool_pick_takes_the_same_path_before_a_free_entry_and_the_first_hole() {
+    let e = |status: i32, path: &'static [u8]| (status, path_key(path), path);
+    let pick = |entries: &[(i32, u32, &'static [u8])], path: &[u8]| {
+        pool_pick(path_key(path), path, entries.iter().copied())
+    };
+    let a = e(READY, b"/A");
+    let hole = (UNUSED, 0, &b""[..]);
+    assert_eq!(
+        pick(&[hole, a], b"/A"),
+        Pick::Same(1),
+        "the file's own entry beats the hole before it"
+    );
+    assert_eq!(pick(&[hole, a], b"/B"), Pick::Free(0));
+    assert_eq!(pick(&[e(E_CHANGED, b"/A"), hole], b"/A"), Pick::Again(0));
+    assert_eq!(pick(&[a; TRACKS], b"/B"), Pick::Full);
+    // an equal key with other bytes is not the same file
+    let collide = (READY, path_key(b"/A"), &b"/X"[..]);
+    assert_eq!(pick(&[collide, hole], b"/A"), Pick::Free(1));
+}

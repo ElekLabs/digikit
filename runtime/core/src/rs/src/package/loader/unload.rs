@@ -39,9 +39,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     pub(super) unsafe fn unload_body(&mut self, rec: usize) -> i32 {
         let module = rec < MAX_MODULES;
         // the listing client and the I/O jobs of a module or a service file go before its code does; a queued job's `done` must not point into freed code
-        if !crate::package::files::retire(rec) { return E_BUSY; }
-        if !crate::package::resident::worker::retire(rec) { return E_BUSY; }
-        if !retire_sdk(rec) { return E_BUSY; }
+        if !retire_jobs(rec) { return E_BUSY; }
         if module {
             // an intro of this module that has not run `done` yet: `done` must not point into freed code
             crate::package::resident::intro::discard(rec);
@@ -63,13 +61,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             let ctx = crate::package::entry::ctx_ptr(rec);
             self.m.enter_fini(rec, m.fini, ctx);
         }
-        // a sink it set is released with it, with or without a `fini`; nothing may point into its range
-        crate::package::resident::dlog::release_sinks(rec);
-        crate::package::resident::dlog::sink_drop(m.base, m.base.wrapping_add(m.size));
-        // the SysEx commands it registered are released with it
-        crate::package::module_cmds::release_cmds(rec as u8 + 1);
-        drop_tick_cb(m.base, m.size);
-        crate::package::resident::api::poll_drop_range(m.base, m.size);
+        drop_registrations(rec, m.base, m.size);
         // the unload observers end what they hold for the module (`dkrt_unload_observer_add`): the code and memory are still there, but nothing may call into the module
         if module {
             crate::package::resident::api::notify_unload(rec, m.base, m.size);
@@ -99,6 +91,29 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
         OK
     }
+}
+
+/// The jobs of record `rec` that run code of its file: the listing client, the worker jobs (`dk_job_post`) and the I/O jobs and file writer. False while one still runs (it is
+/// cancelled; ask again). Repeatable. A queued job's `step` and `done` point into the file's block, so this runs before the block is freed: by the unload, by a load that
+/// replaces the record, and by `fail`, for every file whose `init` ran (a job posted by `init` stays queued when the commit then refuses).
+pub(super) unsafe fn retire_jobs(rec: usize) -> bool {
+    // all three run: each one only cancels, and a later call finishes what is still running
+    let files = crate::package::files::retire(rec);
+    let jobs = crate::package::resident::worker::retire(rec);
+    let sdk = retire_sdk(rec);
+    files && jobs && sdk
+}
+
+/// What the code of record `rec` (range `[base, base + size)`) registered in the resident tables, undone: its sinks, SysEx commands, `core/dsp-link` tick callback, poll
+/// functions and unload observers. Nothing may point into the range afterwards. Idempotent; `unload_body` runs it after `fini` and `fail` after a refused load.
+pub(super) unsafe fn drop_registrations(rec: usize, base: u32, size: u32) {
+    // a sink it set is released with it, with or without a `fini`; nothing may point into its range
+    crate::package::resident::dlog::release_sinks(rec);
+    crate::package::resident::dlog::sink_drop(base, base.wrapping_add(size));
+    // the SysEx commands it registered are released with it
+    crate::package::module_cmds::release_cmds(rec as u8 + 1);
+    drop_tick_cb(base, size);
+    crate::package::resident::api::poll_drop_range(base, size);
 }
 
 /// After a module's `fini`: no per-block callback of `core/dsp-link` may point into its memory (a module that forgot to clear it).

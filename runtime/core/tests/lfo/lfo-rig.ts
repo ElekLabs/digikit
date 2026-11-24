@@ -199,11 +199,30 @@ export class LfoRig {
   private async setCc(name: string, cc: number, word: number, value: number): Promise<void> {
     await sendCc(this.rt, 1, cc, value);
     const want = value << 8;
-    await pollUntil(this.rt.clock, () => this.word(word), (got) => got === want, {
-      withinMs: 1000,
-      intervalMs: 20,
-      message: () => `${name}: CC ${cc} = ${value} did not store the word ${want.toString(16)} in Sound word ${word}`,
-    });
+    // what the poll saw, for the failure message: the first and last Sound word read (no extra read on the pass path)
+    let first: number | undefined;
+    let seen: number | undefined;
+    const read = async (): Promise<number> => {
+      const got = await this.word(word);
+      first ??= got;
+      seen = got;
+      return got;
+    };
+    try {
+      await pollUntil(this.rt.clock, read, (got) => got === want, { withinMs: 1000, intervalMs: 20, message: `${name}: CC ${cc} = ${value}` });
+    } catch (err) {
+      const { fx, midi } = deviceProfile(this.device);
+      const hex = (n: number | undefined) => (n === undefined ? 'none' : n.toString(16));
+      const hits = (await this.session.status()).cf.mainloop_hits;
+      const now = await this.rt.clock.now();
+      throw new Error(
+        `${name}: CC ${cc} = ${value} did not store the word ${want.toString(16)} in Sound word ${word}; ` +
+          `Sound word first ${hex(first)}, last ${hex(seen)}; emulated time ${now} ms; mainloop_hits ${hits}; ` +
+          `CC channel 1, track 1 factory channel ${midi?.track_channels[0] ?? 'unknown'}; ` +
+          `sound base ${hex(this.soundBase)} (kit_ptr ${hex(fx.kit_ptr)}); ` +
+          `not available: firmware MIDI receive count or input queue, active track (no address in devices/ or ports/fw); poll: ${String(err)}`,
+      );
+    }
     let last = -1;
     await pollUntil(
       this.rt.clock,

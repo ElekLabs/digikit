@@ -204,7 +204,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if role == 1 {
             let r = self.derive_entries(rec, entries);
             if r != OK {
-                return Err(self.fail(rec, r));
+                return Err(self.fail_started(rec, r));
             }
         }
         Ok(())
@@ -242,10 +242,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         dsp::launch(dsp::Pending { rec: rec as u32, reg: 0, reg_size: 0, init: 0, early: 1, boot_idx: idx, send_base: 0, send_len: 0, send_buf: DevAddr::NULL });
     }
 
-    /// The module `consumer` is attached to the services it needs: the walk of the old registry apply over the rows of the in-crate services and the loaded rows of `services`
-    /// (`svc_rows::walk_rows`): every row's `apply` in the order of the table, then every record in file order, each to the row that owns its kind (a record of a kind a row does
+    /// The module `consumer` is attached to the services it needs: the walk of the registry apply over the loaded rows of `services`
+    /// (`provider_rows::walk_rows`): every row's `attach` in the order of the table, then every record in file order, each to the row that owns its kind (a record of a kind a row does
     /// not own is `OK` there), so that native pages and effect pages interleave as they do in the file and take their reserved rows in that order. The commit of the module
-    /// (`init_and_commit` in `package_start`) only keeps the section (`reg_block`). A consumer with no records, or a package that is no module, has nothing to apply. The first
+    /// (`init_and_commit` in `package_start`) only keeps the section (`reg_block`). A consumer with no records is heard by every provider (`attach` alone); a package that is no module has nothing to apply. The first
     /// refusal is the answer, after the walk undid what it wrote (`remove` for the consumer on the same rows); the manager does not detach a consumer that was refused.
     pub(crate) unsafe fn package_attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<(), i32> {
         // the rows read the selection index (`CoreApi::boot_index`) to find the module whose records they apply
@@ -258,11 +258,15 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             return Ok(());
         }
         let (reg, size) = self.reg_block[rec];
-        if size == 0 {
-            return Ok(());
-        }
         let base = records::module(rec).base;
-        let table = ServiceTable { rows: crate::package::svc_rows::walk_rows(services), ..crate::package::handlers::services() };
+        let table = ServiceTable { rows: crate::package::provider_rows::walk_rows(services), ..crate::package::handlers::services() };
+        if size == 0 {
+            // no records: a provider still hears every consumer that comes up (`Provider::attach`)
+            let c = dkrt_abi::service::ApplyCtx { owner: rec as u8 + 1, reg: core::ptr::null(), base };
+            // a refusal has undone the providers that attached: nothing else to give back
+            let r = table.attach_providers(&c);
+            return if r == OK { Ok(()) } else { Err(r) };
+        }
         // a record whose kind a loaded service owns that the module does not need is refused before anything is applied (the module's needs and its builder imports are the same data: a
         // module whose file says otherwise is not one the packer made)
         let mut unowned = false;
@@ -279,15 +283,14 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
     }
 
-    /// The module `consumer` goes down: the rows of `services` give back what they hold for it (`remove`, the last row of the walk first). The rows of the in-crate services are
-    /// asked too; `package_stop` repeats it for every row.
+    /// The module `consumer` goes down: the rows of `services` give back what they hold for it (`detach`, the last row of the walk first). `package_stop` repeats it for every row.
     pub(crate) unsafe fn package_detach(&mut self, consumer: PackageId, services: &[PackageId]) {
         let rec = record_of(consumer);
         if rec >= MAX_MODULES {
             return;
         }
         self.with_boot_idx(consumer, |_| {
-            let table = ServiceTable { rows: crate::package::svc_rows::walk_rows(services), ..crate::package::handlers::services() };
+            let table = ServiceTable { rows: crate::package::provider_rows::walk_rows(services), ..crate::package::handlers::services() };
             crate::package::registry::remove_with(table, rec as u8 + 1);
         });
     }
@@ -496,7 +499,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// repeatable), and the DSP rows are cleared (`dsp::quiesce`, which `unload_body` repeats). The live job asks before it takes a module down, so that a busy module still gets its tick back.
     pub(crate) unsafe fn package_retire_ready(&mut self, id: PackageId) -> bool {
         let rec = record_of(id);
-        crate::package::files::retire(rec) && crate::package::resident::worker::retire(rec) && retire_sdk(rec) && dsp::quiesce(rec)
+        retire_jobs(rec) && dsp::quiesce(rec)
     }
 
     /// Set the loader's phase for the duration of a bring-up that the package manager drives: the services read it (`resident_query` is for after the boot).

@@ -593,7 +593,7 @@ fn never_started_cancel_is_reclaimable() {
 
 #[test]
 fn on_loaded_runs_once_per_load_and_after_the_last_row() {
-    use crate::package::handlers::tests::{log, Call, TWO};
+    use crate::package::handlers::tests::{log, two, Call};
     let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, true, false);
@@ -602,14 +602,14 @@ fn on_loaded_runs_once_per_load_and_after_the_last_row() {
         let d = dsp::ds();
         vrows().row_owner = [0; dsp::MAX_ROWS];
         d.step = 0; // no row of module 0 in the fake's list: every row is in
-        crate::package::lifecycle::get().unwrap().dsp_step(TWO);
+        crate::package::lifecycle::get().unwrap().dsp_step(two());
         // each service hears it once, in list order, and the load is over
         assert_eq!(*log(), vec![Call::OnLoaded { svc: 1, rec: 0 }, Call::OnLoaded { svc: 2, rec: 0 }]);
         assert_eq!(dsp::ds().phase, dsp::PH_IDLE);
         assert_eq!(boot::info().loaded, 1);
         // an idle loader has nothing to list
         log().clear();
-        crate::package::lifecycle::get().unwrap().dsp_step(TWO);
+        crate::package::lifecycle::get().unwrap().dsp_step(two());
         assert!(log().is_empty());
     }
 }
@@ -879,7 +879,7 @@ fn a_failed_dsp_part_makes_its_module_failed_with_the_dsp_code() {
 
 #[test]
 fn a_loaded_dsp_part_makes_its_module_active() {
-    use crate::package::handlers::tests::TWO;
+    use crate::package::handlers::tests::two;
     let _g = Hold::new();
     unsafe {
         seed(Completion::Ack, false, true, false);
@@ -888,7 +888,7 @@ fn a_loaded_dsp_part_makes_its_module_active() {
         vrows().row_owner = [0; dsp::MAX_ROWS];
         d.step = 0;
         dsp_loading();
-        crate::package::lifecycle::get().unwrap().dsp_step(TWO);
+        crate::package::lifecycle::get().unwrap().dsp_step(two());
         assert_eq!(boot::info().results[0], OK);
         assert_eq!(boot::info().states[0], STATE_ACTIVE);
     }

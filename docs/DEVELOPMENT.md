@@ -386,7 +386,7 @@ pnpm dev                                # the gallery at /patch: patch in the br
 id `core/services/NAME`, `src/lib.rs` with the `service!` call; add `src/hooks.rs` for hook assembler and `src/fw.rs` for firmware calls). It prints the steps that register it
 (workspace member, `[[service]]` row and `[records.kinds]` in `sdk/sdk.toml`). `mise run module:check -- service/NAME` runs `patchkit service-check services/NAME`
 (the layout of both crates, the id and the role; the `[[hook]]` entries equal to the `service!` hooks per device; assembler only in `dks/src/hooks.rs`; firmware names only under `dks/`;
-at most one exported symbol, `dk_module`; no row anchor of `ports/fw` (a `[[data]]` found by the words of a table row) that lists another service in `users`; the record kinds that `Service::declare` makes equal to the `[records.kinds]` entries of the service in `sdk/sdk.toml`), then the crate's
+at most one exported symbol, `dk_module`; no row anchor of `ports/fw` (a `[[data]]` found by the words of a table row) that lists another service in `users`; the kinds argument of the `service!` call equal to `KINDS_NAME`, the list `patchkit gen` writes from the `[records.kinds]` entries of the service in `sdk/sdk.toml`), then the crate's
 `rust-tests`. Example, run in the repository root:
 
 ```text

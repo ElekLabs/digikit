@@ -1,6 +1,5 @@
-//! The store writer: the I/O job that writes and removes files. The job's step runs in the I/O task; everything else runs in the UI task. The writer only writes: the bytes
-//! come from the [`FileBuffer`](super::FileBuffer) and the steps from the [`JobSpec`] a task prepared.
-use super::Env;
+//! The store writer: the steps of the I/O job that writes and removes files. The step runs in the I/O task, in the [`StoreJob`](super::StoreJob) cell. The writer only writes: the
+//! bytes come from the [`FileBuffer`](super::FileBuffer) and the steps from the [`JobSpec`] a task prepared.
 use super::Files;
 use crate::name::Path;
 use dkrt_sdk::proto::{E_FILE_IN_USE, E_NOFILE};
@@ -64,18 +63,6 @@ impl Default for JobSpec {
     }
 }
 
-/// Where the job is. Only the UI task changes it, except that `io_done` (the runtime calls it in the UI task) ends a job.
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[repr(u8)] // zero first: the service is a bss static
-enum JobPhase {
-    /// No job is posted.
-    Idle,
-    /// Posted: the I/O task runs it.
-    Running,
-    /// `io_done` ran and left `status`; the tick has not taken it.
-    Ended,
-}
-
 /// What the I/O task runs, and what it left.
 struct Job {
     spec: JobSpec,
@@ -84,7 +71,6 @@ struct Job {
     /// The open file session of the current `Write` (a handle is above 0), or 0 for none.
     handle: i32,
     reruns: u32,
-    phase: JobPhase,
     status: i32,
 }
 
@@ -95,7 +81,6 @@ impl Job {
             op_at: 0,
             handle: 0,
             reruns: 0,
-            phase: JobPhase::Idle,
             status: 0,
         }
     }
@@ -111,7 +96,8 @@ pub enum JobPoll {
     Ended(i32),
 }
 
-/// Owns the posted job and runs its steps. The tick posts a job per task of the run in progress (UI task); the I/O task runs `io_step`; `io_done` hands the result back to the tick.
+/// Runs the steps of one posted job. It lives in the [`StoreJob`](super::StoreJob) cell, not in the service's owner: the I/O task works on it while the UI task may be inside the
+/// owner. The cell's phase says who may touch it.
 pub struct StoreWriter {
     job: Job,
 }
@@ -121,34 +107,15 @@ impl StoreWriter {
         StoreWriter { job: Job::new() }
     }
 
-    // ---- the job (UI task) -----------------------------------------------------------------------------------------------------------
-
-    /// Is a job posted whose end the tick has not taken?
-    pub fn is_posted(&self) -> bool {
-        self.job.phase != JobPhase::Idle
-    }
-
-    /// Where the job stands: running, ended with a status (taken now), or none.
-    pub fn poll(&mut self) -> JobPoll {
-        if self.job.phase == JobPhase::Idle {
-            return JobPoll::None;
-        }
-        if self.job.phase == JobPhase::Running {
-            return JobPoll::Running;
-        }
-        self.job.phase = JobPhase::Idle;
-        JobPoll::Ended(self.job.status)
-    }
-
-    /// Post the job of `spec`. `false` when the job table is full (nothing is posted).
-    pub fn post<E: Env + ?Sized>(&mut self, env: &mut E, spec: JobSpec) -> bool {
+    /// Prepare the job of `spec` (UI task, while no job is posted).
+    pub fn set_spec(&mut self, spec: JobSpec) {
         self.job = Job::new();
         self.job.spec = spec;
-        if env.post() < 0 {
-            return false;
-        }
-        self.job.phase = JobPhase::Running;
-        true
+    }
+
+    /// The status the job ended with.
+    pub fn status(&self) -> i32 {
+        self.job.status
     }
 
     // ---- the job (I/O task) ----------------------------------------------------------------------------------------------------------
@@ -215,9 +182,8 @@ impl StoreWriter {
     }
 
     /// The job ended (UI task): `status` is the last step's result, or the runtime's cancel code.
-    pub fn io_done(&mut self, status: i32) {
+    pub fn set_status(&mut self, status: i32) {
         self.job.status = status;
-        self.job.phase = JobPhase::Ended;
     }
 
     /// The job's open file session, if the job was cancelled in the middle (the runtime aborts it); for the host tests.

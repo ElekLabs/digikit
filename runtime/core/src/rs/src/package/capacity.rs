@@ -142,25 +142,26 @@ mod tests {
     /// A loaded service's answer wins over the info entry and owns `used`.
     #[test]
     fn a_loaded_services_answer_wins_over_the_info_entry() {
-        use dkrt_abi::service::{Service, ServiceRow, ServiceTable};
+        use crate::package::fixture_provider::{table, Fixture};
+        use dkrt_abi::provider::{Describe, Provider};
         struct Machines;
-        impl<C: crate::package::core_api::CoreApi> Service<C> for Machines {
-            dkrt_abi::accepts_records!();
-            dkrt_abi::accepts_teardown!();
-
-            unsafe fn cap(_: &C, kind: u8) -> Option<(u32, u32)> {
+        impl<C: crate::package::core_api::CoreApi> Provider<C> for Machines {
+            fn start(_: &C) -> Result<Self, i32> {
+                Ok(Machines)
+            }
+        }
+        impl<C: crate::package::core_api::CoreApi> Describe<C> for Machines {
+            fn cap(&self, _: &C, kind: u8) -> Option<(u32, u32)> {
                 (kind == CAPK_MACHINE_ROWS).then_some((12, 2))
             }
         }
-        static ROWS: [ServiceRow; 1] = [ServiceRow::of::<Machines, crate::package::core_api::RealCore>("machines", &[])];
-        static ROWS_P: dkrt_abi::service::RowPtrs<1> = dkrt_abi::service::RowPtrs::of(&ROWS);
         let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
         let p = FakePlatform::new(profiles::DT2);
         for (kind, v) in [(CAPK_MACHINE_ROWS, 8), (CAPK_PARAM_ROWS, 16)] {
             p.info_entries.borrow_mut().push((hash(kind), std::vec![v]));
             p.info_data.borrow_mut().push(hash(kind));
         }
-        let table = ServiceTable::new(&ROWS_P.0, &crate::package::core_api::REAL_CORE);
+        let table = table(std::vec![Fixture::of::<Machines>("machines").describe::<Machines>().handle()]);
         let c = caps(&p, &table);
         let l = limits(&c);
         assert_eq!(l[0], (12, 2), "the service's answer wins and owns used");

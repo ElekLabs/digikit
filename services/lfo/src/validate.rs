@@ -1,4 +1,4 @@
-//! The rule every LFO shape module must meet, in one place: `Lfo::validate_records` runs it. The service's `check` calls it at load, and `patchkit records --check` calls it on a
+//! The rule every LFO shape module must meet, in one place: `Records::check` runs it. The service's `check` calls it at load, and `patchkit records --check` calls it on a
 //! built module, so the two cannot differ.
 //!
 //! [`body_ok`] is the rule of one record (a key, a name of four printable characters). [`check_set`] adds what only a whole module can break: the number of shapes, names the MOD

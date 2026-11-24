@@ -1,0 +1,28 @@
+//! The `project` service over a fake store and a fake firmware list (docs/design/digikit-project.md section 7): load, save, rename, archive, paste, the busy store and the cut write.
+mod archive;
+mod changes;
+mod failed_load;
+mod fake;
+mod files;
+mod listing;
+mod load;
+mod load_reads;
+mod module_list;
+mod module_restore;
+mod paste;
+mod refusals;
+mod rename;
+mod rig;
+mod save;
+mod scope;
+mod start;
+mod write;
+
+pub(crate) use archive::*;
+pub(crate) use failed_load::*;
+pub(crate) use fake::*;
+pub(crate) use files::*;
+pub(crate) use module_list::*;
+pub(crate) use refusals::*;
+pub(crate) use rig::*;
+pub(crate) use start::*;

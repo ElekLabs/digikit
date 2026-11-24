@@ -5,14 +5,54 @@ use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::profiles::ALL;
 use dkrt_sdk::records::KINDS_SHORTCUTS;
 use dkrt_svc_shortcuts::bindings::Callback;
-use dkrt_svc_shortcuts::build::{shortcut_add, ShortcutDef};
-use dkrt_svc_shortcuts::records::{state, ShortcutsService};
-use dkrt_test_support::contract::{contract, Dsp, Fixture, Init, Module, Rows};
-use dkrt_test_support::FakeCore;
-use std::sync::Mutex;
+use dkrt_svc_shortcuts::builder::ShortcutDef;
+use dkrt_svc_shortcuts::shortcuts::Shortcuts;
+use dkrt_test_support::contract::{Dsp, Fixture, Init, Module, Rows};
+use dkrt_test_support::{provider_contract, subject, FakeCore, Recipe, RowBuilder};
 
-/// The binding table is a static of the crate: the profile loop runs one device at a time here.
-static LOCK: Mutex<()> = Mutex::new(());
+// the core imports of the file's code (no runtime is linked)
+// the core imports (`dkc_*`) of the service file, as host functions (this test links no runtime)
+#[path = "../../../runtime/core/test-support/stubs/core_imports.rs"]
+mod stubs;
+
+// the service file's source: its `service!` call is the one place that lists the parts
+#[path = "../dks/src/lib.rs"]
+pub mod file;
+pub use file::{builder, DK_SVC_OWNER};
+
+/// The parts the file adopts, read from the row its `service!` call declares.
+struct ShortcutsRecipe;
+
+impl Recipe for ShortcutsRecipe {
+    type P = Shortcuts;
+    const NAME: &'static str = "shortcuts";
+    fn parts(b: RowBuilder<Shortcuts>) -> RowBuilder<Shortcuts> {
+        use dkrt_abi::provider::{
+            check, PartLookup, DESCRIBE_NEWEST, DSP_NEWEST, PART_DESCRIBE, PART_DSP, PART_QUERY,
+            PART_RECORDS, PART_TICK, QUERY_NEWEST, RECORDS_NEWEST, TICK_NEWEST,
+        };
+        // SAFETY: the row is a static of this binary
+        let row = unsafe { check(file::dk_svc_row(), 0..usize::MAX) }.expect("a valid row");
+        let has = |tag, newest| matches!(row.part(tag, newest), PartLookup::Found { .. });
+        // a part this recipe cannot build (the service does not implement it) must not be in the row
+        assert!(
+            !has(PART_DSP, DSP_NEWEST)
+                && !has(PART_QUERY, QUERY_NEWEST)
+                && !has(PART_DESCRIBE, DESCRIBE_NEWEST),
+            "the recipe has no mapping for a part of the row"
+        );
+        let b = if has(PART_RECORDS, RECORDS_NEWEST) {
+            b.records(&KINDS_SHORTCUTS)
+        } else {
+            b
+        };
+        if has(PART_TICK, TICK_NEWEST) {
+            b.tick()
+        } else {
+            b
+        }
+    }
+}
 
 /// The logical keys of the fixtures: the generated numbers of `[keys] order` (sdk/sdk.toml), as `<dk/gen/keys.h>` has them.
 use dkrt_sdk::keys::{NO, TRK, YES};
@@ -40,7 +80,12 @@ fn shortcut(
         off: code(0x240),
         arg: arg as *mut c_void,
     };
-    unsafe { shortcut_add(init.core, init.ctx(), &d as *const ShortcutDef as *const u8) };
+    // the builder call of the module's `init`, on the owner that the suite's driver started
+    let (core, ctx) = (init.core, init.ctx());
+    subject::<Shortcuts, _>(|s| unsafe {
+        s.builder()
+            .add(core, ctx, &d as *const ShortcutDef as *const u8)
+    });
 }
 
 fn a(init: &mut Init) {
@@ -74,24 +119,26 @@ fn bad(init: &mut Init) {
 
 /// The table: its size, and for each binding the owner, the keys, whether it is disabled, the first four characters of id and label, the argument and the callbacks.
 fn table(_core: &FakeCore) -> Vec<u32> {
-    let t = state().table();
-    let mut v = vec![t.len() as u32];
-    for i in 0..dkrt_svc_shortcuts::bindings::MAX_BINDINGS {
-        if let Some(b) = t.get(i) {
-            v.extend([
-                u32::from(b.owner),
-                u32::from(b.keys[0]),
-                u32::from(b.keys[1]),
-                u32::from(b.disabled),
-                u32::from_be_bytes([b.id[0], b.id[1], b.id[2], b.id[3]]),
-                u32::from_be_bytes([b.label[0], b.label[1], b.label[2], b.label[3]]),
-                b.arg as usize as u32,
-                b.on.map_or(0, |f| f as *const () as usize as u32),
-                b.off.map_or(0, |f| f as *const () as usize as u32),
-            ]);
+    subject::<Shortcuts, _>(|s| {
+        let t = s.table();
+        let mut v = vec![t.len() as u32];
+        for i in 0..dkrt_svc_shortcuts::bindings::MAX_BINDINGS {
+            if let Some(b) = t.get(i) {
+                v.extend([
+                    u32::from(b.owner),
+                    u32::from(b.keys[0]),
+                    u32::from(b.keys[1]),
+                    u32::from(b.disabled),
+                    u32::from_be_bytes([b.id[0], b.id[1], b.id[2], b.id[3]]),
+                    u32::from_be_bytes([b.label[0], b.label[1], b.label[2], b.label[3]]),
+                    b.arg as usize as u32,
+                    b.on.map_or(0, |f| f as *const () as usize as u32),
+                    b.off.map_or(0, |f| f as *const () as usize as u32),
+                ]);
+            }
         }
-    }
-    v
+        v
+    })
 }
 
 fn module(sel: u32, init: fn(&mut Init)) -> Module {
@@ -122,6 +169,7 @@ fn fixture(device: u32) -> Fixture {
         absent_rows: None,
         live: None,
         survives: None,
+        stateless: false,
         salt_same: &[
             ("memory", "a shortcut writes no firmware memory"),
             ("dsp", "a shortcut has no DSP section"),
@@ -137,8 +185,23 @@ fn fixture(device: u32) -> Fixture {
 
 #[test]
 fn the_shortcuts_service_passes_the_contract_on_every_profile() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     for p in ALL.iter() {
-        contract::<ShortcutsService>(&fixture(p.id));
+        provider_contract::<ShortcutsRecipe>(&fixture(p.id));
+    }
+}
+
+/// The queued `on` and `off` calls only run in the UI pass, and the commit and apply only through the records part: the file must adopt both.
+#[test]
+fn the_file_adopts_the_records_and_tick_parts() {
+    use dkrt_abi::provider::{
+        check, PartLookup, PART_RECORDS, PART_TICK, RECORDS_NEWEST, TICK_NEWEST,
+    };
+    // SAFETY: the row is a static of this binary
+    let row = unsafe { check(file::dk_svc_row(), 0..usize::MAX) }.expect("a valid row");
+    for (tag, newest) in [(PART_RECORDS, RECORDS_NEWEST), (PART_TICK, TICK_NEWEST)] {
+        assert!(
+            matches!(row.part(tag, newest), PartLookup::Found { .. }),
+            "part {tag}"
+        );
     }
 }

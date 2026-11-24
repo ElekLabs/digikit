@@ -119,7 +119,7 @@ for (const device of DEVICES) {
       expect((await ui.pending()).slice(0, 2)).toEqual([SEND_ROUTE, MASTER]);
       expect(await ui.popups()).toBe(sendOnlyPopups);
 
-      // The fallback of a stored route the effect no longer allows to its manifest default is a host fact (services/fx/src/fxsend.rs test
+      // The fallback of a stored route the effect no longer allows to its manifest default is a host fact (services/fx/src/fxsend/tests.rs test
       // `the_saved_route_falls_back_to_the_default`).
       await reload('full');
       const fullNames = sendSlots > 1 ? [SEND, SENDONLY, SEND3] : [SEND, SEND3];

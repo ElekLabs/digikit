@@ -14,6 +14,7 @@
 //!
 //! The call lists that stand for the shared fixtures (`tests/fixtures/modules`) are in each service's `tests/contract.rs`: they name the service's own `build::*`, and this
 //! crate cannot depend on a service.
+use crate::driver::{Driver, Subject};
 use crate::FakeCore;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::{
@@ -27,7 +28,7 @@ use dkrt_abi::regcheck::check_layout;
 use dkrt_abi::registry::each;
 use dkrt_abi::service::{
     check_step, commit_phase, ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, RecordSink,
-    Service, SettleCtx, TableFault,
+    SettleCtx, TableFault,
 };
 use dkrt_abi::MAX_MODULES;
 use dkrt_sdk::*;
@@ -136,6 +137,15 @@ impl Rows {
     };
 }
 
+/// Whether case 7 may skip "loaded A and a2 differ": only a fixture that declares itself `stateless` and names every area as equal (a service with no state of
+/// its own). Every other service keeps the full assertion, whatever its `salt_same` lists.
+fn excuses_equal_loads(stateless: bool, salt_same: &[(&str, &str)]) -> bool {
+    stateless
+        && ["memory", "dsp", "settings", "state"]
+            .iter()
+            .all(|area| salt_same.iter().any(|(a, _)| a == area))
+}
+
 /// What a service gives the suite: the profile, the kinds it owns (`[records.kinds]`), the image tables its core has, its modules and a view of its own state.
 pub struct Fixture {
     pub name: &'static str,
@@ -177,6 +187,9 @@ pub struct Fixture {
     /// The areas (`memory`, `dsp`, `settings`, `state`, and `survives` when the fixture has it) in which loaded `A` and loaded `a2` may be equal, each with its reason. Every other area must differ, or the
     /// comparison of case 7 cannot see a leftover there.
     pub salt_same: &'static [(&'static str, &'static str)],
+    /// The service declares it has no state of its own (the `local-ping` test service): with every area in `salt_same`, case 7 does not ask that loaded A and loaded a2
+    /// differ. `false` for every service with state.
+    pub stateless: bool,
     /// The service's data that outlives a module's unload on purpose (the project service keeps what modules put into the current project: it is the project's, not the
     /// module's), as words, `None` when the service keeps none. It is left out of every "back at the start" comparison and is the area `survives` when `A` and `a2` are
     /// compared (the area `state` is `Fixture::state` alone), so a module that fills it makes the two differ. Each use has its reason in the fixture.
@@ -186,7 +199,7 @@ pub struct Fixture {
     /// A module the service refuses while it applies the records, after the rows of earlier records were written (`None`: the service has no such path; its
     /// `check` covers every limit its `apply` has).
     pub bad_late: Option<Late>,
-    /// The service's `validate_records` refuses some records (it is not `accepts_records!()`): case 1b then also checks that it refuses a fixture record whose body is one byte short.
+    /// The service's `validate_records` refuses some records (its `Records::validate` is not the default): case 1b then also checks that it refuses a fixture record whose body is one byte short.
     pub rules: bool,
     /// The values the user turned on the module's rows, which the service keeps while the module is gone (`None`: the service keeps none). Case 13.
     pub parked_knobs: Option<ParkedKnobs>,
@@ -525,7 +538,7 @@ pub struct CheckRun {
 }
 
 /// A fake core with one service loaded the way the loader loads its modules.
-pub struct Lifecycle<'f, S: Service<FakeCore>> {
+pub struct Lifecycle<'f, S: Subject> {
     pub core: FakeCore,
     f: &'f Fixture,
     /// How many records of the last load were applied (and written) before the walk ended.
@@ -536,7 +549,7 @@ pub struct Lifecycle<'f, S: Service<FakeCore>> {
     at: core::cell::Cell<&'static str>,
     /// The last run of the registry check inside a load: the state before and after it, the core calls it made and its answer.
     check_run: core::cell::RefCell<Option<CheckRun>>,
-    _s: core::marker::PhantomData<S>,
+    pub driver: S::Driver,
 }
 
 /// The names of the check steps, for the failure messages.
@@ -556,7 +569,7 @@ const BASE: u32 = 0x4000;
 /// The base of the DSP range: the effect claim computes program counters from it.
 const DSP_BASE: u32 = L2_BYTE_BASE + 0x1000;
 
-impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
+impl<'f, S: Subject> Lifecycle<'f, S> {
     /// A core of the fixture's profile, and every owner's `remove` once (the service's statics start empty).
     pub fn new(f: &'f Fixture) -> Self {
         Self::with_image(f, |_| {})
@@ -570,21 +583,22 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         core.device = f.device;
         (f.image)(&mut core);
         extra(&mut core);
-        let l = Lifecycle {
+        let driver = <S::Driver as Driver>::start(&core);
+        let l: Lifecycle<'f, S> = Lifecycle {
             core,
             f,
             applied: core::cell::Cell::new(0),
             used: core::cell::Cell::new(0),
             at: core::cell::Cell::new(""),
             check_run: core::cell::RefCell::new(None),
-            _s: core::marker::PhantomData,
+            driver,
         };
         for owner in 1..=MAX_MODULES as u8 {
-            unsafe { S::remove(&l.core, owner) };
+            unsafe { l.driver.remove(&l.core, owner) };
         }
         // a service that keeps DSP-side state per record (the samples client slots) frees it in `dsp_release`, which `remove` does not reach
         for rec in 0..MAX_MODULES {
-            unsafe { S::dsp_release(&l.core, rec) };
+            unsafe { l.driver.dsp_release(&l.core, rec) };
         }
         // the boot: the services settle once over the keys of the selection, before the first module loads
         let mut sel = SettleCtx::new();
@@ -599,11 +613,11 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
                 l.core.set_keys(i as u32, *kind, keys);
             }
         }
-        unsafe { S::settle(&l.core, &sel) };
+        unsafe { l.driver.settle(&l.core, &sel) };
         l
     }
 
-    /// Run `Service::settle` again over the keys of `mods`, the modules that are loaded now, in selection order: what a reload does before it loads the new file.
+    /// Run `Provider::settle` again over the keys of `mods`, the modules that are loaded now, in selection order: what a reload does before it loads the new file.
     pub fn settle_over(&self, mods: &[&Module]) {
         let mut sel = SettleCtx::new();
         for (i, m) in mods.iter().enumerate() {
@@ -615,7 +629,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
                 self.core.set_keys(i as u32, *kind, keys);
             }
         }
-        unsafe { S::settle(&self.core, &sel) };
+        unsafe { self.driver.settle(&self.core, &sel) };
     }
 
     /// The service's own view of its state, for the checks that compare it.
@@ -642,7 +656,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         settings.sort();
         let mut caps = Vec::new();
         for kind in 0..32u8 {
-            if let Some((l, u)) = unsafe { S::cap(core, kind) } {
+            if let Some((l, u)) = unsafe { self.driver.cap(core, kind) } {
                 caps.push((kind, l, u));
             }
         }
@@ -680,11 +694,14 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         }
     }
 
-    /// The core's check of the services' tables (invariant 3, `Service::table_check`) with the records that are loaded now: the loader runs it at the end of every load
+    /// The core's check of the services' tables (invariant 3, `Describe::table_check`) with the records that are loaded now: the loader runs it at the end of every load
     /// attempt and every unload, and so does the suite. A mismatch fails the case.
     fn tables_agree(&self, after: &str) {
         let mut fault = TableFault::default();
-        let r = unsafe { S::table_check(&self.core, self.used.get(), &mut fault) };
+        let r = unsafe {
+            self.driver
+                .table_check(&self.core, self.used.get(), &mut fault)
+        };
         assert_eq!(
             r,
             0,
@@ -697,7 +714,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
     /// `S::declare`: the kinds it names.
     pub fn declared(&self) -> Declare {
         let mut d = Declare::new();
-        unsafe { S::declare(&mut d) };
+        unsafe { self.driver.declare(&mut d) };
         d
     }
 
@@ -779,7 +796,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         }
         self.at.set("commit, prepare");
         let mut sink = RecordSink::measure();
-        let r = S::module_commit(
+        let r = self.driver.module_commit(
             core,
             rec,
             &sink_ctx(commit_phase::PREPARE, &mut sink, &keys),
@@ -796,7 +813,9 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         } else {
             RecordSink::over(core::ptr::null_mut(), 0)
         };
-        let r = S::module_commit(core, rec, &sink_ctx(commit_phase::WRITE, &mut out, &keys));
+        let r =
+            self.driver
+                .module_commit(core, rec, &sink_ctx(commit_phase::WRITE, &mut out, &keys));
         if r != OK {
             return Err(r);
         }
@@ -823,7 +842,9 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             }
         }
         self.at.set("commit, declare");
-        let r = S::module_commit(core, rec, &sink_ctx(commit_phase::DECLARE, &mut out, &keys));
+        let r =
+            self.driver
+                .module_commit(core, rec, &sink_ctx(commit_phase::DECLARE, &mut out, &keys));
         if r != OK {
             return Err(r);
         }
@@ -836,11 +857,11 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             };
             self.at.set("apply");
             self.applied.set(0);
-            let mut r = S::apply(core, &c);
+            let mut r = self.driver.apply(core, &c);
             if r == OK {
                 each(buf.as_ptr(), |kind, b| {
                     if r == OK {
-                        r = S::apply_record(core, kind, b, &c);
+                        r = self.driver.apply_record(core, kind, b, &c);
                         if r == OK {
                             self.applied.set(self.applied.get() + 1);
                         }
@@ -850,6 +871,10 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             if r != OK {
                 return Err(r);
             }
+        } else {
+            // a consumer without records: a provider is told
+            self.applied.set(0);
+            self.driver.attach_without_records(core, rec as u8 + 1);
         }
         Ok(buf)
     }
@@ -870,7 +895,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             image_size: 0x4000,
         };
         for step in 0..check_step::COUNT {
-            let r = unsafe { S::check(&self.core, step, &c) };
+            let r = unsafe { self.driver.check(&self.core, step, &c) };
             if r != OK {
                 self.at.set(
                     CHECK_STEPS
@@ -905,7 +930,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
                 byte_shift: DSP_BASE - L2_BYTE_BASE,
                 state_at: 0,
             };
-            S::dsp_claim(core, &mut c);
+            self.driver.dsp_claim(core, &mut c);
         }
         core.boot_index.set(u32::MAX);
     }
@@ -938,7 +963,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             }
             let dsp = m.dsp.any();
             if dsp {
-                let r = S::dsp_admit(core, &job);
+                let r = self.driver.dsp_admit(core, &job);
                 if r != OK {
                     self.at.set("dsp admit");
                     return Err(r);
@@ -950,11 +975,11 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
                     byte_shift: DSP_BASE - L2_BYTE_BASE,
                     state_at: 0,
                 };
-                S::dsp_claim(core, &mut c);
+                self.driver.dsp_claim(core, &mut c);
             }
             core.running.set(owner);
             core.source.set(owner);
-            S::module_begin(core, rec);
+            self.driver.module_begin(core, rec);
             let mut init = Init {
                 core,
                 rec,
@@ -971,14 +996,14 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
             match staged {
                 Ok(sec) => {
                     self.publish(rec);
-                    S::on_loaded(core, rec);
+                    self.driver.on_loaded(core, rec);
                     Ok(sec)
                 }
                 Err(e) => {
-                    S::remove(core, owner);
+                    self.driver.remove(core, owner);
                     if dsp {
-                        S::dsp_clear(core, rec);
-                        S::dsp_release(core, rec);
+                        self.driver.dsp_clear(core, rec);
+                        self.driver.dsp_release(core, rec);
                     }
                     Err(e)
                 }
@@ -993,7 +1018,7 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         let mut seq = Sequence::new();
         loop {
             let mut want = step;
-            let Some(w) = S::dsp_row_step(core, rec, &mut want, true) else {
+            let Some(w) = self.driver.dsp_row_step(core, rec, &mut want, true) else {
                 break;
             };
             seq.push(w.win, w.word, w.value);
@@ -1012,9 +1037,9 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
     pub fn unload(&self, rec: usize) {
         let core = &self.core;
         unsafe {
-            assert!(S::dsp_clear(core, rec), "the DSP rows clear");
-            S::remove(core, rec as u8 + 1);
-            S::dsp_release(core, rec);
+            assert!(self.driver.dsp_clear(core, rec), "the DSP rows clear");
+            self.driver.remove(core, rec as u8 + 1);
+            self.driver.dsp_release(core, rec);
         }
         self.used.set(self.used.get() & !(1 << rec));
         self.tables_agree("an unload");
@@ -1026,7 +1051,10 @@ impl<'f, S: Service<FakeCore>> Lifecycle<'f, S> {
         let Some(absent) = self.f.absent_rows else {
             return;
         };
-        unsafe { S::tick(&self.core, dkrt_abi::service::tick_phase::LAST) };
+        unsafe {
+            self.driver
+                .tick(&self.core, dkrt_abi::service::tick_phase::LAST)
+        };
         let (rows, held) = absent(&self.core);
         assert_eq!(
             rows, held,
@@ -1065,8 +1093,8 @@ pub fn locked() -> MutexGuard<'static, ()> {
     SUITE.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// The six cases of the contract (docs/plans/extension-model.md 3.5) for service `S` on the profile of `f`.
-pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
+/// The cases of the contract (docs/plans/extension-model.md 3.5) for the subject `S` on the profile of `f`.
+pub fn run<S: Subject>(f: &Fixture) {
     let _g = locked();
     declares_its_kinds::<S>(f);
     validates_its_fixtures_records::<S>(f);
@@ -1088,7 +1116,7 @@ pub fn contract<S: Service<FakeCore>>(f: &Fixture) {
 }
 
 /// Case 1: `declare` gives exactly the kinds `[records.kinds]` assigns to the service.
-fn declares_its_kinds<S: Service<FakeCore>>(f: &Fixture) {
+fn declares_its_kinds<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     assert!(
         l.declared().matches_kinds(f.kinds),
@@ -1120,7 +1148,7 @@ fn bodies_of(sec: &[u8], kind: u32) -> Vec<&[u8]> {
 /// Case 1b: `validate_records` accepts the records the fixture's modules produce. The section a module commits is split by record kind, and each kind the service
 /// owns goes through the validator as a set, as `patchkit records --check` does for a built module. A service that owns kinds must see records of at least one of them in
 /// each module (else the case proves nothing). A service with rules (`Fixture::rules`) refuses at least one kind when its first record's body is one byte short.
-fn validates_its_fixtures_records<S: Service<FakeCore>>(f: &Fixture) {
+fn validates_its_fixtures_records<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     for (what, m, rec) in [("A", &f.a, 0), ("B", &f.b, 1)] {
         let sec = l
@@ -1135,7 +1163,8 @@ fn validates_its_fixtures_records<S: Service<FakeCore>>(f: &Fixture) {
             }
             with_records += 1;
             let mut problems = Vec::new();
-            S::validate_records(kind, &bodies, &mut |p| problems.push(p.to_string()));
+            l.driver
+                .validate_records(kind, &bodies, &mut |p| problems.push(p.to_string()));
             assert!(
                 problems.is_empty(),
                 "{}: module {what}: validate_records refuses the records the module commits: {problems:?}",
@@ -1144,7 +1173,8 @@ fn validates_its_fixtures_records<S: Service<FakeCore>>(f: &Fixture) {
             if f.rules {
                 let mut short = bodies.clone();
                 short[0] = &short[0][..short[0].len() - 1];
-                S::validate_records(kind, &short, &mut |_| refused += 1);
+                l.driver
+                    .validate_records(kind, &short, &mut |_| refused += 1);
             }
         }
         assert!(
@@ -1163,7 +1193,7 @@ fn validates_its_fixtures_records<S: Service<FakeCore>>(f: &Fixture) {
 /// Case 2: `check` writes nothing. The registry check inside the load of each module runs in the state the loader checks in (after the commit, before the apply);
 /// the state before and after it is the same, it makes no core call, and it goes through every step (the module loads). A second run over the section of a module
 /// that is loaded is compared the same way (it may refuse there, as the module's ids are taken).
-fn check_writes_nothing<S: Service<FakeCore>>(f: &Fixture) {
+fn check_writes_nothing<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     for (what, m, rec) in [("A", &f.a, 0), ("B", &f.b, 1)] {
         let sec = l
@@ -1210,7 +1240,7 @@ fn check_writes_nothing<S: Service<FakeCore>>(f: &Fixture) {
 
 /// Case 3: the state after `A` is the state after `A`, unload `A`, `A`; what `B` alone writes is the same after `A`, unload `A`, `B` (and the capacity counts and
 /// the service's view are `B`'s); the capacity counts and the service's view return to their start after the unload.
-fn reload_equivalence<S: Service<FakeCore>>(f: &Fixture) {
+fn reload_equivalence<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     let start = l.snapshot();
     assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
@@ -1275,7 +1305,7 @@ fn expect_small(what: &str, f: &Fixture, a: &Snapshot, b: &Snapshot) {
 /// Case 4: with `A` and `B` loaded, `A`'s unload leaves `B` as it was. What `B` alone wrote (its rows, DSP rows and ids) is still there after `B`, `A`, unload `A`
 /// (rows that `A` held and cleared may hold the service's free values, which `B` alone leaves at 0); another cycle of `A` changes nothing; and `A`, `B`, unload `A`,
 /// unload `B` is the start for the capacity counts and the service's view.
-fn another_module_is_untouched<S: Service<FakeCore>>(f: &Fixture) {
+fn another_module_is_untouched<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     assert_eq!(l.load(1, &f.b), OK, "{}: module B is refused", f.name);
     let b_alone = l.snapshot();
@@ -1329,7 +1359,7 @@ fn another_module_is_untouched<S: Service<FakeCore>>(f: &Fixture) {
 
 /// Case 5: a refused commit, then the loader's `remove`, leaves the state as it was. A row that was used and released holds the service's free values and a
 /// row that never was holds 0, so the state "as it was" is taken after one load and unload of `A` (the rows `bad` claims are the ones `A` released).
-fn a_refused_commit_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
+fn a_refused_commit_leaves_nothing<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
     l.unload(0);
@@ -1358,7 +1388,7 @@ fn a_refused_commit_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
 
 /// Case 9: `settle` is idempotent. A reload runs it again over the modules that are loaded (the new file's keys are in the old one's slot); with modules A and B
 /// loaded, one run or two over the live set leave everything the service holds as it was, so the numbers of loaded modules do not move.
-fn settle_over_the_live_set_changes_nothing<S: Service<FakeCore>>(f: &Fixture) {
+fn settle_over_the_live_set_changes_nothing<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
     assert_eq!(l.load(1, &f.b), OK, "{}: module B is refused", f.name);
@@ -1378,24 +1408,24 @@ fn settle_over_the_live_set_changes_nothing<S: Service<FakeCore>>(f: &Fixture) {
 
 /// Case 10: `teardown_refusal` of a module that is loaded is `OK` or `E_RELOAD_ROUTED` (a module's own state, never a refusal for another record), and once the
 /// module is unloaded it is `OK`: an unload leaves nothing that holds up the reload of the record's next module.
-fn teardown_refusal_leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
+fn teardown_refusal_leaves_no_residue<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
-    let r = unsafe { S::teardown_refusal(&l.core, 1) };
+    let r = unsafe { l.driver.teardown_refusal(&l.core, 1) };
     assert!(
         r == OK || r == dkrt_sdk::E_RELOAD_ROUTED,
         "{}: teardown_refusal answers {r} for a loaded module",
         f.name
     );
     assert_eq!(
-        unsafe { S::teardown_refusal(&l.core, 2) },
+        unsafe { l.driver.teardown_refusal(&l.core, 2) },
         OK,
         "{}: teardown_refusal refuses record 1, which holds no module",
         f.name
     );
     l.unload(0);
     assert_eq!(
-        unsafe { S::teardown_refusal(&l.core, 1) },
+        unsafe { l.driver.teardown_refusal(&l.core, 1) },
         OK,
         "{}: teardown_refusal still refuses after the unload",
         f.name
@@ -1406,7 +1436,7 @@ fn teardown_refusal_leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
 /// the new version loads (it takes the placeholder over) or it does not (`live_done` keeps the placeholder of a number the service holds: the module is absent, E5d). Both
 /// leave the capacity counts and the service's view as they were at the start, and the DSP state but for the bytes `kept_dsp` names (the parked rows), so a row that leaks
 /// fails here. The memory words of an unload hold the placeholder values (`kept` names them where a fixture has any), and are not compared.
-fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
+fn a_reload_that_ends_leaves_no_placeholder<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     let start = l.snapshot();
     // the new version loads: A, then the reload of A
@@ -1419,7 +1449,7 @@ fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
         "{}: the reload of A is refused",
         f.name
     );
-    unsafe { S::live_done(&l.core) };
+    unsafe { l.driver.live_done(&l.core) };
     l.core.live_op.set(0);
     l.unload(0);
     let end = l.snapshot();
@@ -1434,7 +1464,7 @@ fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
     assert_eq!(l.load(0, &f.a), OK);
     l.core.live_op.set(1);
     l.unload(0);
-    unsafe { S::live_done(&l.core) };
+    unsafe { l.driver.live_done(&l.core) };
     l.core.live_op.set(0);
     let end = l.snapshot();
     expect_small("A, a reload that fails", f, &start, &end);
@@ -1463,14 +1493,14 @@ fn a_reload_that_ends_leaves_no_placeholder<S: Service<FakeCore>>(f: &Fixture) {
 /// Case 12: a live unload of a module and a live load of it again (docs/plans/extension-model.md E5c) leave the service as it was: the job ends an unload with `live_done`
 /// and no settle, and a load settles over the live set with the file at its index before it loads. With A and B loaded, take B down and load it again: B gets the numbers
 /// it had, A is untouched, and the service holds what it held before. The same for A alone.
-fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
+fn a_live_unload_and_load_keeps_the_numbers<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
     assert_eq!(l.load(1, &f.b), OK, "{}: module B is refused", f.name);
     let both = l.snapshot();
     for round in 0..3 {
         l.unload(1);
-        unsafe { S::live_done(&l.core) };
+        unsafe { l.driver.live_done(&l.core) };
         l.settle_over(&[&f.a, &f.b]);
         assert_eq!(
             l.load(1, &f.b),
@@ -1478,7 +1508,7 @@ fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
             "{}: B is refused when loaded again (round {round})",
             f.name
         );
-        unsafe { S::live_done(&l.core) };
+        unsafe { l.driver.live_done(&l.core) };
         expect(
             &std::format!("unload and load of B (round {round}) changed what the service holds"),
             f,
@@ -1493,7 +1523,7 @@ fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
     assert_eq!(l.load(0, &f.a), OK);
     let alone = l.snapshot();
     l.unload(0);
-    unsafe { S::live_done(&l.core) };
+    unsafe { l.driver.live_done(&l.core) };
     l.settle_over(&[&f.a]);
     assert_eq!(
         l.load(0, &f.a),
@@ -1501,7 +1531,7 @@ fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
         "{}: A is refused when loaded again",
         f.name
     );
-    unsafe { S::live_done(&l.core) };
+    unsafe { l.driver.live_done(&l.core) };
     expect(
         "unload and load of A changed what the service holds",
         f,
@@ -1514,9 +1544,7 @@ fn a_live_unload_and_load_keeps_the_numbers<S: Service<FakeCore>>(f: &Fixture) {
 /// Case 12b: a reload of module A (the live op set, its unload, its load) takes over what the unload parked: the load gets the same rows and the same words on the link
 /// as before, and the service holds what it held with A loaded. Where the service parks DSP rows (`Fixture::parks_rows`), the words that run a row stay on while A is
 /// gone; where it does not, they are off. A reload that ends without A (`live_done`) leaves the rows off, as a plain unload does.
-fn a_reload_takes_over_the_parked_row_and_a_failed_one_leaves_the_gap_row<S: Service<FakeCore>>(
-    f: &Fixture,
-) {
+fn a_reload_takes_over_the_parked_row_and_a_failed_one_leaves_the_gap_row<S: Subject>(f: &Fixture) {
     let on = |s: &Snapshot| -> Vec<bool> {
         f.enable
             .iter()
@@ -1577,7 +1605,7 @@ fn a_reload_takes_over_the_parked_row_and_a_failed_one_leaves_the_gap_row<S: Ser
         &loaded,
         &again,
     );
-    unsafe { S::live_done(&l.core) };
+    unsafe { l.driver.live_done(&l.core) };
     expect(
         "the end of a reload that took everything over changed what the service holds",
         f,
@@ -1591,7 +1619,7 @@ fn a_reload_takes_over_the_parked_row_and_a_failed_one_leaves_the_gap_row<S: Ser
     assert_eq!(l.load(0, &f.a), OK);
     l.core.live_op.set(1);
     l.unload(0);
-    unsafe { S::live_done(&l.core) };
+    unsafe { l.driver.live_done(&l.core) };
     l.core.live_op.set(0);
     gap_rows_after_an_unload(f, &on, &loaded, &l.snapshot());
     l.expect_all_parked();
@@ -1639,7 +1667,7 @@ fn gap_rows_after_an_unload(
 /// Case 13 (`Fixture::parked_knobs`): the values the user turned survive a reload of the same module, as the firmware's kit array keeps them, and only that: they are the defaults
 /// when another kit is live at the load, when a kit load ran while the module was gone, when another module takes the row, and when a module of another name has the
 /// same keys. The user's value is `0x1234`, a word no fixture holds as a default. Docs: docs/plans/extension-model.md, E5b.
-fn parked_values_belong_to_the_module_and_kit_that_left<S: Service<FakeCore>>(f: &Fixture) {
+fn parked_values_belong_to_the_module_and_kit_that_left<S: Subject>(f: &Fixture) {
     let Some(k) = f.parked_knobs else { return };
     const TURNED: i32 = 0x1234;
     const LEFT: i32 = 0x2222;
@@ -1656,7 +1684,7 @@ fn parked_values_belong_to_the_module_and_kit_that_left<S: Service<FakeCore>>(f:
     // a reload: the job sets the live op, the teardown runs, the file loads again
     l.core.live_op.set(1);
     assert_eq!(
-        unsafe { S::teardown_refusal(&l.core, 1) },
+        unsafe { l.driver.teardown_refusal(&l.core, 1) },
         OK,
         "{name}: a loaded module is refused its teardown"
     );
@@ -1723,7 +1751,7 @@ fn dsp_same(f: &Fixture, core: &FakeCore, start: &Snapshot, end: &Snapshot) -> b
 }
 
 /// Case 6: case 3 ten times: no table grows and no sticky value drifts.
-fn reload_ten_times<S: Service<FakeCore>>(f: &Fixture) {
+fn reload_ten_times<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
     let first = l.snapshot();
@@ -1769,7 +1797,7 @@ fn reload_ten_times<S: Service<FakeCore>>(f: &Fixture) {
 /// rows off, settings, capacity counts, the service's view) is the same as after "load `a2`, unload `a2`", both from a fresh start: `a2` has the keys of `A` and
 /// other content, so whatever a release leaves of a module's content differs between the two. And no memory word that `A`'s load wrote is still at `A`'s value after
 /// the unload unless the unload wrote it (its free value) or the fixture names it.
-fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
+fn leaves_no_residue<S: Subject>(f: &Fixture) {
     let l = Lifecycle::<S>::new(f);
     let start = l.snapshot();
     assert_eq!(l.load(0, &f.a), OK, "{}: module A is refused", f.name);
@@ -1844,8 +1872,11 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
         live(&l.core);
     }
     let loaded_a2 = l.snapshot();
+    // a fixture that names every area as equal keeps nothing a module could leave behind (a service with no state of its own): there is no leftover to see
+    let stateless = excuses_equal_loads(f.stateless, f.salt_same);
     assert!(
-        loaded_a.same_after_unload(&loaded_a2, true).is_err()
+        stateless
+            || loaded_a.same_after_unload(&loaded_a2, true).is_err()
             || loaded_a.survives.0 != loaded_a2.survives.0,
         "{}: a2 loads to the same state as A: the comparison cannot see a leftover",
         f.name
@@ -1899,7 +1930,7 @@ fn leaves_no_residue<S: Service<FakeCore>>(f: &Fixture) {
 /// unload of a module that wrote the same rows leaves (`same_but_ok`: it loads, then unloads; the rows it wrote hold the service's free values, as the undone ones
 /// must). The words that turn a row off are not compared: the undo of a row that was never published sends none. The capacity counts and the service's view are those
 /// of the start. The same with another module loaded, which the refusal leaves alone  (`Late::beside_b`).
-fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
+fn a_refusal_during_apply_leaves_nothing<S: Subject>(f: &Fixture) {
     let Some(late) = &f.bad_late else {
         return;
     };
@@ -1925,7 +1956,7 @@ fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
         l.unload(0);
         // (a service that parks the rows of absent modules writes MISSING for a number once its row is parked, at its tick: the refused module has no row of its own)
         if f.parks_rows {
-            unsafe { S::tick(&l.core, dkrt_abi::service::tick_phase::LAST) };
+            unsafe { l.driver.tick(&l.core, dkrt_abi::service::tick_phase::LAST) };
         }
         let reference = l.snapshot();
         expect_small("the reference of the late refusal", f, &before, &reference);
@@ -1944,7 +1975,7 @@ fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
             f.name
         );
         if f.parks_rows {
-            unsafe { S::tick(&l.core, dkrt_abi::service::tick_phase::LAST) };
+            unsafe { l.driver.tick(&l.core, dkrt_abi::service::tick_phase::LAST) };
         }
         let refused = l.snapshot();
         expect_small("a refusal during apply", f, &before, &refused);
@@ -1973,3 +2004,43 @@ fn a_refusal_during_apply_leaves_nothing<S: Service<FakeCore>>(f: &Fixture) {
         }
     }
 }
+
+/// The wiring of a real service file: the functions of its row (`dk_svc_row()`) reach the object through the owner's guard, so a part call that arrives while a hook of the same
+/// file holds the object is refused (`E_BUSY`) and counted, and the object is not entered a second time. A file that wired a table to the plain pointer would run the call
+/// beside the hook's `&mut`. Every ported service runs it in its own test, over its own file's row and cell.
+///
+/// The owner is started (the file's `dk_svc_start`). `hold` runs its argument inside `DK_SVC_OWNER.with` (the hook), `refused` reads `DK_SVC_OWNER.refused()`.
+pub fn row_is_guarded(
+    row: &'static dkrt_abi::provider::ProviderRow,
+    hold: &dyn Fn(&mut dyn FnMut()),
+    refused: &dyn Fn() -> u32,
+) {
+    use dkrt_abi::provider::ProviderHandle;
+    let core = FakeCore::new();
+    let core_ptr = &core as *const FakeCore as *const core::ffi::c_void;
+    // the table functions of a guarded file ignore the instance word; it only has to be non-null for the handle
+    let mut inst = 0u32;
+    // SAFETY: the row is a static of the test binary, so the whole address space is its extent; the handle is dropped before the end of the call.
+    let handle = unsafe {
+        ProviderHandle::resolve(
+            row,
+            0..usize::MAX,
+            &mut inst as *mut u32 as *mut core::ffi::c_void,
+        )
+    }
+    .expect("a valid row");
+    let before = refused();
+    let mut inside = OK;
+    hold(&mut || {
+        // SAFETY: `core_ptr` is the live FakeCore; the guard refuses before any part function runs
+        inside = unsafe { handle.can_stop(core_ptr) };
+    });
+    assert_eq!(
+        inside, E_BUSY,
+        "a part call inside a hook of the same file is refused"
+    );
+    assert_eq!(refused(), before + 1, "and counted once");
+}
+
+#[cfg(test)]
+mod tests;

@@ -1,6 +1,6 @@
 //! Every hook of the machines service as assembler (ColdFire, GNU syntax): `hooks-common.s` (the page entries, one routine for both devices), `hooks-dt2.s` and `hooks-dn2.s`, in one
 //! object (a hook is declared for its device only, `module.toml` `devices` and the `service!` call). The files are plain `.s`, included here only, so that the host tests of core/machines
-//! assemble them as they are (`tests/test_pk_machines_fw.py`). They read the table `MF_TAB` (`lib.rs`) and call `dks_page_key` and `dks_page_turn` (`fw.rs`).
+//! assemble them as they are (`tests/test_pk_machines_fw.py`). They read the table `DKRT_MF_TAB` (`lib.rs`) and call `dks_page_key` and `dks_page_turn` (`fw.rs`).
 #[cfg(target_arch = "m68k")]
 use core::arch::global_asm;
 

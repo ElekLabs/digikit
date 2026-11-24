@@ -1,12 +1,8 @@
-//! The image table `machines_info` and the assembler that reads it: `image.rs` is compiled into this test by path (the crate's own `lib.rs` pulls in the assembler, which a host
-//! cannot assemble). The table is bound over a `FakeCore` (the core's info entry), refused when it is not this device's or lacks the registry, and the byte offsets the
-//! assembler files name (`.equ T_*`) are the word indexes of `image::w`.
+//! The image table `machines_info` and the assembler that reads it. The table is bound over a `FakeCore` (the core's info entry), refused when it is not this device's or lacks the
+//! registry, and the byte offsets the assembler files name (`.equ T_*`) are the word indexes of `info::w` (the crate's `info` owns the table: `Provider::start` binds it).
+use dkrt_svc_machines::info::*;
 use dkrt_svc_rt::name_hash;
 use dkrt_test_support::FakeCore;
-
-#[path = "../src/image.rs"]
-mod image;
-use image::*;
 
 fn table(device: u32) -> Vec<u32> {
     let mut t = vec![0u32; WORDS];
