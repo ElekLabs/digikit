@@ -136,12 +136,12 @@ firmware: VerticalMenuView, MenuItem, ConfirmWindow, MultiChoiceWindow, Toast, p
       intermediate step):
   - SETTINGS > DIGIKIT stays a vertical menu: ABOUT, HEALTH, MEMORY, MODULES. Glyphs later.
   - MODULES is a list like PRESET MANAGER: a title bar; rows of name, kind and size; a check mark
-    for "load at next restart" (YES toggles it); RIGHT opens a side panel with LOAD / UNLOAD,
-    ROUTE... (effects only: a choice of SEND or MASTER) and INFO (size, DSP %, CPU %, fit).
+    for "load at next restart" (YES toggles it); RIGHT opens a side panel with LOAD / UNLOAD
+    and INFO (size, DSP %, CPU %, fit).
     The empty text is "NO MODULES ON CARD".
   - NO with changes pending asks "APPLY & RESTART?": YES applies, NO discards.
   - A module that does not fit gives a toast "NO FIT: NAME".
-  - The FX ROUTES screen is removed; the fx-routes scenario uses ROUTE....
+  - The FX ROUTES screen and the ROUTE... row are removed: the fx service adds SETTINGS > FX ROUTING (E1).
 - [x] Proof: host tests; no firmware-heap growth after the menu, a list and a dialog open and close
       50 times; new golden frames approved by Em from screenshots on dt2 and dn2.
 

@@ -2,7 +2,7 @@
 
 A run-time effect is a master insert or a send effect (finding 62), and the amounts of a send are the framework's (finding 64). Step 4 gives the effect's author a way to say where the effect starts and which routes make sense, and gives the user a page to choose
 (SETTINGS > FX ROUTING, from E1 on; the DIGIKIT menu has no route panel). Marks: **[D]** measured or read once by the author (no second agent has checked it), **[O]** open. Pieces: `packages/patchkit` (`typed.rs` `FxDef`, `register.rs` `fx_routes`, `dkmdsp.rs` effect flags), `modules/core/runtime` (`dsp.rs` `fx_flags`,
-`fxsend.rs` `routes_of`, `saved_route`, `fx_entry`; `fxpage.rs` `rebuild_list`; exports `dkrt_fx`, `dkrt_settings_flush`), `modules/core/apps/digikit-menu` (the page), the fixtures `tests/fixtures/modules/dyn-fx-gain-send` and `dyn-fx-gain-sendonly`, the scenario
+`fxsend.rs` `routes_of`, `saved_route`; `fxpage.rs` `rebuild_list`; export `dkrt_settings_flush`), `services/fx` (`src/routing.rs` and `dks/src/ui.rs`: the FX ROUTING row and its popups; `fxsend` `describe`), the fixtures `tests/fixtures/modules/dyn-fx-gain-send` and `dyn-fx-gain-sendonly`, the scenario
 `REF:tests/digikit/scenarios/fx-routes-dt2.toml` (`tools/patchkit/pk_digikit_fxroutes.py`).
 
 ## The manifest rule **[D]**
@@ -21,14 +21,14 @@ that is not allowed. No contract bump: the contract is still fx 1.0, because the
 
 `fxsend::apply` (when the effect row is registered, at the boot): the route is the stored `fx/route/<module id>` when it is 0 or 1 and the effect allows it, else the manifest's default. An effect with no setting and `route = "send"` starts as a send effect. A send route needs a free send cell
 (`send_slots`, CAPACITY `SEND_SLOTS`); an effect past the limit stays on the master, also a send-only one **[O]** (the menu does not offer a send past the limit, but a default can exceed it). On an image without send cells (the Digitone II until step 6) every effect stays on the master and the page lists
-it as saved. `fxsend::fx_entry` is behind the new export `dkrt_fx(index, DkrtFx *)`: the effects that have a page, in row order, with the tab, the module id, the allowed routes, the default, the route in force and the route the settings give now. `dkrt_settings_flush()` writes the settings record at once
-(the menu needs the write to land before the restart; the 2 s delay would lose it).
+it as saved. The fx service's Describe part gives, for the MODULES reply, one word per effect row of a module that has a page, in row order: the row, the route in force, the route the settings give now, the allowed routes and the default (the old `dkrt_fx` export answers `E_NOT_FOUND`). `dkrt_settings_flush()` writes the settings record at once
+(a restart needs the write to land first; the 2 s delay would lose it).
 
 **The order of the FX view.** `fxpage::rebuild_list` builds the list of FUNC + FX as DEL, REV, CHO, the send effects, the master effects, each in row order. `fxsend::apply` calls it again once the route of the row is known (`fxpage::relist`), so the list is right when the main view is built; no new hook.
 
 ## The page
 
-The route is chosen in SETTINGS > FX ROUTING (E1: the rows of an owner are keyed by its record name through `dkrt_record_name`, and a choice is written with `dkrt_settings_put` of `fx/route/<module id>`: 1 send, 0 master). The DIGIKIT menu has no route panel, no ROUTE line and no route write, and none of the statics `DK_FXR*`, `DK_ROUTE_N` and `DK_ROUTE_ITEM`; their host directory ids (18 to 20, 22, 23) are reserved and resolve to nothing. The rules below are unchanged and live in the runtime: a master-only effect offers no send; a send-only effect offers no master; a send is refused when the slots are full, counting the pending routes of the other effects; the offer is judged against the saved route, not the route in force; two effects of one module share the module's setting (the key is per module id); an effect without a page is not listed.
+The route is chosen in SETTINGS > FX ROUTING (E1: the rows of an owner are keyed by its record name through `dkrt_record_name`, and a pick writes `fx/route/<module id>`, 1 send, 0 master, and reloads the effect's module, so no restart and no confirm is needed; a toast shows the result: `NAME: ROUTE`, `NAME: ROUTE ON STOP` when the transport plays (the runtime reloads the module at stop with `dkc_reload_when_possible`), `NAME: ROUTE PENDING` for a pick that waits for its reload, `NAME: RESTART TO APPLY`, `NAME: NOT SAVED`, `NAME: NO ROUTE FREE`, `BUSY: TRY AGAIN` or `NO EFFECTS LOADED`; a toast cuts a long name to 13 characters in the middle, the popup cuts a name over 19 characters the same way). The DIGIKIT menu has no route panel, no ROUTE line and no route write, and none of the statics `DK_FXR*`, `DK_ROUTE_N` and `DK_ROUTE_ITEM`; their host directory ids (18 to 20, 22, 23) are reserved and resolve to nothing. The rules below are unchanged and live in the runtime: a master-only effect offers no send; a send-only effect offers no master; a send is not offered when the slots are full; the offer is judged against the saved route, not the route in force; two effects of one module share the module's setting (the key is per module id); an effect without a page is not listed.
 
 ## Proof of the runtime half **[D]** (the menu half moved to SETTINGS > FX ROUTING in E1)
 

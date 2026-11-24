@@ -53,7 +53,7 @@ How it works:
 - `Provider::detach` is the teardown of an effect module, whatever route it runs on: page, list entry, send cell and defaults go back (the `DspPart::clear` before it frees the DSP row).
   `can_stop` keeps its default: the service never holds up a reload. The route and the send amounts are settings keyed by the module id, so the next load of the module gets them back; the
   knob values stay in the kit's array.
-- fx has no `Query` part: the FX ROUTING list asks its own rule (`fxsend::effect`). The `local-ping` fixture proves the Query part and `dkrt_service_query`.
+- The service has no Query part and no `dk_service_query_v1` export: the menu no longer asks which routes fit, because the service shows the choices itself (`routing.rs`).
 
 Describe (the MODULES reply): `Describe::describe` (`fxsend::describe`) gives one word for each effect row of module record `who` - 1 that has a page, in row order: the row (bits 0 to 7), then four bits
 each of the route it runs on, the route the settings give it now, the routes its record allows and its default (1 master, 2 send). It has no object and runs on the MODULES command handler's task outside

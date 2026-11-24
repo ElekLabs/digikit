@@ -320,7 +320,7 @@ With the module id, the effect `id` makes the effect ID of saved kits. Never ren
 | Call | Meaning |
 | --- | --- |
 | `dk_module_ctx_add_fx(ctx, index, name, short_name)` | Declares the effect. `index` is `DK_FX_ID_<ID>`. |
-| `dk_fx_routes(fx, allowed, def)` | The routes the user may choose in SETTINGS > DIGIKIT > FX ROUTES (`DK_ROUTE_MASTER`, `DK_ROUTE_SEND`, or-ed) and the route at the start. Without this call: master only. |
+| `dk_fx_routes(fx, allowed, def)` | The routes the user may choose in SETTINGS > FX ROUTING (`DK_ROUTE_MASTER`, `DK_ROUTE_SEND`, or-ed) and the route at the start. Without this call: master only. |
 | `dk_fx_mix(fx, def)` | The default of the framework's MIX knob, 0 to 127. Default: 127. |
 | `dk_fx_add_page(fx, name, short_name)` | The effect's page. `name` is the title, 1 to 23 characters (mixed case: "Freq Shifter"). `short_name` is the tab label, 1 to 3 characters. An effect with a page has its own page after CHO in FUNC + FX. A send route needs a page. |
 | `dk_page_add_fx_param(page, name, short_name, kind, min, max, def)` | A float parameter on the next knob of the page. |
@@ -640,10 +640,10 @@ The template `src/dsp/NAME.s` shows all of this in about 90 lines. Read it first
   `core/fxpages` in its module list (they are in its `device` patch set).
 - Text is printable ASCII. Write titles in mixed case. The firmware font draws a capital Q like an O.
 - Routes: a send effect gets the sum of the tracks' send amounts as its input block. Its wet output times MIX is added to the FX return. The
-  user chooses the route in SETTINGS > DIGIKIT > FX ROUTES (the setting `fx/route/<module id>`). A stored route that the effect no longer allows is
+  user chooses the route in SETTINGS > FX ROUTING (the setting `fx/route/<module id>`; a pick reloads the module, so the effect keeps no state across it). A stored route that the effect no longer allows is
   ignored. Pass `DK_ROUTE_MASTER` only for a gain or limiter or any effect with a dry path of its own, `DK_ROUTE_SEND` only for a pure return such as a reverb, and
   both for the rest. The send amounts live in the settings store and the DSP row, never in your state or in a kit file. FUNC + FX lists DEL, REV,
-  CHO, the send effects, then the master effects. A changed route takes effect after a restart. The runtime refuses an unknown route, empty
+  CHO, the send effects, then the master effects. A changed route takes effect at once through a reload of the module; while the transport plays, at stop. The runtime refuses an unknown route, empty
   `allowed` routes, a default route that `allowed` does not list, and any send route without a page (`dk_fx_routes`).
 - A centred knob: `DK_BIPOLAR`, `min = -64`, `max = 63`, `def = 0`. A mapping with `2^x - 1` and no constant term gives exactly 0.
   A send effect with MIX default 127 changes nothing until a track has a send amount. On the master the same default means fully wet, so say in the
