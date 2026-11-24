@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { Device } from '@digi/test-support';
 import { cardStore, uploadStore } from '../runtime/device-data.ts';
 import { kitAreas } from '../runtime/device-data.ts';
@@ -140,17 +140,16 @@ test('a torn overlay is refused', () => {
 });
 
 describe('layOver', () => {
-  test('a reader that asks for thousands of sectors one by one does not parse the overlay blob for each', () => {
-    const sectors = 20_000;
-    const blob = encodeOverlay(new Map(Array.from({ length: sectors }, (_, i) => [i, Buffer.alloc(512, i & 0xff)] as const)));
+  test('a reader that asks for sectors one by one parses the overlay blob once, not for each sector', () => {
+    const records = 50;
+    const blob = encodeOverlay(new Map(Array.from({ length: records }, (_, i) => [i, Buffer.alloc(512, i + 1)] as const)));
     const card = path.join(os.tmpdir(), 'digi-lay-over-no-such-card.img');
-    const started = Date.now();
-    for (let sector = 0; sector < sectors; sector += 1) {
+    const reads = vi.spyOn(blob, 'readBigUInt64LE');
+    for (let sector = 0; sector < 4 * records; sector += 1) {
       const buf = Buffer.alloc(512);
       layOver(buf, sector, card, blob);
-      if (sector % 4999 === 0) expect(buf[0], `sector ${sector} carries its blob data`).toBe(sector & 0xff);
+      expect(buf[0], `sector ${sector} carries its blob data`).toBe(sector < records ? sector + 1 : 0);
     }
-    // parsing the blob for each sector took minutes at this size; once for the blob takes well under the default test timeout
-    expect(Date.now() - started).toBeLessThan(4000);
+    expect(reads, 'one sector number read per record, for the whole run').toHaveBeenCalledTimes(records);
   });
 });
