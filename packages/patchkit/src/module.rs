@@ -277,9 +277,15 @@ impl Manifest {
                     "{id}: [[hook]] needs a `name` and an `entry`, both not empty"
                 ));
             }
-            if hooks.iter().any(|(n, _, _)| *n == h.name) {
+            // one name may be declared once for each of disjoint devices (an entry without `devices` is for every device)
+            if hooks.iter().any(|(n, _, d)| {
+                *n == h.name
+                    && (d.is_empty()
+                        || h.devices.is_empty()
+                        || d.iter().any(|x| h.devices.contains(x)))
+            }) {
                 return Err(err!(
-                    "{id}: [[hook]] {:?} is declared twice (one name has one entry, so a hook for two devices is one entry without `devices`)",
+                    "{id}: [[hook]] {:?} is declared twice for a common device (one name has one entry for each device, `devices` apart)",
                     h.name
                 ));
             }
@@ -1673,6 +1679,58 @@ mod manifest_tests {
         assert!(e.to_string().contains("unknown field"), "{e}");
         let e = load("[uses.dt3]\nmachine_rows = 1\n").unwrap_err();
         assert!(e.to_string().contains("unknown field"), "{e}");
+    }
+
+    #[test]
+    fn one_hook_name_is_declared_once_for_each_of_disjoint_devices() {
+        let shorts: Vec<String> = crate::devdata::all()
+            .iter()
+            .filter(|d| d.digikit_id.is_some())
+            .map(|d| d.short.clone())
+            .collect();
+        assert!(shorts.len() >= 2, "two runtime devices");
+        let hook = |entry: &str, devices: &[&str]| {
+            let list: Vec<String> = devices.iter().map(|d| format!("{d:?}")).collect();
+            let on = if devices.is_empty() {
+                String::new()
+            } else {
+                format!("devices = [{}]\n", list.join(", "))
+            };
+            format!("[[hook]]\nname = \"cf.a.hook.x\"\nentry = \"{entry}\"\n{on}")
+        };
+        let (a, b) = (shorts[0].as_str(), shorts[1].as_str());
+        // disjoint device sets: accepted
+        let ok = format!("{}{}", hook("e1", &[a]), hook("e2", &[b]));
+        assert!(load_service(&ok).is_ok());
+        // the same device twice, an entry for every device with one for a device (either order), or every device twice: refused
+        for (what, extra) in [
+            (
+                "same device",
+                format!("{}{}", hook("e1", &[a]), hook("e2", &[a])),
+            ),
+            (
+                "a shared device",
+                format!("{}{}", hook("e1", &[a, b]), hook("e2", &[b])),
+            ),
+            (
+                "all then one",
+                format!("{}{}", hook("e1", &[]), hook("e2", &[b])),
+            ),
+            (
+                "one then all",
+                format!("{}{}", hook("e1", &[a]), hook("e2", &[])),
+            ),
+            (
+                "all twice",
+                format!("{}{}", hook("e1", &[]), hook("e2", &[])),
+            ),
+        ] {
+            let e = load_service(&extra).unwrap_err();
+            assert!(
+                e.to_string().contains("declared twice for a common device"),
+                "{what}: {e}"
+            );
+        }
     }
 
     #[test]

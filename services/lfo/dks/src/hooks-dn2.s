@@ -13,8 +13,8 @@
 | (the phase, the call, the code after the call) with `dk_lfo_eval(phase, wave)` for the function table call. Any other byte (6, or 15 to 127) takes the stock RAND code.
 | The DN2 stock call path keeps no register in its frame (d1 is dead at the code after the call), so the routine does not save d1; it saves a0 and a1 (strict liveness does not prove them dead at the exit, finding 149).
 | d0, d1, d2 and the flags change; d3 is untouched. RAND: d0 is dead there and d3 is still 6.
-    .globl lfo_dn2_tick_call
-lfo_dn2_tick_call:
+    .globl lfo_tick_call_b
+lfo_tick_call_b:
     moveq   #6,%d0                   | the displaced instructions of the site
     cmp.l   %d3,%d0
     bne.b   8f                          | clamped wave is not 6: the stock fall-through
@@ -35,15 +35,15 @@ lfo_dn2_tick_call:
     lea     8(%sp),%sp
     movem.l (%sp),%a0/%a1
     lea     8(%sp),%sp
-    jmp     lfo_x_dn2_tick_done
-1:  jmp     lfo_x_dn2_tick_rand
-8:  jmp     lfo_x_dn2_tick_call_end
+    jmp     lfo_x_tick_done
+1:  jmp     lfo_x_tick_rand
+8:  jmp     lfo_x_tick_call_end
 
 | tick_slew, DN2 0x40137d1e: `moveq 6,D1; cmp.l D3,D1; bne DONE(0x40137d52)`.
 | Here the clamped wave is 6 and the scratch register d1 of the hook is free (dead at the slew code and at DONE). d0 (the function result) is live. A shape has no slew: DONE; any other byte
 | runs the slew code of RAND.
-    .globl lfo_dn2_tick_slew
-lfo_dn2_tick_slew:
+    .globl lfo_tick_slew_b
+lfo_tick_slew_b:
     moveq   #6,%d1                   | the displaced instructions of the site
     cmp.l   %d3,%d1
     bne.b   8f                          | clamped wave is not 6: the stock branch to DONE
@@ -52,14 +52,14 @@ lfo_dn2_tick_slew:
     blt.b   1f
     cmpi.l  #14,%d1
     bgt.b   1f
-    jmp     lfo_x_dn2_tick_done
-1:  jmp     lfo_x_dn2_tick_slew
-8:  jmp     lfo_x_dn2_tick_done
+    jmp     lfo_x_tick_done
+1:  jmp     lfo_x_tick_slew
+8:  jmp     lfo_x_tick_done
 
 | tick_start, DN2 0x40137c40: `moveq 6,D0; cmp.l D3,D0; beq CLEAR(0x40137c5c)`.
 | Here the clamped wave is 6 and the scratch register d2 of the hook is free (dead at the clear and at the SPH phase code). RAND starts at phase 0; a shape starts at the SPH phase like the other waves.
-    .globl lfo_dn2_tick_start
-lfo_dn2_tick_start:
+    .globl lfo_tick_start_b
+lfo_tick_start_b:
     moveq   #6,%d0                   | the displaced instructions of the site
     cmp.l   %d3,%d0
     bne.b   8f                          | clamped wave is not 6: the stock fall-through
@@ -68,15 +68,15 @@ lfo_dn2_tick_start:
     blt.b   1f
     cmpi.l  #14,%d2
     bgt.b   1f
-    jmp     lfo_x_dn2_tick_start
-1:  jmp     lfo_x_dn2_tick_start_rand
-8:  jmp     lfo_x_dn2_tick_start
+    jmp     lfo_x_tick_start
+1:  jmp     lfo_x_tick_start_rand
+8:  jmp     lfo_x_tick_start
 
 | read_call (the second reader), DN2 0x401378c4: `moveq 6,D0; cmp.l D3,D0; beq RAND(0x401378fa)`.
 | The block is a4 (raw wave byte at 0x2a(%a4)), d7 is live. The scratch register d0 of the hook is free. The stock path after the beq makes d0 = 0x32 with a `move.b` onto the moveq's 6, multiplies d2 by it
 | (`muls.l d0,d2`) and takes `mac` with 0x7f421f4f; the routine sets d0 itself (`moveq #0x32` is the same value). d1 is live after the call and kept in the stock frame: saved here with a0 and a1.
-    .globl lfo_dn2_read_call
-lfo_dn2_read_call:
+    .globl lfo_read_call_b
+lfo_read_call_b:
     moveq   #6,%d0                   | the displaced instructions of the site
     cmp.l   %d3,%d0
     bne.b   8f                          | clamped wave is not 6: the stock fall-through
@@ -99,13 +99,13 @@ lfo_dn2_read_call:
     lea     8(%sp),%sp
     movem.l (%sp),%d1/%a0/%a1
     lea     12(%sp),%sp
-    jmp     lfo_x_dn2_read_done
-1:  jmp     lfo_x_dn2_read_rand
-8:  jmp     lfo_x_dn2_read_call_end
+    jmp     lfo_x_read_done
+1:  jmp     lfo_x_read_rand
+8:  jmp     lfo_x_read_call_end
 
 | read_slew, DN2 0x40137932: `moveq 6,D2; cmp.l D3,D2; bne DONE(0x40137962)`. The scratch register d2 of the hook is free (dead at the slew code and at DONE).
-    .globl lfo_dn2_read_slew
-lfo_dn2_read_slew:
+    .globl lfo_read_slew_b
+lfo_read_slew_b:
     moveq   #6,%d2                   | the displaced instructions of the site
     cmp.l   %d3,%d2
     bne.b   8f                          | clamped wave is not 6: the stock branch to DONE
@@ -114,13 +114,13 @@ lfo_dn2_read_slew:
     blt.b   1f
     cmpi.l  #14,%d2
     bgt.b   1f
-    jmp     lfo_x_dn2_read_done
-1:  jmp     lfo_x_dn2_read_slew
-8:  jmp     lfo_x_dn2_read_done
+    jmp     lfo_x_read_done
+1:  jmp     lfo_x_read_slew
+8:  jmp     lfo_x_read_done
 
 | read_start, DN2 0x40137836: `moveq 6,D2; cmp.l D3,D2; beq CLEAR(0x40137852)`. The scratch register d2 of the hook is free (dead at the clear and at the SPH phase code).
-    .globl lfo_dn2_read_start
-lfo_dn2_read_start:
+    .globl lfo_read_start_b
+lfo_read_start_b:
     moveq   #6,%d2                   | the displaced instructions of the site
     cmp.l   %d3,%d2
     bne.b   8f                          | clamped wave is not 6: the stock fall-through
@@ -129,6 +129,6 @@ lfo_dn2_read_start:
     blt.b   1f
     cmpi.l  #14,%d2
     bgt.b   1f
-    jmp     lfo_x_dn2_read_start
-1:  jmp     lfo_x_dn2_read_start_rand
-8:  jmp     lfo_x_dn2_read_start
+    jmp     lfo_x_read_start
+1:  jmp     lfo_x_read_start_rand
+8:  jmp     lfo_x_read_start

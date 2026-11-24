@@ -371,29 +371,24 @@ pub struct Options {
 /// The low 24 bits of a `HOOKS` entry of a service file: the handler's image offset. The top byte is the device mask of the hook.
 pub const HOOK_ENTRY_MASK: u32 = dkneeds::keys::HOOK_ENTRY_MASK;
 
-/// The device mask of a hook: bit `i` is the device `i` of `devdata::all()` (file-name order); no device is mask 0, which means every device. The packer writes it
-/// in the top byte of the hook's `HOOKS` entry; the loader drops it (the port file's `absent` flag says which hooks the firmware has).
+/// The device mask of a hook: bit `id - 1` for each device with runtime id `id` (`[digikit] id`, the mask of a `SLOTS` item without its shift); no device is mask 0, which means
+/// every device. The packer writes it in the top byte of the hook's `HOOKS` entry; the loader takes the items of its device and drops it.
 pub fn hook_device_mask(devices: &[String]) -> Result<u32> {
-    let all = crate::devdata::all();
-    let mut mask = 0u32;
-    for d in devices {
-        let i = all.iter().position(|x| x.short == *d).ok_or_else(|| {
-            err!(
-                "hook device {d:?} is not one of {}",
-                crate::devdata::short_list()
-            )
-        })?;
-        if i >= 8 {
-            return Err(err!("hook device {d:?}: the device mask has 8 bits"));
-        }
-        mask |= 1 << i;
-    }
-    Ok(mask)
+    runtime_id_mask(crate::devdata::all(), devices, "hook")
 }
 
 /// The device mask of a `SLOTS` item, in place in the flags word: bit `id - 1` for each device with runtime id `id` (`[digikit] id`); no device is 0 (every device).
 pub fn slot_device_flags(devices: &[String]) -> Result<u32> {
-    let all = crate::devdata::all();
+    Ok(runtime_id_mask(crate::devdata::all(), devices, "slot")?
+        << dkneeds::keys::SLOT_DEVICES_SHIFT)
+}
+
+/// Bit `id - 1` for each of `devices` (short names of `all`) by its runtime id; `what` names the item in the refusal.
+fn runtime_id_mask(
+    all: &[crate::devdata::DeviceInfo],
+    devices: &[String],
+    what: &str,
+) -> Result<u32> {
     let mut mask = 0u32;
     for d in devices {
         let id = all
@@ -402,16 +397,18 @@ pub fn slot_device_flags(devices: &[String]) -> Result<u32> {
             .and_then(|x| x.digikit_id)
             .ok_or_else(|| {
                 err!(
-                    "slot device {d:?} is not a device the runtime runs on ({})",
+                    "{what} device {d:?} is not a device the runtime runs on ({})",
                     crate::devdata::short_list()
                 )
             })?;
         if !(1..=8).contains(&id) {
-            return Err(err!("slot device {d:?}: the runtime id {id} is not 1 to 8"));
+            return Err(err!(
+                "{what} device {d:?}: the runtime id {id} is not 1 to 8"
+            ));
         }
         mask |= 1 << (id - 1);
     }
-    Ok(mask << dkneeds::keys::SLOT_DEVICES_SHIFT)
+    Ok(mask)
 }
 
 /// What a service file provides: the service name (`[module] service`) and the functions it exports (`[[export]]`), each a global function of the object.
@@ -817,7 +814,13 @@ fn pack_inner(
                     err!("the service hooks {hook} with {entry}, which the object does not define")
                 })?;
                 let a = dkneeds::keys::name_hash(hook);
-                if hk.iter().any(|p| p.a == a) {
+                let mask = hook_device_mask(devices)?;
+                // one name may be hooked once for each of disjoint devices; no device is every device
+                let overlaps = |p: &dkneeds::keys::Pair| {
+                    let other = p.b >> dkneeds::keys::HOOK_DEVICES_SHIFT;
+                    p.a == a && (mask == 0 || other == 0 || mask & other != 0)
+                };
+                if hk.iter().any(overlaps) {
                     return Err(err!("the service hooks {hook} twice"));
                 }
                 if at > HOOK_ENTRY_MASK {
@@ -827,7 +830,7 @@ fn pack_inner(
                 }
                 hk.push(dkneeds::keys::Pair {
                     a,
-                    b: at | hook_device_mask(devices)? << 24,
+                    b: at | mask << dkneeds::keys::HOOK_DEVICES_SHIFT,
                 });
             }
             hk.sort_by_key(|p| p.a);
@@ -2008,6 +2011,55 @@ mod tests {
     }
 
     #[test]
+    fn a_device_without_a_runtime_id_is_refused_under_the_name_of_the_item() {
+        let mut none = crate::devdata::all()[0].clone();
+        none.short = "noid".into();
+        none.digikit_id = None;
+        let all = [none];
+        let devices = ["noid".to_string()];
+        let hook = runtime_id_mask(&all, &devices, "hook")
+            .unwrap_err()
+            .to_string();
+        assert!(hook.contains("hook device \"noid\""), "{hook}");
+        let slot = runtime_id_mask(&all, &devices, "slot")
+            .unwrap_err()
+            .to_string();
+        assert!(slot.contains("slot device \"noid\""), "{slot}");
+    }
+
+    #[test]
+    fn one_hook_name_for_disjoint_devices_packs_one_entry_for_each_under_the_runtime_id_mask() {
+        let o = object();
+        let dev =
+            |entry: &str, d: &str| ("hook.a".to_string(), entry.to_string(), vec![d.to_string()]);
+        let ids: Vec<(String, u32)> = crate::devdata::all()
+            .iter()
+            .filter_map(|d| d.digikit_id.map(|id| (d.short.clone(), id)))
+            .take(2)
+            .collect();
+        assert_eq!(ids.len(), 2, "two runtime devices");
+        let p = Provided {
+            hooks: vec![dev("tick_fn", &ids[0].0), dev("init_fn", &ids[1].0)],
+            ..provided()
+        };
+        let packed = pack(&o, &service_of(p)).unwrap();
+        let register = crate::dkm::Dkm::parse(&packed).unwrap().register;
+        let keys = dkneeds::keys::Keys::parse(&register).unwrap();
+        let hooks: Vec<_> = keys.hooks().collect();
+        assert_eq!(hooks.len(), 2, "one item for each device");
+        let mut masks: Vec<u32> = hooks.iter().map(|h| h.b >> 24).collect();
+        masks.sort();
+        let mut want: Vec<u32> = ids.iter().map(|(_, id)| 1 << (id - 1)).collect();
+        want.sort();
+        assert_eq!(masks, want);
+        assert!(
+            hooks
+                .iter()
+                .all(|h| h.a == dkneeds::keys::name_hash("hook.a"))
+        );
+    }
+
+    #[test]
     fn a_service_that_names_an_entry_twice_or_one_the_object_lacks_is_refused() {
         let o = object();
         let hook =
@@ -2024,6 +2076,32 @@ mod tests {
             ..provided()
         };
         assert!(e(twice).contains("hooks hook.a twice"));
+        // one name for the same device twice, or for every device and one: refused
+        let shorts: Vec<String> = crate::devdata::all()
+            .iter()
+            .filter(|d| d.digikit_id.is_some())
+            .map(|d| d.short.clone())
+            .collect();
+        assert!(shorts.len() >= 2, "two runtime devices");
+        let dev = |name: &str, entry: &str, d: &str| {
+            (name.to_string(), entry.to_string(), vec![d.to_string()])
+        };
+        let overlap = Provided {
+            hooks: vec![
+                dev("hook.a", "tick_fn", &shorts[0]),
+                dev("hook.a", "init_fn", &shorts[0]),
+            ],
+            ..provided()
+        };
+        assert!(e(overlap).contains("hooks hook.a twice"));
+        let overlap = Provided {
+            hooks: vec![
+                hook("hook.a", "tick_fn"),
+                dev("hook.a", "init_fn", &shorts[1]),
+            ],
+            ..provided()
+        };
+        assert!(e(overlap).contains("hooks hook.a twice"));
         let twice = Provided {
             fills: vec![hook("slot", "tick_fn"), hook("slot", "init_fn")],
             ..provided()
@@ -2056,7 +2134,11 @@ mod tests {
             hooks: vec![("hook.a".into(), "tick_fn".into(), vec!["zz9".into()])],
             ..provided()
         };
-        assert!(e(bad_device).contains("is not one of"));
+        let bad = e(bad_device);
+        assert!(
+            bad.contains("hook device") && !bad.contains("slot"),
+            "{bad}"
+        );
         // the same functions once each pack
         let ok = Provided {
             exports: vec!["tick_fn".into()],

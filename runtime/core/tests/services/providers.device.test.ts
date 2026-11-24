@@ -63,7 +63,7 @@ function bind(rig: CardRig): Bound {
   const hooks = entry(svc, TAG_HOOKS);
   expect(hooks.count, 'the service takes its one hook').toBe(1);
   expect(svc.readUInt32BE(hooks.at), 'the hook of the service').toBe(nameHash(HOOK));
-  // the top byte of the entry is the device mask of the packer: the loader drops it
+  // the top byte of the entry is the device mask of the packer: the loader selects the entry for its device
   const entryOff = svc.readUInt32BE(hooks.at + 4) & 0xffffff;
   const pf = fs.readFileSync(port);
   const sites = entry(pf, TAG_SITES);
