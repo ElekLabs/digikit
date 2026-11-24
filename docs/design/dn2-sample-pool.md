@@ -2,7 +2,7 @@
 
 Status: accepted by Em on 2026-11-01 with the recommendations in section 7. Built in lane/sample-pool (ColdFire and DSP objects, allocator, transport, dsp-link chaining) and host-tested. The transport (sections 2.2, 2.3, 4 and 5) was rebuilt on 2026-11-02 as a job on the stock SampleLoader worker task, after the first emulator run showed 30 pages/s (one page per UI pass); section 8 has the static checks behind it. The DN2 emulator test of section 6 is still to do for the new transport.
 
-Target: DN2 OS 1.12. Plug-in point: `modules/core/runtime/include/dkrt_pool.h` (version 1, unchanged except one additive symbol, section 2.6).
+Target: DN2 OS 1.12. Plug-in point: `runtime/platform/sample-pool/src/dkrt_pool.h` (version 1, unchanged except one additive symbol, section 2.6).
 Sources read: AGENTS.md, docs/design/sample-api-1.5.md, findings 92, 95, 104, 106, README and sources of `core/dsp-lp0-proof`, `src/cf/dt2/pool.c`, `src/cf/pool_core.h`, `devices/fw/*.toml`, runtime `store.rs`, `tracks.rs`. Marks: [D] read in repo or on 1.12 bytes, [O] open or my estimate.
 
 ## 0. What exists

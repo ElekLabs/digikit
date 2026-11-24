@@ -15,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RawRig } from '@digi/sharc-rig-kit';
 
 const REPO = path.resolve(import.meta.dirname, '../../../..');
-const MOD = path.join(REPO, 'image-modules/points/sample-pool');
+const MOD = path.join(REPO, 'runtime/platform/sample-pool');
 const FIX = path.join(REPO, 'tests/fixtures/sample-pool-dn2');
 const BACK = 0xbb0000;
 const PORT = 0x20070000;

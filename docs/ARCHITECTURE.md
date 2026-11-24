@@ -148,7 +148,7 @@ The inventory covers DT2 1.17 and DN2 1.12. Residency is a property of the execu
 | [fx](../image-modules/points/fx/module.toml) | Post-master and send entry stubs, stock fallback, chain data and registry | `fx.dks` supplies master and send dispatch and output guards. Keep the stubs and check which data has stock or shared callers before moving it. |
 | [dynfx](../image-modules/points/dynfx/module.toml) | Empty DSP effect rows and `dynfx_info` over the shared DSP area | `fx.dks` admits effects and publishes rows into the reservation. Moving their policy requires no change to the image allocation. |
 | [fxpages](../image-modules/points/fxpages/README.md) | Device page/send tables and reserved parameter rows | `fx.dks` owns nine page and kit hooks and writes effect data. Route-choice policy can move independently of the resident reservation. |
-| [sample-pool](../image-modules/points/sample-pool/module.toml) | DT2 stock pool/loader or DN2 DDR and LP0/DSP transfer, with a shared `sample_pool_info` interface | `samples.dks` owns the user API and fills completion/loss slots. Keep the device-specific backing behind the adapter interface. |
+| [sample-pool](../runtime/platform/sample-pool/module.toml) | DT2 stock pool/loader or DN2 DDR and LP0/DSP transfer, with a shared `sample_pool_info` interface | `samples.dks` owns the user API and fills completion/loss slots. Keep the device-specific backing behind the adapter interface. |
 
 ### Remaining ownership work
 

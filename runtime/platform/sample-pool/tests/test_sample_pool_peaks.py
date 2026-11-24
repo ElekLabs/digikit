@@ -57,7 +57,7 @@ int main(void) {
             "-Wextra",
             "-Werror",
             "-I",
-            str(REPO_ROOT / "image-modules/points/sample-pool/src"),
+            str(REPO_ROOT / "runtime/platform/sample-pool/src"),
             str(source),
             "-o",
             str(binary),
