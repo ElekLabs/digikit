@@ -5,11 +5,11 @@ use crate::native_page::fake_firmware::*;
 #[test]
 fn registration_rules() {
     let b = [[0u32; 3]; 8];
-    let mut t = PageTable::new();
+    let mut t = PageTable::new(0);
     let reg = |t: &mut PageTable, ty, idx, mode, flags, draw, words: &[u32]| {
         t.register(ty, idx, mode, flags, b"T", draw, 1, &b, words, 0, false)
     };
-    assert!(reg(&mut t, 32, 1, 1, 0, 1, &[]).is_err(), "type bound");
+    assert!(reg(&mut t, TYPES as u32, 1, 1, 0, 1, &[]).is_err(), "type bound");
     assert!(reg(&mut t, 0, 2, 1, 0, 1, &[]).is_err(), "index bound");
     assert!(reg(&mut t, 0, 1, 1, 0, 0, &[]).is_err(), "draw required");
     assert!(
@@ -42,7 +42,7 @@ fn registration_builds_name_and_descriptor() {
     let mut b = [[0u32; 3]; 8];
     b[2] = [1, 77, 2];
     b[3] = [2, 5, 3];
-    let mut t = PageTable::new();
+    let mut t = PageTable::new(0);
     t.register(
         1,
         1,
@@ -88,7 +88,7 @@ fn code_maps_encoders_for_native_pages_only() {
     assert_eq!(t.code(&other, 7), -1);
     other.ty = -1;
     assert_eq!(t.code(&other, 7), -1);
-    assert_eq!(PageTable::new().code(&v, 7), -1);
+    assert_eq!(PageTable::new(0).code(&v, 7), -1);
 }
 
 /// The firmware reads a name as a `std::string`: the descriptor's words 0 and 1 are the address of the characters, and length, capacity and a reference count of -1 sit in the
@@ -96,7 +96,7 @@ fn code_maps_encoders_for_native_pages_only() {
 #[test]
 fn descriptor_names_the_pages_own_string_in_its_table_slot() {
     // registered where it stays: the descriptor holds an address, so a table is not moved once it has pages
-    let mut t = PageTable::new();
+    let mut t = PageTable::new(0);
     let mut b = [[0u32; 3]; 8];
     b[1] = [1, 40, 7];
     t.register(3, 1, 2, 0, b"Title", 0x1000, 0x2000, &b, &[], 0, false)
@@ -114,4 +114,21 @@ fn descriptor_names_the_pages_own_string_in_its_table_slot() {
         t.page(3, 1).unwrap().descriptor_ptr(),
         p.descriptor_ptr()
     ));
+}
+
+/// The table holds the reserved run-time types only, numbered from the first one: a stock type or a type past the range has no pages.
+#[test]
+fn the_table_covers_the_reserved_types_from_the_first_one() {
+    let b = [[0u32; 3]; 8];
+    let mut t = PageTable::new(16);
+    let reg = |t: &mut PageTable, ty| t.register(ty, 1, 1, 0, b"T", 1, 1, &b, &[], 0, false);
+    assert!(reg(&mut t, 15).is_err(), "a stock type");
+    assert!(reg(&mut t, 16 + TYPES as u32).is_err(), "past the reserved range");
+    assert!(reg(&mut t, 16).is_ok() && reg(&mut t, 16 + TYPES as u32 - 1).is_ok());
+    assert!(t.page(16, 1).is_some() && t.page(15, 1).is_none() && t.page(0, 1).is_none());
+    assert_eq!(t.page_count(16, 3), 4);
+    assert_eq!(t.page_count(15, 3), 3, "a stock type keeps its pages");
+    t.remove(15);
+    t.remove(16);
+    assert!(t.page(16, 1).is_none() && t.page(16 + TYPES as u32 - 1, 1).is_some());
 }

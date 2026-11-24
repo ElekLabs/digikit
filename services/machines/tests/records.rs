@@ -320,6 +320,7 @@ fn a_native_page_record_registers_its_page_in_the_owner_and_other_kinds_do_nothi
     let _lock = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = core();
     let mut owner = Box::new(Machines::new());
+    owner.set_first_reserved(0x10);
     // the key of the machine is a pinned type number of the run-time range
     let (kind, body) = native(0x12);
     let reg = section(&[(kind, body.clone())]);

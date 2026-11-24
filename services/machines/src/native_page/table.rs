@@ -1,24 +1,29 @@
 use super::page::{NativePage, PageSpec, ENCODERS, FLAG_STOCK_OVERLAY, FLAG_WIDE_CANVAS};
 use super::view::View;
 
-pub const TYPES: usize = 32;
+/// The machine types a module can have pages for: the run-time types the image reserves (`[limits] machine_rows` of the device data), numbered from `first`.
+pub const TYPES: usize = dkrt_sdk::limits::MACHINE_ROWS;
 
-/// The registered pages by machine type and page index (0 or 1), the mode of each type (1 append-only v1, 2 replacement pair v2) and the count of live pages.
+/// The registered pages by machine type and page index (0 or 1), the mode of each type (1 append-only v1, 2 replacement pair v2) and the count of live pages. A type is the
+/// position in the reserved range: `first` is the number of the first reserved type, a type below it or past the range has no pages.
 pub struct PageTable {
+    first: u32,
     pages: [[NativePage; 2]; TYPES],
     modes: [u8; TYPES],
     armed: u32,
 }
 impl Default for PageTable {
     fn default() -> Self {
-        Self::new()
+        Self::new(0)
     }
 }
 impl PageTable {
-    pub const fn new() -> Self {
+    /// An empty table for the reserved types from number `first`.
+    pub const fn new(first: u32) -> Self {
         const E: NativePage = NativePage::empty();
         const ROW: [NativePage; 2] = [E, E];
         PageTable {
+            first,
             pages: [ROW; TYPES],
             modes: [0; TYPES],
             armed: 0,
@@ -26,6 +31,15 @@ impl PageTable {
     }
     pub fn armed(&self) -> bool {
         self.armed != 0
+    }
+    /// The number of the first reserved type: set once at `start`, before any page is registered.
+    pub fn set_first(&mut self, first: u32) {
+        self.first = first;
+    }
+    /// The slot of machine type `ty`, if it is one of the reserved types.
+    fn slot(&self, ty: u32) -> Option<usize> {
+        let at = ty.checked_sub(self.first)? as usize;
+        (at < TYPES).then_some(at)
     }
     /// Registers a page. `Err(())` is the C adapter's -1.
     #[allow(clippy::too_many_arguments)]
@@ -43,23 +57,26 @@ impl PageTable {
         arg: u32,
         with_arg: bool,
     ) -> Result<(), ()> {
+        let Some(at) = self.slot(ty) else {
+            return Err(());
+        };
         if flags & !(FLAG_STOCK_OVERLAY | FLAG_WIDE_CANVAS) != 0
             || (flags != 0 && mode != 2)
             || (flags & FLAG_STOCK_OVERLAY != 0 && index != 0)
             || (flags & FLAG_WIDE_CANVAS != 0 && index != 1)
-            || ty as usize >= TYPES
+            || self.slot(ty).is_none()
             || index >= 2
             || draw == 0
             || event == 0
-            || self.pages[ty as usize][index as usize].draw() != 0
-            || (self.modes[ty as usize] != 0 && self.modes[ty as usize] != mode)
+            || self.pages[at][index as usize].draw() != 0
+            || (self.modes[at] != 0 && self.modes[at] != mode)
             || words.len() > 8
             // C indexes `params` and the descriptor with the encoder position unchecked, so a PARAM past H writes outside both; the table refuses it before it writes anything
             || bindings.iter().any(|b| b[0] == 1 && b[2] as usize >= ENCODERS)
         {
             return Err(());
         }
-        let slot = &mut self.pages[ty as usize][index as usize];
+        let slot = &mut self.pages[at][index as usize];
         *slot = NativePage::build(&PageSpec {
             title,
             flags,
@@ -71,25 +88,25 @@ impl PageTable {
             with_arg,
         });
         slot.anchor();
-        self.modes[ty as usize] = mode;
+        self.modes[at] = mode;
         self.armed += 1;
         Ok(())
     }
     pub fn remove(&mut self, ty: u32) {
-        if ty as usize >= TYPES {
+        let Some(at) = self.slot(ty) else {
             return;
-        }
-        for page in &mut self.pages[ty as usize] {
+        };
+        for page in &mut self.pages[at] {
             if page.draw() != 0 {
                 *page = NativePage::empty();
                 self.armed -= 1;
             }
         }
-        self.modes[ty as usize] = 0;
+        self.modes[at] = 0;
     }
     pub fn page_count(&self, ty: u32, ordinary: u32) -> u32 {
-        match self.modes.get(ty as usize) {
-            Some(&m) if m != 0 => {
+        match self.slot(ty).map(|at| self.modes[at]) {
+            Some(m) if m != 0 => {
                 if m == 2 {
                     2
                 } else {
@@ -100,7 +117,7 @@ impl PageTable {
         }
     }
     pub fn page(&self, ty: u32, index: u32) -> Option<&NativePage> {
-        let p = self.pages.get(ty as usize)?.get(index as usize)?;
+        let p = self.pages[self.slot(ty)?].get(index as usize)?;
         (p.draw() != 0).then_some(p)
     }
     /// The page the view shows, if it is a native one.

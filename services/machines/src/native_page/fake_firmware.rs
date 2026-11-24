@@ -103,7 +103,7 @@ impl Content<Clip> for Module {
 
 /// Page of type 3, index 1: PARAM code 40 on encoder H (position 7), LOCAL control 9 on encoder A.
 pub fn table(flags: u32, index: u32) -> PageTable {
-    let mut t = PageTable::new();
+    let mut t = PageTable::new(0);
     let mut b = [[0u32; 3]; 8];
     b[0] = [2, 9, 0];
     b[1] = [1, 40, 7];

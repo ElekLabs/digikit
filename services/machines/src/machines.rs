@@ -47,7 +47,7 @@ impl Machines {
             clicks: Slots::new(),
             parking: Parking::new(),
             applied: Applied::new(),
-            pages: PageTable::new(),
+            pages: PageTable::new(0),
             listed: 0,
         }
     }
@@ -114,6 +114,11 @@ impl Machines {
     /// The click state of the machine page: the file's hooks and the exports `dk_param_get` and `dk_param_set` reach it here.
     pub fn clicks(&mut self) -> &mut Slots {
         &mut self.clicks
+    }
+
+    /// The number of the first run-time machine type, for an owner made with `new` (`start` takes it from the image): the native pages are kept by their place in the range.
+    pub fn set_first_reserved(&mut self, first: u32) {
+        self.pages.set_first(first);
     }
 
     /// The native pages of the machines (the hooks of the service file look them up).
@@ -183,6 +188,19 @@ pub(crate) fn status(code: i32) -> Result<(), Status> {
     }
 }
 
+/// The number of the first run-time machine type of the image's registry (the pages of the machines are kept by their place in that range).
+///
+/// # Safety
+/// `core` gives the image tables.
+unsafe fn first_reserved<C: CoreApi>(core: &C) -> u32 {
+    let inf = dkrt_svc_rows::dynreg(core);
+    if inf.is_null() {
+        0
+    } else {
+        dkrt_abi::mem::iw(inf, dkrt_svc_rows::dynreg::w::M_DYN0)
+    }
+}
+
 impl<C: CoreApi> Provider<C> for Machines {
     /// The file's `init`, before its hooks are installed: the image table `machines_info` is bound into `DKRT_MF_TAB` (the hooks read it), or the file is refused
     /// (`E_NO_REGISTRY`: no usable `core/machines` in the image).
@@ -190,6 +208,7 @@ impl<C: CoreApi> Provider<C> for Machines {
         // SAFETY: `DKRT_MF_TAB` is this crate's table; nothing reads it before the hooks are declared
         status(unsafe { info::bind(core) })?;
         let mut m = Machines::new();
+        m.pages.set_first(unsafe { first_reserved(core) });
         m.listed = unsafe { info::build_list(core) }.ok_or(E_NO_REGISTRY)? as u32;
         // SAFETY: the registry is the image's; no module has filled a row yet
         unsafe { crate::pagerows::init(core) };
@@ -209,6 +228,7 @@ impl<C: CoreApi> Provider<C> for Machines {
             Builder::init(core::ptr::addr_of_mut!((*at).builder));
             core::ptr::addr_of_mut!((*at).clicks).write(Slots::new());
             (*at).listed = listed;
+            (*at).pages.set_first(first_reserved(core));
             // no module has filled a row yet
             crate::pagerows::init(core);
         }
