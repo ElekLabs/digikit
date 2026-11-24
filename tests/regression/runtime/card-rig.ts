@@ -150,7 +150,7 @@ export interface CardRig {
   settle(
     runtime: TestRuntime & { epoch?: number },
     afterEpoch?: number,
-    options?: { emulatedMs?: number },
+    options?: { emulatedMs?: number; afterSeq?: number },
   ): Promise<TestRuntime>;
   /** Poll until the UI loop was reached (and the boot is safe mode when `safe`); returns the boot's fields. */
   ready(safe?: boolean): Promise<Awaited<ReturnType<typeof bootInfo>>>;
@@ -397,7 +397,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     if (o.hold) {
       // Python `settle_ms` (SETTLE_MS, 300 emulated ms), then `wait_dsp`: up to 5 s until no module is still LOADING (its DSP part follows the ColdFire part)
       await runtime.ui.wait({ ms: 300, why: SETTLE });
-      await bootInfoLoaded(runtime.session, prepared.plan);
+      await bootInfoLoaded(runtime.session, prepared.plan, undefined, undefined, options.afterSeq);
     }
     await expectRuntimeUi(runtime.session, prepared.plan, artifacts, {
       afterEpoch,
@@ -478,6 +478,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
     async restart(runtime, { coreOnly = false } = {}) {
       const { session } = runtime;
       const before = Number((await bounded(() => session.status())).epoch);
+      const afterSeq = coreOnly ? undefined : (await bootInfo(session, prepared.plan)).seq; // the boot before: its info stays until the new boot rewrites it
       await rpc(session, 'run.mode', { mode: 'free' });
       await bounded(() => runtime.dk.restart());
       runtime.dk.cancelPending();
@@ -510,7 +511,7 @@ export function cardRig(device: Device, scope: string, o: CardRigOptions = {}): 
         );
         await session.settleBootWindow();
       }
-      return settle(withWaitApi({ session, dk, close: runtime.close }), before);
+      return settle(withWaitApi({ session, dk, close: runtime.close }), before, { afterSeq });
     },
     usb: (runtime, run) => withPausedFxProtocol(runtime, run),
     after: (tag = `after-${++seq}`, base = image) => afterCard(tag, base),
