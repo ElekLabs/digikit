@@ -34,7 +34,7 @@ unsafe fn word(base: *const u8, off: usize) -> u32 {
 mod fwcall {
     use crate::guard::call_if_bound;
 
-    pub unsafe fn machine_type_dt2(view: *const u8) -> i32 {
+    pub unsafe fn machine_type_slotmap(view: *const u8) -> i32 {
         call_if_bound(dkfw::machine::current_track_type as usize, -1, || {
             dkfw::machine::current_track_type(view as *mut u8)
         })
@@ -85,7 +85,7 @@ mod fwcall {
 }
 #[cfg(not(target_arch = "m68k"))]
 mod fwcall {
-    pub unsafe fn machine_type_dt2(_: *const u8) -> i32 {
+    pub unsafe fn machine_type_slotmap(_: *const u8) -> i32 {
         -1
     }
     pub unsafe fn sound_index(_: *const u8) -> u32 {
@@ -108,7 +108,7 @@ mod fwcall {
 unsafe fn machine_type(view: *const u8) -> i32 {
     let reader = read_volatile((addr_of!(DKRT_MF_TAB) as *const u32).add(w::READER_REAL));
     if reader == 0 {
-        return fwcall::machine_type_dt2(view);
+        return fwcall::machine_type_slotmap(view);
     }
     let index = fwcall::sound_index(view);
     let sound = if index < 0x80 {

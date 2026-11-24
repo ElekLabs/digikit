@@ -401,7 +401,7 @@ fn the_dispatch_answers_a_type_of_the_registry_with_its_row_and_gives_a_row_with
     );
 }
 
-// ---- the Digitakt II hooks ---------------------------------------------------------------------------------------------------
+// ---- the slot-map hooks ---------------------------------------------------------------------------------------------------
 
 const HOOKS_MR: &str = "services/machines/dks/src/hooks-dt2.s";
 const ABSENT: &str = "tests/fixtures/native-page-absent.s";
@@ -430,7 +430,7 @@ fn unit_mr() -> Option<Unit> {
     )
 }
 
-/// The memory of a Digitakt II case: the rows, the table, and the slot map of the image.
+/// The memory of a slot-map case: the rows, the table, and the slot map of the image.
 fn mem_mr() -> Vec<(u32, Vec<u8>)> {
     let mut m = rows(&ENTRIES_MR, &|_| (0, 0));
     m.push(table(FIRST_MR, ENTRIES_MR.len() as u32, SLOTMAP, 0, 0));
@@ -649,7 +649,7 @@ fn the_src_page_hook_gives_added_types_one_page_and_stock_types_two() {
     }
 }
 
-// ---- the Digitone II hooks ---------------------------------------------------------------------------------------------------
+// ---- the page-row hooks ---------------------------------------------------------------------------------------------------
 
 const HOOKS_PG: &str = "services/machines/dks/src/hooks-dn2.s";
 const OBJ: u32 = W + 0x12_4000;
@@ -1166,7 +1166,7 @@ fn the_stock_table_copies_append_the_clones_row() {
             .collect();
         assert_eq!(got, [0x500, 0x600, 0xA0 + c]);
         assert_eq!(eval(&rows_of(&permit)[0], &f, &mut ctx), 0xB0 + c);
-        // the per-type byte of the Digitakt II is a `u8:` row
+        // the per-type byte of a slot-map device is a `u8:` row
         let t = rows_of(&pertype)[0].trim_start_matches("u8:").to_string();
         assert_eq!(eval(&t, &f, &mut ctx), 0xC0 + c);
         assert_eq!(eval(&rows_of(&selector)[0], &f, &mut ctx), 0xD0 + c);

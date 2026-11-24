@@ -1,4 +1,4 @@
-//! The page rows of a device that keeps its machines' knobs in page rows (the Digitone II): the rows the registry reserves for run-time machines (`rows_info`, `PG_DYN_N` of
+//! The page rows of a device that keeps its machines' knobs in page rows: the rows the registry reserves for run-time machines (`rows_info`, `PG_DYN_N` of
 //! them from `PG_DYN0`). A free row names a machine no type has (`PG_FREE`), no knobs and the empty string as name and title. `init` puts every reserved row in that state when the
 //! service starts: it was the page half of `mf_ensure` in the image (the names of the rows as `std::string` representations); `free_row` is the same
 //! state for a row a module gives back (`unload::remove`).

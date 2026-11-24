@@ -274,3 +274,28 @@ fn a_plain_hook_declaration_matches_the_entry_of_the_table_for_its_own_device() 
     no_foreign.decl.add(Declare::HOOK, 9, base + 0x60, 0);
     assert!(decl_matches(&no_foreign, &keys, base), "a file may leave out the hooks of other devices");
 }
+
+/// More hooks of other devices than `KeysCopy::FOREIGN_MAX` fit the set-aside list: a service that declares the one that did not fit is refused like any other mismatch.
+#[test]
+fn overflowing_the_set_aside_hooks_refuses_the_load() {
+    use dkneeds::keys::HOOK_DEVICES_SHIFT;
+    let base = 0x1000;
+    let over = KeysCopy::FOREIGN_MAX as u32 + 1;
+    let mut k = KeysCopy::empty();
+    k.decl.add(Declare::HOOK, 1000, 0x30, 0);
+    for h in 0..over {
+        k.decl.add(Declare::HOOK, h, (0x40 + 4 * h) | 1 << HOOK_DEVICES_SHIFT, 0);
+    }
+    k.set_aside_foreign_hooks(2);
+    assert_eq!(k.nforeign, KeysCopy::FOREIGN_MAX);
+    let declare = |hooks: u32| {
+        let mut c = Collect::new();
+        c.decl.add(Declare::HOOK, 1000, base + 0x30, 0);
+        for h in 0..hooks {
+            c.decl.add(Declare::HOOK, h, base + 0x40 + 4 * h, 0);
+        }
+        c
+    };
+    assert!(decl_matches(&declare(over - 1), &k, base), "every hook that fit is set aside");
+    assert!(!decl_matches(&declare(over), &k, base), "the hook past the limit is not set aside");
+}

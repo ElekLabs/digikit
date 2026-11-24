@@ -87,9 +87,6 @@ pub unsafe fn from_image<C: CoreApi>(
     Some(n)
 }
 
-/// The offset of the name pointer in a registry row (the field order of the machines registry in `runtime/platform/rows/module.toml`: `o_name` of `rows_info`).
-const O_NAME: u32 = 56;
-
 /// The registry words the list copy needs: the rows (`first`, `rows`, `row_size`) and the reserved types (`dyn0`, `dyn_n`).
 #[derive(Clone, Copy)]
 pub struct Reserved {
@@ -98,6 +95,8 @@ pub struct Reserved {
     pub row_size: u32,
     pub dyn0: u32,
     pub dyn_n: u32,
+    /// the offset of the name pointer in a row (`o_name` of `rows_info`)
+    pub o_name: u32,
 }
 
 impl Reserved {
@@ -114,6 +113,7 @@ impl Reserved {
             row_size: word(crate::info::w::ROW_SIZE),
             dyn0: word(crate::info::w::DYN0),
             dyn_n: word(crate::info::w::DYN_N),
+            o_name: word(crate::info::w::O_NAME),
         }
     }
 }
@@ -131,7 +131,7 @@ pub unsafe fn copy_listed(m: &impl FwMem, t: &Reserved, begin: u32, end: u32, de
         if ty.wrapping_sub(t.dyn0) < t.dyn_n {
             let row = t.rows + (ty - t.first) * t.row_size;
             // an empty name: the row is free, leave the type out
-            if m.rd8(m.rd(row + O_NAME)) == 0 {
+            if m.rd8(m.rd(row + t.o_name)) == 0 {
                 continue;
             }
         }

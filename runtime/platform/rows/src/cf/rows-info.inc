@@ -1,7 +1,7 @@
 | core/rows: `rows_info`, the table that says where the reserved rows are and how a row is made (docs/ARCHITECTURE.md "rows"). One body for every device: the rows-info-<dev>.s files include the device constants,
 | then this file.
 |
-| The image makes room for rows (parameters, machine types, the Digitone II's page rows) and the run-time services fill them. The services read this table (`CoreApi::info`, the name `rows_info`); the platform
+| The image makes room for rows (parameters, machine types, page rows) and the run-time services fill them. The services read this table (`CoreApi::info`, the name `rows_info`); the platform
 | knows the blocks by number only. Every number is the device file's (`[rows]`, `[limits]`, `[modules.knobs]`, through build/gen/device-<dev>.inc) or an address the packer placed (the externs of module.toml); the offsets
 | of a row's fields are the field order of the registries in module.toml. All words big endian. A word that is 0 is not there on this device. Layout (the words of `services/rows/src/rows_info.rs`; the tests of
 | packages/patchkit/tests/rows.rs read it by these numbers):
@@ -17,7 +17,7 @@
 |  48, 49 not used   50 .. 60 the page rows (0 on a device without): pages.rows, row size, pages.first, the first reserved, reserved rows, then the offsets of name, title, c0, machine, s0, and the `machine`
 |     value of a free page row   61 .. 64 not used
 |  65 .. 86 the builder profile (the machine facts of the device file)
-|  87 machines.entries   88 mf_slotmap (a table of the Digitakt II)   89 the copy of the type reader (Digitone II)   90 mf_list_stock (the stock display order)   91 pages.count
+|  87 machines.entries   88 mf_slotmap (a table of a device with a slot map)   89 the copy of the type reader (a device with page rows)   90 mf_list_stock (the stock display order)   91 pages.count
 |  92 number of blocks, then 4 words for each block: owner number, first code, rows, template code of a free row   105 reserved parameter rows (the sum of the blocks)
 | 106 .. 109 the capacity words the admission reads before an owner loads (`[[info]] cap_<kind>` of module.toml point at them; the kind
 |     names are the admission's, the values are the `[rows] caps` keys of `[limits]`)
@@ -85,7 +85,7 @@ rows_info:
     .long   PROFILE_SLOT_0, PROFILE_SLOT_1, PROFILE_SLOT_2, PROFILE_SLOT_3, PROFILE_SLOT_4, PROFILE_SLOT_5, PROFILE_SLOT_6, PROFILE_SLOT_7   | 73 .. 80 positions
     .long   PROFILE_TPL_ENCODER, PROFILE_TPL_FADER, PROFILE_TPL_PAN, PROFILE_TPL_ONOFF, PROFILE_TPL_TUNE, PROFILE_TPL_PLAY   | 81 .. 86 stock rows: encoder, fader, pan, onoff, tune, play
     .long   _rw_m_entries               | 87 machines.entries
-    .long   mf_slotmap                  | 88 the descriptor field of mirror index 25 .. 34 (-1: none; machines-dt2.s)
+    .long   mf_slotmap                  | 88 the descriptor field of mirror index 25 .. 34 (-1: none; the machines hook file of the device)
     .long   _rw_reader_real             | 89 the copy of the stock type reader (0: none)
     .long   _rw_list_stock              | 90 the stock display order of the machine list: `machines.first` words, one type each
 .if ROWS_CAP_2

@@ -11,7 +11,7 @@ pub const MAGIC: u32 = 0x4d41_4348;
 /// Version 6: the words come from `rows_info` of the image (version 5 was the image table `machines_info`, which had `mf_ensure`).
 pub const VERSION: u32 = 6;
 /// Words of the table.
-pub const WORDS: usize = 16;
+pub const WORDS: usize = 17;
 
 /// Word indexes of the bound table (byte offset = 4 * index; `hooks-dt2.s` and `hooks-dn2.s` name the byte offsets `T_*`, and a test compares them). The hooks leave
 /// through the imports the port file resolves, so the table has no word for a firmware address.
@@ -41,6 +41,8 @@ pub mod w {
     /// The first reserved (run-time) machine type and how many there are: the rows the list copy leaves out while they have no name.
     pub const DYN0: usize = 14;
     pub const DYN_N: usize = 15;
+    /// The offset of the name pointer in a registry row.
+    pub const O_NAME: usize = 16;
 }
 
 /// The byte offsets the assembler files name (`.equ T_NAME, offset`), for the test that compares them with `w`.
@@ -99,6 +101,7 @@ pub unsafe fn bind_table<C: CoreApi>(core: &C, dst: *mut u32) -> i32 {
         (w::O_POS, from(r::O_POS)),
         (w::DYN0, from(r::M_DYN0)),
         (w::DYN_N, from(r::M_DYN_N)),
+        (w::O_NAME, from(r::O_NAME)),
     ];
     for (i, v) in words {
         write_volatile(dst.add(i), v);

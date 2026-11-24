@@ -147,7 +147,10 @@ fn every_instruction_the_framework_places_decodes() {
     let Some(lib) = library(vec![]) else {
         return;
     };
-    for (file, ids) in [(DT2_117, &["core/rows"][..]), (DN2_112, &["core/rows"][..])] {
+    for (file, ids, want) in [
+        (DT2_117, &["core/rows"][..], 51),
+        (DN2_112, &["core/rows"][..], 51),
+    ] {
         let Some(r) = run(file, &lib, ids) else {
             continue;
         };
@@ -171,8 +174,8 @@ fn every_instruction_the_framework_places_decodes() {
                 assert_eq!(at, hi, "the code ends mid-instruction");
             }
         }
-        // the dispatch, the stock-table readers and `mf_ensure` (the native pages are the service's since RC4-3)
-        assert!(n > 30, "{file}: only {n} instructions");
+        // the dispatch and the stock-table readers (the native pages are the service's since RC4-3): a lost routine changes the count
+        assert_eq!(n, want, "{file}: instructions the framework places");
     }
 }
 

@@ -90,6 +90,7 @@ fn the_list_copy_leaves_out_the_reserved_rows_that_have_no_name() {
         row_size: 64,
         dyn0: 7,
         dyn_n: 3,
+        o_name: 56,
     };
     let (empty, filled) = (0x4702_0000u32, 0x4702_0010u32);
     let mut mem = core.mem.borrow_mut();

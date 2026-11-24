@@ -21,6 +21,7 @@ fn table(device: u32) -> Vec<u32> {
     t[r::LIST_STOCK] = 0x4700_0000;
     t[r::M_ROW_SIZE] = 64;
     t[r::O_POS] = 48;
+    t[r::O_NAME] = 56;
     t[r::M_FIRST] = 7;
     t[r::READER_REAL] = 0x4000_2000;
     t
@@ -217,4 +218,21 @@ fn stop_takes_the_descriptor_strings_out_of_the_reserved_rows() {
         (0x5000_0202, 0x5000_0203),
         "nothing else of a row changes"
     );
+}
+
+/// The row layout words of the bound table (`DKRT_MF_TAB`) come from `rows_info` of the image, and `Reserved::bound` carries them to the list copy.
+#[test]
+fn the_row_layout_words_come_from_rows_info() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let mut t = table(2);
+    t[r::O_NAME] = 40;
+    t[r::O_POS] = 44;
+    t[r::M_ROW_SIZE] = 72;
+    let core = core_with(Some(t), 2);
+    let _owner = <Machines as Provider<FakeCore>>::start(&core).expect("starts");
+    // SAFETY: the test holds the turn; nothing else reads the table
+    let res = unsafe { dkrt_svc_machines::list::Reserved::bound() };
+    assert_eq!((res.o_name, res.row_size), (40, 72));
+    let bound = unsafe { *core::ptr::addr_of!(DKRT_MF_TAB) };
+    assert_eq!((bound[w::O_NAME], bound[w::O_POS]), (40, 44));
 }

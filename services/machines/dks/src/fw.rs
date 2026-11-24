@@ -114,8 +114,8 @@ pub unsafe extern "C" fn dks_page_turn(view: *const u8, ev: *const u8) -> u32 {
     }
 }
 
-/// The copy at the end of the firmware's machine list getter (C ABI `copy(begin, end, dest)`, result d0 = the end of the copy): the Digitakt II's `jsr` is pointed here by a patch
-/// (`list_copy_target`), the Digitone II's hook `mf_copy` calls it. It leaves out the reserved machine rows that have no name; it reads the registry words bound by `start` and
+/// The copy at the end of the firmware's machine list getter (C ABI `copy(begin, end, dest)`, result d0 = the end of the copy): the `jsr` of a device with a slot map is pointed here by a patch
+/// (`list_copy_target`), the hook `mf_copy` of a device with page rows calls it. It leaves out the reserved machine rows that have no name; it reads the registry words bound by `start` and
 /// needs no owner.
 #[no_mangle]
 pub unsafe extern "C" fn dks_list_copy(begin: u32, end: u32, dest: u32) -> u32 {
@@ -128,7 +128,7 @@ pub unsafe extern "C" fn dks_list_copy(begin: u32, end: u32, dest: u32) -> u32 {
     )
 }
 
-/// The value of the patch that points the Digitakt II's list copy here (`service!`).
+/// The value of the patch that points the list copy of a device with a slot map here (`service!`).
 pub fn list_copy_target(_: &dkrt_svc_machines::machines::Machines) -> u32 {
     dks_list_copy as usize as u32
 }

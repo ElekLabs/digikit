@@ -63,8 +63,8 @@ What the image keeps (`core/rows`, `core/ui`, `core/dyndsp`) and what the servic
 
 - The image has the type reservation and the dispatch of a type; a row without descriptor strings gets the empty ones there. The service writes the strings with a row, and `stop` takes them out of the
   reserved rows again (they were buffers of the file).
-- The machine list getter's copy (`list.rs` `copy_listed`, entered by `dks_list_copy` of `dks/src/fw.rs`) leaves out the reserved rows that have no name. The Digitakt II points its `jsr` at it with a patch
-  (`cf.machine.hook.patch_list_copy`, the value is the entry's address), the Digitone II replaces the call and the store after it with the hook `mf_copy`.
+- The machine list getter's copy (`list.rs` `copy_listed`, entered by `dks_list_copy` of `dks/src/fw.rs`) leaves out the reserved rows that have no name. A device with a slot map points its `jsr` at it with a patch
+  (`cf.machine.hook.patch_list_copy`, the value is the entry's address), a device with page rows replaces the call and the store after it with the hook `mf_copy`.
 - The machine selection view (the firmware makes it before any file loads) is remembered by a resident hook of `core/ui`; `machine_view` gives its variable and the builder. `selection_view::refresh_view`
   builds the list again at `reload_done` and at `stop`, after the loader restored the sites.
 - The `service!` call names every hook of the file with no device: the loader takes the manifest entry of its own device (docs/MODULE-AUTHORING.md).

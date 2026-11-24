@@ -755,7 +755,7 @@ fn rows_info_states_the_reservation_of_the_device_file() {
             assert_eq!(
                 (w(W_PG_COUNT), w(W_SLOTMAP) != 0),
                 (0, true),
-                "{dev}: a table of the Digitakt"
+                "{dev}: a table of a device without pages"
             );
         } else {
             let pg = |f: &str| field_offset(m, "pages", f) as u64;
