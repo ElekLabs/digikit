@@ -152,8 +152,9 @@ release. A tool has neither list.
 An `lfo_shape` record is an LFO waveform: the body is the key (`DK_KEY_<ID>`), a 4-character name (space to tilde; the Digitone II shows the first 3) and 32 samples of `int16` (Q15), 72 bytes after the 8-byte record header (80 bytes). The `lfo` service gives the shape a value of the LFO WAVE parameter from 7 up (kept across boots in the settings key `lfo.shapes`, never 0x80 or more), and the LFO tick reads the samples with linear interpolation, 32-bit phase to Q31. A shape with no negative sample is unipolar. The service refuses a record whose key the module's header table (`[[record]]`) does not list. A sound that holds the number shows ERR and runs like RAND without the service, and runs as the triangle when the module is not loaded. Start from `module:new -- lfo-shape AUTHOR/NAME` (`sdk/templates/lfo-shape`, section 5.10).
 
 `[uses.dt2]` and `[uses.dn2]` hold the rows the module takes on each device: `machine_rows`, `param_rows`, `page_rows`, `record_bytes`, and the DSP cost
-(`dsp_cost_voice` for a machine, `dsp_cost_fx` for an effect: instructions per block). `module:check` runs `init` in the emulator and the conformance
-suite, and writes them. Never write them by hand. The device menu and the packer use them to tell whether the
+(`dsp_cost_voice` for a machine, `dsp_cost_fx` for an effect: instructions per block). `mise run module:check -- AUTHOR/NAME` builds the current
+system package and installs it on the temporary emulator card before running `init`. It writes the measured rows and `build/gen/gallery.json`,
+then measures the DSP cost in conformance. Never write these by hand. The device menu and the packer use them to tell whether the
 module fits.
 
 `[[object]]` names a built object:

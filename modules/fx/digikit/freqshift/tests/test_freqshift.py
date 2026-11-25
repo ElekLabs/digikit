@@ -94,8 +94,8 @@ def test_the_module_declares_one_effect_by_builder_calls():
     assert [(f["id"], f["dsp"]) for f in man["fx"]] == [("fshift", "fs")]
 
 
-def test_the_committed_shift_knob_is_bipolar():
-    """`module:check` writes build/gen/gallery.json from the records `init` committed: the SHIFT knob carries the bipolar display of the record (DK_P_BIPOLAR) and -64 .. +63."""
+def test_the_committed_knobs_preserve_shift_and_default_spread_to_zero():
+    """Keep the former SHIFT slot and append SPREAD with a neutral default."""
     consts = {
         c["name"]: c["value"]
         for c in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["machine"][
@@ -103,17 +103,10 @@ def test_the_committed_shift_knob_is_bipolar():
         ]
     }
     gallery = json.loads((MODULE / "build/gen/gallery.json").read_text())
-    (knob,) = gallery["effects"][0]["knobs"]
-    assert (
-        knob["short"],
-        knob["display"],
-        knob["min"],
-        knob["max"],
-        knob["default"],
-    ) == (
-        "SHIFT",
-        consts["DK_P_BIPOLAR"],
-        -64,
-        63,
-        0,
-    )
+    assert [
+        (knob["short"], knob["display"], knob["min"], knob["max"], knob["default"])
+        for knob in gallery["effects"][0]["knobs"]
+    ] == [
+        ("SHIFT", consts["DK_P_BIPOLAR"], -64, 63, 0),
+        ("SPREAD", consts["DK_P_PERCENT"], 0, 8, 0),
+    ]

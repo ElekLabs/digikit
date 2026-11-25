@@ -1,4 +1,4 @@
-/* The effect of freqshift, declared by builder calls in init: one effect `fshift` with one knob. Its DSP symbols are _fs_process and _fs_desc
+/* The effect of freqshift, declared by builder calls in init: one effect `fshift`. Its DSP symbols are _fs_process and _fs_desc
    (`dsp = "fs"` in module.toml).
    Saved kits keep the effect by module id + effect id: never rename either.
    The page comes after CHO in the FX view, with the framework's MIX knob. The effect starts as a send effect:
@@ -16,6 +16,7 @@ static int32_t init(dk_module_ctx *ctx)
     dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);
     dk_page *p = dk_fx_add_page(fx, "Freq Shifter", "FSH");
     dk_page_add_fx_param(p, "Freq Shift", "SHIFT", DK_BIPOLAR, -64.0f, 63.0f, 0.0f);
+    dk_page_add_fx_param(p, "Stereo Spread", "SPREAD", DK_PERCENT, 0.0f, 8.0f, 0.0f);
     return DK_OK;
 }
 

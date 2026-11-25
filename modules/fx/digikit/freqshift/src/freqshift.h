@@ -4,5 +4,7 @@
 
 // Parameter word p0: the shift, -64 .. +63.
 #define FSHIFT_SHIFT_WORD 0
+// Parameter word p1: stereo frequency offset in Hz, 0 .. 8.
+#define FSHIFT_SPREAD_WORD 1
 // Parameter words the effect reads.
-#define FSHIFT_KNOBS 1
+#define FSHIFT_KNOBS 2

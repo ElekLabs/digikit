@@ -6,8 +6,7 @@
 //
 // Prints one JSON object on stdout: { module, latched: [mask per machine], commit: {index, machineRows, paramRows, pageRows, addr, size}, records: {counts, params, ...} }.
 // `module:check` (tools/patchkit/pk_modcheck.py) writes `[uses]` and the gallery params from it; conformance reads its cases from it.
-// The event's encoding is isolated in `decodeCommitEvent` (packages/test-support/src/commit-records.ts). Not run end to end yet: it needs
-// a module and the runtime's `MODULE_COMMIT` event.
+// The event's encoding is isolated in `decodeCommitEvent` (packages/test-support/src/commit-records.ts).
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,6 +26,7 @@ import { committedRecords, type RecordsExec } from '../../packages/test-support/
 import { emulatorClock } from '../../packages/test-support/src/emulated-clock.ts';
 import { repoRoot, type Device } from '../../packages/test-support/src/inputs.ts';
 import { Session } from '../../packages/test-support/src/session.ts';
+import { SYSTEM_PACKAGE_PATH } from '../../packages/workbench-core/src/runtime/system-package.ts';
 
 // stdout is the JSON result: the boot window wait of a session logs with console.info, which must go to stderr
 console.info = console.error;
@@ -75,6 +75,9 @@ const root = repoRoot();
 const binary = values.binary ?? process.env[`DIGI_EMUD_${device.toUpperCase()}`];
 if (!binary) throw new Error(`no daemon: pass --binary or set DIGI_EMUD_${device.toUpperCase()}`);
 const debugDkm = values['debug-dkm'] ?? path.join(root, 'dist/modules', device, 'debug.dkm');
+const systemPackage = path.join(root, 'dist/syspkg/runtime/system.dksp');
+if (!fs.existsSync(systemPackage))
+  throw new Error(`Missing ${systemPackage}. Run pnpm nx:pilot run core/runtime:package.`);
 const samples = device === 'dt2' ? path.join(root, 'out/runs/patchkit/samples') : undefined;
 const runDir = fs.mkdtempSync(path.join(root, 'out', `commit-records-${process.pid}-`));
 
@@ -107,6 +110,8 @@ try {
       retry: true,
     },
   );
+  // The fresh card can be core-only or carry a package from an older fixture. Use the package from this build before selecting modules.
+  await dk.put(SYSTEM_PACKAGE_PATH, fs.readFileSync(systemPackage));
   const paths: string[] = [];
   for (const file of [debugDkm, values.dkm]) {
     const store = `modules/${path.basename(file)}`;

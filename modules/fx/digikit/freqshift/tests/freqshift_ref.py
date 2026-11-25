@@ -63,6 +63,10 @@ CLAMP = 7.9
 QUARTER = 0x40000000
 HALF = 0x80000000
 BLOCK = 32
+SPREAD_MAX_HZ = 8.0
+# Block-rate phase steering when Spread returns to zero, about 171 ms per time constant.
+REJOIN_SHIFT = 13
+REJOIN_TAIL = 1 << REJOIN_SHIFT
 
 
 def wrap32(x: int) -> int:
@@ -101,6 +105,19 @@ def target_inc(v: float) -> int:
     if f32(v) < 0:
         m = f32(-m)
     return int(f32(m * f32(INC_PER_HZ)))
+
+
+def spread_inc(centre: int, spread: float) -> int:
+    """Nonnegative frequency offset in phase units, narrowed symmetrically at the knob ends."""
+    value = min(max(f32(spread), f32(0)), f32(SPREAD_MAX_HZ))
+    return max(
+        0,
+        min(
+            int(f32(value * f32(INC_PER_HZ))),
+            centre - target_inc(-64),
+            target_inc(63) - centre,
+        ),
+    )
 
 
 def sinq(p: int) -> np.float32:
@@ -164,11 +181,22 @@ class Shifter:
 
     def block(self, x: np.ndarray, v: float) -> np.ndarray:
         """64 input floats and the SHIFT word v -> 64 output floats."""
-        sins, coss = self.oscillator(target_inc(v))
+        osc = self.oscillator(target_inc(v))
+        return self.filter_block(x, (osc, osc))
+
+    def filter_block(
+        self,
+        x: np.ndarray,
+        oscillators: tuple[
+            tuple[list[np.float32], list[np.float32]],
+            tuple[list[np.float32], list[np.float32]],
+        ],
+    ) -> np.ndarray:
         out = np.zeros(64, dtype=np.float32)
         hi, lo = f32(CLAMP), f32(-CLAMP)
         a_d = np.zeros((2, BLOCK), dtype=np.float32)
         for ch in range(2):
+            sins, coss = oscillators[ch]
             buf = [
                 self.carry[ch]
             ]  # a_d[n] = buf[n]: the chain P's output of the sample before
@@ -181,6 +209,60 @@ class Shifter:
                 o = f32(f32(buf[n] * coss[n]) + f32(b * sins[n]))
                 out[ch * BLOCK + n] = max(min(o, hi), lo)
         return out
+
+
+class SpreadShifter(Shifter):
+    """Frequencies remain centred on SHIFT. Oscillator phases are centre ± side."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.side_phase = 0
+        self.side_inc = 0
+
+    def phase_pairs(
+        self, centre_target: int, side_target: int
+    ) -> tuple[list[int], list[int]]:
+        centre = self.phase
+        side = self.side_phase
+        centre_inc, side_inc = self.inc, self.side_inc
+        centre_step = (centre_target - centre_inc) >> 5
+        tail = False
+        if side_target == 0:
+            if -REJOIN_TAIL <= side <= REJOIN_TAIL and -1 <= side_inc <= 1:
+                # Across the final block, remove all but at most 31 of 2^32
+                # phase units before clearing the remainder at the boundary.
+                side_inc = (-side) >> 5
+                tail = True
+            else:
+                # Treat the signed phase as the shortest direction home. Slew
+                # from the previous rate just as for an ordinary knob move.
+                side_target = -(side >> REJOIN_SHIFT)
+        side_step = 0 if tail else (side_target - side_inc) >> 5
+        left, right = [], []
+        for _ in range(BLOCK):
+            centre_inc += centre_step
+            side_inc += side_step
+            centre = wrap32(centre + centre_inc)
+            side = wrap32(side + side_inc)
+            left.append(wrap32(centre + side))
+            right.append(wrap32(centre - side))
+        self.phase = centre
+        self.inc = centre_target
+        self.side_phase = 0 if tail else side
+        self.side_inc = 0 if tail else side_target
+        return left, right
+
+    def block(self, x: np.ndarray, v: float, spread: float = 0.0) -> np.ndarray:
+        centre = target_inc(v)
+        side = spread_inc(centre, spread)
+        if side == 0 and self.side_phase == 0 and self.side_inc == 0:
+            return super().block(x, v)
+
+        def osc(p: list[int]) -> tuple[list[np.float32], list[np.float32]]:
+            return [sinq(i) for i in p], [sinq(wrap32(i + QUARTER)) for i in p]
+
+        left, right = self.phase_pairs(centre, side)
+        return self.filter_block(x, (osc(left), osc(right)))
 
 
 # ---- analysis -----------------------------------------------------------------------------------------------------------------

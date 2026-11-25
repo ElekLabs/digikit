@@ -10,6 +10,14 @@
           "min": -64,
           "name": "Freq Shift",
           "short": "SHIFT"
+        },
+        {
+          "default": 0,
+          "display": 0,
+          "max": 8,
+          "min": 0,
+          "name": "Stereo Spread",
+          "short": "SPREAD"
         }
       ],
       "mix": 127,

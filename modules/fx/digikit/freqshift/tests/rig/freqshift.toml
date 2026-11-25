@@ -408,7 +408,7 @@ blocks = 6
 
 [[case.check]]
 kind = "description"
-words = [0x444B4658, 1, 1, 664, 1, 0]
+words = [0x444B4658, 1, 2, 940, 1, 0]
 
 [[case.check]]
 # core/fx around one call is about 520 instructions
@@ -542,6 +542,83 @@ amp = 0.5
 tol = 0.0025
 skip_blocks = 300
 
+[[case]]
+name = "full spread adds and subtracts eight Hz about the centre"
+
+[case.input]
+kind = "sine"
+freq = 1000.0
+amp = 0.5
+
+[[case.step]]
+params_f32 = [38.49901595799156, 8.0]
+blocks = 1600
+
+[[case.check]]
+kind = "tone"
+channel = "left"
+freq = 1088.0
+amp = 0.5
+tol = 0.0025
+skip_blocks = 100
+image_freq = 912.0
+image_db_min = 40.0
+
+[[case.check]]
+kind = "tone"
+channel = "right"
+freq = 1072.0
+amp = 0.5
+tol = 0.0025
+skip_blocks = 100
+image_freq = 928.0
+image_db_min = 40.0
+
+[[case.check]]
+kind = "state-untouched-beyond"
+
+[[case]]
+name = "returning spread to zero rejoins the shared oscillator"
+
+[case.input]
+kind = "sine"
+freq = 1000.0
+amp = 0.5
+
+[[case.step]]
+params_f32 = [38.49901595799156, 8.0]
+blocks = 48
+
+[[case.step]]
+params_f32 = [38.49901595799156, 0.0]
+blocks = 4800
+
+[[case.check]]
+kind = "state-word"
+index = 166 # side phase
+equals = 0
+
+[[case.check]]
+kind = "state-word"
+index = 167 # side increment
+equals = 0
+
+[[case.check]]
+kind = "tone-fit"
+channel = "left"
+blocks = [4448, 4848]
+freq = 1080.0
+amp = 0.5
+tol = 0.0025
+
+[[case.check]]
+kind = "tone-fit"
+channel = "right"
+blocks = [4448, 4848]
+freq = 1080.0
+amp = 0.5
+tol = 0.0025
+
 # The output does not depend on what the state held at the start: the same input after two different fills of the declared state
 # gives the same words (the pin is the hash of the output words; pending Em's review, like every new rig pin).
 
@@ -554,7 +631,7 @@ kind = "table"
 file = "ref/mixed-in-3.f32"
 
 [[case.step]]
-params_f32 = [40.0]
+params_f32 = [40.0, 0.0]
 blocks = 36
 
 [[case.check]]

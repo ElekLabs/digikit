@@ -2,31 +2,39 @@
 // 61-fx-pages.md). It moves every frequency of the master up or down by the same number of Hz (single sideband modulation, not a pitch shift). The float32
 // reference, which defines the arithmetic operation for operation, is modules/fx/digikit/freqshift/tests/freqshift_ref.py; the notes below say what the routine does.
 //
-// SHIFT, the one knob (p0, a float from -64 to +63), is mapped once per block: f = sign(v) 0.63 (2^(|v| / 5.5) - 1) Hz (about 0.08 Hz at |v| = 1, 35 Hz at 32,
+// SHIFT (p0, a float from -64 to +63) is mapped once per block: f = sign(v) 0.63 (2^(|v| / 5.5) - 1) Hz (about 0.08 Hz at |v| = 1, 35 Hz at 32,
 // 2 kHz at 64). The increment of a 32-bit phase accumulator (2^32 is a turn) is f 2^32 / 48000, truncated to an integer. The increment goes from the last block's
 // to this block's in a straight line over the 32 samples (d = (new - old) >> 5 added before each sample), so a turn of the knob is a sweep and the phase never jumps.
 // sin and cos of the phase: the phase folds to +-a quarter turn (integer ops) and a degree-7 polynomial gives the sine (error 1.2e-6); cos is the sine of the phase
-// plus a quarter turn. The 64 values of a block (cos, sin per sample) go to the state.
+// plus a quarter turn. SPREAD (p1, 0 to 8 Hz on each side) adds an offset to the left and subtracts it from the right.
+// The centre keeps the legacy phase and ramp. At zero, the side phase returns smoothly to the shared path.
 //
 // Per channel, two chains of four allpass sections in z^-2, transposed form (t = c x; y = t + s; u = c y; s' = u - x, one section of the even samples and one of the
 // odd ones: a polyphase pair, so the sections cost the same as first-order ones). The chain P is delayed by one sample (its output goes through the state word
 // before the buffer: a[n - 1] is read at n); a (P) and b (Q) differ in phase by 90 degrees to within 0.55 degrees from 30 Hz to 18 kHz (image rejection 46 dB).
 // out = a cos + b sin moves the input up by f (down for f < 0); it is clamped to +-7.9 (the effect must stay below the level bound, 8).
 //
-// State (664 bytes; the adapter zeroes it when the effect switches on): word 0 the phase, 1 the last block's increment, 2 the dk_fx_in pointer of this call,
+// State (940 bytes; the adapter zeroes it when the effect switches on): word 0 the phase, 1 the last block's increment, 2 the dk_fx_in pointer of this call,
 // 4 to 35 the section states of chain P and chain Q of the left and the right channel (8 words each: section k, even samples 2k, odd 2k + 1), 36 to 68 and 69 to 101
 // the one-sample delay buffers of the two channels (a carry word, then the 32 outputs of chain P), 102 to 165 cos and sin of the 32 samples.
+// Words 166 and 167 hold the side phase and increment. Words 168 to 170 are right-oscillator setup, and 171 to 234 its output.
 
 #include "dk_fx.inc"
 #include "freqshift.h"
 #define FS_PHASE 0
 #define FS_INC 1
 #define FS_FXIN 2
+#define FS_R_CSPTR 3
 #define FS_ST 4
 #define FS_AB0 36
 #define FS_AB1 69
 #define FS_CS 102
-#define FS_STATE_BYTES 664
+#define FS_SIDE_PHASE 166
+#define FS_SIDE_INC 167
+#define FS_RIGHT_PHASE 168
+#define FS_RIGHT_INC 169
+#define FS_RIGHT_STEP 170
+#define FS_STATE_BYTES 940
 // the same offsets in bytes (the index registers hold byte addresses)
 #define FS_ST_B 16
 #define FS_ST_Q0_B 48
@@ -35,6 +43,7 @@
 #define FS_AB0_B 144
 #define FS_AB0_1_B 148
 #define FS_CS_B 408
+#define FS_CS_RIGHT_B 684
 
 .SECTION/PM seg_pmco;
 .GLOBAL _fs_process;
@@ -43,6 +52,8 @@ _fs_process:                              // R4 = state, R8 = dk_fx_in, R12 = th
     I5 = R4;
     DM(FS_FXIN, I5) = R8;
     I1 = R12;
+    R1 = DM(FSHIFT_SPREAD_WORD, I1);
+    DM(FS_R_CSPTR, I5) = R1;             // p1 until we select the right oscillator buffer
     R0 = DM(FSHIFT_SHIFT_WORD, I1);       // p0, the SHIFT word
     // ---- the increment of this block: f = KHZ (2^x - 1), x = min(|v|, 64) / 5.5 ----
     F9 = PASS F0;
@@ -89,51 +100,121 @@ _fs_process:                              // R4 = state, R8 = dk_fx_in, R12 = th
     R10 = ASHIFT R0 BY R1;                // d
     R8 = R4;                              // the increment
     R9 = DM(FS_PHASE, I5);
-    R11 = 0x40000000;                     // a quarter turn
-    R12 = 0x80000000;                     // half a turn
-    R13 = 0x30800000;                     // 2^-30
-    R15 = 0xbb8f3abb;
-    R7 = 0x3da2d13d;
-    R6 = 0xbf255b67;
-    R5 = 0x3fc90fd1;
+    // SPREAD changes the offset from the unchanged centre oscillator. Keep the original shared
+    // path when it is off and the side phase and rate are both back at zero.
+    R0 = DM(FS_R_CSPTR, I5);
+    R4 = DM(FS_SIDE_PHASE, I5);
+    R5 = DM(FS_SIDE_INC, I5);
+    R1 = R0 OR R4;
+    R1 = R1 OR R5;
+    IF EQ JUMP _fs_shared;
+    R1 = 0;
+    F0 = MAX(F0, F1);
+    R1 = 0x41000000;                     // at most 8 Hz on each side
+    F0 = MIN(F0, F1);
+    R1 = 0x47aec33e;                     // turns per sample in 2^-32 units per Hz
+    F0 = F0 * F1;
+    R6 = TRUNC F0;
+    R0 = -179397856;                     // target increment of SHIFT -64
+    R0 = R3 - R0;
+    R6 = MIN(R6, R0);
+    R0 = 158148960;                      // target increment of SHIFT +63
+    R0 = R0 - R3;
+    R6 = MIN(R6, R0);
+    R2 = 0;
+    R6 = MAX(R6, R2);
+    R0 = R6 OR R4;
+    R0 = R0 OR R5;
+    IF EQ JUMP _fs_shared;
+    R11 = 0;                            // final rejoin block flag
+    COMP(R6, R2);
+    IF NE JUMP _fs_side_slew;
+    // Approach the centre by the shortest signed phase. Use the same block ramp for the
+    // correction rate. In the final few phase units use one quiet block to rejoin exactly.
+    R1 = -8192;
+    COMP(R4, R1);
+    IF LT JUMP _fs_rejoin_slew;
+    R1 = 8192;
+    COMP(R4, R1);
+    IF GT JUMP _fs_rejoin_slew;
+    R1 = -1;
+    COMP(R5, R1);
+    IF LT JUMP _fs_rejoin_slew;
+    R1 = 1;
+    COMP(R5, R1);
+    IF GT JUMP _fs_rejoin_slew;
+    R5 = -R4;
+    R5 = ASHIFT R5 BY -5;
+    R7 = 0;
+    R11 = 1;
+    JUMP _fs_stereo_head;
+
+_fs_rejoin_slew:
+    R6 = ASHIFT R4 BY -13;
+    R6 = -R6;
+_fs_side_slew:
+    R7 = R6 - R5;
+    R7 = ASHIFT R7 BY -5;
+
+_fs_stereo_head:
+    R0 = R9 - R4;
+    DM(FS_RIGHT_PHASE, I5) = R0;
+    R0 = R8 - R5;
+    DM(FS_RIGHT_INC, I5) = R0;
+    R0 = R10 - R7;
+    DM(FS_RIGHT_STEP, I5) = R0;
+
+    // For 32 ramped samples the phase advance is 32*inc + 528*step.
+    // Preserve the centre and side endpoints separately, with ordinary wrapping ADD.
+    R0 = ASHIFT R10 BY 9;
+    R1 = ASHIFT R10 BY 4;
+    R0 = R0 + R1;
+    R1 = ASHIFT R8 BY 5;
+    R0 = R0 + R1;
+    R0 = R0 + R9;
+    DM(FS_PHASE, I5) = R0;
+    R0 = ASHIFT R7 BY 9;
+    R1 = ASHIFT R7 BY 4;
+    R0 = R0 + R1;
+    R1 = ASHIFT R5 BY 5;
+    R0 = R0 + R1;
+    R0 = R0 + R4;
+    R1 = 0;
+    COMP(R11, R1);
+    IF NE R0 = R1;                      // at most 31 phase units left after this block
+    DM(FS_SIDE_PHASE, I5) = R0;
+    DM(FS_SIDE_INC, I5) = R6;
+
+    R9 = R9 + R4;
+    R8 = R8 + R5;
+    R10 = R10 + R7;
     R0 = I5;
     R1 = FS_CS_B;
     R0 = R0 + R1;
     I4 = R0;
-    LCNTR = 32, DO _fs_osc UNTIL LCE;
-        R8 = R8 + R10;
-        R9 = R9 + R8;
-        R0 = PASS R9;
-        R1 = R0 + R0;
-        R1 = R1 XOR R0;
-        IF LT R0 = R12 - R0;
-        F1 = FLOAT R0;
-        F1 = F1 * F13;
-        F2 = F1 * F1;
-        F3 = F15 * F2;
-        F3 = F3 + F7;
-        F3 = F3 * F2;
-        F3 = F3 + F6;
-        F3 = F3 * F2;
-        F3 = F3 + F5;
-        F4 = F3 * F1;                     // sin
-        R0 = R9 + R11;
-        R1 = R0 + R0;
-        R1 = R1 XOR R0;
-        IF LT R0 = R12 - R0;
-        F1 = FLOAT R0;
-        F1 = F1 * F13;
-        F2 = F1 * F1;
-        F3 = F15 * F2;
-        F3 = F3 + F7;
-        F3 = F3 * F2;
-        F3 = F3 + F6;
-        F3 = F3 * F2;
-        F3 = F3 + F5;
-        F3 = F3 * F1;                     // cos
-        DM(I4, M6) = R3;
-_fs_osc: DM(I4, M6) = R4;
+    CALL _fs_make_osc;
+
+    R9 = DM(FS_RIGHT_PHASE, I5);
+    R8 = DM(FS_RIGHT_INC, I5);
+    R10 = DM(FS_RIGHT_STEP, I5);
+    R0 = I5;
+    R1 = FS_CS_RIGHT_B;
+    DM(FS_R_CSPTR, I5) = R1;
+    R0 = R0 + R1;
+    I4 = R0;
+    CALL _fs_make_osc;
+    JUMP _fs_filter;
+
+_fs_shared:
+    R0 = I5;
+    R1 = FS_CS_B;
+    DM(FS_R_CSPTR, I5) = R1;
+    R0 = R0 + R1;
+    I4 = R0;
+    CALL _fs_make_osc;
     DM(FS_PHASE, I5) = R9;
+
+_fs_filter:
     // ---- chain P, left and right (the input advances from one channel to the other) ----
     I2 = DM(FS_FXIN, I5);
     I0 = DM(DK_FX_IN_W_IN, I2);
@@ -172,7 +253,7 @@ _fs_osc: DM(I4, M6) = R4;
     R1 = FS_ST_Q1_B;
     R1 = R0 + R1;
     I3 = R1;
-    R1 = FS_CS_B;
+    R1 = DM(FS_R_CSPTR, I5);
     R1 = R0 + R1;
     I4 = R1;
     CALL _fs_pass_q;
@@ -180,6 +261,50 @@ _fs_osc: DM(I4, M6) = R4;
     DM(FS_AB1, I5) = R0;
     R0 = DK_FX_OK;
     JUMP (M13, I13);
+
+// Write 32 cosine/sine pairs at I4, ramping R8 by R10 and advancing phase R9 before each pair.
+_fs_make_osc:
+    R11 = 0x40000000;                     // a quarter turn
+    R12 = 0x80000000;                     // half a turn
+    R13 = 0x30800000;                     // 2^-30
+    R15 = 0xbb8f3abb;
+    R7 = 0x3da2d13d;
+    R6 = 0xbf255b67;
+    R5 = 0x3fc90fd1;
+    LCNTR = 32, DO _fs_osc UNTIL LCE;
+        R8 = R8 + R10;
+        R9 = R9 + R8;
+        R0 = PASS R9;
+        R1 = R0 + R0;
+        R1 = R1 XOR R0;
+        IF LT R0 = R12 - R0;
+        F1 = FLOAT R0;
+        F1 = F1 * F13;
+        F2 = F1 * F1;
+        F3 = F15 * F2;
+        F3 = F3 + F7;
+        F3 = F3 * F2;
+        F3 = F3 + F6;
+        F3 = F3 * F2;
+        F3 = F3 + F5;
+        F4 = F3 * F1;                     // sin
+        R0 = R9 + R11;
+        R1 = R0 + R0;
+        R1 = R1 XOR R0;
+        IF LT R0 = R12 - R0;
+        F1 = FLOAT R0;
+        F1 = F1 * F13;
+        F2 = F1 * F1;
+        F3 = F15 * F2;
+        F3 = F3 + F7;
+        F3 = F3 * F2;
+        F3 = F3 + F6;
+        F3 = F3 * F2;
+        F3 = F3 + F5;
+        F3 = F3 * F1;                     // cos
+        DM(I4, M6) = R3;
+_fs_osc: DM(I4, M6) = R4;
+    RTS;
 
 // Chain P over one channel (32 samples): I0 = the input (advances 32), I1 = where the outputs go (advances 32), I3 = the 8 state words of this
 // chain and channel (section k, even samples: word 2k; odd samples: word 2k + 1). Clobbers R0-R15.
