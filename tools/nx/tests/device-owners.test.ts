@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ownedConformance, ownerOf, ownershipSelection } from '../device-owners.mjs';
+import { DEVICES, ownedConformance, ownerOf, ownershipSelection } from '../device-owners.mjs';
 
 const project = (
   name: string,
@@ -168,7 +168,7 @@ describe('selection of the repository declarations', () => {
       subjects: (json.implicitDependencies ?? []) as string[],
       targets: (json.metadata?.runtimeAcceptance ?? []).flatMap((r: { files?: string[]; devices?: string[] }) =>
         (r.files ?? []).flatMap((f) =>
-          (r.devices ?? ['dt2', 'dn2']).map(
+          (r.devices ?? DEVICES).map(
             (d) => `test-device--${f.split('/').at(-1)!.replace('.device.test.ts', '')}--${d}`,
           ),
         ),
