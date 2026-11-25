@@ -8,7 +8,7 @@ service = "local-step"
 type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "Fixture for the owner's two-phase call: a hook on the SETTINGS list rebuild that runs Owner::step and calls the service's own export from the act phase"
+summary = "Fixture for the owner's two-phase call: a hook on the SETTINGS list build that runs Owner::step, makes one nested call inside the owner (refused) and calls the service's own export from the act phase"
 requires = []
 conflicts = []
 

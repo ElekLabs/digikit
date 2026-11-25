@@ -4,10 +4,10 @@
 //! words from the running file.
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_fixture_local_step::{
-    dk_local_step_run, dk_svc_start, dk_svc_stop, step_once, ARM, DK_SVC_OWNER, LOCAL_STEP_STATS,
+    dk_local_step_run, dk_svc_start, dk_svc_stop, step_once, DK_SVC_OWNER, LOCAL_STEP_STATS,
 };
 
-fn words() -> [u32; 3] {
+fn words() -> [u32; 2] {
     // SAFETY: the test is the only task
     unsafe { core::array::from_fn(|i| read_volatile(addr_of!(LOCAL_STEP_STATS[i]))) }
 }
@@ -17,21 +17,14 @@ fn a_step_counts_one_entry_and_its_act_finds_the_owner_idle() {
     dk_svc_stop();
     let _instance = dk_svc_start().expect("the instance of local-step starts");
     // SAFETY: the test is the only task
-    unsafe { write_volatile(addr_of_mut!(LOCAL_STEP_STATS), [0; 3]) };
+    unsafe { write_volatile(addr_of_mut!(LOCAL_STEP_STATS), [0; 2]) };
 
-    // the act phase called the export (42), which entered the owner again
+    // the act phase called the export (42), which entered the owner again; the nested call inside the first step was refused
     assert_eq!(step_once(), Some(42));
+    assert_eq!(words(), [1, 1], "steps equal re-entries");
+    assert_eq!(DK_SVC_OWNER.refused(), 1, "the nested call inside the first step was refused");
     dk_local_step_run();
-    assert_eq!(words(), [2, 2, 0], "steps equal re-entries");
-    assert_eq!(DK_SVC_OWNER.refused(), 0, "no call found the owner busy");
-
-    // one nested call inside the owner (armed through the file's word): refused, counted once, and the step still runs
-    // SAFETY: as above
-    unsafe { write_volatile(addr_of_mut!(LOCAL_STEP_STATS[ARM]), 1) };
-    assert_eq!(step_once(), Some(42));
-    assert_eq!(words(), [3, 3, 0], "the arming word is cleared");
-    assert_eq!(DK_SVC_OWNER.refused(), 1, "the nested call was refused");
-    step_once();
+    assert_eq!(words(), [2, 2]);
     assert_eq!(DK_SVC_OWNER.refused(), 1, "later steps are not refused");
 
     dk_svc_stop();
