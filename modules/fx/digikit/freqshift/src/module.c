@@ -17,6 +17,8 @@ static int32_t init(dk_module_ctx *ctx)
     dk_page *p = dk_fx_add_page(fx, "Freq Shifter", "FSH");
     dk_page_add_fx_param(p, "Freq Shift", "SHIFT", DK_BIPOLAR, -64.0f, 63.0f, 0.0f);
     dk_page_add_fx_param(p, "Stereo Spread", "SPREAD", DK_PERCENT, 0.0f, 8.0f, 0.0f);
+    dk_page_add_fx_param(p, "Drift Depth", "DRIFT", DK_PERCENT, 0.0f, 4.0f, 0.0f);
+    dk_page_add_fx_param(p, "Drift Rate", "RATE", DK_PERCENT, 0.03125f, 0.125f, 0.0625f);
     return DK_OK;
 }
 

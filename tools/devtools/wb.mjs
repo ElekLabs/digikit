@@ -139,6 +139,7 @@ for (let i = 0; i < args.length; i++) {
       '--send-amount',
       '--params-f32',
       '--profile-block',
+      '--repeat',
     ].includes(a)
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);

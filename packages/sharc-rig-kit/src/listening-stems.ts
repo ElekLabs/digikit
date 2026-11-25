@@ -10,7 +10,9 @@ const beat = (60 * FS) / LISTENING_TEMPO;
 const tau = 2 * Math.PI;
 
 /** Unsent kick and bass, and an independent hat or stab stem. The returned dry mix includes both. */
-export function listeningStems(scene: ListeningScene) {
+export function listeningStems(scene: ListeningScene, repeat = 1) {
+  if (!Number.isInteger(repeat) || repeat < 1 || repeat > 8)
+    throw new Error('Scene repeat must be an integer from 1 to 8.');
   const beats = scene === 'send/percussion' ? 8 : 16;
   const frames = Math.ceil((beat * beats) / 32) * 32;
   const backing = new Float32Array(frames);
@@ -79,5 +81,11 @@ export function listeningStems(scene: ListeningScene) {
     }
   }
   const dry = backing.map((x, frame) => x + send[frame]!);
-  return { backing, send, dry, beats };
+  if (repeat === 1) return { backing, send, dry, beats };
+  const loop = (stem: Float32Array) => {
+    const repeated = new Float32Array(stem.length * repeat);
+    for (let i = 0; i < repeat; i++) repeated.set(stem, i * stem.length);
+    return repeated;
+  };
+  return { backing: loop(backing), send: loop(send), dry: loop(dry), beats: beats * repeat };
 }

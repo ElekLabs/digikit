@@ -178,3 +178,50 @@ def test_turning_spread_to_zero_rejoins_without_a_phase_reset():
         pytest.fail("Spread did not rejoin the centre within 3.2 seconds")
     x = np.linspace(-0.3, 0.4, 64, dtype=np.float32)
     assert np.isfinite(sh.block(x, 20, 0)).all()
+
+
+@pytest.mark.parametrize("period", [8, 16, 32])
+def test_drift_passes_both_peaks_and_returns_to_centre(period):
+    drift = R.Drift()
+    centre = R.target_inc(20)
+    cycle = period * (int(FS) // R.BLOCK)
+    targets = np.array([drift.move(centre, 4, 1 / period) for _ in range(cycle)])
+    offsets = (targets - centre) / R.INC_PER_HZ
+    for quarter, hz in enumerate((4.0, 0.0, -4.0, 0.0), start=1):
+        assert offsets[quarter * cycle // 4 - 1] == pytest.approx(hz, abs=0.002)
+    assert abs(offsets.mean()) < 0.001
+
+
+def test_rate_changes_advance_phase_without_restarting_and_off_parks_it():
+    drift = R.Drift()
+    centre = R.target_inc(20)
+    for _ in range(1500):
+        before = drift.move(centre, 4, 1 / 32)
+    phase = drift.phase
+    after = drift.move(centre, 4, 1 / 8)
+    assert drift.phase - phase == int(R.f32(R.DRIFT_STEP_PER_HZ / 8))
+    assert 0 < after - before <= 121  # at most 4*depth/period per second
+    phase = drift.phase
+    assert drift.move(centre, 0, 1 / 16) == centre
+    assert drift.phase == phase
+
+
+def test_drift_reduces_excursion_near_the_shift_endpoints():
+    drift = R.Drift()
+    high, low = R.target_inc(63), R.target_inc(-64)
+    drift.phase = R.QUARTER
+    assert drift.move(high, 4, 1 / 8) == high
+    assert drift.move(high - 10_000, 4, 1 / 8) <= high
+    drift.phase = -R.QUARTER
+    assert drift.move(low, 4, 1 / 8) == low
+    assert drift.move(low + 10_000, 4, 1 / 8) >= low
+
+
+def test_rate_has_no_effect_when_drift_is_off_even_with_spread():
+    fixed, swept = R.SpreadShifter(), R.SpreadShifter()
+    x = np.random.default_rng(45).uniform(-0.6, 0.7, (32, 64)).astype(np.float32)
+    for n, block in enumerate(x):
+        a = fixed.block(block, 20, 4)
+        b = swept.block(block, 20, 4, 0, (1 / 8) if n & 1 else (1 / 32))
+        assert np.array_equal(a.view(np.uint32), b.view(np.uint32))
+    assert swept.drift.phase == 0

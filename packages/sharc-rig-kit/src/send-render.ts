@@ -17,17 +17,18 @@ export interface SendOptions {
   amount: number;
   params: readonly number[];
   profileBlock?: number;
+  repeat?: number;
 }
 
 export async function renderSend(sp: FxSpec, device: Device, scene: ListeningScene, options: SendOptions) {
-  const { amount, params, profileBlock } = options;
+  const { amount, params, profileBlock, repeat = 1 } = options;
   if (!Number.isInteger(amount) || amount < 0 || amount > 127)
     throw new Error('Send amount must be an integer from 0 to 127.');
   const built = buildFx(sp.sources, device);
   const desc = fxDescription(built, sp.desc);
   if (params.length > desc[2]! || params.some((n) => !Number.isFinite(Math.fround(n))))
     throw new Error(`Expected up to ${desc[2]} finite float32 parameter values.`);
-  const { dry, send, beats } = listeningStems(scene);
+  const { dry, send, beats } = listeningStems(scene, repeat);
   const blocks = dry.length / 32;
   if (profileBlock !== undefined && (!Number.isSafeInteger(profileBlock) || profileBlock < 0 || profileBlock >= blocks))
     throw new Error(`Profile block must be an index from 0 to ${blocks - 1}.`);
@@ -86,6 +87,7 @@ export async function renderSend(sp: FxSpec, device: Device, scene: ListeningSce
       rate: FS,
       tempoBpm: LISTENING_TEMPO,
       beats,
+      ...(repeat > 1 ? { repeat } : {}),
       stimulusSeed: LISTENING_SEED,
       returnGain: 1,
     },

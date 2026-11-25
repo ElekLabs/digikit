@@ -18,6 +18,22 @@
           "min": 0,
           "name": "Stereo Spread",
           "short": "SPREAD"
+        },
+        {
+          "default": 0,
+          "display": 0,
+          "max": 4,
+          "min": 0,
+          "name": "Drift Depth",
+          "short": "DRIFT"
+        },
+        {
+          "default": 0.0625,
+          "display": 0,
+          "max": 0.125,
+          "min": 0.03125,
+          "name": "Drift Rate",
+          "short": "RATE"
         }
       ],
       "mix": 127,

@@ -6,7 +6,7 @@ import { writeAudioComparison, writeAudioRender } from '../../packages/sharc-rig
 
 export const audioUsage = [
   'wb module render MODULE --device ID --case GROUP/NAME [--emit wav,json] --out DIR',
-  'Listening scenes: --case send/percussion|send/texture --send-amount N [--params-f32 V,...] [--profile-block N]',
+  'Listening scenes: --case send/percussion|send/texture --send-amount N [--params-f32 V,...] [--profile-block N] [--repeat N]',
   'wb audio compare BASELINE.wav|render.json CANDIDATE.wav|render.json --out DIR',
   'Use --format json for a structured answer on stdout.',
 ].join('\n');
@@ -26,17 +26,19 @@ export async function audioCommand({ cmd, sub, rest, opts, fail }) {
       let send;
       const amount = opts['send-amount'];
       const block = opts['profile-block'];
+      const repeat = opts.repeat;
       const params = opts['params-f32']?.split(',').map((p) => p.trim()) ?? [];
       if (amount !== undefined) {
-        if (!amount.trim() || params.includes('') || block?.trim() === '')
-          fail('Send amount, parameter values and profile block must be numbers.');
+        if (!amount.trim() || params.includes('') || block?.trim() === '' || repeat?.trim() === '')
+          fail('Send amount, parameter values, repeat and profile block must be numbers.');
         send = {
           amount: Number(amount),
           params: params.map(Number),
           profileBlock: block === undefined ? undefined : Number(block),
+          repeat: repeat === undefined ? undefined : Number(repeat),
         };
-      } else if (params.length || block !== undefined)
-        fail('--params-f32 and --profile-block need a listening send case with --send-amount.');
+      } else if (params.length || block !== undefined || repeat !== undefined)
+        fail('--params-f32, --profile-block and --repeat need a listening send case with --send-amount.');
       const { files, manifest } = writeAudioRender(await renderCase(rest[0], opts.device, want[0], send), dir, emit);
       if (format === 'json') console.log(JSON.stringify({ files, ...manifest }));
       else {

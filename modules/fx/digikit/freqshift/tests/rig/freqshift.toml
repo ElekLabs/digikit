@@ -408,7 +408,7 @@ blocks = 6
 
 [[case.check]]
 kind = "description"
-words = [0x444B4658, 1, 2, 940, 1, 0]
+words = [0x444B4658, 1, 4, 944, 1, 0]
 
 [[case.check]]
 # core/fx around one call is about 520 instructions
@@ -619,6 +619,51 @@ freq = 1080.0
 amp = 0.5
 tol = 0.0025
 
+[[case]]
+name = "drift reaches the peak without a phase reset on rate change and parks on zero depth"
+
+[case.input]
+kind = "sine"
+freq = 1000.0
+amp = 0.5
+
+# Start at +80 Hz, advance 1/16 of a turn at the slow rate, then another 3/16 at the fast rate.
+[[case.step]]
+params_f32 = [38.49901595799156, 0.0, 4.0, 0.03125]
+blocks = 3000
+
+[[case.step]]
+params_f32 = [38.49901595799156, 0.0, 4.0, 0.125]
+blocks = 2250
+
+[[case.step]]
+params_f32 = [38.49901595799156, 0.0, 0.0, 0.125]
+blocks = 500
+
+[[case.check]]
+kind = "tone-fit"
+channel = "left"
+blocks = [4930, 5250]
+freq = 1084.0
+amp = 0.5
+tol = 0.003
+
+[[case.check]]
+kind = "tone-fit"
+channel = "right"
+blocks = [5350, 5750]
+freq = 1080.0
+amp = 0.5
+tol = 0.003
+
+[[case.check]]
+kind = "state-word"
+index = 235 # Drift phase, parked within quantization of 1/4 turn
+equals = 1073738250
+
+[[case.check]]
+kind = "state-untouched-beyond"
+
 # The output does not depend on what the state held at the start: the same input after two different fills of the declared state
 # gives the same words (the pin is the hash of the output words; pending Em's review, like every new rig pin).
 
@@ -631,7 +676,7 @@ kind = "table"
 file = "ref/mixed-in-3.f32"
 
 [[case.step]]
-params_f32 = [40.0, 0.0]
+params_f32 = [40.0, 0.0, 0.0, 0.125]
 blocks = 36
 
 [[case.check]]

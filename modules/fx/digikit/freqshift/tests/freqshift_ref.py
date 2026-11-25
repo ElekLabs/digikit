@@ -64,6 +64,11 @@ QUARTER = 0x40000000
 HALF = 0x80000000
 BLOCK = 32
 SPREAD_MAX_HZ = 8.0
+DRIFT_MAX_HZ = 4.0
+DRIFT_RATE_MIN = 1 / 32
+DRIFT_RATE_MAX = 1 / 8
+DRIFT_RATE_DEFAULT = 1 / 16
+DRIFT_STEP_PER_HZ = INC_PER_HZ * BLOCK
 # Block-rate phase steering when Spread returns to zero, about 171 ms per time constant.
 REJOIN_SHIFT = 13
 REJOIN_TAIL = 1 << REJOIN_SHIFT
@@ -107,24 +112,50 @@ def target_inc(v: float) -> int:
     return int(f32(m * f32(INC_PER_HZ)))
 
 
-def spread_inc(centre: int, spread: float) -> int:
+SHIFT_MIN_INC = target_inc(-64)
+SHIFT_MAX_INC = target_inc(63)
+
+
+def offset_inc(centre: int, value: float, limit: float) -> int:
     """Nonnegative frequency offset in phase units, narrowed symmetrically at the knob ends."""
-    value = min(max(f32(spread), f32(0)), f32(SPREAD_MAX_HZ))
+    value = min(max(f32(value), f32(0)), f32(limit))
     return max(
         0,
         min(
             int(f32(value * f32(INC_PER_HZ))),
-            centre - target_inc(-64),
-            target_inc(63) - centre,
+            centre - SHIFT_MIN_INC,
+            SHIFT_MAX_INC - centre,
         ),
     )
 
 
+def spread_inc(centre: int, spread: float) -> int:
+    return offset_inc(centre, spread, SPREAD_MAX_HZ)
+
+
+def fold_quarter(p: int) -> int:
+    return wrap32(HALF - p) if (p ^ wrap32(p << 1)) < 0 else p
+
+
+class Drift:
+    """One phase-continuous triangle at block rate, shared by both channels."""
+
+    def __init__(self) -> None:
+        self.phase = 0
+
+    def move(self, centre: int, depth: float, rate: float) -> int:
+        if depth <= 0:
+            return centre
+        span = offset_inc(centre, depth, DRIFT_MAX_HZ)
+        rate = min(max(f32(rate), f32(DRIFT_RATE_MIN)), f32(DRIFT_RATE_MAX))
+        self.phase = wrap32(self.phase + int(f32(rate * f32(DRIFT_STEP_PER_HZ))))
+        triangle = f32(f32(fold_quarter(self.phase)) * f32(2.0**-30))
+        return centre + int(f32(triangle * f32(span)))
+
+
 def sinq(p: int) -> np.float32:
     """sin of the phase p (a signed 32-bit turn fraction) as the routine computes it: fold to +-a quarter turn, then the polynomial."""
-    if (p ^ wrap32(p << 1)) < 0:  # bits 31 and 30 differ: beyond a quarter turn
-        p = wrap32(HALF - p)
-    u = f32(f32(p) * f32(2.0**-30))
+    u = f32(f32(fold_quarter(p)) * f32(2.0**-30))
     v = f32(u * u)
     r = f32(f32(SIN_C[3]) * v)
     r = f32(r + f32(SIN_C[2]))
@@ -218,6 +249,7 @@ class SpreadShifter(Shifter):
         super().__init__()
         self.side_phase = 0
         self.side_inc = 0
+        self.drift = Drift()
 
     def phase_pairs(
         self, centre_target: int, side_target: int
@@ -252,11 +284,19 @@ class SpreadShifter(Shifter):
         self.side_inc = 0 if tail else side_target
         return left, right
 
-    def block(self, x: np.ndarray, v: float, spread: float = 0.0) -> np.ndarray:
-        centre = target_inc(v)
+    def block(
+        self,
+        x: np.ndarray,
+        v: float,
+        spread: float = 0.0,
+        drift: float = 0.0,
+        rate: float = DRIFT_RATE_DEFAULT,
+    ) -> np.ndarray:
+        centre = self.drift.move(target_inc(v), drift, rate)
         side = spread_inc(centre, spread)
         if side == 0 and self.side_phase == 0 and self.side_inc == 0:
-            return super().block(x, v)
+            osc = self.oscillator(centre)
+            return self.filter_block(x, (osc, osc))
 
         def osc(p: list[int]) -> tuple[list[np.float32], list[np.float32]]:
             return [sinq(i) for i in p], [sinq(wrap32(i + QUARTER)) for i in p]

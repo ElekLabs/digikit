@@ -886,7 +886,9 @@ profile_file=$(jq -r '.profile.file' "$base/current/render.json")
 mise run wb:cli -- profile report "$base/current/$profile_file"
 ```
 
-`--params-f32` takes the effect's DSP parameter values, not MIDI knob positions or hertz.
+`--params-f32` takes the effect's DSP parameter values in their declared units, not MIDI knob positions.
+`--repeat N` repeats the exact source stems 1–8 times in one take without resetting the effect.
+For example, add `--repeat 3` to a `send/texture` render to get about 22 seconds for slow modulation.
 `--profile-block` selects one zero-based block from the actual take. The render manifest names
 the matching profile next to the audio. Its counters cover that block only. The manifest records worst block
 cost for the whole take and a hash of the generated source audio. A dry/current comparison should

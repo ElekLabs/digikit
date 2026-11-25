@@ -94,8 +94,8 @@ def test_the_module_declares_one_effect_by_builder_calls():
     assert [(f["id"], f["dsp"]) for f in man["fx"]] == [("fshift", "fs")]
 
 
-def test_the_committed_knobs_preserve_shift_and_default_spread_to_zero():
-    """Keep the former SHIFT slot and append SPREAD with a neutral default."""
+def test_the_committed_knobs_preserve_shift_and_spread_slots():
+    """Append the Drift controls and keep Spread and Drift neutral by default."""
     consts = {
         c["name"]: c["value"]
         for c in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["machine"][
@@ -109,4 +109,6 @@ def test_the_committed_knobs_preserve_shift_and_default_spread_to_zero():
     ] == [
         ("SHIFT", consts["DK_P_BIPOLAR"], -64, 63, 0),
         ("SPREAD", consts["DK_P_PERCENT"], 0, 8, 0),
+        ("DRIFT", consts["DK_P_PERCENT"], 0, 4, 0),
+        ("RATE", consts["DK_P_PERCENT"], 1 / 32, 1 / 8, 1 / 16),
     ]

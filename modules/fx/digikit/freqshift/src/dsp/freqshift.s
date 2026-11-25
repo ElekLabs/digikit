@@ -7,17 +7,18 @@
 // to this block's in a straight line over the 32 samples (d = (new - old) >> 5 added before each sample), so a turn of the knob is a sweep and the phase never jumps.
 // sin and cos of the phase: the phase folds to +-a quarter turn (integer ops) and a degree-7 polynomial gives the sine (error 1.2e-6); cos is the sine of the phase
 // plus a quarter turn. SPREAD (p1, 0 to 8 Hz on each side) adds an offset to the left and subtracts it from the right.
-// The centre keeps the legacy phase and ramp. At zero, the side phase returns smoothly to the shared path.
+// At zero Spread, the side phase returns smoothly to the shared path. DRIFT (p2, 0 to 4 Hz) moves the shared
+// centre with a triangle at RATE (p3, 1/32 to 1/8 Hz). The same audio phase and block ramp are used throughout.
 //
 // Per channel, two chains of four allpass sections in z^-2, transposed form (t = c x; y = t + s; u = c y; s' = u - x, one section of the even samples and one of the
 // odd ones: a polyphase pair, so the sections cost the same as first-order ones). The chain P is delayed by one sample (its output goes through the state word
 // before the buffer: a[n - 1] is read at n); a (P) and b (Q) differ in phase by 90 degrees to within 0.55 degrees from 30 Hz to 18 kHz (image rejection 46 dB).
 // out = a cos + b sin moves the input up by f (down for f < 0); it is clamped to +-7.9 (the effect must stay below the level bound, 8).
 //
-// State (940 bytes; the adapter zeroes it when the effect switches on): word 0 the phase, 1 the last block's increment, 2 the dk_fx_in pointer of this call,
+// State (944 bytes; the adapter zeroes it when the effect switches on): word 0 the phase, 1 the last block's increment, 2 the dk_fx_in pointer of this call,
 // 4 to 35 the section states of chain P and chain Q of the left and the right channel (8 words each: section k, even samples 2k, odd 2k + 1), 36 to 68 and 69 to 101
 // the one-sample delay buffers of the two channels (a carry word, then the 32 outputs of chain P), 102 to 165 cos and sin of the 32 samples.
-// Words 166 and 167 hold the side phase and increment. Words 168 to 170 are right-oscillator setup, and 171 to 234 its output.
+// Words 166 and 167 hold the side phase and increment. Words 168 to 170 are right-oscillator setup, and 171 to 234 its output. Word 235 is the Drift phase.
 
 #include "dk_fx.inc"
 #include "freqshift.h"
@@ -34,7 +35,12 @@
 #define FS_RIGHT_PHASE 168
 #define FS_RIGHT_INC 169
 #define FS_RIGHT_STEP 170
-#define FS_STATE_BYTES 940
+#define FS_DRIFT_PHASE 235
+#define FS_STATE_BYTES 944
+// Integer increments at SHIFT -64 and +63, and float32 conversion from Hz to increments.
+#define FS_SHIFT_MIN -179397856
+#define FS_SHIFT_MAX 158148960
+#define FS_HZ_INC 0x47aec33e
 // the same offsets in bytes (the index registers hold byte addresses)
 #define FS_ST_B 16
 #define FS_ST_Q0_B 48
@@ -52,8 +58,6 @@ _fs_process:                              // R4 = state, R8 = dk_fx_in, R12 = th
     I5 = R4;
     DM(FS_FXIN, I5) = R8;
     I1 = R12;
-    R1 = DM(FSHIFT_SPREAD_WORD, I1);
-    DM(FS_R_CSPTR, I5) = R1;             // p1 until we select the right oscillator buffer
     R0 = DM(FSHIFT_SHIFT_WORD, I1);       // p0, the SHIFT word
     // ---- the increment of this block: f = KHZ (2^x - 1), x = min(|v|, 64) / 5.5 ----
     F9 = PASS F0;
@@ -89,9 +93,12 @@ _fs_process:                              // R4 = state, R8 = dk_fx_in, R12 = th
     R2 = 0;
     COMP(F9, F2);
     IF LT F3 = -F3;
-    R2 = 0x47aec33e;
+    R2 = FS_HZ_INC;
     F3 = F3 * F2;
     R3 = TRUNC F3;                        // the new increment
+    R0 = DM(FSHIFT_DRIFT_WORD, I1);
+    R0 = PASS R0;
+    IF NE CALL _fs_drift;                // zero Drift takes the unchanged centred path
     // ---- the ramp and the oscillator ----
     R4 = DM(FS_INC, I5);
     DM(FS_INC, I5) = R3;
@@ -100,9 +107,9 @@ _fs_process:                              // R4 = state, R8 = dk_fx_in, R12 = th
     R10 = ASHIFT R0 BY R1;                // d
     R8 = R4;                              // the increment
     R9 = DM(FS_PHASE, I5);
-    // SPREAD changes the offset from the unchanged centre oscillator. Keep the original shared
+    // SPREAD changes the offset from the centre oscillator. Keep the original shared
     // path when it is off and the side phase and rate are both back at zero.
-    R0 = DM(FS_R_CSPTR, I5);
+    R0 = DM(FSHIFT_SPREAD_WORD, I1);
     R4 = DM(FS_SIDE_PHASE, I5);
     R5 = DM(FS_SIDE_INC, I5);
     R1 = R0 OR R4;
@@ -112,13 +119,13 @@ _fs_process:                              // R4 = state, R8 = dk_fx_in, R12 = th
     F0 = MAX(F0, F1);
     R1 = 0x41000000;                     // at most 8 Hz on each side
     F0 = MIN(F0, F1);
-    R1 = 0x47aec33e;                     // turns per sample in 2^-32 units per Hz
+    R1 = FS_HZ_INC;
     F0 = F0 * F1;
     R6 = TRUNC F0;
-    R0 = -179397856;                     // target increment of SHIFT -64
+    R0 = FS_SHIFT_MIN;
     R0 = R3 - R0;
     R6 = MIN(R6, R0);
-    R0 = 158148960;                      // target increment of SHIFT +63
+    R0 = FS_SHIFT_MAX;
     R0 = R0 - R3;
     R6 = MIN(R6, R0);
     R2 = 0;
@@ -261,6 +268,50 @@ _fs_filter:
     DM(FS_AB1, I5) = R0;
     R0 = DK_FX_OK;
     JUMP (M13, I13);
+
+// Advance the block-rate triangle and add its bipolar offset to the centre target R3.
+// Preserve the triangle phase across Rate changes. Drift off parks it without touching the audio phase.
+_fs_drift:
+    R1 = 0;
+    F0 = MAX(F0, F1);
+    IF EQ RTS;
+    R1 = 0x40800000;                     // 4 Hz depth
+    F0 = MIN(F0, F1);
+    R1 = FS_HZ_INC;
+    F0 = F0 * F1;
+    R2 = TRUNC F0;
+    R1 = FS_SHIFT_MIN;
+    R1 = R3 - R1;
+    R2 = MIN(R2, R1);
+    R1 = FS_SHIFT_MAX;
+    R1 = R1 - R3;
+    R2 = MIN(R2, R1);
+    R1 = 0;
+    R2 = MAX(R2, R1);
+
+    R0 = DM(FSHIFT_RATE_WORD, I1);
+    R1 = 0x3d000000;                     // 1/32 Hz
+    F0 = MAX(F0, F1);
+    R1 = 0x3e000000;                     // 1/8 Hz
+    F0 = MIN(F0, F1);
+    R1 = 0x4a2ec33e;                     // 2^32 / 1500 blocks per second
+    F0 = F0 * F1;
+    R1 = TRUNC F0;
+    R0 = DM(FS_DRIFT_PHASE, I5);
+    R0 = R0 + R1;
+    DM(FS_DRIFT_PHASE, I5) = R0;
+    R4 = 0x80000000;
+    R1 = R0 + R0;
+    R1 = R1 XOR R0;
+    IF LT R0 = R4 - R0;
+    F0 = FLOAT R0;
+    R1 = 0x30800000;                     // 2^-30 maps the folded phase to -1 .. 1
+    F0 = F0 * F1;
+    F2 = FLOAT R2;
+    F0 = F0 * F2;
+    R0 = TRUNC F0;
+    R3 = R3 + R0;
+    RTS;
 
 // Write 32 cosine/sine pairs at I4, ramping R8 by R10 and advancing phase R9 before each pair.
 _fs_make_osc:

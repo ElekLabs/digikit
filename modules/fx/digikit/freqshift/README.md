@@ -17,6 +17,10 @@ The effect has a page of its own in the FX view (FUNC + FX, then UP or DOWN afte
 - **SPREAD** (second knob, shown from 0 to 127): adds up to 8 Hz to the left shift and subtracts the same amount from the right. Near the ends of SHIFT the
   offset narrows so neither channel exceeds the original range. At 0, the side phase settles back to the shared oscillator. The default is 0 in a fresh
   kit. If a kit saved with the one-knob prototype opens with nonzero SPREAD, turn it to 0 for the original sound.
+- **DRIFT** (third knob) moves the centre shift up and down by up to 4 Hz with a slow triangle. Start with a low depth on a sustained synth or send return.
+  At 0 the centre goes back to SHIFT and the modulation phase parks. If a kit from before Drift opens with nonzero DRIFT, turn it to 0 for the previous sound.
+- **RATE** (fourth knob) runs from a 32-second cycle at the left to an 8-second cycle at the right, with a 16-second default. Changing it changes the speed
+  without restarting the sweep. It has no audible effect when DRIFT is 0.
 - **MIX** (the framework's level knob). It starts at **127**. On the send route (the default on the Digitakt II) MIX is the level of the return: 127 adds the full shifted sound of the sends, 0 adds nothing.
   As a master insert (FX ROUTING, below) MIX is the blend of the dry and the shifted sound: 127 is only the shifted sound (fully shifted), 0 only the dry sound (bit for bit). MIX is one value for both routes: after moving the
   effect to the master, turn MIX down to hear some dry sound with the shifted one.
@@ -43,8 +47,9 @@ Things to know:
 - On the master route the input is the whole master mix (after the master mix and before the output), so every track and the send effects are shifted together. A long reverb tail that is shifted keeps moving. On the send route the input is the sum of the sends only.
 - Frequencies above 18 kHz and below 30 Hz are shifted with less image rejection (the image is still 5 dB down at 5 Hz); a DC offset becomes a tone at the shift frequency.
 - A shift upward moves high frequencies past 24 kHz, where they fold back down (aliasing): a high-pitched sound shifted up by 2 kHz gets a faint reflection.
-- In the scripted send scenes, the send adapter and effect together take 5,391–5,656 rig instructions per steady 32-sample block at zero Spread,
-  and 6,482–6,747 at 4 Hz per side. These are rig instruction counts, not hardware cycle measurements.
+- In the scripted send scenes, the send adapter and effect together take about 5,400–5,700 rig instructions per steady 32-sample block with Spread and
+  Drift off, and about 6,500–6,800 at 4 Hz Spread per side. In the paired texture takes, Drift added 39 instructions per steady block. These are rig instruction
+  counts, not hardware cycle measurements.
 
 A run-time module: it is not patched into the firmware. The digikit runtime loads the `.dkm` from the card and sends the DSP code to the DSP. Pack it with
 `mise run module:pack -- digikit/freqshift --device dt2` (or `dn2`) and upload `out/patch/freqshift-dt2.dkm`, or load it with `mise run dk:run -- digikit/freqshift --emu`. The image needs the digikit runtime with

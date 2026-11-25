@@ -21,3 +21,22 @@ test('the sustained scene has a different send stem from the percussion scene', 
   );
   expect(Buffer.from(a.send.slice(0, window).buffer).equals(Buffer.from(b.send.slice(0, window).buffer))).toBe(false);
 });
+
+test('repeated listening stems preserve the exact source samples in each cycle', () => {
+  const single = listeningStems('send/texture');
+  const repeated = listeningStems('send/texture', 3);
+  expect(repeated.beats).toBe(single.beats * 3);
+  for (const key of ['backing', 'send', 'dry'] as const) {
+    const length = single[key].length;
+    const reference = Buffer.from(single[key].buffer);
+    expect(repeated[key].length).toBe(3 * length);
+    for (let cycle = 0; cycle < 3; cycle++)
+      expect(Buffer.from(repeated[key].slice(cycle * length, (cycle + 1) * length).buffer).equals(reference)).toBe(
+        true,
+      );
+  }
+});
+
+test.each([0, 1.5, 9])('invalid repeat %s cannot generate a scene', (repeat) => {
+  expect(() => listeningStems('send/texture', repeat)).toThrow('Scene repeat');
+});
