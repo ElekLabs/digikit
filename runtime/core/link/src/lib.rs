@@ -44,7 +44,6 @@ pub use poll::Poll;
 pub use sent::Sent;
 pub use transport::Transport;
 
-use event::*;
 use flight::*;
 use limits::*;
 use live::*;

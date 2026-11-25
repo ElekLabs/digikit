@@ -8,6 +8,8 @@ pub mod cfmix;
 pub mod cfprof;
 mod common;
 pub mod cputime;
+mod flash_hle;
+mod fs_check;
 mod guard;
 mod late_send;
 pub mod midi;
@@ -16,6 +18,7 @@ pub mod panel_leds;
 #[cfg(feature = "play")]
 pub mod pcm_play;
 mod pcprobe;
+mod peer_service;
 mod ram_clear;
 mod runtime;
 mod softfloat;
@@ -26,8 +29,8 @@ mod watch;
 pub mod wav;
 
 pub use capture::Dspi2Capture;
-pub use common::FlashWrites;
 pub use cputime::thread_cpu_ns;
+pub use flash_hle::FlashWrites;
 pub use guard::{GUARD_HIT_LIMIT, GuardHit, GuardRange, GuardReport, parse_guard_spec};
 pub use pcprobe::{DEFAULT_KEEP, PcProbeSpec, ProbeSpec, parse_spec as parse_pc_probe_spec};
 pub use periph::clock;

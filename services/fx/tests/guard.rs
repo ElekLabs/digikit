@@ -154,7 +154,7 @@ fn check(fx: &Fx, core: &FakeCore, used: u32) -> (u32, TableFault) {
 
 #[test]
 fn the_table_check_accepts_a_consistent_table_and_names_each_kind_of_mismatch() {
-    let (_rows, core, mut fx) = core();
+    let (_rows, core, fx) = core();
     let used = 1 << REC;
     assert_eq!(check(&fx, &core, used).0, 0);
     // an owned row of a record that is not used

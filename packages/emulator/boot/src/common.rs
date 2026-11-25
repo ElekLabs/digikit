@@ -6,7 +6,6 @@ use std::collections::{BTreeMap, VecDeque};
 
 use coldfire::{Bus, BusError, Cpu, InterruptPolicy};
 use machine::{Board, SemaphoreAddresses, Time};
-use periph::peer::PeerIrq;
 use serde::Serialize;
 
 use crate::guard::WriteGuards;
@@ -21,7 +20,6 @@ pub(crate) const UART8_UDR: u32 = 0xec07_000c;
 pub(crate) const TX35_VECTOR: u8 = 155;
 pub(crate) const INTC1_BASE: u32 = 0xfc04_c000;
 pub(crate) const DSPI0_SR: u32 = 0xfc05_c02c;
-pub(crate) const DSPI1_SR: u32 = 0xfc03_c02c;
 pub(crate) const DSPI2_SR: u32 = 0xec03_802c;
 pub(crate) const ESDHC_CMDARG: u32 = 0xfc0c_c008;
 pub(crate) const ESDHC_XFERTYP: u32 = 0xfc0c_c00c;
@@ -33,25 +31,6 @@ pub(crate) const FLASH_READ_SIG: &[u8] = &[
     0x4f, 0xef, 0xff, 0xf4, 0x48, 0xd7, 0x04, 0x0c, 0x24, 0x2f, 0x00, 0x10, 0x26, 0x2f, 0x00, 0x14,
     0x24, 0x6f, 0x00, 0x18, 0x4e, 0xba, 0xf7, 0xd6,
 ];
-/// The flash sector erase and page program functions of MAIN OS (`erase(addr)`, `program(addr, len, src)`, C calling convention):
-/// the first 36 and 28 bytes, the same in DT2 1.16/1.17 and DN2 1.11/1.12. Absolute operands are masked (`data_mask`).
-#[allow(dead_code)] // the library runtime uses it; the diagnostic binary does not
-pub(crate) const FLASH_ERASE_SIG: &[u8] = &[
-    0x4f, 0xef, 0xff, 0xf4, 0x48, 0xd7, 0x0c, 0x04, 0x4e, 0xba, 0xf3, 0xc2, 0x48, 0x79, 0x44, 0xe6,
-    0x66, 0x48, 0x4e, 0xb9, 0x40, 0x00, 0x15, 0xa0, 0x48, 0x78, 0x00, 0x01, 0x4e, 0xb9, 0x40, 0x13,
-    0x44, 0xdc,
-];
-#[allow(dead_code)] // the library runtime uses it; the diagnostic binary does not
-pub(crate) const FLASH_PROGRAM_SIG: &[u8] = &[
-    0x4f, 0xef, 0xff, 0xec, 0x48, 0xd7, 0x04, 0x3c, 0x28, 0x2f, 0x00, 0x18, 0x24, 0x2f, 0x00, 0x1c,
-    0x2a, 0x2f, 0x00, 0x20, 0x4e, 0xba, 0xf9, 0xc0, 0x4a, 0x80, 0x6c, 0x04,
-];
-/// The container area of the flash that the OS upgrade rewrites: from the container to the settings record at 0x380000.
-#[allow(dead_code)] // the library runtime uses it; the diagnostic binary does not
-pub(crate) const FLASH_CONTAINER_END: usize = 0x38_0000;
-/// The erase unit of the model: the writer's default when the (unmodelled) flash probe tells nothing (`DAT_402b67c4`, 0x10000).
-#[allow(dead_code)] // the library runtime uses it; the diagnostic binary does not
-pub(crate) const FLASH_ERASE_BYTES: usize = 0x1_0000;
 pub(crate) const MAINLOOP_SIG: &[u8] = &[
     0x48, 0x79, 0x40, 0x94, 0xef, 0x3c, 0x4e, 0xb9, 0x40, 0x00, 0x19, 0x28, 0x58, 0x8f, 0x72, 0x28,
     0x24, 0x40, 0x71, 0x92, 0xb2, 0x80, 0x65, 0xe8,
@@ -184,50 +163,6 @@ pub(crate) fn resolve_fs_worker(image: &[u8]) -> Result<(u32, u32, u32, u32), St
         return Err("fs completion byte operands invalid".into());
     }
     Ok((entry, completion, success, done))
-}
-
-/// RAM words that decide whether MainScreenView starts the filesystem check: mounted flag, superblock state, checked word.
-/// The check starts only when mounted != 0 and (state == 3 or checked == 0); a successful check leaves state 4 and checked 1.
-pub(crate) const FS_STATE_DONE: u32 = 4;
-
-/// Resolves the three words from the predicate that starts the check (`mounted && (state == 3 || checked == 0)`): a function that calls
-/// the state getter, compares with 3, then calls the checked getter. Each getter tests the mounted flag and loads its word.
-/// Returns `(mounted, state, checked)`.
-pub(crate) fn resolve_fs_check_flags(image: &[u8]) -> Result<(u32, u32, u32), String> {
-    let sig = hex("4eb9000000007203b280670e4eb9000000004a8057c044804e7570014e75");
-    let mut mask = vec![false; sig.len()];
-    mask[2..6].fill(true);
-    mask[14..18].fill(true);
-    let predicate = unique(image, &sig, &mask).map_err(|e| format!("fs check predicate: {e}"))?;
-    let word = |addr: u32, len: usize| -> Result<&[u8], String> {
-        let off = addr.checked_sub(MAIN_LOAD).ok_or("fs check below MAIN")? as usize;
-        image
-            .get(off..off + len)
-            .ok_or("fs check outside MAIN".to_owned())
-    };
-    let be = |bytes: &[u8]| u32::from_be_bytes(bytes.try_into().expect("four bytes"));
-    let head = word(predicate, 18)?;
-    let (state_getter, checked_getter) = (be(&head[2..6]), be(&head[14..18]));
-    // getter: ... tst.l (mounted).l at +0x16 (4ab9), move.l (word).l,D2 at +0x2c (2439)
-    let getter = |addr: u32| -> Result<(u32, u32), String> {
-        let body = word(addr, 0x32)?;
-        if body[0x16..0x18] != [0x4a, 0xb9] || body[0x2c..0x2e] != [0x24, 0x39] {
-            return Err(format!(
-                "fs flag getter {addr:#010x} has an unexpected shape"
-            ));
-        }
-        Ok((be(&body[0x18..0x1c]), be(&body[0x2e..0x32])))
-    };
-    let (mounted, state) = getter(state_getter)?;
-    let (mounted_again, checked) = getter(checked_getter)?;
-    let in_ram = |a: u32| (0x4000_0000..0x4800_0000).contains(&a) && a & 3 == 0;
-    if mounted != mounted_again
-        || ![mounted, state, checked].into_iter().all(in_ram)
-        || state == checked
-    {
-        return Err("fs check flag operands invalid".into());
-    }
-    Ok((mounted, state, checked))
 }
 
 pub(crate) fn digest(bytes: &[u8]) -> String {
@@ -1114,100 +1049,6 @@ pub(crate) fn service_timers<const TRACE: bool>(
     ))
 }
 
-/// EPORT interrupt enable register (EPIER); IRQ4 is bit 4.
-const EPORT_EPIER: u32 = 0xfc09_0003;
-const PEER_IRQ4_VECTOR: u16 = 68;
-const PEER_EDMA29_VECTOR: u16 = 149;
-
-/// The mailbox peer's due interrupt (`periph::peer`), delivered like a hardware source: ICR level above the CPU IPL, source unmasked in
-/// IMR, IRQ4 enabled in EPIER, handler installed. The hello block goes into the window just before. -> whether it was delivered; when
-/// it is not deliverable yet it stays queued.
-pub(crate) fn service_peer<const TRACE: bool>(
-    bus: &mut LoggingBus<TRACE>,
-    cpu: &mut Cpu,
-    now: u64,
-) -> Result<bool, String> {
-    let due: Vec<PeerIrq> = bus
-        .board
-        .peer()
-        .map(|peer| peer.due_list(now).collect())
-        .unwrap_or_default();
-    for irq in due {
-        if offer_peer_irq(bus, cpu, irq)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-fn offer_peer_irq<const TRACE: bool>(
-    bus: &mut LoggingBus<TRACE>,
-    cpu: &mut Cpu,
-    irq: PeerIrq,
-) -> Result<bool, String> {
-    let vector = match irq {
-        PeerIrq::Eport4 => PEER_IRQ4_VECTOR,
-        PeerIrq::Edma29 => PEER_EDMA29_VECTOR,
-        PeerIrq::Frame => bus.board.peer().map_or(174, |peer| peer.frame_vector),
-    };
-    let Some(level) = bus
-        .board
-        .time()
-        .and_then(|time| time.interrupt_level(vector))
-    else {
-        return Ok(false);
-    };
-    if ((cpu.sr >> 8) & 7) >= u16::from(level) {
-        return Ok(false);
-    }
-    if irq == PeerIrq::Eport4
-        && bus
-            .board
-            .read8(EPORT_EPIER)
-            .map_err(|_| "PeerEportUnavailable".to_string())?
-            & 0x10
-            == 0
-    {
-        return Ok(false);
-    }
-    let handler = bus
-        .board
-        .read32(cpu.ctrl.vbr.wrapping_add(4 * u32::from(vector)))
-        .map_err(|_| "PeerVectorUnavailable".to_string())?;
-    if handler == 0 || handler >= 0x4800_0000 {
-        return Ok(false);
-    }
-    let stack = if cpu.sr & 0x2000 == 0 && cpu.ctrl.cacr & 0x20 != 0 {
-        cpu.other_a7
-    } else {
-        cpu.a[7]
-    };
-    let frame = (stack & !3).wrapping_sub(8);
-    if !bus.board.can_write_ram_range(frame, 4)
-        || !bus.board.can_write_ram_range(frame.wrapping_add(4), 4)
-    {
-        return Err(format!("PeerInterruptFrameUnavailable({frame:#010x})"));
-    }
-    if let Some(hello) = bus.board.peer().and_then(|peer| peer.window_before(irq)) {
-        bus.board.peer_window_store(0, &hello);
-    }
-    match cpu.take_interrupt(
-        &mut bus.board,
-        vector as u8,
-        Some(level),
-        InterruptPolicy::Oracle,
-    ) {
-        Ok(true) => {
-            if let Some(peer) = bus.board.peer_mut() {
-                peer.delivered(irq);
-            }
-            Ok(true)
-        }
-        Ok(false) => Ok(false),
-        Err(stop) => Err(format!("PeerDeliveryPoisoned({stop:?})")),
-    }
-}
-
 // Exact Python unicorn-reference-final:emu/edma.py completion boundary: channel 35 is offered only
 // at its firmware queue-space wait loop. Unlike a generic IRQ scheduler, this
 // checks the programmed INTC1 source-27 level/mask and the live CPU IPL.
@@ -1334,60 +1175,4 @@ pub(crate) fn hle_flash_read<const TRACE: bool>(
     cpu.a[7] = sp.wrapping_add(4);
     cpu.pc = ret;
     Ok(())
-}
-
-/// What the guest did to the container area of the flash.
-#[allow(dead_code)] // the library runtime uses it; the diagnostic binary does not
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
-pub struct FlashWrites {
-    pub erases: u64,
-    pub programs: u64,
-    pub bytes: u64,
-}
-
-/// The flash writes of the OS upgrade (finding 75: erase every sector from 0x80000, then program pages from the staged container),
-/// done on the model's flash instead of the unmodelled QSPI controller. Only a write inside the container area
-/// (`FLASH_SLOT..FLASH_CONTAINER_END`) is taken over: any other (the settings records, the bootstrap) returns `Ok(false)` and runs the
-/// firmware's own code as before. Erase sets a sector to 0xFF; program copies the page (a real chip ANDs; the writer erases first).
-/// Both return 0 in D0 and pop the return address.
-#[allow(dead_code)] // the library runtime uses it; the diagnostic binary does not
-pub(crate) fn hle_flash_write<const TRACE: bool>(
-    bus: &mut LoggingBus<TRACE>,
-    cpu: &mut Cpu,
-    flash: &mut [u8],
-    erase: bool,
-    stats: &mut FlashWrites,
-) -> Result<bool, String> {
-    let sp = cpu.a[7];
-    let arg = |bus: &mut LoggingBus<TRACE>, n: u32| {
-        bus.board
-            .read32(sp.wrapping_add(4 * n))
-            .map_err(|_| format!("FlashWriteStack({n})"))
-    };
-    let ret = arg(bus, 0)?;
-    let addr = arg(bus, 1)? as usize;
-    if erase {
-        let end = addr.saturating_add(FLASH_ERASE_BYTES);
-        if addr < FLASH_SLOT || end > FLASH_CONTAINER_END {
-            return Ok(false);
-        }
-        flash[addr..end].fill(0xff);
-        stats.erases += 1;
-    } else {
-        let len = arg(bus, 2)? as usize;
-        let src = arg(bus, 3)?;
-        let end = addr.saturating_add(len);
-        if addr < FLASH_SLOT || end > FLASH_CONTAINER_END {
-            return Ok(false);
-        }
-        if !bus.board.ram_peek(src, &mut flash[addr..end]) {
-            return Err(format!("FlashProgramSource({src:#010x}+{len})"));
-        }
-        stats.programs += 1;
-        stats.bytes += len as u64;
-    }
-    cpu.d[0] = 0;
-    cpu.a[7] = sp.wrapping_add(4);
-    cpu.pc = ret;
-    Ok(true)
 }

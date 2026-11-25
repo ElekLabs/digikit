@@ -188,6 +188,7 @@ impl Slots {
     }
 
     /// Open the flow of a click (what `take_click` does for a queued one).
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn begin_flow(&mut self, ctx: Ctx) {
         self.held.begin(ctx);
     }

@@ -18,7 +18,6 @@ pub extern "C" fn shortcuts_key_hook() {}
 ///
 /// # Safety
 /// Runs in the UI task, inside the key walker.
-#[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_shortcuts_key(code: u32, flags: u32) -> u32 {
     use dkrt_svc_shortcuts::shortcuts::Verdict;

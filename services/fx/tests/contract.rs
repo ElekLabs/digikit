@@ -406,7 +406,7 @@ fn an_unloaded_effect_leaves_no_defaults_in_the_table_of_the_kit_hooks() {
     let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
     // the table's words as the firmware sees them: the halfwords the service wrote through the core
     let defs = || -> Vec<i32> {
-        let at = unsafe { addr_of!(fxpage::DKRT_FXP_DEFS) } as u32;
+        let at = addr_of!(fxpage::DKRT_FXP_DEFS) as u32;
         (0..64)
             .map(|i| unsafe { l.core.rd16(at + 2 * i) })
             .collect()
@@ -429,11 +429,11 @@ fn an_unloaded_effect_page_row_points_to_the_empty_string() {
     let _g = locked();
     let f = fixture(DT2.id);
     let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
-    let rows = unsafe { addr_of!(fxpage::DKRT_FXP_ROWS) } as u32;
+    let rows = addr_of!(fxpage::DKRT_FXP_ROWS) as u32;
     let words = || unsafe { (FwMem::rd(&l.core, rows), FwMem::rd(&l.core, rows + 4)) };
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
     let (tab, title) = words();
-    let empty = unsafe { addr_of!(fxpage::DKRT_FXP_EMPTY) } as u32 + 12;
+    let empty = addr_of!(fxpage::DKRT_FXP_EMPTY) as u32 + 12;
     assert!(
         tab != empty && title != empty,
         "a loaded page has its strings"
@@ -467,7 +467,7 @@ fn a_loaded_effect_page_row_holds_its_codes_and_the_parameter_records_of_its_kno
     );
     let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
     assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
-    let rows = unsafe { addr_of!(fxpage::DKRT_FXP_ROWS) } as u32;
+    let rows = addr_of!(fxpage::DKRT_FXP_ROWS) as u32;
     let codes: Vec<u32> = (0..9)
         .map(|i| unsafe { FwMem::rd(&l.core, rows + 8 + 4 * i) })
         .collect();
@@ -615,27 +615,25 @@ fn a_reloaded_effect_gets_its_send_cell_and_page_row_back() {
     let _g = locked();
     let f = fixture(DT2.id);
     let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
-    unsafe {
-        // the effect with the default route "send": a send cell
-        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
-        assert_eq!(fxsend::used(), 1, "the effect has its send cell");
-        l.core.live_op.set(1);
-        assert_eq!(
-            l.driver.with_instance(
-                |fx| <Fx as dkrt_abi::provider::Provider<FakeCore>>::can_stop(fx, &l.core)
-            ),
-            Ok(()),
-            "an effect with a send route is torn down"
-        );
-        l.unload(0);
-        assert_eq!(fxsend::used(), 0, "the cell is given back with the module");
-        assert_eq!(fxpage::page_owner(0), 0);
-        l.core.live_op.set(0);
-        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
-        assert_eq!(fxsend::used(), 1, "the route comes back");
-        assert_eq!(fxpage::page_owner(0), 1);
-        l.unload(0);
-    }
+    // the effect with the default route "send": a send cell
+    assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+    assert_eq!(fxsend::used(), 1, "the effect has its send cell");
+    l.core.live_op.set(1);
+    assert_eq!(
+        l.driver.with_instance(
+            |fx| <Fx as dkrt_abi::provider::Provider<FakeCore>>::can_stop(fx, &l.core)
+        ),
+        Ok(()),
+        "an effect with a send route is torn down"
+    );
+    l.unload(0);
+    assert_eq!(fxsend::used(), 0, "the cell is given back with the module");
+    assert_eq!(fxpage::page_owner(0), 0);
+    l.core.live_op.set(0);
+    assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+    assert_eq!(fxsend::used(), 1, "the route comes back");
+    assert_eq!(fxpage::page_owner(0), 1);
+    l.unload(0);
 }
 
 /// The parked values are stamped for each row with the module's name, the effect id and the kit (the contract's case 13 covers the module and kit parts): the removal
@@ -647,18 +645,16 @@ fn the_removal_of_another_effect_does_not_refresh_the_stamp_of_a_parked_row() {
     f.image = image_with_kit;
     let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
     let k = parked_knobs();
-    unsafe {
-        (k.kit)(&l.core, 0);
-        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
-        let default = (k.get)(&l.core);
-        assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
-        (k.set)(&l.core, 0x1234);
-        l.unload(0);
-        (k.kit_loaded)(&l.core);
-        l.unload(1);
-        assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
-        assert_eq!((k.get)(&l.core), default, "a kit was loaded after the row was parked: the removal of another effect does not refresh its stamp");
-        l.unload(0);
-        (k.kit_reset)();
-    }
+    (k.kit)(&l.core, 0);
+    assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+    let default = (k.get)(&l.core);
+    assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
+    (k.set)(&l.core, 0x1234);
+    l.unload(0);
+    (k.kit_loaded)(&l.core);
+    l.unload(1);
+    assert_eq!(l.load(0, &f.a2), dkrt_sdk::OK);
+    assert_eq!((k.get)(&l.core), default, "a kit was loaded after the row was parked: the removal of another effect does not refresh its stamp");
+    l.unload(0);
+    (k.kit_reset)();
 }

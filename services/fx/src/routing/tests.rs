@@ -1,7 +1,7 @@
 //! The FX ROUTING steps over `FakeCore` and a fake `Ui`: the list text, the routes offered, what a pick writes and queues, and the toasts.
 use super::*;
 use crate::fxpage;
-use dkrt_sdk::{E_RELOAD_RETAINED, OK};
+use dkrt_sdk::OK;
 use dkrt_test_support::FakeCore;
 use std::string::{String, ToString};
 use std::sync::MutexGuard;

@@ -184,7 +184,7 @@ pub unsafe extern "C" fn dks_list_copy(begin: u32, end: u32, dest: u32) -> u32 {
 
 /// The value of the patch that points the list copy of a device with a slot map here (`service!`).
 pub fn list_copy_target(_: &dkrt_svc_machines::machines::Machines) -> u32 {
-    dks_list_copy as usize as u32
+    dks_list_copy as *const () as usize as u32
 }
 
 /// `dk_param_get` (an `[[export]]` of the file): the value of a parameter word in the flow of a click. Without an owner there is no flow (`E_STATE`).

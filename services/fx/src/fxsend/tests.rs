@@ -151,12 +151,10 @@ fn describe_gives_one_word_for_each_effect_row_of_the_consumer() {
         std::vec::Vec::<u32>::new(),
         "a free row has owner 0, which is no consumer"
     );
-    unsafe {
-        for k in [0, 2, 3] {
-            crate::fxpage::set_page_owner_for_test(k, 0);
-        }
-        crate::fxsend::reset_published();
+    for k in [0, 2, 3] {
+        crate::fxpage::set_page_owner_for_test(k, 0);
     }
+    crate::fxsend::reset_published();
 }
 
 /// `describe` runs on the MODULES command handler's task and can be preempted by the task that removes or re-routes an effect. At each point where a task switch can fall in (each
@@ -181,15 +179,13 @@ fn describe_is_one_state_when_the_effect_changes_between_its_reads() {
     };
     // before: effect row 0 of record 1 runs on the send bus and allows both; after: another module (record 2) holds the row, on the master, allowing the master only
     fn state(owner: u8, send: bool, allow: u8) {
-        unsafe {
-            let s = ss();
-            crate::fxpage::set_page_owner_for_test(0, owner);
-            s.id[0][..2].copy_from_slice(b"m0");
-            s.idlen[0] = 2;
-            s.allow[0] = allow;
-            s.dflt[0] = ROUTE_MASTER;
-            s.route[0] = send as _;
-        }
+        let s = ss();
+        crate::fxpage::set_page_owner_for_test(0, owner);
+        s.id[0][..2].copy_from_slice(b"m0");
+        s.idlen[0] = 2;
+        s.allow[0] = allow;
+        s.dflt[0] = ROUTE_MASTER;
+        s.route[0] = send as _;
     }
     for at in 1..=6 {
         let core = FakeCore::new();
@@ -206,10 +202,8 @@ fn describe_is_one_state_when_the_effect_changes_between_its_reads() {
             got == std::vec![word(ROUTE_SEND, both)] || got.is_empty(),
             "restore {at}: {got:x?} is a mix of the two states"
         );
-        unsafe {
-            crate::fxpage::set_page_owner_for_test(0, 0);
-            crate::fxsend::reset_published();
-        }
+        crate::fxpage::set_page_owner_for_test(0, 0);
+        crate::fxsend::reset_published();
     }
 }
 
@@ -236,5 +230,5 @@ fn reset_forgets_the_published_effect_words() {
     assert_eq!(words(&core), 1, "published");
     crate::rows::reset();
     assert_eq!(words(&core), 0, "reset forgot the published table");
-    unsafe { crate::fxpage::set_page_owner_for_test(0, 0) };
+    crate::fxpage::set_page_owner_for_test(0, 0);
 }

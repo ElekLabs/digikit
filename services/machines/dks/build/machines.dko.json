@@ -1964,14 +1964,14 @@
   },
   {
    "addend": 0,
-   "offset": 28,
+   "offset": 24,
    "section": ".text._RINvNtCsf1wLQ9n5BAx_17dkrt_svc_machines5check9ck_ownersNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
    "symbol": "_RNvNtCsf1wLQ9n5BAx_17dkrt_svc_machines5check9counts_of",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 68,
+   "offset": 64,
    "section": ".text._RINvNtCsf1wLQ9n5BAx_17dkrt_svc_machines5check9ck_ownersNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
    "symbol": ".sec..text._RINvNtCsaMgU3lEIvKO_8dkrt_abi8registry4eachNCINvNtCsf1wLQ9n5BAx_17dkrt_svc_machines5check9ck_ownersNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreE0ECs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
    "type": "cf.32"
@@ -11920,10 +11920,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffd4206e000c206800042d48ffd42d48ffec2f0841eeffd84eb90000000042aefff041eefff02d48fff42d6e0008fff841eeffec2d48fffc486efff42f2effd44eb9000000004fef000c202efff04e5e4e75",
+   "hex": "4e56ffd8206e000c202800042d40ffec2f0041eeffd84eb90000000042aefff041eefff02d48fff42d6e0008fff841eeffec2d48fffc486efff42f2effec4eb9000000004fef000c202efff04e5e4e75",
    "kind": "text",
    "name": ".text._RINvNtCsf1wLQ9n5BAx_17dkrt_svc_machines5check9ck_ownersNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreECs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
-   "size": 84
+   "size": 80
   },
   {
    "align": 2,
@@ -15272,7 +15272,7 @@
    "size": 24
   }
  ],
- "source_sha256": "1666063f9def4078947f84db4e4a008c067dbd0491e72e4cba84c725c11955c9",
+ "source_sha256": "9ab4407717edd3e08fcf3194ae9b1a4404fdc31394f865978fcead6b51db1931",
  "symbols": [
   {
    "global": false,
@@ -19183,8 +19183,8 @@
  ],
  "toolchain": {
   "exports": "DK_SVC_OWNER dk_machine_add_page dk_module dk_module_ctx_add_machine dk_page_add_param dk_page_bind dk_page_bind_local dk_page_canvas dk_param_get dk_param_glyph dk_param_latched dk_param_on_click dk_param_range dk_param_set dk_svc_abi dks_list_copy dks_native_code dks_native_descriptor dks_native_draw dks_native_overlay dks_native_page_count dks_page_key dks_page_turn mf_clone5 mf_code_hook mf_copy mf_draw_hook mf_frametype mf_group mf_key_hook mf_owner mf_rank mf_reader mf_srcpage mf_turn_hook mf_typearg mf_typemap0 mf_typemap1 mf_typemap2",
-  "instructions_redecoded": "18881",
-  "isa_check": "d946cb9fe9abb041a104c0afddfa8b35cd2a21cc7110f266202134caaad6837f",
+  "instructions_redecoded": "18880",
+  "isa_check": "e2024906d478e5afc507690f28e92e836680e8ea6e0bd886c530bb695ff22e42",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

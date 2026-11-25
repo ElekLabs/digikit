@@ -219,8 +219,10 @@ unsafe extern "C" fn canvas_fill(x0: i32, y0: i32, x1: i32, y1: i32, color: i32)
 struct FwContent;
 impl Content<FwSurface> for FwContent {
     fn draw(&mut self, page: &NativePage, frame: &Frame, canvas: &mut Canvas<'_, FwSurface>) {
-        let bytes =
-            FrameBytes(frame.to_bytes(canvas_text as usize as u32, canvas_fill as usize as u32));
+        let bytes = FrameBytes(frame.to_bytes(
+            canvas_text as *const () as usize as u32,
+            canvas_fill as *const () as usize as u32,
+        ));
         unsafe {
             CURRENT = canvas as *mut Canvas<'_, FwSurface> as *mut c_void;
             match page.arg() {

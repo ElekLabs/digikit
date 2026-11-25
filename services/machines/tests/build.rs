@@ -697,7 +697,7 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
         ),
         E_NO_REGISTRY
     );
-    unsafe { owner.builder().end() };
+    owner.builder().end();
     // an error of the calls is the commit's result, before anything is checked
     let mut core = FakeCore::new();
     core.set_rows_info(rows_info(&DT2));
@@ -721,10 +721,10 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
         ),
         E_FORMAT
     );
-    unsafe { owner.builder().end() };
+    owner.builder().end();
     // a module that declared no machine commits nothing and needs no registry
     let core = FakeCore::new();
-    unsafe { owner.builder().begin(0) };
+    owner.builder().begin(0);
     let mut sink = RecordSink::measure();
     assert_eq!(
         commit(&mut owner, &core, commit_phase::PREPARE, &k, &mut sink),
@@ -756,7 +756,7 @@ fn the_commit_refuses_without_a_registry_an_error_of_the_calls_and_a_provider_wi
             .unwrap_or(OK),
         E_FORMAT
     );
-    unsafe { owner.builder().end() };
+    owner.builder().end();
 }
 
 // ---- golden lowered records -----------------------------------------------------------------------------------------------------
