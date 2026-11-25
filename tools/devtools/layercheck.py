@@ -89,7 +89,7 @@ FOLDER_ROLES = {
 }
 # Content modules that patch the firmware themselves (they have [[op]] and anchor externs by design: patchkit's own
 # example of a hook; the test service takes a raw hook like a core service file does). They are exempt from the objects and apps rules.
-FIRMWARE_PATCH_MODULES = {"test/registry-demo", "test/svc-test"}
+FIRMWARE_PATCH_MODULES = {"test/registry-demo", "test/svc-test", "test/local-step"}
 # Headers of the core layers an app may include.
 APP_HEADERS = {"dkrt.h", "dk_ui_core.h"}
 ANCHOR = re.compile(r"^(cf|dsp|hook|pk)\.")
