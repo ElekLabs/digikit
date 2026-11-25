@@ -59,9 +59,9 @@ pub fn row_of_word(owners: &[u8], owner: u8, word: u32) -> Option<usize> {
 /// firmware part (`read`, `write`) works on it outside the owner.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Target {
-    pub ctx: Ctx,
-    pub code: u32,
-    pub track: u32,
+    ctx: Ctx,
+    code: u32,
+    track: u32,
 }
 
 /// Decide a call: the target, or the status to answer (no flow, a track above 15, a word the module does not have). No firmware access.
