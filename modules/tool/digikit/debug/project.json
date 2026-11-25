@@ -4,6 +4,11 @@
   "metadata": {
     "runtimeAcceptance": [
       {
+        "files": ["tests/view-observer.device.test.ts"],
+        "tags": ["M:digikit/debug"],
+        "modules": ["digikit/debug"]
+      },
+      {
         "files": ["tests/profile-trace.device.test.ts"],
         "dsp": "sharc",
         "tags": ["M:digikit/debug"],

@@ -76,6 +76,15 @@ static int32_t sel_track;
 static int16_t sel_words[101];
 static u32 ranges[2][2];
 static u32 n_ranges;
+static u32 view_object, view_class, view_reads;
+static int view_supported = 1;
+
+int32_t dk_debug_top_view(uint32_t *out)
+{
+    if (!view_supported) return DK_E_NOT_FOUND;
+    if (out) { view_reads++; out[0] = view_object; out[1] = view_class; }
+    return 0;
+}
 
 void dk_debug_log_sink_set(uint8_t *s, uint8_t *t) { the_sink = (void (*)(const Ev *))s; the_tick = (void (*)(void))t; }
 uint32_t dk_time_blocks(void) { return clock_blocks; }
@@ -172,6 +181,12 @@ int main(int argc, char **argv)
             sel_track = (int32_t)c;
         } else if (sscanf(line, "word %u %d", &a, &c) == 2) {
             sel_words[a] = (int16_t)c;
+        } else if (sscanf(line, "view %u %u", &a, &b) == 2) {
+            view_object = a; view_class = b;
+        } else if (sscanf(line, "viewport %u", &a) == 1) {
+            view_supported = a != 0;
+        } else if (!strncmp(line, "viewreads", 9)) {
+            printf("viewreads %u\n", view_reads);
         } else if (sscanf(line, "poll %u %u %x", &a, &b, &c) == 3) {
             poll_owner[a] = b;
             poll_fn[a] = (uint32_t)c;
@@ -238,6 +253,7 @@ def harness(tmp_path_factory):
             "-I",
             str(REPO_ROOT / "sdk/include"),
             str(src),
+            str(MOD / "src/c/view-observer.c"),
             "-o",
             str(exe),
         ],
@@ -275,6 +291,33 @@ def ev(kind, flags, a=0):
 def test_init_registers_the_range_and_the_sink_and_fini_clears_it(harness):
     out = run(harness, ["fini", "setupreg"])
     assert out == ["reg 32 3 30 2 27 1", "init 0 1", "fini 1 1", "setupreg 10 1"]
+
+
+def test_view_observation_is_opt_in_debug_and_has_a_separate_snapshot(harness):
+    out = run(
+        harness,
+        [
+            "cmd 34 0103ffffffffffffffff",  # debug log level alone never reads the view
+            "view 100 200", "slot", "viewreads",
+            "cmd 34 0501", "slot", "cmd 34 04", "slot",
+            "view 101 201", "slot", "cmd 32 00000000",
+            "cmd 34 0500", "view 102 202", "slot", "viewreads",
+        ],
+    )
+    assert "viewreads 0" in out
+    assert "viewreads 3" in out
+    replies = [row for row in out if row.startswith("reply")]
+    assert struct.unpack(">4B3I", bytes.fromhex(replies[1].split()[2])) == (1, 1, 1, 0, 1, 0, 0)
+    assert struct.unpack(">4B3I", bytes.fromhex(replies[2].split()[2])) == (1, 1, 1, 1, 1, 100, 200)
+    _, _, records = log(replies[3])
+    assert len(records) == 1
+    kind = next(k["id"] for k in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["log"]["kind"] if k["name"] == "VIEW_CHANGED")
+    assert records[0][2:] == (kind, DEBUG, 100, 101, 200, 201, 1)
+
+
+def test_unsupported_view_readback_does_not_start_observing(harness):
+    out = run(harness, ["viewport 0", "cmd 34 04", "cmd 34 0501", "slot", "viewreads"])
+    assert out[2:] == ["reply 16 01000000000000000000000000000000", "reply -1 ", "viewreads 0"]
 
 
 ROWS = 8 + 3 + 4  # module records (limits.max modules), service phases, polls

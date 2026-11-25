@@ -16,6 +16,12 @@ export * from './loads.ts';
 export * from './modules-reply.ts';
 export * from './runtime-log.ts';
 export * from './runtime-events.ts';
+export {
+  ViewObserverUnsupported,
+  withViewObserver,
+  type FirmwareView,
+  type ViewObserverState,
+} from './view-observer.ts';
 export * from './setup.ts';
 export * from './waits.ts';
 export * from './emu-clock.ts';

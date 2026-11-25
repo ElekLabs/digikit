@@ -10,6 +10,10 @@ Work phase by phase on `work/freqshift-workflow` in the `freqshift-workflow` wor
 
 Keep firmware, captures, generated catalogs and listening WAVs local under ignored output paths. Arrange hardware sessions with Em. Use the repository's owner checks during iteration and its affected merge gate before merging.
 
+Keep the [event-driven device test audit](event-driven-device-test-audit.md)
+in a separate warm worktree. Start it from the observer checkpoint, which
+passed the SETTINGS open-and-close regression on DT2 1.17 and DN2 1.12.
+
 ## Status on this branch
 
 | Phase | State | Evidence and remaining work |

@@ -7,6 +7,17 @@
 .equ View_blocked, 0x17
 .equ View_name, 0x28
 .equ View_mgr, 0x2c
+/* cf.view.struct.ViewStackBrain: Brain prefix to the first word of the embedded ViewController, as returned by brain.view_manager. */
+.equ ViewStackBrain_size, 0x44
+.equ ViewStackBrain_controller, 0x40
+/* cf.view.struct.ViewStackController: ViewController prefix through the intrusive view-list sentinel. */
+.equ ViewStackController_size, 0x20
+.equ ViewStackController_sentinel, 0x14
+/* cf.view.struct.ViewStackNode: View list node prefix. The sentinel's prev link points to the view currently at the top of the stack. */
+.equ ViewStackNode_size, 0xc
+.equ ViewStackNode_next, 0x0
+.equ ViewStackNode_prev, 0x4
+.equ ViewStackNode_view, 0x8
 
 /* cf.view.hook.ui_loop: The jsr at the top of the UI task's event loop that pops the next event; the hook point for the runtime's per-pass tick. */
 .macro dk_fw_view_ui_loop_hook handler, next

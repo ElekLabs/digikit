@@ -209,6 +209,9 @@ int32_t dk_debug_track_type(uint32_t track);
 /* The selected track and its Sound parameter words (read-only, from the firmware's own accessors). Writes the first `n` s16 words of that track's Sound array to `out`. Returns the track, or a negative code (-2 no project yet, -3 the track has no record: `out` is not written). Context: ui. Since runtime 0.7.0. */
 int32_t dk_debug_selected_params(int16_t *out, uint32_t n);
 
+/* Read the active firmware view on the UI task. Returns 0 and writes [object, class] (0, 0 for an empty stack), DK_E_AGAIN when the data is not ready, or DK_E_NOT_FOUND on a firmware without a bound view stack. With null out, only checks whether the observer is supported and reads no firmware memory (any task). Context: ui. Since runtime 0.13.1. */
+int32_t dk_debug_top_view(uint32_t *out);
+
 /* Set the machine type (`op` 1) or the filter type (`op` 2) of `track` 0 to 15 of the active kit through the firmware's own kit commit, the call a chooser commit makes (calibration setup; never a raw write of the Sound byte). Only for the debug module's SETUP command, from the UI task. A machine type must be a stock one (below the device's `stock_types`) or a run-time type of a loaded module; a filter type a stock one, 0 to 5. Returns 0 when the firmware reports the new type afterwards, DK_E_RANGE (op, track or type not offered), or DK_E_STATE: no project yet, the commit is not in the image, or the firmware kept the old type (the machine permit refused it on that track, the project's settings mode makes the setter skip the write, or the read-back differs). See <dk/platform/debug.h>. Context: ui. Since runtime 0.10.4. */
 int32_t dk_debug_setup(uint32_t op, uint32_t track, uint32_t ty);
 

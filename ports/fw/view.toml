@@ -20,9 +20,38 @@ cpu = "cf"
 devices = ["dt2", "dn2"]
 rule = { kind = "cf_literal", hash = "f3db18895f27b74988ae2789f17c1090", offset = 0xa, len = 4 }
 mark = "D"
-users = ["tests/regression"]
-codegen = false
+users = ["tests/regression", "core/runtime"]
 doc = "The Brain singleton pointer variable (u32 in RAM, 0 until the Brain is made): the operand of the `tst.l` at the start of the Brain getter (cf.view.fn.brain.instance). The address of each firmware is in its port file. The device tests read the view stack through it (the [ui] brain_ptr fact of the device files)."
+
+# The main UI's STL view list. Sources: the key walker on DT2 1.17 and DN2 1.12
+# (see devices/*.toml [ui]). Offsets are relative to the controller or list node.
+[[struct]]
+name = "cf.view.struct.ViewStackBrain"
+size = 0x44
+fields = [{ name = "controller", off = 0x40, type = "u32" }]
+mark = "D"
+users = ["core/runtime"]
+doc = "Brain prefix to the first word of the embedded ViewController, as returned by brain.view_manager."
+
+[[struct]]
+name = "cf.view.struct.ViewStackController"
+size = 0x20
+fields = [{ name = "sentinel", off = 0x14, type = "u32" }]
+mark = "D"
+users = ["core/runtime"]
+doc = "ViewController prefix through the intrusive view-list sentinel."
+
+[[struct]]
+name = "cf.view.struct.ViewStackNode"
+size = 0xc
+fields = [
+  { name = "next", off = 0x0, type = "ptr" },
+  { name = "prev", off = 0x4, type = "ptr" },
+  { name = "view", off = 0x8, type = "ptr" },
+]
+mark = "D"
+users = ["core/runtime"]
+doc = "View list node prefix. The sentinel's prev link points to the view currently at the top of the stack."
 
 [[fn]]
 name = "cf.view.fn.brain.push"

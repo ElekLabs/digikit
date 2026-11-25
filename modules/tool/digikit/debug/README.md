@@ -29,6 +29,26 @@ Start registers the span sink and the clock (`dk_span_sink_set`); stop and fini 
 Start trace also starts aggregate profiling if needed. It records up to 256 completed spans, ordered by start time after stopping. Spans beyond capacity and spans already in flight at the start of the capture increment the dropped count. A new aggregate-only run discards the previous trace. Reset clears both the aggregate counters and the trace, and starts a new generation if a trace exists. A trace read returns `DK_E_STATE` while profiling runs, before the first capture, or when the requested generation is stale. Trace needs a span clock and runtime 0.11.3 or newer.
 
 
+## Observe firmware views
+
+The optional `ui.view` observer reads the top of the firmware's input view
+stack on UI passes. It is off by default. Arming it gives a readable initial
+snapshot, and subsequent changes emit `VIEW_CHANGED` at debug level (3) in
+the normal event log. The class field is the firmware vtable, not a specific
+meaning for a reused dialog. A change that opens and closes inside a single
+UI pass may not be sampled. No pixels or input acknowledgements are used.
+
+Use `withViewObserver(session, events, run)` from `@digi/dk-session` to
+check support, arm the observer for a scenario, and restore its settings
+afterward. Use the caller's existing `RuntimeEvents.until('VIEW_CHANGED', …)`
+and match the active generation. With a regression fixture, `rt.listen()`
+already connects that listener to `rt.ui.tap({ until })`. If the capability
+is missing, the callback isn't entered and no panel input is sent.
+
+The observer needs resident runtime 0.13.1 and matching debug module.
+DT2 1.17 and DN2 1.12 have view stack bindings. Syntakt's observer is
+unsupported. Its existing debug features do not depend on this observer.
+
 ## Setup
 
 SETUP (0x0a) sets the machine type (op 1) or the filter type (op 2) of a track for calibration runs: body u8 op, u8 track (0 to 15), u8 type; reply u8 seq. The request is queued and the UI task performs it in the module's tick through the firmware's own KitActive commit (`dk_debug_setup`: the call the machine or filter chooser makes, anchors `cf.machine.fn.set_kit` and `cf.filter.fn.set_kit`; never a raw write of the Sound byte, finding 148). The log event SETUP_DONE (kind 49: op, track, type, seq, status) reports it. Status 0: the firmware reports the new type afterwards. -46 (DK_E_RANGE): a type no chooser offers (machine: a stock type below `stock_types` of the device, or a run-time type of the profile; filter: 0 to 5, module filter types are not offered yet). The core does not look whether a module has loaded a run-time type (a row nobody loaded plays as type 0): `trackSetup` makes the check by default (its `runTime` option sets another range or turns it off with `false`): it reads the types of the MODULES reply before SETUP and answers -46 itself. -53 (DK_E_STATE): the firmware kept the old type (the machine permit refused it on that track, or the project's settings mode makes the setter skip the write), the read-back differs from the request, or there is no project. -72 (DK_E_AGAIN): the module was unloaded with the request queued; it never ran. Refused at the request: a bad body (-50), an op or track out of range (-60), a request while one is queued (-12), and -53 until the track watch has its baseline (the project is loaded and scanned, about 2 s after the first UI pass). The host side is `DkSession.setup` and `trackSetup` (packages/dk-session/src/setup.ts), which waits on SETUP_DONE. Docs: docs/findings/150-machine-and-filter-setters.md.

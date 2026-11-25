@@ -98,6 +98,7 @@ pub(super) static ROWS: Group<ImportRows> = Group::new(ImportRows {
     dk_debug_poll: device_row!(DkDebugPollFn, debug_poll),
     dk_debug_track_type: device_row!(DkDebugTrackTypeFn, debug_track_type),
     dk_debug_selected_params: device_row!(DkDebugSelectedParamsFn, debug_selected_params),
+    dk_debug_top_view: device_row!(DkDebugTopViewFn, crate::platform::debug_top_view),
     dk_debug_setup: device_row!(DkDebugSetupFn, debug_setup),
     dk_device_track_count: device_row!(DkDeviceTrackCountFn, device_track_count),
     dk_selected_track: device_row!(DkSelectedTrackFn, selected_track),

@@ -1,6 +1,6 @@
 [module]
 id = "core/runtime"
-version = "0.13.0"
+version = "0.13.1"
 name = "digikit runtime"
 category = "core"
 role = "runtime"
@@ -14,7 +14,7 @@ conflicts = []
 ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12", "st-1.42"]
 # What the runtime does without on a firmware that lacks the anchor or hook: the DSP block counter (`dkrt_blocks` reports 0) and the stock sample worker
 # (`worker.rs` queues nothing).
-optional_anchors = ["cf.link.site.block_isr.counter_lit", "cf.samples.fn.worker.get", "cf.samples.fn.worker.queue", "cf.machine.fn.set_kit", "cf.filter.fn.set_kit", "cf.filter.fn.get"]
+optional_anchors = ["cf.link.site.block_isr.counter_lit", "cf.samples.fn.worker.get", "cf.samples.fn.worker.queue", "cf.machine.fn.set_kit", "cf.filter.fn.set_kit", "cf.filter.fn.get", "cf.view.value.brain"]
 
 [targets]
 "dt2-1.17" = "experimental"
