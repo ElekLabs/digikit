@@ -465,7 +465,13 @@ export async function inspect(
   } catch (error) {
     throw new Error(`${(error as Error).message}${await moduleResultsNote(session, plan, results)}`);
   }
-  const capacity = await bounded(() => dk.capacity());
+  // the effect row is claimed in the commit's WRITE pass: the capacity word follows the module list, so wait for it
+  const capacity = await pollEmulated(
+    session,
+    () => bounded(() => dk.capacity()),
+    (c) => c.FX_SLOTS?.used === (wet ? 1 : 0),
+    { emulatedMs: 10_000, intervalMs: 200, message: 'the FX_SLOTS in use' },
+  );
   expect(capacity.FX_SLOTS).toEqual({ limit: slots, used: wet ? 1 : 0, largest: 0 });
   const settings = await bounded(() => readSettingsRecordIfPresent(dk));
   expect(settings === null ? null : settingsValue(settings, 'dk/fault')).toBeNull();
