@@ -17,6 +17,9 @@ import {
 
 export const IMAGE_BUILD = { target: 'build-objects', projects: ['tag:acceptance-image'] };
 // Writes the hash of every committed core object without its source hash (tools/nx/device-bytes.mjs).
+// The fixtures that take the test hook of ports/fw/menu.toml: their port file is the one of the test image (patchkit TEST_SERVICE_USERS).
+const TEST_HOOK_USERS = new Set(['test/svc-test', 'test/local-step']);
+
 export const DEVICE_BYTES = 'patchkit:device-bytes';
 // Writes the hash of the image, plan and address map that `patchkit apply` makes for each acceptance firmware and patch set
 // (tools/nx/device-images.mjs).
@@ -64,7 +67,7 @@ export const deviceTarget = (
       dependsOn.push(`${id}:pack`);
       // a service: the port file that goes on the card with it; the test fixture service takes the port file of the test image (it lists the fixture's hook, which a
       // production port file does not)
-      const portTask = id === 'test/svc-test' ? 'patchkit:ports-test' : 'patchkit:ports';
+      const portTask = TEST_HOOK_USERS.has(id) ? 'patchkit:ports-test' : 'patchkit:ports';
       if (opts.serviceIds?.has(id) && !dependsOn.includes(portTask)) dependsOn.push(portTask);
     }
     if (Object.keys(rec.aliases ?? {}).length) dependsOn.push('pack-aliases');

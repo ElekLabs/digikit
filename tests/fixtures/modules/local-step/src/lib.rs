@@ -1,4 +1,4 @@
-//! The fixture of the owner's two-phase call (`Owner::step`) on the device. A key hook (as the shortcuts service takes it) enters the owner once per key event: `decide` counts the
+//! The fixture of the owner's two-phase call (`Owner::step`) on the device. The test hook (as `test/svc-test` takes it, on the SETTINGS list rebuild) enters the owner once per rebuild: `decide` counts the
 //! step, and `act`, with the owner idle, calls the service's own export `local_step_value`, which enters the owner again (a firmware function that calls back into the service does
 //! the same). So `steps` equals `reentries` and the owner refuses nothing. One nested call, armed through a word of the file, is made inside `decide`: the owner refuses it
 //! and counts one, so a count of 0 means something. The counts are in `LOCAL_STEP_STATS` for a test that reads the file's memory.
@@ -65,14 +65,14 @@ fn decide(owner: &mut LocalStep, _: ()) {
     }
 }
 
-/// One key event: a step whose `act` calls the service's export. `None` without an owner.
+/// One run of the hook: a step whose `act` calls the service's export. `None` without an owner.
 pub fn step_once() -> Option<u32> {
     DK_SVC_OWNER.step((), decide, |(), _: &Outside| local_step_value())
 }
 
-/// The entry `hooks.s` calls on a key event (C calling convention, the UI task). The key always goes on to the stock walker.
+/// The entry `hooks.s` calls on a run of the hook (C calling convention, the UI task). The stock code always goes on through the tail.
 #[cfg_attr(target_arch = "m68k", no_mangle)]
-pub extern "C" fn dk_local_step_key() {
+pub extern "C" fn dk_local_step_run() {
     let _ = step_once();
 }
 
@@ -93,7 +93,7 @@ dkrt_svc_rt::service!(
     "local-step",
     &[],
     parts = [],
-    hooks = [("cf.input.hook.key_event", hooks::local_step_key_hook)],
+    hooks = [("cf.menu.hook.settings_list.test", hooks::local_step_hook)],
     fills = [],
     exports = [("local_step_value", local_step_value)]
 );

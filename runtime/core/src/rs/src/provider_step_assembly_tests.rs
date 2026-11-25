@@ -1,10 +1,10 @@
-//! The owner's two-phase call over the fixture `local-step` (the service whose key hook runs `Owner::step`): through the fixture's own entries as the runtime calls them. A step
+//! The owner's two-phase call over the fixture `local-step` (the service whose test hook runs `Owner::step`): through the fixture's own entries as the runtime calls them. A step
 //! enters the owner once, its `act` phase calls the service's own export (what a firmware function that calls back into the service does) and finds the owner idle; one deliberate
 //! nested call inside the owner is refused and counted, so a count of 0 means something. The device test (`runtime/core/tests/services/owner-step.device.test.ts`) reads the same
 //! words from the running file.
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_fixture_local_step::{
-    dk_local_step_key, dk_svc_start, dk_svc_stop, step_once, ARM, DK_SVC_OWNER, LOCAL_STEP_STATS,
+    dk_local_step_run, dk_svc_start, dk_svc_stop, step_once, ARM, DK_SVC_OWNER, LOCAL_STEP_STATS,
 };
 
 fn words() -> [u32; 3] {
@@ -21,7 +21,7 @@ fn a_step_counts_one_entry_and_its_act_finds_the_owner_idle() {
 
     // the act phase called the export (42), which entered the owner again
     assert_eq!(step_once(), Some(42));
-    dk_local_step_key();
+    dk_local_step_run();
     assert_eq!(words(), [2, 2, 0], "steps equal re-entries");
     assert_eq!(DK_SVC_OWNER.refused(), 0, "no call found the owner busy");
 

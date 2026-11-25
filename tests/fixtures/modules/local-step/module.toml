@@ -8,7 +8,7 @@ service = "local-step"
 type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "Fixture for the owner's two-phase call: a key hook that runs Owner::step and calls the service's own export from the act phase"
+summary = "Fixture for the owner's two-phase call: a hook on the SETTINGS list rebuild that runs Owner::step and calls the service's own export from the act phase"
 requires = []
 conflicts = []
 
@@ -19,17 +19,17 @@ conflicts = []
 [[export]]
 name = "local_step_value"
 
-# The hook it takes (ports/fw/input.toml): the entry of the firmware's key walker, as the shortcuts service takes it (the routine of src/hooks.s runs in place of the first
-# 8 bytes of the walker and leaves through the tail of its site). `init` repeats it with dk_service_declare_hook (`service!`). The fixture never consumes a key.
+# The hook it takes: the test hook of ports/fw/menu.toml, the site of the last step of the SETTINGS list rebuild (the one `test/svc-test` takes; the port file of the test image
+# lists it). The routine of src/hooks.s runs in place of the displaced instructions and leaves through the tail. `init` repeats it with dk_service_declare_hook (`service!`).
 [[hook]]
-name = "cf.input.hook.key_event"
-entry = "local_step_key_hook"
+name = "cf.menu.hook.settings_list.test"
+entry = "local_step_hook"
 
 [[object]]
 path = "build/local-step.dko.json"
 sources = ["Cargo.toml"]
 place = "cf.expansion"
 
-# The tail of the hook of ports/fw/input.toml (`hook.<hook>.tail`: the displaced instructions, then the end of the site).
+# The tail of the hook of ports/fw/menu.toml (`hook.<hook>.tail`: the displaced instructions, then the end of the site).
 [object.externs]
-local_step_t_key = "hook.cf.input.hook.key_event.tail"
+local_step_t_tail = "hook.cf.menu.hook.settings_list.test.tail"
