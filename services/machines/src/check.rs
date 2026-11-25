@@ -46,8 +46,9 @@ pub(crate) unsafe fn counts_of(reg: *const u8) -> (u32, u32, u32, u32, u32) {
 
 /// The records meet the rule of `validate::Acc` (row counts, sizes, fields, texts, a machine key and an action's parameter once), and the native pages are at most two a machine.
 /// The first problem's code is the refusal.
+#[allow(unused_variables)]
 pub(crate) unsafe fn ck_counts(c: &Ctx<'_>) -> i32 {
-    let reg = c.reg;
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let mut acc = Acc::new();
     let mut first = OK;
     each(reg, |kind, b| {
@@ -67,7 +68,7 @@ pub(crate) unsafe fn ck_counts(c: &Ctx<'_>) -> i32 {
     if first != OK {
         return first;
     }
-    let (_, nm, _, _, nn) = counts_of(reg);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     if nn > 2 * nm {
         return E_FORMAT;
     }
@@ -75,9 +76,10 @@ pub(crate) unsafe fn ck_counts(c: &Ctx<'_>) -> i32 {
 }
 
 /// An action names a parameter of the file and code inside the image (that a parameter has one action at most is the rule of `ck_counts`).
+#[allow(unused_variables)]
 pub(crate) unsafe fn ck_actions(c: &Ctx<'_>) -> i32 {
-    let (reg, image_size) = (c.reg, c.image_size);
-    let (np, _, _, _, _) = counts_of(reg);
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     let mut bad_act = OK;
     each(reg, |kind, b| {
         if kind == KIND_ACTION && (rd32(b) >= np || rd32(b.add(4)) >= image_size) {
@@ -88,9 +90,10 @@ pub(crate) unsafe fn ck_actions(c: &Ctx<'_>) -> i32 {
 }
 
 /// Native pages: each record, the claimed pages, the bindings against the machine's parameters.
-pub(crate) unsafe fn ck_native<C: CoreApi>(_core: &C, c: &Ctx<'_>) -> i32 {
+#[allow(unused_variables)]
+pub(crate) unsafe fn ck_native<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
-    let (np, _, _, _, _) = counts_of(reg);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     let mut native_set = PageSet::<MAX_MACH>::new();
     let mut bad_native = OK;
     each(reg, |kind, b| {
@@ -174,9 +177,10 @@ pub(crate) unsafe fn ck_native<C: CoreApi>(_core: &C, c: &Ctx<'_>) -> i32 {
 }
 
 /// Pages need a device that has page rows.
+#[allow(unused_variables)]
 pub(crate) unsafe fn ck_device(c: &Ctx<'_>) -> i32 {
-    let (reg, inf) = (c.reg, c.inf);
-    let (_, _, ng, _, _) = counts_of(reg);
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     // pages need a device that has page rows
     let has_pages = iw(inf, w::PG_ROWS) != 0;
     if ng != 0 && !has_pages {
@@ -186,9 +190,10 @@ pub(crate) unsafe fn ck_device(c: &Ctx<'_>) -> i32 {
 }
 
 /// The parameter, page and machine records, in file order.
+#[allow(unused_variables)]
 pub(crate) unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
-    let (reg, inf) = (c.reg, c.inf);
-    let (np, _, _, _, _) = counts_of(reg);
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     // pass 2: the records
     let has_pages = iw(inf, w::PG_ROWS) != 0;
     let (p_first, knobs, slot_base) = (
@@ -279,9 +284,10 @@ pub(crate) unsafe fn ck_records<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
 }
 
 /// A page belongs to a machine of the same file.
+#[allow(unused_variables)]
 pub(crate) unsafe fn ck_owners<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
-    let reg = c.reg;
-    let (_, _, _, _, _) = counts_of(reg);
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     // a page belongs to a machine of the same file
     let mut bad = OK;
     each(reg, |kind, b| {
@@ -304,9 +310,10 @@ pub(crate) unsafe fn ck_owners<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
 }
 
 /// Free reserved page and parameter rows.
-pub(crate) unsafe fn ck_rows<C: CoreApi>(_core: &C, c: &Ctx<'_>) -> i32 {
-    let (reg, inf) = (c.reg, c.inf);
-    let (np, _, ng, _, _) = counts_of(reg);
+#[allow(unused_variables)]
+pub(crate) unsafe fn ck_rows<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
+    let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
+    let (np, nm, ng, na, nn) = counts_of(reg);
     let s = c.state;
     // free reserved page and parameter rows
     return capacity::registry_rows(
