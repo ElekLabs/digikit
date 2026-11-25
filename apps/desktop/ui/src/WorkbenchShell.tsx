@@ -25,6 +25,8 @@ import type { NativeAudioStatus } from '@digi/workbench-core/runtime/runtime.ts'
 import { bootingStatus } from './boot-core';
 import { bumpCardRefresh, cardRefresh } from './card-state';
 import CardPanel from './CardPanel';
+import SessionMenu from './SessionMenu';
+import { createWorkspaceSession } from './workspace-session';
 import { connectionView } from '@digi/workbench-core/transfer/connection-core.ts';
 import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { createTargetHealth } from './target-health';
@@ -59,6 +61,7 @@ import { audioProcessorLabel, dspLine } from './dsp-core';
 import { running as flashRunning } from '@digi/workbench-core/firmware/firmware-core.ts';
 import FirmwarePage from '@digi/workbench-core/ui/firmware/FirmwarePage.tsx';
 import FirmwareToolbar from './emulator/FirmwareToolbar';
+import { bindSessionMenu } from './emulator/session-menu-actions';
 import Navigation from './shell/Navigation';
 import StatusBar from './shell/StatusBar';
 import TransferPage from '@digi/workbench-core/ui/transfer/TransferPage.tsx';
@@ -310,6 +313,40 @@ export default function WorkbenchShell(
     setInspectorTab('profile');
     setInspectorOpen(true);
   };
+  let captureInput: HTMLInputElement | undefined;
+  const openCapture = async (file: Pick<File, 'name' | 'text'>) => {
+    const capture = await savedPerformance.open(file);
+    if (!capture || capture !== savedPerformance.current()) return;
+    showProfile();
+    showCaptureControls(capture.dsp ? 'DSP blocks' : capture.trace ? 'Timeline' : 'Spans');
+  };
+  const sessionHost = untrack(() => props.host.sessions);
+  const workspaceSession =
+    sessionHost &&
+    createWorkspaceSession({
+      host: sessionHost,
+      pickFirmware: (start) => props.host.emu.pickSyx(start),
+      firmware,
+      storage: app.storage,
+      selectEmulator: () => app.target.selectTarget({ kind: 'emulator' }),
+      confirm: (message) => window.confirm(message),
+      blocked: () => busy('target') || busy('emulator') || !!spanRecording()?.running(),
+      openCapture,
+      clearCapture: savedPerformance.returnToLive,
+    });
+  let sessionMenu: HTMLDetailsElement | undefined;
+  const sessionPaneVisible = () => page() === 'run' && isEmulator() && !app.target.switching();
+  if (workspaceSession && sessionHost && untrack(() => props.host.emu.inApp())) {
+    bindSessionMenu({
+      host: sessionHost,
+      actions: workspaceSession,
+      enabled: () => sessionPaneVisible() && !workspaceSession.disabled(),
+      reveal: () => {
+        if (sessionMenu) sessionMenu.open = true;
+      },
+      report: setError,
+    });
+  }
   const showMetrics = () => {
     setPage('run');
     setInspectorTab('metrics');
@@ -529,6 +566,17 @@ export default function WorkbenchShell(
       }}
     >
       <TitleBar onError={(m) => setError(m)} />
+      <input
+        ref={captureInput}
+        type="file"
+        hidden
+        accept=".json,application/json"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = '';
+          if (file) void openCapture(file);
+        }}
+      />
 
       <Show when={alertText()}>
         {(message) => (
@@ -563,6 +611,11 @@ export default function WorkbenchShell(
             <FirmwareToolbar
               firmware={firmware}
               hidden={!isEmulator()}
+              sessionMenu={
+                <Show when={sessionPaneVisible() && workspaceSession}>
+                  {(session) => <SessionMenu session={session()} ref={(node) => (sessionMenu = node)} />}
+                </Show>
+              }
               device={device()}
               busy={busy('emulator')}
               reloadKey={reloadKey}
@@ -600,6 +653,8 @@ export default function WorkbenchShell(
                     liveDsp={performanceOpen() && performanceView() === 'DSP blocks' && !savedPerformance.current()}
                     savedCapture={savedPerformance.current()}
                     showCaptureControls={showCaptureControls}
+                    openCapture={() => captureInput?.click()}
+                    captureContext={workspaceSession?.captureContext}
                     collectSpans={performanceOpen() && source.target.kind !== 'none'}
                     profileGeneration={isEmulator() ? emulatorGeneration() : 1}
                     onSpanRecording={setSpanRecording}

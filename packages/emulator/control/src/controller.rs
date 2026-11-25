@@ -1631,6 +1631,9 @@ impl Actor {
         let Some(image) = image else {
             return false;
         };
+        if let Some(used) = cards::private_card(image) {
+            return used;
+        }
         self.card_folder
             .as_ref()
             .is_some_and(|f| f.sync && f.image == image)
@@ -1642,6 +1645,10 @@ impl Actor {
     fn adopt_card_folder(&mut self, card: Option<&PathBuf>) {
         // A card `default_card` built from the device's folder: that folder is its +Drive folder.
         self.auto_card = None;
+        if card.is_some_and(|image| cards::private_card(image).is_some()) {
+            self.card_folder = None;
+            return;
+        }
         if let Some((image, dir)) = self.next_auto.take()
             && card == Some(&image)
         {
@@ -2320,6 +2327,7 @@ impl Actor {
             json!({
                 "base_sha256": l.base_sha,
                 "syx_sha256": firmware::sha256_hex(&l.current),
+                "card": l.card,
                 "injected": l.base.as_ref() != Some(&l.current),
                 "runtime": self.runtime_info,
             })
@@ -2649,6 +2657,15 @@ impl Actor {
     /// The mirror writes to the folder of the loaded device: the user's choice, else `plus_drive/<device>/` (made if missing). A
     /// change of folder starts a new mirror; the caller has flushed the old one to its own folder first.
     fn mirror_select(&mut self) {
+        if self
+            .loaded
+            .as_ref()
+            .and_then(|l| l.card.as_deref())
+            .is_some_and(|image| cards::private_card(image).is_some())
+        {
+            self.mirror = None;
+            return;
+        }
         if !self.mirror_on {
             return;
         }
@@ -2858,6 +2875,11 @@ impl Actor {
             .as_ref()
             .and_then(|l| l.card.clone())
             .ok_or_else(|| RpcError::bad_params("no card is loaded"))?;
+        if cards::private_card(&image).is_some() {
+            return Err(RpcError::bad_params(
+                "use Revert to last save to reset a Workbench session card",
+            ));
+        }
         let overlay = overlay_path(&image);
         let aside = set_aside_overlay(&image)
             .map_err(|e| RpcError::io(format!("could not set {} aside: {e}", overlay.display())))?;
@@ -2875,7 +2897,28 @@ impl Actor {
     /// base image it gives the card the guest sees (`tools/emulator/card_overlay.py`).
     fn rpc_card_overlay(&mut self, p: &Params) -> RpcResult {
         let path = p.str("path")?.to_string();
-        let sectors = self.with_runtime(|r| Ok(r.card_overlay()))?;
+        if let Some(expected) = p.opt_str("card")?
+            && (self.loaded.as_ref().and_then(|l| l.card.as_deref()) != Some(Path::new(expected))
+                || self.reset_pending
+                || self.patch_job.is_some()
+                || self.card_job.is_some()
+                || self.job.is_some())
+        {
+            return Err(RpcError::new(
+                code::STALE_SESSION,
+                "the card is no longer mounted and idle",
+            ));
+        }
+        let require_ready = p.opt_bool("require_ready")?.unwrap_or(false);
+        let (sectors, writes) = self.with_runtime(|r| {
+            if require_ready && !r.status().ready {
+                return Err(RpcError::new(
+                    code::BUSY,
+                    "wait for the emulator to finish booting before saving its card",
+                ));
+            }
+            Ok((r.card_overlay(), r.card_write_count()))
+        })?;
         let mut out = Vec::with_capacity(sectors.len() * (8 + 64 + 512));
         for s in &sectors {
             out.extend_from_slice(&s.sector.to_le_bytes());
@@ -2883,7 +2926,12 @@ impl Actor {
             out.extend_from_slice(&s.data);
         }
         std::fs::write(&path, &out).map_err(|e| RpcError::io(format!("{path}: {e}")))?;
-        Ok(json!({"path": path, "sectors": sectors.len()}))
+        Ok(json!({
+            "path": path, "sectors": sectors.len(), "writes": writes,
+            "base_sha256": self.loaded.as_ref().map(|l| &l.base_sha),
+            "syx_sha256": self.loaded.as_ref().map(|l| firmware::sha256_hex(&l.current)),
+            "dsp_enabled": self.dsp,
+        }))
     }
 
     /// `midi.in {bytes | file, period?}` queues bytes on the MIDI DIN input (UART9), one per `period` instructions
@@ -3812,6 +3860,14 @@ impl Actor {
     ) -> Result<Option<Value>, RpcError> {
         let path = p.str("syx")?;
         let bytes = std::fs::read(path).map_err(|e| RpcError::io(format!("{path}: {e}")))?;
+        if let Some(expected) = p.opt_str("source_sha256")?
+            && firmware::sha256_hex(&bytes) != expected
+        {
+            return Err(RpcError::new(
+                code::FIRMWARE_REJECTED,
+                "the selected firmware differs from the saved session",
+            ));
+        }
         self.firmware_load(p, bytes, reply)
     }
 
@@ -3935,6 +3991,13 @@ impl Actor {
             None => None,
         };
         let new = Analysis::of(&bytes).map_err(&rejected)?;
+        if let Some(expected) = p.opt_str("image_sha256")?
+            && new.sha256 != expected
+        {
+            return Err(rejected(
+                "the patched image differs from the saved session".into(),
+            ));
+        }
         if let Some(patch) = &patch
             && let Some(base) = &patch.base_sha256
             && *base != new.sha256
@@ -4053,7 +4116,13 @@ impl Actor {
             let card = card_param
                 .clone()
                 .or_else(|| self.default_card(&bytes, stock_base.as_deref()));
-            if base_sha == new.sha256 {
+            // A generic stock ready snapshot contains its own card overlay
+            // and card-dependent RAM. A private card needs a ready state
+            // built for its own image and checkpoint, even on stock MAIN.
+            let private = card
+                .as_deref()
+                .is_some_and(|image| cards::private_card(image).is_some());
+            if base_sha == new.sha256 && !private {
                 self.load_stock(bytes, card, new, &mut report, start)?
             } else {
                 self.load_patched(
@@ -4574,7 +4643,14 @@ fn card_identity(card: &Path) -> Option<String> {
             format!("p:{}:{modified}", card.display())
         }
     };
-    Some(format!("{content}:{}:{overlay}", meta.len()))
+    let private = cards::private_card(card).map_or("", |used| {
+        if used {
+            ":session-used"
+        } else {
+            ":session-fresh"
+        }
+    });
+    Some(format!("{content}:{}:{overlay}{private}", meta.len()))
 }
 
 /// A staging dir name inside the snapshot root for the cold boot of `stem`: unique per process and call.
@@ -5021,6 +5097,12 @@ impl Actor {
             Some(base) => Some(Analysis::of(base).map_err(&rejected)?),
             None => None,
         };
+        if card
+            .as_deref()
+            .is_some_and(|image| cards::private_card(image).is_some())
+        {
+            self.adopt_card_folder(card.as_ref());
+        }
         self.loaded = Some(Loaded {
             base: base_bytes,
             base_sha,
@@ -5360,6 +5442,16 @@ impl Actor {
     }
 
     fn rpc_card_load(&mut self, p: &Params, reply: &RpcReply) -> Result<Option<Value>, RpcError> {
+        if self
+            .loaded
+            .as_ref()
+            .and_then(|l| l.card.as_deref())
+            .is_some_and(|image| cards::private_card(image).is_some())
+        {
+            return Err(RpcError::bad_params(
+                "this session has a private card; close it before loading another card",
+            ));
+        }
         let dir = PathBuf::from(p.str("dir")?);
         let name = p
             .opt_str("name")?

@@ -1,6 +1,7 @@
 // The real Host: the only module that imports Tauri's `invoke` (a lint rule keeps it so). Bytes go as the raw request body with the
 // small arguments in headers, as the Rust commands take them (`tauri::ipc::Request`); the names and arguments follow the Rust signatures.
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { createFirmwareSymbols } from '../firmware-symbols';
 import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
 import type { EmuRpc, Host, SymbolImageMap, SymbolRelease } from '@digi/workbench-core/host/host.ts';
@@ -25,6 +26,12 @@ export function createTauriHost(): Host {
   }
   // Catalog requests stay ordered across tab unmounts so an older request cannot replace the active frame.
   let catalogTail = Promise.resolve();
+  let sessionMenuTail = Promise.resolve();
+  function setSessionActionsEnabled(enabled: boolean) {
+    const result = sessionMenuTail.then(() => invoke<void>('session_set_actions_enabled', { enabled }));
+    sessionMenuTail = result.catch(() => {});
+    return result;
+  }
   function catalogFrame(path: string, sha256: string, entry?: number) {
     const result = catalogTail.then(() => invoke<string>('symbols_catalog_frame', { path, sha256, entry }));
     catalogTail = result.then(
@@ -35,6 +42,20 @@ export function createTauriHost(): Host {
   }
   return {
     rpc,
+    sessions: {
+      onAction: (receive) => listen<string>('workbench-session-action', ({ payload }) => receive(payload)),
+      setActionsEnabled: setSessionActionsEnabled,
+      pick: (kind, name) => invoke('session_pick', { kind, name }),
+      open: (file) => invoke('session_open', { file }),
+      create: (input) => invoke('session_create', { input }),
+      mount: (root, firmware) => invoke('session_mount', { root, firmware }),
+      release: (card) => invoke('session_release', { card }),
+      save: (root, card, name) => invoke('session_save', { root, card, name }),
+      preserve: (card) => invoke('session_preserve', { card }),
+      attach: (root, source) => invoke('session_attach', { root, source }),
+      readCapture: (root, path) => invoke('session_read_capture', { root, path }),
+      openAttachment: (root, path) => invoke('session_open_attachment', { root, path }),
+    },
     symbols: createFirmwareSymbols(localStorageKeyValue(), {
       pick: (kind) => invoke<string | null>('symbols_pick', { kind }),
       read: (kind, path) => invoke<SymbolImageMap[]>('symbols_read', { kind, path }),

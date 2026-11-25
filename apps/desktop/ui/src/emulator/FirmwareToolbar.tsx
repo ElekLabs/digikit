@@ -1,4 +1,4 @@
-import { Show, untrack } from 'solid-js';
+import { Show, untrack, type JSX } from 'solid-js';
 import { deviceNameOf, registry } from '@digi/workbench-core/data/device-profiles.ts';
 import { audioProcessorLabel } from '../dsp-core';
 import DefaultModules from '@digi/workbench-core/ui/firmware/DefaultModules.tsx';
@@ -31,6 +31,7 @@ type ToolbarFirmware = Pick<
 export default function FirmwareToolbar(props: {
   firmware: ToolbarFirmware;
   hidden: boolean;
+  sessionMenu?: JSX.Element;
   device: string;
   busy: boolean;
   reloadKey: string;
@@ -74,6 +75,7 @@ export default function FirmwareToolbar(props: {
   return (
     <header class="page-head emu-head" hidden={props.hidden}>
       <h2>Emulator</h2>
+      {props.sessionMenu}
       <span class="file-chip" title={fileLabel()}>
         <button
           type="button"

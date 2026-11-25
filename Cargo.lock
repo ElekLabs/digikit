@@ -1126,6 +1126,7 @@ dependencies = [
  "elektron-native-boot",
  "emmc-card",
  "fixed-resample",
+ "libc",
  "midir",
  "objc2",
  "objc2-foundation",

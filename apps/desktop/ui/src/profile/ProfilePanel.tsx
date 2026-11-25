@@ -56,6 +56,8 @@ export default function ProfilePanel(props: {
   liveDsp?: boolean;
   savedCapture?: PerformanceCapture;
   showCaptureControls?(view?: PerformanceView): void;
+  openCapture?(): void;
+  captureContext?(): import('./recorder').SessionCaptureContext | undefined;
   onSpanRecording?(recording?: SpanRecording): void;
   openCatalog?(path: string, sha256: string, entry: number): void;
   source: TargetBinding;
@@ -74,6 +76,7 @@ export default function ProfilePanel(props: {
   const recorder = createRecorder({
     session: () => source.session(),
     rpc: onEmulator ? host?.rpc : undefined,
+    sessionContext: onEmulator ? props.captureContext : undefined,
     loadLibrary: app.loadLibrary,
     prof,
     names: host && prof ? (onEmulator ? createEmulatorNames : createDeviceNames)(host, prof) : undefined,
@@ -153,6 +156,13 @@ export default function ProfilePanel(props: {
               <button type="button" class="act quiet" onClick={() => show()()}>
                 Capture controls
               </button>
+              <Show when={props.openCapture}>
+                {(open) => (
+                  <button type="button" class="act quiet" onClick={() => open()()}>
+                    Open capture…
+                  </button>
+                )}
+              </Show>
               <Show when={props.savedCapture?.spans}>
                 <button type="button" class="act quiet" onClick={() => show()('Spans')}>
                   View spans

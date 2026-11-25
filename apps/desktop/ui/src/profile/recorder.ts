@@ -127,8 +127,15 @@ export type ProfileReading =
       note?: string;
     };
 
+export interface SessionCaptureContext {
+  id: string;
+  saved_checkpoint: string | null;
+  working_card: boolean;
+}
+
 export interface ProfileDeps {
   session: () => Promise<ProfileSession>;
+  sessionContext?: () => SessionCaptureContext | undefined;
   /** The controller's rpc: set when the target is the emulator (Start then also starts `cf.profile` and `sharc.profile`). */
   rpc?: EmuRpc;
   loadLibrary: (device: string) => Promise<LibraryModule[]>;
@@ -226,6 +233,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
   let namesImage: ProfileInfo | undefined;
   let namesRequest = 0;
   let captureImage: { info: ProfileInfo; sha256: string; loads?: LoadTableJson } | undefined;
+  let sessionContext: SessionCaptureContext | undefined;
   let traceGeneration: number | undefined;
   const dspBlocks = createDspBlockRecording();
   let frozenTrace: FrozenTrace | undefined;
@@ -453,6 +461,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
     const id = runId(deps.rpc ? 'emu' : 'dev', now());
     const target = (info.port ?? 'unknown').split('-')[0] ?? 'unknown';
     const run: BuildInput['run'] = { id, target };
+    if (sessionContext) run.session = sessionContext;
     const start = captureImage;
     if (start && !restarts.cf && !restarts.sharc && sameImage(start.info, info)) {
       if (start.loads?.modules.length) await refreshNames(s, info);
@@ -556,6 +565,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       frozenTrace = undefined;
       traceGeneration = undefined;
       captureImage = undefined;
+      sessionContext = deps.sessionContext?.();
       const info = await s.info();
       device = (info.port ?? '').split('-')[0] || device;
       const capabilities = await measurement.inspect(device, s, imageKey(info), false);
@@ -637,6 +647,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
       kept = {};
       stoppedCapture = undefined;
       frozenTrace = undefined;
+      sessionContext = resetState.running ? deps.sessionContext?.() : undefined;
       await captureIdentity(s, info);
       restarts = {};
       try {
@@ -657,7 +668,7 @@ export function createRecorder(deps: ProfileDeps): Recorder {
         capture = await capturedData(s, info, all, parts);
       }
       const doc = buildProfile(capture);
-      return { text: `${JSON.stringify(doc)}\n`, name: `${capture.run.id}.dkprof.json` };
+      return { text: `${JSON.stringify(doc)}\n`, name: `${capture.run.id}.capture.json` };
     },
   };
 }

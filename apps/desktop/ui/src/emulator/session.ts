@@ -70,5 +70,11 @@ export function createEmulatorSession(options: SessionOptions) {
   });
   onMount(() => void start());
 
-  return { runtime: (): SessionRuntime | undefined => runtime(), outsideApp, buildInfo, signal };
+  return {
+    runtime: (): SessionRuntime | undefined => runtime(),
+    stopSession: async () => runtime()?.stop(),
+    outsideApp,
+    buildInfo,
+    signal,
+  };
 }

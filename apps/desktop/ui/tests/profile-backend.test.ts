@@ -296,6 +296,8 @@ describe('the emulator', () => {
   test('Stop keeps the instruction profiles for Export and switches every profile off', async () => {
     const st = state({ elapsed: 5000n });
     const rpcCalls: string[] = [];
+    const started = { id: 'listening-session', saved_checkpoint: 'saved-at-start', working_card: true };
+    let context = started;
     const rec = createRecorder({
       session: async () => fakeSession(st),
       rpc: fakeRpc(rpcCalls, {
@@ -304,8 +306,10 @@ describe('the emulator', () => {
       }),
       loadLibrary: library,
       now: () => NOW,
+      sessionContext: () => context,
     });
     await rec.start();
+    context = { ...started, saved_checkpoint: 'saved-later' };
     st.elapsed = 5000n;
     rpcCalls.length = 0;
     await rec.stop();
@@ -319,9 +323,10 @@ describe('the emulator', () => {
     const f = await rec.exportFile();
     assert.deepEqual(rpcCalls, [], 'the stopped recording is exported from what Stop kept');
     const doc = JSON.parse(f.text);
-    assert.equal(f.name, 'emu-20261115T123456.dkprof.json');
+    assert.equal(f.name, 'emu-20261115T123456.capture.json');
     assert.equal(doc.schema, 'dk.profile/1');
     assert.equal(doc.run.target, 'dn2');
+    assert.deepEqual(doc.run.session, started);
     assert.equal(doc.span_elapsed_ticks, 5000);
     assert.equal(doc.span_clock_hz, HZ);
     assert.deepEqual(

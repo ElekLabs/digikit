@@ -1,6 +1,6 @@
 {
   "identifier": "main",
-  "description": "The main panel window has no plugin permissions.",
+  "description": "The main panel listens for native menu actions.",
   "windows": ["main"],
-  "permissions": []
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
 }

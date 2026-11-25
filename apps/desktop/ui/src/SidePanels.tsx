@@ -23,6 +23,8 @@ export default function SidePanels(props: {
   liveDsp?: boolean;
   savedCapture?: PerformanceCapture;
   showCaptureControls?(view?: PerformanceView): void;
+  openCapture?(): void;
+  captureContext?(): { id: string; saved_checkpoint: string | null; working_card: boolean } | undefined;
   profileGeneration?: number;
   onSpanRecording?(recording?: SpanRecording): void;
   openCatalog?(path: string, sha256: string, entry: number): void;
@@ -170,6 +172,8 @@ export default function SidePanels(props: {
             liveDsp={props.liveDsp}
             savedCapture={props.savedCapture}
             showCaptureControls={props.showCaptureControls}
+            openCapture={props.openCapture}
+            captureContext={props.captureContext}
             collectSpans={props.collectSpans && (props.active ?? true)}
             onSpanRecording={props.onSpanRecording}
             openCatalog={props.openCatalog}

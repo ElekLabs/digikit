@@ -251,6 +251,10 @@ node tools/devtools/rig_profile.ts digikit/shot --device dn2 --case sample/stere
 For offline WAV and JSON exports, use `mise run wb:cli -- module render` and
 `mise run wb:cli -- audio compare`. See [Render and compare audio from the CLI](INSTRUMENTATION.md#render-and-compare-audio-from-the-cli).
 
+To reuse an emulator card, firmware choice and captures, see
+[Workbench sessions](WORKBENCH-SESSIONS.md). Inspect a saved folder with
+`mise run wb:cli -- session inspect FOLDER`.
+
 For a repository move, capture and compare the [byte manifests](TESTING.md#byte-manifests-for-repository-moves).
 
 Pins are valid only for the firmware and ready state they were recorded with.

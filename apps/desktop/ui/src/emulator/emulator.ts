@@ -4,7 +4,10 @@ import type { createEmulatorActions } from '../emulator-actions';
 import { createEmulatorFirmware } from './firmware';
 import { createEmulatorSession } from './session';
 
-type WorkbenchEmulatorOptions = Omit<Parameters<typeof createEmulatorFirmware>[0], 'emu' | 'runtime' | 'signal'> & {
+type WorkbenchEmulatorOptions = Omit<
+  Parameters<typeof createEmulatorFirmware>[0],
+  'emu' | 'runtime' | 'signal' | 'stopSession'
+> & {
   host: Pick<Host, 'emu' | 'rpc'>;
   actions: Pick<ReturnType<typeof createEmulatorActions>, 'registerReloadWithRuntime' | 'registerFlashUi'>;
   pollAudio: () => Promise<void>;
@@ -27,6 +30,7 @@ export function createWorkbenchEmulator(options: WorkbenchEmulatorOptions) {
     ...firmwareOptions,
     emu: host.emu,
     runtime: session.runtime,
+    stopSession: session.stopSession,
     signal: session.signal,
   });
   onCleanup(actions.registerReloadWithRuntime(firmware.reloadWithRuntime));

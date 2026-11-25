@@ -33,6 +33,19 @@ use sha2::{Digest, Sha256};
 /// not reused: it is part of the key.
 pub const FORMAT_TAG: &str = "dt2-card-v3-plusdrive-folder";
 
+/// A Workbench session mount has no source folder. Nothing it writes is
+/// mirrored or exported until the user explicitly checkpoints the session.
+pub const PRIVATE_CARD_MARKER: &str = ".workbench-session";
+
+pub(crate) fn private_card(image: &Path) -> Option<bool> {
+    let marker = fs::read_to_string(image.with_file_name(PRIVATE_CARD_MARKER)).ok()?;
+    match marker.as_str() {
+        "fresh" => Some(false),
+        "used" => Some(true),
+        _ => None,
+    }
+}
+
 /// The files of `dir` a build reads (relative `/` paths, sorted), or why there is nothing to build.
 pub fn list_files(dir: &Path) -> Result<Vec<String>, String> {
     if !dir.is_dir() {

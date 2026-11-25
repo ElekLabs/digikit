@@ -19,6 +19,8 @@ mod local;
 mod log_save;
 mod midi_port;
 mod remote_audio;
+mod session;
+mod session_menu;
 mod symbols;
 use serde_json::Value;
 use std::sync::mpsc;
@@ -673,6 +675,8 @@ fn main() {
         },
     };
     let app = tauri::Builder::default()
+        .menu(session_menu::build)
+        .on_menu_event(session_menu::dispatch)
         .manage(symbols::catalog::CatalogFrame::default())
         .register_uri_scheme_protocol(symbols::catalog::SCHEME, |context, request| {
             use tauri::Manager;
@@ -683,6 +687,7 @@ fn main() {
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(session::Mounts::default())
         .manage(host)
         .manage(midi_port::MidiPort::default())
         .manage(bulk_port::BulkPort::default())
@@ -707,6 +712,17 @@ fn main() {
             emu_launch,
             emu_set_source,
             emu_pick_syx,
+            session::session_pick,
+            session::session_open,
+            session::session_create,
+            session::session_mount,
+            session_menu::session_set_actions_enabled,
+            session::session_release,
+            session::session_save,
+            session::session_preserve,
+            session::session_attach,
+            session::session_read_capture,
+            session::session_open_attachment,
             emu_build_info,
             emu_audio_status,
             remote_audio::remote_audio_inputs,

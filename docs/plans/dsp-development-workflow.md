@@ -22,7 +22,7 @@ Keep firmware, captures, generated catalogs and listening WAVs local under ignor
 | 5a. Render exports and audio comparison | Complete | The [CLI workflow](../INSTRUMENTATION.md#render-and-compare-audio-from-the-cli) exports original WAV and structured evidence and compares them offline. The two-device FREQ SHIFT rig baseline precedes the listening fixture. |
 | 5b. Musical send baseline | Complete | Both generated scenes have dry/current WAVs, matching source hashes and linked rig profiles on both targets. No module changes. |
 | 5c. FREQ SHIFT listening and performance proof | Implemented and rig-verified | Spread was committed in `12c8ae781`. Drift and Rate were approved after the full-cycle A/B, though the difference was subtle on laptop speakers. No kit migration for the experimental prototype. |
-| 6. Review the workflow | Deferred | Consider saved audio evidence in the existing Analyzer only after the CLI workflow has seen real use. No new Workbench panel. |
+| 6. Reuse a real listening session | Host and DT2 emulator checked | [Workbench sessions](../WORKBENCH-SESSIONS.md) package the card and attachments and keep capture inspection independent. Underpass reopened with the same A01 grid and stab-only send. Automated project selection and saved audio views remain follow-ups. No new Workbench panel. |
 
 ## 1. Generate a catalog from one firmware file
 
@@ -98,9 +98,30 @@ The local `out/runs/dsp-workflow/phase5/drift` contains dry, Spread-only and Dri
 
 **Exit check.** `module:check` and the affected rig and device checks pass on both targets. The zero-feature path matches the existing float32 reference within the established tolerance. The new checks cover channel shift separation, parameter continuity and bounded output at control limits. Save the CLI before/after report and linked Workbench capture. Em accepts the musical result after listening to the comparison.
 
-## 6. Review whether the UI needs more
+## 6. Save and reopen a listening session
 
-Review one complete CLI-driven experiment before changing Workbench. If auditioning saved captures there would save repeated work, add a small saved A/B view to the existing Analyzer with synchronized playback and the relevant measurements. Keep Performance focused on timing and counters. Reuse saved artifacts. Leave the UI as it is if the CLI and WAVs are enough.
+Use Underpass at 138 BPM to prove the reusable workflow. Save the card and
+pinned firmware identity with the separate profiling and audio artifacts in a
+[Workbench session](../WORKBENCH-SESSIONS.md). Open the capture offline, then
+boot the working card and load the saved project. Verify A01 and the stab
+track's FREQ SHIFT send before making another recording. Save As must leave
+the original session and the default +Drive untouched.
+
+Keep reusable lifecycle logic under mock-backed unit tests. Use one emulator
+round trip for the card-dependent boot that a fake cannot prove. Expose
+session and capture metadata offline through `wb session inspect` and
+`wb profile report`.
+
+The DT2 1.17 emulator round trip booted the imported card, saved its overlay,
+then mounted that checkpoint in a fresh emulator. Both boots recovered the
+same A01 trigs and the send values `[0, 0, 111, 0]` after loading Project 001.
+The CLI inspected the saved bundle and reported its attached capture without
+an emulator connection. The host tests cover Save As isolation separately.
+
+Defer automated project selection and in-app A/B auditioning until the saved
+session workflow sees use. If an A/B view would save repeated work, add it to
+the existing Analyzer rather than adding a panel. Keep Performance focused
+on timing and counters.
 
 ## End result
 

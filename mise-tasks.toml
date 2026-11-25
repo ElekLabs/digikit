@@ -105,7 +105,7 @@ description = "Build the dkbulk USB bulk bridge and uploader (packages/dkbulk) i
 ["wb:cli"]
 env = { DIGI_WB_MISE = "1" }
 run = "node tools/devtools/wb.mjs"
-description = "Workbench CLI: profile report FILE | module render ID --device ID --case GROUP/NAME --out DIR | audio compare A B --out DIR | samples ls/put | store ls/put/rm | transfer install/restart/delete | info | ports"
+description = "Workbench CLI: session inspect FOLDER | profile report FILE | module render ID --device ID --case GROUP/NAME --out DIR | audio compare A B --out DIR | samples ls/put | store ls/put/rm | transfer install/restart/delete | info | ports"
 
 ["wb:device-inputs"]
 hide = true

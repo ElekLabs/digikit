@@ -21,7 +21,7 @@ pub async fn log_save(
         .get("x-kind")
         .and_then(|v| v.to_str().ok());
     let (title, filter): (&str, Option<(&str, &[&str])>) = match kind {
-        Some("profile") => ("Save the profile", Some(("Profile", &["json"]))),
+        Some("profile") => ("Save capture", Some(("Capture JSON", &["json"]))),
         Some("file") => ("Save the file", None),
         _ => ("Save the log", Some(("Log", &["log", "txt"]))),
     };

@@ -98,7 +98,7 @@ const opts = {
 };
 // the offline group takes these several times
 const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse', 'model', 'case']);
-const OFFLINE = ['addrmap', 'module', 'profile', 'audio'];
+const OFFLINE = ['addrmap', 'module', 'profile', 'audio', 'session'];
 const words = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
@@ -238,6 +238,7 @@ const AUDIO = words[0] === 'audio' || (words[0] === 'module' && words[1] === 're
 if (opts.help) {
   if (!AUDIO) console.log(usage);
   if (!words.length || words[0] === 'profile') console.log('wb profile report FILE [--format json]');
+  if (!words.length || words[0] === 'session') console.log('wb session inspect FOLDER_OR_SESSION_JSON [--format json]');
   if (AUDIO || !words.length || words[0] === 'module') console.log((await import('./wb_audio.mjs')).audioUsage);
   process.exit(0);
 }
@@ -513,6 +514,9 @@ if (SPANS) {
 } else if (AUDIO) {
   const { audioCommand } = await import('./wb_audio.mjs');
   status = await audioCommand({ cmd, sub, rest, opts, fail });
+} else if (cmd === 'session') {
+  const { sessionCommand } = await import('./wb_session.mjs');
+  status = await sessionCommand({ sub, rest, opts, fail });
 } else if (OFFLINE.includes(cmd)) {
   status = await profCommand({ cmd, sub, rest, opts, root, fail });
 } else if (cmd === 'ports') {

@@ -253,6 +253,7 @@ export interface SymbolsHost {
 }
 
 export interface Host {
+  sessions?: import('./session.ts').SessionHost;
   symbols?: SymbolsHost;
   analyzer?: AnalyzerHost;
   fs: FsHost;
