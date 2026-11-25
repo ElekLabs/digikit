@@ -153,6 +153,10 @@ Wait without polling: run a long command with a long tool timeout (up to 2 hours
 `uv run python -m tools.devtools.test_outcomes BEFORE.xml AFTER.xml --renames-from REF` compares
 outcomes and skip reasons test by test after moving tests.
 
+### Device test timings
+
+`node tools/nx/device-timings.mjs [LOG] [--md] [--top N] [--audit audit.md]` prints the measured run time of each device half of one gate run: half, minutes, coupled or zero-DSP, project, file, and whether it ran or was cached; then the summed run time (coupled and zero-DSP) next to the wall of the run. LOG is a launcher run log (`out/runs/nx/*.log`; default: the newest); run it from the checkout whose `.nx/workspace-data` holds the project graph. The seconds are the ones `tools/devtools/emu-slot.mjs` records when a passed task leaves its emulator slot (`<git common dir>/emu-slots/durations/`, slot wait excluded): Nx's own task spans include the slot wait and cannot rank tests. A file is overwritten by the next passed run, so a row marked `*` was written outside the log's run window; a cached or failed half has no seconds of this run. `--md` prints every half; `--audit` adds the files whose minutes differ from a suite audit table by more than 2x. Host test: `tools/nx/tests/device-timings.test.ts`.
+
 ### Service contract suite
 
 `dkrt_test_support::provider_contract::<Recipe>(&Fixture)` (`runtime/core/test-support/src/contract.rs`) proves for a service (an owner object behind the part tables of its row) that a module can be loaded, unloaded and loaded again (docs/plans/extension-model.md 3.5). Each service crate runs it in `tests/contract.rs` for the DT2 and the DN2 profile; it is part of the crate's `rust-tests` (about a second): `pnpm nx:pilot run dkrt-svc-lfo:rust-tests` (and `-fx`, `-machines`, `-samples`).

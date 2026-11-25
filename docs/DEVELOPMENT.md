@@ -232,7 +232,7 @@ mise run scenario:all         # every DN2 scenario; fails when a pinned PCM hash
 mise run scenario trig1-taps --wav
 ```
 
-Test runs print compact output by default; read a failed task with `node tools/nx/failures.mjs <log or project:target>` and use `--verbose` for the full stream ([TESTING.md, "Nx gate"](TESTING.md#nx-gate)). Test levels, layout and all commands are in [docs/TESTING.md](TESTING.md); what a change selects and why a device test is keyed as it is: [TESTING.md, "Check what a change selects"](TESTING.md#check-what-a-change-selects). The most used:
+Test runs print compact output by default; read a failed task with `node tools/nx/failures.mjs <log or project:target>` and use `--verbose` for the full stream ([TESTING.md, "Nx gate"](TESTING.md#nx-gate)). measured minutes per device half of a gate run: `node tools/nx/device-timings.mjs [LOG]` ([TESTING.md, "Device test timings"](TESTING.md#device-test-timings)). Test levels, layout and all commands are in [docs/TESTING.md](TESTING.md); what a change selects and why a device test is keyed as it is: [TESTING.md, "Check what a change selects"](TESTING.md#check-what-a-change-selects). The most used:
 
 ```sh
 mise run test:changed         # lint, format, types, host tests and Python checks of the affected projects; no builds or devices

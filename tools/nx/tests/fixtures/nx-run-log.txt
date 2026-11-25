@@ -1,0 +1,13 @@
+ NX   Running targets test-device--alpha, test-device--beta
+
+✔  nx run core/runtime:test-assembly  [existing outputs match the cache, left as is]
+...e/zero-tests:test-device--alpha  [existing outputs match the cache, l...
+✔  nx run core/dynfx:test-device--alpha
+✔  nx run core/dynfx:test-device--beta
+✔  nx run core/dynfx:pack
+
+Failed tasks:
+
+- core/dynfx:test-device--beta
+
+  Run duration:      1m 40s
