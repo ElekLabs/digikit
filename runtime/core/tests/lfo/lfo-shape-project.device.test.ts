@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { CARD_SYMBOLS, cardRigs } from '@digi/regression/runtime/card-rig.ts';
-import { REDRAW, stableFrameHash } from '@digi/regression/runtime/fx-live.ts';
+import { REDRAW, stableFrameHash } from '@digi/regression/runtime/panel-waits.ts';
 import { loadPanelProject, savePanelProject } from '@digi/regression/runtime/project-kit.ts';
 import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';
 import { servicePath } from '@digi/regression/runtime/service-files.ts';

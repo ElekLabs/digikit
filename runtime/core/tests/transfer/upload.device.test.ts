@@ -14,9 +14,14 @@ import {
 } from '@digi/dk-session';
 import { Session } from '@digi/test-support';
 import { expect } from 'vitest';
-import { blob, currentRecord, listing, pokeWord, sha, statusOf, type Files } from '@digi/regression/runtime/card-kit.ts';
+import { blob, sha, statusOf } from '@digi/regression/runtime/upload-bytes.ts';
+import { currentRecord } from '@digi/regression/runtime/card-record.ts';
+import { listing, type Files } from '@digi/regression/runtime/card-store.ts';
+import { pokeWord } from '@digi/regression/runtime/guest-mailbox.ts';
 import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
-import { options, word, REDRAW } from '@digi/regression/runtime/fx-live.ts';
+import { options } from '@digi/regression/runtime/fx-live.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
+import { REDRAW } from '@digi/regression/runtime/panel-waits.ts';
 import { wordBase } from '@digi/regression/runtime/memory.ts';
 import { portFile } from '@digi/regression/runtime/device-data.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';

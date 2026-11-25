@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
-import { bootInfo, E_LOADING } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo, E_LOADING } from '@digi/regression/runtime/guest-mailbox.ts';
 import { CARD_SYMBOLS, type CardRig } from '@digi/regression/runtime/card-rig.ts';
-import { word } from '@digi/regression/runtime/fx-live.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
 import { packageSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { LOADED, type Geometry, type Want } from '@digi/regression/runtime/synth.ts';

@@ -1,10 +1,11 @@
 import { be32 } from '@digi/dk-session';
 import { button, emulatorClock, waitClock, type Device } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import { bootInfo, bootInfoLoaded, CMD as MAILBOX, currentRecord, encodeRecord, postRaw } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo, bootInfoLoaded, CMD as MAILBOX, postRaw } from '@digi/regression/runtime/guest-mailbox.ts';
+import { currentRecord, encodeRecord } from '@digi/regression/runtime/card-record.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { settleHang } from '@digi/regression/runtime/debug-kit.ts';
-import { rpc } from '@digi/regression/runtime/fx-live.ts';
+import { rpc } from '@digi/regression/runtime/guest-access.ts';
 import { drainInputs } from '@digi/regression/runtime/fx-session.ts';
 import { introNow, safeFrame } from '@digi/regression/runtime/intro-frame.ts';
 import { stateName } from '@digi/regression/runtime/load-states.ts';

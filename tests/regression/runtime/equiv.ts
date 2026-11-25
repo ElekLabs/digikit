@@ -10,21 +10,15 @@ import {
 } from '@digi/sharc-rig-kit/pins';
 export { pcmPinFile } from '@digi/sharc-rig-kit/pins';
 import { expect, test } from 'vitest';
-import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
 import { readLoadTable, resolveAddresses } from '@digi/regression/runtime/addrmap.ts';
 import { moduleArtifact, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { moduleResultsNote } from '@digi/regression/runtime/runtime-menu.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
-import {
-  bounded,
-  frames,
-  peak,
-  pickSine,
-  readFloatWav,
-  rpc,
-  runToFrame,
-  type Rt,
-} from '@digi/regression/runtime/fx-live.ts';
+import { bounded, rpc } from '@digi/regression/runtime/guest-access.ts';
+import { frames, runToFrame } from '@digi/regression/runtime/dsp-state.ts';
+import { peak, readFloatWav } from '@digi/regression/runtime/pcm-files.ts';
+import { pickSine, type Rt } from '@digi/regression/runtime/panel-waits.ts';
 import { FIRMWARE, FULL_TIER, describeOn } from '@digi/regression/runtime/devices.ts';
 import {
   decodeTables,

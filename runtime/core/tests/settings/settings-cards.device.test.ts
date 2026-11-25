@@ -3,8 +3,11 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import type { DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
-import { bootInfo, buildCard, E_NOSTORE, statusOf } from '@digi/regression/runtime/card-kit.ts';
-import { rpc, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { bootInfo, E_NOSTORE } from '@digi/regression/runtime/guest-mailbox.ts';
+import { buildCard } from '@digi/regression/runtime/card-store.ts';
+import { statusOf } from '@digi/regression/runtime/upload-bytes.ts';
+import { rpc } from '@digi/regression/runtime/guest-access.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { DEVICES } from '@digi/regression/runtime/devices.ts';
 import { E_SET_OFF, sectorOf, settingsMailbox, settingsRecord } from '@digi/regression/runtime/project-kit.ts';
 import {

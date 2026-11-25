@@ -1,7 +1,10 @@
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { withWaitApi, type TestRuntime } from '@digi/regression/support.ts';
-import { bounded, compare, pcmMetrics, frames, rows, rpc, word, REDRAW, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
+import { compare, pcmMetrics } from '@digi/regression/runtime/pcm-files.ts';
+import { frames, rows } from '@digi/regression/runtime/dsp-state.ts';
+import { REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { GAIN, SINE, triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import {
   inspectFxBoot,

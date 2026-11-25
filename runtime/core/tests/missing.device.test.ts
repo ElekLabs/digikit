@@ -4,12 +4,16 @@ import { expect } from 'vitest';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { captureNote, frames, pickSine, readFloatWav, word } from '@digi/regression/runtime/fx-live.ts';
+import { captureNote } from '@digi/regression/runtime/note-capture.ts';
+import { frames } from '@digi/regression/runtime/dsp-state.ts';
+import { pickSine } from '@digi/regression/runtime/panel-waits.ts';
+import { readFloatWav } from '@digi/regression/runtime/pcm-files.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
 import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { TRACK_OBJ_WORD } from '@digi/regression/runtime/project-kit.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
-import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
 import { planSymbol, prepareRuntimePlan, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-cli.ts';
 

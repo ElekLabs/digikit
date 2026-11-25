@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { cachedCard, cardKey, fileSha, folderSha } from './card-cache.ts';
-import { buildCard } from './card-kit.ts';
+import { buildCard } from './card-store.ts';
 import { deviceProfile } from './device-data.ts';
 import { resolveInputs, repoRoot, type Device } from '@digi/test-support';
 

@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import { portFile } from '@digi/regression/runtime/device-data.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
-import { rpc, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { rpc } from '@digi/regression/runtime/guest-access.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import type { DkSession } from '@digi/dk-session';

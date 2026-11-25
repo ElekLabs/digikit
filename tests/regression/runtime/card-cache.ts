@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cardCacheRoot, repoRoot, type Device } from '@digi/test-support';
-import { plusdriveBinary } from './card-kit.ts';
+import { plusdriveBinary } from './card-store.ts';
 import { systemPackageFile } from './system-package.ts';
 
 /**
@@ -88,12 +88,13 @@ function toolIdentity(): { plusdrive: string; systemPackage: string; profiles: R
 }
 
 /**
- * The TypeScript files of this directory that build card specs and seed card files: this file, the card kit, the rigs that make the
+ * The TypeScript files of this directory that build card specs and seed card files: this file, the card record and store, the rigs that make the
  * specs (`card-rig`, `fx-session`, `fx-live`) and the helpers they use to lay out the card (services, plan, overlay, device data).
  */
 const BUILDER_SOURCES = [
   'card-cache.ts',
-  'card-kit.ts',
+  'card-record.ts',
+  'card-store.ts',
   'live-card.ts',
   'card-rig.ts',
   'fx-session.ts',

@@ -5,16 +5,9 @@ import path from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import { LOAD_STATE } from '@digi/dk-session/gen_proto';
 import { cardStore } from '../runtime/device-data.ts';
-import {
-  bootInfoFinal,
-  buildCard,
-  currentRecord,
-  decodeRecord,
-  encodeRecord,
-  plusdriveBinary,
-  readSectors,
-  recordsIn,
-} from '../runtime/card-kit.ts';
+import { bootInfoFinal } from '../runtime/guest-mailbox.ts';
+import { buildCard, plusdriveBinary } from '../runtime/card-store.ts';
+import { currentRecord, decodeRecord, encodeRecord, readSectors, recordsIn } from '../runtime/card-record.ts';
 import { SYSTEM_PACKAGE_STORE_PATH, systemPackageFile } from '../runtime/system-package.ts';
 import { cardAfter, encodeOverlay, linkCard } from '../runtime/write-safety.ts';
 

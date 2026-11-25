@@ -4,7 +4,7 @@ import { expect } from 'vitest';
 import { parse } from 'smol-toml';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
-import { word } from '@digi/regression/runtime/fx-live.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 

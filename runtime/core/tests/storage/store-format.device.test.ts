@@ -6,12 +6,14 @@ import { BOOT_LEVEL } from '@digi/dk-session/gen_host_dir';
 import { STATUS } from '@digi/dk-session/gen_proto';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { expect, test } from 'vitest';
-import { blob, bootInfoLoaded, cardInfo, readSectors, statusOf } from '@digi/regression/runtime/card-kit.ts';
+import { blob, statusOf } from '@digi/regression/runtime/upload-bytes.ts';
+import { bootInfoLoaded, cardInfo } from '@digi/regression/runtime/guest-mailbox.ts';
+import { readSectors } from '@digi/regression/runtime/card-record.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { CARD_TIMEOUT } from '@digi/regression/runtime/debug-kit.ts';
 import { cardStore, deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
-import { rpc } from '@digi/regression/runtime/fx-live.ts';
+import { rpc } from '@digi/regression/runtime/guest-access.ts';
 
 /**
  * What a card with real bytes shows the booted image, both devices. The decisions are host tests: `store_tests.rs` (a flipped byte: E_SHA and VERIFY; a

@@ -2,7 +2,7 @@ import { emulatorRead, pollUntil, readViewStack, viewStackFacts } from '@digi/te
 import { expect, test } from 'vitest';
 import type { DkLogEvent } from '@digi/dk-session';
 import { CARD_SYMBOLS, cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
-import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
 import { moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { ringWatch } from '@digi/regression/runtime/runtime-menu.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';

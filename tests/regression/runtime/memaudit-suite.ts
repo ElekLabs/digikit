@@ -5,11 +5,11 @@ import type { DkModule } from '@digi/dk-session';
 import type { Device } from '@digi/test-support';
 import { afterAll, describe, expect, test } from 'vitest';
 import { record } from './artifacts.ts';
-import { bootInfo } from './card-kit.ts';
+import { bootInfo } from './guest-mailbox.ts';
 import { CARD_SYMBOLS, cardRig, RT, type CardRig, type CardSpec } from './card-rig.ts';
 import { pausedProtocol } from './debug-kit.ts';
 import { FIRMWARE, FULL_TIER, selectDevices, skipEmptyHalf } from './devices.ts';
-import { SETTLE } from './fx-live.ts';
+import { SETTLE } from './panel-waits.ts';
 import {
   arenaBounds,
   bytesChanged,

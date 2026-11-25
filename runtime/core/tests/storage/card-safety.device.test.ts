@@ -1,25 +1,15 @@
 import zlib from 'node:zlib';
 import { CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect, test } from 'vitest';
-import {
-  blob,
-  cardInfo,
-  claimHeader,
-  currentRecord,
-  E_CARD_RO,
-  E_INUSE,
-  E_NOSTORE,
-  E_RANGE,
-  probeWrite,
-  setSelection,
-  statusOf,
-} from '@digi/regression/runtime/card-kit.ts';
+import { blob, statusOf } from '@digi/regression/runtime/upload-bytes.ts';
+import { cardInfo, E_CARD_RO, E_INUSE, E_NOSTORE, E_RANGE, probeWrite, setSelection } from '@digi/regression/runtime/guest-mailbox.ts';
+import { claimHeader, currentRecord } from '@digi/regression/runtime/card-record.ts';
 import { CARD_SYMBOLS, cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { NONE, opStatuses } from '@digi/regression/runtime/debug-kit.ts';
 import { cardStore, deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import type { DkSession } from '@digi/dk-session';
 import { logEvents, ofKind } from '@digi/regression/runtime/runtime-menu.ts';
-import { rpc } from '@digi/regression/runtime/fx-live.ts';
+import { rpc } from '@digi/regression/runtime/guest-access.ts';
 import { BOOT_LEVEL } from '@digi/dk-session/gen_host_dir';
 
 /**

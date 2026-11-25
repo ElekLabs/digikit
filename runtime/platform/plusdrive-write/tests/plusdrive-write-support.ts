@@ -5,9 +5,11 @@ import { promisify } from 'node:util';
 import { be32, fileHash, type DkSession } from '@digi/dk-session';
 import { repoRoot } from '@digi/test-support';
 import { expect } from 'vitest';
-import { overlayArgs, plusdriveBinary, readSectors } from '@digi/regression/runtime/card-kit.ts';
+import { overlayArgs, plusdriveBinary } from '@digi/regression/runtime/card-store.ts';
+import { readSectors } from '@digi/regression/runtime/card-record.ts';
 import { cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
-import { word, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { overlayFile, overlayRecords } from '@digi/regression/runtime/write-safety.ts';
 
 // Shared setup of the +Drive write device tests (plusdrive-write-{files,hash,levers,cuts}.device.test.ts): the helpers that read the card, and the rig

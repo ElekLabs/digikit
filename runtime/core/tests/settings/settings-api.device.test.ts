@@ -1,10 +1,11 @@
 import type { DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
-import { bootInfo, statusOf } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
+import { statusOf } from '@digi/regression/runtime/upload-bytes.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import { cardStore } from '@digi/regression/runtime/device-data.ts';
-import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import {
   decodeSettings,

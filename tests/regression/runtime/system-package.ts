@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot } from '@digi/test-support';
-import type { Files } from './card-kit.ts';
+import type { Files } from './card-store.ts';
 
 /**
  * The system package on a test card: the one owner of where the file comes from and where it goes. `dist/syspkg/runtime/system.dksp` is written by the Nx target

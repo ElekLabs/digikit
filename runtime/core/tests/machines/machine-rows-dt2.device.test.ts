@@ -5,7 +5,8 @@ import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
 import { portAnchorAddress } from '@digi/regression/runtime/device-data.ts';
-import { dspBytes, REDRAW, stableFrameHash, type Rt } from '@digi/regression/runtime/fx-live.ts';
+import { dspBytes } from '@digi/regression/runtime/dsp-state.ts';
+import { REDRAW, stableFrameHash, type Rt } from '@digi/regression/runtime/panel-waits.ts';
 import { decodeTables, dynType, selectDt2, trackType } from '@digi/regression/runtime/project-kit.ts';
 import { ENCODERS, expectLoaded, namedKnobs, tableSymbols, turnChangesOneWord } from './machines-kit.ts';
 

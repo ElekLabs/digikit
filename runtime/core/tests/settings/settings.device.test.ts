@@ -1,7 +1,7 @@
 import type { DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
-import { statusOf } from '@digi/regression/runtime/card-kit.ts';
-import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { statusOf } from '@digi/regression/runtime/upload-bytes.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { DEVICES } from '@digi/regression/runtime/devices.ts';
 import {
   decodeSettings,

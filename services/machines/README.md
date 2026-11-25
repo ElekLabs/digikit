@@ -31,7 +31,7 @@ lives). Four tables stay named statics of the crate (D7 of the RC3 briefs), each
 
 | Static | Reader |
 | --- | --- |
-| `DKRT_ASSIGN` (`assign.rs`) | device tests by symbol (`machines-kit`, `fx-live`); the sticky map |
+| `DKRT_ASSIGN` (`assign.rs`) | device tests by symbol (`machines-kit`, `fx-evidence`); the sticky map |
 | `DKRT_VROWS` (`rows.rs`) | the runtime's DSP code (`abi/dsp.rs`); the voice rows; `Describe` on the MODULES task |
 | `DKRT_GUARD` (`guard.rs`) | the MODULES reply (`Describe`), on another task than the poll that writes it |
 | `DKRT_MF_TAB` (`info.rs`) | the assembler hooks (`T_*` offsets of `hooks-*.s`) |

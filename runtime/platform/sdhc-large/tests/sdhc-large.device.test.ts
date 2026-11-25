@@ -3,11 +3,12 @@ import { promisify } from 'node:util';
 import { chooseBulk, EmuBulkLink, fileHash, type DkSession } from '@digi/dk-session';
 import { repoRoot } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
-import { overlayArgs, plusdriveBinary } from '@digi/regression/runtime/card-kit.ts';
+import { overlayArgs, plusdriveBinary } from '@digi/regression/runtime/card-store.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
-import { word, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 
 /**
  * core/sdhc-large through the real writers, driven over the usb-fast bulk link (the emulator's usb.bulk.in / usb.bulk.out).

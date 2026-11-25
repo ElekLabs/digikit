@@ -1,10 +1,12 @@
 import { be32, fileHash, type DkSession } from '@digi/dk-session';
 import { beginBody, dataBody, GCMD } from '@digi/regression/runtime/upload-kit.ts';
 import { describe, expect, test } from 'vitest';
-import { bootInfo, pokeKnob, sha, statusOf } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo, pokeKnob } from '@digi/regression/runtime/guest-mailbox.ts';
+import { sha, statusOf } from '@digi/regression/runtime/upload-bytes.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
-import { SETTLE, word } from '@digi/regression/runtime/fx-live.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';

@@ -14,7 +14,7 @@ import { sampleWav } from '@digi/regression/runtime/fixtures.ts';
 import { liveProtocol } from '@digi/regression/runtime/protocol.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { cardAfter } from '@digi/regression/runtime/write-safety.ts';
-import { overlayArgs, plusdriveBinary } from '@digi/regression/runtime/card-kit.ts';
+import { overlayArgs, plusdriveBinary } from '@digi/regression/runtime/card-store.ts';
 
 const exec = promisify(execFile);
 

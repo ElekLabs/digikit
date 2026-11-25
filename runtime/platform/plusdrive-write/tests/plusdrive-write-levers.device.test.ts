@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
-import { pokeKnob, pokeWord } from '@digi/regression/runtime/card-kit.ts';
-import { word, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { pokeKnob, pokeWord } from '@digi/regression/runtime/guest-mailbox.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { pdwSuite, pattern, slot4, cat, drive, staged, noStagingFolder, WRITE, BIG_CALL, SAMPLES, BITMAP, FRAG_LAST_WORD, IDLE_MS } from './plusdrive-write-support.ts';
 
 // +Drive writes through core/plusdrive-write, the write levers (finding 134) (docs/plans/usb-fast.md 3.1, finding 120; setup: plusdrive-write-support.ts).

@@ -1,7 +1,8 @@
 import { encoder as encoderCode, pollUntil, type Device } from '@digi/test-support';
 import { expect } from 'vitest';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
-import { REDRAW, SETTLE, word, type Rt } from '@digi/regression/runtime/fx-live.ts';
+import { REDRAW, SETTLE, type Rt } from '@digi/regression/runtime/panel-waits.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
 import { halfword } from '@digi/regression/runtime/fx-track-ui.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';

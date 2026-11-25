@@ -1,5 +1,5 @@
 import type { Session } from '@digi/test-support';
-import { word } from './fx-live.ts';
+import { word } from './guest-access.ts';
 import { patchkit } from './patchkit.ts';
 import { HOST_DIR_SYMBOL, hostAddress } from '@digi/dk-session';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';

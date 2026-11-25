@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import { fileHashHex } from '@digi/dk-session';
 import { BOOT_LEVEL } from '@digi/dk-session/gen_host_dir';
 import { expect, test } from 'vitest';
-import { currentRecord } from '@digi/regression/runtime/card-kit.ts';
+import { currentRecord } from '@digi/regression/runtime/card-record.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
-import { rpc } from '@digi/regression/runtime/fx-live.ts';
+import { rpc } from '@digi/regression/runtime/guest-access.ts';
 import { coreFrame, introNow } from '@digi/regression/runtime/intro-frame.ts';
 import { SYSTEM_PACKAGE_STORE_PATH, systemPackageFile } from '@digi/regression/runtime/system-package.ts';
 

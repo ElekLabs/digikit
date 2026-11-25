@@ -4,9 +4,12 @@ import { deviceError, LogCursor, runtimeEvent, type Clock, type DkSession, type 
 import { CMD, READ_MAX } from '@digi/dk-session/gen_proto';
 import { button, encoder, pollUntil, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
-import { postRaw, readSectors } from './card-kit.ts';
+import { postRaw } from './guest-mailbox.ts';
+import { readSectors } from './card-record.ts';
 import { cardStore, TRACK_OBJ_WORD } from './device-data.ts';
-import { REDRAW, SETTLE, bounded, dspBytes, pickSine, word, type Rt } from './fx-live.ts';
+import { REDRAW, SETTLE, pickSine, type Rt } from './panel-waits.ts';
+import { bounded, word } from './guest-access.ts';
+import { dspBytes } from './dsp-state.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { serviceSymbol } from './service-symbols.ts';
 import { overlayRecords } from './write-safety.ts';
@@ -14,7 +17,7 @@ import { overlayRecords } from './write-safety.ts';
 /**
  * Helpers of the settings, roundtrip and equiv device tests (ports of 6a5bb1ed:tools/patchkit/pk_digikit_settings.py, pk_digikit_project.py and pk_digikit_scen.py):
  * the settings record codec and mailbox, the project slot and the machine tables. The card fixture is card-rig.ts.
- * Candidates for card-kit.ts: `settingsRecord`, `settingsMailbox`.
+ * Candidates for guest-mailbox.ts: `settingsRecord`, `settingsMailbox`.
  */
 
 // ---- the settings record (port of tools/device/dksettings.py; vectors in runtime/core/vectors/settings-vectors.json) -------------------------

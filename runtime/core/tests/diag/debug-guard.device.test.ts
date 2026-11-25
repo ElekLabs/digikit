@@ -3,10 +3,13 @@ import { runtimeEvent } from '@digi/dk-session';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { button, encoder } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import { bootInfoLoaded } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfoLoaded } from '@digi/regression/runtime/guest-mailbox.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { pausedProtocol } from '@digi/regression/runtime/debug-kit.ts';
-import { frames, pickSine, readFloatWav, rpc, windowRms, REDRAW, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { frames } from '@digi/regression/runtime/dsp-state.ts';
+import { pickSine, REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
+import { readFloatWav, windowRms } from '@digi/regression/runtime/pcm-files.ts';
+import { rpc } from '@digi/regression/runtime/guest-access.ts';
 import { ofKind } from '@digi/regression/runtime/runtime-menu.ts';
 
 /**

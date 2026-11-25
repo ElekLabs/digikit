@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import type { Device } from '@digi/test-support';
 import { cardStore, deviceProfile, fxProfile } from '../runtime/device-data.ts';
 import { selectDevices } from '../runtime/devices.ts';
-import { addedFactorOf, pcmStats } from '../runtime/fx-live.ts';
+import { addedFactorOf, pcmStats } from '../runtime/pcm-files.ts';
 import { addedFactor } from '../runtime/pcm-compare.ts';
 import { decodeSettings, lockCheck, seedSettingsCard, SLOT0, STAMP } from '../runtime/project-kit.ts';
 import { encodeOverlay } from '../runtime/write-safety.ts';

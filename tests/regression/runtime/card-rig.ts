@@ -15,20 +15,14 @@ import {
   type TestRuntime,
   withWaitApi,
 } from '../support.ts';
-import {
-  bootInfo,
-  bootInfoLoaded,
-  buildCard,
-  cardView,
-  pokeKnob,
-  selRecords,
-  storeList,
-  type CardOptions,
-  type SelRecord,
-} from './card-kit.ts';
+import { bootInfo, bootInfoLoaded, pokeKnob } from './guest-mailbox.ts';
+import { buildCard, cardView, storeList, type CardOptions } from './card-store.ts';
+import { selRecords, type SelRecord } from './card-record.ts';
 import { cachedCard, cachedCardId, cardSpecKey, fileSha } from './card-cache.ts';
 import { uploadStore } from './device-data.ts';
-import { bounded, options, rpc, SETTLE } from './fx-live.ts';
+import { bounded, rpc } from './guest-access.ts';
+import { options } from './fx-live.ts';
+import { SETTLE } from './panel-waits.ts';
 import { drainInputs, withPausedFxProtocol } from './fx-session.ts';
 import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';

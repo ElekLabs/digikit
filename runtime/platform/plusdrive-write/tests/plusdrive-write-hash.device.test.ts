@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
-import { pokeKnob, readSectors } from '@digi/regression/runtime/card-kit.ts';
-import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { pokeKnob } from '@digi/regression/runtime/guest-mailbox.ts';
+import { readSectors } from '@digi/regression/runtime/card-record.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { pdwSuite, pattern, slot4, cat, drive, staged, WRITE, ABORT, SAMPLES, HASH_PAGES, IDLE_MS } from './plusdrive-write-support.ts';
 
 // +Drive writes through core/plusdrive-write, the close hash (docs/plans/usb-fast.md 3.1, finding 120; setup: plusdrive-write-support.ts).

@@ -6,7 +6,10 @@ import { cardRig, RT, CARD_SYMBOLS } from '@digi/regression/runtime/card-rig.ts'
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { moduleStorePath } from '@digi/regression/runtime/install.ts';
-import { captureNote, frames, readFloatWav, word } from '@digi/regression/runtime/fx-live.ts';
+import { captureNote } from '@digi/regression/runtime/note-capture.ts';
+import { frames } from '@digi/regression/runtime/dsp-state.ts';
+import { readFloatWav } from '@digi/regression/runtime/pcm-files.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { buildPanelProject, dynType, loadPanelProject, savePanelProject, trackType } from '@digi/regression/runtime/project-kit.ts';
 import type { TestRuntime } from '@digi/regression/support.ts';

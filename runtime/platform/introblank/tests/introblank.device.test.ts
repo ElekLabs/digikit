@@ -1,9 +1,10 @@
 import path from 'node:path';
 import type { Device } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import { bootInfo, bootInfoLoaded } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo, bootInfoLoaded } from '@digi/regression/runtime/guest-mailbox.ts';
 import { CARD_SYMBOLS, cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
-import { capture, peak, readFloatWav } from '@digi/regression/runtime/fx-live.ts';
+import { capture } from '@digi/regression/runtime/note-capture.ts';
+import { peak, readFloatWav } from '@digi/regression/runtime/pcm-files.ts';
 import { introNow } from '@digi/regression/runtime/intro-frame.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
 import { bootScreenCard, IB, lastFrame } from './introblank-support.ts';

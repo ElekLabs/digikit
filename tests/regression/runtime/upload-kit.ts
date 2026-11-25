@@ -7,9 +7,9 @@ import { repoRoot, resolveInputs, stepWithProgress, type Device, type Session } 
 import { parse } from 'smol-toml';
 import { describe, expect, test } from 'vitest';
 import { CMD as GCMD } from '../../../packages/dk-session/src/gen_proto.ts';
-import { listing, plusdriveBinary, storeList, type Files, type Listing } from './card-kit.ts';
+import { listing, plusdriveBinary, storeList, type Files, type Listing } from './card-store.ts';
 import { cardRig, type CardRig } from './card-rig.ts';
-import { rpc } from './fx-live.ts';
+import { rpc } from './guest-access.ts';
 import { FIRMWARE, FULL_TIER, selectDevices, skipEmptyHalf } from './devices.ts';
 import { overlayRecords } from './write-safety.ts';
 import { SYSTEM_PACKAGE_STORE_PATH } from './system-package.ts';

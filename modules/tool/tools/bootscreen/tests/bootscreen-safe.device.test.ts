@@ -1,7 +1,7 @@
 import { be32 } from '@digi/dk-session';
 import { expect, test } from 'vitest';
 import { button } from '@digi/test-support';
-import { currentRecord } from '@digi/regression/runtime/card-kit.ts';
+import { currentRecord } from '@digi/regression/runtime/card-record.ts';
 import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
 import { intro, lastFrame, SAFE_COUNTER, SAFE_KEY, spec, valid } from './bootscreen-support.ts';
 

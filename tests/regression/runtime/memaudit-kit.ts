@@ -5,7 +5,8 @@ import { repoRoot, type Device, type Session } from '@digi/test-support';
 import { parse } from 'smol-toml';
 import { freeRegions, type TestRuntime } from '../support.ts';
 import { openDigikitMenu } from './flows/menu.ts';
-import { REDRAW, SETTLE, word } from './fx-live.ts';
+import { REDRAW, SETTLE } from './panel-waits.ts';
+import { word } from './guest-access.ts';
 import {
   buildPanelProject,
   loadPanelProject,

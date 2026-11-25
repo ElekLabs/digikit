@@ -2,9 +2,10 @@ import { button, encoder as encoderCode, pollUntil, type Device, type Session } 
 import { expect } from 'vitest';
 import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';
 import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
-import { bootInfo, E_LOADING } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo, E_LOADING } from '@digi/regression/runtime/guest-mailbox.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
-import { bounded, SETTLE, word, type Rt } from '@digi/regression/runtime/fx-live.ts';
+import { bounded, word } from '@digi/regression/runtime/guest-access.ts';
+import { SETTLE, type Rt } from '@digi/regression/runtime/panel-waits.ts';
 import { halfword } from '@digi/regression/runtime/fx-track-ui.ts';
 
 /** Helpers of the machine fixture tests on a run-time machine: what the firmware shows after `machines.dks` has acted on the rows the loader made. */
