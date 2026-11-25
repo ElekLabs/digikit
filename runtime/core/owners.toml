@@ -67,6 +67,7 @@ shared = [
   "dkrt::params",
   "dkrt::package::invariants",
   "dkrt_fit",
+  "dkrt_svc_rt",     # service runtime glue in every .dks: part loading, owner hooks (runtime/core/svc-rt)
 ]
 "C:dsp" = ["dkrt::package::dsp", "dkrt::package::dsp_stats", "dkrt::package::link", "dkrt_link"]
 "C:storage" = [

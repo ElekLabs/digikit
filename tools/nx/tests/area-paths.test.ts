@@ -2,7 +2,16 @@ import { expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { deviceShorts, filesOf } from '../device-files.mjs';
-import { areaContext, areasOfPath, crateOf, modulePathOf, ownerOf, parseOwners, OWNERS_FILE } from '../area-paths.mjs';
+import {
+  areaContext,
+  areasOfPath,
+  crateOf,
+  externalLockChanges,
+  modulePathOf,
+  ownerOf,
+  parseOwners,
+  OWNERS_FILE,
+} from '../area-paths.mjs';
 
 const owners = parseOwners(`
 shared = ["core", "dkrt::lib", "dkrt::entry", "dkrt_abi"]
@@ -120,4 +129,43 @@ it('gives a platform leaf the area of its own record tag, and a leaf without a t
   expect(areasOfPath('runtime/platform/rows/module.toml', ctx)).toEqual({ areas: ['A:core/rows'] });
   expect(areasOfPath('runtime/platform/rows/src/cf/type-dispatch.s', ctx)).toEqual({ areas: ['A:core/rows'] });
   expect(areasOfPath('runtime/platform/dsp-link/module.toml', ctx)).toHaveProperty('unknown');
+});
+
+const lock = (...packages: string[]) => packages.map((p) => `[[package]]\n${p}\n`).join('\n');
+const own = (deps: string[] = []) =>
+  `name = "dkrt-svc-x"\nversion = "0.1.0"\ndependencies = [${deps.map((d) => `"${d}"`).join(', ')}]`;
+const serde = (version: string, checksum: string) =>
+  `name = "serde"\nversion = "${version}"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\nchecksum = "${checksum}"`;
+
+it('ignores a lockfile change that touches only crates of the repository', () => {
+  const before = lock(own(), serde('1.0.1', 'aa'));
+  const after = lock(own(['dkrt-test-support']), serde('1.0.1', 'aa'), 'name = "dkrt-test-support"\nversion = "0.1.0"');
+  expect(externalLockChanges(before, after)).toEqual([]);
+  expect(areasOfPath('Cargo.lock', { ...ctx, lockChange: () => externalLockChanges(before, after) })).toEqual({
+    none: true,
+  });
+});
+
+it('names the registry or git packages a lockfile adds, removes or changes', () => {
+  const before = lock(own(), serde('1.0.1', 'aa'));
+  expect(externalLockChanges(before, lock(own(), serde('1.0.2', 'bb')))).toEqual([
+    'serde 1.0.1 removed',
+    'serde 1.0.2 added',
+  ]);
+  expect(externalLockChanges(before, lock(own(), serde('1.0.1', 'cc')))).toEqual(['serde 1.0.1 changed']);
+  expect(externalLockChanges(undefined, before)).toEqual(['serde 1.0.1 added']);
+  expect(externalLockChanges(before, undefined)).toEqual(['serde 1.0.1 removed']);
+  const found = areasOfPath('services/lfo/dks/Cargo.lock', {
+    ...ctx,
+    lockChange: () => externalLockChanges(before, lock(own(), serde('1.0.1', 'cc'))),
+  });
+  expect(found).toEqual({ unknown: 'services/lfo/dks/Cargo.lock changes external package(s): serde 1.0.1 changed' });
+});
+
+it('maps svc-rt to C:loading and a dev-only crate to nothing, in the real checkout', () => {
+  const root = resolve(import.meta.dirname, '../../..');
+  const real = areaContext(root, [{ metadata: { runtimeAcceptance: [{ tags: ['C:loading'] }] } }]);
+  expect(areasOfPath('runtime/core/svc-rt/src/owner/step.rs', real)).toEqual({ areas: ['C:loading'] });
+  expect(areasOfPath('runtime/core/test-support/src/lib.rs', real)).toEqual({ none: true });
+  expect(areasOfPath('runtime/core/lifecycle/src/graph.rs', real)).toEqual({ areas: ['C:loading'] });
 });

@@ -37,6 +37,15 @@ const CLI = {
     dir: 'plusdrive',
   },
 };
+// The build of a CLI compiles the normal and build dependencies of its crates, never their dev-dependencies (test-support crates):
+// `^default` would add those, so the inputs name the closure of the other two kinds.
+const BUILT_KINDS = ['dependencies', 'build-dependencies'];
+const builtInputs = (workspaceRoot, crateRoot, inputs) =>
+  inputs?.map((i) =>
+    i === '^default'
+      ? { input: 'default', projects: pathDepNames(workspaceRoot, crateRoot, new Set(), BUILT_KINDS) }
+      : i,
+  );
 const cliTarget = ({ build, bin, dir, key, inputs }) => ({
   executor: 'nx:run-commands',
   cache: false,
@@ -372,9 +381,9 @@ const COMPILE_SOURCE = {
 };
 
 // Normalized repo-relative roots of the path dependencies of a crate (all dependency tables).
-export const pathDeps = (workspaceRoot, crateRoot) => {
+export const pathDeps = (workspaceRoot, crateRoot, kinds = KINDS) => {
   const t = read(workspaceRoot, join(crateRoot, 'Cargo.toml'));
-  const tables = [t, ...Object.values(t.target ?? {})].flatMap((s) => KINDS.map((k) => s[k] ?? {}));
+  const tables = [t, ...Object.values(t.target ?? {})].flatMap((s) => kinds.map((k) => s[k] ?? {}));
   const deps = tables.flatMap((tbl) =>
     Object.values(tbl)
       .filter((d) => d?.path)
@@ -384,12 +393,12 @@ export const pathDeps = (workspaceRoot, crateRoot) => {
 };
 
 // Package names of the path dependencies of a crate, transitively (each is a project of this plugin).
-const pathDepNames = (workspaceRoot, crateRoot, seen = new Set()) => {
-  for (const dep of pathDeps(workspaceRoot, crateRoot)) {
+const pathDepNames = (workspaceRoot, crateRoot, seen = new Set(), kinds = KINDS) => {
+  for (const dep of pathDeps(workspaceRoot, crateRoot, kinds)) {
     const { name } = read(workspaceRoot, join(dep, 'Cargo.toml')).package;
     if (seen.has(name)) continue;
     seen.add(name);
-    pathDepNames(workspaceRoot, dep, seen);
+    pathDepNames(workspaceRoot, dep, seen, kinds);
   }
   return [...seen].sort();
 };
@@ -481,7 +490,9 @@ export const createNodesV2 = [
           tags: ['rust'],
           targets: {
             ...(!NO_TESTS.has(name) && { 'rust-tests': rustTests(name) }),
-            ...(CLI[name] && { cli: cliTarget(CLI[name]) }),
+            ...(CLI[name] && {
+              cli: cliTarget({ ...CLI[name], inputs: builtInputs(ctx.workspaceRoot, root, CLI[name].inputs) }),
+            }),
             ...CRATE_TARGETS[name],
             ...GATE[name],
           },
