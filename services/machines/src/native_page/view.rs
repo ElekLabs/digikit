@@ -17,6 +17,24 @@ pub trait View {
     fn invalidate(&self);
 }
 
+impl<V: View + ?Sized> View for &V {
+    fn page_index(&self) -> u32 {
+        (**self).page_index()
+    }
+    fn native_type(&self) -> i32 {
+        (**self).native_type()
+    }
+    fn track(&self) -> u32 {
+        (**self).track()
+    }
+    fn value(&self, code: u32) -> i32 {
+        (**self).value(code)
+    }
+    fn invalidate(&self) {
+        (**self).invalidate()
+    }
+}
+
 /// The module's callbacks of a page: draw gets the frame and a canvas, event gets the local control event.
 pub trait Content<S: Surface> {
     fn draw(&mut self, page: &NativePage, frame: &Frame, canvas: &mut Canvas<'_, S>);

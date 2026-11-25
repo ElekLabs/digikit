@@ -1,8 +1,9 @@
 //! Native page logic ported from the image point's `native-page.c` (RC4 decision D8): the page table, the frame the content callback sees, the clipped canvas with
 //! its overlay mask, the page dots and the turn dispatch. Everything is pure; firmware access goes through the traits of `view` (the view's fields and calls) and
 //! `surface` (the stock draw routines). The service file wires it (`dks/src/native.rs`: the view, the surfaces and the content callbacks over the firmware).
-//! Layout: `record` (the page record: field offsets, `check`, `apply`), `claim` (`PageSet`: the owner and index claims of a load), `page` (one `NativePage`), `table` (the `PageTable`: registration and lookup), `frame` (the `dk_page_frame` and its bytes), `canvas` (clipping, planes, mask), `dots`, `paint`, `turn`.
+//! Layout: `record` (the page record: field offsets, `check`, `apply`), `claim` (`PageSet`: the owner and index claims of a load), `page` (one `NativePage`), `candidates` (the live pages cloned out for one owner entry), `table` (the `PageTable`: registration and lookup), `frame` (the `dk_page_frame` and its bytes), `canvas` (clipping, planes, mask), `dots`, `paint`, `turn`.
 mod bitmap;
+mod candidates;
 mod canvas;
 mod claim;
 mod dots;
@@ -20,6 +21,7 @@ mod view;
 mod fake_firmware;
 
 pub use bitmap::Bitmap;
+pub use candidates::Candidates;
 pub use canvas::{Canvas, Clipped, HEIGHT, MASK_WORDS, ORIGIN_X, PLANE_WORDS, WIDE_WIDTH, WIDTH};
 pub use claim::PageSet;
 pub use dots::dots;
