@@ -78,7 +78,9 @@ impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
         }
     }
 
-    /// How many calls and events were refused (a nested `with` or `run`, a full queue) since the cell was made.
+    /// How many calls and events were refused since the cell was made. Counted: a call that found the owner inside another call (a nested `with`, `run` or `step`, whose
+    /// `decide` is a `run`) and an event that found the queue full. Not counted: a `start` or `stop` that is refused (loaded already, a call in progress, a transition),
+    /// and a call before `start` or after `stop` (no live object: `None` or the `refused` answer, no count). So a count above 0 means a nested call, never a lifecycle refusal.
     pub fn refused(&self) -> u32 {
         self.gate.refused()
     }
