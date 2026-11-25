@@ -1,4 +1,4 @@
-| machines.dks on the Digitakt II (1.17): the ColdFire routines the service's hooks run. The dispatch is the image's (`runtime/platform/rows/src/cf/machines-dt2.s`).
+| machines.dks on the Digitakt II (1.17): the ColdFire routines the service's hooks run. The dispatch is the image's (`runtime/platform/rows/src/cf/type-dispatch-dt2.s`).
 |
 | Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (a hook of a service is raw: no trampoline). The routine takes the whole
 | control flow of the site and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, made by

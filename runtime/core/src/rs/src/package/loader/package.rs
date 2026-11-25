@@ -308,6 +308,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         self.decl_diff = (0, 0);
         self.import_hash = 0;
         self.last_name = [0; LOG_NAME];
+        self.last_hash = 0;
     }
 
     /// Undo `package_activate`, before the entries are restored: a service has no tick, no resident query entry and no export any more. A module has nothing public but

@@ -40,7 +40,7 @@ the device runs. Nothing changes for the player. It ran on a Digitakt II (OS 1.1
   | 29-30 | the addresses of this block's reply record and of the one before |
   | 31 | the effect row switched off last (byte offset + 1) |
 
-  Who reads the words: the runtime core keeps the heartbeat (1, 2), the breadcrumbs (14, 24, 25) and the raw log of the block; the machines service logs words 17 to 23 and the fx service words 28 and 31 (`DspPart::diag`); the layout is this file's.
+  Who reads the words: the runtime core keeps the heartbeat (1, 2), the breadcrumbs (14, 24, 25) and the raw log of the block; the machine-registry owner logs words 17 to 23 and the effect-registry owner words 28 and 31 (`DspPart::diag`); the layout is this file's.
 
   Words 3-13 are the registers as the firmware left them at the first voice of the block, before the wrapper pins anything. A frozen heartbeat is a halted
   core. The breadcrumb names the step of a machine's path that `core/dsp-voice` reached last: 1 hook entered (every voice; the type is not known yet and

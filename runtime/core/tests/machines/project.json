@@ -18,6 +18,7 @@
         ],
         "dsp": "sharc",
         "tags": [
+          "A:core/ui",
           "C:loading",
           "C:state",
           "C:types",
@@ -38,6 +39,7 @@
         ],
         "dsp": "sharc",
         "tags": [
+          "A:core/ui",
           "C:state",
           "C:types",
           "S:machines"
@@ -54,6 +56,7 @@
         ],
         "dsp": "sharc",
         "tags": [
+          "A:core/ui",
           "C:state",
           "C:types",
           "S:machines"

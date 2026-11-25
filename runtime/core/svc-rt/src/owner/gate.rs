@@ -17,7 +17,11 @@ pub(super) enum Admit {
 }
 
 /// The flags and counters of an owner. All-zero bytes at the start, so the owner's cell stays `.bss`. Tested and changed only with interrupts masked.
+/// `repr(C)` with the refusal count first: it is the first word of the owner (`DK_SVC_OWNER`), so a device test reads it at the symbol.
+#[repr(C)]
 pub(super) struct Gate {
+    /// Calls and events refused: a nested `with`, `run` or `step`, an event that found the queue full. Not counted: `begin_start` and `begin_stop` refusals, and `NoOwner` (before `start`, after `stop`, during a transition).
+    refused: Cell<u32>,
     /// Whether the cell holds a live object.
     live: Cell<bool>,
     /// Set while a call into the object runs.
@@ -27,8 +31,6 @@ pub(super) struct Gate {
     /// The queue: oldest event at `head`, `len` waiting.
     head: Cell<usize>,
     len: Cell<usize>,
-    /// Calls and events refused: a nested `with` or `run`, an event that found the queue full.
-    refused: Cell<u32>,
 }
 
 impl Gate {

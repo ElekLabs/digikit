@@ -1,4 +1,5 @@
 use super::*;
+use dkrt_abi::fw::Fw;
 
 use dkrt_test_support::FakeCore;
 
@@ -117,24 +118,23 @@ fn codes_outside_the_encoders_are_no_click() {
 #[test]
 fn a_click_on_a_parameter_with_an_action_gives_its_callback_and_the_track() {
     let actions = [0, 0xa0, 0, 0xb0];
-    assert_eq!(resolve(&actions, 100, 101, || 5), Some((0xa0, 5)));
-    assert_eq!(resolve(&actions, 100, 103, || 15), Some((0xb0, 15)));
+    assert_eq!(resolve(&actions, 100, 101, 5), Some((0xa0, 5)));
+    assert_eq!(resolve(&actions, 100, 103, 15), Some((0xb0, 15)));
 }
 
 #[test]
 fn a_click_on_a_stock_knob_or_a_parameter_without_an_action_passes_through() {
     let actions = [0, 0xa0, 0, 0xb0];
-    let never = || -> u32 { panic!("the track is not read") };
-    assert_eq!(resolve(&actions, 100, 100, never), None);
+    assert_eq!(resolve(&actions, 100, 100, 7), None);
     assert_eq!(
-        resolve(&actions, 100, 0xcd, never),
+        resolve(&actions, 100, 0xcd, 7),
         None,
         "a stock parameter code (SAMP)"
     );
-    assert_eq!(resolve(&actions, 100, 0, never), None, "an empty knob");
-    assert_eq!(resolve(&actions, 100, -1, never), None);
+    assert_eq!(resolve(&actions, 100, 0, 7), None, "an empty knob");
+    assert_eq!(resolve(&actions, 100, -1, 7), None);
     assert_eq!(
-        resolve(&[0; 4], 100, 101, never),
+        resolve(&[0; 4], 100, 101, 7),
         None,
         "no module declares an action"
     );
@@ -259,7 +259,7 @@ fn the_key_hook_halves_ask_the_firmware_between_them_and_not_inside() {
             fw.calls().is_empty(),
             "detecting the click asks the firmware nothing"
         );
-        slots.queue_click(&core, &fw, v, 202);
+        slots.queue_click(&core, v, 202, fw.view_track(0));
     }
     let p = slots.pending();
     assert_eq!((p.callback, p.track, p.code), (0x4000, 5, 202));

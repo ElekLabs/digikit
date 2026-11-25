@@ -109,7 +109,7 @@ confirmed: each is `[[hook]]` without `handler`, installed by install.rs. [D]
 | hook.value_class (offset 4, before `cmpi.l #count`) | 0x400c8932 / 0x400c2580 | value-class accessor | task, 15 callers (ParameterSet vfuncs etc., 0x4003a768 ...) [D]; no direct edge from vector 191 root [D] | image | 2 |
 | writes cf.param.sites.descriptor_table.ref.* (absolute pointers into the 60-byte-row table) and .bound.* (`cmpi.l #N`) | first 0x4003a7ea / 0x400174e0; bound 0x4003a7d8 / 0x400174d6 (ParameterSet::vfunc_22 etc.) | repoint to the copied table (pf_table) and grow bounds | task (ParameterSet vfuncs) | image | 2 (bulk writes; the table copy needs the runtime-allocated area; the copy is made from live RAM at load, which equals the image bytes since nothing writes the table) |
 
-### core/fxpages (image-modules/points/fxpages): no image ops (data only: 24+2 param rows, `fxpages_info`). Nothing to move.
+### core/fxpages (runtime/platform/fxpages): no image ops (data only: 24+2 param rows, `fxpages_info`). Nothing to move.
 services/fx/dks: 9 `[[hook]]`s (page_desc 0x400c898a/0x400c25d8, tab_label_test, filter_graph_test, fx_view_list.load, fx_key_list.load,
 fx_array.load/save/init_exit, sound_load_exit): all option 2 today, all UI/storage task code (reach: main_os or the console task; FxPageView::vfunc_4)
 [D]. Two DSP fills (`fx_entry`, `fx_send`) are DSP-side.
@@ -295,7 +295,7 @@ dt2 pc 0x1c7734 (byte alias 0x2838ee68), dn2 0x28393fa4: the block handler's one
 | --- | --- | --- | --- |
 | dsp.cache.hook.cache_enable (byte alias 0x20017358, boot region) | boot cache configuration after RR3 cleanup, before final CFG enable/invalidate; displaced `R2=DM(CFG)` | boot code, runs once before the RTOS and long before the ColdFire can talk to the DSP | O3 only (runs before any card service exists); [D] |
 | dsp.link.site.boot_wire_size (op write, 4 bytes `840fcc0a`) | immediate R4=0xabc before SPI2 descriptor build | boot-only literal | O3 only, a data patch (32-bit-sized, atomic) [D] |
-| the block_tail call `_sp_tail` | see block_tail | | follows block_tail |
+| the block_tail call `_dl_tail_chain` | see block_tail | | follows block_tail |
 
 ### runtime/platform/dsp-link: dsp.link.hook.block_tail
 
@@ -325,7 +325,7 @@ dsp-voice 28 hooks, fx 2, sample-pool DSP 2 (boot hook, boot data write) + block
 
 No, not with dsp-link as built [D, cf/dsp-link.c lines 147-190, dsp/dsp-link.inc lines 24-40, 184-223]:
 - window 0: slot block (DL_SLOT_WORDS words just below `_dl_area`) and the reserved area `_dl_area` (512 KiB DT2, 320 KiB DN2) in dsp.l2. A write may not leave either; the DSP refuses a chunk that crosses word 16.
-- window 1: voice rows `_dv_table` (counted `_dl_vcount`), window 2: fx rows (`_dl_fcount`), window 3: 3 stats control words. The DSP checks offset against the window size (status 3 = out of range, transfer stopped).
+- window 1: rows at `_dl_win1_base` (counted `_dl_win1_rows`), window 2: rows at `_dl_win2_base` (counted `_dl_win2_rows`), window 3: 3 stats control words. The DSP checks offset against the window size (status 3 = out of range, transfer stopped).
 - all copies are made by DSP code in the block tail with DM stores into those windows. Stock tables (0x25f7b0, 0x2577c4 in internal L2; 0x8055c840, 0x8052db90.. in external SDRAM, which only the DSP addresses) are outside every window. To write one a new DSP-side window or "poke" command is needed in the receiver (our code, in the tail), plus for SDRAM no cache issue is modelled in the emulator [O]; for code addresses the 48-bit non-atomic write and I-cache invalidate remain unproven (finding 128). For 32-bit data entries (jump tables, RPC table) the write is a single 32-bit store: atomic against a table read [D reasoning], but whether the read hits a stale D-cache line for SDRAM tables is [O].
 
 ### 6. Open questions

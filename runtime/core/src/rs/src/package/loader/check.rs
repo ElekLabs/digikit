@@ -101,6 +101,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         c.f = f;
         c.size = size;
         self.last_name = [0; LOG_NAME];
+        self.last_hash = 0;
 
         // ---- checks (nothing is written outside the staging buffer) ----
         let head = match image::head(f, size) {
@@ -109,7 +110,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         };
         c.head = head;
         // the header is read: the log names the module by its id, not by its file
-        self.last_name = name_part(core::slice::from_raw_parts(f.add(H_NAME), dkneeds::NAME_LEN as usize));
+        let name_field = core::slice::from_raw_parts(f.add(H_NAME), dkneeds::NAME_LEN as usize);
+        self.last_name = name_part(name_field);
+        self.last_hash = name_hash(name_field);
         // the steps of the file's role
         let role = rd32(f.add(dkneeds::H_ROLE as usize));
         c.role = role;

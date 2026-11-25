@@ -50,7 +50,7 @@ export type Rt = Pick<TestRuntime, 'session' | 'ui' | 'clock'>;
 export const REDRAW = 'firmware redraw after a panel input (no page-change event)';
 /** The reason of a fixed wait for the firmware to act on its own (a timer, a retry, a save): nothing observable yet. */
 export const SETTLE = 'emulated time for the firmware to act (no observable state)';
-// core/fx's published registry row: image-modules/points/fx/module.toml.
+// core/fx's published registry row: runtime/platform/fx/module.toml.
 export const ROW_WORDS = 24;
 export const FREE_PC = 0xffffffff;
 

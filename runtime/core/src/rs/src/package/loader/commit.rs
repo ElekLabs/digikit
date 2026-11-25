@@ -58,10 +58,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if rec < MAX_MODULES {
             col::keep(rec, baddr, size);
         }
+        // the fifth word names the module: FNV-1a 32 of its id after the last `/`, whole (not cut to `LOG_NAME`), so a test finds a module by its id and leaves sharing 12 characters differ
         crate::package::resident::dlog::ev(
             logk::MODULE_COMMIT,
             crate::package::resident::dlog::INFO,
-            [boot_idx::get(), rows.0 | rows.1 << 8 | rows.2 << 16, baddr, size, 0],
+            [boot_idx::get(), rows.0 | rows.1 << 8 | rows.2 << 16, baddr, size, self.last_hash],
         );
         OK
     }

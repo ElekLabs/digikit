@@ -1372,11 +1372,10 @@ uses = ["DEVICE_ID"]
         root.module("tests/fixtures/modules", "test/dependency", &[], false);
         root.module("runtime", "test/runtime", &[], false);
         root.module("services", "test/service", &[], false);
-        root.module("image-modules", "test/image", &[], false);
         // Device models and declared objects/sources are deliberately unusable: catalog validation never reads them.
         std::fs::write(root.0.join("devices/broken.toml"), "malformed = [").unwrap();
         let check = || Library::catalog_check(&root.0);
-        assert_eq!(check().unwrap(), 5);
+        assert_eq!(check().unwrap(), 4);
         run(Args {
             root: root.0.clone(),
             rest: vec!["catalog-check".into()],
@@ -1419,7 +1418,7 @@ uses = ["DEVICE_ID"]
             assert!(check().unwrap_err().0.contains(error), "expected {error}");
         }
         std::fs::write(path, original).unwrap();
-        assert_eq!(check().unwrap(), 5);
+        assert_eq!(check().unwrap(), 4);
         assert!(!cache_dir(&root.0).exists());
     }
 

@@ -690,8 +690,8 @@ from = { anchor = "cf.machine.fn.type_reader", len = 48 }
 # ---- the dispatch ---------------------------------------------------------------------------------------------------
 
 [[object]]
-path = "build/machines-dt2.dko.json"
-sources = ["src/cf/machines-dt2.s"]
+path = "build/type-dispatch-dt2.dko.json"
+sources = ["src/cf/type-dispatch-dt2.s"]
 place = "cf.expansion"
 devices = ["dt2"]
 
@@ -702,8 +702,8 @@ _mf_rows = "machines.rows"
 _mf_t_dispatch = "hook.cf.machine.fn.dispatch.tail"
 
 [[object]]
-path = "build/machines-dn2.dko.json"
-sources = ["src/cf/machines-dn2.s"]
+path = "build/type-dispatch-dn2.dko.json"
+sources = ["src/cf/type-dispatch-dn2.s"]
 place = "cf.expansion"
 devices = ["dn2"]
 
@@ -729,7 +729,7 @@ hook = "cf.machine.hook.dispatch"
 to = "mf_dispatch"
 devices = ["dn2"]
 
-# The machine list builder's buffer and its sizes (4 patches), and the rank pairs of the sort comparator, are the machines service's (services/machines): it builds them in `start` and patches the
+# The machine list builder's buffer and its sizes (4 patches), and the rank pairs of the sort comparator, are the machine-registry owner's: it builds them in `start` and patches the
 # list builder at load.
 
 # group (Digitakt II): SLICE and its clones; (Digitone II: a hook, below). Bound = the last type, branch `bne` -> `bcs`
@@ -939,7 +939,7 @@ devices = ["dn2"]
 
 # ---- reserved rows -------------------------------------------------------------------------------------------------------
 
-# Machines: the permanent numbers are the run-time range of types.toml (key "core/rows:dyn<N>"). The rows read as gap rows (clone of type 0, no name) until the machines service fills them.
+# Machines: the permanent numbers are the run-time range of types.toml (key "core/rows:dyn<N>"). The rows read as gap rows (clone of type 0, no name) until the machine-registry owner fills them.
 [[entry]]
 registry = "machines"
 id = "dyn16"

@@ -2,7 +2,7 @@
 """ColdFire ISA check: refuse any instruction a MCF54418 (V4e: ISA_A/B/C + EMAC, no FPU) does not have.
 
     uv run python -m tools.coldfire.isacheck FILE...          # .dko.json (arch cf), ELF .o, or .a archive
-    uv run python -m tools.coldfire.isacheck --committed      # every committed object (under runtime/, image-modules/ and services/)
+    uv run python -m tools.coldfire.isacheck --committed      # every committed object (under runtime/ and services/)
     uv run python -m tools.coldfire.isacheck --cached         # every built object in the cache out/cache/dko
 
 This is a front end of `patchkit dko isa-check` (packages/patchkit/src/build/cf.rs `check_isa`), the one copy of the check. Every

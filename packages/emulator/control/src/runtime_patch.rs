@@ -537,13 +537,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for d in [
-            "modules",
-            "runtime",
-            "services",
-            "image-modules",
-            "ports",
-            "devices",
-            "tests",
+            "modules", "runtime", "services", "ports", "devices", "tests",
         ] {
             std::os::unix::fs::symlink(root().join(d), dir.join(d)).unwrap();
         }

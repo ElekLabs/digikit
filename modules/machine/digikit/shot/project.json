@@ -7,7 +7,7 @@
         "files": ["tests/shot-dt2.device.test.ts"],
         "devices": ["dt2"],
         "dsp": "sharc",
-        "tags": ["S:machines", "S:samples"],
+        "tags": ["A:core/ui", "S:machines", "S:samples"],
         "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines", "core/services/samples"],
         "plusdrive": true,
         "dksampleWasm": true
@@ -62,7 +62,7 @@
         "files": ["tests/shot-picker.device.test.ts"],
         "devices": ["dt2"],
         "dsp": "sharc",
-        "tags": ["S:machines", "S:samples"],
+        "tags": ["A:core/ui", "S:machines", "S:samples"],
         "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines", "core/services/samples"],
         "plusdrive": true,
         "dksampleWasm": true

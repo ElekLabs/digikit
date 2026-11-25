@@ -16,7 +16,7 @@
 //!   writes) for SDK services. A service outside the SDK declares its export names in `dks/module.toml` and in the literal `exports` list.
 //!   Either can add a resident query with the reserved export name in the manifest and a typed `query` entry in `service!`.
 //!   Assembler (`asm!`, `global_asm!`, `naked`) is only in `dks/src/hooks.rs`, and firmware names (`cf.` hook and anchor names, `dkfw`) only under `dks/`.
-//! - **Fills equal the slots.** A `[[fill]]` of `dks/module.toml` names a `[[slot]]` of an image adapter (`image-modules/**/module.toml`). When the
+//! - **Fills equal the slots.** A `[[fill]]` of `dks/module.toml` names a `[[slot]]` of an image adapter (`runtime/platform/**/module.toml`). When the
 //!   slot must exist (a typo is an error). When the slot exists only on some devices (`devices` in its `[[slot]]`), the fill names `devices` too and only devices the slot has.
 //! - **One entry.** The crate exports at most one entry symbol, `dk_module`: the entry that carries the service's `ProviderRow` (interface B); a second export of any other name is a second row
 //!   symbol. The state a device test reads by name (`DKRT_FXP`, `DKRT_FXS`: a `static` named `DKRT_*`) is state, not an entry, and is allowed.
@@ -757,7 +757,7 @@ fn strings(v: Option<&toml::Value>) -> Vec<String> {
 
 /// The `[[fill]]` entries of `dks/module.toml` whose devices differ from the devices of the adapter slot they fill. A slot that exists on every device (no
 /// `devices`) takes any fill; a slot limited to some devices takes only fills that name `devices`, all of them among the slot's.
-fn fill_problems(dir: &Path, adapters: &Path) -> Vec<String> {
+fn fill_problems(dir: &Path, root: &Path) -> Vec<String> {
     let mut out = vec![];
     // an unparsable dks/module.toml is reported by `check_dks`
     let Some(m) = std::fs::read_to_string(dir.join("dks/module.toml"))
@@ -766,22 +766,18 @@ fn fill_problems(dir: &Path, adapters: &Path) -> Vec<String> {
     else {
         return out;
     };
-    // the fills cannot be compared without the adapters folder: that is an error, not a skip
-    if m.get("fill").is_some() && !adapters.is_dir() {
+    // the fills cannot be compared without the platform folder: that is an error, not a skip
+    let platform = root.join("runtime/platform");
+    if m.get("fill").is_some() && !platform.is_dir() {
         out.push(format!(
-            "the adapters folder {} is missing: the [[fill]] entries of dks/module.toml cannot be checked",
-            adapters.display()
+            "the platform folder {} is missing: the [[fill]] entries of dks/module.toml cannot be checked",
+            platform.display()
         ));
         return out;
     }
     let mut slots = std::collections::BTreeMap::new();
     let mut twice = vec![];
-    adapter_slots(adapters, &mut slots, &mut twice);
-    // platform modules (`runtime/platform/`) declare slots as well
-    let platform = adapters.join("../runtime/platform");
-    if platform.is_dir() {
-        adapter_slots(&platform, &mut slots, &mut twice);
-    }
+    adapter_slots(&platform, &mut slots, &mut twice);
     for name in twice {
         out.push(format!(
             "the slot `{name}` is declared twice ([[slot]] in the adapter module.toml files)"
@@ -876,13 +872,14 @@ pub fn row_anchor_problems(name: &str, fw: &Path) -> Vec<String> {
     out
 }
 
-/// Every problem of the service crate at `dir`; empty when it is as the layout says. The image slots are under `image-modules/` of the repository.
+/// Every problem of the service crate at `dir`; empty when it is as the layout says. The image slots are under `runtime/platform/` of the repository.
 pub fn check(dir: &Path, sdk: &Path) -> Result<Vec<String>> {
-    check_with_adapters(dir, sdk, &dir.join("../../image-modules"))
+    check_with_root(dir, sdk, &dir.join("../.."))
 }
 
-/// `check` with the folder of the image adapters named (the fills of the service file are compared with the `[[slot]]` entries under it).
-pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Vec<String>> {
+/// `check` with the repository root named (the fills of the service file are compared with the `[[slot]]` entries under `runtime/platform/`; the row anchors
+/// are read from `ports/fw/`).
+pub fn check_with_root(dir: &Path, sdk: &Path, root: &Path) -> Result<Vec<String>> {
     let name = dir
         .file_name()
         .and_then(|n| n.to_str())
@@ -997,10 +994,10 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
     for p in check_dks(dir, row, &provided, !row, &srcs) {
         problem(p);
     }
-    for p in fill_problems(dir, adapters) {
+    for p in fill_problems(dir, root) {
         problem(p);
     }
-    for p in row_anchor_problems(&name, &adapters.join("../ports/fw")) {
+    for p in row_anchor_problems(&name, &root.join("ports/fw")) {
         problem(p);
     }
     if !row && !dir.join("dks/module.toml").is_file() {

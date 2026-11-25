@@ -1,3 +1,4 @@
+import { expectNoRefusedCalls } from '@digi/regression/runtime/service-symbols.ts';
 import { pollUntil } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';
@@ -86,5 +87,6 @@ describeOn('dt2', `DT2 ${FIRMWARE.dt2} machines.dks: the SRC page of a run-time 
     expect(edit.index, 'Level edits the Sound word of its mirror index').toBe((tables.params['Level'] as { mirror: number }).mirror);
     expect(edit.after, 'Level moved down').toBeLessThan(edit.before);
     await session.expectNoFault('Sine selected, SRC knob turned');
+    await expectNoRefusedCalls(rt, run.plan, 'machines');
   }, 900_000);
 });

@@ -19,13 +19,13 @@
   {
     "name": "module-tests",
     "dir": ".",
-    "include": "{modules,runtime,services,image-modules}/**/tests/**/*.test.ts",
+    "include": "{modules,runtime,services}/**/tests/**/*.test.ts",
     "exclude": ["**/*.rig.test.ts"]
   },
   {
     "name": "module-rig",
     "dir": ".",
-    "include": "{{modules,runtime,services,image-modules,tests/fixtures/modules}/**/tests,sdk/tests/dsp}/*.rig.test.ts",
+    "include": "{{modules,runtime,services,tests/fixtures/modules}/**/tests,sdk/tests/dsp}/*.rig.test.ts",
     "testTimeout": 600000
   },
   { "name": "nx-host", "dir": "tools", "include": "nx/tests/*.test.ts" }

@@ -1722,7 +1722,7 @@ args = ["index", "name0", "name1", "name2", "-"]
 [[log.kind]]
 id = 44
 name = "MODULE_COMMIT"
-args = ["index", "rows", "records_addr", "records_size", "-"]
+args = ["index", "rows", "records_addr", "records_size", "name_hash"]
 
 # a machine of a module of api major 3 declared latched parameters (info level, once per such machine, right before its module's MODULE_COMMIT): the selection index
 # (0xffffffff: not a boot load), the machine's ordinal in the module and its latch mask (bit w: the machine's parameter word w, its w-th parameter, is latched at note-on).

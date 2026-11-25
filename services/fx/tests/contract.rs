@@ -4,7 +4,9 @@
 //! The parts the file adopts are read from the row its own `service!` call declares (the file's source is compiled in by path).
 use core::ptr::addr_of;
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::dsp::{FXW_P0, FXW_PC, FX_FREE_PC, FX_ROW_WORDS, MAX_FX, MIX_ONE, WIN_FX};
+use dkrt_abi::dsp::{
+    FXW_AMT0, FXW_P0, FXW_PC, FXW_ROUTE, FX_FREE_PC, FX_ROW_WORDS, MAX_FX, MIX_ONE, WIN_FX,
+};
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::{ALL, DT2};
@@ -450,6 +452,118 @@ fn an_unloaded_effect_page_row_points_to_the_empty_string() {
     let word = |off: usize| unsafe { dkrt_abi::mem::rd32(at.add(off)) };
     assert_eq!((word(0), word(4), word(8)), (0, 0, 0xffff_ffff));
     assert_eq!(unsafe { *at.add(12) }, 0);
+}
+
+/// The page row of a loaded effect holds the nine parameter codes (the knob at position 0, MIX on the level slot, nothing between) and the parameter records of its two
+/// knobs hold the value index, the raw range and the default (host successor of the code and record checks of the `fx-pages` device test).
+#[test]
+fn a_loaded_effect_page_row_holds_its_codes_and_the_parameter_records_of_its_knobs() {
+    let _g = locked();
+    let f = fixture(
+        ALL.iter()
+            .find(|p| p.dyn_types > 0)
+            .expect("a device with a DSP")
+            .id,
+    );
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    let rows = unsafe { addr_of!(fxpage::DKRT_FXP_ROWS) } as u32;
+    let codes: Vec<u32> = (0..9)
+        .map(|i| unsafe { FwMem::rd(&l.core, rows + 8 + 4 * i) })
+        .collect();
+    let first = 40; // the effect knob block of `image`
+    assert_eq!(
+        codes,
+        [first, 0, 0, 0, 0, 0, 0, 0, first + 7],
+        "GAIN at knob A, empty B to H, MIX at LEVEL"
+    );
+    // the knob of a code: the mirror word of its parameter record (the value index of the knob) and the minimum, maximum and default of its registry row
+    let record = |code: u32| -> Vec<u32> {
+        let mirror = unsafe { FwMem::rd(&l.core, 0x10000 + 0x40 * code + 4) };
+        let reg = 0x20000 + 0x20 * code + 8;
+        let mut v = vec![mirror];
+        v.extend((1..4).map(|i| unsafe { FwMem::rd(&l.core, reg + 4 * i + 4) }));
+        v
+    };
+    assert_eq!(
+        record(first),
+        [0, 0, 0x7f00, 0x3200],
+        "GAIN mirror, range, default"
+    );
+    assert_eq!(
+        record(first + 7),
+        [7, 0, 0x7f00, 0x7f00],
+        "MIX mirror, range, default"
+    );
+}
+
+/// Three effects that may run on the send bus and default to it, one page each.
+fn send_effects(i: &mut Init) {
+    unsafe {
+        for n in 0..3 {
+            let fx = build::add_fx(i.core, i.ctx(), n, c(b"Send Gain\0"), c(b"SND\0"));
+            build::fx_routes(i.core, fx, ROUTE_MASTER | ROUTE_SEND, ROUTE_SEND);
+            let p = build::fx_add_page(i.core, fx, c(b"Send Gain\0"), c(b"SND\0"));
+            build::page_add_fx_param(
+                i.core,
+                p,
+                c(b"Gain\0"),
+                c(b"GAIN\0"),
+                DK_PERCENT,
+                0.0,
+                1.27,
+                0.5,
+            );
+        }
+    }
+}
+
+/// The effect rows a module's load leaves: the route word of row `k` is 1 for the first effects that fit the send cells of the image (`facts`: 2), in the order of the
+/// module's effects, and 0 for the rest (they stay on the master without a send cell); the four amount words are 0 (the settings hold no amount). This is words 18 to 22 of
+/// an effect row (`FXW_ROUTE`, `FXW_AMT0`), as the DSP gets them.
+#[test]
+fn the_effects_of_a_load_get_route_1_in_order_up_to_the_send_cells_and_zero_amounts() {
+    let _g = locked();
+    let f = fixture(
+        ALL.iter()
+            .find(|p| p.dyn_types > 0)
+            .expect("a device with a DSP")
+            .id,
+    );
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
+    let m = Module {
+        dsp: Dsp {
+            fxs: 3,
+            salt: 1,
+            ..Dsp::default()
+        },
+        ..module(3, keys_four, send_effects, 1)
+    };
+    assert_eq!(l.load(0, &m), dkrt_sdk::OK);
+    let d = rows::frows();
+    assert_eq!(
+        d.fx_route[..3],
+        [1, 1, 0],
+        "the route word of the three effect rows"
+    );
+    assert_eq!(d.fx_amt[..3], [[0; 4]; 3], "no send amount");
+    assert_eq!(fxsend::used(), 2, "two send cells in use");
+    // what the DSP is sent: the route word and the amount words of each row, in the words 18 to 22 of the row
+    let wire = l.core.link.borrow().t.words();
+    let sent = |at: u32| {
+        wire.iter()
+            .rev()
+            .find(|w| w.0 == WIN_FX && w.1 == at)
+            .map(|w| w.2)
+    };
+    for (k, route) in [1u32, 1, 0].into_iter().enumerate() {
+        let row = FX_ROW_WORDS * (6 + k as u32);
+        assert_eq!(sent(row + FXW_ROUTE), Some(route), "route word of row {k}");
+        for a in 0..4 {
+            assert_eq!(sent(row + FXW_AMT0 + a), Some(0), "amount {a} of row {k}");
+        }
+    }
+    l.unload(0);
 }
 
 const KIT_CELL: u32 = 0x7000;

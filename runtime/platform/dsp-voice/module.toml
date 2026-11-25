@@ -1,0 +1,485 @@
+[module]
+id = "core/dsp-voice"
+version = "0.1.0"
+name = "DSP voice hook"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Per-voice render hook of the SHARC engine: machine types registered by other modules render with their own DSP routine, every other type renders as stock"
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = ["core/dsp-link"]
+conflicts = []
+
+# Test status per firmware; patchkit does not read it.
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+[[object]]
+path = "build/dsp-voice-dsp.dko.json"
+sources = ["src/dsp/dsp-voice.s"]
+place = "dsp.l2"
+devices = ["dt2"]
+
+[object.externs]
+_dv_table = "voices.rows"
+_fw_type_cache = "dsp.voice.value.type_cache"
+_fw_render_next = "dsp.voice.site.render_entry.next"
+_fw_frame = "dsp.voice.value.frame_base"
+_fw_param_rec = "dsp.voice.value.param_record_base"
+_fw_release_latch = "dsp.voice.value.release_latch"
+_fw_unpack = "dsp.voice.fn.track_unpack"
+
+# Digitone II: the render hook of the FM engine's host (docs/findings/06, "Per-voice hook on DN2"); another object, the
+# same registration table and claim.
+[[object]]
+path = "build/dsp-voice-dn2-dsp.dko.json"
+sources = ["src/dsp/dsp-voice-dn2.s", "src/dsp/dsp-voice-dn2-stereo.s"]
+place = "dsp.l2"
+devices = ["dn2"]
+
+[object.externs]
+_fw_frame = "dsp.voice.value.frame_base"
+_fw_render_next = "dsp.voice.site.render_entry.next"
+# The stereo hooks (dsp-voice-dn2-stereo.s, docs/design/dn2-stereo.md): the stock stages the wrappers call or jump to, the engine's base and two sites of the pan loop.
+_gs_fo_stock = "dsp.voice.fn.first_order_process"
+_gs_fo_reset_stock = "dsp.voice.fn.first_order_reset"
+_gs_uy_stock = "dsp.voice.fn.uy_process"
+_gs_uy_reset_stock = "dsp.voice.fn.uy_reset"
+_gs_gain_stock = "dsp.voice.fn.gain_stage"
+_gs_c5_stock = "dsp.voice.fn.case5_filter"
+_gs_held_stock = "dsp.voice.fn.held_sample"
+_gs_shaper_stock = "dsp.voice.fn.shaper"
+_gs_case1_stock = "dsp.voice.fn.filter_case1"
+_gs_case2_stock = "dsp.voice.fn.filter_case2"
+_gs_case3_stock = "dsp.voice.fn.filter_case3"
+_gs_ring_stock = "dsp.voice.fn.ring_stage"
+_gs_held_reset_stock = "dsp.voice.fn.held_reset"
+_gs_case1_reset_stock = "dsp.voice.fn.case1_reset"
+_gs_case2_reset_stock = "dsp.voice.fn.case2_reset"
+_gs_case3_reset_stock = "dsp.voice.fn.case3_reset"
+_gs_ring_reset_stock = "dsp.voice.fn.ring_reset"
+_gs_case5_reset_stock = "dsp.voice.fn.case5_reset"
+_gs_engine_base = "dsp.voice.value.engine_base"
+_gs_pan_cont = "dsp.voice.site.pan_slot.next"
+_gs_pan_end = "dsp.voice.site.pan_slot.end"
+_gs_pre_cont = "dsp.voice.site.pan_pre.next"
+
+# The machine adapter's device facts (`[adapter.machine]` of the device files; docs/design/module-sdk.md 5.2) as ADM_* defines, written by `patchkit gen`.
+[[gen]]
+kind = "sharc-adapter"
+path = "build/gen/adapter-{dev}.inc"
+
+# The slots the stubs read (sdk/sdk.toml `[dsp.slots]`, words of core/dsp-link's slot block): the machine-registry owner fills them with the pcs of its dispatch code (`[[fill]] space = "dsp"`
+# in the owner's dks/module.toml). Zero takes the stock path. DT2 has two (render and unpack), DN2 one (render).
+[[slot]]
+name = "voice_render"
+space = "dsp"
+devices = ["dt2", "dn2"]
+
+[[slot]]
+name = "voice_unpack"
+space = "dsp"
+devices = ["dt2"]
+
+# The first instruction of the render entry becomes `JUMP _dv_entry`; the wrapper executes the displaced instruction.
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.render_entry"
+to = "_dv_entry"
+devices = ["dt2", "dn2"]
+
+# Digitakt II: the frame consumer's two calls of the per-track unpack go to _dv_unpack, which fixes the level of a track whose machine
+# has a parameter on knob 7.
+[[op]]
+op = "hook"
+hook = "dsp.frame.hook.frame_rx.unpack_call_a"
+to = "_dv_unpack"
+devices = ["dt2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.frame.hook.frame_rx.unpack_call_b"
+to = "_dv_unpack"
+devices = ["dt2"]
+
+# Machine modules add rows {type, routine pc} with `[[entry]] registry = "voices"`:
+#
+#     [[entry]]
+#     registry = "voices"
+#     id = "pluck"
+#     type = "machines.pluck.index"    # the machine type (a number, or the index of a machines entry)
+#     pc = "_pk_render"                # the routine's symbol in the module's DSP object
+#
+# The scan ends at the zero row patchkit appends (terminator); at most 16 types.
+[[registry]]
+name = "voices"
+first = "0"
+max = 16
+region = "dsp.l2"
+terminator = true
+
+# A row is 24 words (core/dsp-link's window 1 and the DSP scan count in rows of this size):
+#   0 type, 1 pc, 2 to 9 the declared range of machine knob 0 to 7 (min | max << 16, from the machine's [[param]]; 0: undeclared, the
+#   guard clamps to 0 .. 0x7f00), 10 the type this row's faults disabled, 11 the block of the fault window's start, 12 faults in the
+#   window, 13 faults since the start, 14 and 15 spare, 16 to 23 the contract words (note_on, state_base, stride, clear, gen, level,
+#   latch mask and one spare; below). The ranges come from the typed `[[voice]]` of the machine module (patchkit
+#   fills them), or from the voice record of a `.dkm`'s DSP section; the guard words are the DSP's.
+[[registry.field]]
+name = "type"
+kind = "u32"
+[[registry.field]]
+name = "pc"
+kind = "u32"
+[[registry.field]]
+name = "rng0"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "rng1"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "rng2"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "rng3"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "rng4"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "rng5"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "rng6"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "rng7"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "dis"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "wstart"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "wcount"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "nfault"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "spare0"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "spare1"
+kind = "u32"
+default = 0
+# 16 note_on: the pc of the note_on routine, same form as pc (0: none)
+[[registry.field]]
+name = "note_on"
+kind = "u32"
+default = 0
+# 17 state_base: the byte address of voice 0's state (what `R1 = _sym;` loads for a data symbol placed there)
+[[registry.field]]
+name = "state_base"
+kind = "u32"
+default = 0
+# 18 stride: bytes between the states of two voices
+[[registry.field]]
+name = "stride"
+kind = "u32"
+default = 0
+# 19 clear: bytes the adapter zeroes at note-on
+[[registry.field]]
+name = "clear"
+kind = "u32"
+default = 0
+# 20 gen: generation counter (0 for now)
+[[registry.field]]
+name = "gen"
+kind = "u32"
+default = 0
+# 21 level: log level (0 for now); 22 latched: parameter-word mask (machine contract 1.3), 23 spare
+[[registry.field]]
+name = "level"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "latched"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "spare3"
+kind = "u32"
+default = 0
+
+[[claim]]
+resource = "dsp.voice.hook"
+
+# ---- DN2 stereo: R twins of the stages that follow a machine, the stages without a twin, the pan loop. The claims are the call sites of core/dsp-stereo-proof too:
+# the two modules cannot be installed together. ----
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.first_order_process.call"
+to = "_gs_fo"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.first_order_process.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.first_order_reset.call"
+to = "_gs_fo_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.first_order_reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.uy_process.early.call"
+to = "_gs_uy"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.uy_process.early.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.uy_process.late.call"
+to = "_gs_uy"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.uy_process.late.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.uy_reset.call"
+to = "_gs_uy_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.uy_reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.gain_stage.call"
+to = "_gs_gain"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.gain_stage.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.case5.call"
+to = "_gs_c5"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.case5.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.held_sample.early.call"
+to = "_gs_held_early"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.held_sample.early.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.held_sample.late.call"
+to = "_gs_held_late"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.held_sample.late.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.shaper.early.call"
+to = "_gs_shaper_early"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.shaper.early.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.shaper.late.call"
+to = "_gs_shaper_late"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.shaper.late.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.filter_case1.call"
+to = "_gs_case1"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.filter_case1.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.filter_case2.call"
+to = "_gs_case2"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.filter_case2.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.filter_case3.call"
+to = "_gs_case3"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.filter_case3.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.ring_stage.case4.call"
+to = "_gs_ring4"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.ring_stage.case4.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.ring_stage.case6.call"
+to = "_gs_ring6"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.ring_stage.case6.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.held_sample.reset.call"
+to = "_gs_held_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.held_sample.reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.filter_case1.reset.call"
+to = "_gs_case1_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.filter_case1.reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.filter_case2.reset.call"
+to = "_gs_case2_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.filter_case2.reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.filter_case3.reset.call"
+to = "_gs_case3_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.filter_case3.reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.ring_stage.reset.case4.call"
+to = "_gs_ring_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.ring_stage.reset.case4.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.ring_stage.reset.case6.call"
+to = "_gs_ring_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.ring_stage.reset.case6.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.case5.reset.call"
+to = "_gs_case5_reset"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.case5.reset.call"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.pan_slot"
+to = "_gs_slot"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.pan_slot"
+devices = ["dn2"]
+
+[[op]]
+op = "hook"
+hook = "dsp.voice.hook.pan_pre"
+to = "_gs_prepan"
+devices = ["dn2"]
+
+[[claim]]
+resource = "dsp.voice.site.pan_pre"
+devices = ["dn2"]

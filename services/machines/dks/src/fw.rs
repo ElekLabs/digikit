@@ -5,9 +5,18 @@
 use core::ptr::read_volatile;
 use dkrt_abi::fw::{Fw, MODE_KEYS};
 use dkrt_svc_machines::paramapi;
-use dkrt_svc_rt::ImportCore;
+use dkrt_svc_machines::slots::{Click, Slots};
+use dkrt_svc_rt::{ImportCore, Outside};
 
-pub struct DkFw;
+/// The firmware's parameter page. Made from the [`Outside`] token that `Owner::step` gives its `act` phase and nothing else gives, so no code inside the owner can hold one: a
+/// firmware call that calls back into this service (a code hook, a setter that fires hooks) always finds the owner idle.
+pub struct DkFw(());
+
+impl DkFw {
+    pub fn new(_: &Outside) -> DkFw {
+        DkFw(())
+    }
+}
 
 /// The three firmware functions of the click flow (`cf.input.fn.key_down`, `cf.param.fn.set_value`, `cf.page.fn.view_track`).
 #[cfg(target_arch = "m68k")]
@@ -101,27 +110,47 @@ impl Fw for DkFw {
 /// The hook entry of the machine page's key event: the click detector of the owner. Without an owner (before `init` made it, after `fini`) the event passes.
 #[no_mangle]
 pub unsafe extern "C" fn dks_page_key(view: *const u8, ev: *const u8) {
-    page_key!(&DkFw, view, ev);
+    page_key(DkFw::new, view, ev);
 }
 
-/// The body of the key hook, written once for the firmware entry above (its closures stay inside `dks_page_key`, so the committed object does not change with a host seam) and for
-/// `page_key_with`.
-macro_rules! page_key {
-    ($fw:expr, $view:ident, $ev:ident) => {{
-        let Some(Some(enc)) = crate::DK_SVC_OWNER.with(|m| m.clicks().key_click($view, $ev)) else {
-            return;
-        };
-        // outside the owner: the code hook looks the native page up in it
-        let code = $fw.param_code($view as usize, enc);
-        crate::DK_SVC_OWNER.with(|m| m.clicks().queue_click(&ImportCore, $fw, $view, code));
-    }};
+/// The key hook over any `Fw` made from the token (`DkFw::new` for the firmware; the host test of the file gives a fake that enters the owner, as the page's code hook does).
+/// Decide inside the owner, ask the firmware outside it (the encoder's code and the page's track), act inside again.
+pub unsafe fn page_key<F: Fw>(make: impl FnOnce(&Outside) -> F, view: *const u8, ev: *const u8) {
+    let asked = crate::DK_SVC_OWNER.step(
+        (view, ev),
+        |m, (view, ev)| m.clicks().key_click(view, ev),
+        |enc, out| {
+            let fw = make(out);
+            enc.map(|enc| {
+                (
+                    fw.param_code(view as usize, enc),
+                    fw.view_track(Slots::track_ref(view)),
+                )
+            })
+        },
+    );
+    if let Some(Some((code, track))) = asked {
+        crate::DK_SVC_OWNER.with(|m| m.clicks().queue_click(&ImportCore, view, code, track));
+    }
 }
-use page_key;
 
-/// The key hook over any `Fw` (a host build only: the host test of the file gives one whose code mapper enters the owner, as the page's code hook does).
-#[cfg(not(target_arch = "m68k"))]
-pub unsafe fn page_key_with<F: Fw>(fw: &F, view: *const u8, ev: *const u8) {
-    page_key!(fw, view, ev);
+/// The tick of the file (the UI task, once per pass; `tick =` of `service!`): the click that waits runs outside the owner, so its callback may call `dk_param_get` and
+/// `dk_param_set`, which enter it (SHOT's open-picker reads the current slot). The owner only takes the click; before `init` and after `fini` there is none.
+pub unsafe extern "C" fn tick(_ctx: *mut u8) {
+    click_tick(|click| click.run());
+}
+
+/// The tick over any way to run the taken click (the host test of the file runs a closure for a module's callback, whose address would not fit a host pointer).
+pub unsafe fn click_tick(run: impl FnOnce(Click)) {
+    crate::DK_SVC_OWNER.step(
+        (),
+        |m, ()| m.take_click(&ImportCore),
+        |click, _| {
+            if let Some(click) = click {
+                run(click);
+            }
+        },
+    );
 }
 
 /// The hook entry of the machine page's turn: the turn ends the click flow (the owner), then the native handler of the page runs outside the owner: nonzero when a native page
@@ -156,15 +185,44 @@ pub fn list_copy_target(_: &dkrt_svc_machines::machines::Machines) -> u32 {
 /// `dk_param_get` (an `[[export]]` of the file): the value of a parameter word in the flow of a click. Without an owner there is no flow (`E_STATE`).
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_param_get(track: u32, word: u32) -> i32 {
-    crate::DK_SVC_OWNER
-        .with(|m| m.param_get(&ImportCore, &DkFw, track, word))
-        .unwrap_or(paramapi::E_STATE)
+    param_get(DkFw::new, track, word)
 }
 
 /// `dk_param_set`, as `dk_param_get`.
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_param_set(track: u32, word: u32, raw: i32) -> i32 {
+    param_set(DkFw::new, track, word, raw)
+}
+
+/// `dk_param_get` over any `Fw` made from the token: the owner resolves the target, the page is read outside it.
+pub unsafe fn param_get<F: Fw>(make: impl FnOnce(&Outside) -> F, track: u32, word: u32) -> i32 {
     crate::DK_SVC_OWNER
-        .with(|m| m.param_set(&ImportCore, &DkFw, track, word, raw))
+        .step(
+            (track, word),
+            |m, (track, word)| m.param_target(&ImportCore, track, word),
+            |t, out| match t {
+                Ok(t) => paramapi::read(&make(out), &t),
+                Err(e) => e,
+            },
+        )
+        .unwrap_or(paramapi::E_STATE)
+}
+
+/// `dk_param_set` over any `Fw` made from the token, as `param_get`: the stock setter fires hooks, which find the owner idle.
+pub unsafe fn param_set<F: Fw>(
+    make: impl FnOnce(&Outside) -> F,
+    track: u32,
+    word: u32,
+    raw: i32,
+) -> i32 {
+    crate::DK_SVC_OWNER
+        .step(
+            (track, word),
+            |m, (track, word)| m.param_target(&ImportCore, track, word),
+            |t, out| match t {
+                Ok(t) => paramapi::write(&make(out), &t, raw),
+                Err(e) => e,
+            },
+        )
         .unwrap_or(paramapi::E_STATE)
 }

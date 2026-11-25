@@ -26,6 +26,6 @@ it('lists every device of its manifest in the build/gen/gallery.json of each mod
       walk(sub);
     }
   };
-  for (const root of ['modules', 'runtime', 'services', 'image-modules']) walk(root);
+  for (const root of ['modules', 'runtime', 'services']) walk(root);
   expect(found).toEqual(pending);
 });

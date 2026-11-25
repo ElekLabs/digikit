@@ -11,7 +11,6 @@ use crate::slots::Slots;
 use crate::{assign, dsp, info, registry, selection_view, unload};
 use core::mem::MaybeUninit;
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::fw::Fw;
 use dkrt_abi::provider::WordSink;
 use dkrt_abi::provider::{Consumer, ConsumerId, Describe, Provider, Status, Ticker};
 use dkrt_abi::service::{tick_phase, SettleCtx, TableFault};
@@ -19,7 +18,7 @@ use dkrt_sdk::proto::{
     CAPK_MACHINE_ROWS, CAPK_MAP_ENTRIES, CAPK_PAGE_ROWS, CAPK_PARAM_ROWS, CAPK_VOICE_ROWS,
 };
 use dkrt_sdk::records::KINDS_MACHINES;
-use dkrt_sdk::{E_NO_REGISTRY, OK};
+use dkrt_sdk::{E_FORMAT, E_NO_REGISTRY, OK};
 use dkrt_svc_rows::rows_info::RegState;
 
 /// The machines service: nothing collected, no click queued, nothing parked. The file's cell holds the one instance (`Provider::start_in`).
@@ -80,40 +79,53 @@ impl Machines {
         self.builder.commit(core, &self.reg, module, c)
     }
 
-    /// `dk_param_get` of the file: the value of a parameter word in the flow of a click (the owner of the parameter rows is the registry state).
+    /// `dk_param_get` and `dk_param_set` of the file, owner half: what the call resolves to (the owner of the parameter rows is the registry state). The firmware half runs
+    /// outside the owner (`paramapi::read`, `paramapi::write`).
     ///
     /// # Safety
-    /// As `Slots::param_get`.
-    pub unsafe fn param_get<C: CoreApi, F: Fw>(
-        &mut self,
+    /// As `Slots::param_target`.
+    pub unsafe fn param_target<C: CoreApi>(
+        &self,
         core: &C,
-        fw: &F,
         track: u32,
         word: u32,
-    ) -> i32 {
+    ) -> Result<crate::paramapi::Target, i32> {
         self.clicks
-            .param_get(core, fw, &self.reg.param_owner, track, word)
+            .param_target(core, &self.reg.param_owner, track, word)
     }
 
-    /// `dk_param_set`, as `param_get`.
-    ///
-    /// # Safety
-    /// As `Slots::param_set`.
-    pub unsafe fn param_set<C: CoreApi, F: Fw>(
-        &mut self,
-        core: &C,
-        fw: &F,
-        track: u32,
-        word: u32,
-        raw: i32,
-    ) -> i32 {
-        self.clicks
-            .param_set(core, fw, &self.reg.param_owner, track, word, raw)
+    /// Give parameter row `k` an owner module, as `apply` does for a loaded module's row: the host test of the service file has no loaded module.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn own_row_for_test(&mut self, k: usize, owner: u8) {
+        self.reg.param_owner[k] = owner;
+    }
+
+    /// Open the click flow as a click on a row of `owner` would (`take_click`): the host test of the service file has no loaded module to start one.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn open_flow_for_test(&mut self, ctx: crate::paramapi::Ctx) {
+        self.reg.param_owner[0] = ctx.owner;
+        self.clicks.begin_flow(ctx);
+    }
+
+    /// Register page 0 of the first reserved type with encoder 3 bound to parameter code `code`: the host test of the service file has no loaded module that registers one.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn register_page_for_test(&mut self, code: u32) {
+        let mut bindings = [[0u32; 3]; crate::native_page::ENCODERS];
+        bindings[0] = [1, code, 3];
+        self.pages
+            .register(0, 0, 1, 0, b"T", 1, 1, &bindings, &[], 0, false)
+            .expect("register");
     }
 
     /// The click state of the machine page: the file's hooks and the exports `dk_param_get` and `dk_param_set` reach it here.
     pub fn clicks(&mut self) -> &mut Slots {
         &mut self.clicks
+    }
+
+    /// The click that waits for the UI pass, taken (the owner half of the file's tick; the file runs it outside, `Click::run`). Detach has dropped a click of an unloaded module.
+    pub fn take_click<C: CoreApi>(&mut self, core: &C) -> Option<crate::slots::Click> {
+        // SAFETY: reads the core's parameter rows
+        unsafe { self.clicks.take_click(core, &self.reg.param_owner) }
     }
 
     /// The number of the first run-time machine type, for an owner made with `new` (`start` takes it from the image): the native pages are kept by their place in the range.
@@ -202,21 +214,14 @@ unsafe fn first_reserved<C: CoreApi>(core: &C) -> u32 {
 }
 
 impl<C: CoreApi> Provider<C> for Machines {
-    /// The file's `init`, before its hooks are installed: the registry words of `rows_info` are bound into `DKRT_MF_TAB` (the hooks read it), or the file is refused
-    /// (`E_NO_REGISTRY`: no usable `core/rows` in the image).
-    fn start(core: &C) -> Result<Machines, Status> {
-        // SAFETY: `DKRT_MF_TAB` is this crate's table; nothing reads it before the hooks are declared
-        status(unsafe { info::bind(core) })?;
-        let mut m = Machines::new();
-        m.pages.set_first(unsafe { first_reserved(core) });
-        m.listed = unsafe { info::build_list(core) }.ok_or(E_NO_REGISTRY)? as u32;
-        // SAFETY: the registry is the image's; no module has filled a row yet
-        unsafe { crate::pagerows::init(core, &mut m.reg) };
-        Ok(m)
+    /// Not a start path: `init` points page-row strings into the state, so the state must not move after it is built, and `start` returns it by move. Every caller
+    /// uses `start_in` (the file's `init`, the test driver); this refuses (`E_FORMAT`) so a move can never produce a state whose rows dangle.
+    fn start(_core: &C) -> Result<Machines, Status> {
+        Err(E_FORMAT)
     }
 
     /// The state is made where it lives: all-zero bytes are valid for every field, and the gate is closed after (`Builder::init`) and the click state is written to its start
-    /// value (the detector and the held flow are not zero). This is a fill and a few words, and no copy of the 5 KiB collection through the stack.
+    /// value (the detector and the held flow are not zero). The file's `init` (bind the registry words into `DKRT_MF_TAB`, the hooks read it; `E_NO_REGISTRY` when the image has no usable `core/rows`) is this function. This is a fill and a few words, and no copy of the 5 KiB collection through the stack.
     fn start_in(core: &C, slot: &mut MaybeUninit<Machines>) -> Result<(), Status> {
         // SAFETY: as in `start`
         status(unsafe { info::bind(core) })?;
@@ -330,9 +335,8 @@ impl<C: CoreApi> Provider<C> for Machines {
 impl<C: CoreApi> Ticker<C> for Machines {
     fn tick(&mut self, core: &C, phase: u32) {
         if phase == tick_phase::LAST {
-            // SAFETY: the UI task runs the tick; the queued action is code of a loaded module (`detach` drops the click of a module before its image goes)
+            // SAFETY: the UI task runs the tick (the queued click is taken by the file's tick, outside the owner)
             unsafe {
-                self.clicks.tick(core, &self.reg.param_owner);
                 self.parking.park_absent(core, &mut self.reg);
             }
         }

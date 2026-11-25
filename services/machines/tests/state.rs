@@ -3,7 +3,7 @@
 use core::mem::MaybeUninit;
 use dkneeds::keys::name_hash;
 use dkrt_abi::provider::Provider;
-use dkrt_sdk::E_NO_REGISTRY;
+use dkrt_sdk::{E_FORMAT, E_NO_REGISTRY};
 use dkrt_svc_machines::info::{self, w, DKRT_MF_TAB};
 use dkrt_svc_machines::machines::Machines;
 use dkrt_svc_rows::rows_info::w as r;
@@ -58,6 +58,24 @@ fn a_new_owner_has_nothing_collected_queued_or_parked() {
     assert_initial(&mut m);
 }
 
+/// Start in place, in a box that keeps its address (the rows point into the state): the way `init` and the test driver start it.
+fn started(core: &FakeCore) -> Result<Box<Machines>, dkrt_abi::provider::Status> {
+    let mut slot = Box::new(MaybeUninit::<Machines>::uninit());
+    <Machines as Provider<FakeCore>>::start_in(core, &mut slot)?;
+    // SAFETY: `start_in` wrote the whole value; `MaybeUninit<T>` and `T` have one layout
+    Ok(unsafe { Box::from_raw(Box::into_raw(slot) as *mut Machines) })
+}
+
+/// The by-move `start` is no start path: the state points into itself, so it refuses.
+#[test]
+fn start_by_move_is_refused() {
+    let core = core_with(Some(table(2)), 2);
+    assert!(matches!(
+        <Machines as Provider<FakeCore>>::start(&core),
+        Err(E_FORMAT)
+    ));
+}
+
 #[test]
 fn start_refuses_an_image_without_a_usable_table_and_binds_a_good_one() {
     let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
@@ -69,10 +87,7 @@ fn start_refuses_an_image_without_a_usable_table_and_binds_a_good_one() {
         core_with(Some(table(1)), 2),
         core_with(Some(no_rows), 2),
     ] {
-        assert!(matches!(
-            <Machines as Provider<FakeCore>>::start(&core),
-            Err(E_NO_REGISTRY)
-        ));
+        assert!(matches!(started(&core), Err(E_NO_REGISTRY)));
         let mut slot = MaybeUninit::<Machines>::uninit();
         assert_eq!(
             <Machines as Provider<FakeCore>>::start_in(&core, &mut slot),
@@ -80,7 +95,7 @@ fn start_refuses_an_image_without_a_usable_table_and_binds_a_good_one() {
         );
     }
     let core = core_with(Some(table(2)), 2);
-    let mut owner = <Machines as Provider<FakeCore>>::start(&core).expect("starts");
+    let mut owner = started(&core).expect("starts");
     assert_initial(&mut owner);
     // SAFETY: the test holds the turn; nothing else reads the table
     let bound = unsafe { *core::ptr::addr_of!(DKRT_MF_TAB) };
@@ -134,7 +149,7 @@ fn start_builds_the_list_and_gives_the_patches_their_bytes() {
             .borrow_mut()
             .insert(0x4200_0000 + 64 * k as u32 + 48, *p);
     }
-    let m = <Machines as Provider<FakeCore>>::start(&core).unwrap();
+    let m = started(&core).unwrap();
     assert_eq!(
         m.list_bytes(),
         9 * 4,
@@ -162,25 +177,17 @@ fn start_makes_the_reserved_page_rows_free_rows() {
     rows_words[dw::PGO_S] = 0x30;
     rows_words[dw::PGO_MACH] = 0x2c;
     rows_words[dw::PG_FREE] = 0x7fff_ffff;
-    for in_place in [false, true] {
+    {
         let core = core_with(Some(rows_words.clone()), 2);
         core.mem.borrow_mut().insert(ROWS, 0x4000_0000);
         core.mem.borrow_mut().insert(ROWS + 0x54 + 0x2c, 5);
-        // the rows point at the empty string of the owner, so the owner must stay at its address: only the in-place start has one
+        // the rows point at the empty string of the owner, so the owner must stay at its address: the in-place start
         let mut slot = Box::new(MaybeUninit::<Machines>::uninit());
-        let mut by_value = None;
-        if in_place {
-            <Machines as Provider<FakeCore>>::start_in(&core, &mut slot).unwrap();
-        } else {
-            by_value = Some(<Machines as Provider<FakeCore>>::start(&core).unwrap());
-        }
+        <Machines as Provider<FakeCore>>::start_in(&core, &mut slot).unwrap();
         unsafe {
-            if in_place {
-                let owner = slot.assume_init_ref();
-                let rep = core::ptr::addr_of!(owner.reg().empty_rep) as u32 + 12;
-                assert_eq!(core.rd(ROWS), rep, "in_place {in_place}");
-            }
-            drop(by_value);
+            let owner = slot.assume_init_ref();
+            let rep = core::ptr::addr_of!(owner.reg().empty_rep) as u32 + 12;
+            assert_eq!(core.rd(ROWS), rep);
             assert_eq!(core.rd(ROWS + 0x54 + 0x2c), 0x7fff_ffff);
         }
     }
@@ -235,7 +242,7 @@ fn the_row_layout_words_come_from_rows_info() {
     t[r::O_POS] = 44;
     t[r::M_ROW_SIZE] = 72;
     let core = core_with(Some(t), 2);
-    let _owner = <Machines as Provider<FakeCore>>::start(&core).expect("starts");
+    let _owner = started(&core).expect("starts");
     // SAFETY: the test holds the turn; nothing else reads the table
     let res = unsafe { dkrt_svc_machines::list::Reserved::bound() };
     assert_eq!((res.o_name, res.row_size), (40, 72));

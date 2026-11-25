@@ -48,7 +48,7 @@ import {
 } from './toolchain.ts';
 
 /** the hook stubs, which stay in the image */
-export const VOICE_CORE = path.join(ROOT, 'image-modules/points/dsp-voice/src/dsp/dsp-voice.s');
+export const VOICE_CORE = path.join(ROOT, 'runtime/platform/dsp-voice/src/dsp/dsp-voice.s');
 /** the dispatch code behind the stubs, which the machines service carries (R12-8) */
 export const VOICE_DISPATCH = path.join(ROOT, 'services/machines/dks/dsp/dispatch-dt2.s');
 /** a sine routine of the raw (no contract) form */

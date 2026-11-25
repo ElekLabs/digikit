@@ -61,7 +61,7 @@ const lap = (what) => console.error(`${((Date.now() - t0) / 1000).toFixed(1)} s 
 
 // 1. objects
 const buildArgs = force ? ['--force'] : [];
-const coreRoots = ['runtime', 'services', 'image-modules'];
+const coreRoots = ['runtime', 'services'];
 for (const tree of [...coreRoots, 'modules', 'tests/fixtures/modules']) {
   try {
     run(['build', ...buildArgs, '--tree', tree]);

@@ -1,20 +1,17 @@
 //! The service over a `FakeCore` and a `FakeFw`: the record checks, `apply` and `remove` of parameter rows and click actions, the native page
 //! record and the capacity counts. The machine and page rows are written through `FwMem` (`wr`), so a host test reaches them: `tests/contract.rs` loads and
 //! unloads whole modules and compares the rows (the contract suite); the tests here cover the single handlers.
-use dkneeds::keys::name_hash;
+use dkrt_abi::fw::Fw;
 use dkrt_abi::mem::FwMem;
 use dkrt_abi::provider::{Consumer, ConsumerId, Describe, DspPart, Provider, Records, Ticker};
 use dkrt_abi::service::*;
 use dkrt_sdk::records::*;
 use dkrt_sdk::*;
-use dkrt_svc_machines::info;
 use dkrt_svc_machines::machines::Machines;
 use dkrt_svc_machines::records::*;
 use dkrt_svc_machines::slots;
 use dkrt_svc_rows::rows_info::w;
 use dkrt_test_support::{Call, FakeCore, FakeFw};
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Mutex;
 use std::vec::Vec;
 
@@ -175,12 +172,13 @@ fn click(owner: &mut Machines, core: &FakeCore, code: i32, track: u32, enc: u32)
         // the view's track reference word (`view + 0x74`) is read before the page is asked: a block of words stands in for the view
         let view = [0u32; 0x40];
         let v = view.as_ptr() as *const u8;
-        owner
-            .clicks()
-            .page_key(core, &fw, v, press.as_ptr() as *const u8);
-        owner
-            .clicks()
-            .page_key(core, &fw, v, release.as_ptr() as *const u8);
+        let clicks = owner.clicks();
+        for ev in [&press, &release] {
+            if let Some(enc) = clicks.key_click(v, ev.as_ptr() as *const u8) {
+                let code = fw.param_code(v as usize, enc);
+                clicks.queue_click(core, v, code, fw.view_track(0));
+            }
+        }
         owner.clicks().pending()
     }
 }

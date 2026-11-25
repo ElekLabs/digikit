@@ -1279,16 +1279,11 @@ pub struct Build<'a> {
 }
 
 /// The roots of the image modules and service files, whose objects are committed.
-pub const CORE_MODULE_ROOTS: &[&str] = &["runtime", "services", "image-modules"];
+pub const CORE_MODULE_ROOTS: &[&str] = &["runtime", "services"];
 
 /// The module library's committed roots, in the same order as tools/patchkit/modroots.py.
-pub const REPO_MODULE_ROOTS: &[&str] = &[
-    "modules",
-    "runtime",
-    "services",
-    "image-modules",
-    "tests/fixtures/modules",
-];
+pub const REPO_MODULE_ROOTS: &[&str] =
+    &["modules", "runtime", "services", "tests/fixtures/modules"];
 
 /// Where a module library comes from, besides the repository's module roots and PATCHKIT_MODULES.
 #[cfg(not(target_arch = "wasm32"))]

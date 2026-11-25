@@ -10,11 +10,12 @@ pub trait Provider<C: CoreApi>: Sized {
     /// Declarations the core checks against the packed header: resources with an "init" limit, entries.
     fn declare(&self, _d: &mut Declarations) {}
 
-    /// The file's `init`, before the declarations. Allocate state; no consumer is attached yet.
+    /// The file's `init`, before the declarations. Allocate state; no consumer is attached yet. The value is returned by move: a service whose state points into itself
+    /// (strings, rows) must not be moved after it is built, so it starts in `start_in` and refuses here.
     fn start(core: &C) -> Result<Self, Status>;
 
     /// What the file's `init` calls: `start` into the slot. The default moves the value `start` returns into the slot; a service with a large state overrides it and writes
-    /// the state where it lives (no copy through the stack). It must leave nothing that needs a drop when it fails.
+    /// the state where it lives (no copy through the stack). Started state must not move afterwards: self-pointers made here stay valid until `stop`. It must leave nothing that needs a drop when it fails.
     fn start_in(core: &C, slot: &mut core::mem::MaybeUninit<Self>) -> Result<(), Status> {
         slot.write(Self::start(core)?);
         Ok(())

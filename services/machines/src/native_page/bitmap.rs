@@ -13,11 +13,17 @@ pub struct Bitmap {
     plane1: u32,
 }
 
+#[cfg(test)]
 pub const OFF_WIDTH: usize = 4;
+#[cfg(test)]
 pub const OFF_HEIGHT: usize = 8;
+#[cfg(test)]
 pub const OFF_BANDS: usize = 12;
+#[cfg(test)]
 pub const OFF_PLANE0: usize = 16;
+#[cfg(test)]
 pub const OFF_PLANE1: usize = 20;
+#[cfg(test)]
 pub const BITMAP_BYTES: usize = 24;
 
 impl Bitmap {

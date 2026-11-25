@@ -192,7 +192,7 @@ const DAEMON_BUILD_SOURCES = [
   '{workspaceRoot}/runtime/core/fit/{Cargo.toml,build.rs,src/**/*}',
   '{workspaceRoot}/runtime/core/sdk/{Cargo.toml,build.rs,src/**/*}',
   // Test sources (config/test-source-patterns.json): `#[cfg(test)]` modules that the release build does not compile.
-  ...testSourceGlobs('{workspaceRoot}/{packages,modules,runtime,services,image-modules,ports/bindings}', '.rs'),
+  ...testSourceGlobs('{workspaceRoot}/{packages,modules,runtime,services,ports/bindings}', '.rs'),
   '{workspaceRoot}/devices/**/*',
   '{workspaceRoot}/ports/*.toml',
   '{workspaceRoot}/ports/fw/**/*',

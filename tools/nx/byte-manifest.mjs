@@ -13,7 +13,7 @@ import { objectHash } from './object-hash.mjs';
 import { trackedObjects } from './tracked-objects.mjs';
 
 const DEVICES = CELLS.map(({ dev }) => dev);
-const KINDS = ['image', 'plan', 'addrmap', 'pack', 'verdicts', 'generated', 'object', 'core-object-list'];
+const KINDS = ['image', 'plan', 'addrmap', 'dksp', 'pack', 'verdicts', 'generated', 'object', 'core-object-list'];
 const RELOCATABLE = ['generated', 'object', 'core-object-list'];
 const SHA = /^[a-f0-9]{64}$/;
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
@@ -121,11 +121,14 @@ const collectImages = (root) => {
         if (job.cell.dev !== dev) continue;
         const { line, ...hashes } = values.get(path);
         expectedLines.add(line);
+        // the system package kept beside the image is part of the bytes a device test boots
+        if (job.keep) entries.push({ kind: 'dksp', path, sha256: sha(fileBytes(`${job.keep}.dksp`)) });
         for (const [kind, sha256] of Object.entries(hashes)) {
           const suffix = kind === 'image' ? 'syx' : `${kind}.json`;
           if (job.keep) {
             const kept = `${job.keep}.${suffix}`;
             expectedFiles.add(relative(dir, kept));
+            expectedFiles.add(relative(dir, `${job.keep}.dksp`));
             if (sha(fileBytes(kept)) !== sha256) throw new Error(`${kept}: differs from ${file}`);
           }
           entries.push({ kind, path, sha256 });
@@ -320,7 +323,11 @@ const collect = (root, scratch, tracked) => {
   const shared = [collectPacks(root, projects, entries)];
   const generated = JSON.parse(pk('gen', '--check', '--paths'));
   for (const path of generated)
-    shared.push({ kind: 'generated', path: checkedPath(path), sha256: sha(fileBytes(join(root, path))) });
+    shared.push({
+      kind: 'generated',
+      path: checkedPath(normalize(path)),
+      sha256: sha(fileBytes(join(root, normalize(path)))),
+    });
   shared.push(...collectObjects(root, scratch, projects, tracked));
   return new Map(
     [...entries].map(([device, own]) => {

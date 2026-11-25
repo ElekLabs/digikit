@@ -99,6 +99,7 @@ macro_rules! service {
         /// The owner object: made by `start` in `init`, taken by `stop` in `fini`. The file's hooks reach it with `DK_SVC_OWNER.with(|s| ...)`; every call into it,
         /// the part functions of the tables too, runs under its busy state (`Owner`), and with the `Reentry` part a call that arrives meanwhile is queued with
         /// `DK_SVC_OWNER.post(event)`.
+        #[cfg_attr(target_arch = "m68k", no_mangle)]
         pub static DK_SVC_OWNER: $crate::service!(@owner_ty $svc; [$($part),*]) = $crate::service!(@owner_new $svc; [$($part),*]);
 
         /// The way the tables of this file reach the object: through the owner's busy state, so a part function never runs inside another call into the object.

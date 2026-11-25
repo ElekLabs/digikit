@@ -52,7 +52,7 @@ native handler outside it (a handler may call back into the file).
 A failed `start` (no usable `rows_info` for the device) leaves nothing: the file is refused with `E_NO_REGISTRY` and the cell stays empty. ColdFire rule: an if chain, not
 a `match` on dense integers, in code that runs on the device (`Describe::cap`).
 
-Native pages: a module's page records are registered in the owner's `PageTable` (`nativepage::apply`) and taken out again by `unload::remove`. The hooks of the machine page call
+Native pages: a module's page records are registered in the owner's `PageTable` (`native_page::record::apply`) and taken out again by `unload::remove`. The hooks of the machine page call
 `dks_native_draw`, `dks_native_overlay`, `dks_native_code`, `dks_native_page_count` and `dks_native_descriptor`, which look the page up in the owner and clone it out before its
 callbacks run (a callback may call back into the file). A page's descriptor holds the address of its own name (a `std::string` representation), so the table stays where the owner
 is made and is never moved once it has pages. The clipped bitmap is a static (6.8 KiB, too big for a UI stack). The frame layout is asserted against the struct by the fixture

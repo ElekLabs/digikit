@@ -4,6 +4,9 @@ use super::view::View;
 /// The machine types a module can have pages for: the run-time types the image reserves (`[limits] machine_rows` of the device data), numbered from `first`.
 pub const TYPES: usize = dkrt_sdk::limits::MACHINE_ROWS;
 
+/// The pages a machine type can have (the replacement pair).
+pub const PAGES: u32 = 2;
+
 /// The registered pages by machine type and page index (0 or 1), the mode of each type (1 append-only v1, 2 replacement pair v2) and the count of live pages. A type is the
 /// position in the reserved range: `first` is the number of the first reserved type, a type below it or past the range has no pages.
 pub struct PageTable {
@@ -127,11 +130,15 @@ impl PageTable {
             return None;
         }
         let index = view.page_index();
-        if index >= 2 {
+        if index >= PAGES {
             return None;
         }
-        let ty = view.native_type();
-        if ty < 0 {
+        self.lookup(index, view.native_type())
+    }
+    /// The page of a view that showed page `index` of machine type `ty` (a negative type is none): the lookup of [`PageTable::selected`] over values the caller read from the
+    /// firmware before it entered the owner.
+    pub fn lookup(&self, index: u32, ty: i32) -> Option<&NativePage> {
+        if index >= PAGES || ty < 0 {
             return None;
         }
         self.page(ty as u32, index)
@@ -141,13 +148,7 @@ impl PageTable {
         let Some(page) = self.selected(view) else {
             return -1;
         };
-        if encoder >= 8 {
-            return -1;
-        }
-        page.bindings()
-            .iter()
-            .find(|b| b[0] == 1 && b[2] == encoder)
-            .map_or(0, |b| b[1] as i32)
+        page.encoder_code(encoder)
     }
 }
 

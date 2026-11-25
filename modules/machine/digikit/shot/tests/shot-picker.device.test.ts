@@ -1,3 +1,4 @@
+import { expectNoRefusedCalls } from '@digi/regression/runtime/service-symbols.ts';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Sample, prepareUpload } from '@digi/dk-session/dksample';
@@ -143,6 +144,14 @@ runtimeTests(
       expect(ready1.state, 'slot 1 is READY').toBe(3);
       expect(await smp(), 'SMP is slot 1').toBe(1);
 
+      // The click opens the list again with SMP at 1 (the callback reads it with `dk_param_get` outside the owner: expectNoRefusedCalls below). The cursor
+      // placement on the current slot is a host test of the picker (runtime/platform/ui/host/tests/picker.rs).
+      await ui.tap('PUSH D', 600);
+      expect(await view(), 'the click opens the slot list').not.toBe(page);
+      await ui.tap('NO', 800);
+      await ui.settle(1500);
+      expect(await smp(), 'closing the list changed nothing').toBe(1);
+
       // YES on a filled slot replaces it.
       await loadSlot(0, 'K2', false);
       let replaced = await api.status(0);
@@ -191,6 +200,7 @@ runtimeTests(
 
       for (const m of await dk.modules()) expect(m.faults, `${m.name} faults`).toBe(0);
       await session.expectNoFault('SMP click flow');
+      await expectNoRefusedCalls(runtime, plan, 'machines');
     } finally {
       try {
         record(artifacts, 'runtime-log', await dk.readLog());

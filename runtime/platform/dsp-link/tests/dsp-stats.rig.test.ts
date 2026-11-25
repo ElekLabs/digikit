@@ -52,15 +52,15 @@ function build(device: 'dt2' | 'dn2', withoutStats: boolean) {
   const layout = placeData([object], DATA_BASE);
   const externs: Record<string, number> = {
     _dl_back: STOCK_BP,
-    _dl_vrows: 0,
-    _dl_vcount: 0,
-    _dl_frows: 0,
-    _dl_fcount: 0,
+    _dl_win1_base: 0,
+    _dl_win1_rows: 0,
+    _dl_win2_base: 0,
+    _dl_win2_rows: 0,
     _dv_diag: DVDIAG,
     _dv_rec: DVREC,
     _fx_diag: FXDIAG,
     _fx_rec: FXREC,
-    _sp_tail: 0,
+    _dl_tail_chain: 0,
     _dk_rec: 0,
     ...layout.data,
   };

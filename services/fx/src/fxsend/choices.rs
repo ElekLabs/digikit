@@ -1,9 +1,7 @@
 //! The route options the menu offers for a row.
 
 use super::*;
-use crate::fxpage;
 use dkrt_abi::dsp;
-use dkrt_sdk::*;
 
 pub(super) fn allowed_choices(allowed: u8, row: u32, pending_sends: u32, slots: u32) -> u32 {
     let current = 1 << row;

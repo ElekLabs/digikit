@@ -30,7 +30,7 @@ mod table;
 mod tests;
 mod tick;
 pub use apply::*;
-pub use choices::*;
+use choices::*;
 pub use effect::*;
 pub use layout::*;
 pub use naming::*;

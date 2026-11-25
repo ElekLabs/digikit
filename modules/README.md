@@ -74,7 +74,7 @@ Numbers can be written as TOML integers or as strings holding an *expression* (s
 | `version` | module version, `major.minor.patch` |
 | `name` | display name in the gallery |
 | `category` | `core`, `fx`, `machines`, `ui`, `tools` or `test` |
-| `role` | layer of a `core` module, required for them: `runtime` (`runtime/core`), `installer` (`runtime/platform/expansion`), `adapter` (`runtime/platform` and `image-modules`) or `app` (`runtime/apps`). It must fit the folder; `tools/devtools/layercheck.py` checks it ([docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)) |
+| `role` | layer of a `core` module, required for them: `runtime` (`runtime/core`), `installer` (`runtime/platform/expansion`), `adapter` (`runtime/platform`) or `app` (`runtime/apps`). It must fit the folder; `tools/devtools/layercheck.py` checks it ([docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)) |
 | `type` | `machine`, `fx`, `service`, `raw` or `framework` (`framework` is internal, for core modules) |
 | `author` | who wrote the module (`digikit` for the modules of this repository) |
 | `status` | `experimental` or `stable` |
@@ -412,7 +412,7 @@ module table is inconsistent (`E_TABLE` -49). `patchkit pack` and `dkm-info` pri
 include the note of each constant is on the line before its `#define`: a trailing comment would become part of the macro.
 
 Example (pluck, Digitakt II): `R1 = FRAME_BASE;` and `R0 = R13 + PLUCK_DECAY_FRAME_OFF;` instead of `0x6d` and `1`.
-`image-modules/points/dsp-voice/tests/test_pk_gen_include.py` shows that this assembles to the committed object, byte for byte.
+`runtime/platform/dsp-voice/tests/test_pk_gen_include.py` shows that this assembles to the committed object, byte for byte.
 
 ### `[[section]]`
 
@@ -474,7 +474,7 @@ Workflow:
 
 1. Copy a similar patched-in module (`tests/fixtures/modules/registry-demo`) and fill in the manifest and the sources.
 2. `mise run module:dev -- --modules category/name`: edit, see one summary line per save.
-3. Add module tests; a `smoke.toml` like the one of `image-modules/points/fx` only checks that the patched firmware is audible and does not fault.
+3. Add module tests; a `smoke.toml` like the one of `runtime/platform/fx` only checks that the patched firmware is audible and does not fault.
 4. Add a cell to `tests/patchkit/smoke/matrix.toml` for each device and firmware you support, then
    `mise run patch:test -- --cell "dt2-1.17:category/name" --update` records the frame goldens (hashes only) once,
    and later runs compare against them. A change that is invisible on screen must give the stock frames.
@@ -484,7 +484,7 @@ Workflow:
 
 ## Worked example 1: `core/fx` (SHARC+ only, both devices)
 
-`image-modules/points/fx/` runs the effect chain on the final stereo block: the master block (64 floats) goes through the chain
+`runtime/platform/fx/` runs the effect chain on the final stereo block: the master block (64 floats) goes through the chain
 before the firmware packs it for USB and converts it to the 24-bit output. With an empty chain the audio is the stock audio.
 
 - **Object.** `src/dsp/fx.s` is placed in `dsp.l2`. `[object.externs]` maps its undefined symbols: the rows of the `fx` registry
@@ -500,7 +500,7 @@ before the firmware packs it for USB and converts it to the 24-bit output. With 
 - **Test.** `tests/smoke.toml`: expect audible output and no fault.
 
 ```sh
-mise run module:build -- image-modules/points/fx --check
+mise run module:build -- runtime/platform/fx --check
 mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx -o out/patch/fx.syx
 mise run patch:explain -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx
 mise run module:dev -- --modules core/fx
@@ -514,13 +514,13 @@ A machine is a run-time module, not a patch-time row: write it with the builder 
 ### An effect: run-time module
 
 An effect is a run-time module (`dynamic = true`, a `.dkm`), like a machine. It builds its effect in `init` with builder calls (`dk_module_ctx_add_fx`, `dk_fx_routes`; `modules/fx/digikit/freqshift/src/module.c`, `[[fx]]` in `module.toml`)
-and takes one of the 3 free rows that `core/dynfx` reserves in the registry `fx` of `core/fx` (the effects adapter, `image-modules/points/fx/`); the fx service (`services/fx`) makes the pages. The chain runs in module order, at most
+and takes one of the 3 free rows that `core/dynfx` reserves in the registry `fx` of `core/fx` (the effects adapter, `runtime/platform/fx/`); the fx service (`services/fx`) makes the pages. The chain runs in module order, at most
 `DK_FX_MAX` (4) effects. patchkit refuses an `[[entry]] registry = "fx"` of any module except `core/dynfx`. The routine, its `dk_fx_desc` and its state block are symbols of the module's DSP object
 (`<dk/gen/fx.h>`, [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), sections 5.4 and 7.2). An empty chain plays the stock audio.
 The format is `docs/design/digikit-dkm.md`; the design of the pages is "Effect pages" in `docs/design/digikit-registry.md`.
 Example and fixture: `tests/fixtures/modules/dyn-fx-gain`.
 
 The frameworks themselves are ordinary modules: `runtime/platform/rows/` (the machine types: the registry, six copied tables, the dispatch of a type, the reserved rows; the parameter table; `rows_info`), the machine
-selection view in `runtime/platform/ui/`, the DSP selector in `runtime/platform/dyndsp/` and `image-modules/points/dsp-voice/`. What a machine needs at run time is the machines service's (`services/machines`: the list,
+selection view in `runtime/platform/ui/`, the DSP selector in `runtime/platform/dyndsp/` and `runtime/platform/dsp-voice/`. What a machine needs at run time is the machines service's (`services/machines`: the list,
 the rank pairs, the hooks of the machine framework, the native pages). Their routines are unit-tested on the emulated ColdFire core (`packages/patchkit/tests/machines_fw.rs`: the dispatch and the hooks;
 the parameter table: `packages/patchkit/tests/rows.rs`), and the proofs are the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`). Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).

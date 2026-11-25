@@ -19,7 +19,7 @@ beforeAll(() => {
 it('infers core producers from category and source-backed objects, independently of IDs and types', () => {
   const modules = [
     {
-      dir: 'image-modules/arbitrary/owner',
+      dir: 'runtime/arbitrary/owner',
       id: 'example/owner',
       category: 'core',
       requires: ['example/dep', 'core/content'],
@@ -60,7 +60,7 @@ it('infers core producers from category and source-backed objects, independently
     if (module.category === 'core') expect(producer.inputs).toContain(input);
     else expect(producer.inputs).not.toContain(input);
   }
-  expect(producer.inputs).not.toContain('{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml');
+  expect(producer.inputs).not.toContain('{workspaceRoot}/{modules,runtime,services}/**/module.toml');
   expect(producer.inputs).not.toContain('{workspaceRoot}/tests/fixtures/modules/**/module.toml');
 
   expect(producer.outputs).toEqual([`{workspaceRoot}/${modules[0].dir}/build/object.dko.json`]);
@@ -108,7 +108,7 @@ it('scopes explicit acceptance images without changing the default image produce
     return `${dir}/project.json`;
   });
   const manifests = ['owner', 'dep', 'content', 'prebuilt', 'unrelated'].map(
-    (name) => `${name === 'owner' ? 'image-modules' : 'modules'}/arbitrary/${name}/module.toml`,
+    (name) => `${name === 'owner' ? 'runtime' : 'modules'}/arbitrary/${name}/module.toml`,
   );
   manifests.push('relocated/tools/example/module.toml', 'relocated/fixtures/example/module.toml');
   const inferred = createNodesV2[1]([...manifests, ...files], {}, { workspaceRoot: root });

@@ -12,8 +12,9 @@ use dkrt_abi::fw::Fw;
 use dkrt_svc_machines::info::{w, DKRT_MF_TAB};
 use dkrt_svc_machines::native_page::{
     draw_page, overlay_page, turn_page, Bitmap, Canvas, Clipped, Content, Draw, Event, Frame,
-    NativePage, PageEvent, Stock, Surface, View,
+    NativePage, PageEvent, Stock, Surface, View, PAGES,
 };
+use dkrt_svc_rt::Outside;
 
 /// Offsets in the machine page's view (the same on both devices): the selected page, the browser's sounds, the track reference and the sounds of the kit.
 const VIEW_PAGE: usize = 0x90;
@@ -105,7 +106,7 @@ mod fwcall {
 
 /// The machine type of the selected sound of the view, as the image's `mf_native_type` gave it. A device whose type reader is hooked (the image gives the copy of the stock
 /// reader, `READER_REAL`) takes the sound of the browser or the track and reads its type with that copy; the other asks the firmware's track type function.
-unsafe fn machine_type(view: *const u8) -> i32 {
+unsafe fn machine_type(view: *const u8, fw: &DkFw) -> i32 {
     let reader = read_volatile((addr_of!(DKRT_MF_TAB) as *const u32).add(w::READER_REAL));
     if reader == 0 {
         return fwcall::machine_type_slotmap(view);
@@ -114,27 +115,27 @@ unsafe fn machine_type(view: *const u8) -> i32 {
     let sound = if index < 0x80 {
         fwcall::library_sound(word(view, VIEW_LIBRARY) as *const u8, index)
     } else {
-        let track = DkFw.view_track(word(view, VIEW_TRACK_REF) as usize);
+        let track = fw.view_track(word(view, VIEW_TRACK_REF) as usize);
         fwcall::track_sound(word(view, VIEW_SOUNDS) as *const u8, track)
     };
     let read: unsafe extern "C" fn(*const u8) -> u32 = transmute(reader as usize);
     read(sound) as i32
 }
 
-/// The firmware view of the machine page.
-struct FwView(*const u8);
+/// The firmware view of the machine page, with the page's firmware handle: made only from the [`Outside`] token (`with_view`), so its reads never run inside the owner.
+struct FwView(*const u8, DkFw);
 impl View for FwView {
     fn page_index(&self) -> u32 {
         unsafe { word(self.0, VIEW_PAGE) }
     }
     fn native_type(&self) -> i32 {
-        unsafe { machine_type(self.0) }
+        unsafe { machine_type(self.0, &self.1) }
     }
     fn track(&self) -> u32 {
-        unsafe { DkFw.view_track(word(self.0, VIEW_TRACK_REF) as usize) }
+        unsafe { self.1.view_track(word(self.0, VIEW_TRACK_REF) as usize) }
     }
     fn value(&self, code: u32) -> i32 {
-        DkFw.page_value(self.0 as usize, code)
+        self.1.page_value(self.0 as usize, code)
     }
     fn invalidate(&self) {
         unsafe { fwcall::invalidate(self.0) }
@@ -248,57 +249,77 @@ impl Content<FwSurface> for FwContent {
     }
 }
 
-/// The page the view shows, if it is a native one, cloned out of the owner's table. `None` also without an owner.
-unsafe fn selected(view: &FwView) -> Option<NativePage> {
+/// Runs `f` on the firmware view of `view` outside the owner (the `act` phase of `Owner::step`): the view's reads are firmware calls, and a stock getter may enter the owner
+/// again through a hook. `None` without an owner, as every hook of the file.
+unsafe fn with_view<R>(view: *const u8, f: impl FnOnce(&FwView) -> R) -> Option<R> {
+    crate::DK_SVC_OWNER.step((), |_, ()| (), |(), out| f(&FwView(view, DkFw::new(out))))
+}
+
+/// The page the view shows, if it is a native one, cloned out of the owner's table. The view is read between two short entries of the owner (is a page registered; the
+/// lookup of the values read), never inside one. `None` also without an owner.
+pub fn selected(view: &impl View) -> Option<NativePage> {
+    if !crate::DK_SVC_OWNER.with(|m| m.pages().armed())? {
+        return None;
+    }
+    let index = view.page_index();
+    if index >= PAGES {
+        return None;
+    }
+    let ty = view.native_type();
     crate::DK_SVC_OWNER
-        .with(|m| m.pages().selected(view).cloned())
+        .with(|m| m.pages().lookup(index, ty).cloned())
         .flatten()
 }
 
 /// The draw hook (`mf_draw_hook`): 0 resumes the stock draw, 1 the page is drawn, 2 asks for the stock draw first and `dks_native_overlay` after it.
 #[no_mangle]
 pub unsafe extern "C" fn dks_native_draw(view: *const u8, canvas: *mut u8) -> u32 {
-    let v = FwView(view);
-    let Some(page) = selected(&v) else {
-        return Draw::Stock as u32;
-    };
-    let vptr = word(canvas, 0);
-    draw_page(
-        &page,
-        &v,
-        &mut FwSurface { vptr },
-        &mut FwStock { canvas, vptr },
-        &mut *addr_of_mut!(CLIPPED),
-        &mut FwContent,
-    ) as u32
+    with_view(view, |v| {
+        let Some(page) = selected(v) else {
+            return Draw::Stock as u32;
+        };
+        let vptr = word(canvas, 0);
+        draw_page(
+            &page,
+            v,
+            &mut FwSurface { vptr },
+            &mut FwStock { canvas, vptr },
+            &mut *addr_of_mut!(CLIPPED),
+            &mut FwContent,
+        ) as u32
+    })
+    .unwrap_or(Draw::Stock as u32)
 }
 
 /// The second half of an overlay page, after the stock draw.
 #[no_mangle]
 pub unsafe extern "C" fn dks_native_overlay(view: *const u8, canvas: *mut u8) {
-    let v = FwView(view);
-    let Some(page) = selected(&v) else {
-        return;
-    };
-    let vptr = word(canvas, 0);
-    overlay_page(
-        &page,
-        &v,
-        &mut FwSurface { vptr },
-        &mut FwStock { canvas, vptr },
-        &mut *addr_of_mut!(CLIPPED),
-        &mut FwContent,
-    );
+    with_view(view, |v| {
+        let Some(page) = selected(v) else {
+            return;
+        };
+        let vptr = word(canvas, 0);
+        overlay_page(
+            &page,
+            v,
+            &mut FwSurface { vptr },
+            &mut FwStock { canvas, vptr },
+            &mut *addr_of_mut!(CLIPPED),
+            &mut FwContent,
+        );
+    });
+}
+
+/// The parameter code of an encoder on the page the view shows: -1 resumes the stock mapper.
+pub fn code(view: &impl View, encoder: u32) -> i32 {
+    selected(view).map_or(-1, |page| page.encoder_code(encoder))
 }
 
 /// The parameter code of an encoder (`mf_code_hook`): -1 resumes the stock mapper.
 #[no_mangle]
 pub unsafe extern "C" fn dks_native_code(view: *const u8, encoder: u32) -> i32 {
-    crate::DK_SVC_OWNER
-        .with(|m| m.pages().code(&FwView(view), encoder))
-        .unwrap_or(-1)
+    with_view(view, |v| code(v, encoder)).unwrap_or(-1)
 }
-
 /// The number of pages of machine type `ty`, given `ordinary` pages of its own.
 #[no_mangle]
 pub unsafe extern "C" fn dks_native_page_count(ty: u32, ordinary: u32) -> u32 {
@@ -321,14 +342,16 @@ pub unsafe extern "C" fn dks_native_descriptor(ty: u32, page: u32) -> u32 {
 
 /// The turn of an encoder on a native page: nonzero when the page consumed it. Runs outside the owner.
 pub unsafe fn turn(view: *const u8, ev: *const u8) -> u32 {
-    let v = FwView(view);
-    let Some(page) = selected(&v) else {
-        return 0;
-    };
-    let event = Event {
-        control: word(ev, EV_CONTROL),
-        delta: word(ev, EV_DELTA) as i32,
-        coarse: *ev.add(EV_COARSE) != 0,
-    };
-    turn_page(&page, &v, &event, &mut FwContent)
+    with_view(view, |v| {
+        let Some(page) = selected(v) else {
+            return 0;
+        };
+        let event = Event {
+            control: word(ev, EV_CONTROL),
+            delta: word(ev, EV_DELTA) as i32,
+            coarse: *ev.add(EV_COARSE) != 0,
+        };
+        turn_page(&page, v, &event, &mut FwContent)
+    })
+    .unwrap_or(0)
 }

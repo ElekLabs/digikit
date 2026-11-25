@@ -1,7 +1,9 @@
 //! `Owner<T>`: the one cell of a service file that holds its owner object (`Provider`), made by `start` in the file's `init` and taken back by `stop` in `fini`.
 mod gate;
+mod step;
 
 use self::gate::{Admit, Gate};
+pub use self::step::Outside;
 use core::cell::UnsafeCell;
 use core::mem::MaybeUninit;
 use dkrt_abi::provider::Status;
@@ -51,11 +53,15 @@ pub enum Post {
 /// calls never both find the owner idle. A call that arrives meanwhile (a callback of the same service, a hook in an interrupt, the other task) never forms a second `&mut T`:
 /// `with` and `run` refuse it, and [`Owner::post`] queues a typed event (`A::Event`, at most `N` waiting, no heap) that runs through `A::apply` right after the outer call
 /// returns, before the owner is idle. A refused call or a full queue is counted in [`Owner::refused`], never dropped silently. The object itself is never shared: state that a job in another task reads or writes lives in a cell of its own, outside `T`.
+///
+/// The layout is fixed (`repr(C)`, the gate first, the refusal count first in the gate): the first word of `DK_SVC_OWNER` is the count of refused calls, which a device
+/// test reads at the symbol (`Owner::refused` for the host).
+#[repr(C)]
 pub struct Owner<T, A: Events<T> = NoEvents, const N: usize = 0> {
-    /// The state, uninitialised until `start`: all-zero bytes, so the cell is `.bss` and costs no file bytes.
-    cell: UnsafeCell<MaybeUninit<T>>,
     /// The flags, the queue's bookkeeping and the refusal count.
     gate: Gate,
+    /// The state, uninitialised until `start`: all-zero bytes, so the cell is `.bss` and costs no file bytes.
+    cell: UnsafeCell<MaybeUninit<T>>,
     /// The events that arrived while busy, oldest first (the gate's `head`); all-zero bytes at the start.
     queue: UnsafeCell<[MaybeUninit<A::Event>; N]>,
 }
@@ -72,7 +78,9 @@ impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
         }
     }
 
-    /// How many calls and events were refused (a nested `with` or `run`, a full queue) since the cell was made.
+    /// How many calls and events were refused since the cell was made. Counted: a call that found the owner inside another call (a nested `with`, `run` or `step`, whose
+    /// `decide` is a `run`) and an event that found the queue full. Not counted: a `start` or `stop` that is refused (loaded already, a call in progress, a transition),
+    /// and a call before `start` or after `stop` (no live object: `None` or the `refused` answer, no count). So a count above 0 means a nested call, never a lifecycle refusal.
     pub fn refused(&self) -> u32 {
         self.gate.refused()
     }

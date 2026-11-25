@@ -44,7 +44,7 @@ export const readBytes = (path: string): Uint8Array<ArrayBuffer> => new Uint8Arr
 /** Every module.toml under `dir` (default: the repository's module roots, excluding test fixtures). */
 export const manifestFiles = (dir?: string): string[] =>
   dir === undefined
-    ? ['modules', 'runtime', 'services', 'image-modules'].flatMap((r) => manifestFiles(join(root, r)))
+    ? ['modules', 'runtime', 'services'].flatMap((r) => manifestFiles(join(root, r)))
     : readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
         e.isDirectory() ? manifestFiles(join(dir, e.name)) : e.name === 'module.toml' ? [join(dir, e.name)] : [],
       );
