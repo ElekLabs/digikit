@@ -1483,7 +1483,18 @@ def check_self_contained(root: Path, mods: list[Module]) -> list[Violation]:
 
 
 # The platform and the runtime core do not name a service: no id (`core/services/<name>`), no repo path (`services/<name>/`), no service crate (`dkrt_svc_<name>`).
-DENAME_SUFFIXES = {".toml", ".json", ".s", ".S", ".inc", ".c", ".h", ".rs", ".mjs", ".py"}
+DENAME_SUFFIXES = {
+    ".toml",
+    ".json",
+    ".s",
+    ".S",
+    ".inc",
+    ".c",
+    ".h",
+    ".rs",
+    ".mjs",
+    ".py",
+}
 DENAME_SKIP_DIRS = {"tests", "build", "target", "node_modules", "out"}
 DENAME_SKIP_FILES = {"Cargo.lock"}
 # Files that may name a service, with the reason. The runtime crate links the service crates (the one place the core reaches them);
@@ -1491,12 +1502,27 @@ DENAME_SKIP_FILES = {"Cargo.lock"}
 DENAME_ALLOWED = (
     ("runtime/core/src/rs/Cargo.toml", "the runtime links the service crates"),
     ("runtime/core/src/rs/src/package/gen_services.rs", "the generated service table"),
-    ("runtime/core/src/rs/src/package/handlers.rs", "the one place the core reaches a service"),
+    (
+        "runtime/core/src/rs/src/package/handlers.rs",
+        "the one place the core reaches a service",
+    ),
     ("runtime/core/src/rs/src/package/handlers/", "host tests of handlers.rs"),
-    ("runtime/core/owners.toml", "the area tags of the runtime crates, including the service crates linked into it"),
-    ("runtime/core/project.json", "test-assembly packs the services it reads; the records list the services a device test loads"),
-    ("runtime/platform/dynfx/project.json", "runtimeAcceptance modules: the services its device tests load"),
-    ("runtime/platform/introblank/project.json", "runtimeAcceptance modules: the services its device test loads"),
+    (
+        "runtime/core/owners.toml",
+        "the area tags of the runtime crates, including the service crates linked into it",
+    ),
+    (
+        "runtime/core/project.json",
+        "test-assembly packs the services it reads; the records list the services a device test loads",
+    ),
+    (
+        "runtime/platform/dynfx/project.json",
+        "runtimeAcceptance modules: the services its device tests load",
+    ),
+    (
+        "runtime/platform/introblank/project.json",
+        "runtimeAcceptance modules: the services its device test loads",
+    ),
 )
 
 
@@ -1518,7 +1544,9 @@ def strip_comments(text: str, suffix: str) -> str:
                     break
             out.append(line[:cut])
         return "\n".join(out)
-    text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+    text = re.sub(
+        r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S
+    )
     text = re.sub(r"//[^\n]*", "", text)
     if suffix in {".s", ".S", ".inc"}:
         text = re.sub(r"\|[^\n]*", "", text)
@@ -1527,23 +1555,38 @@ def strip_comments(text: str, suffix: str) -> str:
 
 def check_de_naming(root: Path) -> list[Violation]:
     """No file under runtime/ (manifests, build files, sources; comments stripped) names a service."""
-    names = sorted(d.name for d in (root / "services").iterdir() if d.is_dir()) if (root / "services").is_dir() else []
+    names = (
+        sorted(d.name for d in (root / "services").iterdir() if d.is_dir())
+        if (root / "services").is_dir()
+        else []
+    )
     if not names:
         return []
     alt = "|".join(re.escape(n) for n in names)
-    pat = re.compile(rf"core/services/|(?<![\w/.-])services/(?:{alt})/|\bdkrt_svc_(?:{alt})\b")
-    runtime_ids = {m.id for m in load_modules(root) if rel(root, m.dir).startswith("runtime/")}
+    pat = re.compile(
+        rf"core/services/|(?<![\w/.-])services/(?:{alt})/|\bdkrt_svc_(?:{alt})\b"
+    )
+    runtime_ids = {
+        m.id for m in load_modules(root) if rel(root, m.dir).startswith("runtime/")
+    }
     out: list[Violation] = []
     for f in sorted((root / "runtime").rglob("*")):
         r = f.relative_to(root)
-        if not f.is_file() or f.suffix not in DENAME_SUFFIXES or f.name in DENAME_SKIP_FILES:
+        if (
+            not f.is_file()
+            or f.suffix not in DENAME_SUFFIXES
+            or f.name in DENAME_SKIP_FILES
+        ):
             continue
         if f.suffix == ".json" and f.name != "project.json":
             continue  # data files (test vectors) are not code of the layer
         if DENAME_SKIP_DIRS & set(r.parts[1:]) or f.name.endswith(".dko.json"):
             continue
         path = r.as_posix()
-        if any(path == a or (a.endswith("/") and path.startswith(a)) for a, _ in DENAME_ALLOWED):
+        if any(
+            path == a or (a.endswith("/") and path.startswith(a))
+            for a, _ in DENAME_ALLOWED
+        ):
             continue
         text = f.read_text(encoding="utf-8", errors="replace")
         for n, line in enumerate(strip_comments(text, f.suffix).splitlines(), 1):
