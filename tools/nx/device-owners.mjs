@@ -7,7 +7,7 @@
 //      projects win over their parents). Markdown and project.json files select nothing; a test source (config/test-source-patterns.json)
 //      does not touch its project, it selects the tests that import it (rule 5).
 //   4. A touched project P selects the device tests of P itself, of every project whose authored `implicitDependencies` name P (a test
-//      project names its subject there) and of every record whose `modules` list P (a fixture or module the test loads).
+//      project names its subject there) and of every record whose `modules` list P when P is a fixture project (tests/fixtures/modules/**); a loaded service or real module is not a subject.
 //   5. A changed TypeScript file (the driver packages only for DRIVER_SUBJECT_FILES, as the device keys do) selects the device test files whose import closure holds it (a harness or test-support helper),
 //      a changed test file or a file in a record's `sources` selects that record.
 //   6. A changed path owned by no project, or by a project no test names, selects nothing and is returned in `unowned` / `quiet`,
@@ -54,7 +54,15 @@ export const leavesOf = (file, targets) => {
 };
 
 // The names a record's subject is made of: its project, the authored implicit dependencies of the project, the modules it loads.
-const subjectNames = (project, rec) => new Set([project.name, ...(project.subjects ?? []), ...(rec.modules ?? [])]);
+// A loaded module selects the test only when it is a fixture (tests/fixtures/modules/**): a service or real module a test loads is
+// not its subject (most tests load machines.dks), the test names its subject in implicitDependencies.
+const FIXTURE_ROOT = 'tests/fixtures/modules/';
+const subjectNames = (project, rec, byName) =>
+  new Set([
+    project.name,
+    ...(project.subjects ?? []),
+    ...(rec.modules ?? []).filter((m) => byName.get(m)?.root?.startsWith(FIXTURE_ROOT)),
+  ]);
 
 /** Changed paths -> the device tests they select.
  * `projects`: [{ name, root, subjects (authored implicitDependencies), targets, metadata }] (the nodes of the Nx graph).
@@ -104,7 +112,7 @@ export const ownershipSelection = (projects, { changed, closureOf, portUsers, de
     const { name, root, targets } = project;
     for (const rec of project.metadata?.runtimeAcceptance ?? []) {
       const via = new Set();
-      for (const [p, files] of touched) if (subjectNames(project, rec).has(p)) files.forEach((f) => via.add(f));
+      for (const [p, files] of touched) if (subjectNames(project, rec, byName).has(p)) files.forEach((f) => via.add(f));
       const own = [...(rec.files ?? []).map((f) => `${root}/${f}`), ...(rec.sources ?? [])];
       changed.filter((f) => own.includes(f)).forEach((f) => via.add(f));
       if (closureOf && tsChanged.length)

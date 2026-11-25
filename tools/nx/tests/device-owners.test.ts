@@ -48,6 +48,12 @@ const graph = [
     [{ files: ['lfo.device.test.ts'] }],
     ['core/services/lfo'],
   ),
+  project(
+    'machines-user-tests',
+    'tests/consumer',
+    ['test-device--dt2'],
+    [{ files: ['consumer.device.test.ts'], modules: ['core/services/lfo'] }],
+  ),
   project('tb303', 'modules/tb303', ['test-device--dt2', 'test-conformance'], [{ files: ['tests/tb.device.test.ts'] }]),
   project('other', 'modules/other', ['test-conformance'], []),
   project('regression', 'tests/regression', [], []),
@@ -83,6 +89,10 @@ it('selects the tests that name the touched project, not those of its parent', (
 
 it('selects the tests of a project for its own product file, and the service tests that name the service', () => {
   expect(select(['modules/tb303/src/x.c']).files).toEqual(['tb303:tests/tb.device.test.ts']);
+  expect(select(['services/lfo/dks/src/lib.rs']).files).toEqual(['lfo-tests:lfo.device.test.ts']);
+});
+
+it('does not select a test for a service or real module it only loads', () => {
   expect(select(['services/lfo/dks/src/lib.rs']).files).toEqual(['lfo-tests:lfo.device.test.ts']);
 });
 
