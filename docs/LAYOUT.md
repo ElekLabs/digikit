@@ -26,7 +26,7 @@ This file says who owns which part of the repository and which moves are planned
 
 ## Module folders
 
-`modules/` holds content by kind and module ID. The runtime, services, ports and image modules have their own top-level folders. Image module and service IDs stay stable across folder moves. For example, `core/ui` lives in `runtime/platform/ui`. The layer rules are checked by `mise run check:layers`. See [architecture](ARCHITECTURE.md) and [taxonomy](design/taxonomy.md).
+`modules/` holds content by kind and module ID. The runtime (with its platform modules in `runtime/platform/`), services and ports have their own top-level folders. Image module and service IDs stay stable across folder moves. For example, `core/ui` lives in `runtime/platform/ui`. The layer rules are checked by `mise run check:layers`. See [architecture](ARCHITECTURE.md) and [taxonomy](design/taxonomy.md).
 
 | Folder | Role | What |
 | --- | --- | --- |
