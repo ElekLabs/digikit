@@ -67,15 +67,17 @@ export const buildRows = (run, graph, durDir) => {
     const cut = id.indexOf(':');
     const project = id.slice(0, cut);
     const target = id.slice(cut + 1);
-    if (!/^test-device(--|$)/.test(target)) continue;
+    if (!/^test-device(-all)?(--|$)/.test(target)) continue;
     const facts = targetFacts(nodes[project]?.data?.targets?.[target]);
     const file = durDir && join(durDir, durationName(id));
     let seconds;
     let outside = false;
+    let unverified = false;
     if (file && existsSync(file)) {
       seconds = Number(readFileSync(file, 'utf8'));
       const m = statSync(file).mtimeMs;
-      outside = run.start !== undefined && (m < run.start - 60000 || m > run.end + 60000);
+      if (Number.isFinite(run.end)) outside = m < run.start - 60000 || m > run.end + 60000;
+      else unverified = true; // run window unknown: the file may belong to any run
     }
     const half = /--([^-]+)$/.exec(target)?.[1];
     // the plain `test-device` parent runs nothing: it carries no files
@@ -91,6 +93,7 @@ export const buildRows = (run, graph, durDir) => {
       cached: t.cached,
       failed: t.failed || run.failed.includes(id),
       outside,
+      unverified,
     });
   }
   return rows;
@@ -99,8 +102,11 @@ export const buildRows = (run, graph, durDir) => {
 const fmt = (s) => (s === undefined ? 'n/a' : s >= 60 ? `${(s / 60).toFixed(1)} min` : `${s.toFixed(0)} s`);
 const base = (f) => f.replace(/^.*\//, '').replace(/\.device\.test\.ts$/, '');
 
+// Rows whose seconds do not belong to this run: failed (no new record), written outside the run window, or window unknown.
+export const stale = (r) => r.failed || r.outside || r.unverified;
+
 export const summarize = (rows, run) => {
-  const ran = rows.filter((r) => !r.cached && r.seconds !== undefined);
+  const ran = rows.filter((r) => !r.cached && r.seconds !== undefined && !stale(r));
   const sum = ran.reduce((a, r) => a + r.seconds, 0);
   return {
     ran,
@@ -113,7 +119,7 @@ export const summarize = (rows, run) => {
 export const table = (rows, { top = 20 } = {}) => {
   const sorted = [...rows].sort((a, b) => (b.seconds ?? -1) - (a.seconds ?? -1));
   const line = (r) =>
-    `| ${r.device || '-'} | ${fmt(r.seconds)}${r.outside ? ' *' : ''} | ${r.mode} | ${r.project} | ${r.files.map(base).join(', ') || r.target} | ${r.cached ? 'cached' : r.failed ? 'failed' : 'ran'} |`;
+    `| ${r.device || '-'} | ${fmt(r.seconds)}${r.outside ? ' *' : ''}${r.unverified ? ' ?' : ''} | ${r.mode} | ${r.project} | ${r.files.map(base).join(', ') || r.target} | ${r.cached ? 'cached' : r.failed ? 'failed' : 'ran'} |`;
   const head = '| half | run time | mode | project | file | this run |\n|---|---|---|---|---|---|';
   return {
     all: `${head}\n${sorted.map(line).join('\n')}`,
@@ -135,7 +141,7 @@ export const parseAudit = (text) => {
 export const compareAudit = (rows, audit, factor = 2) => {
   const per = new Map();
   for (const r of rows)
-    if (r.files.length === 1 && r.seconds !== undefined && !r.cached)
+    if (r.files.length === 1 && r.seconds !== undefined && !r.cached && !stale(r))
       per.set(base(r.files[0]), (per.get(base(r.files[0])) ?? 0) + r.seconds / 60);
   const lines = [];
   for (const [file, min] of [...per].sort((a, b) => b[1] - a[1])) {
@@ -176,7 +182,13 @@ const main = () => {
   console.log(
     `summed run time of ${s.ran.length} halves that ran: ${fmt(s.sum)} (coupled ${fmt(s.byMode('coupled'))}, zero-DSP ${fmt(s.byMode('zero'))}); run wall ${fmt(s.wall)}`,
   );
-  console.log('`*` = the duration file was written outside this run window (a later or earlier passed run)\n');
+  if (rows.some((r) => r.unverified))
+    console.warn(
+      'WARNING: the run window is unknown (log name without a timestamp, or no "Run duration": a killed run): every row is unverified (`?`) and left out of the sums',
+    );
+  console.log(
+    '`*` = the duration file was written outside this run window (a later or earlier passed run); `?` = run window unknown; both and failed rows are left out of the sums\n',
+  );
   console.log(args.includes('--md') ? t.all : t.slowest);
   const auditFile = opt('--audit');
   if (auditFile)
