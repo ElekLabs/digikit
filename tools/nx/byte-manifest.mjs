@@ -13,7 +13,7 @@ import { objectHash } from './object-hash.mjs';
 import { trackedObjects } from './tracked-objects.mjs';
 
 const DEVICES = CELLS.map(({ dev }) => dev);
-const KINDS = ['image', 'plan', 'addrmap', 'pack', 'verdicts', 'generated', 'object', 'core-object-list'];
+const KINDS = ['image', 'plan', 'addrmap', 'dksp', 'pack', 'verdicts', 'generated', 'object', 'core-object-list'];
 const RELOCATABLE = ['generated', 'object', 'core-object-list'];
 const SHA = /^[a-f0-9]{64}$/;
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
@@ -121,6 +121,8 @@ const collectImages = (root) => {
         if (job.cell.dev !== dev) continue;
         const { line, ...hashes } = values.get(path);
         expectedLines.add(line);
+        // the system package kept beside the image is part of the bytes a device test boots
+        if (job.keep) entries.push({ kind: 'dksp', path, sha256: sha(fileBytes(`${job.keep}.dksp`)) });
         for (const [kind, sha256] of Object.entries(hashes)) {
           const suffix = kind === 'image' ? 'syx' : `${kind}.json`;
           if (job.keep) {

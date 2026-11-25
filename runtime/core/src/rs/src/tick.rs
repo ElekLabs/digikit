@@ -84,3 +84,6 @@ pub unsafe extern "C" fn dkrt_tick() {
     hooks::tick(tick_phase::MODULES);
     poll_all();
 }
+
+#[cfg(test)]
+mod tests;

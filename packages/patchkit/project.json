@@ -23,7 +23,7 @@
     "objects-check": {
       "executor": "nx:run-commands",
       "cache": false,
-      "description": "Fails when a committed core object (under runtime/, services/ or runtime/platform/) is older than its sources. Content-module objects are not read.",
+      "description": "Fails when a committed core object (under the runtime/ tree, platform modules included, or services/) is older than its sources. Content-module objects are not read.",
       "inputs": [
         "{workspaceRoot}/{runtime,services}/**/src/**/*",
         "{workspaceRoot}/{runtime,services}/**/module.toml",

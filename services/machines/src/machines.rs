@@ -95,11 +95,13 @@ impl Machines {
     }
 
     /// Give parameter row `k` an owner module, as `apply` does for a loaded module's row: the host test of the service file has no loaded module.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn own_row_for_test(&mut self, k: usize, owner: u8) {
         self.reg.param_owner[k] = owner;
     }
 
     /// Open the click flow as a click on a row of `owner` would (`take_click`): the host test of the service file has no loaded module to start one.
+    #[cfg(any(test, feature = "test-support"))]
     pub fn open_flow_for_test(&mut self, ctx: crate::paramapi::Ctx) {
         self.reg.param_owner[0] = ctx.owner;
         self.clicks.begin_flow(ctx);
