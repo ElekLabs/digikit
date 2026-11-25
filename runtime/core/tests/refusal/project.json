@@ -4,9 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": [
-    "core/runtime"
-  ],
+  "implicitDependencies": ["core/runtime-package", "sdk", "core/services/lfo", "dkrt-svc-lfo"],
   "metadata": {
     "runtimeAcceptance": [
       {
@@ -18,11 +16,7 @@
           "test/lfo-shape",
           "core/services/lfo"
         ],
-        "plusdrive": true,
-        "tags": [
-          "C:loading",
-          "S:lfo"
-        ]
+        "plusdrive": true
       }
     ]
   }

@@ -6,7 +6,7 @@ model: sonnet
 
 Read AGENTS.md first. Work only in the worktree and branch named in the brief; never switch checkouts.
 
-- Run only the checks and the named device targets (change -> test) the brief lists. Never use area tags.
+- Run only the checks and the named device targets (change -> test) the brief lists. Never use tags.
 - Read failures, not logs: use the gate's failure summary or the failing task's error block; never print a whole Nx output or run log.
 - Nice heavy builds, and run at most one at a time. Stop only your own PIDs or run directories.
 - Commit at good points with the trailers the session gives. Never push or merge.

@@ -4,7 +4,8 @@ import path from 'node:path';
 import { button, type Session } from '@digi/test-support';
 import { expect, test, vi } from 'vitest';
 import { withWaitApi, type PatchedSession } from '../support.ts';
-import { evidence, pickSine } from '../runtime/fx-live.ts';
+import { evidence } from '../runtime/fx-evidence.ts';
+import { pickSine } from '../runtime/panel-waits.ts';
 import { fakeClock } from './fake-status.ts';
 
 const rt = (session: Session) => withWaitApi({ session, dk: {}, close: async () => {} } as unknown as PatchedSession);

@@ -2,23 +2,12 @@ import path from 'node:path';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { describe, expect, test } from 'vitest';
 import { withWaitApi, type TestRuntime } from '@digi/regression/support.ts';
-import {
-  peak,
-  readFloatWav,
-  bounded,
-  captureNote,
-  compare,
-  dspWords,
-  expectGainRow,
-  FREE_PC,
-  frames,
-  inspect,
-  rows,
-  rpc,
-  runFrames,
-  slotsFor,
-  word,
-} from '@digi/regression/runtime/fx-live.ts';
+import { peak, readFloatWav, compare } from '@digi/regression/runtime/pcm-files.ts';
+import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
+import { captureNote } from '@digi/regression/runtime/note-capture.ts';
+import { dspWords, FREE_PC, frames, rows, runFrames } from '@digi/regression/runtime/dsp-state.ts';
+import { expectGainRow, inspect } from '@digi/regression/runtime/fx-evidence.ts';
+import { slotsFor } from '@digi/regression/runtime/device-data.ts';
 import { GAIN, RT, SINE, triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import { chainCheck, fxExpectations } from '@digi/regression/runtime/dkm.ts';
 import { inspectFxBoot, selectSine, withPreparedFxSession } from '@digi/regression/runtime/fx-session.ts';
@@ -109,7 +98,7 @@ for (const device of DEVICES) {
       test('keeps free rows transparent, loads one effect exactly, deselects it, and refuses overflow without changing the full serial gain chain', async () => {
         const { fixture, plan, artifacts, rememberEpoch } = context;
         const dry = fixture.runtime;
-        // `inspect` (fx-live): module list, boot words, DKRT_ASSIGN, one type, no dk/fault, capacity, every free row FREE_PC, UI reached.
+        // `inspect` (fx-evidence): module list, boot words, DKRT_ASSIGN, one type, no dk/fault, capacity, every free row FREE_PC, UI reached.
         const dryState = await inspect(dry, plan, slots, false, artifacts, 'dry-boot');
         rememberEpoch(dryState.epoch);
         const dryPcm = await capture(dry, context, 'dry');

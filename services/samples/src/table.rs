@@ -65,7 +65,7 @@ pub struct PoolTable {
 /// The table of the service file: one cell, a static of the service (it holds no owner state). `Samples` takes it by reference, so a host test gives its own.
 pub type PoolCell = Shared<PoolTable>;
 
-/// The cell of the service file; `Provider::start` empties it.
+/// The cell of the service file; `Provider::start_in` empties it.
 pub static POOL_TABLE: PoolCell = PoolCell::new(PoolTable::new());
 
 /// One entry's published state, as the owner copies it from the state machine.

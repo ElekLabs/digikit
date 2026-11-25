@@ -45,9 +45,9 @@ export const TIERS = {
     access: 'rw',
     narrow: false,
   },
-  // The merge tier selects device tests by area (tools/nx/test-subset.mjs `--gate`, docs/TESTING.md "Area-based device selection"):
+  // The merge tier selects device tests by ownership (tools/nx/test-subset.mjs `--gate`, docs/TESTING.md "Nx gate"):
   // `affected` runs every target below except `test-device` and `test-conformance`; `--all-affected` puts them back (the old selection).
-  merge: { targets: MERGE_TARGETS, access: 'rw', narrow: false, pgo: true, areaDevice: true },
+  merge: { targets: MERGE_TARGETS, access: 'rw', narrow: false, pgo: true, ownedDevice: true },
   full: {
     targets: [
       ...MERGE_TARGETS.filter(
@@ -68,8 +68,8 @@ export const TIERS = {
   },
 };
 
-// Whether the tier's device tests are selected by area and not by `affected` (the tier says so and `--all-affected` is not given).
-export const deviceByArea = (tier, allAffected) => Boolean(tier?.areaDevice) && !allAffected;
+// Whether the tier's device tests are selected by ownership and not by `affected` (the tier says so and `--all-affected` is not given).
+export const deviceByOwnership = (tier, allAffected) => Boolean(tier?.ownedDevice) && !allAffected;
 
 // The gate's emulators (daemons and coupled-run) use the per-device PGO profile of DN2 and DT2.
 export function pgoRead(device) {
@@ -144,7 +144,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     allAffected = args.includes('--all-affected');
     args = args.filter((arg) => arg !== '--all-affected');
     process.env.DIGI_GATE_BASE ||= 'main';
-    const targets = deviceByArea(tier, allAffected)
+    const targets = deviceByOwnership(tier, allAffected)
       ? tier.targets.filter((t) => t !== 'test-device' && t !== 'test-conformance').join(',')
       : tier.targets.join(',');
     args = tier.runMany ? ['-t', targets, ...args] : ['--base', process.env.DIGI_GATE_BASE, '-t', targets, ...args];
@@ -177,16 +177,16 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       : ['pnpm', ['nx:pilot', ...command]];
   const commands = [tier?.runMany ? ['run-many', ...args] : ['affected', ...args]];
   console.log(`gate: ${commands[0][0]} ${tier ? 'over the tier targets' : 'with the given arguments'}`);
-  // The device tests of the changed areas and the fixed smoke set: test-subset.mjs plans the run (it runs it itself, with the
+  // The device tests the changed files select by ownership and the fixed smoke set: test-subset.mjs plans the run (it runs it itself, with the
   // remote cache and the compact output); the plan alone with --explain. Each command has its own trace dir and summary.
-  const areaCommand = deviceByArea(tier, allAffected)
+  const ownedCommand = deviceByOwnership(tier, allAffected)
     ? [
         'node',
         ['tools/nx/test-subset.mjs', '--gate', '--base', process.env.DIGI_GATE_BASE, ...(explain ? [] : ['--run'])],
       ]
     : undefined;
-  for (const command of [...commands, ...(areaCommand ? [areaCommand] : [])]) {
-    const isArea = command === areaCommand;
+  for (const command of [...commands, ...(ownedCommand ? [ownedCommand] : [])]) {
+    const isArea = command === ownedCommand;
     const [file, fileArgs] = isArea ? command : wrap(styled(command));
     console.log(`gate: ${file} ${fileArgs.join(' ')}`);
     const startedAt = Date.now();

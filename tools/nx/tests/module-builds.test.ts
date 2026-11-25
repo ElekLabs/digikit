@@ -97,7 +97,6 @@ it('scopes explicit acceptance images without changing the default image produce
           runtimeAcceptance: [
             {
               files: ['ui.device.test.ts'],
-              tags: ['C:loading', 'M:tool/example'],
               modules: ['fixture/example'],
               patchModules,
             },

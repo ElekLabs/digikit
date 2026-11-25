@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { pollUntil } from '@digi/test-support';
-import { currentRecord } from '@digi/regression/runtime/card-kit.ts';
+import { currentRecord } from '@digi/regression/runtime/card-record.ts';
 import { CARD_SYMBOLS, cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import {
   clearProject,
@@ -19,7 +19,7 @@ import {
   unloadLive,
   type ProtocolRun,
 } from '@digi/regression/runtime/project-kit.ts';
-import { word } from '@digi/regression/runtime/fx-live.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { shot } from '@digi/regression/runtime/fx-session.ts';

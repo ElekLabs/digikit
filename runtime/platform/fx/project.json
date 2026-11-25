@@ -11,11 +11,6 @@
           "dt2"
         ],
         "dsp": "sharc",
-        "tags": [
-          "A:core/fx",
-          "C:boot",
-          "C:dsp"
-        ],
         "sources": [
           "runtime/platform/dsp-link/{module.toml,src/**/*,build/**/*}",
           "runtime/platform/expansion/{module.toml,src/**/*,build/**/*}",

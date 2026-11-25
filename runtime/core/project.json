@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime",
-  "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"],
+  "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw", "core/services/project"],
   "metadata": {
     "runtimeAcceptance": [{ "modules": ["test/svc-test", "test/svc-test-user", "test/project-user", "core/services/project"] }]
   },
@@ -10,7 +10,7 @@
       "executor": "nx:run-commands",
       "cache": false,
       "inputs": [
-        "{projectRoot}/src/rs/**/*",
+        "{workspaceRoot}/runtime/core/src/rs/**/*",
         {
           "input": "production",
           "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"]
@@ -53,7 +53,7 @@
       "cache": true,
       "description": "Host assembly tests: the seams between the real packed outputs (fixtures, service files, bound files, the runtime object, the info table of the image) through the package graph and admission, the role checks and the installs of the boot over FakePlatform. Every test-device target depends on it.",
       "inputs": [
-        "{projectRoot}/src/rs/**/*",
+        "{workspaceRoot}/runtime/core/src/rs/**/*",
         {
           "input": "production",
           "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"]
@@ -71,7 +71,7 @@
         "{workspaceRoot}/services/{fx,machines,lfo,samples,shortcuts,project}/dks/{Cargo.toml,src/**/*}",
         "{workspaceRoot}/services/project/dks/build/project.dko.json",
         "{workspaceRoot}/tools/nx/device-images.mjs",
-        "{projectRoot}/src/rs/src/package/loader/tests/snapshots/*.txt",
+        "{workspaceRoot}/runtime/core/src/rs/src/package/loader/tests/snapshots/*.txt",
         { "dependentTasksOutputFiles": "dist/modules/*/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/syspkg/*/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
@@ -95,6 +95,8 @@
         "test/local-ping-user:pack",
         "test/local-ping-user-b:pack",
         "test/local-ping-old-user:pack",
+        "test/local-step:pack",
+        "test/local-step-user:pack",
         "test/local-patch:pack",
         "test/local-patch-user:pack",
         "test/project-user:pack",

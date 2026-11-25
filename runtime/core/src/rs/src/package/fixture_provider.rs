@@ -82,8 +82,9 @@ pub(crate) fn table(rows: Vec<ProviderHandle>) -> dkrt_abi::service::ServiceTabl
 pub(crate) struct Nothing;
 
 impl<C: dkrt_abi::core_api::CoreApi> Provider<C> for Nothing {
-    fn start(_: &C) -> Result<Nothing, i32> {
-        Ok(Nothing)
+    fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Nothing>) -> Result<(), i32> {
+        slot.write(Nothing);
+        Ok(())
     }
 }
 

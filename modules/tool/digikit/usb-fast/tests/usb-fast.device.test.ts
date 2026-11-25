@@ -18,12 +18,14 @@ import {
 } from '@digi/dk-session';
 import { repoRoot } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
-import { overlayArgs, plusdriveBinary, pokeKnob } from '@digi/regression/runtime/card-kit.ts';
+import { overlayArgs, plusdriveBinary } from '@digi/regression/runtime/card-store.ts';
+import { pokeKnob } from '@digi/regression/runtime/guest-mailbox.ts';
 import { cardRig, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { portFile } from '@digi/regression/runtime/device-data.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
-import { rpc, word, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { rpc, word } from '@digi/regression/runtime/guest-access.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 
 /**
  * digikit/usb-fast (docs/plans/usb-fast-hardware.md, step 4), through the TypeScript BulkSession over the emulator link (`EmuBulkLink`: the daemon's

@@ -5,7 +5,7 @@ use super::{Events, Owner};
 use core::marker::PhantomData;
 
 /// The proof that the owner is not inside a call: only [`Owner::step`] makes one, and only for its `act` phase, which runs after the object was released. A service's firmware
-/// handle is built from it (`DkFw::new(&Outside)`), so a handle cannot be made inside a `with` closure that has no token.
+/// handle is built from it (`DkFw::new(&Outside)`), so a handle cannot be made inside a `with` closure that has no token. Do not keep an `Outside`, or a handle made from it, for a later `with`: the token proves the owner idle only during the `act` call that got it, and a kept one reaches firmware from inside a later call into the owner.
 pub struct Outside<'a>(PhantomData<&'a ()>);
 
 impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {

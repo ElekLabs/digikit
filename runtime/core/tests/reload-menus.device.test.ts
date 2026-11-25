@@ -6,7 +6,7 @@ import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
-import { word } from '@digi/regression/runtime/fx-live.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
 import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
 import { openDigikitMenu } from '@digi/regression/runtime/flows/menu.ts';
 

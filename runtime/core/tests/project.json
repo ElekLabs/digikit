@@ -1,22 +1,44 @@
 {
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime-tests",
-  "tags": ["test-only"],
-  "implicitDependencies": ["core/runtime"],
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime-package",
+    "sdk",
+    "core/services/fx",
+    "core/services/project",
+    "core/services/lfo",
+    "dkrt-svc-fx",
+    "dkrt-svc-project",
+    "dkrt-svc-lfo"
+  ],
   "metadata": {
     "runtimeAcceptance": [
       {
-        "files": ["card-guard.device.test.ts"],
-        "devices": ["st"],
-        "tags": ["C:storage", "A:core/card-guard"],
-        "modules": []
-      },
-      {
-        "files": ["reload.device.test.ts"],
+        "files": [
+          "reload.device.test.ts"
+        ],
         "firmwareOnly": "the audible swap of a reload and the transport refusal on the real firmware",
         "dsp": "sharc",
-        "tags": ["C:loading", "C:dsp", "S:machines"],
-        "modules": ["digikit/debug", "test/lfo-shape", "test/sine", "core/services/machines", "core/services/lfo"],
+        "modules": [
+          "digikit/debug",
+          "test/lfo-shape",
+          "test/sine",
+          "core/services/machines",
+          "core/services/lfo"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
         "compiles": true,
         "sources": [
           "tests/fixtures/modules/sine/module.toml",
@@ -25,10 +47,11 @@
         ]
       },
       {
-        "files": ["reload-fx.device.test.ts"],
+        "files": [
+          "reload-fx.device.test.ts"
+        ],
         "firmwareOnly": "the audio of an effect and of the send bus across reload, unload and load, the real effect rows and the page frame",
         "dsp": "sharc",
-        "tags": ["C:loading", "C:dsp", "A:core/fx"],
         "modules": [
           "digikit/debug",
           "test/sine",
@@ -36,225 +59,144 @@
           "test/dyn-fx-gain-send",
           "core/services/machines",
           "core/services/fx"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ]
       },
       {
-        "files": ["reload-project.device.test.ts"],
+        "files": [
+          "reload-project.device.test.ts"
+        ],
         "firmwareOnly": "a project saved with a reloaded machine plays the same sound on the firmware",
-        "devices": ["dt2"],
+        "devices": [
+          "dt2"
+        ],
         "dsp": "sharc",
-        "tags": ["C:loading", "C:dsp", "C:storage", "S:machines"],
-        "modules": ["test/sine", "core/services/machines"]
-      },
-      {
-        "files": ["reload-menus.device.test.ts"],
-        "firmwareOnly": "the real core/ui reports a built menu object to the runtime",
-        "tags": ["C:loading", "C:state"],
-        "modules": ["digikit/debug", "test/entry-demo"]
-      },
-      {
-        "files": ["live.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["C:loading", "C:dsp", "S:machines"],
-        "modules": ["digikit/debug", "test/c-demo", "test/sine", "core/services/machines"],
-        "sources": [
-          "tools/devtools/wb.mjs",
-          "tools/devtools/wb_transfer.mjs",
-          "packages/workbench-core/src/modules/dktransfer.ts"
-        ]
-      },
-      {
-        "files": ["missing.device.test.ts"],
-        "firmwareOnly": "the audio silence of an absent machine and the sound after its load",
-        "dsp": "sharc",
-        "tags": ["C:loading", "C:dsp", "S:machines"],
-        "modules": ["digikit/debug", "test/sine", "test/native-page", "core/services/machines"],
-        "sources": [
-          "tools/devtools/wb.mjs",
-          "tools/devtools/wb_transfer.mjs",
-          "packages/workbench-core/src/modules/dktransfer.ts"
-        ]
-      },
-      {
-        "files": ["modules-capacity.device.test.ts"],
-        "firmwareOnly": "the MODULES and CAPACITY ranges against the real arena and DSP area",
-        "devices": ["dt2"],
-        "dsp": "sharc",
-        "tags": ["C:loading"],
-        "modules": ["digikit/debug", "digikit/probe", "digikit/remote", "test/dyn-dn2", "core/services/machines"]
-      },
-      {
-        "files": ["fault-trace.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["C:diagnostics", "C:dsp", "C:fault", "C:layout"],
         "modules": [
-          "digikit/debug",
-          "test/dyn-fx-gain-send",
-          "test/dyn-fx-hang",
-          "test/dyn-fx-nan",
-          "core/services/machines",
-          "core/services/fx"
-        ]
-      },
-      {
-        "files": ["fault-trace-dt2.device.test.ts"],
-        "devices": ["dt2"],
-        "dsp": "sharc",
-        "tags": ["C:diagnostics", "C:dsp", "C:fault", "C:layout"],
-        "modules": [
-          "digikit/debug",
-          "test/dyn-crash",
-          "test/dyn-dsp-hang",
-          "core/services/machines",
-          "core/services/fx"
-        ]
-      },
-      {
-        "files": ["transfer-live.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["C:storage", "C:transport"],
-        "modules": ["digikit/debug", "test/sine", "core/services/machines"],
-        "sources": [
-          "tools/devtools/wb.mjs",
-          "tools/devtools/wb_transfer.mjs",
-          "packages/devices/src/node.ts",
-          "packages/devices/src/parse.ts",
-          "packages/workbench-core/src/modules/dktransfer.ts",
-          "packages/workbench-core/src/node/node-host.ts",
-          "packages/workbench-core/src/node/stock-image.ts"
-        ]
-      },
-      {
-        "files": ["samples-live.device.test.ts"],
-        "devices": ["dt2"],
-        "tags": ["C:storage", "S:samples"],
-        "modules": [],
-        "sources": ["packages/workbench-core/src/transfer/sample-upload.ts"],
-        "plusdrive": true,
-        "dksampleWasm": true
-      },
-      {
-        "files": ["store-format.device.test.ts"],
-        "firmwareOnly": "host hash against the runtime's on uploaded files, the booted image refusing to load a module whose card bytes changed, and a version 3 card booting, taking the first upload and loading its kept selection after a restart",
-        "tags": ["C:loading", "C:storage"],
-        "modules": ["test/c-demo"],
-        "plusdrive": true
-      },
-      {
-        "files": ["samples-store-live.device.test.ts"],
-        "devices": ["dn2"],
-        "tags": ["C:storage", "S:samples"],
-        "modules": [],
-        "sources": ["packages/workbench-core/src/transfer/sample-upload.ts"],
-        "dksampleWasm": true
-      },
-      {
-        "files": ["upload.device.test.ts"],
-        "devices": ["dt2"],
-        "tags": ["C:storage", "C:transport"],
-        "modules": [],
-        "plusdrive": true
-      },
-      {
-        "files": ["upload-depth.device.test.ts"],
-        "tags": ["C:transport"],
-        "modules": [],
-        "plusdrive": true
-      },
-      {
-        "files": ["upload-faults.device.test.ts"],
-        "devices": ["dt2"],
-        "dsp": "sharc",
-        "tags": ["C:layout", "C:storage", "C:transport"],
-        "modules": ["test/sine", "core/services/machines"],
-        "plusdrive": true
-      },
-      {
-        "files": ["card-safety.device.test.ts"],
-        "firmwareOnly": "core-only boot cause, boot counter record, USB store replies and log events of the booted image on cards the emulated driver reports (blank, foreign, torn, small)",
-        "devices": ["dt2"],
-        "tags": ["C:storage"],
-        "modules": ["test/c-demo"],
-        "plusdrive": true
-      },
-      {
-        "files": ["safe-mode.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["C:boot", "C:layout", "C:storage"],
-        "modules": ["test/c-demo", "test/dyn-dn2", "test/dyn-crash", "test/sine", "core/services/machines"],
-        "plusdrive": true
-      },
-      {
-        "files": ["core-only.device.test.ts"],
-        "firmwareOnly": "a core-only boot of the real firmware: the reported cause, the core-only frame in place of the intro, the resident store answering, and the counter cleared on the card by an upload of the package or by RETRY",
-        "tags": ["C:boot", "C:storage"],
-        "modules": [],
-        "plusdrive": true,
-        "sources": [
-          "runtime/core/tests/fixtures/safe-counter.bin",
-          "runtime/core/tests/fixtures/core-crashes.bin",
-          "runtime/core/tests/fixtures/core-missing.bin"
-        ]
-      },
-      {
-        "files": ["boot-restart.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["C:boot", "C:dsp", "C:loading"],
-        "modules": ["test/dyn-dn2", "test/sine", "core/services/machines"],
-        "plusdrive": true
-      },
-      {
-        "files": ["crash-capture.device.test.ts"],
-        "devices": ["dt2"],
-        "dsp": "sharc",
-        "tags": ["C:diagnostics", "C:fault", "C:layout"],
-        "modules": ["digikit/debug", "test/dyn-crash"],
-        "plusdrive": true
-      },
-      {
-        "files": ["debug-guard.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["C:diagnostics", "C:dsp", "C:layout"],
-        "modules": ["digikit/debug", "test/dyn-guard-nan", "test/sine", "core/services/machines"],
-        "plusdrive": true
-      },
-      {
-        "files": ["platform-contract.device.test.ts"],
-        "tags": ["C:boot", "C:device-facts", "C:storage", "C:tick", "C:transport"],
-        "modules": [],
-        "sources": ["runtime/core/tests/platform/contract.toml"]
-      },
-      {
-        "files": ["addrmap.device.test.ts"],
-        "tags": ["C:layout"],
-        "modules": ["digikit/debug", "test/dyn-demo"]
-      },
-      {
-        "files": ["log-names.device.test.ts"],
-        "tags": ["C:diagnostics", "C:layout"],
-        "modules": ["digikit/debug", "test/dyn-demo"],
-        "dkprofWasm": true
-      },
-      {
-        "files": ["memaudit.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["C:layout"],
-        "modules": [
-          "test/c-demo",
-          "test/dyn-demo",
-          "test/dyn-demo-stray",
-          "test/dyn-dn2",
           "test/sine",
           "core/services/machines"
         ],
-        "plusdrive": true
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ]
+      },
+      {
+        "files": [
+          "reload-menus.device.test.ts"
+        ],
+        "firmwareOnly": "the real core/ui reports a built menu object to the runtime",
+        "modules": [
+          "digikit/debug",
+          "test/entry-demo"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ]
+      },
+      {
+        "files": [
+          "live.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "digikit/debug",
+          "test/c-demo",
+          "test/sine",
+          "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
+        "sources": [
+          "tools/devtools/wb.mjs",
+          "tools/devtools/wb_transfer.mjs",
+          "packages/workbench-core/src/modules/dktransfer.ts"
+        ]
+      },
+      {
+        "files": [
+          "missing.device.test.ts"
+        ],
+        "firmwareOnly": "the audio silence of an absent machine and the sound after its load",
+        "dsp": "sharc",
+        "modules": [
+          "digikit/debug",
+          "test/sine",
+          "test/native-page",
+          "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
+        "sources": [
+          "tools/devtools/wb.mjs",
+          "tools/devtools/wb_transfer.mjs",
+          "packages/workbench-core/src/modules/dktransfer.ts"
+        ]
+      },
+      {
+        "files": [
+          "modules-capacity.device.test.ts"
+        ],
+        "firmwareOnly": "the MODULES and CAPACITY ranges against the real arena and DSP area",
+        "devices": [
+          "dt2"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "digikit/debug",
+          "digikit/probe",
+          "digikit/remote",
+          "test/dyn-dn2",
+          "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "digikit/probe",
+            "reason": "loaded as a module that logs in its init; the probe itself is not exercised"
+          },
+          {
+            "module": "digikit/remote",
+            "reason": "loaded as a module that registers early; the remote module itself is not exercised"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ]
       }
-    ],
-    "mergeTests": [
-      "upload-depth.device.test.ts",
-      "safe-mode.device.test.ts",
-      "samples-live.device.test.ts",
-      "samples-store-live.device.test.ts"
     ]
   }
 }

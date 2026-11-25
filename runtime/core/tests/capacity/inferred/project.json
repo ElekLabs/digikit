@@ -2,14 +2,13 @@
   "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime-inferred-needs-tests",
   "tags": ["test-only", "tier:full"],
-  "implicitDependencies": ["core/runtime"],
+  "implicitDependencies": ["core/runtime-package", "sdk", "dkneeds", "core/services/machines", "core/services/fx", "dkrt-svc-machines", "dkrt-svc-fx"],
   "metadata": {
     "runtimeAcceptance": [
       {
         "files": ["inferred-needs.device.test.ts"],
         "firmwareOnly": "the resources the real loader takes equal the needs patchkit infers (full tier; no host test of this seam yet)",
         "dsp": "sharc",
-        "tags": ["C:loading", "S:machines"],
         "modules": [
           "digikit/debug",
           "digikit/probe",
@@ -21,6 +20,20 @@
           "test/sine",
           "core/services/fx",
           "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "digikit/probe",
+            "reason": "loaded as a module that logs in its init; the probe itself is not exercised"
+          },
+          {
+            "module": "digikit/remote",
+            "reason": "loaded as a module that registers early; the remote module itself is not exercised"
+          }
         ],
         "plusdrive": true
       }

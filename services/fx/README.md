@@ -30,7 +30,7 @@ through that concept's functions, because something outside the service reads th
 
 | Static | File | Reader |
 | --- | --- | --- |
-| `DKRT_FROWS` | `src/rows.rs` | `core/dsp-link` (`_dl_win2_base = "fx.rows"` in its module.toml), the contract suite (`rows.kept`), the runtime's host tests of cleanup and invariants |
+| `DKRT_FROWS` | `src/rows.rs` | `core/dsp-link` (`_dl_win2_base = "window2.rows"` in its module.toml), the contract suite (`rows.kept`), the runtime's host tests of cleanup and invariants |
 | `DKRT_FXP` | `src/fxpage/state.rs` | the device tests `fx-kit-persist` and the shot module's link test (`sent`, `errors`, `seeds`) |
 | `DKRT_FXS` | `src/fxsend/state.rs` | the device test `fx-track-route` (`allow`, `dflt`) |
 | `DKRT_FXP_TAB`, `DKRT_FXP_ROWS`, `DKRT_FXP_LIST_BUF`, `DKRT_FXP_COUNT`, `DKRT_FXP_IDS`, `DKRT_FXP_DEFS`, `DKRT_FXP_*` counters and cells | `src/fxpage/symbols.rs` | the assembler of the nine hooks (`dks/src/hooks.rs`) |

@@ -2,19 +2,17 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime-settings-tests",
   "tags": ["test-only"],
-  "implicitDependencies": ["core/runtime"],
+  "implicitDependencies": ["core/runtime", "core/runtime-storage", "dkrt-sdk"],
   "metadata": {
     "runtimeAcceptance": [
       {
         "files": ["settings.device.test.ts", "settings-copies.device.test.ts", "settings-cards.device.test.ts"],
         "firmwareOnly": "the settings write 2 s of the firmware block counter after the last change, copy A then B in the real card's sectors, the restart flush and the boot read-back across a restart, the USB answers (CAPACITY, SETTINGS, LIST) over a store that overlaps the settings area, and the header B repair on a card with an older header B. The put and get flow, the copy choice, the mailbox answers and a torn copy are host tests (runtime settings_tests.rs)",
-        "tags": ["C:boot", "C:state", "C:storage"],
         "modules": ["test/c-demo"],
         "plusdrive": true
       },
       {
         "files": ["settings-api.device.test.ts"],
-        "tags": ["C:state", "C:storage"],
         "modules": ["test/settings-a", "test/settings-b"],
         "plusdrive": true
       }

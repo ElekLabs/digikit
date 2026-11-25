@@ -11,7 +11,20 @@ import { haveWasmAndImages as need, images, py, root, wasmPath, workDir, writeBu
 // test that took 408 s on a loaded machine. The limit fits that work.
 vi.setConfig({ testTimeout: 900_000 });
 
-type Registry = { name: string; entries: { id: string; index: number }[]; gaps?: number[]; count?: number };
+/** A `[limits]` number of a device file (devices/*.toml, the one source of the reserved row counts). */
+function limit(dev: 'dt2' | 'dn2', key: string): number {
+  const file = join(root, 'devices', dev === 'dt2' ? 'digitakt-ii.toml' : 'digitone-ii.toml');
+  const m = readFileSync(file, 'utf8').match(new RegExp(`^${key}\\s*=\\s*(\\d+)`, 'm'));
+  assert.ok(m, `${file}: no limit ${key}`);
+  return Number(m[1]);
+}
+
+type Registry = {
+  name: string;
+  entries: { id: string; index: number; module: string }[];
+  gaps?: number[];
+  count?: number;
+};
 
 /** The raw exports of patchkit.wasm (`pk_*`), with the helpers that pass bytes in and read results out. */
 async function load() {
@@ -101,14 +114,14 @@ test.skipIf(!need)(
       );
       const wasmPlan = text(x.pk_plan_ptr, x.pk_plan_len);
       assert.equal(wasmPlan, readFileSync(plan, 'utf8'), `${dev}: plan.json differs`);
-      // no module adds rows at patch time: the registries exist and are empty
+      // core/rows reserves the run-time rows (RC4-4: the machine rows dyn<N>, the parameter blocks dp, fp and fs) and no other module adds rows at patch time
       const registries = JSON.parse(wasmPlan).registries as Registry[];
       for (const name of ['machines', 'params']) {
-        assert.deepEqual(
-          registries.find((r) => r.name === name)?.entries,
-          [],
-          `${dev}: ${name} has no patch-time rows`,
-        );
+        const entries = registries.find((r) => r.name === name)?.entries ?? [];
+        assert.ok(entries.length > 0, `${dev}: ${name} has the reserved run-time rows`);
+        for (const e of entries) {
+          assert.equal(e.module.split('@')[0], 'core/rows', `${dev}: ${name} row ${e.id} comes from core/rows`);
+        }
       }
     }
   },
@@ -122,8 +135,8 @@ test.skipIf(!need)(
     const [bp, bl] = put(readFileSync(writeBundle(work)));
     // the first parameter code and the reserved page rows differ by device (the machine rows are the types 16 to 23 on both)
     const want = {
-      dt2: { gaps: [7, 8, 9, 10, 11, 12, 13, 14, 15], firstParam: 275, pages: 0 },
-      dn2: { gaps: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], firstParam: 321, pages: 8 },
+      dt2: { gaps: [7, 8, 9, 10, 11, 12, 13, 14, 15], firstParam: 275 },
+      dn2: { gaps: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], firstParam: 321 },
     } as const;
     for (const dev of ['dt2', 'dn2'] as const) {
       const out = join(work, `${dev}-dynreg.syx`);
@@ -141,7 +154,8 @@ test.skipIf(!need)(
         '--plan',
         plan,
       );
-      assert.match(said, /added by requires: .*core\/machines/);
+      // core/rows is the one module that reserves the rows: only the expansion it needs is added
+      assert.match(said, /applied core\/expansion@[\d.]+, core\/rows@[\d.]+ to /);
       const [fp, fl] = put(readFileSync(images[dev]));
       const [ip, il] = put(Buffer.from('core/rows'));
       assert.equal(x.pk_apply(fp, fl, bp, bl, ip, il), 0, text(x.pk_err_ptr, x.pk_err_len));
@@ -161,7 +175,9 @@ test.skipIf(!need)(
       );
       assert.deepEqual(machines.gaps, want[dev].gaps, `${dev}: the rows between the stock and the run-time types`);
       const params = find('params').entries;
-      assert.equal(params.length, 16, `${dev}: sixteen reserved parameter rows`);
+      // the three blocks of the device file: param_rows, fx_slots times 8 (`per`), send_rows
+      const paramRows = limit(dev, 'param_rows') + limit(dev, 'fx_slots') * 8 + limit(dev, 'send_rows');
+      assert.equal(params.length, paramRows, `${dev}: reserved parameter rows (three blocks)`);
       assert.deepEqual(
         [params[0]!.id, params[0]!.index],
         ['dp0', want[dev].firstParam],
@@ -169,7 +185,7 @@ test.skipIf(!need)(
       );
       assert.equal(
         registries.find((r) => r.name === 'pages')?.entries.length ?? 0,
-        want[dev].pages,
+        limit(dev, 'page_rows'),
         `${dev}: reserved page rows`,
       );
     }

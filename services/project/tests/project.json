@@ -2,18 +2,27 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/services/project-tests",
   "tags": ["test-only"],
-  "implicitDependencies": ["core/runtime"],
+  "implicitDependencies": ["core/services/project", "core/runtime-storage", "core/runtime-package", "dkrt-svc-project"],
   "metadata": {
     "runtimeAcceptance": [
       {
         "files": ["project.device.test.ts"],
         "dsp": "sharc",
         "plusdrive": true,
-        "tags": ["C:state", "C:storage", "C:loading"],
         "modules": ["digikit/debug", "test/project-user", "test/sine", "core/services/project", "core/services/machines"],
         "sources": [
           "packages/dk-session/src/dkupload-core.ts",
           "packages/dk-session/src/gen_proto.ts"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ]
       }
     ]

@@ -9,7 +9,7 @@ import { repoRoot, withinRuntimeDeadline, type Device, type RuntimeBaseline, typ
 import { aggregate, withReusablePatchedSession, type PatchedSession } from '../support.ts';
 import { record } from './artifacts.ts';
 import { cachedCard, cardKey, fileSha } from './card-cache.ts';
-import { plusdriveBinary } from './card-kit.ts';
+import { plusdriveBinary } from './card-store.ts';
 import { installSystemPackage } from './system-package.ts';
 import { FIRMWARE, claimRunDir } from './devices.ts';
 import { moduleArtifact } from './install.ts';
@@ -18,17 +18,11 @@ import { bindServiceSymbols } from './service-symbols.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { moduleResultsNote } from './runtime-menu.ts';
 import { pollEmulated } from './waits.ts';
-import {
-  bounded,
-  evidence,
-  evidenceCollector,
-  options,
-  pickSine,
-  word,
-  type RequireAudible,
-  type Rt,
-  expectLifetimeSafety,
-} from './fx-live.ts';
+import { bounded, word } from './guest-access.ts';
+import { evidence, evidenceCollector, type RequireAudible } from './fx-evidence.ts';
+import { options } from './devices.ts';
+import { expectLifetimeSafety } from './lifetime-safety.ts';
+import { pickSine, type Rt } from './panel-waits.ts';
 import {
   planSymbol,
   prepareRuntimePlanListedOffline,

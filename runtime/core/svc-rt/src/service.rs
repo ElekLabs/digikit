@@ -18,14 +18,14 @@ macro_rules! hook_device {
 /// The glue of a service file: `service!(Shortcuts, "shortcuts", &KINDS_SHORTCUTS, parts = [Records, Tick], hooks = [...], fills = [...], exports = ..., tick = f)` for an owner object
 /// `Shortcuts: Provider<ImportCore>` that also implements the traits of the parts it names. `parts` lists the optional parts the object adopts (`Records`, `Dsp`, `Tick`, `Query`,
 /// `Describe`; the lifecycle part is always there; `Reentry` has no table: it gives the owner an event queue, see `Reentry`). `kinds` (`&'static [(u32, u32)]`, as `dkrt_sdk::records::KINDS_*`)
-/// need the `Records` part. The macro emits the part tables, the row, the cell `DK_SVC_OWNER` (`Owner<Shortcuts>`: `init` makes the instance with `Provider::start` before the declarations,
+/// need the `Records` part. The macro emits the part tables, the row, the cell `DK_SVC_OWNER` (`Owner<Shortcuts>`: `init` makes the instance with `Provider::start_in` before the declarations,
 /// `fini` stops it), the module record `dk_module`, the data word `dk_svc_abi` and (on the ColdFire) the panic handler; `Query` also declares the resident query entry and points it at the part.
 ///
 /// After `parts`: `hooks = [...]`, `fills = [...]`, `patches = [...]`, `exports = gen_exports::exports()` (the list `patchkit gen` writes for a service with `provided` imports in `sdk/sdk.toml`:
 /// `[(name hash, entry); N]`) or, only in tests (`patchkit service-check` refuses it in a service crate), `exports = [("dk_param_get", fw::dk_param_get), ...]` (name, function: declared with the
 /// hash of the name) and `tick = f` (`unsafe extern "C" fn(*mut u8)`, the file's `tick`: once per UI pass, with the module context; only after `exports`), each optional list in this order.
 /// `patches = [("name", 4, f), ...]` lists the patches of the service (`[[patch]]` of its module.toml): the name of the patch, its length (1, 2 or 4, the length of the site in the port file) and
-/// `f`, a `fn(&Service) -> u32` that gives the bytes (the low `len` of the value) from the instance `Provider::start` made, so a table address or a count computed in `start` goes in.
+/// `f`, a `fn(&Service) -> u32` that gives the bytes (the low `len` of the value) from the instance `Provider::start_in` made, so a table address or a count computed in `start` goes in.
 /// The runtime writes them at the site when the service loads and the stock bytes back before `stop`; an optional device name as for a hook limits the entry. Only after
 /// `fills`, before `exports`.
 /// `parts = [..], hooks = [..], fills = [..]` with no `exports` is the form of a service with no `provided` imports (it declares no export). The macro also emits `dk_svc_declare(ctx, device)`: the
@@ -150,7 +150,7 @@ macro_rules! service {
             &DK_SVC_ROW
         }
 
-        /// What `init` does before the declarations: make the instance (`Provider::start`) and keep it in `DK_SVC_OWNER`. `E_LOADED` when there is one.
+        /// What `init` does before the declarations: make the instance (`Provider::start_in`) and keep it in `DK_SVC_OWNER`. `E_LOADED` when there is one.
         pub fn dk_svc_start() -> Result<*mut u8, i32> {
             DK_SVC_OWNER
                 .start(|slot| <$svc as $crate::dkrt_abi::provider::Provider<$crate::ImportCore>>::start_in(&$crate::ImportCore, slot))

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { cardInfo } from '@digi/regression/runtime/card-kit.ts';
-import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { cardInfo } from '@digi/regression/runtime/guest-mailbox.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { DEVICES } from '@digi/regression/runtime/devices.ts';
 import { decodeSettings, sectorOf, settingsMailbox } from '@digi/regression/runtime/project-kit.ts';
 import { byte, DELAY_MS, ROUTE, settingsCase, suiteName } from './settings-support.ts';

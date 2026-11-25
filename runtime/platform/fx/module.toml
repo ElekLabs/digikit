@@ -75,6 +75,7 @@ devices = ["dt2", "dn2"]
 # (packages/patchkit/tests/sdkgen.rs checks this number against <dk/fx/fx.h>).
 [[registry]]
 name = "fx"
+window = 2
 first = "0"
 max = 4
 limit = "fx_slots"

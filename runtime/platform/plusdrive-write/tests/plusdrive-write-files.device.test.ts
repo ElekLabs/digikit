@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
-import { pokeWord, readSectors } from '@digi/regression/runtime/card-kit.ts';
-import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { pokeWord } from '@digi/regression/runtime/guest-mailbox.ts';
+import { readSectors } from '@digi/regression/runtime/card-record.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { pdwSuite, pattern, slot4, cat, staged, noStagingFolder, WRITE, ABORT, DELETE, BIG_CALL, REPLACE, SAMPLES, SAMPLES_ONLY, STAGING, E_EXISTS, E_FILE_IN_USE, HASH_PAGES, REC_SECTORS, BITMAP, FRAG_LAST_WORD } from './plusdrive-write-support.ts';
 
 // +Drive writes through core/plusdrive-write, files and journal-free cases: write, replace, abort, delete, wrong hash, open files, foreign staging entries, direct write failures, full card (docs/plans/usb-fast.md 3.1, finding 120; setup: plusdrive-write-support.ts).

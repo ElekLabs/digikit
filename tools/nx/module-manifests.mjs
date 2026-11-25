@@ -28,6 +28,11 @@ export const records = (root) => {
   const file = join(root, 'project.json');
   return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')).metadata?.runtimeAcceptance ?? []) : [];
 };
+// The authored `implicitDependencies` of the project at `root` (its subjects).
+export const subjectsOf = (root) => {
+  const file = join(root, 'project.json');
+  return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')).implicitDependencies ?? []) : [];
+};
 // Device test files (relative to the project root) whose merge target keeps full inputs.
 export const mergeTests = (root) => {
   const file = join(root, 'project.json');

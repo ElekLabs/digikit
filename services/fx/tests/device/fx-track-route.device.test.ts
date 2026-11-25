@@ -1,16 +1,10 @@
 import path from 'node:path';
 import { button, encoder } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import {
-  addedFactorOf,
-  bounded,
-  compare,
-  frames,
-  rpc,
-  word,
-  REDRAW,
-  SETTLE,
-} from '@digi/regression/runtime/fx-live.ts';
+import { addedFactorOf, compare } from '@digi/regression/runtime/pcm-files.ts';
+import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
+import { frames } from '@digi/regression/runtime/dsp-state.ts';
+import { REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { FX, SINE } from '@digi/regression/runtime/fixtures.ts';
 import { shot, selectSine } from '@digi/regression/runtime/fx-session.ts';
 import {

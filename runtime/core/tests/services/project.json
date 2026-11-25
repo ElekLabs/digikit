@@ -4,18 +4,12 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": [
-    "core/runtime"
-  ],
+  "implicitDependencies": ["core/runtime-package", "dkrt-svc-rt", "dkrt-lifecycle", "dkrt-abi", "sdk"],
   "metadata": {
     "runtimeAcceptance": [
       {
         "files": [
           "providers.device.test.ts"
-        ],
-        "tags": [
-          "C:boot",
-          "C:loading"
         ],
         "modules": [
           "digikit/debug",
@@ -25,6 +19,32 @@
           "test/local-ping-user",
           "test/local-patch",
           "test/local-patch-user"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "owner-step.device.test.ts"
+        ],
+        "tags": [
+          "C:loading"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/local-step",
+          "test/local-step-user"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
         ],
         "plusdrive": true
       }

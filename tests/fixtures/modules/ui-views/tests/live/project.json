@@ -4,22 +4,22 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": [
-    "core/runtime"
-  ],
+  "implicitDependencies": ["core/ui"],
   "metadata": {
     "runtimeAcceptance": [
       {
         "files": [
           "ui-views.device.test.ts"
         ],
-        "tags": [
-          "C:loading",
-          "A:core/ui"
-        ],
         "modules": [
           "digikit/debug",
           "test/ui-views"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
         ]
       }
     ]

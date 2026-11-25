@@ -43,31 +43,31 @@ path = "build/dsp-link-dt2.dko.json"
 sources = ["src/dsp/dt2.s"]
 place = "dsp.l2"
 devices = ["dt2"]
-# window 1 and window 2 (row registries a service of the image registers by base and row count); 0 when no registry is registered
+# window 1 and window 2 (row registries a module of the image binds to a window with `window = N` in its `[[registry]]`; base and row count); 0 when no registry is registered
 optional = ["_dl_win1_base", "_dl_win1_rows", "_dl_win2_base", "_dl_win2_rows", "_dv_diag", "_dv_rec", "_fx_diag", "_fx_rec"]
 
 [object.externs]
 _dl_back = "hook.dsp.link.site.block_tail.tail"
-_dl_win1_base = "voices.rows"
-_dl_win1_rows = "voices.count"
-_dl_win2_base = "fx.rows"
-_dl_win2_rows = "fx.count"
+_dl_win1_base = "window1.rows"
+_dl_win1_rows = "window1.count"
+_dl_win2_base = "window2.rows"
+_dl_win2_rows = "window2.count"
 
 [[object]]
 path = "build/dsp-link-dn2.dko.json"
 sources = ["src/dsp/dn2.s"]
 place = "dsp.l2"
 devices = ["dn2"]
-# window 1 and window 2 (row registries a service of the image registers by base and row count); 0 when no registry is registered
+# window 1 and window 2 (row registries a module of the image binds to a window with `window = N` in its `[[registry]]`; base and row count); 0 when no registry is registered
 # `_dl_tail_chain`: block work another DSP object chains onto the end of the tail; 0 when none is in the image
 optional = ["_dl_win1_base", "_dl_win1_rows", "_dl_win2_base", "_dl_win2_rows", "_dv_diag", "_dv_rec", "_fx_diag", "_fx_rec", "_dl_tail_chain"]
 
 [object.externs]
 _dl_back = "hook.dsp.link.site.block_tail.tail"
-_dl_win1_base = "voices.rows"
-_dl_win1_rows = "voices.count"
-_dl_win2_base = "fx.rows"
-_dl_win2_rows = "fx.count"
+_dl_win1_base = "window1.rows"
+_dl_win1_rows = "window1.count"
+_dl_win2_base = "window2.rows"
+_dl_win2_rows = "window2.count"
 
 [[op]]
 op = "hook"

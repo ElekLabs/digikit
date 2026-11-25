@@ -1169,7 +1169,7 @@ mod tests {
         assert!(
             !hook_is_patch(0)
                 && !hook_is_patch(0x1234)
-                && !hook_is_patch(HOOK_ENTRY_PATCH - 1 | 1 << HOOK_DEVICES_SHIFT)
+                && !hook_is_patch((HOOK_ENTRY_PATCH - 1) | (1 << HOOK_DEVICES_SHIFT))
         );
         // a patch item survives the table like a hook item
         let hooks = [

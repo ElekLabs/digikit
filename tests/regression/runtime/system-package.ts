@@ -5,7 +5,7 @@ import {
   systemPackagePath,
 } from '../../../packages/workbench-core/src/node/card-image.ts';
 import { SYSTEM_PACKAGE_PATH } from '../../../packages/workbench-core/src/runtime/system-package.ts';
-import type { Files } from './card-kit.ts';
+import type { Files } from './card-store.ts';
 
 /**
  * The system package on a test card: the one owner of where the file comes from and where it goes. `dist/syspkg/runtime/system.dksp` is written by the Nx target

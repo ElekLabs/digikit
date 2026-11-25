@@ -1,7 +1,7 @@
 import { encoder, emulatorRead, readTopMenuItems, readViewStack, viewStackFacts, type Device } from '@digi/test-support';
 import { expect } from 'vitest';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
-import { REDRAW, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { shot } from '@digi/regression/runtime/fx-session.ts';
 import { installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';

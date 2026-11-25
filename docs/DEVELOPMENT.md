@@ -239,7 +239,7 @@ mise run test:changed         # lint, format, types, host tests and Python check
 pnpm test:host                # host Vitest projects; no device
 pnpm verify:host              # host lint, format, tests and types
 mise run test                 # the gate: Nx targets of the affected projects
-mise run test:subset -- S:machines  # the device tests of record tags plus gate-smoke and gate-pins; add --run to run them (docs/TESTING.md "Named device subset")
+mise run test:subset -- core/runtime-lfo-tests  # the device tests of a project (and of the projects that name it) plus gate-smoke and gate-pins; add --run to run them (docs/TESTING.md "Named device subset")
 uv run python -m tools.devtools.sharc_cells A=BIN B=BIN --state dn2-reset --seconds 3,6   # paired counter runs of two coupled-run binaries: DSP and ColdFire host instructions per audio second, B/A ratios, parity (docs/TESTING.md)
 mise run module:check ID      # one module: conformance and its own tests
 mise run lfo:report -- digikit/lfo_shapes_1   # output report of an LFO shape module on the emulator: fit error per shape against its table, swing, verdict, SVG plots (sdk/templates/lfo-shape/README.md "Output report")

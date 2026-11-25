@@ -3,7 +3,8 @@ import { pollUntil } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
-import { pickSine, REDRAW, stableFrameHash, word, type Rt } from '@digi/regression/runtime/fx-live.ts';
+import { pickSine, REDRAW, stableFrameHash, type Rt } from '@digi/regression/runtime/panel-waits.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
 import { decodeTables, dynType } from '@digi/regression/runtime/project-kit.ts';
 import {
   DN2_AUDIO_MIRROR_112,

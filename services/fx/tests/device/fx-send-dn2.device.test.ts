@@ -2,23 +2,13 @@ import path from 'node:path';
 import { button } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { withWaitApi, type PatchedSession } from '@digi/regression/support.ts';
-import {
-  addedFactorOf,
-  pcmStats,
-  bounded,
-  captureNote,
-  dspBytes,
-  dspWords,
-  frames,
-  runFrames,
-  runToFrame,
-  FREE_PC,
-  inspect,
-  pickSine,
-  rows,
-  rpc,
-  withGainFxSession,
-} from '@digi/regression/runtime/fx-live.ts';
+import { addedFactorOf, pcmStats } from '@digi/regression/runtime/pcm-files.ts';
+import { bounded, rpc } from '@digi/regression/runtime/guest-access.ts';
+import { captureNote } from '@digi/regression/runtime/note-capture.ts';
+import { dspBytes, dspWords, frames, runFrames, runToFrame, FREE_PC, rows } from '@digi/regression/runtime/dsp-state.ts';
+import { inspect } from '@digi/regression/runtime/fx-evidence.ts';
+import { pickSine } from '@digi/regression/runtime/panel-waits.ts';
+import { withGainFxSession } from '@digi/regression/runtime/fx-live.ts';
 import { slotBusAddress } from '@digi/regression/runtime/device-data.ts';
 import { triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import { record } from '@digi/regression/runtime/artifacts.ts';

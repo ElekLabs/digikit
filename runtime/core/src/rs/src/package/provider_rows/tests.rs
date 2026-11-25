@@ -158,8 +158,9 @@ macro_rules! provider_logging {
     ($ty:ident, $name:literal, $commit:expr) => {{
         struct $ty;
         impl<C: CoreApi> Provider<C> for $ty {
-            fn start(_: &C) -> Result<Self, i32> {
-                Ok($ty)
+            fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Self>) -> Result<(), i32> {
+                slot.write($ty);
+                Ok(())
             }
         }
         impl<C: CoreApi> Records<C> for $ty {
@@ -290,8 +291,9 @@ fn a_part_the_provider_did_not_adopt_is_skipped() {
 fn a_part_version_newer_than_the_core_knows_is_refused_at_add_and_changes_nothing() {
     struct Newer;
     impl<C: CoreApi> Provider<C> for Newer {
-        fn start(_: &C) -> Result<Self, i32> {
-            Ok(Newer)
+        fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Self>) -> Result<(), i32> {
+            slot.write(Newer);
+            Ok(())
         }
     }
     static LIFE: LifecycleV1 = LifecycleV1::of::<Newer, RealCore>();

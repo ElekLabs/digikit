@@ -5,7 +5,6 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/remote-input.device.test.ts"],
-        "tags": ["M:digikit/remote"],
         "modules": []
       }
     ]

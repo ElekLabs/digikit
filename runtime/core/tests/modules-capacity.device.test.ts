@@ -4,7 +4,7 @@ import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
-import { word } from '@digi/regression/runtime/fx-live.ts';
+import { word } from '@digi/regression/runtime/guest-access.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { DEBUG_MODULE, installModules, moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';

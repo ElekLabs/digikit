@@ -1,5 +1,7 @@
 import { button } from '@digi/test-support';
-import { REDRAW, SETTLE, bounded, rows, word, type Rt } from './fx-live.ts';
+import { REDRAW, SETTLE, type Rt } from './panel-waits.ts';
+import { bounded, word } from './guest-access.ts';
+import { rows } from './dsp-state.ts';
 import { openPages } from './fx-pages-ui.ts';
 import { shot, type FxProfile } from './fx-session.ts';
 import { halfword, kitMenu, kitSlotOne } from './fx-track-ui.ts';

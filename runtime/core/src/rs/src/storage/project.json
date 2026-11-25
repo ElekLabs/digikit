@@ -1,0 +1,5 @@
+{
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-storage",
+  "description": "The storage module of the dkrt crate: an ownership project for test selection. Its files belong to the crate build of core/runtime (runtime/core/src/rs), whose inputs name them by workspace path."
+}

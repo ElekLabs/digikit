@@ -4,17 +4,12 @@ import { record } from '@digi/regression/runtime/artifacts.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { triggerFrame as triggerFor } from '@digi/regression/runtime/fixtures.ts';
-import {
-  addedFactorOf,
-  capture,
-  compare,
-  dspWords,
-  runFrames,
-  inspect,
-  rows,
-  rpc,
-  withGainFxSession,
-} from '@digi/regression/runtime/fx-live.ts';
+import { addedFactorOf, compare } from '@digi/regression/runtime/pcm-files.ts';
+import { capture } from '@digi/regression/runtime/note-capture.ts';
+import { dspWords, runFrames, rows } from '@digi/regression/runtime/dsp-state.ts';
+import { inspect } from '@digi/regression/runtime/fx-evidence.ts';
+import { rpc } from '@digi/regression/runtime/guest-access.ts';
+import { withGainFxSession } from '@digi/regression/runtime/fx-live.ts';
 
 for (const device of DEVICES) {
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} FX SEND`, () => {

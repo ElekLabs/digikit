@@ -31,7 +31,7 @@
       "description": "py_select picks the tests from the diff against DIGI_GATE_BASE; tests/patchkit/test_pk_current.py always runs and needs the built patchkit (patchkit:cli, dist/patchkit/patchkit). The first step builds the cf_call example that some tests need (pk_cfcall.build_example; a no-op when current). Selected only for changes in the scope of python-checks.",
       "cache": false,
       "parallelism": true,
-      "dependsOn": ["digi-control:daemons", "patchkit:cli"],
+      "dependsOn": ["digi-control:daemons", "patchkit:cli", "core/runtime:package"],
       "inputs": ["pythonGate"],
       "options": {
         "command": "DIGI_JOBS=2 uv run python -c \"from tools.patchkit import pk_cfcall; pk_cfcall.build_example()\" && uv run python -m tools.devtools.py_select run --base ${DIGI_GATE_BASE:-main}",

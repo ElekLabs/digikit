@@ -1,6 +1,6 @@
 // Pack reads its explicit manifest library and builds the selected objects, not acceptance graph edges.
 import { existsSync, globSync, readFileSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join, normalize } from 'node:path';
+import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
 import { pathDeps } from './cargo.mjs';
 import { read } from './module-manifests.mjs';
 
@@ -72,6 +72,15 @@ export const packSourceInputs = (workspaceRoot, byId, manifests, { privateOnly =
           if (project.name) owners.push({ name: project.name, root });
           break;
         }
+      }
+    // A project nested below a crate directory keeps its own files out of the parent's: it joins the inputs (runtime/core/src/rs/src/package).
+    if (directory)
+      for (const nested of globSync('**/project.json', {
+        cwd: join(workspaceRoot, path),
+        exclude: (name) => ['node_modules', 'target'].includes(basename(name)),
+      })) {
+        const name = JSON.parse(readFileSync(join(workspaceRoot, path, nested), 'utf8')).name;
+        if (name) projects.add(name);
       }
     const candidates = owners.filter((owner) => path === owner.root || path.startsWith(`${owner.root}/`));
     candidates.sort((a, b) => b.root.length - a.root.length);

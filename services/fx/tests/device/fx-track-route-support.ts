@@ -1,7 +1,9 @@
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
-import { rpc, rows, REDRAW } from '@digi/regression/runtime/fx-live.ts';
+import { rpc } from '@digi/regression/runtime/guest-access.ts';
+import { rows } from '@digi/regression/runtime/dsp-state.ts';
+import { REDRAW } from '@digi/regression/runtime/panel-waits.ts';
 import { FX, SINE, triggerFrame as triggerFor } from '@digi/regression/runtime/fixtures.ts';
 import { withRouteFxSession } from '@digi/regression/runtime/fx-route-live.ts';
 import { inspectFxBoot, withPausedFxProtocol, selectSine, shot } from '@digi/regression/runtime/fx-session.ts';

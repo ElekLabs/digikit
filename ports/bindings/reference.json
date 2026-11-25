@@ -8021,7 +8021,8 @@
       "site": "cf.menu.site.settings_list.tail",
       "subsystem": "menu",
       "users": [
-        "test/svc-test"
+        "test/svc-test",
+        "test/local-step"
       ],
       "was": []
     },

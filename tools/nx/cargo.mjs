@@ -103,23 +103,6 @@ const CRATE_TARGETS = {
       outputs: ['{workspaceRoot}/dist/bytes/core-objects.sha256'],
       options: { command: 'node tools/nx/device-bytes.mjs', cwd: '.' },
     },
-    'runtime-owners': {
-      executor: 'nx:run-commands',
-      cache: true,
-      parallelism: true,
-      description:
-        'Writes dist/bytes/owners/: one hash per owner of the runtime object (`patchkit owners`, runtime/core/owners.toml), the shared set, the other runtime objects and the whole object.',
-      inputs: [
-        '{workspaceRoot}/tools/nx/runtime-owners.mjs',
-        '{workspaceRoot}/tools/nx/object-hash.mjs',
-        '{workspaceRoot}/runtime/core/owners.toml',
-        '{workspaceRoot}/runtime/core/build/*.dko.json',
-        { dependentTasksOutputFiles: 'dist/patchkit/patchkit', transitive: true },
-      ],
-      dependsOn: ['cli'],
-      outputs: ['{workspaceRoot}/dist/bytes/owners'],
-      options: { command: 'node tools/nx/runtime-owners.mjs', cwd: '.' },
-    },
     'pack-verdicts': {
       executor: 'nx:run-commands',
       cache: false, // under a second: the file it writes is part of the key of the device tasks that read it

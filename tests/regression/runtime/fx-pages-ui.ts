@@ -1,7 +1,8 @@
 import { encoder, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '../support.ts';
-import { REDRAW, SETTLE, bounded, rpc, word, type Rt } from './fx-live.ts';
+import { REDRAW, SETTLE, type Rt } from './panel-waits.ts';
+import { bounded, rpc, word } from './guest-access.ts';
 import { shot, type FxProfile } from './fx-session.ts';
 import { halfword } from './fx-track-ui.ts';
 import { wordBase } from './memory.ts';

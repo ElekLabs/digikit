@@ -50,6 +50,11 @@ mod native {
     }
 }
 
+/// The page's track from its track reference: a plain firmware read, for the reads a hook makes before it enters the owner.
+pub(crate) unsafe fn view_track(track_ref: usize) -> u32 {
+    native::view_track(track_ref as *const u8)
+}
+
 /// Vtable slots of the page (`view`) and of its parameter object.
 const VT_PAGE_VALUE: usize = 0x54;
 const VT_PAGE_OBJECT: usize = 0xc4;

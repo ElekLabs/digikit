@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect } from 'vitest';
-import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
 import { moduleStorePath } from '@digi/regression/runtime/install.ts';
 import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { decodeSettings, settingsMap, settingsRecord } from '@digi/regression/runtime/project-kit.ts';

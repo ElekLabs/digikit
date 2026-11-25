@@ -140,7 +140,7 @@ unsafe fn declare(ctx: *mut u8, tag: u16, a: u32, b: u32, c: u32) -> i32 {
         _ => E_CONTEXT,
     }
 }
-/// `dk_provider_declare_row` (a service file's `init`, `SVC_IMPORTS` only): the `ProviderRow` the file provides and the instance `Provider::start` made. One row per file; the commit hands it to the registry (`Registry::add`), which resolves it against the part versions this core knows.
+/// `dk_provider_declare_row` (a service file's `init`, `SVC_IMPORTS` only): the `ProviderRow` the file provides and the instance `Provider::start_in` made. One row per file; the commit hands it to the registry (`Registry::add`), which resolves it against the part versions this core knows.
 #[cfg_attr(test, no_mangle)]
 pub unsafe extern "C" fn dk_provider_declare_row(ctx: *mut u8, row: *const dkrt_abi::provider::ProviderRow, instance: *mut u8) -> i32 {
     match active() {

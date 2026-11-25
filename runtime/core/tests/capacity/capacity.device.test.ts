@@ -4,7 +4,7 @@ import type { DkModule } from '@digi/dk-session';
 import { expect, test } from 'vitest';
 import { cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { needsOf, parseDspSection, relocate } from '@digi/regression/runtime/dkm.ts';
-import { dspBytes } from '@digi/regression/runtime/fx-live.ts';
+import { dspBytes } from '@digi/regression/runtime/dsp-state.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { systemPackagePlacedBytes } from '@digi/regression/runtime/system-package.ts';
 import { bootEntries, COUPLED_ROOTS, expectBoot, SYMBOLS, type Entry } from './capacity-helpers.ts';

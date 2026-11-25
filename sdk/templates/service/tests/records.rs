@@ -8,7 +8,7 @@ use dkrt_test_support::FakeCore;
 #[test]
 fn the_service_starts_without_asking_the_core() {
     let core = FakeCore::new();
-    let mut owner = <__CAMEL__ as Provider<FakeCore>>::start(&core).expect("start");
+    let mut owner = dkrt_test_support::start_boxed::<__CAMEL__>(&core).expect("start");
     <__CAMEL__ as Provider<FakeCore>>::detach(&mut owner, &core, dkrt_abi::provider::ConsumerId::new(1));
     assert!(core.calls().is_empty());
 }

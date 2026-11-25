@@ -39,7 +39,7 @@ Make it a real service:
    `_s = "hook.cf.x.hook.y.stock"` then `jsr _s` (`dk_stock_`, the stock path called from inside the hook; it returns);
    `_r = "hook.cf.x.hook.y.ret"` then `jmp _r` (`dk_ret_`, leave as `rts` does). See docs/PATCHING.md "Firmware references".
    A fill (the pointer slot of a fixed firmware site) is one `[[fill]]` (`slot`, `entry`, optional `devices`) in `dks/module.toml` and one `fills = [("slot", hooks::fill_fn, dn2)]` entry;
-   as for hooks, an entry with `dt2` or `dn2` is for that device. `fills` must match the `[[fill]]` entries (`exports` comes from `sdk/sdk.toml`); what the image half needs (binding the adapter's tables) is done in `Provider::start`.
+   as for hooks, an entry with `dt2` or `dn2` is for that device. `fills` must match the `[[fill]]` entries (`exports` comes from `sdk/sdk.toml`); what the image half needs (binding the adapter's tables) is done in `Provider::start_in`.
    `dks/module.toml` and `dks/src/lib.rs` hold commented examples of each.
    A service that needs an image table (like `rows_info`) requires the adapter that provides it, as `core/services/machines` requires `core/rows`: put the adapter in `requires` of `dks/module.toml`.
    A service that offers functions to other modules: each is an `[[import]]` of the service in `sdk/sdk.toml` with `provided = true` (a function that is not a thin wrapper over the crate's `build::*` names its module in `wrapper = "fw"`). `patchkit gen` writes `dks/src/gen_exports.rs` (the pure wrappers and `exports()`); `lib.rs` declares `#[rustfmt::skip] mod gen_exports;` and passes `exports = gen_exports::exports()` after `fills =` (`hooks =` and `fills =` come first; pass `fills = []` when there is none). `service!` declares each export in `init`:

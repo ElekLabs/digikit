@@ -287,8 +287,8 @@ pub struct HookDecl {
 
 /// The prefix of a `users` entry that is a service module id.
 pub const SERVICE_USER_PREFIX: &str = "core/services/";
-/// The test fixtures that take a hook or patch of their own (`test/svc-test` a hook, `test/local-patch` a patch): services for the port set like the core services.
-pub const TEST_SERVICE_USERS: [&str; 2] = ["test/svc-test", "test/local-patch"];
+/// The test fixtures that take a hook or patch of their own (`test/svc-test` and `test/local-step` the test hook, `test/local-patch` a patch): services for the port set like the core services.
+pub const TEST_SERVICE_USERS: [&str; 3] = ["test/svc-test", "test/local-patch", "test/local-step"];
 
 /// The ColdFire names and hooks of `ports/fw/` whose `users` list names a service (`core/services/*`): the set a port file lists. A hook may appear once per
 /// device (the same name, `devices` apart).

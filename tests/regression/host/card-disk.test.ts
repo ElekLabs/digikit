@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { allocatedBytes, cloneFile } from '@digi/test-support';
 import { afterEach, describe, expect, test } from 'vitest';
-import { buildCard, plusdriveBinary } from '../runtime/card-kit.ts';
+import { buildCard, plusdriveBinary } from '../runtime/card-store.ts';
 import { cardAfter, encodeOverlay, overlayFile } from '../runtime/write-safety.ts';
 
 /** A card file is about 25 GB of address space and a few MB of data: copying one must not allocate the holes. */

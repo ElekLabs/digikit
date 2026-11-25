@@ -54,7 +54,7 @@ struct Pending {
     arg: *mut c_void,
 }
 
-/// The owner object of the service: no key held, no binding, nothing active, nothing pending. The file's cell holds the one instance (`Provider::start`), and everything
+/// The owner object of the service: no key held, no binding, nothing active, nothing pending. The file's cell holds the one instance (`Provider::start_in`), and everything
 /// that reaches it (the part functions, the key hook, the builder call) runs in the UI task, so the fields need no lock.
 pub struct Shortcuts {
     /// The calls to make, oldest first: `head` is the oldest and `len` the count (a ring).
@@ -222,10 +222,6 @@ impl Shortcuts {
 }
 
 impl<C: CoreApi> Provider<C> for Shortcuts {
-    fn start(_core: &C) -> Result<Shortcuts, Status> {
-        Ok(Shortcuts::new())
-    }
-
     /// The state is made where it lives: all-zero bytes are the initial state (see `Shortcuts::new`; `tests/state.rs` checks it), so this is one fill and no copy of
     /// the 1.4 kB through the stack.
     fn start_in(_core: &C, slot: &mut MaybeUninit<Shortcuts>) -> Result<(), Status> {

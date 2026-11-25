@@ -3,7 +3,6 @@
 import { globSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { noDspShorts } from './device-files.mjs';
-import { checkAcceptanceTags } from './acceptance-tags.mjs';
 import { packAliasesTarget } from './module-build.mjs';
 import { isUploadable, mergeTests, manifestClosure, read, records } from './module-manifests.mjs';
 import {
@@ -18,6 +17,9 @@ import {
 
 export const IMAGE_BUILD = { target: 'build-objects', projects: ['tag:acceptance-image'] };
 // Writes the hash of every committed core object without its source hash (tools/nx/device-bytes.mjs).
+// The fixtures that take the test hook of ports/fw/menu.toml: their port file is the one of the test image (patchkit TEST_SERVICE_USERS).
+const TEST_HOOK_USERS = new Set(['test/svc-test', 'test/local-step']);
+
 export const DEVICE_BYTES = 'patchkit:device-bytes';
 // Writes the hash of the image, plan and address map that `patchkit apply` makes for each acceptance firmware and patch set
 // (tools/nx/device-images.mjs).
@@ -29,12 +31,11 @@ export const SYSTEM_PACKAGE = 'core/runtime:package';
 // The host assembly tests of the runtime (runtime/core): the seams between the real packed outputs. No device task starts while they fail.
 export const TEST_ASSEMBLY = 'core/runtime:test-assembly';
 // Tasks every device task depends on: the patchkit binary, the daemons and the runtime assembly tests. Their projects are the
-// shared inputs of every device test (`test:subset --base` cannot select by path for them).
+// shared inputs of every device test (the gate selects no test by a change below them: smoke and the full tier cover it).
 export const SHARED_TASKS = ['patchkit:cli', 'digi-control:daemons', TEST_ASSEMBLY];
 // The daemon of the devices without a SHARC DSP (cargo.mjs `daemon-nodsp`, dist/bin/digi-emud-nodsp).
 export const DAEMON_NODSP = 'digi-control:daemon-nodsp';
 const NO_DSP = noDspShorts();
-export const SHARED_PROJECTS = SHARED_TASKS.map((task) => task.split(':')[0]);
 // Device and conformance tasks run behind this wrapper: it takes one machine-wide emulator slot. It only schedules and is
 // no input: it cannot change a result, and Nx does not cache failures.
 export const EMU_SLOT = 'node tools/devtools/emu-slot.mjs --';
@@ -66,7 +67,7 @@ export const deviceTarget = (
       dependsOn.push(`${id}:pack`);
       // a service: the port file that goes on the card with it; the test fixture service takes the port file of the test image (it lists the fixture's hook, which a
       // production port file does not)
-      const portTask = id === 'test/svc-test' ? 'patchkit:ports-test' : 'patchkit:ports';
+      const portTask = TEST_HOOK_USERS.has(id) ? 'patchkit:ports-test' : 'patchkit:ports';
       if (opts.serviceIds?.has(id) && !dependsOn.includes(portTask)) dependsOn.push(portTask);
     }
     if (Object.keys(rec.aliases ?? {}).length) dependsOn.push('pack-aliases');
@@ -157,6 +158,48 @@ export const deviceTargets = (
 };
 
 // What a file without `devices` runs on: the devices with a ready snapshot. A device that boots cold (`st`) is named by the file.
+// Throws when a device test file is in no `metadata.runtimeAcceptance` record of its project: the gate selects, keys and
+// places a test by its record. `recs`: the records of project `root`; `deviceTests`: its device test files relative to the root.
+export const checkRecordsCover = (root, recs, deviceTests) => {
+  const listed = new Set(recs.flatMap((rec) => rec.files ?? []));
+  const missing = deviceTests.filter((t) => !listed.has(t));
+  if (missing.length)
+    throw new Error(`metadata.runtimeAcceptance of ${root} has no record for the device tests: ${missing.join(', ')}`);
+};
+
+// Throws when a record loads a real service or module (not a fixture) that the project neither names as a subject nor lists
+// as `incidental: [{ module, reason }]` (loaded, not exercised). The gate selects a test by its subjects only
+// (tools/nx/device-owners.mjs), so a loaded module that is missing there never selects the test. A service is named by its dks
+// project (the module id) and its crate (`dkrt-svc-<service>`): they select on different changes, so naming one is reported.
+// `own`: the id of the module of a module project (its own tests need no subject). `byId`: id -> { manifest }.
+export const checkSubjectCoverage = (root, recs, subjects, byId, own) => {
+  const named = new Set(subjects ?? []);
+  const problems = [];
+  for (const rec of recs) {
+    const where = rec.files?.join(', ') ?? 'a record without files';
+    const incidental = new Map();
+    for (const entry of rec.incidental ?? []) {
+      if (!entry?.module || !String(entry.reason ?? '').trim())
+        problems.push(`an incidental entry of ${root} needs a module and a reason`);
+      else incidental.set(entry.module, entry.reason);
+    }
+    for (const id of rec.modules ?? []) {
+      const manifest = byId.get(id)?.manifest;
+      if (!manifest || manifest.category === 'test' || id === own || incidental.has(id)) continue;
+      const crate = manifest.role === 'service' ? `dkrt-svc-${manifest.service}` : undefined;
+      const hasId = named.has(id);
+      const hasCrate = crate !== undefined && named.has(crate);
+      if (!hasId && !hasCrate) problems.push(`${id}${crate ? ` (and ${crate})` : ''} is loaded by ${where}`);
+      else if (crate && hasId !== hasCrate)
+        problems.push(`${hasId ? crate : id} is not named although ${hasId ? id : crate} is, for ${where}`);
+    }
+  }
+  if (problems.length)
+    throw new Error(
+      `${root}: a loaded service or module must be a subject (implicitDependencies) or listed in the record's incidental [{ module, reason }]:\n  ${problems.join('\n  ')}`,
+    );
+};
+
 const ALL_DEVICES = ['dt2', 'dn2'];
 const KNOWN_DEVICES = ['dt2', 'dn2', 'st'];
 const unionDevices = (lists) => KNOWN_DEVICES.filter((d) => lists.some((list) => list.includes(d)));
@@ -299,7 +342,6 @@ export const testOnlyNodes = (
   workspaceRoot,
   testOwners,
   byId,
-  moduleInfo,
   coreBuilds,
   importInputs,
   pythonInputs,
@@ -318,7 +360,8 @@ export const testOnlyNodes = (
     checkMergeTests(workspaceRoot, root, tests, config.tags.includes('tier:full'));
     if (!tests.length) continue;
     const recs = records(join(workspaceRoot, root));
-    checkAcceptanceTags(root, recs, tests, moduleInfo);
+    checkRecordsCover(root, recs, tests);
+    checkSubjectCoverage(root, recs, config.implicitDependencies, byId, undefined);
     // Explicit fixture images build only their manifest requirements; ordinary owners keep the default image.
     const patchRoots = [...new Set(recs.flatMap((rec) => rec.patchModules ?? []))];
     const patchIds = patchRoots.length

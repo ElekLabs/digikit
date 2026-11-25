@@ -4,18 +4,12 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": [
-    "core/runtime",
-    "core/services/shortcuts"
-  ],
+  "implicitDependencies": ["core/services/shortcuts", "dkrt-svc-shortcuts"],
   "metadata": {
     "runtimeAcceptance": [
       {
         "files": [
           "shortcuts.device.test.ts"
-        ],
-        "tags": [
-          "S:shortcuts"
         ],
         "modules": [
           "test/shortcut-demo",

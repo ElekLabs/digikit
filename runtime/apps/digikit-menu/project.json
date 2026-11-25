@@ -8,10 +8,6 @@
           "tests/apply-live.device.test.ts"
         ],
         "firmwareOnly": "the real MODULES page applies a change without a boot, and a playing transport refuses it",
-        "tags": [
-          "A:core/digikit-menu",
-          "C:loading"
-        ],
         "modules": [],
         "plusdrive": true
       }

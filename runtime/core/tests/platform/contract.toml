@@ -2,7 +2,7 @@
 # two checkers:
 #   host    the `FakePlatform` host test of the runtime crate (`src/rs/src/fake_platform.rs`) that checks the rule on the model
 #   device  the check of `platform-contract.device.test.ts` that runs the rule against the real platform on each device
-# `device` is a check that platform-contract.device.test.ts runs, or an existing device test file of this folder that covers the row.
+# `device` is a check that platform-contract.device.test.ts runs, or the repository path of a device test file that covers the row.
 # A row that has no checker on one side says why (`host_pending`, `device_pending`). The numbers here are the contract's own; every number
 # that a device file owns (id, name, where the samples live, the sample path limit) is read from the device file, not written here.
 
@@ -24,13 +24,13 @@ device_pending = "the runtime exposes no read of the block counter; safe-mode an
 id = "sector_read"
 what = "a known sector reads back (store header A of a card that has a store)"
 host_pending = "the fake's card holds what the test puts there; there is nothing platform-specific to model"
-device = "card-safety.device.test.ts"
+device = "runtime/core/tests/storage/card-safety.device.test.ts"
 
 [[check]]
 id = "card_write_gate"
 what = "writes outside the store and on a foreign card are refused, and never reach the card"
 host = "a_foreign_card_is_read_only_for_every_write"
-device = "card-safety.device.test.ts"
+device = "runtime/core/tests/storage/card-safety.device.test.ts"
 
 [[check]]
 id = "midi_out"
@@ -61,10 +61,10 @@ device = "anchors"
 id = "info_tables"
 what = "every *_info table that is present has its magic and the version the runtime reads"
 host = "the_info_tables_are_bytes_the_fake_hands_out"
-device = "addrmap.device.test.ts"
+device = "runtime/core/tests/diag/addrmap.device.test.ts"
 
 [[check]]
 id = "exception_hook"
 what = "the firmware's exception handler runs the runtime's hook once it is installed: the hook word is set after the firmware's boot and stays ours"
 host = "the_exception_hook_is_installed_once_and_asked_for_again_harmlessly"
-device = "crash-capture.device.test.ts"
+device = "runtime/core/tests/diag/crash-capture.device.test.ts"

@@ -38,11 +38,11 @@ vi.mock('../runtime/service-symbols.ts', async (original) => ({
   bindServiceSymbols: vi.fn(async () => {}),
 }));
 vi.mock('../runtime/write-safety.ts', () => ({ runtimeWatchEnv: fake.watchEnv, runtimeSafety: fake.safety }));
-vi.mock('../runtime/fx-live.ts', async (original) => ({
+vi.mock('../runtime/devices.ts', async (original) => ({
   ...(await original<object>()),
   options: (device: string) => ({ device, firmware: device === 'dt2' ? '1.17' : '1.12' }),
-  evidence: fake.evidence,
 }));
+vi.mock('../runtime/fx-evidence.ts', async (original) => ({ ...(await original<object>()), evidence: fake.evidence }));
 // the host card builder makes no card file to seed, and no OLED frames exist to render: what these tests observe is what they are given
 vi.mock('../runtime/project-kit.ts', async (original) => ({
   ...(await original<object>()),
@@ -343,7 +343,7 @@ for (const { afterEpoch, loaderResult } of [
     expect(mode).toBe('paused');
     expect(inspected.epoch).toBe(3);
     expect(inspected.results).toEqual([loaderResult]);
-    const { evidence } = await vi.importActual<typeof import('../runtime/fx-live.ts')>('../runtime/fx-live.ts');
+    const { evidence } = await vi.importActual<typeof import('../runtime/fx-evidence.ts')>('../runtime/fx-evidence.ts');
     await expect(evidence({ session } as PatchedSession, artifacts, 'closing', [], false)).resolves.toBeUndefined();
     expect(order.indexOf('pcm:start')).toBeLessThan(order.indexOf('ready'));
     expect(order.indexOf('pcm:report')).toBeGreaterThan(order.indexOf('paused'));

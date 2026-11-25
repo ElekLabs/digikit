@@ -1,6 +1,6 @@
 import { emulatorRead, panelInput, pollUntil, readTopMenuItems, readViewStack, viewStackFacts, type Device } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import { bootInfo } from '@digi/regression/runtime/card-kit.ts';
+import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
 import { CARD_SYMBOLS, cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { ringWatch } from '@digi/regression/runtime/runtime-menu.ts';
 import { moduleStorePath } from '@digi/regression/runtime/install.ts';

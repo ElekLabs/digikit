@@ -1,6 +1,7 @@
 import { emuMidiSink, MidiOut } from '@digi/dk-session';
 import { pollUntil } from '@digi/test-support';
-import { rpc, type Rt } from './fx-live.ts';
+import { rpc } from './guest-access.ts';
+import type { Rt } from './panel-waits.ts';
 
 /**
  * The firmware's own MIDI CC path: the bytes go to `midi.usb.in` and reach the firmware's USB MIDI receive callback, as if a host had sent them.

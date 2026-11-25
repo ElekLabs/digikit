@@ -10,16 +10,11 @@
         "files": [
           "ui.device.test.ts"
         ],
-        "tags": [
-          "A:core/ui"
-        ],
         "modules": [
           "test/ui-demo"
         ]
       }
     ]
   },
-  "implicitDependencies": [
-    "core/runtime"
-  ]
+  "implicitDependencies": ["core/ui"]
 }

@@ -25,7 +25,7 @@ fn fresh() -> (MutexGuard<'static, ()>, FakeCore, Lfo) {
     let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = FakeCore::new();
     set_firmware(0, [0; 3]);
-    let mut lfo = <Lfo as Provider<FakeCore>>::start(&core).unwrap();
+    let mut lfo = *dkrt_test_support::start_boxed::<Lfo>(&core).unwrap();
     for owner in 0..=8u8 {
         detach(&mut lfo, &core, owner);
     }

@@ -4,10 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": [
-    "core/runtime",
-    "core/services/fx"
-  ],
+  "implicitDependencies": ["core/services/fx", "core/fx", "core/dynfx", "core/runtime-package", "dkrt-svc-fx"],
   "metadata": {
     "runtimeAcceptance": [
       {
@@ -17,10 +14,6 @@
           "fx-routes-persist.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "S:fx",
-          "C:state"
-        ],
         "modules": [
           "test/dyn-fx-gain",
           "test/dyn-fx-gain-send",
@@ -32,7 +25,13 @@
         "aliases": {
           "test/dyn-fx-gain-send-3": "test/dyn-fx-gain-send"
         },
-        "plusdrive": true
+        "plusdrive": true,
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ]
       },
       {
         "firmwareOnly": "signed FX page words and PCM gain through the firmware pages and the stock FX audio path; the page and row tables exist only in firmware memory",
@@ -40,10 +39,6 @@
           "fx-bipolar.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "S:fx",
-          "C:state"
-        ],
         "modules": [
           "test/dyn-fx-gain-bipolar",
           "test/sine",
@@ -53,7 +48,13 @@
         "sources": [
           "tools/patchkit/hook_ab.py"
         ],
-        "plusdrive": true
+        "plusdrive": true,
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ]
       },
       {
         "firmwareOnly": "the firmware kit and project save and load reacting to the FX values and effect ids (kit objects, Load Kit, project save menu)",
@@ -61,10 +62,6 @@
           "fx-kit-persist.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "S:fx",
-          "C:state"
-        ],
         "modules": [
           "test/dyn-fx-gain",
           "test/dyn-fx-gain-b",
@@ -72,7 +69,13 @@
           "core/services/fx",
           "core/services/machines"
         ],
-        "plusdrive": true
+        "plusdrive": true,
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ]
       },
       {
         "firmwareOnly": "stock FUNC pixels, stock PCM, the page list words, the strings in firmware format, the kit and DSP words after a knob turn and removal after SELECT and restart (page row codes and parameter records are host-tested: services/fx/tests/contract.rs)",
@@ -80,16 +83,19 @@
           "fx-pages.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "S:fx"
-        ],
         "modules": [
           "test/dyn-fx-gain",
           "test/sine",
           "core/services/fx",
           "core/services/machines"
         ],
-        "plusdrive": true
+        "plusdrive": true,
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ]
       },
       {
         "firmwareOnly": "send cells of the Sound array, track DSP amounts and project saves written into firmware memory, and the stock FX pixels and PCM (the host cannot reach those raw addresses; route flags and the send limit are host-tested: services/fx/tests/builder.rs, table.rs)",
@@ -97,11 +103,6 @@
           "fx-track-route.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "A:core/fx",
-          "S:fx",
-          "C:state"
-        ],
         "modules": [
           "test/dyn-fx-gain-both",
           "test/sine",
@@ -115,7 +116,13 @@
         "sources": [
           "tools/patchkit/hook_ab.py"
         ],
-        "plusdrive": true
+        "plusdrive": true,
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ]
       },
       {
         "firmwareOnly": "the send bus wired through the patched stock image: zero, other and full amounts as PCM (the gain law is on the rig)",
@@ -123,33 +130,6 @@
           "fx-send.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "A:core/fx",
-          "S:fx"
-        ],
-        "modules": [
-          "test/dyn-fx-gain",
-          "test/sine",
-          "core/services/fx",
-          "core/services/machines"
-        ],
-        "sources": [
-          "tools/patchkit/hook_ab.py"
-        ],
-        "plusdrive": true
-      },
-      {
-        "files": [
-          "fx-send-dn2.device.test.ts"
-        ],
-        "devices": [
-          "dn2"
-        ],
-        "dsp": "sharc",
-        "tags": [
-          "A:core/fx",
-          "S:fx"
-        ],
         "modules": [
           "test/dyn-fx-gain",
           "test/sine",
@@ -160,7 +140,38 @@
           "tools/patchkit/hook_ab.py"
         ],
         "plusdrive": true,
-        "firmwareOnly": "the release-tail chord sums on the send bus as PCM (the gain law and the slot sum are on the rig)"
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ]
+      },
+      {
+        "files": [
+          "fx-send-dn2.device.test.ts"
+        ],
+        "devices": [
+          "dn2"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "test/dyn-fx-gain",
+          "test/sine",
+          "core/services/fx",
+          "core/services/machines"
+        ],
+        "sources": [
+          "tools/patchkit/hook_ab.py"
+        ],
+        "plusdrive": true,
+        "firmwareOnly": "the release-tail chord sums on the send bus as PCM (the gain law and the slot sum are on the rig)",
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ]
       }
     ],
     "mergeTests": [

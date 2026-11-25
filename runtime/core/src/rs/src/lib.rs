@@ -134,6 +134,8 @@ mod contract_tests;
 #[cfg(test)]
 mod provider_ping_tests;
 #[cfg(test)]
+mod provider_step_assembly_tests;
+#[cfg(test)]
 mod svc_contract_tests;
 #[cfg(test)]
 mod fake_storage;

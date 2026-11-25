@@ -4,9 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": [
-    "core/runtime"
-  ],
+  "implicitDependencies": ["core/services/machines", "core/rows", "core/dsp-voice", "sdk", "core/runtime-package", "dkrt-svc-machines", "dkrt-svc-rows"],
   "metadata": {
     "runtimeAcceptance": [
       {
@@ -17,13 +15,6 @@
           "dn2"
         ],
         "dsp": "sharc",
-        "tags": [
-          "A:core/ui",
-          "C:loading",
-          "C:state",
-          "C:types",
-          "S:machines"
-        ],
         "modules": [
           "test/dyn-dn2",
           "core/services/machines"
@@ -38,12 +29,6 @@
           "dt2"
         ],
         "dsp": "sharc",
-        "tags": [
-          "A:core/ui",
-          "C:state",
-          "C:types",
-          "S:machines"
-        ],
         "modules": [
           "test/sine",
           "core/services/machines"
@@ -55,12 +40,6 @@
           "roundtrip.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "A:core/ui",
-          "C:state",
-          "C:types",
-          "S:machines"
-        ],
         "modules": [
           "test/dyn-dn2",
           "test/sine",
@@ -73,11 +52,6 @@
           "equiv.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:dsp",
-          "C:types",
-          "S:machines"
-        ],
         "modules": [
           "test/dyn-dn2",
           "test/sine",

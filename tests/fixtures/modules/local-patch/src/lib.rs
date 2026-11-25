@@ -22,8 +22,9 @@ impl LocalPatch {
 }
 
 impl<C: CoreApi> Provider<C> for LocalPatch {
-    fn start(_: &C) -> Result<LocalPatch, Status> {
-        Ok(LocalPatch { bound: BOUND_PATCH })
+    fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<LocalPatch>) -> Result<(), Status> {
+        slot.write(LocalPatch { bound: BOUND_PATCH });
+        Ok(())
     }
 }
 

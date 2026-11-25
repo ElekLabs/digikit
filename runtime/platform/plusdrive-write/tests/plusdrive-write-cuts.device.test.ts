@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { pokeKnob } from '@digi/regression/runtime/card-kit.ts';
-import { SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { pokeKnob } from '@digi/regression/runtime/guest-mailbox.ts';
+import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { pdwSuite, pattern, slot4, cat, staged, noStagingFolder, WRITE, REPLACE, SAMPLES, E_EXISTS } from './plusdrive-write-support.ts';
 
 // +Drive writes through core/plusdrive-write, power cuts and recovery (docs/plans/usb-fast.md 3.1, finding 120; setup: plusdrive-write-support.ts).

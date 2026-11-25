@@ -1,5 +1,5 @@
 //! Host tests of the shortcuts service over `FakeCore`: the builder call and its commit, the rule for the records, `Records::check` and `Records::apply`, `Provider::detach`, and
-//! the entry for the key-dispatch hook. Each test starts its own owner object (`Provider::start`): nothing is shared between tests.
+//! the entry for the key-dispatch hook. Each test starts its own owner object (`Provider::start_in`): nothing is shared between tests.
 use core::ffi::c_void;
 use dkrt_abi::profiles::ALL;
 use dkrt_abi::provider::{Consumer, ConsumerId, Provider, Records, Ticker};
@@ -63,7 +63,7 @@ fn fresh() -> (Shortcuts, FakeCore) {
         .find(|p| [TRK, YES, OTHER].iter().all(|k| p.key_code(*k) != 0))
         .expect("a profile with key names")
         .id;
-    let s = <Shortcuts as Provider<FakeCore>>::start(&core).unwrap();
+    let s = *dkrt_test_support::start_boxed::<Shortcuts>(&core).unwrap();
     assert_eq!(s.table().len(), 0);
     (s, core)
 }

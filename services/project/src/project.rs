@@ -78,13 +78,6 @@ impl<H: Host> Project<H> {
 }
 
 impl<C: CoreApi, H: Host> Provider<C> for Project<H> {
-    fn start(core: &C) -> Result<Project<H>, Status> {
-        let mut slot = MaybeUninit::uninit();
-        Self::start_in(core, &mut slot)?;
-        // SAFETY: `start_in` wrote the value.
-        Ok(unsafe { slot.assume_init() })
-    }
-
     /// The state is made where it lives: all-zero bytes are the initial state (`Host`'s contract, and `ProjectService::new` is zero: `tests/state.rs` checks it), so this is one fill
     /// and no copy of the engine's buffers through the stack. Then the handles open and the settings overlay is set, as `setup` of the file did.
     fn start_in(core: &C, slot: &mut MaybeUninit<Project<H>>) -> Result<(), Status> {

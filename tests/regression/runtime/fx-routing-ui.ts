@@ -7,7 +7,9 @@ import {
   type Device,
 } from '@digi/test-support';
 import { plainItem, readChoiceWindow, type ChoiceWindow } from './choice-window.ts';
-import { REDRAW, rows, word, type Rt } from './fx-live.ts';
+import { REDRAW, type Rt } from './panel-waits.ts';
+import { rows } from './dsp-state.ts';
+import { word } from './guest-access.ts';
 import { shot, withPausedFxProtocol } from './fx-session.ts';
 import { type RuntimePlan } from './runtime-plan.ts';
 import { symbolsOf } from './service-symbols.ts';

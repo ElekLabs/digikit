@@ -1,0 +1,24 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-platform-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime",
+    "core/platform"
+  ],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "platform-contract.device.test.ts"
+        ],
+        "modules": [],
+        "sources": [
+          "runtime/core/tests/platform/contract.toml"
+        ]
+      }
+    ]
+  }
+}
