@@ -5,12 +5,12 @@
 // The fingerprint rule must match digi_env.core_fingerprint, and the target dir rule must match
 // native_target.target_dir: the Python tools still build into the same dirs. targetDir uses an
 // explicit gen, where native_target falls back to $SHARC_GEN_DIR.
-import { createHash } from 'node:crypto';
 import { existsSync, globSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { parse } from 'smol-toml';
+import { sha256Of } from './digest.mjs';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const TOOLCHAIN = parse(readFileSync(join(ROOT, 'mise.toml'), 'utf8')).tools.rust;
@@ -51,12 +51,8 @@ export const coreFingerprint = (root = ROOT) => {
     'sharc_rsgen.py',
   ].map((file) => file.split(sep).join('/'));
   files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  const digest = createHash('sha256');
-  for (const file of files) {
-    digest.update(Buffer.concat([Buffer.from(file, 'utf8'), Buffer.from([0])]));
-    digest.update(Buffer.concat([readFileSync(join(base, file)), Buffer.from([0])]));
-  }
-  return digest.digest('hex');
+  const zero = Buffer.from([0]);
+  return sha256Of(...files.flatMap((file) => [file, zero, readFileSync(join(base, file)), zero]));
 };
 
 // Refuses a generated core not made from the current sharc_core (DIGI_ALLOW_STALE_GEN=1 warns instead).
@@ -100,7 +96,7 @@ export const targetDir = (gen, variant = '') => {
     const resolved = real(gen);
     if (resolved === real(DEFAULT_GENERATED)) key = 'prod';
     else if (!existsSync(join(resolved, 'image.rs'))) key = 'generic';
-    else key = 'g-' + createHash('sha256').update(resolved, 'utf8').digest('hex').slice(0, 8);
+    else key = 'g-' + sha256Of(resolved).slice(0, 8);
   }
   const path = join(root, key);
   return variant ? join(path, variant) : path;

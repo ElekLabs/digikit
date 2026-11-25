@@ -1,10 +1,10 @@
 // Shared module manifest and acceptance metadata helpers.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parse } from 'smol-toml';
 import { galleryGaps as rigGalleryGaps, hasGallery } from '../../packages/sharc-rig-kit/src/gallery-gaps.mjs';
+import { read } from './toml.mjs';
 
-export const read = (root, toml) => parse(readFileSync(join(root, toml), 'utf8'));
+export { read };
 // The devices a module packs for: no ports means both devices.
 export const packDevices = (m) => {
   if (!m.ports?.length) return ['dt2', 'dn2'];

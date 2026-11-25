@@ -1,11 +1,11 @@
 // E8 relocation proof. See docs/TESTING.md, "Byte manifests for repository moves".
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, normalize, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { sha256Of } from './digest.mjs';
 import { CELLS } from './device-inputs.mjs';
 import { imageJobs } from './image-jobs.mjs';
 import { read } from './module-manifests.mjs';
@@ -17,7 +17,7 @@ const KINDS = ['image', 'plan', 'addrmap', 'dksp', 'pack', 'verdicts', 'generate
 const RELOCATABLE = ['generated', 'object', 'core-object-list'];
 const SHA = /^[a-f0-9]{64}$/;
 const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
-const sha = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const sha = sha256Of;
 
 const checkedPath = (path) => {
   if (

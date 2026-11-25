@@ -4,24 +4,15 @@
 // (`firmware`, `firmware_for`, `READY_DIRS`, `ready_inputs`, `[acceptance] ready_dir`); a change there must change this file.
 // It also hashes the store key of each device's core library (the generated core is untracked and no Nx input sees it).
 // The DT2 FX card is built from a generated sine, so it has no input file; DIGI_DT2_CARD (a kept card image) is hashed.
-import { createHash } from 'node:crypto';
-import { createReadStream, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { sha256FileOrMissing, sha256Of } from './digest.mjs';
 import { firmwareDir } from './device-inputs.mjs';
 import { readyDirs } from './ready-dirs.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-
-const fileHash = (file) =>
-  new Promise((done) => {
-    const h = createHash('sha256');
-    const s = createReadStream(file);
-    s.on('data', (c) => h.update(c));
-    s.on('end', () => done(h.digest('hex')));
-    s.on('error', () => done('missing'));
-  });
 
 const isFile = (p) => {
   try {
@@ -36,7 +27,8 @@ const under = (p) => resolve(root, p);
 
 export const coupledInputs = async (env = process.env) => {
   const lines = [];
-  const add = async (label, file) => lines.push(`${label} ${isFile(file) ? await fileHash(file) : 'missing'}`);
+  const add = async (label, file) =>
+    lines.push(`${label} ${isFile(file) ? await sha256FileOrMissing(file) : 'missing'}`);
 
   await add('dn2/syx', env.DIGI_EMU_SYX || env.DIGI_COUPLED_SYX || join(firmwareDir(env), 'Digitone_II_OS1.12.syx'));
   await add('dt2/syx', env.DIGI_EMU_SYX_DT2 || join(firmwareDir(env), 'Digitakt_II_OS1.17.syx'));
@@ -67,9 +59,7 @@ export const coupledInputs = async (env = process.env) => {
       lines.push(`${device}/core-key ${done.status === 0 ? done.stdout.trim() : 'unavailable'}`);
     }
   }
-  return createHash('sha256')
-    .update(`coupled-inputs v2\n${lines.join('\n')}`)
-    .digest('hex');
+  return sha256Of(`coupled-inputs v2\n${lines.join('\n')}`);
 };
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) console.log(await coupledInputs());
