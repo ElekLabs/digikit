@@ -123,7 +123,7 @@ sampleSlot = { scope = "track", word = 28 }
 "delay.feedback" = { scope = "kit", word = 35 }
 
 # The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is
-# part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/firmware-inputs.ts, tests/regression/runtime/devices.ts).
+# part of its inputs (tools/nx/device-inputs.mjs, packages/test-support/src/inputs.ts, tests/regression/runtime/devices.ts).
 # ready_dir (private, firmware-derived, never committed; the one source of the ready directory): rebuilt from the .syx alone with
 # `mise run emu:ready -- dt2` (tools/emulator/ready.py). Files: digi-audio-dn2-image.bin, digi-audio-m5.snap, digi-audio-m5.snap.dsp.
 [acceptance]
