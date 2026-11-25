@@ -1,5 +1,6 @@
 import { RuntimeEvents, resolveParameterWatch, withParameterObserver, type DkSession } from '@digi/dk-session';
 import type { DeviceRecord } from '@digi/devices';
+import { matchesNativeSample, type NativeSampleKey, type dt2StockSampleReader } from './dt2-stock-sample-reader.ts';
 
 /** Record actual live values before a capture. A slot number does not prove the sample's identity. */
 export async function readStockDelayState(session: DkSession, profile: DeviceRecord, version: string) {
@@ -11,4 +12,22 @@ export async function readStockDelayState(session: DkSession, profile: DeviceRec
   const sampleSlot = await withParameterObserver(session, events, slot, async (value) => value, { target });
   const feedbackRaw = await withParameterObserver(session, events, feedback, async (value) => value, { target });
   return { track, sample_slot: sampleSlot, delay_feedback_raw: feedbackRaw };
+}
+
+/** Read the DT2 Delay case's live settings and check the loaded sample before recording. */
+export async function readStockDelayCaptureState(
+  session: DkSession,
+  profile: DeviceRecord,
+  version: string,
+  reader: ReturnType<typeof dt2StockSampleReader>,
+  expected: NativeSampleKey,
+) {
+  const state = await readStockDelayState(session, profile, version);
+  const actual = await reader.readLoadedKey(session, state.sample_slot);
+  return {
+    ...state,
+    loaded_sample: actual,
+    expected_sample: expected,
+    sample_matches: matchesNativeSample(actual, expected),
+  };
 }

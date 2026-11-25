@@ -10,6 +10,7 @@ import {
   type MidiSink,
 } from '../../packages/dk-session/src/index.ts';
 import type { MidiMap, Registry } from '../../packages/devices/src/index.ts';
+import type { Sample } from '../../packages/dk-session/src/dksample.ts';
 import type { SamplesBackend } from '../../packages/dk-session/src/samples.ts';
 import { parseWave, type Wave } from '../../packages/sharc-rig-kit/src/wave.ts';
 import { remoteInput } from '../../packages/test-support/src/input.ts';
@@ -20,7 +21,11 @@ import {
   delayReference as spec,
 } from '../../packages/workbench-core/src/reference/dt2-stock-delay.ts';
 import { compareDelay, measureDelay } from '../../packages/workbench-core/src/reference/delay.ts';
-import { readStockDelayState } from '../../packages/workbench-core/src/reference/stock-delay-state.ts';
+import { readStockDelayCaptureState } from '../../packages/workbench-core/src/reference/stock-delay-state.ts';
+import {
+  dt2StockSampleReader,
+  identifyNativeSample,
+} from '../../packages/workbench-core/src/reference/dt2-stock-sample-reader.ts';
 import { emulatorAudio, listAudioInputs, usbAudio } from './reference_capture.ts';
 import { prepareProject } from './reference_project.ts';
 
@@ -63,6 +68,7 @@ interface Command {
   opts: ReferenceOptions;
   devices: Registry;
   connectReady(): Promise<ReferenceLink>;
+  loadSample(): Promise<Sample>;
   openUploadBackend(session: DkSession): Promise<SamplesBackend>;
 }
 
@@ -127,28 +133,46 @@ function verifyFirmware(info: { port: string; fw_id?: string | null }, devices: 
   if (info.port !== device && info.port !== spec.port) throw new Error(`Expected ${spec.port}, reported ${info.port}.`);
   const record = devices.get(info.port);
   const firmware = captureFirmwareIdentity(info.fw_id ?? '', record.firmware);
-  if (!record.firmware.some((f) => f.version === version && f.sha256 === firmware.stock_firmware_sha256))
+  const sha256 = firmware.stock_firmware_sha256;
+  if (!sha256 || !record.firmware.some((f) => f.version === version && f.sha256 === sha256))
     throw new Error(`The target did not identify the stock ${spec.port} firmware hash.`);
-  return { record, firmware, version: version! };
+  return { record, firmware: { ...firmware, stock_firmware_sha256: sha256 }, version: version! };
 }
 
-async function inspect({ opts, devices, connectReady }: Command) {
+async function observeBeforeCapture(
+  command: Command,
+  session: DkSession,
+  { record, version, firmware }: ReturnType<typeof verifyFirmware>,
+) {
+  const reader = dt2StockSampleReader(
+    readFileSync(path.join(command.root, 'ports', `${spec.port}.toml`), 'utf8'),
+    firmware.stock_firmware_sha256,
+  );
+  const expected = identifyNativeSample(await command.loadSample(), renderFixture());
+  return readStockDelayCaptureState(session, record, version, reader, expected);
+}
+
+async function inspect(command: Command) {
+  const { opts, devices, connectReady } = command;
   const link = await connectReady();
   try {
-    const { record, firmware, version } = verifyFirmware(await link.session.info(), devices);
-    const state = await readStockDelayState(link.session, record, version);
-    if (opts.format === 'json') console.log(json({ port: spec.port, ...firmware, ...state }));
-    else
+    const target = verifyFirmware(await link.session.info(), devices);
+    const state = await observeBeforeCapture(command, link.session, target);
+    if (opts.format === 'json') console.log(json({ port: spec.port, ...target.firmware, ...state }));
+    else {
+      const sample = state.sample_matches ? 'probe verified' : state.loaded_sample ? 'different sample' : 'empty';
       console.log(
-        `Track ${state.track} · sample slot ${state.sample_slot} · Delay feedback raw ${state.delay_feedback_raw}`,
+        `Track ${state.track} · sample slot ${state.sample_slot} (${sample}) · Delay feedback raw ${state.delay_feedback_raw}`,
       );
+    }
     return 0;
   } finally {
     await link.close();
   }
 }
 
-async function run({ opts, devices, connectReady }: Command) {
+async function run(command: Command) {
+  const { opts, devices, connectReady } = command;
   const scratchProject = opts['scratch-project']?.trim();
   const audioInput = opts['audio-input']?.trim();
   if (!scratchProject || !opts.out || (!opts.emu && !audioInput))
@@ -159,7 +183,8 @@ async function run({ opts, devices, connectReady }: Command) {
   const link = await connectReady();
   const { session } = link;
   try {
-    const { record, firmware, version } = verifyFirmware(await session.info(), devices);
+    const verified = verifyFirmware(await session.info(), devices);
+    const { record, firmware } = verified;
     if (!record.midi) throw new Error('Target has no registered MIDI map.');
     if ((await session.modules()).some(isContentModule))
       throw new Error('Use a scratch project without digikit content modules for the stock reference.');
@@ -169,12 +194,18 @@ async function run({ opts, devices, connectReady }: Command) {
     if (emu && (await emu<{ mode: string }>('status')).mode !== 'free')
       throw new Error('Resume the emulator before recording.');
 
-    const observed = await readStockDelayState(session, record, version);
+    const observed = await observeBeforeCapture(command, session, verified);
+    if (!observed.sample_matches) {
+      const key = observed.loaded_sample;
+      const actual = key ? `${key.content_hash}, ${key.stored_bytes} stored bytes` : 'no loaded sample';
+      throw new Error(
+        `Track ${observed.track} slot ${observed.sample_slot} has ${actual}. Assign the ${spec.fixture} probe before recording.`,
+      );
+    }
     const target = makeTarget(link, record.midi, emu);
     const recordAudio = emu ? emulatorAudio(emu) : usbAudio(opts['audio-bin'], audioInput!);
     mkdirSync(path.dirname(dir), { recursive: true });
     mkdirSync(dir); // no overwriting or mixing with another run
-    renderFixture(); // verify the fixture hash before pressing keys
     const waves = new Map<string, Wave>();
     const captures = await captureStockDelay(target, async (kind, send, play) => {
       const file = `${kind}.wav`;
@@ -205,7 +236,7 @@ async function run({ opts, devices, connectReady }: Command) {
       target: emu ? 'emulator' : 'hardware',
       port: spec.port,
       ...firmware,
-      fixture: { file: spec.fixture, sha256: spec.fixtureSha256, assignment: 'operator-declared' },
+      fixture: { file: spec.fixture, sha256: spec.fixtureSha256, assignment: 'loaded-native-key' },
       project: { name: scratchProject, identity: 'operator-declared' },
       validation: {
         settings: 'acoustic',

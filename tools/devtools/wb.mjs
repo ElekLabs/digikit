@@ -245,6 +245,7 @@ const SPANS = words[0] === 'profile' && words[1] === 'spans';
 const CALIBRATE = words[0] === 'profile' && words[1] === 'calibrate' && words[2] === 'run';
 const REFERENCE = words[0] === 'audio' && words[1] === 'reference';
 const REFERENCE_RUN = REFERENCE && words[2] === 'run';
+const REFERENCE_INSPECT = REFERENCE && words[2] === 'inspect';
 const REFERENCE_PROJECT = REFERENCE && words[2] === 'prepare-project';
 const REFERENCE_INPUTS = REFERENCE && words[2] === 'inputs';
 const AUDIO = words[0] === 'audio' || (words[0] === 'module' && words[1] === 'render');
@@ -260,17 +261,23 @@ if (REFERENCE_PROJECT && !opts.emu && (!explicitMidiPort || !opts.port.trim()))
   fail('prepare-project on hardware requires --port PORT.');
 const deviceCommand =
   words.length > 0 &&
-  (!OFFLINE.includes(words[0]) || SPANS || CALIBRATE || REFERENCE_RUN || (REFERENCE_PROJECT && !opts.emu));
+  (!OFFLINE.includes(words[0]) ||
+    SPANS ||
+    CALIBRATE ||
+    REFERENCE_RUN ||
+    REFERENCE_INSPECT ||
+    (REFERENCE_PROJECT && !opts.emu));
 const prepTasks = REFERENCE_INPUTS
   ? ['dkaudio:build']
   : REFERENCE_PROJECT
     ? opts.emu
       ? ['wb:reference-card-inputs']
       : ['dkmidi:build', 'wasm:dksample']
-    : REFERENCE_RUN
-      ? opts.emu
-        ? []
-        : ['dkmidi:build', 'dkaudio:build']
+    : REFERENCE_RUN || REFERENCE_INSPECT
+      ? [
+          ...(existsSync(path.join(root, 'apps/web/public/dksample.wasm')) ? [] : ['wasm:dksample']),
+          ...(opts.emu ? [] : REFERENCE_RUN ? ['dkmidi:build', 'dkaudio:build'] : ['dkmidi:build']),
+        ]
       : deviceCommand
         ? ['wb:device-inputs']
         : [];
@@ -561,6 +568,7 @@ if (SPANS) {
     root,
     devices,
     connectReady,
+    loadSample,
     async openUploadBackend(session) {
       const wasm = path.join(root, 'apps/web/public/dksample.wasm');
       if (!existsSync(wasm)) throw new Error('Missing dksample.wasm (run mise run wasm:dksample).');

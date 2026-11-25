@@ -1073,10 +1073,13 @@ mise run wb:cli -- audio reference inspect --emu --run-dir out/native/run --form
 mise run wb:cli -- audio reference inspect --port "Digitakt II" --format json
 ```
 
-The command reads Track 1's sample slot and stock Delay feedback in raw
-firmware units. The capture keeps both readings in
-`validation.observed_before_capture`. A slot number is not a sample hash
-and a feedback readback does not replace the acoustic check.
+The command reads Track 1's sample slot, the loaded sample's native content
+hash and stored size, and stock Delay feedback in raw firmware units. It
+compares the loaded key to the test WAV converted by `dksample`. The capture
+refuses a wrong or empty slot before sending input or opening a recorder. A
+successful capture keeps the observed values and expected sample key in
+`validation.observed_before_capture`. The feedback readback does not replace
+the acoustic check.
 
 - Boot DT2 1.17 with the digikit debug and remote modules active. Do not load
   content modules. On hardware use USB AUDIO/MIDI, USB OUT = MAIN and
@@ -1106,8 +1109,10 @@ mise run wb:cli -- audio reference compare \
 Use a fresh output directory for each run. The result is `dry.wav`,
 `delay.wav` and `reference.json` (`dk.audio-reference/1`). The case only
 changes Track 1's Delay send and sets it back to zero on exit. The project
-name and sample assignment are operator declarations. Firmware identity is
-checked against the target's reported hash. The recording must show a clean
+name is an operator declaration. The loaded sample assignment is checked
+against the expected native key, and the firmware identity is checked against
+the target's reported hash. Older reports can still be compared, but may lack
+the sample key evidence. The recording must show a clean
 dry probe and five wet repeats with 58–68 ms spacing and 4.5–7.5 dB loss per
 repeat. Compare two passing reports with matching firmware and fixture
 identity. The pair must agree within 2 ms and 1 dB per repeat. This compares

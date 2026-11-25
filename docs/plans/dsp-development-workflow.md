@@ -308,10 +308,26 @@ snapshots matched independent reads of the live memory. The CLI can inspect
 both raw values and includes them in the capture report. DN2 and Syntakt
 do not yet advertise mappings for this observer.
 
-**Next readbacks.** Verify that the captured sample slot refers to the
-staged probe, and carry that identity into the report. Verify the remaining
-Delay parameters as needed for automated setup. The physical comparison
-still needs matched runtime artifacts and a working USB audio input.
+**Loaded sample checkpoint.** The DT2 1.17 reader in Workbench Core uses
+the resolved `cf.samples.site.slot.keys` anchor and the existing read-only
+`DkSession.peek`. The session and capture scaffold do not know the DT2
+table layout. `wb audio reference inspect` reports the live and expected
+native keys. `run` checks them before sending panel input or creating the
+output directory and records both in the capture report. On two disposable
+emulator cards, slot 7 matched the seeded probe (`b9694553`, 19,280 stored
+bytes) and a different sample in the same slot was refused before recording.
+The saved hardware upload receipt agrees on the expected hash and counts
+19,264 payload bytes before the firmware's 16-byte trailer. See
+[the DT2 pool tables](../findings/109-dt2-stock-pool-borrowing.md).
+
+The coupled emulator recorded both WAVs and included the matching keys in
+`reference.json`. That fresh project's wet take did not pass the acoustic
+check. Sample identity and effect setup are separate checks. Replay with the
+verified Delay setup before taking this as a new comparison baseline.
+
+Verify the remaining Delay parameters as needed for automated setup. The
+physical comparison still needs matched runtime artifacts and a working
+USB audio input.
 
 ## End result
 
