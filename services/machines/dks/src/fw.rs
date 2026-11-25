@@ -101,17 +101,27 @@ impl Fw for DkFw {
 /// The hook entry of the machine page's key event: the click detector of the owner. Without an owner (before `init` made it, after `fini`) the event passes.
 #[no_mangle]
 pub unsafe extern "C" fn dks_page_key(view: *const u8, ev: *const u8) {
-    page_key_with(&DkFw, view, ev);
+    page_key!(&DkFw, view, ev);
 }
 
-/// The key hook over any `Fw` (the host test of the file gives one whose code mapper enters the owner, as the page's code hook does).
+/// The body of the key hook, written once for the firmware entry above (its closures stay inside `dks_page_key`, so the committed object does not change with a host seam) and for
+/// `page_key_with`.
+macro_rules! page_key {
+    ($fw:expr, $view:ident, $ev:ident) => {{
+        let Some(Some(enc)) = crate::DK_SVC_OWNER.with(|m| m.clicks().key_click($view, $ev)) else {
+            return;
+        };
+        // outside the owner: the code hook looks the native page up in it
+        let code = $fw.param_code($view as usize, enc);
+        crate::DK_SVC_OWNER.with(|m| m.clicks().queue_click(&ImportCore, $fw, $view, code));
+    }};
+}
+use page_key;
+
+/// The key hook over any `Fw` (a host build only: the host test of the file gives one whose code mapper enters the owner, as the page's code hook does).
+#[cfg(not(target_arch = "m68k"))]
 pub unsafe fn page_key_with<F: Fw>(fw: &F, view: *const u8, ev: *const u8) {
-    let Some(Some(enc)) = crate::DK_SVC_OWNER.with(|m| m.clicks().key_click(view, ev)) else {
-        return;
-    };
-    // outside the owner: the code hook looks the native page up in it
-    let code = fw.param_code(view as usize, enc);
-    crate::DK_SVC_OWNER.with(|m| m.clicks().queue_click(&ImportCore, fw, view, code));
+    page_key!(fw, view, ev);
 }
 
 /// The hook entry of the machine page's turn: the turn ends the click flow (the owner), then the native handler of the page runs outside the owner: nonzero when a native page
