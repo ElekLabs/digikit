@@ -224,7 +224,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     // Ownership gate (device-owners.mjs): what owns a changed file selects the tests; the named projects join as a union.
     const changed = changedFiles(root, base);
     const importInputs = testImportInputs(root);
-    const ctx = gateContext(root);
+    const ctx = gateContext(root, base);
     const owned = ownershipSelection(projects, {
       changed,
       closureOf: (projectRoot, file) => closureFiles(importInputs, `${projectRoot}/${file}`),
