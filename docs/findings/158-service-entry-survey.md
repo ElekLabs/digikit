@@ -109,7 +109,7 @@ confirmed: each is `[[hook]]` without `handler`, installed by install.rs. [D]
 | hook.value_class (offset 4, before `cmpi.l #count`) | 0x400c8932 / 0x400c2580 | value-class accessor | task, 15 callers (ParameterSet vfuncs etc., 0x4003a768 ...) [D]; no direct edge from vector 191 root [D] | image | 2 |
 | writes cf.param.sites.descriptor_table.ref.* (absolute pointers into the 60-byte-row table) and .bound.* (`cmpi.l #N`) | first 0x4003a7ea / 0x400174e0; bound 0x4003a7d8 / 0x400174d6 (ParameterSet::vfunc_22 etc.) | repoint to the copied table (pf_table) and grow bounds | task (ParameterSet vfuncs) | image | 2 (bulk writes; the table copy needs the runtime-allocated area; the copy is made from live RAM at load, which equals the image bytes since nothing writes the table) |
 
-### core/fxpages (image-modules/points/fxpages): no image ops (data only: 24+2 param rows, `fxpages_info`). Nothing to move.
+### core/fxpages (runtime/platform/fxpages): no image ops (data only: 24+2 param rows, `fxpages_info`). Nothing to move.
 services/fx/dks: 9 `[[hook]]`s (page_desc 0x400c898a/0x400c25d8, tab_label_test, filter_graph_test, fx_view_list.load, fx_key_list.load,
 fx_array.load/save/init_exit, sound_load_exit): all option 2 today, all UI/storage task code (reach: main_os or the console task; FxPageView::vfunc_4)
 [D]. Two DSP fills (`fx_entry`, `fx_send`) are DSP-side.

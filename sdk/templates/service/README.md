@@ -17,7 +17,7 @@ services/__NAME__/
 ```
 
 The neutral crate exports only `dk_module` and `DKRT_*` state symbols, has no assembler and names no firmware (no `cf.` hook or anchor names, no `dkfw`). What the service
-needs from the image comes from the image adapter `image-modules/points/X`: reserved rows, hook stubs and `[[slot]]` words, and `[[info]]` data tables, found by name hash
+needs from the image comes from the image adapter `runtime/platform/X`: reserved rows, hook stubs and `[[slot]]` words, and `[[info]]` data tables, found by name hash
 with `dkc_info` (`CoreApi::info`). The image half is the adapter's; the runtime names neither the service nor the adapter's table.
 
 A service is an owner object (`__CAMEL__`) that implements `Provider` (the lifecycle: `start`, `attach`, `detach`, `can_stop`, `stop`, `settle`, `reload_done`) and the parts it needs, which the

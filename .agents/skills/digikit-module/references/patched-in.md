@@ -15,7 +15,7 @@ The browser patch page lists patched-in modules only; a `.dkm` goes to the devic
 
 | step | command |
 | --- | --- |
-| new | Copy an existing patched-in module (`image-modules/points/fx`). `module:new` makes run-time content modules only. |
+| new | Copy an existing patched-in module (`runtime/platform/fx`). `module:new` makes run-time content modules only. |
 | toolchains | `mise run patch:toolchains` once |
 | patch | `mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules fx/NAME -o out/patch/x.syx` |
 | explain | `mise run patch:explain -- --firmware ... --modules ...` |
