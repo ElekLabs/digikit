@@ -92,8 +92,12 @@ fn the_exports_reach_the_started_owner() {
         assert_eq!(dk_page_add_param(ph, NAME, NAME, 1), ph);
         // no click flow is open: the owner says so, as the cell did
         assert_eq!(dk_param_get(0, 0), E_STATE);
-        // the turn reaches the native handler (the stub image binds none, so nothing is consumed)
-        assert_eq!(dks_page_turn(null(), null()), 0);
+        // the turn reaches the native handler (the stub image binds none, so nothing is consumed); the hook reads the view first, so it is a zeroed one
+        let (view, ev) = ([0u32; 64], [0u32; 8]);
+        assert_eq!(
+            dks_page_turn(view.as_ptr() as *const u8, ev.as_ptr() as *const u8),
+            0
+        );
     }
     drop(started);
     assert!(DK_SVC_OWNER.with(|_| ()).is_none());
@@ -385,6 +389,34 @@ fn the_native_page_lookup_reads_the_view_while_the_owner_is_idle() {
         "a type without pages resumes the stock mapper"
     );
     assert_eq!(other.refused.get(), 0);
+}
+
+/// A hook enters the owner once: the view is read before, then one `Owner::step` runs `decide` on the table and `act` (one `make` of the view) with the owner idle.
+#[test]
+fn a_native_hook_enters_the_owner_once() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let _o = Started::new();
+    DK_SVC_OWNER.with(|m| m.register_page_for_test(9)).unwrap();
+    let view = ReentrantView {
+        refused: Default::default(),
+        ty: 0,
+    };
+    use dkrt_svc_machines::native_page::{target, View};
+    let t = target(|| view.page_index(), || view.native_type());
+    let entries = std::cell::Cell::new(0);
+    let shown = native::with_page(
+        t,
+        |_| {
+            entries.set(entries.get() + 1);
+            // act runs with the owner idle: a read that enters it is answered
+            view.enter();
+            &view
+        },
+        |_, page| page.is_some(),
+    );
+    assert_eq!(shown, Some(true));
+    assert_eq!(entries.get(), 1, "one owner entry for the hook");
+    assert_eq!(view.refused.get(), 0);
 }
 
 /// A click queued for a module that is unloaded before the UI pass runs it is dropped: the file's tick calls nothing (a callback into unloaded code would fault). Both ways a
