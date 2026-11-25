@@ -121,11 +121,7 @@ pub unsafe extern "C" fn dks_page_key(view: *const u8, ev: *const u8) {
 
 /// The key hook over any `Fw` made from the token (`DkFw::new` for the firmware; the host test of the file gives a fake that enters the owner, as the page's code hook does).
 /// Decide inside the owner, ask the firmware outside it (the encoder's code and the page's track), act inside again.
-pub unsafe fn page_key<F: Fw>(
-    make: impl FnOnce(&Outside) -> F,
-    view: *const u8,
-    ev: *const u8,
-) {
+pub unsafe fn page_key<F: Fw>(make: impl FnOnce(&Outside) -> F, view: *const u8, ev: *const u8) {
     let asked = crate::DK_SVC_OWNER.step(
         (view, ev),
         |m, (view, ev)| m.clicks().key_click(view, ev),
@@ -152,11 +148,15 @@ pub unsafe extern "C" fn tick(_ctx: *mut u8) {
 
 /// The tick over any way to run the taken click (the host test of the file runs a closure for a module's callback, whose address would not fit a host pointer).
 pub unsafe fn click_tick(run: impl FnOnce(Click)) {
-    crate::DK_SVC_OWNER.step((), |m, ()| m.take_click(&ImportCore), |click, _| {
-        if let Some(click) = click {
-            run(click);
-        }
-    });
+    crate::DK_SVC_OWNER.step(
+        (),
+        |m, ()| m.take_click(&ImportCore),
+        |click, _| {
+            if let Some(click) = click {
+                run(click);
+            }
+        },
+    );
 }
 
 /// The hook entry of the machine page's turn: the turn ends the click flow (the owner), then the native handler of the page runs outside the owner: nonzero when a native page

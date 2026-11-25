@@ -14,7 +14,10 @@ use file::builder::{
     dk_machine_add_page, dk_module_ctx_add_machine, dk_page_add_param, dk_page_bind,
     dk_page_bind_local, dk_param_glyph, dk_param_latched, dk_param_range,
 };
-use file::fw::{click_tick, dk_param_get, dk_param_set, dks_page_key, dks_page_turn, page_key, param_get, param_set};
+use file::fw::{
+    click_tick, dk_param_get, dk_param_set, dks_page_key, dks_page_turn, page_key, param_get,
+    param_set,
+};
 pub use file::{builder, fw, native, DK_SVC_OWNER};
 use file::{dk_svc_start, dk_svc_stop};
 
@@ -269,7 +272,11 @@ fn param_set_stores_while_the_owner_is_idle() {
     assert_eq!(fw.refused.get(), 0);
     assert!(fw.stored.get().is_some(), "the setter ran");
     let none = unsafe { param_get(|_| fw.clone(), 3, 9) };
-    assert_eq!(none, dkrt_svc_machines::paramapi::E_ARG, "a word the module lacks");
+    assert_eq!(
+        none,
+        dkrt_svc_machines::paramapi::E_ARG,
+        "a word the module lacks"
+    );
 }
 
 /// A module's click callback (SHOT's open-picker) reads the page with `dk_param_get`: the click runs outside the owner, so the call is answered, not refused with `E_STATE`.
@@ -295,7 +302,11 @@ fn a_click_callback_that_reads_a_parameter_gets_the_value() {
         page_key(|_| fw.clone(), v, release.as_ptr() as *const u8);
         // the runtime's pass: the owner's tick part, then the file's tick
         DK_SVC_OWNER.with(|m| {
-            dkrt_abi::provider::Ticker::tick(m, &dkrt_svc_rt::ImportCore, dkrt_abi::service::tick_phase::LAST)
+            dkrt_abi::provider::Ticker::tick(
+                m,
+                &dkrt_svc_rt::ImportCore,
+                dkrt_abi::service::tick_phase::LAST,
+            )
         });
     }
     let mut got = None;
@@ -303,6 +314,10 @@ fn a_click_callback_that_reads_a_parameter_gets_the_value() {
     unsafe {
         click_tick(|_click| got = Some(param_get(|_| fw.clone(), 5, 0)));
     }
-    assert_eq!(got, Some(0x1200), "the callback read the value the page gave");
+    assert_eq!(
+        got,
+        Some(0x1200),
+        "the callback read the value the page gave"
+    );
     assert_eq!(fw.refused.get(), 0);
 }
