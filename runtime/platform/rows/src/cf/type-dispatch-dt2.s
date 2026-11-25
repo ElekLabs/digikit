@@ -1,4 +1,4 @@
-| core/rows on the Digitakt II: the dispatch of a machine type. What else the machine rows need at run time is the machines service's (services/machines).
+| core/rows on the Digitakt II: the type-row dispatch of a machine type. What else the rows need at run time is the business of the registry's owner.
 |
 | `mf_dispatch` is the hook at the entry of the firmware's machine descriptor lookup: `FUN_xxxx(type)` returns the descriptor of a type. The rows of the registry are the descriptors of the types from
 | `machines.first` on (a row the service has not filled is a gap row); every other type goes to the stock code. A descriptor has the std::string representations of its long and short name: the service writes them
@@ -39,7 +39,7 @@ mf_empty:                           | an empty C string (a free row's name)
     .byte   0
     .balign 4
 
-| the descriptor field offset of mirror index 25 .. 34 (-1: none): the slot map of the machines service
+| the descriptor field offset of mirror index 25 .. 34 (-1: none): the slot map of the registry's owner
     .globl mf_slotmap
 mf_slotmap:
     .long   8, 12, 16, 20, -1, -1, 24, 28, 32, 36

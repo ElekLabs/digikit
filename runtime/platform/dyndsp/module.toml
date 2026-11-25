@@ -55,7 +55,7 @@ _fw_frame = "dsp.voice.value.frame_base"
 _fw_param_rec = "dsp.voice.value.param_record_base"
 _fw_release_latch = "dsp.voice.value.release_latch"
 _fw_unpack = "dsp.voice.fn.track_unpack"
-# and those of the dispatch code of the fx service
+# and those of the dispatch code of the effect-registry owner
 _fx_table = "fx.rows"
 _fx_master = "dsp.master.value.q31_converter.float_buf"
 _fxs_trackbus = "dsp.fx.value.send.track_bus"
@@ -78,7 +78,7 @@ _dd_frame_sw = "_dv_frame_sw"
 # the table of a run-time DSP object's imports also holds the firmware addresses that the dispatch code of core/dsp-voice uses
 _dv_table = "voices.rows"
 _fw_frame = "dsp.voice.value.frame_base"
-# and those of the dispatch code of the fx service
+# and those of the dispatch code of the effect-registry owner
 _fx_table = "fx.rows"
 _fx_master = "dsp.master.value.q31_converter.float_buf"
 _fxs_slotbus = "dsp.fx.value.send.slot_bus"
@@ -159,8 +159,8 @@ id = "dv7"
 type = 0xffffffff
 pc = 0
 
-# The table of this adapter, exported to the image's info table (`dkrt_info_table`): the services find it by the hash of its name (`CoreApi::info`), the machines service for
-# its voice rows and the fx service for the bounds of an effect's state. The runtime also links it directly (it owns the area).
+# The table of this adapter, exported to the image's info table (`dkrt_info_table`): the services find it by the hash of its name (`CoreApi::info`), the machine-registry owner for
+# its voice rows and the effect-registry owner for the bounds of an effect's state. The runtime also links it directly (it owns the area).
 [[info]]
 name = "dyndsp_info"
 devices = ["dt2", "dn2"]

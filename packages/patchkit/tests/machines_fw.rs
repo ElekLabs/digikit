@@ -390,12 +390,12 @@ const FIRST_PG: u32 = 5;
 fn the_dispatch_answers_a_type_of_the_registry_with_its_row_and_gives_a_row_without_strings_the_empty_ones()
  {
     check_dispatch(
-        "runtime/platform/rows/src/cf/machines-dt2.s",
+        "runtime/platform/rows/src/cf/type-dispatch-dt2.s",
         FIRST_MR,
         &ENTRIES_MR,
     );
     check_dispatch(
-        "runtime/platform/rows/src/cf/machines-dn2.s",
+        "runtime/platform/rows/src/cf/type-dispatch-dn2.s",
         FIRST_PG,
         &ENTRIES_PG,
     );

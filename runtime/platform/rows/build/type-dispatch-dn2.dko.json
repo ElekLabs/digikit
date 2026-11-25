@@ -4,107 +4,113 @@
  "relocs": [
   {
    "addend": 0,
-   "offset": 38,
+   "offset": 6,
    "section": ".text",
-   "symbol": ".sec..bss",
+   "symbol": "_mf_first",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 28,
+   "offset": 12,
    "section": ".text",
-   "symbol": "_ui_view_next",
+   "symbol": "_mf_count",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 0,
-   "section": ".rodata",
-   "symbol": ".sec..bss",
+   "offset": 26,
+   "section": ".text",
+   "symbol": "_mf_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 40,
+   "section": ".text",
+   "symbol": ".sec..rodata",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 4,
-   "section": ".rodata",
-   "symbol": "_ui_view_build",
+   "offset": 56,
+   "section": ".text",
+   "symbol": "_mf_t_dispatch",
    "type": "cf.32"
   }
  ],
  "sections": [
   {
    "align": 4,
-   "hex": "4feffff048d703032f2f00144eba0012588f4cd703034fef00104ef900000000202f000423c0000000004e75",
+   "hex": "202f00040480000000000c8000000000642472404c0108000680000000002f0820404a90660c223c00000000208121410004205f4e754ef900000000",
    "kind": "text",
    "name": ".text",
-   "size": 44
-  },
-  {
-   "align": 16,
-   "hex": "",
-   "kind": "bss",
-   "name": ".bss",
-   "size": 16
+   "size": 60
   },
   {
    "align": 4,
-   "hex": "0000000000000000",
+   "hex": "0000000000000000ffffffff0000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 8
+   "size": 20
   }
  ],
- "source_sha256": "99116655569f6069fe52ea28503b3f720641a1fe3a0cdcec05e0277eb902dcf6",
+ "source_sha256": "e9ce5625ee88245b5c88e170c6f63db7512597d20ccfc27dbb61656ce4d2672e",
  "symbols": [
   {
    "global": false,
-   "name": ".sec..bss",
-   "section": ".bss",
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_ui_view_build",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_ui_view_next",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "ui_machine_view",
-   "section": ".bss",
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "ui_machine_view_hook",
-   "section": ".text",
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "ui_machine_view_info",
+   "name": ".sec..rodata",
    "section": ".rodata",
    "value": 0
   },
   {
-   "global": false,
-   "name": "ui_machine_view_store",
+   "global": true,
+   "name": "_mf_count",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_mf_first",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_mf_rows",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_mf_t_dispatch",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_dispatch",
    "section": ".text",
-   "value": 32
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "mf_empty",
+   "section": ".rodata",
+   "value": 16
+  },
+  {
+   "global": true,
+   "name": "mf_empty_rep",
+   "section": ".rodata",
+   "value": 0
   }
  ],
  "toolchain": {
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "11",
-  "isa_check": "3e786fa6990dd3e25bce11c88f4450f857e9ec38f38cf85a449bdaf3e0abeb70",
+  "instructions_redecoded": "17",
+  "isa_check": "d38f1348961d03dff7388b349ea1ab693ed80f42464847b49cbbc26b7ce1fedc",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

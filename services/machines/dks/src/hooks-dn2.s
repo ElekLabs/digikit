@@ -1,4 +1,4 @@
-| machines.dks on the Digitone II (1.12): the ColdFire routines the service's hooks run. The dispatch is the image's (`runtime/platform/rows/src/cf/machines-dn2.s`).
+| machines.dks on the Digitone II (1.12): the ColdFire routines the service's hooks run. The dispatch is the image's (`runtime/platform/rows/src/cf/type-dispatch-dn2.s`).
 |
 | Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (a hook of a service is raw: no trampoline); the frame type is entered
 | through the image stub of the pointer slot `frametype` (an interrupt site). The routine takes the whole control flow of the site: it runs in place of the stock

@@ -48,8 +48,8 @@ devices = ["dn2"]
 [object.externs]
 _fxs_back = "hook.dsp.fx.fn.send.tail"
 
-# The slots the two stubs read (sdk/sdk.toml `[dsp.slots]`, words of core/dsp-link's slot block): the fx service fills them with the pcs of its dispatch code (`[[fill]] space = "dsp"`
-# in core/services/fx/dks/module.toml). Zero takes the stock path.
+# The slots the two stubs read (sdk/sdk.toml `[dsp.slots]`, words of core/dsp-link's slot block): the effect-registry owner fills them with the pcs of its dispatch code (`[[fill]] space = "dsp"`
+# in the owner's dks/module.toml). Zero takes the stock path.
 [[slot]]
 name = "fx_entry"
 space = "dsp"

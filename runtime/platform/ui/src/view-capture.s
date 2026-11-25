@@ -1,5 +1,5 @@
-| core/ui: the machine selection view. The firmware builds the view's item list once, from the machine list getter, and keeps the list; the machines service changes that list at run time and builds it
-| again. The hook remembers the view (the one place that has it: the view's constructor calls the builder once, at boot) in `ui_machine_view`, a word the service reads (the info entry `machine_view`).
+| core/ui: the view capture of the machine selection view. The firmware builds the view's item list once, from the machine list getter, and keeps the list; a loaded service can change that list at run time and builds it
+| again. The hook remembers the view (the one place that has it: the view's constructor calls the builder once, at boot) in `ui_machine_view`, a word a service reads (the info entry `machine_view`).
 | It is resident because the constructor has run before the service file loads.
 |
 | `ui_machine_view_hook` is the entry of the item builder `cf.machine.fn.view.build(view)` (view at 4(sp)). The macro keeps every register; the displaced instructions run in the tail.
@@ -20,7 +20,7 @@ ui_machine_view_store:
     .section .rodata
     .balign 4
     .globl ui_machine_view_info
-ui_machine_view_info:               | the info entry `machine_view`: what the machines service needs to build the view's list again
+ui_machine_view_info:               | the info entry `machine_view`: what a service needs to build the view's list again
     .long   ui_machine_view         | 0 the variable that holds the view (0 until the firmware made it)
     .long   _ui_view_build          | 1 the function that builds the view's items: build(view)
 

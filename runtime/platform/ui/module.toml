@@ -41,10 +41,10 @@ to = "dk_hook"
 [[claim]]
 resource = "cf.menu.site.settings_list.tail"
 
-# The machine selection view (both devices): the hook remembers the view and `machine_view` names the word that holds it. The machines service builds the view's list again after a reload.
+# The view capture (both devices): the hook remembers the view the firmware builds its item list for, and `machine_view` names the word that holds it. A loaded service can build the view's list again after a reload.
 [[object]]
-path = "build/machine-view.dko.json"
-sources = ["src/machine-view.s"]
+path = "build/view-capture.dko.json"
+sources = ["src/view-capture.s"]
 place = "cf.expansion"
 devices = ["dt2", "dn2"]
 

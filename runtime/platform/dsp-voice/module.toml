@@ -72,8 +72,8 @@ _gs_pre_cont = "dsp.voice.site.pan_pre.next"
 kind = "sharc-adapter"
 path = "build/gen/adapter-{dev}.inc"
 
-# The slots the stubs read (sdk/sdk.toml `[dsp.slots]`, words of core/dsp-link's slot block): the machines service fills them with the pcs of its dispatch code (`[[fill]] space = "dsp"`
-# in core/services/machines/dks/module.toml). Zero takes the stock path. DT2 has two (render and unpack), DN2 one (render).
+# The slots the stubs read (sdk/sdk.toml `[dsp.slots]`, words of core/dsp-link's slot block): the machine-registry owner fills them with the pcs of its dispatch code (`[[fill]] space = "dsp"`
+# in the owner's dks/module.toml). Zero takes the stock path. DT2 has two (render and unpack), DN2 one (render).
 [[slot]]
 name = "voice_render"
 space = "dsp"

@@ -1,7 +1,7 @@
 // core/dsp-voice on the Digitone II: the render hook stub of the FM engine's host (docs/findings/06, "Per-voice hook on DN2"; R12-8 of docs/plans/runtime-and-services.md).
 //
 // The image keeps the hook site, the voice-0 heartbeat with the context words and `_gs_block`, the helper routines and all data that the dispatch code and the machine modules
-// share. The code that decides what runs (the mask, the registry scan, the contract adapter, the output guard) is dispatch-dn2.s of core/services/machines. The stereo
+// share. The code that decides what runs (the mask, the registry scan, the contract adapter, the output guard) is dispatch-dn2.s of the machine-registry owner. The stereo
 // code of dsp-voice-dn2-stereo.s stays here too: it shares data with the dispatch both ways.
 //
 // The hook is FUN_b8251b, a 55-instruction helper the engine calls once per voice buffer after the synthesis, with R15 = 16 - v (a count that runs 16, 15, ... 1),

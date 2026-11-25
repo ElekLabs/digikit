@@ -1,7 +1,7 @@
 // core/fx: the effects adapter of the SHARC engine, the hook stub and the data (docs/findings/55, <dk/fx/fx.h>; R12-8 of docs/plans/runtime-and-services.md).
 //
 // The image keeps the hook, the data the dispatch code and the effects share, and a stub. The dispatch (the quick scan, the row loop, `_fx_exec`, the output guard, the fades) is
-// fx-chain.inc of core/services/fx, which the fx service carries (dks/dsp/fx-<device>.s). The send route has its own stub and data (fxsend.s, fxsend-dn2.s).
+// fx-chain.inc of the effect-registry owner, which carries (dks/dsp/fx-<device>.s). The send route has its own stub and data (fxsend.s, fxsend-dn2.s).
 //
 // The hook is the first instruction of a function that the block orchestrator calls once per block after the master mix and before the USB pack: Digitakt II FUN_1c80f2 (called at
 // 0x1c311f, after the pack's earlier siblings and before the pack at 0x1c3160), Digitone II FUN_1c244d (H1 of finding 53, which also holds the pack). The site is chosen for the
@@ -10,7 +10,7 @@
 // entry nothing of the stock frame exists yet, so the stub saves what it uses and the dispatch code saves the rest.
 //
 // The stub reads one slot of core/dsp-link's slot block (`_dl_slots`; sdk/dsp/contract/dk_stub.inc):
-//   slot 0: no dispatch code is installed (the fx service is not loaded, or failed): R0 is restored and the stub continues in `_fx_back`: the audio is the stock audio.
+//   slot 0: no dispatch code is installed (the effect-registry owner is not loaded, or failed): R0 is restored and the stub continues in `_fx_back`: the audio is the stock audio.
 //   else:   the pc of the dispatch entry. The stub saves M13 and I12 in `_fx_sv_m13` and `_fx_sv_i12`, pins M13 = 0 and jumps with `JUMP (M13, I12)`. The entry restores them.
 // R0 is saved in `_fx_s_r0` on both paths; `_fx_idle` restores it. The dispatch code ends in `_fx_idle` as well, after it has restored every other register.
 
