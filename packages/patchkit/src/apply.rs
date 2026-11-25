@@ -1702,6 +1702,10 @@ pub fn apply_with(
             add(r.owner, format!("{n}.entries"), r.live as u64)?;
             add(r.owner, format!("{n}.rows"), reg_at[ri].0)?;
             add(r.owner, format!("{n}.row_size"), r.row_size as u64)?;
+            if let Some(w) = r.def.window {
+                add(r.owner, format!("window{w}.count"), r.entries.len() as u64)?;
+                add(r.owner, format!("window{w}.rows"), reg_at[ri].0)?;
+            }
             for (k, e) in r.entries.iter().enumerate().filter(|(_, e)| !e.gap) {
                 add(
                     e.owner,
