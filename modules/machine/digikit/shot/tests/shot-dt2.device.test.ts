@@ -1,3 +1,4 @@
+import { expectNoRefusedCalls } from '@digi/regression/runtime/service-symbols.ts';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Sample, prepareUpload } from '@digi/dk-session/dksample';
@@ -560,6 +561,7 @@ runtimeTests(
       log.modules = modules.map((m) => ({ name: m.name, faults: m.faults, off: m.guard_off }));
       for (const m of modules) expect(m.faults, `${m.name} faults`).toBe(0);
       await session.expectNoFault('SHOT stereo sample');
+      await expectNoRefusedCalls(runtime, tablePlan, 'machines');
     } finally {
       record(artifacts, 'measurements', log);
       console.info('shot-dt2 measurements', JSON.stringify(log));

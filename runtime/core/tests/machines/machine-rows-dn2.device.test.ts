@@ -1,3 +1,4 @@
+import { expectNoRefusedCalls } from '@digi/regression/runtime/service-symbols.ts';
 import { pollUntil } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
@@ -170,5 +171,6 @@ describeOn('dn2', `DN2 ${FIRMWARE.dn2} machines.dks: the own page of a run-time 
       }
     }
     await session.expectNoFault('DynSyn selected, page shown, knobs turned');
+    await expectNoRefusedCalls(rt, run.plan, 'machines');
   }, 900_000);
 });

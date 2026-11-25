@@ -540,3 +540,15 @@ fn a_step_without_an_owner_does_not_act() {
         None::<()>
     );
 }
+
+#[test]
+fn the_refusal_count_is_the_first_word_of_the_owner() {
+    let o = fake();
+    let first = || unsafe { *(&o as *const _ as *const u32) };
+    assert_eq!(first(), 0);
+    o.run((), |_| {
+        assert_eq!(o.with(|_| ()), None);
+    });
+    assert_eq!(o.refused(), 1);
+    assert_eq!(first(), 1, "a device test reads the count at the owner's symbol");
+}

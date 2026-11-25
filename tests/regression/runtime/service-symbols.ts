@@ -63,6 +63,22 @@ export async function serviceSymbol(
 }
 
 /**
+ * The count of calls the service's owner refused (a nested `with` or `run`, a full event queue: `Owner::refused`): the first word of `DK_SVC_OWNER`. A scenario that ends
+ * with a count above 0 had a call into the service land inside another call into it.
+ */
+export async function refusedCalls(runtime: WithSession, plan: RuntimePlan, service: string, opts: LookupOptions = {}): Promise<number> {
+  const at = await serviceSymbol(runtime, plan, service, 'DK_SVC_OWNER', opts);
+  const reply = (await runtime.session.client.call('mem.cf.peek', { addr: at })) as { value: number };
+  return reply.value >>> 0;
+}
+
+/** Assert that the owner of `service` refused no call in the scenario so far. */
+export async function expectNoRefusedCalls(runtime: WithSession, plan: RuntimePlan, service: string, opts: LookupOptions = {}): Promise<void> {
+  const n = await refusedCalls(runtime, plan, service, opts);
+  if (n !== 0) throw new Error(`the ${service} service refused ${n} nested call(s) into its owner`);
+}
+
+/**
  * A name lookup for a test that reads the state of a service and of the image together: the names of the service's own symbols (`DKRT_FXP`, `DKRT_FXS`, the
  * `DKRT_FXP_*` statics; the old lower-case `fxp_*` names of the hook labels map to them) resolve through the service, every other name through the image's plan.
  * The base is read once: call it again after a reload that can move the service.

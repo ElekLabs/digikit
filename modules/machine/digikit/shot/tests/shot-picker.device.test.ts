@@ -1,3 +1,4 @@
+import { expectNoRefusedCalls } from '@digi/regression/runtime/service-symbols.ts';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Sample, prepareUpload } from '@digi/dk-session/dksample';
@@ -203,6 +204,7 @@ runtimeTests(
 
       for (const m of await dk.modules()) expect(m.faults, `${m.name} faults`).toBe(0);
       await session.expectNoFault('SMP click flow');
+      await expectNoRefusedCalls(runtime, plan, 'machines');
     } finally {
       try {
         record(artifacts, 'runtime-log', await dk.readLog());
