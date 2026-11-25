@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/dynfx",
-  "implicitDependencies": ["core/services/fx", "core/fx"],
+  "implicitDependencies": ["core/services/fx", "core/fx", "dkrt-svc-fx"],
   "metadata": {
     "runtimeAcceptance": [
       {

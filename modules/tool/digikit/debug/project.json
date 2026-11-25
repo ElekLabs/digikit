@@ -1,7 +1,7 @@
 {
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "digikit/debug",
-  "implicitDependencies": ["core/services/machines", "core/services/fx"],
+  "implicitDependencies": ["core/services/machines", "core/services/fx", "dkrt-svc-machines", "dkrt-svc-fx"],
   "metadata": {
     "runtimeAcceptance": [
       {

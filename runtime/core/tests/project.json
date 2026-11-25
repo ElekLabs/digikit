@@ -9,7 +9,10 @@
     "sdk",
     "core/services/fx",
     "core/services/project",
-    "core/services/lfo"
+    "core/services/lfo",
+    "dkrt-svc-fx",
+    "dkrt-svc-project",
+    "dkrt-svc-lfo"
   ],
   "metadata": {
     "runtimeAcceptance": [

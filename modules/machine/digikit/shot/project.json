@@ -1,7 +1,7 @@
 {
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "digikit/shot",
-  "implicitDependencies": ["core/services/machines", "core/services/samples", "core/services/fx", "core/ui", "digikit/remote"],
+  "implicitDependencies": ["core/services/machines", "core/services/samples", "core/services/fx", "core/ui", "digikit/remote", "dkrt-svc-machines", "dkrt-svc-samples", "dkrt-svc-fx"],
   "metadata": {
     "runtimeAcceptance": [
       {

@@ -2,7 +2,7 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/services/project-tests",
   "tags": ["test-only"],
-  "implicitDependencies": ["core/services/project", "core/runtime-storage", "core/runtime-package"],
+  "implicitDependencies": ["core/services/project", "core/runtime-storage", "core/runtime-package", "dkrt-svc-project"],
   "metadata": {
     "runtimeAcceptance": [
       {

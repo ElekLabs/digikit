@@ -4,7 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": ["core/runtime-package", "dkrt-fit", "dkrt-sdk", "sdk", "core/services/machines", "core/services/fx"],
+  "implicitDependencies": ["core/runtime-package", "dkrt-fit", "dkrt-sdk", "sdk", "core/services/machines", "core/services/fx", "dkrt-svc-machines", "dkrt-svc-fx"],
   "metadata": {
     "runtimeAcceptance": [
       {

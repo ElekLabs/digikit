@@ -4,7 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": ["core/services/fx", "core/fx", "core/dynfx", "core/runtime-package"],
+  "implicitDependencies": ["core/services/fx", "core/fx", "core/dynfx", "core/runtime-package", "dkrt-svc-fx"],
   "metadata": {
     "runtimeAcceptance": [
       {

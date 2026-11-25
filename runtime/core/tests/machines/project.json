@@ -4,7 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": ["core/services/machines", "core/rows", "core/dsp-voice", "sdk", "core/runtime-package"],
+  "implicitDependencies": ["core/services/machines", "core/rows", "core/dsp-voice", "sdk", "core/runtime-package", "dkrt-svc-machines", "dkrt-svc-rows"],
   "metadata": {
     "runtimeAcceptance": [
       {
