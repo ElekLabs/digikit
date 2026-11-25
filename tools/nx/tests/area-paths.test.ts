@@ -2,7 +2,16 @@ import { expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { deviceShorts, filesOf } from '../device-files.mjs';
-import { areaContext, areasOfPath, crateOf, externalLockChanges, modulePathOf, ownerOf, parseOwners, OWNERS_FILE } from '../area-paths.mjs';
+import {
+  areaContext,
+  areasOfPath,
+  crateOf,
+  externalLockChanges,
+  modulePathOf,
+  ownerOf,
+  parseOwners,
+  OWNERS_FILE,
+} from '../area-paths.mjs';
 
 const owners = parseOwners(`
 shared = ["core", "dkrt::lib", "dkrt::entry", "dkrt_abi"]
@@ -132,12 +141,17 @@ it('ignores a lockfile change that touches only crates of the repository', () =>
   const before = lock(own(), serde('1.0.1', 'aa'));
   const after = lock(own(['dkrt-test-support']), serde('1.0.1', 'aa'), 'name = "dkrt-test-support"\nversion = "0.1.0"');
   expect(externalLockChanges(before, after)).toEqual([]);
-  expect(areasOfPath('Cargo.lock', { ...ctx, lockChange: () => externalLockChanges(before, after) })).toEqual({ none: true });
+  expect(areasOfPath('Cargo.lock', { ...ctx, lockChange: () => externalLockChanges(before, after) })).toEqual({
+    none: true,
+  });
 });
 
 it('names the registry or git packages a lockfile adds, removes or changes', () => {
   const before = lock(own(), serde('1.0.1', 'aa'));
-  expect(externalLockChanges(before, lock(own(), serde('1.0.2', 'bb')))).toEqual(['serde 1.0.1 removed', 'serde 1.0.2 added']);
+  expect(externalLockChanges(before, lock(own(), serde('1.0.2', 'bb')))).toEqual([
+    'serde 1.0.1 removed',
+    'serde 1.0.2 added',
+  ]);
   expect(externalLockChanges(before, lock(own(), serde('1.0.1', 'cc')))).toEqual(['serde 1.0.1 changed']);
   expect(externalLockChanges(undefined, before)).toEqual(['serde 1.0.1 added']);
   expect(externalLockChanges(before, undefined)).toEqual(['serde 1.0.1 removed']);

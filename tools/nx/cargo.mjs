@@ -42,7 +42,9 @@ const CLI = {
 const BUILT_KINDS = ['dependencies', 'build-dependencies'];
 const builtInputs = (workspaceRoot, crateRoot, inputs) =>
   inputs?.map((i) =>
-    i === '^default' ? { input: 'default', projects: pathDepNames(workspaceRoot, crateRoot, new Set(), BUILT_KINDS) } : i,
+    i === '^default'
+      ? { input: 'default', projects: pathDepNames(workspaceRoot, crateRoot, new Set(), BUILT_KINDS) }
+      : i,
   );
 const cliTarget = ({ build, bin, dir, key, inputs }) => ({
   executor: 'nx:run-commands',

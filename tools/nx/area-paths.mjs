@@ -151,7 +151,10 @@ const devOnlyCrateDirs = (root) => {
     if (text === undefined) continue;
     const t = parse(text);
     const tables = [t, ...Object.values(t.target ?? {})];
-    for (const [kinds, into] of [[['dependencies', 'build-dependencies'], built], [['dev-dependencies'], dev]])
+    for (const [kinds, into] of [
+      [['dependencies', 'build-dependencies'], built],
+      [['dev-dependencies'], dev],
+    ])
       for (const tbl of tables)
         for (const kind of kinds)
           for (const d of Object.values(tbl[kind] ?? {}))
@@ -177,7 +180,9 @@ export const areaContext = (root, projects, base) => {
       const entries = Object.values(parse(text)).flatMap((v) => (Array.isArray(v) ? v : []));
       return [...new Set(entries.flatMap((e) => (Array.isArray(e?.users) ? e.users : [])))];
     },
-    lockChange: base ? (file) => externalLockChanges(textAt(root, base, file), readIfThere(join(root, file))) : undefined,
+    lockChange: base
+      ? (file) => externalLockChanges(textAt(root, base, file), readIfThere(join(root, file)))
+      : undefined,
     devOnly: (file) => devOnlyDirs.some((dir) => file.startsWith(`${dir}/`)),
     deviceOf: (file) => globs.find(({ globs: g }) => g.some((glob) => matchesGlob(file, glob)))?.short,
   };
