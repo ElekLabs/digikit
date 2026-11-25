@@ -1428,6 +1428,40 @@ mod tests {
     }
 
     #[test]
+    fn repeated_panel_entry_publishes_only_the_latest_capture_on_return() {
+        let mut board = Board::new(
+            Card::default(),
+            SemaphoreAddresses::default(),
+            CompletionPolicy::Oracle,
+        );
+        let page = 0x4020_0000;
+        board.map_zeroed_ram_page(page).unwrap();
+        let tcb_global = page;
+        let front_global = page + 4;
+        let frame_ptr = page + 0x100;
+        let sp = page + 0x800;
+        let owner = 0x4020_4000;
+        let return_pc = 0x4000_1000;
+        board.write_guest(tcb_global, 4, owner).unwrap();
+        board.write_guest(front_global, 4, frame_ptr).unwrap();
+        board.write_guest(sp, 4, return_pc).unwrap();
+
+        let mut tracker = FrameTracker::default();
+        for tick in 1..=3 {
+            board.write_guest(frame_ptr, 1, tick).unwrap();
+            tracker
+                .capture(&mut board, tcb_global, front_global, u64::from(tick), sp)
+                .unwrap();
+        }
+
+        tracker.complete_at_return(&mut board, tcb_global, return_pc, sp + 4);
+        let frame = tracker.latest_for(owner).unwrap();
+        assert_eq!(frame.icount, 3);
+        assert_eq!(frame.raw[0], 3);
+        assert!(tracker.pending.is_empty());
+    }
+
+    #[test]
     fn stop_success_only_accepts_requested_terminal_condition() {
         assert!(stop_success("VERIFIED_READY", "ready", true, 1, 10));
         assert!(!stop_success("instruction limit", "ready", true, 10, 10));
