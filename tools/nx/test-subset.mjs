@@ -5,7 +5,8 @@
 // Tags of one call are a union: a test runs when any of its record tags is given.
 // `--base REF` adds the tests whose subject changed since REF (`git diff REF`, with the working tree): a record's subject is the
 // source of its project (not its tests) and of the projects of its `modules`, so a change to a machine selects the records that load it.
-// Area gate (`--base`, and `--gate` for the merge gate): the changed paths also name areas (tools/nx/area-paths.mjs: owners.toml and the
+// Ownership gate (`--base`, and `--gate`): tools/nx/device-owners.mjs selects by the project that owns a changed file; the paragraph below describes the old area layer (area-paths.mjs, unused by the gate, removed by U5).
+// Area gate (old): the changed paths also name areas (tools/nx/area-paths.mjs: owners.toml and the
 // service directories, firmware declaration files by their users, device files), and the tests of those areas join the selection with the
 // fixed smoke set gate-device-smoke. Precise when the area is known, wide when it is not: when any changed path that reaches device tests
 // names no area and is an input of any device or conformance test task as Nx resolves it (device-reach.mjs: a shared module, the SDK, patchkit, owners.toml, config, device data, bindings, image-module sources), every device test `affected` selects runs, and the gate prints the
@@ -18,10 +19,10 @@ import { fileURLToPath } from 'node:url';
 import { AREAS, SERVICES } from './acceptance-tags.mjs';
 import { isTestSource } from './test-source.mjs';
 import { SHARED_PROJECTS } from './device-tests.mjs';
-import { reachingDeviceTests } from './device-reach.mjs';
 import { budget, startAtOnce, workCores } from './resources.mjs';
 import { closureFiles, testImportInputs } from './ts-imports.mjs';
 import { areaContext, areasOfPath } from './area-paths.mjs';
+import { ownedConformance, ownershipSelection } from './device-owners.mjs';
 
 // Gate projects whose suites join a subset when `affected` selects them: the patchkit smoke matrix and the PCM pins.
 export const FIXED = [
@@ -354,15 +355,30 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   const projects = loadProjects(root);
   let selection;
   if (base) {
+    // Ownership gate (device-owners.mjs): what owns a changed file selects the tests; the given tags join as a union.
     const changed = changedFiles(root, base);
     const importInputs = testImportInputs(root);
-    selection = areaSelection(tags, projects, {
+    const ctx = areaContext(root, projects, base);
+    const owned = ownershipSelection(projects, {
       changed,
-      ctx: areaContext(root, projects, base),
-      reaches: (files) => reachingDeviceTests(root, files, undefined, { first: true }),
       closureOf: (projectRoot, file) => closureFiles(importInputs, `${projectRoot}/${file}`),
+      portUsers: ctx.portUsers,
+      deviceOf: ctx.deviceOf,
     });
-    selection.changed = changed;
+    const named = resolveSubset(tags, projects);
+    const seen = new Set();
+    selection = {
+      ...owned,
+      tests: [...owned.tests, ...named.tests].filter(
+        (t) => !seen.has(`${t.project}:${t.file}`) && seen.add(`${t.project}:${t.file}`),
+      ),
+      unknown: named.unknown,
+      wide: [],
+      wideAll: owned.devices.length > 0,
+      wideDevices: owned.devices.length ? owned.devices : null,
+      tags,
+      changed,
+    };
   } else
     selection = {
       ...resolveSubset(tags, projects),
@@ -373,7 +389,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       tags,
       changed: [],
     };
-  const { tests, unknown, mapped, wide, wideAll, wideDevices } = selection;
+  const { tests, unknown, mapped, wideAll, wideDevices } = selection;
   const problem = baseProblem({ base, changed: selection.changed, gate });
   if (gate && base && !selection.changed.length) {
     console.log(`test:subset: no file changed since ${base}: no device tests to run.`);
@@ -397,9 +413,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   // A wide selection runs every device half `affected` selects (of the devices a device file names, else all), and the conformance
   // tasks follow the rule of conformanceSelection.
   const wideHalves = wideAll ? halvesOfDevices(deviceHalves(affected), wideDevices) : [];
-  const conformance = base
-    ? conformanceSelection(affected, projects, { changed: selection.changed, ...selection })
-    : [];
+  const conformance = base ? ownedConformance(affected, projects, selection.changed) : [];
   const idPair = (id) => ({ project: id.slice(0, id.indexOf(':')), target: id.slice(id.indexOf(':') + 1) });
   const pairs = [
     ...new Map(
@@ -409,16 +423,13 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     ).values(),
   ];
   console.log(`test:subset: ${[...tags, ...(base ? [`--base ${base}`] : [])].join(' ')}`);
-  for (const { file, areas } of mapped.slice(0, 20)) console.log(`  area ${areas.join(' ')} <- ${file}`);
-  if (mapped.length > 20) console.log(`  area: ${mapped.length - 20} more changed files`);
-  if (wideAll)
-    console.log(
-      `  wide (${wideDevices ? `halves of ${wideDevices.join(' ')}` : 'every affected device test'}), forced by: ` +
-        `${wide
-          .slice(0, 5)
-          .map((w) => `${w.file} (${w.why})`)
-          .join('; ')}${wide.length > 5 ? `; ${wide.length - 5} more` : ''}`,
-    );
+  for (const { file, project } of mapped.slice(0, 20)) console.log(`  owner ${project} <- ${file}`);
+  if (mapped.length > 20) console.log(`  owner: ${mapped.length - 20} more changed files`);
+  for (const { file, why } of (selection.unowned ?? []).slice(0, 20))
+    console.log(`  unowned ${file} (${why}): selects no test`);
+  for (const { file, project } of (selection.quiet ?? []).slice(0, 20))
+    console.log(`  no test names ${project}: ${file} selects none (smoke and the full tier cover it)`);
+  if (wideAll) console.log(`  device files: every affected half of ${wideDevices.join(' ')}`);
   if (base)
     console.log(
       `  conformance: ${conformance.length ? conformance.map((id) => id.split(':')[0]).join(' ') : 'none selected'}`,
