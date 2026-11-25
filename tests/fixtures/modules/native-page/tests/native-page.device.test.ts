@@ -26,14 +26,8 @@ runtimeTests(
     const turns = scheduledTurns(session, runtime.clock);
     const artifacts = path.join(session.runDir, 'native-page-proof');
     fs.mkdirSync(artifacts, { recursive: true });
-    const plan = await prepareRuntimePlan(session, artifacts, ['mf_native_register']);
-    function machineSymbol(name: string) {
-      const matches = Object.entries(plan.symbols).filter(
-        ([key]) => key.startsWith('core/rows@') && key.endsWith(`:${name}`),
-      );
-      expect(matches).toHaveLength(1);
-      return matches[0]![1];
-    }
+    // The native page logic lives in machines.dks: its state has no image symbol; the test reads the firmware's font operand and the service's refusal count.
+    const plan = await prepareRuntimePlan(session, artifacts, ['DKRT_STATE']);
     const mem = memory(session);
     const source = session.options.device === 'dt2' ? 'SRC' : 'SYN';
     async function choose(position: number) {
@@ -76,10 +70,8 @@ runtimeTests(
     const font = await mem.cf(operand);
     record(artifacts, 'native-binding-evidence', {
       owner,
-      page: await mem.words(machineSymbol('pages') + owner * 184, 46),
       font,
       fontWords: await mem.words(font, 5),
-      pixels: await mem.words(machineSymbol('pixels0'), 32),
     });
     await shot(session, artifacts, 'page-one');
     expect(before.draws, 'custom page draw callback ran').toBeGreaterThan(0);
