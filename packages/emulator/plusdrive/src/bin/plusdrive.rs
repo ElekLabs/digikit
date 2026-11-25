@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::{env, fs, path::PathBuf};
 
 fn usage() -> &'static str {
-    "usage: plusdrive build DIR -o NEW_IMAGE [--device dt2|dn2] [--syx FILE] [--no-project] [--capacity-blocks N] [--max-extent-pages N]\n       plusdrive ls IMAGE\n       plusdrive fs ls IMAGE [--overlay FILE] | fs cat IMAGE PATH [--overlay FILE]\n       plusdrive store ls IMAGE [--overlay FILE] [--device dt2|dn2] [--cat PATH]\n       plusdrive export IMAGE [--overlay FILE] -o FOLDER [--out DIR] [--prune] [--with-working-project] [--device dt2|dn2]\n\nDIR is a plus_drive/<device> folder: files and folders map to the path filesystem (a .wav becomes a native\nsample named without the extension; any other file is copied byte for byte), .mmcfs/{projects,sounds,kits}/NNNN.bin\nare raw MmcFs slots, .mmcfs/boot/SSSSSS.bin are the project regions outside the pools (a boot copy replaces the\ngenerated boot project) and digikit/ goes to the module store (docs/design/digikit-store.md). A device without a\npath filesystem (DN2) takes only .mmcfs and digikit.\nThe card layout of --device (default dt2) comes from devices/*.toml [card].\nA boot project is seeded from a verified DT2 1.16 SysEx (--syx) when the folder holds a native sample."
+    "usage: plusdrive build DIR -o NEW_IMAGE [--device dt2|dn2] [--syx FILE] [--no-project] [--boot-fs-check] [--capacity-blocks N] [--max-extent-pages N]\n       plusdrive ls IMAGE\n       plusdrive fs ls IMAGE [--overlay FILE] | fs cat IMAGE PATH [--overlay FILE]\n       plusdrive store ls IMAGE [--overlay FILE] [--device dt2|dn2] [--cat PATH]\n       plusdrive export IMAGE [--overlay FILE] -o FOLDER [--out DIR] [--prune] [--with-working-project] [--device dt2|dn2]\n\nDIR is a plus_drive/<device> folder: files and folders map to the path filesystem (a .wav becomes a native\nsample named without the extension; any other file is copied byte for byte), .mmcfs/{projects,sounds,kits}/NNNN.bin\nare raw MmcFs slots, .mmcfs/boot/SSSSSS.bin are the project regions outside the pools (a boot copy replaces the\ngenerated boot project) and digikit/ goes to the module store (docs/design/digikit-store.md). A device without a\npath filesystem (DN2) takes only .mmcfs and digikit.\nThe card layout of --device (default dt2) comes from devices/*.toml [card].\nA boot project is seeded from a verified DT2 1.16 SysEx (--syx) when the folder holds a native sample."
 }
 
 fn build(args: Vec<String>) -> Result<(), String> {
@@ -19,6 +19,7 @@ fn build(args: Vec<String>) -> Result<(), String> {
     let mut no_project = false;
     let mut device = None;
     let mut max_extent_pages = u32::MAX;
+    let mut boot_fs_checked = true;
     let mut it = args.into_iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
@@ -40,6 +41,8 @@ fn build(args: Vec<String>) -> Result<(), String> {
             "--device" => device = Some(it.next().ok_or("missing --device value")?),
             "--syx" => syx = Some(PathBuf::from(it.next().ok_or("missing --syx value")?)),
             "--no-project" => no_project = true,
+            // the card leaves the superblock "checked" word 0, so the firmware runs its boot check
+            "--boot-fs-check" => boot_fs_checked = false,
             _ if source.is_none() => source = Some(PathBuf::from(arg)),
             _ => return Err(usage().into()),
         }
@@ -101,6 +104,7 @@ fn build(args: Vec<String>) -> Result<(), String> {
             capacity_blocks: capacity,
             layout,
             max_extent_pages,
+            boot_fs_checked,
         },
         if no_project { None } else { seed },
     )
