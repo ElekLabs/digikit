@@ -524,7 +524,12 @@ fn send_effects(i: &mut Init) {
 #[test]
 fn the_effects_of_a_load_get_route_1_in_order_up_to_the_send_cells_and_zero_amounts() {
     let _g = locked();
-    let f = fixture(DT2.id);
+    let f = fixture(
+        ALL.iter()
+            .find(|p| p.dyn_types > 0)
+            .expect("a device with a DSP")
+            .id,
+    );
     let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
     let m = Module {
         dsp: Dsp {

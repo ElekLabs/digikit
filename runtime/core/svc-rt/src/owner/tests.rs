@@ -550,5 +550,9 @@ fn the_refusal_count_is_the_first_word_of_the_owner() {
         assert_eq!(o.with(|_| ()), None);
     });
     assert_eq!(o.refused(), 1);
-    assert_eq!(first(), 1, "a device test reads the count at the owner's symbol");
+    assert_eq!(
+        first(),
+        1,
+        "a device test reads the count at the owner's symbol"
+    );
 }

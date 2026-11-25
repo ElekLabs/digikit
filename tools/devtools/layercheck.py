@@ -1183,7 +1183,11 @@ def check_service_crates(root: Path) -> list[Violation]:
             allowed = (
                 SERVICE_DEV_DEPS if label.endswith("dev-dependencies") else SERVICE_DEPS
             )
-            if real not in allowed:
+            # a service crate may list itself as a dev-dependency to switch on its `test-support` feature for its integration tests
+            own = label.endswith("dev-dependencies") and real == data.get(
+                "package", {}
+            ).get("name")
+            if real not in allowed and not own:
                 alias = f" (as {key})" if key != real else ""
                 out.append(
                     Violation(
