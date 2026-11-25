@@ -1,4 +1,3 @@
-use super::candidates::Candidates;
 use super::page::{NativePage, PageSpec, ENCODERS, FLAG_STOCK_OVERLAY, FLAG_WIDE_CANVAS};
 use super::view::View;
 
@@ -7,19 +6,6 @@ pub const TYPES: usize = dkrt_sdk::limits::MACHINE_ROWS;
 
 /// The pages a machine type can have (the replacement pair).
 pub const PAGES: u32 = 2;
-
-/// The page index and machine type of the page a view shows, read from the firmware: `None` when `armed` is false (nothing is registered, the view is not read) or the view
-/// shows a page past the native pair. Shared by the table and its [`Candidates`].
-pub(super) fn target(armed: bool, view: &impl View) -> Option<(u32, i32)> {
-    if !armed {
-        return None;
-    }
-    let index = view.page_index();
-    if index >= PAGES {
-        return None;
-    }
-    Some((index, view.native_type()))
-}
 
 /// The registered pages by machine type and page index (0 or 1), the mode of each type (1 append-only v1, 2 replacement pair v2) and the count of live pages. A type is the
 /// position in the reserved range: `first` is the number of the first reserved type, a type below it or past the range has no pages.
@@ -140,23 +126,18 @@ impl PageTable {
     /// The page the view shows, if it is a native one.
     pub fn selected(&self, view: &impl View) -> Option<&NativePage> {
         // nothing registered: the view is not even read (a hook runs on every draw and turn of the machine page)
-        let (index, ty) = target(self.armed(), view)?;
-        self.lookup(index, ty)
-    }
-    /// The live pages, cloned (see [`Candidates`]).
-    pub fn candidates(&self) -> Candidates {
-        let mut out = Candidates::empty();
-        for (at, row) in self.pages.iter().enumerate() {
-            for (index, page) in row.iter().enumerate() {
-                if page.draw() != 0 {
-                    out.push(self.first + at as u32, index as u32, page);
-                }
-            }
+        if !self.armed() {
+            return None;
         }
-        out
+        let index = view.page_index();
+        if index >= PAGES {
+            return None;
+        }
+        self.lookup(index, view.native_type())
     }
-    /// The page of a view that showed page `index` of machine type `ty` (a negative type is none).
-    fn lookup(&self, index: u32, ty: i32) -> Option<&NativePage> {
+    /// The page of a view that showed page `index` of machine type `ty` (a negative type is none): the lookup of [`PageTable::selected`] over values the caller read from the
+    /// firmware before it entered the owner.
+    pub fn lookup(&self, index: u32, ty: i32) -> Option<&NativePage> {
         if index >= PAGES || ty < 0 {
             return None;
         }
