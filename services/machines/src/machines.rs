@@ -18,7 +18,7 @@ use dkrt_sdk::proto::{
     CAPK_MACHINE_ROWS, CAPK_MAP_ENTRIES, CAPK_PAGE_ROWS, CAPK_PARAM_ROWS, CAPK_VOICE_ROWS,
 };
 use dkrt_sdk::records::KINDS_MACHINES;
-use dkrt_sdk::{E_NO_REGISTRY, OK};
+use dkrt_sdk::{E_NO_REGISTRY, E_FORMAT, OK};
 use dkrt_svc_rows::rows_info::RegState;
 
 /// The machines service: nothing collected, no click queued, nothing parked. The file's cell holds the one instance (`Provider::start_in`).
@@ -204,21 +204,14 @@ unsafe fn first_reserved<C: CoreApi>(core: &C) -> u32 {
 }
 
 impl<C: CoreApi> Provider<C> for Machines {
-    /// The file's `init`, before its hooks are installed: the registry words of `rows_info` are bound into `DKRT_MF_TAB` (the hooks read it), or the file is refused
-    /// (`E_NO_REGISTRY`: no usable `core/rows` in the image).
-    fn start(core: &C) -> Result<Machines, Status> {
-        // SAFETY: `DKRT_MF_TAB` is this crate's table; nothing reads it before the hooks are declared
-        status(unsafe { info::bind(core) })?;
-        let mut m = Machines::new();
-        m.pages.set_first(unsafe { first_reserved(core) });
-        m.listed = unsafe { info::build_list(core) }.ok_or(E_NO_REGISTRY)? as u32;
-        // SAFETY: the registry is the image's; no module has filled a row yet
-        unsafe { crate::pagerows::init(core, &mut m.reg) };
-        Ok(m)
+    /// Not a start path: `init` points page-row strings into the state, so the state must not move after it is built, and `start` returns it by move. Every caller
+    /// uses `start_in` (the file's `init`, the test driver); this refuses (`E_FORMAT`) so a move can never produce a state whose rows dangle.
+    fn start(_core: &C) -> Result<Machines, Status> {
+        Err(E_FORMAT)
     }
 
     /// The state is made where it lives: all-zero bytes are valid for every field, and the gate is closed after (`Builder::init`) and the click state is written to its start
-    /// value (the detector and the held flow are not zero). This is a fill and a few words, and no copy of the 5 KiB collection through the stack.
+    /// value (the detector and the held flow are not zero). The file's `init` (bind the registry words into `DKRT_MF_TAB`, the hooks read it; `E_NO_REGISTRY` when the image has no usable `core/rows`) is this function. This is a fill and a few words, and no copy of the 5 KiB collection through the stack.
     fn start_in(core: &C, slot: &mut MaybeUninit<Machines>) -> Result<(), Status> {
         // SAFETY: as in `start`
         status(unsafe { info::bind(core) })?;
