@@ -51,6 +51,9 @@ Rules:
             package's loader that `optional_imports!` expands to; RC2s-2 drops it with the package crate), items inside inline `mod name { }` blocks and impls (only the
             declarations at the top level of a file count as module items), a module named by `#[path]` outside `lib.rs` (its file name is read as its module name), and a path built
             by a macro. Host-test files and every item behind `#[cfg(test)]` are not read. `BOUNDARY_ENFORCED` switches `check()` on, `--boundary-report` lists the crossings at any time.
+  de-naming The platform and the runtime core (everything under runtime/ but tests and build outputs) name no service: no `core/services/<name>` id, no `services/<name>/` path, no `dkrt_svc_<name>`
+            in a manifest, build file or source (comments stripped: a comment edit must not stale the committed runtime object), and a `requires` of a runtime/ manifest names only modules under runtime/. Allowed:
+            the files in DENAME_ALLOWED (the runtime crate's service table and handlers; the project records that list the services a device test loads).
   imports   Every function of <dk/platform/ui.h> is an `[[import]]` of sdk/sdk.toml with `requires = "core/ui"`, and every import
             with `requires` is in the runtime's `optional` list, so the runtime can link it by name (or hand out its stub).
 
@@ -1479,6 +1482,96 @@ def check_self_contained(root: Path, mods: list[Module]) -> list[Violation]:
     ]
 
 
+# The platform and the runtime core do not name a service: no id (`core/services/<name>`), no repo path (`services/<name>/`), no service crate (`dkrt_svc_<name>`).
+DENAME_SUFFIXES = {".toml", ".json", ".s", ".S", ".inc", ".c", ".h", ".rs", ".mjs", ".py"}
+DENAME_SKIP_DIRS = {"tests", "build", "target", "node_modules", "out"}
+DENAME_SKIP_FILES = {"Cargo.lock"}
+# Files that may name a service, with the reason. The runtime crate links the service crates (the one place the core reaches them);
+# a project record lists the service modules its device tests load (test wiring, not code of the layer).
+DENAME_ALLOWED = (
+    ("runtime/core/src/rs/Cargo.toml", "the runtime links the service crates"),
+    ("runtime/core/src/rs/src/package/gen_services.rs", "the generated service table"),
+    ("runtime/core/src/rs/src/package/handlers.rs", "the one place the core reaches a service"),
+    ("runtime/core/src/rs/src/package/handlers/", "host tests of handlers.rs"),
+    ("runtime/core/owners.toml", "the area tags of the runtime crates, including the service crates linked into it"),
+    ("runtime/core/project.json", "test-assembly packs the services it reads; the records list the services a device test loads"),
+    ("runtime/platform/dynfx/project.json", "runtimeAcceptance modules: the services its device tests load"),
+    ("runtime/platform/introblank/project.json", "runtimeAcceptance modules: the services its device test loads"),
+)
+
+
+def strip_comments(text: str, suffix: str) -> str:
+    """The text with comments blanked (line numbers kept): `//` and `/* */` (C, Rust, SHARC), `|` (ColdFire assembly), `#` (TOML, Python)."""
+    if suffix in {".toml", ".py"}:
+        out = []
+        for line in text.splitlines():
+            in_str = None
+            cut = len(line)
+            for i, ch in enumerate(line):
+                if in_str:
+                    if ch == in_str:
+                        in_str = None
+                elif ch in "\"'":
+                    in_str = ch
+                elif ch == "#":
+                    cut = i
+                    break
+            out.append(line[:cut])
+        return "\n".join(out)
+    text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+    text = re.sub(r"//[^\n]*", "", text)
+    if suffix in {".s", ".S", ".inc"}:
+        text = re.sub(r"\|[^\n]*", "", text)
+    return text
+
+
+def check_de_naming(root: Path) -> list[Violation]:
+    """No file under runtime/ (manifests, build files, sources; comments stripped) names a service."""
+    names = sorted(d.name for d in (root / "services").iterdir() if d.is_dir()) if (root / "services").is_dir() else []
+    if not names:
+        return []
+    alt = "|".join(re.escape(n) for n in names)
+    pat = re.compile(rf"core/services/|(?<![\w/.-])services/(?:{alt})/|\bdkrt_svc_(?:{alt})\b")
+    runtime_ids = {m.id for m in load_modules(root) if rel(root, m.dir).startswith("runtime/")}
+    out: list[Violation] = []
+    for f in sorted((root / "runtime").rglob("*")):
+        r = f.relative_to(root)
+        if not f.is_file() or f.suffix not in DENAME_SUFFIXES or f.name in DENAME_SKIP_FILES:
+            continue
+        if f.suffix == ".json" and f.name != "project.json":
+            continue  # data files (test vectors) are not code of the layer
+        if DENAME_SKIP_DIRS & set(r.parts[1:]) or f.name.endswith(".dko.json"):
+            continue
+        path = r.as_posix()
+        if any(path == a or (a.endswith("/") and path.startswith(a)) for a, _ in DENAME_ALLOWED):
+            continue
+        text = f.read_text(encoding="utf-8", errors="replace")
+        for n, line in enumerate(strip_comments(text, f.suffix).splitlines(), 1):
+            if pat.search(line):
+                out.append(
+                    Violation(
+                        f"{path}:{n}",
+                        "de-naming",
+                        "the platform or the runtime core names a service",
+                        "name the concept (a registry, a window, a slot) and let the service register itself; a loaded service belongs in a test record or in DENAME_ALLOWED with a reason",
+                    )
+                )
+    for m in load_modules(root):
+        if not rel(root, m.dir).startswith("runtime/"):
+            continue
+        for dep in m.manifest.get("module", {}).get("requires", []) or []:
+            if dep not in runtime_ids:
+                out.append(
+                    Violation(
+                        f"{rel(root, m.dir)}/module.toml:{line_of(m.text, dep)}",
+                        "de-naming",
+                        f"`requires` names {dep}, which is not a module under runtime/",
+                        "a runtime module requires only runtime modules",
+                    )
+                )
+    return out
+
+
 def check(root: Path = ROOT, boundary_enforced: bool | None = None) -> list[Violation]:
     mods = load_modules(root)
     return [
@@ -1499,6 +1592,7 @@ def check(root: Path = ROOT, boundary_enforced: bool | None = None) -> list[Viol
         *check_service_crates(root),
         *check_core_kind_free(root),
         *check_self_contained(root, mods),
+        *check_de_naming(root),
     ]
 
 

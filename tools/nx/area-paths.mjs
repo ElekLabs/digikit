@@ -4,9 +4,10 @@
 //      record tags (`C:boot`, `S:lfo`, ...) or to `shared`. A Rust source file has the module path of its crate and its place below
 //      `src/`; the longest owner prefix at a `::` boundary wins (the rule `patchkit owners` uses for the items of the object).
 //   2. A service crate `services/<name>/` is `S:<name>` when a runtimeAcceptance record carries that tag.
-//   3. A firmware declaration `ports/fw/<point>.toml` names its `users` (core modules): `core/services/<name>` is `S:<name>`, any other
+//   3. A platform leaf `runtime/platform/<leaf>/` is `A:core/<leaf>` when a runtimeAcceptance record carries that tag (the leaf's module id is `core/<leaf>`).
+//   4. A firmware declaration `ports/fw/<point>.toml` names its `users` (core modules): `core/services/<name>` is `S:<name>`, any other
 //      user `A:<id>`, each when a record carries the tag. A user that names no tag (the runtime, the UI) makes the file unknown.
-//   4. A device file (`devices/<stem>.toml`, its companions, `ports/<short>-*.toml`) names the device: its halves only.
+//   5. A device file (`devices/<stem>.toml`, its companions, `ports/<short>-*.toml`) names the device: its halves only.
 // Principle: precise when the area is known, wide when it is not. Any other path ({ unknown }: a shared module, the SDK, a header, a
 // table, patchkit, owners.toml, a crate or file outside the object) is wide when it reaches device tests: the gate then runs every device
 // test `affected` selects (test-subset.mjs), never the smoke set alone.
@@ -87,6 +88,8 @@ export const areasOfPath = (file, ctx) => {
   }
   const service = /^services\/([^/]+)\//.exec(file)?.[1];
   if (service && ctx.serviceTags.has(`S:${service}`)) return { areas: [`S:${service}`] };
+  const leaf = /^runtime\/platform\/([^/]+)\//.exec(file)?.[1];
+  if (leaf && ctx.recordTags.has(`A:core/${leaf}`)) return { areas: [`A:core/${leaf}`] };
   if (PORT_FILE.test(file)) return portAreas(file, ctx);
   const device = ctx.deviceOf?.(file);
   if (device) return { devices: [device] };
