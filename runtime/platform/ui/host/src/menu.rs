@@ -1,4 +1,5 @@
 use crate::*;
+use std::ffi::{c_char, c_int, c_void};
 
 #[derive(Clone, Copy)]
 pub(crate) enum Kind {

@@ -8,6 +8,7 @@ pub mod cfmix;
 pub mod cfprof;
 mod common;
 pub mod cputime;
+mod dspi1_status;
 mod flash_hle;
 mod fs_check;
 mod guard;

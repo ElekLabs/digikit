@@ -1,11 +1,6 @@
 //! Host fake of `<dk/platform/ui.h>` and the ui calls of `<dk/gen/imports.h>`. The `dk_ui_*` functions below keep a model of menus, the view stack,
 //! the open dialog and the toasts. `driver` acts like the user on that model.
 //! The model is per thread; `session()` serialises tests, because the C code under test has statics.
-use std::cell::RefCell;
-use std::collections::HashSet;
-use std::ffi::{c_char, c_int, c_void, CStr};
-use std::sync::{Mutex, MutexGuard};
-
 pub mod driver;
 
 mod caps;

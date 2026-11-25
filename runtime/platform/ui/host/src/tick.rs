@@ -1,4 +1,5 @@
 use crate::*;
+use std::ffi::{c_int, c_void};
 
 pub(crate) type TickFn = extern "C" fn(Ctx);
 

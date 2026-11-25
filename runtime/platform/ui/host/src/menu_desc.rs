@@ -1,4 +1,4 @@
-use crate::*;
+use std::ffi::{c_char, c_int, c_void};
 
 pub const DK_UI_TEXT_PAGE: u32 = 1;
 

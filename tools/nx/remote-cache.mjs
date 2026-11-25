@@ -106,7 +106,7 @@ const ensure = async () => {
 };
 
 const dirStats = (dir) => {
-  const files = walkFiles(dir);
+  const files = existsSync(dir) ? walkFiles(dir, { strict: true }) : [];
   return { count: files.length, bytes: files.reduce((sum, file) => sum + statSync(file).size, 0) };
 };
 

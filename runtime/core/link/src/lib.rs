@@ -27,7 +27,7 @@ mod flight;
 #[cfg(any(test, feature = "fake"))]
 mod inspect;
 mod limits;
-mod link_stats;
+mod link_counters;
 mod live;
 mod poll;
 mod req;
@@ -39,7 +39,7 @@ mod transport;
 
 pub use event::{EV_DONE, EV_ERROR, EV_LIVE, EV_RESEND, EV_START, EV_SUBMIT};
 pub use limits::{CHUNK, REQ_MAX, SLOT_MAX};
-pub use link_stats::Stats;
+pub use link_counters::Stats;
 pub use poll::Poll;
 pub use sent::Sent;
 pub use transport::Transport;

@@ -1,4 +1,5 @@
 use crate::*;
+use std::ffi::c_int;
 
 pub const CAP_MENU: c_int = 1;
 

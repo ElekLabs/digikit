@@ -1,4 +1,5 @@
 use crate::*;
+use std::ffi::{c_char, c_int, c_void};
 
 #[no_mangle]
 pub extern "C" fn dk_ui_toast(_ui: *mut c_void, text: *const c_char) -> c_int {

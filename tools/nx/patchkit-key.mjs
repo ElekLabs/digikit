@@ -95,7 +95,7 @@ const buildFiles = (sources, workspaceRoot) => {
       }
   }
   if (existsSync(join(workspaceRoot, '.cargo')))
-    for (const file of walkFiles(join(workspaceRoot, '.cargo')))
+    for (const file of walkFiles(join(workspaceRoot, '.cargo'), { strict: true }))
       files.add(relative(workspaceRoot, file).split(sep).join('/'));
   return files;
 };

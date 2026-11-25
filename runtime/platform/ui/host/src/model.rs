@@ -1,4 +1,8 @@
 use crate::*;
+use std::cell::RefCell;
+use std::collections::HashSet;
+use std::ffi::{c_char, c_int, CStr};
+use std::sync::{Mutex, MutexGuard};
 
 #[derive(Default)]
 pub(crate) struct Model {

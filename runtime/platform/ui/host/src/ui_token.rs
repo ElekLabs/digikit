@@ -1,4 +1,4 @@
-use crate::*;
+use std::ffi::c_void;
 
 /// The handle of `dk_ui_open`: only a token, as in core/ui.
 pub(crate) static UI_TOKEN: u8 = 0;

@@ -2,13 +2,21 @@
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** The regular files under `dir` (absolute when `dir` is), in directory order; none when `dir` is missing or unreadable. Symbolic links are not followed. */
-export const walkFiles = (dir) => {
+/**
+ * The regular files under `dir` (absolute when `dir` is), in directory order. Symbolic links are not followed.
+ * A directory that cannot be read (missing, no permission) is skipped; with `strict` its error is thrown instead.
+ */
+export const walkFiles = (dir, { strict = false } = {}) => {
   let entries;
   try {
-    entries = readdirSync(dir, { recursive: true, withFileTypes: true });
-  } catch {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (error) {
+    if (strict) throw error;
     return [];
   }
-  return entries.filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name));
+  return entries.flatMap((e) => {
+    const path = join(dir, e.name);
+    if (e.isDirectory()) return walkFiles(path, { strict });
+    return e.isFile() ? [path] : [];
+  });
 };
