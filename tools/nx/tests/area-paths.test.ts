@@ -118,6 +118,6 @@ it('maps the real runtime files by the real owners.toml and service records', ()
 
 it('gives a platform leaf the area of its own record tag, and a leaf without a tag none', () => {
   expect(areasOfPath('runtime/platform/rows/module.toml', ctx)).toEqual({ areas: ['A:core/rows'] });
-  expect(areasOfPath('runtime/platform/rows/src/cf/type-dispatch-dt2.s', ctx)).toEqual({ areas: ['A:core/rows'] });
+  expect(areasOfPath('runtime/platform/rows/src/cf/type-dispatch.s', ctx)).toEqual({ areas: ['A:core/rows'] });
   expect(areasOfPath('runtime/platform/dsp-link/module.toml', ctx)).toHaveProperty('unknown');
 });
