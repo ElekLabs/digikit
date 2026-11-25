@@ -126,6 +126,7 @@ const collectImages = (root) => {
           if (job.keep) {
             const kept = `${job.keep}.${suffix}`;
             expectedFiles.add(relative(dir, kept));
+            expectedFiles.add(relative(dir, `${job.keep}.dksp`));
             if (sha(fileBytes(kept)) !== sha256) throw new Error(`${kept}: differs from ${file}`);
           }
           entries.push({ kind, path, sha256 });
@@ -320,7 +321,7 @@ const collect = (root, scratch, tracked) => {
   const shared = [collectPacks(root, projects, entries)];
   const generated = JSON.parse(pk('gen', '--check', '--paths'));
   for (const path of generated)
-    shared.push({ kind: 'generated', path: checkedPath(path), sha256: sha(fileBytes(join(root, path))) });
+    shared.push({ kind: 'generated', path: checkedPath(normalize(path)), sha256: sha(fileBytes(join(root, normalize(path)))) });
   shared.push(...collectObjects(root, scratch, projects, tracked));
   return new Map(
     [...entries].map(([device, own]) => {
