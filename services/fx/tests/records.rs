@@ -4,7 +4,7 @@
 use dkrt_abi::dsp::{FXW_ENABLED, FXW_P0, FXW_PC, FX_FREE_PC, FX_ROW_WORDS, MIX_ONE, WIN_FX};
 use dkrt_abi::provider::{Consumer, ConsumerId, DspPart, Provider, Records, Ticker};
 use dkrt_abi::service::tick_phase;
-use dkrt_sdk::{E_FORMAT, E_NO_REGISTRY, OK};
+use dkrt_sdk::{E_FORMAT, E_NO_REGISTRY};
 use dkrt_svc_fx::fx::Fx;
 use dkrt_svc_fx::fxpage;
 use dkrt_svc_fx::rows::frows;
@@ -109,25 +109,24 @@ fn a_declared_effect_publishes_its_words_in_order() {
 #[test]
 fn clearing_a_module_sends_the_free_pc_first_and_frees_the_row() {
     let (_rows, core, mut fx) = core_with_row();
-    unsafe {
-        assert!(DspPart::clear(&mut fx, &core, REC));
-        let at = FX_ROW_WORDS * (FIRST_ROW + 1);
-        let wire = core.link.borrow().t.words();
-        assert_eq!(
-            wire.first().map(|w| (w.0, w.1, w.2)),
-            Some((WIN_FX, at + FXW_PC, FX_FREE_PC))
-        );
-        assert!(wire
-            .iter()
-            .any(|w| w.1 == at + dkrt_abi::dsp::FXW_MIX && w.2 == MIX_ONE));
-        assert_eq!(frows().fx_pub[1], 0);
-        // nothing published any more: a second clear sends nothing
-        let n = wire.len();
-        assert!(DspPart::clear(&mut fx, &core, REC));
-        assert_eq!(core.link.borrow().t.words().len(), n);
-        DspPart::release(&mut fx, &core, REC);
-        assert_eq!(frows().fx_owner[1], 0);
-    }
+    assert!(DspPart::clear(&mut fx, &core, REC));
+    let at = FX_ROW_WORDS * (FIRST_ROW + 1);
+    let wire = core.link.borrow().t.words();
+    assert_eq!(
+        wire.first().map(|w| (w.0, w.1, w.2)),
+        Some((WIN_FX, at + FXW_PC, FX_FREE_PC))
+    );
+    assert!(wire
+        .iter()
+        .any(|w| w.1 == at + dkrt_abi::dsp::FXW_MIX && w.2 == MIX_ONE));
+    assert_eq!(frows().fx_pub[1], 0);
+    // nothing published any more: a second clear sends nothing
+    let n = wire.len();
+    assert!(DspPart::clear(&mut fx, &core, REC));
+    assert_eq!(core.link.borrow().t.words().len(), n);
+    DspPart::release(&mut fx, &core, REC);
+    assert_eq!(frows().fx_owner[1], 0);
+
     assert!(!core.calls().iter().any(|c| matches!(c, Call::Log { .. })));
 }
 
@@ -135,7 +134,7 @@ fn clearing_a_module_sends_the_free_pc_first_and_frees_the_row() {
 /// module or another's, published row or not.
 #[test]
 fn a_published_effect_row_never_refuses_a_teardown() {
-    let (_rows, core, mut fx) = core_with_row();
+    let (_rows, core, fx) = core_with_row();
     let owner = REC as u8 + 1;
     // the owner keeps the default `can_stop`: it holds up nothing, whoever goes down
     let ask = |fx: &Fx| Provider::can_stop(fx, &core);

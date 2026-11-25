@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { Clock } from '../src/emulated-clock.ts';
-import { panelInput, probeInput, remoteInput } from '../src/input.ts';
+import { panelInput, probeInput, remoteInput } from '../src/input-path.ts';
 import { button, encoder } from '../src/keys.ts';
 import { MS } from '../src/session.ts';
 

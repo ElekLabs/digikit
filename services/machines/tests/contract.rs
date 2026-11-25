@@ -2,7 +2,6 @@
 //! `tests/fixtures/modules/sine` (`src/module.c`: one machine with a page of one parameter) and a second machine with another key: each makes the builder calls through
 //! the service's `build::*`. The image tables are those of the device profiles (`Profile` of `tests/build.rs`) as `core/rows` writes them, over the fake core's memory.
 use core::ptr::addr_of;
-use dkneeds::keys::name_hash;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::{FREE_TYPE, I_VFIRST, I_VFREE, ROW_WORDS, WIN_VOICES};
 use dkrt_abi::keys::KeysCopy;
@@ -16,7 +15,7 @@ use dkrt_svc_machines::machines::Machines;
 use dkrt_svc_machines::records::{mach_owner, types_of};
 use dkrt_svc_machines::rows::{self, vrows, VoiceRows};
 use dkrt_svc_rows::rows_info::{w, RegState};
-use dkrt_test_support::contract::{Dsp, Fixture, Init, Late, Lifecycle, Module, Rows};
+use dkrt_test_support::contract::{Dsp, Fixture, Init, Lifecycle, Module, Rows};
 use dkrt_test_support::{
     provider_contract, subject, Driver, FakeCore, Provided, Recipe, RowBuilder,
 };

@@ -6,11 +6,11 @@
 // file writes no line for it. Lines `roots:<id>` are the static `--modules` sets of tests/regression/runtime/image-roots.json (the tasks hash the firmware itself in device-inputs.mjs).
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sha256File } from './digest.mjs';
 import { CELLS, syxPath } from './device-inputs.mjs';
 import { imageJobs } from './image-jobs.mjs';
 
@@ -68,7 +68,7 @@ try {
         await run(pk, args, { cwd: root });
         // The info table of a patch set's image, as text for the host assembly tests (runtime/core, `test-assembly`)
         if (!keep) writeInfo(cell.dev, label, JSON.parse(readFileSync(plan, 'utf8')).info ?? []);
-        const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+        const sha = sha256File;
         lines[index] = `${cell.dev}-${cell.ver} ${label} image ${sha(out)} plan ${sha(plan)} addrmap ${sha(addrmap)}`;
       }
     }),

@@ -2,6 +2,7 @@
 //! A call that does not fit the screen (no such row, no dialog) panics with a message,
 //! so a wrong test fails loudly.
 use crate::*;
+use std::ffi::c_int;
 
 fn top() -> usize {
     with(|s| s.stack.last().copied()).expect("no view is open")

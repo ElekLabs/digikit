@@ -1,6 +1,5 @@
 //! The module record and the names the runtime and the system package both use: `Module` (one slot of the arena's module table), `Ctx` (what a module's
 //! `dk_module_ctx *` points to), the width of the names the log shows and the provider index.
-use dkrt_sdk::*;
 
 /// One module record: the used flag, the name, the version and the arena block of its code and data. The package reads the records in `PackageState`: the layout is
 /// part of the major version of the resident table.

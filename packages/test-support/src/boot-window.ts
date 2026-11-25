@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse as parseToml } from 'smol-toml';
-import { repoRoot, type Device } from './inputs.ts';
+import { repoRoot, type Device } from './firmware-inputs.ts';
 import type { Clock } from './emulated-clock.ts';
 
 /**

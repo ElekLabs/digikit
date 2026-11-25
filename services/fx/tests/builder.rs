@@ -1,7 +1,6 @@
 //! The builder calls of the effects and their commit over a `FakeCore`: the collection, its refusals, the lowering to the effect records of the `register` section (and the
 //! effects' lines of `tests/fixtures/records/lowered.golden`, recorded before the collect moved into the services) and the passes of `Records::commit`. Each test makes its own
 //! owner or builder: the collection is not shared.
-use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::provider::Records;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};

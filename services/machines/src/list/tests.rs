@@ -50,7 +50,7 @@ fn rank_pairs_name_each_listed_type_with_its_display_index() {
 #[test]
 fn from_image_reads_the_stock_order_and_the_positions_through_the_core() {
     use dkrt_test_support::FakeCore;
-    let mut core = FakeCore::new();
+    let core = FakeCore::new();
     let (stock, rows, size, o_pos) = (0x4700_0000u32, 0x4701_0000u32, 64u32, 48u32);
     for (i, t) in STOCK.iter().enumerate() {
         core.mem.borrow_mut().insert(stock + 4 * i as u32, *t);

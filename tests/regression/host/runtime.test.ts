@@ -27,7 +27,7 @@ vi.mock('@digi/control-client', async (original) => ({
   ...(await original<object>()),
   spawnDaemon: fake.spawn,
 }));
-vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
+vi.mock('../../../packages/test-support/src/firmware-inputs.ts', async (original) => ({
   ...(await original<object>()),
   validateRuntimeInputs: vi.fn(),
   coupledEnv: fake.coupledEnv,

@@ -50,7 +50,7 @@ STARTS_PER_REGION = 3
 LOOPS_PER_REGION = 2
 RUN_TIMEOUT = 900.0
 
-# Stock firmware of the fixture (same table as packages/test-support/src/inputs.ts).
+# Stock firmware of the fixture (same table as packages/test-support/src/firmware-inputs.ts).
 STOCK_SYX = {"dn2": "Digitone_II_OS1.12.syx", "dt2": "Digitakt_II_OS1.17.syx"}
 PROJECT = ROOT / "tools" / "gate" / "fast-roots" / "project.json"
 

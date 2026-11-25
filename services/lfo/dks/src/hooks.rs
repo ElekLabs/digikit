@@ -43,7 +43,6 @@ entries! {
     lfo_ui_graph,
 }
 
-#[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
 /// The value of the shape with wave number `wave` at the 32-bit `phase`, signed Q31 (TRI when no module keeps the number): what the LFO tick takes from the function table for
 /// a stock wave; the routines call it for a wave of 7 to 14. C calling convention; the routines of the hooks call it with the phase and the wave on the stack.
 #[cfg_attr(target_arch = "m68k", no_mangle)]
@@ -56,7 +55,6 @@ pub extern "C" fn dk_lfo_eval(phase: u32, wave: u32) -> i32 {
 ///
 /// # Safety
 /// `buf` is valid for `width + 1` bytes.
-#[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_lfo_name(value: i32, buf: *mut u8, width: u32) -> u32 {
     dkrt_svc_lfo::shapes::name_into(value, buf, width as usize) as u32
@@ -67,7 +65,6 @@ pub unsafe extern "C" fn dk_lfo_name(value: i32, buf: *mut u8, width: u32) -> u3
 ///
 /// # Safety
 /// `flag` is valid for one byte.
-#[cfg_attr(not(target_arch = "m68k"), allow(dead_code))]
 #[cfg_attr(target_arch = "m68k", no_mangle)]
 pub unsafe extern "C" fn dk_lfo_graph(wave: u32, vtable: u32, flag: *mut u8) -> *const u8 {
     dkrt_svc_lfo::graph::lookup(wave, vtable, flag)

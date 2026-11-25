@@ -5,15 +5,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import { DependencyType } from '@nx/devkit';
-import { parse } from 'smol-toml';
 import { testSourceGlobs } from './test-source.mjs';
+import { read } from './toml.mjs';
 
 // The packs whose `needs` verdict tests read from dist/bytes/pack-verdicts.json (one list: tests/regression/runtime/needs-packs.json).
 const NEEDS_PACKS = JSON.parse(
   readFileSync(new URL('../../tests/regression/runtime/needs-packs.json', import.meta.url), 'utf8'),
 ).modules;
 
-const read = (root, toml) => parse(readFileSync(join(root, toml), 'utf8'));
 const KINDS = ['dependencies', 'dev-dependencies', 'build-dependencies'];
 
 // CLI builds into dist/ (gitignored). Copy then rename: a running process keeps the old file.

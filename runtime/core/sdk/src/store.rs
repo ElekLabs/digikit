@@ -833,7 +833,7 @@ unsafe fn gaps_hook<E: FnMut(*const u8) -> bool, F: FnMut(u32, u32) -> bool>(
     let mut stop = false;
     let mut aborted = false;
     // one used extent at a time: a gap is what lies between the cursor and the extent's start
-    let mut take = |start: u32, len: u32, cursor: &mut u32, stop: &mut bool, f: &mut F| {
+    let take = |start: u32, len: u32, cursor: &mut u32, stop: &mut bool, f: &mut F| {
         // once `f` said stop it is not asked again (a later fixed extent of the same entry would overwrite the first fit)
         if !*stop && start > *cursor && !f(*cursor, start - *cursor) {
             *stop = true;

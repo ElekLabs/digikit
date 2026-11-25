@@ -5,7 +5,6 @@
 // repository-relative, so every lane and the remote cache get the same key. Same shape as `emud_key.test_key_of` (the daemon test key).
 // Full keys (test-device-all, conformance) keep the binary. Run by `patchkit:cli` after the build (tools/nx/cargo.mjs); it fails when the
 // dependency file is missing or lists a file that is gone: build patchkit again.
-import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -19,6 +18,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
+import { sha256File } from './digest.mjs';
+import { walkFiles } from './tree.mjs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { releaseProfileEnv } from './cargo-profile-env.mjs';
@@ -81,7 +82,6 @@ export const repoFilesOfDepfile = (text, workspaceRoot) => {
   return [...names].sort();
 };
 
-const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const expand = (globs, workspaceRoot) => globs.flatMap((glob) => globSync(glob, { cwd: workspaceRoot }));
 
 // The Cargo.toml of the crate that holds each source file, the root manifest and Cargo.lock, and `.cargo/`: features and profiles are not in the dependency file.
@@ -95,8 +95,8 @@ const buildFiles = (sources, workspaceRoot) => {
       }
   }
   if (existsSync(join(workspaceRoot, '.cargo')))
-    for (const e of readdirSync(join(workspaceRoot, '.cargo'), { recursive: true, withFileTypes: true }))
-      if (e.isFile()) files.add(relative(workspaceRoot, join(e.parentPath, e.name)).split(sep).join('/'));
+    for (const file of walkFiles(join(workspaceRoot, '.cargo'), { strict: true }))
+      files.add(relative(workspaceRoot, file).split(sep).join('/'));
   return files;
 };
 
@@ -123,7 +123,7 @@ export const patchkitKeys = ({ depText, workspaceRoot = root, facts }) => {
         `# rustc ${facts.rustc.trim().replace(/\n/g, '; ')}`,
         `# profile ${facts.profileEnv}`,
         `# rustflags ${facts.rustflags}`,
-        ...[...names].sort().map((name) => `${sha256(join(workspaceRoot, name))}  ${name}`),
+        ...[...names].sort().map((name) => `${sha256File(join(workspaceRoot, name))}  ${name}`),
       ].join('\n') + '\n',
     );
   }

@@ -2,10 +2,10 @@
 // dist/bytes/sharc-rig.sha256 (the hash of the binary, which holds the generated core: the cache key of the tasks that run it).
 // The core is out/native/shared-core/gen (`mise run gen:core`), or SHARC_GEN_DIR. CARGO_TARGET_DIR overrides the target dir of
 // tools/nx/rust-env.mjs (a lane that built the rig earlier names that dir and skips a cold build).
-import { createHash } from 'node:crypto';
-import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { sha256File } from './digest.mjs';
 import { ROOT, generatedDir, targetDir } from './rust-env.mjs';
 
 const env = { ...process.env };
@@ -42,8 +42,6 @@ mkdirSync(bin, { recursive: true });
 mkdirSync(join(ROOT, 'dist', 'bytes'), { recursive: true });
 copyFileSync(join(target, 'release', 'sharc-rig'), join(bin, 'sharc-rig.tmp'));
 renameSync(join(bin, 'sharc-rig.tmp'), join(bin, 'sharc-rig'));
-const hash = createHash('sha256')
-  .update(readFileSync(join(bin, 'sharc-rig')))
-  .digest('hex');
+const hash = sha256File(join(bin, 'sharc-rig'));
 writeFileSync(join(ROOT, 'dist', 'bytes', 'sharc-rig.sha256'), `${hash}\n`);
 console.log(`dist/bin/sharc-rig ${hash}`);

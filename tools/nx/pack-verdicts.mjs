@@ -3,11 +3,11 @@
 // committed pack's needs read this file (tests/regression/runtime/pack-needs.ts), so a patchkit edit that changes no verdict
 // changes no key. Keys are sorted: the output is deterministic.
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CELLS } from './device-inputs.mjs';
+import { sha256File } from './digest.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const { modules } = JSON.parse(readFileSync(join(root, 'tests/regression/runtime/needs-packs.json'), 'utf8'));
@@ -23,7 +23,7 @@ for (const { dev } of CELLS) {
     });
     const verdict = JSON.parse(out)[file];
     if (!verdict || 'error' in verdict) throw new Error(`patchkit needs ${file}: ${verdict?.error ?? 'no verdict'}`);
-    verdicts[`needs:${createHash('sha256').update(readFileSync(file)).digest('hex')}`] = verdict;
+    verdicts[`needs:${sha256File(file)}`] = verdict;
   }
 }
 const sorted = Object.fromEntries(Object.entries(verdicts).sort(([a], [b]) => a.localeCompare(b)));

@@ -6,7 +6,7 @@ import {
   type SettleOptions,
 } from './boot-window.ts';
 import { emulatorClock } from './emulated-clock.ts';
-import { panelInput } from './input.ts';
+import { panelInput } from './input-path.ts';
 import type { Session } from './session.ts';
 
 /** Guest memory through the daemon's `mem.cf.peek`, which reads one longword: `length` bytes from `addr` (any alignment). */

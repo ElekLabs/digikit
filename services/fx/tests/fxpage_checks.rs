@@ -11,12 +11,14 @@ use std::sync::Mutex;
 static LOCK: Mutex<()> = Mutex::new(());
 
 /// Binds the table in a test and gives it back at the end, also when the test fails.
-struct Bound<'a>(std::sync::MutexGuard<'a, ()>);
+struct Bound<'a> {
+    _guard: std::sync::MutexGuard<'a, ()>,
+}
 
 fn lock() -> Bound<'static> {
     let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     unsafe { fxpage::unbind() };
-    Bound(g)
+    Bound { _guard: g }
 }
 
 impl Drop for Bound<'_> {

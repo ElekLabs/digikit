@@ -1,9 +1,8 @@
 //! The owner `Machines` itself: what `start` and `start_in` do (the image table is bound into `DKRT_MF_TAB`, or the file is refused; the state is made where it lives, over
 //! whatever the slot held), and what a new owner holds (nothing collected, the gate closed, no action armed, nothing parked).
 use core::mem::MaybeUninit;
-use dkneeds::keys::name_hash;
 use dkrt_abi::provider::Provider;
-use dkrt_sdk::{E_FORMAT, E_NO_REGISTRY};
+use dkrt_sdk::E_NO_REGISTRY;
 use dkrt_svc_machines::info::{self, w, DKRT_MF_TAB};
 use dkrt_svc_machines::machines::Machines;
 use dkrt_svc_rows::rows_info::w as r;

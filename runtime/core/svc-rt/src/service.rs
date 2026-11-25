@@ -127,7 +127,7 @@ macro_rules! service {
                 DK_SVC_KINDS,
                 &DK_SVC_ROW,
                 DK_SVC_OWNER.instance() as *mut u8,
-                dk_svc_init as usize as *const u8,
+                dk_svc_init as *const () as *const u8,
                 device,
                 &$crate::service!(@hooks $(($site, $entry $(, $dev)?)),*),
                 &$crate::service!(@hooks $(($slot, $fill $(, $fdev)?)),*),
@@ -316,7 +316,7 @@ macro_rules! service {
     (@hooks $(($site:literal, $entry:path $(, $dev:ident)?)),*) => {
         [$((
             $crate::name_hash($site),
-            $entry as usize as *const u8,
+            $entry as *const () as *const u8,
             $crate::hook_device!($($dev)?),
         )),*]
     };

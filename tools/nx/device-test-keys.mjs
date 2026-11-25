@@ -312,7 +312,7 @@ export const DRIVER_SUBJECT_FILES = [
   'packages/test-support/src/session.ts',
   'packages/test-support/src/emulator-config.ts',
   'packages/test-support/src/keys.ts',
-  'packages/test-support/src/input.ts',
+  'packages/test-support/src/input-path.ts',
 ];
 // `imports` in the form of importInputs (`{workspaceRoot}/<path>`) without the files of DRIVER_ROOTS, except DRIVER_SUBJECT_FILES.
 export const withoutDriver = (imports) =>

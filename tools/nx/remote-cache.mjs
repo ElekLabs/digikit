@@ -13,13 +13,13 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
-  readdirSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { walkFiles } from './tree.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const serverDir = join(root, 'tools/nx/cache-server');
@@ -106,20 +106,8 @@ const ensure = async () => {
 };
 
 const dirStats = (dir) => {
-  let count = 0;
-  let bytes = 0;
-  const walk = (d) => {
-    for (const e of readdirSync(d, { withFileTypes: true })) {
-      const p = join(d, e.name);
-      if (e.isDirectory()) walk(p);
-      else if (e.isFile()) {
-        count++;
-        bytes += statSync(p).size;
-      }
-    }
-  };
-  if (existsSync(dir)) walk(dir);
-  return { count, bytes };
+  const files = existsSync(dir) ? walkFiles(dir, { strict: true }) : [];
+  return { count: files.length, bytes: files.reduce((sum, file) => sum + statSync(file).size, 0) };
 };
 
 const [cmd, ...rest] = process.argv.slice(2);
