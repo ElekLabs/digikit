@@ -351,6 +351,13 @@ pub(crate) struct PendingFrame {
     pub(crate) expected_a7: u32,
     pub(crate) frame: Frame,
 }
+
+impl PendingFrame {
+    fn matches(&self, owner: u32, pc: u32, sp: u32) -> bool {
+        self.owner_tcb == owner && self.return_pc == pc && self.expected_a7 == sp
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct FrameTracker {
     pub(crate) pending: VecDeque<PendingFrame>,
@@ -398,6 +405,11 @@ impl FrameTracker {
             raw,
         };
         let return_pc = board.read32(a7).map_err(|_| "PanelReturnUnreadable")?;
+        let return_sp = a7.wrapping_add(4);
+        // An interrupt can make us observe the entry again before the guest executes it.
+        // A call frame has one return; keep its newest pixels rather than queueing repeats.
+        self.pending
+            .retain(|pending| !pending.matches(owner_tcb, return_pc, return_sp));
         if self.pending.len() == 16 {
             self.pending.pop_front();
             self.pending_dropped += 1;
@@ -405,7 +417,7 @@ impl FrameTracker {
         self.pending.push_back(PendingFrame {
             owner_tcb,
             return_pc,
-            expected_a7: a7.wrapping_add(4),
+            expected_a7: return_sp,
             frame,
         });
         Ok(())
@@ -430,12 +442,17 @@ impl FrameTracker {
         let Ok(owner_tcb) = board.read32(current_tcb_addr) else {
             return;
         };
-        let Some(index) = self.pending.iter().position(|pending| {
-            pending.owner_tcb == owner_tcb && pending.return_pc == pc && pending.expected_a7 == a7
-        }) else {
+        let Some(index) = self
+            .pending
+            .iter()
+            .rposition(|pending| pending.matches(owner_tcb, pc, a7))
+        else {
             return;
         };
         let frame = self.pending.remove(index).expect("pending index").frame;
+        // An older snapshot may still carry duplicate observations of this entry.
+        self.pending
+            .retain(|pending| !pending.matches(owner_tcb, pc, a7));
         if !self.completed.contains_key(&owner_tcb) && self.completed.len() == 16 {
             self.completed_dropped += 1;
             return;
