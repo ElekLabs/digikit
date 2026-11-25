@@ -1,4 +1,4 @@
-//! The UI-loop tick `dkrt_tick`: services, the mailbox, the modules' ticks and the poll functions.
+//! The UI-loop tick `dkrt_tick`: services, the modules' ticks, the mailbox and the poll functions.
 
 use crate::api::{dkrt_load, dkrt_restart};
 use crate::health::{dkrt_health, DKRT_HEALTH};
@@ -13,13 +13,15 @@ use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::hooks::tick_phase;
 use dkrt_sdk::*;
 
-/// The phases of the services' part of the pass, in the order they run, and whether each is measured as a span (the module files' jobs are not). The modules' tick
-/// (`tick_phase::MODULES`) comes after the last of them: `Click::run` of the machines service (a module's click callback, run outside the owner) relies on `LAST` having run.
-pub(crate) const SERVICE_PHASES: [(u32, bool); 4] = [
+/// The hook phases of one UI pass, in the order they run, and whether each is measured as a span (the module files' jobs and the modules' tick are not). The modules' tick
+/// (`tick_phase::MODULES`) is the last step: `Click::run` of the machines service (a module's click callback, run outside the owner) relies on `LAST` having run before it,
+/// and a module tick relies on every service phase being over.
+pub(crate) const TICK_STEPS: [(u32, bool); 5] = [
     (tick_phase::EARLY, true),
     (tick_phase::FILES, false),
     (tick_phase::LATE, true),
     (tick_phase::LAST, true),
+    (tick_phase::MODULES, false),
 ];
 
 /// One tick phase of the services, measured as a span (owner `SPAN_PHASE | p`) while a span sink and clock are set.
@@ -60,8 +62,8 @@ pub unsafe extern "C" fn dkrt_tick() {
     worker::tick();
     io::tick();
     let mut i = 0;
-    while i < SERVICE_PHASES.len() {
-        let (p, spanned) = SERVICE_PHASES[i];
+    while i < TICK_STEPS.len() {
+        let (p, spanned) = TICK_STEPS[i];
         if spanned {
             phase(p);
         } else {
@@ -97,8 +99,6 @@ pub unsafe extern "C" fn dkrt_tick() {
         write_volatile(addr_of_mut!(mb.seq), mb.seq.wrapping_add(1));
         write_volatile(addr_of_mut!(mb.cmd), 0);
     }
-    // the tick of every loaded module (`dk_module.tick`)
-    hooks::tick(tick_phase::MODULES);
     poll_all();
 }
 
