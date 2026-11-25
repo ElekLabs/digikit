@@ -19,6 +19,7 @@ static int32_t init(dk_module_ctx *ctx)
     dk_page_add_fx_param(p, "Stereo Spread", "SPREAD", DK_PERCENT, 0.0f, 8.0f, 0.0f);
     dk_page_add_fx_param(p, "Drift Depth", "DRIFT", DK_PERCENT, 0.0f, 4.0f, 0.0f);
     dk_page_add_fx_param(p, "Drift Rate", "RATE", DK_PERCENT, 0.03125f, 0.125f, 0.0625f);
+    dk_page_add_fx_param(p, "Feedback", "FDBK", DK_PERCENT, 0.0f, 0.8f, 0.0f);
     return DK_OK;
 }
 

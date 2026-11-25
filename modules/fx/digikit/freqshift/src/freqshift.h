@@ -10,5 +10,7 @@
 #define FSHIFT_DRIFT_WORD 2
 // Parameter word p3: modulation frequency in Hz, 1/32 .. 1/8.
 #define FSHIFT_RATE_WORD 3
+// Parameter word p4: feedback loop gain, 0 .. 0.8.
+#define FSHIFT_FEEDBACK_WORD 4
 // Parameter words the effect reads.
-#define FSHIFT_KNOBS 4
+#define FSHIFT_KNOBS 5

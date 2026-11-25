@@ -24,6 +24,7 @@ Keep firmware, captures, generated catalogs and listening WAVs local under ignor
 | 5c. FREQ SHIFT listening and performance proof | Implemented and rig-verified | Spread was committed in `12c8ae781`. Drift and Rate were approved after the full-cycle A/B, though the difference was subtle on laptop speakers. No kit migration for the experimental prototype. |
 | 6. Reuse a real listening session | Host and DT2 emulator checked | [Workbench sessions](../WORKBENCH-SESSIONS.md) package the card and attachments and keep capture inspection independent. Underpass reopened with the same A01 grid and stab-only send. Automated project selection and saved audio views remain follow-ups. No new Workbench panel. |
 | 7. Stock audio reference pilot | Verified, ready for review | Underpass gives a conservative Feedback candidate. DN2 confirms the stock decay anchor and the DT2 plain-versus-PGO sweep is byte-identical. |
+| 7a. Run Feedback inside FREQ SHIFT | Verified, listening review open | The fifth knob controls a filtered 55 ms stereo loop. Zero Feedback is byte-identical to the previous build on both send rigs. Both emulator record checks and packs passed. |
 | 8. Replay a reference case on emulator and hardware | Planned follow-up | Reuse the shared session and calibration runner for one DT2 Delay case. Swap the target and PCM capture source without changing the case. |
 
 ## 1. Generate a catalog from one firmware file
@@ -200,16 +201,41 @@ The PGO build used the available DT2 profile without retraining. This
 verifies PCM for this stimulus and build pair, not host throughput, the
 PGO mode of the original pilot, or parity with a physical unit.
 
-**Next.** Keep 0.48 as the first Feedback candidate and 0.78 as the stronger
-audition option. The module still needs a production feedback loop, its own
-DSP cost and headroom checks, and a default and upper limit chosen separately.
-A hardware check is a separate validation, not a gate on the musical
-audition.
+**Implementation choice.** Keep 0.48 as the first Feedback candidate and
+0.78 as the stronger audition option. A hardware check is a separate
+validation, not a gate on the musical audition.
 
 **Exit check.** Reproduce the chosen stock Delay case from its inputs. Show
 which Feedback settings give a useful short tail and which settings should
 stay out of the default range. Document any emulator or capture limitations.
 No new Workbench UI or module control is required for the pilot.
+
+### 7a. Run Feedback inside FREQ SHIFT
+
+The fifth knob, FDBK, is off by default and capped provisionally at 0.8.
+The module feeds its filtered wet signal into the shifter after exactly
+2,640 frames, without changing the adapter's dry signal or MIX. The
+per-effect state is 22,356 bytes, including the stereo ring. Turning
+the knob off ramps the gain down over one block and invalidates the ring.
+The rig allocates and guards larger effect states from their descriptors.
+
+**Checks.** The Underpass stem and first-bar mix preserve the previous
+DT2 and DN2 send output byte-for-byte at zero. The two rigs match a
+separate float32 reference loop, including the half-block wrap. At 0.48
+and 0.78 the worst steady Underpass send blocks took 7,517 instructions
+on DT2 and 7,782 on DN2, compared with 6,505 and 6,770 at zero. The
+adapter's first-block state clear raised those active counts to 12,931
+and 13,196. These are rig counts, not board timing. The raw groove peak
+was at most −20.7 dBFS in these takes. A deliberately hot source can go
+above unity, so do not treat this comparison as a general headroom limit.
+The standard module check accepted both sets of registered records and
+measured 24,768 bytes of DSP area per pack, including code and alignment.
+Its packing check shows that either build fits on an empty target.
+
+**Review.** Listen to the in-module Underpass takes at zero, 0.48 and 0.78,
+with a shared audition gain. Keep the default off while the module is
+experimental. Review the upper limit by ear and with hot sources before
+promoting it. Hardware timing and loading are separate from this rig proof.
 
 ## 8. Replay a reference case on emulator and hardware
 

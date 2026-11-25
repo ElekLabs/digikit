@@ -30,6 +30,8 @@ import {
 import { OpQueue, hex, realRig, type RigOpener } from './ops.ts';
 import {
   CODE_BASE,
+  DATA_END,
+  FX_AUTO_STATE_BYTES,
   FX_FADETAB,
   FX_MASTER,
   FX_RETURN,
@@ -37,6 +39,7 @@ import {
   FX_TRACKBUS,
   buildFx,
   type FxBuilt,
+  type Range,
 } from './place.ts';
 import { PyRandom } from './prng.ts';
 import type { CallResult, RigPort } from './rig.ts';
@@ -47,6 +50,7 @@ const FREE_PC = 0xffffffff; // the pc of a free row (core/dynfx): the adapter sk
 const POISON = 0x7fc00001; // the initial word of every .PKBSS
 export const TRACKS = 16;
 export const MAX_ROWS = 4;
+export const FX_STATE_GUARD_WORDS = 16;
 // the row words (core/fx module.toml)
 export const PC = 0;
 export const DESC = 1;
@@ -161,6 +165,7 @@ export class FxRig {
   readonly stepLimit: number;
   lastCtx: Context = {};
   private readonly rows: Row[];
+  private readonly extendedStates = new Map<number, Range>();
   private readonly ctxRng: PyRandom;
   private readonly q = new OpQueue();
   private port!: RigPort;
@@ -203,6 +208,7 @@ export class FxRig {
       for (let k = 0; k < Math.floor(init.bytes.length / 4); k++)
         q.poke(nw(init.address) + k, init.bss ? POISON : view.getUint32(4 * k, true));
     }
+    this.reserveLargeStates(q);
     // what the fx service installs (R12-8): the stubs of core/fx jump to the dispatch entries through these slots (DK_SLOT_FX_ENTRY, DK_SLOT_FX_SEND)
     for (let k = 0; k < SLOT_WORDS; k++) q.poke(nw(SLOTS) + k, 0);
     q.poke(nw(SLOTS) + FX_ENTRY_SLOT, b.symbols._fx_dispatch ?? 0);
@@ -215,7 +221,7 @@ export class FxRig {
       }
       q.poke(base + PC, b.symbols[r.pc]!);
       q.poke(base + DESC, b.data[r.desc ?? '_te_desc']!);
-      q.poke(base + STATE, b.data[this.stateSymbol(i)]!);
+      q.poke(base + STATE, this.stateAddress(i));
       q.poke(base + ENABLED, r.enabled ?? 1);
       q.poke(base + MIX, r.mix ?? ONE);
       q.poke(base + ROUTE, r.route ?? ROUTE_MASTER);
@@ -232,9 +238,26 @@ export class FxRig {
     this.port = port;
   }
 
+  private reserveLargeStates(q: OpQueue): void {
+    // Allocate larger descriptors per active row, like the loader. The
+    // trailing poison guard is not part of the effect's writable state.
+    let end = Math.max(...this.built.inits.map((init) => init.address + init.bytes.length));
+    this.rows.forEach((row, i) => {
+      if (!row.pc || row.state) return;
+      const [, , , bytes] = this.descWords(row.desc ?? '_te_desc');
+      if (bytes === undefined || bytes < FX_AUTO_STATE_BYTES) return;
+      const address = Math.ceil(end / 8) * 8;
+      const words = bytes / 4 + FX_STATE_GUARD_WORDS;
+      end = address + words * 4;
+      if (bytes % 4 || end > DATA_END) throw new Error(`FX row ${i}: ${bytes} state bytes do not fit in rig L2`);
+      this.extendedStates.set(i, { address, bytes });
+      for (let k = 0; k < words; k++) q.poke(nw(address) + k, POISON);
+    });
+  }
+
   /** The byte address of the state block of row i. */
   stateAddress(i: number): number {
-    return this.built.data[this.stateSymbol(i)]!;
+    return this.extendedStates.get(i)?.address ?? this.built.data[this.stateSymbol(i)]!;
   }
 
   /** Set the first COUNT words of the state block of row I to WORD (before the first block): an effect must not depend on what the state held. */
@@ -435,6 +458,7 @@ export class FxRig {
     return [
       { address: this.built.data._fx_scratch!, bytes: 4 * 64 },
       ...this.built.moduleData,
+      ...this.extendedStates.values(),
       { address: STACK - stackBytes, bytes: stackBytes },
     ];
   }

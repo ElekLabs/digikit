@@ -15,10 +15,11 @@
 // before the buffer: a[n - 1] is read at n); a (P) and b (Q) differ in phase by 90 degrees to within 0.55 degrees from 30 Hz to 18 kHz (image rejection 46 dB).
 // out = a cos + b sin moves the input up by f (down for f < 0); it is clamped to +-7.9 (the effect must stay below the level bound, 8).
 //
-// State (944 bytes; the adapter zeroes it when the effect switches on): word 0 the phase, 1 the last block's increment, 2 the dk_fx_in pointer of this call,
+// The adapter zeroes state on switch-on. Word 0 is the phase, 1 the last block's increment, 2 the dk_fx_in pointer of this call,
 // 4 to 35 the section states of chain P and chain Q of the left and the right channel (8 words each: section k, even samples 2k, odd 2k + 1), 36 to 68 and 69 to 101
 // the one-sample delay buffers of the two channels (a carry word, then the 32 outputs of chain P), 102 to 165 cos and sin of the 32 samples.
 // Words 166 and 167 hold the side phase and increment. Words 168 to 170 are right-oscillator setup, and 171 to 234 its output. Word 235 is the Drift phase.
+// At nonzero FDBK (p4) the previous wet output is filtered, delayed by 55 ms and fed into the shifter again. See feedback.inc for this part of the state.
 
 #include "dk_fx.inc"
 #include "freqshift.h"
@@ -36,7 +37,8 @@
 #define FS_RIGHT_INC 169
 #define FS_RIGHT_STEP 170
 #define FS_DRIFT_PHASE 235
-#define FS_STATE_BYTES 944
+#define FS_FB_TARGET 236
+#define FS_INPUT 244
 // Integer increments at SHIFT -64 and +63, and float32 conversion from Hz to increments.
 #define FS_SHIFT_MIN -179397856
 #define FS_SHIFT_MAX 158148960
@@ -58,6 +60,8 @@ _fs_process:                              // R4 = state, R8 = dk_fx_in, R12 = th
     I5 = R4;
     DM(FS_FXIN, I5) = R8;
     I1 = R12;
+    R0 = DM(FSHIFT_FEEDBACK_WORD, I1);
+    DM(FS_FB_TARGET, I5) = R0;
     R0 = DM(FSHIFT_SHIFT_WORD, I1);       // p0, the SHIFT word
     // ---- the increment of this block: f = KHZ (2^x - 1), x = min(|v|, 64) / 5.5 ----
     F9 = PASS F0;
@@ -225,6 +229,9 @@ _fs_filter:
     // ---- chain P, left and right (the input advances from one channel to the other) ----
     I2 = DM(FS_FXIN, I5);
     I0 = DM(DK_FX_IN_W_IN, I2);
+    CALL _fs_fb_prepare;
+    R0 = I0;
+    DM(FS_INPUT, I5) = R0;
     R0 = I5;
     R1 = FS_AB0_1_B;
     R1 = R0 + R1;
@@ -241,7 +248,7 @@ _fs_filter:
     CALL _fs_pass_p;
     // ---- chain Q with the mix, left and right ----
     I2 = DM(FS_FXIN, I5);
-    I0 = DM(DK_FX_IN_W_IN, I2);
+    I0 = DM(FS_INPUT, I5);
     I1 = DM(DK_FX_IN_W_OUT, I2);
     R0 = I5;
     R1 = FS_AB0_B;
@@ -266,6 +273,7 @@ _fs_filter:
     CALL _fs_pass_q;
     R0 = DM(I2, M6);
     DM(FS_AB1, I5) = R0;
+    CALL _fs_fb_finish;
     R0 = DK_FX_OK;
     JUMP (M13, I13);
 
@@ -500,6 +508,8 @@ _fs_pq: DM(I1, M6) = R12;
     DM(7, I3) = R11;
     RTS;
 
+#include "feedback.inc"
+
 .SECTION/DM seg_dmda;
 // dk_fx_desc: magic, contract, n_params, state_bytes, max_call_depth, stack_bytes.
 .GLOBAL _fs_desc;
@@ -507,5 +517,5 @@ _fs_pq: DM(I1, M6) = R12;
 .VAR _fs_desc1 = DK_FX_V1;
 .VAR _fs_desc2 = FSHIFT_KNOBS;
 .VAR _fs_desc3 = FS_STATE_BYTES;
-.VAR _fs_desc4 = 1;
+.VAR _fs_desc4 = 2;
 .VAR _fs_desc5 = 0;

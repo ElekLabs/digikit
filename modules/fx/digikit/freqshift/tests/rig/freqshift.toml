@@ -408,7 +408,7 @@ blocks = 6
 
 [[case.check]]
 kind = "description"
-words = [0x444B4658, 1, 4, 944, 1, 0]
+words = [0x444B4658, 1, 5, 22356, 2, 0]
 
 [[case.check]]
 # core/fx around one call is about 520 instructions
