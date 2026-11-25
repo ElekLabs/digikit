@@ -1,4 +1,7 @@
-import { expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
 import { ownedConformance, ownerOf, ownershipSelection } from '../device-owners.mjs';
 
 const project = (
@@ -143,4 +146,63 @@ it('runs conformance only for the modules whose own source changed', () => {
   expect(ownedConformance(affected, graph, ['modules/tb303/src/x.c'])).toEqual(['tb303:test-conformance']);
   expect(ownedConformance(affected, graph, ['runtime/core/src/rs/src/boot.rs'])).toEqual([]);
   expect(ownedConformance(affected, graph, ['modules/other/README.md'])).toEqual([]);
+});
+
+// The authored declarations of the repository (project.json files) with the Cargo-inferred crate projects the tests name.
+describe('selection of the repository declarations', () => {
+  const root = path.resolve(import.meta.dirname, '../../..');
+  const authored = execFileSync('git', ['ls-files', '*project.json'], { cwd: root, encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean)
+    .map((f) => ({ file: f, json: JSON.parse(readFileSync(path.join(root, f), 'utf8')) }));
+  const inferred = [
+    ['dkrt-svc-machines', 'services/machines'],
+    ['dkrt-svc-lfo', 'services/lfo'],
+    ['core/runtime-storage', 'runtime/core/src/rs/src/storage'],
+    ['core/runtime-package', 'runtime/core/src/rs/src/package'],
+  ].filter(([n]) => !authored.some((a) => a.json.name === n));
+  const projects = [
+    ...authored.map(({ file, json }) => ({
+      name: json.name as string,
+      root: path.dirname(file),
+      subjects: (json.implicitDependencies ?? []) as string[],
+      targets: (json.metadata?.runtimeAcceptance ?? []).flatMap((r: { files?: string[]; devices?: string[] }) =>
+        (r.files ?? []).flatMap((f) =>
+          (r.devices ?? ['dt2', 'dn2']).map(
+            (d) => `test-device--${f.split('/').at(-1)!.replace('.device.test.ts', '')}--${d}`,
+          ),
+        ),
+      ),
+      metadata: json.metadata,
+    })),
+    ...inferred.map(([name, r]) => ({ name, root: r, subjects: [], targets: [], metadata: undefined })),
+  ];
+  const selected = (changed: string[]) =>
+    ownershipSelection(projects, {
+      changed,
+      closureOf: () => [],
+      portUsers: () => [],
+      deviceOf: () => undefined,
+    }).tests.map((t) => `${t.project}:${t.file}`);
+
+  it('a change of the machines service crate selects shot-picker', () => {
+    expect(selected(['services/machines/src/lib.rs'])).toContain('digikit/shot:tests/shot-picker.device.test.ts');
+  });
+
+  it('a change of sdk/sdk.toml selects the loader and package tests', () => {
+    const tests = selected(['sdk/sdk.toml']);
+    for (const t of [
+      'entry.device.test.ts',
+      'module-load.device.test.ts',
+      'refusal.device.test.ts',
+      'capacity.device.test.ts',
+    ])
+      expect(tests.some((x) => x.endsWith(`:${t}`))).toBe(true);
+  });
+
+  it('a change of the storage code selects the transfer upload tests and the lfo shape project test', () => {
+    const tests = selected(['runtime/core/src/rs/src/storage/card.rs']);
+    expect(tests).toContain('core/runtime-transfer-tests:upload.device.test.ts');
+    expect(tests).toContain('core/runtime-lfo-tests:lfo-shape-project.device.test.ts');
+  });
 });
