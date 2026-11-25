@@ -23,8 +23,9 @@ impl __CAMEL__ {
 
 impl<C: CoreApi> Provider<C> for __CAMEL__ {
     /// The file's `init`, before the declarations: make the object. No consumer is attached yet.
-    fn start(_core: &C) -> Result<__CAMEL__, Status> {
-        Ok(__CAMEL__)
+    fn start_in(_core: &C, slot: &mut core::mem::MaybeUninit<__CAMEL__>) -> Result<(), Status> {
+        slot.write(__CAMEL__);
+        Ok(())
     }
 }
 

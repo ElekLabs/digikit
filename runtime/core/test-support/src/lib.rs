@@ -21,7 +21,7 @@ use dkrt_link::Link;
 use dkrt_sdk::api::{JobDoneFn, JobStepFn};
 pub use driver::{Driver, Subject};
 pub use provider_driver::{
-    provider_contract, Provided, ProviderDriver, Recipe, RowBuilder, Started,
+    provider_contract, start_boxed, Provided, ProviderDriver, Recipe, RowBuilder, Started,
 };
 use std::boxed::Box;
 use std::string::String;

@@ -66,16 +66,6 @@ fn started(core: &FakeCore) -> Result<Box<Machines>, dkrt_abi::provider::Status>
     Ok(unsafe { Box::from_raw(Box::into_raw(slot) as *mut Machines) })
 }
 
-/// The by-move `start` is no start path: the state points into itself, so it refuses.
-#[test]
-fn start_by_move_is_refused() {
-    let core = core_with(Some(table(2)), 2);
-    assert!(matches!(
-        <Machines as Provider<FakeCore>>::start(&core),
-        Err(E_FORMAT)
-    ));
-}
-
 #[test]
 fn start_refuses_an_image_without_a_usable_table_and_binds_a_good_one() {
     let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());

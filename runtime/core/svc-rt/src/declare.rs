@@ -48,7 +48,7 @@ pub const DEVICE_DT2: u32 = dkrt_abi::profiles::DT2.id;
 #[doc(hidden)]
 pub const DEVICE_DN2: u32 = dkrt_abi::profiles::DN2.id;
 
-/// The declarations of a service file (`service!`): each record kind in `kinds`, the row with the instance `Provider::start` made, then the hooks, fills, patches and exports. `instance` is null before `start` (the host test of the assembly replays the
+/// The declarations of a service file (`service!`): each record kind in `kinds`, the row with the instance `Provider::start_in` made, then the hooks, fills, patches and exports. `instance` is null before `start` (the host test of the assembly replays the
 /// declarations without one; the runtime refuses such a row at the commit).
 ///
 /// # Safety

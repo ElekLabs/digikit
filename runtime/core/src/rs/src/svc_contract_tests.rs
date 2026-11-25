@@ -89,8 +89,9 @@ fn the_link_and_the_job_queue_answer_over_the_c_shape() {
 /// A service that does nothing: only the row and the glue are looked at.
 struct Nothing;
 impl<C: CoreApi> Provider<C> for Nothing {
-    fn start(_core: &C) -> Result<Nothing, Status> {
-        Ok(Nothing)
+    fn start_in(_core: &C, slot: &mut core::mem::MaybeUninit<Nothing>) -> Result<(), Status> {
+        slot.write(Nothing);
+        Ok(())
     }
 }
 impl<C: CoreApi> Records<C> for Nothing {}

@@ -564,7 +564,7 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
 - **Patches.** A patch is plain bytes (1, 2 or 4) at a data site of the firmware, as an operand of an instruction or a table word, that a service replaces with a value of its own and the loader gives
   back before the service stops. The port declaration is a raw `[[hook]]` (`mode = "replace"`, no handler, `tail`, `stock` or `exits`) with `patch = N`: its `site` and `offset` give the bytes (the
   anchor must cover them); `patchkit port facts` writes the length `N`, the kind `patch` and the check value of the stock bytes into the port file (`SITES`, kind 3). A service names it with `[[patch]] name = "..."`
-  in its `module.toml` (`devices` as for a hook) and `patches = [("name", N, f)]` in `service!`, where `f` is a `fn(&Service) -> u32` that gives the bytes (the low `N`) from the instance `Provider::start` made
+  in its `module.toml` (`devices` as for a hook) and `patches = [("name", N, f)]` in `service!`, where `f` is a `fn(&Service) -> u32` that gives the bytes (the low `N`) from the instance `Provider::start_in` made
   (a table address, a count): the values exist only at run time, so `init` declares them with `dk_service_declare_patch` (a service-only import, beside `dk_service_declare_hook`) and the header table holds only
   a `HOOKS` item whose entry word is `HOOK_ENTRY_PATCH` (the low 24 bits set; the device mask works as for a hook). The installer takes hooks and patches of a file together: the layout (overlaps, at most
   `install_patches` over all providers), the stock copy of each site and its check value are checked outside the interrupt mask, nothing is written when one differs (`E_HOOK_STOCK`, or `E_FORMAT` for a declared

@@ -296,7 +296,7 @@ fn only_one_binding_is_active_and_the_first_owner_of_a_pair_is_the_one_called() 
 #[test]
 fn start_makes_an_owner_with_nothing_bound_held_or_queued_and_a_closed_builder() {
     let core = FakeCore::new();
-    let mut s = <Shortcuts as Provider<FakeCore>>::start(&core).unwrap();
+    let mut s = dkrt_test_support::start_boxed::<Shortcuts>(&core).unwrap();
     assert!(s.active().is_none() && s.table().len() == 0 && s.pending() == 0);
     let p = device();
     let mut log = Box::new(Log::new());

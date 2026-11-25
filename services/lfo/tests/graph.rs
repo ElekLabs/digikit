@@ -180,7 +180,7 @@ fn a_gap_number_gets_the_stock_tri_marker() {
     use dkrt_test_support::FakeCore;
     let _g = lock();
     let core = FakeCore::new();
-    let mut lfo = <Lfo as Provider<FakeCore>>::start(&core).unwrap();
+    let mut lfo = *dkrt_test_support::start_boxed::<Lfo>(&core).unwrap();
     let (key_a, key_b) = (0x00a1_0100u32, 0x00b2_0200u32);
     let mut sel = SettleCtx::new();
     sel.count = 1;

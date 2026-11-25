@@ -157,8 +157,9 @@ fn a_module_starts_with_init_and_stops_with_fini_and_a_failed_start_is_freed() {
 
 struct Recorder;
 impl<C: dkrt_abi::core_api::CoreApi> Provider<C> for Recorder {
-    fn start(_: &C) -> Result<Recorder, i32> {
-        Ok(Recorder)
+    fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Recorder>) -> Result<(), i32> {
+        slot.write(Recorder);
+        Ok(())
     }
     fn detach(&mut self, _: &C, consumer: ConsumerId) {
         REMOVED.lock().unwrap_or_else(|e| e.into_inner()).push(consumer.get());
@@ -384,8 +385,9 @@ fn registry_block(kinds: &[u32]) -> Vec<u8> {
 /// A service that owns the kinds of one parity (`T` = 1: odd, 2: even) and logs each call with its tag; a record of kind 99 is refused.
 struct Tag<const T: u32>;
 impl<const T: u32, C: dkrt_abi::core_api::CoreApi> Provider<C> for Tag<T> {
-    fn start(_: &C) -> Result<Tag<T>, i32> {
-        Ok(Tag)
+    fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Tag<T>>) -> Result<(), i32> {
+        slot.write(Tag);
+        Ok(())
     }
     fn attach(&mut self, c: &C, _: &Consumer<'_>) -> Result<(), i32> {
         WALKED.lock().unwrap_or_else(|e| e.into_inner()).push((T, 0));
@@ -508,8 +510,9 @@ fn attach_walks_every_apply_then_the_records_in_file_order_across_the_services_a
 /// A service that refuses every take-down (`Provider::can_stop`): a routed effect is on its bus.
 struct Refuser;
 impl<C: dkrt_abi::core_api::CoreApi> Provider<C> for Refuser {
-    fn start(_: &C) -> Result<Refuser, i32> {
-        Ok(Refuser)
+    fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Refuser>) -> Result<(), i32> {
+        slot.write(Refuser);
+        Ok(())
     }
     fn can_stop(&self, _: &C) -> Result<(), i32> {
         Err(E_RELOAD_ROUTED)

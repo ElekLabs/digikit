@@ -24,7 +24,7 @@ tests/            host tests over `FakeCore`: `state.rs` (owner logic), `records
 
 What goes where (copy this split):
 
-- The owner holds all state as private fields: no `static mut`, no lock. The file's cell (`DK_SVC_OWNER`, made by `service!`) holds the one instance: `Provider::start` makes it in
+- The owner holds all state as private fields: no `static mut`, no lock. The file's cell (`DK_SVC_OWNER`, made by `service!`) holds the one instance: `Provider::start_in` makes it in
   the file's `init`, `Provider::stop` ends it in `fini`. The cell is `.bss` (zeroed bytes plus a live flag), and the state is made and dropped where it lives: a service with
   a large state overrides `Provider::start_in` to write it into the slot (here one zero fill; a copy of the value `start` returns would pass through the stack), and `stop`
   takes `&mut self` and the cell drops the value in place. A hook or a builder call in `dks/` reaches it with `DK_SVC_OWNER.with(|s| ...)`; a call before `start` or after
@@ -44,7 +44,7 @@ What goes where (copy this split):
 - A provider with no record kinds has no `src/records.rs` and no `pub mod records`/`slots` (`patchkit service-check` accepts it when the manifest gives it no kind and `service!` uses
   `parts = [...]`): its parts (`Dsp`, `Tick`, ...) sit beside the owner, and `service!` takes `&[]` for the kinds. A provider with kinds keeps `records.rs`, `pub mod records` and
   `&KINDS_<NAME>`. A provider with no `provided` imports leaves out `exports`: `service!(Owner, "name", &[], parts = [...], hooks = [...], fills = [...])`.
-- Tests: the file's wrapper code in `file.rs` (with no owner it answers `E_CONTEXT` and passes the key); logic in `state.rs` over `Shortcuts::new()` or `Provider::start`; the loader's walk (commit, check, apply, detach) in `records.rs` over one owner per test; the shared
+- Tests: the file's wrapper code in `file.rs` (with no owner it answers `E_CONTEXT` and passes the key); logic in `state.rs` over `Shortcuts::new()` or `Provider::start_in`; the loader's walk (commit, check, apply, detach) in `records.rs` over one owner per test; the shared
   suite in `contract.rs` through `provider_contract` (its fixture functions reach the started owner with `dkrt_test_support::subject`).
 
 - A failed start leaves nothing to drop: write the state fully before returning `Ok`, or return `Err` without partial state (the cell stays empty and `stop` never runs on it).

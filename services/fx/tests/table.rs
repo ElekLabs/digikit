@@ -1,7 +1,7 @@
 //! Host tests of the fx service over `FakeCore`: the table of the effect pages (the device facts and the blocks of `rows_info`), the send limit that comes from it, and what the service does
 //! when the blocks are missing or do not fit (the file refuses to load). The page rows and the hooks write raw 32-bit firmware addresses, which a host cannot
 //! reach: the device tests (`core/fx`, with `fx.dks` on the card) cover those.
-use dkrt_abi::provider::{Describe, DspPart, Provider};
+use dkrt_abi::provider::{Describe, DspPart};
 use dkrt_sdk::proto::{CAPK_FX_SLOTS, CAPK_SEND_SLOTS};
 use dkrt_sdk::{E_NO_REGISTRY, OK};
 use dkrt_svc_fx::fx::Fx;
@@ -174,7 +174,7 @@ fn without_rows_info_or_with_blocks_that_do_not_fit_the_file_refuses_to_load() {
     }
 }
 
-/// The owner's `start` is the file's `init` step: it binds the table and refuses the file when the image has no `rows_info` with the blocks.
+/// The owner's `start_in` is the file's `init` step: it binds the table and refuses the file when the image has no `rows_info` with the blocks.
 #[test]
 fn the_owner_starts_over_the_blocks_of_the_image_and_refuses_the_file_without_them() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -183,13 +183,13 @@ fn the_owner_starts_over_the_blocks_of_the_image_and_refuses_the_file_without_th
     let mut bare = FakeCore::new();
     bare.device = device;
     assert_eq!(
-        <Fx as Provider<FakeCore>>::start(&bare).map(|_| ()),
+        dkrt_test_support::start_boxed::<Fx>(&bare).map(|_| ()),
         Err(E_NO_REGISTRY),
         "no rows_info in the image"
     );
     unsafe { fxpage::unbind() };
     let core = core_with_blocks(device);
-    assert!(<Fx as Provider<FakeCore>>::start(&core).is_ok());
+    assert!(dkrt_test_support::start_boxed::<Fx>(&core).is_ok());
     assert!(
         unsafe { fxpage::available(&FakeCore::new()) },
         "the table stays bound for the hooks"

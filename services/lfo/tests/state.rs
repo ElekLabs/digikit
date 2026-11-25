@@ -25,17 +25,3 @@ fn start_in_over_a_dirty_slot_gives_the_initial_state() {
     let lfo = unsafe { slot.assume_init() };
     assert_eq!(lfo.number_of(0, 0x00a1_0100), 0);
 }
-
-#[test]
-fn start_and_start_in_make_the_same_bytes() {
-    let core = FakeCore::new();
-    let made = <Lfo as Provider<FakeCore>>::start(&core).unwrap();
-    // SAFETY: plain integers and arrays of them
-    let bytes = unsafe {
-        core::slice::from_raw_parts(
-            &made as *const Lfo as *const u8,
-            core::mem::size_of::<Lfo>(),
-        )
-    };
-    assert!(bytes.iter().all(|b| *b == 0));
-}

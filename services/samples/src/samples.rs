@@ -26,7 +26,7 @@ pub struct Samples {
 }
 
 impl Samples {
-    /// A service over the backing `pool` (`Pool::none()`: no adapter, so every `sample_pool_add` refuses) and the pool table `table`. `Provider::start` empties the table and tells
+    /// A service over the backing `pool` (`Pool::none()`: no adapter, so every `sample_pool_add` refuses) and the pool table `table`. `Provider::start_in` empties the table and tells
     /// it whether an adapter is installed; this constructor leaves the table as it is.
     pub fn new(pool: Pool, table: &'static PoolCell) -> Samples {
         Samples {
@@ -132,13 +132,6 @@ impl Samples {
 impl<C: CoreApi> Provider<C> for Samples {
     /// The adapter's calls come from its table `sample_pool_info`. Without the adapter the file does not load (`requires = core/sample-pool` of its module.toml, so its users are
     /// refused with a missing need); `Pool::none()` here is a host build, where there is no way to call the adapter.
-    fn start(core: &C) -> Result<Samples, Status> {
-        // SAFETY: the table of the image holds the addresses of the adapter's functions
-        let pool = unsafe { Pool::from_info(core) };
-        PoolTable::reset(&POOL_TABLE, core, pool.present());
-        Ok(Samples::new(pool, &POOL_TABLE))
-    }
-
     /// The state is made where it lives: the tracks are 35 kB, so no copy of the value goes through the stack.
     fn start_in(core: &C, slot: &mut MaybeUninit<Samples>) -> Result<(), Status> {
         let p = slot.as_mut_ptr();

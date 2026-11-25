@@ -209,6 +209,14 @@ impl<R: Recipe> ProviderDriver<R> {
     }
 }
 
+/// Start the owner object of `P` over `core` where it lives, in a box that keeps its address (`Provider::start_in`, as the file's `init` does): for a host test that has no row.
+pub fn start_boxed<P: Provider<FakeCore>>(core: &FakeCore) -> Result<Box<P>, Status> {
+    let mut slot = Box::new(core::mem::MaybeUninit::<P>::uninit());
+    P::start_in(core, &mut slot)?;
+    // SAFETY: `start_in` wrote the whole value; `MaybeUninit<T>` and `T` have one layout
+    Ok(unsafe { Box::from_raw(Box::into_raw(slot) as *mut P) })
+}
+
 impl<R: Recipe> Driver for ProviderDriver<R> {
     fn start(core: &FakeCore) -> Self {
         let started = R::parts(RowBuilder::<R::P>::new(R::NAME))

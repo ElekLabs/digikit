@@ -41,8 +41,9 @@ impl LocalPing {
 }
 
 impl<C: CoreApi> Provider<C> for LocalPing {
-    fn start(_: &C) -> Result<LocalPing, Status> {
-        Ok(LocalPing::default())
+    fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<LocalPing>) -> Result<(), Status> {
+        slot.write(LocalPing::default());
+        Ok(())
     }
 
     fn attach(&mut self, _: &C, consumer: &Consumer<'_>) -> Result<(), Status> {

@@ -1,6 +1,6 @@
 //! The sample backing plug-in point (`dkrt_pool.h`, version 1) as the service uses it: a table of function pointers, found through the adapter's data table
 //! `sample_pool_info` (`CoreApi::info`), not through link symbols of the image. A service file links no adapter symbol; the table is the one place that names
-//! the adapter, and `Provider::start` of the owner (or a host test, with `Pool::new`) installs it.
+//! the adapter, and `Provider::start_in` of the owner (or a host test, with `Pool::new`) installs it.
 //!
 //! `sample_pool_info` (big-endian words, ColdFire): magic `DKSP`, version, a reserved word, then the addresses of `dkpool_load`, `dkpool_release`, `dkpool_check`,
 //! `dkpool_free_frames`, `dkpool_tick` and the optional `dkpool_cancel`, `dkpool_peaks`, `dkpool_window_step` (0: the adapter has no such hook).
