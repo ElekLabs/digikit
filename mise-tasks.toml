@@ -328,7 +328,7 @@ description = "Check one module: module:check ID [--device dt2|dn2] [--trace]; a
 
 ["module:audit"]
 run = "sh tools/devtools/module_audit.sh"
-description = "ColdFire memory audit of one run-time module in the emulator: `module:audit NAME [--device dt2|dn2]`. Loads the module (and the run-time modules it requires) on a ColdFire-only rig, drives the UI for a bounded time (DIGIKIT menu, machine list, parameter turns, project save and load) and reports every store into the free regions outside the module blocks by code that is not a patch object (pc, address, size, the code it belongs to). Runs a Vitest device test (runtime/core/tests/memaudit-module.manual.device.test.ts) with DIGI_AUDIT_MODULE=NAME. About 1 to 2 minutes per device"
+description = "ColdFire memory audit of one run-time module in the emulator: `module:audit NAME [--device dt2|dn2]`. Loads the module (and the run-time modules it requires) on a ColdFire-only rig, drives the UI for a bounded time (DIGIKIT menu, machine list, parameter turns, project save and load) and reports every store into the free regions outside the module blocks by code that is not a patch object (pc, address, size, the code it belongs to). Runs a Vitest device test (runtime/core/tests/diag/memaudit-module.manual.device.test.ts) with DIGI_AUDIT_MODULE=NAME. About 1 to 2 minutes per device"
 
 ["lfo:report"]
 run = "sh tools/devtools/lfo_report.sh"

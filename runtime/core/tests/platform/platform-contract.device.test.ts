@@ -10,7 +10,7 @@ import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime
 
 /**
  * The platform contract (docs/plans/runtime-and-services.md, "Platform adapter"), run against the real platform on each device. The expectation
- * table is `platform/contract.toml`; the host side of each row is a `FakePlatform` test of the runtime crate (`fake_platform.rs`). The numbers that
+ * table is `contract.toml` beside this file; the host side of each row is a `FakePlatform` test of the runtime crate (`fake_platform.rs`). The numbers that
  * a device file owns are read from the device file, never written here.
  *
  * Rows checked here: `identity` (the device object's words are the device file's id, name and capabilities), `midi_out` (a reply reaches the
@@ -18,6 +18,7 @@ import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime
  * resolved). The other rows name the device test that covers them, or say why none can.
  */
 const HERE = path.dirname(new URL(import.meta.url).pathname);
+const ROOT = path.join(HERE, '../../../..');
 const CHECKS_HERE = ['identity', 'midi_out', 'anchors'];
 
 interface Row {
@@ -26,7 +27,7 @@ interface Row {
   device_pending?: string;
 }
 
-const contract = parse(fs.readFileSync(path.join(HERE, 'platform/contract.toml'), 'utf8')) as unknown as { check: Row[] };
+const contract = parse(fs.readFileSync(path.join(HERE, 'contract.toml'), 'utf8')) as unknown as { check: Row[] };
 
 runtimeTests('platform contract: identity, MIDI output and anchors on the real platform', async (runtime) => {
   const { session, dk } = runtime;
@@ -35,7 +36,7 @@ runtimeTests('platform contract: identity, MIDI output and anchors on the real p
   for (const row of contract.check) {
     expect(row.device !== undefined || row.device_pending !== undefined, `${row.id}: a device check or a reason`).toBe(true);
     if (row.device !== undefined && !CHECKS_HERE.includes(row.device)) {
-      expect(fs.existsSync(path.join(HERE, row.device)), `${row.id}: ${row.device} is a device test of this folder`).toBe(true);
+      expect(fs.existsSync(path.join(ROOT, row.device)), `${row.id}: ${row.device} is a device test file`).toBe(true);
     }
   }
 

@@ -1,0 +1,84 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-transfer-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime"
+  ],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "upload.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
+        "tags": [
+          "C:storage",
+          "C:transport"
+        ],
+        "modules": [],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "upload-depth.device.test.ts"
+        ],
+        "tags": [
+          "C:transport"
+        ],
+        "modules": [],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "upload-faults.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
+        "dsp": "sharc",
+        "tags": [
+          "C:layout",
+          "C:storage",
+          "C:transport"
+        ],
+        "modules": [
+          "test/sine",
+          "core/services/machines"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "transfer-live.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "tags": [
+          "C:storage",
+          "C:transport"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/sine",
+          "core/services/machines"
+        ],
+        "sources": [
+          "tools/devtools/wb.mjs",
+          "tools/devtools/wb_transfer.mjs",
+          "packages/devices/src/node.ts",
+          "packages/devices/src/parse.ts",
+          "packages/workbench-core/src/modules/dktransfer.ts",
+          "packages/workbench-core/src/node/node-host.ts",
+          "packages/workbench-core/src/node/stock-image.ts"
+        ]
+      }
+    ],
+    "mergeTests": [
+      "upload-depth.device.test.ts"
+    ]
+  }
+}

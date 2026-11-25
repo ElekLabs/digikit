@@ -9,13 +9,13 @@
       "dependsOn": [
         {
           "projects": [
-            "core/runtime-tests"
+            "core/runtime-boot-tests"
           ],
           "target": "test-device--boot-restart--dt2"
         },
         {
           "projects": [
-            "core/runtime-tests"
+            "core/runtime-boot-tests"
           ],
           "target": "test-device--boot-restart--dn2"
         },
@@ -69,25 +69,25 @@
         },
         {
           "projects": [
-            "core/runtime-tests"
+            "core/runtime-boot-tests"
           ],
           "target": "test-device--safe-mode--dt2"
         },
         {
           "projects": [
-            "core/runtime-tests"
+            "core/runtime-boot-tests"
           ],
           "target": "test-device--safe-mode--dn2"
         },
         {
           "projects": [
-            "core/runtime-tests"
+            "core/runtime-transfer-tests"
           ],
           "target": "test-device--transfer-live--dt2"
         },
         {
           "projects": [
-            "core/runtime-tests"
+            "core/runtime-transfer-tests"
           ],
           "target": "test-device--transfer-live--dn2"
         },
@@ -105,7 +105,7 @@
         },
         {
           "projects": [
-            "core/runtime-tests"
+            "core/runtime-storage-tests"
           ],
           "target": "test-device--card-guard--st"
         }

@@ -2,7 +2,7 @@
   "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
   "name": "native-page-proof-tests",
   "tags": ["test-only"],
-  "implicitDependencies": ["core/runtime", "core/rows"],
+  "implicitDependencies": ["core/ui", "core/rows"],
   "metadata": {
     "runtimeAcceptance": [
       {

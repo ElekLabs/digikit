@@ -19,7 +19,5 @@
       }
     ]
   },
-  "implicitDependencies": [
-    "core/runtime"
-  ]
+  "implicitDependencies": ["core/ui"]
 }

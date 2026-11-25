@@ -2,7 +2,7 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime-fixture-tests",
   "tags": ["test-only"],
-  "implicitDependencies": ["core/runtime"],
+  "implicitDependencies": ["core/runtime-package", "dkrt-link", "dkrt-abi", "core/dsp-link", "core/dyndsp"],
   "metadata": {
     "mergeTests": ["module-load.device.test.ts"],
     "runtimeAcceptance": [

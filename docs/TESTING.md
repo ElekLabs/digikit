@@ -192,13 +192,13 @@ A new service or runtime mechanism adds an assembly case before its first device
 
 | Test | Project |
 |---|---|
-| `boot-restart` | `core/runtime-tests` |
+| `boot-restart` | `core/runtime-boot-tests` |
 | `live` | `core/runtime-tests` |
 | `services/providers` | `core/runtime-provider-tests` |
 | machines `equiv` | `core/runtime-machines-tests` |
 | `settings/settings-api` | `core/runtime-settings-tests` |
-| `safe-mode` | `core/runtime-tests` |
-| `transfer-live` | `core/runtime-tests` |
+| `safe-mode` | `core/runtime-boot-tests` |
+| `transfer-live` | `core/runtime-transfer-tests` |
 | digikit-menu `zero/menu` | `core/digikit-menu-zero-tests` |
 
 ```text
@@ -464,8 +464,9 @@ A module keeps its tests in its own `tests/` folder. Content modules use `module
   next to the test is imported by name. Use `Path(__file__).parents[1]` for the module folder.
 - `*.test.ts`: Vitest project `module-tests` of `vitest.host.projects.json` (`pnpm test:host`), found recursively under the module roots.
 - `*.device.test.ts`: device tests, registered in the owner's `project.json` (`metadata.runtimeAcceptance`, files relative to that
-  project root) and run by Vitest's `runtime` project. Runtime acceptance is owned by `core/runtime-tests`
-  (`runtime/core/tests/project.json`) with CF-only service commands and settings in nested
+  project root) and run by Vitest's `runtime` project. Runtime acceptance is split by concern: `core/runtime-tests` (the package: reload, live, missing; `runtime/core/tests/project.json`),
+  `core/runtime-boot-tests`, `core/runtime-transfer-tests`, `core/runtime-diag-tests`, `core/runtime-platform-tests`,
+  `core/runtime-storage-tests` and `core/services/samples-tests` (each in the folder of that name), with CF-only service commands and settings in nested
   `core/runtime-service-tests` and `core/runtime-settings-tests` (`service-commands/project.json` and
   `settings/project.json`). Each owner's `test-device` runs its files;
   `mise run module:check core/runtime` discovers and runs all owners serially.
@@ -715,10 +716,10 @@ sources/includes, variant toolchains and mutable object caches have no proven bo
 3. Which tests are live, and why:
 
    ```text
-   $ pnpm nx:pilot show target inputs core/runtime-tests:test-device--store-format --json
+   $ pnpm nx:pilot show target inputs core/runtime-storage-tests:test-device--store-format --json
    depOutputs: ["dist/bytes/pack-verdicts.json", "dist/bytes/patchkit-test-dn2.key", "dist/plusdrive/plusdrive"]   # the --dn2 half
    files containing tests/regression/runtime/patchkit.ts
-   $ pnpm nx:pilot show project core/runtime-tests --json   # targets["test-device--store-format--dn2"].options.env
+   $ pnpm nx:pilot show project core/runtime-storage-tests --json   # targets["test-device--store-format--dn2"].options.env
    {"DIGI_PATCHKIT_LIVE": "1", "DIGI_DEVICE": "dn2"}      # test-device--safe-mode--dn2 has no DIGI_PATCHKIT_LIVE
    ```
 
@@ -773,7 +774,7 @@ and a table named like the kind. Kinds:
 | `pages` | Parameter pages of a machine on track 1: an added machine has one SRC page (no page dots, no sample view) and the stock sample machines keep two. |
 
 Every scenario ends with the write-watch over `cf.expansion` (0 stray writes), the flush check (0 hits)
-and the card-sector check. Tiers: `DIGIKIT_TIER=quick` is the default. The store's cut and tear tests (`runtime/core/tests/upload-faults.device.test.ts`: upload cuts, torn headers, the CLEAR double fault) are full tier: the default gate skips them. Run them with `pnpm nx:pilot run core/runtime-tests:test-device-all--upload-faults` (sets the tier) or `DIGIKIT_TIER=full pnpm nx:pilot run core/runtime-tests:test-device--upload-faults` (add `--dt2` or `--dn2` for one device). The default `mise run test` gate does not select full-tier tests. `mise run test:full` runs every `test-device-all` twin with `DIGIKIT_TIER=full` (set by the target) and the separate `core/runtime-inferred-needs-tests:test-device-full` target; `mise run module:check` sets it for a module's own scenarios.
+and the card-sector check. Tiers: `DIGIKIT_TIER=quick` is the default. The store's cut and tear tests (`runtime/core/tests/transfer/upload-faults.device.test.ts`: upload cuts, torn headers, the CLEAR double fault) are full tier: the default gate skips them. Run them with `pnpm nx:pilot run core/runtime-tests:test-device-all--upload-faults` (sets the tier) or `DIGIKIT_TIER=full pnpm nx:pilot run core/runtime-tests:test-device--upload-faults` (add `--dt2` or `--dn2` for one device). The default `mise run test` gate does not select full-tier tests. `mise run test:full` runs every `test-device-all` twin with `DIGIKIT_TIER=full` (set by the target) and the separate `core/runtime-inferred-needs-tests:test-device-full` target; `mise run module:check` sets it for a module's own scenarios.
 Both use the newest image of each device. Cards are cached by content in `out/cache/digikit/cards/`.
 Jobs: `DIGI_JOBS`. `DIGIKIT_PROFILE=1` prints the phase table,
 `DIGIKIT_RUN_SALT=x` forces cold boots.

@@ -6,7 +6,7 @@ import {
   uploadItems,
   type UploadEvent,
   type Uploads,
-} from '../../../packages/workbench-core/src/transfer/sample-upload.ts';
+} from '../../../../packages/workbench-core/src/transfer/sample-upload.ts';
 
 /** The files under `folder`, with their paths from the top, folders walked. */
 async function files(dev: SamplesBackend, folder: string): Promise<string[]> {

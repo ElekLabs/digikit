@@ -4,9 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": [
-    "core/runtime"
-  ],
+  "implicitDependencies": ["core/runtime-storage"],
   "metadata": {
     "runtimeAcceptance": [
       {

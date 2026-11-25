@@ -4,10 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": [
-    "core/runtime",
-    "core/services/shortcuts"
-  ],
+  "implicitDependencies": ["core/services/shortcuts"],
   "metadata": {
     "runtimeAcceptance": [
       {

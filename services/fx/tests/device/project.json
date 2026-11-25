@@ -4,10 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": [
-    "core/runtime",
-    "core/services/fx"
-  ],
+  "implicitDependencies": ["core/services/fx", "core/fx", "core/dynfx"],
   "metadata": {
     "runtimeAcceptance": [
       {
