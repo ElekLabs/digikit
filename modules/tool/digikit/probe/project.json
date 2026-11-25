@@ -1,6 +1,7 @@
 {
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "digikit/probe",
+  "implicitDependencies": ["core/services/fx", "digikit/remote"],
   "metadata": {
     "runtimeAcceptance": [
       {
