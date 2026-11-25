@@ -21,5 +21,5 @@ names = ["local_step_value"]
 
 [[object]]
 path = "build/local-step-user.dko.json"
-sources = ["src/user.c"]
+sources = ["src/c/user.c"]
 place = "cf.expansion"

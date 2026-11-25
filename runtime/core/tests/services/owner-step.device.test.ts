@@ -35,7 +35,8 @@ cardRigs('owner step', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS }, (h) =>
 
     const seen = await counts();
     expect(seen.steps, 'the hook ran the step').toBe(1);
-    expect(seen.reentries, 'the act re-entered the owner').toBe(1);
+    // two re-entries: the client's init calls the export once, and the hook's act re-enters the owner outside it
+    expect(seen.reentries, 'the client init call and the act re-entered the owner').toBe(2);
     expect(await refusedCalls(rt, h.plan, 'local-step'), 'the nested call inside the owner was refused once').toBe(1);
     await session.expectNoFault('owner step');
   });
