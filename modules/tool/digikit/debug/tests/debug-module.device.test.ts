@@ -76,7 +76,8 @@ async function expectWithDebugModule(runtime: PatchedSession): Promise<void> {
   modulesLevels[probe.index] = 4;
   expect(await dk.setLogConfig(1, modulesLevels)).toEqual({ level: 1, modules: modulesLevels, debug: true });
   expect(await dk.logConfig()).toEqual({ level: 1, modules: modulesLevels, debug: true });
-  expect((await dk.request(SERVICE_CMD.LOGCFG, Uint8Array.of(4, 1))).status, 'the old debug switch is gone').toBe(-60);
+  // the old 2-byte debug switch form is now rejected as malformed by the extended LOGCFG layout (op 4 is the view observer get and takes no body)
+  expect((await dk.request(SERVICE_CMD.LOGCFG, Uint8Array.of(4, 1))).status, 'the old debug switch is gone').toBe(-50);
 
   // PEEK: the first range of the device file starts at the firmware's data
   const ok = await dk.request(SERVICE_CMD.PEEK, new Uint8Array([...be32(0x40000000), 0, 16]));
