@@ -19,7 +19,7 @@ import { currentRecord } from '@digi/regression/runtime/card-record.ts';
 import { listing, type Files } from '@digi/regression/runtime/card-store.ts';
 import { pokeWord } from '@digi/regression/runtime/guest-mailbox.ts';
 import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
-import { options } from '@digi/regression/runtime/fx-live.ts';
+import { options } from '@digi/regression/runtime/devices.ts';
 import { word } from '@digi/regression/runtime/guest-access.ts';
 import { REDRAW } from '@digi/regression/runtime/panel-waits.ts';
 import { wordBase } from '@digi/regression/runtime/memory.ts';

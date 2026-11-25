@@ -793,6 +793,7 @@
   "tests/regression/host/write-safety.test.ts": 4,
   "tests/regression/package.json": 3,
   "tests/regression/runtime/card-rig.ts": 1,
+  "tests/regression/runtime/card-store.ts": 2,
   "tests/regression/runtime/device-data.ts": 6,
   "tests/regression/runtime/devices.ts": 10,
   "tests/regression/runtime/dsp-cache-registers.test.ts": 5,

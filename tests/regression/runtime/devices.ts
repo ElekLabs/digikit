@@ -143,3 +143,8 @@ export function daemonBinary(device: Device): string {
 
 /** Full-tier scenarios run only under `DIGIKIT_TIER=full` (`verify --full`), as the Python tiers do. */
 export const FULL_TIER = process.env.DIGIKIT_TIER === 'full';
+
+/** The emulator options of a device: its firmware image and daemon binary. */
+export function options(device: Device) {
+  return { device, firmware: FIRMWARE[device], binary: daemonBinary(device), autoNo: true };
+}

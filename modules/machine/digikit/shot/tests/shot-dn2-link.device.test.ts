@@ -2,7 +2,7 @@ import { encoder } from '@digi/test-support';
 import { expect } from 'vitest';
 import { bounded, word } from '@digi/regression/runtime/guest-access.ts';
 import { rows } from '@digi/regression/runtime/dsp-state.ts';
-import { slotsFor } from '@digi/regression/runtime/fx-live.ts';
+import { slotsFor } from '@digi/regression/runtime/device-data.ts';
 import { SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { effectPage, mainPage } from '@digi/regression/runtime/fx-pages-ui.ts';
 import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';

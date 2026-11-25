@@ -4,32 +4,24 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { repoRoot, type Session, type Device, type RuntimeBaseline } from '@digi/test-support';
-import { expect } from 'vitest';
 import { withReusablePatchedSession } from '../support.ts';
 import { record } from './artifacts.ts';
 import { bounded } from './guest-access.ts';
 import { plusdriveBinary } from './card-store.ts';
 import { installSystemPackage } from './system-package.ts';
 import { cachedCard, cardKey, fileSha } from './card-cache.ts';
-import { daemonBinary, FIRMWARE, claimRunDir } from './devices.ts';
+import { FIRMWARE, claimRunDir, options } from './devices.ts';
 import { moduleArtifact } from './install.ts';
 import { neededServices, portFile } from './service-files.ts';
-import { deviceProfile } from './device-data.ts';
+import { slotsFor } from './device-data.ts';
 import { evidenceCollector, type RequireAudible } from './fx-evidence.ts';
+import { expectLifetimeSafety } from './lifetime-safety.ts';
 import { planSymbol, prepareRuntimePlanOffline, type RuntimePlan } from './runtime-plan.ts';
-import { runtimeSafety, runtimeWatchEnv, type SafetyPolicy } from './write-safety.ts';
+import { runtimeWatchEnv } from './write-safety.ts';
 import { GAIN, SINE } from './fixtures.ts';
 
 const exec = promisify(execFile);
 const root = repoRoot();
-export function options(device: Device) {
-  return { device, firmware: FIRMWARE[device], binary: daemonBinary(device), autoNo: true };
-}
-
-export function slotsFor(device: Device): number {
-  return deviceProfile(device).limits.fx_slots;
-}
-
 /** Native plusdrive owns all card/store/selection encoding. The cards are built once into the card cache and reused by their inputs. */
 async function baseline(
   session: Session,
@@ -94,22 +86,6 @@ async function baseline(
     // A targeted run-time invariant guard, not the legacy launch-time expansion write-watch/flush proof.
     guard: { protect: [{ lo: boot, hi: boot + 8, label: 'runtime boot identity' }], allow_pc: [] },
   };
-}
-
-/** After the owned emulators exit: every watch log and exported overlay meets the safety policy of the card's services. One call site for every session kind. */
-export function expectLifetimeSafety(run: {
-  device: Device;
-  watchOutput: string;
-  overlays: string[];
-  epochs: Set<number>;
-  artifacts: string;
-  policy: SafetyPolicy;
-  cardServices: Iterable<string>;
-}) {
-  const { device, watchOutput, overlays, epochs, artifacts, policy, cardServices } = run;
-  const report = runtimeSafety(device, watchOutput, overlays, epochs.size, policy, [], [...cardServices]);
-  record(artifacts, 'lifetime-safety', report);
-  expect(report.pass, 'every emulator and exported overlay meets the write-safety policy').toBe(true);
 }
 
 export interface GainFxSessionOptions {

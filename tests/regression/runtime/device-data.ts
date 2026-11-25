@@ -161,3 +161,8 @@ export function fxProfile(device: Device): FxProfile {
     fx: profile.fx,
   };
 }
+
+/** The effect slots of a device (`limits.fx_slots` of its profile). */
+export function slotsFor(device: Device): number {
+  return deviceProfile(device).limits.fx_slots;
+}

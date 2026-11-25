@@ -7,7 +7,7 @@ import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
 import { captureNote } from '@digi/regression/runtime/note-capture.ts';
 import { dspWords, FREE_PC, frames, rows, runFrames } from '@digi/regression/runtime/dsp-state.ts';
 import { expectGainRow, inspect } from '@digi/regression/runtime/fx-evidence.ts';
-import { slotsFor } from '@digi/regression/runtime/fx-live.ts';
+import { slotsFor } from '@digi/regression/runtime/device-data.ts';
 import { GAIN, RT, SINE, triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import { chainCheck, fxExpectations } from '@digi/regression/runtime/dkm.ts';
 import { inspectFxBoot, selectSine, withPreparedFxSession } from '@digi/regression/runtime/fx-session.ts';

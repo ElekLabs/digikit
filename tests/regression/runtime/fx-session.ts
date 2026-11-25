@@ -20,7 +20,8 @@ import { moduleResultsNote } from './runtime-menu.ts';
 import { pollEmulated } from './waits.ts';
 import { bounded, word } from './guest-access.ts';
 import { evidence, evidenceCollector, type RequireAudible } from './fx-evidence.ts';
-import { options, expectLifetimeSafety } from './fx-live.ts';
+import { options } from './devices.ts';
+import { expectLifetimeSafety } from './lifetime-safety.ts';
 import { pickSine, type Rt } from './panel-waits.ts';
 import {
   planSymbol,

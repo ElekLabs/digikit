@@ -21,7 +21,7 @@ import { selRecords, type SelRecord } from './card-record.ts';
 import { cachedCard, cachedCardId, cardSpecKey, fileSha } from './card-cache.ts';
 import { uploadStore } from './device-data.ts';
 import { bounded, rpc } from './guest-access.ts';
-import { options } from './fx-live.ts';
+import { options } from './devices.ts';
 import { SETTLE } from './panel-waits.ts';
 import { drainInputs, withPausedFxProtocol } from './fx-session.ts';
 import { emulatorDk, pollEmulated } from './waits.ts';

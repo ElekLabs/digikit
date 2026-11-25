@@ -38,7 +38,7 @@ vi.mock('../runtime/service-symbols.ts', async (original) => ({
   bindServiceSymbols: vi.fn(async () => {}),
 }));
 vi.mock('../runtime/write-safety.ts', () => ({ runtimeWatchEnv: fake.watchEnv, runtimeSafety: fake.safety }));
-vi.mock('../runtime/fx-live.ts', async (original) => ({
+vi.mock('../runtime/devices.ts', async (original) => ({
   ...(await original<object>()),
   options: (device: string) => ({ device, firmware: device === 'dt2' ? '1.17' : '1.12' }),
 }));
