@@ -9,8 +9,8 @@ installer calls
   flush blk1+0 200
   flush blk1+0 200
   flush blk1+4 196
-  flush blk4+0 88356
-  flush blk4+0 88356
+  flush blk4+0 87764
+  flush blk4+0 87764
   mask
   write 0x40016eac 8
   write 0x400da3ac 8
@@ -140,7 +140,7 @@ service rows
 arena blocks
   0x00100000 208 bytes
   0x00200000 2624 bytes
-  0x00400000 88368 bytes
+  0x00400000 87776 bytes
   0x00500000 464 bytes
   0x00700000 51552 bytes
   0x00800000 272 bytes
@@ -159,7 +159,7 @@ contexts and ticks
   2 magic 0x444b4358 rec 2 tick 0
   3 magic 0x444b4358 rec 3 tick 0
   4 magic 0x444b4358 rec 4 tick blk24+266
-  8 magic 0x444b4358 rec 8 tick blk4+23962
+  8 magic 0x444b4358 rec 8 tick blk4+24278
   9 magic 0x444b4358 rec 9 tick 0
   10 magic 0x444b4358 rec 10 tick 0
   11 magic 0x444b4358 rec 11 tick 0
@@ -177,7 +177,7 @@ records
   2 test/lfo-shape modules/lfo-shape.dkm version 0x100 base 0x01400000 size 110 fini 0x00000000
   3 test/local-ping-user modules/local-ping-user.dkm version 0x101 base 0x01600000 size 60 fini 0x00000000
   4 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x01800000 size 1760 fini 0x0180020a
-  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 88356 fini 0x00408300
+  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 87764 fini 0x004081fc
   9 core/services/fx services/fx.dks version 0x900 base 0x00700000 size 51548 fini 0x007043b0
   10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 23138 fini 0x00a00f2a
   11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 5184 fini 0x00d0009e
@@ -206,7 +206,7 @@ service rows
 arena blocks
   0x00100000 208 bytes
   0x00200000 2624 bytes
-  0x00400000 88368 bytes
+  0x00400000 87776 bytes
   0x00500000 464 bytes
   0x00700000 51552 bytes
   0x00800000 272 bytes
@@ -225,7 +225,7 @@ contexts and ticks
   2 magic 0x444b4358 rec 2 tick 0
   3 magic 0x444b4358 rec 3 tick 0
   4 magic 0x444b4358 rec 4 tick blk24+266
-  8 magic 0x444b4358 rec 8 tick blk4+23962
+  8 magic 0x444b4358 rec 8 tick blk4+24278
   9 magic 0x444b4358 rec 9 tick 0
   10 magic 0x444b4358 rec 10 tick 0
   11 magic 0x444b4358 rec 11 tick 0
@@ -243,7 +243,7 @@ records
   2 test/lfo-shape modules/lfo-shape.dkm version 0x100 base 0x01a00000 size 110 fini 0x00000000
   3 test/local-ping-user modules/local-ping-user.dkm version 0x101 base 0x01600000 size 60 fini 0x00000000
   4 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x01800000 size 1760 fini 0x0180020a
-  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 88356 fini 0x00408300
+  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 87764 fini 0x004081fc
   9 core/services/fx services/fx.dks version 0x900 base 0x00700000 size 51548 fini 0x007043b0
   10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 23138 fini 0x00a00f2a
   11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 5184 fini 0x00d0009e
@@ -267,7 +267,7 @@ service rows
 arena blocks
   0x00100000 208 bytes
   0x00200000 2624 bytes
-  0x00400000 88368 bytes
+  0x00400000 87776 bytes
   0x00500000 464 bytes
   0x00700000 51552 bytes
   0x00800000 272 bytes
@@ -284,7 +284,7 @@ contexts and ticks
   1 magic 0x444b4358 rec 1 tick 0
   3 magic 0x444b4358 rec 3 tick 0
   4 magic 0x444b4358 rec 4 tick blk24+266
-  8 magic 0x444b4358 rec 8 tick blk4+23962
+  8 magic 0x444b4358 rec 8 tick blk4+24278
   9 magic 0x444b4358 rec 9 tick 0
   10 magic 0x444b4358 rec 10 tick 0
   11 magic 0x444b4358 rec 11 tick 0
@@ -301,7 +301,7 @@ records
   1 test/dyn-fx-gain modules/dyn-fx-gain.dkm version 0x100 base 0x01200000 size 134 fini 0x00000000
   3 test/local-ping-user modules/local-ping-user.dkm version 0x101 base 0x01600000 size 60 fini 0x00000000
   4 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x01800000 size 1760 fini 0x0180020a
-  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 88356 fini 0x00408300
+  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 87764 fini 0x004081fc
   9 core/services/fx services/fx.dks version 0x900 base 0x00700000 size 51548 fini 0x007043b0
   10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 23138 fini 0x00a00f2a
   11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 5184 fini 0x00d0009e
@@ -330,7 +330,7 @@ service rows
 arena blocks
   0x00100000 208 bytes
   0x00200000 2624 bytes
-  0x00400000 88368 bytes
+  0x00400000 87776 bytes
   0x00500000 464 bytes
   0x00700000 51552 bytes
   0x00800000 272 bytes
@@ -349,7 +349,7 @@ contexts and ticks
   2 magic 0x444b4358 rec 2 tick 0
   3 magic 0x444b4358 rec 3 tick 0
   4 magic 0x444b4358 rec 4 tick blk24+266
-  8 magic 0x444b4358 rec 8 tick blk4+23962
+  8 magic 0x444b4358 rec 8 tick blk4+24278
   9 magic 0x444b4358 rec 9 tick 0
   10 magic 0x444b4358 rec 10 tick 0
   11 magic 0x444b4358 rec 11 tick 0
@@ -367,7 +367,7 @@ records
   2 test/lfo-shape modules/lfo-shape.dkm version 0x100 base 0x01c00000 size 110 fini 0x00000000
   3 test/local-ping-user modules/local-ping-user.dkm version 0x101 base 0x01600000 size 60 fini 0x00000000
   4 test/entry-demo modules/entry-demo.dkm version 0x100 base 0x01800000 size 1760 fini 0x0180020a
-  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 88356 fini 0x00408300
+  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 87764 fini 0x004081fc
   9 core/services/fx services/fx.dks version 0x900 base 0x00700000 size 51548 fini 0x007043b0
   10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 23138 fini 0x00a00f2a
   11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 5184 fini 0x00d0009e
@@ -392,7 +392,7 @@ service rows
 arena blocks
   0x00100000 208 bytes
   0x00200000 2624 bytes
-  0x00400000 88368 bytes
+  0x00400000 87776 bytes
   0x00500000 464 bytes
   0x00700000 51552 bytes
   0x00800000 272 bytes
@@ -409,7 +409,7 @@ contexts and ticks
   1 magic 0x444b4358 rec 1 tick 0
   2 magic 0x444b4358 rec 2 tick 0
   3 magic 0x444b4358 rec 3 tick 0
-  8 magic 0x444b4358 rec 8 tick blk4+23962
+  8 magic 0x444b4358 rec 8 tick blk4+24278
   9 magic 0x444b4358 rec 9 tick 0
   10 magic 0x444b4358 rec 10 tick 0
   11 magic 0x444b4358 rec 11 tick 0
@@ -426,7 +426,7 @@ records
   1 test/dyn-fx-gain modules/dyn-fx-gain.dkm version 0x100 base 0x01200000 size 134 fini 0x00000000
   2 test/lfo-shape modules/lfo-shape.dkm version 0x100 base 0x01c00000 size 110 fini 0x00000000
   3 test/local-ping-user modules/local-ping-user.dkm version 0x101 base 0x01600000 size 60 fini 0x00000000
-  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 88356 fini 0x00408300
+  8 core/services/machines services/machines.dks version 0x802 base 0x00400000 size 87764 fini 0x004081fc
   9 core/services/fx services/fx.dks version 0x900 base 0x00700000 size 51548 fini 0x007043b0
   10 core/services/lfo services/lfo.dks version 0x802 base 0x00a00000 size 23138 fini 0x00a00f2a
   11 test/local-ping services/local-ping.dks version 0x10200 base 0x00d00000 size 5184 fini 0x00d0009e
