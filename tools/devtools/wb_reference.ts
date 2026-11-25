@@ -13,7 +13,7 @@ import type { MidiMap, Registry } from '../../packages/devices/src/index.ts';
 import type { Sample } from '../../packages/dk-session/src/dksample.ts';
 import type { SamplesBackend } from '../../packages/dk-session/src/samples.ts';
 import { parseWave, type Wave } from '../../packages/sharc-rig-kit/src/wave.ts';
-import { remoteInput } from '../../packages/test-support/src/input.ts';
+import { remoteInput } from '../../packages/test-support/src/input-path.ts';
 import { captureFirmwareIdentity } from '../../packages/workbench-core/src/calibration/calprofile.ts';
 import { isContentModule } from '../../packages/workbench-core/src/calibration/effects.ts';
 import {

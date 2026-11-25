@@ -340,7 +340,7 @@
   "packages/test-support/src/boot-window.ts": 1,
   "packages/test-support/src/clone.ts": 1,
   "packages/test-support/src/fakedevice.ts": 1,
-  "packages/test-support/src/inputs.ts": 16,
+  "packages/test-support/src/firmware-inputs.ts": 16,
   "packages/test-support/src/session.ts": 1,
   "packages/test-support/tests/support.test.ts": 49,
   "packages/workbench-core/src/data/device-profiles.ts": 2,

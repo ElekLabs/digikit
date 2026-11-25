@@ -29,7 +29,7 @@ from tools.firmware import device as device_files
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 # The ready-inputs directory of each device: `[acceptance] ready_dir` of its device file (the one source;
-# tools/patchkit/pk_harness.py, packages/test-support/src/inputs.ts and tools/nx/device-inputs.mjs read the
+# tools/patchkit/pk_harness.py, packages/test-support/src/firmware-inputs.ts and tools/nx/device-inputs.mjs read the
 # same key). The DN2 one is overridden by DIGI_EMU_READY_DIR.
 # The raw repo-relative ready directories, without env overrides.
 READY_JSON_DIRS: dict[str, str] = {

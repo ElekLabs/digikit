@@ -27,7 +27,7 @@ vi.mock('node:fs', async (original) => ({
     writeFileSync: fake.write,
   },
 }));
-vi.mock('../../../packages/test-support/src/inputs.ts', async (original) => ({
+vi.mock('../../../packages/test-support/src/firmware-inputs.ts', async (original) => ({
   ...(await original<object>()),
   resolveInputs: () => ({ syx: '/stock.syx' }),
 }));

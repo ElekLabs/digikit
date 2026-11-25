@@ -26,7 +26,7 @@ import {
   validatePreparedRuntimeImage,
   type Device,
   type PreparedRuntimeImage,
-} from './inputs.ts';
+} from './firmware-inputs.ts';
 import { bootWindowFacts } from './boot-window.ts';
 import { button, encoder } from './keys.ts';
 

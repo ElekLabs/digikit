@@ -24,7 +24,7 @@ import { LOG_KIND } from '../../packages/dk-session/src/gen_proto.ts';
 import { moduleStateText, stateModule } from '../../packages/dk-session/src/loads.ts';
 import { committedRecords, type RecordsExec } from '../../packages/test-support/src/commit-records.ts';
 import { emulatorClock } from '../../packages/test-support/src/emulated-clock.ts';
-import { repoRoot, type Device } from '../../packages/test-support/src/inputs.ts';
+import { repoRoot, type Device } from '../../packages/test-support/src/firmware-inputs.ts';
 import { Session } from '../../packages/test-support/src/session.ts';
 import { SYSTEM_PACKAGE_PATH } from '../../packages/workbench-core/src/runtime/system-package.ts';
 

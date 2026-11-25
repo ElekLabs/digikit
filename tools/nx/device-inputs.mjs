@@ -1,6 +1,6 @@
 // Prints one sha256 hex line over the untracked inputs of the device tests: firmware images, ready dirs
 // and the DT2 sample card, plus binary overrides (root overrides deliberately prevent reuse).
-// Mirrors packages/test-support/src/inputs.ts (FIRMWARE table, DIGI_FIRMWARE_DIR, ready files,
+// Mirrors packages/test-support/src/firmware-inputs.ts (FIRMWARE table, DIGI_FIRMWARE_DIR, ready files,
 // DIGI_PK_READY_<DEV>_<VER> override) and tests/regression/runtime/devices.ts (DT2 card dir
 // out/runs/patchkit/samples); a change there must change this file.
 // The ready dirs come from `[acceptance] ready_dir` of the device files (ready-dirs.mjs), as there.
