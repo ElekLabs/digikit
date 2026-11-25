@@ -4,6 +4,8 @@
 //
 // `module:check` takes `[uses]` and the gallery param names from the output, and conformance its cases (slot, min, max, default).
 // The CLI that boots a device and calls this is tools/devtools/commit_records.ts.
+import { serviceHash } from '@digi/dk-session';
+
 /** The part of a log event the decoder reads (`DkLogEvent` and `RuntimeEvent` of @digi/dk-session have it). */
 export interface LogEvent {
   args: number[];
@@ -21,10 +23,15 @@ export interface CommitEvent {
   size: number;
 }
 
+/** The `name_hash` of a module's `MODULE_COMMIT` event: FNV-1a 32 of the id after its last `/`, cut to 12 characters (the name `MOD_LOAD` shows). */
+export function commitNameHash(moduleId: string): number {
+  return serviceHash(moduleId.slice(moduleId.lastIndexOf('/') + 1).slice(0, 12));
+}
+
 /**
  * The one place that knows how `MODULE_COMMIT` (log kind 44, `sdk/sdk.toml`) packs its fields into the five log arguments:
- * [index, rows, records_addr, records_size, 0] with rows = machine_rows | param_rows << 8 | page_rows << 16. `index` is the selection index
- * (0xffffffff: not a boot load).
+ * [index, rows, records_addr, records_size, name_hash] with rows = machine_rows | param_rows << 8 | page_rows << 16. `index` is the selection index
+ * (0xffffffff: not a boot load); `name_hash` is `commitNameHash` of the module id.
  */
 export function decodeCommitEvent(event: LogEvent): CommitEvent {
   const [index, rows, addr, size] = event.args as [number, number, number, number, number];
