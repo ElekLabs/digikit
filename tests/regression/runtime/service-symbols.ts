@@ -85,7 +85,10 @@ export async function expectNoRefusedCalls(
   opts: LookupOptions = {},
 ): Promise<void> {
   const n = await refusedCalls(runtime, plan, service, opts);
-  if (n !== 0) throw new Error(`expected no nested call refused in the ${service} service owner, got ${n} (nested with/run/step or a full event queue)`);
+  if (n !== 0)
+    throw new Error(
+      `expected no nested call refused in the ${service} service owner, got ${n} (nested with/run/step or a full event queue)`,
+    );
 }
 
 /**

@@ -18,7 +18,7 @@ use dkrt_sdk::proto::{
     CAPK_MACHINE_ROWS, CAPK_MAP_ENTRIES, CAPK_PAGE_ROWS, CAPK_PARAM_ROWS, CAPK_VOICE_ROWS,
 };
 use dkrt_sdk::records::KINDS_MACHINES;
-use dkrt_sdk::{E_NO_REGISTRY, E_FORMAT, OK};
+use dkrt_sdk::{E_FORMAT, E_NO_REGISTRY, OK};
 use dkrt_svc_rows::rows_info::RegState;
 
 /// The machines service: nothing collected, no click queued, nothing parked. The file's cell holds the one instance (`Provider::start_in`).
