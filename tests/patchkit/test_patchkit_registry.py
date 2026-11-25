@@ -20,9 +20,11 @@ RUNTIME = ROOT / "runtime/core"
 
 
 def test_committed_objects_are_current_and_plain_coldfire():
-    for dev in ("dt2", "dn2"):
-        obj = json.loads((MACHINES / f"build/machines-{dev}.dko.json").read_text())
-        assert {r["type"] for r in obj["relocs"]} <= {"cf.32", "cf.pc32", "cf.pc16"}
+    objects = sorted((MACHINES / "build").glob("*.dko.json"))
+    assert len(objects) >= 2 * 3, "params, rows-info and type-dispatch per device"
+    for path in objects:
+        obj = json.loads(path.read_text())
+        assert {r["type"] for r in obj["relocs"]} <= {"cf.32", "cf.pc32", "cf.pc16"}, path
     front_end.build_module(MACHINES, check=True)
     if pk_toolchains.codegen_gcc_ready():
         front_end.build_module(RUNTIME, check=True)

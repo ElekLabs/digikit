@@ -65,8 +65,10 @@ def test_hook_displaces_the_selection_restore(image, tmp_path):
         h
         for h in json.loads(plan_path.read_text())["hooks"]
         if h["module"].split("@")[0] == "core/ui"
+        and h["anchor"] == "cf.menu.site.settings_list.tail"
     ]
-    assert len(hooks) == 1 and hooks[0]["anchor"] == "cf.menu.site.settings_list.tail"
+    # core/ui has other hooks too (the machine view build); this test owns the SETTINGS rebuild one
+    assert len(hooks) == 1
     assert [i.split(None, 2)[2] for i in hooks[0]["displaced_insns"]] == [
         "movea.l (a2),a0",
         "pea.l (0x2).w",
