@@ -9,15 +9,10 @@ pub fn find(actions: &[u32], first: u32, code: i32) -> u32 {
     }
 }
 
-/// What a click queues: the callback of the parameter `code` and the track (asked for only when there is a callback), or None: the stock click.
-pub fn resolve(
-    actions: &[u32],
-    first: u32,
-    code: i32,
-    track: impl FnOnce() -> u32,
-) -> Option<(u32, u32)> {
+/// What a click queues: the callback of the parameter `code` and the page's track, or None: the stock click.
+pub fn resolve(actions: &[u32], first: u32, code: i32, track: u32) -> Option<(u32, u32)> {
     match find(actions, first, code) {
         0 => None,
-        f => Some((f, track())),
+        f => Some((f, track)),
     }
 }

@@ -168,7 +168,7 @@ impl Slots {
         track: u32,
     ) {
         let first = crate::records::param_first(core);
-        if let Some((callback, track)) = resolve(&self.actions, first, code, || track) {
+        if let Some((callback, track)) = resolve(&self.actions, first, code, track) {
             self.pending = Pending {
                 callback,
                 track,
