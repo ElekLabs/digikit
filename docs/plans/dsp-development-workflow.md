@@ -27,9 +27,9 @@ passed the SETTINGS open-and-close regression on DT2 1.17 and DN2 1.12.
 | 5b. Musical send baseline | Complete | Both generated scenes have dry/current WAVs, matching source hashes and linked rig profiles on both targets. No module changes. |
 | 5c. FREQ SHIFT listening and performance proof | Implemented and rig-verified | Spread was committed in `12c8ae781`. Drift and Rate were approved after the full-cycle A/B, though the difference was subtle on laptop speakers. No kit migration for the experimental prototype. |
 | 6. Reuse a real listening session | Host and DT2 emulator checked | [Workbench sessions](../WORKBENCH-SESSIONS.md) package the card and attachments and keep capture inspection independent. Underpass reopened with the same A01 grid and stab-only send. Automated project selection and saved audio views remain follow-ups. No new Workbench panel. |
-| 7. Stock audio reference pilot | Verified, ready for review | Underpass gives a conservative Feedback candidate. DN2 confirms the stock decay anchor and the DT2 plain-versus-PGO sweep is byte-identical. |
-| 7a. Run Feedback inside FREQ SHIFT | Verified, listening review open | The fifth knob controls a filtered 55 ms stereo loop. Zero Feedback is byte-identical to the previous build on both send rigs. Both emulator record checks and packs passed. |
-| 8. Replay a reference case on emulator and hardware | Emulator checked, hardware open | Use one TypeScript Delay case with the shared session and input helpers. Prepare the project separately from capture. |
+| 7. Stock audio reference pilot | Committed in `acf50402f` | Underpass gives a conservative Feedback candidate. DN2 confirms the stock decay anchor and the DT2 plain-versus-PGO sweep is byte-identical. |
+| 7a. Run Feedback inside FREQ SHIFT | Committed in `f6d450153` | The fifth knob controls a filtered 55 ms stereo loop. Zero Feedback is byte-identical to the previous build on both send rigs. Both emulator record checks and packs passed. Hardware timing and upper-limit tuning remain follow-ups. |
+| 8. Replay a reference case on emulator and hardware | Passed on both, closed in `6c5e98c68` | One TypeScript Delay case verified the loaded probe, recorded WAV and JSON on both targets, and passed within 1.56 ms and 0.0011 dB per repeat. |
 
 ## 1. Generate a catalog from one firmware file
 
@@ -279,9 +279,8 @@ measured 64.901 ms echo spacing and 6.034 dB loss per repeat, and the Delay
 send returned to zero after each run. They also passed against the earlier
 64.047 ms baseline, with a 0.854 ms spacing difference from the prepared
 stock Delay setting and no measurable difference in decay. The USB audio
-bridge builds and lists inputs. The physical run and cross-target comparison
-remain open. The CLI validation is acoustic and does not read back the stock
-Delay knob values or the assigned sample hash.
+bridge built and listed inputs. This initial run preceded the structured
+readbacks and physical comparison below.
 
 **Project preparation checkpoint.** The CLI-built session reopened in the
 session inspector. A disposable mount booted with its preselected debug and
@@ -289,7 +288,8 @@ remote modules and played the seeded probe without a sample upload or panel
 assignment. After applying the listed stock Delay settings, two takes
 measured 64.755 ms and 6.034 dB per repeat. The earlier TypeScript baseline
 comparison passed. Hardware staging has host tests for new uploads, reuse,
-and collision refusal. Running it on the physical DT2 remains open.
+and collision refusal. The hardware checkpoint below verified the staged
+probe in the live project.
 
 **View observer checkpoint.** With the 0.13.1 runtime and the debug module,
 the same event-driven regression opened and closed SETTINGS on the DT2
