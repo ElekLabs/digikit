@@ -138,7 +138,7 @@ impl PageTable {
     }
     /// The page the view shows, if it is a native one.
     pub fn selected(&self, view: &impl View) -> Option<&NativePage> {
-        // nothing registered: the view is not even read (a hook runs on every draw and turn of the machine page)
+        // nothing registered: this method does not read the view. The service file's hooks read the machine type on every draw and turn of the machine page, registered or not (accepted)
         if !self.armed() {
             return None;
         }
