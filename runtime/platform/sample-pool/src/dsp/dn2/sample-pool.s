@@ -13,14 +13,14 @@
 //   error 5  any other sequence number: nothing is written
 // An error leaves the receiver armed; the next good page clears it.
 //
-// The acknowledgement is a 16-byte extension of the reply record, written by _sp_tail in every block (the ColdFire wire is 0xabc + 16
-// bytes, patched at boot). _sp_tail is called by core/dsp-link at the end of its block tail (dsp-link has the one claim on the tail); it
+// The acknowledgement is a 16-byte extension of the reply record, written by _dl_tail_chain in every block (the ColdFire wire is 0xabc + 16
+// bytes, patched at boot). _dl_tail_chain is called by core/dsp-link at the end of its block tail (dsp-link has the one claim on the tail); it
 // saves every register itself, sets up the LP0 port once and returns to the tail.
 //
 // Not here, by design: any cache maintenance (the receive window is noncacheable through boot-window.s; PCM in DDR has one user, the core, which
 // reads it through the cache it writes it with, finding 95 and docs/design/dn2-sample-pool.md section 3).
 .SECTION/PM seg_pmco;
-.GLOBAL _sp_tail;
+.GLOBAL _dl_tail_chain;
 .GLOBAL _sp_callback;
 .EXTERN _sp_back;
 .EXTERN _sp_open;
@@ -43,7 +43,7 @@
     NOP; \
     NOP
 
-_sp_tail:
+_dl_tail_chain:
     DM(_sp_save + 0) = R0;
     DM(_sp_save + 4) = R1;
     DM(_sp_save + 8) = R2;

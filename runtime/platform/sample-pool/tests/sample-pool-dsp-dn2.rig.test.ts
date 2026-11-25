@@ -92,7 +92,7 @@ class Pool {
   async tail(extra: Record<string, number> = {}, bootFirst = true): Promise<void> {
     if (bootFirst && (await this.val('_sp_boot_status')) === 0) await this.boot();
     const regs = { ...REGS, ...extra };
-    const r = await this.rig.call('_sp_tail', regs, { maxSteps: 30000, readRegs: Object.keys(regs) });
+    const r = await this.rig.call('_dl_tail_chain', regs, { maxSteps: 30000, readRegs: Object.keys(regs) });
     expect(r.halt).toBe('breakpoint');
     // every register comes back as it went in
     const changed = Object.entries(regs).filter(([k, v]) => r.regs[k] == null || u32(r.regs[k]!) !== u32(v));

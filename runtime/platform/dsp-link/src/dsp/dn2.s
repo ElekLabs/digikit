@@ -6,7 +6,7 @@
 // to 686 of the ring, 15 words.
 //
 // The reserved area (window 0): see the Digitakt II file.
-// The tail also calls core/sample-pool's `_sp_tail` when that module is in the image (docs/design/dn2-sample-pool.md 2.5).
+// The tail also calls `_dl_tail_chain` when an object that defines it is in the image (docs/design/dn2-sample-pool.md 2.5).
 #define DL_CHAIN_SP
 #include "device-dn2.inc"
 #include "dk_stub.inc"
