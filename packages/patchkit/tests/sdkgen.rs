@@ -19,12 +19,12 @@ fn the_fx_chain_cap_is_the_registrys() {
         .find(|c| c.name == "DK_FX_MAX")
         .unwrap()
         .value;
-    let man = std::fs::read_to_string(root().join("image-modules/points/fx/module.toml"))
-        .unwrap_or_default();
+    let man =
+        std::fs::read_to_string(root().join("runtime/platform/fx/module.toml")).unwrap_or_default();
     if !man.is_empty() {
         assert!(
             man.contains(&format!("max = {max}")),
-            "image-modules/points/fx/module.toml: the fx registry has max = {max}"
+            "runtime/platform/fx/module.toml: the fx registry has max = {max}"
         );
     }
 }

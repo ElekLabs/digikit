@@ -7,7 +7,7 @@ use crate::check::{
     Ctx,
 };
 use crate::machines::{status, Machines};
-use crate::nativepage;
+use crate::native_page::record;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::{Consumer, Records, Status};
 use dkrt_abi::service::{check_step, CheckCtx, ModuleCommitCtx, Problem};
@@ -40,7 +40,7 @@ impl<C: CoreApi> Records<C> for Machines {
         use check_step as st;
         // SAFETY: `c.reg` is the section the registry walker checked; `inf` is the registry's table
         unsafe {
-            let inf = dkrt_svc_rows::dynreg(core);
+            let inf = dkrt_svc_rows::rows_info(core);
             if inf.is_null() || !fits(inf) {
                 // the machine, parameter, page, action and native page records need this registry: a section without them does not
                 let none = counts_of(c.reg) == (0, 0, 0, 0, 0);
@@ -84,13 +84,13 @@ impl<C: CoreApi> Records<C> for Machines {
         body: &[u8],
         consumer: &Consumer<'_>,
     ) -> Result<(), Status> {
-        if !nativepage::is_kind(kind) {
+        if !record::is_kind(kind) {
             return Ok(());
         }
-        let whole = if kind == nativepage::KIND_V2 {
-            nativepage::LEN_V2
+        let whole = if kind == record::KIND_V2 {
+            record::LEN_V2
         } else {
-            nativepage::LEN
+            record::LEN
         };
         if body.len() < whole as usize - 8 {
             return Err(E_FORMAT);

@@ -98,7 +98,7 @@ fn image(core: &mut FakeCore) {
     t[20] = COPY;
     t[27] = 60;
     t[23] = 300;
-    core.set_dynreg(t);
+    core.set_rows_info(t);
     for (c, def) in CODES.iter().zip([0x100, 0, 0]) {
         unsafe {
             core.wr(COPY + 60 * c + 8, 0);
@@ -217,5 +217,47 @@ fn the_row_reaches_the_object_through_the_owner_guard() {
         },
         &|| DK_SVC_OWNER.refused(),
     );
+    file::dk_svc_stop();
+}
+
+/// The LFO tick hooks run in an interrupt (vector 191, IPL 5) and may preempt a part call: they read the static shape table and never enter the owner, so the owner's guard
+/// neither refuses nor counts them. A hook that took the owner would be refused here.
+#[test]
+fn an_lfo_hook_fired_in_an_interrupt_never_enters_the_owner() {
+    use dkrt_test_support::hook_context::HookContext;
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    file::dk_svc_start().expect("start");
+    let hold = |f: &mut dyn FnMut()| {
+        DK_SVC_OWNER.run((), |_| f());
+    };
+    let refused = || DK_SVC_OWNER.refused();
+    let phase = 0x4000_0000;
+    let fired =
+        HookContext::Interrupt.fire(&hold, &refused, &mut || file::hooks::dk_lfo_eval(phase, 7));
+    assert_eq!(
+        fired.result,
+        dkrt_svc_lfo::shapes::eval(7, phase),
+        "the table answers while the owner is busy"
+    );
+    assert_eq!(fired.refused, 0, "the hook did not enter the owner");
+    file::dk_svc_stop();
+}
+
+/// The name and graph formatters of the MOD page run in the UI task, also inside a part call: they read the static tables and do not enter the owner.
+#[test]
+fn an_lfo_page_hook_fired_inside_a_part_call_never_enters_the_owner() {
+    use dkrt_test_support::hook_context::HookContext;
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    file::dk_svc_start().expect("start");
+    let hold = |f: &mut dyn FnMut()| {
+        DK_SVC_OWNER.run((), |_| f());
+    };
+    let refused = || DK_SVC_OWNER.refused();
+    let mut buf = [0u8; 8];
+    let fired = HookContext::InPartCall.fire(&hold, &refused, &mut || unsafe {
+        file::hooks::dk_lfo_name(7 << 8, buf.as_mut_ptr(), 7)
+    });
+    assert_eq!(fired.result, 0, "no shape is loaded for wave 7");
+    assert_eq!(fired.refused, 0, "the hook did not enter the owner");
     file::dk_svc_stop();
 }

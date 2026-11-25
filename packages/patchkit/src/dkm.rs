@@ -421,6 +421,9 @@ pub struct Provided {
     /// device). The runtime installs a jump to the entry at the hook's site from the port file; the devices are the device mask in the top byte of the `HOOKS` entry
     /// ([`hook_device_mask`]).
     pub hooks: Vec<(String, String, Vec<String>)>,
+    /// The patches the service takes (`[[patch]]`): (patch name of the port, devices it is for; empty: every device). Each is a `HOOKS` item with the entry
+    /// `HOOK_ENTRY_PATCH` and the device mask in its top byte; the bytes come from the service's `init` (`dk_service_declare_patch`), not from the file.
+    pub patches: Vec<(String, Vec<String>)>,
     /// The pointer slots the service fills (`[[fill]]`): (slot name of the image adapter, global function of the object whose address goes in the slot).
     /// A `SLOTS` item of the table is the name hash and the entry offset. The third item lists the devices the fill is for (empty: every device); they are the device mask in the
     /// flags of the item ([`slot_device_flags`]), and the loader skips an item for another device, so one file serves every device.
@@ -831,6 +834,23 @@ fn pack_inner(
                 hk.push(dkneeds::keys::Pair {
                     a,
                     b: at | mask << dkneeds::keys::HOOK_DEVICES_SHIFT,
+                });
+            }
+            for (patch, devices) in &s.patches {
+                let a = dkneeds::keys::name_hash(patch);
+                let mask = hook_device_mask(devices)?;
+                let overlaps = |p: &dkneeds::keys::Pair| {
+                    let other = p.b >> dkneeds::keys::HOOK_DEVICES_SHIFT;
+                    p.a == a && (mask == 0 || other == 0 || mask & other != 0)
+                };
+                if hk.iter().any(overlaps) {
+                    return Err(err!(
+                        "the service takes {patch} twice (a hook or a patch of that name already has the device)"
+                    ));
+                }
+                hk.push(dkneeds::keys::Pair {
+                    a,
+                    b: dkneeds::keys::HOOK_ENTRY_PATCH | mask << dkneeds::keys::HOOK_DEVICES_SHIFT,
                 });
             }
             hk.sort_by_key(|p| p.a);
@@ -1407,6 +1427,7 @@ mod tests {
                 callback_order: None,
                 exports: vec![],
                 hooks: vec![],
+                patches: vec![],
                 fills: vec![],
                 dsp_fills: vec![],
             }),
@@ -1446,6 +1467,7 @@ mod tests {
                 callback_order: None,
                 exports: vec![],
                 hooks: vec![],
+                patches: vec![],
                 fills: vec![("frametype".into(), "tick_fn".into(), vec![])],
                 dsp_fills: vec![],
             }),
@@ -1464,6 +1486,7 @@ mod tests {
                 callback_order: None,
                 exports: vec![],
                 hooks: vec![],
+                patches: vec![],
                 fills: vec![("frametype".into(), "no_such_function".into(), vec![])],
                 dsp_fills: vec![],
             }),
@@ -1484,6 +1507,7 @@ mod tests {
                         callback_order: None,
                         exports: vec![],
                         hooks: vec![],
+                        patches: vec![],
                         fills: vec![
                             ("frametype".into(), "tick_fn".into(), vec!["dn2".into()]),
                             ("other".into(), "tick_fn".into(), vec![]),
@@ -1985,6 +2009,7 @@ mod tests {
             callback_order: None,
             exports: vec![],
             hooks: vec![],
+            patches: vec![],
             fills: vec![],
             dsp_fills: vec![],
         }
@@ -2057,6 +2082,65 @@ mod tests {
                 .iter()
                 .all(|h| h.a == dkneeds::keys::name_hash("hook.a"))
         );
+    }
+
+    /// A patch is a `HOOKS` item with the patch entry and the device mask in the top byte: the values are the service's, given in `init`, so the file holds none.
+    #[test]
+    fn a_service_patch_is_a_hooks_item_with_the_patch_entry_and_a_device_mask() {
+        let o = object();
+        let ids: Vec<(String, u32)> = crate::devdata::all()
+            .iter()
+            .filter_map(|d| d.digikit_id.map(|id| (d.short.clone(), id)))
+            .take(2)
+            .collect();
+        assert_eq!(ids.len(), 2, "two runtime devices");
+        let p = Provided {
+            hooks: vec![("hook.a".into(), "tick_fn".into(), vec![])],
+            patches: vec![
+                ("patch.a".into(), vec![]),
+                ("patch.b".into(), vec![ids[1].0.clone()]),
+            ],
+            ..provided()
+        };
+        let packed = pack(&o, &service_of(p)).unwrap();
+        let register = crate::dkm::Dkm::parse(&packed).unwrap().register;
+        let keys = dkneeds::keys::Keys::parse(&register).unwrap();
+        let find = |n: &str| {
+            keys.hooks()
+                .find(|h| h.a == dkneeds::keys::name_hash(n))
+                .unwrap()
+        };
+        assert!(
+            !dkneeds::keys::hook_is_patch(find("hook.a").b),
+            "the hook keeps its entry"
+        );
+        assert_eq!(
+            find("patch.a").b,
+            dkneeds::keys::HOOK_ENTRY_PATCH,
+            "no device: every device"
+        );
+        assert_eq!(
+            find("patch.b").b,
+            dkneeds::keys::HOOK_ENTRY_PATCH | (1 << (ids[1].1 - 1)) << 24
+        );
+        // one name is a hook or a patch for a device, not both, and not two patches
+        let e = |p: Provided| pack(&o, &service_of(p)).unwrap_err().0;
+        let both = Provided {
+            hooks: vec![("hook.a".into(), "tick_fn".into(), vec![])],
+            patches: vec![("hook.a".into(), vec![])],
+            ..provided()
+        };
+        assert!(e(both).contains("takes hook.a twice"));
+        let twice = Provided {
+            patches: vec![("patch.a".into(), vec![]), ("patch.a".into(), vec![])],
+            ..provided()
+        };
+        assert!(e(twice).contains("takes patch.a twice"));
+        let unknown = Provided {
+            patches: vec![("patch.a".into(), vec!["zz9".into()])],
+            ..provided()
+        };
+        assert!(e(unknown).contains("zz9"));
     }
 
     #[test]

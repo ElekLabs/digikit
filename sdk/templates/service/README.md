@@ -17,7 +17,7 @@ services/__NAME__/
 ```
 
 The neutral crate exports only `dk_module` and `DKRT_*` state symbols, has no assembler and names no firmware (no `cf.` hook or anchor names, no `dkfw`). What the service
-needs from the image comes from the image adapter `image-modules/points/X`: reserved rows, hook stubs and `[[slot]]` words, and `[[info]]` data tables, found by name hash
+needs from the image comes from the image adapter `runtime/platform/X`: reserved rows, hook stubs and `[[slot]]` words, and `[[info]]` data tables, found by name hash
 with `dkc_info` (`CoreApi::info`). The image half is the adapter's; the runtime names neither the service nor the adapter's table.
 
 A service is an owner object (`__CAMEL__`) that implements `Provider` (the lifecycle: `start`, `attach`, `detach`, `can_stop`, `stop`, `settle`, `reload_done`) and the parts it needs, which the
@@ -41,7 +41,7 @@ Make it a real service:
    A fill (the pointer slot of a fixed firmware site) is one `[[fill]]` (`slot`, `entry`, optional `devices`) in `dks/module.toml` and one `fills = [("slot", hooks::fill_fn, dn2)]` entry;
    as for hooks, an entry with `dt2` or `dn2` is for that device. `fills` must match the `[[fill]]` entries (`exports` comes from `sdk/sdk.toml`); what the image half needs (binding the adapter's tables) is done in `Provider::start`.
    `dks/module.toml` and `dks/src/lib.rs` hold commented examples of each.
-   A service that needs an image table (like `machines_info`) requires the adapter that provides it, as `core/services/machines` requires `core/machines`: put the adapter in `requires` of `dks/module.toml`.
+   A service that needs an image table (like `rows_info`) requires the adapter that provides it, as `core/services/machines` requires `core/rows`: put the adapter in `requires` of `dks/module.toml`.
    A service that offers functions to other modules: each is an `[[import]]` of the service in `sdk/sdk.toml` with `provided = true` (a function that is not a thin wrapper over the crate's `build::*` names its module in `wrapper = "fw"`). `patchkit gen` writes `dks/src/gen_exports.rs` (the pure wrappers and `exports()`); `lib.rs` declares `#[rustfmt::skip] mod gen_exports;` and passes `exports = gen_exports::exports()` after `fills =` (`hooks =` and `fills =` come first; pass `fills = []` when there is none). `service!` declares each export in `init`:
    a header entry `init` does not declare refuses the file with `E_DECL_KIND`. The header lists the provided imports. A provider may also declare the reserved `[[export]] name = "dk_service_query_v1"` and adopt the `Query` part in `parts = [...]` for [resident app queries](../../../docs/ARCHITECTURE.md#choosing-an-api).
 4. `mise run module:check -- service/__NAME__` runs `patchkit service-check` (the layout above, the `service!` hooks against `[[hook]]` per device, assembler only in `dks/src/hooks.rs`, firmware names only under `dks/`,

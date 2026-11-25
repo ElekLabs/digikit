@@ -44,7 +44,7 @@ pub(super) unsafe fn values<C: CoreApi>(core: &C, inf: *const u32) {
     }
     let arr = kit + iw(inf, w::ARRAY_OFF);
     if core.rd16(arr + 2 * iw(inf, w::MARK_INDEX)) != iw(inf, w::MARK_VALUE) as i32 {
-        // no mark: the hooks of core/fxpages have not given this kit object its rows (a kit that was there before the effect was loaded: another pattern's, or one the
+        // no mark: the hooks of the effect pages have not given this kit object its rows (a kit that was there before the effect was loaded: another pattern's, or one the
         // firmware cleared without them): the defaults, and the mark, before anything is read from it (a zero is never sent)
         k = 0;
         while k < MAX_FX {
@@ -108,7 +108,7 @@ pub(super) unsafe fn write_knob_row<C: CoreApi>(
     let wi = k * WORDS + j;
     dkrt_svc_rows::write_fx_param_row(
         c,
-        dkrt_svc_rows::dynreg(c),
+        dkrt_svc_rows::rows_info(c),
         code,
         tpl,
         idx,

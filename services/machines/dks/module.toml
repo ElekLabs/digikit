@@ -10,7 +10,7 @@ type = "raw"
 author = "digikit"
 status = "experimental"
 summary = "The machines service of the runtime as a service file: machine types, parameters, pages, page clicks and native pages; it owns their record kinds, exports dk_param_get, dk_param_set and the builder calls of the machines and takes the hooks of the machine framework"
-requires = ["core/machines"]
+requires = ["core/rows"]
 conflicts = []
 
 [targets]
@@ -18,7 +18,7 @@ conflicts = []
 "dn2-1.12" = "experimental"
 
 # The hooks it takes (ports/fw/machine.toml and page.toml), for each device that has them. They have no `handler`: each is a routine of this file that runs in place of the
-# stock instructions at the site and continues in the stock code through the table `machines_info` of core/machines (the port file makes the site jump straight to the entry).
+# stock instructions at the site and continues in the stock code through the table `DKRT_MF_TAB` (the registry words of `rows_info` of core/rows) (the port file makes the site jump straight to the entry).
 # `init` declares the hooks of its device again with dk_service_declare_hook.
 
 [[hook]]
@@ -35,6 +35,18 @@ devices = ["dt2"]
 name = "cf.machine.hook.srcpage"
 entry = "mf_srcpage"
 devices = ["dt2"]
+
+[[hook]]
+name = "cf.machine.hook.list_rank_insert"
+entry = "mf_rank"
+devices = ["dt2"]
+
+# The machine list getter's copy: a device whose getter has a call and a store after it replaces them (a hook); the other points its `jsr` at the service's copy (a patch, below). Both leave out the reserved
+# machine rows that no module has filled.
+[[hook]]
+name = "cf.machine.hook.list.copy_call"
+entry = "mf_copy"
+devices = ["dn2"]
 
 [[hook]]
 name = "cf.page.hook.source_draw"
@@ -82,9 +94,9 @@ name = "cf.machine.hook.owner_type_load"
 entry = "mf_owner"
 devices = ["dn2"]
 
-# The pointer slot of the interrupt site of the Digitone II (the frame builder's machine type): the image stub loads it, and a loaded file fills it with the address of its routine.
-[[fill]]
-slot = "frametype"
+# The frame type (the device with a frame builder interrupt site): the frame builder's interrupt site (vector 191) is a hook like the others (RC4-3): the installer writes its jump under one interrupt mask.
+[[hook]]
+name = "cf.machine.hook.frametype"
 entry = "mf_frametype"
 devices = ["dn2"]
 
@@ -108,6 +120,23 @@ slot = "voice_render"
 entry = "_dv_run"
 space = "dsp"
 devices = ["dn2"]
+
+# The patches of the machine list builder (ports/fw/machine.toml): `start` builds the list and `Machines::list_*` give the bytes.
+[[patch]]
+name = "cf.machine.hook.patch_list_alloc"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_vector_end"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_buffer_end"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_buffer"
+
+[[patch]]
+name = "cf.machine.hook.patch_list_copy"
+devices = ["dt2"]
 
 [[gen]]
 kind = "sharc-adapter"
@@ -144,6 +173,8 @@ mf_x_typearg = "hook.cf.machine.hook.param_code.args.exit.1"
 mf_x_sp_stock = "hook.cf.machine.hook.srcpage.exit.1"
 mf_x_sp_alt = "hook.cf.machine.hook.srcpage.exit.2"
 mf_spt = "cf.machine.fn.current_track_type"
+mf_x_rank = "hook.cf.machine.hook.list_rank_insert.tail"
+mf_x_copy = "hook.cf.machine.hook.list.copy_call.exit"
 mf_x_g_next = "hook.cf.machine.hook.group.exit"
 mf_x_g_taken = "hook.cf.machine.hook.group.exit.1"
 mf_ret_tm0 = "hook.cf.machine.hook.type_page.count.ret"

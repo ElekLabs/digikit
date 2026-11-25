@@ -4,6 +4,7 @@ import { globSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { noDspShorts } from './device-files.mjs';
 import { checkAcceptanceTags } from './acceptance-tags.mjs';
+import { packAliasesTarget } from './module-build.mjs';
 import { isUploadable, mergeTests, manifestClosure, read, records } from './module-manifests.mjs';
 import {
   DEVICE_INPUTS,
@@ -318,8 +319,6 @@ export const testOnlyNodes = (
     if (!tests.length) continue;
     const recs = records(join(workspaceRoot, root));
     checkAcceptanceTags(root, recs, tests, moduleInfo);
-    if (recs.some((rec) => Object.keys(rec.aliases ?? {}).length))
-      throw new Error(`Test-only project ${config.name} needs explicit pack-aliases support`);
     // Explicit fixture images build only their manifest requirements; ordinary owners keep the default image.
     const patchRoots = [...new Set(recs.flatMap((rec) => rec.patchModules ?? []))];
     const patchIds = patchRoots.length
@@ -374,6 +373,8 @@ export const testOnlyNodes = (
         );
       if (targetName === 'test-device-full') target.options.env = { ...target.options.env, DIGIKIT_TIER: 'full' };
     }
+    const aliasesTarget = packAliasesTarget(workspaceRoot, byId, recs);
+    if (aliasesTarget) targets['pack-aliases'] = aliasesTarget;
     nodes.push([file, { projects: { [root]: { name: config.name, root, tags: config.tags, targets } } }]);
   }
 };

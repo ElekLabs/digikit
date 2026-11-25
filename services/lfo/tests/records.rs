@@ -518,7 +518,7 @@ fn image_with_rows(core: &mut FakeCore) {
     t[20] = COPY; // P_TABLE
     t[27] = 60; // PF_SIZE
     t[23] = 300; // P_FIRST
-    core.set_dynreg(t);
+    core.set_rows_info(t);
     for (c, def) in CODES.iter().zip([0x100, 0, 0]) {
         unsafe {
             core.wr(COPY + 60 * c + 8, 0);
@@ -599,7 +599,7 @@ fn the_wave_rows_of_the_copy_follow_the_highest_loaded_shape_and_go_back_to_stoc
 #[test]
 fn an_image_without_the_registry_table_refuses_a_shape_and_writes_nothing() {
     let (_g, core, mut lfo) = fresh();
-    // the service has the firmware addresses, the image has no dynreg_info
+    // the service has the firmware addresses, the image has no rows_info
     set_firmware(STOCK, CODES.map(|c| STOCK + 60 * c));
     settle(&mut lfo, &core, &[&[KEY_A]]);
     core.boot_index.set(0);

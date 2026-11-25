@@ -494,3 +494,65 @@ fn an_event_that_arrives_while_the_queue_drains_is_not_lost() {
     );
     o.with(|f| assert_eq!(&f.ran[..f.count], &[1, 9]));
 }
+
+#[test]
+fn step_decides_inside_and_acts_outside() {
+    let o: Owner<u32> = Owner::new();
+    o.start(put(5)).unwrap();
+    let r = o.step(
+        &o,
+        |v, o| {
+            assert!(o.with(|_| ()).is_none(), "decide runs inside the owner");
+            *v += 1;
+            *v
+        },
+        |x, _| {
+            // outside: the owner is idle, a re-entering call is answered
+            (x, o.with(|v| *v))
+        },
+    );
+    assert_eq!(r, Some((6, Some(6))));
+    assert_eq!(o.refused(), 1, "only the nested call of decide was refused");
+}
+
+#[test]
+fn a_step_inside_a_call_is_refused_and_counted_without_acting() {
+    let o: Owner<u32> = Owner::new();
+    o.start(put(5)).unwrap();
+    let mut acted = false;
+    let inner = o.with(|_| {
+        o.step(
+            (),
+            |_, ()| unreachable!("a second reference"),
+            |(), _| acted = true,
+        )
+    });
+    assert_eq!(inner, Some(None));
+    assert!(!acted);
+    assert_eq!(o.refused(), 1);
+}
+
+#[test]
+fn a_step_without_an_owner_does_not_act() {
+    let o: Owner<u32> = Owner::new();
+    assert_eq!(
+        o.step((), |_, ()| unreachable!(), |(): (), _| unreachable!()),
+        None::<()>
+    );
+}
+
+#[test]
+fn the_refusal_count_is_the_first_word_of_the_owner() {
+    let o = fake();
+    let first = || unsafe { *(&o as *const _ as *const u32) };
+    assert_eq!(first(), 0);
+    o.run((), |_| {
+        assert_eq!(o.with(|_| ()), None);
+    });
+    assert_eq!(o.refused(), 1);
+    assert_eq!(
+        first(),
+        1,
+        "a device test reads the count at the owner's symbol"
+    );
+}

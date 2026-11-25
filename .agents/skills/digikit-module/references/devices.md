@@ -68,7 +68,7 @@ What is used and what is left: `mise run dk:store -- --emu info` (or `--port NAM
 ## Effects
 
 An effect works on the master block (or a send bus) and is the same routine on both devices. The run-time effect rows come from `core/dynfx`;
-the pages from `core/fxpages`, which the Digitone II image needs in its module list (`device` patch set).
+the pages are the fx service's (`services/fx`; the image reserves their parameter rows in `core/rows`).
 
 | | Digitakt II | Digitone II |
 | --- | --- | --- |

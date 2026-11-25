@@ -81,9 +81,12 @@ fn service_file(dev: Dev, leaf: &str, nx: &str) -> Vec<u8> {
     packed(dev, leaf, "dks", nx)
 }
 
+/// The bytes the fixture `local-patch` declares for its patch (`BOUND_PATCH` of tests/fixtures/modules/local-patch/src/lib.rs): `init` is replayed here, so the value is the test's.
+pub(super) const PATCH_TEST_VALUE: u32 = 0xfffe;
+
 /// The stock bytes of every hook site a service takes, from the local firmware (`patchkit port stock`, which reads the image and the committed port data; the bytes go
 /// into a fake firmware here and are written nowhere): hook name hash to (site address, displaced bytes). The port file holds only their check values.
-fn stock_sites(dev: Dev) -> std::collections::BTreeMap<u32, (u32, Vec<u8>)> {
+pub(super) fn stock_sites(dev: Dev) -> std::collections::BTreeMap<u32, (u32, Vec<u8>)> {
     let out = std::process::Command::new(repo().join("dist/patchkit/patchkit"))
         .current_dir(repo())
         .args(["--root", ".", "port", "stock", "--firmware"])
@@ -201,7 +204,7 @@ fn module_requires() -> std::collections::BTreeMap<String, Vec<String>> {
     }
     let mut out = std::collections::BTreeMap::new();
     let repo = repo();
-    for root in ["modules", "runtime", "services", "image-modules"] {
+    for root in ["modules", "runtime", "services"] {
         walk(&repo.join(root), &mut out);
     }
     out
@@ -351,6 +354,8 @@ pub(super) struct Card {
     pub(super) real_rows: bool,
     /// `init` declares the handler of every kind 4 bytes off the one the header table carries (a service whose `init` and file disagree).
     pub(super) skew_kind_handler: bool,
+    /// The replayed `init` of a service declares its patches with another length than the port file's site (a file whose `service!` list and port disagree).
+    pub(super) skew_patch_len: bool,
     /// The `init` and `fini` the loader entered, in order: `(is_fini, record)`.
     pub(super) hooks: Vec<(bool, usize)>,
     /// The records whose service file provides a `ProviderRow` (the fixture `local-ping`, linked into the test binary): their `fini` stops the instance.
@@ -395,6 +400,7 @@ impl Card {
             init_calls: Vec::new(),
             real_rows: false,
             skew_kind_handler: false,
+            skew_patch_len: false,
             hooks: Vec::new(),
             provider_recs: Vec::new(),
             newer_parts: false,
@@ -525,6 +531,10 @@ impl Images for Card {
                 crate::package::collect::dk_service_declare_kind(ctx, d.a, d.b, at(d.c + if self.skew_kind_handler { 4 } else { 0 }))
             } else if d.tag == Declare::SLOT {
                 crate::package::collect::dk_service_declare_slot(ctx, d.a, d.b, at(d.c))
+            } else if d.tag == Declare::HOOK && dkneeds::keys::hook_is_patch(d.b) {
+                // a patch: `init` declares the bytes `start` computed (the fixture `local-patch` gives `PATCH_TEST_VALUE`) with the length of the port file's site
+                let len = port.as_ref().and_then(|p| p.find_site(d.a)).map_or(2, |s| s.len as u32);
+                crate::package::collect::dk_service_declare_patch(ctx, d.a, PATCH_TEST_VALUE, if self.skew_patch_len { len * 2 } else { len })
             } else if d.tag == Declare::HOOK {
                 crate::package::collect::dk_service_declare_hook(ctx, d.a, at(d.b))
             } else if d.tag == Declare::EXPORT {
@@ -633,6 +643,9 @@ pub(super) const LFO_SHAPE: Fixture = Fixture { leaf: "lfo-shape", nx: "test/lfo
 const LFO_SHAPE_B: Fixture = Fixture { leaf: "lfo-shape-b", nx: "test/lfo-shape-b" };
 pub(super) const SVC_USER: Fixture = Fixture { leaf: "svc-test-user", nx: "test/svc-test-user" };
 /// The test service with ColdFire hooks in the port file of the test image, and its user.
+/// A service that takes one patch of the firmware (two bytes, a dead size bound of the chooser's order vector copy) and the module that needs it.
+pub(super) const LOCAL_PATCH: Fixture = Fixture { leaf: "local-patch", nx: "test/local-patch" };
+pub(super) const LOCAL_PATCH_USER: Fixture = Fixture { leaf: "local-patch-user", nx: "test/local-patch-user" };
 pub(super) const SVC_TEST: Fixture = Fixture { leaf: "svc-test", nx: "test/svc-test" };
 pub(super) const LOCAL_PING: Fixture = Fixture { leaf: "local-ping", nx: "test/local-ping" };
 pub(super) const LOCAL_PING_USER: Fixture = Fixture { leaf: "local-ping-user", nx: "test/local-ping-user" };
@@ -790,6 +803,16 @@ fn found(l: &Boot, plan: &Plan) -> BTreeSet<String> {
 
 /// The hook sites (hook name hash, address) that the service files which loaded install: each `HOOKS` item of the packed file that the port file lists as present.
 fn binds_of(dev: Dev, l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
+    binds_split(dev, l, plan, false)
+}
+
+/// The patch sites of the service files that came up (the `HOOKS` items with the patch entry): (name hash, address).
+fn patches_of(dev: Dev, l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
+    binds_split(dev, l, plan, true)
+}
+
+/// The sites of the `HOOKS` items of the service files that came up: the hooks, or (`patches`) the patches.
+fn binds_split(dev: Dev, l: &Boot, plan: &Plan, patches: bool) -> Vec<(u32, u32)> {
     let pf = port_file(dev);
     let pt = table_of(&pf);
     let port = Keys::parse(&pt).unwrap();
@@ -805,7 +828,7 @@ fn binds_of(dev: Dev, l: &Boot, plan: &Plan) -> Vec<(u32, u32)> {
         for i in 0..keys.count(tag::HOOKS) {
             let (hash, entry, _) = keys.words(tag::HOOKS, i).unwrap();
             // the entry of another device (one name may have an entry for each device)
-            if !dkneeds::keys::hook_for_device(entry, dev.profile.id) {
+            if !dkneeds::keys::hook_for_device(entry, dev.profile.id) || dkneeds::keys::hook_is_patch(entry) != patches {
                 continue;
             }
             let site = port.find_site(hash).expect("the port file lists the hook");
@@ -931,9 +954,11 @@ unsafe fn fits(dev: Dev, set: &str, modules: &[&Fixture], want: &[&str]) {
     }
     // the hook sites of the files: one `jmp` written for each hook of a service file that the port lists as present, at its address, under one mask
     let binds = binds_of(dev, &l, &plan);
+    let patches = patches_of(dev, &l, &plan);
     assert_eq!(l.installer.count(), binds.len(), "{what}: installed sites");
+    assert_eq!(l.installer.patch_count(), patches.len(), "{what}: installed patches");
     let written: Vec<u32> = l.p.calls.borrow().iter().filter_map(|c| if let Call::Write { addr, .. } = c { Some(*addr) } else { None }).collect();
-    let mut sites: Vec<u32> = binds.iter().map(|b| b.1).collect();
+    let mut sites: Vec<u32> = binds.iter().chain(patches.iter()).map(|b| b.1).collect();
     sites.sort();
     let mut w2 = written.clone();
     w2.sort();
@@ -1021,6 +1046,26 @@ fn an_effect_loads_with_the_fx_service_file() {
             fits(*dev, "emulator", &[&FX_GAIN], &["fx"]);
         }
         let _ = clean_state();
+    }
+}
+
+/// No image point holds a table for the fx service (RC4-2): the patched image of every set has no `fxpages_info`, only the `rows_info` the service finds its parameter blocks in (the
+/// blocks themselves: `tests/rows.rs` of patchkit against the device files, `tests/table.rs` of the service), and the service file starts over it from its own device facts and loads an
+/// effect (the facts of each device: `tests/table.rs` of the service).
+#[test]
+fn the_fx_service_file_loads_over_an_image_with_no_effect_pages_point() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        for set in ["emulator", "device"] {
+            let image = Image::read(*dev, set);
+            let has = |name: &str| image.entries.iter().any(|e| e.1 == name_hash(name) && e.2 == 0);
+            assert!(!has("fxpages_info"), "{} {set}: the image has a table for the effect pages", dev.name);
+            assert!(has("rows_info"), "{} {set}: no rows_info", dev.name);
+            unsafe {
+                fits(*dev, set, &[&FX_GAIN], &["fx"]);
+            }
+            let _ = clean_state();
+        }
     }
 }
 
@@ -2051,7 +2096,10 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
     }
     // (tag, a, b) with the address words left out
     fn plain(tag: u16, a: u32, b: u32) -> (u16, u32, u32) {
-        if tag == Declare::HOOK || tag == Declare::EXPORT {
+        // a patch is a `HOOKS` item of the header table (the entry word names it as a patch)
+        if tag == Declare::PATCH {
+            (Declare::HOOK, a, 0)
+        } else if tag == Declare::HOOK || tag == Declare::EXPORT {
             (tag, a, 0)
         } else {
             (tag, a, b)
@@ -2106,6 +2154,18 @@ fn the_init_of_each_service_file_declares_what_its_header_table_carries() {
                     // the row and the provider's instance are the core's own, not entries of the header table
                     if d.tag != Declare::PROVIDER_ROW && d.tag != Declare::PROVIDER_INSTANCE {
                         got.push(plain(d.tag, d.a, d.b));
+                    }
+                }
+            }
+            // a service may declare a hook plain that the table lists for another device only: the loader drops that declaration at the commit (`declared_offsets`), so it is not
+            // compared. Per name, as many declarations go as the table has items of other devices for it, never more than the file declared above the table's own.
+            for i in 0..header.n {
+                let h = header.items[i];
+                if h.tag == Declare::HOOK && !dkneeds::keys::hook_for_device(h.b, dev.profile.id) {
+                    let (g, w) = (got.iter().filter(|x| x.0 == Declare::HOOK && x.1 == h.a).count(), want.iter().filter(|x| x.0 == Declare::HOOK && x.1 == h.a).count());
+                    if g > w {
+                        let at = got.iter().position(|x| x.0 == Declare::HOOK && x.1 == h.a).unwrap();
+                        got.remove(at);
                     }
                 }
             }
@@ -2371,8 +2431,8 @@ fn a_machine_index_that_the_keys_table_lacks_is_refused_with_e_decl_id_and_leave
             assert_eq!(Keys::parse(&table_of(&packed(*dev, SINE.leaf, "dkm", SINE.nx))).unwrap().keys_of(dkneeds::KIND_MACHINE).count(), 1, "the fixture has one machine key");
             swap_module(&mut l, 0, SINE.leaf, without_dsp(*dev, &SINE));
             // the machines service reads the image's registry table through the core
-            let dynreg = image.words("dynreg_info");
-            let _reg = crate::package::cleanup_tests::DynregInfoGuard::set(dynreg.as_ptr());
+            let rows_words = image.words("rows_info");
+            let _reg = crate::package::cleanup_tests::RowsInfoGuard::set(rows_words.as_ptr());
             l.m.init_calls = std::vec![Builder::Machine(1)];
             l.m.real_rows = true;
             let _dsp = dsp_env(*dev, &l, &plan);
@@ -2403,9 +2463,9 @@ fn a_machine_declared_beyond_its_uses_is_refused_with_e_decl_uses_and_leaves_not
             put(&mut f, item as u32 + 4, 0);
             swap_module(&mut l, 0, SINE.leaf, f);
             // the image lists the first words of the table; the machines service reads the profile words after them, which are zero here instead of what follows the vector in memory
-            let mut dynreg = image.words("dynreg_info");
-            dynreg.resize(128, 0);
-            let _reg = crate::package::cleanup_tests::DynregInfoGuard::set(dynreg.as_ptr());
+            let mut rows_words = image.words("rows_info");
+            rows_words.resize(128, 0);
+            let _reg = crate::package::cleanup_tests::RowsInfoGuard::set(rows_words.as_ptr());
             l.m.init_calls = std::vec![Builder::Machine(0)];
             l.m.real_rows = true;
             let _dsp = dsp_env(*dev, &l, &plan);

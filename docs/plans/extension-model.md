@@ -97,7 +97,7 @@ Facts from the code on `int/shared-gate`. Paths are relative to the repository r
     prebuilt card. The runtime and `plusdrive-write` now use the same anchors.
   - `dsp-ddr-proof` and `dsp-lp0-proof` are not tracked any more.
 - "Gate" has four meanings: the planned hot reload hook gate, the builder `Gate` (`params/src/builder.rs`), test gates, size limits.
-- Module ids are written in each `module.toml` (`id = "core/dynreg"` in `modules/core/adapters/dynreg/`); patchkit finds manifests anywhere
+- Module ids are written in each `module.toml` (`id = "core/rows"` in `modules/core/adapters/dynreg/`); patchkit finds manifests anywhere
   under `modules/` (`packages/patchkit/src/module.rs:1`). A folder move inside `modules/` keeps ids.
 
 **Firmware facts (E0b, DT2 1.17 and DN2 1.12)**
@@ -113,7 +113,7 @@ Filter machines:
 - The filter type is a byte in the sound: DT2 +0xa3, DN2 +0xdf. On DT2 filter types and machines share one descriptor table; on DN2 they are
   separate arrays that share one fallback row.
 - Six sites interpret the value and need a hook: the accessor, the graph switch (its default branch draws something; the hook must replace it),
-  the list builder, the name function ("ERROR" for 6 and up), the loader bound, and the per-type knob slot function that `core/machines` already
+  the list builder, the name function ("ERROR" for 6 and up), the loader bound, and the per-type knob slot function that `core/rows` already
   hooks (`cf.machine.hook.param_code.args`). About ten other functions only copy or compare the byte.
 - The stock loader keeps 0..5 (and 0xff) and resets any other value to 0. A stored type of 6 or more on stock code shows the last machine's
   knobs, the name "ERROR" and no knob slots, with no fault.
@@ -178,7 +178,7 @@ service by default.
 **How a closed table is extended.** The firmware's bounds (`type < 6`, `moveq #6`) are not raised in place. The service takes the points
 where the firmware turns a stored number into a row: the list builder (appends the new ids), the accessor (returns the service's own row for
 a number in the service's range), and each switch or bound that reads the number directly (default case to the service). Source machines
-work this way today (`core/machines`: lookup at run time, hooks at the machine sites, stock tables copied with rows appended). The cost of a
+work this way today (`core/rows`: lookup at run time, hooks at the machine sites, stock tables copied with rows appended). The cost of a
 new table family is the number of direct readers of its stored number; E0b counts them before a feature starts.
 
 ### 3.3 Rules
@@ -361,7 +361,7 @@ Class and home of every image module (inventory of the 25 `adapters/` folders an
 | `services/params` | `services/rows` | crate rename; users in machines and fx |
 | "adapter" in docs | "image half" or "platform" | ARCHITECTURE.md, LAYOUT.md, runtime-and-services.md, AGENTS.md |
 
-Module ids keep the word they have (`core/dynreg` and so on); only folders, roles and docs change.
+Module ids keep the word they have (`core/rows` and so on); only folders, roles and docs change.
 
 ### 4.3 Service trait
 
@@ -415,7 +415,7 @@ claims confirmed, one refuted and corrected, the rest open and marked).
 6. **Stop rule for E6 and E7**: do the project, kit and sound loaders clamp the LFO wave value (codes 79, 89, 99) and the filter type byte? If
    not, rule 7 puts extended values in digikit's store.
 7. Re-resolve on 1.17 and 1.12 the project, kit, track and view-hook facts of the archive (`registry::in_use`, `view_now`, `refresh_view`,
-   the core/dynreg view hook), as `devices/fw` declarations for B1 `dk_fw_` imports.
+   the core/rows view hook), as `devices/fw` declarations for B1 `dk_fw_` imports.
 8. Count imports, binds and exports of `machines.dks` against the limit of 64, with the filter hooks of item 3 added.
 9. Second agent: check every DT2 address in section 2 against the image bytes.
 
@@ -623,7 +623,7 @@ What:
    (`Loader::reload_load`; the keys of every loaded module and of the new file, in selection order). Live modules keep their numbers (rule 1) and new keys
    take free numbers; `dkrt_sdk::sticky` does not change. A service `settle` must be idempotent: contract case 9 (`settle_over_the_live_set_changes_nothing`).
 9. Machine list rebuild after every reload, unconditional (the archive's behaviour, proven on the emulator only). The firmware builds the machine selection
-   view's item list once and keeps it. `core/dynreg` has the view hook again (`dynreg_view_hook`, hook `cf.machine.hook.view.build` on the function
+   view's item list once and keeps it. `core/rows` has the view hook again (`dynreg_view_hook`, hook `cf.machine.hook.view.build` on the function
    `cf.machine.fn.view.build`, declared in `devices/fw/machine.toml` with the archived hash on DT2 1.17 and DN2 1.12): it stores the view in `dynreg_view`, and
    words 48 and 49 of `dynreg_info` (`dynreg::w::VIEW_VAR`, `VIEW_BUILD`) hold that variable and the builder. The machines service rebuilds the list in
    `Service::live_done`, which the job calls at the end of every reload that got past the checks, success or failure (after a failed load the cached list would keep
@@ -836,7 +836,7 @@ What:
    - UI-task sites, as `lfo.dks` hooks (B1 bind resolves the addresses; routines in `services/lfo/dks/src/hooks-ui.s`, sites in `devices/fw/lfo.toml`,
      finding 149 "The panel hooks"): the name formatter (`wave_name`: DT2 0x400e1b68 and DN2 0x400e3610, four characters; `wave_name3`: DN2
      0x4000766c, the first three characters). The maximum of the WAVE parameter is no hook: the service writes the max word of the three WAVE rows (codes 79, 89 and 99) in the
-     RAM copy of the parameter table that `core/params` makes, to the highest loaded wave number << 8, and puts the stock pair back when the last shape is gone (E6c), so
+     RAM copy of the parameter table that `core/rows` makes, to the highest loaded wave number << 8, and puts the stock pair back when the last shape is gone (E6c), so
      with the service absent the maximum stays 0x600. The firmware's range accessor (DT2 0x400da368, DN2 0x400dc154, 172 callers on DT2 and 191 on DN2, among them the live-set
      clamp the encoder reaches) reads that copy. No caller scales a value onto 0..max (finding 149, "Callers of the T1 range accessor"); the MIDI CC and NRPN clamps see the new maximum, so with a shape loaded
      a CC value above 6 selects a shape number up to the highest one instead of clamping to RAND. Gaps: the maximum follows the highest loaded number, so a number below it
@@ -921,7 +921,7 @@ interrupt cost is the open risk). Depends on: E3; E4. Open first: which field th
 
 What: the maximum of the LFO WAVE parameter is a word of the firmware's parameter table, so the lfo service writes it and hooks nothing. The service writes
 the max word (+0xc) of the three WAVE rows (codes 79, 89 and 99; row layout: owner +0, mirror +4, min +8, max +0xc, default +0x10, stride 0x3c) in the RAM copy of
-the table that `core/params` makes (every reference of the stock table points into the copy). Only the range accessor reads min, max and default of those rows,
+the table that `core/rows` makes (every reference of the stock table points into the copy). Only the range accessor reads min, max and default of those rows,
 apart from the default read in `ParameterPageView::vfunc_2`, which the write does not touch (finding 149, "Direct readers of the parameter table"). The write
 is made at run time, never at patch time, so with no shape loaded the maximum stays 0x600 (RAND).
 
@@ -932,7 +932,7 @@ is made at run time, never at patch time, so with no shape loaded the maximum st
   `cf.param.data.descriptor_table`; `patchkit bind` resolves the four words (`DKRT_LFO_FW` in `hooks-ui.s`) and `setup` gives them to the crate.
   `patchkit service-check` fails a row anchor that lists two services in `users`.
 - `apply_record` and `remove` call `sync_range`: max = the highest loaded shape number << 8 while a shape is loaded; the stock pair goes back with the last
-  shape (contract cases 3 and 7 compare the word with its start value). `lfo.dks` requires `core/dynreg` (it provides `dynreg_info` and the table copy), so a patch set without it is refused at plan time; an image without `dynreg_info` still refuses a shape with `E_NO_REGISTRY`.
+  shape (contract cases 3 and 7 compare the word with its start value). `lfo.dks` requires `core/rows` (it provides `dynreg_info` and the table copy), so a patch set without it is refused at plan time; an image without `dynreg_info` still refuses a shape with `E_NO_REGISTRY`.
 
 Tests: unit (the helper over `FakeCore` memory: set, restore, refusals; lfo: the maximum follows the highest loaded shape over apply, remove and reload; the contract
 suite with the rows in the fixture image), assembly (`lfo.dks` binds two hooks on DT2 and three on DN2, the four words of `DKRT_LFO_FW` resolve to the table and its rows), device (existing: lfo-shape-panel,

@@ -10,7 +10,7 @@ import { dn2Tests, type Dn2 } from './shot-dn2-support.ts';
 // writes (the track table's owner requests) go through one queue. This test turns the GAIN knob of an effect page while a pool sample loads into a track,
 // so the table publish and the knob words share the link. Both must land in DSP memory, and the link must report no failed write.
 //
-// DN2 OS 1.12, patch set `sample-tracks` (it has core/fxpages, core/dynfx, core/sample-pool and core/dsp-link). Written for the batched gate; not run yet.
+// DN2 OS 1.12, patch set `sample-tracks` (it has core/dynfx, core/sample-pool and core/dsp-link). Written for the batched gate; not run yet.
 //
 // Read back: the effect row's p0 word and the track record through `dsp.peek` (the plan symbols `fx.rows` and the samples service `DKRT_SMP_RECORDS`), and the page writer's counters in
 // `DKRT_FXP` (word 4 `sent`: values the link confirmed; word 5 `errors`: live writes that failed).

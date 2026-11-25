@@ -119,7 +119,7 @@ export function buildModuleData(root = repoRoot, offered = undefined, { firmware
     .map((f) => readFileSync(join(root, 'ports', f), 'utf8'));
   // the module roots in the order of tools/patchkit/modroots.py REPO_ROOTS; the tests use the fixtures
   // The published site leaves out the test fixtures: only the site's tests use them, and some need the Rust toolchain for ColdFire.
-  const roots = ['modules', 'runtime', 'services', 'image-modules'];
+  const roots = ['modules', 'runtime', 'services'];
   if (!firmwareOnly && !process.env.DIGI_SITE_NO_FIXTURES) roots.push('tests/fixtures/modules');
   const manifests = roots.flatMap((r) => walk(join(root, r), 'module.toml').sort(byParts));
   const parsed = manifests

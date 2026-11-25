@@ -17,19 +17,14 @@ export function withRouteFxSession(device: Device, scope: string, config: RouteF
     ...config,
     image: {
       name: config.image,
-      modules: [
-        ...RT,
-        ...(config.image === 'track-base' ? [] : ['core/fxpages']),
-        ...(config.image === 'routes' ? ['core/ui'] : []),
-      ],
+      modules: [...RT, ...(config.image === 'routes' ? ['core/ui'] : [])],
       inventory: config.image === 'routes' ? [SINE, GAIN, SEND, SENDONLY, SEND3] : [SINE, FX, `${FX}-2`, `${FX}-3`],
       symbols: [
         'DKRT_BOOT',
         'fx.rows',
         '_dl_area',
-        ...(config.image === 'track' || config.image === 'track-base' ? ['dynreg_info'] : []),
-        ...(config.image === 'track' ? ['fxpages_info'] : []),
-        ...(config.image === 'routes' ? ['DKRT_HOST_DIR', 'fxpages_info'] : []),
+        ...(config.image === 'track' || config.image === 'track-base' ? ['rows_info'] : []),
+        ...(config.image === 'routes' ? ['DKRT_HOST_DIR'] : []),
       ],
       policy: 'fx-routes',
     },

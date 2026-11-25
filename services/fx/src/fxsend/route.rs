@@ -6,7 +6,6 @@ use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp;
 use dkrt_abi::provider::WordSink;
 use dkrt_abi::shared::Shared;
-use dkrt_sdk::*;
 
 /// The routes of a record's flags word: (allowed `ROUTE_*` bits, default `ROUTE_*`). The loader has checked the word.
 pub(super) fn routes_of(flags: u32) -> (u8, u8) {

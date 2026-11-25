@@ -120,7 +120,7 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
   gen [--check [--paths] [--scope all|modules|shared]] [--modules a,b] [--manifest PATH]...
                                          write (or check) generated module, SDK and firmware files
                                          --manifest PATH (repeatable, needs --modules, incompatible with --scope shared): explicit library including requires;
-                                         include core/machines for machine galleries or [[gen]] device constants
+                                         include core/rows for machine galleries or [[gen]] device constants
                                          --scope restricts checks to module outputs or shared SDK/firmware outputs (default all)
   reference [-o OUT.html] [--fragment]   the searchable firmware reference page (default out/reference/fw.html) from
                                          ports/bindings/reference.json (written by `gen`); --fragment writes the
@@ -1173,7 +1173,7 @@ mod tests {
         // Replace the build fixture's SDK link with a private copy: stale checks never touch the repository.
         std::fs::remove_file(fixture.0.join("sdk")).unwrap();
         let real = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        for dir in ["sdk", "devices", "ports", "image-modules/points/machines"] {
+        for dir in ["sdk", "devices", "ports", "runtime/platform/rows"] {
             copy_tree(&real.join(dir), &fixture.0.join(dir));
         }
         std::fs::create_dir_all(fixture.0.join("runtime/core")).unwrap();
@@ -1255,7 +1255,7 @@ uses = ["DEVICE_ID"]
             let mut a = args("modules");
             for path in [
                 module_dir.join("module.toml"),
-                fixture.0.join("image-modules/points/machines/module.toml"),
+                fixture.0.join("runtime/platform/rows/module.toml"),
             ] {
                 a.rest
                     .extend(["--manifest".into(), path.display().to_string()]);
@@ -1267,7 +1267,7 @@ uses = ["DEVICE_ID"]
             "--manifest".into(),
             module_dir.join("module.toml").display().to_string(),
         ]);
-        assert!(run(missing_alloc).unwrap_err().0.contains("core/machines"));
+        assert!(run(missing_alloc).unwrap_err().0.contains("core/rows"));
         run(explicit_args()).unwrap();
         assert_eq!(baseline, snapshot());
         let unrelated = fixture.0.join("modules/unrelated/module.toml");
@@ -1372,11 +1372,10 @@ uses = ["DEVICE_ID"]
         root.module("tests/fixtures/modules", "test/dependency", &[], false);
         root.module("runtime", "test/runtime", &[], false);
         root.module("services", "test/service", &[], false);
-        root.module("image-modules", "test/image", &[], false);
         // Device models and declared objects/sources are deliberately unusable: catalog validation never reads them.
         std::fs::write(root.0.join("devices/broken.toml"), "malformed = [").unwrap();
         let check = || Library::catalog_check(&root.0);
-        assert_eq!(check().unwrap(), 5);
+        assert_eq!(check().unwrap(), 4);
         run(Args {
             root: root.0.clone(),
             rest: vec!["catalog-check".into()],
@@ -1419,7 +1418,7 @@ uses = ["DEVICE_ID"]
             assert!(check().unwrap_err().0.contains(error), "expected {error}");
         }
         std::fs::write(path, original).unwrap();
-        assert_eq!(check().unwrap(), 5);
+        assert_eq!(check().unwrap(), 4);
         assert!(!cache_dir(&root.0).exists());
     }
 
@@ -1613,6 +1612,7 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
                             portfile::SiteKind::Raw => "raw",
                             portfile::SiteKind::Tail => "tail",
                             portfile::SiteKind::Stock => "stock",
+                            portfile::SiteKind::Patch => "patch",
                         },
                         "check": patchkit::error::hex(&f.check),
                     }),
@@ -1693,19 +1693,24 @@ fn port_cmd(root: &Path, rest: &[String]) -> Result<()> {
                     let d = patchkit::dkm::Dkm::parse(&bytes)?;
                     let outside = portfile::outside_set(&d, &data);
                     let unlisted = portfile::unlisted_hooks(&d, &data)?;
+                    let wrong = portfile::wrong_kind_hooks(&d, &data)?;
                     println!(
-                        "{} {f}: {} firmware reference(s) outside the port set, {} hook(s) not listed",
+                        "{} {f}: {} firmware reference(s) outside the port set, {} hook(s) not listed, {} hook(s) or patch(es) on a site of the other kind",
                         p.id(),
                         outside.len(),
-                        unlisted.len()
+                        unlisted.len(),
+                        wrong.len()
                     );
+                    for h in &wrong {
+                        println!("  {h:#010x}: a patch on a hook site or a hook on a patch site");
+                    }
                     for n in &outside {
                         println!("  {n} is outside the port set");
                     }
                     for h in &unlisted {
                         println!("  hook {h:#010x} is not listed");
                     }
-                    bad += outside.len() + unlisted.len();
+                    bad += outside.len() + unlisted.len() + wrong.len();
                 }
             }
             if bad != 0 {

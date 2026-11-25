@@ -15,7 +15,7 @@ export const DATA_BASE = 0x200a0000; // byte address of the first data symbol (f
 export const DATA_END = 0x20100000;
 
 /** The adapter's sources of a device, assembled as separate objects that see each other's data symbols. */
-const DSP = path.join(ROOT, 'image-modules/points/dsp-voice/src/dsp');
+const DSP = path.join(ROOT, 'runtime/platform/dsp-voice/src/dsp');
 const WRAPPER: Record<string, string[]> = {
   dt2: [path.join(DSP, 'dsp-voice.s'), path.join(ROOT, 'services/machines/dks/dsp/dispatch-dt2.s')],
   dn2: [
@@ -24,7 +24,7 @@ const WRAPPER: Record<string, string[]> = {
     path.join(ROOT, 'services/machines/dks/dsp/dispatch-dn2.s'),
   ],
 };
-const FX_DSP = path.join(ROOT, 'image-modules/points/fx/src/dsp');
+const FX_DSP = path.join(ROOT, 'runtime/platform/fx/src/dsp');
 const FX_ADAPTER = path.join(FX_DSP, 'fx.s');
 const FX_SEND: Record<string, string> = { dt2: path.join(FX_DSP, 'fxsend.s'), dn2: path.join(FX_DSP, 'fxsend-dn2.s') };
 /** The dispatch code of the fx service for a device (master chain and send route). */

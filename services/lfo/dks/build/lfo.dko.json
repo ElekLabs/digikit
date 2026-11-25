@@ -411,21 +411,21 @@
   {
    "addend": 0,
    "offset": 6,
-   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows9rows_infoNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "symbol": ".sec..rodata.global.10",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 12,
-   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows9rows_infoNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "symbol": "_RNvNtCshSkmfNJ5zIR_7dkneeds4keys9name_hash",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 24,
-   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows9rows_infoNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "symbol": "_RNvXs_NtCs8bqlSpJqGKy_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCs4NVp4pdP0rZ_8dkrt_abi8core_api7CoreApi4info",
    "type": "cf.32"
   },
@@ -713,7 +713,7 @@
    "addend": 0,
    "offset": 16,
    "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave9wave_rowsNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
-   "symbol": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows9rows_infoNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "type": "cf.32"
   },
   {
@@ -762,7 +762,7 @@
    "addend": 0,
    "offset": 90,
    "section": ".text._RINvNtCsiu542U2B5NE_12dkrt_svc_lfo4wave10sync_rangeNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
-   "symbol": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "symbol": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows9rows_infoNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "type": "cf.32"
   },
   {
@@ -958,7 +958,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1000,7 +1000,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle8can_stopNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2E_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1014,7 +1014,7 @@
    "addend": 0,
    "offset": 20,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle8can_stopNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2E_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1028,7 +1028,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6attachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2C_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1042,7 +1042,7 @@
    "addend": 0,
    "offset": 20,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6attachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2C_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1056,7 +1056,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle11reload_doneNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2I_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1070,7 +1070,7 @@
    "addend": 0,
    "offset": 20,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle11reload_doneNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2I_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1084,7 +1084,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records6commitNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2A_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1098,7 +1098,7 @@
    "addend": 0,
    "offset": 20,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records6commitNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2A_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1112,7 +1112,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5beginNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2z_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1126,7 +1126,7 @@
    "addend": 0,
    "offset": 20,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5beginNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2z_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1140,7 +1140,7 @@
    "addend": 0,
    "offset": 6,
    "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks14dk_svc_declare",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1588,7 +1588,7 @@
    "addend": 0,
    "offset": 42,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5applyNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2z_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1609,7 +1609,7 @@
    "addend": 0,
    "offset": 110,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5applyNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2z_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1707,7 +1707,7 @@
    "addend": 0,
    "offset": 6,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2z_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1728,7 +1728,7 @@
    "addend": 0,
    "offset": 62,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables7records5checkNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2z_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1770,7 +1770,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6detachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2C_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1791,7 +1791,7 @@
    "addend": 0,
    "offset": 38,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6detachNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2C_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1882,7 +1882,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6settleNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2C_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1903,7 +1903,7 @@
    "addend": 0,
    "offset": 36,
    "section": ".text._RINvNtNtNtCs4NVp4pdP0rZ_8dkrt_abi8provider6tables9lifecycle6settleNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoNtCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DkSvcEnterEB2C_",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -1980,7 +1980,7 @@
    "addend": 0,
    "offset": 8,
    "section": ".text._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start",
-   "symbol": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -2082,21 +2082,21 @@
    "type": "cf.32"
   },
   {
-   "addend": 11,
+   "addend": 9,
    "offset": 16,
    "section": ".rodata.global.11",
    "symbol": ".sec..rodata.global.10",
    "type": "cf.32"
   },
   {
-   "addend": 22,
+   "addend": 20,
    "offset": 32,
    "section": ".rodata.global.11",
    "symbol": ".sec..rodata.global.10",
    "type": "cf.32"
   },
   {
-   "addend": 33,
+   "addend": 31,
    "offset": 48,
    "section": ".rodata.global.11",
    "symbol": ".sec..rodata.global.10",
@@ -3093,14 +3093,14 @@
   },
   {
    "align": 2,
-   "hex": "4878000b4879000000004eb9000000002f002f2f00104eb9000000004fef00104a80670c223c44594e522040b29066024e75428060fa",
+   "hex": "487800094879000000004eb9000000002f002f2f00104eb9000000004fef00104a80671a223c524f57532040b290660c7202b2a8000467064280600242804e75",
    "kind": "text",
-   "name": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
-   "size": 54
+   "name": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows9rows_infoNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "size": 64
   },
   {
    "align": 2,
-   "hex": "598f2f0a2f02246f0010487800014eb900000000142a000d588f4a0266504a2a000c674a122a000e1f41000b72011541000e2f00487800014eb900000000508f4a2f000b6638487800014eb90000000042011541000c1541000e2f00487800014eb9000000004fef000c740160102f00487800014eb900000000508f42027001c082241f245f588f4e75",
+   "hex": "598f2f0a2f02246f0010487800014eb900000000142a0005588f4a0266504a2a0004674a122a00061f41000b7201154100062f00487800014eb900000000508f4a2f000b6638487800014eb900000000420115410004154100062f00487800014eb9000000004fef000c740160102f00487800014eb900000000508f42027001c082241f245f588f4e75",
    "kind": "text",
    "name": ".text._RINvMs0_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE4stopNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks11dk_svc_stop0EB1F_",
    "size": 138
@@ -3240,7 +3240,7 @@
   },
   {
    "align": 2,
-   "hex": "206f00044a28000c660442804e754a28000e66f6200806800000001060ee",
+   "hex": "206f00044a280004660442804e754a28000666f6200806800000001060ee",
    "kind": "text",
    "name": ".text._RNvMs0_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE8instanceCsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "size": 30
@@ -3317,7 +3317,7 @@
   },
   {
    "align": 2,
-   "hex": "4fefffe448d7440c2c48246f0020487800014eb900000000588f4a2a000c6600008a142a000e72011541000e2f00487800014eb900000000508f4a026650260a0683000000102f034878000141ef001e4eb900000000342f001e2f6f00200018487800014eb90000000042011541000e4fef000c4a42661c72011541000c2f00487800014eb900000000508f602e76f6740160282f00487800014eb900000000262f0018508f740160122f00487800014eb900000000508f76f674013c822d430002200e4cd7440c4fef001c4e75",
+   "hex": "4fefffe448d7440c2c48246f0020487800014eb900000000588f4a2a00046600008a142a00067201154100062f00487800014eb900000000508f4a026650260a0683000000102f034878000141ef001e4eb900000000342f001e2f6f00200018487800014eb9000000004201154100064fef000c4a42661c7201154100042f00487800014eb900000000508f602e76f6740160282f00487800014eb900000000262f0018508f740160122f00487800014eb900000000508f76f674013c822d430002200e4cd7440c4fef001c4e75",
    "kind": "text",
    "name": ".text._RINvMs0_NtCs8bqlSpJqGKy_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsiu542U2B5NE_12dkrt_svc_lfo3lfo3LfoE5startNCNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12dk_svc_start0EB1G_",
    "size": 206
@@ -3464,14 +3464,14 @@
   },
   {
    "align": 1,
-   "hex": "64796e7265675f696e666f3c72656461637465643e003c72656461637465643e003c72656461637465643e00",
+   "hex": "726f77735f696e666f3c72656461637465643e003c72656461637465643e003c72656461637465643e00",
    "kind": "data",
    "name": ".rodata.global.10",
-   "size": 44
+   "size": 42
   },
   {
    "align": 2,
-   "hex": "349c5fb8",
+   "hex": "e561fde9",
    "kind": "data",
    "name": ".rodata.dk_svc_abi",
    "size": 4
@@ -3499,13 +3499,6 @@
   },
   {
    "align": 2,
-   "hex": "",
-   "kind": "bss",
-   "name": ".bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
-   "size": 600
-  },
-  {
-   "align": 2,
    "hex": "000000015768d0680000000000020000",
    "kind": "data",
    "name": ".rodata._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks10DK_SVC_ROW",
@@ -3513,14 +3506,21 @@
   },
   {
    "align": 2,
-   "hex": "598f4eb900000000206f00084a28000c661672011f4100032f004eb900000000102f0007508f4e75206f00084a28000e66e01228000d1f410003660872011141000d60d4206f000852a8000872031f41000360c4",
-   "kind": "text",
-   "name": ".text._RNvMNtNtCs8bqlSpJqGKy_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
-   "size": 84
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.DK_SVC_OWNER",
+   "size": 600
   },
   {
    "align": 2,
-   "hex": "4eb900000000206f000442011141000d2f004eb900000000588f4e75",
+   "hex": "598f4eb900000000206f00084a280004661672011f4100032f004eb900000000102f0007508f4e75206f00084a28000666e0122800051f410003660872011141000560d4206f0008529072031f41000360c6",
+   "kind": "text",
+   "name": ".text._RNvMNtNtCs8bqlSpJqGKy_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "size": 82
+  },
+  {
+   "align": 2,
+   "hex": "4eb900000000206f00044201114100052f004eb900000000588f4e75",
    "kind": "text",
    "name": ".text._RNvMNtNtCs8bqlSpJqGKy_11dkrt_svc_rt5owner4gateNtB2_4Gate7release",
    "size": 28
@@ -4065,12 +4065,12 @@
    "size": 24
   }
  ],
- "source_sha256": "09a513b8a5cb674a626e84c69191bf75e212678f7bd514489e650b0027976403",
+ "source_sha256": "3cb9c9f5d5713ea43497359e0ad1285c0c13cd4aad05892c4bce5218a45d27fb",
  "symbols": [
   {
    "global": false,
-   "name": ".sec..bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
-   "section": ".bss._RNvCsfMRU4ugVlCc_16dkrt_svc_lfo_dks12DK_SVC_OWNER",
+   "name": ".sec..bss.DK_SVC_OWNER",
+   "section": ".bss.DK_SVC_OWNER",
    "value": 0
   },
   {
@@ -4279,8 +4279,8 @@
   },
   {
    "global": false,
-   "name": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
-   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows6dynregNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "name": ".sec..text._RINvCseQtBFPkyhVO_13dkrt_svc_rows9rows_infoNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
+   "section": ".text._RINvCseQtBFPkyhVO_13dkrt_svc_rows9rows_infoNtNtCs8bqlSpJqGKy_11dkrt_svc_rt11import_core10ImportCoreECsfMRU4ugVlCc_16dkrt_svc_lfo_dks",
    "value": 0
   },
   {
@@ -4707,6 +4707,12 @@
    "global": true,
    "name": "DKRT_LFO_FW",
    "section": ".data",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "DK_SVC_OWNER",
+   "section": ".bss.DK_SVC_OWNER",
    "value": 0
   },
   {
@@ -5275,9 +5281,9 @@
   }
  ],
  "toolchain": {
-  "exports": "DKRT_LFO_FW dk_lfo_eval dk_lfo_graph dk_lfo_name dk_module dk_svc_abi lfo_read_call_a lfo_read_call_b lfo_read_slew_a lfo_read_slew_b lfo_read_start_a lfo_read_start_b lfo_tick_call_a lfo_tick_call_b lfo_tick_slew_a lfo_tick_slew_b lfo_tick_start_a lfo_tick_start_b lfo_ui_graph lfo_ui_name3 lfo_ui_name4",
-  "instructions_redecoded": "4440",
-  "isa_check": "49c763aee09045ad7db3a68d0fc44191b56f88e45d4ecce3bb6edad034be1320",
+  "exports": "DKRT_LFO_FW DK_SVC_OWNER dk_lfo_eval dk_lfo_graph dk_lfo_name dk_module dk_svc_abi lfo_read_call_a lfo_read_call_b lfo_read_slew_a lfo_read_slew_b lfo_read_start_a lfo_read_start_b lfo_tick_call_a lfo_tick_call_b lfo_tick_slew_a lfo_tick_slew_b lfo_tick_start_a lfo_tick_start_b lfo_ui_graph lfo_ui_name3 lfo_ui_name4",
+  "instructions_redecoded": "4444",
+  "isa_check": "770d64c66f389751af3e25a1e7568e70de6b5b74acfc2f927a4e5858ee418c00",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

@@ -108,8 +108,8 @@ The write-set check (P4a) still looks at one module at a time.
 | ColdFire arena | 512 KiB | 512 KiB | `[limits] arena_bytes` | `E_NOMEM`; a bss above the arena is `E_FORMAT` | capacity-*, memaudit-*-full |
 | upload stage buffer | 128 KiB | 128 KiB | `[limits] stage_bytes` | `E_TOO_BIG` (a file of the exact size loads) | capacity-* |
 | machine types and DSP voice rows | 8 (types 0x10-0x17) | 8 | `[limits] machine_rows`, tied to types.toml by a gen check | a hashed machine `E_TYPE_RANGE`; a pinned voice `E_DSP_ROWS` (rows) or `E_DSP_TYPE` (type) | capacity-*, isolation-* |
-| parameter rows | 16 | 16 | `[limits] param_rows` (tied to the core/dynreg manifest by a cargo test) | `E_PARAM_FULL` | capacity-* |
-| page rows | 0 | 8 | `[limits] page_rows` (tied to the core/dynreg manifest) | `E_PAGE_FULL` (DN2) | capacity-dn2 |
+| parameter rows | 16 | 16 | `[limits] param_rows` (tied to the core/rows manifest by a cargo test) | `E_PARAM_FULL` | capacity-* |
+| page rows | 0 | 8 | `[limits] page_rows` (tied to the core/rows manifest) | `E_PAGE_FULL` (DN2) | capacity-dn2 |
 | sticky id map entries | 8 | 8 | `MAP_N` in the runtime SDK (`[limits.max] map_entries`, a cargo test ties them) | eviction (`MACHINE_TYPE_EVICTED`) | sticky-types |
 | DSP run-time area | 512 KiB | 320 KiB | device profile `[digikit] dsp_area_bytes` | `E_DSP_NOSPACE`; granules of 64 bytes, the first range starts at offset 4, 60 bytes unusable | capacity-*, memaudit-*-full |
 | effects in the chain | 4 | 4 | `[limits] fx_slots` (at most `DK_FX_MAX`) | patched in: build time (`apply` refuses more than `fx_slots`) | prims test |

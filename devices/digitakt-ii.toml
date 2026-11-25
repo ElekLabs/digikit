@@ -170,7 +170,7 @@ esdhc_base = 0xFC0CC000
 dsp_clock_hz = 1000000000
 dsp_blocks_per_second = 1500
 
-# The digikit runtime's view of this device. `id` is what the runtime, the registry (core/dynreg), the DSP table (core/dyndsp) and a
+# The digikit runtime's view of this device. `id` is what the runtime, the registry (core/rows), the DSP table (core/dyndsp) and a
 # .dkm file call the device; `name` is what the INFO reply of the upload protocol says (at most 3 characters).
 [digikit]
 id = 1
@@ -211,10 +211,33 @@ arena_bytes = 524288
 stage_bytes = 131072
 fx_slots = 3   # effects in the chain; core/dynfx reserves this many free effect rows for run-time effects (at most DK_FX_MAX = 4)
 send_slots = 2 # of them effects that run on a send bus (core/fx send route, the send page of the FX key: one knob each; at most the entries of [fx] send_indices)
+send_rows = 2  # parameter rows core/rows reserves for the send page's cells (the two devices share the count, so the parameter table has one layout); at least send_slots
 param_rows = 16
 page_rows = 0
 
-# The effect pages of run-time effects (core/fxpages, docs/design/digikit-registry.md "Effect pages"): facts of the firmware's kit object and of its
+# The reservation of the parameter table (runtime/platform/rows): the image makes room, the loaded services fill their blocks. The platform knows
+# the blocks by number only: `owner` is the number a service finds its block by, the rows are `per` times the `[limits]` key `limit`, `template` the
+# stock parameter code whose row a free row copies. `recipe`: how each of the 15 words of a row is made (0 .. 0x3c: that word of the template's row,
+# 0x100 min, 0x101 max, 0x102 default, 0x103 name pointer, 0x104 short pointer, then 0x105 mirror index (25 + slot + (slot >> 2) * 2), 0x106 kind word ((0x10 + slot ...) << 16 | the template's word 0x18 & 0xffff), 0x107 0x80 + slot). `caps`: the `[limits]` keys whose values are the capacity
+# words the admission reads (the order of the `cap_<kind>` entries of the module; the kind names are the admission's, sdk/sdk.toml `[capacity.kinds]`).
+[rows]
+recipe = [0x00, 0x105, 0x100, 0x101, 0x102, 0x14, 0x106, 0x107, 0x20, 0x24, 0x103, 0x2c, 0x104, 0x34, 0x38]
+caps = ["machine_rows", "param_rows", "page_rows", "send_slots"]
+[[rows.block]]
+owner = 1
+limit = "param_rows"
+template = 0xd1
+[[rows.block]]
+owner = 2
+limit = "fx_slots"
+per = 8
+template = 0x75
+[[rows.block]]
+owner = 3
+limit = "send_rows"
+template = 0x75
+
+# The effect pages of run-time effects (services/fx, docs/design/digikit-registry.md "Effect pages"): facts of the firmware's kit object and of its
 # parameter table that the runtime and the patch use. All **[D]** (read from the 1.17 image and measured in the emulator, docs/findings/61).
 [fx]
 # The firmware's pointer to the live kit object (an SRAM global; the same table holds the 16 track sound pointers at +8, tools/patchkit/pk_harness.py
@@ -222,7 +245,7 @@ page_rows = 0
 # accessor (anchors cf.project.fn.singleton and cf.project.fn.active_kit) returns another object, the project's: the encoders edit this one.
 kit_ptr = 0x80004704
 array_off = 0x4534
-# The number of stock pages: page numbers 0 .. 32 are in the firmware's page table, the effect pages are 33 and up (core/fxpages answers the
+# The number of stock pages: page numbers 0 .. 32 are in the firmware's page table, the effect pages are 33 and up (the fx service answers the
 # page accessor for them). The three effect pages of the Digitakt II are 33, 34 and 35.
 page_first = 33
 # Indices of the effect value array that no stock parameter reads or writes (the DSP does not get them either, finding 61), in the order the
@@ -234,7 +257,7 @@ template_percent = 0x75
 template_bipolar = 0x73
 template_mix = 0x79
 # Persistence (finding 61): the kit's storage record of the effect value array ("fxSetupStorage_v0", 0xa0 bytes) has a u32 at +0, 46 used halfwords from +4, 56
-# spare bytes from +0x60 that the stock loader and saver ignore (28 halfwords), and a u32 at +0x98. core/fxpages keeps the effect values there: one halfword for
+# spare bytes from +0x60 that the stock loader and saver ignore (28 halfwords), and a u32 at +0x98. the fx service keeps the effect values there: one halfword for
 # each of `value_indices`, then one effect ID for each effect row (27 of the 28 halfwords).
 store_off = 0x60
 store_halfwords = 28
@@ -249,6 +272,11 @@ sound_off = 0x34
 sound_stride = 0x450
 # The number of s16 parameter words in a Sound object's array (the stock getter's bound; finding 02): the debug log's parameter watch reads them.
 sound_words = 71
+# The firmware's second per-code table: one value-class object of 0x44 bytes for each parameter code (the display and lock flags a knob row copies from its template; the accessor of the
+# port anchor cf.param.fn.value_class reads it). The tests read the class of a row from it.
+value_classes = 0x4293c040
+# The firmware's kit library: sector ranges (hi exclusive) that the kit and project saves of the firmware write; the FX write-safety policies allow them.
+kit_areas = [[0x16000, 0x17000]]
 # The array the LFO tick adds its output to, track 1 word 0 (finding 149, "Where the output lands": the smoother's return value plus 0x22; word i at +2 i, track t at +2 * sound_words * t),
 # and the phase accumulator (u32) of LFO 1 of voice slot 0 in the tick's state. The device tests of the LFO read them.
 # The LFO state belongs to a voice slot, not a track: slot s is at lfo_phase + lfo_phase_stride * s. This device has one voice per track (track 1 uses slot 0).
@@ -263,7 +291,7 @@ lfo_frame_stride = 0x60
 lfo_frame_words = 10
 send_template = 0x44
 send_indices = [69, 70]
-# An index of the array that nothing reads or writes either (Fx[70]; poked in the emulator without any effect, finding 61): core/fxpages keeps a mark there, set when it gave an effect row its defaults
+# An index of the array that nothing reads or writes either (Fx[70]; poked in the emulator without any effect, finding 61): the fx service keeps a mark there, set when it gave an effect row its defaults
 # or the stored values (the init and load hooks) and not saved with the kit. A kit object without the mark (one that no hook has touched: another pattern's kit) gets the defaults when it first plays.
 mark_index = 70
 # The byte offset of the u32 that follows the array's 71 halfwords (the loader and saver copy it between the storage record's +0x98 and the array).
@@ -334,13 +362,13 @@ dsp_l2_excludes = [[0x200FA000, 0x200FE000]]
 # another). Both are the flash-image roots of the rt021 images for now. The two sets are the same
 # today (core/input and core/sample-pool, the stock sample pool adapter, are in both); a module such as digikit/remote is on exactly when its check mark in DIGIKIT > MODULES is set.
 [patch_sets]
-emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool"]
+emulator = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/sample-pool"]
 # Real-device image. core/usb-bulk (inert until the usb-fast module is selected) and core/plusdrive-write (the +Drive writes usb-fast uses) are in: usb-fast requires both. core/usb-bulk-audio is in too: the bulk OUT interface in USB AUDIO/MIDI, so usb-fast works without changing USB CONFIG.
-device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
+device = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/sdhc-large"]
 # `device` plus the optional black intro (core/introblank): the Workbench Firmware page picks it with its "Custom boot screen" toggle.
-device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
+device-introblank = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/sample-pool", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write", "core/introblank", "core/sdhc-large"]
 # Same roots as `emulator`; the name stays for the per-track sample tests (API 1.5).
-sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool"]
+sample-tracks = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/sample-pool"]
 
 # The input backend core/input uses to press keys and turn encoders from software (docs/plans/remote-control.md). The profile chooses; `panel-uart`: the panel
 # MCU's UART packets are decoded by the firmware's own key and encoder decoders, which core/input calls (anchors by hash in the port files).
@@ -627,7 +655,7 @@ knobs = [3]
 why = "the sample slot: only the sample number bits reach the DSP"
 
 # The DSP's copy of the frame holds knob j of track t at halfword 0x6d + 48 t + j + (j / 4) * 2 (byte 0xda + 0x60 t);
-# the parameter table gives knob j the mirror index 25 + j + (j / 4) * 2 (core/params builds the same index).
+# the parameter table gives knob j the mirror index 25 + j + (j / 4) * 2 (core/rows builds the same index).
 [modules.frame]
 base = 0x6d
 stride = 48

@@ -78,7 +78,7 @@ cardRigs(
             (info) => info.seq === seq && info.stable === 1,
             { withinMs: UI_WITHIN_MS, message: `the new boot (record seq ${seq}) ends its stable period` },
           );
-          return bootInfoLoaded(session, h.plan);
+          return bootInfoLoaded(session, h.plan, mods.length);
         };
 
         const b1 = await restart();

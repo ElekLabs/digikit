@@ -12,7 +12,7 @@ use discover::Found;
 use dkrt_abi::plan::Verdict;
 use crate::package::handlers::{services, ServiceTable};
 use dkneeds::keys::Keys;
-use install::{Backend, CfItems, DspInstaller, Installer, SITES_MAX};
+use install::{Backend, CfItems, DspInstaller, Installer, PATCHES_MAX, SITES_MAX};
 use role::{PlaceArgs, RoleSteps};
 use exports::Exports;
 use crate::package::resident::platform::TablePlatform;
@@ -48,6 +48,13 @@ fn name_part(head: &[u8]) -> [u8; LOG_NAME] {
     let m = name.len().min(LOG_NAME);
     out[..m].copy_from_slice(&name[..m]);
     out
+}
+/// FNV-1a 32 of the whole leaf of the module id in `head` (the NAME_LEN bytes of the header's name): after the last `/`, not cut.
+fn name_hash(head: &[u8]) -> u32 {
+    let n = head.iter().position(|b| *b == 0).unwrap_or(head.len());
+    let id = &head[..n];
+    let from = id.iter().rposition(|b| *b == b'/').map_or(0, |i| i + 1);
+    dkneeds::keys::name_hash_bytes(&id[from..])
 }
 const H_REG_OFF: usize = dkneeds::H_REG_OFF as usize;
 const H_REG_SIZE: usize = dkneeds::H_REG_SIZE as usize;
@@ -107,10 +114,23 @@ pub(crate) struct ProvRec {
     query_v1: u32,
     /// Bytes of the DSP image of the file (0: it has no DSP section): the bound of the entries of its DSP slot fills.
     pub dsp_image: u32,
+    /// The patches the file declared in `init` (`dk_service_declare_patch`): name hash, value, length. Kept by the commit for the install; `npatch` of them.
+    pub patches: [(u32, u32, u8); install::SERVICE_PATCHES_MAX],
+    pub npatch: u8,
 }
 
 impl ProvRec {
-    pub const EMPTY: ProvRec = ProvRec { block: None, len: 0, image_size: 0, provides: None, callback_order: None, query_v1: 0, dsp_image: 0 };
+    pub const EMPTY: ProvRec = ProvRec {
+        block: None,
+        len: 0,
+        image_size: 0,
+        provides: None,
+        callback_order: None,
+        query_v1: 0,
+        dsp_image: 0,
+        patches: [(0, 0, 0); install::SERVICE_PATCHES_MAX],
+        npatch: 0,
+    };
 }
 
 /// Which loads the loader accepts. The boot hook loads the module set; after it only a live job loads (docs/plans/extension-model.md E5c).
@@ -182,6 +202,8 @@ pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     log_name: [[u8; LOG_NAME]; SEL_MAX],
     /// The same for the last file `check_file` read a header of (zero when the last check did not get that far).
     last_name: [u8; LOG_NAME],
+    /// FNV-1a 32 of the whole leaf of the module id (after the last `/`, not cut to `LOG_NAME`), for `MODULE_COMMIT`.
+    last_hash: u32,
     /// The providers the boot tried and refused (the admission, or the manager's bring-up): the live check does not count them. A provider that is only not up (nothing needed it, or
     /// the manager took it down when its last consumer went) is not here: a live load brings it up again.
     unusable: [bool; PROVIDER_MAX],
@@ -331,6 +353,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             found: Found::new(),
             log_name: [[0; LOG_NAME]; SEL_MAX],
             last_name: [0; LOG_NAME],
+            last_hash: 0,
             unusable: [false; PROVIDER_MAX],
             provs: [ProvRec::EMPTY; PROVIDER_MAX],
             exports: Exports::new(),

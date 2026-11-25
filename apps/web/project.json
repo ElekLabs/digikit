@@ -30,8 +30,8 @@
         "^production",
         "jsToolchain",
         "{workspaceRoot}/config/emulator.json",
-        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml",
-        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/gallery/icon.svg"
+        "{workspaceRoot}/{modules,runtime,services}/**/module.toml",
+        "{workspaceRoot}/{modules,runtime,services}/**/gallery/icon.svg"
       ],
       "outputs": ["{projectRoot}/.astro"],
       "description": "astro check; it writes .astro/*.d.ts before it checks (the audit lists them as generated)."
@@ -64,8 +64,8 @@
         "{workspaceRoot}/packages/dkbs/package.json",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/ports/*.toml",
-        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml",
-        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/gallery/icon.svg",
+        "{workspaceRoot}/{modules,runtime,services}/**/module.toml",
+        "{workspaceRoot}/{modules,runtime,services}/**/gallery/icon.svg",
         "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
         "{workspaceRoot}/config/emulator.json"
       ],

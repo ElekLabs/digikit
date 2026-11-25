@@ -8,7 +8,7 @@ type = "framework"
 author = "digikit"
 status = "experimental"
 summary = "Reserves the DSP side of run-time machines: free voice rows and the table of DSP addresses the digikit runtime uses"
-requires = ["core/runtime", "core/dsp-link", "core/dsp-voice", "core/fx"]
+requires = ["core/runtime", "core/rows", "core/dsp-link", "core/dsp-voice", "core/fx"]
 conflicts = []
 ports = ["dt2-1.17", "dn2-1.12"]
 
@@ -25,7 +25,7 @@ ports = ["dt2-1.17", "dn2-1.12"]
 # - `dyndsp_info` is the table of DSP addresses the runtime reads (core/runtime, optional link): the area, the free voice rows, and
 #   the exported DSP symbols a run-time DSP object may import (the helpers of core/dsp-voice).
 
-# Device id, area size and the number of reserved types from the device files and core/machines types.toml, written by
+# Device id, area size and the number of reserved types from the device files and core/rows types.toml, written by
 # `patchkit gen` (docs/design/device-data.md). This module reserves DYN_TYPES rows: keep the `[[entry]]` rows below at that number
 # (packages/patchkit/tests/devdata.rs checks it).
 [[gen]]
@@ -55,7 +55,7 @@ _fw_frame = "dsp.voice.value.frame_base"
 _fw_param_rec = "dsp.voice.value.param_record_base"
 _fw_release_latch = "dsp.voice.value.release_latch"
 _fw_unpack = "dsp.voice.fn.track_unpack"
-# and those of the dispatch code of the fx service
+# and those of the dispatch code of the effect-registry owner
 _fx_table = "fx.rows"
 _fx_master = "dsp.master.value.q31_converter.float_buf"
 _fxs_trackbus = "dsp.fx.value.send.track_bus"
@@ -78,13 +78,38 @@ _dd_frame_sw = "_dv_frame_sw"
 # the table of a run-time DSP object's imports also holds the firmware addresses that the dispatch code of core/dsp-voice uses
 _dv_table = "voices.rows"
 _fw_frame = "dsp.voice.value.frame_base"
-# and those of the dispatch code of the fx service
+# and those of the dispatch code of the effect-registry owner
 _fx_table = "fx.rows"
 _fx_master = "dsp.master.value.q31_converter.float_buf"
 _fxs_slotbus = "dsp.fx.value.send.slot_bus"
 _fxs_slotmap = "dsp.fx.value.send.slot_map"
 _fxs_fadetab = "dsp.fx.value.send.slot_fade_flags"
 _fxs_return = "dsp.fx.value.send.return_bus"
+
+# The DSP's machine selector (a device whose DSP memory holds it): the table that maps a machine type to the word that picks the sample renderer is in the DSP's memory, and no load-time path writes there, so it stays
+# in the image. The copy has one word per type, the rows of core/rows appended with their clone's word; the literal that loads the table's address follows. (A device without the table has no such patch.)
+[[section]]
+name = "mf_selector"
+region = "dsp.l2"
+devices = ["dt2"]
+from = { anchor = "dsp.machine.data.selector.table", len = "(image.u8(cf.machine.fn.dispatch + 1) + 1) * 4" }
+append = { registry = "machines", row = ["image.u32(dsp.machine.data.selector.table + 4 * $clone_of)"] }
+
+[[op]]
+op = "write"
+anchor = "dsp.machine.value.selector.table_ref"
+offset = 2
+value = "(mf_selector >> 16) & 0xffff"
+width = 2
+devices = ["dt2"]
+
+[[op]]
+op = "write"
+anchor = "dsp.machine.value.selector.table_ref"
+offset = 4
+value = "mf_selector & 0xffff"
+width = 2
+devices = ["dt2"]
 
 [[entry]]
 registry = "voices"
@@ -134,8 +159,8 @@ id = "dv7"
 type = 0xffffffff
 pc = 0
 
-# The table of this adapter, exported to the image's info table (`dkrt_info_table`): the services find it by the hash of its name (`CoreApi::info`), the machines service for
-# its voice rows and the fx service for the bounds of an effect's state. The runtime also links it directly (it owns the area).
+# The table of this adapter, exported to the image's info table (`dkrt_info_table`): the services find it by the hash of its name (`CoreApi::info`), the machine-registry owner for
+# its voice rows and the effect-registry owner for the bounds of an effect's state. The runtime also links it directly (it owns the area).
 [[info]]
 name = "dyndsp_info"
 devices = ["dt2", "dn2"]

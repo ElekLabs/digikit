@@ -342,7 +342,7 @@ typedef struct DkrtDevice {
     uint32_t keep_base;                          /* [digikit] keep_base: RAM a soft reset is assumed to keep (the crash record) */
     uint32_t keep_bytes;                         /* [digikit] keep_bytes */
     uint32_t dsp_block_cycles;                   /* [board] dsp_clock_hz / dsp_blocks_per_second, rounded (0 without DEV_HAS_DSP) */
-    uint32_t dyn_type_first;                     /* core/machines types.toml dynamic_first */
+    uint32_t dyn_type_first;                     /* core/rows types.toml dynamic_first */
     uint32_t dyn_types;                          /* run-time machine types (0 without DEV_HAS_DSP) */
     uint32_t tracks;                             /* [digikit] tracks: the tracks of the device (0: not given) */
     uint32_t key_codes[DKRT_DEV_KEYS];           /* [input.keys]: the id of each logical key in the firmware's key events, indexed by the key's number (0: the device has no such key) */

@@ -24,9 +24,9 @@
 //   w0  bits 0-15 DL_MAGIC, bits 16-29 idx (chunk number, 0 for the first of a transfer), bits 30-31 win (the window)
 //   w1  bits 0-16 off (destination, in words from the start of the window), bits 17-24 n (payload words),
 //       bit 25 LAST, bit 26 END (stop acknowledging), bits 27-31 xid (transfer id, 1..31)
-// Windows: 0 is the slot block `_dl_slots` (words 0 to 15, DK_SLOTS of sdk/dsp/contract/dk_stub.inc) followed by _dl_area (DL_AREA_WORDS - DK_SLOTS words, from word 16; a chunk that starts in the slots must end there; the window is DL_AREA_WORDS long); 1 is the voices registry (_dl_vrows, 24 * _dl_vcount words: a row is 24 words), which the digikit
-// runtime fills one word per transfer so that the render scan never sees a half-written row; 2 is the effect rows of core/fx (_dl_frows, 24 *
-// _dl_fcount words, all rows of the registry `fx`, free rows included), filled the same way (the pc word last). Windows 1 and 2 refuse every write
+// Windows: 0 is the slot block `_dl_slots` (words 0 to 15, DK_SLOTS of sdk/dsp/contract/dk_stub.inc) followed by _dl_area (DL_AREA_WORDS - DK_SLOTS words, from word 16; a chunk that starts in the slots must end there; the window is DL_AREA_WORDS long); 1 is the first row registry (_dl_win1_base, 24 * _dl_win1_rows words: a row is 24 words), which the digikit
+// runtime fills one word per transfer so that the render scan never sees a half-written row; 2 is the second row registry (_dl_win2_base, 24 *
+// _dl_win2_rows words, all rows of the registry, free rows included), filled the same way (the pc word last). Windows 1 and 2 refuse every write
 // when their registry is not in the image (the externs are 0). Window 3 is the stats control (P8d, below): 3 words, `_dl_stctl`.
 //   w2 ... w(n+1)  the payload
 //   w(n+2)  check = s1 XOR s2 over w0 ... w(n+1), where s1 += w and s2 += s1 for each word w (both start at 0)
@@ -101,13 +101,13 @@
 .GLOBAL _dl_hook;
 .EXTERN _dl_back;
 #ifdef DL_CHAIN_SP
-.EXTERN _sp_tail;
+.EXTERN _dl_tail_chain;
 #endif
 .EXTERN _dl_area;
-.EXTERN _dl_vrows;
-.EXTERN _dl_vcount;
-.EXTERN _dl_frows;
-.EXTERN _dl_fcount;
+.EXTERN _dl_win1_base;
+.EXTERN _dl_win1_rows;
+.EXTERN _dl_win2_base;
+.EXTERN _dl_win2_rows;
 .EXTERN _dv_diag;
 .EXTERN _dv_rec;
 .EXTERN _fx_diag;
@@ -199,21 +199,21 @@ _dl_win1:
     R3 = 1;
     COMP(R0, R3);
     IF NE JUMP _dl_win2;
-    R3 = _dl_vcount;                      // window 1: the voice rows (24 words each, the terminator row excluded)
+    R3 = _dl_win1_rows;                      // window 1: the rows (24 words each, the terminator row excluded)
     R4 = LSHIFT R3 BY 4;
     R3 = LSHIFT R3 BY 3;
     R3 = R3 + R4;                         // count * 24
-    R4 = _dl_vrows;
+    R4 = _dl_win1_base;
     JUMP _dl_wdone;
 _dl_win2:
     R3 = 2;
     COMP(R0, R3);
     IF NE JUMP _dl_win3;
-    R3 = _dl_fcount;                      // window 2: the effect rows (24 words each, the terminator row excluded)
+    R3 = _dl_win2_rows;                      // window 2: the rows (24 words each, the terminator row excluded)
     R4 = LSHIFT R3 BY 4;
     R3 = LSHIFT R3 BY 3;
     R3 = R3 + R4;                         // count * 24
-    R4 = _dl_frows;
+    R4 = _dl_win2_base;
     JUMP _dl_wdone;
 _dl_win3:
     R3 = 3;
@@ -546,12 +546,12 @@ _dl_nodiag:
     R5 = DM(_dl_sv5);
     R6 = DM(_dl_sv6);
 #ifdef DL_CHAIN_SP
-    // core/sample-pool (DN2) hangs its own block work on this tail: _sp_tail saves every register itself and ends in the same
+    // another DSP object (DN2) hangs its own block work on this tail: _dl_tail_chain saves every register itself and ends in the same
     // `_dl_back` (it is 0 when that module is not in the image). R10 is free here, the epilogue reloads it from the frame.
-    R10 = _sp_tail;
+    R10 = _dl_tail_chain;
     R10 = PASS R10;
     IF EQ JUMP _dl_back;
-    JUMP _sp_tail;
+    JUMP _dl_tail_chain;
 #else
     JUMP _dl_back;
 #endif

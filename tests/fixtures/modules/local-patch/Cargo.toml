@@ -1,0 +1,20 @@
+[package]
+name = "dkrt-fixture-local-patch"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+dkrt-svc-rt = { path = "../../../../runtime/core/svc-rt" }
+
+[workspace]
+
+[profile.release]
+opt-level = "s"
+panic = "abort"
+lto = false
+codegen-units = 1
+debug = false

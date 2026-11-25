@@ -5,6 +5,10 @@ use patchkit::svccheck::check;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// The two devices of the checker's per-device lists, in its order.
+const DEV_A: &str = "dt2";
+const DEV_B: &str = "dn2";
+
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -301,7 +305,7 @@ fn service_hooks_equal_the_hook_entries_per_device() {
     append(&dir.join("dks/module.toml"), &entry("cf.a.hook.x", ""));
     append(
         &dir.join("dks/module.toml"),
-        &entry("cf.a.hook.y", "devices = [\"dn2\"]\n"),
+        &entry("cf.a.hook.y", &format!("devices = [\"{DEV_B}\"]\n")),
     );
     assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
     // the call has a hook the manifest has not, and the manifest has one the call has not, each for its device
@@ -318,7 +322,7 @@ fn service_hooks_equal_the_hook_entries_per_device() {
     assert!(
         mentions(
             &found,
-            "[[hook]] `cf.a.hook.y` on dn2 is not in the service! hook list"
+            &format!("[[hook]] `cf.a.hook.y` on {DEV_B} is not in the service! hook list")
         ),
         "{found:?}"
     );
@@ -330,17 +334,78 @@ fn service_hooks_equal_the_hook_entries_per_device() {
     ));
 }
 
-/// The service with an adapters folder beside it that declares `[[slot]] frametype` with the given `devices` line.
+/// A hook declared with no device is the loader's to match (it takes the entry of its own device and drops the declaration of a hook that the table lists for another device only): the
+/// manifest needs an entry for it on some device, and every manifest entry still needs its declaration.
+#[test]
+fn a_plain_hook_needs_a_manifest_entry_on_some_device() {
+    let call = |hooks: &str| {
+        format!(
+            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [Records], hooks = [{hooks}]);\n"
+        )
+    };
+    let entry =
+        |name: &str, dev: &str| format!("\n[[hook]]\nname = \"{name}\"\nentry = \"e\"\n{dev}");
+    let (dir, sdk) = service("hooks-plain", &[]);
+    fs::write(dir.join("dks/src/hooks.rs"), "").unwrap();
+    append(
+        &dir.join("dks/module.toml"),
+        &entry("cf.a.hook.x", &format!("devices = [\"{DEV_A}\"]\n")),
+    );
+    append(
+        &dir.join("dks/module.toml"),
+        &entry("cf.a.hook.y", &format!("devices = [\"{DEV_B}\"]\n")),
+    );
+    // both declared plain: each has an entry on one device
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call("(\"cf.a.hook.x\", hooks::x), (\"cf.a.hook.y\", hooks::y)"),
+    )
+    .unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    // a plain hook that no device's entry names is refused
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call(
+            "(\"cf.a.hook.x\", hooks::x), (\"cf.a.hook.y\", hooks::y), (\"cf.a.hook.z\", hooks::z)",
+        ),
+    )
+    .unwrap();
+    let found = problems(&dir, &sdk);
+    assert!(
+        mentions(
+            &found,
+            "service! takes the hook `cf.a.hook.z`, but dks/module.toml has no [[hook]] for it"
+        ),
+        "{found:?}"
+    );
+    // an entry the call leaves out is still refused, on its device
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call("(\"cf.a.hook.x\", hooks::x)"),
+    )
+    .unwrap();
+    let found = problems(&dir, &sdk);
+    assert!(
+        mentions(
+            &found,
+            &format!("[[hook]] `cf.a.hook.y` on {DEV_B} is not in the service! hook list")
+        ),
+        "{found:?}"
+    );
+}
+
+/// The service with a platform module beside it that declares `[[slot]] frametype` with the given `devices` line.
 fn adapters_with(test: &str, devices: &str) -> (PathBuf, PathBuf, PathBuf) {
     let (dir, sdk) = service(test, &[]);
-    let adapters = dir.parent().unwrap().join("adapters/machines");
+    let root = dir.parent().unwrap().to_path_buf();
+    let adapters = root.join("runtime/platform/machines");
     fs::create_dir_all(&adapters).unwrap();
     fs::write(
         adapters.join("module.toml"),
         format!("[[slot]]\nname = \"frametype\"\n{devices}\n"),
     )
     .unwrap();
-    (dir, sdk, adapters.parent().unwrap().to_path_buf())
+    (dir, sdk, root)
 }
 
 /// The `service!` call of the service in `dir` with `extra` after `hooks = []` (the fills and exports of the call must equal the manifest entries).
@@ -363,9 +428,8 @@ fn service_fills_equal_the_manifest_entries() {
         )
     };
     let (dir, sdk, adapters) = adapters_with("fills", "devices = [\"dn2\"]");
-    let problems = |dir: &Path, sdk: &Path| {
-        patchkit::svccheck::check_with_adapters(dir, sdk, &adapters).unwrap()
-    };
+    let problems =
+        |dir: &Path, sdk: &Path| patchkit::svccheck::check_with_root(dir, sdk, &adapters).unwrap();
     fs::write(dir.join("dks/src/hooks.rs"), "").unwrap();
     fs::write(
         dir.join("dks/src/lib.rs"),
@@ -575,7 +639,7 @@ fn with_dsp_fill(test: &str, asm_name: &str, asm: &str) -> (PathBuf, PathBuf, Pa
     let (dir, sdk, adapters) = adapters_with(test, "devices = [\"dn2\"]");
     // the adapter that declares the DSP slot
     fs::write(
-        adapters.join("machines/module.toml"),
+        adapters.join("runtime/platform/machines/module.toml"),
         "[[slot]]\nname = \"voice_render\"\nspace = \"dsp\"\ndevices = [\"dt2\"]\n",
     )
     .unwrap();
@@ -599,7 +663,7 @@ fn with_dsp_fill(test: &str, asm_name: &str, asm: &str) -> (PathBuf, PathBuf, Pa
 fn a_dsp_fill_needs_dispatch_code_and_imports_that_the_dyndsp_table_has() {
     // a DSP fill is not a Rust function: the service! call does not list it, and the check wants the dispatch code and a DSP object
     let found_in =
-        |d: &Path, s: &Path, a: &Path| patchkit::svccheck::check_with_adapters(d, s, a).unwrap();
+        |d: &Path, s: &Path, a: &Path| patchkit::svccheck::check_with_root(d, s, a).unwrap();
     let asm = ".EXTERN _dv_diag;\n.EXTERN _fw_frame;\n";
     let (dir, sdk, ad) = with_dsp_fill("dsp-ok", "dispatch-dt2.s", asm);
     assert_eq!(found_in(&dir, &sdk, &ad), Vec::<String>::new());
@@ -641,7 +705,7 @@ fn a_dsp_fill_needs_dispatch_code_and_imports_that_the_dyndsp_table_has() {
 
 #[test]
 fn a_fill_names_the_devices_of_the_adapter_slot_it_fills() {
-    use patchkit::svccheck::check_with_adapters;
+    use patchkit::svccheck::check_with_root;
     let fill =
         |devices: &str| format!("\n[[fill]]\nslot = \"frametype\"\nentry = \"e\"\n{devices}");
     // a slot on dn2 only: a fill for dn2 agrees
@@ -649,13 +713,13 @@ fn a_fill_names_the_devices_of_the_adapter_slot_it_fills() {
     append(&dir.join("dks/module.toml"), &fill("devices = [\"dn2\"]\n"));
     call_with(&dir, "fills = [(\"frametype\", hooks::e, dn2)]");
     assert_eq!(
-        check_with_adapters(&dir, &sdk, &adapters).unwrap(),
+        check_with_root(&dir, &sdk, &adapters).unwrap(),
         Vec::<String>::new()
     );
     // a fill with no devices would fill a slot that dt2 does not have
     let (dir, sdk, adapters) = adapters_with("fill-all", "devices = [\"dn2\"]");
     append(&dir.join("dks/module.toml"), &fill(""));
-    let found = check_with_adapters(&dir, &sdk, &adapters).unwrap();
+    let found = check_with_root(&dir, &sdk, &adapters).unwrap();
     assert!(
         mentions(&found, "[[fill]] `frametype` has no `devices`"),
         "{found:?}"
@@ -666,7 +730,7 @@ fn a_fill_names_the_devices_of_the_adapter_slot_it_fills() {
         &dir.join("dks/module.toml"),
         &fill("devices = [\"dn2\", \"dt2\"]\n"),
     );
-    let found = check_with_adapters(&dir, &sdk, &adapters).unwrap();
+    let found = check_with_root(&dir, &sdk, &adapters).unwrap();
     assert!(
         mentions(
             &found,
@@ -679,7 +743,7 @@ fn a_fill_names_the_devices_of_the_adapter_slot_it_fills() {
     append(&dir.join("dks/module.toml"), &fill(""));
     call_with(&dir, "fills = [(\"frametype\", hooks::e)]");
     assert_eq!(
-        check_with_adapters(&dir, &sdk, &adapters).unwrap(),
+        check_with_root(&dir, &sdk, &adapters).unwrap(),
         Vec::<String>::new()
     );
     // a fill that names no slot of any adapter is a typo
@@ -688,7 +752,7 @@ fn a_fill_names_the_devices_of_the_adapter_slot_it_fills() {
         &dir.join("dks/module.toml"),
         "\n[[fill]]\nslot = \"frametpye\"\nentry = \"e\"\ndevices = [\"dn2\"]\n",
     );
-    let found = check_with_adapters(&dir, &sdk, &adapters).unwrap();
+    let found = check_with_root(&dir, &sdk, &adapters).unwrap();
     assert!(
         mentions(
             &found,
@@ -701,7 +765,8 @@ fn a_fill_names_the_devices_of_the_adapter_slot_it_fills() {
 /// The service with two adapter folders, each declaring `[[slot]] frametype` with the given `devices` lines.
 fn two_adapters(test: &str, first: &str, second: &str) -> (PathBuf, PathBuf, PathBuf) {
     let (dir, sdk) = service(test, &[]);
-    let adapters = dir.parent().unwrap().join("adapters");
+    let root = dir.parent().unwrap().to_path_buf();
+    let adapters = root.join("runtime/platform");
     for (folder, devices) in [("machines", first), ("other", second)] {
         fs::create_dir_all(adapters.join(folder)).unwrap();
         fs::write(
@@ -710,23 +775,23 @@ fn two_adapters(test: &str, first: &str, second: &str) -> (PathBuf, PathBuf, Pat
         )
         .unwrap();
     }
-    (dir, sdk, adapters)
+    (dir, sdk, root)
 }
 
 #[test]
 fn a_slot_declared_twice_for_a_common_device_fails_and_on_disjoint_devices_passes() {
-    use patchkit::svccheck::check_with_adapters;
+    use patchkit::svccheck::check_with_root;
     let twice = "the slot `frametype` is declared twice";
     let (dir, sdk, adapters) = two_adapters(
         "slot-twice",
         "devices = [\"dn2\"]",
         "devices = [\"dn2\", \"dt2\"]",
     );
-    let found = check_with_adapters(&dir, &sdk, &adapters).unwrap();
+    let found = check_with_root(&dir, &sdk, &adapters).unwrap();
     assert!(mentions(&found, twice), "{found:?}");
     // a slot with no `devices` is on every device, so any second declaration overlaps
     let (dir, sdk, adapters) = two_adapters("slot-twice-all", "", "devices = [\"dt2\"]");
-    let found = check_with_adapters(&dir, &sdk, &adapters).unwrap();
+    let found = check_with_root(&dir, &sdk, &adapters).unwrap();
     assert!(mentions(&found, twice), "{found:?}");
     // one slot per device is not a duplicate, and a fill for either device agrees
     let (dir, sdk, adapters) = two_adapters(
@@ -740,22 +805,22 @@ fn a_slot_declared_twice_for_a_common_device_fails_and_on_disjoint_devices_passe
     );
     call_with(&dir, "fills = [(\"frametype\", hooks::e)]");
     assert_eq!(
-        check_with_adapters(&dir, &sdk, &adapters).unwrap(),
+        check_with_root(&dir, &sdk, &adapters).unwrap(),
         Vec::<String>::new()
     );
 }
 
 #[test]
-fn a_fill_without_the_adapters_folder_is_an_error() {
-    use patchkit::svccheck::check_with_adapters;
+fn a_fill_without_the_platform_folder_is_an_error() {
+    use patchkit::svccheck::check_with_root;
     let (dir, sdk) = service("no-adapters", &[]);
     append(
         &dir.join("dks/module.toml"),
         "\n[[fill]]\nslot = \"frametype\"\nentry = \"e\"\n",
     );
-    let missing = dir.parent().unwrap().join("no-such-adapters");
-    let found = check_with_adapters(&dir, &sdk, &missing).unwrap();
-    assert!(mentions(&found, "the adapters folder"), "{found:?}");
+    let missing = dir.parent().unwrap().join("no-such-root");
+    let found = check_with_root(&dir, &sdk, &missing).unwrap();
+    assert!(mentions(&found, "the platform folder"), "{found:?}");
     assert!(mentions(&found, "is missing"), "{found:?}");
 }
 
@@ -772,7 +837,7 @@ fn a_row_anchor_has_one_service_in_its_users() {
         row("cf.a.data.row_ok", "[\"core/services/lfo\"]", words)
             + &row("cf.a.data.row_shared", "[\"core/services/lfo\", \"core/services/fx\"]", words)
             // a row that no service names, a service and a core module, and a code site (not a row)
-            + &row("cf.a.data.row_core", "[\"core/params\", \"core/services/lfo\"]", words)
+            + &row("cf.a.data.row_core", "[\"core/rows\", \"core/services/lfo\"]", words)
             + &row(
                 "cf.a.data.site",
                 "[\"core/services/lfo\", \"core/services/fx\"]",

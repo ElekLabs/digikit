@@ -1,24 +1,48 @@
 //! Read-only stock kit values for the opt-in debug observer.
-use crate::{
-    dev,
-    platform::{self, PLATFORM},
-};
+use crate::dev;
 use core::ptr::{addr_of, read_volatile};
-use dkrt_abi::{
-    mem::{iw, rd16, rd32},
-    platform::Platform,
-    provider::name_hash,
-};
+use dkrt_abi::mem::{rd, rd16};
 use dkrt_sdk::{proto::E_AGAIN, E_NOT_FOUND, E_RANGE, OK};
 
-// Published words of the FXPG v4 image adapter (image-modules/points/fxpages).
-// The numbers in the table are generated from the device's [fx] profile.
-const FXPAGES: u32 = name_hash("fxpages_info");
-const FXPG: u32 = 0x4658_5047;
-const KIT_PTR: usize = 19;
-const SOUND_OFF: usize = 46;
-const SOUND_STRIDE: usize = 47;
-const TAIL: usize = 62;
+/// Runtime-private data emitted by the device object from the device profile.
+/// Reading stock Sound and kit values must not depend on a loaded service.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Layout {
+    kit_table: u32,
+    sound_off: u32,
+    sound_stride: u32,
+    kit_values_bytes: u32,
+}
+
+extern "C" {
+    static dkrt_stock_kit_layout: Layout;
+}
+
+impl Layout {
+    fn locate(
+        self,
+        scope: u32,
+        track: u32,
+        word: u32,
+        tracks: u32,
+        sound_words: u32,
+    ) -> Result<(u32, u32), i32> {
+        if self.kit_table == 0 {
+            return Err(E_NOT_FOUND);
+        }
+        let (pointer, offset) = match scope {
+            1 if track < tracks && word < sound_words => (
+                self.kit_table,
+                self.sound_off + self.sound_stride * track + crate::SOUND_WORDS_AT,
+            ),
+            // The second pointer is the live kit values. Do not infer it from a kit copy.
+            2 if track == 0 && word < self.kit_values_bytes / 2 => (self.kit_table + 4, 0),
+            _ => return Err(E_RANGE),
+        };
+        Ok((pointer, offset + 2 * word))
+    }
+}
 
 pub(crate) unsafe extern "C" fn debug_read_parameter(
     scope: u32,
@@ -26,40 +50,20 @@ pub(crate) unsafe extern "C" fn debug_read_parameter(
     word: u32,
     out: *mut i32,
 ) -> i32 {
-    let info = PLATFORM.info(FXPAGES);
-    if info.is_null()
-        || iw(info, 0) != FXPG
-        || iw(info, 1) != 4
-        || iw(info, 2) != platform::device()
-    {
+    if !dev::valid() {
         return E_NOT_FOUND;
     }
-    let kit_table = iw(info, KIT_PTR);
-    let (pointer, offset) = if scope == 1 {
-        let tracks = dev::tracks();
-        let n = read_volatile(addr_of!(crate::dkrt_sound_words));
-        if track >= tracks || word >= n {
-            return E_RANGE;
-        }
-        (
-            kit_table,
-            iw(info, SOUND_OFF) + iw(info, SOUND_STRIDE) * track + crate::SOUND_WORDS_AT,
-        )
-    } else if scope == 2 && track == 0 && word < iw(info, TAIL) / 2 {
-        // The live pointer table is [kit, FX values, track sounds...].
-        // Read the FX view's actual array, not an inferred field of a kit copy.
-        (kit_table + 4, 0)
-    } else {
-        return E_RANGE;
+    let layout = read_volatile(addr_of!(dkrt_stock_kit_layout));
+    let sound_words = read_volatile(addr_of!(crate::dkrt_sound_words));
+    let (pointer, offset) = match layout.locate(scope, track, word, dev::tracks(), sound_words) {
+        Ok(location) => location,
+        Err(error) => return error,
     };
     if out.is_null() {
         return OK;
     }
-    let kit = rd32(pointer as *const u8);
-    let Some(at) = kit
-        .checked_add(offset)
-        .and_then(|a| a.checked_add(2 * word))
-    else {
+    let kit = rd(pointer);
+    let Some(at) = kit.checked_add(offset) else {
         return E_AGAIN;
     };
     if !dev::ddr_contains(kit)
@@ -71,3 +75,6 @@ pub(crate) unsafe extern "C" fn debug_read_parameter(
     out.write(rd16(at));
     OK
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,19 +1,50 @@
-//! The image table `machines_info` and the assembler that reads it. The table is bound over a `FakeCore` (the core's info entry), refused when it is not this device's or lacks the
-//! registry, and the byte offsets the assembler files name (`.equ T_*`) are the word indexes of `info::w` (the crate's `info` owns the table: `Provider::start` binds it).
+//! The registry words of the image's `rows_info` and the assembler that reads them. They are bound over a `FakeCore` (the core's info entry) into the table of the hooks, refused when
+//! they are not this device's or lack the registry, and the byte offsets the assembler files name (`.equ T_*`) are the word indexes of `info::w` (the crate's `info` owns the table:
+//! `Provider::start` binds it).
 use dkrt_svc_machines::info::*;
+use dkrt_svc_rows::rows_info::w as r;
 use dkrt_svc_rt::name_hash;
 use dkrt_test_support::FakeCore;
 
-fn table(device: u32) -> Vec<u32> {
-    let mut t = vec![0u32; WORDS];
+/// `rows_info` of an image: a registry of three rows from type 7 with the stock list, a reader copy, and the reserved types 8 and 9.
+fn rows(device: u32) -> Vec<u32> {
+    let mut t = vec![0u32; r::WORDS];
+    t[r::DEVICE] = device;
+    t[r::M_ROWS] = 0x4200_0000;
+    t[r::LIST_STOCK] = 0x4700_0000;
+    t[r::M_ROW_SIZE] = 64;
+    t[r::O_POS] = 48;
+    t[r::M_FIRST] = 7;
+    t[r::M_COUNT] = 3;
+    t[r::M_ENTRIES] = 2;
+    t[r::READER_REAL] = 0x4000_2000;
+    t[r::SLOTMAP] = 0x4000_3000;
+    t[r::PG_ROWS] = 0x4300_0000;
+    t[r::PG_COUNT] = 8;
+    t[r::M_DYN0] = 8;
+    t[r::M_DYN_N] = 2;
+    t
+}
+
+/// The bound table the words of `rows(device)` give.
+fn bound(device: u32) -> [u32; WORDS] {
+    let mut t = [0u32; WORDS];
     t[w::MAGIC] = MAGIC;
     t[w::VERSION] = VERSION;
     t[w::DEVICE] = device;
-    t[w::ENSURE] = 0x4000_1000;
-    t[w::ROWS] = 0x4200_0000;
     t[w::FIRST] = 7;
     t[w::COUNT] = 3;
-    t[w::N_CODE] = 0x4000_2000;
+    t[w::ENTRIES] = 2;
+    t[w::ROWS] = 0x4200_0000;
+    t[w::SLOTMAP] = 0x4000_3000;
+    t[w::PGROWS] = 0x4300_0000;
+    t[w::PGN] = 8;
+    t[w::READER_REAL] = 0x4000_2000;
+    t[w::LIST_STOCK] = 0x4700_0000;
+    t[w::ROW_SIZE] = 64;
+    t[w::O_POS] = 48;
+    t[w::DYN0] = 8;
+    t[w::DYN_N] = 2;
     t
 }
 
@@ -21,17 +52,17 @@ fn core_with(words: Option<Vec<u32>>, device: u32) -> FakeCore {
     let mut c = FakeCore::new();
     c.device = device;
     if let Some(t) = words {
-        c.info_tables.push((name_hash("machines_info"), t));
+        c.set_rows_info(t);
     }
     c
 }
 
 #[test]
-fn the_table_is_copied_with_the_magic_last_and_every_word_in() {
-    let core = core_with(Some(table(2)), 2);
+fn the_registry_words_are_copied_with_the_magic_last_and_every_word_in() {
+    let core = core_with(Some(rows(2)), 2);
     let mut dst = [0xffff_ffffu32; WORDS];
     assert_eq!(unsafe { bind_table(&core, dst.as_mut_ptr()) }, 0);
-    assert_eq!(dst[..], table(2)[..]);
+    assert_eq!(dst, bound(2));
 }
 
 #[test]
@@ -42,21 +73,23 @@ fn an_image_without_the_table_another_device_or_no_registry_is_refused() {
         unsafe { bind_table(&none, dst.as_mut_ptr()) },
         dkrt_sdk::E_NO_REGISTRY
     );
-    let other = core_with(Some(table(1)), 2);
+    let other = core_with(Some(rows(1)), 2);
     assert_eq!(
         unsafe { bind_table(&other, dst.as_mut_ptr()) },
         dkrt_sdk::E_NO_REGISTRY
     );
-    let mut bare = table(2);
-    bare[w::ROWS] = 0;
+    let mut bare = rows(2);
+    bare[r::M_ROWS] = 0;
     assert_eq!(
         unsafe { bind_table(&core_with(Some(bare), 2), dst.as_mut_ptr()) },
         dkrt_sdk::E_NO_REGISTRY
     );
-    let mut old = table(2);
-    old[w::VERSION] = VERSION + 1;
+    // a table of another layout (version 1 had the parameter rows only) is not `rows_info` for this crate
+    let mut old = core_with(Some(rows(2)), 2);
+    let hash = name_hash("rows_info");
+    old.info_tables.iter_mut().find(|(h, _)| *h == hash).unwrap().1[1] = 1;
     assert_eq!(
-        unsafe { bind_table(&core_with(Some(old), 2), dst.as_mut_ptr()) },
+        unsafe { bind_table(&old, dst.as_mut_ptr()) },
         dkrt_sdk::E_NO_REGISTRY
     );
     assert_eq!(dst, [0u32; WORDS], "nothing is written for a refused table");
@@ -82,8 +115,9 @@ fn equates(text: &str) -> Vec<(String, usize)> {
 
 #[test]
 fn the_offsets_the_assembler_names_are_the_word_indexes_of_the_table() {
+    // the common file reads no word of the table any more (its native page entries are Rust); each device's file names the words it reads
+    assert!(equates(include_str!("../src/hooks-common.s")).is_empty());
     for file in [
-        include_str!("../src/hooks-common.s"),
         include_str!("../src/hooks-dt2.s"),
         include_str!("../src/hooks-dn2.s"),
     ] {

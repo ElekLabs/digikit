@@ -14,7 +14,7 @@ export const SHARED_SDK_INPUTS = [
   '{workspaceRoot}/runtime/core/vectors/**/*',
 ];
 export const ALL_MANIFESTS = new Set([
-  '{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml',
+  '{workspaceRoot}/{modules,runtime,services}/**/module.toml',
   '{workspaceRoot}/tests/fixtures/modules/**/module.toml',
 ]);
 // Build/pack producers do not read acceptance tests. Nx's implicit ^default input would

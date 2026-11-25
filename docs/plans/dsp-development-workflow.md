@@ -345,6 +345,12 @@ DT2 stock Delay exit check at comparable settings. It does not establish
 bit-exact audio or identical timing at identical raw knob values. Broader
 automatic setup or additional cases can build on the same readback path.
 
+This checkpoint used a pre-integration development image and system package.
+Those artifacts used a different observer import layout under ABI 2.4.
+For a future upgrade from that build, replace the development card package
+with the one built alongside the new image before booting it. The integrated
+ABI 2.5 appends the observer calls and keeps the upstream 2.4 layout intact.
+
 ## End result
 
 A reusable CLI and Workbench workflow for firmware investigation, module development, SDK kernels and performance comparisons. A developer or an LLM can reproduce a run and point to the function, loop and audio evidence behind a change. FREQ SHIFT is the first shipped application of that workflow, with a stereo send Em can use and a saved comparison that demonstrates it.

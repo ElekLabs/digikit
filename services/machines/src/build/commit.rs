@@ -3,10 +3,8 @@ use super::*;
 use crate::{assign, dsp};
 use dkrt_abi::core_api::{CoreApi, LOG_INFO};
 use dkrt_abi::keys::KeysCopy;
-use dkrt_abi::mem::iw;
 use dkrt_abi::service::{commit_phase, ModuleCommitCtx, RecordSink};
 use dkrt_sdk::*;
-use dkrt_svc_rows::dynreg::w;
 
 /// The commit of module record `rec` (`Records::commit`): `PREPARE` checks the collection and measures its records, `WRITE` writes them, counts the rows and keeps the callback
 /// arguments for `apply`; `DECLARE` (after the registry walker's check) declares the voice rows' ranges. The collection is closed after the `DECLARE` pass.
@@ -14,7 +12,7 @@ impl Builder {
     pub unsafe fn commit<C: CoreApi>(
         &mut self,
         core: &C,
-        reg: &dkrt_svc_rows::dynreg::RegState,
+        reg: &dkrt_svc_rows::rows_info::RegState,
         rec: usize,
         c: &ModuleCommitCtx,
     ) -> i32 {
@@ -33,8 +31,8 @@ impl Builder {
         if rec >= dkrt_abi::MAX_MODULES {
             return E_FORMAT;
         }
-        let inf = dkrt_svc_rows::dynreg(core);
-        if inf.is_null() || iw(inf, w::VERSION) < 3 {
+        let inf = dkrt_svc_rows::rows_info(core);
+        if inf.is_null() {
             return E_NO_REGISTRY;
         }
         let p = Profile::read(inf);

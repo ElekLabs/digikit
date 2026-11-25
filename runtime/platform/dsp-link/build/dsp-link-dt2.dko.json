@@ -244,14 +244,14 @@
    "addend": 0,
    "offset": 189,
    "section": "seg_pmco",
-   "symbol": "_dl_vcount",
+   "symbol": "_dl_win1_rows",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
    "offset": 199,
    "section": "seg_pmco",
-   "symbol": "_dl_vrows",
+   "symbol": "_dl_win1_base",
    "type": "sharc.abs32"
   },
   {
@@ -272,14 +272,14 @@
    "addend": 0,
    "offset": 211,
    "section": "seg_pmco",
-   "symbol": "_dl_fcount",
+   "symbol": "_dl_win2_rows",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
    "offset": 221,
    "section": "seg_pmco",
-   "symbol": "_dl_frows",
+   "symbol": "_dl_win2_base",
    "type": "sharc.abs32"
   },
   {
@@ -859,7 +859,7 @@
    "size": 524288
   }
  ],
- "source_sha256": "e4cfc3550aac104bf49d8dce352825a78802b570d9172b5b2ea0df66ee41e716",
+ "source_sha256": "e62c4451bf72e2affda337711f2f56c27cc22b3592846230d226c5bf0be79e5b",
  "symbols": [
   {
    "global": false,
@@ -1157,25 +1157,25 @@
   },
   {
    "global": true,
-   "name": "_dl_fcount",
+   "name": "_dl_win1_base",
    "section": null,
    "value": 0
   },
   {
    "global": true,
-   "name": "_dl_frows",
+   "name": "_dl_win1_rows",
    "section": null,
    "value": 0
   },
   {
    "global": true,
-   "name": "_dl_vcount",
+   "name": "_dl_win2_base",
    "section": null,
    "value": 0
   },
   {
    "global": true,
-   "name": "_dl_vrows",
+   "name": "_dl_win2_rows",
    "section": null,
    "value": 0
   },

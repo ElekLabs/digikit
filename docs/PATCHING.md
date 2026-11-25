@@ -53,7 +53,7 @@ The command verifies the result before it reports success. Notes:
   (dynreg, dyndsp, digikit-menu and health, plus what they require); `emulator` is what the emulator patches in itself
   (below), and will gain modules that a device does not take.
 - `--modules` is a comma-separated list of module ids (their path under `modules/`). The command line adds the
-  modules they `requires`, like the web gallery, and says so (`added by requires: core/machines, ...`). A module that
+  modules they `requires`, like the web gallery, and says so (`added by requires: core/rows, ...`). A module that
   is not in the library, a missing requirement and a `requires` cycle are refused.
 - Modules apply in a fixed order (dependencies first, then by id), whatever order you write them in.
 - When the selected runtime declares a system package, `patchkit apply -o OUT.syx` also saves the companion
@@ -72,7 +72,7 @@ uv run python -m tools.patchkit.patchkit inspect out/patch/fx.syx               
 uv run python -m tools.patchkit.patchkit check --firmware firmware/Digitakt_II_OS1.17.syx           # which modules fit this firmware
 uv run python -m tools.patchkit.patchkit verify out/patch/fx.syx --base firmware/Digitakt_II_OS1.17.syx   # re-decode and check
 mise run patch:explain -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/fx
-mise run patch:mem -- core/machines core/params --device dt2 --firmware 1.17    # bytes used and free per region
+mise run patch:mem -- core/rows core/rows --device dt2 --firmware 1.17    # bytes used and free per region
 ```
 
 - `check` prints `ok` or `refused` plus the reason for every module (for example "built for dn2-1.12").
@@ -229,7 +229,7 @@ in the firmware and a card.
 
 ```sh
 uv run python -m tools.patchkit.patchkit patch --firmware firmware/Digitakt_II_OS1.17.syx \
-  --set emulator -o out/patch/rt-dt2.syx          # the same as --modules core/dynreg,core/dyndsp,core/digikit-menu,core/health
+  --set emulator -o out/patch/rt-dt2.syx          # the same as --modules core/rows,core/dyndsp,core/digikit-menu,core/health
 mise run module:pack -- digikit/pluck --device dt2       # out/patch/pluck-dt2.dkm (--device dn2 for the Digitone II)
 mkdir -p plus_drive/dt2 && cp notes.txt plus_drive/dt2/    # any file: the card is built only when the folder has content
 mise run workbench -- out/patch/rt-dt2.syx
@@ -448,10 +448,10 @@ the native Patchkit CLI for system package setup and core-only recovery. The bro
 | Layer | Holds | Examples |
 |---|---|---|
 | Port | Per-firmware facts: named anchors with SHA-256 of the expected bytes, free regions, container limits. Generated, keyed by the `.syx` SHA-256. | `ports/dt2-1.17.toml` |
-| Framework module | Hooks firmware sites once and exports a registry that other modules add entries to. Ordinary assembly plus a manifest. | `core/machines`, `core/params`, `core/dsp-voice`, `core/expansion` |
+| Framework module | Hooks firmware sites once and exports a registry that other modules add entries to. Ordinary assembly plus a manifest. | `core/rows`, `core/rows`, `core/dsp-voice`, `core/expansion` |
 | Content module | Own code and declarative registry entries. No addresses. | `test/registry-demo` |
 
-Device, board and firmware facts are data (`devices/*.toml`, `ports/*.toml`, `image-modules/points/machines/types.toml`); code that needs a constant gets it from `patchkit gen` (`[[gen]]` in a `module.toml`). Where each fact lives and what a new device needs: `docs/design/device-data.md`.
+Device, board and firmware facts are data (`devices/*.toml`, `ports/*.toml`, `runtime/platform/rows/types.toml`); code that needs a constant gets it from `patchkit gen` (`[[gen]]` in a `module.toml`). Where each fact lives and what a new device needs: `docs/design/device-data.md`.
 
 patchkit itself (`packages/patchkit`, Rust) has no framework-specific code. It provides generic primitives, and the
 frameworks are modules built on them. One implementation serves the command line and `patchkit.wasm`.
@@ -537,7 +537,7 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
 - **Capacity limits in the info table.** An image adapter that reserves a capacity exports its limit as an `[[info]]` entry named
   `cap_<kind>` (the kind name of `[capacity.kinds]` in `sdk/sdk.toml` in lower case, e.g. `cap_machine_rows`, `cap_param_rows`,
   `cap_page_rows`, `cap_voice_rows`, `cap_fx_slots`, `cap_send_slots`). `symbol` is the address of a u32 word that holds the limit
-  (for example `dynreg_info + 32`, the word `M_DYN_N` of the table). `dkrt_capacity` reports per kind: the answer of a loaded service
+  (for example `rows_info + 32`, the word `M_DYN_N` of the table). `dkrt_capacity` reports per kind: the answer of a loaded service
   (it wins and owns `used`), else the `cap_<kind>` entry as the limit with `used` 0, else zeros. The planner therefore knows the
   limits before any service file is loaded. The runtime names no adapter or service: it builds the entry name from the generic
   kind table (`CAP_INFO_HASHES`).
@@ -561,6 +561,15 @@ The manifest has `[module]`, `[targets]`, `[[object]]`, `[[op]]`, `[[claim]]`, `
 
   A name that only another device has, and a hook listed only for another device, resolve to 0; a name the port file does not list refuses the service file (`E_IMPORT`, the hash
   in the provider log). `patchkit apply` adds the info entry `fw_id`, and the loader refuses a port file for another firmware with E_HOOK_STOCK.
+- **Patches.** A patch is plain bytes (1, 2 or 4) at a data site of the firmware, as an operand of an instruction or a table word, that a service replaces with a value of its own and the loader gives
+  back before the service stops. The port declaration is a raw `[[hook]]` (`mode = "replace"`, no handler, `tail`, `stock` or `exits`) with `patch = N`: its `site` and `offset` give the bytes (the
+  anchor must cover them); `patchkit port facts` writes the length `N`, the kind `patch` and the check value of the stock bytes into the port file (`SITES`, kind 3). A service names it with `[[patch]] name = "..."`
+  in its `module.toml` (`devices` as for a hook) and `patches = [("name", N, f)]` in `service!`, where `f` is a `fn(&Service) -> u32` that gives the bytes (the low `N`) from the instance `Provider::start` made
+  (a table address, a count): the values exist only at run time, so `init` declares them with `dk_service_declare_patch` (a service-only import, beside `dk_service_declare_hook`) and the header table holds only
+  a `HOOKS` item whose entry word is `HOOK_ENTRY_PATCH` (the low 24 bits set; the device mask works as for a hook). The installer takes hooks and patches of a file together: the layout (overlaps, at most
+  `install_patches` over all providers), the stock copy of each site and its check value are checked outside the interrupt mask, nothing is written when one differs (`E_HOOK_STOCK`, or `E_FORMAT` for a declared
+  length that is not the site's, `E_RANGE` for a patch on a hook site, a hook on a patch site, or a value wider than its length), and one mask holds only the compare of the live bytes with the saved copy, the writes and the flush. The restore
+  writes the saved bytes back, the patches in the reverse of the order they went in, then the hooks, before the service's `fini`. `patchkit service-check` compares `[[patch]]` and `patches` per device.
 - **Hooks per device.** One `.dks` serves both devices. `[[hook]]` in the module's `module.toml` has `devices`; the `service!`
   call lists `(name, entry)` for every device, `(name, entry, dt2)` or `(name, entry, dn2)` for one, and declares at `init` those of
   the running device. The packer writes the device set of each hook into the file: an item of `HOOKS` is `{name hash, word}`,
@@ -803,13 +812,13 @@ device.
 | Rung | What it adds | `--modules` (requires are added automatically) | Sections that change | Image bytes |
 | --- | --- | --- | --- | --- |
 | A | the runtime and the menu, no DSP change | `core/runtime,core/digikit-menu,core/health` | 3 only; 7 is the stock DSP | 1,869,472 |
-| B | A plus the DSP link and the run-time machine rows (no module installed) | `core/runtime,core/digikit-menu,core/health,core/dynreg,core/dyndsp` | 3 and 7 | 1,876,512 |
+| B | A plus the DSP link and the run-time machine rows (no module installed) | `core/runtime,core/digikit-menu,core/health,core/rows,core/dyndsp` | 3 and 7 | 1,876,512 |
 | C | B's module list rebuilt (the DSP now writes breadcrumbs, the runtime decodes them: a new image, flash it), then the test module `digikit/pluck` uploaded at run time | same as B (the module is a file, not part of the image) | 3 and 7 | 1,885,088 |
 
 - Rung A: the requires added are `core/expansion` only. `core/health` has no DSP part: it reads the DSP's own cycle count from the reply
   record and counts idle iterations on the ColdFire, so it needs no `dsp-link` and leaves section 7 stock (checked: the plan changes
   section 3 only). A module with a DSP part cannot load on rung A. Its HEALTH page is the first thing to compare with the emulator.
-- Rung B: the requires added are `core/machines`, `core/params`, `core/dsp-link` and `core/dsp-voice`. The DSP section changes (a stub in
+- Rung B: the requires added are `core/rows`, `core/rows`, `core/dsp-link` and `core/dsp-voice`. The DSP section changes (a stub in
   the block handler, finding 31, and the voice rows). `core/dsp-voice` carries the open silicon question of the pluck voice
   (M6/M13, `docs/plans/digikit-runtime.md` Phase 9 "Pluck on silicon"): the image plays stock sounds normally in the emulator, but
   nothing about the odd-voice copy has run on a device. Rung B is the first rung where the DSP boot ROM reads a changed stream (pre-flash
@@ -881,7 +890,7 @@ Since 2026-10-21 (P3e-1) the module of these sections is `digikit/pluck` and its
 **1. Build and check the image** (the rung B module list; the file is new because the DSP changed):
 
 ```sh
-mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/dynreg,core/dyndsp -o out/patch/rungC-dt2-1.17.syx
+mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/rows,core/dyndsp -o out/patch/rungC-dt2-1.17.syx
 mise run patch:preflight -- out/patch/rungC-dt2-1.17.syx     # must end with PREFLIGHT OK; sections 3 and 7 differ from stock, nothing else
 mise run module:pack -- digikit/pluck --device dt2           # out/patch/pluck-dt2.dkm
 shasum -a 256 out/patch/rungC-dt2-1.17.syx out/patch/pluck-dt2.dkm
@@ -1004,9 +1013,9 @@ touched, and `DIGI_PK_ROOT` makes `patch` and `preflight` use that tree):
 
 ```sh
 R=$(uv run python -m tools.patchkit.pk_variant make core/dsp-voice DV_BISECT_C2 dv-c2)
-DIGI_PK_ROOT=$R mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/dynreg,core/dyndsp -o out/patch/rungC2-dt2-1.17.syx
+DIGI_PK_ROOT=$R mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/rows,core/dyndsp -o out/patch/rungC2-dt2-1.17.syx
 mise run patch:preflight -- out/patch/rungC2-dt2-1.17.syx       # PREFLIGHT OK; sections 3 and 7 differ from stock, nothing else
-mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/dynreg,core/dyndsp -o out/patch/rungC-dt2-1.17.syx   # the matching rung C
+mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/rows,core/dyndsp -o out/patch/rungC-dt2-1.17.syx   # the matching rung C
 shasum -a 256 out/patch/rungC2-dt2-1.17.syx out/patch/rungC-dt2-1.17.syx
 ```
 
@@ -1057,7 +1066,7 @@ All three: 1,885,472 bytes, `PREFLIGHT OK` (sections 3 and 7 differ from stock, 
 ```sh
 for v in a:DV_C3_FINE,DV_C3_DB b:DV_C3_FINE,DV_C3_NOIRQ c:DV_C3_FINE,DV_C3_NOSYS; do
   n=${v%%:*}; R=$(uv run python -m tools.patchkit.pk_variant make core/dsp-voice ${v#*:} dv-c3$n)
-  DIGI_PK_ROOT=$R mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/dynreg,core/dyndsp -o out/patch/rungC3$n-dt2-1.17.syx
+  DIGI_PK_ROOT=$R mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/rows,core/dyndsp -o out/patch/rungC3$n-dt2-1.17.syx
   DIGI_PK_ROOT=$R mise run patch:preflight -- out/patch/rungC3$n-dt2-1.17.syx    # PREFLIGHT OK
 done
 shasum -a 256 out/patch/rungC3?-dt2-1.17.syx
@@ -1094,7 +1103,7 @@ variants keep the path working, not that the cause is found.
 ```sh
 for v in d2:DV_C3_FINE d3:DV_C3_FINE,DV_C3_DEEP; do
   n=${v%%:*}; R=$(uv run python -m tools.patchkit.pk_variant make core/dsp-voice ${v#*:} dv-c3$n)
-  DIGI_PK_ROOT=$R mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/dynreg,core/dyndsp -o out/patch/rungC3$n-dt2-1.17.syx
+  DIGI_PK_ROOT=$R mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/rows,core/dyndsp -o out/patch/rungC3$n-dt2-1.17.syx
   DIGI_PK_ROOT=$R mise run patch:preflight -- out/patch/rungC3$n-dt2-1.17.syx    # PREFLIGHT OK
 done
 shasum -a 256 out/patch/rungC3d?-dt2-1.17.syx
@@ -1150,7 +1159,7 @@ Rehearsed in the emulator on 2026-10-19 (scenarios `menu-dkrun-pluck` and `uploa
 **1. Build and check the image** (the rung C module list; nothing else changed except the runtime, 3 to 4):
 
 ```sh
-mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/dynreg,core/dyndsp -o out/patch/rt4-dt2-1.17.syx
+mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/rows,core/dyndsp -o out/patch/rt4-dt2-1.17.syx
 mise run patch:preflight -- out/patch/rt4-dt2-1.17.syx     # PREFLIGHT OK and "ISA check: ok"; sections 3 and 7 differ from stock, nothing else
 shasum -a 256 out/patch/rt4-dt2-1.17.syx
 ```
@@ -1196,7 +1205,7 @@ One flash, and the `.dkm` files must be packed again (a DSP section of version 2
 **1. Build and check the image** (the runtime-4 module list):
 
 ```sh
-mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/dynreg,core/dyndsp -o out/patch/rt5-dt2-1.17.syx
+mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules core/runtime,core/digikit-menu,core/health,core/rows,core/dyndsp -o out/patch/rt5-dt2-1.17.syx
 mise run patch:preflight -- out/patch/rt5-dt2-1.17.syx     # PREFLIGHT OK and "ISA check: ok"; sections 3 and 7 differ from stock, nothing else
 shasum -a 256 out/patch/rt5-dt2-1.17.syx
 mise run module:pack -- digikit/pluck --device dt2          # the machine as a .dkm (DSP section version 2)

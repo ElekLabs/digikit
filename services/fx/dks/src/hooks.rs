@@ -1,5 +1,5 @@
-//! The nine hooks of the effect pages, in assembler (ColdFire, GNU syntax). They were `core/fxpages`' `fxpages-dt2.s` and `fxpages-dn2.s`; the two were the same code
-//! with other numbers. Here the numbers are read when the hook runs, from `DKRT_FXP_TAB` (the service binds it from the image table `fxpages_info`, `fxpage::setup`), so one
+//! The nine hooks of the effect pages, in assembler (ColdFire, GNU syntax). They were in the image (the point `core/fxpages`, RC4-2 moved them here); the code for the two devices was the same
+//! with other numbers. Here the numbers are read when the hook runs, from `DKRT_FXP_TAB` (the service binds it from the generated device facts and `rows_info`, `fxpage::bind`), so one
 //! file serves both devices. Design: docs/design/digikit-registry.md ("Effect pages"), docs/findings/61-fx-pages.md.
 //!
 //! Each hook runs in place of the first whole instructions of its stock site (6 bytes, or 8 for two of them) and ends in the stock code behind them: the displaced
@@ -21,8 +21,8 @@
 //!   effect ID differs, or a value is out of range), the saver writes the values and the IDs into the spare halfwords of the storage record, the initialiser gives
 //!   the defaults. The loader and the initialiser put the mark (`MARKVAL` at `MARK_OFF` in the array) when a row has an effect.
 //!
-//! Table offsets (bytes): the image table `fxpages_info` version 4 (`core/fxpages`) and the words `fxpage::bind_table` adds (from `ROWS_N`). The firmware words of version 3
-//! (the stock lists and the return of each hook) are not in the table any more: `bind` resolves them.
+//! Table offsets (bytes): the words `fxpage::bind_table` makes from the device facts and the blocks of `rows_info`, and the computed words from `ROWS_N`. The stock lists and the return of each hook are
+//! the file's firmware words (`dk_fw_`, `dk_exit_`): `bind` puts the two list words into the table.
 #[cfg(target_arch = "m68k")]
 use core::arch::global_asm;
 #[cfg(target_arch = "m68k")]

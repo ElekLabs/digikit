@@ -2,7 +2,8 @@
 //! its native pages.
 
 use crate::build::ApplyArgs;
-use crate::nativepage;
+use crate::native_page::record;
+use crate::native_page::PageTable;
 use crate::parking::Parking;
 use crate::registry::{
     copy_text, machine_text, set_mach_owner, KNOBS, KNOB_PARAM, MAX_PAGE, MAX_PARAM,
@@ -13,7 +14,7 @@ use dkrt_abi::mem::{iw, rd32};
 use dkrt_abi::provider::Consumer;
 use dkrt_sdk::records::{KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM};
 use dkrt_sdk::*;
-use dkrt_svc_rows::dynreg::{w, RegState, MACH_TEXT};
+use dkrt_svc_rows::rows_info::{w, RegState, MACH_TEXT};
 
 /// The parameter codes of the records `fill_rows` has written and the native pages seen so far: the state between `attach` and the per-record `apply` of one section (the
 /// registry applies one module at a time, in the UI task). It belongs to the owner.
@@ -50,7 +51,7 @@ impl Applied {
 }
 
 impl Applied {
-    /// Fill the reserved parameter, action, page and machine rows from the (checked) records. `inf` is the words of `dynreg_info`, `args` the callback arguments of the
+    /// Fill the reserved parameter, action, page and machine rows from the (checked) records. `inf` is the words of `rows_info`, `args` the callback arguments of the
     /// last commit.
     pub(crate) unsafe fn fill_rows<C: CoreApi>(
         &mut self,
@@ -247,8 +248,9 @@ impl Applied {
         b: *const u8,
         consumer: &Consumer<'_>,
         args: Option<&ApplyArgs>,
+        pages: &mut PageTable,
     ) -> i32 {
-        if !nativepage::is_kind(kind) {
+        if !record::is_kind(kind) {
             return OK;
         }
         let base = consumer.base();
@@ -283,8 +285,9 @@ impl Applied {
             }
         }
         if rc == OK {
-            rc = nativepage::apply(
+            rc = record::apply(
                 core,
+                pages,
                 kind,
                 b,
                 base,

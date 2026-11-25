@@ -6,6 +6,24 @@
 #include <dk/core/module.h>
 #include <dk/platform/host.h>
 #include "module_ids.h"
+#include "frame-layout.h"
+
+/* The frame the machines service builds has this layout: the numbers of frame-layout.h are the struct as the ColdFire compiler lays it out (the host build of this file, in
+ * the frame test, has 8-byte pointers). */
+#ifdef __m68k__
+_Static_assert(sizeof(dk_page_frame) == NP_FRAME_BYTES, "dk_page_frame size");
+_Static_assert(offsetof(dk_page_frame, version) == NP_OFF_VERSION, "version");
+_Static_assert(offsetof(dk_page_frame, size) == NP_OFF_SIZE, "size");
+_Static_assert(offsetof(dk_page_frame, track) == NP_OFF_TRACK, "track");
+_Static_assert(offsetof(dk_page_frame, params) == NP_OFF_PARAMS, "params");
+_Static_assert(offsetof(dk_page_frame, canvas.width) == NP_OFF_CANVAS_WIDTH, "canvas.width");
+_Static_assert(offsetof(dk_page_frame, canvas.height) == NP_OFF_CANVAS_HEIGHT, "canvas.height");
+_Static_assert(offsetof(dk_page_frame, canvas.text) == NP_OFF_CANVAS_TEXT, "canvas.text");
+_Static_assert(offsetof(dk_page_frame, canvas.fill_rect) == NP_OFF_CANVAS_FILL, "canvas.fill_rect");
+_Static_assert(offsetof(dk_page_frame, word_count) == NP_OFF_WORD_COUNT, "word_count");
+_Static_assert(offsetof(dk_page_frame, word_values) == NP_OFF_WORD_VALUES, "word_values");
+_Static_assert(offsetof(dk_page_frame, level) == NP_OFF_LEVEL, "level");
+#endif
 
 static void native_draw(void *arg, const dk_page_frame *frame);
 static void native_event(void *arg, const dk_page_event *event);

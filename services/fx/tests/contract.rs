@@ -4,14 +4,16 @@
 //! The parts the file adopts are read from the row its own `service!` call declares (the file's source is compiled in by path).
 use core::ptr::addr_of;
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::dsp::{FXW_P0, FXW_PC, FX_FREE_PC, FX_ROW_WORDS, MAX_FX, MIX_ONE, WIN_FX};
+use dkrt_abi::dsp::{
+    FXW_AMT0, FXW_P0, FXW_PC, FXW_ROUTE, FX_FREE_PC, FX_ROW_WORDS, MAX_FX, MIX_ONE, WIN_FX,
+};
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::{ALL, DT2};
 use dkrt_sdk::records::KINDS_FX;
 use dkrt_svc_fx::builder::{ROUTE_MASTER, ROUTE_SEND};
 use dkrt_svc_fx::fx::Fx;
-use dkrt_svc_fx::fxpage::{self, INFO_HASH};
+use dkrt_svc_fx::fxpage::{self, DeviceFacts};
 use dkrt_svc_fx::fxsend;
 use dkrt_svc_fx::rows::{self, FxRows};
 use dkrt_test_support::contract::{
@@ -282,38 +284,44 @@ fn keys_none() -> KeysCopy {
     KeysCopy::empty()
 }
 
-/// The words of `fxpages_info` (the version-4 image table the service binds) and `dynreg_info`, and the `dynfx_info` the DSP rows come from.
+/// The facts of the test device: 3 page rows, 32 values (the value index of word `j` of effect row `k` is `8k + j`), 2 send cells; `kit` is the address of the kit pointer cell.
+fn facts(kit: u32) -> DeviceFacts {
+    let mut value_indices = [0u8; 32];
+    for (i, v) in value_indices.iter_mut().enumerate() {
+        *v = i as u8;
+    }
+    DeviceFacts {
+        device: 1,
+        page_first: 14,
+        slots: 3,
+        array_off: 0x14,
+        values_n: 32,
+        kit_ptr: kit,
+        mark_index: 70,
+        send_cells: 2,
+        knob_block: 2,
+        send_block: 3,
+        track_page: 13,
+        store_off: 0x80,
+        value_indices,
+        ..Default::default()
+    }
+}
+
+/// `rows_info` (the parameter table, the blocks of the effect knobs from code 40 and of the send knobs from code 90), the `dynfx_info` the DSP rows come from, and the table of the
+/// effect pages bound from the test device's facts.
 fn image(core: &mut FakeCore) {
-    let mut t = vec![0u32; 64];
-    t[0] = 0x4658_5047; // "FXPG"
-    t[1] = 4;
-    t[2] = core.device;
-    t[3] = 0x6000; // page rows
-    t[4] = 0x2c; // row size
-    t[5] = 14; // the page number of row 0
-    t[6] = 3; // rows
-    t[8] = 8; // list capacity
-    t[12] = 40; // the first parameter code of the effect pages
-    t[13] = 8;
-    t[14] = 0x14; // the kit's array offset
-    t[15] = 32; // values
-    t[37] = 70; // the mark's array index
-    t[38] = 0x46a7;
-    t[39] = 2; // send cells
-    t[42] = 90; // the first send parameter code
-    t[61] = 13;
-    t[63] = 0x80;
-    core.info_tables.push((INFO_HASH, t));
-    let mut d = vec![0u32; 96];
-    d[dkrt_svc_rows::dynreg::w::P_TABLE] = 0x10000;
-    d[dkrt_svc_rows::dynreg::w::PF_SIZE] = 0x40;
-    d[dkrt_svc_rows::dynreg::w::P_ROWS] = 0x20000;
-    d[dkrt_svc_rows::dynreg::w::P_ROW_SIZE] = 0x20;
-    d[dkrt_svc_rows::dynreg::w::P_FIRST] = 0;
-    d[dkrt_svc_rows::dynreg::w::P_TEMPLATE_OFF] = 8;
-    core.set_dynreg(d);
+    let mut d = vec![0u32; 110];
+    d[dkrt_svc_rows::rows_info::w::P_TABLE] = 0x10000;
+    d[dkrt_svc_rows::rows_info::w::PF_SIZE] = 0x40;
+    d[dkrt_svc_rows::rows_info::w::P_ROWS] = 0x20000;
+    d[dkrt_svc_rows::rows_info::w::P_ROW_SIZE] = 0x20;
+    d[dkrt_svc_rows::rows_info::w::P_FIRST] = 0;
+    d[dkrt_svc_rows::rows_info::w::P_TEMPLATE_OFF] = 8;
+    core.set_rows_info(d);
+    core.set_rows_blocks(&[(2, 40, 24, 0x75), (3, 90, 2, 0x75)]);
     core.set_dynfx(6, 4);
-    unsafe { fxpage::unbind() };
+    unsafe { assert_eq!(fxpage::bind_facts(core, &facts(0), [0, 0]), dkrt_sdk::OK) };
 }
 
 /// The service's own view: the DSP rows in use, the pages and their owners, the send cells.
@@ -446,23 +454,130 @@ fn an_unloaded_effect_page_row_points_to_the_empty_string() {
     assert_eq!(unsafe { *at.add(12) }, 0);
 }
 
+/// The page row of a loaded effect holds the nine parameter codes (the knob at position 0, MIX on the level slot, nothing between) and the parameter records of its two
+/// knobs hold the value index, the raw range and the default (host successor of the code and record checks of the `fx-pages` device test).
+#[test]
+fn a_loaded_effect_page_row_holds_its_codes_and_the_parameter_records_of_its_knobs() {
+    let _g = locked();
+    let f = fixture(
+        ALL.iter()
+            .find(|p| p.dyn_types > 0)
+            .expect("a device with a DSP")
+            .id,
+    );
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    let rows = unsafe { addr_of!(fxpage::DKRT_FXP_ROWS) } as u32;
+    let codes: Vec<u32> = (0..9)
+        .map(|i| unsafe { FwMem::rd(&l.core, rows + 8 + 4 * i) })
+        .collect();
+    let first = 40; // the effect knob block of `image`
+    assert_eq!(
+        codes,
+        [first, 0, 0, 0, 0, 0, 0, 0, first + 7],
+        "GAIN at knob A, empty B to H, MIX at LEVEL"
+    );
+    // the knob of a code: the mirror word of its parameter record (the value index of the knob) and the minimum, maximum and default of its registry row
+    let record = |code: u32| -> Vec<u32> {
+        let mirror = unsafe { FwMem::rd(&l.core, 0x10000 + 0x40 * code + 4) };
+        let reg = 0x20000 + 0x20 * code + 8;
+        let mut v = vec![mirror];
+        v.extend((1..4).map(|i| unsafe { FwMem::rd(&l.core, reg + 4 * i + 4) }));
+        v
+    };
+    assert_eq!(
+        record(first),
+        [0, 0, 0x7f00, 0x3200],
+        "GAIN mirror, range, default"
+    );
+    assert_eq!(
+        record(first + 7),
+        [7, 0, 0x7f00, 0x7f00],
+        "MIX mirror, range, default"
+    );
+}
+
+/// Three effects that may run on the send bus and default to it, one page each.
+fn send_effects(i: &mut Init) {
+    unsafe {
+        for n in 0..3 {
+            let fx = build::add_fx(i.core, i.ctx(), n, c(b"Send Gain\0"), c(b"SND\0"));
+            build::fx_routes(i.core, fx, ROUTE_MASTER | ROUTE_SEND, ROUTE_SEND);
+            let p = build::fx_add_page(i.core, fx, c(b"Send Gain\0"), c(b"SND\0"));
+            build::page_add_fx_param(
+                i.core,
+                p,
+                c(b"Gain\0"),
+                c(b"GAIN\0"),
+                DK_PERCENT,
+                0.0,
+                1.27,
+                0.5,
+            );
+        }
+    }
+}
+
+/// The effect rows a module's load leaves: the route word of row `k` is 1 for the first effects that fit the send cells of the image (`facts`: 2), in the order of the
+/// module's effects, and 0 for the rest (they stay on the master without a send cell); the four amount words are 0 (the settings hold no amount). This is words 18 to 22 of
+/// an effect row (`FXW_ROUTE`, `FXW_AMT0`), as the DSP gets them.
+#[test]
+fn the_effects_of_a_load_get_route_1_in_order_up_to_the_send_cells_and_zero_amounts() {
+    let _g = locked();
+    let f = fixture(
+        ALL.iter()
+            .find(|p| p.dyn_types > 0)
+            .expect("a device with a DSP")
+            .id,
+    );
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
+    let m = Module {
+        dsp: Dsp {
+            fxs: 3,
+            salt: 1,
+            ..Dsp::default()
+        },
+        ..module(3, keys_four, send_effects, 1)
+    };
+    assert_eq!(l.load(0, &m), dkrt_sdk::OK);
+    let d = rows::frows();
+    assert_eq!(
+        d.fx_route[..3],
+        [1, 1, 0],
+        "the route word of the three effect rows"
+    );
+    assert_eq!(d.fx_amt[..3], [[0; 4]; 3], "no send amount");
+    assert_eq!(fxsend::used(), 2, "two send cells in use");
+    // what the DSP is sent: the route word and the amount words of each row, in the words 18 to 22 of the row
+    let wire = l.core.link.borrow().t.words();
+    let sent = |at: u32| {
+        wire.iter()
+            .rev()
+            .find(|w| w.0 == WIN_FX && w.1 == at)
+            .map(|w| w.2)
+    };
+    for (k, route) in [1u32, 1, 0].into_iter().enumerate() {
+        let row = FX_ROW_WORDS * (6 + k as u32);
+        assert_eq!(sent(row + FXW_ROUTE), Some(route), "route word of row {k}");
+        for a in 0..4 {
+            assert_eq!(sent(row + FXW_AMT0 + a), Some(0), "amount {a} of row {k}");
+        }
+    }
+    l.unload(0);
+}
+
 const KIT_CELL: u32 = 0x7000;
 const KIT_A: u32 = 0x4000_1000;
 const KIT_B: u32 = 0x4000_3000;
 
-/// The live kit in the image: the cell `KIT_CELL` is the kit pointer cell of `fxpages_info` (word 19), and word `j` of effect row `k` lives at array index `8k + j`.
+/// The live kit in the image: the cell `KIT_CELL` is the kit pointer cell of the effect pages, and word `j` of effect row `k` lives at array index `8k + j`.
 fn with_kit(core: &mut FakeCore) {
-    let t = &mut core
-        .info_tables
-        .iter_mut()
-        .find(|(h, _)| *h == INFO_HASH)
-        .unwrap()
-        .1;
-    t[19] = KIT_CELL;
-    let bytes = unsafe { core::slice::from_raw_parts_mut(t.as_mut_ptr() as *mut u8, 4 * t.len()) };
-    for i in 0..24 {
-        bytes[80 + i] = i as u8;
-    }
+    unsafe {
+        assert_eq!(
+            fxpage::bind_facts(core, &facts(KIT_CELL), [0, 0]),
+            dkrt_sdk::OK
+        )
+    };
 }
 
 /// `image` with a live kit.

@@ -192,26 +192,21 @@ fn generate_with(
 fn a_uses_list_names_constants_the_module_reads() {
     let gas = "build/gen/x-{dev}.inc";
     // a name that is no constant
-    if let Some(r) = generate_with("core/fxpages", "gas", gas, &["NO_SUCH_*", "FX_KIT_PTR"]) {
+    if let Some(r) = generate_with("core/rows", "gas", gas, &["NO_SUCH_*", "DEVICE_ID"]) {
         assert!(r.unwrap_err().0.contains("NO_SUCH_*"));
     }
     // a constant that the sources of the module never use
-    if let Some(r) = generate_with(
-        "core/fxpages",
-        "gas",
-        gas,
-        &["FX_KIT_PTR", "PANEL_ENCODERS"],
-    ) {
+    if let Some(r) = generate_with("core/rows", "gas", gas, &["DEVICE_ID", "PANEL_ENCODERS"]) {
         let e = r.unwrap_err().0;
         assert!(
-            e.contains("PANEL_ENCODERS") && !e.contains("FX_KIT_PTR,"),
+            e.contains("PANEL_ENCODERS") && !e.contains("DEVICE_ID,"),
             "{e}"
         );
         // the message names only the unreferenced constants, so the used one is absent at any position
-        assert!(!e.contains("FX_KIT_PTR"), "{e}");
+        assert!(!e.contains("DEVICE_ID"), "{e}");
     }
     // an empty list on a kind that needs one
-    if let Some(r) = generate_with("core/fxpages", "gas", gas, &[]) {
+    if let Some(r) = generate_with("core/rows", "gas", gas, &[]) {
         let e = r.unwrap_err().0;
         assert!(e.contains("needs `uses`"), "{e}");
     }
@@ -226,15 +221,15 @@ fn a_uses_list_names_constants_the_module_reads() {
         assert!(e.contains("takes no `uses`"), "{e}");
     }
     // a trailing `*` takes the whole family and nothing else
-    if let Some(r) = generate_with("core/fxpages", "gas", gas, &["FX_VALUE_*"]) {
+    if let Some(r) = generate_with("core/rows", "gas", gas, &["ROWS_B1_*"]) {
         for (_, text) in r.unwrap() {
             let names: Vec<&str> = text
                 .lines()
                 .filter_map(|l| l.trim().strip_prefix(".equ "))
                 .map(|l| l.split(',').next().unwrap())
                 .collect();
-            assert_eq!(names.len(), 32, "{text}");
-            assert!(names.iter().all(|n| n.starts_with("FX_VALUE_")), "{text}");
+            assert_eq!(names.len(), 3, "{text}");
+            assert!(names.iter().all(|n| n.starts_with("ROWS_B1_")), "{text}");
         }
     }
 }
@@ -358,6 +353,22 @@ fn a_limit_above_the_contract_maximum_is_refused() {
 }
 
 #[test]
+fn a_send_page_cell_needs_a_parameter_row() {
+    let (first, second) = device_texts();
+    // fewer reserved rows than send slots: a cell would have no row
+    let bad = first.replace("send_rows = 2", "send_rows = 1");
+    assert_ne!(bad, first);
+    let e = Facts::from_texts([bad.as_str(), second.as_str()])
+        .unwrap_err()
+        .0;
+    assert!(e.contains("send_rows") && e.contains("send_slots"), "{e}");
+    // as many rows as slots is a device choice (the second device has one slot: one row is enough)
+    let one = second.replace("send_rows = 2", "send_rows = 1");
+    assert_ne!(one, second);
+    Facts::from_texts([first.as_str(), one.as_str()]).unwrap();
+}
+
+#[test]
 fn machine_rows_are_the_run_time_machine_types_of_types_toml() {
     let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
         return;
@@ -413,30 +424,15 @@ fn the_free_effect_rows_are_the_devices_fx_slots() {
 
 #[test]
 fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
-    // core/fxpages reserves 7 knobs and MIX for each effect slot; the device file's [fx] has a value index for each of them (docs/design/digikit-registry.md "Effect pages")
+    // the effect pages take 7 knobs and MIX for each effect slot; the device file's [fx] has a value index for each of them (docs/design/digikit-registry.md "Effect pages")
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    let m = lib.get("core/fxpages").unwrap();
-    let rows = m
-        .manifest
-        .entry
-        .iter()
-        .filter(|e| e.registry == "params" && e.id.starts_with("fp"))
-        .count() as u64;
-    // and one more row for each send cell of the send page (`[limits] send_slots`, finding 64)
-    let send_rows = m
-        .manifest
-        .entry
-        .iter()
-        .filter(|e| e.registry == "params" && e.id.starts_with("fs"))
-        .count() as u64;
+    let m = lib.get("core/services/fx").unwrap();
+    // the rows themselves are core/rows' (the count of each block against the device file: tests/rows.rs)
     assert!(
-        m.manifest
-            .module
-            .ports
-            .iter()
-            .all(|p| p.starts_with("dt2-") || p.starts_with("dn2-"))
+        m.manifest.entry.iter().all(|e| e.registry != "params"),
+        "the fx service reserves no parameter rows"
     );
     // (device file, the number of stock pages: the firmware's page accessor has that many rows, the effect pages follow them, the array's halfwords: 71 / 101)
     for (file, first, array_hw) in [("digitakt-ii", 33, 71), ("digitone-ii", 37, 101)] {
@@ -445,18 +441,19 @@ fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
         )
         .unwrap();
         let slots = t["limits"]["fx_slots"].as_integer().unwrap() as u64;
-        assert_eq!(rows, 8 * slots, "{file}");
+        let rows = 8 * slots;
+        let send_rows = t["limits"]["send_rows"].as_integer().unwrap() as u64;
         let idx = t["fx"]["value_indices"].as_array().unwrap();
         assert!(
             idx.len() as u64 >= rows,
             "{file}: a value index for each parameter row"
         );
         assert_eq!(t["fx"]["page_first"].as_integer(), Some(first), "{file}");
-        // the send page (finding 64): a device that has one lists the Sound indices of its cells and a Sound layout that ends before the Fx array; its cells are parameter rows of core/fxpages
+        // the send page (finding 64): a device that has one lists the Sound indices of its cells and a Sound layout that ends before the Fx array; its cells are parameter rows of core/rows
         if let Some(track_page) = t["fx"].get("track_page").and_then(|v| v.as_integer()) {
             let send = t["limits"]["send_slots"].as_integer().unwrap() as u64;
             let n = t["fx"]["send_indices"].as_array().unwrap().len() as u64;
-            // the rows are shared by both devices (as many as the device with the most send cells); a device uses n of them
+            // the device reserves send_rows rows (both devices the same number); it uses n of them
             assert!(
                 track_page > 0 && send <= n && n <= send_rows,
                 "{file}: {send} {n} {send_rows}"
@@ -491,6 +488,103 @@ fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
     }
 }
 
+/// The device facts the fx service binds its table from (`services/fx/src/fxpage/tables.rs`) are the device files' `[fx]` and `[limits]`, read here from the TOML and not from the
+/// generator's own constants: one entry for each device that has effect pages, in the order of the file.
+#[test]
+fn the_fx_service_tables_are_the_device_files_fx_facts() {
+    let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
+        .unwrap();
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    let files = devgen::generate(&lib, &facts, "core/services/fx").unwrap();
+    let text = &files
+        .iter()
+        .find(|f| f.0.ends_with("fxpage/tables.rs"))
+        .expect("the fx service generates its device facts")
+        .1;
+    let mut n = 0;
+    for file in ["digitakt-ii", "digitone-ii"] {
+        let t: toml::Value = toml::from_str(
+            &std::fs::read_to_string(root().join(format!("devices/{file}.toml"))).unwrap(),
+        )
+        .unwrap();
+        let int = |tab: &str, key: &str| t[tab][key].as_integer().unwrap();
+        let id = int("digikit", "id");
+        // the entry of this device
+        let at = text
+            .find(&format!("device: {id},"))
+            .unwrap_or_else(|| panic!("{file}: no entry\n{text}"));
+        let entry = &text[at..at + text[at..].find("},").unwrap()];
+        let field = |name: &str| -> String {
+            entry
+                .lines()
+                .find_map(|l| l.trim().strip_prefix(&format!("{name}: ")))
+                .unwrap_or_else(|| panic!("{file}: no {name}\n{entry}"))
+                .trim_end_matches(',')
+                .to_string()
+        };
+        let hex = |v: i64| format!("{v:#x}");
+        let idx: Vec<i64> = t["fx"]["value_indices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_integer().unwrap())
+            .collect();
+        assert_eq!(
+            field("page_first"),
+            int("fx", "page_first").to_string(),
+            "{file}"
+        );
+        assert_eq!(
+            field("slots"),
+            int("limits", "fx_slots").to_string(),
+            "{file}"
+        );
+        assert_eq!(field("array_off"), hex(int("fx", "array_off")), "{file}");
+        assert_eq!(field("values_n"), idx.len().to_string(), "{file}");
+        assert_eq!(field("kit_ptr"), hex(int("fx", "kit_ptr")), "{file}");
+        assert_eq!(
+            field("track_page"),
+            int("fx", "track_page").to_string(),
+            "{file}"
+        );
+        assert_eq!(
+            field("send_template"),
+            hex(int("fx", "send_template")),
+            "{file}"
+        );
+        assert_eq!(
+            field("sound_stride"),
+            hex(int("fx", "sound_stride")),
+            "{file}"
+        );
+        assert_eq!(field("store_off"), hex(int("fx", "store_off")), "{file}");
+        let sends = t["fx"]["send_indices"].as_array().unwrap();
+        assert_eq!(
+            field("send_cells"),
+            int("limits", "send_slots").to_string(),
+            "{file}"
+        );
+        assert!(
+            field("send_index").starts_with(&format!("[{}", sends[0].as_integer().unwrap())),
+            "{file}"
+        );
+        // the value indices, padded with 0 to 32 entries
+        let want: Vec<String> = (0..32)
+            .map(|i| idx.get(i).copied().unwrap_or(0).to_string())
+            .collect();
+        assert_eq!(
+            field("value_indices"),
+            format!("[{}]", want.join(", ")),
+            "{file}"
+        );
+        n += 1;
+    }
+    assert_eq!(n, text.matches("DeviceFacts {").count(), "{text}");
+}
+
 #[test]
 fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
     let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
@@ -498,7 +592,7 @@ fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
     };
     lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
         .unwrap();
-    let dynreg = lib.get("core/dynreg").unwrap();
+    let dynreg = lib.get("core/rows").unwrap();
     let count = |registry: &str, dev: &str| {
         dynreg
             .manifest
@@ -534,19 +628,14 @@ fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
             "{dev} voice rows of core/dyndsp"
         );
         assert_eq!(
-            count("params", dev),
-            l["param_rows"].as_integer().unwrap() as u64,
-            "{dev} parameter rows of core/dynreg"
-        );
-        assert_eq!(
             count("pages", dev),
             l["page_rows"].as_integer().unwrap() as u64,
-            "{dev} page rows of core/dynreg"
+            "{dev} page rows of core/rows"
         );
         assert_eq!(
             count("machines", dev),
             l["machine_rows"].as_integer().unwrap() as u64,
-            "{dev} machine rows of core/dynreg"
+            "{dev} machine rows of core/rows"
         );
     }
 }
@@ -571,15 +660,13 @@ fn the_link_width_is_a_shared_c_header_from_the_contract_maximum() {
 }
 
 /// The modules of the rt021 flash images (`out/patch/rt021-dt2-1.17.plan.json`, `modules`), by id.
-const RT021_MODULES: [&str; 9] = [
+const RT021_MODULES: [&str; 7] = [
     "core/dsp-link",
     "core/dsp-voice",
     "core/dyndsp",
-    "core/dynreg",
+    "core/rows",
     "core/expansion",
     "core/health",
-    "core/machines",
-    "core/params",
     "core/runtime",
 ];
 
@@ -642,7 +729,7 @@ fn the_patch_sets_are_the_rt021_flash_modules() {
             want.extend(extra);
             // run-time effects (core/dynfx and the chain it reserves rows in): both devices have them in both sets (the Digitone II's emulator set since the engine bars only the
             // changed blocks: the hook costs x1.01 DSP CPU there, finding 55)
-            want.extend(["core/dynfx", "core/fx", "core/fxpages"]);
+            want.extend(["core/dynfx", "core/fx"]);
             // core/runtime requires the platform adapter (its hooks and the exception hook install)
             want.push("core/platform");
             // the SETTINGS hook of the menu, the controls and the views of modules (the DIGIKIT menu in the system package is drawn by it)

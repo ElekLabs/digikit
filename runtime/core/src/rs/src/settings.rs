@@ -5,7 +5,7 @@
 //! to the copy that is not current, with `seq + 1`, through `block_write` (the range and ownership checks of finding 46), and only the sectors the
 //! record needs. A power cut in the write leaves the current copy valid. Unloaded modules keep their entries (nothing is removed but by `remove`).
 //!
-//! Callers: the UI task (the menu, `core/fxpages`) and the mailbox test commands. Not for interrupts or the MIDI task: the record is one buffer.
+//! Callers: the UI task (the menu, `core/rows`) and the mailbox test commands. Not for interrupts or the MIDI task: the record is one buffer.
 //! The C ABI for core modules is `dkrt_settings_put` and `dkrt_settings_flush` (the menu's).
 //! A `.dkm` module uses `dk_settings_open`, `dk_settings_get`, `dk_settings_put` and `dk_settings_remove` (`module_*` below): the runtime
 //! stores its keys as `<module name>/<key>`, so a module reaches its own prefix only. There is no task check: `dk_settings_put` and `dk_settings_remove`

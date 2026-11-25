@@ -7,7 +7,7 @@ cpu = "cf"
 sig = "void (u8 *dst, u8 *src, i32 x, i32 y, u8 centre)"
 rule = { kind = "cf_func", hash = "39e620510e0096949807c746a770f520", offset = 0x0, len = 4 }
 mark = "D"
-users = ["core/ui"]
+users = ["core/ui", "core/services/machines"]
 doc = "Copies a 1 bpp Bitmap `src` onto `dst` at x, y, clipped; when `centre` is not 0, x, y is the centre of `src`. Bitmap: +4 width, +8 height, +0xc 32-bit row bands, +0x10 pixel pointer, +0x14 mask pointer."
 
 [[fn]]
@@ -16,7 +16,7 @@ cpu = "cf"
 sig = "void (u8 *bitmap, i32 x0, i32 y0, i32 x1, i32 y1, i32 color)"
 rule = { kind = "cf_func", hash = "c613cb2d63aff4380cffc91378aa5dec", offset = 0x0, len = 4 }
 mark = "D"
-users = ["core/ui"]
+users = ["core/ui", "core/services/machines"]
 doc = "Fills the rectangle x0, y0 to x1, y1 (inclusive, corners in any order, clipped) in a Bitmap with `color`; the screen Bitmap is 0x80 x 0x40, 1 bpp."
 
 [[fn]]

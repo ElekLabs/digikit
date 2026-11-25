@@ -20,7 +20,7 @@ word i = s16 big endian at record + 0x14 + 2 * i
 | `cf.page.fn.native_track_sound` (clamp 0..15, kit + 0x6c + 0x3c0 * track) | 0x40035cca | 0x40030e66 |
 | Words in the array (`[fx] sound_words` of the device file) | 71 | 101 |
 
-Both anchors are unique by hash on both devices (`settings` in `devices/fw/project.toml`; `native_track_sound` in `devices/fw/page.toml`, used by core/machines on DN2 and by core/runtime on both). Ports: `devices/ports/{dt2-1.17,dn2-1.12,dn2-1.11}.toml`.
+Both anchors are unique by hash on both devices (`settings` in `devices/fw/project.toml`; `native_track_sound` in `devices/fw/page.toml`, used by core/rows on DN2 and by core/runtime on both). Ports: `devices/ports/{dt2-1.17,dn2-1.12,dn2-1.11}.toml`.
 `track`, `kit` and `project` use the existing anchors `view_track`, `active_kit` and `singleton`. The record of a track is at an odd address on DN2 (stride 0x48b in the kit blob), so the runtime reads the words byte by byte.
 
 **Code to index [V].** A parameter code maps to its word through the descriptor table (anchor `cf.param.data.descriptor_table`): row = base + code * 0x3c, the mirror index is the s32 at row + 4, -1 means the code has no word in this array. The index is a position: the same index has other codes on other machines (finding 02). The log therefore carries the index; a host maps it to a code only for display.

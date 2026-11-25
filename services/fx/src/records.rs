@@ -47,7 +47,7 @@ impl<C: CoreApi> Records<C> for Fx {
             }
             Ok(())
         } else if step == check_step::EFFECTS {
-            // effect pages need core/fxpages; the records meet the rule of `validate` (each record, and an effect has one page)
+            // effect pages need the blocks of `rows_info` and the device's facts; the records meet the rule of `validate` (each record, and an effect has one page)
             let mut bodies: [&[u8]; MAX_FX + 1] = [&[]; MAX_FX + 1];
             let mut n = 0;
             // SAFETY: as above; a record of this kind holds `BODY_LEN` bytes after its header.

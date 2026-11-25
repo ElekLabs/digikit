@@ -40,7 +40,7 @@ pub unsafe fn cstr_len(a: *const u8, max: usize) -> usize {
     i
 }
 
-/// Word `k` of an info table (`dynreg_info`, `dyndsp_info`, `dynfx_info`, `fxpages_info`).
+/// Word `k` of an info table (`rows_info`, `dyndsp_info`, `dynfx_info`).
 #[inline]
 pub unsafe fn iw(i: *const u32, k: usize) -> u32 {
     read_volatile(i.add(k))

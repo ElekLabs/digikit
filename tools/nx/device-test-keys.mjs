@@ -31,11 +31,11 @@ const SHARED_READS = [
   { file: 'ports/fw/**/*.toml' },
   // the manifests of the core modules: `patchkit apply` reads them with the objects (the image, plan and address map in
   // dist/bytes/images-<device>.sha256 carry the effect); only the memaudit helper reads them itself
-  { file: '{runtime,services,image-modules}/**/module.toml', readers: ['tests/regression/runtime/memaudit-kit.ts'] },
+  { file: '{runtime,services}/**/module.toml', readers: ['tests/regression/runtime/memaudit-kit.ts'] },
   // upload-kit.ts reads the runtime version and the `since` of the imports
   { file: 'sdk/sdk.toml', readers: ['tests/regression/runtime/upload-kit.ts'] },
   // synth.ts reads the machine types
-  { file: 'image-modules/points/machines/types.toml', readers: ['tests/regression/runtime/synth.ts'] },
+  { file: 'runtime/platform/rows/types.toml', readers: ['tests/regression/runtime/synth.ts'] },
 ];
 export const TEST_READS = [
   // fixture files

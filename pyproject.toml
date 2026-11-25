@@ -39,7 +39,6 @@ include = [
     "modules/**/tests/**/*.py",
     "runtime/**/tests/**/*.py",
     "services/**/tests/**/*.py",
-    "image-modules/**/tests/**/*.py",
     "conftest.py",
 ]
 
@@ -61,10 +60,6 @@ files = [
     "tools/patchkit/modroots.py",
     "tools/patchkit/pk_conform.py",
     "tools/patchkit/pk_modcheck.py",
-    "tools/patchkit/pk_digikit_fx.py",
-    "tools/patchkit/pk_digikit_fxsend.py",
-    "tools/patchkit/pk_digikit_fxroute.py",
-    "tools/patchkit/pk_digikit_fxroutes.py",
     "tools/patchkit/pk_idx65_poke.py",
     "modules/*/*/*/tests/freqshift_ref.py",
     "tools/device/dkcardinfo.py",

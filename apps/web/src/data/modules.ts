@@ -6,12 +6,12 @@ import type { DeviceId } from '@digi/workbench-core/data/device-profiles.ts';
 import { isShipped } from './shipped.mjs';
 import type { Category } from './module-labels';
 
-const manifests = import.meta.glob('../../../../{modules,runtime,services,image-modules}/**/module.toml', {
+const manifests = import.meta.glob('../../../../{modules,runtime,services}/**/module.toml', {
   query: '?raw',
   import: 'default',
   eager: true,
 }) as Record<string, string>;
-const icons = import.meta.glob('../../../../{modules,runtime,services,image-modules}/**/gallery/icon.svg', {
+const icons = import.meta.glob('../../../../{modules,runtime,services}/**/gallery/icon.svg', {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -19,7 +19,7 @@ const icons = import.meta.glob('../../../../{modules,runtime,services,image-modu
 
 // `patchkit gen` writes build/gen/gallery.json for a module with typed sections ([[machine]], [[param]]): the
 // machines it adds and their parameters, per device. Committed; apps/web/tests/gallery.test.ts checks the shape.
-const galleries = import.meta.glob('../../../../{modules,runtime,services,image-modules}/**/build/gen/gallery.json', {
+const galleries = import.meta.glob('../../../../{modules,runtime,services}/**/build/gen/gallery.json', {
   query: '?raw',
   import: 'default',
   eager: true,

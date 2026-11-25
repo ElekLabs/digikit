@@ -77,6 +77,10 @@ pub struct Manifest {
     /// that handles each. Their name hashes and entry offsets go in the `HOOKS` entry of the header table; the port file gives each a trampoline.
     #[serde(default, rename = "hook")]
     pub hooks: Vec<ServiceHook>,
+    /// `[[patch]] name = "cf.machine.patch.list_alloc"`: a patch site of the port file (plain bytes of 1, 2 or 4, as a table pointer or a bound) that a service module writes
+    /// at load with a value its `start` computes (`patches = [..]` of `service!`) and restores at unload. The name hash goes in a `HOOKS` item with the patch entry.
+    #[serde(default, rename = "patch")]
+    pub patches: Vec<ServicePatch>,
     /// `[[fill]] slot = "frametype"`, `entry = "mf_frametype"`: a pointer slot of an image adapter (`[[slot]]` of its module.toml) that a service module fills with the address
     /// of a global function of the object when it is loaded (the loader finds the slot word by the hash of the name in the image's info table).
     #[serde(default, rename = "fill")]
@@ -203,6 +207,71 @@ impl Manifest {
         Ok(())
     }
 
+    /// Turn each reservation (`[[entry]] ... count = EXPR`) into its entries: `<id>0 ..= <id>(n-1)` for each device the entry names, in
+    /// place, with n from the device file's `[limits]`. The count is device data; the manifest holds one line for a block of rows.
+    fn expand_reservations(&mut self) -> Result<()> {
+        struct Limits<'a>(&'a crate::devdata::DeviceInfo);
+        impl crate::expr::Env for Limits<'_> {
+            fn symbol(&self, name: &str) -> Option<i64> {
+                self.0.limit_of(name).map(|v| v as i64)
+            }
+            fn field(&self, _: &str) -> Option<i64> {
+                None
+            }
+            fn image(&self, _: &str, _: i64, _: u8) -> Result<i64> {
+                Err(err!("a reservation count reads device limits only"))
+            }
+        }
+        if self.entry.iter().all(|e| e.count.is_none()) {
+            return Ok(());
+        }
+        let who = self.module.id.clone();
+        let mut out = Vec::with_capacity(self.entry.len());
+        for e in std::mem::take(&mut self.entry) {
+            let Some(count) = &e.count else {
+                out.push(e);
+                continue;
+            };
+            if e.devices.is_empty() {
+                return Err(err!(
+                    "{who}: reservation {}.{} names no devices (its count is a device limit)",
+                    e.registry,
+                    e.id
+                ));
+            }
+            for dev in &e.devices {
+                let info = crate::devdata::by_short(dev).ok_or_else(|| {
+                    err!(
+                        "{who}: reservation {}.{}: unknown device {dev}",
+                        e.registry,
+                        e.id
+                    )
+                })?;
+                let n = crate::expr::eval_str(&count.text(), &Limits(info)).map_err(|x| {
+                    err!("{who}: reservation {}.{} on {dev}: {x}", e.registry, e.id)
+                })?;
+                if n < 0 {
+                    return Err(err!(
+                        "{who}: reservation {}.{} on {dev}: count {n} is negative",
+                        e.registry,
+                        e.id
+                    ));
+                }
+                for k in 0..n {
+                    out.push(EntryDef {
+                        registry: e.registry.clone(),
+                        id: format!("{}{k}", e.id),
+                        devices: vec![dev.clone()],
+                        count: None,
+                        fields: e.fields.clone(),
+                    });
+                }
+            }
+        }
+        self.entry = out;
+        Ok(())
+    }
+
     /// What a `role = "service"` module provides (`None` for any other role). SDK services keep their generated exports.
     pub fn provided_service(&self) -> Result<Option<crate::dkm::Provided>> {
         let id = &self.module.id;
@@ -211,10 +280,11 @@ impl Manifest {
                 || self.module.callback_order.is_some()
                 || !self.exports.is_empty()
                 || !self.hooks.is_empty()
+                || !self.patches.is_empty()
                 || !self.fills.is_empty()
             {
                 return Err(err!(
-                    "{id}: `service` or `callback_order` in [module], [[export]], [[hook]] and [[fill]] belong to a module with `role = \"service\"`"
+                    "{id}: `service` or `callback_order` in [module], [[export]], [[hook]], [[patch]] and [[fill]] belong to a module with `role = \"service\"`"
                 ));
             }
             return Ok(None);
@@ -302,6 +372,54 @@ impl Manifest {
             }
             hooks.push((h.name.clone(), h.entry.clone(), h.devices.clone()));
         }
+        let mut patches: Vec<(String, Vec<String>)> = vec![];
+        for h in &self.patches {
+            if h.name.is_empty() {
+                return Err(err!("{id}: [[patch]] needs a `name`, not empty"));
+            }
+            if patches.iter().any(|(n, d)| {
+                *n == h.name
+                    && (d.is_empty()
+                        || h.devices.is_empty()
+                        || d.iter().any(|x| h.devices.contains(x)))
+            }) {
+                return Err(err!(
+                    "{id}: [[patch]] {:?} is declared twice for a common device",
+                    h.name
+                ));
+            }
+            if hooks.iter().any(|(n, _, _)| *n == h.name) {
+                return Err(err!(
+                    "{id}: [[patch]] {:?} is also a [[hook]] (a name is one or the other)",
+                    h.name
+                ));
+            }
+            for d in &h.devices {
+                if crate::devdata::by_short(d).is_none() {
+                    return Err(err!(
+                        "{id}: [[patch]] {:?}: device {d:?} is not one of {}",
+                        h.name,
+                        crate::devdata::short_list()
+                    ));
+                }
+            }
+            patches.push((h.name.clone(), h.devices.clone()));
+        }
+        // per device, the file's patches stay within what the loader keeps from `init` to the install
+        for dev in std::iter::once(None)
+            .chain(crate::devdata::all().iter().map(|d| Some(d.short.as_str())))
+        {
+            let n = patches
+                .iter()
+                .filter(|(_, d)| d.is_empty() || dev.is_some_and(|x| d.iter().any(|y| y == x)))
+                .count();
+            if n > dkneeds::SERVICE_PATCHES_MAX as usize {
+                return Err(err!(
+                    "{id}: {n} [[patch]] entries, over the {} a service file may take",
+                    dkneeds::SERVICE_PATCHES_MAX
+                ));
+            }
+        }
         let mut fills: Vec<(String, String, Vec<String>)> = vec![];
         let mut dsp_fills: Vec<crate::dkm::DspFill> = vec![];
         for f in &self.fills {
@@ -362,6 +480,7 @@ impl Manifest {
             callback_order: self.module.callback_order,
             exports,
             hooks,
+            patches,
             fills,
             dsp_fills,
         }))
@@ -438,6 +557,16 @@ pub struct ServiceHook {
     pub entry: String,
     /// The devices the hook is for (`dt2`, `dn2`); empty: every device that declares it. `service!` lists the hooks of each device the same way
     /// (`hooks_dt2`, `hooks_dn2`, `hooks`), and `patchkit service-check` compares the two per device.
+    #[serde(default)]
+    pub devices: Vec<String>,
+}
+
+/// An entry of `[[patch]]` of a service: the patch site of the port files (`ports/`); the bytes are the service's own, given in `init`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ServicePatch {
+    pub name: String,
+    /// The devices the patch is for (short names of `devices/*.toml`); empty: every device that declares it. `service!` lists the patches of each device the same way.
     #[serde(default)]
     pub devices: Vec<String>,
 }
@@ -634,7 +763,7 @@ pub struct RegistryDef {
     /// The registry takes no entry from a patched-in module: its rows are made at run time. The text says why and is part of the error that a module with an entry gets.
     #[serde(default)]
     pub refuse_entries: Option<String>,
-    /// Modules that may still add entries to a registry with `refuse_entries` (`core/dynreg` reserves the rows that run-time machines fill).
+    /// Modules that may still add entries to a registry with `refuse_entries` (`core/rows` reserves the rows that run-time machines fill).
     #[serde(default)]
     pub refuse_entries_except: Vec<String>,
 }
@@ -653,7 +782,7 @@ pub struct DevAlloc {
     pub last: i64,
     #[serde(default)]
     pub alloc: BTreeMap<String, i64>,
-    /// First number of the range reserved for run-time modules (`core/dynreg` reserves `dynamic_first ..= last`).
+    /// First number of the range reserved for run-time modules (`core/rows` reserves `dynamic_first ..= last`).
     #[serde(default)]
     pub dynamic_first: Option<i64>,
     /// How many stock machine types the firmware has (types `0 .. stock_types`; the numbers up to `dynamic_first` that are not stock are built-in or gap rows).
@@ -695,11 +824,11 @@ impl DevAlloc {
         let Some(first) = self.dynamic_first else {
             return Ok(());
         };
-        // the range belongs to the run-time modules; `core/dynreg` reserves its rows there
+        // the range belongs to the run-time modules; `core/rows` reserves its rows there
         if let Some((k, v)) = self
             .alloc
             .iter()
-            .find(|(k, v)| **v >= first && !k.starts_with("core/dynreg:"))
+            .find(|(k, v)| **v >= first && !k.starts_with("core/rows:"))
         {
             return Err(err!(
                 "allocation table [{dev}]: {k} = {v} lies in the run-time range {first}.."
@@ -728,6 +857,10 @@ pub struct EntryDef {
     pub id: String,
     #[serde(default)]
     pub devices: Vec<String>,
+    /// A reservation: the entry stands for `<id>0 ..= <id>(n-1)` on each of its `devices`, n being this expression over the device file's
+    /// `[limits]` (`8 * fx_slots`). Expanded when the manifest loads (`Manifest::expand_reservations`); no entry keeps it afterwards.
+    #[serde(default)]
+    pub count: Option<ExprSrc>,
     #[serde(flatten)]
     pub fields: BTreeMap<String, toml::Value>,
 }
@@ -909,7 +1042,7 @@ pub struct Op {
     pub when: Option<String>,
 }
 
-/// `[[info]] name = "fxpages_info", symbol = "fxpages_info", devices = ["dt2"]`: an entry of the image's info table: the hash of `name` and the address that the
+/// `[[info]] name = "rows_info", symbol = "rows_info", devices = ["dt2"]`: an entry of the image's info table: the hash of `name` and the address that the
 /// expression `symbol` evaluates to (a global symbol of the module's objects). `name` is what a service passes to `dkc_info` (as its name hash); it shares one
 /// namespace with the `[[slot]]` names of all image adapters, and `patchkit apply` refuses two entries with one hash.
 #[derive(Clone, Debug, Deserialize)]
@@ -1014,8 +1147,9 @@ impl Module {
         read: &dyn Fn(&str) -> Result<String>,
         lenient: bool,
     ) -> Result<Module> {
-        let manifest: Manifest = toml::from_str(manifest_text)?;
+        let mut manifest: Manifest = toml::from_str(manifest_text)?;
         manifest.validate_header()?;
+        manifest.expand_reservations()?;
         let mut objects = vec![];
         let mut all = manifest_text.to_string();
         for o in &manifest.object {
@@ -1145,16 +1279,11 @@ pub struct Build<'a> {
 }
 
 /// The roots of the image modules and service files, whose objects are committed.
-pub const CORE_MODULE_ROOTS: &[&str] = &["runtime", "services", "image-modules"];
+pub const CORE_MODULE_ROOTS: &[&str] = &["runtime", "services"];
 
 /// The module library's committed roots, in the same order as tools/patchkit/modroots.py.
-pub const REPO_MODULE_ROOTS: &[&str] = &[
-    "modules",
-    "runtime",
-    "services",
-    "image-modules",
-    "tests/fixtures/modules",
-];
+pub const REPO_MODULE_ROOTS: &[&str] =
+    &["modules", "runtime", "services", "tests/fixtures/modules"];
 
 /// Where a module library comes from, besides the repository's module roots and PATCHKIT_MODULES.
 #[cfg(not(target_arch = "wasm32"))]
@@ -1242,12 +1371,12 @@ pub fn selected_library(
         selected,
     )?;
     lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
-    if lenient && lib.get("core/machines").is_none() {
+    if lenient && lib.get("core/rows").is_none() {
         for id in selected {
             let m = lib.get(id).unwrap();
             if !m.manifest.gens.is_empty() || !m.manifest.machine.is_empty() {
                 return Err(Error(format!(
-                    "{id}: generation requires --manifest for core/machines (machine allocations)"
+                    "{id}: generation requires --manifest for core/rows (machine allocations)"
                 )));
             }
         }
@@ -1395,7 +1524,7 @@ impl Library {
         // Validate the complete explicit selection before any objects are read or built.
         let headers = Self::read_headers(paths)?;
         headers.with_requires(selected)?;
-        // Support manifests (for example core/machines allocations) are explicit inputs too;
+        // Support manifests (for example core/rows allocations) are explicit inputs too;
         // validate their requirements rather than silently accepting a partial library.
         let ids: Vec<_> = headers.modules.iter().map(|m| m.id().to_string()).collect();
         headers.with_requires(&ids)?;
@@ -1749,6 +1878,40 @@ mod manifest_tests {
     }
 
     #[test]
+    fn a_service_patch_is_a_name_and_devices_and_a_name_is_a_hook_or_a_patch_never_both() {
+        let hook = "[[hook]]\nname = \"cf.a.hook.x\"\nentry = \"e\"\n";
+        let patch = |n: &str| format!("[[patch]]\nname = \"{n}\"\n");
+        // a patch has a name and, as a hook, devices; nothing else
+        assert!(load_service(&patch("cf.a.hook.p")).is_ok());
+        let e = load_service("[[patch]]\nname = \"cf.a.hook.p\"\nentry = \"f\"\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        let e = load_service(&patch("")).unwrap_err();
+        assert!(e.to_string().contains("needs a `name`"), "{e}");
+        // the same name twice for every device, or as a hook and a patch
+        let e =
+            load_service(&format!("{}{}", patch("cf.a.hook.p"), patch("cf.a.hook.p"))).unwrap_err();
+        assert!(
+            e.to_string().contains("declared twice for a common device"),
+            "{e}"
+        );
+        let e = load_service(&format!("{hook}{}", patch("cf.a.hook.x"))).unwrap_err();
+        assert!(e.to_string().contains("also a [[hook]]"), "{e}");
+        // a module that is no service has none
+        let e = load(&patch("cf.a.hook.p")).unwrap_err();
+        assert!(e.to_string().contains("[[patch]]"), "{e}");
+        // the loader keeps a bounded number from `init` to the install
+        let many: String = (0..=dkneeds::SERVICE_PATCHES_MAX)
+            .map(|i| patch(&format!("cf.a.hook.p{i}")))
+            .collect();
+        let e = load_service(&many).unwrap_err();
+        assert!(e.to_string().contains("a service file may take"), "{e}");
+        let ok: String = (0..dkneeds::SERVICE_PATCHES_MAX)
+            .map(|i| patch(&format!("cf.a.hook.p{i}")))
+            .collect();
+        assert!(load_service(&ok).is_ok());
+    }
+
+    #[test]
     fn a_record_has_a_local_id_and_no_key_field() {
         let e = load("[[record]]\nkind = \"lfo_shape\"\nkey = 7\n").unwrap_err();
         assert!(e.to_string().contains("unknown field"), "{e}");
@@ -1757,6 +1920,84 @@ mod manifest_tests {
         let e = load("[[record]]\nkind = \"lfo_shape\"\nid = \"a\"\n[[record]]\nkind = \"lfo_shape\"\nid = \"a\"\n").unwrap_err();
         assert!(e.to_string().contains("declared twice"), "{e}");
         assert!(load("[[record]]\nkind = \"lfo_shape\"\nid = \"ramp-up\"\n").is_ok());
+    }
+
+    fn reserved(extra: &str) -> Result<Vec<EntryDef>> {
+        let mut m = load(extra)?;
+        m.expand_reservations()?;
+        Ok(m.entry)
+    }
+
+    /// Short names of the devices whose file reserves `limit` rows.
+    fn devices_with(limit: &str, at_least: u64) -> Vec<&'static str> {
+        crate::devdata::all()
+            .iter()
+            .filter(|d| d.limit_of(limit).is_some_and(|v| v >= at_least))
+            .map(|d| d.short.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn a_reservation_is_one_entry_for_each_row_of_the_device_limit() {
+        let devs = devices_with("fx_slots", 1);
+        assert!(devs.len() >= 2);
+        let list = devs
+            .iter()
+            .map(|d| format!("\"{d}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let rows = reserved(&format!(
+            "[[entry]]\nregistry = \"params\"\nid = \"fp\"\ncount = \"8 * fx_slots\"\ntemplate = 117\ndevices = [{list}]\n\
+             [[entry]]\nregistry = \"params\"\nid = \"keep\"\ntemplate = 1\n"
+        ))
+        .unwrap();
+        for dev in devs {
+            let mine: Vec<_> = rows
+                .iter()
+                .filter(|e| e.id.starts_with("fp"))
+                .filter(|e| e.devices == [dev])
+                .collect();
+            let n = 8 * crate::devdata::by_short(dev)
+                .unwrap()
+                .limit_of("fx_slots")
+                .unwrap() as usize;
+            assert_eq!(mine.len(), n, "{dev}");
+            // numbered in order, the other fields of the line on every row, no count left
+            assert!(
+                mine.iter()
+                    .enumerate()
+                    .all(|(k, e)| e.id == format!("fp{k}")
+                        && e.count.is_none()
+                        && e.fields["template"].as_integer() == Some(117))
+            );
+        }
+        // an entry without a count passes through, in place
+        assert_eq!(rows.last().unwrap().id, "keep");
+        // a limit of 0 reserves nothing (a device without the feature)
+        let none = crate::devdata::all()
+            .iter()
+            .find(|d| d.limit_of("send_rows") == Some(0))
+            .expect("a device without send rows")
+            .short
+            .clone();
+        assert!(reserved(&format!("[[entry]]\nregistry = \"params\"\nid = \"fs\"\ncount = \"send_rows\"\ndevices = [\"{none}\"]\n")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_reservation_needs_devices_known_limits_and_a_count_of_zero_or_more() {
+        let dev = devices_with("fx_slots", 1)[0];
+        let line = |count: &str, devices: &str| {
+            reserved(&format!(
+                "[[entry]]\nregistry = \"params\"\nid = \"fp\"\ncount = \"{count}\"\n{devices}"
+            ))
+            .unwrap_err()
+            .to_string()
+        };
+        assert!(line("fx_slots", "").contains("names no devices"));
+        let on = format!("devices = [\"{dev}\"]\n");
+        assert!(line("no_such_limit", &on).contains("unknown symbol no_such_limit"));
+        assert!(line("fx_slots", "devices = [\"zz9\"]\n").contains("unknown device zz9"));
+        assert!(line("fx_slots - 9", &on).contains("negative"));
     }
 }
 

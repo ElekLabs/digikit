@@ -1,0 +1,92 @@
+[module]
+id = "core/dynfx"
+version = "0.1.0"
+name = "Run-time effects"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Reserves the DSP side of run-time effects: free rows in the effect chain of core/fx and the table of their addresses (`dynfx_info`) that the effect-registry owner reads"
+requires = ["core/runtime", "core/dsp-link", "core/dyndsp", "core/fx"]
+conflicts = []
+ports = ["dt2-1.17", "dn2-1.12"]
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# Patch-time half of the DSP side of run-time effects (docs/design/digikit-dkm.md "DSP section", docs/findings/55-fx-adapter.md).
+# It adds no behaviour by itself:
+#
+# - One free row in the effect chain of core/fx for each of the device's effect slots ([limits] fx_slots; 3 on both devices). A free row
+#   holds pc 0xffffffff, which the adapter skips. The runtime claims one for an effect: it writes the parameter words, desc, state and
+#   `enabled`, then the pc (one word per transfer through window 2 of core/dsp-link), so the chain never sees a half-written row. It frees a
+#   row the other way round (the pc to 0xffffffff first).
+# - `dynfx_info` is the table the effect-registry owner reads (the image's info table): the rows of the chain (= window 2), the index of the first free
+#   row, the number of free rows and the words of a row.
+#
+# The free rows are listed in the registry in module order (the registry's limit is `fx_slots`); no other module adds a patch-time row.
+
+# The device id and the limits from the device files, written by `patchkit gen` (docs/design/device-data.md). `[[entry]]` rows below: one
+# for each effect slot of a device (tests/patchkit/test_limits.py checks the number against `[limits] fx_slots`).
+[[gen]]
+kind = "gas"
+path = "build/gen/device-{dev}.inc"
+uses = ["DEVICE_ID", "LIMIT_FX_SLOTS"]
+
+[[object]]
+path = "build/dynfx-dt2.dko.json"
+sources = ["src/cf/dynfx-dt2.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[object.externs]
+_df_rows = "fx.rows"
+_df_first = "fx.df0.index"
+_df_count = "fx.count"
+
+[[object]]
+path = "build/dynfx-dn2.dko.json"
+sources = ["src/cf/dynfx-dn2.s"]
+place = "cf.expansion"
+devices = ["dn2"]
+
+[object.externs]
+_df_rows = "fx.rows"
+_df_first = "fx.df0.index"
+_df_count = "fx.count"
+
+[[entry]]
+registry = "fx"
+id = "df0"
+pc = 0xffffffff
+desc = 0
+state = 0
+
+[[entry]]
+registry = "fx"
+id = "df1"
+pc = 0xffffffff
+desc = 0
+state = 0
+
+[[entry]]
+registry = "fx"
+id = "df2"
+pc = 0xffffffff
+desc = 0
+state = 0
+
+# The table of this adapter, exported to the image's info table (`dkrt_info_table`): the effect-registry owner finds it by the hash of its name (`CoreApi::info`); the runtime
+# does not read it.
+[[info]]
+name = "dynfx_info"
+devices = ["dt2", "dn2"]
+
+# The capacity limits this adapter reserves, as `cap_<kind>` entries of the image's info table (docs/PATCHING.md): each points at the u32 word of the table that holds the limit, so the planner knows the limit before any service file is loaded.
+[[info]]
+name = "cap_fx_slots"
+symbol = "dynfx_info + 20"
+devices = ["dt2", "dn2"]
+

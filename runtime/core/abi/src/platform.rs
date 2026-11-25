@@ -49,11 +49,11 @@ pub struct DeviceProfile {
     pub esdhc_base: u32,
     /// `[board] dsp_clock_hz / dsp_blocks_per_second`, rounded (0 without a DSP): the DSP cycles of one block.
     pub dsp_block_cycles: u32,
-    /// The first run-time machine type (`dynamic_first` of core/machines `types.toml`) and how many there are (0 without a DSP). The tables have
+    /// The first run-time machine type (`dynamic_first` of core/rows `types.toml`) and how many there are (0 without a DSP). The tables have
     /// `MACHINE_ROWS` rows: a device has that many types or none.
     pub dyn_type_first: u32,
     pub dyn_types: u32,
-    /// How many stock machine types the firmware has (`stock_types` of core/machines `types.toml`; 0 without a DSP): the types `0 .. stock_machine_types`. The numbers
+    /// How many stock machine types the firmware has (`stock_types` of core/rows `types.toml`; 0 without a DSP): the types `0 .. stock_machine_types`. The numbers
     /// from there to `dyn_type_first` are built-in or gap rows that no chooser offers.
     pub stock_machine_types: u32,
     /// `[digikit] tracks`: the tracks of the device (0: the file gives none).

@@ -24,6 +24,8 @@ export const TABLE_MAGIC = 1145787458;
 export const TABLE_VERSION = 3;
 export const PROVIDER_MAX = 8;
 export const INSTALL_SITES = 48;
+export const INSTALL_PATCHES = 16;
+export const SERVICE_PATCHES_MAX = 8;
 export const SLOTS_MAX = 16;
 export const INFO_MAX = 64;
 export const DSP_SLOT_WORDS = 16;
@@ -425,7 +427,7 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   41: ['INPUT_TAKEN', ['what', 'control', 'delta', '-', '-']],
   42: ['PARAM_CHANGE', ['track', 'index', 'old', 'new', '-']],
   43: ['MOD_NEEDS', ['index', 'name0', 'name1', 'name2', '-']],
-  44: ['MODULE_COMMIT', ['index', 'rows', 'records_addr', 'records_size', '-']],
+  44: ['MODULE_COMMIT', ['index', 'rows', 'records_addr', 'records_size', 'name_hash']],
   45: ['MODULE_LATCH', ['index', 'machine', 'latched', '-', '-']],
   46: ['DSP_LINK', ['what', 'a', 'b', 'c', 'd']],
   47: ['FW_READY', ['blocks', '-', '-', '-', '-']],

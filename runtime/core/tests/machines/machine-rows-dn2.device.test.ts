@@ -1,3 +1,4 @@
+import { expectNoRefusedCalls } from '@digi/regression/runtime/service-symbols.ts';
 import { pollUntil } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
@@ -23,6 +24,7 @@ import {
 /**
  * What `machines.dks` does for a run-time machine with its own page on the Digitone II (`test/dyn-dn2`: machine DynSyn, one SYN page DYN with four parameters).
  * One emulator start, two boots of it: the plain runtime (FM TONE's SYN, FLTR and AMP pages are captured), then the card with the machine.
+ * The plain boot also shows the stock TX frame type of track 1 after a note (FM TONE, 0), the baseline of the own type below (the frame type hook, `cf.machine.hook.frametype`).
  * With the machine loaded: the rows are in the tables (names, titles, ranges, knob layout, slots), the stock pages show the same frames, the machine is in the list at
  * the first place after MIDI, YES commits its type (audio mirror, TX frame word), the Sound words hold the defaults of its parameters, the SYN key draws its page,
  * a knob edits the Sound word of its parameter (exactly the word of its slot), Gamma stops at its non-zero minimum (the firmware knob editor uses our row limits) and the empty knobs move nothing.
@@ -64,6 +66,9 @@ describeOn('dn2', `DN2 ${FIRMWARE.dn2} machines.dks: the own page of a run-time 
     const plain = await run.first();
     const stock = await stockFrames(plain);
     expect(new Set(stock).size, 'the stock pages show different frames').toBeGreaterThan(1);
+    // the stock frame builder sends FM TONE's type 0 (`cf.machine.hook.frametype` is not installed); a note first, so the frame has been written
+    await plain.ui.tap('TRIG 1', { until: { drained: true } });
+    expect((await word(plain.session, DN2_TX_TYPE_TRACK1_112)) >>> 16, 'no service: the stock code sends FM TONE type 0').toBe(0);
 
     const rt = await run.load('with-machines', { modules: [ID], selection: [run.mod(ID).name] });
     const { session } = rt;
@@ -99,7 +104,7 @@ describeOn('dn2', `DN2 ${FIRMWARE.dn2} machines.dks: the own page of a run-time 
     // FUNC+SRC, five DOWN from FM TONE (the list is FM TONE, FM DRUM, WAVETONE, SWARMER, MIDI, then the first run-time machine; the hint of the round-trip test), YES, YES;
     // a TRIG sends the type to the audio side. The TRIG press is the first note since the boot: it uses voice slot 0 (round robin from 0, finding 06)
     const type = await dynType(session, run.plan, ID, 'dyn_pluck');
-    expect(type, 'a run-time type (the range of core/dynreg)').toBeGreaterThanOrEqual(16);
+    expect(type, 'a run-time type (the range of core/rows)').toBeGreaterThanOrEqual(16);
     await pickSine(rt, 5);
     await rt.ui.tap('TRIG 1', { until: { drained: true } });
     const mirror = await pollUntil(rt.clock, () => word(session, DN2_AUDIO_MIRROR_112), (w) => w >>> 24 === type, {
@@ -166,5 +171,6 @@ describeOn('dn2', `DN2 ${FIRMWARE.dn2} machines.dks: the own page of a run-time 
       }
     }
     await session.expectNoFault('DynSyn selected, page shown, knobs turned');
+    await expectNoRefusedCalls(rt, run.plan, 'machines');
   }, 900_000);
 });

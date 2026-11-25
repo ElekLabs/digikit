@@ -95,12 +95,12 @@ host tests: their checks stay device tests until the logic is split out.
 | --- | --- |
 | `core/adapters/dynfx/tests/fx-chain.device.test.ts` | A:core/dynfx |
 | `core/adapters/dynfx/tests/fx-reuse.device.test.ts` | A:core/dynfx |
-| `core/adapters/dynreg/tests/equiv.device.test.ts` | A:core/dynreg, C:dsp, S:machines |
-| `core/adapters/dynreg/tests/roundtrip.device.test.ts` | A:core/dynreg, C:state |
+| `core/adapters/dynreg/tests/equiv.device.test.ts` | A:core/rows, C:dsp, S:machines |
+| `core/adapters/dynreg/tests/roundtrip.device.test.ts` | A:core/rows, C:state |
 | `core/adapters/fx/tests/fx-routes-panel.device.test.ts` | A:core/fx, C:state |
-| `core/adapters/fx/tests/fx-routes-persist.device.test.ts` | A:core/fx, C:state |
-| `core/adapters/fx/tests/fx-send-dn2.device.test.ts` | A:core/fx |
-| `core/adapters/fx/tests/fx-send.device.test.ts` | A:core/fx |
+| `services/fx/tests/device/fx-routes-persist.device.test.ts` | A:core/fx, S:fx, C:state |
+| `services/fx/tests/device/fx-send-dn2.device.test.ts` | A:core/fx, S:fx |
+| `services/fx/tests/device/fx-send.device.test.ts` | A:core/fx, S:fx |
 | `core/adapters/fx/tests/patched-dsp-startup.device.test.ts` | A:core/fx, C:boot, C:dsp |
 | `core/adapters/fxpages/tests/fx-kit-persist.device.test.ts` | A:core/fxpages, C:state |
 | `core/adapters/fxpages/tests/fx-pages.device.test.ts` | A:core/fxpages |

@@ -19,7 +19,7 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  *
  * Every reload below is followed by the checks of what only the firmware shows: the reload answers result 0 with the old module torn down; no new boot (the epoch); no row or
  * placeholder is left over (the voice rows in use are those the modules' row masks name: a placeholder row would count in use and be in no mask); and the machine selection view
- * the hook remembered is still there (`dynreg_info` words 48 and 49 name the variable and the builder, and the variable is not 0: the rebuild of the list at the end of a reload
+ * the hook remembered is still there (the `machine_view` entry of core/ui names the variable and the builder, and the variable is not 0: the rebuild of the list at the end of a reload
  * has a view to rebuild). The rebuilt list itself is not read. What the runtime keeps on the host is not read here: the job's steps, state and counters are unit tests
  * (`reload.rs`, `loader`), a service's rows and numbers across a reload are the service contract suite (`dkrt_test_support::contract`, case 12b).
  *
@@ -47,9 +47,9 @@ const setPaths = (rt: TestRuntime): void => {
 };
 const E_RELOAD_PLAYING = loadCode('E_RELOAD_PLAYING');
 const SOAK_CYCLES = process.env.DIGIKIT_TIER === 'full' ? 20 : 5;
-/** Byte offsets in DkrtBootInfo (runtime/core/abi.toml) and in `dynreg_info` (word 48: the view variable, word 49: the builder). */
-const DYNREG_VIEW_VAR = 4 * 48;
-const DYNREG_VIEW_BUILD = 4 * 49;
+/** Byte offsets in DkrtBootInfo (runtime/core/abi.toml) and in the `machine_view` entry of core/ui (word 0: the view variable, word 1: the builder). */
+const VIEW_INFO_VAR = 0;
+const VIEW_INFO_BUILD = 4;
 const MIDI_CHANNEL = 1;
 /**
  * The AMP envelope CCs of the track (MIDI appendix of each manual: Digitakt II B.5, Digitone II C.5): HOLD and DECAY. HOLD = 127 is NOTE: the hold phase lasts as long as the key
@@ -80,10 +80,10 @@ async function expectReloadLeftNothing(rt: TestRuntime, plan: RuntimePlan, why: 
   expect(cap['VOICE_ROWS']?.used, `${why}: voice rows in use (the row masks of the modules name ${named}; a placeholder row would be one more)`).toBe(named);
   // the runtime's table checks ran over the real firmware tables (host tests run them over fakes only)
   expect((await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.TABLE_BAD), `${why}: a table check failed`).toEqual([]);
-  const info = planSymbol(plan, 'dynreg_info');
-  const viewVar = await word(rt.session, info + DYNREG_VIEW_VAR);
-  expect(viewVar, `${why}: dynreg_info word 48 (the variable that holds the machine selection view)`).not.toBe(0);
-  expect(await word(rt.session, info + DYNREG_VIEW_BUILD), `${why}: dynreg_info word 49 (the list builder)`).not.toBe(0);
+  const info = planSymbol(plan, 'ui_machine_view_info');
+  const viewVar = await word(rt.session, info + VIEW_INFO_VAR);
+  expect(viewVar, `${why}: the machine_view entry of core/ui names the variable that holds the machine selection view`).not.toBe(0);
+  expect(await word(rt.session, info + VIEW_INFO_BUILD), `${why}: the machine_view entry names the list builder`).not.toBe(0);
   expect(await word(rt.session, viewVar), `${why}: the hook remembered the machine selection view`).not.toBe(0);
 }
 
@@ -111,7 +111,7 @@ async function expectReloadLive(rt: TestRuntime): Promise<void> {
   setPaths(rt);
   const artifacts = liveArtifacts(rt.session, 'reload-live');
   await cliInstall(rt.session, 'test/lfo-shape', artifacts, 300_000, [DEBUG_MODULE, 'test/sine']);
-  const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT', 'dynreg_info']);
+  const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT', 'ui_machine_view_info']);
   const epoch = await epochOf(rt);
   const before = await moduleRows(rt);
   record(artifacts, 'modules-before', before);
@@ -238,7 +238,7 @@ async function expectReloadPitchSoak(rt: TestRuntime): Promise<void> {
   // both builds go through the same pack, so the only difference is the constant
   const builds = [fs.readFileSync(await build('sine-base', [])), fs.readFileSync(await build('sine-octave', [SINE_OCTAVE_UP]))];
   await cliInstall(rt.session, 'test/sine', artifacts, 300_000, [DEBUG_MODULE]);
-  const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT', 'dynreg_info']);
+  const plan = await prepareRuntimePlan(rt.session, artifacts, ['DKRT_BOOT', 'ui_machine_view_info']);
   const epoch = await epochOf(rt);
   const sine = (await moduleRows(rt)).find((m) => m.name === 'test/sine')!;
   // what the image accounts for: a reload that leaks DSP area, arena or a row per cycle shows here only (the contract suite runs over a fake core)

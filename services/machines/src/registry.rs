@@ -3,7 +3,7 @@ use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::iw;
 use dkrt_abi::shared::Shared;
 use dkrt_sdk::*;
-use dkrt_svc_rows::dynreg::{w, RegState, MACH_TEXT};
+use dkrt_svc_rows::rows_info::{w, RegState, MACH_TEXT};
 
 /// Who owns each reserved machine row (module record index + 1, 0 free). It is the one table of the registry that is read outside the owner: the MODULES reply asks
 /// `Describe::describe` on the command handler's task, which must answer while the owner is busy in another call (the owner's guard would refuse it). So it is a `Shared`
@@ -39,7 +39,7 @@ pub fn clear_mach_owners<C: CoreApi>(core: &C) {
 /// The code of the first run-time parameter row (a row `k` has code `param_first + k`); `u32::MAX` without a registry.
 pub fn param_first<C: CoreApi>(core: &C) -> u32 {
     unsafe {
-        let inf = dkrt_svc_rows::dynreg(core);
+        let inf = dkrt_svc_rows::rows_info(core);
         if inf.is_null() {
             u32::MAX
         } else {
@@ -50,7 +50,7 @@ pub fn param_first<C: CoreApi>(core: &C) -> u32 {
 
 /// The reserved machine, parameter and page rows as (rows the registry has, rows in use); (0, 0) without a registry (for CAPACITY).
 pub(crate) unsafe fn counts<C: CoreApi>(core: &C, s: &RegState) -> [(u32, u32); 3] {
-    let inf = dkrt_svc_rows::dynreg(core);
+    let inf = dkrt_svc_rows::rows_info(core);
     if inf.is_null() {
         return [(0, 0); 3];
     }
@@ -109,5 +109,21 @@ pub(crate) unsafe fn copy_text(dst: *mut u8, src: *const u8, n: usize) {
     while i < n {
         *dst.add(i) = *src.add(i);
         i += 1;
+    }
+}
+
+/// Take the descriptor strings out of the reserved machine rows (word 0 and 1 of a row): they are buffers of this file, which is about to go. The dispatch of `core/rows` gives
+/// a row that has none the empty string.
+///
+/// # Safety
+/// `inf` is the image's `rows_info`.
+pub(crate) unsafe fn forget_descriptor_strings<C: CoreApi>(core: &C, inf: *const u32) {
+    let first = iw(inf, w::M_DYN0) - iw(inf, w::M_FIRST);
+    let mut k = 0;
+    while k < iw(inf, w::M_DYN_N) {
+        let row = iw(inf, w::M_ROWS) + (first + k) * iw(inf, w::M_ROW_SIZE);
+        core.wr(row + iw(inf, w::O_LONG), 0);
+        core.wr(row + iw(inf, w::O_SHORT), 0);
+        k += 1;
     }
 }

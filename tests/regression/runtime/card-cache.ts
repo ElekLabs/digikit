@@ -106,6 +106,7 @@ const BUILDER_SOURCES = [
   'runtime-plan.ts',
   'write-safety.ts',
   'device-data.ts',
+  'project-kit.ts',
   'image-roots.ts',
   'fixtures.ts',
   'install.ts',

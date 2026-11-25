@@ -54,8 +54,8 @@ impl Default for Fx {
 }
 
 impl<C: CoreApi> Provider<C> for Fx {
-    /// The file's `init`, before its hooks are installed: the table of the effect pages is bound (with the firmware words of the hooks), or the file is refused (`E_NO_REGISTRY`:
-    /// no usable `core/fxpages` in the image).
+    /// The file's `init`, before its hooks are installed: the table of the effect pages is bound (the device facts, the parameter blocks of `rows_info` and the firmware words of the
+    /// hooks), or the file is refused (`E_NO_REGISTRY`: no `rows_info` with the blocks, or no effect pages on this device).
     fn start(core: &C) -> Result<Fx, Status> {
         // SAFETY: the table is this crate's static; the words are the file's own data (none on a host)
         let r = unsafe { fxpage::bind(core, fxpage::firmware()) };

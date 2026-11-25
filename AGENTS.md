@@ -27,7 +27,6 @@ packages/
   sharc-rig-kit/    TypeScript kit on the rig: machine and effect rigs, conformance cases and report
 runtime/            Runtime core, platform modules and digikit menu
 services/           Service crates and their loadable .dks modules
-image-modules/      Firmware plug-in points, adapters, fixes and proof modules
 modules/            Content modules by kind and module ID (kind/author/name)
 sdk/                Module contracts and headers
 devices/            Device profiles

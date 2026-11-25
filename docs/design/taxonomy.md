@@ -11,7 +11,7 @@ This file defines the terms, layers and card layout. [Architecture](../ARCHITECT
 | Services (L3) | Versioned domain APIs and policy. May own record kinds, validation, state, hooks and slot targets | Embedded firmware addresses or bytes, direct calls into another service's implementation | Uses `CoreApi` and declared imports. The core calls declared rows and consumers call exports | `.dks`, role 1; shipped crates under `services/NAME` |
 | Runtime core (L2) | Discovery, planning, loading, registry, safe mode, tick, generic DSP loading, store, settings broker and transport | Domain builders, domain record semantics and stock patch sites | Uses platform interfaces and dispatches declared service callbacks | `runtime/core`, patched into the image |
 | Port | The identity of one device and firmware version, named anchors and hook sites with check values | Service state, record kinds and firmware bytes | Read by the loader. Supplies bindings for a matching image | `.dkport`, role 2 |
-| Image capabilities (L1) | Reset installer, adapters, stock fallback code, shared reservations and firmware-time plug-in points | Content behavior that belongs to a loaded module | Reaches stock firmware through bindings. Slots can dispatch to a loaded service | `runtime/platform/` and `image-modules/`, patched into the image |
+| Image capabilities (L1) | Reset installer, platform modules, stock fallback code, shared reservations and firmware-time slots | Content behavior that belongs to a loaded module | Reaches stock firmware through bindings. Slots can dispatch to a loaded service | `runtime/platform/`, patched into the image |
 | Stock (L0) | Elektron firmware, DSP image, Elektron files | Digikit values outside the stock contract | | |
 
 Supported content modules can change while the device runs. Card services and port files take effect at boot. Image changes require flashing. The [architecture inventories](../ARCHITECTURE.md#shipped-services) show the current division between services and image capabilities.
@@ -23,10 +23,10 @@ One meaning per word. A second use gets a new word.
 | Term | Meaning |
 | --- | --- |
 | runtime | the base in every digikit image. "Runtime core" is `core/runtime`. "Everything we flash" is the image. |
-| image | the patched firmware only. Qualify the others: module code image, DSP image, card image. The repo folder for image modules is `image-modules/`. |
+| image | the patched firmware only. Qualify the others: module code image, DSP image, card image. The repo folder for image modules is `runtime/platform/`. |
 | image module | a `module.toml` unit patched into the image. Its role gives its class. |
 | platform | the `Platform` trait and the image modules behind it. |
-| adapter | an image module implementing platform or firmware integration. Manifests also use `role = "adapter"` for plug-in points, fixes and proofs. |
+| adapter | an image module implementing platform or firmware integration. Manifests also use `role = "adapter"` for platform slots, fixes and proofs. |
 | image capability | a resident facility offered by the patched image. A capability can support multiple services, and a service can use the port without a dedicated image module. |
 | library | code linked into its callers at build time. A library has no provider identity or runtime registration. A shared live resource still needs an owner. |
 | stub | image code at a site that calls a filled pointer slot. The fallback for an absent optional import is the "absent-import fallback". |
@@ -71,7 +71,7 @@ fixed sectors outside the table, two copies each: the settings record, the selec
 
 ## Repo layout
 
-The E8 move uses the [directory map](../plans/e8-moves.json). Firmware plug-in points live in `image-modules/points/`, shared libraries in `services/{bitmap,rows}/` and proofs in `tests/fixtures/modules/`. See the [manifest roles](../ARCHITECTURE.md#roles) and [plug-in point inventory](../ARCHITECTURE.md#firmware-plug-in-points) for current ownership.
+The E8 move uses the [directory map](../plans/e8-moves.json). Platform modules (slots, adapters and fixes) live in `runtime/platform/`, shared libraries in `services/{bitmap,rows}/` and proofs in `tests/fixtures/modules/`. See the [manifest roles](../ARCHITECTURE.md#roles) and [platform slot catalogue](../ARCHITECTURE.md#platform-slots) for current ownership.
 
 The following tree and table preserve the original E8 proposal and its proposed follow-up moves.
 
@@ -82,7 +82,6 @@ services/<x>/dks/              the .dks module
 services/<x>/image-halves/<half>/   the image halves of the service
 services/rows/                 today services/params; the crate is renamed to dkrt-svc-rows in a later PR
 ports/{<device>-<fw>.toml, fw/, bindings/, routines/<service>/}
-image-modules/{adapters, fixes, proofs}
 modules/<kind>/<module id>/    content only; the folder is the id (<author>/<name>); kind folders: machine, fx, tool, lfo-shape, filter
 devices/*.toml  sdk/  packages/  tools/  apps/  tests/  docs/          unchanged
 ```
@@ -98,8 +97,8 @@ devices/*.toml  sdk/  packages/  tools/  apps/  tests/  docs/          unchanged
 | adapters `fx`, `dynfx`, `fxpages` | `services/fx/image-halves/` |
 | adapter `sample-pool` | `services/samples/image-halves/` |
 | adapter `lfo` | `services/lfo/image-halves/` |
-| adapters `usb-bulk` (with `usb-bulk-audio` merged in), `plusdrive-write`, `sdhc-large` | `image-modules/adapters/` |
-| adapters `overdrive`, `introblank` | `image-modules/fixes/` |
+| adapters `usb-bulk` (with `usb-bulk-audio` merged in), `plusdrive-write`, `sdhc-large` | `runtime/platform/` |
+| adapters `overdrive`, `introblank` | `runtime/platform/` |
 | adapters `storage-fault-proof`, `file-catalog-proof` | `tests/fixtures/modules/` |
 | adapter `dsp-stereo-proof` | the tests of `dsp-voice` |
 | `devices/ports`, `devices/fw`, `modules/core/fw` | `ports/`, `ports/fw`, `ports/bindings` |

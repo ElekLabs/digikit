@@ -255,3 +255,41 @@ def test_check_reports_crossings_as_failures_when_enforced(
     assert [v.rule for v in found if v.rule.startswith("boundary")] == [
         "boundary-table"
     ]
+
+
+def de_naming(tmp_path: Path, files: dict[str, str]) -> list[str]:
+    (tmp_path / "services" / "fx").mkdir(parents=True)
+    for name, text in files.items():
+        f = tmp_path / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+    return [
+        v.where.split(":")[0]
+        for v in layercheck.check_de_naming(tmp_path)
+        if v.rule == "de-naming"
+    ]
+
+
+def test_de_naming_sees_a_name_after_slashes_inside_a_string(tmp_path: Path) -> None:
+    hits = de_naming(
+        tmp_path,
+        {
+            "runtime/platform/x/src/a.rs": 'const U: &str = "http://x"; const P: &str = "services/fx/dks";\n',
+            "runtime/platform/x/src/b.rs": "// services/fx/ in a comment\nconst Q: char = '\"'; /* services/fx/ */\n",
+        },
+    )
+    assert hits == ["runtime/platform/x/src/a.rs"]
+
+
+def test_de_naming_pipe_is_a_comment_in_coldfire_and_bit_or_in_sharc(
+    tmp_path: Path,
+) -> None:
+    hits = de_naming(
+        tmp_path,
+        {
+            "runtime/platform/x/src/cf/a.s": "| services/fx/ is a gas comment\n",
+            "runtime/platform/x/src/dsp/b.s": "r0 = r1 | services/fx/;\n",
+            "runtime/platform/x/src/dsp/c.inc": "// services/fx/ comment\n",
+        },
+    )
+    assert hits == ["runtime/platform/x/src/dsp/b.s"]

@@ -65,7 +65,7 @@
     {
       "files": [
         "packages/**/*.{ts,tsx,mjs}",
-        "{modules,runtime,services,image-modules}/**/*.{ts,tsx,mjs}",
+        "{modules,runtime,services}/**/*.{ts,tsx,mjs}",
         "tests/regression/**/*.{ts,tsx,mjs}",
         "tools/**/*.{ts,mjs}"
       ],
@@ -126,7 +126,7 @@
     },
     {
       "files": [
-        "{modules,runtime,services,image-modules}/**/tests/**/*.ts",
+        "{modules,runtime,services}/**/tests/**/*.ts",
         "tests/fixtures/**/tests/**/*.ts",
         "tests/regression/runtime/flows/**/*.ts"
       ],

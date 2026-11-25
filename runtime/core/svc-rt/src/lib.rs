@@ -13,6 +13,9 @@
 #![no_std]
 #![deny(improper_ctypes, improper_ctypes_definitions)]
 
+#[cfg(test)]
+extern crate std;
+
 mod declare;
 mod import_core;
 mod module_def;
@@ -28,5 +31,5 @@ pub use dkrt_abi::provider::Reentry;
 pub use dkrt_sdk;
 pub use import_core::{sys, ImportCore};
 pub use module_def::{ModuleDef, TickFn};
-pub use owner::{Events, NoEvent, NoEvents, Owner, Post};
+pub use owner::{Events, NoEvent, NoEvents, Outside, Owner, Post};
 pub use shared::Shared;

@@ -15,7 +15,6 @@
 use super::paramapi::{self, Ctx, Held};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::fw::Fw;
 use dkrt_sdk::limits;
 
 mod action;
@@ -37,6 +36,34 @@ pub struct Pending {
     pub view: usize,
     pub code: u32,
 }
+/// A click taken from the queue (`Slots::take_click`): what the file runs outside the owner.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Click {
+    callback: u32,
+    track: u32,
+    arg: Option<u32>,
+}
+
+impl Click {
+    /// Call the module's action: `void fn(u32 track)`, or `void fn(u32 arg, u32 track)` for a row registered with an argument.
+    ///
+    /// # Safety
+    /// The callback is code of a loaded module: taken in the same UI pass, so `detach` has not dropped its image. Run it outside the owner.
+    pub unsafe fn run(self) {
+        match self.arg {
+            Some(arg) => {
+                let call: unsafe extern "C" fn(u32, u32) =
+                    core::mem::transmute(self.callback as usize);
+                call(arg, self.track);
+            }
+            None => {
+                let call: unsafe extern "C" fn(u32) = core::mem::transmute(self.callback as usize);
+                call(self.track);
+            }
+        }
+    }
+}
+
 const NO_CLICK: Pending = Pending {
     callback: 0,
     track: 0,
@@ -76,7 +103,7 @@ impl Slots {
         }
     }
 
-    /// Set (`addr` != 0) or clear (0) the action of parameter row `k` (a row of core/dynreg). Called by `apply` and `remove`.
+    /// Set (`addr` != 0) or clear (0) the action of parameter row `k` (a row of core/rows). Called by `apply` and `remove`.
     pub fn set(&mut self, k: usize, addr: u32) {
         if k >= limits::PARAM_ROWS {
             return;
@@ -116,37 +143,31 @@ impl Slots {
         unsafe { read_volatile(addr_of!(self.armed)) != 0 }
     }
 
-    /// Hook at the entry of the page's key handler (stack: view, event).
-    pub unsafe fn page_key<C: CoreApi, F: Fw>(
-        &mut self,
-        core: &C,
-        fw: &F,
-        view: *const u8,
-        ev: *const u8,
-    ) {
+    /// First half of the key hook: the detector. `Some(encoder)` is a click. The code of the encoder is asked of the page by the caller, outside the owner: the page's code hook
+    /// (`dks_native_code`) enters the owner to look up a native page, and inside this call it would be refused and the click would map to the stock code.
+    pub unsafe fn key_click(&mut self, view: *const u8, ev: *const u8) -> Option<u32> {
         if !self.is_armed() {
-            return;
+            return None;
         }
         self.held.input();
-        if let Some(enc) = self.det.key(view as usize, word(ev, 0xc), word(ev, 0x10)) {
-            self.click(core, fw, view, enc);
-        }
+        self.det.key(view as usize, word(ev, 0xc), word(ev, 0x10))
     }
 
-    /// Hook at the entry of the page's turn handler (stack: view, event): every page turn ends the click flow, including LOCAL and unused custom encoders. Bookkeeping must
-    /// precede the consumed return: press A, turn an unused D, release A must never become an SMP click. The native handler (`nativepage::turn`) runs after it, outside
-    /// the owner.
-    pub unsafe fn page_turn_input(&mut self, view: *const u8, ev: *const u8) {
-        if self.is_armed() {
-            turn_input(&mut self.det, &mut self.held, view as usize, word(ev, 0xc));
-        }
+    /// The page's track reference of `view`: the argument of the firmware's `view_track`, which the caller calls outside the owner (it is a firmware call).
+    pub unsafe fn track_ref(view: *const u8) -> usize {
+        word(view, VIEW_TRACK_REF) as usize
     }
 
-    /// A click of encoder `enc` on `view`: queue the action of the parameter under it, if it has one.
-    unsafe fn click<C: CoreApi, F: Fw>(&mut self, core: &C, fw: &F, view: *const u8, enc: u32) {
-        let code = fw.param_code(view as usize, enc);
+    /// Second half: queue the action of parameter `code`, the code `view` maps the clicked encoder to, if it has one. `track` is the page's track (`view_track` of
+    /// [`Slots::track_ref`], asked of the firmware outside the owner).
+    pub unsafe fn queue_click<C: CoreApi>(
+        &mut self,
+        core: &C,
+        view: *const u8,
+        code: i32,
+        track: u32,
+    ) {
         let first = crate::records::param_first(core);
-        let track = || fw.view_track(word(view, VIEW_TRACK_REF) as usize);
         if let Some((callback, track)) = resolve(&self.actions, first, code, track) {
             self.pending = Pending {
                 callback,
@@ -157,13 +178,24 @@ impl Slots {
         }
     }
 
+    /// Hook at the entry of the page's turn handler (stack: view, event): every page turn ends the click flow, including LOCAL and unused custom encoders. Bookkeeping must
+    /// precede the consumed return: press A, turn an unused D, release A must never become an SMP click. The native handler (`native_page::turn`) runs after it, outside
+    /// the owner.
+    pub unsafe fn page_turn_input(&mut self, view: *const u8, ev: *const u8) {
+        if self.is_armed() {
+            turn_input(&mut self.det, &mut self.held, view as usize, word(ev, 0xc));
+        }
+    }
+
+    /// Open the flow of a click (what `take_click` does for a queued one).
+    pub(crate) fn begin_flow(&mut self, ctx: Ctx) {
+        self.held.begin(ctx);
+    }
+
     /// The queued click, taken for the UI pass: its callback, and the argument it was registered with. The flow of `param_get` and `param_set` is open from here until the
-    /// page gets input again, so the list the action opens can set the value when the user picks. `None`: nothing queued, or the row was unloaded.
-    unsafe fn take_click<C: CoreApi>(
-        &mut self,
-        core: &C,
-        owners: &[u8],
-    ) -> Option<(Pending, (bool, u32))> {
+    /// page gets input again, so the list the action opens can set the value when the user picks. `None`: nothing queued, or the row was unloaded. This runs inside the
+    /// owner and only takes the click; the file runs it outside (`Click::run`), so the callback may call `dk_param_get` and `dk_param_set`, which enter the owner.
+    pub unsafe fn take_click<C: CoreApi>(&mut self, core: &C, owners: &[u8]) -> Option<Click> {
         let p = self.pending;
         if p.callback == 0 {
             return None;
@@ -171,63 +203,30 @@ impl Slots {
         self.pending = NO_CLICK;
         let ctx = click_context(core, owners, &p)?;
         self.held.begin(ctx);
-        let arg = self.args[(p.code.wrapping_sub(crate::records::param_first(core))) as usize
+        let (with_arg, arg) = self.args[(p.code.wrapping_sub(crate::records::param_first(core)))
+            as usize
             % limits::PARAM_ROWS];
-        Some((p, arg))
+        Some(Click {
+            callback: p.callback,
+            track: p.track,
+            arg: with_arg.then_some(arg),
+        })
     }
 
-    /// The UI loop pass: run the queued action (`void fn(u32 track)`). The callback is the last thing that runs: it may call `dk_param_get` and `dk_param_set`, which reach
-    /// the flow through the owner again.
-    pub unsafe fn tick<C: CoreApi>(&mut self, core: &C, owners: &[u8]) {
-        let Some((p, (with_arg, arg))) = self.take_click(core, owners) else {
-            return;
-        };
-        if with_arg {
-            let call: unsafe extern "C" fn(u32, u32) = core::mem::transmute(p.callback as usize);
-            call(arg, p.track);
-        } else {
-            let call: unsafe extern "C" fn(u32) = core::mem::transmute(p.callback as usize);
-            call(p.track);
-        }
-    }
-
-    /// `dk_param_get`.
-    pub unsafe fn param_get<C: CoreApi, F: Fw>(
+    /// `dk_param_get` and `dk_param_set`, owner half: what the call resolves to (`paramapi::target`); the firmware half (`paramapi::read`, `write`) runs outside the owner.
+    pub unsafe fn param_target<C: CoreApi>(
         &self,
         core: &C,
-        fw: &F,
         owners: &[u8],
         track: u32,
         word: u32,
-    ) -> i32 {
-        paramapi::get(
-            fw,
+    ) -> Result<paramapi::Target, i32> {
+        paramapi::target(
             self.held.ctx(),
             owners,
             crate::records::param_first(core),
             track,
             word,
-        )
-    }
-
-    /// `dk_param_set`.
-    pub unsafe fn param_set<C: CoreApi, F: Fw>(
-        &self,
-        core: &C,
-        fw: &F,
-        owners: &[u8],
-        track: u32,
-        word: u32,
-        raw: i32,
-    ) -> i32 {
-        paramapi::set(
-            fw,
-            self.held.ctx(),
-            owners,
-            crate::records::param_first(core),
-            track,
-            word,
-            raw,
         )
     }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { decodeCommitEvent, readBlock } from '../src/commit-records.ts';
+import { commitNameHash, decodeCommitEvent, readBlock } from '../src/commit-records.ts';
 
 test('the commit event gives the counts and the block range', () => {
   const c = decodeCommitEvent({ args: [2, 1 | (4 << 8) | (1 << 16), 0x47e90000, 640, 0] });
@@ -16,4 +16,12 @@ test('a block is read as big-endian longwords and an unmapped word fails', async
   assert.deepEqual([...(await readBlock(peek, 0x1000, 8))], [1, 2, 3, 4, 0xff, 0xfe, 0xfd, 0xfc]);
   await assert.rejects(readBlock(peek, 0x1000, 12), /unmapped/);
   await assert.rejects(readBlock(peek, 0x1002, 4), /aligned/);
+});
+
+test('the commit event names a module by the hash of its whole id after the last slash', () => {
+  // FNV-1a 32 of "dyn-fx-gain-send" (the whole leaf, since leaves sharing 12 characters collided): the runtime hashes the leaf with `dkneeds::keys::name_hash_bytes`
+  assert.equal(commitNameHash('test/dyn-fx-gain-send'), 0xdb6843d4);
+  assert.notEqual(commitNameHash('test/dyn-fx-gain'), commitNameHash('test/dyn-fx-gain-send'));
+  // equal in the first 12 characters
+  assert.notEqual(commitNameHash('a/reload-fx-a-one'), commitNameHash('b/reload-fx-a-two'));
 });

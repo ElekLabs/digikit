@@ -79,7 +79,7 @@ and the handler has not started at task entry anyway. Remaining [O]: the vector 
 non-maskable); the task's second reader can be preempted only by interrupts, which are masked during the write. Port hooks must be
 allowed to have the exits for both devices (already resolved, ports/fw/lfo.toml).
 
-### core/machines (image-modules/points/machines)
+### core/rows (image-modules/points/machines)
 
 | site | DT2 / DN2 addr | stock fn | ctx | entry today | recommended |
 | --- | --- | --- | --- | --- | --- |
@@ -94,7 +94,7 @@ The machines service already takes 13 more machine/page hooks at load (DT2: clon
 DN2: group, type_page.count/desc, param_code.map, type_reader.load, owner_type_load + the four page hooks). Those are option 2 and
 confirmed: each is `[[hook]]` without `handler`, installed by install.rs. [D]
 
-### core/dynreg (image-modules/points/dynreg)
+### core/rows (image-modules/points/dynreg)
 
 | site | addr DT2 / DN2 | what | ctx | entry today | recommended |
 | --- | --- | --- | --- | --- | --- |
@@ -102,14 +102,14 @@ confirmed: each is `[[hook]]` without `handler`, installed by install.rs. [D]
 | view.build hook (`dynreg_view_hook`) | 0x40060f50 / 0x4005b2c0 | entry of machine selection view item builder | task | image | 2, or delete: digikit-runtime.md l.173 says the view hook and rebuild are removed with the archive commit, but module.toml l.118-124 still has the op and the build contains `dynreg_view_hook` [O: stale doc or stale op] |
 | 8 machine rows, 16 param rows, 8 page rows (data) | data only | reserved rows | | image | stays as data (the registry area), not an entry |
 
-### core/params (image-modules/points/params)
+### core/rows (runtime/platform/rows)
 
 | site | addr DT2 / DN2 | what | ctx | entry today | recommended |
 | --- | --- | --- | --- | --- | --- |
 | hook.value_class (offset 4, before `cmpi.l #count`) | 0x400c8932 / 0x400c2580 | value-class accessor | task, 15 callers (ParameterSet vfuncs etc., 0x4003a768 ...) [D]; no direct edge from vector 191 root [D] | image | 2 |
 | writes cf.param.sites.descriptor_table.ref.* (absolute pointers into the 60-byte-row table) and .bound.* (`cmpi.l #N`) | first 0x4003a7ea / 0x400174e0; bound 0x4003a7d8 / 0x400174d6 (ParameterSet::vfunc_22 etc.) | repoint to the copied table (pf_table) and grow bounds | task (ParameterSet vfuncs) | image | 2 (bulk writes; the table copy needs the runtime-allocated area; the copy is made from live RAM at load, which equals the image bytes since nothing writes the table) |
 
-### core/fxpages (image-modules/points/fxpages): no image ops (data only: 24+2 param rows, `fxpages_info`). Nothing to move.
+### core/fxpages (runtime/platform/fxpages): no image ops (data only: 24+2 param rows, `fxpages_info`). Nothing to move.
 services/fx/dks: 9 `[[hook]]`s (page_desc 0x400c898a/0x400c25d8, tab_label_test, filter_graph_test, fx_view_list.load, fx_key_list.load,
 fx_array.load/save/init_exit, sound_load_exit): all option 2 today, all UI/storage task code (reach: main_os or the console task; FxPageView::vfunc_4)
 [D]. Two DSP fills (`fx_entry`, `fx_send`) are DSP-side.
@@ -166,7 +166,7 @@ module.toml of image-modules/points/* and runtime/platform/dyndsp; findings 02, 
 
 ### Table by table
 
-### 1. core/machines (image-modules/points/machines, 36 [[op]], 6 [[section]])
+### 1. core/rows (image-modules/points/machines, 36 [[op]], 6 [[section]])
 
 | Table | Stock addr, size, memory | First read / frequency | Reach | Verdict |
 | --- | --- | --- | --- | --- |
@@ -184,7 +184,7 @@ could be pointer-indirected in the flashed adapter code once; afterwards the ser
 (A). Cost today: the copies of names/permit/pertype with appended rows exist only to keep the stock readers bounded and to give each added type a row.
 Confidence 0.7 (not checked: every reader of the type byte beyond those anchors).
 
-### 2. core/params (6 [[op]], 2 [[section]] pf_table)
+### 2. core/rows (6 [[op]], 2 [[section]] pf_table)
 
 - Stock: DT2 descriptor table 0x4020f59c, 275 rows x 60 B (0x113 count from `cmpi.l #0x113` at 0x400c8932, accessor FUN_400c892e); DN2 0x401f83a4, 321 rows. Const data in DDR, no slack (next table at 0x40211a68 is another object).
 - Readers: 56 absolute references + 54 clamp bounds `cmpi.l #N` per device (anchors `cf.param.sites.descriptor_table.ref` / `.bound`; xref shows ~70 hits at
@@ -198,7 +198,7 @@ Confidence 0.7 (not checked: every reader of the type byte beyond those anchors)
   Pointer indirection is not available: all readers use absolute addresses. Recommendation: reserve generously at flash (cheap) rather than patch 110 sites at load. Confidence 0.8.
   [O] whether the 54 bounds are all of the form `cmpi.l #N,Dn` writable by one rule at load (they are today by one `write` op each, so yes, mechanically).
 
-### 3. core/dynreg (machine rows 16..23, param rows 16, DN2 page rows 8; dynreg_info)
+### 3. core/rows (machine rows 16..23, param rows 16, DN2 page rows 8; dynreg_info)
 
 - Rows are content of tables 1 and 2 above; `dynreg_copy` (DT2 0x40052b46 jsr; hook target) / `dynreg_list_hook` (DN2 0x4004d994) filter empty-name machines at the end of the list getter; `dynreg_view_hook` at FUN_40060f50 entry remembers the view so the runtime can rebuild the list (call FUN_40060f50 again; emulator-proven, finding 30).
 - Timing: list built once per boot (G2); rebuild path exists and ran without fault in emu; heap/cursor over many rebuilds not examined [O].
@@ -295,7 +295,7 @@ dt2 pc 0x1c7734 (byte alias 0x2838ee68), dn2 0x28393fa4: the block handler's one
 | --- | --- | --- | --- |
 | dsp.cache.hook.cache_enable (byte alias 0x20017358, boot region) | boot cache configuration after RR3 cleanup, before final CFG enable/invalidate; displaced `R2=DM(CFG)` | boot code, runs once before the RTOS and long before the ColdFire can talk to the DSP | O3 only (runs before any card service exists); [D] |
 | dsp.link.site.boot_wire_size (op write, 4 bytes `840fcc0a`) | immediate R4=0xabc before SPI2 descriptor build | boot-only literal | O3 only, a data patch (32-bit-sized, atomic) [D] |
-| the block_tail call `_sp_tail` | see block_tail | | follows block_tail |
+| the block_tail call `_dl_tail_chain` | see block_tail | | follows block_tail |
 
 ### runtime/platform/dsp-link: dsp.link.hook.block_tail
 
@@ -325,7 +325,7 @@ dsp-voice 28 hooks, fx 2, sample-pool DSP 2 (boot hook, boot data write) + block
 
 No, not with dsp-link as built [D, cf/dsp-link.c lines 147-190, dsp/dsp-link.inc lines 24-40, 184-223]:
 - window 0: slot block (DL_SLOT_WORDS words just below `_dl_area`) and the reserved area `_dl_area` (512 KiB DT2, 320 KiB DN2) in dsp.l2. A write may not leave either; the DSP refuses a chunk that crosses word 16.
-- window 1: voice rows `_dv_table` (counted `_dl_vcount`), window 2: fx rows (`_dl_fcount`), window 3: 3 stats control words. The DSP checks offset against the window size (status 3 = out of range, transfer stopped).
+- window 1: rows at `_dl_win1_base` (counted `_dl_win1_rows`), window 2: rows at `_dl_win2_base` (counted `_dl_win2_rows`), window 3: 3 stats control words. The DSP checks offset against the window size (status 3 = out of range, transfer stopped).
 - all copies are made by DSP code in the block tail with DM stores into those windows. Stock tables (0x25f7b0, 0x2577c4 in internal L2; 0x8055c840, 0x8052db90.. in external SDRAM, which only the DSP addresses) are outside every window. To write one a new DSP-side window or "poke" command is needed in the receiver (our code, in the tail), plus for SDRAM no cache issue is modelled in the emulator [O]; for code addresses the 48-bit non-atomic write and I-cache invalidate remain unproven (finding 128). For 32-bit data entries (jump tables, RPC table) the write is a single 32-bit store: atomic against a table read [D reasoning], but whether the read hits a stale D-cache line for SDRAM tables is [O].
 
 ### 6. Open questions

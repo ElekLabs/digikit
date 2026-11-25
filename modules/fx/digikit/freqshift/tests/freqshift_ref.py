@@ -295,8 +295,8 @@ class SpreadShifter(Shifter):
         centre = self.drift.move(target_inc(v), drift, rate)
         side = spread_inc(centre, spread)
         if side == 0 and self.side_phase == 0 and self.side_inc == 0:
-            osc = self.oscillator(centre)
-            return self.filter_block(x, (osc, osc))
+            shared = self.oscillator(centre)
+            return self.filter_block(x, (shared, shared))
 
         def osc(p: list[int]) -> tuple[list[np.float32], list[np.float32]]:
             return [sinq(i) for i in p], [sinq(wrap32(i + QUARTER)) for i in p]

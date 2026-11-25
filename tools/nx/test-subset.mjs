@@ -358,7 +358,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     const importInputs = testImportInputs(root);
     selection = areaSelection(tags, projects, {
       changed,
-      ctx: areaContext(root, projects),
+      ctx: areaContext(root, projects, base),
       reaches: (files) => reachingDeviceTests(root, files, undefined, { first: true }),
       closureOf: (projectRoot, file) => closureFiles(importInputs, `${projectRoot}/${file}`),
     });

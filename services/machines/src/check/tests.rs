@@ -4,7 +4,7 @@
 use super::*;
 use crate::records::validate;
 use dkrt_sdk::records::*;
-use dkrt_svc_rows::dynreg::MACH_TEXT;
+use dkrt_svc_rows::rows_info::MACH_TEXT;
 use dkrt_test_support::FakeCore;
 use std::vec::Vec;
 
@@ -55,7 +55,7 @@ fn refused_by_both(recs: &[Rec]) -> (bool, bool) {
     (problems > 0, check(ck_counts, recs, true) != OK)
 }
 
-/// The words of a `dynreg_info` table: the device has page rows when `pages`; the first parameter code, knob count and slot base of these tests.
+/// The words of a `rows_info` table: the device has page rows when `pages`; the first parameter code, knob count and slot base of these tests.
 fn info(pages: bool) -> Vec<u32> {
     let mut words = std::vec![0u32; 128];
     words[w::PG_ROWS] = pages as u32;
@@ -78,7 +78,7 @@ fn text(b: &mut [u8], at: usize, field: usize, s: &[u8]) {
 }
 
 /// A registry state with no row owned (the owner's field, here made alone).
-fn state() -> dkrt_svc_rows::dynreg::RegState {
+fn state() -> dkrt_svc_rows::rows_info::RegState {
     // SAFETY: all-zero bytes are the state of a registry with no row owned
     unsafe { core::mem::zeroed() }
 }

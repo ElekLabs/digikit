@@ -1,7 +1,7 @@
 //! Constants from device data, for code that cannot read a file: `patchkit gen` writes them, `gen --check` keeps them current.
 //!
 //! The sources are the device files (`devices/*.toml`: `[board]`, `[digikit]`, `[card.store]`) and the run-time type range of
-//! `core/machines` (`types.toml`). A module asks for a file with a `[[gen]]` entry in its `module.toml` (`module::GenDef`):
+//! `core/rows` (`types.toml`). A module asks for a file with a `[[gen]]` entry in its `module.toml` (`module::GenDef`):
 //!
 //! - `gas-dkdv`: the runtime's per-device data object `dkrt_dev` (struct `DkrtDevice` of `core/runtime/abi.toml`) as ColdFire assembly
 //!   data, one file per device. The runtime is one image for all devices: what differs between devices is data that it reads from this
@@ -43,10 +43,37 @@ struct Doc {
     input: Option<InputDoc>,
     panel: Option<PanelDoc>,
     fx: Option<FxDoc>,
+    rows: Option<RowsDoc>,
     #[serde(default)]
     patch_sets: BTreeMap<String, Vec<String>>,
 }
-/// `[fx]`: the facts of the effect pages of run-time effects (core/fxpages, docs/design/digikit-registry.md "Effect pages"): where the kit keeps its
+/// `[rows]`: the reservation of the parameter table (`runtime/platform/rows`): `ROWS_BLOCKS` numbered blocks, the recipe of a row (`ROWS_RECIPE_WORDS`
+/// words) and the `[limits]` keys whose values are the capacity words of the table (`caps`, in the order of the info entries `cap_<kind>` of the module).
+/// The platform knows no owner: a block's owner is a number, its size a `[limits]` key times `per`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RowsDoc {
+    recipe: Vec<u64>,
+    caps: Vec<String>,
+    block: Vec<RowsBlockDoc>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RowsBlockDoc {
+    owner: u64,
+    limit: String,
+    #[serde(default = "one")]
+    per: u64,
+    template: u64,
+}
+fn one() -> u64 {
+    1
+}
+/// The shape of the platform's table: three blocks, a recipe of 15 words, four capacity words.
+const ROWS_BLOCKS: usize = 3;
+const ROWS_RECIPE_WORDS: usize = 15;
+const ROWS_CAPS: usize = 4;
+/// `[fx]`: the facts of the effect pages of run-time effects (services/fx, docs/design/digikit-registry.md "Effect pages"): where the kit keeps its
 /// effect values, which of them the firmware does not use (effect row k owns `value_indices[8k .. 8k + 8]`), the page numbering and the stock
 /// parameter rows whose display an effect knob copies.
 #[derive(Deserialize)]
@@ -66,7 +93,7 @@ struct FxDoc {
     /// array, and the number of spare halfwords. The values (one halfword for each of `value_indices`) come first, then one effect ID for each effect row.
     store_off: u64,
     store_halfwords: u64,
-    /// An array index nothing uses (not one of `value_indices`): the mark that an effect row holds values (core/fxpages).
+    /// An array index nothing uses (not one of `value_indices`): the mark that an effect row holds values (the fx service).
     mark_index: u64,
     /// The byte offset of the u32 after the array's halfwords (the stock loader and saver move it with `move.l (0x98,record),(tail,array)`).
     tail_off: u64,
@@ -191,6 +218,7 @@ struct Limits {
     stage_bytes: u64,
     fx_slots: u64,
     send_slots: u64,
+    send_rows: u64,
     param_rows: u64,
     page_rows: u64,
 }
@@ -325,6 +353,7 @@ struct Entry {
     /// `[input.keys]`: logical key name to the key's id in the firmware's key events (empty: the device has no key names).
     keys: BTreeMap<String, u64>,
     fx: FxF,
+    rows: RowsF,
     profile: ProfileF,
     /// DSP instructions per block left for modules (`dkprof::budget`: the block at the default margin, less the stock firmware's load). 0 where `devices/cycle-factors.json`
     /// has no entry for the device, and in the wasm build (which has no `dkprof`).
@@ -345,10 +374,12 @@ fn dsp_headroom(short: &str, b: &Board, voices: u64) -> u64 {
 fn dsp_headroom(_short: &str, _b: &Board, _voices: u64) -> u64 {
     0
 }
-/// The device facts of the builder commit (`core/runtime` reads them from `dynreg_info` version 3): what the packer took from `[modules]` and
+/// The device facts of the builder commit (the services read them from `rows_info`): what the packer took from `[modules]` and
 /// `[adapter.machine]` before modules declared through builder calls. All 0 on a device without `[modules]`.
 #[derive(Debug, Default)]
 struct ProfileF {
+    knobs: u64,
+    slot_base: u64,
     clone_of: u64,
     level: u64,
     own_dsp: u64,
@@ -385,6 +416,8 @@ fn profile_facts(short: &str, model: Option<&crate::typed::DeviceModel>) -> Resu
             .ok_or_else(|| err!("{short}: [modules.templates] has no `{g}`"))? as u64;
     }
     Ok(ProfileF {
+        knobs: kn.count as u64,
+        slot_base: kn.slot_base as u64,
         clone_of: kn.clone_of as u64,
         level: kn.level_default as u64,
         own_dsp: u64::from(kn.own_dsp),
@@ -462,6 +495,61 @@ struct AdapterF {
     gap: u64,
     block_cycles: u64,
 }
+/// `[rows]` resolved: per block the owner, the row count and the template; the recipe; the capacity words.
+#[derive(Debug, Default)]
+struct RowsF {
+    blocks: Vec<[u64; 3]>,
+    recipe: Vec<u64>,
+    caps: Vec<u64>,
+}
+
+fn rows_facts(short: &str, rows: Option<RowsDoc>, l: &Limits) -> Result<RowsF> {
+    let Some(r) = rows else {
+        return Ok(RowsF::default());
+    };
+    let limit = |key: &str| -> Result<u64> {
+        Ok(match key {
+            "modules" => l.modules,
+            "machine_rows" => l.machine_rows,
+            "arena_bytes" => l.arena_bytes,
+            "stage_bytes" => l.stage_bytes,
+            "fx_slots" => l.fx_slots,
+            "send_slots" => l.send_slots,
+            "send_rows" => l.send_rows,
+            "param_rows" => l.param_rows,
+            "page_rows" => l.page_rows,
+            _ => {
+                return Err(err!(
+                    "{short}: [rows] names {key:?}, which is no key of [limits]"
+                ));
+            }
+        })
+    };
+    if r.block.len() != ROWS_BLOCKS
+        || r.recipe.len() != ROWS_RECIPE_WORDS
+        || r.caps.len() != ROWS_CAPS
+    {
+        return Err(err!(
+            "{short}: [rows] holds {ROWS_BLOCKS} [[rows.block]] entries, a recipe of {ROWS_RECIPE_WORDS} words and {ROWS_CAPS} caps (the platform's table has that shape)"
+        ));
+    }
+    let blocks = r
+        .block
+        .iter()
+        .map(|b| Ok([b.owner, b.per * limit(&b.limit)?, b.template]))
+        .collect::<Result<Vec<_>>>()?;
+    let caps = r
+        .caps
+        .iter()
+        .map(|k| limit(k))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(RowsF {
+        blocks,
+        recipe: r.recipe,
+        caps,
+    })
+}
+
 #[derive(Debug)]
 struct LimitsF {
     modules: u64,
@@ -470,10 +558,8 @@ struct LimitsF {
     stage_bytes: u64,
     fx_slots: u64,
     send_slots: u64,
-    // Not written into the generated files (the runtime reads the rows from core/dynreg's device object): checked against the maxima only.
-    #[allow(dead_code)]
+    send_rows: u64,
     param_rows: u64,
-    #[allow(dead_code)]
     page_rows: u64,
 }
 #[derive(Debug)]
@@ -621,6 +707,7 @@ impl Facts {
             let keys = key_facts(&short, d.input.as_ref().map(|i| &i.keys))?;
             let input = input_facts(&short, d.input, d.panel, &keys)?;
             let fx = fx_facts(&short, d.fx, l.fx_slots, l.send_slots)?;
+            let rows = rows_facts(&short, d.rows, &l)?;
             let (adapter_machine, sample_pool) = match d.adapter {
                 Some(a) => (a.machine, a.sample_pool),
                 None => (None, None),
@@ -673,6 +760,7 @@ impl Facts {
                             stage_bytes: l.stage_bytes,
                             fx_slots: l.fx_slots,
                             send_slots: l.send_slots,
+                            send_rows: l.send_rows,
                             param_rows: l.param_rows,
                             page_rows: l.page_rows,
                         },
@@ -682,6 +770,7 @@ impl Facts {
                         input,
                         keys,
                         fx,
+                        rows,
                         profile: profile_facts(&short, models.by_device.get(&short))?,
                         dsp_headroom,
                     },
@@ -775,6 +864,13 @@ fn check_limits(
     }
     if l.modules == 0 {
         return Err(err!("{short}: [limits] modules must be at least 1"));
+    }
+    if l.send_rows < l.send_slots {
+        return Err(err!(
+            "{short}: [limits] send_rows ({}) is below send_slots ({}): a send cell needs a parameter row",
+            l.send_rows,
+            l.send_slots
+        ));
     }
     Ok(())
 }
@@ -1530,22 +1626,22 @@ fn c(name: &'static str, value: u64, note: &'static str) -> C {
     }
 }
 
-/// The run-time machine type range of a device: `dynamic_first ..= last` of `core/machines` types.toml.
+/// The run-time machine type range of a device: `dynamic_first ..= last` of `core/rows` types.toml.
 pub fn dyn_range(lib: &Library, dev: &str) -> Result<(i64, i64)> {
     let d = lib
-        .get("core/machines")
+        .get("core/rows")
         .and_then(|m| m.alloc.get("machines"))
         .and_then(|a| a.devices.get(dev))
-        .ok_or_else(|| err!("{dev}: no allocation table (core/machines types.toml)"))?;
+        .ok_or_else(|| err!("{dev}: no allocation table (core/rows types.toml)"))?;
     let first = d
         .dynamic_first
         .ok_or_else(|| err!("{dev}: types.toml has no dynamic_first"))?;
     Ok((first, d.last))
 }
 
-/// The number of stock machine types of a device: `stock_types` of `core/machines` types.toml.
+/// The number of stock machine types of a device: `stock_types` of `core/rows` types.toml.
 pub fn stock_types(lib: &Library, dev: &str) -> Result<i64> {
-    lib.get("core/machines")
+    lib.get("core/rows")
         .and_then(|m| m.alloc.get("machines"))
         .and_then(|a| a.devices.get(dev))
         .and_then(|d| d.stock_types)
@@ -1604,13 +1700,13 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     }
     if n > abi["MACHINE_ROWS"] {
         return Err(err!(
-            "{dev}: core/machines types.toml reserves {n} run-time machine types, more than the runtime's tables hold (MACHINE_ROWS {} of core/runtime/abi.toml)",
+            "{dev}: core/rows types.toml reserves {n} run-time machine types, more than the runtime's tables hold (MACHINE_ROWS {} of core/runtime/abi.toml)",
             abi["MACHINE_ROWS"]
         ));
     }
     if e.limits.machine_rows != n {
         return Err(err!(
-            "{dev}: [limits] machine_rows is {}, but core/machines types.toml reserves {n} run-time machine types (dynamic_first ..= last)",
+            "{dev}: [limits] machine_rows is {}, but core/rows types.toml reserves {n} run-time machine types (dynamic_first ..= last)",
             e.limits.machine_rows
         ));
     }
@@ -1651,22 +1747,22 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
         c(
             "STOCK_MACHINE_TYPES",
             stock as u64,
-            "core/machines types.toml stock_types (0: no DSP)",
+            "core/rows types.toml stock_types (0: no DSP)",
         ),
         c(
             "DYN_TYPE_FIRST",
             first as u64,
-            "core/machines types.toml dynamic_first (0: no DSP)",
+            "core/rows types.toml dynamic_first (0: no DSP)",
         ),
         c(
             "DYN_TYPE_LAST",
             last as u64,
-            "core/machines types.toml last (0: no DSP)",
+            "core/rows types.toml last (0: no DSP)",
         ),
         c(
             "DYN_TYPES",
             n,
-            "run-time machine types; core/dynreg reserves one machine row and core/dyndsp one voice row for each",
+            "run-time machine types; core/rows reserves one machine row and core/dyndsp one voice row for each",
         ),
         c(
             "CONSOLE_UART_BASE",
@@ -1756,6 +1852,21 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "LIMIT_FX_SLOTS",
             e.limits.fx_slots,
             "[limits] fx_slots (effects in the chain: CAPACITY's limit and the free effect rows of core/dynfx)",
+        ),
+        c(
+            "LIMIT_PARAM_ROWS",
+            e.limits.param_rows,
+            "[limits] param_rows (parameter rows the run-time machines fill: the first block of core/rows)",
+        ),
+        c(
+            "LIMIT_PAGE_ROWS",
+            e.limits.page_rows,
+            "[limits] page_rows (machine page rows; 0 on a device that keeps the knobs in the machine row)",
+        ),
+        c(
+            "LIMIT_SEND_ROWS",
+            e.limits.send_rows,
+            "[limits] send_rows (parameter rows reserved for the cells of the send page)",
         ),
         c(
             "LIMIT_STAGE_BYTES",
@@ -1939,6 +2050,36 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     ] {
         v.push(c(name, value, note));
     }
+    let rw = &e.rows;
+    for (i, names) in ROWS_BLOCK.iter().enumerate() {
+        let b = rw.blocks.get(i).copied().unwrap_or([0; 3]);
+        for (name, value) in names.iter().zip(b) {
+            v.push(c(
+                name,
+                value,
+                "[rows.block] (owner number, rows, template stock code)",
+            ));
+        }
+    }
+    v.push(c(
+        "ROWS_RESERVED",
+        rw.blocks.iter().map(|b| b[1]).sum(),
+        "[rows.block] the rows of all blocks",
+    ));
+    for (i, name) in ROWS_RECIPE.iter().enumerate() {
+        v.push(c(
+            name,
+            rw.recipe.get(i).copied().unwrap_or(0),
+            "[rows] recipe (how word i of a row is made)",
+        ));
+    }
+    for (i, name) in ROWS_CAP.iter().enumerate() {
+        v.push(c(
+            name,
+            rw.caps.get(i).copied().unwrap_or(0),
+            "[rows] caps (the [limits] value of capacity word i)",
+        ));
+    }
     for (i, name) in FX_VALUE.iter().enumerate() {
         v.push(c(
             name,
@@ -1955,6 +2096,16 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
     }
     let pf = &e.profile;
     for (name, value, note) in [
+        (
+            "PROFILE_KNOBS",
+            pf.knobs,
+            "[modules.knobs] count (knobs of a machine)",
+        ),
+        (
+            "PROFILE_SLOT_BASE",
+            pf.slot_base,
+            "[modules.knobs] slot_base (engine or sound-array slot of knob 0)",
+        ),
         ("PROFILE_CLONE_OF", pf.clone_of, "[modules.knobs] clone_of"),
         ("PROFILE_LEVEL", pf.level, "[modules.knobs] level_default"),
         (
@@ -2050,6 +2201,29 @@ const PANEL_EXC_BIT: [&str; PANEL_EXC_MAX] = [
     "PANEL_EXC_BIT_6",
     "PANEL_EXC_BIT_7",
 ];
+const ROWS_BLOCK: [[&str; 3]; ROWS_BLOCKS] = [
+    ["ROWS_B1_OWNER", "ROWS_B1_ROWS", "ROWS_B1_TEMPLATE"],
+    ["ROWS_B2_OWNER", "ROWS_B2_ROWS", "ROWS_B2_TEMPLATE"],
+    ["ROWS_B3_OWNER", "ROWS_B3_ROWS", "ROWS_B3_TEMPLATE"],
+];
+const ROWS_RECIPE: [&str; ROWS_RECIPE_WORDS] = [
+    "ROWS_RECIPE_0",
+    "ROWS_RECIPE_1",
+    "ROWS_RECIPE_2",
+    "ROWS_RECIPE_3",
+    "ROWS_RECIPE_4",
+    "ROWS_RECIPE_5",
+    "ROWS_RECIPE_6",
+    "ROWS_RECIPE_7",
+    "ROWS_RECIPE_8",
+    "ROWS_RECIPE_9",
+    "ROWS_RECIPE_10",
+    "ROWS_RECIPE_11",
+    "ROWS_RECIPE_12",
+    "ROWS_RECIPE_13",
+    "ROWS_RECIPE_14",
+];
+const ROWS_CAP: [&str; ROWS_CAPS] = ["ROWS_CAP_0", "ROWS_CAP_1", "ROWS_CAP_2", "ROWS_CAP_3"];
 const FX_SEND_IDX: [&str; FX_SEND_MAX] = ["FX_SEND_IDX_0", "FX_SEND_IDX_1"];
 const FX_VALUE: [&str; FX_VALUES_MAX] = [
     "FX_VALUE_0",
@@ -2302,7 +2476,7 @@ fn hex(v: i64) -> String {
 }
 
 const NOTE: &str =
-    "generated by `patchkit gen` from the device files and core/machines types.toml; do not edit";
+    "generated by `patchkit gen` from the device files and the module manifests; do not edit";
 
 /// `DeviceProfile` constants of every device (the type is `dkrt_abi::platform::DeviceProfile`): what the real platform reads from the device object
 /// (`device.s`, `dkrt_dev`) and what the host tests' `FakePlatform` and a service (through the device id) take their facts from, so they cannot differ.
@@ -2380,6 +2554,62 @@ fn rust_profiles(module: &str, lib: &Library, facts: &Facts) -> Result<String> {
         "\n/// Every device file's profile.\npub const ALL: [DeviceProfile; {}] = [{}];",
         names.len(),
         names.join(", ")
+    );
+    Ok(s)
+}
+
+/// The device facts of the effect pages as Rust statics, one `DeviceFacts` for each device that has effect pages (`[fx]`): what the fx service binds its table from
+/// (`services/fx/src/fxpage/facts.rs` names the fields). The numbers are the constants of `gas` files (`FX_*`, `LIMIT_*`), so the two cannot differ.
+fn rust_fx_tables(module: &str, per_dev: &[(String, Vec<C>)]) -> Result<String> {
+    let mut s = format!(
+        "// {module}: {NOTE}.\n// The device facts of the effect pages (`[fx]` of the device files), one entry for each device that has them.\n\nuse super::DeviceFacts;\n"
+    );
+    let mut n = 0;
+    let mut body = String::new();
+    for (dev, cs) in per_dev {
+        let v = |name: &str| -> Result<u64> {
+            cs.iter()
+                .find(|k| k.name == name)
+                .map(|k| k.value as u64)
+                .ok_or_else(|| err!("{module}: no device constant {name} for {dev}"))
+        };
+        if v("FX_VALUES_N")? == 0 {
+            continue;
+        }
+        let idx: Vec<String> = (0..FX_VALUES_MAX)
+            .map(|i| v(&format!("FX_VALUE_{i}")).map(|x| x.to_string()))
+            .collect::<Result<_>>()?;
+        let _ = writeln!(
+            body,
+            "    DeviceFacts {{\n        device: {},\n        page_first: {},\n        slots: {},\n        array_off: {:#x},\n        values_n: {},\n        template_percent: {:#x},\n        template_bipolar: {:#x},\n        template_mix: {:#x},\n        kit_ptr: {:#x},\n        mark_index: {},\n        send_cells: {},\n        send_index: [{}, {}],\n        send_template: {:#x},\n        sound_off: {:#x},\n        sound_stride: {:#x},\n        track_page: {},\n        tail_off: {:#x},\n        store_off: {:#x},\n        knob_block: {},\n        send_block: {},\n        value_indices: [{}],\n    }},",
+            v("DEVICE_ID")?,
+            v("FX_PAGE_FIRST")?,
+            v("LIMIT_FX_SLOTS")?,
+            v("FX_ARRAY_OFF")?,
+            v("FX_VALUES_N")?,
+            v("FX_TPL_PERCENT")?,
+            v("FX_TPL_BIPOLAR")?,
+            v("FX_TPL_MIX")?,
+            v("FX_KIT_PTR")?,
+            v("FX_MARK_INDEX")?,
+            v("LIMIT_SEND_SLOTS")?,
+            v("FX_SEND_IDX_0")?,
+            v("FX_SEND_IDX_1")?,
+            v("FX_SEND_TEMPLATE")?,
+            v("FX_SOUND_OFF")?,
+            v("FX_SOUND_STRIDE")?,
+            v("FX_TRACK_PAGE")?,
+            v("FX_TAIL_OFF")?,
+            v("FX_STORE_OFF")?,
+            v("ROWS_B2_OWNER")?,
+            v("ROWS_B3_OWNER")?,
+            idx.join(", ")
+        );
+        n += 1;
+    }
+    let _ = write!(
+        s,
+        "\n/// Every device file's effect page facts.\npub(super) static DEVICES: [DeviceFacts; {n}] = [\n{body}];\n"
     );
     Ok(s)
 }
@@ -2759,6 +2989,14 @@ pub fn generate(lib: &Library, facts: &Facts, module: &str) -> Result<Vec<GenFil
                     ));
                 }
                 out.push((g.path.clone(), gas_dkdv_offsets(module)));
+            }
+            "rust-fx-tables" => {
+                if g.path.contains("{dev}") {
+                    return Err(err!(
+                        "{module}: a `rust-fx-tables` gen is one file for all devices"
+                    ));
+                }
+                out.push((g.path.clone(), rust_fx_tables(module, &per_dev)?));
             }
             "rust-profiles" => {
                 if g.path.contains("{dev}") {

@@ -38,12 +38,13 @@ pub struct ImportRows {
     pub dk_debug_poll: *const (),
     pub dk_debug_track_type: *const (),
     pub dk_debug_selected_params: *const (),
-    pub dk_debug_top_view: *const (),
     pub dk_debug_setup: *const (),
     pub dk_device_track_count: *const (),
     pub dk_selected_track: *const (),
     pub dk_debug_log_sink_set: *const (),
     pub dk_debug_speed_flags: *const (),
+    // Resident ABI 2.5. The rows above are the 2.4 prefix.
+    pub dk_debug_top_view: *const (),
     pub dk_debug_read_parameter: *const (),
 }
 

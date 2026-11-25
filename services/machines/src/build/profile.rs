@@ -1,8 +1,8 @@
 //! The device facts of the lowering (`Profile`).
 use dkrt_abi::mem::iw;
-use dkrt_svc_rows::dynreg::w;
+use dkrt_svc_rows::rows_info::w;
 
-/// The device facts of the lowering (a copy of the words of `dynreg_info` from 65; see core/dynreg).
+/// The device facts of the lowering (a copy of the words of `rows_info` from 65; see core/rows).
 #[derive(Clone, Copy)]
 pub struct Profile {
     pub device: u32,
@@ -23,7 +23,7 @@ pub struct Profile {
 }
 
 impl Profile {
-    /// The facts of `dynreg_info` version 3 (`inf`).
+    /// The facts of `rows_info` version 3 (`inf`).
     pub unsafe fn read(inf: *const u32) -> Profile {
         let mut p = Profile {
             device: iw(inf, w::DEVICE),

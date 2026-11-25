@@ -49,6 +49,7 @@ const baseline = () => ({
     { kind: 'image', path: 'example-1.2/device' },
     { kind: 'plan', path: 'example-1.2/device' },
     { kind: 'addrmap', path: 'example-1.2/device' },
+    { kind: 'dksp', path: 'example-1.2/device' },
     { kind: 'pack', path: 'dist/modules/example/test.dkm' },
     { kind: 'verdicts', path: 'dist/bytes/pack-verdicts.json' },
     { kind: 'generated', path: 'modules/core/build/gen/foo.h' },

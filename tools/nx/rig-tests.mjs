@@ -17,16 +17,13 @@ export const DSP_CONFORMANCE_ALL = 'test-dsp-conformance-all';
 const PINS = 'tools/patchkit/toolchain/pins.toml';
 
 const machineAdapters = [
-  '{workspaceRoot}/image-modules/points/dsp-voice/**/*',
+  '{workspaceRoot}/runtime/platform/dsp-voice/**/*',
   '{workspaceRoot}/runtime/platform/dsp-link/**/*',
   '{workspaceRoot}/services/machines/dks/{dsp,build/gen}/**/*',
-  '{workspaceRoot}/image-modules/points/machines/types.toml',
+  '{workspaceRoot}/runtime/platform/rows/types.toml',
 ];
 
-const fxAdapters = [
-  '{workspaceRoot}/image-modules/points/fx/**/*',
-  '{workspaceRoot}/services/fx/dks/{dsp,build/gen}/**/*',
-];
+const fxAdapters = ['{workspaceRoot}/runtime/platform/fx/**/*', '{workspaceRoot}/services/fx/dks/{dsp,build/gen}/**/*'];
 
 const conformance = ({ root = '', file, inputs, reports, fixed = false, suiteAdapters = [] }) => {
   const command = `pnpm exec vitest run --config vitest.host.config.ts --project sharc-rig-conformance${file ? ` conformance/${file}` : ''}`;

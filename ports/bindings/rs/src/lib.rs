@@ -120,7 +120,11 @@ pub mod link {
 }
 
 pub mod machine {
-    // cf.machine.fn.current_track_type: no sig yet
+    unsafe extern "C" {
+        /// DT2: returns the current track's machine type as a signed long, -1 without a track; the SRC page hook calls it.
+        #[link_name = "cf.machine.fn.current_track_type"]
+        pub fn current_track_type(view: *mut u8) -> i32;
+    }
 
     // cf.machine.fn.dispatch: no sig yet
 
@@ -147,7 +151,7 @@ pub mod machine {
     }
 
     unsafe extern "C" {
-        /// Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/machines copies it with the added types inserted.
+        /// Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/rows copies it with the added types inserted.
         #[link_name = "cf.machine.data.list.table"]
         pub static LIST_TABLE: u8;
     }
@@ -520,7 +524,7 @@ pub mod page {
     }
 
     unsafe extern "C" {
-        /// The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. core/fxpages substitutes its own list.
+        /// The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. The fx service substitutes its own list.
         #[link_name = "cf.page.data.fx_key_list"]
         pub static FX_KEY_LIST: u8;
     }
@@ -548,7 +552,7 @@ pub mod param {
     // cf.param.fn.value_class: no sig yet
 
     unsafe extern "C" {
-        /// the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/params` makes.
+        /// the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/rows` makes.
         #[link_name = "cf.param.data.descriptor_table"]
         pub static DESCRIPTOR_TABLE: u8;
     }

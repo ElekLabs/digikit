@@ -174,7 +174,7 @@ cores exist (`DIGI_EMU_SECOND_CORE=0` selects one device; daemon launches (`mise
   `SHARC_FAST_FALLBACK_REGIONS`; DT2 the same names with `_2`. This holds for a host that runs one device and for one that
   runs both. `digi_env.resolve_tiers` and `fast_env` (Python) and `coupledEnv(syx, env, device)` (Vitest) apply it. Builds
   that link `sharc-gen` (`sharc-rig`, the browser core, the engine's tests and examples) read the unsuffixed names.
-- The patched images (runtime, core/dynfx, core/fxpages, core/fx) differ from the image the generated blocks came from. Each
+- The patched images (runtime, core/dynfx, core/fx) differ from the image the generated blocks came from. Each
   engine checks its own loaded code against its own generated core (`Engine::verify_code`, `code_diff.rs`) and bars only
   the blocks with a changed instruction (`SHARC_CODE_LOG=1` prints the check; the audio report's `dsp_tiers` has
   `code_mismatch`).

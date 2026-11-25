@@ -10,12 +10,13 @@
 //! - **The service file.** `dks/` holds `module.toml` (id `core/services/NAME`, `role = "service"`, `service = "NAME"`), `Cargo.toml`, `src/lib.rs` (the
 //!   `service!(...)` call and nothing else) and, when needed, `src/hooks.rs` (every hook as assembler; required when the module has `[[hook]]` entries) and
 //!   `src/fw.rs` (firmware calls). It is required when the service has a `[[service]]` row (the service is a file), and checked whenever it exists.
-//!   The `[[hook]]` entries of `dks/module.toml` equal the hooks of the `service!` call, per device (an entry with `devices`, and a call entry `(name, entry, dt2)`).
+//!   The `[[hook]]` entries of `dks/module.toml` equal the hooks of the `service!` call, per device (an entry with `devices`, and a call entry `(name, entry, dt2)`); so do the `[[patch]]`
+//!   entries and its `patches` list (`(name, length, function)` with the same optional device).
 //!   The exports of the file are the `provided = true` imports of the service in `sdk.toml`: `service!` takes `exports = gen_exports::exports()` (the file `patchkit gen`
 //!   writes) for SDK services. A service outside the SDK declares its export names in `dks/module.toml` and in the literal `exports` list.
 //!   Either can add a resident query with the reserved export name in the manifest and a typed `query` entry in `service!`.
 //!   Assembler (`asm!`, `global_asm!`, `naked`) is only in `dks/src/hooks.rs`, and firmware names (`cf.` hook and anchor names, `dkfw`) only under `dks/`.
-//! - **Fills equal the slots.** A `[[fill]]` of `dks/module.toml` names a `[[slot]]` of an image adapter (`image-modules/**/module.toml`). When the
+//! - **Fills equal the slots.** A `[[fill]]` of `dks/module.toml` names a `[[slot]]` of an image adapter (`runtime/platform/**/module.toml`). When the
 //!   slot must exist (a typo is an error). When the slot exists only on some devices (`devices` in its `[[slot]]`), the fill names `devices` too and only devices the slot has.
 //! - **One entry.** The crate exports at most one entry symbol, `dk_module`: the entry that carries the service's `ProviderRow` (interface B); a second export of any other name is a second row
 //!   symbol. The state a device test reads by name (`DKRT_FXP`, `DKRT_FXS`: a `static` named `DKRT_*`) is state, not an entry, and is allowed.
@@ -269,8 +270,9 @@ fn service_list(lib: &str, key: &str) -> Option<Vec<(String, Option<String>)>> {
             _ => {}
         }
     }
+    // a patch entry has its length (1, 2 or 4) between the name and the function: `("name", 4, S::f)`
     let entry = Regex::new(
-        r#"\(\s*"([^"]+)"\s*,\s*[A-Za-z_]\w*(?:\s*::\s*\w+)*\s*(?:,\s*([A-Za-z0-9_]+)\s*)?\)"#,
+        r#"\(\s*"([^"]+)"\s*,\s*(?:[124]\s*,\s*)?[A-Za-z_]\w*(?:\s*::\s*\w+)*\s*(?:,\s*([A-Za-z0-9_]+)\s*)?\)"#,
     )
     .unwrap();
     Some(
@@ -377,6 +379,7 @@ fn check_dks(
         .and_then(|t| t.parse().ok());
     let mut hooks: Vec<(String, Vec<String>)> = vec![];
     let mut fills: Vec<(String, Vec<String>)> = vec![];
+    let mut patches: Vec<(String, Vec<String>)> = vec![];
     let mut local_exports = vec![];
     let mut has_query = false;
     if let Some(m) = &manifest {
@@ -495,6 +498,7 @@ fn check_dks(
             }
         }
         fills = list("fill", "slot");
+        patches = list("patch", "name");
         if !dsp_fills.is_empty() {
             fills.retain(|(n, _)| !dsp_fills.contains(n));
         }
@@ -652,11 +656,23 @@ fn check_dks(
         for (what, noun, key, entries) in [
             ("[[hook]]", "hook", "hooks", &hooks),
             ("[[fill]]", "fill", "fills", &fills),
+            ("[[patch]]", "patch", "patches", &patches),
         ] {
             let c = called(key);
-            for dev in ["dt2", "dn2"] {
+            // a hook with no device named is declared plain: the loader drops it on a device whose manifest entry is for another, so it needs an entry on some device
+            let plain = |n: &String| {
+                matches!(key, "hooks" | "patches") && c.iter().any(|(x, d)| x == n && d.is_empty())
+            };
+            let anywhere: BTreeSet<String> = entries.iter().map(|(n, _)| n.clone()).collect();
+            for (first, dev) in ["dt2", "dn2"].into_iter().enumerate() {
                 let (m, c) = (hook_set(entries, dev), hook_set(&c, dev));
                 for n in c.difference(&m) {
+                    if plain(n) {
+                        if !anywhere.contains(n) && first == 0 {
+                            out.push(format!("dks/src/lib.rs: service! takes the {noun} `{n}`, but dks/module.toml has no {what} for it"));
+                        }
+                        continue;
+                    }
                     out.push(format!("dks/src/lib.rs: service! takes the {noun} `{n}` on {dev}, but dks/module.toml has no {what} for it"));
                 }
                 for n in m.difference(&c) {
@@ -741,7 +757,7 @@ fn strings(v: Option<&toml::Value>) -> Vec<String> {
 
 /// The `[[fill]]` entries of `dks/module.toml` whose devices differ from the devices of the adapter slot they fill. A slot that exists on every device (no
 /// `devices`) takes any fill; a slot limited to some devices takes only fills that name `devices`, all of them among the slot's.
-fn fill_problems(dir: &Path, adapters: &Path) -> Vec<String> {
+fn fill_problems(dir: &Path, root: &Path) -> Vec<String> {
     let mut out = vec![];
     // an unparsable dks/module.toml is reported by `check_dks`
     let Some(m) = std::fs::read_to_string(dir.join("dks/module.toml"))
@@ -750,22 +766,18 @@ fn fill_problems(dir: &Path, adapters: &Path) -> Vec<String> {
     else {
         return out;
     };
-    // the fills cannot be compared without the adapters folder: that is an error, not a skip
-    if m.get("fill").is_some() && !adapters.is_dir() {
+    // the fills cannot be compared without the platform folder: that is an error, not a skip
+    let platform = root.join("runtime/platform");
+    if m.get("fill").is_some() && !platform.is_dir() {
         out.push(format!(
-            "the adapters folder {} is missing: the [[fill]] entries of dks/module.toml cannot be checked",
-            adapters.display()
+            "the platform folder {} is missing: the [[fill]] entries of dks/module.toml cannot be checked",
+            platform.display()
         ));
         return out;
     }
     let mut slots = std::collections::BTreeMap::new();
     let mut twice = vec![];
-    adapter_slots(adapters, &mut slots, &mut twice);
-    // platform modules (`runtime/platform/`) declare slots as well
-    let platform = adapters.join("../runtime/platform");
-    if platform.is_dir() {
-        adapter_slots(&platform, &mut slots, &mut twice);
-    }
+    adapter_slots(&platform, &mut slots, &mut twice);
     for name in twice {
         out.push(format!(
             "the slot `{name}` is declared twice ([[slot]] in the adapter module.toml files)"
@@ -860,13 +872,14 @@ pub fn row_anchor_problems(name: &str, fw: &Path) -> Vec<String> {
     out
 }
 
-/// Every problem of the service crate at `dir`; empty when it is as the layout says. The image slots are under `image-modules/` of the repository.
+/// Every problem of the service crate at `dir`; empty when it is as the layout says. The image slots are under `runtime/platform/` of the repository.
 pub fn check(dir: &Path, sdk: &Path) -> Result<Vec<String>> {
-    check_with_adapters(dir, sdk, &dir.join("../../image-modules"))
+    check_with_root(dir, sdk, &dir.join("../.."))
 }
 
-/// `check` with the folder of the image adapters named (the fills of the service file are compared with the `[[slot]]` entries under it).
-pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Vec<String>> {
+/// `check` with the repository root named (the fills of the service file are compared with the `[[slot]]` entries under `runtime/platform/`; the row anchors
+/// are read from `ports/fw/`).
+pub fn check_with_root(dir: &Path, sdk: &Path, root: &Path) -> Result<Vec<String>> {
     let name = dir
         .file_name()
         .and_then(|n| n.to_str())
@@ -981,10 +994,10 @@ pub fn check_with_adapters(dir: &Path, sdk: &Path, adapters: &Path) -> Result<Ve
     for p in check_dks(dir, row, &provided, !row, &srcs) {
         problem(p);
     }
-    for p in fill_problems(dir, adapters) {
+    for p in fill_problems(dir, root) {
         problem(p);
     }
-    for p in row_anchor_problems(&name, &adapters.join("../ports/fw")) {
+    for p in row_anchor_problems(&name, &root.join("ports/fw")) {
         problem(p);
     }
     if !row && !dir.join("dks/module.toml").is_file() {
@@ -1051,4 +1064,43 @@ pub fn run(args: &[String]) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The `patches` list of `service!` has the length of each patch between its name and its function; `service-check` reads the names and the device filter as for a hook.
+    #[test]
+    fn the_patches_of_a_service_call_are_listed_with_their_device_filter() {
+        let shorts: Vec<String> = crate::devdata::all()
+            .iter()
+            .filter(|d| d.digikit_id.is_some())
+            .map(|d| d.short.clone())
+            .collect();
+        let (a, b) = (shorts[0].as_str(), shorts[1].as_str());
+        let lib = format!(
+            "dkrt_svc_rt::service!(S, \"s\", &[], parts = [], hooks = [(\"cf.a.hook.h\", hooks::h, {a})], fills = [],\n\
+             patches = [(\"cf.a.hook.p\", 4, S::table), (\"cf.a.hook.q\", 2, S::count, {b})],\n exports = [])"
+        );
+        let named = |key: &str| service_list(&lib, key).unwrap();
+        assert_eq!(
+            named("patches"),
+            [
+                ("cf.a.hook.p".to_string(), None),
+                ("cf.a.hook.q".to_string(), Some(b.to_string()))
+            ]
+        );
+        assert_eq!(
+            named("hooks"),
+            [("cf.a.hook.h".to_string(), Some(a.to_string()))]
+        );
+        assert!(
+            service_list(
+                "service!(S, \"s\", &[], parts = [], hooks = [], fills = [])",
+                "patches"
+            )
+            .is_none()
+        );
+    }
 }

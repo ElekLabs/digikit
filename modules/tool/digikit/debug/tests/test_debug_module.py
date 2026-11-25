@@ -313,52 +313,114 @@ def test_view_observation_is_opt_in_debug_and_has_a_separate_snapshot(harness):
         harness,
         [
             "cmd 34 0103ffffffffffffffff",  # debug log level alone never reads the view
-            "view 100 200", "slot", "viewreads",
-            "cmd 34 0501", "slot", "cmd 34 04", "slot",
-            "view 101 201", "slot", "cmd 32 00000000",
-            "cmd 34 0500", "view 102 202", "slot", "viewreads",
+            "view 100 200",
+            "slot",
+            "viewreads",
+            "cmd 34 0501",
+            "slot",
+            "cmd 34 04",
+            "slot",
+            "view 101 201",
+            "slot",
+            "cmd 32 00000000",
+            "cmd 34 0500",
+            "view 102 202",
+            "slot",
+            "viewreads",
         ],
     )
     assert "viewreads 0" in out
     assert "viewreads 3" in out
     replies = [row for row in out if row.startswith("reply")]
-    assert struct.unpack(">4B3I", bytes.fromhex(replies[1].split()[2])) == (1, 1, 1, 0, 1, 0, 0)
-    assert struct.unpack(">4B3I", bytes.fromhex(replies[2].split()[2])) == (1, 1, 1, 1, 1, 100, 200)
+    assert struct.unpack(">4B3I", bytes.fromhex(replies[1].split()[2])) == (
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+    )
+    assert struct.unpack(">4B3I", bytes.fromhex(replies[2].split()[2])) == (
+        1,
+        1,
+        1,
+        1,
+        1,
+        100,
+        200,
+    )
     _, _, records = log(replies[3])
     assert len(records) == 1
-    kind = next(k["id"] for k in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["log"]["kind"] if k["name"] == "VIEW_CHANGED")
+    kind = next(
+        k["id"]
+        for k in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["log"]["kind"]
+        if k["name"] == "VIEW_CHANGED"
+    )
     assert records[0][2:] == (kind, DEBUG, 100, 101, 200, 201, 1)
 
 
 def test_unsupported_view_readback_does_not_start_observing(harness):
     out = run(harness, ["viewport 0", "cmd 34 04", "cmd 34 0501", "slot", "viewreads"])
-    assert out[2:] == ["reply 16 01000000000000000000000000000000", "reply -1 ", "viewreads 0"]
+    assert out[2:] == [
+        "reply 16 01000000000000000000000000000000",
+        "reply -1 ",
+        "viewreads 0",
+    ]
 
 
 def test_parameter_observer_scopes_changes_to_an_armed_generation(harness):
     out = run(
         harness,
         [
-            "cmd 34 0103ffffffffffffffff", "parameter 3", "slot", "parameterreads",
-            "cmd 34 06020023", "cmd 34 07020023", "slot", "cmd 34 08",
+            "cmd 34 0103ffffffffffffffff",
+            "parameter 3",
+            "slot",
+            "parameterreads",
+            "cmd 34 06020023",
+            "cmd 34 07020023",
+            "slot",
+            "cmd 34 08",
             "cmd 34 0900000002",  # a stale owner cannot stop this watch
-            "parameter 91", "slot", "slot", "cmd 32 00000000",
-            "cmd 34 0900000001", "parameter 142", "slot", "parameterreads",
+            "parameter 91",
+            "slot",
+            "slot",
+            "cmd 32 00000000",
+            "cmd 34 0900000001",
+            "parameter 142",
+            "slot",
+            "parameterreads",
         ],
     )
     assert "parameterreads 0" in out
     assert "parameterreads 3" in out
     replies = [row for row in out if row.startswith("reply")]
-    assert struct.unpack(">4B3i", bytes.fromhex(replies[3].split()[2])) == (1, 7, 2, 0, 1, 3, 35)
+    assert struct.unpack(">4B3i", bytes.fromhex(replies[3].split()[2])) == (
+        1,
+        7,
+        2,
+        0,
+        1,
+        3,
+        35,
+    )
     _, _, records = log(replies[5])
-    kind = next(k["id"] for k in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["log"]["kind"] if k["name"] == "VALUE_CHANGED")
+    kind = next(
+        k["id"]
+        for k in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["log"]["kind"]
+        if k["name"] == "VALUE_CHANGED"
+    )
     assert len(records) == 1
     assert records[0][2:] == (kind, DEBUG, 2, 35, 3, 91, 1)
 
 
 def test_parameter_observer_refuses_unavailable_key_without_polling(harness):
     out = run(harness, ["cmd 34 06030023", "cmd 34 07030023", "slot", "parameterreads"])
-    assert out[2:] == ["reply 16 01000300000000000000000000000023", "reply -1 ", "parameterreads 0"]
+    assert out[2:] == [
+        "reply 16 01000300000000000000000000000023",
+        "reply -1 ",
+        "parameterreads 0",
+    ]
 
 
 ROWS = 8 + 3 + 4  # module records (limits.max modules), service phases, polls

@@ -173,6 +173,7 @@ arena_bytes = 524288
 stage_bytes = 131072
 fx_slots = 0
 send_slots = 0
+send_rows = 0
 param_rows = 0
 page_rows = 0
 

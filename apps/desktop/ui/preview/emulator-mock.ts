@@ -58,7 +58,7 @@ export function previewEmulator(query: URLSearchParams) {
     isLoaded: () => loaded,
     hasRuntime: () => loaded && patched,
     status: () => ({
-      firmware: loaded ? { runtime: patched ? { patched: true, set: 'core/dynreg' } : null } : null,
+      firmware: loaded ? { runtime: patched ? { patched: true, set: 'core/rows' } : null } : null,
       dsp_enabled: dsp,
       load: loaded ? previewLoad((performance.now() - startedAt) / 1000, dsp) : null,
     }),

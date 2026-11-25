@@ -12,7 +12,7 @@ no re-patch:
 
 | Step (DN2 1.11 and 1.12) | Result |
 | --- | --- |
-| patch `core/runtime` + `core/dynreg` (so `core/machines`, `core/params`) | 643 656 of 25 976 832 bytes of `cf.expansion` (1.12); machine rows for types 5 to 23 (19 rows), 16 parameter rows, 8 page rows; `dynreg_info` version 2 |
+| patch `core/runtime` + `core/rows` (so `core/rows`, `core/rows`) | 643 656 of 25 976 832 bytes of `cf.expansion` (1.12); machine rows for types 5 to 23 (19 rows), 16 parameter rows, 8 page rows; `dynreg_info` version 2 |
 | pack `test/dyn-dn2` (machine `own_dsp`, 4 parameters, 1 page with knobs A to D): `patchkit pack test/dyn-dn2 --device dn2` | 708 bytes: header, a 4-byte image, 540 bytes of records (4 PARAM, 1 MACHINE, 1 PAGE) |
 | 11 edited copies (wrong device, bad version, type 9, type 24, `clone_of` a run-time type, `own_dsp` 2, position 3, page for a type not in the file, page knob a stock code, page knob naming a missing parameter, unknown record kind) | refused with -21, -5, -22, -22, -22, -5, -5, -5, -5, -5, -5; **no byte of any row, table or page row changes** |
 | list getter (`FUN_4004d8b6`, called through a stub that loads `a0`) before the load | `0 2 1 3 4` (the built-in order) |
@@ -21,7 +21,7 @@ no re-patch:
 | a track of the active kit put on type 16 (headless, see below), unload | **-26 (`E_TYPE_IN_USE`)**, rows, tables, page rows and list unchanged; with the track back on type 0: 0 |
 | unload | the machine rows, names, permission, page rows and parameter rows are byte for byte the start (but for the string-representation, name and short pointers of the free rows); getter back to `0 2 1 3 4` |
 | load, unload again | all 0; the rows after the reload equal those after the first load |
-| write watch on the rows and tables (page rows included), the runtime's code the only allowed writer | 54 events, all by `core/machines` (`mf_ensure`: two representation pointers of each of 19 machine rows and of the 8 reserved page rows); control run (runtime not allowed): 514 more events, all the runtime's |
+| write watch on the rows and tables (page rows included), the runtime's code the only allowed writer | 54 events, all by `core/rows` (`mf_ensure`: two representation pointers of each of 19 machine rows and of the 8 reserved page rows); control run (runtime not allowed): 514 more events, all the runtime's |
 | flush check | 0 hits |
 | `uv run python -m tools.patchkit.pk_registry proof --image dn2-1.12` (and 1.11, and `--quick`: a subset of the refused files, no second reload) | all checks hold, about 10 s |
 
@@ -35,16 +35,16 @@ the load succeeds and the list the panel shows is still the stock list (the same
 ## What was found
 
 - **[D]** The Digitone II list code has the same shape as the Digitakt II's, with three differences. (1) The getter `FUN_4004d8b6` (1.11 and 1.12; it is the function whose entry
-  `core/machines` hooks as `cf.machines.list_entry`) copies its static list into the vector it returns through `jsr (A3)`, A3 holding the library `std::copy` (loaded at
+  `core/rows` hooks as `cf.machines.list_entry`) copies its static list into the vector it returns through `jsr (A3)`, A3 holding the library `std::copy` (loaded at
   entry), so the Digitakt II's `retarget` of a `jsr abs.l` does not apply. The six bytes at +0xde, `jsr (A3); move.l D0,(4,A2)`, are replaced by a `hook` with
   `displaced = "drop"`: the routine (`dynreg_list_hook`) calls the same filter as the Digitakt II (`dynreg_copy`), stores the result and jumps to the instruction after. (2) There is no
-  sort and no rank map: the static list is a copy of `mf_list_buf`, which `core/machines` builds in order at first use. (3) Nothing else: the reserved rows are in the list from patch time
+  sort and no rank map: the static list is a copy of `mf_list_buf`, which `core/rows` builds in order at first use. (3) Nothing else: the reserved rows are in the list from patch time
   (position 255, in type order, after MIDI) and the filter leaves out those whose name is empty.
 - **[D]** The machine selection view's item builder is `FUN_4005b2c0(view)` (called by `MachineSelectionView::ctor_dtor`, which fills `view + 0x184`), **the same function as the
   Digitakt II's `FUN_40060f50`**: the same `h_strict` hash `aba88709...` on all four images, so one anchor rule serves both (`cf.dynreg.msv_build`, devices dt2 and dn2). The view is built
   once at boot and keeps its list: the registry's view pointer is set before any panel input and is the same after FUNC+SRC. The control above shows that without the rebuild the
   machine does not appear.
-- **[D]** The page rows are what `core/machines` already uses for a patched machine with pages (`mf_typemap0/1/2`, `mf_reader`): they are looked up by the row's `machine` field at each
+- **[D]** The page rows are what `core/rows` already uses for a patched machine with pages (`mf_typemap0/1/2`, `mf_reader`): they are looked up by the row's `machine` field at each
   call, so a page row written at run time needs no cache maintenance. A free page row's `machine` is **0x7fffffff, not -1**: a track without a sound reads the type as -1
   (`track_type` returns it for track 16, and the sound reader `mvs.b` sign-extends 0xff), and `mf_pg_count` compares the unsigned value with each row.
 - **[D]** The Digitone II parameter row is the same 60 bytes; the lowering spec of `dynreg_info` differs from the Digitakt II's in two words (the mirror index is the sound-array slot
@@ -55,8 +55,8 @@ the load succeeds and the list the panel shows is still the stock list (the same
   same `h_strict` hash on both) and `track_type(kit, t)` (`FUN_4003134e` on DN2, `FUN_40036266` on DT2: -1 for track 16, 4 (DN2) or 5 (DT2) when the track's bit in a mask at kit
   data + 0x5cda is set, else the sound reader on the sound object `kit + 0x6c + t * 0x3c0`, whose virtual function at vtable + 0x28 returns the record that holds the type byte, at +0xde on
   DN2 and +0xa2 on DT2, read with `mvs.b`). The machine selection view's constructor calls exactly this chain (`FUN_4003134e(kit, FUN_40046bfe(settings))`). The anchors
-  are rules of `core/dynreg` (`cf.dynreg.project`, `kit_of`, `track_type`; `pk_dynreg_rules --check` resolves them on all four images, each in one function). The runtime calls them
-  (addresses in `dynreg_info` bytes 244 to 252; the 16 tracks in byte 256) instead of knowing a layout. On DN2 with `core/machines` the `track_type` tail jumps to the unhooked copy of the reader, so it
+  are rules of `core/rows` (`cf.dynreg.project`, `kit_of`, `track_type`; `pk_dynreg_rules --check` resolves them on all four images, each in one function). The runtime calls them
+  (addresses in `dynreg_info` bytes 244 to 252; the 16 tracks in byte 256) instead of knowing a layout. On DN2 with `core/rows` the `track_type` tail jumps to the unhooked copy of the reader, so it
   returns the real type of a clone too.
 - **[D]** The proof makes a track hold the machine without the panel: a 60-byte stub in free RAM calls `project`, `kit_of` and the sound's virtual getter and writes the type byte
   of track 5 (the layout above is only in the proof; the runtime does not use it). The stub reads back what it wrote (type 16), so the refusal is checked against a value the
@@ -65,8 +65,8 @@ the load succeeds and the list the panel shows is still the stock list (the same
   replace it.
 - **[D]** Cost: `dynreg_info` 264 bytes; `dynreg.s` DN2 432 bytes in all; the runtime's registry grew by the page code and `in_use` (the registry state by 8 pages x (2 x 24 + 2 x 48) bytes
   = about 1.2 KB of bss). `RUNTIME_VERSION` stays 1 on purpose (a bump rebuilds every object that includes `dkrt-sdk`, which other lanes own): a runtime without PAGE records refuses such a file with `E_FORMAT`; the integrator may bump it once.
-- **[D]** Images without `core/dynreg` are byte-identical to before (`cargo test` of `packages/patchkit` and `mise run verify`; the types table change adds `[dn2.dynamic]` and the
-  `core/dynreg:dyn16..23` numbers, which only `core/dynreg` uses).
+- **[D]** Images without `core/rows` are byte-identical to before (`cargo test` of `packages/patchkit` and `mise run verify`; the types table change adds `[dn2.dynamic]` and the
+  `core/rows:dyn16..23` numbers, which only `core/rows` uses).
 
 ## Open **[O]**
 

@@ -141,4 +141,4 @@ runtimeTests('parameter observer follows a sample pick and panel and MIDI Delay 
     delay_feedback_raw: await actualFeedback(),
   });
   await session.expectNoFault('stock parameter observation');
-});
+}, { devices: ['dt2'] });

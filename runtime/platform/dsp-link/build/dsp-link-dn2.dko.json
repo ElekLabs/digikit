@@ -244,14 +244,14 @@
    "addend": 0,
    "offset": 189,
    "section": "seg_pmco",
-   "symbol": "_dl_vcount",
+   "symbol": "_dl_win1_rows",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
    "offset": 199,
    "section": "seg_pmco",
-   "symbol": "_dl_vrows",
+   "symbol": "_dl_win1_base",
    "type": "sharc.abs32"
   },
   {
@@ -272,14 +272,14 @@
    "addend": 0,
    "offset": 211,
    "section": "seg_pmco",
-   "symbol": "_dl_fcount",
+   "symbol": "_dl_win2_rows",
    "type": "sharc.abs32"
   },
   {
    "addend": 0,
    "offset": 221,
    "section": "seg_pmco",
-   "symbol": "_dl_frows",
+   "symbol": "_dl_win2_base",
    "type": "sharc.abs32"
   },
   {
@@ -811,7 +811,7 @@
    "addend": 0,
    "offset": 1031,
    "section": "seg_pmco",
-   "symbol": "_sp_tail",
+   "symbol": "_dl_tail_chain",
    "type": "sharc.abs32"
   },
   {
@@ -825,7 +825,7 @@
    "addend": 0,
    "offset": 1038,
    "section": "seg_pmco",
-   "symbol": "_sp_tail",
+   "symbol": "_dl_tail_chain",
    "type": "sharc.abs24"
   }
  ],
@@ -873,7 +873,7 @@
    "size": 327680
   }
  ],
- "source_sha256": "10974f6fb4c93e98654a7eacf7ef4f186ee09802229563ca2315d4bf199649a4",
+ "source_sha256": "a3ed94b87c0f9664399c09554279dd26e1420901919320eae9b5cd309d13ebde",
  "symbols": [
   {
    "global": false,
@@ -1171,25 +1171,31 @@
   },
   {
    "global": true,
-   "name": "_dl_fcount",
+   "name": "_dl_tail_chain",
    "section": null,
    "value": 0
   },
   {
    "global": true,
-   "name": "_dl_frows",
+   "name": "_dl_win1_base",
    "section": null,
    "value": 0
   },
   {
    "global": true,
-   "name": "_dl_vcount",
+   "name": "_dl_win1_rows",
    "section": null,
    "value": 0
   },
   {
    "global": true,
-   "name": "_dl_vrows",
+   "name": "_dl_win2_base",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dl_win2_rows",
    "section": null,
    "value": 0
   },
@@ -1214,12 +1220,6 @@
   {
    "global": true,
    "name": "_fx_rec",
-   "section": null,
-   "value": 0
-  },
-  {
-   "global": true,
-   "name": "_sp_tail",
    "section": null,
    "value": 0
   }

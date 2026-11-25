@@ -9,7 +9,7 @@
       "{workspaceRoot}/packages/dkneeds/**/*",
       "{workspaceRoot}/packages/emulator/control/**/*",
       "{workspaceRoot}/packages/emulator/plusdrive/**/*",
-      "{workspaceRoot}/{modules,runtime,services,image-modules}/**/*",
+      "{workspaceRoot}/{modules,runtime,services}/**/*",
       "{workspaceRoot}/sdk/**/*",
       "{workspaceRoot}/{devices,ports}/**/*",
       "{workspaceRoot}/pyproject.toml",

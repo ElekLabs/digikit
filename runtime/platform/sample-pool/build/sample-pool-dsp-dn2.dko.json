@@ -2847,8 +2847,14 @@
    "size": 292
   }
  ],
- "source_sha256": "58a35331903ba5bc7a96fad000d20569a744f52f37e5b0f7e23a95348235d856",
+ "source_sha256": "c018350bb72c79d218572a0b23705c2e8cdd659defc816db8167df6ba4c19d8d",
  "symbols": [
+  {
+   "global": true,
+   "name": "_dl_tail_chain",
+   "section": "seg_pmco",
+   "value": 829
+  },
   {
    "global": false,
    "name": "_sp_after_arm",
@@ -3034,12 +3040,6 @@
    "name": "_sp_reply",
    "section": "seg_pmco",
    "value": 1362
-  },
-  {
-   "global": true,
-   "name": "_sp_tail",
-   "section": "seg_pmco",
-   "value": 829
   },
   {
    "global": true,

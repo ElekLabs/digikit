@@ -141,8 +141,8 @@ kind is appended, never renumbered. `used` and `largest` come from the same tabl
 | 5 | DSP_AREA | DSP run-time area bytes (0 without a DSP loader) | taken; alignment gaps count as free | the largest free range |
 | 6 | MACHINE_ROWS | run-time machine types the registry reserves | in use | 0 |
 | 7 | VOICE_ROWS | DSP voice rows | in use | 0 |
-| 8 | PARAM_ROWS | parameter rows core/dynreg reserves | in use | 0 |
-| 9 | PAGE_ROWS | page rows core/dynreg reserves (0 on the Digitakt II) | in use | 0 |
+| 8 | PARAM_ROWS | parameter rows core/rows reserves | in use | 0 |
+| 9 | PAGE_ROWS | page rows core/rows reserves (0 on the Digitakt II) | in use | 0 |
 | 10 | FX_SLOTS | effects in the chain (`[limits] fx_slots`) | 0 (run-time effects do not exist) | 0 |
 | 11 | MAP_ENTRIES | sticky machine-type map entries (`MAP_N`) | in use | 0 |
 | 12 | STORE | the store area in **KiB** (a store can be 22 GiB; 0 when the card is too small for it) | KiB the headers say are used (header A, the table, the files); a card with no header: 0 | 0 (BEGIN answers E_FULL with the free bytes; a fragmented store can refuse a file smaller than the sum of its gaps) |

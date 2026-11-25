@@ -2,14 +2,25 @@
 
 use crate::api::{dkrt_load, dkrt_restart};
 use crate::health::{dkrt_health, DKRT_HEALTH};
+use crate::hooks;
 use crate::mailbox::mailbox_select;
 use crate::platform::st;
 use crate::state::{init_once, DKRT_MAILBOX, DKRT_POLLS, POLLS};
-use dkrt_abi::hooks::tick_phase;
-use crate::{admin_cmds, card, dlog, fault, intro, io, safe_mode, settings, store_writer, watch, worker};
-use crate::hooks;
+use crate::{
+    admin_cmds, card, dlog, fault, intro, io, safe_mode, settings, store_writer, watch, worker,
+};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
+use dkrt_abi::hooks::tick_phase;
 use dkrt_sdk::*;
+
+/// The phases of the services' part of the pass, in the order they run, and whether each is measured as a span (the module files' jobs are not). The modules' tick
+/// (`tick_phase::MODULES`) comes after the last of them: `Click::run` of the machines service (a module's click callback, run outside the owner) relies on `LAST` having run.
+pub(crate) const SERVICE_PHASES: [(u32, bool); 4] = [
+    (tick_phase::EARLY, true),
+    (tick_phase::FILES, false),
+    (tick_phase::LATE, true),
+    (tick_phase::LAST, true),
+];
 
 /// One tick phase of the services, measured as a span (owner `SPAN_PHASE | p`) while a span sink and clock are set.
 pub(crate) unsafe fn phase(p: u32) {
@@ -48,10 +59,16 @@ pub unsafe extern "C" fn dkrt_tick() {
     hooks::tick(tick_phase::POLL_DSP);
     worker::tick();
     io::tick();
-    phase(tick_phase::EARLY);
-    hooks::tick(tick_phase::FILES);
-    phase(tick_phase::LATE);
-    phase(tick_phase::LAST);
+    let mut i = 0;
+    while i < SERVICE_PHASES.len() {
+        let (p, spanned) = SERVICE_PHASES[i];
+        if spanned {
+            phase(p);
+        } else {
+            hooks::tick(p);
+        }
+        i += 1;
+    }
     settings::tick();
     watch::tick();
     let mb = &mut *addr_of_mut!(DKRT_MAILBOX);
@@ -84,3 +101,6 @@ pub unsafe extern "C" fn dkrt_tick() {
     hooks::tick(tick_phase::MODULES);
     poll_all();
 }
+
+#[cfg(test)]
+mod tests;

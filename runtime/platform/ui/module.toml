@@ -41,6 +41,32 @@ to = "dk_hook"
 [[claim]]
 resource = "cf.menu.site.settings_list.tail"
 
+# The view capture (both devices): the hook remembers the view the firmware builds its item list for, and `machine_view` names the word that holds it. A loaded service can build the view's list again after a reload.
+[[object]]
+path = "build/view-capture.dko.json"
+sources = ["src/view-capture.s"]
+place = "cf.expansion"
+devices = ["dt2", "dn2"]
+
+[object.externs]
+_ui_view_next = "hook.cf.machine.fn.view.build.tail"
+_ui_view_build = "cf.machine.fn.view.build"
+
+[[op]]
+op = "hook"
+hook = "cf.machine.hook.view.build"
+to = "ui_machine_view_hook"
+devices = ["dt2", "dn2"]
+
+[[claim]]
+resource = "cf.machine.fn.view.build"
+devices = ["dt2", "dn2"]
+
+[[info]]
+name = "machine_view"
+symbol = "ui_machine_view_info"
+devices = ["dt2", "dn2"]
+
 # The key ids of the firmware's key events differ per device (the Syntakt's decoder table is not the identity): the device file's [input.keys] (YES, LEVEL_PUSH, NO, RIGHT) and [input.key_flags],
 # generated into build/gen/ui-<dev>.inc and put in a small per-device object that ui.c reads (`dk_ui_view_keys`).
 [[gen]]

@@ -80,14 +80,13 @@ Module device tests: `core/runtime` (`service-commands`, `transfer-live`, `sampl
 (`input-adapter`), `modules/tool/digikit/remote` (`remote-input`), `modules/tool/digikit/debug` and `modules/tool/digikit/probe`. Those workflows use a
 fresh runtime daemon for each device case.
 
-FX route acceptance on both devices lives in `image-modules/points/fx/tests/fx-routing.device.test.ts`
-(the SETTINGS row, the stock choice popups, a pick without a restart and the full send bus), `image-modules/points/fx/tests/fx-routes-persist.device.test.ts`
-(a pick, its persistence across a restart and PCM), and `image-modules/points/fxpages/tests/fx-track-route-*.device.test.ts`
+FX route acceptance on both devices lives in `services/fx/tests/device/fx-routing.device.test.ts`
+(the SETTINGS row, the stock choice popups, a pick without a restart and the full send bus), `services/fx/tests/device/fx-routes-persist.device.test.ts`
+(a pick, its persistence across a restart and PCM), and `services/fx/tests/device/fx-track-route*.device.test.ts`
 (track SEND pages, amounts, kit loads and project-byte controls). These replace the Python `fxroute` and
 `fxroutes` scenarios. Independent cases reload clean card baselines in an owned daemon; apply/restart cases
 preserve the guest's writes. Track SEND's image without the page hook closes before its image with the hook
-starts. Offline profile, card settings, OLED and project-byte helpers remain in
-`tools/patchkit/pk_digikit_fxroute.py` and `tools/patchkit/pk_digikit_fxroutes.py`.
+starts. The device profile (`fxProfile`), the settings seed of a card (`seedSettingsCard`), the project-byte controls (`lockCheck`), the send analysis (`addedFactorOf`) and the OLED frame renderer (`renderShots`) are TypeScript helpers in `tests/regression/runtime/` and `packages/test-support`; their host tests are `tests/regression/host/fx-route-data.test.ts` and `packages/test-support/tests/oled-png.test.ts`.
 
 The gate prepares the complete card inventories, including renamed effect packs; manual runs need those
 prepared artifacts, the plusdrive builder and the native patchkit CLI used by store dump.

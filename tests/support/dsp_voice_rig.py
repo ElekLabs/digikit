@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 from tools.patchkit import pk_sharc  # noqa: E402
 
-CORE = ROOT / "image-modules" / "points" / "dsp-voice" / "src" / "dsp" / "dsp-voice.s"
+CORE = ROOT / "runtime" / "platform" / "dsp-voice" / "src" / "dsp" / "dsp-voice.s"
 DISPATCH = (
     ROOT / "services" / "machines" / "dks" / "dsp" / "dispatch-dt2.s"
 )  # the code behind the stubs of CORE: the machines service carries it

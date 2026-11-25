@@ -149,7 +149,7 @@ test('without options trackSetup checks a run-time machine type against the MODU
 });
 
 test('RUN_TIME_TYPE_FIRST is dynamic_first of the machines type table', () => {
-  const toml = readFileSync(new URL('../../../image-modules/points/machines/types.toml', import.meta.url), 'utf8');
+  const toml = readFileSync(new URL('../../../runtime/platform/rows/types.toml', import.meta.url), 'utf8');
   const firsts = [...toml.matchAll(/^dynamic_first\s*=\s*(\d+)/gm)].map((m) => Number(m[1]));
   assert.ok(firsts.length > 0);
   for (const f of firsts) assert.equal(f, RUN_TIME_TYPE_FIRST);

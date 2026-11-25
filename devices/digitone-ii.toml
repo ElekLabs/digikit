@@ -164,7 +164,7 @@ esdhc_base = 0xFC0CC000
 dsp_clock_hz = 1000000000
 dsp_blocks_per_second = 1500
 
-# The digikit runtime's view of this device. `id` is what the runtime, the registry (core/dynreg), the DSP table (core/dyndsp) and a
+# The digikit runtime's view of this device. `id` is what the runtime, the registry (core/rows), the DSP table (core/dyndsp) and a
 # .dkm file call the device; `name` is what the INFO reply of the upload protocol says (at most 3 characters).
 [digikit]
 id = 2
@@ -205,10 +205,33 @@ arena_bytes = 524288
 stage_bytes = 131072
 fx_slots = 3   # effects in the chain; core/dynfx reserves this many free effect rows for run-time effects (at most DK_FX_MAX = 4)
 send_slots = 1 # effects that run on a send bus (core/fx send route, the send page of the FX key: one knob each; at most the entries of [fx] send_indices)
+send_rows = 2  # parameter rows core/rows reserves for the send page's cells (the two devices share the count, so the parameter table has one layout); at least send_slots
 param_rows = 16
 page_rows = 8
 
-# The effect pages of run-time effects (core/fxpages, docs/design/digikit-registry.md "Effect pages", docs/findings/61-fx-pages.md "The Digitone II"): the
+# The reservation of the parameter table (runtime/platform/rows): the image makes room, the loaded services fill their blocks. The platform knows
+# the blocks by number only: `owner` is the number a service finds its block by, the rows are `per` times the `[limits]` key `limit`, `template` the
+# stock parameter code whose row a free row copies. `recipe`: how each of the 15 words of a row is made (0 .. 0x3c: that word of the template's row,
+# 0x100 min, 0x101 max, 0x102 default, 0x103 name pointer, 0x104 short pointer, then 0x108 the slot itself; the words 0x18 and 0x1c are the template's). `caps`: the `[limits]` keys whose values are the capacity
+# words the admission reads (the order of the `cap_<kind>` entries of the module; the kind names are the admission's, sdk/sdk.toml `[capacity.kinds]`).
+[rows]
+recipe = [0x00, 0x108, 0x100, 0x101, 0x102, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x103, 0x2c, 0x104, 0x34, 0x38]
+caps = ["machine_rows", "param_rows", "page_rows", "send_slots"]
+[[rows.block]]
+owner = 1
+limit = "param_rows"
+template = 0xd5
+[[rows.block]]
+owner = 2
+limit = "fx_slots"
+per = 8
+template = 0x75
+[[rows.block]]
+owner = 3
+limit = "send_rows"
+template = 0x75
+
+# The effect pages of run-time effects (services/fx, docs/design/digikit-registry.md "Effect pages", docs/findings/61-fx-pages.md "The Digitone II"): the
 # same facts as in the Digitakt II file, read from the 1.12 image. The kit's Fx array has 101 halfwords here (the Fx parameters use the indices 1 to 69; the
 # indices 70 to 100 belong to no Fx parameter, are not sent to the DSP and not saved by the stock saver), so the effect values and the mark live above 69.
 [fx]
@@ -236,6 +259,11 @@ sound_off = 0x34
 sound_stride = 0x48b
 # The number of s16 parameter words in a Sound object's array (the stock getter's bound; finding 02): the debug log's parameter watch reads them.
 sound_words = 101
+# The firmware's second per-code table: one value-class object of 0x44 bytes for each parameter code (the display and lock flags a knob row copies from its template; the accessor of the
+# port anchor cf.param.fn.value_class reads it). The tests read the class of a row from it.
+value_classes = 0x4243425c
+# The firmware's kit library: sector ranges (hi exclusive) that the kit and project saves of the firmware write; the FX write-safety policies allow them.
+kit_areas = [[0x2000, 0x2100]]
 # The array the LFO tick adds its output to, track 1 word 0 (finding 149, "Where the output lands": the smoother's return value plus 0x22; word i at +2 i, track t at +2 * sound_words * t),
 # and the phase accumulator (u32) of LFO 1 of voice slot 0 in the tick's state. The device tests of the LFO read them.
 # The LFO state belongs to a voice slot, not a track: slot s is at lfo_phase + lfo_phase_stride * s. This device rotates voices (each note takes the next of lfo_slots slots).
@@ -296,13 +324,13 @@ dsp_l2_excludes = [[0x200FA000, 0x200FE000]]
 # emulator testing; the `device` set (what is flashed) does not, until the SPI wire-size decision and a hardware read-back of the reserved DDR range.
 # A module such as digikit/remote is on exactly when its check mark in DIGIKIT > MODULES is set.
 [patch_sets]
-emulator = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool"]
+emulator = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/sample-pool"]
 # Real-device image. core/usb-bulk is inert until the usb-fast module is selected; usb-fast requires it. core/usb-bulk-audio is in too: the bulk OUT interface in USB AUDIO/MIDI, so usb-fast works without changing USB CONFIG.
-device = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/usb-bulk", "core/usb-bulk-audio", "core/sdhc-large"]
+device = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/usb-bulk", "core/usb-bulk-audio", "core/sdhc-large"]
 # `device` plus the optional black intro (core/introblank): the Workbench Firmware page picks it with its "Custom boot screen" toggle.
-device-introblank = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/usb-bulk", "core/usb-bulk-audio", "core/introblank", "core/sdhc-large"]
+device-introblank = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/usb-bulk", "core/usb-bulk-audio", "core/introblank", "core/sdhc-large"]
 # `emulator` plus the sample pool (core/sample-pool), core/dsp-link (the pool's DSP tail needs it) and the dsp-voice stereo hooks, for the per-track sample tests (API 1.5).
-sample-tracks = ["core/dynreg", "core/dyndsp", "core/dynfx", "core/fxpages", "core/ui", "core/health", "core/input", "core/sample-pool", "core/dsp-link", "core/dsp-voice"]
+sample-tracks = ["core/rows", "core/dyndsp", "core/dynfx", "core/ui", "core/health", "core/input", "core/sample-pool", "core/dsp-link", "core/dsp-voice"]
 
 # The input backend core/input uses to press keys and turn encoders from software (docs/plans/remote-control.md). The profile chooses; `panel-uart`: the panel
 # MCU's UART packets are decoded by the firmware's own key and encoder decoders, which core/input calls (anchors by hash in the port files).
@@ -561,7 +589,7 @@ count = 8
 slot_base = 25
 to = "page"
 clone_of = 0                # every run-time machine is a clone of machine 0
-list_position = 4           # list position of a patched-in machine row: before MIDI; core/machines on the Digitone II lists a row only with a position
+list_position = 4           # list position of a patched-in machine row: before MIDI; core/rows on the Digitone II lists a row only with a position
 knob_field = "c"
 slot_field = "s"
 level_field = "c8"

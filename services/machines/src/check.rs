@@ -1,5 +1,5 @@
 //! The load check of a `register` section: the seven steps of `Records::check` (counts, actions, native pages, device, records, owners, rows).
-use crate::nativepage;
+use crate::native_page::{record, PageSet};
 use crate::registry::{mach_owner, KNOBS, KNOB_PARAM, MAX_MACH, MAX_PAGE, MAX_PARAM};
 use crate::validate::{body_len, Acc};
 use dkrt_abi::core_api::CoreApi;
@@ -8,9 +8,9 @@ use dkrt_abi::registry::each;
 use dkrt_abi::service::Problem;
 use dkrt_sdk::records::{KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM};
 use dkrt_sdk::*;
-use dkrt_svc_rows::dynreg::{w, RegState};
+use dkrt_svc_rows::rows_info::{w, RegState};
 
-/// What the checks read: the section, the words of `dynreg_info` and the owner's registry state.
+/// What the checks read: the section, the words of `rows_info` and the owner's registry state.
 pub(crate) struct Ctx<'a> {
     pub(crate) reg: *const u8,
     pub(crate) image_size: u32,
@@ -35,7 +35,7 @@ pub(crate) unsafe fn counts_of(reg: *const u8) -> (u32, u32, u32, u32, u32) {
             nm += 1;
         } else if kind == KIND_ACTION {
             na += 1;
-        } else if nativepage::is_kind(kind) {
+        } else if record::is_kind(kind) {
             nn += 1;
         } else if kind == KIND_PAGE {
             ng += 1;
@@ -94,18 +94,18 @@ pub(crate) unsafe fn ck_actions(c: &Ctx<'_>) -> i32 {
 pub(crate) unsafe fn ck_native<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
     let (reg, image_size, inf) = (c.reg, c.image_size, c.inf);
     let (np, nm, ng, na, nn) = counts_of(reg);
-    let mut native_set = nativepage::PageSet::<MAX_MACH>::new();
+    let mut native_set = PageSet::<MAX_MACH>::new();
     let mut bad_native = OK;
     each(reg, |kind, b| {
-        if !nativepage::is_kind(kind) || bad_native != OK {
+        if !record::is_kind(kind) || bad_native != OK {
             return;
         }
-        bad_native = nativepage::check(core, kind, b, np, image_size);
+        bad_native = record::check(kind, b, np, image_size);
         if bad_native != OK {
             return;
         }
         let owner = rd32(b.add(4));
-        if !native_set.claim(kind, owner, nativepage::page_index(kind, b)) {
+        if !native_set.claim(kind, owner, record::page_index(kind, b)) {
             bad_native = E_FORMAT;
             return;
         }
@@ -144,7 +144,7 @@ pub(crate) unsafe fn ck_native<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
         }
         let mut i = 0;
         while i < 8 && bad_native == OK {
-            let binding = b.add(nativepage::binding_offset(kind) + 12 * i);
+            let binding = b.add(record::binding_offset(kind) + 12 * i);
             if rd32(binding) == 1 {
                 let param = KNOB_PARAM | rd32(binding.add(4));
                 let mut owned = false;

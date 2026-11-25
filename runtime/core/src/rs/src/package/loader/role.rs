@@ -4,11 +4,11 @@
 //! The service search (`discover.rs`) uses `role_of` and `role_ok`; the loader runs the steps.
 use super::exports::EXPORTS_MAX;
 use super::image::Head;
-use super::install::{Backend, CfItems, DspItems, HookItem, SITES_MAX};
+use super::install::{Backend, CfItems, DspItems, HookItem, PatchItem, SERVICE_PATCHES_MAX, SITES_MAX};
 use super::{Images, Loader, ProvRec, Registry};
 use dkneeds::keys::{tag, Keys, FLAG_ABSENT};
 use dkrt_abi::package_platform::PackagePlatform;
-use dkrt_sdk::{E_FORMAT, E_HOOK_STOCK, E_IMPORT, E_NOMEM, E_PLAN_FIT, E_RANGE, E_SVC_ABI, OK};
+use dkrt_sdk::{E_DECL_KIND, E_FORMAT, E_HOOK_STOCK, E_IMPORT, E_NOMEM, E_PLAN_FIT, E_RANGE, E_SVC_ABI, OK};
 
 /// What a role step may need of the file besides the record: the staged file (valid until `init` runs) and where its table and image are.
 #[derive(Clone, Copy)]
@@ -103,8 +103,8 @@ unsafe fn hook_items<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<
     let mut i = 0;
     while let Some((hash, entry, _)) = keys.words(tag::HOOKS, i) {
         i += 1;
-        // the entry of another device (one name may have an entry for each of disjoint devices)
-        if !dkneeds::keys::hook_for_device(entry, l.p.device_id()) {
+        // the entry of another device (one name may have an entry for each of disjoint devices); a patch is no hook (`patch_items`)
+        if !dkneeds::keys::hook_for_device(entry, l.p.device_id()) || dkneeds::keys::hook_is_patch(entry) {
             continue;
         }
         // a name has one entry for this device (the packer never writes two): which would win is not defined, so the file is malformed
@@ -129,13 +129,76 @@ unsafe fn hook_items<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<
         if s.flags & FLAG_ABSENT != 0 {
             continue;
         }
-        if !super::port::site_ok(&s) {
+        // a patch site takes bytes, not a `jmp.l`
+        if !super::port::site_ok(&s) || s.kind == dkneeds::keys::SITE_PATCH {
             return Err(E_RANGE);
         }
         if n == SITES_MAX {
             return Err(E_PLAN_FIT);
         }
         out[n] = HookItem { addr: s.addr, len: s.len as u32, check: s.check, entry };
+        n += 1;
+    }
+    Ok(n)
+}
+
+/// The patches a service takes, into `out`; their count. Each `HOOKS` item whose entry is the patch entry (`HOOK_ENTRY_PATCH`) takes the `SITES` item of the loaded port file for that
+/// name: its address, length (1, 2 or 4) and the check value of the stock bytes. `values` are the patches the service declared in `init` (name hash, value, length), kept by the commit;
+/// a patch the port file lists as absent on this firmware is skipped, with or without a value. A name the port file does not list is `E_IMPORT` (the hash kept for the log), a site that is
+/// no patch site `E_RANGE`, a declared length that is not the site's `E_FORMAT`, a patch with no declared value `E_DECL_KIND` (the commit compared the declarations with the table, so only a
+/// file that is not the packer's gets here). With no `values` (the check before `init`) the items carry value 0: the stock check needs no value.
+#[inline(never)]
+unsafe fn patch_items<P: PackagePlatform, M: Images, R: Registry>(
+    l: &mut Loader<P, M, R>,
+    keys: &Keys,
+    values: Option<&[(u32, u32, u8)]>,
+    out: &mut [PatchItem; SERVICE_PATCHES_MAX],
+) -> Result<usize, i32> {
+    let mut n = 0;
+    let mut i = 0;
+    while let Some((hash, entry, _)) = keys.words(tag::HOOKS, i) {
+        i += 1;
+        if !dkneeds::keys::hook_for_device(entry, l.p.device_id()) || !dkneeds::keys::hook_is_patch(entry) {
+            continue;
+        }
+        // a name has one entry for this device (the packer never writes two)
+        let mut j = 0;
+        while j + 1 < i {
+            if let Some((h, e, _)) = keys.words(tag::HOOKS, j) {
+                if h == hash && dkneeds::keys::hook_for_device(e, l.p.device_id()) {
+                    return Err(E_FORMAT);
+                }
+            }
+            j += 1;
+        }
+        let site = match l.port_keys() {
+            Some((port, ..)) => port.find_site(hash),
+            None => None,
+        };
+        let Some(s) = site else {
+            l.import_hash = hash;
+            return Err(E_IMPORT);
+        };
+        if s.flags & FLAG_ABSENT != 0 {
+            continue;
+        }
+        if !super::port::patch_ok(&s) {
+            return Err(E_RANGE);
+        }
+        let mut value = 0;
+        if let Some(values) = values {
+            let Some(v) = values.iter().find(|v| v.0 == hash) else {
+                return Err(E_DECL_KIND);
+            };
+            if v.2 as u16 != s.len {
+                return Err(E_FORMAT);
+            }
+            value = v.1;
+        }
+        if n == out.len() {
+            return Err(E_PLAN_FIT);
+        }
+        out[n] = PatchItem { addr: s.addr, len: s.len as u32, check: s.check, value };
         n += 1;
     }
     Ok(n)
@@ -173,13 +236,18 @@ unsafe fn service_check<P: PackagePlatform, M: Images, R: Registry>(l: &mut Load
     if keys.count(tag::EXPORTS) > EXPORTS_MAX {
         return E_FORMAT;
     }
-    // every hook site holds the stock bytes the port file's check value is of: checked here, before `init` runs, and again under the mask at the install
+    // every hook and patch site holds the stock bytes the port file's check value is of: checked here, before `init` runs, and again under the mask at the install
     let mut hooks = core::mem::zeroed::<[HookItem; SITES_MAX]>();
     let n = match hook_items(l, &keys, &mut hooks) {
         Ok(n) => n,
         Err(e) => return e,
     };
-    match l.installer.check(&l.p, &hooks[..n], head.image_size) {
+    let mut patches = core::mem::zeroed::<[PatchItem; SERVICE_PATCHES_MAX]>();
+    let np = match patch_items(l, &keys, None, &mut patches) {
+        Ok(n) => n,
+        Err(e) => return e,
+    };
+    match l.installer.check(&l.p, &hooks[..n], &patches[..np], head.image_size) {
         Ok(()) => OK,
         Err(e) => e,
     }
@@ -192,6 +260,8 @@ unsafe fn service_check<P: PackagePlatform, M: Images, R: Registry>(l: &mut Load
 #[inline(never)]
 pub(super) unsafe fn filter_hooks<P: PackagePlatform, M: Images, R: Registry>(l: &Loader<P, M, R>, keys: &mut crate::package::collect::KeysCopy) {
     let port = l.port_keys();
+    // the hooks of another device are kept aside: a service declares all its hooks, and the commit drops the declarations that the table lists for another device only
+    keys.set_aside_foreign_hooks(l.p.device_id());
     let d = &mut keys.decl;
     let (mut from, mut to) = (0, 0);
     while from < d.n {
@@ -207,9 +277,6 @@ pub(super) unsafe fn filter_hooks<P: PackagePlatform, M: Images, R: Registry>(l:
             it.b &= !dkneeds::keys::SLOT_DEVICES_MASK;
         }
         if it.tag == tag::HOOKS {
-            if !dkneeds::keys::hook_for_device(it.b, l.p.device_id()) {
-                continue;
-            }
             it.b &= dkneeds::keys::HOOK_ENTRY_MASK;
             let gone = match &port {
                 Some((p, ..)) => matches!(p.find_site(it.a), Some(s) if s.flags & FLAG_ABSENT != 0),
@@ -380,6 +447,9 @@ pub(super) unsafe fn service_publish<P: PackagePlatform, M: Images, R: Registry>
 pub(super) struct ServiceItems {
     pub hooks: [HookItem; SITES_MAX],
     pub nh: usize,
+    /// The patches, with the values the service declared in `init`.
+    pub patches: [PatchItem; SERVICE_PATCHES_MAX],
+    pub np: usize,
     /// ColdFire slots: (address of the word, value).
     pub slots: [(u32, u32); dkneeds::SLOTS_MAX as usize],
     pub ns: usize,
@@ -393,6 +463,8 @@ impl ServiceItems {
         ServiceItems {
             hooks: [HookItem { addr: 0, len: 0, check: [0; 8], entry: 0 }; SITES_MAX],
             nh: 0,
+            patches: [PatchItem { addr: 0, len: 0, check: [0; 8], value: 0 }; SERVICE_PATCHES_MAX],
+            np: 0,
             slots: [(0u32, 0u32); dkneeds::SLOTS_MAX as usize],
             ns: 0,
             dsp_slots: [(0u32, 0u32); dkneeds::SLOTS_MAX as usize],
@@ -409,6 +481,9 @@ pub(super) unsafe fn service_items<P: PackagePlatform, M: Images, R: Registry>(l
     };
     let base = super::records::module(rec).base;
     it.nh = hook_items(l, &keys, &mut it.hooks)?;
+    // the patches: sites from the port file, bytes from the declarations `init` made (kept by the commit); a service that declared none has no patch item in its table
+    let declared = pr.patches;
+    it.np = patch_items(l, &keys, Some(&declared[..pr.npatch as usize]), &mut it.patches)?;
     // the pointer slots the file fills: a SLOTS item is the name hash of a `[[slot]]` of an image adapter (the image's info table gives the address of its word) and the entry
     // of this file. A slot the image does not have, or a name that is an `[[info]]` data table, refuses the file, before anything is installed.
     for sl in keys.slots() {
@@ -462,7 +537,7 @@ unsafe fn service_activate<P: PackagePlatform, M: Images, R: Registry>(l: &mut L
     if let Err(e) = Backend::install(&mut l.dsp_install, &l.p, rec as u8, &DspItems { slots: &it.dsp_slots[..it.nd] }) {
         return e;
     }
-    let cf = CfItems { hooks: &it.hooks[..it.nh], image_base: base, image_size, slots: &it.slots[..it.ns] };
+    let cf = CfItems { hooks: &it.hooks[..it.nh], patches: &it.patches[..it.np], image_base: base, image_size, slots: &it.slots[..it.ns] };
     match Backend::install(&mut l.installer, &l.p, rec as u8, &cf) {
         Ok(()) => {
             l.provs[index_of(rec)].query_v1 = query_v1;

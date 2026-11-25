@@ -1070,6 +1070,21 @@ pub struct HookSite {
 /// The site of the declared hook `hook` on the stock image `fw`: the anchor address plus the hook offset, the whole instructions the
 /// 6-byte jump covers and their stock bytes. The image must be a stock one the registry has a port for.
 pub fn resolve_hook_site(fw: &[u8], reg: &Registry, hook: &str) -> Result<HookSite> {
+    resolve_site(fw, reg, hook, None)
+}
+
+/// The site of the declared patch `hook` (a `[[hook]]` with `patch = N`) on the stock image `fw`: the anchor address plus the offset and the `len` stock bytes there (1, 2 or 4).
+/// No instruction is decoded: a patch is plain bytes (an operand of an instruction, a table word), so the site needs no whole-instruction length.
+pub fn resolve_patch_site(fw: &[u8], reg: &Registry, hook: &str, len: usize) -> Result<HookSite> {
+    resolve_site(fw, reg, hook, Some(len))
+}
+
+fn resolve_site(
+    fw: &[u8],
+    reg: &Registry,
+    hook: &str,
+    patch_len: Option<usize>,
+) -> Result<HookSite> {
     let fw = Firmware::parse(fw)?;
     let port = reg.find(&fw.syx_sha256).ok_or_else(|| {
         err!("no port for firmware {}: it is not a stock image patchkit knows (a patched image is refused too)", fw.syx_sha256)
@@ -1115,7 +1130,14 @@ pub fn resolve_hook_site(fw: &[u8], reg: &Registry, hook: &str) -> Result<HookSi
         ));
     }
     let site = a.addr + h.offset as u64;
-    let cf = prim::cf_site(main, base, a.addr, site).map_err(|e| err!("{who}: {e}"))?;
+    let cf = match patch_len {
+        None => prim::cf_site(main, base, a.addr, site).map_err(|e| err!("{who}: {e}"))?,
+        Some(len) => prim::CfSite {
+            addr: site,
+            len,
+            insns: vec![],
+        },
+    };
     if h.offset as u64 + cf.len as u64 > a.len {
         return Err(err!(
             "{who}: the {}-byte site reaches past the anchor's {} bytes",

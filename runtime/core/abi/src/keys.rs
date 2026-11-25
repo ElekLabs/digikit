@@ -18,9 +18,16 @@ pub struct KeysCopy {
     pub fk: [u32; MAX_RECORDS as usize],
     /// the KINDS, SLOTS, HOOKS, EXPORTS and RESOURCES entries of the table, as `init`'s declarations must repeat them (`decl_matches`)
     pub decl: Declare,
+    /// The HOOKS items of other devices (name hash, entry offset), set aside by `set_aside_foreign_hooks`: a service declares every hook it has, plain, and the commit leaves out
+    /// the declarations that the table lists for another device only.
+    pub foreign: [(u32, u32); KeysCopy::FOREIGN_MAX],
+    pub nforeign: usize,
 }
 
 impl KeysCopy {
+    /// Most hook items of other devices kept for the comparison; more are not kept, and a declaration of such a hook is then refused like any other mismatch.
+    pub const FOREIGN_MAX: usize = 24;
+
     pub const fn empty() -> KeysCopy {
         KeysCopy {
             machine_rows: 0,
@@ -31,7 +38,48 @@ impl KeysCopy {
             mk: [0; MAX_RECORDS as usize],
             fk: [0; MAX_RECORDS as usize],
             decl: Declare::new(),
+            foreign: [(0, 0); KeysCopy::FOREIGN_MAX],
+            nforeign: 0,
         }
+    }
+
+    /// Take the HOOKS items that are not for the device with runtime id `device_id` out of `decl` and keep their (hash, entry offset) in `foreign`: the table of a service file lists
+    /// the hooks of every device (one name may have an entry for each of disjoint devices), the loader works with the items of its own (the device mask dropped).
+    pub fn set_aside_foreign_hooks(&mut self, device_id: u32) {
+        let d = &mut self.decl;
+        let (mut from, mut to) = (0, 0);
+        while from < d.n {
+            let it = d.items[from];
+            from += 1;
+            if it.tag == dkneeds::keys::tag::HOOKS
+                && !dkneeds::keys::hook_for_device(it.b, device_id)
+            {
+                if self.nforeign < KeysCopy::FOREIGN_MAX {
+                    self.foreign[self.nforeign] = (it.a, it.b & dkneeds::keys::HOOK_ENTRY_MASK);
+                    self.nforeign += 1;
+                }
+                continue;
+            }
+            d.items[to] = it;
+            if it.tag == dkneeds::keys::tag::HOOKS {
+                // the items of this device keep the entry only
+                d.items[to].b &= dkneeds::keys::HOOK_ENTRY_MASK;
+            }
+            to += 1;
+        }
+        d.n = to;
+    }
+
+    /// Whether the table lists the hook (`hash`, `entry`: the image offset, or `HOOK_ENTRY_PATCH`) for another device only.
+    pub fn lists_for_other_device(&self, hash: u32, entry: u32) -> bool {
+        let mut i = 0;
+        while i < self.nforeign {
+            if self.foreign[i] == (hash, entry) {
+                return true;
+            }
+            i += 1;
+        }
+        false
     }
 
     /// Parse the header table bytes. A file with no table, or another magic or version, is the format of runtime 0.7: `E_CONTRACT`; a damaged

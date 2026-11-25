@@ -127,8 +127,8 @@ DN2: the flush check sees few CPUSHL on DN2 images (finding 25), so the 0-hit re
 
 ## Registry (machines and parameters)
 
-A `.dkm` with `register` records fills machine and parameter rows that `core/dynreg` reserved at patch time. The runtime links to
-`core/dynreg`'s `dynreg_info` table optionally; `registry.rs` holds the code and its state (`DKRT_REG`). Design, record format, what is derived
+A `.dkm` with `register` records fills machine and parameter rows that `core/rows` reserved at patch time. The runtime links to
+`core/rows`'s `rows_info` table; `registry.rs` holds the code and its state (`DKRT_REG`). Design, record format, what is derived
 state and the write order: `docs/design/digikit-registry.md`.
 
 ## DSP code of a module (state machine)

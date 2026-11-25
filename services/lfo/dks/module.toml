@@ -10,7 +10,7 @@ type = "raw"
 author = "digikit"
 status = "experimental"
 summary = "The lfo service of the runtime as a service file: it owns the lfo_shape record kind, numbers the shapes as values of the LFO wave parameter, writes their maximum into the parameter table and installs the interrupt hooks of the LFO tick"
-requires = ["core/dynreg"]
+requires = ["core/rows"]
 conflicts = []
 
 [targets]
