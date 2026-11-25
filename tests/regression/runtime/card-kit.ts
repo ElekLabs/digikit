@@ -348,6 +348,15 @@ const BI_STATES_AT = 176;
 const UNSETTLED_STATES = new Set(['SELECTED', 'PLANNED', 'INIT', 'DSP_LOADING']);
 
 /**
+ * Whether a boot info is final: no state is unsettled and `loaded` equals the number of ACTIVE modules. The runtime sets a module's state and raises `loaded` in two
+ * steps (`report_module`, `report_dsp`), and the session pauses between instructions: a read in between sees the new state with the old count.
+ */
+export function bootInfoFinal(info: { loaded: number; states: number[] }): boolean {
+  const names = info.states.map((n) => stateName(n));
+  return !names.some((n) => UNSETTLED_STATES.has(n)) && info.loaded === names.filter((n) => n === 'ACTIVE').length;
+}
+
+/**
  * `bootInfo` once this boot has written its info and every selected module has a final state (`DkrtBootInfo.states`: ACTIVE, REFUSED, FAILED, SKIPPED or UNLOADED):
  * the boot has finished loading its selection. The result words do not tell this: 0 is also the unwritten initial value, so a module not yet started reads 0 like a
  * loaded one. Written means `magic` is valid (the boot sets it first) and `count` is set (the boot copies it from the selection record before any load, and `states`
@@ -359,7 +368,7 @@ export async function bootInfoLoaded(session: Session, plan: RuntimePlan, expect
   const settled = (info: Awaited<ReturnType<typeof bootInfo>>) => {
     const written = info.magic === BI_MAGIC && info.version !== 0 && (info.count > 0 || info.uiReached !== 0);
     const counted = expected === undefined || info.count >= expected;
-    return written && counted && !info.states.some((n) => UNSETTLED_STATES.has(stateName(n)));
+    return written && counted && bootInfoFinal(info);
   };
   let last: Awaited<ReturnType<typeof bootInfo>> | undefined;
   return pollUntil(emulatorClock(session), async () => (last = await bootInfo(session, plan)), settled, {
