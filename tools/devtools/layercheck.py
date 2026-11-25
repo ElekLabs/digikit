@@ -1530,8 +1530,29 @@ DENAME_ALLOWED = (
 )
 
 
-def strip_comments(text: str, suffix: str) -> str:
-    """The text with comments blanked (line numbers kept): `//` and `/* */` (C, Rust, SHARC), `|` (ColdFire assembly), `#` (TOML, Python)."""
+# One left-to-right scan keeps string and character literals whole, so a `//` or `|` inside a string is not a comment.
+# Order matters: a comment that starts first hides the quotes inside it.
+_SCAN_RUST = re.compile(
+    r"""(?P<raw>\br(?P<h>\#*)".*?"(?P=h))|(?P<str>"(?:\\.|[^"\\])*")|(?P<chr>'(?:\\.|[^\\'\n])')"""
+    r"""|(?P<line>//[^\n]*)|(?P<block>/\*.*?\*/)""",
+    re.S,
+)
+_SCAN_GAS = re.compile(
+    r"""(?P<str>"(?:\\.|[^"\\\n])*")|(?P<line>\|[^\n]*)|(?P<block>/\*.*?\*/)""", re.S
+)
+
+
+def _blank(m: re.Match[str]) -> str:
+    if m.lastgroup in {"line", "block"}:
+        return re.sub(r"[^\n]", " ", m.group(0))
+    return m.group(0)
+
+
+def strip_comments(text: str, suffix: str, path: str = "") -> str:
+    """The text with comments blanked (line numbers kept), by the syntax of the file:
+    `//` and `/* */` in C, Rust and SHARC assembly (`.inc` and `.s` under a `dsp` folder: `|` is bit-or there);
+    `|` and `/* */` in ColdFire gas assembly (`.s`, `.S`, `.inc` elsewhere; the repo writes `|` at the start of a line);
+    `#` in TOML and Python. Quoted strings are kept whole in every syntax."""
     if suffix in {".toml", ".py"}:
         out = []
         for line in text.splitlines():
@@ -1548,13 +1569,9 @@ def strip_comments(text: str, suffix: str) -> str:
                     break
             out.append(line[:cut])
         return "\n".join(out)
-    text = re.sub(
-        r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S
-    )
-    text = re.sub(r"//[^\n]*", "", text)
-    if suffix in {".s", ".S", ".inc"}:
-        text = re.sub(r"\|[^\n]*", "", text)
-    return text
+    if suffix in {".s", ".S", ".inc"} and "dsp" not in Path(path).parts:
+        return _SCAN_GAS.sub(_blank, text)
+    return _SCAN_RUST.sub(_blank, text)
 
 
 def check_de_naming(root: Path) -> list[Violation]:
@@ -1582,8 +1599,13 @@ def check_de_naming(root: Path) -> list[Violation]:
             or f.name in DENAME_SKIP_FILES
         ):
             continue
+        # Skipped on purpose (documents and data, not code of the layer):
+        # - other JSON (test vectors, package manifests): data; project.json is read because its records wire modules;
+        # - `*.dko.json`: built objects, derived from sources that this rule already reads;
+        # - Markdown and other non-code suffixes (not in DENAME_SUFFIXES): prose may name a service to explain it;
+        # - DENAME_SKIP_DIRS: `tests` load services as fixtures (test wiring), the rest is generated or vendored output.
         if f.suffix == ".json" and f.name != "project.json":
-            continue  # data files (test vectors) are not code of the layer
+            continue
         if DENAME_SKIP_DIRS & set(r.parts[1:]) or f.name.endswith(".dko.json"):
             continue
         path = r.as_posix()
@@ -1593,7 +1615,7 @@ def check_de_naming(root: Path) -> list[Violation]:
         ):
             continue
         text = f.read_text(encoding="utf-8", errors="replace")
-        for n, line in enumerate(strip_comments(text, f.suffix).splitlines(), 1):
+        for n, line in enumerate(strip_comments(text, f.suffix, path).splitlines(), 1):
             if pat.search(line):
                 out.append(
                     Violation(
