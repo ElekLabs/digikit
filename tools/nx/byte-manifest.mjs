@@ -321,7 +321,11 @@ const collect = (root, scratch, tracked) => {
   const shared = [collectPacks(root, projects, entries)];
   const generated = JSON.parse(pk('gen', '--check', '--paths'));
   for (const path of generated)
-    shared.push({ kind: 'generated', path: checkedPath(normalize(path)), sha256: sha(fileBytes(join(root, normalize(path)))) });
+    shared.push({
+      kind: 'generated',
+      path: checkedPath(normalize(path)),
+      sha256: sha(fileBytes(join(root, normalize(path)))),
+    });
   shared.push(...collectObjects(root, scratch, projects, tracked));
   return new Map(
     [...entries].map(([device, own]) => {

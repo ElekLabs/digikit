@@ -23,10 +23,7 @@ const machineAdapters = [
   '{workspaceRoot}/runtime/platform/rows/types.toml',
 ];
 
-const fxAdapters = [
-  '{workspaceRoot}/runtime/platform/fx/**/*',
-  '{workspaceRoot}/services/fx/dks/{dsp,build/gen}/**/*',
-];
+const fxAdapters = ['{workspaceRoot}/runtime/platform/fx/**/*', '{workspaceRoot}/services/fx/dks/{dsp,build/gen}/**/*'];
 
 const conformance = ({ root = '', file, inputs, reports, fixed = false, suiteAdapters = [] }) => {
   const command = `pnpm exec vitest run --config vitest.host.config.ts --project sharc-rig-conformance${file ? ` conformance/${file}` : ''}`;
