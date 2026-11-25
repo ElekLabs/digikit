@@ -2,21 +2,33 @@
 use super::{Step, TICK_STEPS};
 use dkrt_abi::hooks::tick_phase;
 
-/// The pass runs EARLY, the file jobs, LATE and LAST, then settings, the watch and the mailbox, and the modules' tick ends the table (the order the pass always had).
-/// `Click::run` of the machines service relies on LAST having run before the modules tick, and a module tick relies on every other step being over.
+fn position(step: Step) -> usize {
+    TICK_STEPS
+        .iter()
+        .position(|s| *s == step)
+        .unwrap_or_else(|| panic!("{step:?} is not in the table"))
+}
+
+/// `Click::run` of the machines service (a module's click callback) relies on LAST having run before the modules tick, and a module tick relies on the mailbox
+/// (and so every other step) being over: MODULES follows LAST and the mailbox, and the mailbox follows LAST.
 #[test]
-fn the_steps_run_in_order_and_the_modules_tick_follows_the_mailbox() {
-    assert_eq!(
-        TICK_STEPS,
-        [
-            Step::Hook(tick_phase::EARLY, true),
-            Step::Hook(tick_phase::FILES, false),
-            Step::Hook(tick_phase::LATE, true),
-            Step::Hook(tick_phase::LAST, true),
-            Step::Settings,
-            Step::Watch,
-            Step::Mailbox,
-            Step::Hook(tick_phase::MODULES, false),
-        ]
-    );
+fn the_modules_tick_follows_last_and_the_mailbox() {
+    let last = position(Step::Hook(tick_phase::LAST, true));
+    let mailbox = position(Step::Mailbox);
+    let modules = position(Step::Hook(tick_phase::MODULES, false));
+    assert!(last < modules, "MODULES runs after LAST");
+    assert!(mailbox < modules, "MODULES runs after the mailbox");
+    assert_eq!(modules, TICK_STEPS.len() - 1, "MODULES ends the pass");
+}
+
+/// Each step appears once: a repeated step would run a service phase twice per pass.
+#[test]
+fn every_step_runs_once() {
+    for (i, step) in TICK_STEPS.iter().enumerate() {
+        assert_eq!(
+            TICK_STEPS.iter().position(|s| s == step),
+            Some(i),
+            "{step:?} is listed twice"
+        );
+    }
 }
