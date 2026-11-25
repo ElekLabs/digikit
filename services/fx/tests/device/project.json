@@ -157,7 +157,7 @@
           "tools/patchkit/hook_ab.py"
         ],
         "plusdrive": true,
-        "firmwareOnly": "the release-tail chord sums on the send bus of the Digitone II image as PCM (the gain law and the slot sum are on the rig)"
+        "firmwareOnly": "the release-tail chord sums on the send bus as PCM (the gain law and the slot sum are on the rig)"
       }
     ],
     "mergeTests": [
