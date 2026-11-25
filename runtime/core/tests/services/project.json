@@ -27,6 +27,19 @@
           }
         ],
         "plusdrive": true
+      },
+      {
+        "files": [
+          "owner-step.device.test.ts"
+        ],
+        "tags": [
+          "C:loading"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/local-step"
+        ],
+        "plusdrive": true
       }
     ]
   }

@@ -60,9 +60,13 @@ mod ticked {
 
     pub struct S;
     impl Provider<crate::ImportCore> for S {
-        fn start(_: &crate::ImportCore) -> Result<S, Status> {
+        fn start_in(
+            _: &crate::ImportCore,
+            slot: &mut core::mem::MaybeUninit<S>,
+        ) -> Result<(), Status> {
             assert_eq!(crate::init_ctx() as usize, 0x1234);
-            Ok(S)
+            slot.write(S);
+            Ok(())
         }
     }
     pub static TICKS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
@@ -88,8 +92,12 @@ mod unticked {
 
     pub struct S;
     impl Provider<crate::ImportCore> for S {
-        fn start(_: &crate::ImportCore) -> Result<S, Status> {
-            Ok(S)
+        fn start_in(
+            _: &crate::ImportCore,
+            slot: &mut core::mem::MaybeUninit<S>,
+        ) -> Result<(), Status> {
+            slot.write(S);
+            Ok(())
         }
     }
     crate::service!(S, "unticked", &[], parts = []);
@@ -136,11 +144,15 @@ mod provided {
         pub ticks: u32,
     }
     impl Provider<crate::ImportCore> for S {
-        fn start(_: &crate::ImportCore) -> Result<S, Status> {
-            Ok(S {
+        fn start_in(
+            _: &crate::ImportCore,
+            slot: &mut core::mem::MaybeUninit<S>,
+        ) -> Result<(), Status> {
+            slot.write(S {
                 id: 100 + STARTS.fetch_add(1, SeqCst),
                 ticks: 0,
-            })
+            });
+            Ok(())
         }
         fn stop(&mut self, _: &crate::ImportCore) {
             STOPS.fetch_add(1, SeqCst);
@@ -189,8 +201,12 @@ mod patched {
         pub table: u32,
     }
     impl Provider<crate::ImportCore> for S {
-        fn start(_: &crate::ImportCore) -> Result<S, Status> {
-            Ok(S { table: 0x4100_2000 })
+        fn start_in(
+            _: &crate::ImportCore,
+            slot: &mut core::mem::MaybeUninit<S>,
+        ) -> Result<(), Status> {
+            slot.write(S { table: 0x4100_2000 });
+            Ok(())
         }
     }
     impl S {
@@ -337,8 +353,12 @@ mod exportless {
     use dkrt_abi::provider::{Provider, Status};
     pub struct S;
     impl Provider<crate::ImportCore> for S {
-        fn start(_: &crate::ImportCore) -> Result<S, Status> {
-            Ok(S)
+        fn start_in(
+            _: &crate::ImportCore,
+            slot: &mut core::mem::MaybeUninit<S>,
+        ) -> Result<(), Status> {
+            slot.write(S);
+            Ok(())
         }
     }
     pub fn hook() {}
@@ -379,8 +399,12 @@ mod pretick {
 
     pub struct S;
     impl Provider<crate::ImportCore> for S {
-        fn start(_: &crate::ImportCore) -> Result<S, Status> {
-            Ok(S)
+        fn start_in(
+            _: &crate::ImportCore,
+            slot: &mut core::mem::MaybeUninit<S>,
+        ) -> Result<(), Status> {
+            slot.write(S);
+            Ok(())
         }
     }
     impl Reentry<crate::ImportCore> for S {
@@ -465,8 +489,12 @@ mod described {
 
     pub struct S;
     impl Provider<crate::ImportCore> for S {
-        fn start(_: &crate::ImportCore) -> Result<S, Status> {
-            Ok(S)
+        fn start_in(
+            _: &crate::ImportCore,
+            slot: &mut core::mem::MaybeUninit<S>,
+        ) -> Result<(), Status> {
+            slot.write(S);
+            Ok(())
         }
     }
     impl Describe<crate::ImportCore> for S {

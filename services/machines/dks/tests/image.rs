@@ -1,6 +1,6 @@
 //! The registry words of the image's `rows_info` and the assembler that reads them. They are bound over a `FakeCore` (the core's info entry) into the table of the hooks, refused when
 //! they are not this device's or lack the registry, and the byte offsets the assembler files name (`.equ T_*`) are the word indexes of `info::w` (the crate's `info` owns the table:
-//! `Provider::start` binds it).
+//! `Provider::start_in` binds it).
 use dkrt_svc_machines::info::*;
 use dkrt_svc_rows::rows_info::w as r;
 use dkrt_svc_rt::name_hash;

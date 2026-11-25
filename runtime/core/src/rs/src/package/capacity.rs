@@ -146,8 +146,9 @@ mod tests {
         use dkrt_abi::provider::{Describe, Provider};
         struct Machines;
         impl<C: crate::package::core_api::CoreApi> Provider<C> for Machines {
-            fn start(_: &C) -> Result<Self, i32> {
-                Ok(Machines)
+            fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Self>) -> Result<(), i32> {
+                slot.write(Machines);
+                Ok(())
             }
         }
         impl<C: crate::package::core_api::CoreApi> Describe<C> for Machines {

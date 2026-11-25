@@ -746,6 +746,10 @@ pub struct RegistryDef {
     pub region: String,
     #[serde(default)]
     pub devices: Vec<String>,
+    /// The window of `core/dsp-link` this registry fills: patchkit then also defines `window<N>.rows` and `window<N>.count` (the symbols of `<name>.rows` and `<name>.count`), so
+    /// the link names its windows and not the registries that fill them. Two registries cannot take one window.
+    #[serde(default)]
+    pub window: Option<u32>,
     /// One all-zero row behind the entries (not counted in `<reg>.count`): a table a routine scans until a zero row.
     #[serde(default)]
     pub terminator: bool,

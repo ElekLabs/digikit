@@ -1,5 +1,5 @@
 //! The `machines` service as a service file (`services/machines.dks`): the crate `dkrt-svc-machines` over the `dkc_*` imports, the hooks of the machine framework (`hooks.rs`),
-//! the click flow's firmware calls and the exports `dk_param_get` and `dk_param_set` (`fw.rs`), the native pages over the firmware (`native.rs`), the two builder calls that take a callback (`builder.rs`), the list of all exports (`gen_exports.rs`, written by `patchkit gen`); the image table `machines_info` is bound by `Provider::start` of the owner (`info::bind`)
+//! the click flow's firmware calls and the exports `dk_param_get` and `dk_param_set` (`fw.rs`), the native pages over the firmware (`native.rs`), the two builder calls that take a callback (`builder.rs`), the list of all exports (`gen_exports.rs`, written by `patchkit gen`); the image table `machines_info` is bound by `Provider::start_in` of the owner (`info::bind`)
 //! (docs/plans/runtime-and-services.md section 13.2, R12-6).
 // a host build (the assembly test of the runtime) has std; the file is `no_std` on the ColdFire
 #![cfg_attr(target_arch = "m68k", no_std)]

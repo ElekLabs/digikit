@@ -116,6 +116,7 @@ devices = ["dt2"]
 # The scan ends at the zero row patchkit appends (terminator); at most 16 types.
 [[registry]]
 name = "voices"
+window = 1
 first = "0"
 max = 16
 region = "dsp.l2"

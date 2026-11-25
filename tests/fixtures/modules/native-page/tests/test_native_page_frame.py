@@ -22,6 +22,7 @@ dk_param *dk_page_add_param(dk_page *p, const char *n, const char *s, uint32_t d
 void dk_page_canvas(dk_page *p, uint32_t f, dk_page_draw_fn *d, dk_page_event_fn *e, void *a) { (void)p; (void)f; (void)d; (void)e; (void)a; }
 void dk_page_bind(dk_page *p, dk_param *q, uint32_t s) { (void)p; (void)q; (void)s; }
 void dk_page_bind_local(dk_page *p, uint32_t l, uint32_t s) { (void)p; (void)l; (void)s; }
+int32_t dk_param_get(uint32_t t, uint32_t w) { (void)w; return t == 3 ? -0x10001 : 77; }
 int32_t dk_host_register(uint32_t a, uint32_t b, dk_host_cmd_fn *f) { (void)a; (void)b; (void)f; return 0; }
 static void text(int32_t x, int32_t y, const char *s) { (void)x; (void)y; (void)s; }
 static void rect(int32_t a, int32_t b, int32_t c, int32_t d, int32_t color) {
@@ -38,7 +39,7 @@ int main(void) {
     f.level = 6789;
     native_draw(NULL, &f);
     assert(native_end_seen == 122<<8 && native_level_seen == 6789);
-    uint8_t out[28];
+    uint8_t out[32];
     assert(status(0,0,0,0,out) == sizeof(out));
     assert(out[24] == 0 && out[25] == 0 && out[26] == (6789>>8) && out[27] == (6789&255));
     f.size = offsetof(dk_page_frame, level);
@@ -47,6 +48,15 @@ int main(void) {
     f.size = sizeof(f); f.track = 16;
     native_draw(NULL, &f);
     assert(native_draws == 3);
+    /* the turn callback calls the service and keeps its answer */
+    dk_page_event e = {.version=1, .size=sizeof(e), .track=3, .control=0, .delta=2};
+    native_event(NULL, &e);
+    assert(native_param_seen == -0x10001 && native_events == 1 && zoom[3] == 2);
+    e.track = 4;
+    native_event(NULL, &e);
+    assert(native_param_seen == 77);
+    assert(status(0,0,0,0,out) == sizeof(out));
+    assert(out[28] == 0 && out[29] == 0 && out[30] == 0 && out[31] == 77);
     return 0;
 }
 """

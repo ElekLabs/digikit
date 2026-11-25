@@ -59,8 +59,9 @@ unsafe fn body(reg: *const u8, kind: u32, b: *const u8) -> Vec<u8> {
 }
 
 impl<const N: u8, C: CoreApi> Provider<C> for Fake<N> {
-    fn start(_: &C) -> Result<Self, Status> {
-        Ok(Fake)
+    fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Self>) -> Result<(), Status> {
+        slot.write(Fake);
+        Ok(())
     }
 
     /// The rows a service writes before the per-record pass.
@@ -367,16 +368,18 @@ mod table {
 
     struct A;
     impl<C: CoreApi> Provider<C> for A {
-        fn start(_: &C) -> Result<Self, Status> {
-            Ok(A)
+        fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Self>) -> Result<(), Status> {
+            slot.write(A);
+            Ok(())
         }
     }
     impl<C: CoreApi> Records<C> for A {}
     impl<C: CoreApi> DspPart<C> for A {}
     struct B;
     impl<C: CoreApi> Provider<C> for B {
-        fn start(_: &C) -> Result<Self, Status> {
-            Ok(B)
+        fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Self>) -> Result<(), Status> {
+            slot.write(B);
+            Ok(())
         }
     }
     impl<C: CoreApi> Records<C> for B {}
@@ -420,8 +423,9 @@ mod table {
         ($name:ident, $slot:expr, $fails:expr) => {
             struct $name;
             impl<C: CoreApi> Provider<C> for $name {
-                fn start(_: &C) -> Result<Self, Status> {
-                    Ok($name)
+                fn start_in(_: &C, slot: &mut core::mem::MaybeUninit<Self>) -> Result<(), Status> {
+                    slot.write($name);
+                    Ok(())
                 }
             }
             impl<C: CoreApi> DspPart<C> for $name {

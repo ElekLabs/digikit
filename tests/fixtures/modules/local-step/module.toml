@@ -1,0 +1,35 @@
+[module]
+id = "test/local-step"
+version = "0.1.0"
+name = "Local step service"
+category = "test"
+role = "service"
+service = "local-step"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Fixture for the owner's two-phase call: a key hook that runs Owner::step and calls the service's own export from the act phase"
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+[[export]]
+name = "local_step_value"
+
+# The hook it takes (ports/fw/input.toml): the entry of the firmware's key walker, as the shortcuts service takes it (the routine of src/hooks.s runs in place of the first
+# 8 bytes of the walker and leaves through the tail of its site). `init` repeats it with dk_service_declare_hook (`service!`). The fixture never consumes a key.
+[[hook]]
+name = "cf.input.hook.key_event"
+entry = "local_step_key_hook"
+
+[[object]]
+path = "build/local-step.dko.json"
+sources = ["Cargo.toml"]
+place = "cf.expansion"
+
+# The tail of the hook of ports/fw/input.toml (`hook.<hook>.tail`: the displaced instructions, then the end of the site).
+[object.externs]
+local_step_t_key = "hook.cf.input.hook.key_event.tail"
