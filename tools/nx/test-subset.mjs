@@ -9,7 +9,7 @@
 // and the tests that import a changed file, plus the fixed smoke set gate-device-smoke when `affected` selects a device test. A changed
 // path no project owns, or that no test names, selects nothing and is printed. What `affected` selects and the gate skips is listed.
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { budget, startAtOnce, workCores } from './resources.mjs';
@@ -180,6 +180,13 @@ const defaultGit = (root, ...args) => {
 export const baseProblem = ({ base, changed, gate = false }) =>
   base && !changed.length && !gate ? `no file changed since ${base}.` : '';
 
+// A file at `ref` (null when it does not exist there) and in the working tree (null when deleted).
+const gitShow = (root, ref, file) => {
+  const done = spawnSync('git', ['show', `${ref}:${file}`], { cwd: root, encoding: 'utf8' });
+  return done.status === 0 ? done.stdout : null;
+};
+const readIfExists = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : null);
+
 const loadProjects = (root) => {
   const dir = resolve(root, 'out/runs/test-subset');
   mkdirSync(dir, { recursive: true });
@@ -223,6 +230,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       closureOf: (projectRoot, file) => closureFiles(importInputs, `${projectRoot}/${file}`),
       portUsers: ctx.portUsers,
       deviceOf: ctx.deviceOf,
+      projectJsonOf: (file) => ({ before: gitShow(root, base, file), after: readIfExists(resolve(root, file)) }),
     });
     const named = namedSelection(names, projects);
     const seen = new Set();
@@ -281,6 +289,8 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   if (mapped.length > 20) console.log(`  owner: ${mapped.length - 20} more changed files`);
   for (const { file, why } of (selection.unowned ?? []).slice(0, 20))
     console.log(`  unowned ${file} (${why}): selects no test`);
+  for (const { file, project } of (selection.metadataOnly ?? []).slice(0, 20))
+    console.log(`  metadata only ${project}: ${file} selects none (tags, subjects or reasons changed)`);
   for (const { file, project } of (selection.quiet ?? []).slice(0, 20))
     console.log(`  no test names ${project}: ${file} selects none (smoke and the full tier cover it)`);
   if (deviceFiles.length) console.log(`  device files: every affected half of ${deviceFiles.join(' ')}`);

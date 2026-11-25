@@ -10,6 +10,9 @@
 //      project names its subject there) and of every record whose `modules` list P when P is a fixture project (tests/fixtures/modules/**); a loaded service or real module is not a subject.
 //   5. A changed TypeScript file (the driver packages only for DRIVER_SUBJECT_FILES, as the device keys do) selects the device test files whose import closure holds it (a harness or test-support helper),
 //      a changed test file or a file in a record's `sources` selects that record.
+//      A project.json edit is read as data (`projectJsonChange`): fields that cannot change what runs on the device (METADATA_FIELDS) are
+//      dropped from base and head; an edit that is equal after that selects nothing and is returned in `metadataOnly`; a changed record
+//      selects that record, any other difference (targets, unknown fields, a parse error) selects the whole project.
 //   6. A changed path owned by no project, or by a project no test names, selects nothing and is returned in `unowned` / `quiet`,
 //      for the gate to print.
 // Conformance (`ownedConformance`): the modules whose own source changed. Nothing here forces a wide selection; the full tier
@@ -53,6 +56,53 @@ export const leavesOf = (file, targets) => {
   );
 };
 
+// Fields of a project.json that cannot change what a device test runs: the record's tags, its incidental list (loaded, not exercised),
+// its text-only reason (firmwareOnly), and the project's implicitDependencies (they name subjects: a subject edit moves selection of
+// later changes, not the test).
+export const METADATA_FIELDS = { record: ['tags', 'incidental', 'firmwareOnly'], project: ['implicitDependencies'] };
+
+const canonical = (v) =>
+  JSON.stringify(v, (_, x) =>
+    x && typeof x === 'object' && !Array.isArray(x)
+      ? Object.fromEntries(
+          Object.keys(x)
+            .sort()
+            .map((k) => [k, x[k]]),
+        )
+      : x,
+  );
+
+const recordKey = (rec) =>
+  canonical(Object.fromEntries(Object.entries(rec).filter(([k]) => !METADATA_FIELDS.record.includes(k))));
+
+const dropFields = (json) => {
+  const rest = Object.fromEntries(Object.entries(json).filter(([k]) => !METADATA_FIELDS.project.includes(k)));
+  const records = (json.metadata?.runtimeAcceptance ?? []).map(recordKey);
+  if (rest.metadata) {
+    rest.metadata = { ...rest.metadata };
+    delete rest.metadata.runtimeAcceptance;
+  }
+  return { rest: canonical(rest), records };
+};
+
+/** What a project.json edit changes on the device: { metadataOnly: true } or { records: Set of canonical changed records, all: bool }.
+ * `before`/`after`: file text or null (a new or deleted file). A parse error counts as a change of the whole project. */
+export const projectJsonChange = (before, after) => {
+  let a;
+  let b;
+  try {
+    a = before === null ? null : dropFields(JSON.parse(before));
+    b = after === null ? null : dropFields(JSON.parse(after));
+  } catch {
+    return { metadataOnly: false, all: true, records: new Set() };
+  }
+  if (!a || !b) return { metadataOnly: false, all: true, records: new Set() };
+  if (a.rest !== b.rest) return { metadataOnly: false, all: true, records: new Set() };
+  const old = new Set(a.records);
+  const records = new Set(b.records.filter((r) => !old.has(r)));
+  return { metadataOnly: !records.size && a.records.length === b.records.length, all: false, records };
+};
+
 // The names a record's subject is made of: its project, the authored implicit dependencies of the project, the modules it loads.
 // A loaded module selects the test only when it is a fixture (tests/fixtures/modules/**): a service or real module a test loads is
 // not its subject (most tests load machines.dks), the test names its subject in implicitDependencies.
@@ -67,14 +117,17 @@ const subjectNames = (project, rec, byName) =>
 /** Changed paths -> the device tests they select.
  * `projects`: [{ name, root, subjects (authored implicitDependencies), targets, metadata }] (the nodes of the Nx graph).
  * `opts.changed`: repository-relative changed files. `opts.closureOf(projectRoot, file)`: the import closure of a test file.
+ * `opts.projectJsonOf(file)`: { before, after } texts of a changed project.json (null when absent); without it a project.json selects nothing.
  * `opts.portUsers(file)`: project names of a firmware declaration file. `opts.deviceOf(file)`: the device a device file names.
  * Returns { tests: [{ project, file, named, changed, dsp, targets }], mapped: [{ file, project }], devices: string[], unowned:
- * [{ file, why }], quiet: [{ file, project }] (owned by a project no test names), covered: Set }. */
-export const ownershipSelection = (projects, { changed, closureOf, portUsers, deviceOf }) => {
+ * [{ file, why }], quiet: [{ file, project }] (owned by a project no test names), metadataOnly: [{ file, project }], covered: Set }. */
+export const ownershipSelection = (projects, { changed, closureOf, portUsers, deviceOf, projectJsonOf }) => {
   const byName = new Map(projects.map((p) => [p.name, p]));
   const touched = new Map(); // project name -> files
   const mapped = [];
   const unowned = [];
+  const metadataOnly = [];
+  const changedRecords = new Map(); // project name -> canonical changed records of its project.json
   const devices = new Set();
   const touch = (name, file) => touched.set(name, [...(touched.get(name) ?? []), file]);
   for (const file of changed) {
@@ -100,6 +153,14 @@ export const ownershipSelection = (projects, { changed, closureOf, portUsers, de
       continue;
     }
     mapped.push({ file, project: owner.name });
+    if (file === `${owner.root}/project.json` && projectJsonOf) {
+      const { before, after } = projectJsonOf(file);
+      const change = projectJsonChange(before, after);
+      if (change.metadataOnly) metadataOnly.push({ file, project: owner.name });
+      else if (change.all) touch(owner.name, file);
+      else changedRecords.set(owner.name, { file, records: change.records });
+      continue;
+    }
     if (isProduct(file, owner.root)) touch(owner.name, file);
   }
   // The driver packages have host tests of their own and leave the device keys, except the protocol and log layout files.
@@ -113,6 +174,8 @@ export const ownershipSelection = (projects, { changed, closureOf, portUsers, de
     for (const rec of project.metadata?.runtimeAcceptance ?? []) {
       const via = new Set();
       for (const [p, files] of touched) if (subjectNames(project, rec, byName).has(p)) files.forEach((f) => via.add(f));
+      const edited = changedRecords.get(name);
+      if (edited?.records.has(recordKey(rec))) via.add(edited.file);
       const own = [...(rec.files ?? []).map((f) => `${root}/${f}`), ...(rec.sources ?? [])];
       changed.filter((f) => own.includes(f)).forEach((f) => via.add(f));
       if (closureOf && tsChanged.length)
@@ -134,7 +197,7 @@ export const ownershipSelection = (projects, { changed, closureOf, portUsers, de
   const quiet = [...touched].flatMap(([project, files]) =>
     files.filter((f) => !covered.has(f)).map((file) => ({ file, project })),
   );
-  return { tests, mapped, devices: [...devices], unowned, quiet, covered };
+  return { tests, mapped, devices: [...devices], unowned, quiet, metadataOnly, covered };
 };
 
 /** The `project:test-conformance` tasks among `affected` of the modules whose own source changed (deepest owner, product files). */

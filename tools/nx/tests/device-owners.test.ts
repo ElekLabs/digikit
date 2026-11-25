@@ -135,6 +135,62 @@ it('selects nothing for a path no project owns, prints it, and ignores Markdown 
   expect(got.unowned).toEqual([{ file: 'stray/file.bin', why: 'no project owns it' }]);
 });
 
+describe('a project.json edit', () => {
+  const rec = { files: ['reload.device.test.ts'] };
+  const boot = { files: ['boot.device.test.ts'], sources: ['tools/boot-helper.py'] };
+  const text = (records: object[], more: object = {}) =>
+    JSON.stringify({
+      name: 'x',
+      implicitDependencies: ['core/runtime-package'],
+      metadata: { runtimeAcceptance: records },
+      ...more,
+    });
+  const file = 'runtime/core/tests/project.json';
+  const edit = (before: string | null, after: string | null) =>
+    select([file], { projectJsonOf: () => ({ before, after }) });
+
+  it('selects nothing when only tags, subjects, incidental entries or reasons changed', () => {
+    const base = text([{ ...rec, tags: ['A'] }, boot]);
+    const head = JSON.stringify({
+      name: 'x',
+      implicitDependencies: ['core/runtime'],
+      metadata: {
+        runtimeAcceptance: [
+          { ...rec, tags: ['B'], firmwareOnly: 'why', incidental: [{ module: 'm', reason: 'r' }] },
+          boot,
+        ],
+      },
+    });
+    const { got, files } = edit(base, head);
+    expect(files).toEqual([]);
+    expect(got.metadataOnly).toEqual([{ file, project: 'core/runtime-tests' }]);
+  });
+
+  it('selects only the record whose modules, sources, devices or dsp changed', () => {
+    const { files } = edit(text([rec, { ...boot, dsp: 'sharc' }]), text([rec, boot]));
+    expect(files).toEqual(['core/runtime-tests:boot.device.test.ts']);
+  });
+
+  it('selects the record of a moved test file', () => {
+    const moved = edit(text([rec, { ...boot, files: ['old/boot.device.test.ts'] }]), text([rec, boot]));
+    expect(moved.files).toEqual(['core/runtime-tests:boot.device.test.ts']);
+  });
+
+  it('selects the whole project for an unknown field, a target change, a new file or a parse error', () => {
+    const base = text([rec, boot]);
+    for (const after of [text([rec, boot], { newField: 1 }), text([rec, boot], { targets: { a: {} } }), '{ not json'])
+      expect(edit(base, after).files).toEqual([
+        'core/runtime-tests:reload.device.test.ts',
+        'core/runtime-tests:boot.device.test.ts',
+      ]);
+    expect(edit(null, base).files).toHaveLength(2);
+  });
+
+  it('selects nothing without a reader of the file', () => {
+    expect(select([file]).files).toEqual([]);
+  });
+});
+
 it('lists a touched project that no test names', () => {
   const { got } = select(['modules/other/src/x.c']);
   expect(got.tests).toEqual([]);
