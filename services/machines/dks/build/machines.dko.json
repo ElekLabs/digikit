@@ -4120,14 +4120,14 @@
   },
   {
    "addend": 0,
-   "offset": 10,
+   "offset": 6,
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE5enterCs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
    "symbol": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 12,
+   "offset": 6,
    "section": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE5leaveCs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
    "symbol": "_RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate7release",
    "type": "cf.32"
@@ -4178,7 +4178,7 @@
    "addend": 0,
    "offset": 8,
    "section": ".text._RINvNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks2fw10click_tickNCNvB2_4tick0EB4_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4290,7 +4290,7 @@
    "addend": 0,
    "offset": 66,
    "section": ".text.dk_page_add_param",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4332,7 +4332,7 @@
    "addend": 0,
    "offset": 52,
    "section": ".text.dk_machine_add_page",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4374,7 +4374,7 @@
    "addend": 0,
    "offset": 66,
    "section": ".text.dk_module_ctx_add_machine",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4535,7 +4535,7 @@
    "addend": 0,
    "offset": 52,
    "section": ".text.dk_page_bind",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4577,7 +4577,7 @@
    "addend": 0,
    "offset": 80,
    "section": ".text.dk_page_canvas",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4619,7 +4619,7 @@
    "addend": 0,
    "offset": 26,
    "section": ".text.dk_param_glyph",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4661,7 +4661,7 @@
    "addend": 0,
    "offset": 52,
    "section": ".text.dk_param_range",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4703,7 +4703,7 @@
    "addend": 0,
    "offset": 16,
    "section": ".text.dk_param_latched",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4745,7 +4745,7 @@
    "addend": 0,
    "offset": 52,
    "section": ".text.dk_param_on_click",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4787,7 +4787,7 @@
    "addend": 0,
    "offset": 52,
    "section": ".text.dk_page_bind_local",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4801,7 +4801,7 @@
    "addend": 0,
    "offset": 4,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables8describe11table_checkNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2W_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4822,7 +4822,7 @@
    "addend": 0,
    "offset": 40,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables8describe11table_checkNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2W_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4836,7 +4836,7 @@
    "addend": 0,
    "offset": 8,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp8row_stepNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2N_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4857,7 +4857,7 @@
    "addend": 0,
    "offset": 62,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp8row_stepNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2N_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4871,7 +4871,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2M_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4892,7 +4892,7 @@
    "addend": 0,
    "offset": 34,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp7releaseNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2M_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4906,7 +4906,7 @@
    "addend": 0,
    "offset": 4,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp5clearNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2K_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4927,7 +4927,7 @@
    "addend": 0,
    "offset": 40,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp5clearNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2K_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4941,7 +4941,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp5claimNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2K_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4962,7 +4962,7 @@
    "addend": 0,
    "offset": 34,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp5claimNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2K_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4976,7 +4976,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp4diagNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2J_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -4997,7 +4997,7 @@
    "addend": 0,
    "offset": 34,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp4diagNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2J_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5011,7 +5011,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables7records5beginNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2O_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5032,7 +5032,7 @@
    "addend": 0,
    "offset": 36,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables7records5beginNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2O_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5046,7 +5046,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables9lifecycle8can_stopNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2T_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5060,7 +5060,7 @@
    "addend": 0,
    "offset": 20,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables9lifecycle8can_stopNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2T_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5074,7 +5074,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp6loadedNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2L_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5088,7 +5088,7 @@
    "addend": 0,
    "offset": 20,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp6loadedNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2L_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5102,7 +5102,7 @@
    "addend": 0,
    "offset": 8,
    "section": ".text._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks14dk_svc_declare",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5543,7 +5543,7 @@
    "addend": 0,
    "offset": 1132,
    "section": ".text._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks14dk_svc_declare",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5578,7 +5578,7 @@
    "addend": 0,
    "offset": 1212,
    "section": ".text._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks14dk_svc_declare",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5613,7 +5613,7 @@
    "addend": 0,
    "offset": 1292,
    "section": ".text._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks14dk_svc_declare",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5655,7 +5655,7 @@
    "addend": 0,
    "offset": 1374,
    "section": ".text._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks14dk_svc_declare",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5697,7 +5697,7 @@
    "addend": 0,
    "offset": 1454,
    "section": ".text._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks14dk_svc_declare",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5893,7 +5893,7 @@
    "addend": 0,
    "offset": 14,
    "section": ".text._RNvNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks6native8selected",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5963,7 +5963,7 @@
    "addend": 0,
    "offset": 42,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables7records5applyNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2O_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -5984,7 +5984,7 @@
    "addend": 0,
    "offset": 110,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables7records5applyNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2O_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6068,7 +6068,7 @@
    "addend": 0,
    "offset": 6,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables7records5checkNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2O_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6089,7 +6089,7 @@
    "addend": 0,
    "offset": 62,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables7records5checkNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2O_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6110,7 +6110,7 @@
    "addend": 0,
    "offset": 6,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables7records6commitNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2P_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6131,7 +6131,7 @@
    "addend": 0,
    "offset": 62,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables7records6commitNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2P_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6152,7 +6152,7 @@
    "addend": 0,
    "offset": 6,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp10check_rowsNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2Q_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6173,7 +6173,7 @@
    "addend": 0,
    "offset": 58,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp10check_rowsNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2Q_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6194,7 +6194,7 @@
    "addend": 0,
    "offset": 6,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp11check_typesNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2R_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6215,7 +6215,7 @@
    "addend": 0,
    "offset": 58,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp11check_typesNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2R_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6236,7 +6236,7 @@
    "addend": 0,
    "offset": 6,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp14check_sectionsNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2U_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6257,7 +6257,7 @@
    "addend": 0,
    "offset": 62,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp14check_sectionsNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2U_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6285,7 +6285,7 @@
    "addend": 0,
    "offset": 6,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp5admitNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2K_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6306,7 +6306,7 @@
    "addend": 0,
    "offset": 58,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp5admitNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2K_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6327,7 +6327,7 @@
    "addend": 0,
    "offset": 8,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp9attributeNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2O_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6348,7 +6348,7 @@
    "addend": 0,
    "offset": 60,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables3dsp9attributeNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2O_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6460,7 +6460,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables9lifecycle11reload_doneNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2X_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6481,7 +6481,7 @@
    "addend": 0,
    "offset": 32,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables9lifecycle11reload_doneNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2X_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6528,28 +6528,28 @@
   },
   {
    "addend": 0,
-   "offset": 78,
+   "offset": 80,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE4stopNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks11dk_svc_stop0EB1U_",
    "symbol": ".sec..text._RNvXs0_NtCsf1wLQ9n5BAx_17dkrt_svc_machines8machinesNtB5_8MachinesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider8contract8ProviderNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreE4stopCs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 88,
+   "offset": 90,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE4stopNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks11dk_svc_stop0EB1U_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi8irq_mask",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 110,
+   "offset": 112,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE4stopNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks11dk_svc_stop0EB1U_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 130,
+   "offset": 132,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE4stopNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks11dk_svc_stop0EB1U_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
@@ -6558,7 +6558,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks11dk_svc_stop",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6628,7 +6628,7 @@
    "addend": 0,
    "offset": 30,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables9lifecycle6attachNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2R_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6649,7 +6649,7 @@
    "addend": 0,
    "offset": 86,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables9lifecycle6attachNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2R_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6677,7 +6677,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables9lifecycle6detachNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2R_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6698,7 +6698,7 @@
    "addend": 0,
    "offset": 38,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables9lifecycle6detachNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2R_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6780,35 +6780,35 @@
   },
   {
    "addend": 0,
-   "offset": 74,
+   "offset": 82,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE5startNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12dk_svc_start0EB1V_",
    "symbol": ".sec..text._RNvXs0_NtCsf1wLQ9n5BAx_17dkrt_svc_machines8machinesNtB5_8MachinesINtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider8contract8ProviderNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreE8start_inCs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 94,
+   "offset": 102,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE5startNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12dk_svc_start0EB1V_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi8irq_mask",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 126,
+   "offset": 134,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE5startNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12dk_svc_start0EB1V_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 150,
+   "offset": 156,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE5startNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12dk_svc_start0EB1V_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 172,
+   "offset": 178,
    "section": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE5startNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12dk_svc_start0EB1V_",
    "symbol": "_RNvXs_NtCs1H2YknomaMO_11dkrt_svc_rt11import_coreNtB4_10ImportCoreNtNtCsaMgU3lEIvKO_8dkrt_abi8core_api7CoreApi11irq_restore",
    "type": "cf.32"
@@ -6817,7 +6817,7 @@
    "addend": 0,
    "offset": 8,
    "section": ".text._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12dk_svc_start",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6971,7 +6971,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables4tick4tickNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2K_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -6992,7 +6992,7 @@
    "addend": 0,
    "offset": 36,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables4tick4tickNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2K_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -7041,7 +7041,7 @@
    "addend": 0,
    "offset": 8,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables8describe3capNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2N_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -7062,7 +7062,7 @@
    "addend": 0,
    "offset": 64,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables8describe3capNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2N_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -7328,7 +7328,7 @@
    "addend": 0,
    "offset": 2,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables9lifecycle6settleNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2R_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -7349,7 +7349,7 @@
    "addend": 0,
    "offset": 36,
    "section": ".text._RINvNtNtNtCsaMgU3lEIvKO_8dkrt_abi8provider6tables9lifecycle6settleNtNtCs1H2YknomaMO_11dkrt_svc_rt11import_core10ImportCoreNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks10DkSvcEnterEB2R_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -7643,7 +7643,7 @@
    "addend": 0,
    "offset": 32,
    "section": ".text._RINvNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks2fw8page_keyNtB2_4DkFwNvMB2_BR_3newEB4_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -7657,7 +7657,7 @@
    "addend": 0,
    "offset": 116,
    "section": ".text._RINvNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks2fw8page_keyNtB2_4DkFwNvMB2_BR_3newEB4_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -7734,7 +7734,7 @@
    "addend": 0,
    "offset": 18,
    "section": ".text._RINvNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks2fw9param_getNtB2_4DkFwNvMB2_BS_3newEB4_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -7804,7 +7804,7 @@
    "addend": 0,
    "offset": 30,
    "section": ".text._RINvNtCs6WsKiMrcTEJ_21dkrt_svc_machines_dks2fw9param_setNtB2_4DkFwNvMB2_BS_3newEB4_",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -7958,7 +7958,7 @@
    "addend": 0,
    "offset": 26,
    "section": ".text.dks_native_code",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -7972,7 +7972,7 @@
    "addend": 0,
    "offset": 26,
    "section": ".text.dks_native_descriptor",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -8042,7 +8042,7 @@
    "addend": 0,
    "offset": 28,
    "section": ".text.dks_native_page_count",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -8063,7 +8063,7 @@
    "addend": 0,
    "offset": 30,
    "section": ".text.dks_page_turn",
-   "symbol": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "symbol": ".sec..bss.DK_SVC_OWNER",
    "type": "cf.32"
   },
   {
@@ -12361,17 +12361,17 @@
   },
   {
    "align": 2,
-   "hex": "206f0004486831a04eb900000000588f4a006606202f00044e7542af000460f4",
+   "hex": "2f2f00044eb900000000588f4a00660c202f00040680000000104e75428060fa",
    "kind": "text",
    "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE5enterCs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
    "size": 32
   },
   {
    "align": 2,
-   "hex": "206f000441e831a02f084eb900000000588f4e75",
+   "hex": "2f2f00044eb900000000588f4e75",
    "kind": "text",
    "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE5leaveCs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
-   "size": 20
+   "size": 14
   },
   {
    "align": 2,
@@ -12781,10 +12781,10 @@
   },
   {
    "align": 2,
-   "hex": "206f00044a2831ac670e4a2831ae6604200860064280600242804e75",
+   "hex": "206f00044a280004660442804e754a28000666f6200806800000001060ee",
    "kind": "text",
    "name": ".text._RNvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB5_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE8instanceCs6WsKiMrcTEJ_21dkrt_svc_machines_dks",
-   "size": 28
+   "size": 30
   },
   {
    "align": 2,
@@ -13026,10 +13026,10 @@
   },
   {
    "align": 2,
-   "hex": "598f2f0a2f02246f0010487800014eb900000000142a31ad588f4a02665c4a2a31ac6756122a31ae1f41000b7201154131ae2f00487800014eb900000000508f4a2f000b6644487800012f0a4eb900000000487800014eb9000000004201154131ac154131ae2f00487800014eb9000000004fef0014740160102f00487800014eb900000000508f42027001c082241f245f588f4e75",
+   "hex": "598f2f0a2f02246f0010487800014eb900000000142a0005588f4a02665e4a2a00046758122a00061f41000b7201154100062f00487800014eb900000000508f4a2f000b664648780001486a00104eb900000000487800014eb900000000420115410004154100062f00487800014eb9000000004fef0014740160102f00487800014eb900000000508f42027001c082241f245f588f4e75",
    "kind": "text",
    "name": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE4stopNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks11dk_svc_stop0EB1U_",
-   "size": 150
+   "size": 152
   },
   {
    "align": 2,
@@ -13082,10 +13082,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffe848d744042c48246f001c487800014eb900000000588f4a2a31ac66000084142a31ae7201154131ae2f00487800014eb900000000508f4a0266482f0a4878000141ef001a4eb900000000342f001a2f6f001c0014487800014eb9000000004201154131ae4fef000c4a42661e7201154131ac2f00487800014eb900000000508f6032347cfff67401602a2f00487800014eb900000000246f0014508f740160142f00487800014eb900000000508f347cfff674013c822d4a0002200e4cd744044fef00184e75",
+   "hex": "4fefffe448d7440c2c48246f0020487800014eb900000000588f4a2a00046600008a142a00067201154100062f00487800014eb900000000508f4a026650260a0683000000102f034878000141ef001e4eb900000000342f001e2f6f00200018487800014eb9000000004201154100064fef000c4a42661c7201154100042f00487800014eb900000000508f602e76f6740160282f00487800014eb900000000262f0018508f740160122f00487800014eb900000000508f76f674013c822d430002200e4cd7440c4fef001c4e75",
    "kind": "text",
    "name": ".text._RINvMs0_NtCs1H2YknomaMO_11dkrt_svc_rt5ownerINtB6_5OwnerNtNtCsf1wLQ9n5BAx_17dkrt_svc_machines8machines8MachinesE5startNCNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12dk_svc_start0EB1V_",
-   "size": 202
+   "size": 206
   },
   {
    "align": 2,
@@ -13851,13 +13851,6 @@
    "size": 24
   },
   {
-   "align": 4,
-   "hex": "",
-   "kind": "bss",
-   "name": ".bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
-   "size": 12720
-  },
-  {
    "align": 2,
    "hex": "00000000",
    "kind": "data",
@@ -13879,15 +13872,22 @@
    "size": 44
   },
   {
-   "align": 2,
-   "hex": "598f4eb900000000206f00084a28000c661672011f4100032f004eb900000000102f0007508f4e75206f00084a28000e66e01228000d1f410003660872011141000d60d4206f000852a8000872031f41000360c4",
-   "kind": "text",
-   "name": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
-   "size": 84
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss.DK_SVC_OWNER",
+   "size": 12720
   },
   {
    "align": 2,
-   "hex": "4eb900000000206f000442011141000d2f004eb900000000588f4e75",
+   "hex": "598f4eb900000000206f00084a280004661672011f4100032f004eb900000000102f0007508f4e75206f00084a28000666e0122800051f410003660872011141000560d4206f0008529072031f41000360c6",
+   "kind": "text",
+   "name": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate10admit_call",
+   "size": 82
+  },
+  {
+   "align": 2,
+   "hex": "4eb900000000206f00044201114100052f004eb900000000588f4e75",
    "kind": "text",
    "name": ".text._RNvMNtNtCs1H2YknomaMO_11dkrt_svc_rt5owner4gateNtB2_4Gate7release",
    "size": 28
@@ -15244,7 +15244,7 @@
    "size": 24
   }
  ],
- "source_sha256": "679ccebcf20718925da48394a5fa6767db3d2deab81f50931b9d38fa764b3d50",
+ "source_sha256": "d14f301e201db9f77d23db8e5c654c2a834925afda93f3af7d2feb8fb643aa18",
  "symbols": [
   {
    "global": false,
@@ -15278,8 +15278,8 @@
   },
   {
    "global": false,
-   "name": ".sec..bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
-   "section": ".bss._RNvCs6WsKiMrcTEJ_21dkrt_svc_machines_dks12DK_SVC_OWNER",
+   "name": ".sec..bss.DK_SVC_OWNER",
+   "section": ".bss.DK_SVC_OWNER",
    "value": 0
   },
   {
@@ -17707,6 +17707,12 @@
    "value": 0
   },
   {
+   "global": true,
+   "name": "DK_SVC_OWNER",
+   "section": ".bss.DK_SVC_OWNER",
+   "value": 0
+  },
+  {
    "global": false,
    "name": "_RINvNtCs6uNbiqmv1Ak_4core5slice20copy_from_slice_implhEB4_",
    "section": ".text._RINvNtCs6uNbiqmv1Ak_4core5slice20copy_from_slice_implhEB4_",
@@ -19124,9 +19130,9 @@
   }
  ],
  "toolchain": {
-  "exports": "dk_machine_add_page dk_module dk_module_ctx_add_machine dk_page_add_param dk_page_bind dk_page_bind_local dk_page_canvas dk_param_get dk_param_glyph dk_param_latched dk_param_on_click dk_param_range dk_param_set dk_svc_abi dks_list_copy dks_native_code dks_native_descriptor dks_native_draw dks_native_overlay dks_native_page_count dks_page_key dks_page_turn mf_clone5 mf_code_hook mf_copy mf_draw_hook mf_frametype mf_group mf_key_hook mf_owner mf_rank mf_reader mf_srcpage mf_turn_hook mf_typearg mf_typemap0 mf_typemap1 mf_typemap2",
-  "instructions_redecoded": "18794",
-  "isa_check": "d915d60b0441a6754398f3c37568d553aee37c2b5a75125c2419ca90575eaa00",
+  "exports": "DK_SVC_OWNER dk_machine_add_page dk_module dk_module_ctx_add_machine dk_page_add_param dk_page_bind dk_page_bind_local dk_page_canvas dk_param_get dk_param_glyph dk_param_latched dk_param_on_click dk_param_range dk_param_set dk_svc_abi dks_list_copy dks_native_code dks_native_descriptor dks_native_draw dks_native_overlay dks_native_page_count dks_page_key dks_page_turn mf_clone5 mf_code_hook mf_copy mf_draw_hook mf_frametype mf_group mf_key_hook mf_owner mf_rank mf_reader mf_srcpage mf_turn_hook mf_typearg mf_typemap0 mf_typemap1 mf_typemap2",
+  "instructions_redecoded": "18793",
+  "isa_check": "441c1a4079d68470d4924496b78b83929fa6d1423766050d05ef433c5a0f17e6",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",

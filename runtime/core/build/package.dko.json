@@ -12072,301 +12072,315 @@
   },
   {
    "addend": 0,
-   "offset": 1748,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvXNtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB2_10RealImagesNtB2_6Images5alloc",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1862,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvXs_NtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB4_12RealRegistryNtB4_8Registry13module_commit",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1888,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvMNtNtCsacrnCRhYs1l_4dkrt7package7collectNtB2_7Collect13write_generic",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1916,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvXNtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB2_10RealImagesNtB2_6Images4free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 1944,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvMNtNtCsacrnCRhYs1l_4dkrt7package7collectNtB2_7Collect13write_generic",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2014,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvXs_NtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB4_12RealRegistryNtB4_8Registry13module_commit",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2042,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..data._RNvNtNtCsacrnCRhYs1l_4dkrt7package8boot_idx8BOOT_IDX",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2088,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2158,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4wr32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2182,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2218,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2244,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows5table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2264,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2284,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2302,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2318,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2462,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2476,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2500,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvMNtNtCsaGmOzcP47sg_8dkrt_abi8provider6handleNtB2_14ProviderHandle5kinds",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2570,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..rodata.global.12",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2580,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2618,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvMNtNtCsaGmOzcP47sg_8dkrt_abi8provider6handleNtB2_14ProviderHandle5check",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2684,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvXNtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB2_10RealImagesNtB2_6Images4free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2740,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows5table",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2764,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvNtNtCsacrnCRhYs1l_4dkrt7package8registry10apply_with",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2794,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvXNtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB2_10RealImagesNtB2_6Images4free",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2840,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package7collect6BLOCKS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2888,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package12gen_services4ROWS",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2894,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows4LIVE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 2910,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows4LIVE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 56,
-   "offset": 2922,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows4LIVE",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3048,
+   "offset": 1838,
    "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
    "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package12gen_services4ROWS",
    "type": "cf.32"
   },
   {
    "addend": 52,
-   "offset": 3080,
+   "offset": 1870,
    "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
    "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows4LIVE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3098,
+   "offset": 1888,
    "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
    "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows4LIVE",
    "type": "cf.32"
   },
   {
    "addend": 60,
-   "offset": 3114,
+   "offset": 1904,
    "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
    "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows4LIVE",
    "type": "cf.32"
   },
   {
    "addend": 48,
-   "offset": 3124,
+   "offset": 1914,
    "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
    "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows4LIVE",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3192,
+   "offset": 1946,
    "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": "_RNvMNtCsaGmOzcP47sg_8dkrt_abi7serviceNtB2_10RecordSink7measure",
+   "symbol": ".sec..rodata.global.12",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3246,
+   "offset": 1960,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 1986,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvXNtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB2_10RealImagesNtB2_6Images5alloc",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2100,
    "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
    "symbol": ".sec..text._RNvXs_NtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB4_12RealRegistryNtB4_8Registry13module_commit",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3272,
+   "offset": 2126,
    "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
    "symbol": ".sec..text._RNvMNtNtCsacrnCRhYs1l_4dkrt7package7collectNtB2_7Collect13write_generic",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3372,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvXs_NtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB4_12RealRegistryNtB4_8Registry13module_commit",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3438,
-   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "symbol": ".sec..text._RNvXs_NtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB4_12RealRegistryNtB4_8Registry13module_commit",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 3462,
+   "offset": 2152,
    "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
    "symbol": ".sec..text._RNvXNtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB2_10RealImagesNtB2_6Images4free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 3482,
+   "offset": 2180,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvMNtNtCsacrnCRhYs1l_4dkrt7package7collectNtB2_7Collect13write_generic",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2250,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvXs_NtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB4_12RealRegistryNtB4_8Registry13module_commit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2304,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4wr32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2328,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2364,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2390,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows5table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2410,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2430,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2448,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2464,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2608,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2622,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvNtCsaGmOzcP47sg_8dkrt_abi3mem4rd32",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2646,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvMNtNtCsaGmOzcP47sg_8dkrt_abi8provider6handleNtB2_14ProviderHandle5kinds",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2716,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..rodata.global.12",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2726,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvNtCs6uNbiqmv1Ak_4core9panicking18panic_bounds_check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2764,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvMNtNtCsaGmOzcP47sg_8dkrt_abi8provider6handleNtB2_14ProviderHandle5check",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2830,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvXNtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB2_10RealImagesNtB2_6Images4free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2864,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvXNtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB2_10RealImagesNtB2_6Images4free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2918,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..data._RNvNtNtCsacrnCRhYs1l_4dkrt7package8boot_idx8BOOT_IDX",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2928,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvNtCs7RjeRL46GKI_7dkneeds4keys15name_hash_bytes",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 2974,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..bss._RNvNtNtNtCsacrnCRhYs1l_4dkrt7package8resident5table5TABLE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3028,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package7collect6BLOCKS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3110,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package12gen_services4ROWS",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3116,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows4LIVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 3138,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..bss._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows4LIVE",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3202,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": "_RNvMNtCsaGmOzcP47sg_8dkrt_abi7serviceNtB2_10RecordSink7measure",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3256,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvXs_NtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB4_12RealRegistryNtB4_8Registry13module_commit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3282,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvMNtNtCsacrnCRhYs1l_4dkrt7package7collectNtB2_7Collect13write_generic",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3382,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvXs_NtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB4_12RealRegistryNtB4_8Registry13module_commit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3410,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvXNtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB2_10RealImagesNtB2_6Images4free",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3468,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvXs_NtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB4_12RealRegistryNtB4_8Registry13module_commit",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3514,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvNtNtCsacrnCRhYs1l_4dkrt7package13provider_rows5table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3538,
+   "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
+   "symbol": ".sec..text._RNvNtNtCsacrnCRhYs1l_4dkrt7package8registry10apply_with",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 3570,
    "section": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
    "symbol": ".sec..text._RNvXNtNtNtCsacrnCRhYs1l_4dkrt7package6loader5seamsNtB2_10RealImagesNtB2_6Images4free",
    "type": "cf.32"
@@ -32367,10 +32381,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56fa8048d73cfc2f2e000c4eb900000000204028680028246e001045ea02cc2d4afab4487803862f0a486efaf04eb9000000004fef00104aaefe70672e45eefaf02d4afab82e0e0687fffffe707a014282226e00142d49fab0600002322d42fe70327c00014a826600016a246e0014486a01d8486efaf04eb900000000508f4a00670002ac7a07baae000c650004b02f2efab441eefad24eb900000000588f4a6efad267000ba2262efad44a8367000b987a07baae000c64000392202e0018d08cb08c55c275028480282efad82f022f0c2f0341eeff3e4eb9000000004fef000c4aaeff3e670005d6222eff46202e000c51807a7c4c050800246e000841f2080a4a5067000346b2a800026600033e204ad1c03e280014206800162d48fab42f042f022f0c2f0341eefedc4eb900000000242efede4fef00104a6efedc6600057443eefede41eefefe20d920d920d920d920d920d920d9209122422639000000004a83670004b87209928341f9000000007008b3d067000c34b081670004a6538041e800204a8066ea48790000000048780008487800084eb90000000048790000000048780040487800404eb900000000928c3080214200062141000ab3eefe706400fea85289700ed1aefab8beaefab867ca206efab83010242800062228000a77c07804b88367c877c07a05ba83672277c07806b883671e77c07a07ba836716780cb88366ac4281243c00ffffff700660a0928c609c948c609848790000000048780040487800404eb900000000267c00ffffff2f0b2f042f2efab04eb9000000004fef000c4a006672703fb082650000cc3d43fe762d44fe782d46fe7c700e4c02080041f6080043eefe7641e8faf020d920d920d930915282baaefe706400fddc45ea000e5285b5c7678e41eefe76224a20d920d920d930913612282a00022c2a000671c3720cb280678271c37206b2806696264697cc6000ff7a206efab0202805584a8067b2206efab041e801d83a7c00419bc070403d43fabc602248790000000048780040487800404eb900000000bbc06784538041e8000e4a8067de73d07606b68166eab8a8000266e4b7e8000666de362efabc6000ff30487900000000487800402f024eb900000000266efe704a8b671245eefaf07e419e8b7640286e00146000017a246e0014222a05584a81670001e2280a0684000001d87e419e81200b720e4c01080041eefae245f008007a40243cfffffe70d48e604848790000000048780040487800404eb900000000b1ca677441e8000eb1c267e071d0b28066eeb6a8000266e8b9e8000666e2bbe8000a66dcbe85674a538506840000000e4a85672a2c0441eefeb0224420d920d920d930914a8b6730262efeb2286efeb62a6efeba41eefaf073eefeb060ae48790000000048780040487800404eb90000000042817001603443eefece204622d822d822d8329043eefece41eefebe20d920d920d93091342efebe222efec042007601c083b780e18875c28082246e000825403bf425413bf874b120024cee3cfcfa804e5e4e7548790000000048780040487800404eb90000000048790000000048780040487800404eb900000000b3c067000086538041e8000e4a8067dc2d48fab075d0b48166e6b8a8000266e0baa8000666dabbe8000a66d4246efab4be836700fe94538345ea000e4a8367982c0a321271c1740ab48067e471c1780bb88067dc41eefe84224a20d920d920d93091202c05584a806720282efe862a2efe8a2a6efe8e41ec01d8327c004193c0704073c12d4afab4608643eefea2204622d822d822d8329043eefea241eefe9220d920d920d93091342efe92222efe9470016000fefe70016000ff04262e000c51837007b083653c727c4c013800226e0008d3c342021342007a246e0010202a064c4a806700fb28206e001041e802cc74419480704006830000002a266e00082a436036487900000000487800082f034eb90000000048790000000048780040487800404eb900000000b4806700fae0538041e8000e4a8067dc73d0760cb68166e81229007a7b817808b885670005562e2800022c2800062a28000a79817607b68465242204780a4c04180045f51800d5cb248725460004154500081229007a52811341007a60a24879000000004878000873812f014eb9000000002003600005ba7008b0836700077c7a01bf854a4556c544854a4756c044804a00671c202efab42d40fab02c03538645f900000000204a42807b859bcd6026428060e47801b9814a4156c144817381b285620004cab08667a852805c88588a7208b280671e32106700072c7801b3844a4457c444847984b88567c8222800026000072848790000000048780008487800084eb9000000004a826600fd966000057c242eff426000fd8a2a2eff562f0b2f0341eeff7a4eb900000000508f4a6eff7a6700044c246eff7c282eff802d44fabc42aeffc842aeffcc42aeffd02d4aff842d4bff8870102d40ff8c42aeff9042aeff9442aeff9842aeff9c72012d41ffa02d4cffa4282e00182d44ffa8206e00142d48ffac43eeff842d49ffb0486effa02f2e000c2f034eb90000000028004fef000c4a806600063e486eff842f2e00104eb900000000508fb7eeff8c6608baaeff90670000da2f2efabc2f034eb900000000508f74fb6000fcc8280e0684ffffff842f042f2e00104eb9000000002a2eff942d45fab02a2eff982d45fab42a2eff9c2d45fab870022d40ffb42d4cffb8222e00182d41ffbc246e00142d4affc02d44ffc4486effb42f2e000c2f034eb9000000004fef00144a80665c97cb22407207b2ae000c6400031841f9000000002d50fadc202efab4e188222efab848414241808180aefab02d40fae02d49fae42d4bfae842aefaec207900000000486efadc487800044878002c206800a84e904fef000c6000fc0a24006000fc04282eff942d44fab0282eff982d44fab4282eff9c2d44fab82f3c444b52472f0a4bf9000000004e95280a5884487800012f044e952c0a508643f90000000020512028005020404e902f002f064e952e0a06870000000c2f052f074e9543f90000000020514fef00202028005020404e902a0041eeffe04eb900000000226effe02d49fac02a6effe42f0a4eb900000000588f0c80444b52476600018c2f044eb900000000588f7201b2806600017a2f064eb900000000588fb0856600018a2f074eb900000000588f7820b880650001584a806700015253802d40fac842847c102a2efabc2d45faac2d42facc604e242efaac2d42fabc242efaccbc8b660001282d4affec282e00182d44fff04287600000c62a2efaacbe8d640000a2b4a8000466000094b4aefabc62000112dc82b8aefac867ba5284bc8b620000d0240b94862d42fabc7a07ba82640000ca487268004eb9000000002d40fac4487268044eb9000000002400508f4a8d670000b22a2efac042872f054eb90000000020402001588f4a81671a42812d40faa8202efac4b0906700ff7e52815088b2aefaa866ec5287068500000020be8d66c8246efaac2d4afabc60702d45fabc606a4879000000002f0d2f074eb90000000052877008b087670003204a8d67f22c2efac04285486effec2f072f2effe82f064eb90000000028004fef00104a80662c5285068600000020ba8d66d860c22a2efaac2d45fabc6012246efaac2d4afabc6008242efaac2d42fabc78fb2f2efabc2f034eb900000000508f24046000f9c8282efaac2d44fabc60e078eb60de206e00084a28510c67087007b0ae000c644e280e0684fffffff420444eb9000000002f0c2f0b2f0a202e000c528071802f002f044eb90000000028004fef00144a806608202efabc6000fd0c2f2efabc2f034eb900000000508f24046000f95a262e000ce78b204341e850ccd1ee0008208a214b000460cc222e000ce7892041d1fc000000002080214b00046000fcd474b66000f92474f86000f91eb3ea003c6400fb3ab0836400009e2203eb892641d7fc0000000041f90000000041f0383378064c0348000684000000002203e5892a41dbfc00000000220922442d48fab0538341eeff1e20ebffe020ebffe420ebffe820ebffec20ebfff020ebfff420ebfff820abfffc45eeff1e204b20da20da20da20da20da20da20da2092246efab01552000132a9fffa2369fffc00022b55000447ebffe0538a2d4afab05d89598db083669c22412d42fefe2200eb892041d1fc0000000020c245eeff0220da20da20da20da20da20da2092222e000c528141f9000000001181080072064c0018002041d1fc0000000030872a2efab42145000241f90000000021890c0052b900000000246e0010242a02c04a82671a6000f808246e0010242a02c04a826600f7fa7007b0ae000c640e246e001074fb4aaa02c46600f7e4240e0682ffffff4a20424eb90000000042aeff662d4cff6a222e00182d41ff6e246e00142d4aff722d42ff76262e000806830000510e486eff662f2e000c2f034eb90000000024004fef000c4a806600f792486eff4a2f2e00104eb900000000266eff52508f7010b08b6500f9ee42aeffd442aeffd842aeffdc42aeff8442aeff882d40ff8c42aeff9042aeff9442aeff9842aeff9c72012d41ffa02d4cffa4282e00182d44ffa82d4affac41eeff842d48ffb0486effa02f2e000c2f034eb9000000004fef000c4a806700fa5024006000f71078022d44ffb42d4cffb82a2e00182d45ffbc206e00142d48ffc043eeff842d49ffc4486effb42f2e000c2f034eb90000000028004fef000c4a806700fd1a2f2efabc2f034eb900000000508f24046000f6be2f2efabc2f034eb900000000508f24046000f6aa74b26000f6a474b46000f69e7801b9814a4157c144817381b2856700fd78220db2aefab06700fd666300f8a26000fd66",
+   "hex": "4e56fa8048d73cfc2f2e000c4eb900000000204028680028246e001045ea02cc2d4afab4487803862f0a486efaf04eb9000000004fef00104aaefe70672e45eefaf02d4afab82e0e0687fffffe707a014282226e00142d49fab0600002322d42fe70327c00014a826600016a246e0014486a01d8486efaf04eb900000000508f4a00670002ac7a07baae000c650004b02f2efab441eefad24eb900000000588f4a6efad267000bac262efad44a8367000ba27a07baae000c64000392202e0018d08cb08c55c275028480282efad82f022f0c2f0341eeff3e4eb9000000004fef000c4aaeff3e670006c4222eff46202e000c51807a7c4c050800246e000841f2080a4a5067000346b2a800026600033e204ad1c03e280014206800162d48fab42f042f022f0c2f0341eefedc4eb900000000242efede4fef00104a6efedc6600065043eefede41eefefe20d920d920d920d920d920d920d9209128022c39000000004a86670004b87209928641f9000000007008b89067000c8cb280670004a6538041e800204a8066ea48790000000048780008487800084eb90000000048790000000048780040487800404eb900000000928c3080214200062141000ab3eefe706400fea85289700ed1aefab8beaefab867ca206efab83010242800062228000a77c07804b88367c877c07a05ba83672277c07806b883671e77c07a07ba836716780cb88366ac4281243c00ffffff700660a0928c609c948c609848790000000048780040487800404eb900000000267c00ffffff2f0b2f042f2efab04eb9000000004fef000c4a006672703fb082650000cc3d43fe762d44fe782d46fe7c700e4c02080041f6080043eefe7641e8faf020d920d920d930915282baaefe706400fddc45ea000e5285b5c7678e41eefe76224a20d920d920d930913612282a00022c2a000671c3720cb280678271c37206b2806696264697cc6000ff7a206efab0202805584a8067b2206efab041e801d83a7c00419bc070403d43fabc602248790000000048780040487800404eb900000000b08d6784538041e8000e4a8067de73d07606b68166eab8a8000266e4b7e8000666de362efabc6000ff30487900000000487800402f024eb900000000266efe704a8b671245eefaf07e419e8b7640286e00146000017a246e0014222a05584a81670001e2280a0684000001d87e419e81200b720e4c01080041eefae245f008007a40243cfffffe70d48e604848790000000048780040487800404eb900000000b1ca677441e8000eb1c267e071d0b28066eeb6a8000266e8b9e8000666e2bbe8000a66dcbe85674a538506840000000e4a85672a2c0441eefeb0224420d920d920d930914a8b6730262efeb2286efeb62a6efeba41eefaf073eefeb060ae48790000000048780040487800404eb90000000042817001603443eefece204622d822d822d8329043eefece41eefebe20d920d920d93091342efebe222efec042007601c083b780e18875c28082246e000825403bf425413bf874b120024cee3cfcfa804e5e4e7548790000000048780040487800404eb90000000048790000000048780040487800404eb900000000b08967000086538041e8000e4a8067dc2d48fab075d0b48166e6b8a8000266e0baa8000666dabbe8000a66d4246efab4b6876700fe94538345ea000e4a8367982c0a321271c1740ab48067e471c1780bb88067dc41eefe84224a20d920d920d93091202c05584a806720282efe862a2efe8a2a6efe8e41ec01d8327c004193c0704073c12d4afab4608643eefea2204622d822d822d8329043eefea241eefe9220d920d920d93091342efe92222efe9470016000fefe70016000ff04262e000c51837007b083653c727c4c013800226e0008d3c342021342007a246e0010202a064c4a806700fb28206e001041e802cc74419480704006830000002a266e00082a436036487900000000487800082f034eb90000000048790000000048780040487800404eb900000000b4806700fae0538041e8000e4a8067dc73d0760cb68166e81229007a7b817808b885670006102e2800022c2800062a28000a79817607b68465242204780a4c04180045f51800d5cb248725460004154500081229007a52811341007a60a24879000000004878000873812f014eb9000000002006600001007008b086670007d47a01bf854a4556c544854a4756c044804a00671c202efab42d40fab02046538845f900000000224a42807b859bcd6026428060e47601b7814a4156c144817381b285620005a8b08867a852805c89588a7208b280671e3211670007847601b3834a4357c344837783b68567c8222900026000078048790000000048780008487800084eb900000000220976ffb681670000dc43eeff1e22ebffe022ebffe422ebffe822ebffec22ebfff022ebfff422ebfff822abfffc45eeff1e224b22da22da22da22da22da22da22da22921b55000130a8fffa2168fffc0002226efab0235100042241538947ebffe0538d5d8859aefab0b28066922d42fefe2200eb892041d1fc0000000020c243eeff0220d920d920d920d920d920d92091222e000c528141f9000000001181080072064c0018002041d1fc0000000030872a2efab42145000241f90000000021840c0052b900000000246e0010242a02c04a82670004de6000fcc04a826600fcba60e6487900000000487800084878ffff4eb900000000242eff426000fc9c2a2eff562f0b2f0341eeff7a4eb900000000508f4a6eff7a67000418246eff7c282eff802d44fabc42aeffc842aeffcc42aeffd02d4aff842d4bff8870102d40ff8c42aeff9042aeff9442aeff9842aeff9c72012d41ffa02d4cffa4282e00182d44ffa8206e00142d48ffac43eeff842d49ffb0486effa02f2e000c2f034eb90000000028004fef000c4a80660005a8486eff842f2e00104eb900000000508fb7eeff8c6606baaeff90677e2f2efabc2f034eb900000000508f74fb6000fbdc280e0684ffffff842f042f2e00104eb9000000002a2eff942d45fab02a2eff982d45fab42a2eff9c2d45fab870022d40ffb42d4cffb8222e00182d41ffbc246e00142d4affc02d44ffc4486effb42f2e000c2f034eb9000000004fef00144a806700031624006000fb72282eff942d44fab0282eff982d44fab4282eff9c2d44fab82f3c444b52472f0a4bf9000000004e95280a5884487800012f044e952c0a508643f90000000020512028005020404e902f002f064e952e0a06870000000c2f052f074e9543f90000000020514fef00202028005020404e902a0041eeffe04eb900000000226effe02d49fac02a6effe42f0a4eb900000000588f0c80444b52476600018c2f044eb900000000588f7201b2806600017a2f064eb900000000588fb0856600018a2f074eb900000000588f7820b880650001584a806700015253802d40fac842847c102a2efabc2d45faac2d42facc604e242efaac2d42fabc242efaccbc8b660001282d4affec282e00182d44fff04287600000c62a2efaacbe8d640000a2b4a8000466000094b4aefabc62000112dc82b8aefac867ba5284bc8b620000d0240b94862d42fabc7a07ba82640000ca487268004eb9000000002d40fac4487268044eb9000000002400508f4a8d670000b22a2efac042872f054eb90000000020402001588f4a81671a42812d40faa8202efac4b0906700ff7e52815088b2aefaa866ec5287068500000020be8d66c8246efaac2d4afabc60702d45fabc606a4879000000002f0d2f074eb90000000052877008b087670002ac4a8d67f22c2efac04285486effec2f072f2effe82f064eb90000000028004fef00104a80662c5285068600000020ba8d66d860c22a2efaac2d45fabc6012246efaac2d4afabc6008242efaac2d42fabc78fb2f2efabc2f034eb900000000508f24046000f936282efaac2d44fabc60e078eb60de2f2efabc2f034eb900000000508f24046000f914262e000ce78b204341e850ccd1ee0008208a214b00046000028e20404a1867602008b28066f4700c2839000000002f002f094eb9000000002d44fadc222efab4e189282efab848444244828482aefab02d41fae02d43fae42d4bfae82d40faec207900000000486efadc487800044878002c206800a84e904fef00146000f894223cffffaf7892ae0008d081609a222e000ce7892041d1fc000000002080214b0004601874b66000f86a74f86000f86497cb26007207b2ae000c64d2226e000843e950882009222e00080681000050946000ff50b8aa003c6400fa5cb0866400fb062206eb892641d7fc0000000043f9000000004bf1683376064c063800d689e58e2446d5fc00000000220820432d4afab06000fa66246e0010242a02c04a826600f7f07007b0ae000c640e246e001074fb4aaa02c46600f7da240e0682ffffff4a20424eb90000000042aeff662d4cff6a222e00182d41ff6e246e00142d4aff722d42ff76262e000806830000510e486eff662f2e000c2f034eb90000000024004fef000c4a806600f788486eff4a2f2e00104eb900000000266eff52508f7010b08b6500fad242aeffd442aeffd842aeffdc42aeff8442aeff882d40ff8c42aeff9042aeff9442aeff9842aeff9c72012d41ffa02d4cffa4282e00182d44ffa82d4affac41eeff842d48ffb0486effa02f2e000c2f034eb9000000004fef000c4a806700fb3224006000f7062f2efabc2f034eb900000000508f24046000f6f278022d44ffb42d4cffb82a2e00182d45ffbc206e00142d48ffc043eeff842d49ffc4486effb42f2e000c2f034eb90000000028004fef000c4a8066b0206e00084a28510c670a7007b0ae000c6400fd90280e0684fffffff420444eb9000000002f0c2f0b2f0a202e000c528071802f002f044eb90000000028004fef00144a806600fd48202efabc6000fe062f2efabc2f034eb900000000508f24046000f65274b26000f64c74b46000f6467601b7814a4157c144817381b2856700fdfe220db2aefab06700fdec6300f84a6000fdec",
    "kind": "text",
    "name": ".text._RNvMNtNtNtCsacrnCRhYs1l_4dkrt7package6loader6commitINtB4_6LoaderNtNtNtB6_8resident8platform13TablePlatformNtNtB4_5seams10RealImagesNtB1I_12RealRegistryE6commitB8_",
-   "size": 3542
+   "size": 3630
   },
   {
    "align": 2,
@@ -36440,7 +36454,7 @@
    "size": 24
   }
  ],
- "source_sha256": "2b9346a4bfb10ab40fea7c331cbc549722f2244ec01cb63e33a8759b10df606e",
+ "source_sha256": "c2facd21561f596ac71b673cb2249b6b346dbd109aeb438427d9b680e59ef6a9",
  "symbols": [
   {
    "global": false,
@@ -42199,8 +42213,8 @@
  ],
  "toolchain": {
   "exports": "DKPKG_TABLE DKRT_CTXS DKRT_DSP DKRT_PROVIDERS DKRT_TABLE_BAD DKRT_TICKS dk_dsp_stats_ctl dk_dsp_stats_read dk_ui_choice dk_ui_confirm dk_ui_core_handle dk_ui_menu_add_action dk_ui_menu_add_submenu dk_ui_menu_add_text dk_ui_menu_check dk_ui_menu_close dk_ui_menu_is_open dk_ui_menu_new dk_ui_menu_open dk_ui_menu_refresh dk_ui_menu_select dk_ui_stock_row dkpkg_entry dkrt_blocks dkrt_boot_info dkrt_boot_name dkrt_capacity dkrt_diag dkrt_dsp_stats_feed dkrt_fit dkrt_fx dkrt_health dkrt_live dkrt_live_state dkrt_menu_built dkrt_menu_release dkrt_module dkrt_module_header dkrt_poll_add dkrt_poll_remove dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_service_query dkrt_settings_flush dkrt_settings_put dkrt_status",
-  "instructions_redecoded": "53632",
-  "isa_check": "476bd16eaa850660ad44bcc637e672c423fccbaff729da7ee9edcd5e07d4d3b6",
+  "instructions_redecoded": "53659",
+  "isa_check": "5d6c52a2c214ca824cbba79c1eec1cbd51bf897aff587e243b4142994a393b78",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
