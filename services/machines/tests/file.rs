@@ -386,3 +386,56 @@ fn the_native_page_lookup_reads_the_view_while_the_owner_is_idle() {
     );
     assert_eq!(other.refused.get(), 0);
 }
+
+/// A click queued for a module that is unloaded before the UI pass runs it is dropped: the file's tick calls nothing (a callback into unloaded code would fault). Both ways a
+/// module goes away: its action is cleared (`Slots::set(k, 0)`) and its parameter row loses the owner.
+#[test]
+fn a_click_queued_for_a_module_unloaded_before_the_tick_is_not_run() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let view = [0u32; 64];
+    let v = view.as_ptr() as *const u8;
+    let ev = |flags: u32| [0u32, 0, 0, 0x29 + 1, flags, 0];
+    let (press, release) = (ev(0x01), ev(0x10));
+    let queue = || {
+        let fw = ReentrantFw::new();
+        // SAFETY: the view and the events are zeroed words of the size the hook reads
+        unsafe {
+            page_key(|_| fw.clone(), v, press.as_ptr() as *const u8);
+            page_key(|_| fw.clone(), v, release.as_ptr() as *const u8);
+        }
+    };
+    let ran = || {
+        let mut n = 0;
+        // SAFETY: the closure stands for the module's callback
+        unsafe { click_tick(|_| n += 1) };
+        n
+    };
+    for clear_action in [true, false] {
+        let _o = Started::new();
+        DK_SVC_OWNER
+            .with(|m| {
+                m.own_row_for_test(2, 3);
+                m.clicks().set(2, 0x4000);
+            })
+            .unwrap();
+        queue();
+        assert_eq!(
+            DK_SVC_OWNER.with(|m| m.clicks().pending().callback),
+            Some(0x4000)
+        );
+        DK_SVC_OWNER
+            .with(|m| {
+                if clear_action {
+                    m.clicks().set(2, 0);
+                } else {
+                    m.own_row_for_test(2, 0);
+                }
+            })
+            .unwrap();
+        assert_eq!(
+            ran(),
+            0,
+            "no callback runs (action cleared: {clear_action})"
+        );
+    }
+}
