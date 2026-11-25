@@ -112,7 +112,13 @@ def prepare() -> tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
         # tests/regression/scenarios/dt2-fx.test.ts are tied to the ready state it boots to
         card = pathlib.Path(pinned).resolve()
     else:
-        card = ne.plusdrive_card(samples, syx, digi_env.rust_env(dict(os.environ)))
+        # The stock-image fx scenarios place panel inputs at fixed instruction slots after ready, and their
+        # expected values were recorded with the firmware's boot filesystem check running (since #611 the
+        # default card skips it, which shifts the encoder acceleration readbacks). The device suite reduction
+        # milestone replaces this with a scenario wait on firmware state (C').
+        card = ne.plusdrive_card(
+            samples, syx, digi_env.rust_env(dict(os.environ)), boot_fs_check=True
+        )
     ready = subprocess.run(
         [sys.executable, "-m", "tools.emulator.ready", "dt2", "--syx", str(syx),
          "--card-image", str(card)],

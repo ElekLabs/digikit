@@ -66,7 +66,11 @@ pub fn name_hash(name: &[u8]) -> u32 {
     }
     cur.wrapping_mul(2)
 }
-pub fn build_superblock() -> [u8; SECTOR] {
+/// `checked` is the superblock word the firmware's own writer sets after a filesystem check ended well. The default
+/// card sets it (the boot check does not run). The stock-image fx scenarios clear it: their panel inputs sit at fixed
+/// instruction slots and their expected values were recorded with the ~2.2 s boot check running. The device suite
+/// reduction milestone replaces that with a scenario wait on firmware state (C').
+pub fn build_superblock(checked: bool) -> [u8; SECTOR] {
     let mut b = [0; SECTOR];
     for (at, v) in [
         (0, 0x656b4653),
@@ -84,7 +88,7 @@ pub fn build_superblock() -> [u8; SECTOR] {
         (48, 0x5ef480),
         // "checked": the firmware's own writer sets it to 1 after a filesystem check ended well. With state 4 and
         // checked 1 the boot does not run the check (and shows no "VERIFYING FILE SYSTEM" window).
-        (0x34, 1),
+        (0x34, u32::from(checked)),
     ] {
         put32(&mut b, at, v)
     }
@@ -365,11 +369,19 @@ mod tests {
     }
     #[test]
     fn structures() {
-        let s = build_superblock();
+        let s = build_superblock(true);
         assert_eq!(u32::from_be_bytes(s[0..4].try_into().unwrap()), 0x656b4653);
         // verified: state 4, checked 1, so the firmware's boot check does not run
         assert_eq!(u32::from_be_bytes(s[4..8].try_into().unwrap()), 4);
         assert_eq!(u32::from_be_bytes(s[0x34..0x38].try_into().unwrap()), 1);
+        // the fx card variant: the boot check runs, the rest and the checksum stay valid
+        let u = build_superblock(false);
+        assert_eq!(u32::from_be_bytes(u[0x34..0x38].try_into().unwrap()), 0);
+        assert_eq!(&u[..0x34], &s[..0x34]);
+        assert_eq!(
+            hashlittle(&u[..0x1fc], 0x31323334),
+            u32::from_be_bytes(u[0x1fc..].try_into().unwrap())
+        );
         assert_eq!(
             hashlittle(&s[..0x1fc], 0x31323334),
             u32::from_be_bytes(s[0x1fc..].try_into().unwrap())

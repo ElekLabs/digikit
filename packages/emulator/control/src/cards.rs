@@ -171,6 +171,7 @@ pub fn build_card(
             capacity_blocks: plusdrive_format::DEFAULT_CAPACITY_BLOCKS,
             layout,
             max_extent_pages: u32::MAX,
+            boot_fs_checked: true,
         },
         seed.as_ref().map(Dt2Seed::seed),
     )

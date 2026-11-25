@@ -95,6 +95,8 @@ pub struct TreeOptions {
     /// several (adjacent) extents. Nothing in the layout needs it; it
     /// exercises multi-extent and indirect-extent records.
     pub max_extent_pages: u32,
+    /// The superblock "checked" word (see `build_superblock`). True skips the firmware's boot filesystem check.
+    pub boot_fs_checked: bool,
 }
 impl Default for TreeOptions {
     fn default() -> Self {
@@ -102,6 +104,7 @@ impl Default for TreeOptions {
             capacity_blocks: DEFAULT_CAPACITY_BLOCKS,
             layout: dt2_layout(),
             max_extent_pages: u32::MAX,
+            boot_fs_checked: true,
         }
     }
 }
@@ -612,7 +615,7 @@ pub fn build_tree_image(
     if path_fs {
         image.write_at(
             bytes_at_sector(u64::from(SUPERBLOCK_SECTOR))?,
-            &build_superblock(),
+            &build_superblock(options.boot_fs_checked),
         )?;
         image.write_at(
             bytes_at_sector(FACTORY_TABLE_SECTOR)?,
@@ -1022,6 +1025,21 @@ mod tests {
         assert_eq!(bit(&pages, last + 40), 0);
     }
 
+    #[test]
+    fn boot_fs_check_word_follows_the_option() {
+        let word = |options: TreeOptions| {
+            let built = build(vec![plain("a", vec![1])], options);
+            let at = u64::from(SUPERBLOCK_SECTOR) * SECTOR as u64 + 0x34;
+            let b = View(&built.image).read(at, 4);
+            u32::from_be_bytes(b.try_into().unwrap())
+        };
+        assert_eq!(word(TreeOptions::default()), 1);
+        let fx = TreeOptions {
+            boot_fs_checked: false,
+            ..Default::default()
+        };
+        assert_eq!(word(fx), 0);
+    }
     #[test]
     fn directory_of_600_entries_spans_pages() {
         let files: Vec<_> = (0..600)

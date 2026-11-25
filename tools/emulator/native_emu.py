@@ -595,7 +595,11 @@ def plus_drive_files(root: pathlib.Path) -> list[pathlib.Path]:
 
 
 def plusdrive_card(
-    folder: pathlib.Path, syx: pathlib.Path, env: dict[str, str], device: str = "dt2"
+    folder: pathlib.Path,
+    syx: pathlib.Path,
+    env: dict[str, str],
+    device: str = "dt2",
+    boot_fs_check: bool = False,
 ) -> pathlib.Path:
     """Build (or reuse) a +Drive card image from a `plus_drive/<device>/` folder.
 
@@ -614,6 +618,9 @@ def plusdrive_card(
     out/plusdrive/native/<key12>/<device>.img, keyed by the SHA-256 of the firmware,
     the plusdrive binary and every file's relative path and bytes, so unchanged
     inputs reuse the image.
+
+    `boot_fs_check` builds the card with the superblock "checked" word 0, so the
+    firmware runs its ~2.2 s boot filesystem check (`plusdrive build --boot-fs-check`).
     """
     if not folder.is_dir():
         raise SystemExit(f"{folder} is not a directory")
@@ -646,6 +653,8 @@ def plusdrive_card(
     h.update(b"firmware\0" + hashlib.sha256(syx.read_bytes()).digest())
     h.update(b"plusdrive\0" + hashlib.sha256(binary.read_bytes()).digest())
     h.update(b"device\0" + device.encode() + b"\0")
+    if boot_fs_check:
+        h.update(b"boot-fs-check\0")
     for rel in files:
         h.update(b"file\0" + rel.as_posix().encode() + b"\0")
         h.update(hashlib.sha256((folder / rel).read_bytes()).digest())
@@ -669,6 +678,7 @@ def plusdrive_card(
             device,
             "--syx",
             str(syx),
+            *(["--boot-fs-check"] if boot_fs_check else []),
         ],
         cwd=ROOT,
         env=env,
