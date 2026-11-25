@@ -23,6 +23,8 @@ Keep firmware, captures, generated catalogs and listening WAVs local under ignor
 | 5b. Musical send baseline | Complete | Both generated scenes have dry/current WAVs, matching source hashes and linked rig profiles on both targets. No module changes. |
 | 5c. FREQ SHIFT listening and performance proof | Implemented and rig-verified | Spread was committed in `12c8ae781`. Drift and Rate were approved after the full-cycle A/B, though the difference was subtle on laptop speakers. No kit migration for the experimental prototype. |
 | 6. Reuse a real listening session | Host and DT2 emulator checked | [Workbench sessions](../WORKBENCH-SESSIONS.md) package the card and attachments and keep capture inspection independent. Underpass reopened with the same A01 grid and stab-only send. Automated project selection and saved audio views remain follow-ups. No new Workbench panel. |
+| 7. Stock audio reference pilot | Verified, ready for review | Underpass gives a conservative Feedback candidate. DN2 confirms the stock decay anchor and the DT2 plain-versus-PGO sweep is byte-identical. |
+| 8. Replay a reference case on emulator and hardware | Planned follow-up | Reuse the shared session and calibration runner for one DT2 Delay case. Swap the target and PCM capture source without changing the case. |
 
 ## 1. Generate a catalog from one firmware file
 
@@ -131,6 +133,105 @@ Defer automated project selection and in-app A/B auditioning until the saved
 session workflow sees use. If an A/B view would save repeated work, add it to
 the existing Analyzer rather than adding a panel. Keep Performance focused
 on timing and counters.
+
+## 7. Build a small stock audio reference
+
+- Reuse the [stock FX scenario fixtures](../../tests/regression/scenarios/README.md)
+  and [saved-session workflow](../WORKBENCH-SESSIONS.md). Start with stock Delay
+  on DT2 1.17 and cross-check on DN2 1.12. Use the closest delay time to the
+  55 ms Feedback prototype and record actual echo spacing, feedback readback,
+  first-repeat level, fall per repeat, tail length and peak. Use a short burst
+  to identify repeats, then the same musical source to check mix behavior.
+- Keep two comparisons separate. Use stock Delay to anchor echo spacing,
+  decay and return level. Use FREQ SHIFT with itself to verify the frequency
+  offset in Hz, Spread as the left/right offset, and Drift depth and period.
+  Stock Chorus can be a listening reference for width or motion, not an
+  equivalent control. Keep the raw gain evidence and make separate
+  level-matched listening copies.
+- Store each case with device, firmware, input hash, route, settings, tap,
+  WAV and JSON metrics. Keep audio reference metrics separate from measured
+  DSP cost. Expand only when the first case informs a real range decision.
+  A DT2 playback reference would use a known WAV. A DN2 machine reference
+  would use a saved patch and a fixed note and velocity sequence.
+
+**DT2 pilot.** A 25 ms, 1 kHz burst through stock Delay on the 1.17 emulator
+gave about 63.5 ms between returns. At the feedback settings near 19, 32,
+45 and 58, the first repeats fell by 10.7, 6.1, 3.2 and 0.9 dB per repeat,
+respectively. Zero feedback gave one return. The same recorded dry burst
+through the actual FREQ SHIFT kernel on the SHARC rig, with the feedback
+loop in the host, gave about 55.4 ms between returns and losses of 6.5 and
+2.3 dB per repeat at loop gains 0.48 and 0.78. Use 0.48 as the first musical
+audition candidate and 0.78 as the long-tail stress case, not as a proposed
+default or upper bound. The stock recording includes the dry signal and the
+rig output is wet-only, so this compares separated returns, not overall
+loudness or headroom. Both pilot sweeps captured exactly 120,480 frames per
+take at 48 kHz, with byte-identical dry PCM. At stock Feedback near 32,
+decay was about 6.1 dB per repeat at both delay times. Host wall-clock speed
+does not enter this measurement. The headless emulator ran in emulated time
+and wrote PCM before the host playback buffer. The capture recorded firmware
+hashes but not the daemon or DSP library build IDs, so PGO is unverified.
+
+**DT2 musical audition.** Retuned stock Delay's TIME control on the 138 BPM
+Underpass session and measured 53.65 ms from dry stab to return, close to the
+prototype's 55 ms loop. Kept stock Delay near Feedback 32 and compared the
+same stab played solo and in the first verified bar of the groove. The
+listening reel matches the first return and preserves the dry signal. The
+untouched emulator captures and raw SHARC rig returns are kept alongside the
+comparison JSON. Over the 100 ms before the next programmed stab, the
+level-matched isolated return was 1.75 dB quieter than stock at 0.48 and
+1.36 dB louder at 0.78. Keep 0.48 as the conservative audition candidate and
+0.78 as the stronger comparison, not as a chosen default or limit. The
+feedback loop is still outside the module.
+
+**DN2 cross-check.** Stock DN2 1.12 used a short, factory audition-sine
+note, not the DT2 sample. At about 62.4 ms between returns, the first
+repeats fell by 10.85, 6.26, 3.28 and 1.03 dB per repeat near Feedback
+19, 32, 45 and 58 respectively. Zero feedback gave one return. At each
+setting the decay was within 0.16 dB per repeat of DT2. This makes about
+6 dB per repeat a useful stock anchor on both emulated devices. It does
+not equate their gain staging or establish a module ceiling.
+
+**DT2 build parity.** Replayed the same probe card and six-take stock
+Delay sweep with matching firmware, runtime assets and effect readbacks.
+The plain and PGO daemon and SHARC library pairs were pinned by hash and
+matched to the same emulator source revision. All six takes were
+byte-identical at 120,480 stereo frames each, with zero sample difference.
+The PGO build used the available DT2 profile without retraining. This
+verifies PCM for this stimulus and build pair, not host throughput, the
+PGO mode of the original pilot, or parity with a physical unit.
+
+**Next.** Keep 0.48 as the first Feedback candidate and 0.78 as the stronger
+audition option. The module still needs a production feedback loop, its own
+DSP cost and headroom checks, and a default and upper limit chosen separately.
+A hardware check is a separate validation, not a gate on the musical
+audition.
+
+**Exit check.** Reproduce the chosen stock Delay case from its inputs. Show
+which Feedback settings give a useful short tail and which settings should
+stay out of the default range. Document any emulator or capture limitations.
+No new Workbench UI or module control is required for the pilot.
+
+## 8. Replay a reference case on emulator and hardware
+
+- Move one DT2 stock Delay tone case onto the shared [calibration step runner](../INSTRUMENTATION.md)
+  and `DkSession` for MIDI and remote-control steps. The case defines the
+  firmware, source WAV and its hash, project setup, effect settings, stimulus
+  and capture window. The target supplies the clock, panel control transport,
+  and a way to verify the effective settings.
+- Keep card images and snapshots emulator-only. On hardware, use an explicitly
+  selected scratch project and the existing sample-transfer workflow to stage
+  the same WAV. Manual project selection is enough for this proof. Do not
+  require raw card import or overwrite an existing project.
+- Use the emulator's internal PCM tap or the device's USB audio input. Reuse
+  the [device probe](../INSTRUMENTATION.md#device-probe-usb-audio--remote)
+  checks for dropped samples and record the source, channel route and rate.
+  Export the same WAV and JSON fields from both targets through the CLI.
+
+**Exit check.** Run the same case on DT2 1.17 in the emulator and on a
+physical DT2, with Em's hardware session arranged separately. Verify the
+fixture and settings, then compare echo spacing and decay against documented
+tolerances. Do not require matching PCM hashes across targets. Add more cases
+or a Workbench control only once this first case proves useful.
 
 ## End result
 
