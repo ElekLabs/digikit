@@ -142,7 +142,9 @@ test('a torn overlay is refused', () => {
 describe('layOver', () => {
   test('a reader that asks for sectors one by one parses the overlay blob once, not for each sector', () => {
     const records = 50;
-    const blob = encodeOverlay(new Map(Array.from({ length: records }, (_, i) => [i, Buffer.alloc(512, i + 1)] as const)));
+    const blob = encodeOverlay(
+      new Map(Array.from({ length: records }, (_, i) => [i, Buffer.alloc(512, i + 1)] as const)),
+    );
     const card = path.join(os.tmpdir(), 'digi-lay-over-no-such-card.img');
     const reads = vi.spyOn(blob, 'readBigUInt64LE');
     for (let sector = 0; sector < 4 * records; sector += 1) {

@@ -362,22 +362,17 @@ export async function bootInfoLoaded(session: Session, plan: RuntimePlan, expect
     return written && counted && !info.states.some((n) => UNSETTLED_STATES.has(stateName(n)));
   };
   let last: Awaited<ReturnType<typeof bootInfo>> | undefined;
-  return pollUntil(
-    emulatorClock(session),
-    async () => (last = await bootInfo(session, plan)),
-    settled,
-    {
-      withinMs: BOOT_WAIT_MS,
-      intervalMs: EMULATED_POLL_MS,
-      message: () => {
-        const seen = last?.states.map((n) => stateName(n)).join(',') || 'none';
-        return (
-          `boot info not settled: magic 0x${((last?.magic ?? 0) >>> 0).toString(16)}, count ${last?.count}` +
-          `${expected === undefined ? '' : ` (expected ${expected})`}, uiReached ${last?.uiReached}, states [${seen}]`
-        );
-      },
+  return pollUntil(emulatorClock(session), async () => (last = await bootInfo(session, plan)), settled, {
+    withinMs: BOOT_WAIT_MS,
+    intervalMs: EMULATED_POLL_MS,
+    message: () => {
+      const seen = last?.states.map((n) => stateName(n)).join(',') || 'none';
+      return (
+        `boot info not settled: magic 0x${((last?.magic ?? 0) >>> 0).toString(16)}, count ${last?.count}` +
+        `${expected === undefined ? '' : ` (expected ${expected})`}, uiReached ${last?.uiReached}, states [${seen}]`
+      );
     },
-  );
+  });
 }
 
 /** `DKRT_CARD`: state, the first non-blank sector, its crc32, writes refused and done. */
