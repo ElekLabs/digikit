@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use dkaddrmap::Cpu;
 use rusqlite::Connection;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 use super::*;
@@ -249,4 +250,62 @@ fn imports_the_current_repository_databases() {
             );
         }
     }
+}
+
+#[test]
+fn resolves_catalog_by_the_verified_database_or_the_worktree() {
+    let (dir, path, db) = fixture(Cpu::Sharc);
+    let port = port("dt2-1.17");
+    add_identity(&db, port.id, port.dsp.unwrap());
+    db.execute(
+        "INSERT INTO functions VALUES (?1, 120, 124, 'example', NULL)",
+        [port.id],
+    )
+    .unwrap();
+    let maps = read_source(SourceKind::Sharc, &path).unwrap();
+    let map = &maps[0];
+    assert!(find_review(SourceKind::Sharc, &path, map, Some(dir.path())).is_none());
+
+    let catalog = dir.path().join("out/firmware").join(port.id).join("dsp");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let html = catalog.join("review.html");
+    std::fs::write(&html, "<title>Review</title>").unwrap();
+    let index = catalog.join("review.addrmap.json");
+    let write_index = |sha: &str| {
+        std::fs::write(
+            &index,
+            json!({
+                "key": { "image_sha256": sha },
+                "review": {
+                    "cpu": "sharc", "file": "review.html", "entries": [120],
+                    "html_sha256": format!("{:x}", Sha256::digest(b"<title>Review</title>"))
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+    };
+    write_index(port.main);
+    assert!(find_review(SourceKind::Sharc, &path, map, Some(dir.path())).is_none());
+
+    write_index(&port.stock.to_uppercase());
+    let found = find_review(SourceKind::Sharc, &path, map, Some(dir.path())).unwrap();
+    assert_eq!(Path::new(&found.path), html.canonicalize().unwrap());
+    assert_eq!(found.entries, vec![120]);
+    assert!(found.url.starts_with("file:"));
+    assert!(find_review(SourceKind::Map, &index, map, None).is_some());
+    assert!(find_review(SourceKind::Cf, &path, map, Some(dir.path())).is_none());
+
+    #[cfg(unix)]
+    {
+        let symlink = dir.path().join("linked source.sqlite");
+        let relocated = catalog.join("moved source.sqlite");
+        std::fs::copy(&path, &relocated).unwrap();
+        std::os::unix::fs::symlink(relocated, &symlink).unwrap();
+        let found = find_review(SourceKind::Sharc, &symlink, map, None).unwrap();
+        assert_eq!(Path::new(&found.path), html.canonicalize().unwrap());
+    }
+
+    std::fs::write(&html, "<title>Different review</title>").unwrap();
+    assert!(find_review(SourceKind::Sharc, &path, map, Some(dir.path())).is_none());
 }

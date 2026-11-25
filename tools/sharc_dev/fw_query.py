@@ -7,6 +7,7 @@ import json
 import os
 import re
 import tomllib
+from collections.abc import Callable
 from contextlib import closing
 from functools import cached_property
 from typing import Any
@@ -637,8 +638,10 @@ def cmd_cost(
     vars_text: str | None = None,
     follow_calls: bool = True,
     vars_all_text: str | None = None,
+    *,
+    as_json: bool = False,
 ) -> list[str]:
-    from tools.sharc_dev.sharc_cost import fn_cost, split_sym
+    from tools.sharc_dev.sharc_cost import cost_evidence, fn_cost, split_sym
 
     pairs = _cost_pairs(vars_text, "--vars")
     pairs_all = _cost_pairs(vars_all_text, "--vars-all")
@@ -671,7 +674,21 @@ def cmd_cost(
             )
         for x in hit:
             values[x] = val
-    c_max = fn_cost(img.db, img.image, entry, follow_calls=follow_calls, values=values)
+    c_max = (
+        fn_cost(img.db, img.image, entry, follow_calls=follow_calls, values=values)
+        if values
+        else c
+    )
+    if as_json:
+        evidence = cost_evidence(c, follow_calls)
+        evidence.update(
+            image=img.image,
+            name=img.label(entry),
+            variables=values,
+            evaluated=str(c.total.evaluate(values)) if values else None,
+            tail_max=str(c_max.total_max) if c_max.total_max is not None else None,
+        )
+        return [json.dumps(evidence)]
     out = ["%s insns %d self %s" % (img.label(entry), c.n_insns, c.self_cost)]
     for lp in c.loops:
         out.append(
@@ -955,15 +972,17 @@ def cmd_search(img: Sharc, term: str, where: str | None, cap: int) -> list[str]:
     return out
 
 
-def build_images(image: str, other: str) -> None:
+def build_images(
+    image: str, other: str | None, *, report: Callable[[str], None] = print
+) -> None:
     from tools.sharc_dev import sharc_catalog, sharcdb
 
-    for name in (image, other):
+    for name in filter(None, (image, other)):
         blob = os.path.join(ROOT, "out", "sections", name, "section_7_BLOB.bin")
         if not os.path.isfile(blob):
             raise FwError(f"no SHARC blob for {name}: expected {blob}")
         artifacts = FirmwareArtifacts(name, "sharc")
         sharcdb.build_database(blob, str(artifacts.database), name=name)
         artifacts.publish_legacy_alias()
-    if sharc_catalog.catalog(image, other):
+    if sharc_catalog.catalog(image, other, report=report):
         raise FwError("SHARC catalog build failed")

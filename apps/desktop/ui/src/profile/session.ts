@@ -35,6 +35,7 @@ export function createProfileSession(deps: ProfileSessionDeps) {
   const [dsp, setDsp] = createSignal<DspView>();
   const [error, setError] = createSignal('');
   const [includeDsp, setIncludeDsp] = createSignal(false);
+  const [includeDspHotspots, setIncludeDspHotspots] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [acting, setActing] = createSignal<Action>();
   const [noRuntime, setNoRuntime] = createSignal(false);
@@ -178,7 +179,8 @@ export function createProfileSession(deps: ProfileSessionDeps) {
       const file = await recorder.exportFile();
       await save(file);
     });
-  const dspAvailable = () => !!ok() && !ok()?.noDsp;
+  const dspAvailable = () => ok()?.capabilities.dspBlocks === true;
+  const dspHotspotsAvailable = () => ok()?.capabilities.dspHotspots === true;
   const recording: SpanRecording = {
     dspBlocks: () => ok()?.dspBlocks,
     dspBlockStatus: () => {
@@ -200,7 +202,7 @@ export function createProfileSession(deps: ProfileSessionDeps) {
       if (!r.traceSupported)
         return 'Individual events require digikit runtime 0.11.3 or later and the updated debug module.';
       if (r.snap.running) return 'Stop recording to view the captured events.';
-      return r.traceSummary || 'Start a recording to capture ColdFire events.';
+      return r.traceSummary || 'Start a recording to capture Main CPU events.';
     },
     intervals,
     running,
@@ -222,12 +224,27 @@ export function createProfileSession(deps: ProfileSessionDeps) {
     setIncludeDsp: (value) => {
       if (!locked() && !running()) setIncludeDsp(value);
     },
+    includeDspHotspots,
+    dspHotspotsAvailable,
+    setIncludeDspHotspots: (value) => {
+      if (!locked() && !running()) setIncludeDspHotspots(value);
+    },
+    canSave: () => !!save && !running() && !locked() && (ok()?.snap.elapsedTicks ?? 0n) > 0n,
+    save: exportFile,
+    reset: () =>
+      act('reset', async () => {
+        clearRecording();
+        await recorder.reset();
+      }),
     toggle: () => {
       if (running()) void act('stop', () => recorder.stop());
       else
         void act('start', async () => {
           clearRecording();
-          await recorder.start(untrack(() => dspAvailable() && includeDsp()));
+          await recorder.start(
+            untrack(() => dspAvailable() && includeDsp()),
+            untrack(() => dspHotspotsAvailable() && includeDspHotspots()),
+          );
         });
     },
   };
@@ -245,12 +262,6 @@ export function createProfileSession(deps: ProfileSessionDeps) {
     columns: () => (historyVersion(), history.columns()),
     markers: () => (historyVersion(), history.markers()),
     nowShare: () => (historyVersion(), history.now()),
-    reset: () =>
-      act('reset', async () => {
-        clearRecording();
-        await recorder.reset();
-      }),
-    exportFile,
     addDebug: () => act('add', () => deps.installDebug(() => !untrack(leaving))),
   };
 }

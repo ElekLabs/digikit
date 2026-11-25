@@ -2,7 +2,7 @@
 // The profile, its step files and the runner are the shared code of packages/workbench-core/src/calibration; this file only connects the pieces a command line has:
 // the session and the MIDI port of wb.mjs, the transfer code path of `wb transfer install`, and the files.
 //
-//     wb [--port SUB | --emu [--run-dir DIR]] profile calibrate run --profile NAME|FILE [--out DIR] [--allow-unidentified-firmware]
+//     wb [--port SUB | --emu [--run-dir DIR]] profile calibrate run --profile NAME|FILE [--case ID] [--trace] [--out DIR] [--allow-unidentified-firmware]
 //
 // NAME is a file of devices/calibration/profiles/. The captures go to --out, by default out/runs/calibration/<time>-<profile>-<target>/, as <case>-<n>.profile.json
 // with a run.json that lists them. Exit 1 when a case was skipped (the target lacks something it needs) or the run failed. Use: docs/INSTRUMENTATION.md "Calibration runs".
@@ -16,9 +16,16 @@ import { SPAN_PHASES } from '../../packages/dk-session/src/gen_proto.ts';
 import { button, encoder } from '../../packages/test-support/src/keys.ts';
 import {
   addModuleCases,
+  captureFirmwareIdentity,
+  selectCalCases,
   parseCalCase,
   parseCalProfile,
 } from '../../packages/workbench-core/src/calibration/calprofile.ts';
+import {
+  isContentModule,
+  moduleDispatch,
+  sessionEffects,
+} from '../../packages/workbench-core/src/calibration/effects.ts';
 import { runCalibration } from '../../packages/workbench-core/src/calibration/runner.ts';
 import { sessionSetup, untilBootStable } from '../../packages/workbench-core/src/calibration/rigsetup.ts';
 import { sessionStatsSource } from '../../packages/workbench-core/src/calibration/stats.ts';
@@ -31,7 +38,8 @@ const dirOf = (root) => path.join(root, 'devices/calibration');
 
 /** The profile named by `--profile`: a file path, or a name in devices/calibration/profiles/. */
 function profileFile(root, spec, fail) {
-  if (!spec) fail('profile calibrate run --profile NAME|FILE [--out DIR] [--allow-unidentified-firmware]');
+  if (!spec)
+    fail('profile calibrate run --profile NAME|FILE [--case ID] [--trace] [--out DIR] [--allow-unidentified-firmware]');
   // a file only: the profile named `modules` must not take the `modules/` folder of the repository
   if (existsSync(spec) && statSync(spec).isFile() && !spec.includes('..')) return spec;
   const named = path.join(dirOf(root), 'profiles', `${spec}.toml`);
@@ -92,6 +100,11 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
   // the runtime's INFO names the device by its id (the debug module is needed anyway); the stock Ping can fail on the emulator
   const info = await session.info();
   profile = addModuleCases(profile, moduleCases(root, fail, info.port.split('-')[0]));
+  try {
+    profile = selectCalCases(profile, opts.case);
+  } catch (error) {
+    fail(error.message);
+  }
   const record = devices.get(opts.device ?? info.port);
   if (!record.midi) fail(`the ${record.name} device file has no [midi] table`);
   const emu = Boolean(opts.emu);
@@ -128,7 +141,7 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
   const modules = {
     async install(ids) {
       const info = await session.info();
-      keep = (await session.modules()).filter((m) => m.rows === 0 && m.types.length === 0).map((m) => m.name);
+      keep = (await session.modules()).filter((m) => !isContentModule(m)).map((m) => m.name);
       for (const f of await host.library.scan(info.port)) {
         if (!f.path.endsWith('.dkm')) continue;
         const bytes = new Uint8Array(await host.library.read(info.port, f.path));
@@ -165,7 +178,7 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
     },
     // content modules: a service has no rows and no types
     async loaded() {
-      return (await session.modules()).filter((m) => m.rows > 0 || m.types.length > 0).map((m) => m.name);
+      return (await session.modules()).filter(isContentModule).map((m) => m.name);
     },
   };
 
@@ -190,7 +203,9 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
   const rig = {
     midi: new MidiOut(link.midiSink),
     ...(drained ? { drained } : {}),
-    stats: sessionStatsSource(session, nameOf),
+    stats: sessionStatsSource(session, nameOf, opts.trace),
+    effect: sessionEffects(session),
+    dispatch: async (ids) => moduleDispatch(await session.modules(), ids),
     clock,
     events,
     setup: sessionSetup(session, events, clock),
@@ -210,9 +225,9 @@ export async function calibrateRun({ opts, link, host, root, fail, devices, emit
       : {}),
   };
 
-  // the firmware identity both sides share: INFO `fw_id`, the first 8 bytes of the SHA-256 of the stock firmware (16 hex digits), also what the emulator's runtime reports
+  // the firmware identity both sides share: INFO `fw_id`, the stock SHA-256 prefix, with a separately recorded full hash where known
   const run = { id: runId(emu ? 'emu' : 'dev', new Date()), target: record.id, runtime_version: info.runtime };
-  if (info.fw_id) run.firmware_sha256 = info.fw_id;
+  if (info.fw_id) Object.assign(run, captureFirmwareIdentity(info.fw_id, record.firmware));
   if (info.image_id) run.image_id = info.image_id;
   try {
     run.source_revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();

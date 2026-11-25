@@ -13,6 +13,8 @@ import {
   type Rig,
   type RigModules,
 } from '../calibration/runner.ts';
+import { captureFirmwareIdentity, selectCalCases } from '../calibration/calprofile.ts';
+import { isContentModule, moduleDispatch, sessionEffects } from '../calibration/effects.ts';
 import { sessionSetup, untilBootStable } from '../calibration/rigsetup.ts';
 import { sessionStatsSource } from '../calibration/stats.ts';
 import { resolveRef, type Op } from '../calibration/steps.ts';
@@ -41,6 +43,8 @@ export interface RunDeps {
 export interface RunOptions {
   /** The profile's name (one of `deps.files.profiles`). */
   profile: string;
+  cases?: string[];
+  trace?: boolean;
   /** Stop: the run ends at its next wait, the teardown of the case in progress plays, the captures made are kept. */
   signal?: AbortSignal;
   onEvent?: (e: RunEvent) => void;
@@ -79,8 +83,9 @@ export function deviceOfInfo(port: string): string {
 }
 
 export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): Promise<RunOutcome> {
-  const whole = deps.files.profiles.find((p) => p.name === opts.profile);
-  if (!whole) throw new Error(`no calibration profile ${opts.profile}`);
+  const declared = deps.files.profiles.find((p) => p.name === opts.profile);
+  if (!declared) throw new Error(`no calibration profile ${opts.profile}`);
+  const whole = selectCalCases(declared, opts.cases);
   const { session, emulator } = deps;
   const info = await session.info();
   // A module case whose module has no build for the target (the library holds the builds of this target's device only) is skipped with that reason, and the rest runs.
@@ -159,7 +164,7 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
     modules = {
       async install(ids) {
         const files = await m.library();
-        keep = (await session.modules()).filter((x) => x.rows === 0 && x.types.length === 0).map((x) => x.name);
+        keep = (await session.modules()).filter((x) => !isContentModule(x)).map((x) => x.name);
         for (const f of files)
           if ((ids.includes(f.id) || keep.includes(f.id)) && !byId.has(f.id))
             byId.set(f.id, {
@@ -189,7 +194,7 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
       },
       // content modules: a service has no rows and no types
       async loaded() {
-        return (await session.modules()).filter((x) => x.rows > 0 || x.types.length > 0).map((x) => x.name);
+        return (await session.modules()).filter(isContentModule).map((x) => x.name);
       },
     };
   }
@@ -212,7 +217,9 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
 
   const rig: Rig = {
     midi: new MidiOut(deps.sink),
-    stats: sessionStatsSource(session, nameOf),
+    stats: sessionStatsSource(session, nameOf, opts.trace),
+    effect: sessionEffects(session),
+    dispatch: async (ids) => moduleDispatch(await session.modules(), ids),
     clock,
     ...(events ? { events } : {}),
     ...(setup ? { setup } : {}),
@@ -225,16 +232,16 @@ export async function runCalibrationOnTarget(deps: RunDeps, opts: RunOptions): P
     target: device,
     runtime_version: info.runtime,
   };
-  if (info.fw_id) run.firmware_sha256 = info.fw_id;
+  if (info.fw_id) Object.assign(run, captureFirmwareIdentity(info.fw_id, record.firmware));
   if (info.image_id) run.image_id = info.image_id;
 
-  // The cases this rig cannot play, as the runner will decide (it has no panel and no screenshots, SETUP sets no effects and needs the debug log; waits need what the rig has).
+  // The cases this rig cannot play, as the runner will decide (it has no panel and no screenshots, machine/filter SETUP needs the debug log; waits need what the rig has).
   const cannot = (ops: Op[], mods: string[]): boolean =>
     mods.length > 0 && !modules
       ? true
       : ops.some(
           (o) =>
-            (o.op === 'setup' && (o.what === 'effect' || !events)) ||
+            (o.op === 'setup' && o.what !== 'effect' && !setup) ||
             o.op === 'key' ||
             o.op === 'turn' ||
             o.op === 'shot' ||

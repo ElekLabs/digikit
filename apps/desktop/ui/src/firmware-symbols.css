@@ -119,3 +119,21 @@
   color: var(--bad);
   overflow-wrap: anywhere;
 }
+
+.symbol-profiles {
+  display: grid;
+  gap: 16px;
+}
+.symbol-profile summary {
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.symbol-profile .symbols-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+.symbols-origin {
+  margin-left: 8px;
+  font-size: 0.85em;
+  color: var(--ink-3);
+}

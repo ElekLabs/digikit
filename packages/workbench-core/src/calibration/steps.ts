@@ -2,6 +2,7 @@
 // Pure: no I/O, no clock, no device. The runner (runner.ts) plays the operations; docs/INSTRUMENTATION.md "Calibration runs" describes the format.
 import { parse as parseToml } from 'smol-toml';
 import type { MidiMap } from '@digi/devices';
+import type { ExpectedEffectRoute } from './effects.ts';
 
 export const STEPS_SCHEMA = 'dk.steps/1';
 
@@ -37,8 +38,8 @@ export type Op =
   | { op: 'midi.stop' }
   | { op: 'key'; key: string | number; hold_ms?: number }
   | { op: 'turn'; encoder: string | number; by: number }
-  /** `type`: a type number, or for a run-time module its id (the SETUP command resolves it). `track` 0: the effect chain, not a track. */
-  | { op: 'setup'; what: 'machine' | 'filter' | 'effect'; track: number; type: number | string }
+  | { op: 'setup'; what: 'machine' | 'filter'; track: number; type: number | string }
+  | { op: 'setup'; what: 'effect'; track: 0; type: string; route: ExpectedEffectRoute }
   | {
       op: 'wait';
       ms?: number;
@@ -189,7 +190,7 @@ const FIELDS: Record<string, string[]> = {
   'midi.stop': [],
   key: ['key', 'hold_ms'],
   turn: ['encoder', 'by'],
-  setup: ['machine', 'filter', 'effect', 'track'],
+  setup: ['machine', 'filter', 'effect', 'track', 'route'],
   wait: ['ms', 'event', 'match', 'within_ms', 'drained'],
   shot: ['name'],
   capture: ['mark'],
@@ -302,9 +303,17 @@ function resolveOne(s: Record<string, unknown> & { action: string }, ctx: Resolv
         throw new Error(`${where}: setup takes one of machine = TYPE, filter = TYPE, effect = MODULE_ID`);
       const what = given[0]!;
       const v = s[what];
+      if (what === 'effect') {
+        const route = s.route ?? 'default';
+        if (typeof v !== 'string' || !v.trim() || /^\d+$/.test(v.trim()))
+          throw new Error(`${where}: effect takes a loaded module id or module id with #row`);
+        if (route !== 'default' && route !== 'master' && route !== 'send')
+          throw new Error(`${where}: effect route must be default, master or send`);
+        return [{ op: 'setup', what, track: 0, type: v, route }];
+      }
+      if (s.route !== undefined) throw new Error(`${where}: route is only valid for an effect`);
       const type = typeof v === 'string' && !/^\d+$/.test(v.trim()) ? v : int(v, what, 0, 255, where);
       if (typeof type === 'string' && what === 'filter') throw new Error(`${where}: filter takes a type number`);
-      if (what === 'effect') return [{ op: 'setup', what, track: 0, type }];
       return parseTracks(s.track ?? '', where).map((track) => ({ op: 'setup' as const, what, track, type }));
     }
     case 'wait': {

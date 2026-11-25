@@ -457,7 +457,7 @@ test('a module case sets its machine through the rig, and its teardown (after th
   assert.equal(g.log.at(-1), 'setup machine 1 0');
 });
 
-test('SETUP sets no effects: a case that needs one is skipped with that reason even when the rig has a setter', async () => {
+test('an effect case is skipped when the rig cannot verify its route', async () => {
   const f = fake();
   f.rig.setup = async () => {};
   const [stock, fx] = await runCalibration({
@@ -699,4 +699,39 @@ test('the tracks a profile uses come from its setup and its MIDI channels', () =
     ),
     [1],
   );
+});
+
+test('the selected effect must count on its own row for the capture to be kept', async () => {
+  const f = fake({ moduleCalls: 23 });
+  const requested = { module: 'a/fx', kind: 'effect' as const, row: 9, route: 'send' as const };
+  f.rig.effect = async (_module, route) => {
+    assert.equal(route, 'default');
+    return requested;
+  };
+  const text =
+    base.replace('repeats = 2', 'repeats = 1') +
+    'modules = ["a/fx"]\n[[case]]\nid = "stock"\nsteps = "hold"\n[[case]]\nid = "fx"\nsteps = "fx"\nmodules = ["a/fx"]\n';
+  const [, wrong] = await run(f.rig, text);
+  assert.match(wrong!.failed!, /a\/fx row 9/);
+  assert.equal(wrong!.captures.length, 0);
+
+  const read = f.rig.stats.read.bind(f.rig.stats);
+  f.rig.stats.read = async () => {
+    const sample = await read();
+    if (sample.dsp!.sweep!.rows[0]!.calls === 0) return sample;
+    sample.dsp!.sweep!.rows = [
+      {
+        row: 9,
+        kind: 'effect',
+        calls: 100,
+        sumCycles: 2000n,
+        maxCall: 20,
+        maxBlock: 21,
+      },
+    ];
+    return sample;
+  };
+  const [, correct] = await run(f.rig, text);
+  assert.equal(correct!.failed, undefined);
+  assert.deepEqual((correct!.captures[0]!.profile.run as { dispatch: unknown }).dispatch, [requested]);
 });

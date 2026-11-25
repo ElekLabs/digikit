@@ -8,23 +8,25 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import html
 import json
 import os
 import sqlite3
 import sys
+import tomllib
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from contextlib import closing
+from contextlib import closing, suppress
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import quote
 
 from tools.firmware import config, device
 from tools.firmware.artifacts import FirmwareArtifacts
 from tools.firmware.catalog import group_edges, parse_counts
-from tools.firmware.query_db import ATLAS_DIR, FwError, open_ro, short_image
-from tools.firmware.query_target import select_core, select_image
+from tools.firmware.query_db import ATLAS_DIR, ROOT, FwError, _has, open_ro, short_image
+from tools.firmware.query_target import known_release, select_core, select_image
 
 Row = dict[str, str]
 
@@ -39,6 +41,50 @@ OTHER_IMAGE = (
 )
 DEVICE_NAMES = {d.short: d.name for d in device.load_all(config.DEVICES_DIR)}
 MAX_NEIGHBOURS = 8
+
+
+class CatalogData(NamedTuple):
+    rows: list[Row]
+    groups: list[Row]
+    edges: list[tuple[str, str, int]]
+    # None for legacy catalogs, empty for an explicitly standalone build.
+    peer: str | None = None
+
+
+class ReviewOutput(NamedTuple):
+    artifacts: FirmwareArtifacts
+    html: Path
+    tsv: Path
+    peer: str
+    summary: str
+    addrmap: Path | None
+
+
+def format_reviews(reviews: Sequence[ReviewOutput], output_format: str) -> str:
+    if output_format == "text":
+        return "\n".join(review.summary for review in reviews)
+
+    results = []
+    for review in reviews:
+        artifacts = review.artifacts
+        directory = artifacts.directory
+        release = directory.parent.name
+        record = known_release(release)
+        database = artifacts.database_path()
+        results.append(
+            {
+                "release": release,
+                "core": directory.name,
+                "cpu": artifacts.cpu,
+                "firmware_sha256": record[1].sha256 if record else None,
+                "peer": review.peer or None,
+                "database": str(database.absolute()) if database.is_file() else None,
+                "html": str(review.html.absolute()),
+                "tsv": str(review.tsv.absolute()),
+                "addrmap": str(review.addrmap.absolute()) if review.addrmap else None,
+            }
+        )
+    return json.dumps({"reviews": results}, indent=2)
 
 
 def read_tsv(path: str) -> list[Row]:
@@ -62,9 +108,7 @@ def sqlite_rows(cursor: sqlite3.Cursor, *address_columns: str) -> list[Row]:
     ]
 
 
-def read_database_catalog(
-    artifacts: FirmwareArtifacts,
-) -> tuple[list[Row], list[Row], list[tuple[str, str, int]]]:
+def read_database_catalog(artifacts: FirmwareArtifacts) -> CatalogData:
     sharc = artifacts.cpu == "sharc"
     image = short_image(artifacts.image)
     name = image if sharc else image + "-emac"
@@ -81,6 +125,13 @@ def read_database_catalog(
         groups = sqlite_rows(
             db.execute("SELECT * FROM catalog_groups ORDER BY size DESC, id"), "best"
         )
+        peer = None
+        if sharc and _has(db, "function_index_meta"):
+            recorded = db.execute(
+                "SELECT value FROM function_index_meta WHERE key='pair_image'"
+            ).fetchone()
+            if recorded is not None:
+                (peer,) = recorded
         calls: dict[int, Counter[int]] = defaultdict(Counter)
         for caller, callee, count in db.execute(
             f"SELECT {source}, {target}, count(*) FROM edges "
@@ -93,12 +144,10 @@ def read_database_catalog(
             calls[caller][callee] = count
     addrs = [int(row["addr"], 16) for row in rows]
     edges = [(hex(a), hex(b), n) for (a, b), n in group_edges(addrs, calls).items()]
-    return rows, groups, edges
+    return CatalogData(rows, groups, edges, peer)
 
 
-def read_catalog(
-    artifacts: FirmwareArtifacts,
-) -> tuple[list[Row], list[Row], list[tuple[str, str, int]]]:
+def read_catalog(artifacts: FirmwareArtifacts) -> CatalogData:
     try:
         return read_database_catalog(artifacts)
     except (FwError, sqlite3.OperationalError) as exc:
@@ -106,7 +155,7 @@ def read_catalog(
         exports = artifacts.catalog_exports(ATLAS_DIR)
         if artifacts.cpu == "cf" and all(p.is_file() for p in exports):
             with exports.graph.open() as f:
-                return (
+                return CatalogData(
                     read_tsv(str(exports.catalog)),
                     read_tsv(str(exports.groups)),
                     json.load(f)["edges"],
@@ -389,6 +438,8 @@ def build_payload(
                 key: r.get(key, "")
                 for key in ("bytes", "callers", "callees", "loops", "do", "prof_insns")
             }
+            if r.get("cost"):
+                out_rows[-1]["dsp"]["cost"] = json.loads(r["cost"])
 
     out_groups: list[dict[str, Any]] = []
     for g in keep_groups:
@@ -574,34 +625,138 @@ def add_review_options(ap: argparse.ArgumentParser) -> None:
         help="include every catalog row and group (default for SHARC)",
     )
     ap.add_argument("--out", help="override the output HTML path")
+    ap.add_argument("--format", choices=("text", "json"), default="text")
+
+
+def review_paths(artifacts: FirmwareArtifacts, output: str | None) -> tuple[Path, Path]:
+    if output:
+        path = Path(output)
+        return path, path.with_suffix(".tsv")
+    return artifacts.review, artifacts.review_tsv
+
+
+def review_map_path(html: Path) -> Path:
+    return html.with_suffix(".addrmap.json")
+
+
+def sharc_review_map(
+    artifacts: FirmwareArtifacts, html: Path, rows: list[Row]
+) -> dict[str, Any] | None:
+    release = known_release(artifacts.directory.parent.name)
+    if release is None:
+        return None
+    dev, firmware = release
+    port_file = Path(ROOT) / "ports" / f"{artifacts.directory.parent.name}.toml"
+    if not port_file.is_file():
+        return None
+    port = tomllib.loads(port_file.read_text(encoding="utf-8"))["port"]
+    with closing(open_ro(str(artifacts.database_path()))) as db:
+        db.execute("BEGIN")
+        if not (_has(db, "functions") and _has(db, "meta")):
+            return None
+        meta = dict(
+            db.execute("SELECT key,value FROM meta WHERE image=?", (artifacts.image,))
+        )
+        if (
+            meta.get("image") != artifacts.image
+            or meta.get("cpu", "sharc") != "sharc"
+            or meta.get("image_sha256") != port.get("dsp_sha256")
+            or not port.get("dsp_sha256")
+        ):
+            raise FwError(
+                f"{artifacts.image}: SHARC database does not match the registered firmware"
+            )
+        name = "f.name"
+        if _has(db, "function_names"):
+            name = (
+                "COALESCE((SELECT n.name FROM function_names n WHERE n.image=f.image "
+                "AND n.entry=f.entry_sw AND n.name<>'' "
+                "ORDER BY n.source='cf_names' DESC,n.name LIMIT 1), f.name)"
+            )
+        entries = [
+            {
+                "cpu": "sharc",
+                "addr": entry,
+                "size": end - entry,
+                "name": symbol or label or f"FUN_{entry:06x}",
+                "layer": "fw",
+            }
+            for entry, end, symbol, label in db.execute(
+                f"SELECT f.entry_sw,f.end_sw,{name},f.label FROM functions f "
+                "WHERE f.image=? AND f.end_sw>f.entry_sw ORDER BY f.entry_sw",
+                (artifacts.image,),
+            )
+        ]
+    return {
+        "format": "dk-addrmap",
+        "version": 1,
+        "kind": "dev",
+        "key": {
+            "device": dev.short,
+            "firmware": firmware.version,
+            "image_sha256": firmware.sha256,
+        },
+        "entries": entries,
+        "review": {
+            "cpu": "sharc",
+            "file": html.name,
+            "entries": sorted(int(row["addr"], 16) for row in rows),
+        },
+    }
+
+
+def add_sharc_costs(artifacts: FirmwareArtifacts, rows: list[Row]) -> None:
+    from tools.sharc_dev.sharc_cost import cost_evidence, fn_cost
+
+    with closing(open_ro(str(artifacts.database_path()))) as db:
+        if not _has(db, "insn"):
+            return
+        for row in rows:
+            cost = fn_cost(
+                db, artifacts.image, int(row["addr"], 16), follow_calls=False
+            )
+            row["cost"] = json.dumps(cost_evidence(cost, follow_calls=False))
 
 
 def export_review(
-    image: str | None, core: str | None, cpu: str | None, args: argparse.Namespace
-) -> str:
+    image: str | None,
+    core: str | None,
+    cpu: str | None,
+    args: argparse.Namespace,
+) -> ReviewOutput:
     if image is None:
         raise FwError("select an image or pass --device")
-    other = args.other or OTHER_IMAGE.get(short_image(image), "")
+    default_peer = OTHER_IMAGE.get(short_image(image), "")
     if core:
         image, cpu = select_core(image, core, cpu)
-        if other:
-            other = select_core(other, core, cpu).image
     image = short_image(image)
-    other = short_image(other)
     cpu = cpu or "cf"
     artifacts = FirmwareArtifacts(image, cpu)
-    rows, groups, edges = read_catalog(artifacts)
-    out = Path(args.out) if args.out else artifacts.review
-    tsv = out.with_suffix(".tsv") if args.out else artifacts.review_tsv
+    rows, groups, edges, peer = read_catalog(artifacts)
+    if cpu == "sharc":
+        add_sharc_costs(artifacts, rows)
+    other = default_peer if peer is None else peer
+    if args.other:
+        requested = (
+            select_core(args.other, core, cpu).image
+            if core
+            else short_image(args.other)
+        )
+        if peer is not None and requested != peer:
+            raise FwError(
+                "requested peer differs from the built catalog; rebuild to change it"
+            )
+        other = requested
+    elif other and peer is None and core:
+        other = select_core(other, core, cpu).image
+    other = short_image(other)
+    out, tsv = review_paths(artifacts, args.out)
     other_page = None
     other_addrs: set[int] = set()
     if other:
         counterpart = FirmwareArtifacts(other, cpu)
-        try:
-            other_rows, _, _ = read_catalog(counterpart)
-            other_addrs = {int(r["addr"], 16) for r in other_rows}
-        except FwError:
-            pass
+        with suppress(FwError):
+            other_addrs = {int(r["addr"], 16) for r in read_catalog(counterpart).rows}
         other_page = counterpart.review
         legacy_page = Path(ATLAS_DIR) / review_filename(other, cpu)
         if args.out and not other_page.is_file() and legacy_page.is_file():
@@ -635,11 +790,16 @@ def export_review(
         cpu,
         pair_page=os.path.relpath(other_page, out.parent) if other_page else None,
     )
-    template = Path(TEMPLATE).read_text()
+    address_map = sharc_review_map(artifacts, out, rows) if cpu == "sharc" else None
+    addrmap = review_map_path(out) if address_map is not None else None
+    if addrmap is not None:
+        payload["address_map_url"] = quote(addrmap.name)
+    template = Path(TEMPLATE).read_text(encoding="utf-8")
     sub = subtitle(image, other)
     page = render(template, payload, ("SHARC · " if cpu == "sharc" else "") + sub)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(page)
+    page_bytes = page.encode("utf-8")
+    out.write_bytes(page_bytes)
     tsv.parent.mkdir(parents=True, exist_ok=True)
     write_review_tsv(
         str(tsv),
@@ -654,10 +814,17 @@ def export_review(
         pair_page=os.path.relpath(other_page, tsv.parent) if other_page else None,
     )
     labelled = sum(1 for r in payload["rows"] if r["lab"])
-    return (
+    summary = (
         f"{len(payload['groups'])} groups, {len(payload['rows'])} rows, "
         f"{labelled} labelled → {out}\nReview TSV → {tsv}"
     )
+    if addrmap is not None and address_map is not None:
+        address_map["review"]["html_sha256"] = hashlib.sha256(page_bytes).hexdigest()
+        addrmap.write_text(
+            json.dumps(address_map, separators=(",", ":")) + "\n", encoding="utf-8"
+        )
+        summary += f"\nReview address map → {addrmap}"
+    return ReviewOutput(artifacts, out, tsv, other, summary, addrmap)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -673,7 +840,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         image = select_image(args.image, args.device, args.firmware)
-        print(export_review(image, args.core, args.cpu, args))
+        output = export_review(image, args.core, args.cpu, args)
+        print(format_reviews([output], args.format))
     except FwError as exc:
         ap.error(str(exc))
     return 0

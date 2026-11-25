@@ -38,7 +38,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 from tools.sharc_dev import sharcinv
 from tools.sharc_dev.sharcfn import sign_extend
@@ -162,6 +163,22 @@ class FnCost:
     # Tail alternatives replaced by their maximum, `values` substituted; None
     # when no `values` were given or an alternative stays symbolic.
     total_max: Poly | None = None
+
+
+def cost_evidence(cost: FnCost, follow_calls: bool) -> dict[str, Any]:
+    """The same static estimate for the query CLI and offline review pages."""
+    return {
+        "unit": "insn",
+        "entry_sw": cost.entry_sw,
+        "decoded_insns": cost.n_insns,
+        "follows_calls": follow_calls,
+        "self": str(cost.self_cost),
+        "total": str(cost.total),
+        "trip_symbols": sorted(cost.self_cost.symbols() | cost.total.symbols()),
+        "loops": [asdict(loop) for loop in cost.loops],
+        "unknown_calls": cost.unknown_calls,
+        "notes": cost.notes,
+    }
 
 
 def _sym(reg: str, entry: int) -> str:
@@ -362,6 +379,8 @@ def fn_cost(
                 t = t.evaluate(tmax)
             if not follow_calls:
                 return t, False
+            if e != entry_sw and o.unknown_calls:
+                note(f"0x{e:x}: {o.unknown_calls} unresolved calls or jumps excluded")
             cut = False
             tails: list[Poly] = []
             for callee, mult, tail in o.calls:

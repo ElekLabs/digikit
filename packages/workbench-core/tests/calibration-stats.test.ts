@@ -49,3 +49,31 @@ test('start stops counters an earlier run left on before it counts from zero', a
   await sessionStatsSource(s, () => 'x').start();
   assert.deepEqual(log, ['state stop', 'dsp get', 'dsp stop', 'state reset', 'state start', 'dsp clear', 'dsp start']);
 });
+
+test('an optional trace pins the generation of the cleared window and uses target-clock markers', async () => {
+  const { s } = session(async () => sweep);
+  let generation = 5;
+  let tracing = false;
+  s.profileState = async (op) => {
+    if (op === 'startTrace') tracing = true;
+    if (op === 'reset' && tracing) generation++;
+    const elapsedTicks = op === 'stop' ? 120n : 100n;
+    return { traceVersion: 1, traceGeneration: generation, elapsedTicks };
+  };
+  s.profileTrace = async (selected) => {
+    assert.equal(selected, 6);
+    return { version: 1, generation, hz: 1000, dropped: 3, events: [] };
+  };
+  const source = sessionStatsSource(s, () => 'x', true);
+  await source.start();
+  await source.clear();
+  await source.mark?.('Workload end');
+  await source.stop();
+  const { trace } = await source.read();
+  assert.equal(trace?.dropped, 3);
+  assert.deepEqual(trace?.markers, [
+    { name: 'Capture start', atTicks: '0' },
+    { name: 'Workload end', atTicks: '100' },
+    { name: 'Capture stop', atTicks: '120' },
+  ]);
+});

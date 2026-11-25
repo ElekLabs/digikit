@@ -89,6 +89,8 @@
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/runtime/core/vectors/**/*",
         "{workspaceRoot}/runtime/core/tests/lfo/lfo-fit.ts",
+        "{workspaceRoot}/packages/workbench-core/src/node/card-image.ts",
+        "{workspaceRoot}/packages/workbench-core/src/runtime/system-package.ts",
         {
           "runtime": "shasum -a 256 dist/plusdrive/plusdrive 2>/dev/null || echo no-plusdrive"
         }

@@ -52,6 +52,7 @@ mod worker;
 mod health;
 mod mailbox;
 mod platform;
+mod stock_kit;
 pub mod level;
 pub mod stage1;
 mod safe_mode;

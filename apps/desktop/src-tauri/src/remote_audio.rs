@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle, Thread};
 
 use digi_coupled::pcm_observer::PcmSource;
+use dkaudio::{AudioInput, inputs};
 use tauri::State;
 use tauri::async_runtime::{Sender, channel};
 
@@ -12,12 +13,6 @@ mod permission;
 mod stereo;
 mod streams;
 use streams::Streams;
-
-#[derive(serde::Serialize)]
-pub(crate) struct AudioInput {
-    id: String,
-    name: String,
-}
 
 type Reply<T> = Sender<Result<T, String>>;
 
@@ -91,7 +86,7 @@ fn run(receive: mpsc::Receiver<Command>, pcm_source: Arc<PcmSource>) {
         }
         match receive.try_recv() {
             Ok(Command::Inputs(reply)) => {
-                let _ = reply.try_send(streams::inputs());
+                let _ = reply.try_send(inputs());
             }
             Ok(Command::Start(input, reply)) => {
                 let stopped = streams.take().map_or(Ok(()), Streams::pause);

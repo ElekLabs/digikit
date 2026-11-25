@@ -25,6 +25,13 @@ import type { LoadFailure } from './runtime-log.ts';
 import { LogCursor } from './runtime-events.ts';
 import { BOOT_WAIT_MS, DEFAULT_HANG_MS, WALL_POLL_MS, poll, stuckGuard, wallClock, type Clock } from './waits.ts';
 import { PROBE_EMULATED_MS } from './emu-clock.ts';
+import { parseViewObserverState, type ViewObserverState } from './view-observer.ts';
+import {
+  parameterAddress,
+  parseParameterObserver,
+  type ParameterKey,
+  type ParameterObserverState,
+} from './parameter-observer.ts';
 
 export interface DkInfo {
   protocol: number;
@@ -1851,6 +1858,48 @@ export class DkSession {
   /** LOGCFG op 3: switch the card log on or off; the reply is the state after the set. */
   async setCardLog(on: boolean, quick: Quick = false): Promise<CardLogState> {
     return parseCardLogState(await this.ok(SERVICE_CMD.LOGCFG, 'logcfg', Uint8Array.of(3, on ? 1 : 0), quick));
+  }
+  /** LOGCFG op 4: read capability and snapshot. Null means this debug module predates the observer. */
+  async viewObserver(quick: Quick = false): Promise<ViewObserverState | null> {
+    try {
+      return parseViewObserverState(await this.ok(SERVICE_CMD.LOGCFG, 'view observer', Uint8Array.of(4), quick));
+    } catch (error) {
+      if (error instanceof DkError && error.status === 'E_PROTO') return null;
+      throw error;
+    }
+  }
+  /** LOGCFG op 5: enable or disable observation, for this boot only. */
+  async setViewObserver(on: boolean, quick: Quick = false): Promise<ViewObserverState> {
+    return parseViewObserverState(
+      await this.ok(SERVICE_CMD.LOGCFG, 'view observer', Uint8Array.of(5, on ? 1 : 0), quick),
+    );
+  }
+  /** LOGCFG op 6: check the exact key without arming an observer. Null means older debug. */
+  async probeParameter(key: ParameterKey, quick: Quick = false): Promise<ParameterObserverState | null> {
+    try {
+      return parseParameterObserver(
+        await this.ok(SERVICE_CMD.LOGCFG, 'parameter observer', Uint8Array.of(6, ...parameterAddress(key)), quick),
+      );
+    } catch (error) {
+      if (error instanceof DkError && error.status === 'E_PROTO') return null;
+      throw error;
+    }
+  }
+  /** LOGCFG op 7: reserve the parameter observer for this key. */
+  async startParameterObserver(key: ParameterKey, quick: Quick = false): Promise<ParameterObserverState> {
+    return parseParameterObserver(
+      await this.ok(SERVICE_CMD.LOGCFG, 'parameter observer', Uint8Array.of(7, ...parameterAddress(key)), quick),
+    );
+  }
+  /** LOGCFG op 8: the active generation's last snapshot. */
+  async parameterObserver(quick: Quick = false): Promise<ParameterObserverState> {
+    return parseParameterObserver(await this.ok(SERVICE_CMD.LOGCFG, 'parameter observer', Uint8Array.of(8), quick));
+  }
+  /** LOGCFG op 9: stop only this generation, not a later capture. */
+  async stopParameterObserver(generation: number, quick: Quick = false): Promise<void> {
+    const body = Uint8Array.of(9, 0, 0, 0, 0);
+    new DataView(body.buffer).setUint32(1, generation);
+    await this.ok(SERVICE_CMD.LOGCFG, 'parameter observer', body, quick);
   }
   /** The four card log files of the store that exist (rolling and incident, a and b), the older boot first (by the boot_seq in the header), rolling before incident. */
   async readCardLog(): Promise<CardLogFile[]> {

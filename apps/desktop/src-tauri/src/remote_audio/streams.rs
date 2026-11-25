@@ -4,115 +4,20 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::thread;
 
-#[cfg(test)]
 use cpal::Sample;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{
-    Device, DeviceId, ErrorKind, FromSample, Host, SampleFormat, SizedSample, Stream,
+    Device, DeviceId, ErrorKind, FromSample, SampleFormat, SizedSample, Stream,
     SupportedStreamConfig,
 };
 
 use digi_coupled::pcm_observer::{PcmConnection, PcmSource};
 
-use super::AudioInput;
 use super::stereo::{self, Capture, Playback};
+use dkaudio::{InputSink, exact_device, open_input, stereo_config};
 
 #[cfg(windows)]
 mod wasapi;
-
-pub(super) fn inputs() -> Result<Vec<AudioInput>, String> {
-    let host = cpal::default_host();
-    let mut candidates = Vec::new();
-    for device in host
-        .input_devices()
-        .map_err(|error| format!("List audio inputs: {error}"))?
-    {
-        if let (Ok(id), Ok(description)) = (device.id(), device.description()) {
-            candidates.push((
-                id,
-                description.name().to_owned(),
-                config(&device, true).is_ok(),
-            ));
-        }
-    }
-
-    let mut inputs = Vec::new();
-    for (id, name, usable) in &candidates {
-        if !usable
-            || candidates
-                .iter()
-                .filter(|(other, _, _)| other == id)
-                .count()
-                != 1
-        {
-            continue;
-        }
-        inputs.push(AudioInput {
-            id: id.to_string(),
-            name: name.clone(),
-        });
-    }
-    inputs.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
-    Ok(inputs)
-}
-
-fn exact_device(host: &Host, id: &DeviceId) -> Result<Device, String> {
-    let mut matches = host
-        .devices()
-        .map_err(|error| format!("List audio devices: {error}"))?
-        .filter(|candidate| candidate.id().ok().as_ref() == Some(id));
-    let device = matches.next().ok_or("Audio device disconnected")?;
-    if matches.next().is_some() {
-        return Err("The audio device ID is ambiguous. Refresh the audio inputs.".into());
-    }
-    Ok(device)
-}
-
-fn config(device: &Device, input: bool) -> Result<SupportedStreamConfig, String> {
-    const DEFAULT_RATE: u32 = 48_000;
-    let usable = |format: SampleFormat| format.is_int() || format.is_uint() || format.is_float();
-    let default = if input {
-        device.default_input_config()
-    } else {
-        device.default_output_config()
-    };
-    let mut desired_rate = DEFAULT_RATE;
-    if let Ok(default) = default {
-        desired_rate = default.sample_rate().clamp(1, 768_000);
-        if default.channels() >= 2
-            && default.sample_rate() == desired_rate
-            && usable(default.sample_format())
-        {
-            return Ok(default);
-        }
-    }
-    let ranges: Vec<_> = if input {
-        device.supported_input_configs().map(Iterator::collect)
-    } else {
-        device.supported_output_configs().map(Iterator::collect)
-    }
-    .map_err(|error| error.to_string())?;
-    ranges
-        .into_iter()
-        .filter(|range| {
-            range.channels() >= 2
-                && usable(range.sample_format())
-                && range.min_sample_rate() <= 768_000
-                && range.max_sample_rate() > 0
-        })
-        .min_by_key(|range| {
-            let rate = desired_rate.clamp(range.min_sample_rate(), range.max_sample_rate());
-            (rate.abs_diff(desired_rate), range.channels())
-        })
-        .map(|range| {
-            let rate = desired_rate.clamp(
-                range.min_sample_rate().max(1),
-                range.max_sample_rate().min(768_000),
-            );
-            range.with_sample_rate(rate)
-        })
-        .ok_or_else(|| "The device has no usable stereo PCM format.".to_owned())
-}
 
 pub(super) struct Streams {
     // Drop playback first so a stopped monitor cannot play queued input.
@@ -170,10 +75,10 @@ impl Streams {
             return Err("Audio input and system output are on the same device. Choose a different system audio output before monitoring.".into());
         }
 
-        let input_config =
-            config(&input, true).map_err(|error| format!("Configure audio input: {error}"))?;
-        let output_config =
-            config(&output, false).map_err(|error| format!("Configure audio output: {error}"))?;
+        let input_config = stereo_config(&input, true, None)
+            .map_err(|error| format!("Configure audio input: {error}"))?;
+        let output_config = stereo_config(&output, false, None)
+            .map_err(|error| format!("Configure audio output: {error}"))?;
 
         #[cfg(target_os = "macos")]
         super::permission::check()?;
@@ -187,7 +92,15 @@ impl Streams {
             stereo::monitor(input_config.sample_rate(), output_config.sample_rate());
         let (writer, connection) = pcm_source.connect(input_config.sample_rate());
         capture.observe(writer);
-        let input = capture_stream(input, input_config, capture, signal.clone())?;
+        let input = open_input(
+            &input,
+            input_config,
+            MonitorInput {
+                capture,
+                signal: signal.clone(),
+            },
+            on_error(&signal, false),
+        )?;
         let output = playback_stream(output, output_config, playback, signal.clone())?;
         let streams = Self {
             output,
@@ -324,36 +237,26 @@ macro_rules! for_pcm {
     };
 }
 
-fn capture_stream(
-    device: Device,
-    supported: SupportedStreamConfig,
-    mut capture: Capture,
+struct MonitorInput {
+    capture: Capture,
     signal: Arc<StreamSignal>,
-) -> Result<Stream, String> {
-    let channels = supported.channels() as usize;
-    let config = supported.config();
-    let callback_error = on_error(&signal, false);
-    macro_rules! open {
-        ($sample:ty) => {
-            device.build_input_stream(
-                config,
-                move |data: &[$sample], _| {
-                    if !signal.closing.load(Ordering::Acquire)
-                        && signal.failure.load(Ordering::Acquire) == 0
-                    {
-                        capture.write(data, channels);
-                        #[cfg(test)]
-                        signal
-                            .captured
-                            .fetch_add(data.len() / channels, Ordering::Relaxed);
-                    }
-                },
-                callback_error,
-                None,
-            )
-        };
+}
+
+impl InputSink for MonitorInput {
+    fn write<T: Sample>(&mut self, data: &[T], channels: usize)
+    where
+        f32: FromSample<T>,
+    {
+        if !self.signal.closing.load(Ordering::Acquire)
+            && self.signal.failure.load(Ordering::Acquire) == 0
+        {
+            self.capture.write(data, channels);
+            #[cfg(test)]
+            self.signal
+                .captured
+                .fetch_add(data.len() / channels, Ordering::Relaxed);
+        }
     }
-    for_pcm!(supported.sample_format(), open).map_err(|error| format!("Open audio input: {error}"))
 }
 
 fn playback_stream(

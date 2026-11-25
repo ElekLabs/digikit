@@ -119,3 +119,109 @@ def test_the_output_is_clamped_below_the_level_bound():
         x = rng.uniform(-8, 8, 64).astype(np.float32)
         worst = max(worst, float(np.abs(sh.block(x, 25.0)).max()))
     assert worst <= 7.9 + 1e-6
+
+
+def test_spread_held_at_zero_matches_the_legacy_effect_on_independent_channels():
+    old = R.Shifter()
+    new = R.SpreadShifter()
+    rng = np.random.default_rng(7)
+    for v in (0, -64, 63, 20, -1, 0, -37.5) * 4:
+        x = rng.uniform(-0.8, 0.8, 64).astype(np.float32)
+        np.testing.assert_array_equal(new.block(x, v, 0), old.block(x, v))
+
+
+def test_spread_narrows_at_the_range_ends_without_moving_the_centre():
+    low, high = R.target_inc(-64), R.target_inc(63)
+    assert R.spread_inc(low, 8) == R.spread_inc(high, 8) == 0
+    assert R.spread_inc(0, 100) == R.spread_inc(0, 8)
+    for centre in (low + 5000, high - 5000):
+        assert R.spread_inc(centre, 8) == 5000
+
+
+def test_spread_shifts_left_and_right_with_the_same_image_rejection():
+    sh = R.SpreadShifter()
+    f_in, v, spread = 1000.0, R.v_for_hz(80.0), 8.0
+    centre = R.target_inc(v)
+    side = R.spread_inc(centre, spread)
+    base = (0.5 * np.sin(2 * np.pi * f_in * np.arange(900 * 32) / FS)).astype(
+        np.float32
+    )
+    out = np.array(
+        [sh.block(np.tile(block, 2), v, spread) for block in base.reshape(-1, 32)]
+    )
+    for ch, increment in enumerate((centre + side, centre - side)):
+        y = out[:, ch * 32 : ch * 32 + 32].reshape(-1)
+        shift = increment / R.INC_PER_HZ
+        wanted = amplitude(y, f_in + shift, 120 * 32)
+        image = amplitude(y, f_in - shift, 120 * 32)
+        assert abs(wanted - 0.5) < 0.005
+        assert wanted / image > 100
+
+
+def test_turning_spread_to_zero_rejoins_without_a_phase_reset():
+    sh = R.SpreadShifter()
+    centre = R.target_inc(20)
+    side = R.spread_inc(centre, 8)
+    for _ in range(87):
+        sh.phase_pairs(centre, side)
+    assert sh.side_phase != 0
+    previous = [R.wrap32(sh.phase + sh.side_phase), R.wrap32(sh.phase - sh.side_phase)]
+    for _ in range(4800):
+        phases = sh.phase_pairs(centre, 0)
+        for ch, channel in enumerate(phases):
+            for phase in channel:
+                assert abs(R.wrap32(phase - previous[ch] - centre)) <= side + 32
+                previous[ch] = phase
+        if sh.side_phase == 0 and sh.side_inc == 0:
+            break
+    else:
+        pytest.fail("Spread did not rejoin the centre within 3.2 seconds")
+    x = np.linspace(-0.3, 0.4, 64, dtype=np.float32)
+    assert np.isfinite(sh.block(x, 20, 0)).all()
+
+
+@pytest.mark.parametrize("period", [8, 16, 32])
+def test_drift_passes_both_peaks_and_returns_to_centre(period):
+    drift = R.Drift()
+    centre = R.target_inc(20)
+    cycle = period * (int(FS) // R.BLOCK)
+    targets = np.array([drift.move(centre, 4, 1 / period) for _ in range(cycle)])
+    offsets = (targets - centre) / R.INC_PER_HZ
+    for quarter, hz in enumerate((4.0, 0.0, -4.0, 0.0), start=1):
+        assert offsets[quarter * cycle // 4 - 1] == pytest.approx(hz, abs=0.002)
+    assert abs(offsets.mean()) < 0.001
+
+
+def test_rate_changes_advance_phase_without_restarting_and_off_parks_it():
+    drift = R.Drift()
+    centre = R.target_inc(20)
+    for _ in range(1500):
+        before = drift.move(centre, 4, 1 / 32)
+    phase = drift.phase
+    after = drift.move(centre, 4, 1 / 8)
+    assert drift.phase - phase == int(R.f32(R.DRIFT_STEP_PER_HZ / 8))
+    assert 0 < after - before <= 121  # at most 4*depth/period per second
+    phase = drift.phase
+    assert drift.move(centre, 0, 1 / 16) == centre
+    assert drift.phase == phase
+
+
+def test_drift_reduces_excursion_near_the_shift_endpoints():
+    drift = R.Drift()
+    high, low = R.target_inc(63), R.target_inc(-64)
+    drift.phase = R.QUARTER
+    assert drift.move(high, 4, 1 / 8) == high
+    assert drift.move(high - 10_000, 4, 1 / 8) <= high
+    drift.phase = -R.QUARTER
+    assert drift.move(low, 4, 1 / 8) == low
+    assert drift.move(low + 10_000, 4, 1 / 8) >= low
+
+
+def test_rate_has_no_effect_when_drift_is_off_even_with_spread():
+    fixed, swept = R.SpreadShifter(), R.SpreadShifter()
+    x = np.random.default_rng(45).uniform(-0.6, 0.7, (32, 64)).astype(np.float32)
+    for n, block in enumerate(x):
+        a = fixed.block(block, 20, 4)
+        b = swept.block(block, 20, 4, 0, (1 / 8) if n & 1 else (1 / 32))
+        assert np.array_equal(a.view(np.uint32), b.view(np.uint32))
+    assert swept.drift.phase == 0

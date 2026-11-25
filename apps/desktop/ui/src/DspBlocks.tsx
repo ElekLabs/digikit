@@ -1,7 +1,7 @@
 import { Application, Graphics } from 'pixi.js';
 import 'pixi.js/unsafe-eval';
 import { Index, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
-import type { DspBlockCapture } from './dsp-block-recording';
+import type { DspBlockCapture } from '@digi/workbench-core/profile/dsp-blocks.ts';
 import './dsp-blocks.css';
 
 type DspBlockRow = DspBlockCapture['rows'][number];
@@ -65,7 +65,16 @@ export default function DspBlocks(props: { capture: DspBlockCapture }) {
                 {(row, index) => (
                   <tr>
                     <th scope="row">
-                      {row().kind === 'machine' ? 'Machine' : 'Effect'} slot {row().row}
+                      <Show
+                        when={row().module}
+                        fallback={`${row().kind === 'machine' ? 'Machine' : 'Effect'} slot ${row().row}`}
+                      >
+                        {(module) => (
+                          <>
+                            {module()} · {row().route ? `${row().route} · ` : ''}slot {row().row}
+                          </>
+                        )}
+                      </Show>
                     </th>
                     <Show when={index === 0}>
                       <td class="dsp-blocks-chart" rowSpan={ranked().length}>

@@ -19455,6 +19455,148 @@
       "was": []
     },
     {
+      "bindings": {
+        "c": "ViewStackBrain",
+        "gas": "ViewStackBrain_size",
+        "rust": "ViewStackBrain"
+      },
+      "cpu": "cf",
+      "doc": "Brain prefix to the first word of the embedded ViewController, as returned by brain.view_manager.",
+      "fields": [
+        {
+          "name": "controller",
+          "off": 64,
+          "type": "u32"
+        }
+      ],
+      "file": "devices/fw/view.toml",
+      "kind": "struct",
+      "mark": "D",
+      "name": "cf.view.struct.ViewStackBrain",
+      "size": 68,
+      "subsystem": "view",
+      "users": [
+        "core/runtime"
+      ],
+      "was": []
+    },
+    {
+      "bindings": {
+        "c": "ViewStackController",
+        "gas": "ViewStackController_size",
+        "rust": "ViewStackController"
+      },
+      "cpu": "cf",
+      "doc": "ViewController prefix through the intrusive view-list sentinel.",
+      "fields": [
+        {
+          "name": "sentinel",
+          "off": 20,
+          "type": "u32"
+        }
+      ],
+      "file": "devices/fw/view.toml",
+      "kind": "struct",
+      "mark": "D",
+      "name": "cf.view.struct.ViewStackController",
+      "size": 32,
+      "subsystem": "view",
+      "users": [
+        "core/runtime"
+      ],
+      "was": []
+    },
+    {
+      "bindings": {
+        "c": "ViewStackNode",
+        "gas": "ViewStackNode_size",
+        "rust": "ViewStackNode"
+      },
+      "cpu": "cf",
+      "doc": "View list node prefix. The sentinel's prev link points to the view currently at the top of the stack.",
+      "fields": [
+        {
+          "name": "next",
+          "off": 0,
+          "type": "ptr"
+        },
+        {
+          "name": "prev",
+          "off": 4,
+          "type": "ptr"
+        },
+        {
+          "name": "view",
+          "off": 8,
+          "type": "ptr"
+        }
+      ],
+      "file": "devices/fw/view.toml",
+      "kind": "struct",
+      "mark": "D",
+      "name": "cf.view.struct.ViewStackNode",
+      "size": 12,
+      "subsystem": "view",
+      "users": [
+        "core/runtime"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x44647900",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x44648900",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x44f37098",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_view_brain",
+        "rust": "dkfw::view::BRAIN"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "The Brain singleton pointer variable (u32 in RAM, 0 until the Brain is made): the operand of the `tst.l` at the start of the Brain getter (cf.view.fn.brain.instance). The address of each firmware is in its port file. The device tests read the view stack through it (the [ui] brain_ptr fact of the device files).",
+      "file": "devices/fw/view.toml",
+      "kind": "value",
+      "mark": "D",
+      "name": "cf.view.value.brain",
+      "rule": {
+        "dn2": {
+          "kind": "cf_literal",
+          "len": 4,
+          "offset": 10
+        },
+        "dt2": {
+          "kind": "cf_literal",
+          "len": 4,
+          "offset": 10
+        }
+      },
+      "subsystem": "view",
+      "users": [
+        "tests/regression",
+        "core/runtime"
+      ],
+      "was": []
+    },
+    {
       "at": {
         "dn2-1.11": [
           {
@@ -25993,7 +26135,7 @@
       "name": "usb"
     },
     {
-      "count": 14,
+      "count": 18,
       "cpu": "cf",
       "file": "devices/fw/view.toml",
       "meaning": "Brain, ViewController, View, redraw, the UI loop",

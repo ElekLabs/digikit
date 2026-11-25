@@ -25,11 +25,14 @@ import type { NativeAudioStatus } from '@digi/workbench-core/runtime/runtime.ts'
 import { bootingStatus } from './boot-core';
 import { bumpCardRefresh, cardRefresh } from './card-state';
 import CardPanel from './CardPanel';
+import SessionMenu from './SessionMenu';
+import { createWorkspaceSession } from './workspace-session';
 import { connectionView } from '@digi/workbench-core/transfer/connection-core.ts';
 import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
 import { createTargetHealth } from './target-health';
 import type { SpanRecording } from './span-recording';
 import type { PerformanceView } from './PerformancePanel';
+import { createSavedPerformance } from './saved-performance';
 import { createUtilizationHistory } from './utilization-history';
 import { percent } from './device-health';
 import type { Page } from './page-core';
@@ -44,6 +47,8 @@ import type { DesktopApps } from './desktop-app';
 import WorkbenchDrawer from './WorkbenchDrawer';
 import LogPanel from './LogPanel';
 import FirmwareSymbols from './FirmwareSymbols';
+import FirmwareCatalog, { type CatalogSelection } from './FirmwareCatalog';
+import Segmented from '@digi/workbench-core/ui/components/Segmented.tsx';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import SidePanels from './SidePanels';
 import TitleBar from './TitleBar';
@@ -52,10 +57,11 @@ import RemotePage from './remote/RemotePage';
 import RemoteAudio from './remote/RemoteAudio';
 import type { WorkerFactory } from '@digi/workbench-core/workers.ts';
 import { useFirmwareApp, useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
-import { dspLine } from './dsp-core';
+import { audioProcessorLabel, dspLine } from './dsp-core';
 import { running as flashRunning } from '@digi/workbench-core/firmware/firmware-core.ts';
 import FirmwarePage from '@digi/workbench-core/ui/firmware/FirmwarePage.tsx';
 import FirmwareToolbar from './emulator/FirmwareToolbar';
+import { bindSessionMenu } from './emulator/session-menu-actions';
 import Navigation from './shell/Navigation';
 import StatusBar from './shell/StatusBar';
 import TransferPage from '@digi/workbench-core/ui/transfer/TransferPage.tsx';
@@ -92,6 +98,7 @@ export default function WorkbenchShell(
   const { drawer, log, logWriter, emulatorActions } = untrack(() => props.tools);
   const { logEvent, logInput } = logWriter;
   const logOpen = () => drawer.active() === 'Log';
+  const savedPerformance = createSavedPerformance();
   const performanceOpen = () => drawer.active() === 'Performance';
   const toggleLog = () => drawer.toggle('Log');
   const { emulatorSession, lastMidiPort, lastMidiSession, target } = app.target;
@@ -107,6 +114,15 @@ export default function WorkbenchShell(
   const [dockDrag, setDockDrag] = createSignal(false);
   const [page, setPage] = createSignal<Page>(props.initialPage ?? 'run');
   const [moduleId, setModuleId] = createSignal('');
+  const [firmwareTab, setFirmwareTab] = createSignal<'flash' | 'catalog'>('flash');
+  const [catalogSelection, setCatalogSelection] = createSignal<CatalogSelection>();
+  const [fromProfile, setFromProfile] = createSignal(false);
+  function openCatalog(selection: CatalogSelection) {
+    setCatalogSelection(selection);
+    setFromProfile(selection.path !== undefined && selection.entry !== undefined);
+    setFirmwareTab('catalog');
+    setPage('firmware');
+  }
   const filePages = moduleFilePages(app);
   const runtimePage = runtimeModulePages(app, (id, schema, open) => moduleFilePage(app, id, schema, open));
   const modulePages = createMemo(() => {
@@ -202,6 +218,8 @@ export default function WorkbenchShell(
     return d !== undefined && Object.hasOwn(panels, d) ? d : defaultFaceplate;
   });
   const panel = () => panels[device()];
+  const audioProcessor = () =>
+    audioProcessorLabel(registry.ids.includes(device()) ? registry.get(device()) : undefined);
   const inventoryConnected = createMemo(() => connectionState() === 'connected');
   // Keep loaded modules available to the shell while Transfer is closed. Transfer's own
   // read publishes to the same inventory when it is open.
@@ -286,6 +304,49 @@ export default function WorkbenchShell(
 
   const [performanceView, setPerformanceView] = createSignal<PerformanceView>('Utilization');
   const [spanRecording, setSpanRecording] = createSignal<SpanRecording>();
+  const showCaptureControls = (view?: PerformanceView) => {
+    if (view) setPerformanceView(view);
+    drawer.select('Performance');
+  };
+  const showProfile = () => {
+    setPage('run');
+    setInspectorTab('profile');
+    setInspectorOpen(true);
+  };
+  let captureInput: HTMLInputElement | undefined;
+  const openCapture = async (file: Pick<File, 'name' | 'text'>) => {
+    const capture = await savedPerformance.open(file);
+    if (!capture || capture !== savedPerformance.current()) return;
+    showProfile();
+    showCaptureControls(capture.dsp ? 'DSP blocks' : capture.trace ? 'Timeline' : 'Spans');
+  };
+  const sessionHost = untrack(() => props.host.sessions);
+  const workspaceSession =
+    sessionHost &&
+    createWorkspaceSession({
+      host: sessionHost,
+      pickFirmware: (start) => props.host.emu.pickSyx(start),
+      firmware,
+      storage: app.storage,
+      selectEmulator: () => app.target.selectTarget({ kind: 'emulator' }),
+      confirm: (message) => window.confirm(message),
+      blocked: () => busy('target') || busy('emulator') || !!spanRecording()?.running(),
+      openCapture,
+      clearCapture: savedPerformance.returnToLive,
+    });
+  let sessionMenu: HTMLDetailsElement | undefined;
+  const sessionPaneVisible = () => page() === 'run' && isEmulator() && !app.target.switching();
+  if (workspaceSession && sessionHost && untrack(() => props.host.emu.inApp())) {
+    bindSessionMenu({
+      host: sessionHost,
+      actions: workspaceSession,
+      enabled: () => sessionPaneVisible() && !workspaceSession.disabled(),
+      reveal: () => {
+        if (sessionMenu) sessionMenu.open = true;
+      },
+      report: setError,
+    });
+  }
   const showMetrics = () => {
     setPage('run');
     setInspectorTab('metrics');
@@ -427,8 +488,8 @@ export default function WorkbenchShell(
         <dd>{status() ? `${status()!.device} ${status()!.version} · ${phase()}` : '—'}</dd>
         <dt>Instructions</dt>
         <dd>{status()?.icount.toLocaleString() ?? '—'}</dd>
-        <dt>DSP</dt>
-        <dd>{dspLine(info()?.dsp)}</dd>
+        <dt>{audioProcessor()}</dt>
+        <dd>{dspLine(info()?.dsp, audioProcessor())}</dd>
         <dt>Audio output</dt>
         <dd>{audio()?.output_device ?? (audio()?.setup_needed ? 'no audio for this firmware' : '—')}</dd>
         <dt>Speed</dt>
@@ -505,6 +566,17 @@ export default function WorkbenchShell(
       }}
     >
       <TitleBar onError={(m) => setError(m)} />
+      <input
+        ref={captureInput}
+        type="file"
+        hidden
+        accept=".json,application/json"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          event.currentTarget.value = '';
+          if (file) void openCapture(file);
+        }}
+      />
 
       <Show when={alertText()}>
         {(message) => (
@@ -539,6 +611,11 @@ export default function WorkbenchShell(
             <FirmwareToolbar
               firmware={firmware}
               hidden={!isEmulator()}
+              sessionMenu={
+                <Show when={sessionPaneVisible() && workspaceSession}>
+                  {(session) => <SessionMenu session={session()} ref={(node) => (sessionMenu = node)} />}
+                </Show>
+              }
               device={device()}
               busy={busy('emulator')}
               reloadKey={reloadKey}
@@ -573,12 +650,19 @@ export default function WorkbenchShell(
                   <SidePanels
                     host={props.host}
                     visible={sidePanelsShown()}
-                    liveDsp={performanceOpen() && performanceView() === 'DSP blocks'}
-                    collectSpans={
-                      performanceOpen() && performanceView() !== 'Utilization' && source.target.kind !== 'none'
-                    }
+                    liveDsp={performanceOpen() && performanceView() === 'DSP blocks' && !savedPerformance.current()}
+                    savedCapture={savedPerformance.current()}
+                    showCaptureControls={showCaptureControls}
+                    openCapture={() => captureInput?.click()}
+                    captureContext={workspaceSession?.captureContext}
+                    collectSpans={performanceOpen() && source.target.kind !== 'none'}
                     profileGeneration={isEmulator() ? emulatorGeneration() : 1}
                     onSpanRecording={setSpanRecording}
+                    openCatalog={
+                      props.host.symbols?.catalogFrame
+                        ? (path, sha256, entry) => openCatalog({ path, sha256, entry })
+                        : undefined
+                    }
                     active={!isEmulator() || !!status()}
                     source={source}
                     metrics={
@@ -608,7 +692,12 @@ export default function WorkbenchShell(
             {(view) => <ModulePageView page={view} current={() => modulePage() === view} />}
           </Show>
           <Show when={page() === 'transfer'}>
-            <TransferPage onFlash={() => setPage('firmware')} />
+            <TransferPage
+              onFlash={() => {
+                setFirmwareTab('flash');
+                setPage('firmware');
+              }}
+            />
           </Show>
           <Show when={page() === 'files' && !app.target.switching() && selected()} keyed>
             {(ops) => (
@@ -630,7 +719,35 @@ export default function WorkbenchShell(
             )}
           </Show>
           <Show when={page() === 'firmware'}>
-            <FirmwarePage />
+            <div class="firmware-workspace">
+              <Show when={props.host.symbols?.catalogFrame}>
+                <div class="firmware-tabs">
+                  <Segmented
+                    label="Firmware view"
+                    options={
+                      [
+                        { id: 'flash', label: 'Flash' },
+                        { id: 'catalog', label: 'Catalog' },
+                      ] as const
+                    }
+                    value={firmwareTab()}
+                    onChange={setFirmwareTab}
+                  />
+                </div>
+              </Show>
+              <Show when={firmwareTab() === 'catalog' && props.host.symbols?.catalogFrame} fallback={<FirmwarePage />}>
+                <FirmwareCatalog
+                  symbols={props.host.symbols!}
+                  selection={catalogSelection()}
+                  source={symbolSource()}
+                  imageRevision={isEmulator() ? info() : connectionState()}
+                  imageFor={(source) => selectedSymbolImage(props.host, source)}
+                  select={setCatalogSelection}
+                  settings={() => setPage('settings')}
+                  back={fromProfile() ? () => setPage('run') : undefined}
+                />
+              </Show>
+            </div>
           </Show>
           <main class="appearance-page" hidden={page() !== 'settings'} aria-label="Settings">
             <section>
@@ -655,6 +772,7 @@ export default function WorkbenchShell(
                   imageRevision={isEmulator() ? info() : connectionState()}
                   imageFor={(binding) => selectedSymbolImage(props.host, binding)}
                   targetName={targetLabel(target())}
+                  openCatalog={props.host.symbols?.catalogFrame ? (sha256) => openCatalog({ sha256 }) : undefined}
                 />
               )}
             </Show>
@@ -688,7 +806,9 @@ export default function WorkbenchShell(
                 estimated={isEmulator()}
                 view={performanceView()}
                 setView={setPerformanceView}
+                showProfile={showProfile}
                 recording={spanRecording()}
+                savedPerformance={savedPerformance}
                 activeTarget={selected().target.kind !== 'none' && (!isEmulator() || !!status())}
               />
             </Suspense>

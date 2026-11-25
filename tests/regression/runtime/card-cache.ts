@@ -88,10 +88,12 @@ function toolIdentity(): { plusdrive: string; systemPackage: string; profiles: R
 }
 
 /**
- * The TypeScript files of this directory that build card specs and seed card files: this file, the card record and store, the rigs that make the
+ * The TypeScript files that build card specs and seed card files: the shared builder, this file, the card record and store, the rigs that make the
  * specs (`card-rig`, `fx-session`, `fx-live`) and the helpers they use to lay out the card (services, plan, overlay, device data).
  */
 const BUILDER_SOURCES = [
+  '../../../packages/workbench-core/src/node/card-image.ts',
+  '../../../packages/workbench-core/src/runtime/system-package.ts',
   'card-cache.ts',
   'card-record.ts',
   'card-store.ts',

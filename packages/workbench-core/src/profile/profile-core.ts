@@ -252,22 +252,6 @@ export function fmtElapsed(ticks: bigint, hz: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
-// ---- comparison with an exported profile ----------------------------------------------------------------------------------------------
-
-/** The spans of a `dk.profile/1` file, as shares by owner name; `undefined` when the file has no spans or no elapsed window. */
-export function readReference(doc: unknown): Map<string, number> | undefined {
-  const d = doc as {
-    schema?: string;
-    spans?: { name?: string; sum_ticks?: number }[];
-    span_elapsed_ticks?: number;
-  };
-  if (!d || d.schema !== 'dk.profile/1') throw new Error('not a dk.profile/1 file');
-  if (!d.spans?.length || !d.span_elapsed_ticks || d.span_elapsed_ticks <= 0) return undefined;
-  const out = new Map<string, number>();
-  for (const s of d.spans) if (s.name) out.set(s.name, (s.sum_ticks ?? 0) / d.span_elapsed_ticks);
-  return out;
-}
-
 // ---- DSP ------------------------------------------------------------------------------------------------------------------------------
 
 /** One module of the emulator's DSP view: its instructions per block, and the functions that hold most of them. */

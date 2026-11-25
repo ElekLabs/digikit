@@ -6,7 +6,10 @@ use dkaddrmap::{AddrMap, Entry, Key, Layer};
 use serde::{Deserialize, Serialize};
 use tauri_plugin_dialog::DialogExt;
 
+pub(crate) mod catalog;
 mod database;
+
+use catalog::{ReviewIndex, read_review};
 
 #[cfg(test)]
 mod tests;
@@ -17,6 +20,7 @@ pub(crate) enum SourceKind {
     Cf,
     Sharc,
     Map,
+    Catalog,
 }
 
 struct PortFingerprint {
@@ -36,6 +40,49 @@ pub(crate) struct SymbolMap {
     firmware: &'static str,
     sha256: &'static str,
     json: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    review: Option<ReviewIndex>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SymbolRelease {
+    device: &'static str,
+    firmware: &'static str,
+    sha256: &'static str,
+    defaults: SymbolDefaults,
+}
+
+#[derive(Serialize)]
+struct SymbolDefaults {
+    cf: String,
+    sharc: String,
+    catalog: String,
+}
+
+#[tauri::command]
+pub(crate) fn symbols_releases() -> Result<Vec<SymbolRelease>, String> {
+    let root = std::env::current_dir().map_err(|e| e.to_string())?;
+    let registry = device_profile::Registry::embedded().map_err(|e| e.to_string())?;
+    let profiles = registry.devices().iter().filter_map(|device| {
+        let acceptance = device.acceptance.as_ref()?;
+        let port = PORTS.iter().find(|port| {
+            port.device == device.short
+                && port.firmware == acceptance.firmware
+                && port.dsp.is_some()
+        })?;
+        let dir = root.join("out/firmware").join(port.id);
+        Some(SymbolRelease {
+            device: port.device,
+            firmware: port.firmware,
+            sha256: port.stock,
+            defaults: SymbolDefaults {
+                cf: dir.join("main/firmware.sqlite").display().to_string(),
+                sharc: dir.join("dsp/firmware.sqlite").display().to_string(),
+                catalog: dir.join("dsp/review.html").display().to_string(),
+            },
+        })
+    });
+    Ok(profiles.collect())
 }
 
 #[tauri::command]
@@ -47,6 +94,7 @@ pub(crate) async fn symbols_pick(
         SourceKind::Cf => ("Open ColdFire database", &["sqlite", "sqlite3", "db"]),
         SourceKind::Sharc => ("Open SHARC database", &["sqlite", "sqlite3", "db"]),
         SourceKind::Map => ("Open developer address map", &["json"]),
+        SourceKind::Catalog => ("Open SHARC catalog", &["html", "htm"]),
     };
     let dialog = app
         .dialog()
@@ -68,9 +116,19 @@ pub(crate) async fn symbols_pick(
 
 #[tauri::command]
 pub(crate) async fn symbols_read(kind: SourceKind, path: String) -> Result<Vec<SymbolMap>, String> {
-    tauri::async_runtime::spawn_blocking(move || read_source(kind, Path::new(&path)))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = Path::new(&path);
+        let repo = std::env::current_dir().ok();
+        let mut maps = read_source(kind, path)?;
+        if !matches!(kind, SourceKind::Catalog) {
+            for map in &mut maps {
+                map.review = find_review(kind, path, map, repo.as_deref());
+            }
+        }
+        Ok(maps)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn read_source(kind: SourceKind, path: &Path) -> Result<Vec<SymbolMap>, String> {
@@ -82,8 +140,56 @@ fn read_source(kind: SourceKind, path: &Path) -> Result<Vec<SymbolMap>, String> 
         SourceKind::Cf => database::read(path, dkaddrmap::Cpu::Cf),
         SourceKind::Sharc => database::read(path, dkaddrmap::Cpu::Sharc),
         SourceKind::Map => read_map(path).map(|map| vec![map]),
+        SourceKind::Catalog => read_catalog(path).map(|map| vec![map]),
     };
     result.map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn find_review(
+    kind: SourceKind,
+    path: &Path,
+    map: &SymbolMap,
+    repo: Option<&Path>,
+) -> Option<ReviewIndex> {
+    let by_source = match kind {
+        SourceKind::Cf | SourceKind::Catalog => return None,
+        SourceKind::Map => read_review(path, map.sha256),
+        SourceKind::Sharc => read_review(&path.with_file_name("review.addrmap.json"), map.sha256)
+            .or_else(|| {
+                let sibling = path
+                    .canonicalize()
+                    .ok()?
+                    .with_file_name("review.addrmap.json");
+                read_review(&sibling, map.sha256)
+            })
+            .filter(|index| index.cpu == dkaddrmap::Cpu::Sharc),
+    };
+    by_source.or_else(|| {
+        let review = repo?
+            .join("out/firmware")
+            .join(format!("{}-{}", map.device, map.firmware))
+            .join("dsp/review.addrmap.json");
+        read_review(&review, map.sha256).filter(|index| index.cpu == dkaddrmap::Cpu::Sharc)
+    })
+}
+
+fn read_catalog(path: &Path) -> Result<SymbolMap, String> {
+    let index_path = path.with_extension("addrmap.json");
+    let path = path
+        .parent()
+        .and_then(|dir| dir.canonicalize().ok())
+        .zip(path.file_name())
+        .map(|(dir, name)| dir.join(name))
+        .ok_or("Catalog file is missing")?;
+    let mut map = read_map(&index_path).map_err(|e| format!("{}: {e}", index_path.display()))?;
+    map.review = read_review(&index_path, map.sha256)
+        .filter(|review| review.cpu == dkaddrmap::Cpu::Sharc && Path::new(&review.path) == path);
+    if map.review.is_none() {
+        return Err(
+            "The SHARC catalog and its sibling address map must come from the same export.".into(),
+        );
+    }
+    Ok(map)
 }
 
 fn read_map(path: &Path) -> Result<SymbolMap, String> {
@@ -155,5 +261,6 @@ fn make_map(port: &PortFingerprint, entries: Vec<Entry>) -> Result<SymbolMap, St
         firmware: port.firmware,
         sha256: port.stock,
         json: AddrMap::new("dev", key, entries).to_json(),
+        review: None,
     })
 }

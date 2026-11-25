@@ -1,5 +1,6 @@
-import { Show, untrack } from 'solid-js';
-import { deviceNameOf } from '@digi/workbench-core/data/device-profiles.ts';
+import { Show, untrack, type JSX } from 'solid-js';
+import { deviceNameOf, registry } from '@digi/workbench-core/data/device-profiles.ts';
+import { audioProcessorLabel } from '../dsp-core';
 import DefaultModules from '@digi/workbench-core/ui/firmware/DefaultModules.tsx';
 import { CHART, FOLDER, Icon, MODULES, PAUSE, PLAY, RELOAD, RESTART } from '../icons';
 import type { createEmulatorFirmware } from './firmware';
@@ -30,6 +31,7 @@ type ToolbarFirmware = Pick<
 export default function FirmwareToolbar(props: {
   firmware: ToolbarFirmware;
   hidden: boolean;
+  sessionMenu?: JSX.Element;
   device: string;
   busy: boolean;
   reloadKey: string;
@@ -68,9 +70,12 @@ export default function FirmwareToolbar(props: {
     const parts = fileLabel().split('/');
     return parts.length > 3 ? `…/${parts.slice(-3).join('/')}` : fileLabel();
   };
+  const processor = () =>
+    audioProcessorLabel(registry.ids.includes(props.device) ? registry.get(props.device) : undefined);
   return (
     <header class="page-head emu-head" hidden={props.hidden}>
       <h2>Emulator</h2>
+      {props.sessionMenu}
       <span class="file-chip" title={fileLabel()}>
         <button
           type="button"
@@ -157,8 +162,8 @@ export default function FirmwareToolbar(props: {
         class="tag opt"
         title={
           dspHere()
-            ? 'Run the DSP (and a second CPU that runs its program) at the next Open or Reload. Off: ColdFire only, no DSP audio, a faster UI'
-            : `${deviceNameOf(props.device)} has no DSP and no second CPU`
+            ? `Run the ${processor()} at the next Open or Reload. Off: run the main CPU without it.`
+            : `${deviceNameOf(props.device)} has no separate audio processor`
         }
       >
         <input
@@ -167,8 +172,8 @@ export default function FirmwareToolbar(props: {
           disabled={!dspHere()}
           onChange={(e) => chooseDsp(e.currentTarget.checked)}
         />
-        <span class="long">DSP</span>
-        <span class="short">DSP</span>
+        <span class="long">{processor()}</span>
+        <span class="short">{processor()}</span>
         <Show when={info()?.dsp}>
           {(d) => (
             <span
@@ -176,10 +181,8 @@ export default function FirmwareToolbar(props: {
               classList={{ on: d().enabled, pending: dspIsPending() }}
               title={
                 dspIsPending()
-                  ? `The running image has the DSP ${d().enabled ? 'on' : 'off'}; the tick applies at the next Reload (${props.reloadKey}) or Open`
-                  : d().enabled
-                    ? 'The running image has the DSP'
-                    : 'The running image has no DSP'
+                  ? `${processor()} is ${d().enabled ? 'on' : 'off'} in this session. The setting applies at the next Reload (${props.reloadKey}) or Open.`
+                  : `${processor()} is ${d().enabled ? 'on' : 'off'} in this session.`
               }
             >
               {dspIsPending() ? 'on next Reload' : d().enabled ? 'on' : 'off'}

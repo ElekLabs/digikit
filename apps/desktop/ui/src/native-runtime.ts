@@ -254,6 +254,8 @@ export async function createNativeRuntime(
             runtime: !!options?.runtime,
             ...(options?.card ? { card: options.card } : {}),
             ...(options?.dsp === undefined ? {} : { dsp: options.dsp }),
+            ...(options?.sourceSha256 ? { source_sha256: options.sourceSha256 } : {}),
+            ...(options?.imageSha256 ? { image_sha256: options.imageSha256 } : {}),
           },
           token,
         );

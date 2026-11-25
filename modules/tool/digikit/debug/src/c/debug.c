@@ -39,6 +39,8 @@
 #include <dk/platform/io.h>
 #include <dk/platform/settings.h>
 #include <dk/platform/ui.h>
+#include "view-observer.h"
+#include "parameter-observer.h"
 
 typedef uint32_t u32;
 typedef uint16_t u16;
@@ -612,6 +614,10 @@ static int32_t cmd_logcfg(const u8 *body, u32 len, u8 *out)
     u32 i;
     if (len < 1u)
         return E_MSG;
+    if (body[0] == 4u || body[0] == 5u)
+        return debug_view_observer_config(body, len, out);
+    if (body[0] >= 6u && body[0] <= 9u)
+        return debug_parameter_observer_config(body, len, out);
     if (body[0] == 2u || body[0] == 3u) {
         if (!cl.avail)
             return E_PROTO;
@@ -1154,6 +1160,8 @@ static void tick(void)
 {
     u32 t, a[5];
     u32 b = now();
+    debug_view_observer_tick();
+    debug_parameter_observer_tick();
     setup_run();
     if (!watch.started) {
         watch.started = 1u;

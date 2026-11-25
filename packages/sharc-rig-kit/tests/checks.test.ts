@@ -92,6 +92,7 @@ const fxGood = (): FxBlock => ({
   regsBad: [],
   faults: [0, 0, 0, 0],
   scratch: Array<number>(64).fill(0.5),
+  profile: [],
   stores: [],
   extra: [],
 });

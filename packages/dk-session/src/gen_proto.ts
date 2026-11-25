@@ -378,6 +378,8 @@ export const LOG_KIND = {
   PROJECT_IGNORED: 61,
   PROJECT_DEFERRED: 62,
   PROJECT_MODULE: 63,
+  VIEW_CHANGED: 64,
+  VALUE_CHANGED: 65,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
@@ -443,6 +445,8 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   61: ['PROJECT_IGNORED', ['slot', 'reason', 'status', '-', '-']],
   62: ['PROJECT_DEFERRED', ['slot', 'status', 'seconds', '-', '-']],
   63: ['PROJECT_MODULE', ['slot', 'what', 'status', 'index', 'id_hash']],
+  64: ['VIEW_CHANGED', ['old_view', 'view', 'old_class', 'class', 'generation']],
+  65: ['VALUE_CHANGED', ['scope', 'key', 'old', 'new', 'generation']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */

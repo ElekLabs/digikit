@@ -1,72 +1,75 @@
-import type { Cpu, DkProf } from '@digi/dk-session/dkprof';
-import { stockImageHash } from '@digi/dk-session/log-names';
+import type { DkProf } from '@digi/dk-session/dkprof';
 import type { Host } from '@digi/workbench-core/host/host.ts';
-import { readReference } from '@digi/workbench-core/profile/profile-core.ts';
+import {
+  readProfileHotspots,
+  resolveProfileHotspots,
+  verifiedProfileMaps,
+  type Hotspot,
+  type ProfileHotspots,
+} from '@digi/workbench-core/profile/hotspots.ts';
 
-export interface Hotspot {
-  addr: number;
-  weight: number;
-  share: number;
-  name?: string;
-}
+export { sampledPcs, type Hotspot } from '@digi/workbench-core/profile/hotspots.ts';
 
-export function sampledPcs(raw: unknown[], cpu: Cpu, top = 10): Hotspot[] {
-  const samples = new Map<number, number>();
-  for (const value of raw) {
-    const row = value as { cpu?: unknown; series?: unknown; addr?: unknown; count?: unknown } | null;
-    if (!row || row.cpu !== cpu || row.series !== 'pc') continue;
-    const { addr, count } = row;
-    if (typeof addr !== 'number' || !Number.isInteger(addr) || addr < 0 || addr > 0xffffffff) continue;
-    if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) continue;
-    samples.set(addr, (samples.get(addr) ?? 0) + count);
-  }
-  const total = [...samples.values()].reduce((sum, count) => sum + count, 0);
-  return [...samples]
-    .sort(([addrA, countA], [addrB, countB]) => countB - countA || addrA - addrB)
-    .slice(0, top)
-    .map(([addr, weight]) => ({ addr, weight, share: weight / total }));
-}
-
-export interface SavedProfile {
-  sha256?: string;
-  shares?: Map<string, number>;
-  pcs: { cf: Hotspot[]; sharc: Hotspot[] };
+export interface SavedProfile extends ProfileHotspots {
+  document: unknown;
 }
 
 export function readSavedProfile(doc: unknown): SavedProfile {
-  const shares = readReference(doc);
-  const { run, raw } = doc as { run?: { firmware_sha256?: unknown }; raw?: unknown };
-  const hash = run?.firmware_sha256;
-  const sha256 = typeof hash === 'string' && /^[a-f0-9]{64}$/i.test(hash) ? hash.toLowerCase() : undefined;
-  const rows = Array.isArray(raw) ? raw : [];
-  const pcs = { cf: sampledPcs(rows, 'cf'), sharc: sampledPcs(rows, 'sharc') };
-  return { sha256, shares, pcs };
+  return { ...readProfileHotspots(doc), document: doc };
 }
 
+interface SharcCostRow {
+  self_count: number;
+  per_block?: number;
+  share: number;
+}
+
+interface SharcCosts {
+  functions: (SharcCostRow & { name: string; module?: string; layer?: string })[];
+  loops?: (SharcCostRow & { function?: string; module: string; start: number; end: number; count: string })[];
+}
+
+export interface SavedEvidence {
+  pcs: SavedProfile['pcs'];
+  sharc?: SharcCosts & { unit: string };
+}
+
+type ProfileReader = Pick<DkProf, 'addrLookup'> & Partial<Pick<DkProf, 'profileReport'>>;
+
 export async function resolveSavedHotspots(
-  { sha256, pcs }: SavedProfile,
+  profile: SavedProfile,
   symbols?: Pick<NonNullable<Host['symbols']>, 'maps'>,
-  prof?: () => Promise<Pick<DkProf, 'addrLookup'>>,
-): Promise<SavedProfile['pcs']> {
-  if (!sha256 || !symbols || !prof || !(pcs.cf.length || pcs.sharc.length)) return pcs;
+  prof?: () => Promise<ProfileReader>,
+  library?: Pick<Host['library'], 'readMaps'>,
+): Promise<SavedEvidence> {
+  const { sha256, pcs, target, moduleHashes, rig } = profile;
+  const result: SavedEvidence = { pcs };
+  if ((!sha256 && !rig) || !prof || !(pcs.cf.length || pcs.sharc.length)) return result;
   try {
-    const dkprof = await prof();
-    const maps = (await symbols.maps(sha256)).filter((map) => stockImageHash(map) === sha256);
-    if (!maps.length) return pcs;
-    const addrs = [
-      ...pcs.cf.map(({ addr }) => ({ cpu: 'cf' as const, addr })),
-      ...pcs.sharc.map(({ addr }) => ({ cpu: 'sharc' as const, addr })),
-    ];
-    const { results } = dkprof.addrLookup({ maps, addrs });
-    const named = (rows: Hotspot[], start: number) =>
-      rows.map((row, i) => {
-        const name = results[start + i]?.text;
-        return name ? { ...row, name } : row;
-      });
-    return { cf: named(pcs.cf, 0), sharc: named(pcs.sharc, pcs.cf.length) };
+    const [maps, modules] = await Promise.all([
+      sha256 ? (symbols?.maps(sha256) ?? []) : [],
+      sha256 && target && moduleHashes.length
+        ? (library?.readMaps(target).then(({ modules }) => modules.map(({ json }) => JSON.parse(json))) ?? [])
+        : [],
+    ]);
+    const verified = verifiedProfileMaps(profile, [...maps, ...modules]);
+    if (!verified.length) return result;
+    const reader = await prof();
+    result.pcs = resolveProfileHotspots(profile, verified, reader);
+    if (pcs.sharc.length && reader.profileReport) {
+      const report = reader.profileReport({
+        profile: profile.document,
+        maps: verified,
+        analyses: rig?.analyses,
+        top: 8,
+      }) as { unit: string; series: (SharcCosts & { cpu: string; series: string })[] };
+      const sharc = report.series.find((row) => row.cpu === 'sharc' && row.series === 'pc');
+      if (sharc) result.sharc = { ...sharc, unit: report.unit };
+    }
   } catch {
-    return pcs;
+    // Keep the raw PCs if the maps fail, or the named PCs if the aggregate report fails.
   }
+  return result;
 }
 
 export function hotspotLabel({ addr, name }: Hotspot): string {

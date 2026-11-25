@@ -28,6 +28,34 @@ _Static_assert(offsetof(View, blocked) == 0x17, "View.blocked offset");
 _Static_assert(offsetof(View, name) == 0x28, "View.name offset");
 _Static_assert(offsetof(View, mgr) == 0x2c, "View.mgr offset");
 
+/* Brain prefix to the first word of the embedded ViewController, as returned by brain.view_manager. */
+typedef struct ViewStackBrain {
+    uint8_t _pad0[64];
+    uint32_t controller;
+} ViewStackBrain;
+_Static_assert(sizeof(ViewStackBrain) == 0x44, "ViewStackBrain size");
+_Static_assert(offsetof(ViewStackBrain, controller) == 0x40, "ViewStackBrain.controller offset");
+
+/* ViewController prefix through the intrusive view-list sentinel. */
+typedef struct ViewStackController {
+    uint8_t _pad0[20];
+    uint32_t sentinel;
+    uint8_t _pad1[8];
+} ViewStackController;
+_Static_assert(sizeof(ViewStackController) == 0x20, "ViewStackController size");
+_Static_assert(offsetof(ViewStackController, sentinel) == 0x14, "ViewStackController.sentinel offset");
+
+/* View list node prefix. The sentinel's prev link points to the view currently at the top of the stack. */
+typedef struct ViewStackNode {
+    uint32_t next;
+    uint32_t prev;
+    uint32_t view;
+} ViewStackNode;
+_Static_assert(sizeof(ViewStackNode) == 0xc, "ViewStackNode size");
+_Static_assert(offsetof(ViewStackNode, next) == 0x0, "ViewStackNode.next offset");
+_Static_assert(offsetof(ViewStackNode, prev) == 0x4, "ViewStackNode.prev offset");
+_Static_assert(offsetof(ViewStackNode, view) == 0x8, "ViewStackNode.view offset");
+
 /* The Brain singleton. */
 uint8_t * dk_fw_view_brain_instance(void) __asm__("cf.view.fn.brain.instance");
 /* The Brain-level push `(menu, &shared_ptr<View>)` (finding 71 section 2); `menu` is the object that opens the view. */
@@ -46,6 +74,8 @@ void dk_fw_view_view_ctor(uint8_t *this, const char *name) __asm__("cf.view.fn.v
 uint8_t dk_fw_view_view_push(uint8_t *view, const shared_ptr *sp, uint8_t exclusive) __asm__("cf.view.fn.view_push");
 /* The literal queue address of the UI loop's `pea <queue>` (the boot hook peeks the queue for a held safe-mode key). */
 extern const uint8_t dk_fw_view_ui_loop_queue_lit __asm__("cf.view.site.ui_loop.queue_lit");
+/* The Brain singleton pointer variable (u32 in RAM, 0 until the Brain is made): the operand of the `tst.l` at the start of the Brain getter (cf.view.fn.brain.instance). The address of each firmware is in its port file. The device tests read the view stack through it (the [ui] brain_ptr fact of the device files). */
+extern const uint8_t dk_fw_view_brain __asm__("cf.view.value.brain");
 /* The jsr at the top of the UI task's event loop that pops the next event; the hook point for the runtime's per-pass tick. */
 typedef void dk_fw_view_ui_loop_hook(void);
 

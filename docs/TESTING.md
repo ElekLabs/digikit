@@ -432,7 +432,7 @@ of a boot that failed a check would otherwise pass the next run. A `.dirty` mark
 Cards that the fixtures build (`cardRig`, the fx presets) are content-named: `dist/session-cache/cards/<key>/`
 holds `card.img` and `overlay.bin`, read-only. The key is a hash of the spec, the bytes of every input file
 (`.dkm`, `.syx`, the settings tool), the plusdrive binary, the system package, `devices/*.toml` and a format version in
-`tests/regression/runtime/card-cache.ts`. Every card carries the system package `digikit/system.dksp` (built by the Nx target `core/runtime:package`, a dependency of every device target): `system-package.ts` is the one owner of the file and its store path, `buildCard` installs it (also on a `folder` card; `systemPackage: false` leaves it off, for a test of a card without it) and the fx seed cards call `installSystemPackage`; a changed package changes every card key and so every boot snapshot. A test that lists the store expects the package in the listing (`SYSTEM_PACKAGE_STORE_PATH`, `systemPackageFiles()`). `card.key` holds this key. Equal inputs give the same content id, so the daemon's
+`tests/regression/runtime/card-cache.ts`. Regression fixtures and the Workbench reference CLI use the same [base-image builder](../packages/workbench-core/src/node/card-image.ts). It assembles the seed and invokes PlusDrive, which writes the verified filesystem superblock. The regression wrapper owns its selection overlays, injected sectors and alternate boot paths. Every card carries the system package `digikit/system.dksp` (built by the Nx target `core/runtime:package`, a dependency of every device target). `buildCard` installs it, including on a copied `folder` card. `systemPackage: false` leaves it off for a test of a card without it. The FX seed cards use the same installer. A changed package or builder changes the card key and boot snapshot identity. A test that lists the store expects the package in the listing (`SYSTEM_PACKAGE_STORE_PATH`, `systemPackageFiles()`). `card.key` holds this key. Equal inputs give the same content id, so the daemon's
 snapshot key matches and a baseline reload restores the snapshot (0.2 to 1.5 s) instead of a cold boot
 (14 s DT2, 38 s DN2). A card built on a `base` outside the cache (a card after the guest's writes) is built in a
 fresh dir and always boots cold. Eviction runs when a fixture claims its run dir: only the newest 32 card dirs
@@ -854,8 +854,11 @@ A call with `"profile": true` also returns `profile`, one `[pc, count]` row per 
 nothing is counted and the answer has no `profile` key. `MachineRig` takes `profile: true` and puts the rows in `MachineBlock.profile`. The rig is a producer for `wb profile report`
 ([INSTRUMENTATION.md](INSTRUMENTATION.md#profiles)), the profiler of the emulator and the device: `packages/sharc-rig-kit/src/profile.ts` writes the counts as a `dk.profile/1` (`rigProfile`, raw SHARC counters
 per pc, metric `sharc.blocks`, clock unit `instructions`, the load of the module's DSP image) and the labels of the placed objects as a `dk-addrmap` (`rigAddrMap`; module labels relative to its DSP image).
-`tools/devtools/rig_profile.ts` runs one conformance case, adds the counts of its steady blocks (the blocks that are no note-on block), writes both files and the module's `.dkm` to `out/runs/rig-profile/<module>/<device>/`
-and runs `wb profile report` on them with `--analyse`, so the function rows follow the map and the loop rows follow `dksharc`. It needs `mise run wasm:dkprof` once; `--print` shows the command instead. SHARC core only (no emulator), a few seconds:
+`tools/devtools/rig_profile.ts` profiles one conformance case of a machine or effect. It adds the
+machine's steady blocks or the effect's master test-chain blocks, writes the profile, address map and
+module's `.dkm` to `out/runs/rig-profile/<module>/<device>/`, and runs `wb profile report`. The profile
+includes the map and the DO-loop analysis when `dkprof.wasm` is available. Run `mise run wasm:dkprof`
+once. `--print` prints the report command for later. SHARC core only, a few seconds:
 
 ```sh
 node tools/devtools/rig_profile.ts digikit/shot --device dt2 --case sample/stereo-fwd-oneshot/note60 --top 4
