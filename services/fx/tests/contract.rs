@@ -452,6 +452,49 @@ fn an_unloaded_effect_page_row_points_to_the_empty_string() {
     assert_eq!(unsafe { *at.add(12) }, 0);
 }
 
+/// The page row of a loaded effect holds the nine parameter codes (the knob at position 0, MIX on the level slot, nothing between) and the parameter records of its two
+/// knobs hold the value index, the raw range and the default (host successor of the code and record checks of the `fx-pages` device test).
+#[test]
+fn a_loaded_effect_page_row_holds_its_codes_and_the_parameter_records_of_its_knobs() {
+    let _g = locked();
+    let f = fixture(
+        ALL.iter()
+            .find(|p| p.dyn_types > 0)
+            .expect("a device with a DSP")
+            .id,
+    );
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    let rows = unsafe { addr_of!(fxpage::DKRT_FXP_ROWS) } as u32;
+    let codes: Vec<u32> = (0..9)
+        .map(|i| unsafe { FwMem::rd(&l.core, rows + 8 + 4 * i) })
+        .collect();
+    let first = 40; // the effect knob block of `image`
+    assert_eq!(
+        codes,
+        [first, 0, 0, 0, 0, 0, 0, 0, first + 7],
+        "GAIN at knob A, empty B to H, MIX at LEVEL"
+    );
+    // the knob of a code: the mirror word of its parameter record (the value index of the knob) and the minimum, maximum and default of its registry row
+    let record = |code: u32| -> Vec<u32> {
+        let mirror = unsafe { FwMem::rd(&l.core, 0x10000 + 0x40 * code + 4) };
+        let reg = 0x20000 + 0x20 * code + 8;
+        let mut v = vec![mirror];
+        v.extend((1..4).map(|i| unsafe { FwMem::rd(&l.core, reg + 4 * i + 4) }));
+        v
+    };
+    assert_eq!(
+        record(first),
+        [0, 0, 0x7f00, 0x3200],
+        "GAIN mirror, range, default"
+    );
+    assert_eq!(
+        record(first + 7),
+        [7, 0, 0x7f00, 0x7f00],
+        "MIX mirror, range, default"
+    );
+}
+
 const KIT_CELL: u32 = 0x7000;
 const KIT_A: u32 = 0x4000_1000;
 const KIT_B: u32 = 0x4000_3000;

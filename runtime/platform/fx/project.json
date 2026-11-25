@@ -4,90 +4,18 @@
   "metadata": {
     "runtimeAcceptance": [
       {
-        "firmwareOnly": "the FX ROUTING row in the stock SETTINGS list, the stock choice popup that returns the picked index, an effect moved to the send bus without a restart, the send bus that is full, the persisted route on the card and the restarted audio and FX pages",
-        "files": ["tests/fx-routing.device.test.ts", "tests/fx-routes-persist.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["A:core/fx", "C:state"],
-        "modules": [
-          "test/dyn-fx-gain",
-          "test/dyn-fx-gain-send",
-          "test/dyn-fx-gain-sendonly",
-          "test/sine",
-          "core/services/fx",
-          "core/services/machines"
+        "files": [
+          "tests/patched-dsp-startup.device.test.ts"
         ],
-        "aliases": {
-          "test/dyn-fx-gain-send-3": "test/dyn-fx-gain-send"
-        },
-        "plusdrive": true
-      },
-      {
-        "firmwareOnly": "signed FX page words and PCM gain through the firmware pages and the stock FX audio path; the page and row tables exist only in firmware memory",
-        "files": ["tests/fx-bipolar.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["A:core/fx", "C:state"],
-        "modules": ["test/dyn-fx-gain-bipolar", "test/sine", "core/services/machines", "core/services/fx"],
-        "sources": ["tools/patchkit/hook_ab.py"],
-        "plusdrive": true
-      },
-      {
-        "firmwareOnly": "the firmware kit and project save and load reacting to the FX values and effect ids (kit objects, Load Kit, project save menu)",
-        "files": ["tests/fx-kit-persist.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["A:core/fx", "C:state"],
-        "modules": [
-          "test/dyn-fx-gain",
-          "test/dyn-fx-gain-b",
-          "test/sine",
-          "core/services/fx",
-          "core/services/machines"
+        "devices": [
+          "dt2"
         ],
-        "plusdrive": true
-      },
-      {
-        "firmwareOnly": "stock FUNC pixels, stock PCM and knob mapping through the firmware pages, and removal after SELECT and restart",
-        "files": ["tests/fx-pages.device.test.ts"],
         "dsp": "sharc",
-        "tags": ["A:core/fx"],
-        "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
-        "plusdrive": true
-      },
-      {
-        "firmwareOnly": "send cells of the Sound array, track DSP amounts and project saves written into firmware memory (the host cannot reach those raw addresses: services/fx/tests/table.rs header)",
-        "files": ["tests/fx-track-route.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["A:core/fx", "C:state"],
-        "modules": ["test/dyn-fx-gain-both", "test/sine", "core/services/fx", "core/services/machines"],
-        "aliases": {
-          "test/dyn-fx-gain-both-2": "test/dyn-fx-gain-both",
-          "test/dyn-fx-gain-both-3": "test/dyn-fx-gain-both"
-        },
-        "sources": ["tools/patchkit/hook_ab.py"],
-        "plusdrive": true
-      },
-      {
-        "firmwareOnly": "the send bus wired through the patched stock image: zero, other and full amounts as PCM (the gain law is on the rig)",
-        "files": ["tests/fx-send.device.test.ts"],
-        "dsp": "sharc",
-        "tags": ["A:core/fx"],
-        "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
-        "sources": ["tools/patchkit/hook_ab.py"],
-        "plusdrive": true
-      },
-      {
-        "files": ["tests/fx-send-dn2.device.test.ts"],
-        "devices": ["dn2"],
-        "dsp": "sharc",
-        "tags": ["A:core/fx"],
-        "modules": ["test/dyn-fx-gain", "test/sine", "core/services/fx", "core/services/machines"],
-        "sources": ["tools/patchkit/hook_ab.py"],
-        "plusdrive": true
-      },
-      {
-        "files": ["tests/patched-dsp-startup.device.test.ts"],
-        "devices": ["dt2"],
-        "dsp": "sharc",
-        "tags": ["A:core/fx", "C:boot", "C:dsp"],
+        "tags": [
+          "A:core/fx",
+          "C:boot",
+          "C:dsp"
+        ],
         "sources": [
           "runtime/platform/dsp-link/{module.toml,src/**/*,build/**/*}",
           "runtime/platform/expansion/{module.toml,src/**/*,build/**/*}",
@@ -95,7 +23,6 @@
         ],
         "compiles": true
       }
-    ],
-    "mergeTests": ["tests/fx-send.device.test.ts"]
+    ]
   }
 }

@@ -57,9 +57,8 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
         {
           const { runtime, state } = await boot('master', [SINE, FX], 'master');
           expect(state.results).toEqual([0, 0]);
-          const row = (await chain(runtime))[0]!;
-          expect(row[0]).not.toBe(0xffffffff);
-          expect(row.slice(18, 23)).toEqual([0, 0, 0, 0, 0]);
+          // the route flags of the effect row are host-tested (services/fx/tests/builder.rs `an_effect_without_routes_runs_on_the_master_only_...`)
+          expect((await chain(runtime))[0]![0]).not.toBe(0xffffffff);
           await selectSine(runtime, context.profile);
           await runtime.ui.tap('FX', { until: { ms: 400, why: REDRAW } });
           expect(await shot(runtime.session, context.artifacts, 'master-fx1')).toBe(base.hash);
@@ -91,9 +90,7 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
           const { session } = runtime;
           const { profile, artifacts } = context;
           expect(state.results).toEqual([0, 0]);
-          const row = (await chain(runtime))[0]!;
-          expect(row[0]).not.toBe(0xffffffff);
-          expect(row.slice(18, 23)).toEqual([1, 0, 0, 0, 0]);
+          expect((await chain(runtime))[0]![0]).not.toBe(0xffffffff);
           const info = sym('DKRT_FXP_TAB');
           const registry = sym('rows_info');
           const [regRows, regSize, regFirst, templateOffset] = await Promise.all(
@@ -249,11 +246,7 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
         {
           const { runtime, state } = await boot('limit', [SINE, ...names], 'limit');
           expect(state.results).toEqual([0, 0, 0, 0]);
-          expect((await chain(runtime)).slice(0, 3).map((row) => row[18])).toEqual([
-            ...Array(context.sendSlots).fill(1),
-            ...Array(3 - context.sendSlots).fill(0),
-          ]);
-          expect(context.sendSlots).toBe(device === 'dt2' ? 2 : 1);
+          // which effects get a send cell is host-tested (services/fx/tests/table.rs `the_send_limit_is_the_cells_of_the_table_...`); the device shows capacity() and the amounts below
           await capacity(runtime, context.sendSlots);
           await selectSine(runtime, context.profile);
           await pageTwo(runtime);

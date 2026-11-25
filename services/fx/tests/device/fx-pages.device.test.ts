@@ -170,17 +170,14 @@ for (const device of DEVICES) {
         );
         expect(listed).toEqual([...(device === 'dt2' ? [13, 14, 15] : [17, 18, 19]), profile.fx.page_first]);
         const row = sym('fxp_rows');
+        // the page row's codes and the knobs' parameter records are host-tested (services/fx/tests/contract.rs `a_loaded_effect_page_row_holds_its_codes_...`); the device shows the strings in firmware format
         const first = sym('params.fp0.index');
-        const codes = await Promise.all(Array.from({ length: 9 }, (_, i) => word(effect.session, row + 8 + 4 * i)));
-        expect(codes, 'GAIN at knob A, empty B-H, MIX at LEVEL').toEqual([first, 0, 0, 0, 0, 0, 0, 0, first + 7]);
         expect(await cstring(effect.session, await word(effect.session, row))).toBe('GAN');
         expect(await cstring(effect.session, await word(effect.session, row + 4))).toBe('Test Gain');
         const param = (code: number) =>
           Promise.all(Array.from({ length: 15 }, (_, i) => word(effect.session, sym('pf_table') + 60 * code + 4 * i)));
         const gain = await param(first);
         const mix = await param(first + 7);
-        expect(gain.slice(1, 5), 'GAIN mirror/range/default').toEqual([profile.fx.value_indices[0], 0, 0x7f00, 0x3200]);
-        expect(mix.slice(1, 5), 'MIX mirror/range/default').toEqual([profile.fx.value_indices[7], 0, 0x7f00, 0x7f00]);
         expect(
           await Promise.all([gain[10]!, gain[12]!, mix[10]!, mix[12]!].map((at) => cstring(effect.session, at))),
         ).toEqual(['Gain', 'GAIN', 'Mix', 'MIX']);
