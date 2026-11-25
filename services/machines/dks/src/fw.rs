@@ -5,7 +5,7 @@
 use core::ptr::read_volatile;
 use dkrt_abi::fw::{Fw, MODE_KEYS};
 use dkrt_svc_machines::paramapi;
-use dkrt_svc_machines::slots::Slots;
+use dkrt_svc_machines::slots::{Click, Slots};
 use dkrt_svc_rt::{ImportCore, Outside};
 
 /// The firmware's parameter page. Made from the [`Outside`] token that `Owner::step` gives its `act` phase and nothing else gives, so no code inside the owner can hold one: a
@@ -142,6 +142,21 @@ pub unsafe fn page_key<F: Fw>(
     if let Some(Some((code, track))) = asked {
         crate::DK_SVC_OWNER.with(|m| m.clicks().queue_click(&ImportCore, view, code, track));
     }
+}
+
+/// The tick of the file (the UI task, once per pass; `tick =` of `service!`): the click that waits runs outside the owner, so its callback may call `dk_param_get` and
+/// `dk_param_set`, which enter it (SHOT's open-picker reads the current slot). The owner only takes the click; before `init` and after `fini` there is none.
+pub unsafe extern "C" fn tick(_ctx: *mut u8) {
+    click_tick(|click| click.run());
+}
+
+/// The tick over any way to run the taken click (the host test of the file runs a closure for a module's callback, whose address would not fit a host pointer).
+pub unsafe fn click_tick(run: impl FnOnce(Click)) {
+    crate::DK_SVC_OWNER.step((), |m, ()| m.take_click(&ImportCore), |click, _| {
+        if let Some(click) = click {
+            run(click);
+        }
+    });
 }
 
 /// The hook entry of the machine page's turn: the turn ends the click flow (the owner), then the native handler of the page runs outside the owner: nonzero when a native page

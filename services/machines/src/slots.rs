@@ -36,6 +36,34 @@ pub struct Pending {
     pub view: usize,
     pub code: u32,
 }
+/// A click taken from the queue (`Slots::take_click`): what the file runs outside the owner.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Click {
+    callback: u32,
+    track: u32,
+    arg: Option<u32>,
+}
+
+impl Click {
+    /// Call the module's action: `void fn(u32 track)`, or `void fn(u32 arg, u32 track)` for a row registered with an argument.
+    ///
+    /// # Safety
+    /// The callback is code of a loaded module: taken in the same UI pass, so `detach` has not dropped its image. Run it outside the owner.
+    pub unsafe fn run(self) {
+        match self.arg {
+            Some(arg) => {
+                let call: unsafe extern "C" fn(u32, u32) =
+                    core::mem::transmute(self.callback as usize);
+                call(arg, self.track);
+            }
+            None => {
+                let call: unsafe extern "C" fn(u32) = core::mem::transmute(self.callback as usize);
+                call(self.track);
+            }
+        }
+    }
+}
+
 const NO_CLICK: Pending = Pending {
     callback: 0,
     track: 0,
@@ -165,12 +193,9 @@ impl Slots {
     }
 
     /// The queued click, taken for the UI pass: its callback, and the argument it was registered with. The flow of `param_get` and `param_set` is open from here until the
-    /// page gets input again, so the list the action opens can set the value when the user picks. `None`: nothing queued, or the row was unloaded.
-    unsafe fn take_click<C: CoreApi>(
-        &mut self,
-        core: &C,
-        owners: &[u8],
-    ) -> Option<(Pending, (bool, u32))> {
+    /// page gets input again, so the list the action opens can set the value when the user picks. `None`: nothing queued, or the row was unloaded. This runs inside the
+    /// owner and only takes the click; the file runs it outside (`Click::run`), so the callback may call `dk_param_get` and `dk_param_set`, which enter the owner.
+    pub unsafe fn take_click<C: CoreApi>(&mut self, core: &C, owners: &[u8]) -> Option<Click> {
         let p = self.pending;
         if p.callback == 0 {
             return None;
@@ -178,24 +203,14 @@ impl Slots {
         self.pending = NO_CLICK;
         let ctx = click_context(core, owners, &p)?;
         self.held.begin(ctx);
-        let arg = self.args[(p.code.wrapping_sub(crate::records::param_first(core))) as usize
+        let (with_arg, arg) = self.args[(p.code.wrapping_sub(crate::records::param_first(core)))
+            as usize
             % limits::PARAM_ROWS];
-        Some((p, arg))
-    }
-
-    /// The UI loop pass: run the queued action (`void fn(u32 track)`). The callback is the last thing that runs: it may call `dk_param_get` and `dk_param_set`, which reach
-    /// the flow through the owner again.
-    pub unsafe fn tick<C: CoreApi>(&mut self, core: &C, owners: &[u8]) {
-        let Some((p, (with_arg, arg))) = self.take_click(core, owners) else {
-            return;
-        };
-        if with_arg {
-            let call: unsafe extern "C" fn(u32, u32) = core::mem::transmute(p.callback as usize);
-            call(arg, p.track);
-        } else {
-            let call: unsafe extern "C" fn(u32) = core::mem::transmute(p.callback as usize);
-            call(p.track);
-        }
+        Some(Click {
+            callback: p.callback,
+            track: p.track,
+            arg: with_arg.then_some(arg),
+        })
     }
 
     /// `dk_param_get` and `dk_param_set`, owner half: what the call resolves to (`paramapi::target`); the firmware half (`paramapi::read`, `write`) runs outside the owner.

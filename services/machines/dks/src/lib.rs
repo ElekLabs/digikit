@@ -55,5 +55,6 @@ dkrt_svc_rt::service!(
         ("cf.machine.hook.patch_list_buffer", 4, Machines::list_start),
         ("cf.machine.hook.patch_list_copy", 4, fw::list_copy_target),
     ],
-    exports = gen_exports::exports()
+    exports = gen_exports::exports(),
+    tick = fw::tick
 );

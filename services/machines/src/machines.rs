@@ -94,6 +94,11 @@ impl Machines {
             .param_target(core, &self.reg.param_owner, track, word)
     }
 
+    /// Give parameter row `k` an owner module, as `apply` does for a loaded module's row: the host test of the service file has no loaded module.
+    pub fn own_row_for_test(&mut self, k: usize, owner: u8) {
+        self.reg.param_owner[k] = owner;
+    }
+
     /// Open the click flow as a click on a row of `owner` would (`take_click`): the host test of the service file has no loaded module to start one.
     pub fn open_flow_for_test(&mut self, ctx: crate::paramapi::Ctx) {
         self.reg.param_owner[0] = ctx.owner;
@@ -103,6 +108,12 @@ impl Machines {
     /// The click state of the machine page: the file's hooks and the exports `dk_param_get` and `dk_param_set` reach it here.
     pub fn clicks(&mut self) -> &mut Slots {
         &mut self.clicks
+    }
+
+    /// The click that waits for the UI pass, taken (the owner half of the file's tick; the file runs it outside, `Click::run`). Detach has dropped a click of an unloaded module.
+    pub fn take_click<C: CoreApi>(&mut self, core: &C) -> Option<crate::slots::Click> {
+        // SAFETY: reads the core's parameter rows
+        unsafe { self.clicks.take_click(core, &self.reg.param_owner) }
     }
 
     /// The number of the first run-time machine type, for an owner made with `new` (`start` takes it from the image): the native pages are kept by their place in the range.
@@ -319,9 +330,8 @@ impl<C: CoreApi> Provider<C> for Machines {
 impl<C: CoreApi> Ticker<C> for Machines {
     fn tick(&mut self, core: &C, phase: u32) {
         if phase == tick_phase::LAST {
-            // SAFETY: the UI task runs the tick; the queued action is code of a loaded module (`detach` drops the click of a module before its image goes)
+            // SAFETY: the UI task runs the tick (the queued click is taken by the file's tick, outside the owner)
             unsafe {
-                self.clicks.tick(core, &self.reg.param_owner);
                 self.parking.park_absent(core, &mut self.reg);
             }
         }

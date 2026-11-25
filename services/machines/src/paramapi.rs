@@ -79,7 +79,7 @@ pub fn target(
     let k = row_of_word(owners, ctx.owner, word).ok_or(E_ARG)?;
     Ok(Target {
         ctx,
-        code: first + k as u32,
+        code: first.wrapping_add(k as u32),
         track,
     })
 }
