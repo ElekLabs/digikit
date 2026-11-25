@@ -19,7 +19,13 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { hasDsp, noDspDaemon, resolveInputs, repoRoot, type Device } from '../../packages/test-support/src/firmware-inputs.ts';
+import {
+  hasDsp,
+  noDspDaemon,
+  resolveInputs,
+  repoRoot,
+  type Device,
+} from '../../packages/test-support/src/firmware-inputs.ts';
 import { DkSession, EmuUsbTransport } from '../../packages/dk-session/src/index.ts';
 import { steppedClock } from '../../packages/test-support/src/emulated-clock.ts';
 import { MS, Session } from '../../packages/test-support/src/session.ts';

@@ -177,7 +177,7 @@
   "packages/emulator/boot/examples/plusdrive_check.rs": 5,
   "packages/emulator/boot/examples/sysex_bridge.rs": 1,
   "packages/emulator/boot/src/capture.rs": 2,
-  "packages/emulator/boot/src/common.rs": 2,
+  "packages/emulator/boot/src/flash_hle.rs": 2,
   "packages/emulator/boot/src/late_send.rs": 1,
   "packages/emulator/boot/src/main.rs": 7,
   "packages/emulator/boot/src/midi.rs": 8,
