@@ -4,7 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": ["core/runtime-package", "sdk"],
+  "implicitDependencies": ["core/runtime-package", "sdk", "core/services/lfo", "dkrt-svc-lfo"],
   "metadata": {
     "runtimeAcceptance": [
       {

@@ -21,6 +21,12 @@
           "test/sine",
           "core/services/machines"
         ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
         "plusdrive": true
       },
       {
@@ -45,6 +51,12 @@
           "test/dyn-dn2",
           "test/sine",
           "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ],
         "plusdrive": true
       }

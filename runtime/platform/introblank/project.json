@@ -1,13 +1,20 @@
 {
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/introblank",
+  "implicitDependencies": ["tools/bootscreen"],
   "metadata": {
     "runtimeAcceptance": [
       {
         "files": ["tests/introblank.device.test.ts", "tests/introblank-rec.device.test.ts"],
         "dsp": "sharc",
         "modules": ["tools/bootscreen", "test/sine", "core/services/machines"],
-        "plusdrive": true
+        "plusdrive": true,
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ]
       }
     ]
   }

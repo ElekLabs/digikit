@@ -164,6 +164,39 @@ export const checkRecordsCover = (root, recs, deviceTests) => {
     throw new Error(`metadata.runtimeAcceptance of ${root} has no record for the device tests: ${missing.join(', ')}`);
 };
 
+// Throws when a record loads a real service or module (not a fixture) that the project neither names as a subject nor lists
+// as `incidental: [{ module, reason }]` (loaded, not exercised). The gate selects a test by its subjects only
+// (tools/nx/device-owners.mjs), so a loaded module that is missing there never selects the test. A service is named by its dks
+// project (the module id) and its crate (`dkrt-svc-<service>`): they select on different changes, so naming one is reported.
+// `own`: the id of the module of a module project (its own tests need no subject). `byId`: id -> { manifest }.
+export const checkSubjectCoverage = (root, recs, subjects, byId, own) => {
+  const named = new Set(subjects ?? []);
+  const problems = [];
+  for (const rec of recs) {
+    const where = rec.files?.join(', ') ?? 'a record without files';
+    const incidental = new Map();
+    for (const entry of rec.incidental ?? []) {
+      if (!entry?.module || !String(entry.reason ?? '').trim())
+        problems.push(`an incidental entry of ${root} needs a module and a reason`);
+      else incidental.set(entry.module, entry.reason);
+    }
+    for (const id of rec.modules ?? []) {
+      const manifest = byId.get(id)?.manifest;
+      if (!manifest || manifest.category === 'test' || id === own || incidental.has(id)) continue;
+      const crate = manifest.role === 'service' ? `dkrt-svc-${manifest.service}` : undefined;
+      const hasId = named.has(id);
+      const hasCrate = crate !== undefined && named.has(crate);
+      if (!hasId && !hasCrate) problems.push(`${id}${crate ? ` (and ${crate})` : ''} is loaded by ${where}`);
+      else if (crate && hasId !== hasCrate)
+        problems.push(`${hasId ? crate : id} is not named although ${hasId ? id : crate} is, for ${where}`);
+    }
+  }
+  if (problems.length)
+    throw new Error(
+      `${root}: a loaded service or module must be a subject (implicitDependencies) or listed in the record's incidental [{ module, reason }]:\n  ${problems.join('\n  ')}`,
+    );
+};
+
 const ALL_DEVICES = ['dt2', 'dn2'];
 const KNOWN_DEVICES = ['dt2', 'dn2', 'st'];
 const unionDevices = (lists) => KNOWN_DEVICES.filter((d) => lists.some((list) => list.includes(d)));
@@ -325,6 +358,7 @@ export const testOnlyNodes = (
     if (!tests.length) continue;
     const recs = records(join(workspaceRoot, root));
     checkRecordsCover(root, recs, tests);
+    checkSubjectCoverage(root, recs, config.implicitDependencies, byId, undefined);
     // Explicit fixture images build only their manifest requirements; ordinary owners keep the default image.
     const patchRoots = [...new Set(recs.flatMap((rec) => rec.patchModules ?? []))];
     const patchIds = patchRoots.length

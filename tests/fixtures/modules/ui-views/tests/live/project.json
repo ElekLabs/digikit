@@ -14,6 +14,12 @@
         "modules": [
           "digikit/debug",
           "test/ui-views"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
         ]
       }
     ]

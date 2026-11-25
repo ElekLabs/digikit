@@ -2,7 +2,7 @@
   "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
   "name": "native-page-proof-tests",
   "tags": ["test-only"],
-  "implicitDependencies": ["core/ui", "core/rows", "dkrt-svc-rows"],
+  "implicitDependencies": ["core/ui", "core/rows", "dkrt-svc-rows", "core/services/machines", "dkrt-svc-machines"],
   "metadata": {
     "runtimeAcceptance": [
       {

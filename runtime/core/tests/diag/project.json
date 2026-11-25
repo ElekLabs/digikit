@@ -22,6 +22,16 @@
           "test/dyn-fx-nan",
           "core/services/machines",
           "core/services/fx"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          },
+          {
+            "module": "core/services/fx",
+            "reason": "loaded as the effects host the fixtures need; the fx service is not exercised here"
+          }
         ]
       },
       {
@@ -38,6 +48,16 @@
           "test/dyn-dsp-hang",
           "core/services/machines",
           "core/services/fx"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          },
+          {
+            "module": "core/services/fx",
+            "reason": "loaded as the effects host the fixtures need; the fx service is not exercised here"
+          }
         ]
       },
       {
@@ -64,6 +84,12 @@
           "test/dyn-guard-nan",
           "test/sine",
           "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ],
         "plusdrive": true
       },
@@ -98,6 +124,12 @@
           "test/dyn-dn2",
           "test/sine",
           "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ],
         "plusdrive": true
       }

@@ -29,6 +29,16 @@
           "core/services/machines",
           "core/services/lfo"
         ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
         "compiles": true,
         "sources": [
           "tests/fixtures/modules/sine/module.toml",
@@ -49,6 +59,16 @@
           "test/dyn-fx-gain-send",
           "core/services/machines",
           "core/services/fx"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ]
       },
       {
@@ -63,6 +83,12 @@
         "modules": [
           "test/sine",
           "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ]
       },
       {
@@ -73,6 +99,12 @@
         "modules": [
           "digikit/debug",
           "test/entry-demo"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
         ]
       },
       {
@@ -85,6 +117,16 @@
           "test/c-demo",
           "test/sine",
           "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ],
         "sources": [
           "tools/devtools/wb.mjs",
@@ -103,6 +145,16 @@
           "test/sine",
           "test/native-page",
           "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ],
         "sources": [
           "tools/devtools/wb.mjs",
@@ -125,6 +177,24 @@
           "digikit/remote",
           "test/dyn-dn2",
           "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "digikit/probe",
+            "reason": "loaded as a module that logs in its init; the probe itself is not exercised"
+          },
+          {
+            "module": "digikit/remote",
+            "reason": "loaded as a module that registers early; the remote module itself is not exercised"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ]
       }
     ]

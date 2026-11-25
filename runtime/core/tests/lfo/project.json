@@ -16,6 +16,12 @@
           "test/lfo-shape",
           "core/services/lfo"
         ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ],
         "firmwareOnly": "hooks install into the real image and a shape fixture loads and unloads with the firmware running; refusals and stock-byte restore are assembly tests"
       },
       {

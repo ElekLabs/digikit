@@ -8,6 +8,12 @@
         "files": ["tests/fx-contract.device.test.ts"],
         "dsp": "sharc",
         "modules": ["test/dyn-fx-gain", "test/sine", "core/services/machines", "core/services/fx"],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
         "aliases": {
           "test/dyn-fx-gain-2": "test/dyn-fx-gain",
           "test/dyn-fx-gain-3": "test/dyn-fx-gain",

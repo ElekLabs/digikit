@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
-import { checkRecordsCover, deviceTargets, fileDevices, taskMode } from '../device-tests.mjs';
+import { describe, expect, it } from 'vitest';
+import { checkRecordsCover, checkSubjectCoverage, deviceTargets, fileDevices, taskMode } from '../device-tests.mjs';
 
 const none = () => [];
 const halves = (tests: string[], recs: object[], opts: object = {}) =>
@@ -121,4 +121,41 @@ it('refuses a device test that no runtimeAcceptance record lists', () => {
   expect(() =>
     checkRecordsCover('p', [{ files: ['a.device.test.ts'] }], ['a.device.test.ts', 'b.device.test.ts']),
   ).toThrow(/no record for the device tests: b\.device\.test\.ts/);
+});
+
+describe("subject coverage of a record's loaded modules", () => {
+  const byId = new Map<string, any>([
+    ['core/services/machines', { manifest: { role: 'service', service: 'machines' } }],
+    ['core/rows', { manifest: {} }],
+    ['test/sine', { manifest: { category: 'test' } }],
+  ]);
+  const rec = (extra = {}) => [
+    { files: ['a.device.test.ts'], modules: ['core/services/machines', 'test/sine'], ...extra },
+  ];
+  const crate = 'dkrt-svc-machines';
+
+  it('refuses a loaded service that the project does not name', () => {
+    expect(() => checkSubjectCoverage('p', rec(), ['core/rows'], byId, undefined)).toThrow(/core\/services\/machines/);
+  });
+  it('accepts a service named by its dks project and its crate', () => {
+    expect(() => checkSubjectCoverage('p', rec(), ['core/services/machines', crate], byId, undefined)).not.toThrow();
+  });
+  it('reports a service named by only one of the two', () => {
+    expect(() => checkSubjectCoverage('p', rec(), ['core/services/machines'], byId, undefined)).toThrow(
+      new RegExp(crate),
+    );
+    expect(() => checkSubjectCoverage('p', rec(), [crate], byId, undefined)).toThrow(/core\/services\/machines/);
+  });
+  it('accepts an incidental entry with a reason and refuses one without', () => {
+    const incidental = [{ module: 'core/services/machines', reason: 'the host of the fixtures' }];
+    expect(() => checkSubjectCoverage('p', rec({ incidental }), [], byId, undefined)).not.toThrow();
+    expect(() =>
+      checkSubjectCoverage('p', rec({ incidental: [{ module: 'core/services/machines' }] }), [], byId, undefined),
+    ).toThrow(/needs a module and a reason/);
+  });
+  it('ignores a fixture and the own module of a module project', () => {
+    expect(() =>
+      checkSubjectCoverage('p', [{ modules: ['test/sine', 'core/rows'] }], [], byId, 'core/rows'),
+    ).not.toThrow();
+  });
 });

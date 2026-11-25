@@ -14,6 +14,7 @@ import {
   packDevices,
   isUploadable,
   isFixture,
+  subjectsOf,
 } from './module-manifests.mjs';
 import { buildObjectsTarget, packTarget, packAliasesTarget } from './module-build.mjs';
 import { packSourceInputs } from './pack-inputs.mjs';
@@ -21,6 +22,7 @@ import {
   deviceTargets,
   checkMergeTests,
   checkRecordsCover,
+  checkSubjectCoverage,
   conformanceTarget,
   testOnlyNodes,
   regressionNode,
@@ -162,6 +164,7 @@ export const createNodesV2 = [
         };
       checkMergeTests(ctx.workspaceRoot, root, deviceTests, false);
       checkRecordsCover(root, recs, deviceTests);
+      checkSubjectCoverage(root, recs, subjectsOf(join(ctx.workspaceRoot, root)), byId, m.id);
       if (shipped && deviceTests.length)
         Object.assign(
           targets,

@@ -7,7 +7,13 @@
         "files": ["tests/usb-bulk.device.test.ts"],
         "dsp": "sharc",
         "modules": ["test/usb-echo", "digikit/debug"],
-        "plusdrive": true
+        "plusdrive": true,
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ]
       }
     ]
   }

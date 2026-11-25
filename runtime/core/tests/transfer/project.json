@@ -39,6 +39,12 @@
           "test/sine",
           "core/services/machines"
         ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
         "plusdrive": true
       },
       {
@@ -50,6 +56,16 @@
           "digikit/debug",
           "test/sine",
           "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
         ],
         "sources": [
           "tools/devtools/wb.mjs",

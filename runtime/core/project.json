@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime",
-  "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"],
+  "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw", "core/services/project"],
   "metadata": {
     "runtimeAcceptance": [{ "modules": ["test/svc-test", "test/svc-test-user", "test/project-user", "core/services/project"] }]
   },

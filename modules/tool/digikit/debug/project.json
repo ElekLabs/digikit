@@ -22,6 +22,16 @@
           "digikit/remote",
           "test/dyn-dn2",
           "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/probe",
+            "reason": "loaded as a module that logs in its init; the probe itself is not exercised"
+          },
+          {
+            "module": "digikit/remote",
+            "reason": "loaded as a module that registers early; the remote module itself is not exercised"
+          }
         ]
       },
       {
