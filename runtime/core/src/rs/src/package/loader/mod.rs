@@ -49,6 +49,13 @@ fn name_part(head: &[u8]) -> [u8; LOG_NAME] {
     out[..m].copy_from_slice(&name[..m]);
     out
 }
+/// FNV-1a 32 of the whole leaf of the module id in `head` (the NAME_LEN bytes of the header's name): after the last `/`, not cut.
+fn name_hash(head: &[u8]) -> u32 {
+    let n = head.iter().position(|b| *b == 0).unwrap_or(head.len());
+    let id = &head[..n];
+    let from = id.iter().rposition(|b| *b == b'/').map_or(0, |i| i + 1);
+    dkneeds::keys::name_hash_bytes(&id[from..])
+}
 const H_REG_OFF: usize = dkneeds::H_REG_OFF as usize;
 const H_REG_SIZE: usize = dkneeds::H_REG_SIZE as usize;
 const H_DSP_OFF: usize = dkneeds::H_DSP_OFF as usize;
@@ -195,6 +202,8 @@ pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     log_name: [[u8; LOG_NAME]; SEL_MAX],
     /// The same for the last file `check_file` read a header of (zero when the last check did not get that far).
     last_name: [u8; LOG_NAME],
+    /// FNV-1a 32 of the whole leaf of the module id (after the last `/`, not cut to `LOG_NAME`), for `MODULE_COMMIT`.
+    last_hash: u32,
     /// The providers the boot tried and refused (the admission, or the manager's bring-up): the live check does not count them. A provider that is only not up (nothing needed it, or
     /// the manager took it down when its last consumer went) is not here: a live load brings it up again.
     unusable: [bool; PROVIDER_MAX],
@@ -344,6 +353,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             found: Found::new(),
             log_name: [[0; LOG_NAME]; SEL_MAX],
             last_name: [0; LOG_NAME],
+            last_hash: 0,
             unusable: [false; PROVIDER_MAX],
             provs: [ProvRec::EMPTY; PROVIDER_MAX],
             exports: Exports::new(),

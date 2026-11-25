@@ -23,9 +23,9 @@ export interface CommitEvent {
   size: number;
 }
 
-/** The `name_hash` of a module's `MODULE_COMMIT` event: FNV-1a 32 of the id after its last `/`, cut to 12 characters (the name `MOD_LOAD` shows). */
+/** The `name_hash` of a module's `MODULE_COMMIT` event: FNV-1a 32 of the id after its last `/`, whole: leaves sharing their first 12 characters differ. */
 export function commitNameHash(moduleId: string): number {
-  return serviceHash(moduleId.slice(moduleId.lastIndexOf('/') + 1).slice(0, 12));
+  return serviceHash(moduleId.slice(moduleId.lastIndexOf('/') + 1));
 }
 
 /**

@@ -18,8 +18,10 @@ test('a block is read as big-endian longwords and an unmapped word fails', async
   await assert.rejects(readBlock(peek, 0x1002, 4), /aligned/);
 });
 
-test('the commit event names a module by the hash of its id after the last slash, cut to 12 characters', () => {
-  // FNV-1a 32 of "dyn-fx-gain-": the runtime hashes `Loader::last_name` with `dkneeds::keys::name_hash_bytes`
-  assert.equal(commitNameHash('test/dyn-fx-gain-send'), 0x7940758e);
+test('the commit event names a module by the hash of its whole id after the last slash', () => {
+  // FNV-1a 32 of "dyn-fx-gain-send" (the whole leaf, since leaves sharing 12 characters collided): the runtime hashes the leaf with `dkneeds::keys::name_hash_bytes`
+  assert.equal(commitNameHash('test/dyn-fx-gain-send'), 0xdb6843d4);
   assert.notEqual(commitNameHash('test/dyn-fx-gain'), commitNameHash('test/dyn-fx-gain-send'));
+  // equal in the first 12 characters
+  assert.notEqual(commitNameHash('a/reload-fx-a-one'), commitNameHash('b/reload-fx-a-two'));
 });
