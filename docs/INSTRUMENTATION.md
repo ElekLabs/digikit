@@ -1074,12 +1074,14 @@ mise run wb:cli -- audio reference inspect --port "Digitakt II" --format json
 ```
 
 The command reads Track 1's sample slot, the loaded sample's native content
-hash and stored size, and stock Delay feedback in raw firmware units. It
-compares the loaded key to the test WAV converted by `dksample`. The capture
-refuses a wrong or empty slot before sending input or opening a recorder. A
-successful capture keeps the observed values and expected sample key in
-`validation.observed_before_capture`. The feedback readback does not replace
-the acoustic check.
+hash and stored size, and stock Delay TIME and feedback in raw firmware units.
+It compares the loaded key to the test WAV converted by `dksample`. The
+capture refuses a wrong or empty slot, or Delay TIME outside `0x0240–0x0340`,
+before sending panel input or opening a recorder. A successful capture keeps
+the observed values, expected sample key and TIME range in
+`validation.observed_before_capture`. The TIME range is a setup check, not a
+tempo readback or a conversion to milliseconds. The WAV remains the check of
+actual echo spacing and decay.
 
 - Boot DT2 1.17 with the digikit debug and remote modules active. Do not load
   content modules. On hardware use USB AUDIO/MIDI, USB OUT = MAIN and

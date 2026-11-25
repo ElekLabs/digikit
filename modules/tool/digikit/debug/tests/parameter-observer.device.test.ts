@@ -137,6 +137,7 @@ runtimeTests('parameter observer follows a sample pick and panel and MIDI Delay 
   expect(await readStockDelayState(dk, profile, version)).toEqual({
     track: 1,
     sample_slot: await actualSlot(),
+    delay_time_raw: await mem.half((await mem.cf(fx.kit_ptr + 4)) + 2 * 32),
     delay_feedback_raw: await actualFeedback(),
   });
   await session.expectNoFault('stock parameter observation');

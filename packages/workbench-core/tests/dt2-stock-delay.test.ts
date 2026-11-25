@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { captureStockDelay, type DelayTarget } from '../src/reference/dt2-stock-delay.ts';
+import { captureStockDelay, isReferenceDelayTime, type DelayTarget } from '../src/reference/dt2-stock-delay.ts';
 
 function fakeTarget() {
   const steps: (string | number)[][] = [];
@@ -18,6 +18,13 @@ function fakeTarget() {
 }
 
 describe('DT2 stock Delay case', () => {
+  it('accepts a short Delay TIME setting and refuses the fresh-project default before recording', () => {
+    expect(isReferenceDelayTime(0x0288)).toBe(true); // passing emulator replay
+    expect(isReferenceDelayTime(0x0300)).toBe(true); // nominal 1/32 knob setting
+    expect(isReferenceDelayTime(0x1700)).toBe(false); // fresh project, 441 ms repeats
+    expect(isReferenceDelayTime(0)).toBe(false);
+  });
+
   it('records the same trigger at zero and wet send, then leaves Track 1 dry', async () => {
     const { target, steps } = fakeTarget();
     const result = await captureStockDelay(target, async (kind, _send, play) => {

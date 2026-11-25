@@ -116,9 +116,10 @@ send_chorus = { cc = 12, nrpn = [1, 35] }
 # The watches are pinned to the stock firmware release. The word is an index
 # in the live Sound or kit FX array, not a MIDI CC or a virtual page slot.
 # Sound slot: finding 81, kit + Sound 0x80 (word 28 after Sound +0x14).
-# Delay feedback: the fourth Delay FX value (finding 61).
+# Delay TIME and feedback: the first and fourth Delay FX values (finding 61).
 [parameter_watches."1.17"]
 sampleSlot = { scope = "track", word = 28 }
+"delay.time" = { scope = "kit", word = 32 }
 "delay.feedback" = { scope = "kit", word = 35 }
 
 # The device's test cell: the firmware the acceptance tests run, the ready-snapshot directory and whether a sample card is

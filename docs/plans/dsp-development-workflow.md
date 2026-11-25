@@ -320,10 +320,16 @@ The saved hardware upload receipt agrees on the expected hash and counts
 19,264 payload bytes before the firmware's 16-byte trailer. See
 [the DT2 pool tables](../findings/109-dt2-stock-pool-borrowing.md).
 
-The coupled emulator recorded both WAVs and included the matching keys in
-`reference.json`. That fresh project's wet take did not pass the acoustic
-check. Sample identity and effect setup are separate checks. Replay with the
-verified Delay setup before taking this as a new comparison baseline.
+**Delay TIME checkpoint.** The fresh project had TIME `0x1700` and echoes
+441.3 ms apart even though Track 1 received the requested Delay send.
+Changing only TIME to `0x0288` gave 64.90 ms spacing and 6.03 dB decay per
+repeat. The corrected emulator capture passed against the saved baseline
+within 0.15 ms. The reference CLI now reads TIME through the existing kit
+observer and refuses values outside `0x0240–0x0340` before recording.
+That range catches setup mistakes, but does not verify tempo or replace
+the acoustic check. The CLI refused the original `0x1700` without creating
+output. A second take at `0x027C` passed at 64.05 ms and 6.03 dB per repeat,
+within 0.86 ms of the `0x0288` take.
 
 Verify the remaining Delay parameters as needed for automated setup. The
 physical comparison still needs matched runtime artifacts and a working

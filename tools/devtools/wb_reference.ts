@@ -43,6 +43,7 @@ const schema = 'dk.audio-reference/1';
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 const json = (v: unknown) => JSON.stringify(v, null, 2);
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const hexWord = (raw: number) => `0x${(raw & 0xffff).toString(16).padStart(4, '0')}`;
 
 interface ReferenceOptions {
   emu?: boolean;
@@ -152,6 +153,11 @@ async function observeBeforeCapture(
   return readStockDelayCaptureState(session, record, version, reader, expected);
 }
 
+function delayTimeText(state: Awaited<ReturnType<typeof observeBeforeCapture>>): string {
+  const [min, max] = state.expected_delay_time_raw_range.map(hexWord);
+  return `Delay TIME ${hexWord(state.delay_time_raw)} raw (reference range ${min}–${max})`;
+}
+
 async function inspect(command: Command) {
   const { opts, devices, connectReady } = command;
   const link = await connectReady();
@@ -162,7 +168,7 @@ async function inspect(command: Command) {
     else {
       const sample = state.sample_matches ? 'probe verified' : state.loaded_sample ? 'different sample' : 'empty';
       console.log(
-        `Track ${state.track} · sample slot ${state.sample_slot} (${sample}) · Delay feedback raw ${state.delay_feedback_raw}`,
+        `Track ${state.track} · sample slot ${state.sample_slot} (${sample}) · ${delayTimeText(state)} · Delay feedback raw ${state.delay_feedback_raw}`,
       );
     }
     return 0;
@@ -200,6 +206,11 @@ async function run(command: Command) {
       const actual = key ? `${key.content_hash}, ${key.stored_bytes} stored bytes` : 'no loaded sample';
       throw new Error(
         `Track ${observed.track} slot ${observed.sample_slot} has ${actual}. Assign the ${spec.fixture} probe before recording.`,
+      );
+    }
+    if (!observed.delay_time_in_range) {
+      throw new Error(
+        `${delayTimeText(observed)}. Set the project to ${spec.project.tempoBpm} BPM and adjust Delay TIME near 1/32 before recording. Use audio reference inspect to recheck.`,
       );
     }
     const target = makeTarget(link, record.midi, emu);

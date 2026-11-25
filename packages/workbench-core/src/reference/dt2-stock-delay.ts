@@ -13,9 +13,22 @@ export const delayReference = {
     name: 'Delay probe',
     tempoBpm: 120,
     sampleAssignment: { track: 1, machine: 'One Shot' },
-    delaySettings: { timeMs: 64, feedback: 32, volume: 110, initialSend: 0 },
+    delaySettings: {
+      timeMs: 64,
+      // A setup check, not a conversion to milliseconds. Include the measured
+      // emulator setting (0x0288) and the nominal 1/32 knob setting (0x0300).
+      timeRawRange: [0x0240, 0x0340],
+      feedback: 32,
+      volume: 110,
+      initialSend: 0,
+    },
   },
 } as const;
+
+export function isReferenceDelayTime(raw: number): boolean {
+  const [min, max] = delayReference.project.delaySettings.timeRawRange;
+  return Number.isInteger(raw) && raw >= min && raw <= max;
+}
 
 export interface DelayTarget {
   setDelaySend(value: number): Promise<void>;
