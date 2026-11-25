@@ -43,6 +43,9 @@ pub struct ImportRows {
     pub dk_selected_track: *const (),
     pub dk_debug_log_sink_set: *const (),
     pub dk_debug_speed_flags: *const (),
+    // Resident ABI 2.5. The rows above are the 2.4 prefix.
+    pub dk_debug_top_view: *const (),
+    pub dk_debug_read_parameter: *const (),
 }
 
 // The addresses name resident functions for the whole run of the system; the rows are built once and only read.

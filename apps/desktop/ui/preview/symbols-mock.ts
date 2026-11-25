@@ -15,6 +15,7 @@ export function createPreviewSymbols(): SymbolsHost {
   let pickedMap = false;
   return createFirmwareSymbols(memoryKeyValue(), {
     async pick(kind) {
+      if (kind === 'catalog') return null;
       if (kind === 'map') {
         if (pickedMap) return null;
         pickedMap = true;

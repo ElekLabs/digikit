@@ -209,13 +209,28 @@ export interface AnalyzerHost {
 }
 
 export type SymbolKind = 'cf' | 'sharc' | 'map';
+export type ProfileSymbolKind = 'cf' | 'sharc' | 'catalog';
 export interface SymbolImage {
   device: string;
   firmware: string;
   sha256: string;
 }
+export interface SymbolReview {
+  cpu: 'cf' | 'sharc';
+  path: string;
+  url?: string;
+  entries: number[];
+}
 export interface SymbolImageMap extends SymbolImage {
   json: string;
+  review?: SymbolReview;
+}
+export interface SymbolRelease extends SymbolImage {
+  defaults: Record<ProfileSymbolKind, string>;
+}
+export interface FirmwareProfile extends SymbolImage {
+  sources: Record<ProfileSymbolKind, { path: string; override: boolean; error?: string }>;
+  review?: SymbolReview;
 }
 export interface SymbolSource {
   kind: SymbolKind;
@@ -229,10 +244,16 @@ export interface SymbolsHost {
   remove(path: string): Promise<void>;
   refresh(): Promise<void>;
   maps(stockSha256: string): Promise<Record<string, unknown>[]>;
+  profiles?(): Promise<FirmwareProfile[]>;
+  chooseProfile?(sha256: string, kind: ProfileSymbolKind): Promise<void>;
+  resetProfile?(sha256: string, kind: ProfileSymbolKind): Promise<void>;
+  catalogFrame?(path: string, sha256: string, entry?: number): Promise<string>;
+  openReview?(path: string, sha256: string, entry?: number): Promise<void>;
   revision(): number;
 }
 
 export interface Host {
+  sessions?: import('./session.ts').SessionHost;
   symbols?: SymbolsHost;
   analyzer?: AnalyzerHost;
   fs: FsHost;

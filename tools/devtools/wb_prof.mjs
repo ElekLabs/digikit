@@ -3,7 +3,7 @@
 //
 //     wb [--format json|text] addrmap lookup ADDR... [--map F]... [--image X.syx] [--loads F | --snapshot F] [--load ID=BASE] [--dsp-base ID=PC] [--cpu cf|sharc] [--ret]
 //     wb [--format json|text] module analyse MODULE.dkm DSP.dko.json
-//     wb [--format json|text] profile report FILE [--top N] [--map F]... [--image X.syx] [--loads F] [--analyse ID=MODULE.dkm:DSP.dko.json]...
+//     wb [--format json|text] profile report FILE [--run-id ID] [--top N] [--map F]... [--image X.syx] [--loads F] [--analyse ID=MODULE.dkm:DSP.dko.json]...
 //     wb profile calibrate fit --device D.json... --model E.json... --out cal.json [--block-cycles N] [--model-id ID]   (device and model captures of the same cases: docs/INSTRUMENTATION.md "Calibration")
 //     wb [--format json|text] profile calibrate report cal.json [--model-profile FILE]    (--calibration FILE on `profile report` adds the estimate to a model profile's DSP rows)
 //     wb profile calibrate run --profile NAME|FILE [--out DIR]   (the capture runner: tools/devtools/wb_calibrate.mjs, docs/INSTRUMENTATION.md "Calibration runs")
@@ -22,8 +22,15 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DkProf } from '../../packages/dk-session/src/dkprof.ts';
+import {
+  readProfileHotspots,
+  resolveProfileHotspots,
+  verifiedProfileMaps,
+} from '../../packages/workbench-core/src/profile/hotspots.ts';
 import { SPAN_PHASES } from '../../packages/dk-session/src/gen_proto.ts';
-import { expandCaptures } from '../../packages/workbench-core/src/profile/calibration-view.ts';
+import { expandCaptures, observedDispatch } from '../../packages/workbench-core/src/profile/calibration-view.ts';
+import { formatSpanShare, readSpanSummary } from '../../packages/workbench-core/src/profile/span-summary.ts';
+import { readTrace } from '../../packages/workbench-core/src/profile/trace.ts';
 import {
   buildProfile,
   cfPart,
@@ -61,7 +68,26 @@ export async function loadProf(root, fail) {
 function mapsOf(opts) {
   const files = [...(opts.map ?? [])];
   if (opts.image) files.push(opts.image.replace(/\.syx$/, '') + '.addrmap.json');
-  return files.map((f) => readJson(f));
+  return files.map((f) => {
+    const map = readJson(f);
+    const review = map.review;
+    delete map.review;
+    if (
+      typeof review?.file === 'string' &&
+      path.basename(review.file) === review.file &&
+      /\.html?$/i.test(review.file) &&
+      Array.isArray(review.entries) &&
+      typeof review.html_sha256 === 'string'
+    ) {
+      const html = path.resolve(path.dirname(f), review.file);
+      try {
+        if (sha256(html) === review.html_sha256) map.review = { ...review, path: html };
+      } catch {
+        // An absent or unreadable catalog still leaves valid function names.
+      }
+    }
+    return map;
+  });
 }
 
 function parseAddr(text, defaultCpu, fail) {
@@ -113,31 +139,20 @@ export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
     return 0;
   }
   if (cmd === 'profile' && sub === 'report') {
-    if (rest.length !== 1) fail('profile report FILE [--top N]');
-    const req = { profile: readJson(rest[0]), maps: mapsOf(opts), format };
-    if (opts.top !== undefined) req.top = Number(opts.top);
-    if (opts.loads) req.loads = readJson(opts.loads);
-    for (const spec of opts.analyse ?? []) {
-      const at = spec.indexOf('=');
-      const [dkm, dko] = (at < 0 ? '' : spec.slice(at + 1)).split(':');
-      if (at < 0 || !dkm || !dko) fail('--analyse ID=MODULE.dkm:DSP.dko.json');
-      (req.analyses ??= {})[spec.slice(0, at)] = prof.moduleAnalyse(
-        Uint8Array.from(readFileSync(dkm)),
-        Uint8Array.from(readFileSync(dko)),
-      );
-    }
-    const rep = prof.profileReport(req);
-    if (opts.calibration) {
-      const cal = readJson(opts.calibration);
-      const est = prof.calibrateReport({ calibration: cal, profile: req.profile, estimate_only: true, format });
-      if (format === 'json') console.log(JSON.stringify({ ...rep, estimate: est.estimate }));
-      else {
-        show(rep, format);
-        process.stdout.write(est.text);
-      }
-      return 0;
-    }
-    show(rep, format);
+    if (rest.length !== 1) fail('profile report FILE [--run-id ID] [--top N]');
+    const doc = readJson(rest[0]);
+    const bundle = doc?.schema === 'dk.calcaptures/1';
+    const captures = expandCaptures(doc, undefined, rest[0]);
+    if (!captures.length) fail('capture set has no runs');
+    const selected = opts['run-id'];
+    const profiles = selected === undefined ? captures : captures.filter((capture) => capture?.run?.id === selected);
+    if (!profiles.length) fail(`no capture with run ID ${selected}`);
+    if (selected !== undefined && profiles.length > 1) fail(`capture has multiple runs with ID ${selected}`);
+    if (profiles.length > 1 && (opts.calibration || opts.loads || opts.analyse?.length))
+      fail('--calibration, --loads and --analyse require --run-id when reporting on a capture set');
+    const reports = profiles.map((profile) => reportProfile(prof, opts, format, profile, fail));
+    if (format === 'json' && bundle && selected === undefined) console.log(JSON.stringify({ captures: reports }));
+    else for (const report of reports) show(report, format);
     return 0;
   }
   if (cmd === 'profile' && sub === 'calibrate') return calibrate({ prof, rest, opts, format, fail });
@@ -145,6 +160,73 @@ export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
   fail(
     'usage: wb addrmap lookup | module analyse | profile report | profile record | profile spans (see tools/devtools/wb_prof.mjs)',
   );
+}
+
+function reportProfile(prof, opts, format, profile, fail) {
+  const top = opts.top === undefined ? undefined : Number(opts.top);
+  const evidence = readProfileHotspots(profile, top);
+  const maps = mapsOf(opts);
+  const verified = new Set(verifiedProfileMaps(evidence, maps));
+  // Existing aggregate reports can use an explicit module map for captures that predate pack hashes.
+  // Navigable hotspot evidence below always requires a matching pack hash.
+  const reportMaps = evidence.sha256
+    ? maps.filter((map) => verified.has(map) || (map.kind === 'module' && !evidence.moduleHashes.length))
+    : [...verified, ...maps];
+  const req = { profile, maps: reportMaps, format, analyses: evidence.rig?.analyses };
+  if (top !== undefined) req.top = top;
+  if (opts.loads) req.loads = readJson(opts.loads);
+  if (opts.analyse?.length) req.analyses = { ...req.analyses };
+  for (const spec of opts.analyse ?? []) {
+    const at = spec.indexOf('=');
+    const [dkm, dko] = (at < 0 ? '' : spec.slice(at + 1)).split(':');
+    if (at < 0 || !dkm || !dko) fail('--analyse ID=MODULE.dkm:DSP.dko.json');
+    (req.analyses ??= {})[spec.slice(0, at)] = prof.moduleAnalyse(
+      Uint8Array.from(readFileSync(dkm)),
+      Uint8Array.from(readFileSync(dko)),
+    );
+  }
+  const rep = prof.profileReport(req);
+  const hotspots =
+    format === 'json'
+      ? resolveProfileHotspots(
+          {
+            ...evidence,
+            loads: req.loads ? { modules: [...(evidence.loads?.modules ?? []), ...req.loads.modules] } : evidence.loads,
+          },
+          maps,
+          prof,
+        )
+      : undefined;
+  if (hotspots) rep.hotspots = hotspots;
+  const dispatch = observedDispatch(profile);
+  if (format === 'json' && dispatch.length) rep.dispatch = dispatch;
+  const spans = readSpanSummary(profile);
+  const trace = readTrace(profile)?.trace;
+  if (format === 'json') {
+    if (spans) rep.spans = spans;
+    if (trace)
+      rep.trace = { hz: trace.hz, events: trace.events.length, dropped: trace.dropped, markers: trace.markers };
+  } else {
+    for (const row of dispatch) {
+      const label = [row.module, row.route, 'row ' + row.row].filter(Boolean).join(' · ');
+      rep.text += `${label}    ${row.calls} calls    max ${row.max_block} ${row.unit ?? 'units'}/block\n`;
+    }
+    if (spans) {
+      rep.text += 'Main CPU spans (recorded window)\n';
+      const us = (n) => (n === undefined ? '—' : n.toFixed(2) + ' µs');
+      for (const row of spans.rows) {
+        rep.text += `  ${row.name}    ${row.calls ?? '—'} calls    total ${us(row.totalUs)}    max ${us(row.maxUs)}    ${formatSpanShare(row.share)}\n`;
+      }
+    }
+    if (trace) rep.text += `Main CPU trace: ${trace.events.length} retained events, ${trace.dropped} dropped\n`;
+  }
+  if (opts.calibration) {
+    const cal = readJson(opts.calibration);
+    const est = prof.calibrateReport({ calibration: cal, profile: req.profile, estimate_only: true, format });
+    if (format === 'json') rep.estimate = est.estimate;
+    else rep.text += est.text;
+  }
+  return rep;
 }
 
 const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');

@@ -4,49 +4,49 @@
  "relocs": [
   {
    "addend": 0,
-   "offset": 432,
+   "offset": 448,
    "section": ".rodata",
    "symbol": "cf.storage.fn.path.open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 436,
+   "offset": 452,
    "section": ".rodata",
    "symbol": "cf.storage.fn.path.read",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 440,
+   "offset": 456,
    "section": ".rodata",
    "symbol": "cf.storage.fn.path.close",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 444,
+   "offset": 460,
    "section": ".rodata",
    "symbol": "cf.storage.fn.path.size",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 448,
+   "offset": 464,
    "section": ".rodata",
    "symbol": "cf.storage.fn.directory.open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 452,
+   "offset": 468,
    "section": ".rodata",
    "symbol": "cf.storage.fn.directory.next",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 456,
+   "offset": 472,
    "section": ".rodata",
    "symbol": "cf.storage.fn.directory.metadata",
    "type": "cf.32"
@@ -55,13 +55,13 @@
  "sections": [
   {
    "align": 4,
-   "hex": "444b445600000001000001500000000fec070000480000004000000008000000fc0cc0000000001347fe000000001000000a2c2b000000100000000800000010000000000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018000000190000001a0000001b0000001c0000001d0000001e0000001f000000200000002100000022000000230000002400000025000000260000002700000028000000290000002a0000002b0000002c0000002d0000002e0000002f0000003000000031000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000300000004000000016474320000000000000000fe0002f6c40000001000000002fc07000c07de2900000000474000000047e3000047e8b00047fe10000000000000000000000000000000000002df100000029000444b494d47494431000000000000000000000000000000000000000000000000000000000000000000000000",
+   "hex": "444b445600000001000001500000000fec070000480000004000000008000000fc0cc0000000001347fe000000001000000a2c2b000000100000000800000010000000000000000100000002000000030000000400000005000000060000000700000008000000090000000a0000000b0000000c0000000d0000000e0000000f000000100000001100000012000000130000001400000015000000160000001700000018000000190000001a0000001b0000001c0000001d0000001e0000001f000000200000002100000022000000230000002400000025000000260000002700000028000000290000002a0000002b0000002c0000002d0000002e0000002f0000003000000031000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000300000004000000016474320000000000000000fe0002f6c40000001000000002fc07000c07de2900000000478000470400000034000004500000008e4000000047e3000047e8b00047fe10000000000000000000000000000000000002df100000029000444b494d47494431000000000000000000000000000000000000000000000000000000000000000000000000",
    "kind": "data",
    "name": ".rodata",
-   "size": 460
+   "size": 476
   }
  ],
- "source_sha256": "921a4dd49b968955051583f4b497dcaa3fe3407fe076c747cc6d2ccd7b5f550d",
+ "source_sha256": "b27e6041a0075110cd76d626b9b7a0506ac7a01a5945df03e58c2827816b88af",
  "symbols": [
   {
    "global": true,
@@ -139,13 +139,13 @@
    "global": true,
    "name": "dkrt_files_fs",
    "section": ".rodata",
-   "value": 448
+   "value": 464
   },
   {
    "global": true,
    "name": "dkrt_image_id",
    "section": ".rodata",
-   "value": 424
+   "value": 440
   },
   {
    "global": true,
@@ -157,13 +157,13 @@
    "global": true,
    "name": "dkrt_peek_ranges",
    "section": ".rodata",
-   "value": 376
+   "value": 392
   },
   {
    "global": true,
    "name": "dkrt_sample_fs",
    "section": ".rodata",
-   "value": 432
+   "value": 448
   },
   {
    "global": true,
@@ -197,15 +197,21 @@
   },
   {
    "global": true,
+   "name": "dkrt_stock_kit_layout",
+   "section": ".rodata",
+   "value": 376
+  },
+  {
+   "global": true,
    "name": "dkrt_store_first",
    "section": ".rodata",
-   "value": 408
+   "value": 424
   },
   {
    "global": true,
    "name": "dkrt_store_sectors",
    "section": ".rodata",
-   "value": 412
+   "value": 428
   }
  ],
  "toolchain": {
@@ -213,7 +219,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "0",
-  "isa_check": "a204371d64a7417ad3146e13386c5f11d026cf80e6b6ceeb599a33d47820fe50",
+  "isa_check": "82628b848f08c9e34777c04219c364872045193911eb12c4c711f89127ab0515",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

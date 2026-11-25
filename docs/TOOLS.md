@@ -510,8 +510,8 @@ Text output defaults to 60 lines. The call graph is cached in `out/cache/fw/`.
 | `cost`, `stores` | | Static instruction cost and call-reachable store operands |
 | `sql`, `batch` | Read-only SQL and mixed query batches | Read-only SQL and mixed query batches |
 
-Build both CPU databases with `fw.py build -i IMAGE --other IMAGE`. See the
-[firmware guide](FIRMWARE.md) for the required inputs.
+Build a SHARC review directly from a stock firmware file or prepare both
+CPU databases through the [firmware guide](FIRMWARE.md#generate-a-sharc-catalog-from-a-syx).
 
 - The ColdFire `firmware.sqlite` holds the Ghidra facts, decompiled C and
   disassembly in `function_text`, full-text indexes, glossary, and catalog.

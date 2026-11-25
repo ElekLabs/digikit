@@ -19,10 +19,10 @@ fn hardware_audio_monitor() {
         std::env::var("DIGI_REMOTE_AUDIO_INPUT").expect("set the exact input name or ID");
     let output_match =
         std::env::var("DIGI_REMOTE_AUDIO_OUTPUT").expect("set the exact default output name");
-    let inputs: Vec<_> = inputs()
+    let inputs: Vec<_> = dkaudio::inputs()
         .unwrap()
         .into_iter()
-        .filter(|input| input.name == input_match || input.id == input_match)
+        .filter(|input| input.name() == input_match || input.id() == input_match)
         .collect();
     assert_eq!(
         inputs.len(),
@@ -50,7 +50,10 @@ fn hardware_audio_monitor() {
         assert!(pcm_source.read(session, &mut cursor).is_none());
         let (start, mut started) = tauri::async_runtime::channel(1);
         monitor
-            .send(super::super::Command::Start(inputs[0].id.clone(), start))
+            .send(super::super::Command::Start(
+                inputs[0].id().to_owned(),
+                start,
+            ))
             .unwrap();
         assert_eq!(started.blocking_recv().unwrap().unwrap(), output_match);
         let (observe, mut observed) = tauri::async_runtime::channel(1);

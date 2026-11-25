@@ -663,6 +663,17 @@ node tools/devtools/wb.mjs profile report out/try/synthetic.profile.json --map o
 #              400 100.0%  digikit/pluck
 ```
 
+For a saved capture set, pass the same file you open in Workbench. The JSON report has a `captures`
+array with one report per run. Add `--run-id ID` to get one report with the usual output shape.
+Select one run before supplying a load-table, analysis or calibration override.
+The report includes saved span totals and retained and dropped trace counts where recorded.
+It does not join spans and hotspot samples from different runs.
+
+```sh
+node tools/devtools/wb.mjs --format json profile report FILE.captures.json
+node tools/devtools/wb.mjs --format json profile report FILE.captures.json --run-id ID
+```
+
 `wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR]` starts `cf.profile {enable: true}` on the running emulator (the daemon needs the `cf-profile` feature, below; the launcher builds every workbench daemon with it), waits N seconds
 and writes the counters as a profile; with `--image` it also reads the load table of the running image. `--since-boot` skips the start and the wait and reads the counters since an earlier `cf.profile {enable: true}` (read a paused emulator to get a stable state). A real run, 4 s of a DT2 1.17 image with the runtime (no modules loaded; the dev map adds firmware names):
 
@@ -673,7 +684,7 @@ node tools/devtools/wb.mjs profile record --seconds 4 --image out/try/rt.syx --o
 # out/try/real.profile.json: 371 counters over 4 s
 ```
 
-`wb profile spans [--start|--stop|--reset] [--out FILE]` reads the runtime span counters of a device (or an emulator with a MIDI port) over the dk-session link: the flag sets the counting first (`--start` resets the counters, then starts), then it reads the spans (modules, the phases `early`, `late`, `last`, and polls) and prints one row each. With `--out` it writes a `dk.profile/1` with `spans` (`owner`, `kind`, `name`, `calls`, `sum_ticks`, `max_ticks`) `span_clock_hz` and `span_elapsed_ticks` (the ticks the counters were gathered over: `sum_ticks / span_elapsed_ticks` is the share of the CPU); `raw` stays empty and `wb profile report` ignores the spans. It takes `--port` and `--bin` like the other device commands. The numbers below are an example:
+`wb profile spans [--start|--stop|--reset] [--out FILE]` reads the runtime span counters of a device (or an emulator with a MIDI port) over the dk-session link: the flag sets the counting first (`--start` resets the counters, then starts), then it reads the spans (modules, the phases `early`, `late`, `last`, and polls) and prints one row each. With `--out` it writes a `dk.profile/1` with `spans` (`owner`, `kind`, `name`, `calls`, `sum_ticks`, `max_ticks`) `span_clock_hz` and `span_elapsed_ticks` (the ticks the counters were gathered over: `sum_ticks / span_elapsed_ticks` is the share of the CPU). `raw` stays empty because spans do not sample PCs. It takes `--port` and `--bin` like the other device commands. The numbers below are an example:
 
 ```sh
 node tools/devtools/wb.mjs profile spans --start                    # start counting
@@ -689,7 +700,7 @@ node tools/devtools/wb.mjs profile spans --out out/try/spans.profile.json
 
 Calibration fits the factor between what a device measured and what the model (the emulator) counted ([profiling.md](plans/profiling.md) 13.2). It needs no device: the inputs are profiles
 already captured, a device one and an emulator one per case, each with `run.case_id` and `run.input_sha256` and the DSP stats rows (`dsp_rows`, `dsp`) and/or `spans`. The fit runs in Rust
-(`packages/dkprof/src/calibrate.rs`, through `dkprof.wasm`), so `wb`, the workbench and patchkit use one code. The capture runner `wb profile calibrate run` is not built yet and prints so.
+(`packages/dkprof/src/calibrate.rs`, through `dkprof.wasm`), so `wb`, the workbench and patchkit use one code.
 
 ```sh
 mise run wasm:dkprof                    # once: apps/web/public/dkprof.wasm
@@ -729,10 +740,28 @@ A calibration run plays a fixed setup on a target and captures the DSP stats win
 
 ```sh
 node tools/devtools/wb.mjs --emu profile calibrate run --profile light            # the running emulator (mise run emu:serve)
+node tools/devtools/wb.mjs --emu profile calibrate run --profile modules --case pluck --case freqshift --trace --out out/runs/calibration/modules
 node tools/devtools/wb.mjs --port Digitakt profile calibrate run --profile heavy --out out/runs/calibration/dt2-heavy
 ```
 
-`--profile` is a file or a name in `devices/calibration/profiles/` (a name wins over a folder of the same name: `modules` is the profile, not `modules/`). Module cases are those of the modules whose `module.toml` lists a port of the target's device (tb303 is Digitakt II only). Captures go to `--out` (default `out/runs/calibration/<time>-<profile>-<target>/`) as `<case>-<n>.profile.json` with a `run.json` that lists them; the summary prints one line per capture. Each capture is written as it finishes and `run.json` is updated every time, so a failed run keeps what finished (and `run.json` carries the error). Every capture has `run.firmware_sha256`, the INFO `fw_id` (first 8 bytes of the SHA-256 of the stock firmware, 16 hex digits; the emulator's runtime reports the same field, so a device and an emulator capture of one firmware agree); a target that reports none is refused unless `--allow-unidentified-firmware` is given. The exit status is 1 when a case was skipped (the target lacks something it needs; the line says what) or the run failed.
+`--profile` is a file or a name in `devices/calibration/profiles/` (a name wins over a folder of the same name: `modules` is the profile, not `modules/`). Use `--case ID` more than once to replay a subset in profile order. Module cases are those of the modules whose `module.toml` lists a port of the target's device (tb303 is Digitakt II only). Captures go to `--out` (default `out/runs/calibration/<time>-<profile>-<target>/`) as `<case>-<n>.profile.json` with a `run.json` that lists them; the summary prints one line per capture. Each capture is written as it finishes and `run.json` is updated every time, so a failed run keeps what finished (and `run.json` carries the error). Every capture has `run.firmware_sha256`, the INFO stock hash prefix used to pair old and new captures. When the prefix uniquely matches the device registry, `run.stock_firmware_sha256` also holds the full hash for hotspot lookup; a target that reports none is refused unless `--allow-unidentified-firmware` is given. The exit status is 1 when a case was skipped (the target lacks something it needs; the line says what) or the run failed.
+
+For an effect case, `setup` checks the running route and row reported by the
+runtime's MODULES reply before the capture window. It accepts `route = "default"`, `"master"`, or
+`"send"`. Configure the route in **FX ROUTING** before capturing. Set the
+module's own send amount when the workload needs wet audio on the send
+route. The stock delay send controls the stock delay. The capture records the
+resolved workload and the dispatch rows in `run.workload` and `run.dispatch`.
+It keeps an effect measurement only when its exact DSP row counted calls
+and its route still matches.
+
+Use `--trace` or select **Include ColdFire trace** in the Workbench
+Calibration tab to keep a bounded event trace with calibration captures.
+The retained trace and its markers share the runtime span clock. The marker
+at zero is the counter reset. **Workload end** is sampled after the requested
+stimulus window, and **Capture stop** includes the wait for the final DSP sweep.
+The aggregate counters remain available when the event buffer fills.
+
 
 Preparation on the device: INPUT FROM is USB or MIDI+USB and RECEIVE NOTES and RECEIVE CC/NRPN are on (SETTINGS > MIDI CONFIG > PORT CONFIG), and the tracks have their factory MIDI channels (CHANNELS; the `[midi]` table of the device file, section 8.4 of the manual: DT2 tracks 1 to 8 on 1 to 8, DN2 tracks 1 to 16 on 1 to 16). Nothing reports these settings to the host, so the runner cannot check them; a note that makes no sound is how a wrong one shows. The project must have its factory filter (Multi-Mode); the filter type cannot be set over MIDI. The device needs the debug module (spans, DSP stats) and, for `key` and `turn` steps, the remote module.
 
@@ -745,7 +774,7 @@ Preparation on the device: INPUT FROM is USB or MIDI+USB and RECEIVE NOTES and R
 | `midi.nrpn` | `track`, `param` or `nrpn = [msb, lsb]`, `value` (0 to 127, mapped onto the whole 14-bit range: 0 is 0, 127 is 16383) or `value14` (0 to 16383) |
 | `midi.start`, `midi.stop` | none |
 | `key`, `turn` | `key` (name or code), `hold_ms`; `encoder`, `by` (remote module) |
-| `setup` | one of `machine = TYPE or module id`, `filter = TYPE`, `effect = module id`; `track`. The runner calls the rig's setter (`trackSetup` of dk-session: the SETUP command of the debug module, awaited on its SETUP_DONE event; `track` is 1 to 16). A machine given as a module id is the first machine type the runtime reports for that module (`MODULES`), read when the step plays; `module#n` is its n-th (counted from 1, in the order of the module's `[[machine]]` entries). `effect` is not supported by SETUP: a case with it is skipped with that reason. A rig without the debug log skips the case. The request is repeated while the module answers E_STATE (its track watch has no baseline yet, about 2 s after a boot) |
+| `setup` | one of `machine = TYPE or module id`, `filter = TYPE`, `effect = module id`. Machine and filter take `track`. Effects take optional `route`. The runner calls the rig's setter (`trackSetup` of dk-session: the SETUP command of the debug module, awaited on its SETUP_DONE event; `track` is 1 to 16). A machine given as a module id is the first machine type the runtime reports for that module (`MODULES`), read when the step plays; `module#n` is its n-th (counted from 1, in the order of the module's `[[machine]]` entries). An effect step checks the running route and dispatch row through MODULES. A rig without the debug log skips the case. The request is repeated while the module answers E_STATE (its track watch has no baseline yet, about 2 s after a boot) |
 | `wait` | one of `ms` (emulated time on the emulator, wall time on a device), `event = KIND` with optional `match = { field = value }` and `within_ms` (the runtime log, `RuntimeEvents.until`), `drained = true` (a target that tells) |
 | `shot` | `name` (a target with a screenshot; `wb` has none yet: the case is skipped) |
 | `capture` | `mark = "start"` or `"stop"`: the steps between them are the measured window of each repeat, in place of `capture_s` |
@@ -758,11 +787,24 @@ Preparation on the device: INPUT FROM is USB or MIDI+USB and RECEIVE NOTES and R
 
 **Flow.** All steps are resolved for the device first (a wrong name, a track without a channel, a value out of range fails before anything is played). Then, per case: make the loaded content modules exactly the case's (a restart through `restartDevice`, only when they differ, after the runtime has called the running boot stable (its `STABLE` event, or an event `stable_blocks` of the boot record past the boot's start when the ring dropped it, waited for 1.5 times that long plus 5 s: the runtime counts boots that were not stable and a second one in a row starts in safe mode with nothing loaded; if the boot is not seen stable the run stops with that message), with the debug module kept in the selection (the run waits on its log), and then until the runtime's own `MOD_LOAD` (and `MOD_DSP` for a DSP part) events of every module of the selection have come (`RuntimeEvents.untilModulesActive`, no list poll; a refusal is `ModuleLoadRefused`: when the case declares `needs = ["core/sample-pool"]` in its `calibration.toml` and the `MOD_NEEDS` of the refusal names that core module, the case is skipped with the reason that the image lacks it); the stock case therefore runs with none loaded, which the runner checks against `MODULES` and refuses otherwise, and refuses a stock capture that counted module rows); play `setup`, the case steps (those before `capture start`) once; per repeat: start the counters (spans reset and started, DSP stats cleared and started), warm up `warmup_s`, clear (a new generation), play the window or wait `capture_s`, then wait for the `DSP_SWEEP` event of the clear generation (the runtime logs it when the mirror publishes a complete sweep, about every 50 blocks; no polling, a wall-clock guard only), stop the counters (also after a failure), then read the spans and the newest complete DSP sweep, so both describe one frozen window; then the rest of the steps and `teardown` (also after a failure). Each capture is a `dk.profile/1` with `run.case_id`, `run.input_sha256` (SHA-256 of the profile timing, the resolved operations with channels and numbers, and the case modules), `run.module_sha256` (the SHA-256 of each loaded `.dkm` file), `spans` and `span_clock_hz`, and, when the target has PROFILE_DSP, `dsp` (`unit` `insn` on the emulator, `cycles` on a device; `blocks`, `max_stock_block_delta`, `overruns`) and `dsp_rows` (`row`, `kind`, `calls`, `sum_cycles`, `max_call`, `max_block`; rows with no calls and no maximum left out). A debug module without PROFILE_DSP (an older one) gives spans only and the run says so. The profiles `light` and `heavy` play stock engines only, so their captures have no DSP rows with calls: `calibrate fit` pairs their ColdFire spans (an emulator against itself gives exactly 1.000) and finds no DSP pair until the module cases run. `DSP_SWEEP` exists only while the counters run (it is logged once per sweep, 30 a second, while counting): counters left on by a run that could not stop them would fill the log and make `RuntimeEvents` report lost events for every reader, so the runner and the stats source stop any counters left on before they count, and refuse to run a profile with module cases on a target without PROFILE_DSP (only an unknown-command answer, `E_PROTO`, means that; any other error stops the run). The device is named from the runtime's INFO (`port`), which the debug module's host needs anyway.
 
-**DSP block costs.** In the desktop workbench, select **Include DSP block costs** beside Record in Profile or Performance, open **Performance → DSP blocks**, start a recording, play the pattern, then stop. While the pane is open it updates once per second from the latest complete sweep. Stop freezes the final reading. The chart ranks active machine and effect dispatch slots by estimated mean cost per audio block and shows the largest measured block for each. Calls and worst-call cost help distinguish a frequently called module from an expensive single call. Hardware reports cycles and the emulator reports instructions. The checkbox defaults to off and stays fixed during a recording. On Digitone II, the diagnostics stream uses an effect-bus audio slot while recording. The device sends each sweep in pages, so the row total and block count can differ by roughly 50 blocks or more, especially affecting short recordings. The block count and overruns cover the newest complete DSP stats sweep of the recording. A stock-only pattern can produce block counts with no active module rows. Profile export includes the same sweep in `dsp` and `dsp_rows`.
+**DSP block costs.** In the desktop workbench, select **Include DSP block costs** in the Performance drawer's capture controls, open **Performance → DSP blocks**, start a recording, play the pattern, then stop. While the pane is open it updates once per second from the latest complete sweep. Stop freezes the final reading. The chart ranks active machine and effect dispatch slots by estimated mean cost per audio block and shows the largest measured block for each. Calls and worst-call cost help distinguish a frequently called module from an expensive single call. Hardware reports cycles and the emulator reports instructions. The checkbox defaults to off and stays fixed during a recording. On Digitone II, the diagnostics stream uses an effect-bus audio slot while recording. The device sends each sweep in pages, so the row total and block count can differ by roughly 50 blocks or more, especially affecting short recordings. The block count and overruns cover the newest complete DSP stats sweep of the recording. A stock-only pattern can produce block counts with no active module rows. Profile export includes the same sweep in `dsp` and `dsp_rows`.
 
-**ColdFire trace capture.** In the desktop workbench, select **Performance → Spans → Start recording**. The **Profile** tab controls the same recording. Stop from either view. Open **Performance → Timeline** to inspect one lane per ColdFire owner, hover for event timing, and zoom around the pointer to separate short calls. The event and drop counts describe the retained portion of the recording. Choose **Profile → Export…** to save the capture. With runtime 0.11.3 and a trace-capable debug module, the file includes a `trace` object. Each event has a numeric owner matching the span table, a decimal-string `startTicks` relative to capture start, and a numeric `durationTicks`. Divide ticks by `trace.hz` for seconds. The device retains up to 256 events and counts omitted events in `trace.dropped`. The aggregate counters continue through Stop, including after the event buffer fills. Earlier debug modules and runtimes support the interval view and aggregate exports.
+**ColdFire trace capture.** Select **Start recording** in the Performance drawer. The **Profile** tab has a shortcut to those controls. Stop the recording and open **Performance → Timeline** to inspect one lane per ColdFire owner, hover for event timing, and zoom around the pointer to separate short calls. The event and drop counts describe the retained portion of the recording. Choose **Save capture…** in Performance after stopping. With runtime 0.11.3 and a trace-capable debug module, the file includes a `trace` object. Each event has a numeric owner matching the span table, a decimal-string `startTicks` relative to capture start, and a numeric `durationTicks`. Divide ticks by `trace.hz` for seconds. The device retains up to 256 events and counts omitted events in `trace.dropped`. The aggregate counters continue through Stop, including after the event buffer fills. Earlier debug modules and runtimes support the interval view and aggregate exports. In **Performance → Timeline**, choose
+**Open capture…** to inspect a `dk.profile/1` or a saved
+`dk.calcaptures/1` run, even with no active target. When a file contains several
+runs, use the **Capture** selector. Profile, Spans, DSP blocks and Timeline share it.
+**Spans** shows calls, total and max time, and CPU share for the whole saved window.
+Current captures do not include interval history, so the rolling interval plot is live only.
+Available hotspots open in Profile. DSP blocks uses the saved units and names
+the module and route when the dispatch matches the row. Block costs without DSP
+PC samples cannot name individual routines.
 
-**Profile pane (desktop workbench).** The Profile tab of the right-hand column (Emulator page and Remote page; `apps/desktop/ui/src/profile/ProfilePanel.tsx`) shows the same span counters live. Start resets the counters and starts the spans (`PROFILE_STATE`); on the emulator it also starts `cf.profile` and `sharc.profile` (both with `{enable: true}`; Stop reads them, then switches them off), so one button records spans and instruction profiles, and on a device it records spans only. While the tab is shown and the target records, the pane reads once per second (`profileAll`, one read at a time). Shares are `sum_ticks / elapsed`: `PROFILE_STATE` reports the elapsed ticks of the span clock (a u64 after the row count; the module adds the 32-bit counter difference at every UI pass and every `PROFILE_STATE`, so one read per wrap period, about 32.5 s at 132 MHz, keeps it exact). The graph keeps the last 60 readings, coloured by the owner type (machine, effect, tool, runtime). A maximum of at least 100 µs and more than 4 times the mean shows red. The DSP section on the emulator lists the modules' instructions per DSP block against the device headroom (`DSP_COST` of CAPACITY), from `sharc.profile` named with the maps of the running image; on a device it shows the whole-block load of the newest HEALTH event. Export writes one `dk.profile/1` (spans, `cf.profile`, `sharc.profile`) with the same builder as `wb profile` (`packages/workbench-core/src/profile/profile-artifact.ts`); Open profile… shows the shares of an exported file as one more column. Phase names come from `[spans]` of `sdk/sdk.toml`. The poll set changes at run time (`dkrt_poll_add`), so the runtime records the owner of each slot (the module record whose code holds the function, or the firmware image) and `PROFILE_STATE` reports it with the function address (`dk_debug_poll`); a row reads `<module> poll` or `runtime poll`, with `: <function>` when the address maps name the function (the Log pane's maps), and `poll N` only when the debug module is too old to say. Without the debug module the pane offers to add it (Transfer upload, one restart). `node tools/devtools/ui_shots.mjs profile-emulator profile-device profile-nodebug` draws the three states over the preview (`preview/profile-backend.mock.ts`; the first two take a minute for the 60 s graph).
+Click a workload marker to zoom around it. **Fit events** focuses the retained
+events and **Fit** shows the full trace window. A partial trace has omitted
+events. Empty time after the last retained call does not establish idle time.
+Use **Show current target** to return to the live target.
+
+**Profile pane (desktop workbench).** The Profile tab of the right-hand column (Emulator page and Remote page; `apps/desktop/ui/src/profile/ProfilePanel.tsx`) shows the same span counters live. The Performance recorder starts the spans (`PROFILE_STATE`) and emulator ColdFire counters when supported. On an emulator built with SHARC profiling support, select **Include DSP hotspots** before Start to collect DSP instruction counts. The DSP block option depends on the debug runtime and is separate from PC sampling. Both options start off. Syntakt's main CPU spans do not require profiling its audio peer. Stop freezes the collected measurements. While the tab is shown and the target records, the pane reads once per second (`profileAll`, one read at a time). Shares are `sum_ticks / elapsed`: `PROFILE_STATE` reports the elapsed ticks of the span clock (a u64 after the row count; the module adds the 32-bit counter difference at every UI pass and every `PROFILE_STATE`, so one read per wrap period, about 32.5 s at 132 MHz, keeps it exact). The graph keeps the last 60 readings, coloured by the owner type (machine, effect, tool, runtime). A maximum of at least 100 µs and more than 4 times the mean shows red. The DSP section on the emulator lists the modules' instructions per DSP block against the device headroom (`DSP_COST` of CAPACITY), from `sharc.profile` named with the maps of the running image; on a device it shows the whole-block load of the newest HEALTH event. **Save capture…** writes the available measurements to one `dk.profile/1` with the same builder as `wb profile` (`packages/workbench-core/src/profile/profile-artifact.ts`). The Profile table can show the saved run's span shares as one more column. Phase names come from `[spans]` of `sdk/sdk.toml`. The poll set changes at run time (`dkrt_poll_add`), so the runtime records the owner of each slot (the module record whose code holds the function, or the firmware image) and `PROFILE_STATE` reports it with the function address (`dk_debug_poll`); a row reads `<module> poll` or `runtime poll`, with `: <function>` when the address maps name the function (the Log pane's maps), and `poll N` only when the debug module is too old to say. Without the debug module the pane offers to add it (Transfer upload, one restart). `node tools/devtools/ui_shots.mjs profile-emulator profile-device profile-nodebug` draws the three states over the preview (`preview/profile-backend.mock.ts`; the first two take a minute for the 60 s graph).
 
 **DSP profile (`--cpu sharc`).** A daemon built with `--features sharc-profile` (it implies `sharc` and `play`: a DSP core and its audio output) answers `sharc.profile` ([CONTROL.md](CONTROL.md)).
 `wb profile record --cpu sharc --seconds N --out FILE [--image X.syx] [--run-dir DIR]` starts the counting, waits N seconds (a live emulator) and writes the counts as a profile
@@ -771,6 +813,13 @@ Preparation on the device: INPUT FROM is USB or MIDI+USB and RECEIVE NOTES and R
 `--analyse ID=MODULE.dkm:DSP.dko.json`, adds the counts inside each DO loop of its DSP code (`dksharc`): a counter belongs to the innermost loop that holds it, so a loop's row
 does not include the loops inside it. With the `sharc.blocks` metric every row also shows instructions per DSP block. A fast-tier or block-tier dispatch is credited whole to its
 entry PC, so a count says which region the instructions belong to, not which instruction in it.
+For a fixed module workload, the [SDK worked example](../sdk/dsp/README.md#profile-a-module-and-compare-two-builds)
+uses `rig_profile.ts` for machines and effects. Open its `profile.json` in Workbench **Performance → Open capture…**
+or pass it to `wb profile report`. Rig profiles carry the symbol placement and, when available, DO-loop analysis
+from the producing build. Workbench uses the same report code for the function and loop counts. Running-target
+exports keep raw PCs and include the firmware identity and a stable module load table when those were
+available. Use the matching firmware and module maps to name a running-target capture at the CLI.
+
 A real run (DN2 1.12 with digikit/pluck, 5487 DSP blocks, one note from the module; the daemon with `sharc-profile`, the report with the ship map and the module's map from `patchkit pack --addrmap`): the whole DSP
 takes 332,039 instructions per block (the stock firmware, near the 334,529 of `stock_busy`), the module 247.4 per block; its `_pk_render` loop (32 passes) takes 200.7 per block, its `_pk_coef` 33.5.
 The map holds assembler labels as functions (`_pk_run` inside the render routine), so the function rows follow the map and the loop rows follow `dksharc`.
@@ -778,6 +827,75 @@ The SHARC-only rig is a second producer of `dk.profile/1` (`tools/devtools/rig_p
 `wb addrmap lookup` and `wb module analyse` ([ADDRMAP.md](ADDRMAP.md#usage), [dksharc](../packages/dksharc/README.md#usage)) use the same `dkprof.wasm`.
 
 The workbench runs the same code from the Calibration tab of the right-hand column (`CalibrationPanel.tsx`, `CalibrationSection.tsx`; the run state is owned by the panel, so switching tabs never aborts a run): choose a profile, press Run on the pane's target (the emulator or a device), and Stop ends the run at its next wait after the teardown of the case in progress has played; the captures made are kept. The table shows per case and DSP row the worst block and worst call of the emulator (instructions) and of the device (cycles), and after a fit the factor and the error of each pair. **Save run…** writes the captures of this target as one `dk.calcaptures/1` file (`{ "schema": "dk.calcaptures/1", "profile": NAME, "side": "emu"|"dev", "captures": [dk.profile/1, ...] }`). **Load file…** reads such a file, or the `<case>-<n>.profile.json` files of `wb profile calibrate run` (all of one side), as the run of that side. **Fit with…** loads a file as the missing side and fits it with the run of the other side (`dkprof` `calibrateFit`; plain **Fit** when both sides are there); the section shows fit, budget, worst under, n, leave-one-out (`n/a` with one row), refusals and warnings. **Save calibration…** writes the `dk.calibration/1` file. Cases that press keys, or need SETUP without the debug log, are skipped with their reason, as on the command line. **Active calibration** (top of the tab): **Load…** reads a `dk.calibration/1` file for the target's device (a file of another device, with no DSP fit, or with `device_unit` `insn` is refused with the reason); it is kept per device in the app's KeyValue until **Clear**. While one is active the Profile tab's DSP section (emulator target) adds a header line (`calibrated: DN2 1.12, fit 1.31 ±1.3 %`) and the columns `est. cyc/blk` (instructions times the budget factor) and `% block` (against `key.block_cycles`, `–` when the file has none); rules in `workbench-core/src/profile/calibration-active.ts`. A device target measures cycles itself and gets no estimate. Preview: `mise run wb:preview` with `node tools/devtools/ui_shots.mjs profile-calibration-fit profile-calibration-run profile-calibration-active profile-calibration-estimate` (made-up numbers).
+
+## Render and compare audio from the CLI
+
+Build the two rig tools after repository setup and the local generated core are ready.
+
+```sh
+pnpm nx:pilot run patchkit:cli
+pnpm nx:pilot run sharc-rig:build
+```
+
+Render a named conformance case on the same adapter and target you want to measure again later.
+For effects this is the stereo rig master insert, not a device send. A machine render records
+the mono voice output. Neither requires MIDI or a running Workbench.
+
+```sh
+mise run wb:cli -- module render digikit/freqshift --device dt2 \
+  --case params/all-mid/noise --out out/runs/shift-baseline
+```
+
+The default `--emit wav,json` writes `audio.wav` (original float32 PCM) and `render.json`
+(workload and build hashes, settings, rate, frames, audio measurements, and rig instructions per block).
+Use `--emit wav` or `--emit json` to keep one. `--format json` selects the terminal response, not the files.
+Keep the WAV next to its manifest if you move them. JSON-only files keep the evidence but not the samples.
+
+Render the candidate with the same device and case to a different folder. If the candidate is in another worktree,
+run that worktree's command or pass its source tree through `DIGI_RIG_ROOT` with `DIGI_SHARC_RIG` and `DIGI_PATCHKIT` pointing at the chosen binaries.
+
+```sh
+mise run wb:cli -- audio compare out/runs/shift-baseline/render.json \
+  out/runs/shift-candidate/render.json --out out/runs/shift-compare --format json
+```
+
+The comparison writes `comparison.json` and a waveform, difference and band-spectrum plot per channel
+when both have PCM at the same sample rate, channel count and duration. It checks the WAV hashes and flags
+differences in recorded workload or device. It never aligns, resamples or level-matches samples for you.
+It also accepts bare mono or stereo PCM or float32 WAVs, with no claim that their workloads match.
+With JSON-only input it compares the saved levels and fingerprints without making sample-level claims.
+Band spectra describe the first analysis window. The report gives its frame count, and level
+measurements cover the render beyond that window.
+The plots and fingerprints summarize evidence. They do not establish that one version sounds better.
+
+### Listen to a send return
+
+The rig can generate two repeatable scenes for an effect. `send/percussion` sends a syncopated hat and
+`send/texture` sends a held stab. Both use the same dry kick and bass, at 132 BPM.
+Run the same scene twice at the same settings, with just the send amount changed.
+
+```sh
+device=dt2
+base=out/runs/shift-send
+mise run wb:cli -- module render digikit/freqshift --device "$device" \
+  --case send/percussion --params-f32 20 --send-amount 0 --profile-block 375 --out "$base/dry"
+mise run wb:cli -- module render digikit/freqshift --device "$device" \
+  --case send/percussion --params-f32 20 --send-amount 96 --profile-block 375 --out "$base/current"
+mise run wb:cli -- audio compare "$base/dry/render.json" "$base/current/render.json" --out "$base/comparison"
+profile_file=$(jq -r '.profile.file' "$base/current/render.json")
+mise run wb:cli -- profile report "$base/current/$profile_file"
+```
+
+`--params-f32` takes the effect's DSP parameter values in their declared units, not MIDI knob positions.
+`--repeat N` repeats the exact source stems 1–8 times in one take without resetting the effect.
+For example, add `--repeat 3` to a `send/texture` render to get about 22 seconds for slow modulation.
+`--profile-block` selects one zero-based block from the actual take. The render manifest names
+the matching profile next to the audio. Its counters cover that block only. The manifest records worst block
+cost for the whole take and a hash of the generated source audio. A dry/current comparison should
+report matching input and different settings. The rig runs the target's send hook, then adds its
+return to the dry master at unity. Send amount zero gives a dry audio reference with the effect
+row still installed. Its cost is not the cost of unloading the effect. These are rig instruction
+counts and modeled audio, not a capture from a physical device or a full firmware mix.
 
 ## Cargo features
 
@@ -909,3 +1027,98 @@ Results are in `out/runs/devprobe/<time>/`: `capture.wav`, `events.json`, `hits.
 - The remote presses keys only. It does not restart the device.
 - On hardware the panel scan may override remote keys (finding 58). The first run shows it.
 - `--analyse WAV` analyses any WAV, for example an emulator capture, to compare device and emulator.
+
+### Replay the DT2 stock Delay reference
+
+Use this case to compare stock Delay on DT2 1.17 in a running emulator
+and on a physical DT2. It plays the same short 1 kHz sample once with
+no send and once with Delay send 111. The [typed case](../packages/workbench-core/src/reference/dt2-stock-delay.ts)
+uses the existing `DkSession` remote input and wait helpers on both targets.
+The emulator records its internal master PCM. Hardware uses Workbench's
+native CPAL input code in a capture-only bridge, without opening a playback
+device or loading Python. The bridge captures the first stereo pair at
+48 kHz without resampling, and rejects reported overruns/underruns or a
+capture length that indicates loss.
+
+```sh
+mise run wb:cli -- audio reference prepare --out out/runs/delay-probe
+```
+
+That offline command only writes `01-delay-probe.wav` and checks its exact
+SHA-256. To prepare a project, use the separate command for your target.
+
+```sh
+mise run wb:cli -- audio reference prepare-project --emu --out out/runs/delay-session
+mise run wb:cli -- audio reference prepare-project --port "Digitakt II" \
+  --scratch-project "Delay probe" --out out/runs/delay-prep-device
+```
+
+The emulator command builds a new private card seeded with the probe and
+the debug and remote modules. Open `out/runs/delay-session/session.json` in
+Workbench and choose **Start emulator**. The session pins the registered
+stock firmware, found under `DIGI_FIRMWARE_DIR` or `firmware/`. Pass
+`--firmware FILE` to select another copy of the same release.
+
+The hardware command verifies the firmware over MIDI, then uploads the
+probe to a dedicated +Drive folder and verifies the device's content hash.
+A repeat reuses a matching upload and refuses to replace a different file.
+It never loads, saves, or edits the project. `--out` is optional on hardware.
+With it, both targets write `preparation.json`. Use `--format json` for
+machine-readable stdout. Both report `panel-setup-required` and list the
+remaining settings. To check the live state without sending any panel
+input, use the matching runtime 0.13.2 and debug module:
+
+```sh
+mise run wb:cli -- audio reference inspect --emu --run-dir out/native/run --format json
+mise run wb:cli -- audio reference inspect --port "Digitakt II" --format json
+```
+
+The command reads Track 1's sample slot, the loaded sample's native content
+hash and stored size, and stock Delay TIME and feedback in raw firmware units.
+It compares the loaded key to the test WAV converted by `dksample`. The
+capture refuses a wrong or empty slot, or Delay TIME outside `0x0240–0x0340`,
+before sending panel input or opening a recorder. A successful capture keeps
+the observed values, expected sample key and TIME range in
+`validation.observed_before_capture`. The TIME range is a setup check, not a
+tempo readback or a conversion to milliseconds. The WAV remains the check of
+actual echo spacing and decay.
+
+- Boot DT2 1.17 with the digikit debug and remote modules active. Do not load
+  content modules. On hardware use USB AUDIO/MIDI, USB OUT = MAIN and
+  `mise run wb:cli -- audio reference inputs` to find the exact input ID
+  or unique name. On macOS, enable Microphone access for the app launching
+  the CLI. USB inputs can enumerate and return all-zero PCM when that app
+  has no audio-input permission.
+- On hardware, import the staged probe into the scratch project's sample
+  pool and assign it to Track 1 in One Shot. On the emulator, verify Track 1
+  plays the seeded probe. The recorder does not construct a card, transfer
+  a sample, switch projects or save a project.
+- With transport stopped, play the sample from the beginning at original
+  pitch, with the filter open and no modulation. Set all Track 1 sends
+  to zero. Set Track 1 to MIDI channel 1 and allow USB MIDI CC/NRPN input.
+- Use 120 BPM and set stock Delay TIME near a 1/32 note (about 63 ms),
+  FDBK 32 and VOL 110, with ping-pong off and Delay-to-Reverb at zero.
+  Start from the default Delay filters. Use the audio check below to
+  confirm the effective timing and decay instead of relying on knob rounding.
+
+```sh
+mise run wb:cli -- audio reference run --emu --run-dir out/native/run \
+  --scratch-project "Delay probe" --out out/runs/delay-emu
+mise run wb:cli -- audio reference run --port "Digitakt II" --audio-input INPUT_ID \
+  --scratch-project "Delay probe" --out out/runs/delay-device
+mise run wb:cli -- audio reference compare \
+  out/runs/delay-emu/reference.json out/runs/delay-device/reference.json --format json
+```
+
+Use a fresh output directory for each run. The result is `dry.wav`,
+`delay.wav` and `reference.json` (`dk.audio-reference/1`). The case only
+changes Track 1's Delay send and sets it back to zero on exit. The project
+name is an operator declaration. The loaded sample assignment is checked
+against the expected native key, and the firmware identity is checked against
+the target's reported hash. Older reports can still be compared, but may lack
+the sample key evidence. The recording must show a clean
+dry probe and five wet repeats with 58–68 ms spacing and 4.5–7.5 dB loss per
+repeat. Compare two passing reports with matching firmware and fixture
+identity. The pair must agree within 2 ms and 1 dB per repeat. This compares
+the Delay shape, not bit-exact PCM or hardware performance. Timing comes
+from sample positions, not emulator wall time.

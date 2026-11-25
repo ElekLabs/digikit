@@ -15,7 +15,8 @@ export const BLOCK = 32;
 export const BANDS = 64;
 const BAND_LO = 40; // Hz
 const BAND_HI = 22000;
-const FFT_SIZE = 65536;
+export const BAND_WINDOW_FRAMES = 65536;
+const FFT_SIZE = BAND_WINDOW_FRAMES;
 const FLOOR_DB = -200;
 /** a difference at or below this energy (dB re the signal) with an unchanged spectrum is rounding */
 export const ROUNDING_DB = -100;

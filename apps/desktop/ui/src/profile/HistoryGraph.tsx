@@ -32,12 +32,12 @@ export default function HistoryGraph(props: {
   return (
     <div class="prof-sec">
       <div class="sec-head">
-        <span class="title">{props.emulator ? 'ColdFire, last 60 s' : 'ColdFire, recorded window'}</span>
+        <span class="title">{props.emulator ? 'Main CPU, last 60 s' : 'Main CPU, recorded window'}</span>
         <span class="num">
           {fmtShare(props.share)} {props.emulator ? 'now' : 'mean'}
         </span>
       </div>
-      <div class="graph" role="img" aria-label="ColdFire share per owner type over time">
+      <div class="graph" role="img" aria-label="Main CPU share per owner type over time">
         <For each={columns()}>
           {(c) => (
             <div class="col">

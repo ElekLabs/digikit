@@ -164,6 +164,8 @@ export interface LoadOptions {
   dsp?: boolean;
   /** Native desktop only: the card image of this load (`--card-image`). */
   card?: string;
+  sourceSha256?: string;
+  imageSha256?: string;
 }
 /** The controller's report of the runtime patch of the running image: `patched` with the set and whether the image came from the
  * cache, or `patched: false` for an image that already had a patch record. `null`: stock, no runtime requested. */

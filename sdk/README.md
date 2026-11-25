@@ -76,7 +76,9 @@ A header in the module's `src/` is shared by C and SHARC+ sources. Use only deci
 
 ## Tracing
 
-Trace marks tell you where a module was when it faulted or hung. They are opt-in and cost nothing when off.
+Start with the [DSP profiling workflow](dsp/README.md#profile-a-module-and-compare-two-builds).
+A normal module build supports dispatch costs and emulator or rig hotspots without any author-inserted marks.
+Add the marks below when a log or fault record needs an explicit checkpoint inside your code.
 
 | Side | Include | Macro | What it does when on |
 | --- | --- | --- | --- |
@@ -100,7 +102,9 @@ What you see:
 
 Off means off: without `--trace` both macros expand to nothing (the arguments of `DK_TRACE_LOG` are not evaluated), the objects have no extra
 instruction, data or import, and the `.dkm` is byte-identical to one built from sources without the marks
-(`packages/patchkit/tests/trace.rs`). A `DK_STEP` costs two instructions when on, so keep it out of the innermost loop.
+(`packages/patchkit/tests/trace.rs`). A `DK_STEP` costs two instructions when on. Use stable step numbers at
+function boundaries and state transitions, using a scratch register that is dead there. The fault record
+reports the last completed block's step. Use the plain build for an instruction comparison.
 
 ## Modules never touch hardware
 

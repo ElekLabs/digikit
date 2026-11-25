@@ -17,6 +17,8 @@
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] transfer delete PATH...
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] log card [on|off|get [--out DIR]]
 //     node tools/devtools/wb.mjs [--format json|text] addrmap lookup ADDR... | module analyse DKM DKO | profile report FILE | profile record --seconds N --out FILE [--cpu cf|sharc]
+//     mise run wb:cli -- module render MODULE --device ID --case GROUP/NAME [--emit wav,json] --out DIR
+//     mise run wb:cli -- audio compare BASELINE CANDIDATE --out DIR
 //
 //     node tools/devtools/wb.mjs profile calibrate fit --device D.json --model E.json --out cal.json | profile calibrate report cal.json   (offline; wb_prof.mjs)
 //     node tools/devtools/wb.mjs [--port SUB] [--bin PATH] profile spans [--start|--stop|--reset] [--out FILE]   (a device command: reads the runtime span counters; --start resets them, then starts)
@@ -79,7 +81,7 @@ const targetRoot = existsSync(path.join(root, '.git', 'HEAD'))
   ? path.join(root, 'out/native/target')
   : path.join(root, 'dist/native-target');
 const usage =
-  'usage: node tools/devtools/wb.mjs [--port SUB] [--device ID] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] [--slot N] (--slot N writes slot N and replaces what it holds; a cancelled write leaves the slot empty) | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--restart] [--reload] [--library DIR] | transfer reload|load|unload PATH... | transfer restart | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE] | profile calibrate run --profile NAME|FILE [--out DIR] [--allow-unidentified-firmware]';
+  'usage: node tools/devtools/wb.mjs [--port SUB] [--device ID] [--bin PATH] ports | info | samples ls [FOLDER] | samples put FILE... [--folder F] [--slot N] (--slot N writes slot N and replaces what it holds; a cancelled write leaves the slot empty) | samples rm FOLDER... | store ls [PREFIX] | store put LOCAL REMOTE | store rm REMOTE | transfer install ID... [--restart] [--reload] [--library DIR] | transfer reload|load|unload PATH... | transfer restart | transfer delete PATH... | log card [on|off|get [--out DIR]] | profile spans [--start|--stop|--reset] [--out FILE] | profile calibrate run --profile NAME|FILE [--case ID] [--trace] [--out DIR] [--allow-unidentified-firmware]';
 
 // options anywhere on the line; the rest are the command words
 const args = process.argv.slice(2);
@@ -91,13 +93,17 @@ const opts = {
   verify: 'auto',
   speed: undefined,
   'bulk-bin': process.env.DKBULK_BIN || path.join(targetRoot, 'nogen/release/dkbulk'),
+  'audio-bin':
+    process.env.DKAUDIO_BIN ||
+    path.join(targetRoot, 'nogen/release', process.platform === 'win32' ? 'dkaudio.exe' : 'dkaudio'),
   format: undefined,
   ret: false,
 };
 // the offline group takes these several times
-const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse', 'model']);
-const OFFLINE = ['addrmap', 'module', 'profile'];
+const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse', 'model', 'case']);
+const OFFLINE = ['addrmap', 'module', 'profile', 'audio', 'session'];
 const words = [];
+let explicitMidiPort = false;
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (
@@ -112,6 +118,7 @@ for (let i = 0; i < args.length; i++) {
     a === '--speed' ||
     a === '--out' ||
     a === '--profile' ||
+    a === '--case' ||
     a === '--library' ||
     [
       '--format',
@@ -131,15 +138,28 @@ for (let i = 0; i < args.length; i++) {
       '--top',
       '--seconds',
       '--run-dir',
+      '--run-id',
+      '--emit',
+      '--send-amount',
+      '--params-f32',
+      '--profile-block',
+      '--repeat',
+      '--scratch-project',
+      '--audio-input',
+      '--audio-bin',
+      '--firmware',
     ].includes(a)
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);
     const key = a.slice(2);
+    if (key === 'port') explicitMidiPort = true;
     if (REPEATED.has(key)) (opts[key] ??= []).push(args[++i]);
     else opts[key] = args[++i];
     // `profile calibrate fit` takes --device FILE several times (the other commands: one device id)
     if (key === 'device') (opts['device-files'] ??= []).push(opts[key]);
-  } else if (a === '--ret') opts.ret = true;
+  } else if (a === '--help' || a === '-h') opts.help = true;
+  else if (a === '--trace') opts.trace = true;
+  else if (a === '--ret') opts.ret = true;
   else if (a === '--emu' || a === '--restart' || a === '--reload') opts[a.slice(2)] = true;
   else if (a === '--since-boot') opts['since-boot'] = true;
   else if (a === '--allow-unidentified-firmware') opts['allow-unidentified-firmware'] = true;
@@ -223,13 +243,57 @@ async function infoAndKind(session) {
 
 const SPANS = words[0] === 'profile' && words[1] === 'spans';
 const CALIBRATE = words[0] === 'profile' && words[1] === 'calibrate' && words[2] === 'run';
-if ((!OFFLINE.includes(words[0]) || SPANS || CALIBRATE) && !opts.emu && !existsSync(opts.bin))
+const REFERENCE = words[0] === 'audio' && words[1] === 'reference';
+const REFERENCE_RUN = REFERENCE && words[2] === 'run';
+const REFERENCE_INSPECT = REFERENCE && words[2] === 'inspect';
+const REFERENCE_PROJECT = REFERENCE && words[2] === 'prepare-project';
+const REFERENCE_INPUTS = REFERENCE && words[2] === 'inputs';
+const AUDIO = words[0] === 'audio' || (words[0] === 'module' && words[1] === 'render');
+if (opts.help) {
+  if (!AUDIO) console.log(usage);
+  if (!words.length || words[0] === 'profile') console.log('wb profile report FILE [--format json]');
+  if (!words.length || words[0] === 'session') console.log('wb session inspect FOLDER_OR_SESSION_JSON [--format json]');
+  if (AUDIO || !words.length || words[0] === 'module') console.log((await import('./wb_audio.mjs')).audioUsage);
+  if (AUDIO || !words.length) console.log((await import('./wb_reference.ts')).referenceUsage);
+  process.exit(0);
+}
+if (REFERENCE_PROJECT && !opts.emu && (!explicitMidiPort || !opts.port.trim()))
+  fail('prepare-project on hardware requires --port PORT.');
+const deviceCommand =
+  words.length > 0 &&
+  (!OFFLINE.includes(words[0]) ||
+    SPANS ||
+    CALIBRATE ||
+    REFERENCE_RUN ||
+    REFERENCE_INSPECT ||
+    (REFERENCE_PROJECT && !opts.emu));
+const prepTasks = REFERENCE_INPUTS
+  ? ['dkaudio:build']
+  : REFERENCE_PROJECT
+    ? opts.emu
+      ? ['wb:reference-card-inputs']
+      : ['dkmidi:build', 'wasm:dksample']
+    : REFERENCE_RUN || REFERENCE_INSPECT
+      ? [
+          ...(existsSync(path.join(root, 'apps/web/public/dksample.wasm')) ? [] : ['wasm:dksample']),
+          ...(opts.emu ? [] : REFERENCE_RUN ? ['dkmidi:build', 'dkaudio:build'] : ['dkmidi:build']),
+        ]
+      : deviceCommand
+        ? ['wb:device-inputs']
+        : [];
+for (const prepTask of process.env.DIGI_WB_MISE === '1' ? prepTasks : []) {
+  // Do not start device builds for an offline report. Keep tool output off JSON stdout.
+  const prep = spawnSync('mise', ['run', prepTask], { cwd: root, stdio: ['ignore', 2, 2] });
+  if (prep.error) fail(`Cannot prepare Workbench device tools: ${prep.error.message}`, 1);
+  if (prep.status !== 0) process.exit(prep.status ?? 1);
+}
+if (deviceCommand && !opts.emu && !existsSync(opts.bin))
   fail(`no dkmidi binary at ${opts.bin} (run: mise run dkmidi:build)`);
 
 /** Start the bridge on the port and open a session on it. */
 function connect(timeoutMs = 60000) {
   // a calibration run also sends notes and control changes: `--raw` lets the bridge pass them (it drops them otherwise)
-  const child = spawn(opts.bin, ['open', opts.port, ...(CALIBRATE ? ['--raw'] : [])], {
+  const child = spawn(opts.bin, ['open', opts.port, ...(CALIBRATE || REFERENCE_RUN ? ['--raw'] : [])], {
     stdio: ['pipe', 'pipe', 'inherit'],
   });
   const exited = new Promise((resolve) => child.on('exit', resolve));
@@ -299,7 +363,9 @@ async function connectReady(waitMs = 8000) {
   let link;
   // true: the device answered (or failed with something that is no re-enumeration: the first real request reports it); false: no answer yet
   const answered = async () => {
-    await link?.close();
+    const previous = link;
+    link = undefined;
+    await previous?.close();
     link = opts.emu ? await connectEmu() : connect();
     try {
       try {
@@ -322,7 +388,7 @@ async function connectReady(waitMs = 8000) {
   try {
     await poll(clock, answered, Boolean, { withinMs: waitMs, intervalMs: 500, message: 'device answers' });
   } catch (e) {
-    if (e?.kind === 'cancelled') throw e;
+    if (!link || e?.kind === 'cancelled') throw e;
     // after the time the last link is returned anyway and the first real request reports the error
   }
   return link;
@@ -426,6 +492,17 @@ async function loadSample() {
   return Sample.create(Uint8Array.from(readFileSync(wasm)));
 }
 
+function uploadBackend(session, kind, storage, sample, bulk) {
+  return openSamples(kind, {
+    session,
+    hashOf: (d) => sample.hash(d),
+    converter: converterOf(sample),
+    slots: storage?.slots,
+    bulk,
+    note: (n) => console.error(`wb: ${n}`),
+  });
+}
+
 /** The card log state in one line. */
 function cardLogText(s) {
   if (!s) return 'not supported (this debug module has no card log)';
@@ -483,6 +560,27 @@ if (SPANS) {
   } finally {
     await link.close();
   }
+} else if (REFERENCE) {
+  const { referenceCommand } = await import('./wb_reference.ts');
+  status = await referenceCommand({
+    rest,
+    opts,
+    root,
+    devices,
+    connectReady,
+    loadSample,
+    async openUploadBackend(session) {
+      const wasm = path.join(root, 'apps/web/public/dksample.wasm');
+      if (!existsSync(wasm)) throw new Error('Missing dksample.wasm (run mise run wasm:dksample).');
+      return uploadBackend(session, 'stock-rpc', undefined, await loadSample());
+    },
+  });
+} else if (AUDIO) {
+  const { audioCommand } = await import('./wb_audio.mjs');
+  status = await audioCommand({ cmd, sub, rest, opts, fail });
+} else if (cmd === 'session') {
+  const { sessionCommand } = await import('./wb_session.mjs');
+  status = await sessionCommand({ sub, rest, opts, fail });
 } else if (OFFLINE.includes(cmd)) {
   status = await profCommand({ cmd, sub, rest, opts, root, fail });
 } else if (cmd === 'ports') {
@@ -533,14 +631,7 @@ if (SPANS) {
       if (samplesUseBulk(kind)) bulk = await connectBulk(holder);
       if (opts.slot !== undefined && kind !== 'stock-slots')
         fail('--slot works only on a device with numbered sample slots');
-      const backend = openSamples(kind, {
-        session,
-        hashOf: (d) => sample.hash(d),
-        converter: converterOf(sample),
-        slots: storage.slots,
-        bulk: bulk?.session,
-        note: (n) => console.error(`wb: ${n}`),
-      });
+      const backend = uploadBackend(session, kind, storage, sample, bulk?.session);
       const link = () => (backend.bulkState === 'bulk' ? 'bulk' : 'sysex');
       if (opts.folder) await backend.mkdir(opts.folder);
       // one listing of the folder for the whole run: the `exists` hint of every put (REPLACE when the name is there); each put adds its name

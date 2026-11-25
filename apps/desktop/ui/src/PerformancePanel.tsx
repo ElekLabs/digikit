@@ -1,6 +1,7 @@
 import DspBlocks from './DspBlocks';
 import TraceTimeline from './TraceTimeline';
-import RecordingButton from './RecordingButton';
+import CaptureToolbar from './CaptureToolbar';
+import type { PerformanceCapture } from '@digi/workbench-core/profile/performance-capture.ts';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { Application, Graphics } from 'pixi.js';
 import 'pixi.js/unsafe-eval';
@@ -12,7 +13,9 @@ import {
   type UtilizationPoint,
 } from './utilization-history';
 import SpanBreakdown from './SpanBreakdown';
+import SavedSpanSummary from './SavedSpanSummary';
 import type { SpanRecording } from './span-recording';
+import type { createSavedPerformance } from './saved-performance';
 import './performance-panel.css';
 
 const hoverPercent = (value: number | null) => (value === null ? '—' : `${value.toFixed(1)}%`);
@@ -30,11 +33,32 @@ interface PerformanceProps {
   estimated: boolean;
   view: PerformanceView;
   setView(view: PerformanceView): void;
+  showProfile(): void;
   recording?: SpanRecording;
   activeTarget: boolean;
+  savedPerformance: ReturnType<typeof createSavedPerformance>;
 }
 
 export default function PerformancePanel(props: PerformanceProps) {
+  const saved = () => props.savedPerformance.current();
+  const savedSpansView = () => props.view === 'Spans' && saved();
+  const captureView = () => props.view === 'Timeline' || props.view === 'DSP blocks';
+  const trace = () => (saved() ? saved()?.trace : props.activeTarget ? props.recording?.frozenTrace() : undefined);
+  const dsp = () => (saved() ? saved()?.dsp : props.activeTarget ? props.recording?.dspBlocks() : undefined);
+  const liveStatus = (status?: string) =>
+    props.activeTarget ? (status ?? 'Reading target capabilities…') : 'Target unavailable';
+  const selectSaved = (capture: PerformanceCapture) => {
+    if (capture.hasHotspots || (!capture.dsp && !capture.trace)) props.showProfile();
+    if (
+      (props.view === 'DSP blocks' && capture.dsp) ||
+      (props.view === 'Timeline' && capture.trace) ||
+      (props.view === 'Spans' && capture.spans)
+    )
+      return;
+    if (capture.dsp) props.setView('DSP blocks');
+    else if (capture.trace) props.setView('Timeline');
+    else if (capture.spans) props.setView('Spans');
+  };
   const latest = () => {
     const point = props.points.findLast((p) => p.at <= props.now);
     return point && utilizationIsFresh(props.now - point.at, props.estimated) ? point : undefined;
@@ -45,7 +69,15 @@ export default function PerformancePanel(props: PerformanceProps) {
   }
 
   return (
-    <section class="performance-panel" aria-label="Performance">
+    <section
+      class="performance-panel"
+      classList={{
+        'performance-panel-timeline': props.view === 'Timeline',
+        'performance-panel-dsp': props.view === 'DSP blocks',
+        'performance-panel-saved-spans': !!savedSpansView(),
+      }}
+      aria-label="Performance"
+    >
       <header class="performance-header">
         <div class="performance-modes" role="group" aria-label="Performance view">
           <For each={views}>
@@ -56,27 +88,10 @@ export default function PerformancePanel(props: PerformanceProps) {
             )}
           </For>
         </div>
-        <Show when={props.view !== 'Utilization'}>
-          <div class="span-actions">
-            <Show when={props.activeTarget && props.recording?.available()}>
-              <RecordingButton
-                running={!!props.recording?.running()}
-                disabled={!!props.recording?.disabled()}
-                includeDsp={!!props.recording?.includeDsp()}
-                dspAvailable={!!props.recording?.dspAvailable()}
-                setIncludeDsp={(value) => props.recording?.setIncludeDsp(value)}
-                onToggle={() => props.recording?.toggle()}
-              />
-            </Show>
-            <Show when={props.view === 'Spans' || props.recording?.running()}>
-              <span role="status">{props.activeTarget ? props.recording?.status() : 'Target unavailable'}</span>
-            </Show>
-          </div>
-        </Show>
-        <Show when={props.view === 'Spans' || props.view === 'Utilization'}>
+        <Show when={(props.view === 'Spans' && !saved()) || props.view === 'Utilization'}>
           <dl class="performance-legend" aria-label="Latest utilization">
             <div class="performance-cf">
-              <dt>CF</dt>
+              <dt>Main CPU</dt>
               <dd>{latestPercent('cf')}</dd>
             </div>
             <div class="performance-dsp">
@@ -87,37 +102,49 @@ export default function PerformancePanel(props: PerformanceProps) {
           <span class="performance-source">{props.estimated ? 'Estimated utilization' : 'Measured utilization'}</span>
         </Show>
       </header>
+      <CaptureToolbar
+        recording={props.recording}
+        activeTarget={props.activeTarget}
+        saved={props.savedPerformance}
+        onSelect={selectSaved}
+        showProfile={props.showProfile}
+      />
       <Show
-        when={props.view === 'Timeline'}
+        when={savedSpansView()}
         fallback={
-          <Show when={props.view === 'DSP blocks'} fallback={<UtilizationChart {...props} />}>
+          <Show when={captureView()} fallback={<UtilizationChart {...props} />}>
             <Show
-              when={props.activeTarget && props.recording?.dspBlocks()}
+              when={props.view === 'Timeline'}
               fallback={
-                <p role="status">
-                  {props.activeTarget
-                    ? (props.recording?.dspBlockStatus() ?? 'Reading target capabilities…')
-                    : 'Target unavailable'}
-                </p>
+                <Show
+                  when={dsp()}
+                  fallback={
+                    <p role="status">
+                      {saved()
+                        ? 'This capture has no DSP block counters.'
+                        : liveStatus(props.recording?.dspBlockStatus())}
+                    </p>
+                  }
+                >
+                  {(capture) => <DspBlocks capture={capture()} />}
+                </Show>
               }
             >
-              {(capture) => <DspBlocks capture={capture()} />}
+              <Show
+                when={trace()}
+                fallback={
+                  <p role="status">
+                    {saved() ? 'This capture has no Main CPU trace.' : liveStatus(props.recording?.timelineStatus())}
+                  </p>
+                }
+              >
+                {(capture) => <TraceTimeline trace={capture().trace} names={capture().names} />}
+              </Show>
             </Show>
           </Show>
         }
       >
-        <Show
-          when={props.activeTarget && props.recording?.frozenTrace()}
-          fallback={
-            <p role="status">
-              {props.activeTarget
-                ? (props.recording?.timelineStatus() ?? 'Reading target capabilities…')
-                : 'Target unavailable'}
-            </p>
-          }
-        >
-          {(capture) => <TraceTimeline trace={capture().trace} names={capture().names} />}
-        </Show>
+        {(capture) => <SavedSpanSummary spans={capture().spans} label={capture().label} />}
       </Show>
     </section>
   );
@@ -366,7 +393,7 @@ function UtilizationChart(props: PerformanceProps) {
                           <Show when={point().interpolated}>
                             <span>Interpolated</span>
                           </Show>
-                          <span class="performance-cf">CF {hoverPercent(point().cf)}</span>
+                          <span class="performance-cf">Main CPU {hoverPercent(point().cf)}</span>
                           <span class="performance-dsp">DSP {hoverPercent(point().dsp)}</span>
                         </>
                       )}
@@ -395,9 +422,9 @@ function UtilizationChart(props: PerformanceProps) {
       <Show when={showingSpans()}>
         <div class="span-details">
           <label>
-            ColdFire interval
+            Main CPU interval
             <select
-              aria-label="ColdFire interval"
+              aria-label="Main CPU interval"
               value={(cursor() !== undefined ? hoveredInterval() : heldInterval())?.end ?? ''}
               onChange={(e) => setHeld(e.currentTarget.value ? Number(e.currentTarget.value) : undefined)}
             >

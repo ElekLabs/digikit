@@ -32,6 +32,16 @@ const LAST_FIRMWARE_KEY = 'digikit.lastFirmware';
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+export interface SessionBoot {
+  path: string;
+  card: string;
+  runtime: boolean;
+  dsp: boolean;
+  sourceSha256: string;
+  imageSha256?: string;
+  preserve(): Promise<void>;
+}
+
 type FirmwareRuntime = Pick<
   SessionRuntime,
   'loadPath' | 'firmwareInfo' | 'cancelJob' | 'reloadModules' | 'restart' | 'pause' | 'resume'
@@ -41,6 +51,7 @@ type FirmwareOptions = {
   emu: Pick<Host['emu'], 'pickSyx' | 'setSource' | 'sourceInfo'>;
   storage: KeyValue;
   runtime: () => FirmwareRuntime | undefined;
+  stopSession?(): Promise<void>;
   signal: AbortSignal;
   jobs: Pick<JobsApp, 'runJob' | 'busy'>;
   target: Pick<TargetApp, 'target' | 'emulatorRuntime' | 'setEmulatorRuntime' | 'setEmulatorAvailable'>;
@@ -87,6 +98,7 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
   const { noteConnection } = options.connection;
   const { logInput, logEvent } = options.logWriter;
   const { readPref, writePref } = createPrefs(storage);
+  const [sessionBoot, setSessionBoot] = createSignal<SessionBoot>();
 
   const [status, setStatus] = createSignal<RuntimeSnapshot['status']>();
   const [paused, setPaused] = createSignal(false);
@@ -237,7 +249,11 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
     refreshCardAfterQuietPeriod();
   };
   /** Start a new firmware session through the controller's `firmware.load`. */
-  const boot = async (path: string, file: EmuSource | null, choices: { runtime: boolean; card?: string }) => {
+  const boot = async (
+    path: string,
+    file: EmuSource | null,
+    choices: { runtime: boolean; card?: string; dsp?: boolean; sourceSha256?: string; imageSha256?: string },
+  ) => {
     const r = runtime();
     if (!r || signal.aborted) return;
     const name = file?.name ?? path;
@@ -258,7 +274,7 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
     try {
       if (!r.loadPath) throw new Error('no reload');
       // The controller applies these choices using the new image's device data.
-      const snapshot = await r.loadPath(path, { ...choices, dsp: bootDsp() });
+      const snapshot = await r.loadPath(path, { ...choices, dsp: choices.dsp ?? bootDsp() });
       if (signal.aborted) return false;
       update({ type: 'snapshot', snapshot });
       setPaused(false);
@@ -302,9 +318,17 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
     }
   };
   /** Make `path` the console's firmware file and boot it; the controller reads it from its path. */
-  const bootPath = async (path: string, why: string, options: { runtime?: boolean; card?: string } = {}) => {
+  const bootPath = async (
+    path: string,
+    why: string,
+    options: { runtime?: boolean; card?: string; session?: SessionBoot } = {},
+  ) => {
     if (signal.aborted) return;
-    const withRuntime = options.runtime ?? bootRuntime();
+    if (sessionBoot() && !options.session) {
+      setError('Close the current session before opening another firmware.');
+      return;
+    }
+    const withRuntime = options.session?.runtime ?? options.runtime ?? bootRuntime();
     const base = path.split(/[\\/]/).pop() || path;
     const packageAbort = new AbortController();
     const packageSignal = AbortSignal.any([signal, packageAbort.signal]);
@@ -320,13 +344,22 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
         setSource(file ?? undefined);
         lastModified = file?.modified_ms;
         const rBeforeLoad = runtime();
-        const ok = await untrack(() => boot(path, file, { runtime: withRuntime, card: options.card }));
+        const ok = await untrack(() =>
+          boot(path, file, options.session ?? { runtime: withRuntime, card: options.card }),
+        );
         if (ok && !signal.aborted) {
-          writePref(LAST_FIRMWARE_KEY, path);
+          if (!options.session) writePref(LAST_FIRMWARE_KEY, path);
           setReloadNote(`${why} ${new Date().toLocaleTimeString()}`);
         }
         const device = status()?.device;
-        if (ok && device && info()?.runtime?.patched && packageSource && !signal.aborted) {
+        if (
+          ok &&
+          !options.session?.imageSha256 &&
+          device &&
+          info()?.runtime?.patched &&
+          packageSource &&
+          !signal.aborted
+        ) {
           const generation = emulatorGeneration();
           const check = () => {
             if (generation !== emulatorGeneration() || rBeforeLoad !== runtime())
@@ -360,7 +393,9 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
               setReloadNote(`System package setup failed. ${detail}`);
               logInput(failureEntry('firmware', 'system package setup', detail));
             }
-            return false;
+            // The private card is already mounted. Keep it tracked so the
+            // user can save, close, or install the package manually.
+            return !!options.session;
           } finally {
             if (!signal.aborted) bumpCardRefresh();
           }
@@ -369,7 +404,8 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
       });
       // the install is its own job in the same group: it starts after the load job ended
       const s = status();
-      if (loaded && s && withRuntime && !signal.aborted) void installDefaultModules(s.device);
+      if (loaded && s && withRuntime && !signal.aborted && !options.session) void installDefaultModules(s.device);
+      return loaded;
     } catch (e) {
       if (signal.aborted || e instanceof JobBusyError) return;
       setError(message(e));
@@ -377,12 +413,26 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
   };
   /** Boot the console's firmware file again. */
   const reload = async (why: string) => {
+    const pinned = sessionBoot();
+    if (pinned) {
+      try {
+        await pinned.preserve();
+        await bootPath(pinned.path, why, { session: pinned });
+      } catch (e) {
+        setError(message(e));
+      }
+      return;
+    }
     const path = source()?.path;
     if (path) await bootPath(path, why);
   };
   /** The native picker; the picked file becomes the console's file and boots. */
   const openFirmware = async () => {
     if (signal.aborted) return;
+    if (sessionBoot()) {
+      setError('Close the current session before opening another firmware.');
+      return;
+    }
     try {
       const path = await emu.pickSyx(source()?.path ?? readPref(LAST_FIRMWARE_KEY));
       if (path) await bootPath(path, 'Opened at');
@@ -394,6 +444,10 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
    * and swaps module code into a restored main screen, or boots the new image; the result goes to the status area and the Log. A build
    * error is one short line in the status area; the Log has it with the compiler output as its detail. */
   const reloadModules = async () => {
+    if (sessionBoot()) {
+      setError('This session uses a pinned firmware build. Close it before reloading modules from the checkout.');
+      return;
+    }
     const r = runtime();
     if (signal.aborted || !r?.reloadModules) return;
     try {
@@ -433,7 +487,7 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
     void reload('Reloaded with the runtime at');
   };
   const pollSource = async () => {
-    if (signal.aborted) return;
+    if (signal.aborted || sessionBoot()) return;
     try {
       const file = await emu.sourceInfo();
       if (signal.aborted) return;
@@ -484,6 +538,10 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
   };
   const reset = async () => {
     if (signal.aborted || busy('emulator')) return;
+    if (sessionBoot()) {
+      await reload('Reset at').catch((e) => setError(message(e)));
+      return;
+    }
     try {
       await runJob('Resetting the emulator', { group: 'emulator' }, () =>
         untrack(async () => {
@@ -515,6 +573,27 @@ export function createEmulatorFirmware(options: FirmwareOptions) {
   };
 
   return {
+    async bootSession(pinned: SessionBoot) {
+      const ok = await bootPath(pinned.path, 'Session started at', { session: pinned });
+      if (ok) setSessionBoot(pinned);
+      return !!ok;
+    },
+    updateSessionBuild(imageSha256: string | null) {
+      setSessionBoot((current) => (current ? { ...current, imageSha256: imageSha256 ?? undefined } : current));
+    },
+    async closeSession() {
+      if (!status() && !sessionBoot()) return;
+      await runJob('Closing emulator', { group: 'emulator' }, async () => {
+        releaseHeldKeys();
+        await options.stopSession?.();
+        setSessionBoot(undefined);
+        setStatus(undefined);
+        setInfo(undefined);
+        setSource(undefined);
+        setEmulatorGeneration((n) => n + 1);
+        clearInventory();
+      });
+    },
     status,
     emulatorLoaded,
     paused,

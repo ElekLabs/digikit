@@ -2,8 +2,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { crc32, deflateSync } from 'node:zlib';
-import { FS } from './analysis.ts';
-import { BANDS, bandLevels, bandEdges } from './fingerprint.ts';
+import { FS, peak } from './analysis.ts';
+import { BANDS, BAND_WINDOW_FRAMES, bandLevels, bandEdges } from './fingerprint.ts';
 
 /** Float32 WAV (format 3); `x` holds the channels interleaved (mono by default). */
 export function wavBytes(x: readonly number[], rate = FS, channels = 1): Buffer {
@@ -174,6 +174,7 @@ export function plotPng(
   ref: readonly number[] | null,
   /** band levels of a pin that keeps no audio: drawn as the reference curve when `ref` is null */
   refBands: readonly number[] | null = null,
+  rate = FS,
 ): Buffer {
   const W = 1400;
   const H = 1020;
@@ -197,7 +198,7 @@ export function plotPng(
   };
   // 1 waveform
   panel(60, 380, 'WAVEFORM  ORANGE = OUTPUT   BLUE = REFERENCE');
-  const top = Math.max(1e-9, ...now.map(Math.abs), ...(ref ?? []).map(Math.abs));
+  const top = Math.max(1e-9, peak(now), peak(ref ?? []));
   img.line(L, 220, R, 220, GRID);
   if (ref) wave(ref, 60, 380, top, BLUE);
   wave(now, 60, 380, top, ORANGE);
@@ -207,15 +208,15 @@ export function plotPng(
   if (ref) {
     const n = Math.min(now.length, ref.length);
     const d = Array.from({ length: n }, (_, i) => now[i]! - ref[i]!);
-    const dm = Math.max(...d.map(Math.abs));
+    const dm = peak(d);
     img.line(L, 510, R, 510, GRID);
     if (dm > 0) wave(d, 400, 620, dm, RED);
     img.text(L + 6, 594, `PEAK DIFFERENCE = ${dm.toPrecision(3)}`, [90, 90, 90], 2);
   } else img.text(L + 6, 500, 'NO CACHED REFERENCE OUTPUT', [150, 150, 150], 3);
   // 3 band spectra
-  panel(640, 1000, 'BAND LEVELS, 64 LOG BANDS 40 HZ TO 22 KHZ (DB)');
-  const a = bandLevels(now);
-  const b = ref ? bandLevels(ref) : refBands ? [...refBands] : null;
+  panel(640, 1000, `BAND LEVELS (DB), UP TO ${BAND_WINDOW_FRAMES} FRAMES FROM START`);
+  const a = bandLevels(now, rate);
+  const b = ref ? bandLevels(ref, rate) : refBands ? [...refBands] : null;
   const hi = Math.max(...a, ...(b ?? []));
   const lo = hi - 120;
   const yOf = (v: number) => 1000 - 8 - ((Math.max(v, lo) - lo) / (hi - lo)) * (360 - 30);

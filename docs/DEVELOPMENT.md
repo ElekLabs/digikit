@@ -248,6 +248,15 @@ DIGI_RIG_REPORT=1 pnpm exec vitest run --config vitest.host.config.ts --project 
 node tools/devtools/rig_profile.ts digikit/shot --device dn2 --case sample/stereo-fwd-oneshot/note60   # `wb profile report` of one case on the rig: instructions per function and loop (docs/TESTING.md "SHARC-only rig")
 ```
 
+For offline WAV and JSON exports, use `mise run wb:cli -- module render` and
+`mise run wb:cli -- audio compare`. See [Render and compare audio from the CLI](INSTRUMENTATION.md#render-and-compare-audio-from-the-cli).
+To record the same stock Delay test case on a running emulator or a USB device,
+use [the DT2 stock Delay reference](INSTRUMENTATION.md#replay-the-dt2-stock-delay-reference).
+
+To reuse an emulator card, firmware choice and captures, see
+[Workbench sessions](WORKBENCH-SESSIONS.md). Inspect a saved folder with
+`mise run wb:cli -- session inspect FOLDER`.
+
 For a repository move, capture and compare the [byte manifests](TESTING.md#byte-manifests-for-repository-moves).
 
 Pins are valid only for the firmware and ready state they were recorded with.
@@ -262,6 +271,8 @@ mise run perf:cov             # fast-tier coverage per configuration
 Method and results: [finding 18](findings/18-dsp-performance.md). Every run tool
 writes `out/runs/<scenario-or-kind>/<UTC stamp>/` (report, audio, logs);
 [docs/INSTRUMENTATION.md](INSTRUMENTATION.md) lists the output and the switches.
+[Profile a DSP module and compare two builds](../sdk/dsp/README.md#profile-a-module-and-compare-two-builds)
+for a worked SHARC rig, Workbench and CLI example.
 The ColdFire PC probe (`coupled-run --pc-probe`, RPC `pc.probe.set`): [INSTRUMENTATION.md](INSTRUMENTATION.md#pc-probe-coldfire).
 
 ## Analysis tools
@@ -352,17 +363,11 @@ The **Bitmap candidates** and **Parameter candidates** shortcuts search the exis
 
 ### SHARC candidate review
 
-After building the DSP catalogs, run:
-
-```sh
-uv run python -m tools.coldfire.fw review -i dt2-1.17 --core dsp
-uv run python -m tools.coldfire.fw review -i dn2-1.12 --core dsp
-```
-
-The exporter reads the catalog and call edges from each DSP database and writes
-`out/firmware/<image>/dsp/review.html` and `dsp/exports/review.tsv`. The HTML opens in a browser
-and includes every DSP candidate by default. Use the search box to find an
-anchor, role, or DSP hint. Paired links follow the release and core layout.
+Follow [Generate a SHARC catalog from a SysEx](FIRMWARE.md#generate-a-sharc-catalog-from-a-syx)
+to build a review page and register its symbols in Workbench. The SHARC page
+includes every DSP candidate by default. Search by group title, function name,
+anchor, role or DSP hint. The label and browser decision workflows above also
+apply to SHARC reviews.
 
 ## Patching
 

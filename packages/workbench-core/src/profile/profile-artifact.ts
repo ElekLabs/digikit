@@ -1,4 +1,5 @@
 import type { DkSession, DspStats } from '@digi/dk-session';
+import type { TraceMarker } from './trace.ts';
 
 // The `dk.profile/1` artifact (docs/INSTRUMENTATION.md "Profiles"), built from what the sources answer: the runtime spans of the debug module
 // (dk-session `profileAll`), `cf.profile` and `sharc.profile` of the emulator. One builder for `wb profile ...` (tools/devtools/wb_prof.mjs) and
@@ -213,7 +214,7 @@ export interface BuildInput {
   sharc?: Part;
   spans?: SpansPart;
   traceError?: string;
-  trace?: Awaited<ReturnType<DkSession['profileTrace']>>;
+  trace?: Awaited<ReturnType<DkSession['profileTrace']>> & { markers?: TraceMarker[] };
   /** The DSP stats window of the capture (calibration runs). */
   dsp?: { header: DspHeader; rows: DspRowOut[] };
   /** Names the markers (`record.start` at 0 is always there when a part is given). */

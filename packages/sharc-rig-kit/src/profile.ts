@@ -21,10 +21,15 @@ export interface RigRun {
   device: 'dt2' | 'dn2';
   /** `group/name` of the conformance case */
   caseName: string;
+  /** Optional identity of a selected variant of the workload. */
+  id?: string;
+  inputSha256?: string;
   /** calls (blocks) the counts were added over */
   blocks: number;
   /** SHA-256 of the rig binary */
   binarySha256?: string;
+  /** SHA-256 of the module pack used for loop analysis. */
+  moduleSha256?: string;
 }
 
 /**
@@ -41,15 +46,18 @@ export function rigProfile(run: RigRun, counts: ReadonlyMap<number, number>, mod
   return {
     schema: 'dk.profile/1',
     run: {
-      id: `rig:${run.module}:${run.device}:${run.caseName}`,
+      id: run.id ?? `rig:${run.module}:${run.device}:${run.caseName}`,
       target: run.device,
+      case_id: run.caseName,
+      ...(run.inputSha256 ? { input_sha256: run.inputSha256 } : {}),
+      ...(run.moduleSha256 ? { module_sha256: [run.moduleSha256] } : {}),
       ...(run.binarySha256 ? { binary_sha256: run.binarySha256 } : {}),
       loads: { modules: [{ id: run.module, base: 0, size: 0, dsp_base: moduleBase }] },
     },
     clock: {
       source: 'sharc-rig.insn',
       unit: 'instructions',
-      sampling: 'every instruction of the generated core, per pc; the steady blocks of the case added',
+      sampling: 'every instruction of the generated core, per pc; the selected blocks of the case added',
     },
     raw,
     metrics: [{ name: 'sharc.blocks', value: run.blocks, unit: 'blocks' }],

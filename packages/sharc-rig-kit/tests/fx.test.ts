@@ -50,6 +50,28 @@ describe('FxRig setup', () => {
     ).rejects.toThrow('at most 4');
   });
 
+  it('reserves a separate descriptor-sized block for each large effect state', async () => {
+    const fake = fakeRig('dt2');
+    const built = fxBuilt();
+    const bytes = 24_004;
+    new DataView(built.inits[0]!.bytes.buffer).setUint32(12, bytes, true);
+    const row = { pc: '_te_half', state: '' };
+    const rig = await FxRig.open([row, row], { sources: [], built, open: fake.open });
+    try {
+      const a = rig.stateAddress(0);
+      const b = rig.stateAddress(1);
+      expect(b).toBeGreaterThanOrEqual(a + bytes);
+      const init = pokes(fake.setups[0]!.ops ?? []);
+      expect(init).toContainEqual([nw(a + bytes - 4), 0x7fc00001]);
+      expect(init).toContainEqual([nw(b + bytes - 4), 0x7fc00001]);
+      expect(init).toContainEqual([nw(b + bytes), 0x7fc00001]);
+      expect(rig.foreignStores(0, [[0x1010, b + bytes - 4, 4]])).toEqual([]);
+      expect(rig.foreignStores(0, [[0x1010, b + bytes, 4]])).not.toEqual([]);
+    } finally {
+      await rig.close();
+    }
+  });
+
   it('reads the words of a description from its initial bytes', async () => {
     const rig = await FxRig.open([], { sources: [], built: fxBuilt(), open: fakeRig('dt2').open });
     expect(rig.descWords('_te_desc', 3)).toEqual([0x444b4658, 1, 3]);

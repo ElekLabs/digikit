@@ -336,18 +336,114 @@ const SCENES = [
         "document.querySelector('.trace-timeline-counts')?.textContent.includes('12 dropped')",
         'Missing trace loss count',
       );
+      const windowLabel = "document.querySelector('.trace-timeline-window')?.textContent.trim()";
+      const fullWindow = await p.eval(windowLabel);
       await p.eval(`(() => {
         const plot = document.querySelector('.trace-timeline-plot');
         const r = plot.getBoundingClientRect();
         const position = { bubbles: true, clientX: r.left + r.width * 0.018, clientY: r.top + 8 };
-        plot.dispatchEvent(new PointerEvent('pointermove', position));
-        plot.dispatchEvent(new WheelEvent('wheel', { ...position, ctrlKey: true, deltaY: -80, cancelable: true }));
+        plot.dispatchEvent(new WheelEvent('wheel', { ...position, deltaY: -80, cancelable: true }));
       })()`);
       await waitForAnalyzer(
         p,
-        "document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration') && document.querySelector('.trace-timeline-crosshair') && !document.querySelector('[aria-label=\"Zoom out\"]').disabled",
-        'Hover or pointer zoom failed',
+        `${windowLabel} !== ${JSON.stringify(fullWindow)} && document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration') && !document.querySelector('[aria-label="Zoom out"]').disabled`,
+        'Scroll zoom or call inspection failed',
       );
+      const scrollWindow = await p.eval(windowLabel);
+      const location = (fraction) =>
+        p.eval(`(() => {
+        const r = document.querySelector('.trace-timeline-plot').getBoundingClientRect();
+        return [r.left + r.width * ${fraction}, r.top + 8];
+      })()`);
+      const [x, y] = await location(0.018);
+      await p.mouse('mousePressed', x, y, { clicks: 2 });
+      await p.mouse('mouseReleased', x, y, { clicks: 2 });
+      await p.until(
+        `${windowLabel} !== ${JSON.stringify(scrollWindow)} && document.querySelector('.trace-timeline-inspector')?.textContent.includes('Duration')`,
+        'Double-click did not focus the call',
+      );
+      const ruler = "document.querySelector('.trace-timeline-ruler-scale').innerHTML";
+      const beforePan = await p.eval(ruler);
+      const [from, top] = await location(0.6);
+      const [to] = await location(0.2);
+      await p.mouse('mousePressed', from, top);
+      await p.mouse('mouseMoved', to, top);
+      await p.mouse('mouseReleased', to, top);
+      await p.until(
+        `${ruler} !== ${JSON.stringify(beforePan)} && !document.querySelector('.trace-timeline-dragging')`,
+        'Drag did not pan the timeline',
+      );
+    },
+  },
+  {
+    name: 'performance-saved-spans',
+    q: 'page=remote&unidentified',
+    size: WIDE,
+    steps: async (p) => {
+      await p.click(/^Performance$/);
+      await p.click(/^Spans$/);
+      await p.eval(`(() => {
+        const send = {
+          schema: 'dk.profile/1',
+          run: { id: 'send', case_id: 'send', label: 'Saved send' },
+          span_clock_hz: 1000000, span_elapsed_ticks: 1000,
+          spans: [{ owner: 256, name: 'early', calls: 5, sum_ticks: 250, max_ticks: 99 }],
+          trace: { hz: 1000000, dropped: 2, events: [{ owner: 256, startTicks: '50', durationTicks: 25 }] },
+        };
+        const rig = {
+          schema: 'dk.profile/1',
+          run: { id: 'rig', case_id: 'rig', label: 'Saved rig' },
+          raw: [{ cpu: 'sharc', series: 'pc', addr: 291, count: 100 }],
+        };
+        const input = document.querySelector('.capture-source input[type=file]');
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify({ schema: 'dk.calcaptures/1', captures: [send, rig] })], 'capture.json'));
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await waitForAnalyzer(
+        p,
+        `(() => {
+        const drawer = document.querySelector('.performance-panel');
+        const summary = drawer.querySelector('.saved-span-summary');
+        return summary?.textContent.includes('25.0%') && summary.querySelector('tbody td:nth-child(4)')?.textContent === '250'
+          && !drawer.querySelector('.performance-plot');
+      })()`,
+        'Saved Spans did not show the totals instead of the live chart',
+      );
+      await showTab(p, 'Profile');
+      const savedSpanValues = (selector) =>
+        `[...document.querySelectorAll('${selector} .saved-span-summary tbody td')].map(td => td.textContent).join(' ') === '25.0% 5 250 99'`;
+      await waitForAnalyzer(
+        p,
+        `${savedSpanValues('.profile-panel:not([hidden])')} && ${savedSpanValues('.performance-panel')}`,
+        'Profile and the drawer do not agree on the saved span totals',
+      );
+      await p.click(/^Timeline$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.trace-timeline-counts')?.textContent.includes('2 dropped')",
+        'Saved Timeline did not show the trace loss',
+      );
+      const selectRun = (index) =>
+        p.eval(`(() => {
+        const select = document.querySelector('.capture-source select');
+        select.value = '${index}';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await selectRun(1);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.profile-panel:not([hidden])')?.textContent.includes('0x123') && !document.querySelector('.performance-panel .trace-timeline')",
+        'The rig hotspots and send trace did not stay in their respective runs',
+      );
+      await p.click(/^Spans$/);
+      await waitForAnalyzer(
+        p,
+        "document.querySelector('.performance-panel .saved-span-summary')?.textContent.includes('no recorded spans')",
+        'The rig run inherited spans from the send run',
+      );
+      await selectRun(0);
     },
   },
   {
@@ -1524,9 +1620,9 @@ const SCENES = [
       await p.wait(500);
       await showTab(p, 'Profile');
       await p.wait(62000);
-      await p.eval(
-        "(() => { for (const b of document.querySelectorAll('.profile-panel .act')) if (b.textContent.trim() === 'Stop recording') b.click(); })()",
-      );
+      await p.click(/^Capture controls$/);
+      await p.click(/^Stop recording$/, '.span-actions button');
+      await p.click(/^Performance$/);
       await p.wait(1500);
     },
   },

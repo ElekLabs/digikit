@@ -384,7 +384,7 @@ fn the_import_rows_name_the_owners_functions() {
     assert!(served.iter().all(|p| !p.is_null()));
     let device_only = [
         i.dk_fw_alloc, i.dk_fw_free, i.dk_fw_block_read, i.dk_debug_peek, i.dk_debug_span_clock, i.dk_debug_poll, i.dk_debug_track_type, i.dk_debug_selected_params,
-        i.dk_debug_setup, i.dk_device_track_count, i.dk_selected_track, i.dk_debug_speed_flags,
+        i.dk_debug_setup, i.dk_device_track_count, i.dk_selected_track, i.dk_debug_speed_flags, i.dk_debug_top_view, i.dk_debug_read_parameter,
     ];
     assert!(device_only.iter().all(|p| p.is_null()));
     let mut all = std::vec::Vec::from(served);

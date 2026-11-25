@@ -6,9 +6,10 @@ import zlib from 'node:zlib';
 import { BOOT_WAIT_MS, DkError, EMULATED_POLL_MS, fileHashHex } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '../../../packages/dk-session/src/gen_proto.ts';
 import { emulatorClock, pollUntil, repoRoot, waitClock, type Device, type Session } from '@digi/test-support';
+import { buildCardImage, plusdrivePath } from '../../../packages/workbench-core/src/node/card-image.ts';
 import { cardStore } from './device-data.ts';
 import { rpc, word } from './guest-access.ts';
-import { installSystemPackage } from './system-package.ts';
+import { systemPackageFile } from './system-package.ts';
 import { stateName } from './load-states.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { cardOverlay, encodeOverlay, layOver, linkCard, mergeOverlays, overlayFile } from './write-safety.ts';
@@ -34,7 +35,7 @@ const MB_ARG = 12;
 
 /** The plusdrive CLI: `DIGI_PLUSDRIVE` (a lane that built its own), else the shared build. */
 export function plusdriveBinary(): string {
-  return process.env.DIGI_PLUSDRIVE || path.join(repoRoot(), 'dist/plusdrive/plusdrive');
+  return plusdrivePath(repoRoot());
 }
 
 // ---- the selection record (one 512-byte copy) --------------------------------------------------------------------------------------
@@ -166,27 +167,17 @@ export async function buildCard(device: Device, o: CardOptions): Promise<string>
   if (!o.base) {
     const seed = path.join(o.dir, `seed-${o.name ?? 'card'}`);
     fs.rmSync(seed, { recursive: true, force: true });
-    // a folder card is the folder's copy plus the package: the caller's folder stays as it is
-    if (o.folder) fs.cpSync(o.folder, seed, { recursive: true });
-    else fs.mkdirSync(path.join(seed, 'digikit'), { recursive: true });
-    if (o.systemPackage !== false) installSystemPackage(seed);
-    fs.mkdirSync(dir, { recursive: true });
-    for (const m of o.modules ?? []) {
-      fs.mkdirSync(path.dirname(path.join(seed, 'digikit', m.name)), { recursive: true });
-      fs.copyFileSync(m.file, path.join(seed, 'digikit', m.name));
-    }
-    for (const f of o.drive ?? []) {
-      fs.mkdirSync(path.dirname(path.join(seed, f.name)), { recursive: true });
-      fs.copyFileSync(f.file, path.join(seed, f.name));
-    }
-    await exec(
-      plusdriveBinary(),
-      ['build', seed, '-o', out, '--device', device, ...(o.syx ? ['--syx', o.syx] : ['--no-project'])],
-      {
-        cwd: repoRoot(),
-        timeout: 60_000,
-      },
-    );
+    await buildCardImage({
+      root: repoRoot(),
+      device,
+      output: out,
+      syx: o.syx,
+      folder: o.folder,
+      store: o.modules,
+      drive: o.drive,
+      systemPackage: o.systemPackage !== false ? systemPackageFile() : undefined,
+      seed,
+    });
   }
   const sectors = new Map<number, Buffer>();
   if (o.selection != null || o.recs) {

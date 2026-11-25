@@ -31,7 +31,7 @@ import { asV1, compare, measure, readPin, writePin } from './pcmpin.ts';
 import { plotPng, writePng, writeWav } from './plot.ts';
 import { REC, RECORDS, f2w, nw } from './context.ts';
 import { PLANE_L, PLANE_R, TOKEN, publish, writePlanes } from './samplepool.ts';
-import { MIX, P0, FxRig } from './fx.ts';
+import { FX_STATE_GUARD_WORDS, MIX, P0, FxRig } from './fx.ts';
 import { MachineRig } from './machine.ts';
 import type { RigOpener } from './ops.ts';
 import { PyRandom } from './prng.ts';
@@ -317,6 +317,11 @@ async function runFx(module: string, c: RigCase, dir: string, o: RunOptions): Pr
   const observe = c.observe === 'master' ? 'master' : 'scratch';
   const desc = rig.descWords(spec.desc);
   trace.desc = desc;
+  const words = Math.floor(desc[3]! / 4);
+  const checkedWords =
+    words >= 1024 && c.check?.some((check) => check.kind === 'state-untouched-beyond')
+      ? words + FX_STATE_GUARD_WORDS
+      : 1024;
   // `state_fill`: every word of the declared state starts with this value instead of the rig's poison
   if (typeof c.state_fill === 'number') rig.fillState(0, c.state_fill, Math.floor(desc[3]! / 4));
   const total = steps.reduce((n, st) => n + (st.blocks ?? 1), 0);
@@ -331,7 +336,7 @@ async function runFx(module: string, c: RigCase, dir: string, o: RunOptions): Pr
       for (let n = 0; n < (step.blocks ?? 1); n++, k++) {
         const x = inputBlock(input, k, table, rng);
         const last = k === total - 1;
-        const b = await rig.block(x, 'friendly', {}, last ? [[rig.stateAddress(0), 1024]] : []);
+        const b = await rig.block(x, 'friendly', {}, last ? [[rig.stateAddress(0), checkedWords]] : []);
         if (last) trace.state = b.extra[0];
         trace.input.push(x);
         trace.master.push(b.master);

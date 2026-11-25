@@ -12,7 +12,7 @@ use crate::state::{State, DKRT_STATE};
 use core::ffi::c_void;
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::platform::{DeviceProfile, Platform, SamplePool, StagedWriter, Tasking};
-use dkrt_sdk::proto::E_STATE;
+use dkrt_sdk::proto::{E_AGAIN, E_STATE};
 use dkrt_sdk::*;
 
 extern "C" {
@@ -586,6 +586,64 @@ pub unsafe fn selected_sound() -> Option<(u32, u32)> {
     let track = dkfw::page::view_track(dkfw::project::settings(p) as *const u8).min(15);
     let sound = dkfw::page::native_track_sound(dkfw::project::active_kit(p) as *mut u8, track) as u32;
     Some((track, sound))
+}
+
+/// The active view's object and class pointers, read on the UI task. A null
+/// output only probes whether this port describes the view stack.
+pub(crate) unsafe extern "C" fn debug_top_view(out: *mut u32) -> i32 {
+    use core::mem::offset_of;
+    use dkfw::view::{View, ViewStackBrain, ViewStackController, ViewStackNode, BRAIN};
+
+    let slot = core::hint::black_box(addr_of!(BRAIN) as u32);
+    if slot == 0 {
+        return E_NOT_FOUND;
+    }
+    if out.is_null() {
+        return OK;
+    }
+
+    let Some(mut view) = firmware_view_word(slot) else {
+        return E_AGAIN;
+    };
+    let mut class = 0;
+    if view != 0 {
+        let mgr = view.wrapping_add(offset_of!(ViewStackBrain, controller) as u32);
+        let list = mgr.wrapping_add(offset_of!(ViewStackController, sentinel) as u32);
+        let Some(top) = firmware_view_word(list.wrapping_add(offset_of!(ViewStackNode, prev) as u32))
+        else {
+            return E_AGAIN;
+        };
+        if top == list {
+            view = 0;
+        } else {
+            let Some(object) = firmware_view_word(top.wrapping_add(offset_of!(ViewStackNode, view) as u32))
+            else {
+                return E_AGAIN;
+            };
+            let Some(vptr) = firmware_view_word(object.wrapping_add(offset_of!(View, vptr) as u32))
+            else {
+                return E_AGAIN;
+            };
+            if vptr == 0 {
+                return E_AGAIN;
+            }
+            view = object;
+            class = vptr;
+        }
+    }
+    out.write(view);
+    out.add(1).write(class);
+    OK
+}
+
+/// The known slots and heap objects are in cached DDR. Reject an invalid
+/// link without turning a temporarily incomplete view into a device fault.
+unsafe fn firmware_view_word(address: u32) -> Option<u32> {
+    let offset = address.checked_sub(dev::ddr_base())?;
+    if address & 3 != 0 || offset.checked_add(4)? > dev::ddr_bytes() {
+        return None;
+    }
+    Some(read_volatile(address as *const u32))
 }
 
 /// The firmware's heap and block read as the `dk_fw_alloc`, `dk_fw_free` and `dk_fw_block_read` imports.

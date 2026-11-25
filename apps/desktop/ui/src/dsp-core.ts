@@ -2,6 +2,7 @@
 // means. Host tests: apps/desktop/ui/tests/dsp.test.ts.
 import type { DeviceRecord } from '@digi/devices';
 import type { KeyValue } from '@digi/workbench-core/storage.ts';
+import { processorsOf, processorLabels } from '@digi/workbench-core/profile/processor.ts';
 
 /** What the controller reports of the DSP choice (`status.dsp_enabled`, `status.dsp_flag`). */
 export interface DspState {
@@ -13,7 +14,10 @@ export interface DspState {
 
 /** A device has the choice when it has a DSP, or a second CPU that runs a program and has a stand-in (the device file's `cf2` section). */
 export const hasDspChoice = (d: Pick<DeviceRecord, 'capabilities' | 'container'>): boolean =>
-  d.capabilities.dsp === 'sharc' || d.container.cf2 !== undefined;
+  processorsOf(d).some(({ role }) => role !== 'main');
+
+export const audioProcessorLabel = (d?: Pick<DeviceRecord, 'capabilities' | 'container'>): string =>
+  processorLabels[processorsOf(d).find(({ role }) => role !== 'main')?.role ?? 'dsp'];
 
 /** The tick differs from the running image: it applies at the next Reload or Open. */
 export const dspPending = (tick: boolean, running: DspState | undefined): boolean =>
@@ -23,8 +27,8 @@ export const dspPending = (tick: boolean, running: DspState | undefined): boolea
 export const startupDsp = (saved: boolean, running: DspState | undefined): boolean => running?.flag ?? saved;
 
 /** The Metrics line. */
-export const dspLine = (running: DspState | undefined): string =>
-  running === undefined ? '—' : running.enabled ? 'DSP on' : 'DSP off';
+export const dspLine = (running: DspState | undefined, label: string = processorLabels.dsp): string =>
+  running === undefined ? '—' : `${label} ${running.enabled ? 'on' : 'off'}`;
 
 /** The saved "DSP" choice: on unless the user turned it off. A storage that cannot be read gives "on". */
 export const DSP_KEY = 'digikit.bootDsp';

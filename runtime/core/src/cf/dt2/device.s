@@ -38,6 +38,9 @@ dkrt_span_clock_hz:
     .globl dkrt_sound_words
 dkrt_sound_words:
     .long FX_SOUND_WORDS
+    .globl dkrt_stock_kit_layout
+dkrt_stock_kit_layout:
+    .long FX_KIT_PTR, FX_SOUND_OFF, FX_SOUND_STRIDE, FX_TAIL_OFF
     .globl dkrt_peek_ranges
 dkrt_peek_ranges:
     .long PEEK_LO_0, PEEK_HI_0, PEEK_LO_1, PEEK_HI_1

@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createResource, createSignal } from 'solid-js';
 import { deviceNameOf } from '@digi/workbench-core/data/device-profiles.ts';
-import type { SymbolsHost } from '@digi/workbench-core/host/host.ts';
+import type { FirmwareProfile, ProfileSymbolKind, SymbolsHost } from '@digi/workbench-core/host/host.ts';
 import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import './firmware-symbols.css';
 
@@ -12,6 +12,12 @@ const kinds: { kind: SourceKind; label: string }[] = [
   { kind: 'map', label: 'Symbol map' },
 ];
 
+const profileKinds: { kind: ProfileSymbolKind; label: string }[] = [
+  { kind: 'cf', label: 'ColdFire database' },
+  { kind: 'sharc', label: 'SHARC database' },
+  { kind: 'catalog', label: 'SHARC catalog' },
+];
+
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export default function FirmwareSymbols(props: {
@@ -21,6 +27,7 @@ export default function FirmwareSymbols(props: {
   imageRevision?: unknown;
   imageFor(source: TargetBinding): Promise<string | undefined>;
   targetName: string;
+  openCatalog?(sha256: string): void;
 }) {
   const [working, setWorking] = createSignal(false);
   const [actionError, setActionError] = createSignal('');
@@ -29,9 +36,10 @@ export default function FirmwareSymbols(props: {
     () => props.shown,
     async () => {
       try {
-        return { files: await props.symbols.list(), error: '' };
+        const [files, profiles] = await Promise.all([props.symbols.list(), props.symbols.profiles?.() ?? []]);
+        return { files, profiles, error: '' };
       } catch (error) {
-        return { files: [], error: errorMessage(error) };
+        return { files: [], profiles: [], error: errorMessage(error) };
       }
     },
   );
@@ -52,8 +60,19 @@ export default function FirmwareSymbols(props: {
     return current?.request === imageRequest() ? current?.sha256 : undefined;
   };
   const busy = () => working() || sources.loading;
+  const extraSources = () => {
+    const managed = new Set(sources.latest?.profiles.map(({ sha256 }) => sha256));
+    return (
+      sources.latest?.files.filter(
+        (file) => file.kind === 'map' || !file.images.length || file.images.some(({ sha256 }) => !managed.has(sha256)),
+      ) ?? []
+    );
+  };
   const matched = () =>
-    sources.latest?.files.some(
+    sources.latest?.profiles.some(
+      ({ sha256, sources }) => sha256 === activeHash() && Object.values(sources).some((row) => !row.error),
+    ) ||
+    extraSources().some(
       (source) => !source.error && source.images.some((entry) => entry.sha256.toLowerCase() === activeHash()),
     );
   const imageStatus = () => {
@@ -88,7 +107,7 @@ export default function FirmwareSymbols(props: {
       <div class="symbols-body">
         <section aria-labelledby="firmware-symbols">
           <h3 id="firmware-symbols">Firmware symbols</h3>
-          <p>Matching symbols give firmware addresses names in the workbench.</p>
+          <p>Workbench selects these files by the firmware hash of the target or recording.</p>
           <p class="symbols-target" role="status">
             <strong>{props.targetName}</strong>
             <span>{imageStatus()}</span>
@@ -103,9 +122,11 @@ export default function FirmwareSymbols(props: {
           <div class="symbols-actions">
             <For each={kinds}>
               {({ kind, label }) => (
-                <button type="button" disabled={busy()} onClick={() => void run(() => props.symbols.choose(kind))}>
-                  Add {label}…
-                </button>
+                <Show when={kind === 'map' || !props.symbols.profiles}>
+                  <button type="button" disabled={busy()} onClick={() => void run(() => props.symbols.choose(kind))}>
+                    Add {label}…
+                  </button>
+                </Show>
               )}
             </For>
             <button type="button" disabled={busy()} onClick={() => void run(refresh)}>
@@ -121,9 +142,29 @@ export default function FirmwareSymbols(props: {
             <p role="status">Reading sources…</p>
           </Show>
           <Show when={sources.latest && !sources.latest.error}>
-            <Show when={sources.latest?.files.length} fallback={<p>No symbol sources added.</p>}>
+            <div class="symbol-profiles">
+              <For each={sources.latest?.profiles}>
+                {(profile) => (
+                  <ReleaseSettings
+                    profile={profile}
+                    matches={profile.sha256 === activeHash()}
+                    busy={busy()}
+                    choose={(kind) => void run(() => props.symbols.chooseProfile!(profile.sha256, kind))}
+                    reset={(kind) => void run(() => props.symbols.resetProfile!(profile.sha256, kind))}
+                    openCatalog={props.openCatalog ? () => props.openCatalog!(profile.sha256) : undefined}
+                  />
+                )}
+              </For>
+            </div>
+            <Show
+              when={extraSources().length}
+              fallback={props.symbols.profiles ? undefined : <p>No symbol sources added.</p>}
+            >
+              <Show when={props.symbols.profiles}>
+                <h4>Additional symbol sources</h4>
+              </Show>
               <ul class="symbols-files" aria-label="Symbol sources" aria-busy={busy()}>
-                <For each={sources.latest?.files}>
+                <For each={extraSources()}>
                   {(source) => (
                     <li>
                       <div class="symbols-file">
@@ -167,5 +208,70 @@ export default function FirmwareSymbols(props: {
         </section>
       </div>
     </div>
+  );
+}
+
+function ReleaseSettings(props: {
+  profile: FirmwareProfile;
+  matches: boolean;
+  busy: boolean;
+  choose(kind: ProfileSymbolKind): void;
+  reset(kind: ProfileSymbolKind): void;
+  openCatalog?(): void;
+}) {
+  return (
+    <details class="symbol-profile" open>
+      <summary>
+        <strong>
+          {deviceNameOf(props.profile.device)} · OS {props.profile.firmware}
+        </strong>
+        <Show when={props.matches}>
+          <span class="symbols-match">Matches target</span>
+        </Show>
+      </summary>
+      <ul class="symbols-files" aria-label={`${deviceNameOf(props.profile.device)} firmware files`}>
+        <For each={profileKinds}>
+          {({ kind, label }) => {
+            const row = () => props.profile.sources[kind];
+            return (
+              <li>
+                <div class="symbols-file">
+                  <div>
+                    <strong>{label}</strong>
+                    <span class="symbols-origin">{row().override ? 'Custom' : 'Default'}</span>
+                    <code class="selectable" title={row().path}>
+                      {row().path}
+                    </code>
+                  </div>
+                  <div class="symbols-actions">
+                    <Show when={kind === 'catalog' && props.profile.review && props.openCatalog}>
+                      <button type="button" onClick={props.openCatalog}>
+                        Open catalog
+                      </button>
+                    </Show>
+                    <button
+                      type="button"
+                      disabled={props.busy}
+                      aria-label={`Choose ${label} for ${deviceNameOf(props.profile.device)}`}
+                      onClick={() => props.choose(kind)}
+                    >
+                      Choose…
+                    </button>
+                    <Show when={row().override}>
+                      <button type="button" disabled={props.busy} onClick={() => props.reset(kind)}>
+                        Use default
+                      </button>
+                    </Show>
+                  </div>
+                </div>
+                <Show when={row().error}>
+                  <p class="symbols-error">{row().error}</p>
+                </Show>
+              </li>
+            );
+          }}
+        </For>
+      </ul>
+    </details>
   );
 }

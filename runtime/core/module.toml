@@ -1,6 +1,6 @@
 [module]
 id = "core/runtime"
-version = "0.13.0"
+version = "0.13.2"
 name = "digikit runtime"
 category = "core"
 role = "runtime"
@@ -14,7 +14,7 @@ conflicts = []
 ports = ["dt2-1.17", "dn2-1.11", "dn2-1.12", "st-1.42"]
 # What the runtime does without on a firmware that lacks the anchor or hook: the DSP block counter (`dkrt_blocks` reports 0) and the stock sample worker
 # (`worker.rs` queues nothing).
-optional_anchors = ["cf.link.site.block_isr.counter_lit", "cf.samples.fn.worker.get", "cf.samples.fn.worker.queue", "cf.machine.fn.set_kit", "cf.filter.fn.set_kit", "cf.filter.fn.get"]
+optional_anchors = ["cf.link.site.block_isr.counter_lit", "cf.samples.fn.worker.get", "cf.samples.fn.worker.queue", "cf.machine.fn.set_kit", "cf.filter.fn.set_kit", "cf.filter.fn.get", "cf.view.value.brain"]
 
 [targets]
 "dt2-1.17" = "experimental"
@@ -56,7 +56,7 @@ path = "build/gen/dkdv-offsets.inc"
 [[gen]]
 kind = "gas"
 path = "build/gen/device-{dev}.inc"
-uses = ["DEVICE_ID", "DEVICE_NAME_WORD", "SAMPLES_IN_STORE", "SAMPLE_PATH_MAX", "DSP_HEADROOM", "DSP_VOICES", "STORE_FIRST", "STORE_SECTORS", "PEEK_N", "SPAN_CLOCK", "SPAN_CLOCK_HZ", "FX_SOUND_WORDS", "PEEK_LO_*", "PEEK_HI_*"]
+uses = ["DEVICE_ID", "DEVICE_NAME_WORD", "SAMPLES_IN_STORE", "SAMPLE_PATH_MAX", "DSP_HEADROOM", "DSP_VOICES", "STORE_FIRST", "STORE_SECTORS", "PEEK_N", "SPAN_CLOCK", "SPAN_CLOCK_HZ", "FX_KIT_PTR", "FX_SOUND_OFF", "FX_SOUND_STRIDE", "FX_SOUND_WORDS", "FX_TAIL_OFF", "PEEK_LO_*", "PEEK_HI_*"]
 
 # The system package (docs/plans/resident-core-and-system-package.md): the same crate built with `--features package-image` and no resident module. It is not linked into the image:
 # `patchkit syspkg build core/runtime` packs `build/package.dko.json` into the card file digikit/system.dksp, which stage 1 of the resident core places in the package block (DKRT_PKG).

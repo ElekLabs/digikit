@@ -124,6 +124,12 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
         and "[[record]]" not in original
     ):
         return False  # declares nothing through builder calls or records: no rows to measure
+    subprocess.run(
+        ["pnpm", "nx:pilot", "run", "core/runtime:package"],
+        cwd=ROOT,
+        env=python_env(),
+        check=True,
+    )
     # The measuring build takes the device limits as its `[uses]`: the loader refuses a module whose tables are absent, zero or lower than what its
     # init declares, so a new or changed module could not be measured with its own numbers. The measured rows replace them below.
     write_uses(manifest_path, {d: seed_uses(d) for d in devices})

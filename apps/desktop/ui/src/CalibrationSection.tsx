@@ -86,6 +86,29 @@ export default function CalibrationSection(props: {
             <For each={choices().list}>{(p) => <option value={p.name}>{p.name}</option>}</For>
           </select>
         </label>
+        <Show when={(profile()?.profile.cases.length ?? 0) > 1}>
+          <label class="cal-pick">
+            <span>Case</span>
+            <select
+              aria-label="Calibration case"
+              disabled={running()}
+              value={st.chosenCase()}
+              onChange={(event) => st.setChosenCase(event.currentTarget.value)}
+            >
+              <option value="">All cases</option>
+              <For each={profile()?.profile.cases}>{(entry) => <option value={entry.id}>{entry.id}</option>}</For>
+            </select>
+          </label>
+        </Show>
+        <label>
+          <input
+            type="checkbox"
+            disabled={running()}
+            checked={st.trace()}
+            onChange={(event) => st.setTrace(event.currentTarget.checked)}
+          />
+          Include ColdFire trace
+        </label>
         <span class="cal-target" title="The run plays on the target of this pane">
           Target: {props.target}
         </span>

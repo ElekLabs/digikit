@@ -1,3 +1,4 @@
+<meta charset="utf-8" />
 <title>Anchor Review</title>
 <meta name="claude:viewport-fit-sides" content="cover" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -501,7 +502,8 @@
     <button type="button" id="find-params">Parameter candidates</button>
     <span class="muted">Functions only; glyph IDs and bitmap assets are not catalogued.</span>
   </div>
-  <div class="controls">
+  <div class="controls" id="review-storage">
+    <a id="address-map" hidden>Address map (JSON)</a>
     <button type="button" id="export">Export decisions (JSONL)</button>
     <label>Import local decisions <input type="file" id="import" accept=".jsonl,application/json" disabled /></label>
     <span class="muted" id="storage-mode">Connecting to decision storage…</span>
@@ -535,7 +537,12 @@
   const sameReview = (d) => d?.image === DATA.image && (d.cpu || 'cf') === (DATA.cpu || 'cf');
   if (isDsp || isPeer) {
     $('cf-discovery').hidden = true;
-    $('q').setAttribute('placeholder', 'Search name, anchor, role, or DSP hint');
+    $('q').setAttribute('placeholder', 'Search address, name, anchor, role, or DSP hint');
+  }
+  if (DATA.embedded) $('review-storage').hidden = true;
+  if (!DATA.embedded && DATA.address_map_url) {
+    $('address-map').setAttribute('href', DATA.address_map_url);
+    $('address-map').hidden = false;
   }
   if (DATA.full_inventory || !DATA.rows.some((r) => r.lab.length)) $('f-lab').checked = false;
 
@@ -825,6 +832,32 @@
                   r.dsp.do +
                   ' hardware DO)',
               }),
+              ...(r.dsp.cost
+                ? [
+                    el('dt', { text: 'Static instruction estimate' }),
+                    el('dd', {}, [
+                      el('span', { class: 'mono', text: r.dsp.cost.self }),
+                      el('span', { text: ' per call, excluding callees' }),
+                      ...r.dsp.cost.loops.map((loop) =>
+                        el('div', {
+                          text:
+                            'DO 0x' +
+                            loop.do_sw.toString(16) +
+                            ' · ' +
+                            loop.body_insns +
+                            ' body instructions · trips ' +
+                            loop.trip +
+                            ' · depth ' +
+                            loop.depth,
+                        }),
+                      ),
+                      ...(r.dsp.cost.unknown_calls
+                        ? [el('div', { text: 'Unresolved calls or jumps: ' + r.dsp.cost.unknown_calls })]
+                        : []),
+                      ...r.dsp.cost.notes.map((note) => el('div', { text: note })),
+                    ]),
+                  ]
+                : []),
               ...(r.dsp.prof_insns
                 ? [el('dt', { text: 'Profile' }), el('dd', { text: r.dsp.prof_insns + ' executed instructions' })]
                 : []),
@@ -834,7 +867,7 @@
         el(
           'dd',
           { class: 'mono' },
-          r.pair_url ? el('a', { href: r.pair_url, text: r.pair }) : r.pair || 'none',
+          DATA.embedded ? embeddedPair(r) : r.pair_url ? el('a', { href: r.pair_url, text: r.pair }) : r.pair || 'none',
           r.pair ? ' (' + r.pm + ')' + (r.pair_url ? '' : ' · outside paired inventory') : '',
         ),
         el('dt', { text: 'Pair evidence' }),
@@ -855,11 +888,21 @@
         el('dd', { text: isDsp || isPeer ? r.tags : (r.ui_strings || '0') + ' strings · ' + r.tags }),
         r.anchors ? [el('dt', { text: 'Existing anchors' }), el('dd', { class: 'mono', text: r.anchors })] : null,
       ),
-      el('div', { class: 'edit' }, anchorIn, decide),
-      noteIn,
-      saved,
+      DATA.embedded ? null : [el('div', { class: 'edit' }, anchorIn, decide), noteIn, saved],
       r.nb.length ? el('details', {}, el('summary', { text: 'Linked candidates (' + r.nb.length + ')' }), nb) : null,
     );
+  }
+
+  function embeddedPair(row) {
+    if (!row.pair_url || !/^0x[0-9a-f]+$/i.test(row.pair)) return row.pair || 'none';
+    return el('a', {
+      href: '#',
+      text: row.pair,
+      onclick: (event) => {
+        event.preventDefault();
+        parent.postMessage({ kind: 'firmware-catalog-pair', release: DATA.other, entry: Number(row.pair) }, '*');
+      },
+    });
   }
 
   function evidenceFlag(value) {
@@ -1052,6 +1095,7 @@
   followHash();
 
   (async () => {
+    if (DATA.embedded) return;
     const banner = $('banner');
     const db = isDsp ? null : await window.claude?.use?.('db');
     if (!db) {

@@ -28,6 +28,7 @@ function reading(elapsed: number, running = true): ProfileReading {
     port: 'fake-device-0.0',
     emulator: true,
     traceSupported: true,
+    capabilities: { hasDsp: true, dspBlocks: true, dspHotspots: true, mainHotspots: true },
     observedAt: elapsed * 1000,
     modules: [],
     snap: { running, hz: 1000, elapsedTicks: BigInt(elapsed * 1000), spans: [] },
@@ -185,7 +186,7 @@ test('leaving a target discards an in-flight reading and disables polling and co
     expect(noteReply).toHaveBeenCalledTimes(1);
     expect(noteReply.mock.calls[0]![1]()).toBe(false);
     expect(recorder.read).toHaveBeenCalledTimes(2);
-    await owner.reset();
+    await owner.recording.reset();
     expect(recorder.reset).not.toHaveBeenCalled();
   } finally {
     dispose();
@@ -221,10 +222,12 @@ test('target leave and disposal share one DSP release after a recording action s
   const { owner, dispose } = open(f.deps);
   try {
     await vi.advanceTimersByTimeAsync(0);
+    expect(owner.recording.includeDspHotspots()).toBe(false);
     owner.recording.setIncludeDsp(true);
+    owner.recording.setIncludeDspHotspots(true);
     owner.recording.toggle();
     await vi.advanceTimersByTimeAsync(0);
-    expect(recorder.start).toHaveBeenCalledWith(true);
+    expect(recorder.start).toHaveBeenCalledWith(true, true);
     expect(owner.recording.disabled()).toBe(true);
     const leaving = source.beforeLeave.mock.calls[0]![0]();
     dispose();
@@ -250,11 +253,12 @@ test('target leave waits for an in-flight export to save before releasing DSP', 
   const { owner, dispose } = open(f.deps);
   try {
     await vi.advanceTimersByTimeAsync(0);
-    const exporting = owner.exportFile();
+    expect(owner.recording.canSave()).toBe(true);
+    const exporting = owner.recording.save();
     await vi.advanceTimersByTimeAsync(0);
     expect(recorder.exportFile).toHaveBeenCalledTimes(1);
     const leaving = source.beforeLeave.mock.calls[0]![0]();
-    await owner.exportFile();
+    await owner.recording.save();
     expect(recorder.exportFile).toHaveBeenCalledTimes(1);
     expect(recorder.releaseDsp).not.toHaveBeenCalled();
 
@@ -314,7 +318,7 @@ test('Calibration takes over an active Profile read, blocks Profile commands, an
     f.refresh();
     owner.recording.setIncludeDsp(true);
     owner.recording.toggle();
-    await Promise.all([owner.reset(), owner.exportFile(), owner.addDebug()]);
+    await Promise.all([owner.recording.reset(), owner.recording.save(), owner.addDebug()]);
     await vi.advanceTimersByTimeAsync(10_000);
     expect(owner.reading()).toBeUndefined();
     expect(noteReply).not.toHaveBeenCalled();

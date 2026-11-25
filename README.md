@@ -80,7 +80,7 @@ mise run gen:core           # the shared generated core of the emulator's DSP
 
 ### Firmware files
 
-Put `Digitakt_II_OS1.17.syx` and `Digitone_II_OS1.12.syx` in `firmware/`. No Elektron firmware is in this repository. Supply your own files. See the [firmware guide](docs/FIRMWARE.md) to build and browse the analysis databases and catalogs.
+Put `Digitakt_II_OS1.17.syx` and `Digitone_II_OS1.12.syx` in `firmware/`. No Elektron firmware is in this repository. Supply your own files. [Generate a firmware catalog (HTML)](docs/FIRMWARE.md#generate-a-sharc-catalog-from-a-syx) from either firmware file, or see the [firmware guide](docs/FIRMWARE.md) for main-OS analysis.
 
 ### Flash from the command line
 
@@ -126,7 +126,8 @@ Start with `mise run module:new -- machine AUTHOR/NAME` (or `fx`, `service`) and
 
 ### Further reading
 
-- [Writing modules](docs/MODULE-AUTHORING.md), the [SDK](sdk/README.md) and the [module reference](modules/README.md)
+- [Writing modules](docs/MODULE-AUTHORING.md) and the [DSP development loop](docs/MODULE-AUTHORING.md#dsp-development-loop)
+- The [SDK](sdk/README.md) and the [module reference](modules/README.md)
 - [Patching, flashing and recovery in detail](docs/PATCHING.md)
 - [Architecture](docs/ARCHITECTURE.md): the layers, the interfaces between them, device data, profiling and the emulator boundary
 - [Developing digikit](docs/DEVELOPMENT.md): [previews](docs/DEVELOPMENT.md#visible-preview), [fast iteration](docs/DEVELOPMENT.md#fast-iteration-runtime-ui-and-modules), analysis tools, repository layout

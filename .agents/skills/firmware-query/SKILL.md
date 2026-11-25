@@ -25,7 +25,11 @@ Use `batch` for more than one question: one process, one `## query` block each.
 
 ## Build the databases for queries and Workbench
 
-With sections extracted and ColdFire Ghidra dumps under `out/ghidra/`:
+For a SHARC HTML catalog from a stock `.syx`, use
+`fw.py review --syx PATH --core dsp --format json`. For the input requirements
+and the returned paths, see [Generate a SHARC catalog from a SysEx](../../../docs/FIRMWARE.md#generate-a-sharc-catalog-from-a-syx).
+
+To build both cores with sections extracted and ColdFire Ghidra dumps under `out/ghidra/`:
 
     uv run python -m tools.coldfire.fw build -i dt2-1.17 --other dn2-1.12
 
@@ -56,7 +60,7 @@ With the main and DSP Ghidra exports in place:
 The Syntakt main OS is `out/firmware/st-1.42/main/firmware.sqlite`. The DSP is
 `out/firmware/st-1.42/dsp/firmware.sqlite` and its review page lands at
 `out/firmware/st-1.42/dsp/review.html`. The legacy image key `-i st-1.42-peer`
-also selects the DSP. A paired SHARC catalog needs `--other IMAGE`.
+also selects the DSP.
 
 ## SHARC queries
 
@@ -180,12 +184,16 @@ Without Claude's database, Keep/Later/Skip uses per-image browser storage, with 
 
 Needs `out/firmware/<image>/dsp/firmware.sqlite` (also of the old image, for `stable`). Adds `function_index`, `function_anchors`, `function_names`, `function_notes`, `catalog` and `catalog_groups` to sharcdb. TSV and graph files go in the DSP core's `exports/` folder. Addresses are short words. Columns differ from ColdFire: `reloc_hash` replaces `h_strict`; no ui or class fields. DSP-only: `role` (voice, master/fx, util, frame, io, other), `label`, `callers`, `callees`, `loops`, `do`, `recip`, `lit_data`, `abs_dm`, `hints`, and `prof_insns` (NULL without `--profile`, which also adds the tag `hot`). `fw.py catalog` shows `role` and `hints`; TERM matches name, role, hints, tags or anchors.
 
-For browser review, run `uv run python -m tools.coldfire.fw review -i IMAGE --core dsp`
-for each image in the pair. Open `out/firmware/<image>/dsp/review.html`. Paired
-links follow the release and core layout. The page includes every DSP
-catalog candidate and supports search by group title, name, anchor, role,
-and hint. Store review JSONL in the DSP core's `labels/` folder. The legacy `out/atlas/labels/sharc/<image>/` folder is a fallback. Group
-titles without a review label come from the existing DSP roles and hints.
+The [firmware guide](../../../docs/FIRMWARE.md#generate-a-sharc-catalog-from-a-syx)
+covers HTML generation and re-export. The page includes every DSP candidate
+and supports search by group title, name, anchor, role and hint. Store review
+JSONL in the DSP core's `labels/` folder. The legacy
+`out/atlas/labels/sharc/<image>/` folder is a fallback.
+
+For offline profile-to-catalog lookup, use the
+[structured CLI report](../../../docs/ADDRMAP.md#open-a-profile-hotspot).
+Add `--format json` to `fw cost` to read loop body sizes, trip symbols,
+unresolved calls and estimates without parsing the text report.
 
 `fw.py cost ADDR [--vars R2=32] [--vars-all R2=32]` gives a static instruction count with DO-loop trip counts (literal or symbolic) and callees. It is an upper bound over all paths with no stall model, and the unit of `dsp_cost_voice` and `patchkit budget`. Trip symbols name the register and the function that reads it, `R2@1cd286`: a callee's R2 is not the caller's. `--vars NAME=V` sets the entry function's register, `NAME@FN=V` one function's, `--vars-all NAME=V` every function's; an unknown name is an error that lists the symbols present. Jumps to another function (conditional too) count as tail calls whose targets are summed (upper bound); with `--vars` the output also gives the tighter total taking the largest target. A zero or missing DO count is `trip?@fn`; notes list what was not handled.
 

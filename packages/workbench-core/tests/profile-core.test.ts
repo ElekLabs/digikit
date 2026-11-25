@@ -13,7 +13,6 @@ import {
   graphTop,
   groupRows,
   isHot,
-  readReference,
   shareOf,
   totalShare,
   type ModuleRef,
@@ -204,32 +203,11 @@ describe('the history', () => {
   });
 });
 
-describe('text and reference', () => {
+describe('text', () => {
   test('elapsed and clock', () => {
     assert.equal(fmtElapsed(BigInt(HZ) * 130n, HZ), '02:10');
     assert.equal(fmtMhz(132_000_000), '132 MHz');
     assert.equal(fmtMhz(133_333_333), '133.33 MHz');
-  });
-
-  test('a reference profile gives shares by name; one without spans or window gives none', () => {
-    const doc = {
-      schema: 'dk.profile/1',
-      span_elapsed_ticks: 1000,
-      spans: [
-        { name: 'test/saw', sum_ticks: 250 },
-        { name: 'early', sum_ticks: 10 },
-      ],
-    };
-    assert.deepEqual(
-      [...readReference(doc)!],
-      [
-        ['test/saw', 0.25],
-        ['early', 0.01],
-      ],
-    );
-    assert.equal(readReference({ schema: 'dk.profile/1', spans: [] }), undefined);
-    assert.equal(readReference({ schema: 'dk.profile/1', spans: [{ name: 'x', sum_ticks: 1 }] }), undefined);
-    assert.throws(() => readReference({ schema: 'other' }), /dk\.profile\/1/);
   });
 });
 

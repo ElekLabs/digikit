@@ -252,7 +252,27 @@ describe('the emulator', () => {
     });
     await rec.start();
     assert.deepEqual(st.calls, ['state:reset', 'state:start']);
-    assert.deepEqual(rpcCalls, ['cf.profile {"enable":true}', 'sharc.profile {"enable":true}']);
+    assert.deepEqual(
+      rpcCalls.filter((call) => call.includes('enable')),
+      ['cf.profile {"enable":true}', 'sharc.profile {"enable":true}'],
+    );
+  });
+
+  test('leaves the SHARC counter off when hotspots are not requested', async () => {
+    const st = state();
+    const rpcCalls: string[] = [];
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc(rpcCalls, { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+    });
+    await rec.start(false, false);
+    const reading = await rec.read();
+    assert.ok(!reading.noDebug);
+    assert.equal(reading.dspHotspotsRequested, false);
+    assert.equal(reading.dsp, undefined);
+    await rec.stop();
+    assert.ok(!rpcCalls.some((call) => call.startsWith('sharc.profile')));
   });
 
   test('the DSP view appears while recording, with the device headroom, and names no module without maps', async () => {
@@ -276,6 +296,8 @@ describe('the emulator', () => {
   test('Stop keeps the instruction profiles for Export and switches every profile off', async () => {
     const st = state({ elapsed: 5000n });
     const rpcCalls: string[] = [];
+    const started = { id: 'listening-session', saved_checkpoint: 'saved-at-start', working_card: true };
+    let context = started;
     const rec = createRecorder({
       session: async () => fakeSession(st),
       rpc: fakeRpc(rpcCalls, {
@@ -284,8 +306,10 @@ describe('the emulator', () => {
       }),
       loadLibrary: library,
       now: () => NOW,
+      sessionContext: () => context,
     });
     await rec.start();
+    context = { ...started, saved_checkpoint: 'saved-later' };
     st.elapsed = 5000n;
     rpcCalls.length = 0;
     await rec.stop();
@@ -299,9 +323,10 @@ describe('the emulator', () => {
     const f = await rec.exportFile();
     assert.deepEqual(rpcCalls, [], 'the stopped recording is exported from what Stop kept');
     const doc = JSON.parse(f.text);
-    assert.equal(f.name, 'emu-20261115T123456.dkprof.json');
+    assert.equal(f.name, 'emu-20261115T123456.capture.json');
     assert.equal(doc.schema, 'dk.profile/1');
     assert.equal(doc.run.target, 'dn2');
+    assert.deepEqual(doc.run.session, started);
     assert.equal(doc.span_elapsed_ticks, 5000);
     assert.equal(doc.span_clock_hz, HZ);
     assert.deepEqual(
@@ -448,6 +473,31 @@ describe('the emulator', () => {
     );
   });
 
+  test.each([false, true])('export keeps the load table only when its capture boundaries agree (%s)', async (moved) => {
+    const hash = 'ab'.repeat(32);
+    const st = state({ imageId: 'ff'.repeat(8), fwId: hash.slice(0, 16) });
+    let base = 0x8000;
+    const rec = createRecorder({
+      session: async () => fakeSession(st),
+      rpc: fakeRpc([], { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }),
+      loadLibrary: library,
+      names: {
+        inputs: () => ({ maps: [], loads: { modules: [{ id: 'test/render', base, dsp_base: 0x301 }] } }),
+        imageHash: () => hash,
+        refresh: async () => {},
+      },
+    });
+    await rec.start();
+    if (moved) base += 0x1000;
+    await rec.stop();
+    const capture = JSON.parse((await rec.exportFile()).text);
+    assert.equal(capture.run.firmware_sha256, hash);
+    assert.deepEqual(
+      capture.run.loads,
+      moved ? undefined : { modules: [{ id: 'test/render', base, dsp_base: 0x301 }] },
+    );
+  });
+
   test('an emulator reload invalidates the captured firmware SHA even under the same reported image id', async () => {
     const hash = 'ab'.repeat(32);
     const st = state({ imageId: 'ff'.repeat(8), fwId: hash.slice(0, 16) });
@@ -536,8 +586,8 @@ describe('the emulator', () => {
     st.running = true;
     const r = await rec.read();
     assert.ok(!r.noDebug);
-    if (!r.noDebug) assert.match(r.note ?? '', /no DSP on this device/);
-    if (!r.noDebug) assert.equal(r.noDsp, true);
+    if (!r.noDebug) assert.match(r.note ?? '', /no DSP on this device/i);
+    if (!r.noDebug) assert.equal(r.capabilities.hasDsp, false);
     if (!r.noDebug) assert.doesNotMatch(r.note ?? '', /built without/);
   });
 
@@ -657,8 +707,8 @@ test('a failed trace download retains the frozen aggregate and records the loss 
 });
 
 describe('DSP block recording', () => {
-  function setup(emulator = false) {
-    const st = state();
+  function setup(emulator = false, withTrace = false) {
+    const st = state({ traceVersion: withTrace ? 1 : undefined });
     const session = fakeSession(st);
     const steps: string[] = [];
     let generation = 80;
@@ -676,10 +726,23 @@ describe('DSP block recording', () => {
 
       return { on: st.running, generation, counts: { sweeps: 7, gaps: 0, ignored: 0 }, sweep: published };
     };
+    if (withTrace)
+      session.profileTrace = async () => ({
+        version: 1,
+        generation: 2,
+        hz: HZ,
+        dropped: 0,
+        events: [{ owner: 0x100, startTicks: '100', durationTicks: 10 }],
+      });
     const rec = createRecorder({
       session: async () => session,
       loadLibrary: library,
-      rpc: emulator ? fakeRpc([], { 'cf.profile': cfAnswer, 'sharc.profile': sharcAnswer }) : undefined,
+      rpc: emulator
+        ? fakeRpc([], {
+            'cf.profile': cfAnswer,
+            'sharc.profile': { ...sharcAnswer, raw: [{ cpu: 'sharc', addr: 0x123, count: 7, series: 'pc' }] },
+          })
+        : undefined,
     });
     return {
       rec,
@@ -708,7 +771,7 @@ describe('DSP block recording', () => {
         overruns: 2,
         rows: [{ row: 8, kind: 'effect', calls: 120, meanBlock: 80, maxCall: 65, maxBlock: 110 }],
       });
-      assert.deepEqual(steps, ['clear', 'start', 'get', 'clear', 'get']);
+      assert.deepEqual(steps, ['clear', 'start', 'get', 'clear', 'get', 'get']);
       const doc = JSON.parse((await rec.exportFile()).text);
       assert.equal(doc.dsp.unit, emulator ? 'insn' : 'cycles');
       assert.equal(doc.dsp_rows[0].sum_cycles, 3200);
@@ -716,6 +779,19 @@ describe('DSP block recording', () => {
       assert.equal(JSON.parse((await rec.exportFile()).text).dsp, undefined);
     });
   }
+  test('exports the selected collectors together in one stopped capture', async () => {
+    const { rec } = setup(true, true);
+    await rec.start(true, true);
+    await rec.stop();
+    const doc = JSON.parse((await rec.exportFile()).text);
+    assert.equal(doc.schema, 'dk.profile/1');
+    assert.equal(doc.dsp.unit, 'insn');
+    assert.equal(doc.dsp_rows[0].max_block, 110);
+    assert.equal(doc.trace.events[0].durationTicks, 10);
+    assert.ok(doc.spans.length);
+    assert.ok(doc.raw.some((row: { cpu: string }) => row.cpu === 'sharc'));
+  });
+
   test('ordinary recording and reset leave DSP streaming alone', async () => {
     const { rec, steps } = setup();
     await rec.start();
