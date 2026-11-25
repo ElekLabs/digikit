@@ -321,3 +321,68 @@ fn a_click_callback_that_reads_a_parameter_gets_the_value() {
     );
     assert_eq!(fw.refused.get(), 0);
 }
+
+/// A view whose reads enter the owner as the firmware's getters do when a hook runs inside them: `refused` counts the reads that found it busy.
+struct ReentrantView {
+    refused: std::cell::Cell<u32>,
+    ty: i32,
+}
+impl ReentrantView {
+    fn enter(&self) {
+        if DK_SVC_OWNER.with(|_| ()).is_none() {
+            self.refused.set(self.refused.get() + 1);
+        }
+    }
+}
+impl dkrt_svc_machines::native_page::View for ReentrantView {
+    fn page_index(&self) -> u32 {
+        self.enter();
+        0
+    }
+    fn native_type(&self) -> i32 {
+        self.enter();
+        self.ty
+    }
+    fn track(&self) -> u32 {
+        self.enter();
+        0
+    }
+    fn value(&self, _: u32) -> i32 {
+        self.enter();
+        0
+    }
+    fn invalidate(&self) {}
+}
+
+/// The page lookup and the code hook read the view outside the owner: reads that enter it again (a hook inside a firmware getter) are answered, and the page is found.
+#[test]
+fn the_native_page_lookup_reads_the_view_while_the_owner_is_idle() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let _o = Started::new();
+    DK_SVC_OWNER.with(|m| m.register_page_for_test(9)).unwrap();
+    let view = ReentrantView {
+        refused: Default::default(),
+        ty: 0,
+    };
+    assert!(
+        native::selected(&view).is_some(),
+        "the registered page is found"
+    );
+    assert_eq!(
+        native::code(&view, 3),
+        9,
+        "encoder 3 maps to the bound code"
+    );
+    assert_eq!(view.refused.get(), 0, "no read found the owner busy");
+    let other = ReentrantView {
+        refused: Default::default(),
+        ty: 5,
+    };
+    assert!(native::selected(&other).is_none());
+    assert_eq!(
+        native::code(&other, 3),
+        -1,
+        "a type without pages resumes the stock mapper"
+    );
+    assert_eq!(other.refused.get(), 0);
+}

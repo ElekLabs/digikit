@@ -121,6 +121,16 @@ impl NativePage {
         self.descriptor[0] = at;
         self.descriptor[1] = at;
     }
+    /// The parameter code of encoder `encoder` on this page: -1 resumes the stock mapper (no such encoder), 0 is a consumed mapping for LOCAL or unused.
+    pub fn encoder_code(&self, encoder: u32) -> i32 {
+        if encoder as usize >= ENCODERS {
+            return -1;
+        }
+        self.bindings
+            .iter()
+            .find(|b| b[0] == 1 && b[2] == encoder)
+            .map_or(0, |b| b[1] as i32)
+    }
     pub fn bindings(&self) -> &[[u32; 3]; ENCODERS] {
         &self.bindings
     }

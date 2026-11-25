@@ -15,8 +15,8 @@ impl<T, A: Events<T>, const N: usize> Owner<T, A, N> {
     /// `decide` is a function pointer: it captures nothing, so a firmware handle made before the call cannot be carried into it, and it cannot make one (the token is the only
     /// way). What it needs from outside comes in as plain `input`; what `act` needs from the object goes out as `X`.
     ///
-    /// Residual hole: a service can still write a firmware handle that needs no token, or call a firmware function directly from `decide`; the host test of its entries with a
-    /// re-entering fake covers the first, review the second.
+    /// Residual hole: a service can still call a firmware function directly from `decide` (no handle is needed for a bare function); the host test of its entries with a
+    /// re-entering fake covers it, and review.
     pub fn step<I, X, R>(
         &self,
         input: I,

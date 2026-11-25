@@ -107,6 +107,16 @@ impl Machines {
         self.clicks.begin_flow(ctx);
     }
 
+    /// Register page 0 of the first reserved type with encoder 3 bound to parameter code `code`: the host test of the service file has no loaded module that registers one.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn register_page_for_test(&mut self, code: u32) {
+        let mut bindings = [[0u32; 3]; crate::native_page::ENCODERS];
+        bindings[0] = [1, code, 3];
+        self.pages
+            .register(0, 0, 1, 0, b"T", 1, 1, &bindings, &[], 0, false)
+            .expect("register");
+    }
+
     /// The click state of the machine page: the file's hooks and the exports `dk_param_get` and `dk_param_set` reach it here.
     pub fn clicks(&mut self) -> &mut Slots {
         &mut self.clicks

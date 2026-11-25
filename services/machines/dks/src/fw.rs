@@ -16,12 +16,6 @@ impl DkFw {
     pub fn new(_: &Outside) -> DkFw {
         DkFw(())
     }
-
-    /// The handle for the page's getters inside a hook that has no step (`native.rs`: the page the view shows is looked up with the owner held). Only the getters of the stock
-    /// page (`view_track`, `page_value`, the type readers) may be called through it: they fire no hook of this service. Anything that stores or runs a callback takes a token.
-    pub(crate) fn pure_reads() -> DkFw {
-        DkFw(())
-    }
 }
 
 /// The three firmware functions of the click flow (`cf.input.fn.key_down`, `cf.param.fn.set_value`, `cf.page.fn.view_track`).

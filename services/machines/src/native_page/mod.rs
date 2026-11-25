@@ -28,6 +28,6 @@ pub use frame::{Frame, FRAME_BYTES};
 pub use page::{NativePage, ENCODERS, FLAG_STOCK_OVERLAY, FLAG_WIDE_CANVAS};
 pub use paint::{draw, draw_page, overlay, overlay_page, Draw};
 pub use surface::{Stock, Surface};
-pub use table::{PageTable, TYPES};
+pub use table::{PageTable, PAGES, TYPES};
 pub use turn::{turn, turn_page, Event};
 pub use view::{Content, View};
