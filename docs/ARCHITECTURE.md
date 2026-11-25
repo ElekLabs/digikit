@@ -20,9 +20,9 @@ Five layers, L0 to L4, and the port file beside them. The [taxonomy](design/taxo
      loading and link, store, settings broker, transport, diagnostics, tick
         │ platform interface
  ───────┼────────────────────────────────────────────────────────────
- L1  Installer, platform adapters and firmware plug-in points (patched in)
-     reset and boot entry, UI/MIDI/exception hooks, shared tables,
-     firmware-time stubs, DSP link and stock fallbacks
+ L1  Installer and platform modules (patched in, runtime/platform)
+     reset and boot entry, UI/MIDI/exception hooks, shared tables (rows),
+     DSP slots (dsp-voice, fx, dynfx), DSP link and stock fallbacks
         │ bindings and device facts             Port file (.dkport)
  ───────┼────────────────────────────────────────────────────────────
  L0  Stock firmware and hardware (ColdFire, SHARC, card, USB)
@@ -137,11 +137,11 @@ FX routing uses no Query operation. The fx service shows the FX ROUTING row in t
 | [shortcuts](../services/shortcuts/dks/module.toml) | 500 | Shortcut records and dispatch | Record handler, shortcut builder and a port-resolved key-walker hook |
 | [project](../services/project/dks/module.toml) | 600 | `.dkp` files and project-scoped module settings | Project API, settings overlay, tick and port-resolved project hooks |
 
-### Firmware plug-in points
+### Platform slots
 
-The inventory covers DT2 1.17 and DN2 1.12. Residency is a property of the executing code, data and fallback path. Moving a source file or a manifest does not change it.
+The catalogue covers DT2 1.17 and DN2 1.12. All modules sit in `runtime/platform/`. Residency is a property of the executing code, data and fallback path. Moving a source file or a manifest does not change it.
 
-| Point | Resident responsibility | Service ownership and extraction boundary |
+| Slot | Resident responsibility | Service ownership and extraction boundary |
 | --- | --- | --- |
 | [machine types](../runtime/platform/rows/module.toml) (in `core/rows`) | The type reservation: the registry of machine rows (stock gap rows and the reserved run-time rows), the copies of the name, permission and per-type tables with their bounds, the sound-load bound, the dispatch of a type and the Digitone II page rows | `machines.dks` owns type assignment, the machine list and its rank pairs, the record and row lifecycle, the page hooks, the native pages and the frame-type hook. A project that names a reserved type boots without the service, keeps the number and plays as type 0. |
 | [rows](../runtime/platform/rows/README.md) (was params) | Patch-time descriptor-table copy with device-specific slot mappings and reader/reference patches, the reserved parameter rows (one count per block from `[limits]`) and `rows_info` with the cap words | `machines.dks` and `fx.dks` build and manage their own blocks of rows. Keep the shared descriptor layout and reader bounds together. |
@@ -153,9 +153,9 @@ The inventory covers DT2 1.17 and DN2 1.12. Residency is a property of the execu
 
 ### Remaining ownership work
 
-The open work is planned in [runtime contract and package lifecycle](plans/runtime-contract-and-lifecycle.md) (roadmap row RC): one lifecycle for modules and services, provider-owned records and resources, tagged service parts, two installers, the ColdFire points moved into their services and `image-modules/` removed. Its evidence is [finding 158](findings/158-service-entry-survey.md).
+The open work is planned in [runtime contract and package lifecycle](plans/runtime-contract-and-lifecycle.md) (roadmap row RC): one lifecycle for modules and services, provider-owned records and resources, tagged service parts, two installers and the ColdFire hooks moved into their services. Its evidence is [finding 158](findings/158-service-entry-survey.md).
 
-When a service dependency, runtime guarantee or firmware-resident responsibility changes, update this contract or inventory in the same change and link its lowest-layer proof.
+When a service dependency, runtime guarantee or firmware-resident responsibility changes, update this contract or catalogue in the same change and link its lowest-layer proof.
 
 ## Boundaries and tests
 
@@ -188,7 +188,7 @@ Use the lowest layer that sees the behavior. A host test replaces device coverag
 1. **Roles.** Manifests under `runtime/` and `services/` set `[module].role` according to the table above.
 2. **Sources.** Content modules and apps include only their own files and the SDK (`<dk/...>`, `sdk/dsp/contract`). An app may also include `dkrt.h` and `dk_ui_core.h`. Only the runtime (its `platform.rs`, rule 7), the installer and adapters include `dk_fw_*` headers or depend on the `dkfw` crate. C, ColdFire and SHARC assembly (`#include`, `.include`) and Rust (`dkfw`, path dependencies) are checked.
 3. **Objects.** The undefined symbols of the built objects of apps and content modules are SDK imports (`sdk/sdk.toml` `[[import]]`), declared service-local imports (`[[service_import]]`), `dkrt_*`, `dk_ui_*`, `dk_app_*` or the SHARC externs the SDK documents. They never name a firmware anchor (`cf.*`, `dsp.*`, `hook.*`, `pk.*`), and `[object.externs]` never maps a symbol to one.
-4. **Apps do not patch.** An app has no `[[op]]` and no `[[claim]]`. If an app needs a firmware hook, the adapter that owns that plug-in point installs the hook and calls the app through an optional symbol (`dk_app_*`).
+4. **Apps do not patch.** An app has no `[[op]]` and no `[[claim]]`. If an app needs a firmware hook, the platform module that owns that slot installs the hook and calls the app through an optional symbol (`dk_app_*`).
 5. **Capabilities cost nothing unused.** A module asks for capabilities; adapters implement them per device. Prefer data (a field an adapter already passes) to a new firmware hook. A hook must cost at most one flag check on a hot path when no loaded module asks for its capability ([capabilities plan](plans/capabilities.md)).
 
 6. **Arrows inside the runtime.** Service implementations live in their own crates and take the core through `CoreApi`. Card wrappers bind service-only imports and declare their callbacks to the loader. `check:layers` checks allowed crate dependencies and test-only fakes, including renamed and target-specific dependencies. Service-specific runtime bridges are confined to `handlers.rs` and the generated registration code.
@@ -248,9 +248,47 @@ A new firmware version of a known device:
 
 A new device:
 
-1. Add the device profile (`devices/NAME.toml`): limits, patch sets, panel, storage and the values the adapters read (`docs/design/device-data.md`).
-2. Add its ports and, where its firmware differs, device-specific adapter sources (`src/cf/NAME/`, `src/dsp/NAME.s`) behind the same adapter API.
-3. Keep the SDK contract. A content module that builds against the SDK loads on the new device when the runtime reports the contract version.
+1. Add `rule.<dev>` entries to the site and function declarations in `ports/fw/*.toml` (hash-anchored, one entry per firmware image) and add the port file `ports/<dev>-<version>.toml`.
+2. Add the device profile (`devices/NAME.toml`): limits, patch sets, panel, storage, `[capabilities]` and the values the platform modules read (`docs/design/device-data.md`).
+3. Add a trait implementation (`Fw`, `View`, `Surface`; see the service code pattern below) only where the firmware's structure differs. Code selects it by a capability from the device file.
+4. Never branch on a device name in a service, a module or the SDK. A content module that builds against the SDK loads on the new device when the runtime reports the contract version.
+
+## Service code pattern
+
+A service keeps its logic apart from the firmware, so that a host test runs the logic over fakes.
+
+- **Pure logic.** Decisions, tables and state sit in plain Rust over small traits. Host tests give fakes (`FakeCore` for the core, `dkrt-test-support::FakeFw` for the firmware).
+- **Firmware behind traits.** The firmware side is a trait with one implementation on the device and one fake in the tests. Example: `Fw` (`runtime/core/abi/src/fw.rs`) is the interface to the parameter page; `services/machines/dks/src/fw.rs` holds the card implementation `DkFw`. The native pages in `services/machines/src/native_page/` draw through `View` (`view.rs`) and `Surface` (`surface.rs`), with `fake_firmware.rs` for tests.
+- **Per-firmware data in `ports/fw`.** Addresses, offsets, check hashes and register lists are declarations in `ports/fw/*.toml`, never constants in the service.
+- **The owner rule.** State that the firmware can re-enter lives in an `Owner` (`runtime/core/svc-rt/src/owner/`). A call into an owner that is already running is refused and counted, never nested.
+- **`Owner::step`** (`owner/step.rs`). `decide` runs on the object and gets no firmware handle. Its answer goes to `act`, which runs after the owner is idle again and gets the `Outside` token, the only way to build a firmware handle. A firmware function that calls back into the service then finds the owner idle.
+
+## The firmware path
+
+```text
+ service manifest (services/NAME/dks/module.toml)
+   [[hook]], [[patch]], imports dk_fw_*, dk_exit_*, dk_stock_*
+        |  names an anchor, e.g. cf.lfo.hook.tick_call
+        v
+ ports/fw/*.toml
+   declarations; hash-anchored rule.<dev> per firmware image
+        |  patchkit gen
+        v
+ port files (ports/<dev>-<version>.toml, packed as .dkport) and ports/bindings
+   site address, displaced length, check value of the stock bytes
+        |  at load
+        v
+ loader resolves the names to addresses and checks the layout
+        |
+        v
+ installer reads the stock bytes and compares the check value,
+   then under one interrupt mask writes the hooks and patches
+        |  stop or unload
+        v
+ stock bytes are written back (patches in reverse order, then hooks)
+```
+
+A refusal at any step writes nothing. The install is all-or-nothing per provider (`runtime/core/src/rs/src/package/loader/install.rs`).
 
 ## Where the device specifics live
 
