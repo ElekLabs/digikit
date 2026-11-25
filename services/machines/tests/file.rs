@@ -14,7 +14,7 @@ use file::builder::{
     dk_machine_add_page, dk_module_ctx_add_machine, dk_page_add_param, dk_page_bind,
     dk_page_bind_local, dk_param_glyph, dk_param_latched, dk_param_range,
 };
-use file::fw::{dk_param_get, dk_param_set, dks_page_key, dks_page_turn, page_key_with};
+use file::fw::{dk_param_get, dk_param_set, dks_page_key, dks_page_turn, page_key, param_get, param_set};
 pub use file::{builder, fw, native, DK_SVC_OWNER};
 use file::{dk_svc_start, dk_svc_stop};
 
@@ -155,38 +155,61 @@ fn describe_answers_while_the_owner_is_busy_in_another_call() {
     dkrt_svc_machines::rows::reset();
 }
 
-/// A page whose code mapper enters the owner as the page's code hook does (`dks_native_code` looks a native page up in it): it maps encoder 1 to code 1, and answers -1 (the
-/// stock mapper) when the owner refuses the nested call.
-struct ReentrantFw;
+/// A page whose every firmware read and write enters the owner as a hook of the firmware does (the page's code hook, the hooks a setter fires): the call is answered when the
+/// owner is idle and `refused` counts the calls that found it busy.
+#[derive(Clone)]
+struct ReentrantFw {
+    refused: std::rc::Rc<std::cell::Cell<u32>>,
+    stored: std::rc::Rc<std::cell::Cell<Option<(usize, u32, i32, u32)>>>,
+}
+
+impl ReentrantFw {
+    fn new() -> ReentrantFw {
+        ReentrantFw {
+            refused: Default::default(),
+            stored: Default::default(),
+        }
+    }
+    /// The owner is entered, as a hook of the firmware does it: `Some` when it was idle.
+    fn enter(&self) -> Option<()> {
+        let r = DK_SVC_OWNER.with(|_| ());
+        if r.is_none() {
+            self.refused.set(self.refused.get() + 1);
+        }
+        r
+    }
+}
 
 impl dkrt_abi::fw::Fw for ReentrantFw {
     fn mode_key_held(&self) -> bool {
         false
     }
     fn page_value(&self, _: usize, _: u32) -> i32 {
-        0
+        self.enter().map_or(-7, |()| 0x1200)
     }
     fn object(&self, _: usize, _: u32, _: u32) -> usize {
-        0
+        0x77
     }
     fn object_value(&self, _: usize, _: u32) -> i32 {
         0
     }
-    fn store(&self, _: usize, _: u32, _: i32, _: u32) {}
+    fn store(&self, obj: usize, code: u32, raw: i32, track: u32) {
+        if self.enter().is_some() {
+            self.stored.set(Some((obj, code, raw, track)));
+        }
+    }
     fn view_track(&self, _: usize) -> u32 {
-        5
+        self.enter().map_or(99, |()| 5)
     }
     fn param_code(&self, _: usize, enc: u32) -> i32 {
-        match DK_SVC_OWNER.with(|_| ()) {
-            Some(()) => enc as i32,
-            None => -1,
-        }
+        self.enter().map_or(-1, |()| enc as i32)
     }
 }
 
-/// The key hook asks the page for the encoder code outside the owner: a code mapper that enters the owner is answered, so the click of a native page's bound knob reaches its action.
+/// The key hook asks the page for the encoder code and the track outside the owner: a page that enters the owner is answered, so the click of a native page's bound knob
+/// reaches its action.
 #[test]
-fn a_click_maps_to_the_module_code_when_the_code_mapper_enters_the_owner() {
+fn a_click_maps_to_the_module_code_when_the_page_enters_the_owner() {
     let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
     let _o = Started::new();
     // the stub image has no registry: the first parameter code is u32::MAX, so code 1 is action slot 2
@@ -195,15 +218,56 @@ fn a_click_maps_to_the_module_code_when_the_code_mapper_enters_the_owner() {
     let v = view.as_ptr() as *const u8;
     let ev = |flags: u32| [0u32, 0, 0, 0x29 + 1, flags, 0];
     let (press, release) = (ev(0x01), ev(0x10));
+    let fw = ReentrantFw::new();
     // SAFETY: the view and the events are zeroed words of the size the hook reads
     unsafe {
-        page_key_with(&ReentrantFw, v, press.as_ptr() as *const u8);
-        page_key_with(&ReentrantFw, v, release.as_ptr() as *const u8);
+        page_key(|_| fw.clone(), v, press.as_ptr() as *const u8);
+        page_key(|_| fw.clone(), v, release.as_ptr() as *const u8);
     }
     let p = DK_SVC_OWNER.with(|m| m.clicks().pending()).unwrap();
     assert_eq!(
         (p.callback, p.track, p.code),
         (0x4000, 5, 1),
-        "the click maps to the module's encoder code"
+        "the click maps to the module's encoder code and the page's track"
     );
+    assert_eq!(fw.refused.get(), 0, "the page never found the owner busy");
+}
+
+fn open_flow() {
+    DK_SVC_OWNER
+        .with(|m| {
+            m.open_flow_for_test(dkrt_svc_machines::paramapi::Ctx {
+                view: 0x1000,
+                track: 4,
+                owner: 2,
+            })
+        })
+        .unwrap();
+}
+
+/// `dk_param_get` reads the page outside the owner: a getter that enters the owner (as a hook does) is answered.
+#[test]
+fn param_get_reads_the_page_while_the_owner_is_idle() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let _o = Started::new();
+    open_flow();
+    let fw = ReentrantFw::new();
+    let v = unsafe { param_get(|_| fw.clone(), 4, 0) };
+    assert_eq!(v, 0x1200, "the value the page gave");
+    assert_eq!(fw.refused.get(), 0);
+}
+
+/// `dk_param_set` stores through the stock setter outside the owner: the hooks the setter fires reach the service.
+#[test]
+fn param_set_stores_while_the_owner_is_idle() {
+    let _t = TURN.lock().unwrap_or_else(|e| e.into_inner());
+    let _o = Started::new();
+    open_flow();
+    let fw = ReentrantFw::new();
+    let r = unsafe { param_set(|_| fw.clone(), 3, 0, 0x2a00) };
+    assert_eq!(r, 0);
+    assert_eq!(fw.refused.get(), 0);
+    assert!(fw.stored.get().is_some(), "the setter ran");
+    let none = unsafe { param_get(|_| fw.clone(), 3, 9) };
+    assert_eq!(none, dkrt_svc_machines::paramapi::E_ARG, "a word the module lacks");
 }

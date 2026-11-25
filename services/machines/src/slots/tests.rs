@@ -1,4 +1,5 @@
 use super::*;
+use dkrt_abi::fw::Fw;
 
 use dkrt_test_support::FakeCore;
 
@@ -259,7 +260,7 @@ fn the_key_hook_halves_ask_the_firmware_between_them_and_not_inside() {
             fw.calls().is_empty(),
             "detecting the click asks the firmware nothing"
         );
-        slots.queue_click(&core, &fw, v, 202);
+        slots.queue_click(&core, v, 202, fw.view_track(0));
     }
     let p = slots.pending();
     assert_eq!((p.callback, p.track, p.code), (0x4000, 5, 202));

@@ -1,5 +1,4 @@
 use super::*;
-use dkrt_sdk::*;
 
 /// The offsets that the device tests read from `DKRT_FXS` (`fx-track-route.device.test.ts`).
 #[test]

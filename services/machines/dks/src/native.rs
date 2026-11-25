@@ -114,7 +114,7 @@ unsafe fn machine_type(view: *const u8) -> i32 {
     let sound = if index < 0x80 {
         fwcall::library_sound(word(view, VIEW_LIBRARY) as *const u8, index)
     } else {
-        let track = DkFw.view_track(word(view, VIEW_TRACK_REF) as usize);
+        let track = DkFw::pure_reads().view_track(word(view, VIEW_TRACK_REF) as usize);
         fwcall::track_sound(word(view, VIEW_SOUNDS) as *const u8, track)
     };
     let read: unsafe extern "C" fn(*const u8) -> u32 = transmute(reader as usize);
@@ -131,10 +131,10 @@ impl View for FwView {
         unsafe { machine_type(self.0) }
     }
     fn track(&self) -> u32 {
-        unsafe { DkFw.view_track(word(self.0, VIEW_TRACK_REF) as usize) }
+        unsafe { DkFw::pure_reads().view_track(word(self.0, VIEW_TRACK_REF) as usize) }
     }
     fn value(&self, code: u32) -> i32 {
-        DkFw.page_value(self.0 as usize, code)
+        DkFw::pure_reads().page_value(self.0 as usize, code)
     }
     fn invalidate(&self) {
         unsafe { fwcall::invalidate(self.0) }

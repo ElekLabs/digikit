@@ -11,7 +11,6 @@ use crate::slots::Slots;
 use crate::{assign, dsp, info, registry, selection_view, unload};
 use core::mem::MaybeUninit;
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::fw::Fw;
 use dkrt_abi::provider::WordSink;
 use dkrt_abi::provider::{Consumer, ConsumerId, Describe, Provider, Status, Ticker};
 use dkrt_abi::service::{tick_phase, SettleCtx, TableFault};
@@ -80,35 +79,25 @@ impl Machines {
         self.builder.commit(core, &self.reg, module, c)
     }
 
-    /// `dk_param_get` of the file: the value of a parameter word in the flow of a click (the owner of the parameter rows is the registry state).
+    /// `dk_param_get` and `dk_param_set` of the file, owner half: what the call resolves to (the owner of the parameter rows is the registry state). The firmware half runs
+    /// outside the owner (`paramapi::read`, `paramapi::write`).
     ///
     /// # Safety
-    /// As `Slots::param_get`.
-    pub unsafe fn param_get<C: CoreApi, F: Fw>(
-        &mut self,
+    /// As `Slots::param_target`.
+    pub unsafe fn param_target<C: CoreApi>(
+        &self,
         core: &C,
-        fw: &F,
         track: u32,
         word: u32,
-    ) -> i32 {
+    ) -> Result<crate::paramapi::Target, i32> {
         self.clicks
-            .param_get(core, fw, &self.reg.param_owner, track, word)
+            .param_target(core, &self.reg.param_owner, track, word)
     }
 
-    /// `dk_param_set`, as `param_get`.
-    ///
-    /// # Safety
-    /// As `Slots::param_set`.
-    pub unsafe fn param_set<C: CoreApi, F: Fw>(
-        &mut self,
-        core: &C,
-        fw: &F,
-        track: u32,
-        word: u32,
-        raw: i32,
-    ) -> i32 {
-        self.clicks
-            .param_set(core, fw, &self.reg.param_owner, track, word, raw)
+    /// Open the click flow as a click on a row of `owner` would (`take_click`): the host test of the service file has no loaded module to start one.
+    pub fn open_flow_for_test(&mut self, ctx: crate::paramapi::Ctx) {
+        self.reg.param_owner[0] = ctx.owner;
+        self.clicks.begin_flow(ctx);
     }
 
     /// The click state of the machine page: the file's hooks and the exports `dk_param_get` and `dk_param_set` reach it here.

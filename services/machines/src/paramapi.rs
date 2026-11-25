@@ -55,22 +55,63 @@ pub fn row_of_word(owners: &[u8], owner: u8, word: u32) -> Option<usize> {
         .nth(word as usize)
 }
 
-fn target(
+/// What a call resolved to, decided inside the owner from its state (the flow, the row owners): the clicked view, the page's track, the parameter code and the asked track. The
+/// firmware part (`read`, `write`) works on it outside the owner.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Target {
+    pub ctx: Ctx,
+    pub code: u32,
+    pub track: u32,
+}
+
+/// Decide a call: the target, or the status to answer (no flow, a track above 15, a word the module does not have). No firmware access.
+pub fn target(
     ctx: Option<Ctx>,
     owners: &[u8],
     first: u32,
     track: u32,
     word: u32,
-) -> Result<(Ctx, u32), i32> {
+) -> Result<Target, i32> {
     let ctx = ctx.ok_or(E_STATE)?;
     if track >= TRACKS {
         return Err(E_ARG);
     }
     let k = row_of_word(owners, ctx.owner, word).ok_or(E_ARG)?;
-    Ok((ctx, first + k as u32))
+    Ok(Target {
+        ctx,
+        code: first + k as u32,
+        track,
+    })
 }
 
-/// `param_get`: the raw value (unit * 256) of `word` on `track` (a halfword: -0x8000 to 0x7fff), or a status below -0x8000.
+/// `param_get`, firmware part: the raw value (unit * 256) of the target (a halfword: -0x8000 to 0x7fff), or a status below -0x8000.
+pub fn read(fw: &impl Fw, t: &Target) -> i32 {
+    let raw = if t.track == t.ctx.track {
+        fw.page_value(t.ctx.view, t.code)
+    } else {
+        let obj = fw.object(t.ctx.view, t.code, t.track);
+        if obj == 0 {
+            return E_ARG;
+        }
+        fw.object_value(obj, t.code)
+    };
+    raw as i16 as i32
+}
+
+/// `param_set`, firmware part: the stock setter with `raw` (clamped to the row range by the setter). 0 or a negative status.
+pub fn write(fw: &impl Fw, t: &Target, raw: i32) -> i32 {
+    if fw.mode_key_held() {
+        return E_HELD;
+    }
+    let obj = fw.object(t.ctx.view, t.code, t.track);
+    if obj == 0 {
+        return E_ARG;
+    }
+    fw.store(obj, t.code, raw, t.track);
+    0
+}
+
+/// Both halves in one call, for a caller that is not an owner (the unit tests).
 pub fn get(
     fw: &impl Fw,
     ctx: Option<Ctx>,
@@ -79,23 +120,13 @@ pub fn get(
     track: u32,
     word: u32,
 ) -> i32 {
-    let (ctx, code) = match target(ctx, owners, first, track, word) {
-        Ok(t) => t,
-        Err(e) => return e,
-    };
-    let raw = if track == ctx.track {
-        fw.page_value(ctx.view, code)
-    } else {
-        let obj = fw.object(ctx.view, code, track);
-        if obj == 0 {
-            return E_ARG;
-        }
-        fw.object_value(obj, code)
-    };
-    raw as i16 as i32
+    match target(ctx, owners, first, track, word) {
+        Ok(t) => read(fw, &t),
+        Err(e) => e,
+    }
 }
 
-/// `param_set`: the stock setter with `raw` (clamped to the row range by the setter). 0 or a negative status.
+/// `param_set`: both halves in one call, as `get`.
 pub fn set(
     fw: &impl Fw,
     ctx: Option<Ctx>,
@@ -105,19 +136,10 @@ pub fn set(
     word: u32,
     raw: i32,
 ) -> i32 {
-    let (ctx, code) = match target(ctx, owners, first, track, word) {
-        Ok(t) => t,
-        Err(e) => return e,
-    };
-    if fw.mode_key_held() {
-        return E_HELD;
+    match target(ctx, owners, first, track, word) {
+        Ok(t) => write(fw, &t, raw),
+        Err(e) => e,
     }
-    let obj = fw.object(ctx.view, code, track);
-    if obj == 0 {
-        return E_ARG;
-    }
-    fw.store(obj, code, raw, track);
-    0
 }
 
 #[cfg(test)]

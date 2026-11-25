@@ -1,7 +1,9 @@
 //! `Owner<T>`: the one cell of a service file that holds its owner object (`Provider`), made by `start` in the file's `init` and taken back by `stop` in `fini`.
 mod gate;
+mod step;
 
 use self::gate::{Admit, Gate};
+pub use self::step::Outside;
 use core::cell::UnsafeCell;
 use core::mem::MaybeUninit;
 use dkrt_abi::provider::Status;

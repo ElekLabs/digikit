@@ -15,7 +15,6 @@
 use super::paramapi::{self, Ctx, Held};
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::fw::Fw;
 use dkrt_sdk::limits;
 
 mod action;
@@ -116,20 +115,6 @@ impl Slots {
         unsafe { read_volatile(addr_of!(self.armed)) != 0 }
     }
 
-    /// Hook at the entry of the page's key handler (stack: view, event), as one call (host tests, a `Fw` whose code mapper does not re-enter the owner).
-    pub unsafe fn page_key<C: CoreApi, F: Fw>(
-        &mut self,
-        core: &C,
-        fw: &F,
-        view: *const u8,
-        ev: *const u8,
-    ) {
-        if let Some(enc) = self.key_click(view, ev) {
-            let code = fw.param_code(view as usize, enc);
-            self.queue_click(core, fw, view, code);
-        }
-    }
-
     /// First half of the key hook: the detector. `Some(encoder)` is a click. The code of the encoder is asked of the page by the caller, outside the owner: the page's code hook
     /// (`dks_native_code`) enters the owner to look up a native page, and inside this call it would be refused and the click would map to the stock code.
     pub unsafe fn key_click(&mut self, view: *const u8, ev: *const u8) -> Option<u32> {
@@ -140,17 +125,22 @@ impl Slots {
         self.det.key(view as usize, word(ev, 0xc), word(ev, 0x10))
     }
 
-    /// Second half: queue the action of parameter `code`, the code `view` maps the clicked encoder to, if it has one.
-    pub unsafe fn queue_click<C: CoreApi, F: Fw>(
+    /// The page's track reference of `view`: the argument of the firmware's `view_track`, which the caller calls outside the owner (it is a firmware call).
+    pub unsafe fn track_ref(view: *const u8) -> usize {
+        word(view, VIEW_TRACK_REF) as usize
+    }
+
+    /// Second half: queue the action of parameter `code`, the code `view` maps the clicked encoder to, if it has one. `track` is the page's track (`view_track` of
+    /// [`Slots::track_ref`], asked of the firmware outside the owner).
+    pub unsafe fn queue_click<C: CoreApi>(
         &mut self,
         core: &C,
-        fw: &F,
         view: *const u8,
         code: i32,
+        track: u32,
     ) {
         let first = crate::records::param_first(core);
-        let track = || fw.view_track(word(view, VIEW_TRACK_REF) as usize);
-        if let Some((callback, track)) = resolve(&self.actions, first, code, track) {
+        if let Some((callback, track)) = resolve(&self.actions, first, code, || track) {
             self.pending = Pending {
                 callback,
                 track,
@@ -167,6 +157,11 @@ impl Slots {
         if self.is_armed() {
             turn_input(&mut self.det, &mut self.held, view as usize, word(ev, 0xc));
         }
+    }
+
+    /// Open the flow of a click (what `take_click` does for a queued one).
+    pub(crate) fn begin_flow(&mut self, ctx: Ctx) {
+        self.held.begin(ctx);
     }
 
     /// The queued click, taken for the UI pass: its callback, and the argument it was registered with. The flow of `param_get` and `param_set` is open from here until the
@@ -203,43 +198,20 @@ impl Slots {
         }
     }
 
-    /// `dk_param_get`.
-    pub unsafe fn param_get<C: CoreApi, F: Fw>(
+    /// `dk_param_get` and `dk_param_set`, owner half: what the call resolves to (`paramapi::target`); the firmware half (`paramapi::read`, `write`) runs outside the owner.
+    pub unsafe fn param_target<C: CoreApi>(
         &self,
         core: &C,
-        fw: &F,
         owners: &[u8],
         track: u32,
         word: u32,
-    ) -> i32 {
-        paramapi::get(
-            fw,
+    ) -> Result<paramapi::Target, i32> {
+        paramapi::target(
             self.held.ctx(),
             owners,
             crate::records::param_first(core),
             track,
             word,
-        )
-    }
-
-    /// `dk_param_set`.
-    pub unsafe fn param_set<C: CoreApi, F: Fw>(
-        &self,
-        core: &C,
-        fw: &F,
-        owners: &[u8],
-        track: u32,
-        word: u32,
-        raw: i32,
-    ) -> i32 {
-        paramapi::set(
-            fw,
-            self.held.ctx(),
-            owners,
-            crate::records::param_first(core),
-            track,
-            word,
-            raw,
         )
     }
 
