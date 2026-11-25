@@ -37,7 +37,8 @@
         ],
         "modules": [
           "digikit/debug",
-          "test/local-step"
+          "test/local-step",
+          "test/local-step-user"
         ],
         "incidental": [
           {

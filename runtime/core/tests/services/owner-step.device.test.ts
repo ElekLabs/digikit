@@ -21,11 +21,13 @@ const ARM = 2;
 cardRigs('owner step', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS }, (h) => {
   test('a hook that runs Owner::step finds the owner idle in act; a nested call is the one that is refused', async () => {
     const debug = h.mod('digikit/debug', 'debug');
+    // a provider loads only when a selected client imports it: the client imports local-step's export
+    const client = h.mod('test/local-step-user', 'local-step-user');
     const provider = { name: servicePath('local-step'), file: moduleArtifact(h.device, 'test/local-step') };
     // the test hook is listed by the port file of the test image (patchkit:ports-test), as in the providers test
     const leaf = `${h.device}-${FIRMWARE[h.device]}.dkport`;
     const port = { name: `ports/${leaf}`, file: path.join(repoRoot(), 'dist/ports-test', leaf) };
-    const rt = await h.load('owner-step', { modules: [debug, provider, port], selection: [debug.name] });
+    const rt = await h.load('owner-step', { modules: [debug, client, provider, port], selection: [debug.name, client.name] });
     const { session } = rt as PatchedSession;
     const stats = await serviceSymbol(rt, h.plan, 'local-step', STATS);
     const read = async (index: number) =>

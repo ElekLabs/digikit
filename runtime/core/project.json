@@ -96,6 +96,7 @@
         "test/local-ping-user-b:pack",
         "test/local-ping-old-user:pack",
         "test/local-step:pack",
+        "test/local-step-user:pack",
         "test/local-patch:pack",
         "test/local-patch-user:pack",
         "test/project-user:pack",
