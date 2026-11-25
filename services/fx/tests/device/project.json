@@ -98,6 +98,7 @@
         ],
         "dsp": "sharc",
         "tags": [
+          "A:core/fx",
           "S:fx",
           "C:state"
         ],
@@ -123,6 +124,7 @@
         ],
         "dsp": "sharc",
         "tags": [
+          "A:core/fx",
           "S:fx"
         ],
         "modules": [
@@ -145,6 +147,7 @@
         ],
         "dsp": "sharc",
         "tags": [
+          "A:core/fx",
           "S:fx"
         ],
         "modules": [

@@ -4,7 +4,9 @@
 //! The parts the file adopts are read from the row its own `service!` call declares (the file's source is compiled in by path).
 use core::ptr::addr_of;
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::dsp::{FXW_P0, FXW_PC, FX_FREE_PC, FX_ROW_WORDS, MAX_FX, MIX_ONE, WIN_FX};
+use dkrt_abi::dsp::{
+    FXW_AMT0, FXW_P0, FXW_PC, FXW_ROUTE, FX_FREE_PC, FX_ROW_WORDS, MAX_FX, MIX_ONE, WIN_FX,
+};
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::{ALL, DT2};
@@ -493,6 +495,70 @@ fn a_loaded_effect_page_row_holds_its_codes_and_the_parameter_records_of_its_kno
         [7, 0, 0x7f00, 0x7f00],
         "MIX mirror, range, default"
     );
+}
+
+/// Three effects that may run on the send bus and default to it, one page each.
+fn send_effects(i: &mut Init) {
+    unsafe {
+        for n in 0..3 {
+            let fx = build::add_fx(i.core, i.ctx(), n, c(b"Send Gain\0"), c(b"SND\0"));
+            build::fx_routes(i.core, fx, ROUTE_MASTER | ROUTE_SEND, ROUTE_SEND);
+            let p = build::fx_add_page(i.core, fx, c(b"Send Gain\0"), c(b"SND\0"));
+            build::page_add_fx_param(
+                i.core,
+                p,
+                c(b"Gain\0"),
+                c(b"GAIN\0"),
+                DK_PERCENT,
+                0.0,
+                1.27,
+                0.5,
+            );
+        }
+    }
+}
+
+/// The effect rows a module's load leaves: the route word of row `k` is 1 for the first effects that fit the send cells of the image (`facts`: 2), in the order of the
+/// module's effects, and 0 for the rest (they stay on the master without a send cell); the four amount words are 0 (the settings hold no amount). This is words 18 to 22 of
+/// an effect row (`FXW_ROUTE`, `FXW_AMT0`), as the DSP gets them.
+#[test]
+fn the_effects_of_a_load_get_route_1_in_order_up_to_the_send_cells_and_zero_amounts() {
+    let _g = locked();
+    let f = fixture(DT2.id);
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
+    let m = Module {
+        dsp: Dsp {
+            fxs: 3,
+            salt: 1,
+            ..Dsp::default()
+        },
+        ..module(3, keys_four, send_effects, 1)
+    };
+    assert_eq!(l.load(0, &m), dkrt_sdk::OK);
+    let d = rows::frows();
+    assert_eq!(
+        d.fx_route[..3],
+        [1, 1, 0],
+        "the route word of the three effect rows"
+    );
+    assert_eq!(d.fx_amt[..3], [[0; 4]; 3], "no send amount");
+    assert_eq!(fxsend::used(), 2, "two send cells in use");
+    // what the DSP is sent: the route word and the amount words of each row, in the words 18 to 22 of the row
+    let wire = l.core.link.borrow().t.words();
+    let sent = |at: u32| {
+        wire.iter()
+            .rev()
+            .find(|w| w.0 == WIN_FX && w.1 == at)
+            .map(|w| w.2)
+    };
+    for (k, route) in [1u32, 1, 0].into_iter().enumerate() {
+        let row = FX_ROW_WORDS * (6 + k as u32);
+        assert_eq!(sent(row + FXW_ROUTE), Some(route), "route word of row {k}");
+        for a in 0..4 {
+            assert_eq!(sent(row + FXW_AMT0 + a), Some(0), "amount {a} of row {k}");
+        }
+    }
+    l.unload(0);
 }
 
 const KIT_CELL: u32 = 0x7000;
