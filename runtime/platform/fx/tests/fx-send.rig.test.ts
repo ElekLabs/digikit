@@ -1,5 +1,5 @@
 /**
- * core/fx, the send route (image-modules/points/fx/src/dsp/fxsend.s, finding 62): the send hook and the master hook on the SHARC-only rig.
+ * core/fx, the send route (runtime/platform/fx/src/dsp/fxsend.s, finding 62): the send hook and the master hook on the SHARC-only rig.
  * Port of the rig tests of test_fx_send.py (T1g phase 5); the two tests that patch the stock Digitakt II image stay in Python.
  *
  * The model of the send bus is the routine's own float32 arithmetic: gain (byte / 127) squared, ramped by adding the step per sample,

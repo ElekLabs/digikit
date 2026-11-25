@@ -204,7 +204,7 @@ fn module_requires() -> std::collections::BTreeMap<String, Vec<String>> {
     }
     let mut out = std::collections::BTreeMap::new();
     let repo = repo();
-    for root in ["modules", "runtime", "services", "image-modules"] {
+    for root in ["modules", "runtime", "services"] {
         walk(&repo.join(root), &mut out);
     }
     out

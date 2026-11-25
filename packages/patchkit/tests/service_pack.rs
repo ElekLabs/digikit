@@ -29,15 +29,7 @@ fn copy_dir(from: &Path, to: &Path) {
 fn manifest_root(dir: &Path, edit: &dyn Fn(&str) -> String) {
     use std::os::unix::fs::symlink;
     std::fs::create_dir_all(dir).unwrap();
-    for n in [
-        "modules",
-        "runtime",
-        "services",
-        "image-modules",
-        "ports",
-        "devices",
-        "sdk",
-    ] {
+    for n in ["modules", "runtime", "services", "ports", "devices", "sdk"] {
         symlink(root().join(n), dir.join(n)).unwrap();
     }
     let to = dir.join("tests/fixtures/modules/svc-test");

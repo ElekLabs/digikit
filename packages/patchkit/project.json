@@ -6,7 +6,7 @@
       "cache": false,
       "inputs": [
         "default",
-        "{workspaceRoot}/{modules,runtime,services,image-modules}/**/module.toml",
+        "{workspaceRoot}/{modules,runtime,services}/**/module.toml",
         "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
         {
           "dependentTasksOutputFiles": "**/*",
@@ -23,11 +23,11 @@
     "objects-check": {
       "executor": "nx:run-commands",
       "cache": false,
-      "description": "Fails when a committed core object (under runtime/, services/ or image-modules/) is older than its sources. Content-module objects are not read.",
+      "description": "Fails when a committed core object (under runtime/, services/ or runtime/platform/) is older than its sources. Content-module objects are not read.",
       "inputs": [
-        "{workspaceRoot}/{runtime,services,image-modules}/**/src/**/*",
-        "{workspaceRoot}/{runtime,services,image-modules}/**/module.toml",
-        "{workspaceRoot}/{runtime,services,image-modules}/**/build/*.dko.json",
+        "{workspaceRoot}/{runtime,services}/**/src/**/*",
+        "{workspaceRoot}/{runtime,services}/**/module.toml",
+        "{workspaceRoot}/{runtime,services}/**/build/*.dko.json",
         "{workspaceRoot}/runtime/core/sdk/**/*",
         "{workspaceRoot}/runtime/core/fit/**/*",
         "{workspaceRoot}/ports/bindings/rs/**/*",
@@ -54,7 +54,7 @@
       "dependsOn": ["cli"],
       "outputs": [],
       "options": {
-        "command": "for dir in runtime services image-modules; do dist/patchkit/patchkit --root . build --check --tree \"$dir\" || { echo \"A committed object under $dir is stale: run dist/patchkit/patchkit --root . build --tree $dir and commit the result.\" >&2; exit 1; }; done",
+        "command": "for dir in runtime services; do dist/patchkit/patchkit --root . build --check --tree \"$dir\" || { echo \"A committed object under $dir is stale: run dist/patchkit/patchkit --root . build --tree $dir and commit the result.\" >&2; exit 1; }; done",
         "cwd": "."
       }
     },

@@ -226,7 +226,7 @@ interface Manifest {
 export function moduleManifests(): Map<string, Manifest> {
   const root = repoRoot();
   const roots = [
-    ...['modules', 'runtime', 'services', 'image-modules', 'tests/fixtures/modules'].map((dir) => path.join(root, dir)),
+    ...['modules', 'runtime', 'services', 'tests/fixtures/modules'].map((dir) => path.join(root, dir)),
     ...(process.env.PATCHKIT_MODULES ?? '').split(path.delimiter).filter(Boolean),
   ];
   const out = new Map<string, Manifest>();

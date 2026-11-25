@@ -91,7 +91,7 @@
         "sources": [
           "runtime/platform/dsp-link/{module.toml,src/**/*,build/**/*}",
           "runtime/platform/expansion/{module.toml,src/**/*,build/**/*}",
-          "image-modules/points/fx/{module.toml,src/**/*,build/**/*}"
+          "runtime/platform/fx/{module.toml,src/**/*,build/**/*}"
         ],
         "compiles": true
       }

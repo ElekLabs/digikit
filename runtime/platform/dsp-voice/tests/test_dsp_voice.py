@@ -1,5 +1,5 @@
 """core/dsp-voice: a static check on the assembler. The behavioural tests of the wrapper run on the SHARC rig
-(image-modules/points/dsp-voice/tests/dsp-voice.rig.test.ts)."""
+(runtime/platform/dsp-voice/tests/dsp-voice.rig.test.ts)."""
 
 import re
 

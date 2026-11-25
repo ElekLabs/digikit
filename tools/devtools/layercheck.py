@@ -8,7 +8,7 @@ Every violation prints as `file:line: rule: what is wrong. Instead: what to do.`
 
 Rules:
 
-  roles     Each image module has `role` in [module], and the role fits its runtime/, services/ or image-modules/ folder.
+  roles     Each image module has `role` in [module], and the role fits its runtime/ or services/ folder.
   sources   Content modules (modules/ and tests/fixtures/modules) and apps include only
             their own files and the SDK (sdk/include, sdk/dsp/contract); a fixture may also include the source of another fixture (a variant of its base). Apps may also include dkrt.h (runtime) and dk_ui_core.h
             (core/ui). Only the runtime's platform file, the installer and adapters include the firmware bindings (dk_fw_* headers, the dkfw crate).
@@ -80,9 +80,6 @@ FOLDER_ROLES = {
     "runtime/platform/expansion": "installer",
     "runtime/platform": "adapter",
     "runtime/apps": "app",
-    "image-modules/adapters": "adapter",
-    "image-modules/fixes": "adapter",
-    "image-modules/points": "adapter",
     "tests/fixtures/modules/dsp-stereo-proof": "adapter",
     "tests/fixtures/modules/file-catalog-proof": "adapter",
     "tests/fixtures/modules/storage-fault-proof": "adapter",
@@ -186,7 +183,7 @@ def check_roles(root: Path, mods: list[Module]) -> list[Violation]:
                     where,
                     "roles",
                     f"{m.id} sits in {r}, which is no role folder",
-                    "move it to a role folder under runtime/, services/ or image-modules/",
+                    "move it to a role folder under runtime/ or services/",
                 )
             )
         elif have is None:

@@ -118,7 +118,7 @@ describeOn('dt2', 'DT2 1.17 changed-DSP startup and cached restore', () => {
           root,
           'build',
           'runtime/platform/dsp-link',
-          'image-modules/points/fx',
+          'runtime/platform/fx',
           'runtime/platform/expansion',
           '--check',
         ],

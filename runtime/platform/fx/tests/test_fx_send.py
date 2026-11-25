@@ -1,6 +1,6 @@
 """core/fx, the send route (finding 62): the firmware-image checks of the send hook and the anchors on the Digitakt II 1.17 image
 (skipped when it is not in the repository). The send hook and the master hook on the SHARC core run on the rig
-(image-modules/points/fx/tests/fx-send.rig.test.ts)."""
+(runtime/platform/fx/tests/fx-send.rig.test.ts)."""
 
 import json
 import os

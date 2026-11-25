@@ -39,7 +39,6 @@ include = [
     "modules/**/tests/**/*.py",
     "runtime/**/tests/**/*.py",
     "services/**/tests/**/*.py",
-    "image-modules/**/tests/**/*.py",
     "conftest.py",
 ]
 

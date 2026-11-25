@@ -1,5 +1,5 @@
 // Discovery shared by the rig suite and the Nx projects that run its fixed cases.
-export const CONFORMANCE_ROOTS = ['modules', 'runtime', 'services', 'image-modules', 'tests/fixtures/modules'];
+export const CONFORMANCE_ROOTS = ['modules', 'runtime', 'services', 'tests/fixtures/modules'];
 
 /** @type {Record<string, [string, string, string, string, string]>} */
 export const NEGATIVE_VARIANTS = {

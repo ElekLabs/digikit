@@ -1,4 +1,4 @@
-"""core/fx (image-modules/points/fx): the effects adapter, on the concrete SHARC+ core (tests/support/fx_rig.py) and through patchkit.
+"""core/fx (runtime/platform/fx): the effects adapter, on the concrete SHARC+ core (tests/support/fx_rig.py) and through patchkit.
 
 The first group needs only the assembler; the last one patches the stock images (skipped when they are not in the repository)."""
 

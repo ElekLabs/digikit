@@ -540,7 +540,6 @@ mod tests {
             "modules",
             "runtime",
             "services",
-            "image-modules",
             "ports",
             "devices",
             "tests",
