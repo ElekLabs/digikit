@@ -11,9 +11,6 @@
         "files": [
           "shortcuts.device.test.ts"
         ],
-        "tags": [
-          "S:shortcuts"
-        ],
         "modules": [
           "test/shortcut-demo",
           "core/services/shortcuts"

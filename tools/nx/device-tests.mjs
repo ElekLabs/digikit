@@ -3,7 +3,6 @@
 import { globSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { noDspShorts } from './device-files.mjs';
-import { checkAcceptanceTags } from './acceptance-tags.mjs';
 import { packAliasesTarget } from './module-build.mjs';
 import { isUploadable, mergeTests, manifestClosure, read, records } from './module-manifests.mjs';
 import {
@@ -29,12 +28,11 @@ export const SYSTEM_PACKAGE = 'core/runtime:package';
 // The host assembly tests of the runtime (runtime/core): the seams between the real packed outputs. No device task starts while they fail.
 export const TEST_ASSEMBLY = 'core/runtime:test-assembly';
 // Tasks every device task depends on: the patchkit binary, the daemons and the runtime assembly tests. Their projects are the
-// shared inputs of every device test (`test:subset --base` cannot select by path for them).
+// shared inputs of every device test (the gate selects no test by a change below them: smoke and the full tier cover it).
 export const SHARED_TASKS = ['patchkit:cli', 'digi-control:daemons', TEST_ASSEMBLY];
 // The daemon of the devices without a SHARC DSP (cargo.mjs `daemon-nodsp`, dist/bin/digi-emud-nodsp).
 export const DAEMON_NODSP = 'digi-control:daemon-nodsp';
 const NO_DSP = noDspShorts();
-export const SHARED_PROJECTS = SHARED_TASKS.map((task) => task.split(':')[0]);
 // Device and conformance tasks run behind this wrapper: it takes one machine-wide emulator slot. It only schedules and is
 // no input: it cannot change a result, and Nx does not cache failures.
 export const EMU_SLOT = 'node tools/devtools/emu-slot.mjs --';
@@ -157,6 +155,15 @@ export const deviceTargets = (
 };
 
 // What a file without `devices` runs on: the devices with a ready snapshot. A device that boots cold (`st`) is named by the file.
+// Throws when a device test file is in no `metadata.runtimeAcceptance` record of its project: the gate selects, keys and
+// places a test by its record. `recs`: the records of project `root`; `deviceTests`: its device test files relative to the root.
+export const checkRecordsCover = (root, recs, deviceTests) => {
+  const listed = new Set(recs.flatMap((rec) => rec.files ?? []));
+  const missing = deviceTests.filter((t) => !listed.has(t));
+  if (missing.length)
+    throw new Error(`metadata.runtimeAcceptance of ${root} has no record for the device tests: ${missing.join(', ')}`);
+};
+
 const ALL_DEVICES = ['dt2', 'dn2'];
 const KNOWN_DEVICES = ['dt2', 'dn2', 'st'];
 const unionDevices = (lists) => KNOWN_DEVICES.filter((d) => lists.some((list) => list.includes(d)));
@@ -299,7 +306,6 @@ export const testOnlyNodes = (
   workspaceRoot,
   testOwners,
   byId,
-  moduleInfo,
   coreBuilds,
   importInputs,
   pythonInputs,
@@ -318,7 +324,7 @@ export const testOnlyNodes = (
     checkMergeTests(workspaceRoot, root, tests, config.tags.includes('tier:full'));
     if (!tests.length) continue;
     const recs = records(join(workspaceRoot, root));
-    checkAcceptanceTags(root, recs, tests, moduleInfo);
+    checkRecordsCover(root, recs, tests);
     // Explicit fixture images build only their manifest requirements; ordinary owners keep the default image.
     const patchRoots = [...new Set(recs.flatMap((rec) => rec.patchModules ?? []))];
     const patchIds = patchRoots.length

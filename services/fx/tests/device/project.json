@@ -14,10 +14,6 @@
           "fx-routes-persist.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "S:fx",
-          "C:state"
-        ],
         "modules": [
           "test/dyn-fx-gain",
           "test/dyn-fx-gain-send",
@@ -37,10 +33,6 @@
           "fx-bipolar.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "S:fx",
-          "C:state"
-        ],
         "modules": [
           "test/dyn-fx-gain-bipolar",
           "test/sine",
@@ -58,10 +50,6 @@
           "fx-kit-persist.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "S:fx",
-          "C:state"
-        ],
         "modules": [
           "test/dyn-fx-gain",
           "test/dyn-fx-gain-b",
@@ -77,9 +65,6 @@
           "fx-pages.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "S:fx"
-        ],
         "modules": [
           "test/dyn-fx-gain",
           "test/sine",
@@ -94,11 +79,6 @@
           "fx-track-route.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "A:core/fx",
-          "S:fx",
-          "C:state"
-        ],
         "modules": [
           "test/dyn-fx-gain-both",
           "test/sine",
@@ -120,10 +100,6 @@
           "fx-send.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "A:core/fx",
-          "S:fx"
-        ],
         "modules": [
           "test/dyn-fx-gain",
           "test/sine",
@@ -143,10 +119,6 @@
           "dn2"
         ],
         "dsp": "sharc",
-        "tags": [
-          "A:core/fx",
-          "S:fx"
-        ],
         "modules": [
           "test/dyn-fx-gain",
           "test/sine",

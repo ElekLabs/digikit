@@ -16,11 +16,7 @@
           "test/lfo-shape",
           "core/services/lfo"
         ],
-        "plusdrive": true,
-        "tags": [
-          "C:loading",
-          "S:lfo"
-        ]
+        "plusdrive": true
       }
     ]
   }

@@ -5,7 +5,6 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/track-manager.device.test.ts"],
-        "tags": ["M:digikit/track-manager"],
         "modules": ["core/services/shortcuts"]
       }
     ]

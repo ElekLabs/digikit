@@ -6,7 +6,6 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/usb-fast.device.test.ts"],
-        "tags": ["C:storage", "C:transport", "M:digikit/usb-fast"],
         "modules": ["digikit/usb-fast"],
         "plusdrive": true,
         "sources": [

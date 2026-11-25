@@ -68,7 +68,7 @@ const subjectNames = (project, rec, byName) =>
  * `projects`: [{ name, root, subjects (authored implicitDependencies), targets, metadata }] (the nodes of the Nx graph).
  * `opts.changed`: repository-relative changed files. `opts.closureOf(projectRoot, file)`: the import closure of a test file.
  * `opts.portUsers(file)`: project names of a firmware declaration file. `opts.deviceOf(file)`: the device a device file names.
- * Returns { tests: [{ project, file, tags, changed, dsp, targets }], mapped: [{ file, project }], devices: string[], unowned:
+ * Returns { tests: [{ project, file, named, changed, dsp, targets }], mapped: [{ file, project }], devices: string[], unowned:
  * [{ file, why }], quiet: [{ file, project }] (owned by a project no test names), covered: Set }. */
 export const ownershipSelection = (projects, { changed, closureOf, portUsers, deviceOf }) => {
   const byName = new Map(projects.map((p) => [p.name, p]));
@@ -125,7 +125,7 @@ export const ownershipSelection = (projects, { changed, closureOf, portUsers, de
       for (const file of rec.files ?? []) {
         const leaves = leavesOf(file, targets);
         if (leaves.length) {
-          tests.push({ project: name, file, tags: [], changed: [...via], dsp: rec.dsp ?? 'zero', targets: leaves });
+          tests.push({ project: name, file, named: [], changed: [...via], dsp: rec.dsp ?? 'zero', targets: leaves });
         }
       }
     }

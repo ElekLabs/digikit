@@ -6,7 +6,6 @@
       {
         "files": ["tests/fx-contract.device.test.ts"],
         "dsp": "sharc",
-        "tags": ["A:core/dynfx"],
         "modules": ["test/dyn-fx-gain", "test/sine", "core/services/machines", "core/services/fx"],
         "aliases": {
           "test/dyn-fx-gain-2": "test/dyn-fx-gain",

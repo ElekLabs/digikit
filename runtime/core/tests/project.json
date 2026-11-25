@@ -15,11 +15,6 @@
         ],
         "firmwareOnly": "the audible swap of a reload and the transport refusal on the real firmware",
         "dsp": "sharc",
-        "tags": [
-          "C:loading",
-          "C:dsp",
-          "S:machines"
-        ],
         "modules": [
           "digikit/debug",
           "test/lfo-shape",
@@ -40,11 +35,6 @@
         ],
         "firmwareOnly": "the audio of an effect and of the send bus across reload, unload and load, the real effect rows and the page frame",
         "dsp": "sharc",
-        "tags": [
-          "C:loading",
-          "C:dsp",
-          "A:core/fx"
-        ],
         "modules": [
           "digikit/debug",
           "test/sine",
@@ -63,12 +53,6 @@
           "dt2"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:loading",
-          "C:dsp",
-          "C:storage",
-          "S:machines"
-        ],
         "modules": [
           "test/sine",
           "core/services/machines"
@@ -79,10 +63,6 @@
           "reload-menus.device.test.ts"
         ],
         "firmwareOnly": "the real core/ui reports a built menu object to the runtime",
-        "tags": [
-          "C:loading",
-          "C:state"
-        ],
         "modules": [
           "digikit/debug",
           "test/entry-demo"
@@ -93,11 +73,6 @@
           "live.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:loading",
-          "C:dsp",
-          "S:machines"
-        ],
         "modules": [
           "digikit/debug",
           "test/c-demo",
@@ -116,11 +91,6 @@
         ],
         "firmwareOnly": "the audio silence of an absent machine and the sound after its load",
         "dsp": "sharc",
-        "tags": [
-          "C:loading",
-          "C:dsp",
-          "S:machines"
-        ],
         "modules": [
           "digikit/debug",
           "test/sine",
@@ -142,9 +112,6 @@
           "dt2"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:loading"
-        ],
         "modules": [
           "digikit/debug",
           "digikit/probe",

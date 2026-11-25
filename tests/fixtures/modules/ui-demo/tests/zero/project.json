@@ -10,9 +10,6 @@
         "files": [
           "ui.device.test.ts"
         ],
-        "tags": [
-          "A:core/ui"
-        ],
         "modules": [
           "test/ui-demo"
         ]

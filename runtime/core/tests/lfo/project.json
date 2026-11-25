@@ -11,9 +11,6 @@
         "files": [
           "lfo.device.test.ts"
         ],
-        "tags": [
-          "S:lfo"
-        ],
         "modules": [
           "digikit/debug",
           "test/lfo-shape",
@@ -25,9 +22,6 @@
         "files": [
           "lfo-shape-output.device.test.ts"
         ],
-        "tags": [
-          "S:lfo"
-        ],
         "modules": [
           "test/lfo-shape",
           "core/services/lfo"
@@ -38,11 +32,6 @@
       {
         "files": [
           "lfo-shape-project.device.test.ts"
-        ],
-        "tags": [
-          "S:lfo",
-          "C:state",
-          "C:storage"
         ],
         "modules": [
           "test/lfo-shape",
@@ -58,9 +47,6 @@
       {
         "files": [
           "lfo-shape-panel.device.test.ts"
-        ],
-        "tags": [
-          "S:lfo"
         ],
         "modules": [
           "test/lfo-shape",

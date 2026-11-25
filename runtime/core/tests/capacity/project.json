@@ -13,7 +13,6 @@
         ],
         "firmwareOnly": "the real memory map: every limit filled to its last unit and the staging buffer size",
         "dsp": "sharc",
-        "tags": ["C:loading"],
         "modules": [
           "test/dyn-fx-gain",
           "core/services/fx"
@@ -26,7 +25,6 @@
         ],
         "firmwareOnly": "the MODULE_COMMIT event against the record block in firmware memory, and the knob ranges and the latch mask in the real DSP voice row",
         "dsp": "sharc",
-        "tags": ["C:loading", "S:machines"],
         "modules": [
           "test/commit-demo",
           "core/services/machines",

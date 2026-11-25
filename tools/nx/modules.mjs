@@ -17,9 +17,15 @@ import {
 } from './module-manifests.mjs';
 import { buildObjectsTarget, packTarget, packAliasesTarget } from './module-build.mjs';
 import { packSourceInputs } from './pack-inputs.mjs';
-import { deviceTargets, checkMergeTests, conformanceTarget, testOnlyNodes, regressionNode } from './device-tests.mjs';
+import {
+  deviceTargets,
+  checkMergeTests,
+  checkRecordsCover,
+  conformanceTarget,
+  testOnlyNodes,
+  regressionNode,
+} from './device-tests.mjs';
 import { serviceLeaves, serviceIds } from './device-test-keys.mjs';
-import { checkAcceptanceTags } from './acceptance-tags.mjs';
 import { standaloneRustTests } from './cargo.mjs';
 import {
   allRigConformance,
@@ -58,7 +64,6 @@ export const createNodesV2 = [
       if (previous) throw new Error(`Duplicate module ${manifest.id} in ${previous.file} and ${file}`);
       byId.set(manifest.id, { file, manifest, objects, doc });
     }
-    const moduleInfo = new Map([...byId].map(([id, { manifest }]) => [id, manifest]));
     const coreManifests = [...byId.values()]
       .filter(({ manifest }) => manifest.category === 'core')
       .map(({ file }) => file)
@@ -89,9 +94,8 @@ export const createNodesV2 = [
     // Only the modules the gate packs get a pack target: patched-in core modules and static fixtures
     // (several ColdFire objects, no dkm_ symbols) cannot be packed as .dkm.
     const packable = new Set([...byId].filter(([, { manifest }]) => isUploadable(manifest)).map(([id]) => id));
-    for (const [file, project] of projectFiles) {
+    for (const [, project] of projectFiles) {
       const recs = project.metadata?.runtimeAcceptance ?? [];
-      checkAcceptanceTags(dirname(file), recs, [], moduleInfo);
       for (const rec of recs) {
         for (const id of rec.modules ?? []) packable.add(id);
         for (const source of Object.values(rec.aliases ?? {})) packable.add(source);
@@ -157,7 +161,7 @@ export const createNodesV2 = [
           },
         };
       checkMergeTests(ctx.workspaceRoot, root, deviceTests, false);
-      checkAcceptanceTags(root, recs, deviceTests, moduleInfo);
+      checkRecordsCover(root, recs, deviceTests);
       if (shipped && deviceTests.length)
         Object.assign(
           targets,
@@ -210,17 +214,7 @@ export const createNodesV2 = [
           },
         },
       ]);
-    testOnlyNodes(
-      ctx.workspaceRoot,
-      testOwners,
-      byId,
-      moduleInfo,
-      coreBuilds,
-      importInputs,
-      pythonInputs,
-      nodes,
-      imageModules,
-    );
+    testOnlyNodes(ctx.workspaceRoot, testOwners, byId, coreBuilds, importInputs, pythonInputs, nodes, imageModules);
     if (matched.includes('tests/regression/project.json')) nodes.push(regressionNode(ctx.workspaceRoot, importInputs));
     return nodes;
   },

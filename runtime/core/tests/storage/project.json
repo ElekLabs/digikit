@@ -15,9 +15,6 @@
         "files": [
           "storage.device.test.ts"
         ],
-        "tags": [
-          "C:storage"
-        ],
         "modules": [
           "test/files-proof"
         ],
@@ -33,9 +30,6 @@
         "devices": [
           "dt2"
         ],
-        "tags": [
-          "C:storage"
-        ],
         "modules": [
           "test/c-demo"
         ],
@@ -46,10 +40,6 @@
           "store-format.device.test.ts"
         ],
         "firmwareOnly": "host hash against the runtime's on uploaded files, the booted image refusing to load a module whose card bytes changed, and a version 3 card booting, taking the first upload and loading its kept selection after a restart",
-        "tags": [
-          "C:loading",
-          "C:storage"
-        ],
         "modules": [
           "test/c-demo"
         ],
@@ -61,10 +51,6 @@
         ],
         "devices": [
           "st"
-        ],
-        "tags": [
-          "C:storage",
-          "A:core/card-guard"
         ],
         "modules": []
       }

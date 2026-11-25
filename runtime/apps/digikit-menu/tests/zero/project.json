@@ -15,9 +15,6 @@
           "menu.device.test.ts"
         ],
         "firmwareOnly": "core/ui's hook at the end of the real SETTINGS rebuild reaches the package's menu on a normal boot and has nothing to add on a core-only boot",
-        "tags": [
-          "A:core/digikit-menu"
-        ],
         "modules": []
       }
     ],

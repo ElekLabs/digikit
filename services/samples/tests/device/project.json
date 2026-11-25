@@ -17,10 +17,6 @@
         "devices": [
           "dt2"
         ],
-        "tags": [
-          "C:storage",
-          "S:samples"
-        ],
         "modules": [],
         "sources": [
           "packages/workbench-core/src/transfer/sample-upload.ts"
@@ -34,10 +30,6 @@
         ],
         "devices": [
           "dn2"
-        ],
-        "tags": [
-          "C:storage",
-          "S:samples"
         ],
         "modules": [],
         "sources": [

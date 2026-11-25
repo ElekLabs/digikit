@@ -9,7 +9,6 @@
         "files": ["project.device.test.ts"],
         "dsp": "sharc",
         "plusdrive": true,
-        "tags": ["C:state", "C:storage", "C:loading"],
         "modules": ["digikit/debug", "test/project-user", "test/sine", "core/services/project", "core/services/machines"],
         "sources": [
           "packages/dk-session/src/dkupload-core.ts",

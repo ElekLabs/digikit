@@ -14,12 +14,6 @@
           "fault-trace.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:diagnostics",
-          "C:dsp",
-          "C:fault",
-          "C:layout"
-        ],
         "modules": [
           "digikit/debug",
           "test/dyn-fx-gain-send",
@@ -37,12 +31,6 @@
           "dt2"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:diagnostics",
-          "C:dsp",
-          "C:fault",
-          "C:layout"
-        ],
         "modules": [
           "digikit/debug",
           "test/dyn-crash",
@@ -59,11 +47,6 @@
           "dt2"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:diagnostics",
-          "C:fault",
-          "C:layout"
-        ],
         "modules": [
           "digikit/debug",
           "test/dyn-crash"
@@ -75,11 +58,6 @@
           "debug-guard.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:diagnostics",
-          "C:dsp",
-          "C:layout"
-        ],
         "modules": [
           "digikit/debug",
           "test/dyn-guard-nan",
@@ -92,10 +70,6 @@
         "files": [
           "log-names.device.test.ts"
         ],
-        "tags": [
-          "C:diagnostics",
-          "C:layout"
-        ],
         "modules": [
           "digikit/debug",
           "test/dyn-demo"
@@ -105,9 +79,6 @@
       {
         "files": [
           "addrmap.device.test.ts"
-        ],
-        "tags": [
-          "C:layout"
         ],
         "modules": [
           "digikit/debug",
@@ -119,9 +90,6 @@
           "memaudit.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:layout"
-        ],
         "modules": [
           "test/c-demo",
           "test/dyn-demo",

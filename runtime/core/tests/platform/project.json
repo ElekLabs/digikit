@@ -14,13 +14,6 @@
         "files": [
           "platform-contract.device.test.ts"
         ],
-        "tags": [
-          "C:boot",
-          "C:device-facts",
-          "C:storage",
-          "C:tick",
-          "C:transport"
-        ],
         "modules": [],
         "sources": [
           "runtime/core/tests/platform/contract.toml"

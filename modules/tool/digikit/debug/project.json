@@ -6,7 +6,6 @@
       {
         "files": ["tests/profile-trace.device.test.ts"],
         "dsp": "sharc",
-        "tags": ["M:digikit/debug"],
         "modules": ["digikit/debug"]
       },
       {
@@ -17,9 +16,6 @@
           "dt2"
         ],
         "dsp": "sharc",
-        "tags": [
-          "M:digikit/debug"
-        ],
         "modules": [
           "digikit/probe",
           "digikit/remote",
@@ -32,10 +28,6 @@
           "tests/debug-dsp-stats.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "M:digikit/debug",
-          "C:dsp"
-        ],
         "modules": [
           "digikit/debug",
           "test/sine",
@@ -47,9 +39,6 @@
       {
         "files": [
           "tests/setup.device.test.ts"
-        ],
-        "tags": [
-          "M:digikit/debug"
         ],
         "modules": [
           "digikit/debug"

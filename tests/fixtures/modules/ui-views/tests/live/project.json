@@ -11,10 +11,6 @@
         "files": [
           "ui-views.device.test.ts"
         ],
-        "tags": [
-          "C:loading",
-          "A:core/ui"
-        ],
         "modules": [
           "digikit/debug",
           "test/ui-views"

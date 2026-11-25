@@ -10,7 +10,6 @@
         "files": ["module-load.device.test.ts"],
         "firmwareOnly": "representative SDK artifacts through the real loader on the firmware: module bytes on the card after the reboot, DSP loader completion on the SHARC, voice row and machine type, guard counters, the firmware UI reached with no failure event",
         "dsp": "sharc",
-        "tags": ["C:loading"],
         "modules": ["digikit/debug", "test/sine", "test/dyn-dn2", "test/dyn-fx-gain", "core/services/machines", "core/services/fx"]
       }
     ]

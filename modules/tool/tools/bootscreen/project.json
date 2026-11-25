@@ -5,14 +5,12 @@
     "runtimeAcceptance": [
       {
         "files": ["tests/bootscreen.device.test.ts"],
-        "tags": ["C:boot", "M:tools/bootscreen"],
         "modules": ["test/dyn-crash", "test/intro-ticks"],
         "plusdrive": true
       },
       {
         "files": ["tests/bootscreen-safe.device.test.ts", "tests/bootscreen-fault.device.test.ts"],
         "dsp": "sharc",
-        "tags": ["C:boot", "M:tools/bootscreen"],
         "modules": ["test/dyn-crash", "test/intro-ticks"],
         "plusdrive": true
       }

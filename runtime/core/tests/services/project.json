@@ -11,10 +11,6 @@
         "files": [
           "providers.device.test.ts"
         ],
-        "tags": [
-          "C:boot",
-          "C:loading"
-        ],
         "modules": [
           "digikit/debug",
           "test/svc-test",

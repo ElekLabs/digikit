@@ -16,19 +16,12 @@
         "devices": [
           "dt2"
         ],
-        "tags": [
-          "C:storage",
-          "C:transport"
-        ],
         "modules": [],
         "plusdrive": true
       },
       {
         "files": [
           "upload-depth.device.test.ts"
-        ],
-        "tags": [
-          "C:transport"
         ],
         "modules": [],
         "plusdrive": true
@@ -41,11 +34,6 @@
           "dt2"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:layout",
-          "C:storage",
-          "C:transport"
-        ],
         "modules": [
           "test/sine",
           "core/services/machines"
@@ -57,10 +45,6 @@
           "transfer-live.device.test.ts"
         ],
         "dsp": "sharc",
-        "tags": [
-          "C:storage",
-          "C:transport"
-        ],
         "modules": [
           "digikit/debug",
           "test/sine",

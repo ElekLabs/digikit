@@ -9,7 +9,6 @@
         "files": ["inferred-needs.device.test.ts"],
         "firmwareOnly": "the resources the real loader takes equal the needs patchkit infers (full tier; no host test of this seam yet)",
         "dsp": "sharc",
-        "tags": ["C:loading", "S:machines"],
         "modules": [
           "digikit/debug",
           "digikit/probe",

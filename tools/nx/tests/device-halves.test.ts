@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { deviceTargets, fileDevices, taskMode } from '../device-tests.mjs';
+import { checkRecordsCover, deviceTargets, fileDevices, taskMode } from '../device-tests.mjs';
 
 const none = () => [];
 const halves = (tests: string[], recs: object[], opts: object = {}) =>
@@ -114,4 +114,11 @@ it('declares in the records the device pins of the test sources', () => {
       mismatches.push(file);
   }
   expect(mismatches).toEqual([]);
+});
+
+it('refuses a device test that no runtimeAcceptance record lists', () => {
+  expect(() => checkRecordsCover('p', [{ files: ['a.device.test.ts'] }], ['a.device.test.ts'])).not.toThrow();
+  expect(() =>
+    checkRecordsCover('p', [{ files: ['a.device.test.ts'] }], ['a.device.test.ts', 'b.device.test.ts']),
+  ).toThrow(/no record for the device tests: b\.device\.test\.ts/);
 });
