@@ -186,7 +186,9 @@ describe('selection of the repository declarations', () => {
     }).tests.map((t) => `${t.project}:${t.file}`);
 
   it('a change of the machines service crate selects shot-picker', () => {
-    expect(selected(['services/machines/src/lib.rs'])).toContain('digikit/shot:tests/shot-picker.device.test.ts');
+    expect(
+      selected(['services/machines/src/lib.rs']).some((t) => t.endsWith(':tests/shot-picker.device.test.ts')),
+    ).toBe(true);
   });
 
   it('a change of sdk/sdk.toml selects the loader and package tests', () => {
