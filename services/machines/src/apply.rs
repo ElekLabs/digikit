@@ -2,8 +2,8 @@
 //! its native pages.
 
 use crate::build::ApplyArgs;
+use crate::native_page::record;
 use crate::native_page::PageTable;
-use crate::nativepage;
 use crate::parking::Parking;
 use crate::registry::{
     copy_text, machine_text, set_mach_owner, KNOBS, KNOB_PARAM, MAX_PAGE, MAX_PARAM,
@@ -250,7 +250,7 @@ impl Applied {
         args: Option<&ApplyArgs>,
         pages: &mut PageTable,
     ) -> i32 {
-        if !nativepage::is_kind(kind) {
+        if !record::is_kind(kind) {
             return OK;
         }
         let base = consumer.base();
@@ -285,7 +285,7 @@ impl Applied {
             }
         }
         if rc == OK {
-            rc = nativepage::apply(
+            rc = record::apply(
                 core,
                 pages,
                 kind,

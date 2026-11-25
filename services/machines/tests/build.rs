@@ -512,7 +512,7 @@ fn a_flagged_canvas_page_alone_is_an_incomplete_v2_pair_that_the_registry_refuse
     let (buf, _, _) = lowered(&b, &DN2, &keys(&[KEY], (1, 3, 1)), 0);
     let n = buf.len() - 0x98;
     assert_eq!(rd(&buf, n), 7);
-    let mut set = dkrt_svc_machines::nativepage::PageSet::<8>::new();
+    let mut set = dkrt_svc_machines::native_page::PageSet::<8>::new();
     assert!(set.claim(7, KEY, rd(&buf, n + 8 + 40)));
     assert!(!set.complete());
 }

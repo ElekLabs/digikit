@@ -179,7 +179,7 @@ impl Slots {
     }
 
     /// Hook at the entry of the page's turn handler (stack: view, event): every page turn ends the click flow, including LOCAL and unused custom encoders. Bookkeeping must
-    /// precede the consumed return: press A, turn an unused D, release A must never become an SMP click. The native handler (`nativepage::turn`) runs after it, outside
+    /// precede the consumed return: press A, turn an unused D, release A must never become an SMP click. The native handler (`native_page::turn`) runs after it, outside
     /// the owner.
     pub unsafe fn page_turn_input(&mut self, view: *const u8, ev: *const u8) {
         if self.is_armed() {

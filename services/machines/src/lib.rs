@@ -9,7 +9,7 @@
 //! `validate`), `dsp/` (the `DspPart` and the voice rows' loader steps), `apply` (`attach` and the per-record `apply`: the rows of a module), `check/` (the load check),
 //! `unload` and `parking` (give rows back; absent numbers), `registry` (the registry state), `slots/` (the click state; host tests in `slots/tests.rs`), `build/` (the builder
 //! calls and their commit), `assign` (sticky type numbers), `guard` (the machine guard's diagnostics), `modules` (the MODULES reply), `validate` (the record rules), `rows` (the
-//! voice rows), `info` (the image table), `device_profile` (the device's profile), `list` (the machine list and rank tables), `selection_view` (the machine selection view), `nativepage`, `pagerows` (the free page rows at the start), `native_page/` (the native page logic and the page table the owner holds), `paramapi`. Tests that cross the
+//! voice rows), `info` (the image table), `device_profile` (the device's profile), `list` (the machine list and rank tables), `selection_view` (the machine selection view), `pagerows` (the free page rows at the start), `native_page/` (the native page record, its checks, the page logic and the page table the owner holds), `paramapi`. Tests that cross the
 //! crate are in `tests/`.
 #![no_std]
 #[cfg(test)]
@@ -27,7 +27,6 @@ pub mod list;
 pub mod machines;
 pub mod modules;
 pub mod native_page;
-pub mod nativepage;
 pub mod pagerows;
 pub mod paramapi;
 pub mod parking;
