@@ -19,6 +19,7 @@ dkfw = { path = "../../../ports/bindings/rs" }
 
 [dev-dependencies]
 dkrt-test-support = { path = "../../../runtime/core/test-support" }
+dkrt-svc-rows = { path = "../../rows" }
 
 # This crate sits inside the repository's cargo workspace tree but is built on its own (`patchkit build`).
 [workspace]
