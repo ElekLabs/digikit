@@ -1086,7 +1086,9 @@ actual echo spacing and decay.
 - Boot DT2 1.17 with the digikit debug and remote modules active. Do not load
   content modules. On hardware use USB AUDIO/MIDI, USB OUT = MAIN and
   `mise run wb:cli -- audio reference inputs` to find the exact input ID
-  or unique name. On macOS allow audio input access for your terminal if prompted.
+  or unique name. On macOS, enable Microphone access for the app launching
+  the CLI. USB inputs can enumerate and return all-zero PCM when that app
+  has no audio-input permission.
 - On hardware, import the staged probe into the scratch project's sample
   pool and assign it to Track 1 in One Shot. On the emulator, verify Track 1
   plays the seeded probe. The recorder does not construct a card, transfer

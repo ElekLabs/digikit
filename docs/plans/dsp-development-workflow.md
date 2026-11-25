@@ -331,9 +331,19 @@ the acoustic check. The CLI refused the original `0x1700` without creating
 output. A second take at `0x027C` passed at 64.05 ms and 6.03 dB per repeat,
 within 0.86 ms of the `0x0288` take.
 
-Verify the remaining Delay parameters as needed for automated setup. The
-physical comparison still needs matched runtime artifacts and a working
-USB audio input.
+**Hardware checkpoint.** The physical DT2 ran the 1.17 image with digikit
+0.13.2 and the matching debug module. The CLI confirmed the same loaded
+probe hash and size on both targets. Feedback was `0x2000` on both and
+TIME passed the case's setup range (`0x0300` on hardware, `0x027C` on the
+emulator). The internal PCM and USB-audio takes passed the same checks.
+The emulator measured 64.05 ms and 6.034 dB per repeat. The device measured
+62.49 ms and 6.032 dB per repeat. The pair passed with an absolute difference
+of 1.56 ms and 0.0011 dB per repeat, within the 2 ms and 1 dB tolerances.
+Both reports, both WAV pairs and `comparison.json` are together in
+`out/runs/dsp-workflow/phase8-hardware-final.DBaFP5/`. This closes the
+DT2 stock Delay exit check at comparable settings. It does not establish
+bit-exact audio or identical timing at identical raw knob values. Broader
+automatic setup or additional cases can build on the same readback path.
 
 ## End result
 
