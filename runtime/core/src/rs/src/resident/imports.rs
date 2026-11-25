@@ -104,4 +104,5 @@ pub(super) static ROWS: Group<ImportRows> = Group::new(ImportRows {
     dk_selected_track: device_row!(DkSelectedTrackFn, selected_track),
     dk_debug_log_sink_set: row!(DkDebugLogSinkSetFn, dlog::dk_debug_log_sink_set),
     dk_debug_speed_flags: device_row!(DkDebugSpeedFlagsFn, debug_speed_flags),
+    dk_debug_read_parameter: device_row!(DkDebugReadParameterFn, crate::stock_kit::debug_read_parameter),
 });

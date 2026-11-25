@@ -1,6 +1,10 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { repoRoot } from '@digi/test-support';
+import {
+  installSystemPackage as installPackage,
+  systemPackagePath,
+} from '../../../packages/workbench-core/src/node/card-image.ts';
+import { SYSTEM_PACKAGE_PATH } from '../../../packages/workbench-core/src/runtime/system-package.ts';
 import type { Files } from './card-kit.ts';
 
 /**
@@ -11,18 +15,14 @@ import type { Files } from './card-kit.ts';
  */
 
 /** The package artifact. */
-export const systemPackageFile = (): string => path.join(repoRoot(), 'dist/syspkg/runtime/system.dksp');
+export const systemPackageFile = (): string => systemPackagePath(repoRoot());
 
 /** The store path stage 1 reads (`PACKAGE_PATH`, runtime/core/src/rs/src/stage1.rs): relative to the store root, which is the folder `digikit/` of the card. */
-export const SYSTEM_PACKAGE_STORE_PATH = 'digikit/system.dksp';
+export const SYSTEM_PACKAGE_STORE_PATH = SYSTEM_PACKAGE_PATH;
 
 /** Copy the package to its store path in `seed` (the card's `digikit/` folder holds the store). */
 export function installSystemPackage(seed: string): void {
-  const file = systemPackageFile();
-  if (!fs.existsSync(file)) throw new Error(`missing ${file}: run nx run core/runtime:package`);
-  const to = path.join(seed, 'digikit', SYSTEM_PACKAGE_STORE_PATH);
-  fs.mkdirSync(path.dirname(to), { recursive: true });
-  fs.copyFileSync(file, to);
+  installPackage(seed, systemPackageFile());
 }
 
 /** The system package as a store file of a card that carries it: a test's expected listing starts from this. */

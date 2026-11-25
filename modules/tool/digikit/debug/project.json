@@ -4,6 +4,12 @@
   "metadata": {
     "runtimeAcceptance": [
       {
+        "files": ["tests/parameter-observer.device.test.ts"],
+        "devices": ["dt2"],
+        "tags": ["M:digikit/debug"],
+        "modules": ["digikit/debug"]
+      },
+      {
         "files": ["tests/view-observer.device.test.ts"],
         "tags": ["M:digikit/debug"],
         "modules": ["digikit/debug"]

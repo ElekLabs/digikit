@@ -49,6 +49,30 @@ The observer needs resident runtime 0.13.1 and matching debug module.
 DT2 1.17 and DN2 1.12 have view stack bindings. Syntakt's observer is
 unsupported. Its existing debug features do not depend on this observer.
 
+## Observe firmware parameters
+
+`resolveParameterWatch(profile, firmwareVersion, kind, scope)` resolves a
+semantic parameter using the exact firmware's `[parameter_watches]` entries
+in the device file. Track numbers in TypeScript are one-based. Kit values
+have no track. The DT2 1.17 map starts with Track Sound's `sampleSlot` and
+live-kit `delay.feedback`. DN2 and Syntakt do not advertise those readbacks.
+
+`withParameterObserver(session, events, key, run)` checks support before
+running any inputs, waits for the raw starting value, and releases its
+generation when the scenario finishes. Match `VALUE_CHANGED` (debug level)
+through the same `RuntimeEvents` listener with `matchesParameterChange`.
+This observer is off by default and currently supports one watched
+parameter at a time. It samples stored live-kit values, not displayed knob
+units, instantaneous modulation, or sample identity.
+
+The parameter observer requires resident runtime 0.13.2, the matching
+card-side system package, and the updated debug module. LOGCFG ops 6 and 7
+probe or start with bytes for scope (1
+track, 2 kit), zero-based track (0 for kit), and raw word index. Op 8 reads
+the snapshot and 9 releases the generation (one big-endian u32). Replies
+have version, flags (supported, active, ready), scope and track in the
+first four bytes, followed by generation, signed value, and word.
+
 ## Setup
 
 SETUP (0x0a) sets the machine type (op 1) or the filter type (op 2) of a track for calibration runs: body u8 op, u8 track (0 to 15), u8 type; reply u8 seq. The request is queued and the UI task performs it in the module's tick through the firmware's own KitActive commit (`dk_debug_setup`: the call the machine or filter chooser makes, anchors `cf.machine.fn.set_kit` and `cf.filter.fn.set_kit`; never a raw write of the Sound byte, finding 148). The log event SETUP_DONE (kind 49: op, track, type, seq, status) reports it. Status 0: the firmware reports the new type afterwards. -46 (DK_E_RANGE): a type no chooser offers (machine: a stock type below `stock_types` of the device, or a run-time type of the profile; filter: 0 to 5, module filter types are not offered yet). The core does not look whether a module has loaded a run-time type (a row nobody loaded plays as type 0): `trackSetup` makes the check by default (its `runTime` option sets another range or turns it off with `false`): it reads the types of the MODULES reply before SETUP and answers -46 itself. -53 (DK_E_STATE): the firmware kept the old type (the machine permit refused it on that track, or the project's settings mode makes the setter skip the write), the read-back differs from the request, or there is no project. -72 (DK_E_AGAIN): the module was unloaded with the request queued; it never ran. Refused at the request: a bad body (-50), an op or track out of range (-60), a request while one is queued (-12), and -53 until the track watch has its baseline (the project is loaded and scanned, about 2 s after the first UI pass). The host side is `DkSession.setup` and `trackSetup` (packages/dk-session/src/setup.ts), which waits on SETUP_DONE. Docs: docs/findings/150-machine-and-filter-setters.md.

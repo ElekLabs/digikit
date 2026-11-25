@@ -81,3 +81,6 @@ For the Underpass fixture, import `underpass-138.img`, attach the existing
 Underpass capture, and start the session on matching firmware. After boot,
 load saved Project 001, pattern A01. A session restores the card, not the
 device's last screen or working RAM.
+
+The [DT2 stock Delay reference](INSTRUMENTATION.md#replay-the-dt2-stock-delay-reference)
+can generate a new session and private probe card directly from the CLI.

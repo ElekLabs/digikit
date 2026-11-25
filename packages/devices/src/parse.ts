@@ -83,6 +83,11 @@ export function stockFirmware(device: Pick<DeviceRecord, 'acceptance' | 'firmwar
 /** `identity`: `[device]` + `[capabilities]`; `patchable`: also `[patch]`; `runtime`: also `[digikit]`. */
 export type Level = 'identity' | 'patchable' | 'runtime';
 
+export interface ParameterWatchEntry {
+  scope: 'track' | 'kit';
+  word: number;
+}
+
 export interface DeviceRecord {
   id: Device;
   /** The file name stem of the device file (for example `some-device`): it pairs the device with `<stem>-leds.toml` and with a faceplate file. */
@@ -98,6 +103,8 @@ export interface DeviceRecord {
   acceptance?: Acceptance;
   /** `[midi]`; absent when the file has none. */
   midi?: MidiMap;
+  /** Parameter kind to raw word mapping, by verified firmware port version. */
+  parameterWatches?: Readonly<Record<string, Readonly<Record<string, ParameterWatchEntry>>>>;
   firmware: readonly Firmware[];
   /** `[patch_sets]`: the module ids of each named set (`device`, `emulator`); empty when the file has none. */
   patchSets: Readonly<Record<string, readonly string[]>>;
@@ -324,6 +331,33 @@ function midiMap(file: string, v: unknown): MidiMap | undefined {
   return { trackChannels: chans as number[], params };
 }
 
+function parameterWatches(file: string, v: unknown, firmware: readonly Firmware[]): DeviceRecord['parameterWatches'] {
+  if (v === undefined) return undefined;
+  const byVersion = need(file, '[parameter_watches]', v, isTable);
+  return Object.fromEntries(
+    Object.entries(byVersion).map(([version, watch]) => {
+      const field = `[parameter_watches.${version}]`;
+      if (!firmware.some((f) => f.version === version))
+        throw new Error(`devices/${file}: ${field} requires a registered firmware version`);
+      const mappings = Object.entries(need(file, field, watch, isTable)).map(([kind, value]) => {
+        const t = need(file, `${field} ${kind}`, value, isTable);
+        if (
+          !/^[a-zA-Z][a-zA-Z0-9]*(\.[a-zA-Z][a-zA-Z0-9]*)*$/.test(kind) ||
+          (t.scope !== 'track' && t.scope !== 'kit') ||
+          !isInt(t.word) ||
+          t.word < 0 ||
+          t.word > 255
+        )
+          throw new Error(
+            `devices/${file}: ${field} ${kind} needs a parameter kind, track or kit scope, and word 0 to 255`,
+          );
+        return [kind, { scope: t.scope, word: t.word }] as const;
+      });
+      return [version, Object.fromEntries(mappings)] as const;
+    }),
+  );
+}
+
 /** The registry of the device files `files` (name to text). A file without `[device]` (the LED maps) is skipped. */
 export function parse(files: Readonly<Record<string, string>>): Registry {
   const devices: DeviceRecord[] = [];
@@ -355,6 +389,8 @@ export function parse(files: Readonly<Record<string, string>>): Registry {
     if (acc) rec.acceptance = acc;
     const mm = midiMap(file, doc.midi);
     if (mm) rec.midi = mm;
+    const watches = parameterWatches(file, doc.parameter_watches, fw);
+    if (watches) rec.parameterWatches = watches;
     const st = storage(file, doc.storage);
     if (st) rec.storage = st;
     if (doc.digikit !== undefined && doc.patch === undefined)

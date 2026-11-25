@@ -255,6 +255,14 @@ export function fieldsOf(kindId: number, a: number[]): Record<string, FieldValue
     case 'MACHINE_CHANGE':
       f = { track: a[0]! + 1, old_type: a[1] === NONE ? null : a[1]!, new_type: a[2] === NONE ? null : a[2]! };
       break;
+    case 'VALUE_CHANGED':
+      f.scope = a[0] === 1 ? 'track' : a[0] === 2 ? 'kit' : a[0]!;
+      f.track = a[0] === 1 ? (a[1]! >>> 8) + 1 : null;
+      f.word = a[1]! & 0xff;
+      delete f.key;
+      f.old = a[2]! | 0;
+      f.new = a[3]! | 0;
+      break;
     case 'MACHINE_FAULT':
       f = {
         type: a[0]! & 0xffff,

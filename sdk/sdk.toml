@@ -8,7 +8,7 @@
 table = "0.13.0"    # the least version a packed `.dkm` needs: `patchkit pack` writes at least this, so the loader refuses a module of an older MINOR (the 0.7 format, no header table, among them) with E_CONTRACT. It is the current MINOR: the loader accepts only the runtime's MAJOR and MINOR, so a module that links no import newer than the last MINOR needs this floor to load (raise it with `version` at every MINOR)
 service_registration = "0.12.1" # minimum runtime for callback ordering and service-local APIs
 resident_query = "0.12.2" # minimum runtime for the optional resident query facet
-version = "0.13.1"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.13.2"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -1413,6 +1413,14 @@ sig = "i32 (u32 *out)"
 doc = "Read the active firmware view on the UI task. Returns 0 and writes [object, class] (0, 0 for an empty stack), DK_E_AGAIN when the data is not ready, or DK_E_NOT_FOUND on a firmware without a bound view stack. With null out, only checks whether the observer is supported and reads no firmware memory (any task)."
 
 [[import]]
+name = "dk_debug_read_parameter"
+service = "runtime"
+since = "0.13.2"
+context = "ui"
+sig = "i32 (u32 scope, u32 track, u32 word, i32 *out)"
+doc = "Read one raw s16 parameter from the live kit. Scope 1 is the Sound words of track (zero-based), scope 2 is the kit FX array (track argument must be 0). With null out, validates coverage and range without following the live kit pointer, from any task. DK_E_NOT_FOUND when the kit layout is unavailable, DK_E_RANGE for an invalid key, DK_E_AGAIN while the kit is not ready."
+
+[[import]]
 name = "dk_debug_setup"
 service = "runtime"
 since = "0.10.4"
@@ -1855,6 +1863,12 @@ args = ["slot", "what", "status", "index", "id_hash"]
 id = 64
 name = "VIEW_CHANGED"
 args = ["old_view", "view", "old_class", "class", "generation"]
+
+# Opt-in live kit parameter watch. key = track << 8 | word.
+[[log.kind]]
+id = 65
+name = "VALUE_CHANGED"
+args = ["scope", "key", "old", "new", "generation"]
 
 [spans]             # the owners of the runtime's profiling spans that are not modules (the debug module's span table, docs/plans/profiling.md section 7.2)
 phases = ["early", "late", "last"]   # the service tick phases, owner 0x100 | p, in the order of `tick_phase` (runtime/core/abi/src/service.rs)

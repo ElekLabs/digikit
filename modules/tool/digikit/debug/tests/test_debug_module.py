@@ -78,6 +78,16 @@ static u32 ranges[2][2];
 static u32 n_ranges;
 static u32 view_object, view_class, view_reads;
 static int view_supported = 1;
+static int32_t parameter_value;
+static u32 parameter_reads;
+
+int32_t dk_debug_read_parameter(uint32_t scope, uint32_t track, uint32_t word, int32_t *out)
+{
+    if ((scope != 1 || track != 0 || word != 28) && (scope != 2 || track != 0 || word != 35))
+        return DK_E_NOT_FOUND;
+    if (out) { parameter_reads++; *out = parameter_value; }
+    return 0;
+}
 
 int32_t dk_debug_top_view(uint32_t *out)
 {
@@ -187,6 +197,10 @@ int main(int argc, char **argv)
             view_supported = a != 0;
         } else if (!strncmp(line, "viewreads", 9)) {
             printf("viewreads %u\n", view_reads);
+        } else if (sscanf(line, "parameter %u", &a) == 1) {
+            parameter_value = (int32_t)a;
+        } else if (!strncmp(line, "parameterreads", 14)) {
+            printf("parameterreads %u\n", parameter_reads);
         } else if (sscanf(line, "poll %u %u %x", &a, &b, &c) == 3) {
             poll_owner[a] = b;
             poll_fn[a] = (uint32_t)c;
@@ -254,6 +268,7 @@ def harness(tmp_path_factory):
             str(REPO_ROOT / "sdk/include"),
             str(src),
             str(MOD / "src/c/view-observer.c"),
+            str(MOD / "src/c/parameter-observer.c"),
             "-o",
             str(exe),
         ],
@@ -318,6 +333,32 @@ def test_view_observation_is_opt_in_debug_and_has_a_separate_snapshot(harness):
 def test_unsupported_view_readback_does_not_start_observing(harness):
     out = run(harness, ["viewport 0", "cmd 34 04", "cmd 34 0501", "slot", "viewreads"])
     assert out[2:] == ["reply 16 01000000000000000000000000000000", "reply -1 ", "viewreads 0"]
+
+
+def test_parameter_observer_scopes_changes_to_an_armed_generation(harness):
+    out = run(
+        harness,
+        [
+            "cmd 34 0103ffffffffffffffff", "parameter 3", "slot", "parameterreads",
+            "cmd 34 06020023", "cmd 34 07020023", "slot", "cmd 34 08",
+            "cmd 34 0900000002",  # a stale owner cannot stop this watch
+            "parameter 91", "slot", "slot", "cmd 32 00000000",
+            "cmd 34 0900000001", "parameter 142", "slot", "parameterreads",
+        ],
+    )
+    assert "parameterreads 0" in out
+    assert "parameterreads 3" in out
+    replies = [row for row in out if row.startswith("reply")]
+    assert struct.unpack(">4B3i", bytes.fromhex(replies[3].split()[2])) == (1, 7, 2, 0, 1, 3, 35)
+    _, _, records = log(replies[5])
+    kind = next(k["id"] for k in tomllib.loads((REPO_ROOT / "sdk/sdk.toml").read_text())["log"]["kind"] if k["name"] == "VALUE_CHANGED")
+    assert len(records) == 1
+    assert records[0][2:] == (kind, DEBUG, 2, 35, 3, 91, 1)
+
+
+def test_parameter_observer_refuses_unavailable_key_without_polling(harness):
+    out = run(harness, ["cmd 34 06030023", "cmd 34 07030023", "slot", "parameterreads"])
+    assert out[2:] == ["reply 16 01000300000000000000000000000023", "reply -1 ", "parameterreads 0"]
 
 
 ROWS = 8 + 3 + 4  # module records (limits.max modules), service phases, polls

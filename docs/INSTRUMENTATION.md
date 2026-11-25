@@ -1027,3 +1027,89 @@ Results are in `out/runs/devprobe/<time>/`: `capture.wav`, `events.json`, `hits.
 - The remote presses keys only. It does not restart the device.
 - On hardware the panel scan may override remote keys (finding 58). The first run shows it.
 - `--analyse WAV` analyses any WAV, for example an emulator capture, to compare device and emulator.
+
+### Replay the DT2 stock Delay reference
+
+Use this case to compare stock Delay on DT2 1.17 in a running emulator
+and on a physical DT2. It plays the same short 1 kHz sample once with
+no send and once with Delay send 111. The [typed case](../packages/workbench-core/src/reference/dt2-stock-delay.ts)
+uses the existing `DkSession` remote input and wait helpers on both targets.
+The emulator records its internal master PCM. Hardware uses Workbench's
+native CPAL input code in a capture-only bridge, without opening a playback
+device or loading Python. The bridge captures the first stereo pair at
+48 kHz without resampling, and rejects reported overruns/underruns or a
+capture length that indicates loss.
+
+```sh
+mise run wb:cli -- audio reference prepare --out out/runs/delay-probe
+```
+
+That offline command only writes `01-delay-probe.wav` and checks its exact
+SHA-256. To prepare a project, use the separate command for your target.
+
+```sh
+mise run wb:cli -- audio reference prepare-project --emu --out out/runs/delay-session
+mise run wb:cli -- audio reference prepare-project --port "Digitakt II" \
+  --scratch-project "Delay probe" --out out/runs/delay-prep-device
+```
+
+The emulator command builds a new private card seeded with the probe and
+the debug and remote modules. Open `out/runs/delay-session/session.json` in
+Workbench and choose **Start emulator**. The session pins the registered
+stock firmware, found under `DIGI_FIRMWARE_DIR` or `firmware/`. Pass
+`--firmware FILE` to select another copy of the same release.
+
+The hardware command verifies the firmware over MIDI, then uploads the
+probe to a dedicated +Drive folder and verifies the device's content hash.
+A repeat reuses a matching upload and refuses to replace a different file.
+It never loads, saves, or edits the project. `--out` is optional on hardware.
+With it, both targets write `preparation.json`. Use `--format json` for
+machine-readable stdout. Both report `panel-setup-required` and list the
+remaining settings. To check the live state without sending any panel
+input, use the matching runtime 0.13.2 and debug module:
+
+```sh
+mise run wb:cli -- audio reference inspect --emu --run-dir out/native/run --format json
+mise run wb:cli -- audio reference inspect --port "Digitakt II" --format json
+```
+
+The command reads Track 1's sample slot and stock Delay feedback in raw
+firmware units. The capture keeps both readings in
+`validation.observed_before_capture`. A slot number is not a sample hash
+and a feedback readback does not replace the acoustic check.
+
+- Boot DT2 1.17 with the digikit debug and remote modules active. Do not load
+  content modules. On hardware use USB AUDIO/MIDI, USB OUT = MAIN and
+  `mise run wb:cli -- audio reference inputs` to find the exact input ID
+  or unique name. On macOS allow audio input access for your terminal if prompted.
+- On hardware, import the staged probe into the scratch project's sample
+  pool and assign it to Track 1 in One Shot. On the emulator, verify Track 1
+  plays the seeded probe. The recorder does not construct a card, transfer
+  a sample, switch projects or save a project.
+- With transport stopped, play the sample from the beginning at original
+  pitch, with the filter open and no modulation. Set all Track 1 sends
+  to zero. Set Track 1 to MIDI channel 1 and allow USB MIDI CC/NRPN input.
+- Use 120 BPM and set stock Delay TIME near a 1/32 note (about 63 ms),
+  FDBK 32 and VOL 110, with ping-pong off and Delay-to-Reverb at zero.
+  Start from the default Delay filters. Use the audio check below to
+  confirm the effective timing and decay instead of relying on knob rounding.
+
+```sh
+mise run wb:cli -- audio reference run --emu --run-dir out/native/run \
+  --scratch-project "Delay probe" --out out/runs/delay-emu
+mise run wb:cli -- audio reference run --port "Digitakt II" --audio-input INPUT_ID \
+  --scratch-project "Delay probe" --out out/runs/delay-device
+mise run wb:cli -- audio reference compare \
+  out/runs/delay-emu/reference.json out/runs/delay-device/reference.json --format json
+```
+
+Use a fresh output directory for each run. The result is `dry.wav`,
+`delay.wav` and `reference.json` (`dk.audio-reference/1`). The case only
+changes Track 1's Delay send and sets it back to zero on exit. The project
+name and sample assignment are operator declarations. Firmware identity is
+checked against the target's reported hash. The recording must show a clean
+dry probe and five wet repeats with 58–68 ms spacing and 4.5–7.5 dB loss per
+repeat. Compare two passing reports with matching firmware and fixture
+identity. The pair must agree within 2 ms and 1 dB per repeat. This compares
+the Delay shape, not bit-exact PCM or hardware performance. Timing comes
+from sample positions, not emulator wall time.

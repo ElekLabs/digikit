@@ -250,6 +250,8 @@ node tools/devtools/rig_profile.ts digikit/shot --device dn2 --case sample/stere
 
 For offline WAV and JSON exports, use `mise run wb:cli -- module render` and
 `mise run wb:cli -- audio compare`. See [Render and compare audio from the CLI](INSTRUMENTATION.md#render-and-compare-audio-from-the-cli).
+To record the same stock Delay test case on a running emulator or a USB device,
+use [the DT2 stock Delay reference](INSTRUMENTATION.md#replay-the-dt2-stock-delay-reference).
 
 To reuse an emulator card, firmware choice and captures, see
 [Workbench sessions](WORKBENCH-SESSIONS.md). Inspect a saved folder with

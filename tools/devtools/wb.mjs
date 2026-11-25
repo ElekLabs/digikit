@@ -93,6 +93,9 @@ const opts = {
   verify: 'auto',
   speed: undefined,
   'bulk-bin': process.env.DKBULK_BIN || path.join(targetRoot, 'nogen/release/dkbulk'),
+  'audio-bin':
+    process.env.DKAUDIO_BIN ||
+    path.join(targetRoot, 'nogen/release', process.platform === 'win32' ? 'dkaudio.exe' : 'dkaudio'),
   format: undefined,
   ret: false,
 };
@@ -100,6 +103,7 @@ const opts = {
 const REPEATED = new Set(['map', 'load', 'dsp-base', 'analyse', 'model', 'case']);
 const OFFLINE = ['addrmap', 'module', 'profile', 'audio', 'session'];
 const words = [];
+let explicitMidiPort = false;
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (
@@ -140,10 +144,15 @@ for (let i = 0; i < args.length; i++) {
       '--params-f32',
       '--profile-block',
       '--repeat',
+      '--scratch-project',
+      '--audio-input',
+      '--audio-bin',
+      '--firmware',
     ].includes(a)
   ) {
     if (i + 1 >= args.length) fail(`${a} needs a value`);
     const key = a.slice(2);
+    if (key === 'port') explicitMidiPort = true;
     if (REPEATED.has(key)) (opts[key] ??= []).push(args[++i]);
     else opts[key] = args[++i];
     // `profile calibrate fit` takes --device FILE several times (the other commands: one device id)
@@ -234,18 +243,40 @@ async function infoAndKind(session) {
 
 const SPANS = words[0] === 'profile' && words[1] === 'spans';
 const CALIBRATE = words[0] === 'profile' && words[1] === 'calibrate' && words[2] === 'run';
+const REFERENCE = words[0] === 'audio' && words[1] === 'reference';
+const REFERENCE_RUN = REFERENCE && words[2] === 'run';
+const REFERENCE_PROJECT = REFERENCE && words[2] === 'prepare-project';
+const REFERENCE_INPUTS = REFERENCE && words[2] === 'inputs';
 const AUDIO = words[0] === 'audio' || (words[0] === 'module' && words[1] === 'render');
 if (opts.help) {
   if (!AUDIO) console.log(usage);
   if (!words.length || words[0] === 'profile') console.log('wb profile report FILE [--format json]');
   if (!words.length || words[0] === 'session') console.log('wb session inspect FOLDER_OR_SESSION_JSON [--format json]');
   if (AUDIO || !words.length || words[0] === 'module') console.log((await import('./wb_audio.mjs')).audioUsage);
+  if (AUDIO || !words.length) console.log((await import('./wb_reference.ts')).referenceUsage);
   process.exit(0);
 }
-const deviceCommand = words.length > 0 && (!OFFLINE.includes(words[0]) || SPANS || CALIBRATE);
-if (deviceCommand && process.env.DIGI_WB_MISE === '1') {
+if (REFERENCE_PROJECT && !opts.emu && (!explicitMidiPort || !opts.port.trim()))
+  fail('prepare-project on hardware requires --port PORT.');
+const deviceCommand =
+  words.length > 0 &&
+  (!OFFLINE.includes(words[0]) || SPANS || CALIBRATE || REFERENCE_RUN || (REFERENCE_PROJECT && !opts.emu));
+const prepTasks = REFERENCE_INPUTS
+  ? ['dkaudio:build']
+  : REFERENCE_PROJECT
+    ? opts.emu
+      ? ['wb:reference-card-inputs']
+      : ['dkmidi:build', 'wasm:dksample']
+    : REFERENCE_RUN
+      ? opts.emu
+        ? []
+        : ['dkmidi:build', 'dkaudio:build']
+      : deviceCommand
+        ? ['wb:device-inputs']
+        : [];
+for (const prepTask of process.env.DIGI_WB_MISE === '1' ? prepTasks : []) {
   // Do not start device builds for an offline report. Keep tool output off JSON stdout.
-  const prep = spawnSync('mise', ['run', 'wb:device-inputs'], { cwd: root, stdio: ['ignore', 2, 2] });
+  const prep = spawnSync('mise', ['run', prepTask], { cwd: root, stdio: ['ignore', 2, 2] });
   if (prep.error) fail(`Cannot prepare Workbench device tools: ${prep.error.message}`, 1);
   if (prep.status !== 0) process.exit(prep.status ?? 1);
 }
@@ -255,7 +286,7 @@ if (deviceCommand && !opts.emu && !existsSync(opts.bin))
 /** Start the bridge on the port and open a session on it. */
 function connect(timeoutMs = 60000) {
   // a calibration run also sends notes and control changes: `--raw` lets the bridge pass them (it drops them otherwise)
-  const child = spawn(opts.bin, ['open', opts.port, ...(CALIBRATE ? ['--raw'] : [])], {
+  const child = spawn(opts.bin, ['open', opts.port, ...(CALIBRATE || REFERENCE_RUN ? ['--raw'] : [])], {
     stdio: ['pipe', 'pipe', 'inherit'],
   });
   const exited = new Promise((resolve) => child.on('exit', resolve));
@@ -454,6 +485,17 @@ async function loadSample() {
   return Sample.create(Uint8Array.from(readFileSync(wasm)));
 }
 
+function uploadBackend(session, kind, storage, sample, bulk) {
+  return openSamples(kind, {
+    session,
+    hashOf: (d) => sample.hash(d),
+    converter: converterOf(sample),
+    slots: storage?.slots,
+    bulk,
+    note: (n) => console.error(`wb: ${n}`),
+  });
+}
+
 /** The card log state in one line. */
 function cardLogText(s) {
   if (!s) return 'not supported (this debug module has no card log)';
@@ -511,6 +553,20 @@ if (SPANS) {
   } finally {
     await link.close();
   }
+} else if (REFERENCE) {
+  const { referenceCommand } = await import('./wb_reference.ts');
+  status = await referenceCommand({
+    rest,
+    opts,
+    root,
+    devices,
+    connectReady,
+    async openUploadBackend(session) {
+      const wasm = path.join(root, 'apps/web/public/dksample.wasm');
+      if (!existsSync(wasm)) throw new Error('Missing dksample.wasm (run mise run wasm:dksample).');
+      return uploadBackend(session, 'stock-rpc', undefined, await loadSample());
+    },
+  });
 } else if (AUDIO) {
   const { audioCommand } = await import('./wb_audio.mjs');
   status = await audioCommand({ cmd, sub, rest, opts, fail });
@@ -567,14 +623,7 @@ if (SPANS) {
       if (samplesUseBulk(kind)) bulk = await connectBulk(holder);
       if (opts.slot !== undefined && kind !== 'stock-slots')
         fail('--slot works only on a device with numbered sample slots');
-      const backend = openSamples(kind, {
-        session,
-        hashOf: (d) => sample.hash(d),
-        converter: converterOf(sample),
-        slots: storage.slots,
-        bulk: bulk?.session,
-        note: (n) => console.error(`wb: ${n}`),
-      });
+      const backend = uploadBackend(session, kind, storage, sample, bulk?.session);
       const link = () => (backend.bulkState === 'bulk' ? 'bulk' : 'sysex');
       if (opts.folder) await backend.mkdir(opts.folder);
       // one listing of the folder for the whole run: the `exists` hint of every put (REPLACE when the name is there); each put adds its name

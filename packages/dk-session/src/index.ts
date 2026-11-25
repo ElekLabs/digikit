@@ -17,6 +17,15 @@ export * from './modules-reply.ts';
 export * from './runtime-log.ts';
 export * from './runtime-events.ts';
 export {
+  matchesParameterChange,
+  ParameterObserverUnsupported,
+  resolveParameterWatch,
+  withParameterObserver,
+  type ParameterKey,
+  type ParameterScope,
+  type ParameterObserverState,
+} from './parameter-observer.ts';
+export {
   ViewObserverUnsupported,
   withViewObserver,
   type FirmwareView,

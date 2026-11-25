@@ -1121,6 +1121,7 @@ dependencies = [
  "digi-control",
  "digi-coupled",
  "dkaddrmap",
+ "dkaudio",
  "dkbulk",
  "dkmidi",
  "elektron-native-boot",
@@ -1192,6 +1193,15 @@ dependencies = [
 name = "dkaddrmap"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "dkaudio"
+version = "0.1.0"
+dependencies = [
+ "cpal",
  "serde",
  "serde_json",
 ]

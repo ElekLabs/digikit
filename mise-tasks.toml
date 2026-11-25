@@ -102,10 +102,23 @@ description = "Build the dkmidi MIDI bridge (the workbench's MIDI port code on s
 run = "cargo build -p dkbulk --release --offline --target-dir \"$(SHARC_GEN_DIR= uv run python -m tools.emulator.native_target dir)\""
 description = "Build the dkbulk USB bulk bridge and uploader (packages/dkbulk) into the nogen target dir, where tools/devtools/wb.mjs looks; `dkbulk list` shows the devices that offer the bulk interface; `dkbulk descriptors [ID]` checks the WinUSB descriptors of a device"
 
+["dkaudio:build"]
+run = "node tools/nx/rust-env.mjs -- cargo build -p dkaudio --release --locked --offline"
+description = "Build the Workbench USB audio capture bridge"
+
 ["wb:cli"]
 env = { DIGI_WB_MISE = "1" }
 run = "node tools/devtools/wb.mjs"
-description = "Workbench CLI: session inspect FOLDER | profile report FILE | module render ID --device ID --case GROUP/NAME --out DIR | audio compare A B --out DIR | samples ls/put | store ls/put/rm | transfer install/restart/delete | info | ports"
+description = "Workbench CLI: session inspect FOLDER | profile report FILE | module render ID --device ID --case GROUP/NAME --out DIR | audio compare A B --out DIR | audio reference prepare/prepare-project/inspect/inputs/run/compare | samples ls/put | store ls/put/rm | transfer install/restart/delete | info | ports"
+
+["wb:reference-card-inputs"]
+hide = true
+run = [
+  "pnpm nx:pilot run plusdrive-format:cli --output-style=stream",
+  "pnpm nx:pilot run core/runtime:package --output-style=stream",
+  "pnpm nx:pilot run-many -t pack -p digikit/debug,digikit/remote --output-style=stream",
+]
+description = "Prepare the card builder and runtime packs for an emulator reference project"
 
 ["wb:device-inputs"]
 hide = true

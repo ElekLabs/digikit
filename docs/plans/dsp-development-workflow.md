@@ -29,7 +29,7 @@ passed the SETTINGS open-and-close regression on DT2 1.17 and DN2 1.12.
 | 6. Reuse a real listening session | Host and DT2 emulator checked | [Workbench sessions](../WORKBENCH-SESSIONS.md) package the card and attachments and keep capture inspection independent. Underpass reopened with the same A01 grid and stab-only send. Automated project selection and saved audio views remain follow-ups. No new Workbench panel. |
 | 7. Stock audio reference pilot | Verified, ready for review | Underpass gives a conservative Feedback candidate. DN2 confirms the stock decay anchor and the DT2 plain-versus-PGO sweep is byte-identical. |
 | 7a. Run Feedback inside FREQ SHIFT | Verified, listening review open | The fifth knob controls a filtered 55 ms stereo loop. Zero Feedback is byte-identical to the previous build on both send rigs. Both emulator record checks and packs passed. |
-| 8. Replay a reference case on emulator and hardware | Planned follow-up | Reuse the shared session and calibration runner for one DT2 Delay case. Swap the target and PCM capture source without changing the case. |
+| 8. Replay a reference case on emulator and hardware | Emulator checked, hardware open | Use one TypeScript Delay case with the shared session and input helpers. Prepare the project separately from capture. |
 
 ## 1. Generate a catalog from one firmware file
 
@@ -243,18 +243,27 @@ promoting it. Hardware timing and loading are separate from this rig proof.
 
 ## 8. Replay a reference case on emulator and hardware
 
-- Move one DT2 stock Delay tone case onto the shared [calibration step runner](../INSTRUMENTATION.md)
-  and `DkSession` for MIDI and remote-control steps. The case defines the
+- Express one DT2 stock Delay tone case in a [TypeScript case file](../../packages/workbench-core/src/reference/dt2-stock-delay.ts).
+  Reuse the `DkSession` and harness MIDI, clocks and panel input. The case defines the
   firmware, source WAV and its hash, project setup, effect settings, stimulus
   and capture window. The target supplies the clock, panel control transport,
   and a way to verify the effective settings.
-- Keep card images and snapshots emulator-only. On hardware, use an explicitly
-  selected scratch project and the existing sample-transfer workflow to stage
-  the same WAV. Manual project selection is enough for this proof. Do not
-  require raw card import or overwrite an existing project.
-- Use the emulator's internal PCM tap or the device's USB audio input. Reuse
-  the [device probe](../INSTRUMENTATION.md#device-probe-usb-audio--remote)
-  checks for dropped samples and record the source, channel route and rate.
+- Add opt-in firmware state observers to `digikit/debug`, with a shared
+  `DkSession` interface for snapshots and changes. Prove SETTINGS open and
+  close on DT2 1.17 and DN2 1.12, then use structured sample assignment and
+  stock Delay readback for the DT2 case. `INPUT_TAKEN` remains a delivery
+  diagnostic, and screenshots remain failure evidence, not assertions.
+  Before sending any input, fail if the target lacks a required observer.
+  Defer Syntakt's view and value observers until its firmware readbacks are
+  mapped and tested. Its existing debug functions remain available.
+- Keep card images and snapshots emulator-only. The explicit
+  `prepare-project` command builds a private, reopenable Workbench session
+  on the emulator or stages the same verified WAV using the shared sample
+  backend on hardware. Report the remaining panel setup separately. Never
+  rewrite a saved hardware project or upload anything during capture.
+- Use the emulator's internal PCM tap or the device's USB audio input. Share
+  Workbench's native input setup with the CLI capture bridge. Reject apparent
+  capture loss and record the source, channel route and rate.
   Export the same WAV and JSON fields from both targets through the CLI.
 
 **Exit check.** Run the same case on DT2 1.17 in the emulator and on a
@@ -262,6 +271,47 @@ physical DT2, with Em's hardware session arranged separately. Verify the
 fixture and settings, then compare echo spacing and decay against documented
 tolerances. Do not require matching PCM hashes across targets. Add more cases
 or a Workbench control only once this first case proves useful.
+
+**Emulator checkpoint.** [The reference CLI](../INSTRUMENTATION.md#replay-the-dt2-stock-delay-reference)
+generates the pinned WAV and records dry and wet takes using the same
+TypeScript case for both targets. Two consecutive DT2 1.17 emulator captures
+measured 64.901 ms echo spacing and 6.034 dB loss per repeat, and the Delay
+send returned to zero after each run. They also passed against the earlier
+64.047 ms baseline, with a 0.854 ms spacing difference from the prepared
+stock Delay setting and no measurable difference in decay. The USB audio
+bridge builds and lists inputs. The physical run and cross-target comparison
+remain open. The CLI validation is acoustic and does not read back the stock
+Delay knob values or the assigned sample hash.
+
+**Project preparation checkpoint.** The CLI-built session reopened in the
+session inspector. A disposable mount booted with its preselected debug and
+remote modules and played the seeded probe without a sample upload or panel
+assignment. After applying the listed stock Delay settings, two takes
+measured 64.755 ms and 6.034 dB per repeat. The earlier TypeScript baseline
+comparison passed. Hardware staging has host tests for new uploads, reuse,
+and collision refusal. Running it on the physical DT2 remains open.
+
+**View observer checkpoint.** With the 0.13.1 runtime and the debug module,
+the same event-driven regression opened and closed SETTINGS on the DT2
+1.17 and DN2 1.12 emulators, without a DSP or any screenshot matching.
+It checked the reported view against an independent read of the firmware's
+view stack. Host tests cover default-off, debug-level events, the initial
+snapshot, and refusal before input when the observer is unsupported.
+The observer samples the top of the stack. It cannot yet identify a
+particular dialog or a page change within an unchanged view.
+
+**Parameter observer checkpoint.** DT2 1.17 resolves `sampleSlot` in Track
+1's Sound and `delay.feedback` in the live FX array from the device file.
+In one disposable emulator, the sample pick, a panel edit, and two MIDI
+CCs emitted `VALUE_CHANGED` through the existing event listener. The
+snapshots matched independent reads of the live memory. The CLI can inspect
+both raw values and includes them in the capture report. DN2 and Syntakt
+do not yet advertise mappings for this observer.
+
+**Next readbacks.** Verify that the captured sample slot refers to the
+staged probe, and carry that identity into the report. Verify the remaining
+Delay parameters as needed for automated setup. The physical comparison
+still needs matched runtime artifacts and a working USB audio input.
 
 ## End result
 

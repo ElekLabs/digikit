@@ -157,6 +157,7 @@ import_table! {
     ("dk_debug_track_type", row dk_debug_track_type),
     ("dk_debug_selected_params", row dk_debug_selected_params),
     ("dk_debug_top_view", row dk_debug_top_view),
+    ("dk_debug_read_parameter", row dk_debug_read_parameter),
     ("dk_debug_setup", row dk_debug_setup),
     ("dk_device_track_count", row dk_device_track_count),
     ("dk_selected_track", row dk_selected_track),

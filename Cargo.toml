@@ -28,6 +28,7 @@ members = [
     "packages/emulator/sharc-stats",
     "packages/emulator/wasm-core",
     "packages/dkaddrmap",
+    "packages/dkaudio",
     "packages/dkprof",
     "packages/dksharc",
     "packages/dkneeds",
