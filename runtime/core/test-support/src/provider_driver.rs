@@ -123,9 +123,12 @@ impl<P: Provider<FakeCore> + 'static> RowBuilder<P> {
         self
     }
 
-    /// Start the owner object over `core` (`Provider::start`) and resolve the row for it, as the runtime does after `dk_provider_declare_row`.
+    /// Start the owner object over `core` (`Provider::start_in`, in its box) and resolve the row for it, as the runtime does after `dk_provider_declare_row`.
     pub fn start(self, core: &FakeCore) -> Result<Started, Status> {
-        let instance = Box::into_raw(Box::new(P::start(core)?)) as *mut c_void;
+        // started where it lives (`start_in`, as the file's `init` does): a service whose rows point into its own state must not be moved after `start`
+        let mut slot = Box::new(core::mem::MaybeUninit::<P>::uninit());
+        P::start_in(core, &mut slot)?;
+        let instance = Box::into_raw(slot) as *mut c_void;
         let parts: &'static [PartRef] = Box::leak(self.parts.into_boxed_slice());
         let row: &'static ProviderRow = Box::leak(Box::new(ProviderRow::new(
             dkrt_abi::provider::name_hash(self.name),
