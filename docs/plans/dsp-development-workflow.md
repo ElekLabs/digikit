@@ -118,6 +118,15 @@ same A01 trigs and the send values `[0, 0, 111, 0]` after loading Project 001.
 The CLI inspected the saved bundle and reported its attached capture without
 an emulator connection. The host tests cover Save As isolation separately.
 
+The listening A/B restarted both takes from that checkpoint and kept SHIFT,
+Spread, Rate, MIX, the pattern and sends fixed. The 34.8-second takes changed
+only Drift depth, from zero to ±3.02 Hz on a 16-second cycle. Worst FREQ SHIFT
+send cost rose from 5,592 to 5,631 emulated SHARC instructions per block.
+Neither capture recorded DSP overruns. Raw WAVs, level-matched copies, two
+Workbench captures and the JSON comparison are kept together under ignored
+`out/runs/`. A separate DN2 PLUCK rig run verified the render and hotspot
+reporting path for a machine. It was not a DN2 saved-session round trip.
+
 Defer automated project selection and in-app A/B auditioning until the saved
 session workflow sees use. If an A/B view would save repeated work, add it to
 the existing Analyzer rather than adding a panel. Keep Performance focused

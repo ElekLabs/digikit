@@ -13,6 +13,9 @@ Two forms:
 
 Style: [docs/sharc/style.md](../../docs/sharc/style.md), in particular section 5a (rules from the manuals).
 
+New module? Start with the [DSP development loop](../../docs/MODULE-AUTHORING.md#dsp-development-loop)
+for scaffolding, rig tests, opt-in tracing and checking a saved capture.
+
 ## Profile a module and compare two builds
 
 Start with a case that plays a known signal on the SHARC rig. Use ordinary function labels and keep the

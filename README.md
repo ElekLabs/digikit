@@ -126,7 +126,8 @@ Start with `mise run module:new -- machine AUTHOR/NAME` (or `fx`, `service`) and
 
 ### Further reading
 
-- [Writing modules](docs/MODULE-AUTHORING.md), the [SDK](sdk/README.md) and the [module reference](modules/README.md)
+- [Writing modules](docs/MODULE-AUTHORING.md) and the [DSP development loop](docs/MODULE-AUTHORING.md#dsp-development-loop)
+- The [SDK](sdk/README.md) and the [module reference](modules/README.md)
 - [Patching, flashing and recovery in detail](docs/PATCHING.md)
 - [Architecture](docs/ARCHITECTURE.md): the layers, the interfaces between them, device data, profiling and the emulator boundary
 - [Developing digikit](docs/DEVELOPMENT.md): [previews](docs/DEVELOPMENT.md#visible-preview), [fast iteration](docs/DEVELOPMENT.md#fast-iteration-runtime-ui-and-modules), analysis tools, repository layout
