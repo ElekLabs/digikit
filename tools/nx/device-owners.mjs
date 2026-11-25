@@ -1,6 +1,6 @@
-// Ownership-based device test selection of the merge gate (`test-subset.mjs --gate`, docs/TESTING.md "Area-based device selection").
+// Ownership-based device test selection of the merge gate (`test-subset.mjs --gate`, docs/TESTING.md "Nx gate").
 // A device test is a mechanism test on fixtures (owned by the mechanism's project) or a behaviour test (owned by its service or module).
-// A changed file selects tests by what owns it, with no area tags and no list of ours:
+// A changed file selects tests by what owns it, with no tags and no list of ours:
 //   1. A device file (devices/<stem>.toml, its companions) names a device: the halves of that device only (`devices` of the result).
 //   2. A firmware declaration `ports/fw/<point>.toml` touches the projects of its `users`.
 //   3. Any other file belongs to the project with the deepest root containing it (Nx's own rule, from the `nx graph` nodes: nested

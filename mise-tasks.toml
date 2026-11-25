@@ -154,7 +154,7 @@ description = "Explain the default test selection (affected plan, then the area 
 
 ["test:subset"]
 run = "node tools/nx/test-subset.mjs"
-description = "Device tests of record tags (S:fx C:loading ...) and, with --base REF, of the areas of the changed paths plus gate-device-smoke; gate-smoke and gate-pins when affected selects them: prints the Nx targets; add --run to run them (DIGI_EMU_SLOTS honoured)"
+description = "Device tests of the named Nx projects and of the projects that name them (core/runtime-lfo-tests ...) and, with --base REF, of the projects that own the changed paths plus gate-device-smoke; gate-smoke and gate-pins when affected selects them: prints the Nx targets; add --run to run them (DIGI_EMU_SLOTS honoured)"
 
 ["test:full"]
 run = "node tools/nx/gate.mjs --tier full"

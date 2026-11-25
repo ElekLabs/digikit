@@ -1513,7 +1513,7 @@ DENAME_ALLOWED = (
     ("runtime/core/src/rs/src/package/handlers/", "host tests of handlers.rs"),
     (
         "runtime/core/owners.toml",
-        "the area tags of the runtime crates, including the service crates linked into it",
+        "the owners of the runtime crates (patchkit owners), including the service crates linked into it",
     ),
     (
         "runtime/core/project.json",
