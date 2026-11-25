@@ -22,7 +22,7 @@ parameter names.
 
 ## Fix **[D]**
 
-An added machine has no sample to show (its knobs are its own parameters), so **both pages are the knob page**. `core/machines` (Digitakt II) hooks the test
+An added machine has no sample to show (its knobs are its own parameters), so **both pages are the knob page**. `core/rows` (Digitakt II) hooks the test
 at `SourcePageView::vfunc_4 + 0x22` (`addq.l #4,SP; tst.b D0; bne.w knob_page`, 8 bytes, after `jsr FUN_4005b076`): `mf_srcpage` takes the knob-page branch also when
 `FUN_4005f6bc(view)` is `>= machines.first` (signed, so -1 without a track stays on the stock path). Types 0 to 6 fall through to the stock code
 (the frames of SAMPLE, WERP and REPITCH are still the sample view, checked). Data: three anchor rules in `modules/core/adapters/machines/module.toml`
@@ -40,8 +40,8 @@ Tests kept:
   `out/runs/lanes/r1-pages/`.
 - Unit test `test_src_page_hook_draws_the_knob_page_for_added_types_only` in `tests/patchkit/test_pk_machines_fw.py` (native core, a stand-in for `FUN_4005f6bc`): types 0, 3, 6 and -1 take the stock path, 7, 18 and 23
   the knob page, a true stock condition stays; the view register and the stack are as the stock test leaves them.
-- Moved by the hook (section 3 only): every Digitakt II image with `core/machines`; the six DT2 pins of `packages/patchkit/tests/typed.rs` are updated (the DN2 pin is
-  the same). Smoke cells `dt2-1.17:core/machines+test/xslice` and `...+digikit/pluck` pass with unchanged frame goldens (31 checks each); `equiv-dyn-pluck` on
+- Moved by the hook (section 3 only): every Digitakt II image with `core/rows`; the six DT2 pins of `packages/patchkit/tests/typed.rs` are updated (the DN2 pin is
+  the same). Smoke cells `dt2-1.17:core/rows+test/xslice` and `...+digikit/pluck` pass with unchanged frame goldens (31 checks each); `equiv-dyn-pluck` on
   dt2-1.17 passes (PCM equal after the onset alignment as before). Images built before this change (rung C) do not have the fix: rebuild.
 
 ## One SRC page for an added machine (lane srcpage, 2026-10-19) [C]
@@ -54,7 +54,7 @@ machine has one SRC page**, unless it has enough parameters to spill onto a seco
   The page dots read the count (`SourcePageView::vfunc_4` `0x40016eac` at `0x40017082`; and inside the shared `ParameterPageView::vfunc_4` `0x4006b0b0` at `0x4006b1ce`, which draws page 0 of the SRC view
   through `jsr vfunc_4` at `0x400170ae`); the dots are drawn only if the count is more than 1 (`FUN_4006b02e`, 7 px pitch, right edge, pixel x 496 to 511, y 120 to 171).
   The page keys are UP and DOWN (key codes 0xb, 0xc) and a second tap of SRC: all go through the shared `ParameterPageView::vfunc_2` (`0x4006cf20`), which flips only when the vector holds more than one entry.
-- **Hook** **[D]**: `core/machines` hooks the **first test of `SourcePageView::vfunc_4`**, `0x40016ebc` (function + 0x10, 8 bytes `4aaa0090 670001e8` = `tst.l (0x90,A2); beq.w 0x400170aa`, displaced = drop) with `mf_srcpage`.
+- **Hook** **[D]**: `core/rows` hooks the **first test of `SourcePageView::vfunc_4`**, `0x40016ebc` (function + 0x10, 8 bytes `4aaa0090 670001e8` = `tst.l (0x90,A2); beq.w 0x400170aa`, displaced = drop) with `mf_srcpage`.
   For `FUN_4005f6bc(view)` (the track's type, signed) `>= machines.first` it clears view+0x90 and sets view+0x80 to begin + 4 (one entry), then takes the knob-page branch `0x400170aa`.
   For any other type (0 to 6 and -1) it puts the vector back to two entries if it has exactly one, then runs the stock test (page 0 to the knob page, otherwise on at `0x40016ec4`).
   One hook covers the dots (both draw sites read the vector), the page keys (a one-entry vector does not flip) and the page index; it needs no change of shared code. A key that arrives between a track change and the next
@@ -77,7 +77,7 @@ machine has one SRC page**, unless it has enough parameters to spill onto a seco
 
 | Table or test | Where | Types 7 and up | **[D]** / **[O]** |
 | --- | --- | --- | --- |
-| machine list order, rank pairs, group, count bounds | list builder `FUN_40052a08`, comparator | `core/machines` rows (`mf_list_buf`, `mf_rank_buf`), reserved rows listed in type order, shown only when the name is set | **[D]** (findings 02, 30) |
+| machine list order, rank pairs, group, count bounds | list builder `FUN_40052a08`, comparator | `core/rows` rows (`mf_list_buf`, `mf_rank_buf`), reserved rows listed in type order, shown only when the name is set | **[D]** (findings 02, 30) |
 | descriptor dispatch (`FUN_400c898a`, nine knob codes, names) | machine rows, `mf_dispatch` | the row | **[D]** |
 | name, short name, header hint (three accessors, 12-byte rows) | `mf_names` | row copied from `clone_of` | **[D]** |
 | permission mask, per-type byte (6 sites), persistence bound `(u8)(type+1) < 8+N` | `mf_permit`, `mf_pertype`, `cf.machines.persist` | rows to type 23, bound 8+17 | **[D]** |
@@ -98,7 +98,7 @@ was read; an empty caller list is not evidence for the functions that reach the 
 - Also copied unchanged per track: blocks of the sound array (frame offsets `+0xda`, `+0xfa`, `+0x116`, `+0x130`, 20, 28, 26 and 10 bytes), which include the engine slots 25 to 34.
 - **The only type-dependent extra is MANUAL SLICE's slice table** (frame words `+0xee .. +0xf8`), sent for type 6 (no machine clones it). A clone of SAMPLE, like the pluck, gets none.
 - Type-dependent data is selected **on the DSP**: `FUN_001c24e9` indexes the table at `0x2567c0` with the type (`DM 0x255970 + 2t` is the DSP's copy, set after the first
-  frame that follows a trig) and stores the word as the per-track selector (`track_base + 0x4c`). For types 16 to 23 `core/machines` relocated that table and wrote 0 (the clone of the
+  frame that follows a trig) and stores the word as the per-track selector (`track_base + 0x4c`). For types 16 to 23 `core/rows` relocated that table and wrote 0 (the clone of the
   gap or reserved row), so the DSP chooses the SAMPLE path for the track; `core/dsp-voice` then looks at the type for its own dispatch. Stock words 8 and up are loader data pointers (finding 02), so a table
   that was **not** relocated would hand a pointer to the selector. The rung C image's plan (`out/patch/rungC-dt2-1.17.plan.json`) has `mf_selector` in `dsp.l2` with 0x60 bytes = 24 words (7 stock and 17 appended rows,
   `machines.count` 17), so types up to 23 are covered **[D]** (static; the table's contents on silicon are what lane b reads).

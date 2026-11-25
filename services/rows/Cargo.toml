@@ -3,7 +3,7 @@ name = "dkrt-svc-rows"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "What machines.dks and fx.dks share: the parameter row writers (each writes only the rows its adapter reserves), the dynreg_info words and the plumbing of the builder calls"
+description = "What machines.dks and fx.dks share: the parameter row writers (each writes only the rows its adapter reserves), the rows_info words and the plumbing of the builder calls"
 
 [package.metadata.patchkit]
 # Preserve ColdFire object bytes after moving the crate from services/params.

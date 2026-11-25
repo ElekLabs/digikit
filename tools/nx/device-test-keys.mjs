@@ -35,7 +35,7 @@ const SHARED_READS = [
   // upload-kit.ts reads the runtime version and the `since` of the imports
   { file: 'sdk/sdk.toml', readers: ['tests/regression/runtime/upload-kit.ts'] },
   // synth.ts reads the machine types
-  { file: 'image-modules/points/machines/types.toml', readers: ['tests/regression/runtime/synth.ts'] },
+  { file: 'runtime/platform/rows/types.toml', readers: ['tests/regression/runtime/synth.ts'] },
 ];
 export const TEST_READS = [
   // fixture files

@@ -20,7 +20,7 @@ Python API for the scenario suite (lane C builds on it; everything below is impo
 
     from tools.patchkit import pk_dkrt_boot as B
     env = B.Env("dt2-1.17", work_dir)                  # the files of one image: folder, cards, binaries
-    img = env.build_image("core/runtime,core/dynreg,core/dyndsp")   # a patched firmware for the static module set S -> Img
+    img = env.build_image("core/runtime,core/rows,core/dyndsp")   # a patched firmware for the static module set S -> Img
     env.pack("test/sine", "sine-d.dkm")           # a .dkm into the card folder (digikit/modules/)
     card = env.card(["modules/sine-d.dkm"], counter=0, seq=1)      # a card image holding that selection record
     with env.boot(img, card, tag="a") as rig:           # a coupled daemon, cold-booted on that card: the boot hook has run
@@ -110,7 +110,7 @@ SETTLE_MS = int(
     os.environ.get("DIGIKIT_SETTLE_MS", "1500")
 )  # emulated ms the first UI-loop passes run before a scenario looks (wait_dsp then waits for a module's DSP part)
 E_LOADING = 1
-RT = "core/runtime,core/dynreg,core/dyndsp"
+RT = "core/runtime,core/rows,core/dyndsp"
 FREE_TYPE = M.FREE_TYPE
 
 

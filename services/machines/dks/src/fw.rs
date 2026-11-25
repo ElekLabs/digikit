@@ -4,7 +4,7 @@
 //! the calls are no-ops with the neutral answer.
 use core::ptr::read_volatile;
 use dkrt_abi::fw::{Fw, MODE_KEYS};
-use dkrt_svc_machines::{nativepage, paramapi};
+use dkrt_svc_machines::paramapi;
 use dkrt_svc_rt::ImportCore;
 
 pub struct DkFw;
@@ -101,7 +101,27 @@ impl Fw for DkFw {
 /// The hook entry of the machine page's key event: the click detector of the owner. Without an owner (before `init` made it, after `fini`) the event passes.
 #[no_mangle]
 pub unsafe extern "C" fn dks_page_key(view: *const u8, ev: *const u8) {
-    crate::DK_SVC_OWNER.with(|m| m.clicks().page_key(&ImportCore, &DkFw, view, ev));
+    page_key!(&DkFw, view, ev);
+}
+
+/// The body of the key hook, written once for the firmware entry above (its closures stay inside `dks_page_key`, so the committed object does not change with a host seam) and for
+/// `page_key_with`.
+macro_rules! page_key {
+    ($fw:expr, $view:ident, $ev:ident) => {{
+        let Some(Some(enc)) = crate::DK_SVC_OWNER.with(|m| m.clicks().key_click($view, $ev)) else {
+            return;
+        };
+        // outside the owner: the code hook looks the native page up in it
+        let code = $fw.param_code($view as usize, enc);
+        crate::DK_SVC_OWNER.with(|m| m.clicks().queue_click(&ImportCore, $fw, $view, code));
+    }};
+}
+use page_key;
+
+/// The key hook over any `Fw` (a host build only: the host test of the file gives one whose code mapper enters the owner, as the page's code hook does).
+#[cfg(not(target_arch = "m68k"))]
+pub unsafe fn page_key_with<F: Fw>(fw: &F, view: *const u8, ev: *const u8) {
+    page_key!(fw, view, ev);
 }
 
 /// The hook entry of the machine page's turn: the turn ends the click flow (the owner), then the native handler of the page runs outside the owner: nonzero when a native page
@@ -109,9 +129,28 @@ pub unsafe extern "C" fn dks_page_key(view: *const u8, ev: *const u8) {
 #[no_mangle]
 pub unsafe extern "C" fn dks_page_turn(view: *const u8, ev: *const u8) -> u32 {
     match crate::DK_SVC_OWNER.with(|m| m.clicks().page_turn_input(view, ev)) {
-        Some(()) => nativepage::turn(&ImportCore, view, ev),
+        Some(()) => crate::native::turn(view, ev),
         None => 0,
     }
+}
+
+/// The copy at the end of the firmware's machine list getter (C ABI `copy(begin, end, dest)`, result d0 = the end of the copy): the `jsr` of a device with a slot map is pointed here by a patch
+/// (`list_copy_target`), the hook `mf_copy` of a device with page rows calls it. It leaves out the reserved machine rows that have no name; it reads the registry words bound by `start` and
+/// needs no owner.
+#[no_mangle]
+pub unsafe extern "C" fn dks_list_copy(begin: u32, end: u32, dest: u32) -> u32 {
+    dkrt_svc_machines::list::copy_listed(
+        &ImportCore,
+        &dkrt_svc_machines::list::Reserved::bound(),
+        begin,
+        end,
+        dest,
+    )
+}
+
+/// The value of the patch that points the list copy of a device with a slot map here (`service!`).
+pub fn list_copy_target(_: &dkrt_svc_machines::machines::Machines) -> u32 {
+    dks_list_copy as usize as u32
 }
 
 /// `dk_param_get` (an `[[export]]` of the file): the value of a parameter word in the flow of a click. Without an owner there is no flow (`E_STATE`).

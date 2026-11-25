@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { cloneFile, type Device } from '@digi/test-support';
 import { writeIdFile } from './card-cache.ts';
-import { cardStore, deviceProfile, expansionRegion, uploadStore } from './device-data.ts';
+import { cardStore, deviceProfile, expansionRegion, kitAreas, uploadStore } from './device-data.ts';
 import type { RuntimePlan } from './runtime-plan.ts';
 
 /** Write-watch and card-overlay safety of the runtime proofs. */
@@ -14,13 +14,6 @@ const SECTOR = 512;
 const RECORD = 8 + 64 + SECTOR;
 // Sectors of one settings copy (tools/device/dkproto.py SETTINGS_SECTORS).
 const SETTINGS_SECTORS = 16;
-// Kit-library sector ranges of the firmware (hi exclusive), allowed by the fx-kit and fx-routes policies.
-export const KIT_AREAS: Record<Device, [number, number][]> = {
-  dt2: [[0x16000, 0x17000]],
-  dn2: [[0x2000, 0x2100]],
-  st: [],
-};
-
 export type SafetyPolicy = 'default' | 'fx-kit' | 'fx-routes';
 
 export function* overlayRecords(blob: Buffer) {
@@ -81,12 +74,21 @@ function overlayOf(file: string): Records {
   return hit.records;
 }
 
+const blobs = new WeakMap<Buffer, Records>();
+
+/** The records of an overlay blob by sector, parsed once for each blob: a reader asks for one sector at a time (`slotImage` asks for thousands). */
+function blobRecords(blob: Buffer): Records {
+  let records = blobs.get(blob);
+  if (!records) {
+    records = new Map(Array.from(overlayRecords(blob), (r) => [r.sector, r]));
+    blobs.set(blob, records);
+  }
+  return records;
+}
+
 /** The sectors FIRST on of the card the guest sees: BUF holds the image bytes, the `overlay.bin` next to it and then the optional EXTRA overlay blob go over them. */
 export function layOver(buf: Buffer, first: number, card: string, extra?: Buffer): void {
-  const records = [
-    overlayOf(overlayFile(card)),
-    new Map(Array.from(overlayRecords(extra ?? Buffer.alloc(0)), (r) => [r.sector, r])),
-  ];
+  const records = [overlayOf(overlayFile(card)), extra ? blobRecords(extra) : new Map()];
   for (let n = 0; n * SECTOR < buf.length; n++)
     for (const map of records) {
       const r = map.get(first + n);
@@ -237,7 +239,7 @@ function runtimePolicy(device: Device, name: SafetyPolicy, cardServices: readonl
   const store = cardStore(device);
   return {
     name,
-    firmware_areas: name === 'default' ? [] : KIT_AREAS[device],
+    firmware_areas: name === 'default' ? [] : kitAreas(device),
     store_extra: name === 'fx-routes' || cardServices.includes('machines') ? [store.setA, store.setB] : [],
   };
 }

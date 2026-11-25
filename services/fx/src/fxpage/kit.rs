@@ -5,7 +5,7 @@ use core::ptr::{addr_of_mut, read_volatile};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::iw;
 
-/// Kit loads and kit initialisations the hooks of `core/fxpages` have done (their counters move when a kit's rows are replaced).
+/// Kit loads and kit initialisations the hooks of the effect pages have done (their counters move when a kit's rows are replaced).
 #[inline]
 pub(super) fn hook_runs() -> u32 {
     unsafe {
@@ -14,7 +14,7 @@ pub(super) fn hook_runs() -> u32 {
     }
 }
 
-/// Put the mark of `core/fxpages` into the kit array `arr`: its effect rows hold values.
+/// Put the mark of the effect pages into the kit array `arr`: its effect rows hold values.
 #[inline]
 pub(super) unsafe fn mark<C: CoreApi>(core: &C, inf: *const u32, arr: u32) {
     core.wr16(

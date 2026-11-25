@@ -17,9 +17,8 @@ pub(super) const ZERO_PASSES: u8 = 3;
 pub(super) const SOUND_ARRAY: u32 = 0x14;
 pub(super) const KEY_MAX: usize = 48;
 
-/// Words of `fxpages_info` (byte offset / 4) from version 2.
+/// Words of the bound table of the effect pages (`fxpage::w`; byte offset / 4).
 pub(super) mod w {
-    pub const VERSION: usize = 1;
     pub const TPL_PERCENT: usize = 16;
     pub const CELLS: usize = 39;
     pub const ROW: usize = 40;

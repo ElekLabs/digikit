@@ -1,4 +1,4 @@
-"""The run-time registry (core/dynreg, the runtime's registry.rs, `patchkit pack` of a dynamic module): machines and
+"""The run-time registry (core/rows, the runtime's registry.rs, `patchkit pack` of a dynamic module): machines and
 parameters that a `.dkm` adds at run time (docs/design/digikit-registry.md, finding 30).
 
 The committed objects are current; the packer lowers a dynamic module's typed sections into `register` records
@@ -15,15 +15,15 @@ ROOT = REPO_ROOT
 from tools.patchkit import patchkit as front_end  # noqa: E402
 from tools.patchkit import pk_dkrt, pk_toolchains  # noqa: E402
 
-DYNREG = ROOT / "image-modules/points/dynreg"
+MACHINES = ROOT / "runtime/platform/rows"
 RUNTIME = ROOT / "runtime/core"
 
 
 def test_committed_objects_are_current_and_plain_coldfire():
     for dev in ("dt2", "dn2"):
-        obj = json.loads((DYNREG / f"build/dynreg-{dev}.dko.json").read_text())
+        obj = json.loads((MACHINES / f"build/machines-{dev}.dko.json").read_text())
         assert {r["type"] for r in obj["relocs"]} <= {"cf.32", "cf.pc32", "cf.pc16"}
-    front_end.build_module(DYNREG, check=True)
+    front_end.build_module(MACHINES, check=True)
     if pk_toolchains.codegen_gcc_ready():
         front_end.build_module(RUNTIME, check=True)
 

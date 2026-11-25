@@ -1979,7 +1979,7 @@ DSP CPU per audio s and DSP instructions per audio s in millions:
   six images is bit-identical before and after (sha256 of the window), stock scenarios keep their pins; stock cost
   +0.7 % (coupled_ab B/A 1.007 and 1.008, tf-dry-hold and tf-br-127).
 - **Remaining cost (not fixed).** (a) The hook word `0x1c4ecf` is in the hashed range `0x1c4e8d..0x1c5048` and the
-  `selector_table` words of core/machines in `0x1c24e9..0x1c2acf`; every region with an entry in a changed range is
+  `selector_table` words of core/rows in `0x1c24e9..0x1c2acf`; every region with an entry in a changed range is
   barred (`verify_code`: 6 regions for the first range, including the stock sample renderer `0x1c4f81`, the arm
   routine `0x1c4eaf` and `0x1c6b07`), so the stock voice code runs interpreted: +10 M interpreted instructions per
   audio s for the hook alone (+0.7 s), +40 M with the selector patch (+3 s). Ceiling, measured with an engine run

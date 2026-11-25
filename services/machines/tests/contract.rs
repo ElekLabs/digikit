@@ -1,6 +1,6 @@
 //! The service contract suite (`dkrt_test_support::contract`) for the machines service on both profiles. The call lists below stand for the shared fixture
 //! `tests/fixtures/modules/sine` (`src/module.c`: one machine with a page of one parameter) and a second machine with another key: each makes the builder calls through
-//! the service's `build::*`. The image tables are those of the device profiles (`Profile` of `tests/build.rs`) as `core/dynreg` writes them, over the fake core's memory.
+//! the service's `build::*`. The image tables are those of the device profiles (`Profile` of `tests/build.rs`) as `core/rows` writes them, over the fake core's memory.
 use core::ptr::addr_of;
 use dkneeds::keys::name_hash;
 use dkrt_abi::core_api::CoreApi;
@@ -15,7 +15,7 @@ use dkrt_svc_machines::dsp::dyndsp;
 use dkrt_svc_machines::machines::Machines;
 use dkrt_svc_machines::records::{mach_owner, types_of};
 use dkrt_svc_machines::rows::{self, vrows, VoiceRows};
-use dkrt_svc_rows::dynreg::{w, RegState};
+use dkrt_svc_rows::rows_info::{w, RegState};
 use dkrt_test_support::contract::{Dsp, Fixture, Init, Late, Lifecycle, Module, Rows};
 use dkrt_test_support::{
     provider_contract, subject, Driver, FakeCore, Provided, Recipe, RowBuilder,
@@ -28,7 +28,7 @@ mod stubs;
 // the service file's source: its `service!` call is the one place that lists the parts
 #[path = "../dks/src/lib.rs"]
 pub mod file;
-pub use file::{builder, fw, DK_SVC_OWNER};
+pub use file::{builder, fw, native, DK_SVC_OWNER};
 
 /// The registry state of the owner the suite's driver started: the owners of the parameter and page rows, and the strings the firmware's rows point at. The owner lives as long as the
 /// `Lifecycle` of the test that calls this, and nothing changes it while the test reads.
@@ -129,7 +129,6 @@ const DYN_TYPE_FIRST: u32 = DT2.dyn_type_first;
 const KEY_A: u32 = 0x00a1_0100;
 const KEY_B: u32 = 0x00b2_0200;
 /// The key of the module that is refused while its records apply.
-const KEY_L1: u32 = 0x00c3_0300;
 
 fn c(s: &'static [u8]) -> *const u8 {
     assert_eq!(s.last(), Some(&0));
@@ -164,18 +163,6 @@ fn sine_alt(i: &mut Init) {
         let l = build::page_add_param(i.core, p, c(b"Depth\0"), c(b"DEPTH\0"), 33);
         build::param_range(i.core, l, 5, 90);
     }
-}
-
-/// A machine with a canvas page: its machine row, page and parameter rows are written, then the registration of the native page in the firmware fails (the call
-/// of the image answers an error), which `apply_record` reports after `apply` wrote the rows.
-fn native_page_fails(i: &mut Init) {
-    native_page(i);
-    i.core.fw_result.set((-5i32) as usize);
-}
-
-/// The same machine, whose native page registers.
-fn native_page_ok(i: &mut Init) {
-    native_page(i);
 }
 
 fn native_page(i: &mut Init) {
@@ -317,15 +304,15 @@ fn keys_b() -> KeysCopy {
 fn keys_pinned() -> KeysCopy {
     keys_of(&[DYN_TYPE_FIRST])
 }
-/// Two more pinned numbers (hash 0), in the run-time range, in no map entry.
+/// Three more pinned numbers (hash 0), in the run-time range, in no map entry.
 fn keys_pinned_other() -> KeysCopy {
     keys_of(&[DYN_TYPE_FIRST + 5])
 }
 fn keys_pinned_third() -> KeysCopy {
     keys_of(&[DYN_TYPE_FIRST + 6])
 }
-fn keys_late() -> KeysCopy {
-    keys_of(&[KEY_L1])
+fn keys_pinned_last() -> KeysCopy {
+    keys_of(&[DYN_TYPE_FIRST + 7])
 }
 /// A keys table without the machine's row: the commit refuses the builder calls (`E_DECL_ID`).
 fn keys_none() -> KeysCopy {
@@ -335,11 +322,10 @@ fn keys_none() -> KeysCopy {
 const P_TABLE: u32 = 0x10_0000;
 const P_FIRST: u32 = 300;
 
-/// The words of `dynreg_info` the machines service reads, for the profile of `core.device`, and the voice rows of `dyndsp_info`.
+/// The words of `rows_info` the machines service reads, for the profile of `core.device`, and the voice rows of `dyndsp_info`.
 fn image(core: &mut FakeCore) {
     let dn2 = core.device == DN2.id;
     let mut t = vec![0u32; 96];
-    t[w::VERSION] = 3;
     t[w::DEVICE] = core.device;
     t[w::M_ROWS] = 0x30_0000;
     t[w::M_ROW_SIZE] = 0x100;
@@ -370,6 +356,7 @@ fn image(core: &mut FakeCore) {
     t[w::SPEC + 2] = 0x102;
     t[w::KNOBS] = 8;
     t[w::RESERVE_TEMPLATE] = 7;
+    t[w::LIST_STOCK] = 0x4700_0000;
     if dn2 {
         // the Digitone II keeps a machine's knobs in page rows
         t[w::SLOT_BASE] = 25;
@@ -405,7 +392,7 @@ fn image(core: &mut FakeCore) {
         [0xcc, 0xd1, 0x47, 0x32, 0xca, 0xcb]
     };
     t[w::P_TPL..w::P_TPL + 6].copy_from_slice(&tpl);
-    core.set_dynreg(t);
+    core.set_rows_info(t);
     // the per-type tables of the firmware hold the free row's words for every type, and the clone's (type 3) are other: a machine's rows take the clone's words,
     // and a release gives the free row's back
     {
@@ -426,17 +413,6 @@ fn image(core: &mut FakeCore) {
     }
     // `dyndsp_info`: the voice rows start at row 2 of the DSP's table and four are free
     core.set_dyndsp(0x10_0000, 2, 4);
-    // `machines_info`: the adapter's native page register is bound (a call of it is a firmware call the fake answers)
-    let mut mi = vec![0u32; dkrt_svc_machines::info::WORDS];
-    mi[dkrt_svc_machines::info::w::MAGIC] = dkrt_svc_machines::info::MAGIC;
-    mi[dkrt_svc_machines::info::w::VERSION] = dkrt_svc_machines::info::VERSION;
-    // the owner binds the table at its start: the device it runs as, and the two words the hooks cannot do without
-    mi[dkrt_svc_machines::info::w::DEVICE] = core.device;
-    mi[dkrt_svc_machines::info::w::ENSURE] = 0x4000_1000;
-    mi[dkrt_svc_machines::info::w::ROWS] = 0x4200_0000;
-    mi[dkrt_svc_machines::info::w::N_REGISTER] = 0x6000_0010;
-    mi[dkrt_svc_machines::info::w::N_REGISTER_V2] = 0x6000_0020;
-    core.info_tables.push((name_hash("machines_info"), mi));
 }
 
 /// The service's own view: who owns the machine, parameter and page rows, and the type numbers each owner has.
@@ -624,11 +600,8 @@ fn fixture(device: u32) -> Fixture {
             ),
         ],
         bad: module(2, keys_none, sine, 1),
-        bad_late: Some(Late {
-            bad: module(3, keys_late, native_page_fails, 1),
-            same_but_ok: module(3, keys_late, native_page_ok, 1),
-            beside_b: true,
-        }),
+        // no step after the rows can refuse a module any more: the native page table takes every record `check` accepted (the image's adapter could answer an error)
+        bad_late: None,
         rules: true,
         parked_knobs: None,
         survives: None,
@@ -952,7 +925,7 @@ fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_whe
     let f = fixture(DT2.id);
     let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
     let tick = || unsafe { l.driver.tick(&l.core, tick_phase::LAST) };
-    // every row is a placeholder: the boot's numbers (A, B and the two refused modules) are absent
+    // every row is a placeholder: the boot's numbers (A, B and the refused module) are absent
     tick();
     let held = dkrt_svc_machines::assign::map_used() as usize;
     assert_eq!(rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(), held);
@@ -961,6 +934,7 @@ fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_whe
     for (rec, keys) in [
         (2usize, keys_pinned_other as fn() -> KeysCopy),
         (3, keys_pinned_third),
+        (4, keys_pinned_last),
     ] {
         let m = module(rec as u32, keys, sine, 3);
         assert_eq!(
@@ -971,7 +945,7 @@ fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_whe
     }
     assert_eq!(
         rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
-        held.min(free - 2)
+        held.min(free - 3)
     );
     // the number that lost its row: the gap row and an error event
     let gave: Vec<(u32, u32)> = l
@@ -990,7 +964,7 @@ fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_whe
         .collect();
     assert_eq!(
         gave.len(),
-        held + 2 - free,
+        held + 3 - free,
         "one event for each row a load took"
     );
     assert_eq!(gave[0].1, 1, "reason: a real load took the row");
@@ -1001,16 +975,17 @@ fn a_real_load_takes_the_row_of_a_placeholder_and_the_number_is_parked_again_whe
     tick();
     assert_eq!(
         rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
-        held.min(free - 2),
+        held.min(free - 3),
         "no row is free: the number stays without one"
     );
     // a module goes: its row is free, and the number is parked again at the next pass
-    l.unload(3);
+    l.unload(4);
     tick();
     assert_eq!(
         rows_owned_by(&l.core, PLACEHOLDER_OWNER).len(),
-        held.min(free - 1)
+        held.min(free - 2)
     );
+    l.unload(3);
     l.unload(2);
 }
 
@@ -1119,7 +1094,7 @@ fn the_parked_rows_of_absent_numbers_are_bounded_by_the_free_rows_and_no_pass_ru
 /// The machine row of the first run-time type: (its list name is empty, its long name reads MISSING, own_dsp is 1).
 fn missing_row(core: &FakeCore) -> (bool, bool, bool) {
     let s = &reg().s;
-    let inf = unsafe { dkrt_svc_rows::dynreg(core) };
+    let inf = unsafe { dkrt_svc_rows::rows_info(core) };
     let (empty, own, name) = unsafe {
         let row = dkrt_abi::mem::iw(inf, w::M_ROWS)
             + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))
@@ -1344,7 +1319,7 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
         "the descriptor's long name is a firmware string of the text"
     );
     assert_eq!(rep(&s.rep_short[0]), (4, "MISS".to_string()));
-    let inf = unsafe { dkrt_svc_rows::dynreg(&l.core) };
+    let inf = unsafe { dkrt_svc_rows::rows_info(&l.core) };
     let row = unsafe {
         dkrt_abi::mem::iw(inf, w::M_ROWS)
             + (DYN_TYPE_FIRST - dkrt_abi::mem::iw(inf, w::M_FIRST))
@@ -1356,8 +1331,8 @@ fn a_machine_row_unloaded_in_a_reload_shows_missing_and_plays_no_stock_sound() {
     );
 }
 
-/// The machine selection view caches the machine list: a reload rebuilds it through `dynreg_info` words 48 (the variable that holds the view) and 49 (the builder), once
-/// the module's rows are in the DSP (`on_loaded`), and a load outside a reload does not.
+/// The machine selection view caches the machine list: a reload rebuilds it through the info table `machine_view` of core/ui (word 0: the variable that holds the view, word 1: the
+/// builder), once the module's rows are in the DSP (`on_loaded`), and a load outside a reload does not.
 #[test]
 fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
     use std::cell::RefCell;
@@ -1365,15 +1340,12 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
     const VAR: u32 = 0x7000_0000;
     const BUILD: u32 = 0x4006_0f50;
     let calls: Rc<RefCell<Vec<(u32, Vec<usize>)>>> = Rc::default();
-    let table = |var: u32, build: u32| {
-        let mut t = vec![0u32; 64];
-        t[w::VIEW_VAR] = var;
-        t[w::VIEW_BUILD] = build;
-        t
-    };
+    let table = |var: u32, build: u32| vec![var, build];
     let run = |words: Vec<u32>, view: u32, phase: u32| {
         let mut core = FakeCore::new();
-        core.set_dynreg(words);
+        core.set_rows_info(vec![0u32; 112]);
+        core.info_tables
+            .push((dkneeds::keys::name_hash("machine_view"), words));
         core.mem.borrow_mut().insert(VAR, view);
         core.live_op.set(phase);
         let log = calls.clone();
@@ -1403,6 +1375,41 @@ fn the_machine_list_is_rebuilt_at_the_end_of_every_reload() {
     assert!(
         run(table(0, 0), 0x1234_5678, 1).is_empty(),
         "an image without the hook has no view variable or builder"
+    );
+}
+
+/// `stop` builds the cached machine list again after the loader restored the list patches and the rank hook: the view's builder gets the stored view; with no view (or an image
+/// without the hook that remembers it) nothing is called.
+#[test]
+fn stop_builds_the_cached_machine_list_again() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    const VAR: u32 = 0x7000_0000;
+    const BUILD: u32 = 0x4006_0f50;
+    let run = |var: u32, build: u32, view: u32| {
+        let calls: Rc<RefCell<Vec<(u32, Vec<usize>)>>> = Rc::default();
+        let mut core = FakeCore::new();
+        core.set_rows_info(vec![0u32; 112]);
+        core.info_tables
+            .push((dkneeds::keys::name_hash("machine_view"), vec![var, build]));
+        core.mem.borrow_mut().insert(VAR, view);
+        let log = calls.clone();
+        *core.on_call.borrow_mut() = Some(Box::new(move |a, args| {
+            log.borrow_mut().push((a, args.to_vec()));
+            0
+        }));
+        Provider::stop(&mut Machines::new(), &core);
+        let got = calls.borrow().clone();
+        got
+    };
+    assert_eq!(
+        run(VAR, BUILD, 0x1234_5678),
+        vec![(BUILD, vec![0x1234_5678])]
+    );
+    assert!(run(VAR, BUILD, 0).is_empty(), "the view does not exist yet");
+    assert!(
+        run(0, 0, 0x1234_5678).is_empty(),
+        "no view variable or builder"
     );
 }
 
@@ -1487,4 +1494,82 @@ fn the_dsp_checks_of_a_reload_leave_the_module_being_replaced_out_of_used_by_ano
     );
     l.unload(0);
     l.unload(1);
+}
+
+// ---- the native pages (RC4-3: the service has them, the image's adapter is gone) ---------------------------------------------------------
+
+/// The pages of a module with canvas pages are in the owner's table while it is loaded: a device whose machine has page rows gets the pair that replaces its pages, the other the one
+/// page appended (type of the machine, page 1). An unload takes them out again, so the firmware's lookups see stock pages.
+#[test]
+fn the_native_pages_of_a_module_are_in_the_table_while_it_is_loaded() {
+    use dkrt_test_support::contract::locked;
+    let _g = locked();
+    for p in dkrt_abi::profiles::ALL.iter().filter(|p| p.has_dsp) {
+        let f = fixture(p.id);
+        let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
+        let ty = DYN_TYPE_FIRST + 7;
+        let m = module(3, keys_pinned_last, native_page, 1);
+        assert_eq!(l.load(3, &m), dkrt_sdk::OK);
+        let seen = || {
+            l.driver.with_instance(|o| {
+                let t = o.pages();
+                (
+                    t.armed(),
+                    t.page(ty, 0).map(|p| p.flags()),
+                    t.page(ty, 1).map(|p| p.flags()),
+                    t.page_count(ty, 5),
+                )
+            })
+        };
+        match seen() {
+            (true, Some(first), Some(second), count) => {
+                assert_eq!((first, second, count), (1, 2, 2), "a replacement pair")
+            }
+            other => assert_eq!(other, (true, None, Some(0), 6), "one page appended"),
+        }
+        l.unload(3);
+        assert_eq!(seen(), (false, None, None, 5), "an unload takes them out");
+    }
+}
+
+// ---- the page rows (RC4-3: the strings of a row are the service's) -----------------------------------------------------------------------
+
+/// A loaded module's page row names its page and title as `std::string` representations: the row's words are the address of the characters, and length, capacity and -1 stand before them.
+/// The image's `mf_ensure` made the strings of the reserved rows before a module filled them; the service writes them with the row. Only a device with page rows has any.
+#[test]
+fn a_loaded_page_row_names_its_page_and_title_as_string_representations() {
+    use dkrt_test_support::contract::locked;
+    let _g = locked();
+    let mut with_rows = 0;
+    for p in dkrt_abi::profiles::ALL.iter().filter(|p| p.has_dsp) {
+        let f = fixture(p.id);
+        let l = Lifecycle::<Provided<MachinesRecipe>>::new(&f);
+        assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+        let s = reg();
+        let Some(k) = s.page_owner.iter().position(|o| *o == 1) else {
+            continue;
+        };
+        with_rows += 1;
+        let row = 0x60_0000 + 0x80 * k as u32;
+        unsafe {
+            let (name, title) = (l.core.rd(row), l.core.rd(row + 4));
+            for (word, rep, text) in [
+                (name, &s.s.rep_pname[k], &s.s.page_name[k]),
+                (title, &s.s.rep_ptitle[k], &s.s.page_title[k]),
+            ] {
+                assert_eq!(
+                    word,
+                    rep.as_ptr() as usize as u32 + 12,
+                    "the characters of the representation"
+                );
+                let n = text.iter().position(|b| *b == 0).unwrap();
+                assert!(n > 0);
+                let w = |i: usize| u32::from_be_bytes(rep[4 * i..4 * i + 4].try_into().unwrap());
+                assert_eq!((w(0), w(1), w(2)), (n as u32, n as u32, 0xffff_ffff));
+                assert_eq!(&rep[12..12 + n + 1], &text[..n + 1]);
+            }
+        }
+        l.unload(0);
+    }
+    assert_eq!(with_rows, 1, "one device has page rows");
 }

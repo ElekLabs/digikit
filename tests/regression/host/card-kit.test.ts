@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
+import { LOAD_STATE } from '@digi/dk-session/gen_proto';
 import { cardStore } from '../runtime/device-data.ts';
 import {
+  bootInfoFinal,
   buildCard,
   currentRecord,
   decodeRecord,
@@ -181,4 +183,24 @@ describe('system package on the card', () => {
       expect(() => storePaths(without), 'no file, so no store at all').toThrow('no module store');
     },
   );
+});
+
+describe('boot info final', () => {
+  const code = (name: string) => LOAD_STATE.find(([, n]) => n === name)![0];
+  const info = (loaded: number, ...names: string[]) => ({ loaded, states: names.map(code) });
+
+  test('every module has a final state and loaded counts the active ones', () => {
+    expect(bootInfoFinal(info(2, 'ACTIVE', 'ACTIVE'))).toBe(true);
+    expect(bootInfoFinal(info(1, 'ACTIVE', 'REFUSED'))).toBe(true);
+    expect(bootInfoFinal(info(0, 'SKIPPED', 'SKIPPED'))).toBe(true);
+  });
+
+  test('a state already set with loaded not yet raised is not final', () => {
+    expect(bootInfoFinal(info(1, 'ACTIVE', 'ACTIVE'))).toBe(false);
+  });
+
+  test('a module still loading is not final', () => {
+    expect(bootInfoFinal(info(1, 'ACTIVE', 'DSP_LOADING'))).toBe(false);
+    expect(bootInfoFinal(info(0, 'SELECTED', 'SELECTED'))).toBe(false);
+  });
 });

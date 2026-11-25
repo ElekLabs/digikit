@@ -17,6 +17,7 @@ mod golden;
 mod host_boot_env;
 mod host_ops;
 mod manager_assembly_tests;
+mod patch_assembly_tests;
 mod seam_tests;
 mod check;
 mod commit;

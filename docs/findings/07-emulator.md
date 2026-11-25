@@ -6900,7 +6900,7 @@ From the first handover (DT2 1.15C; the addresses were not re-checked on 1.16):
 Why: `Emulator::step_once` accepted a PC only inside `[0x40000400, +len)` (the MAIN image) and stopped with
 `UnsupportedGuestPc` anywhere else, so patch code placed in `cf.expansion` (DT2 `0x47e8b000..`, DN2 `0x46712000..`) could
 not run in the full emulator (the CF-only call harness `Emulator::call_function` already stepped the core directly, which
-is why `test/cf-demo` ran there). `core/machines` therefore squeezed its shims into the 2,108-byte `flash_cave`.
+is why `test/cf-demo` ran there). `core/rows` therefore squeezed its shims into the 2,108-byte `flash_cave`.
 Hardware executes from any DDR (ACR0 covers `0x40000000..0x47ffffff`, copyback cacheable).
 
 Change (`packages/emulator/boot/src/runtime.rs`; the core `packages/emulator/coldfire` needed none):

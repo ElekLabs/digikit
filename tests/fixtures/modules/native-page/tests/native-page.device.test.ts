@@ -25,7 +25,7 @@ runtimeTests(
     const plan = await prepareRuntimePlan(session, artifacts, ['mf_native_register']);
     function machineSymbol(name: string) {
       const matches = Object.entries(plan.symbols).filter(
-        ([key]) => key.startsWith('core/machines@') && key.endsWith(`:${name}`),
+        ([key]) => key.startsWith('core/rows@') && key.endsWith(`:${name}`),
       );
       expect(matches).toHaveLength(1);
       return matches[0]![1];

@@ -71,6 +71,15 @@ users = ["core/services/machines"]
 doc = "`pea (0x18).w` in the order vector's first-call path: the allocation size of the vector (six longs); the service raises it for the added types."
 
 [[site]]
+name = "cf.filter.site.test_bound"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "1b8cb066c2caefda57e7836d91311ecc", offset = 0xaa, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "d47df48273bdbbdbde217c6e06a9510d", offset = 0xaa, len = 4 }
+mark = "D"
+users = ["test/local-patch"]
+doc = "The immediate of `cmpi.l #0x3fffffff,D1; bls` in the order vector copy (DT2 0x40052d40, DN2 0x4004db8a): the size bound before the allocation, never reached by the six-element vector. A patch site of the test fixture only."
+
+[[site]]
 name = "cf.filter.site.list_end"
 cpu = "cf"
 rule.dt2 = { kind = "cf_func", hash = "1b8cb066c2caefda57e7836d91311ecc", offset = 0x4a, len = 6 }
@@ -105,3 +114,19 @@ rule.dn2 = { kind = "cf_func", hash = "f766c42c6be0674aadb1177f3f536367", offset
 mark = "D"
 users = ["core/services/machines"]
 doc = "`move.b #7,D2b` in the sound loader (DT2 FUN_400db3b2 at 0x400db484, DN2 FUN_400dd34e at 0x400dd420): the bound of the next compare, which keeps a stored filter type below 7 and resets any other to 0 (the filter byte is rec[0xd3] on DT2 and rec[0xf5] on DN2; the machine byte uses an earlier bound). The immediate is the low byte of the word at +2."
+
+# A patch site, only for the test fixture `test/local-patch` (the port file of the test image lists it): the low word of the bound of the size compare of the order vector copy,
+# `cmpi.l #0x3fffffff,D1; bls` (DT2 0x40052d40 in FUN_40052c98, DN2 0x4004db8a in FUN_4004dae2). D1 is the element count of the copied vector, always six (the static range is
+# {0,1,4,3,5,2}), so any bound from 6 up takes the same branch: a value other than 0xffff in that word changes the bytes of a code site and nothing the firmware does.
+[[hook]]
+name = "cf.filter.hook.test_bound_patch"
+site = "cf.filter.site.test_bound"
+offset = 2
+cpu = "cf"
+mode = "replace"
+patch = 2
+regs = { in = [], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["test/local-patch"]
+doc = "Test only: a patch site of two bytes, the low word of the immediate of `cmpi.l #0x3fffffff,D1` in the order vector copy. D1 is always 6 there, so the bound is dead; the fixture patches it and the loader restores it at unload."

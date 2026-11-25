@@ -128,7 +128,7 @@ def test_a_patched_image_from_the_command_line_soft_resets(monkeypatch, tmp_path
 
     _, _ = inputs("dt2", monkeypatch)
     env = pk_dkrt_boot.Env("dt2-1.17", tmp_path)
-    img = env.build_image("core/runtime,core/dynreg,core/dyndsp")
+    img = env.build_image("core/runtime,core/rows,core/dyndsp")
     args = native_emu.default_audio_args(
         [str(img.syx), "--card-image", str(env.card(None))]
     )

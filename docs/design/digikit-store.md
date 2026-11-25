@@ -246,7 +246,7 @@ Unloaded modules keep their entries: nothing removes a key but `remove`.
    write (not a refusal) is tried again after 2 s, three times; a refused one (`E_CARD_RO`, `E_RANGE`) is not: the record then holds in RAM until the next boot. `SETTINGS_WRITE` logs every write.
 4. **Limits:** one copy is 8 KiB in all; `put` answers `E_SET_FULL` when the record would not fit (the record is left as it was), `E_SET_KEY` for a key that breaks the rules, `E_SET_VALUE` for a value over 1024 bytes. CAPACITY kind `SETTINGS` reports the area in bytes (limit 8192, used: the record's
    bytes, header included). Room for a share per module is left in the key rule (prefix by module id), not in code.
-5. **Task:** the UI task (the menu, `core/fxpages`) and the mailbox test commands; not an interrupt or the MIDI task (the record is one buffer).
+5. **Task:** the UI task (the menu, the fx service) and the mailbox test commands; not an interrupt or the MIDI task (the record is one buffer).
 
 **API.** Runtime-internal Rust: `settings::get(key, &mut buf) -> len | error`, `put(key, value) -> 0 | error`, `remove(key) -> 0 | error`, `flush()`. Exported C for `core/*` modules (task context, the module links them by symbol like the menu links the selection functions):
 `int dkrt_settings_get(const char *key, u8 *buf, u32 cap)` (the value's length, or `E_SET_NOKEY` -68, `E_SET_KEY` -66, `E_SET_VALUE` -69 when `cap` is too small), `int dkrt_settings_put(const char *key, const u8 *value, u32 len)` (0, `E_SET_KEY`, `E_SET_VALUE`,

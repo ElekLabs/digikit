@@ -5,8 +5,9 @@ import { expect } from 'vitest';
 import { blob, listing, pokeKnob, statusOf, type Files } from '@digi/regression/runtime/card-kit.ts';
 import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
 import { rawModule } from '@digi/regression/runtime/service-files.ts';
-import { analysisJson, frames, pcmMatches, peak, playNote, readFloatWav, SETTLE } from '@digi/regression/runtime/fx-live.ts';
-import { selectSine, type FxProfile } from '@digi/regression/runtime/fx-session.ts';
+import { frames, pcmMatches, peak, playNote, readFloatWav, SETTLE } from '@digi/regression/runtime/fx-live.ts';
+import { fxProfile } from '@digi/regression/runtime/device-data.ts';
+import { selectSine } from '@digi/regression/runtime/fx-session.ts';
 import { liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { SYSTEM_PACKAGE_STORE_PATH, systemPackageFiles } from '@digi/regression/runtime/system-package.ts';
@@ -219,12 +220,7 @@ uploadTests(
       modules: [{ name: 'modules/m0.dkm', file: moduleArtifact(rig.device, 'test/sine') }],
       selection: ['modules/m0.dkm'],
     });
-    const profile = await analysisJson<FxProfile>(
-      'tools.patchkit.pk_digikit_fxroutes',
-      ['profile', '--device', rig.device],
-      rig.artifacts,
-      'profile',
-    );
+    const profile = fxProfile(rig.device);
     const payload = blob(100_000, 31);
     let trigger = 3500;
     let listed: string[] = [];

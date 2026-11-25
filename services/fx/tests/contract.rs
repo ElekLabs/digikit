@@ -11,7 +11,7 @@ use dkrt_abi::profiles::{ALL, DT2};
 use dkrt_sdk::records::KINDS_FX;
 use dkrt_svc_fx::builder::{ROUTE_MASTER, ROUTE_SEND};
 use dkrt_svc_fx::fx::Fx;
-use dkrt_svc_fx::fxpage::{self, INFO_HASH};
+use dkrt_svc_fx::fxpage::{self, DeviceFacts};
 use dkrt_svc_fx::fxsend;
 use dkrt_svc_fx::rows::{self, FxRows};
 use dkrt_test_support::contract::{
@@ -282,38 +282,44 @@ fn keys_none() -> KeysCopy {
     KeysCopy::empty()
 }
 
-/// The words of `fxpages_info` (the version-4 image table the service binds) and `dynreg_info`, and the `dynfx_info` the DSP rows come from.
+/// The facts of the test device: 3 page rows, 32 values (the value index of word `j` of effect row `k` is `8k + j`), 2 send cells; `kit` is the address of the kit pointer cell.
+fn facts(kit: u32) -> DeviceFacts {
+    let mut value_indices = [0u8; 32];
+    for (i, v) in value_indices.iter_mut().enumerate() {
+        *v = i as u8;
+    }
+    DeviceFacts {
+        device: 1,
+        page_first: 14,
+        slots: 3,
+        array_off: 0x14,
+        values_n: 32,
+        kit_ptr: kit,
+        mark_index: 70,
+        send_cells: 2,
+        knob_block: 2,
+        send_block: 3,
+        track_page: 13,
+        store_off: 0x80,
+        value_indices,
+        ..Default::default()
+    }
+}
+
+/// `rows_info` (the parameter table, the blocks of the effect knobs from code 40 and of the send knobs from code 90), the `dynfx_info` the DSP rows come from, and the table of the
+/// effect pages bound from the test device's facts.
 fn image(core: &mut FakeCore) {
-    let mut t = vec![0u32; 64];
-    t[0] = 0x4658_5047; // "FXPG"
-    t[1] = 4;
-    t[2] = core.device;
-    t[3] = 0x6000; // page rows
-    t[4] = 0x2c; // row size
-    t[5] = 14; // the page number of row 0
-    t[6] = 3; // rows
-    t[8] = 8; // list capacity
-    t[12] = 40; // the first parameter code of the effect pages
-    t[13] = 8;
-    t[14] = 0x14; // the kit's array offset
-    t[15] = 32; // values
-    t[37] = 70; // the mark's array index
-    t[38] = 0x46a7;
-    t[39] = 2; // send cells
-    t[42] = 90; // the first send parameter code
-    t[61] = 13;
-    t[63] = 0x80;
-    core.info_tables.push((INFO_HASH, t));
-    let mut d = vec![0u32; 96];
-    d[dkrt_svc_rows::dynreg::w::P_TABLE] = 0x10000;
-    d[dkrt_svc_rows::dynreg::w::PF_SIZE] = 0x40;
-    d[dkrt_svc_rows::dynreg::w::P_ROWS] = 0x20000;
-    d[dkrt_svc_rows::dynreg::w::P_ROW_SIZE] = 0x20;
-    d[dkrt_svc_rows::dynreg::w::P_FIRST] = 0;
-    d[dkrt_svc_rows::dynreg::w::P_TEMPLATE_OFF] = 8;
-    core.set_dynreg(d);
+    let mut d = vec![0u32; 110];
+    d[dkrt_svc_rows::rows_info::w::P_TABLE] = 0x10000;
+    d[dkrt_svc_rows::rows_info::w::PF_SIZE] = 0x40;
+    d[dkrt_svc_rows::rows_info::w::P_ROWS] = 0x20000;
+    d[dkrt_svc_rows::rows_info::w::P_ROW_SIZE] = 0x20;
+    d[dkrt_svc_rows::rows_info::w::P_FIRST] = 0;
+    d[dkrt_svc_rows::rows_info::w::P_TEMPLATE_OFF] = 8;
+    core.set_rows_info(d);
+    core.set_rows_blocks(&[(2, 40, 24, 0x75), (3, 90, 2, 0x75)]);
     core.set_dynfx(6, 4);
-    unsafe { fxpage::unbind() };
+    unsafe { assert_eq!(fxpage::bind_facts(core, &facts(0), [0, 0]), dkrt_sdk::OK) };
 }
 
 /// The service's own view: the DSP rows in use, the pages and their owners, the send cells.
@@ -450,19 +456,14 @@ const KIT_CELL: u32 = 0x7000;
 const KIT_A: u32 = 0x4000_1000;
 const KIT_B: u32 = 0x4000_3000;
 
-/// The live kit in the image: the cell `KIT_CELL` is the kit pointer cell of `fxpages_info` (word 19), and word `j` of effect row `k` lives at array index `8k + j`.
+/// The live kit in the image: the cell `KIT_CELL` is the kit pointer cell of the effect pages, and word `j` of effect row `k` lives at array index `8k + j`.
 fn with_kit(core: &mut FakeCore) {
-    let t = &mut core
-        .info_tables
-        .iter_mut()
-        .find(|(h, _)| *h == INFO_HASH)
-        .unwrap()
-        .1;
-    t[19] = KIT_CELL;
-    let bytes = unsafe { core::slice::from_raw_parts_mut(t.as_mut_ptr() as *mut u8, 4 * t.len()) };
-    for i in 0..24 {
-        bytes[80 + i] = i as u8;
-    }
+    unsafe {
+        assert_eq!(
+            fxpage::bind_facts(core, &facts(KIT_CELL), [0, 0]),
+            dkrt_sdk::OK
+        )
+    };
 }
 
 /// `image` with a live kit.

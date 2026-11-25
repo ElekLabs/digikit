@@ -1,4 +1,4 @@
-//! `core/machines` over the real ports and stock images (skipped when the images are absent): what the framework
+//! `core/rows` over the real ports and stock images (skipped when the images are absent): what the framework
 //! writes for one and for two added machine types, canonical type numbers, and the refusals.
 
 use patchkit::apply::{self, Applied, Options};
@@ -128,7 +128,7 @@ fn section<'a>(p: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
         .unwrap_or_else(|| panic!("no section {name}"))
 }
 
-const PAIR: [&str; 2] = ["core/machines", "core/params"];
+const PAIR: [&str; 1] = ["core/rows"];
 
 #[test]
 fn the_selection_order_does_not_change_the_bytes() {
@@ -138,7 +138,7 @@ fn the_selection_order_does_not_change_the_bytes() {
     let Some(r1) = run(DT2_117, &lib, &PAIR) else {
         return;
     };
-    let r2 = run(DT2_117, &lib, &["core/params", "core/machines"]).unwrap();
+    let r2 = run(DT2_117, &lib, &["core/rows"]).unwrap();
     assert!(r1.unwrap().syx == r2.unwrap().syx);
 }
 
@@ -147,9 +147,9 @@ fn every_instruction_the_framework_places_decodes() {
     let Some(lib) = library(vec![]) else {
         return;
     };
-    for (file, ids) in [
-        (DT2_117, &["core/machines"][..]),
-        (DN2_112, &["core/machines"][..]),
+    for (file, ids, want) in [
+        (DT2_117, &["core/rows"][..], 51),
+        (DN2_112, &["core/rows"][..], 51),
     ] {
         let Some(r) = run(file, &lib, ids) else {
             continue;
@@ -157,9 +157,11 @@ fn every_instruction_the_framework_places_decodes() {
         let a = r.unwrap();
         let m = Main::new(&a.syx, stock_len(file));
         let mut n = 0;
-        for w in a.plan.writes.iter().filter(|w| {
-            w.kind == "place" && w.owner.starts_with("core/machines") && !w.code.is_empty()
-        }) {
+        for w in
+            a.plan.writes.iter().filter(|w| {
+                w.kind == "place" && w.owner.starts_with("core/rows") && !w.code.is_empty()
+            })
+        {
             for &(lo, hi) in &w.code {
                 let mut at = lo;
                 let bytes = m.read(lo as u32, (hi - lo) as usize);
@@ -172,7 +174,8 @@ fn every_instruction_the_framework_places_decodes() {
                 assert_eq!(at, hi, "the code ends mid-instruction");
             }
         }
-        assert!(n > 100, "{file}: only {n} instructions");
+        // the dispatch and the stock-table readers (the native pages are the service's since RC4-3): a lost routine changes the count
+        assert_eq!(n, want, "{file}: instructions the framework places");
     }
 }
 
@@ -182,13 +185,18 @@ fn the_image_keeps_only_the_machine_hooks_that_stay_in_it() {
         return;
     };
     for file in [DN2_112] {
-        let Some(r) = run(file, &lib, &["core/machines"]) else {
+        let Some(r) = run(file, &lib, &["core/rows"]) else {
             continue;
         };
         let a = r.unwrap();
         let p = plan(&a);
-        // a machine is a run-time module: the registry has no patch-time entry
-        assert_eq!(reg(&p, "machines")["entries"].as_array().unwrap().len(), 0);
+        // a machine is a run-time module: the registry has only the reserved rows the machines service fills (`[limits] machine_rows`)
+        assert_eq!(
+            reg(&p, "machines")["entries"].as_array().unwrap().len() as u64,
+            patchkit::devdata::by_syx_id(Firmware::parse(&image(file).unwrap()).unwrap().device_id)
+                .and_then(|d| d.limit_of("machine_rows"))
+                .unwrap()
+        );
         // no DSP selector table and no per-type byte on the Digitone II
         assert!(
             p["sections"]
@@ -203,15 +211,13 @@ fn the_image_keeps_only_the_machine_hooks_that_stay_in_it() {
             .iter()
             .map(|h| h["anchor"].as_str().unwrap().to_string())
             .collect();
-        // the image keeps the dispatch hook, the list entry and the frame type stub; the other hooks are the machines service file's (R12-6)
-        for h in [
-            "cf.machine.fn.dispatch",
-            "cf.machine.fn.list.entry",
-            "cf.machine.site.frametype",
-        ] {
+        // the image keeps the dispatch hook; the other hooks (the list and rank, the frame type among them) are the machines service file's (R12-6, RC4-3)
+        for h in ["cf.machine.fn.dispatch"] {
             assert!(hooks.iter().any(|x| x == h), "{file}: no hook on {h}");
         }
         for h in [
+            "cf.machine.fn.list.entry",
+            "cf.machine.site.frametype",
             "cf.machine.site.group",
             "cf.machine.site.type_reader.load",
             "cf.machine.site.owner_type_load",

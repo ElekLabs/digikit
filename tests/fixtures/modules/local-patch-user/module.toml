@@ -1,0 +1,22 @@
+[module]
+id = "test/local-patch-user"
+version = "0.1.0"
+name = "Local patch client"
+category = "test"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Fixture for a hard need on a service that takes a patch of the firmware"
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[[service_import]]
+service = "local-patch"
+min_version = "1.0.0"
+names = ["local_patch_value"]
+
+[[object]]
+path = "build/local-patch-user.dko.json"
+sources = ["src/c/user.c"]
+place = "cf.expansion"

@@ -1,20 +1,19 @@
-| machines.dks on the Digitone II (1.12): the ColdFire routines the service's hooks run. They were in core/machines (`src/cf/dn2/machines.s`).
+| machines.dks on the Digitone II (1.12): the ColdFire routines the service's hooks run. The dispatch is the image's (`runtime/platform/rows/src/cf/machines-dn2.s`).
 |
 | Each hook is entered by a `jmp.l` that the runtime writes at its firmware site (a hook of a service is raw: no trampoline); the frame type is entered
 | through the image stub of the pointer slot `frametype` (an interrupt site). The routine takes the whole control flow of the site: it runs in place of the stock
 | instructions there and ends in the stock code either by `jmp dk_tail_<hash of the hook>` (the displaced instructions of the site as in the user's firmware, copied by the runtime from the port file) or, when a
 | branch is among them, by `jmp mf_x_*` to an exit that the hook declares in `ports/fw` (`exits`; `dk_exit_<hash>_<n>`, an absolute address the port file resolves: the jump changes no
 | register or flag). A routine that ends the hooked function leaves by `jmp mf_ret_*` (`dk_ret_<hash>`, an `rts`). The aliases are the `[object.externs]` of module.toml. `DKRT_MF_TAB` is the image table
-| `machines_info` of core/machines, copied by `setup` (lib.rs). Offsets T_* below; the same layout is in hooks-dt2.s and in `image.rs`.
+| `rows_info` of core/rows, copied by `setup` (lib.rs). Offsets T_* below; the same layout is in hooks-dt2.s and in `image.rs`.
 |
 | Hook convention: registers the stock site frees are scratch (`ports/fw/machine.toml` lists them per hook); everything else a routine saves.
-| The image keeps `mf_ensure` (the tables of the registry are built once, on first use: `mfn_call_ensure` calls it through the table), the machine list hook and the
-| dispatch hook.
+| The image keeps the dispatch hook (`mf_dispatch` of core/rows: it answers a type of the registry with its row).
 
     .text
     .balignw 4, 0x4e71
 
-| row layout (bytes), the field order of core/machines' [[registry.field]]
+| row layout (bytes), the field order of core/rows' [[registry.field]]
     .equ O_CLONE,  44
     .equ O_OWN,    52          | the DSP is told the entry's own type
     .equ ROWSIZE,  64
@@ -29,19 +28,16 @@
     .equ T_FIRST, 12
     .equ T_COUNT, 16
     .equ T_ROWS, 24
-    .equ T_ENSURE, 28
-    .equ T_N_PAGE_COUNT, 32
-    .equ T_N_DESCRIPTOR, 36
-    .equ T_N_CODE, 40
-    .equ T_N_DRAW, 44
-    .equ T_N_OVERLAY, 48
-    .equ T_PGROWS, 56
-    .equ T_PGN, 60
+    .equ T_PGROWS, 32
+    .equ T_PGN, 36
 
-| mf_ensure: the image's table builder; it preserves every register (not the flags). Called as a subroutine.
-mfn_call_ensure:
-    move.l  DKRT_MF_TAB+T_ENSURE,-(%sp)
-    rts                                 | enters mf_ensure, which returns to the caller of mfn_call_ensure
+| ---- the machine list (hook cf.machine.hook.list.copy_call): the six bytes at the end of the list getter, `jsr (A3); move.l D0,(4,A2)` (A3 = the library's std::copy, the three arguments are on the stack, a2 is the vector
+| being returned), are replaced by a jump here: the copy that leaves out the reserved rows with no name (`dks_list_copy`, the same C-ABI function the Digitakt II's patch points its call at), then the store.
+    .globl mf_copy
+mf_copy:
+    jsr     dks_list_copy
+    move.l  %d0,4(%a2)
+    jmp     mf_x_copy
 
 | mfn_row: d0 = index k (< count) -> a0 = &machines.rows[k]. Preserves every other register (not the flags).
 mfn_row:
@@ -97,8 +93,7 @@ mf_typemap0:
     beq.s   1f
     move.l  %d0,-(%sp)
     move.l  %a1,-(%sp)
-    movea.l DKRT_MF_TAB+T_N_PAGE_COUNT,%a0
-    jsr     (%a0)
+    jsr     dks_native_page_count
     addq.l  #8,%sp
     jmp     mf_ret_tm0                  | ordinary pages plus an opt-in native callback page
 1:  move.l  %a1,%d0
@@ -110,8 +105,7 @@ mf_typemap0:
 mf_typemap1:
     move.l  0xc(%sp),-(%sp)
     move.l  0xc(%sp),-(%sp)
-    movea.l DKRT_MF_TAB+T_N_DESCRIPTOR,%a0
-    jsr     (%a0)
+    jsr     dks_native_descriptor
     addq.l  #8,%sp
     tst.l   %d0
     beq.s   8f
@@ -165,9 +159,8 @@ mf_typemap2:
     moveq   #0x64,%d1                   | the stock code set d1 before the site and reads it again
 9:  jmp     dk_tail_42d651c5
 
-| ---- page rows. mfn_pg_count: d0 = type -> d0 = the number of its pages (builds the tables first); clobbers d1, a0.
+| ---- page rows. mfn_pg_count: d0 = type -> d0 = the number of its pages; clobbers d1, a0.
 mfn_pg_count:
-    bsr.w   mfn_call_ensure
     move.l  %d2,-(%sp)
     move.l  DKRT_MF_TAB+T_PGN,%d2
     movea.l DKRT_MF_TAB+T_PGROWS,%a0
@@ -235,7 +228,7 @@ mfn_pg_slot:
 
 | ---- frame type: the frame builder (the vector-191 handler) writes the track's machine type into TX frame word 0x94 + 2t. The DSP's FM engine knows five types; a type above
 | 4 is treated like MIDI (nothing rendered), so an added type is sent as its clone_of unless the entry has own_dsp (a registered voice routine renders it). Site (6 bytes):
-| `move.b (0xd8c,A0),D0b; ext.w D0w`, a0 = the track; d0 is the result. An interrupt site: the image stub of the slot `frametype` enters here with a1 = this address (a1 and d0
+| `move.b (0xd8c,A0),D0b; ext.w D0w`, a0 = the track; d0 is the result. An interrupt site: the installer's jump enters here (a1 and d0
 | are free). The routine runs at the interrupt's priority: no call, no wait.
     .globl mf_frametype
 mf_frametype:

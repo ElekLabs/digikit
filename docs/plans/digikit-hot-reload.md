@@ -142,7 +142,7 @@ Each stage builds on canonical fixtures from `tests/fixtures/modules` (table in 
 An earlier hot reload was built and proven on the emulator only, then archived. The new plan reuses:
 
 - Runtime: `dkrt_unload`, `loader::unload`, `CMD_UNLOAD`; the in-use scan `registry::in_use` with its `dynreg_info` words (`F_PROJECT`, `F_KIT`, `F_TRACK`, `TRACKS`); the machine-view rebuild (`registry::view_now`, `registry::refresh_view`); the run-time DSP load path and the load queue (S4, S5).
-- `core/dynreg`: the view hook op and the anchors for project, kit and track type (regenerate port anchors with `port_resolve resolve-all`).
+- `core/rows`: the view hook op and the anchors for project, kit and track type (regenerate port anchors with `port_resolve resolve-all`).
 - Proofs: the unload order (machine row, voice row, range), voice rows written atomically, unload refusal while a track of the active kit uses the machine (finding 33), DT2 pluck PCM bit-identical with the key held (finding 32).
 - Findings 28, 29, 30, 32, 33, 34 and 36.
 

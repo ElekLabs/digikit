@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import zlib from 'node:zlib';
-import { DkError, fileHashHex } from '@digi/dk-session';
+import { BOOT_WAIT_MS, DkError, EMULATED_POLL_MS, fileHashHex } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '../../../packages/dk-session/src/gen_proto.ts';
-import { emulatorClock, repoRoot, waitClock, type Device, type Session } from '@digi/test-support';
+import { emulatorClock, pollUntil, repoRoot, waitClock, type Device, type Session } from '@digi/test-support';
 import { cardStore } from './device-data.ts';
 import { rpc, word } from './guest-access.ts';
 import { installSystemPackage } from './system-package.ts';
@@ -348,28 +348,40 @@ const BI_STATES_AT = 176;
 const UNSETTLED_STATES = new Set(['SELECTED', 'PLANNED', 'INIT', 'DSP_LOADING']);
 
 /**
+ * Whether a boot info is final: no state is unsettled and `loaded` equals the number of ACTIVE modules. The runtime sets a module's state and raises `loaded` in two
+ * steps (`report_module`, `report_dsp`), and the session pauses between instructions: a read in between sees the new state with the old count.
+ */
+export function bootInfoFinal(info: { loaded: number; states: number[] }): boolean {
+  const names = info.states.map((n) => stateName(n));
+  return !names.some((n) => UNSETTLED_STATES.has(n)) && info.loaded === names.filter((n) => n === 'ACTIVE').length;
+}
+
+/**
  * `bootInfo` once this boot has written its info and every selected module has a final state (`DkrtBootInfo.states`: ACTIVE, REFUSED, FAILED, SKIPPED or UNLOADED):
  * the boot has finished loading its selection. The result words do not tell this: 0 is also the unwritten initial value, so a module not yet started reads 0 like a
  * loaded one. Written means `magic` is valid (the boot sets it first) and `count` is set (the boot copies it from the selection record before any load, and `states`
  * is cut to it, so a zero `count` before that would pass for an empty list); a boot with an empty selection has no later word, so there `uiReached` stands in.
- * `expected` is the number of modules the caller selected, when it knows it. The DSP part of a module follows its ColdFire part over the first UI-loop passes. Steps 100
- * emulated ms at a time, up to `ms`; the session must be paused. Throws, naming the states seen, when the boot is not settled by then.
+ * `expected` is the number of modules the caller selected, when it knows it. The DSP part of a module follows its ColdFire part over the first UI-loop passes. Waits on that
+ * state (`BOOT_WAIT_MS` only guards a hang); the session must be paused. Throws, naming the states seen, on the guard.
  */
-export async function bootInfoLoaded(session: Session, plan: RuntimePlan, ms = 5000, expected?: number) {
-  let info = await bootInfo(session, plan);
-  for (let i = 0; ; i++) {
+export async function bootInfoLoaded(session: Session, plan: RuntimePlan, expected?: number) {
+  const settled = (info: Awaited<ReturnType<typeof bootInfo>>) => {
     const written = info.magic === BI_MAGIC && info.version !== 0 && (info.count > 0 || info.uiReached !== 0);
     const counted = expected === undefined || info.count >= expected;
-    if (written && counted && !info.states.some((n) => UNSETTLED_STATES.has(stateName(n)))) return info;
-    if (i >= ms / 100) break;
-    await waitClock(emulatorClock(session), 100);
-    info = await bootInfo(session, plan);
-  }
-  const seen = info.states.map((n) => stateName(n)).join(',') || 'none';
-  throw new Error(
-    `boot info not settled after ${ms} emulated ms: magic 0x${(info.magic >>> 0).toString(16)}, count ${info.count}` +
-      `${expected === undefined ? '' : ` (expected ${expected})`}, uiReached ${info.uiReached}, states [${seen}]`,
-  );
+    return written && counted && bootInfoFinal(info);
+  };
+  let last: Awaited<ReturnType<typeof bootInfo>> | undefined;
+  return pollUntil(emulatorClock(session), async () => (last = await bootInfo(session, plan)), settled, {
+    withinMs: BOOT_WAIT_MS,
+    intervalMs: EMULATED_POLL_MS,
+    message: () => {
+      const seen = last?.states.map((n) => stateName(n)).join(',') || 'none';
+      return (
+        `boot info not settled: magic 0x${((last?.magic ?? 0) >>> 0).toString(16)}, count ${last?.count}` +
+        `${expected === undefined ? '' : ` (expected ${expected})`}, uiReached ${last?.uiReached}, states [${seen}]`
+      );
+    },
+  });
 }
 
 /** `DKRT_CARD`: state, the first non-blank sector, its crc32, writes refused and done. */

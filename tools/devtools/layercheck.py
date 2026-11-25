@@ -35,8 +35,8 @@ Rules:
             runtime crate's `services/`; every service (fx, machines, samples, lfo) is a crate.
   kind-free The runtime's own code (the runtime crate's and the abi crate's sources without their host tests, inline `#[cfg(test)] mod x { }` blocks included, `package/handlers.rs`, the host-test files in `package/handlers/` and the generated `package/gen_services.rs`) names no machine or effect: no builder
             call (the `provided` imports of the services machines and fx in sdk/sdk.toml, but for those with `wrapper = "fw"`: `dk_module_ctx_add_machine`, `dk_page_add_param` ...), no record kind of a machine or an effect (`KIND_MACHINE`, `KIND_PARAM`, `KIND_PAGE`,
-            `KIND_ACTION`, `KIND_NATIVE_PAGE*`, `KIND_EFFECT`, `KINDS_MACHINES`, `KINDS_FX`), no table of an image adapter that only a service reads (`dynreg_info`, `machines_info`,
-            `fxpages_info`, `mf_native_*`) and no state of the machines registry (`RegState`, `DKRT_REG`, `DKRT_ASSIGN`). The services own them: the machines and fx service files
+            `KIND_ACTION`, `KIND_NATIVE_PAGE*`, `KIND_EFFECT`, `KINDS_MACHINES`, `KINDS_FX`), no table of an image adapter that only a service reads (`rows_info`,
+            `mf_native_*`) and no state of the machines registry (`RegState`, `DKRT_REG`, `DKRT_ASSIGN`). The services own them: the machines and fx service files
             export the builder calls and write their records in `Records::commit`; the loader only runs the generic part (docs/plans/runtime-slimming.md, RS-C).
   platform  Inside the runtime crate, only `platform.rs` (the real platform, L1) and `fw.rs` at the crate's source root (the declared adapter of
             `dkrt_abi::fw::Fw`: it must contain `impl Fw for`) name the firmware crate dkfw; the rest of the core and the services use the `Platform`
@@ -1303,7 +1303,7 @@ def rt_kind_free(root: Path) -> re.Pattern[str]:
         r"\b(?:"
         + "|".join(kind_free_builders(root))
         + r"|KIND_MACHINE|KIND_PARAM|KIND_PAGE|KIND_ACTION|KIND_NATIVE_PAGE|KIND_NATIVE_PAGE_V2|KIND_EFFECT|KINDS_MACHINES|KINDS_FX"
-        r"|dynreg_info|machines_info|fxpages_info|mf_native_\w+|RegState|DKRT_REG|DKRT_ASSIGN)\b"
+        r"|rows_info|mf_native_\w+|RegState|DKRT_REG|DKRT_ASSIGN)\b"
     )
 
 

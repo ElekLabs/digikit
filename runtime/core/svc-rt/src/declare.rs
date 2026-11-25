@@ -1,6 +1,6 @@
 //! What a service file declares to the runtime in `init`: its record kinds, its row, its hook sites, slot fills and exports (the `dk_service_declare_*` imports of
 //! `sdk.toml`), and the module context `init` was called with.
-use crate::import_core::sys::dk_provider_declare_row;
+use crate::import_core::sys::{dk_provider_declare_row, dk_service_declare_patch};
 use crate::import_core::ImportCore;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::ProviderRow;
@@ -27,13 +27,28 @@ const _: dkrt_sdk::api::DkServiceDeclareExportFn = dk_service_declare_export;
 
 pub use dkrt_abi::provider::name_hash;
 
+/// The bytes a patch writes: a byte, a halfword or a long word (the length of the patch site in the port file), as the value `start` computed. `service!` makes one for each `patches`
+/// entry; the runtime writes it at the site on load and the stock bytes back before `stop`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Patch {
+    pub value: u32,
+    pub len: u32,
+}
+
+impl Patch {
+    /// `len` bytes (1, 2 or 4) of `value`, big-endian, the low bytes of it.
+    pub const fn new(value: u32, len: u32) -> Patch {
+        Patch { value, len }
+    }
+}
+
 /// The `[digikit] id` of a device in the form `service!` takes for the device filter of a hook (`dt2`, `dn2`; no filter: 0, every device).
 #[doc(hidden)]
 pub const DEVICE_DT2: u32 = dkrt_abi::profiles::DT2.id;
 #[doc(hidden)]
 pub const DEVICE_DN2: u32 = dkrt_abi::profiles::DN2.id;
 
-/// The declarations of a service file (`service!`): each record kind in `kinds`, the row with the instance `Provider::start` made, then the hooks, fills and exports. `instance` is null before `start` (the host test of the assembly replays the
+/// The declarations of a service file (`service!`): each record kind in `kinds`, the row with the instance `Provider::start` made, then the hooks, fills, patches and exports. `instance` is null before `start` (the host test of the assembly replays the
 /// declarations without one; the runtime refuses such a row at the commit).
 ///
 /// # Safety
@@ -102,6 +117,26 @@ unsafe fn declare_entries(
         }
     }
     0
+}
+
+/// One patch of the service (`service!` `patches`): declared unless its entry is for another device. The macro calls it once for each entry, so a service without patches carries no
+/// code for them.
+///
+/// # Safety
+/// `ctx` is the module context `init` was called with.
+#[doc(hidden)]
+#[inline(never)]
+pub unsafe fn declare_patch(
+    ctx: *mut u8,
+    device: fn() -> u32,
+    site: u32,
+    patch: Patch,
+    only: u32,
+) -> i32 {
+    if only != 0 && only != device() {
+        return 0;
+    }
+    dk_service_declare_patch(ctx, site, patch.value, patch.len)
 }
 
 /// The `[digikit] id` of the running device (`dkc_device_id`): what `service!` passes to `declare`.

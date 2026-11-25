@@ -1,23 +1,18 @@
 | machines.dks, the hooks both devices share: the machine page's draw, code, key and turn entries. Each continues in the stock code through the tail the port file makes
 | (`dk_tail_<hash of the hook>`) and leaves as `rts` through `jmp mf_ret_*` (`dk_ret_<hash>`; the aliases are the `[object.externs]` of module.toml), so the routines hold no
-| firmware bytes and one routine serves both devices. `DKRT_MF_TAB` is the image table `machines_info` (`image.rs`).
+| firmware bytes and one routine serves both devices. `DKRT_MF_TAB` holds the registry words of the image's `rows_info` (`info.rs`).
 
     .text
     .balignw 4, 0x4e71
 
-    .equ T_N_CODE,    40
-    .equ T_N_DRAW,    44
-    .equ T_N_OVERLAY, 48
-
 | ---- the machine page's draw, code, key and turn entries (SourcePageView and MultiSourcePageView, vfunc_4, vfunc_47, vfunc_2, vfunc_17: the same code on both devices; the port file makes the stock tail of each hook for the firmware it binds to). The stock path is the tail the port file makes. At the entry 0(sp) = the return address, 4(sp) = the view, 8(sp) = the event (or canvas); d0/d1/a0/a1 are free.
-| The native page seams are the adapter's C functions (`mf_native_*` of the image, table words N_*); -1 from code means pass through; 0 is an intentional unused/LOCAL
+| The native page seams are Rust functions of this file (`dks/src/native.rs`: `dks_native_draw`, `dks_native_overlay`, `dks_native_code`); -1 from code means pass through; 0 is an intentional unused/LOCAL
 | mapping. `dks_page_key` and `dks_page_turn` are Rust (lib.rs).
     .globl mf_draw_hook
 mf_draw_hook:
     move.l  8(%sp),-(%sp)
     move.l  8(%sp),-(%sp)
-    movea.l DKRT_MF_TAB+T_N_DRAW,%a0
-    jsr     (%a0)
+    jsr     dks_native_draw
     addq.l  #8,%sp
     tst.l   %d0
     beq.s   1f
@@ -31,8 +26,7 @@ mf_draw_hook:
     addq.l  #8,%sp
     move.l  8(%sp),-(%sp)
     move.l  8(%sp),-(%sp)
-    movea.l DKRT_MF_TAB+T_N_OVERLAY,%a0
-    jsr     (%a0)
+    jsr     dks_native_overlay
     addq.l  #8,%sp
     jmp     mf_ret_draw
 
@@ -40,8 +34,7 @@ mf_draw_hook:
 mf_code_hook:
     move.l  8(%sp),-(%sp)
     move.l  8(%sp),-(%sp)
-    movea.l DKRT_MF_TAB+T_N_CODE,%a0
-    jsr     (%a0)
+    jsr     dks_native_code
     addq.l  #8,%sp
     cmpi.l  #-1,%d0
     beq.s   1f

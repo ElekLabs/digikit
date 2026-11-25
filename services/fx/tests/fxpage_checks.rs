@@ -1,5 +1,5 @@
-//! Host tests of the effect page checks over `FakeCore`: which EFFECT records `fxpage::check_record` accepts and which image tables `fxpage::available` binds.
-//! Both read no firmware address: the record is a byte array and the image table is the words of an info entry. The tests share the bound table of the module
+//! Host tests of the effect page checks over `FakeCore`: which EFFECT records `fxpage::check_record` accepts and which device facts `fxpage::bind_facts` binds.
+//! Both read no firmware address: the record is a byte array and the facts are constants. The tests share the bound table of the module
 //! (`DKRT_FXP_TAB`), so each takes the lock and unbinds before and after.
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::dsp::MAX_FX;
@@ -25,23 +25,22 @@ impl Drop for Bound<'_> {
     }
 }
 
-const MAGIC: u32 = 0x4658_5047;
-
-/// The words of a usable `fxpages_info` table: version 4, the device of the core, a list of 4, the pages of the chain and the kit's 64 values.
-fn table(core: &FakeCore) -> Vec<u32> {
-    let mut w = vec![0u32; 80];
-    w[0] = MAGIC;
-    w[1] = 4;
-    w[2] = core.device_id();
-    w[6] = MAX_FX as u32;
-    w[8] = 4;
-    w[15] = 64;
-    w
+/// The facts of a device with the chain's rows and the kit's 32 values.
+fn facts() -> fxpage::DeviceFacts {
+    fxpage::DeviceFacts {
+        device: FakeCore::new().device_id(),
+        slots: MAX_FX as u32,
+        values_n: 32,
+        knob_block: 2,
+        send_block: 3,
+        ..Default::default()
+    }
 }
 
-fn core_with(words: Vec<u32>) -> FakeCore {
+/// An image whose `rows_info` holds the blocks of the effect knobs and the send knobs.
+fn core_for() -> FakeCore {
     let mut core = FakeCore::new();
-    core.info_tables.push((fxpage::INFO_HASH, words));
+    core.set_rows_blocks(&[(2, 40, 8 * MAX_FX as u32, 0x75), (3, 90, 2, 0x75)]);
     core
 }
 
@@ -98,8 +97,12 @@ fn good() -> Vec<u8> {
 }
 
 fn check(r: &[u8]) -> i32 {
-    let core = core_with(table(&FakeCore::new()));
-    unsafe { fxpage::check_record(&core, r.as_ptr()) }
+    let f = facts();
+    let core = core_for();
+    unsafe {
+        assert_eq!(fxpage::bind_facts(&core, &f, [0, 0]), OK);
+        fxpage::check_record(&core, r.as_ptr())
+    }
 }
 
 #[test]
@@ -215,38 +218,34 @@ fn a_knob_of_an_effect_record_has_its_own_position_a_range_and_a_default_inside_
 }
 
 #[test]
-fn an_image_table_is_bound_only_when_its_magic_version_device_and_sizes_fit() {
+fn facts_are_bound_only_when_the_sizes_fit_what_the_service_holds_state_for() {
     let _g = lock();
-    let ok = table(&FakeCore::new());
-    let bound = |w: Vec<u32>| {
-        let core = core_with(w);
-        let r = unsafe { fxpage::available(&core) };
+    let bound = |f: fxpage::DeviceFacts| {
+        let core = core_for();
+        let r = unsafe { fxpage::bind_facts(&core, &f, [0, 0]) } == OK;
         unsafe { fxpage::unbind() };
         r
     };
-    assert!(bound(ok.clone()));
-    // a newer table is fine, an older one is not
-    let mut w = ok.clone();
-    w[1] = 5;
-    assert!(bound(w));
-    for (what, word, value) in [
-        ("another magic", 0usize, 0x4658_5048u32),
-        ("version 3", 1, 3),
-        ("another device", 2, 99),
-        ("a list longer than the buffer", 8, 9),
-        ("more pages than the chain has rows", 6, MAX_FX as u32 + 1),
-        ("more values than the defaults hold", 15, 65),
-        ("more effect rows than the id table holds", 15, 72),
+    assert!(bound(facts()));
+    for (what, f) in [
+        (
+            "more pages than the chain has rows",
+            fxpage::DeviceFacts {
+                slots: MAX_FX as u32 + 1,
+                ..facts()
+            },
+        ),
+        (
+            "more values than value indices",
+            fxpage::DeviceFacts {
+                values_n: 33,
+                ..facts()
+            },
+        ),
     ] {
-        let mut w = ok.clone();
-        w[word] = value;
-        assert!(!bound(w), "{what}");
+        assert!(!bound(f), "{what}");
     }
-    // the largest sizes that fit
-    let mut w = ok.clone();
-    (w[6], w[8], w[15]) = (MAX_FX as u32, 8, 64);
-    assert!(bound(w));
-    // no table in the image
+    // no `rows_info` in the image, or none for another device: nothing to bind
     let core = FakeCore::new();
     assert!(!unsafe { fxpage::available(&core) });
 }

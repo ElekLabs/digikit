@@ -1,4 +1,4 @@
-//! Named statics the hooks of `core/fxpages` read and write (the `DKRT_FXP_*` symbols).
+//! Named statics the hooks of the effect pages read and write (the `DKRT_FXP_*` symbols).
 
 use super::*;
 use dkrt_abi::dsp::MAX_FX;

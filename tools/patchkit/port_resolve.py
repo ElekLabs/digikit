@@ -61,7 +61,7 @@ Rule kinds (SHARC rules use the image's sharcdb through tools/sharc_dev/sharc.py
 
   cf_params_t1   the parameter descriptor table (60-byte rows), found by the 36-byte signature of its reader (finding 02,
                  exactly one match): a data anchor over all rows (the row count is the length / 60).
-  cf_params_sites  the sites of the code that depend on that table, for core/params: the 2-aligned words that point
+  cf_params_sites  the sites of the code that depend on that table, for core/rows: the 2-aligned words that point
                  into it and the clamp bounds (`cmpi.l #N,Dn` / `cmpa.l #N,An` with N the row count or one less,
                  followed by scs/scc/bhi/bls), found by the scan of scan_param_sites below. An anchor of
                  kind "sites": addr = the table, len = number of sites, sha256 = their digest.

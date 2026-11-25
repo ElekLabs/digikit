@@ -67,7 +67,7 @@ describeOn('dt2', `DT2 ${FIRMWARE.dt2} machines.dks: the SRC page of a run-time 
 
     // the list has the entry (the hint is its place with the stock machines) and the choice reaches the track
     const type = await dynType(session, run.plan, ID, 'sine');
-    expect(type, 'a run-time type (the range of core/dynreg)').toBeGreaterThanOrEqual(16);
+    expect(type, 'a run-time type (the range of core/rows)').toBeGreaterThanOrEqual(16);
     await selectDt2(rt, 1, type, 7);
     expect(await trackType(session, 1), 'track 1 holds the type of Sine').toBe(type);
 

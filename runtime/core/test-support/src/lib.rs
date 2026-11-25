@@ -5,6 +5,7 @@
 extern crate std;
 pub mod contract;
 mod driver;
+pub mod hook_context;
 mod pool;
 mod provider_driver;
 pub mod routes;
@@ -208,12 +209,31 @@ impl FakeCore {
         k.push((at, kind, keys.to_vec()));
     }
 
-    /// The image has the table `dynreg_info` with these words (word 0, the magic, is set here): `dkrt_svc_rows::dynreg` finds it through `CoreApi::info`.
-    pub fn set_dynreg(&mut self, mut table: Vec<u32>) {
-        table[0] = 0x4459_4e52;
-        let hash = fnv1a("dynreg_info");
+    /// The image has the table `rows_info` with these words (word 0, the magic, and word 1, the version, are set here): `dkrt_svc_rows::rows_info` finds it through `CoreApi::info`.
+    pub fn set_rows_info(&mut self, mut table: Vec<u32>) {
+        table[0] = 0x524f_5753;
+        table[1] = 2;
+        let hash = fnv1a("rows_info");
         self.info_tables.retain(|(h, _)| *h != hash);
         self.info_tables.push((hash, table));
+    }
+
+    /// The image's `rows_info` has these parameter blocks (owner number, first code, rows, template of a free row), in this order: the table is made when the image has none, and a
+    /// table a test set before keeps its other words (`dkrt_svc_rows::block::block` finds a block by its owner number).
+    pub fn set_rows_blocks(&mut self, blocks: &[(u32, u32, u32, u32)]) {
+        let hash = fnv1a("rows_info");
+        let mut t = self
+            .info_tables
+            .iter()
+            .find(|(h, _)| *h == hash)
+            .map(|(_, t)| t.clone())
+            .unwrap_or_else(|| std::vec![0u32; 110]);
+        // the words of `dkrt_svc_rows::rows_info::w`: BLOCKS 92, then 4 words for each block
+        t[92] = blocks.len() as u32;
+        for (i, b) in blocks.iter().enumerate() {
+            t[93 + 4 * i..97 + 4 * i].copy_from_slice(&[b.0, b.1, b.2, b.3]);
+        }
+        self.set_rows_info(t);
     }
 
     /// The image has the table `dyndsp_info` (the DSP's voice registry and area) with `area_bytes` bytes of area, the first free voice row at `first` and `free` rows

@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { Device } from '@digi/test-support';
 import { cardStore, uploadStore } from '../runtime/device-data.ts';
-import { KIT_AREAS, overlayWrites, runtimeSafety, type SafetyPolicy } from '../runtime/write-safety.ts';
+import { kitAreas } from '../runtime/device-data.ts';
+import { encodeOverlay, layOver, overlayWrites, runtimeSafety, type SafetyPolicy } from '../runtime/write-safety.ts';
 
 const directories: string[] = [];
 afterEach(() => {
@@ -56,7 +57,7 @@ const check = (
 
 describe.each(['dt2', 'dn2'] as const)('runtime safety on %s', (device) => {
   const store = cardStore(device);
-  const [kitLo, kitHi] = KIT_AREAS[device][0]!;
+  const [kitLo, kitHi] = kitAreas(device)[0]!;
 
   test('passes with clean logs and allowed sectors', () => {
     const { output, overlay } = run([store.selA, store.selB, 0x58000], 2);
@@ -136,4 +137,21 @@ test('a torn overlay is refused', () => {
   fs.writeFileSync(overlay, 'torn');
   expect(() => safety('dt2', output, [overlay])).toThrow('not a multiple');
   expect(() => overlayWrites(overlay, 'dt2')).toThrow('not a multiple');
+});
+
+describe('layOver', () => {
+  test('a reader that asks for sectors one by one parses the overlay blob once, not for each sector', () => {
+    const records = 50;
+    const blob = encodeOverlay(
+      new Map(Array.from({ length: records }, (_, i) => [i, Buffer.alloc(512, i + 1)] as const)),
+    );
+    const card = path.join(os.tmpdir(), 'digi-lay-over-no-such-card.img');
+    const reads = vi.spyOn(blob, 'readBigUInt64LE');
+    for (let sector = 0; sector < 4 * records; sector += 1) {
+      const buf = Buffer.alloc(512);
+      layOver(buf, sector, card, blob);
+      expect(buf[0], `sector ${sector} carries its blob data`).toBe(sector < records ? sector + 1 : 0);
+    }
+    expect(reads, 'one sector number read per record, for the whole run').toHaveBeenCalledTimes(records);
+  });
 });

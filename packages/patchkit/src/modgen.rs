@@ -16,10 +16,10 @@ use crate::typed::{DevResolved, Knob, Models, RMachine, resolve};
 /// One generated file: path relative to the module directory, and its text.
 pub type GenFile = (String, String);
 
-/// The permanent type number of a machine (`core/machines` types.toml), if the framework is in the library.
+/// The permanent type number of a machine (`core/rows` types.toml), if the framework is in the library.
 fn type_number(lib: &Library, dev: &str, module: &str, machine: &str) -> Option<i64> {
     let d = lib
-        .get("core/machines")?
+        .get("core/rows")?
         .alloc
         .get("machines")?
         .devices

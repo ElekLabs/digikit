@@ -8,9 +8,9 @@ use dkrt_abi::registry::each;
 use dkrt_abi::service::Problem;
 use dkrt_sdk::records::{KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM};
 use dkrt_sdk::*;
-use dkrt_svc_rows::dynreg::{w, RegState};
+use dkrt_svc_rows::rows_info::{w, RegState};
 
-/// What the checks read: the section, the words of `dynreg_info` and the owner's registry state.
+/// What the checks read: the section, the words of `rows_info` and the owner's registry state.
 pub(crate) struct Ctx<'a> {
     pub(crate) reg: *const u8,
     pub(crate) image_size: u32,
@@ -100,7 +100,7 @@ pub(crate) unsafe fn ck_native<C: CoreApi>(core: &C, c: &Ctx<'_>) -> i32 {
         if !nativepage::is_kind(kind) || bad_native != OK {
             return;
         }
-        bad_native = nativepage::check(core, kind, b, np, image_size);
+        bad_native = nativepage::check(kind, b, np, image_size);
         if bad_native != OK {
             return;
         }

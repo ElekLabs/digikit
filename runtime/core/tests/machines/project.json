@@ -1,31 +1,85 @@
 {
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime-machines-tests",
-  "tags": ["test-only"],
-  "implicitDependencies": ["core/runtime"],
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime"
+  ],
   "metadata": {
     "runtimeAcceptance": [
       {
-        "files": ["frametype-slot.device.test.ts"],
-        "devices": ["dn2"],
+        "files": [
+          "machine-rows-dn2.device.test.ts"
+        ],
+        "devices": [
+          "dn2"
+        ],
         "dsp": "sharc",
-        "tags": ["S:machines", "C:loading"],
-        "modules": ["digikit/debug", "test/dyn-dn2", "core/services/machines"]
-      },
-      {
-        "files": ["machine-rows-dn2.device.test.ts"],
-        "devices": ["dn2"],
-        "dsp": "sharc",
-        "tags": ["C:state", "C:types", "S:machines"],
-        "modules": ["test/dyn-dn2", "core/services/machines"],
+        "tags": [
+          "C:loading",
+          "C:state",
+          "C:types",
+          "S:machines"
+        ],
+        "modules": [
+          "test/dyn-dn2",
+          "core/services/machines"
+        ],
         "plusdrive": true
       },
       {
-        "files": ["machine-rows-dt2.device.test.ts"],
-        "devices": ["dt2"],
+        "files": [
+          "machine-rows-dt2.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
         "dsp": "sharc",
-        "tags": ["C:state", "C:types", "S:machines"],
-        "modules": ["test/sine", "core/services/machines"],
+        "tags": [
+          "C:state",
+          "C:types",
+          "S:machines"
+        ],
+        "modules": [
+          "test/sine",
+          "core/services/machines"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "roundtrip.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "tags": [
+          "C:state",
+          "C:types",
+          "S:machines"
+        ],
+        "modules": [
+          "test/dyn-dn2",
+          "test/sine",
+          "core/services/machines"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "equiv.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "tags": [
+          "C:dsp",
+          "C:types",
+          "S:machines"
+        ],
+        "modules": [
+          "test/dyn-dn2",
+          "test/sine",
+          "core/services/machines"
+        ],
         "plusdrive": true
       }
     ]

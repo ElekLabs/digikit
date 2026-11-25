@@ -17,7 +17,7 @@
       "{workspaceRoot}/runtime/core/abi.toml",
       "{workspaceRoot}/runtime/core/fit/**",
       "{workspaceRoot}/runtime/core/sdk/**",
-      "{workspaceRoot}/image-modules/points/machines/types.toml",
+      "{workspaceRoot}/runtime/platform/rows/types.toml",
       "{workspaceRoot}/packages/patchkit/Cargo.toml",
       "{workspaceRoot}/packages/patchkit/build.rs",
       "{workspaceRoot}/packages/patchkit/src/**",

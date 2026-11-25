@@ -5,7 +5,7 @@ import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { triggerFrame as triggerFor } from '@digi/regression/runtime/fixtures.ts';
 import {
-  analysisJson,
+  addedFactorOf,
   capture,
   compare,
   dspWords,
@@ -83,12 +83,8 @@ for (const device of DEVICES) {
         await compare(pcm.get('dry')!, pcm.get(tag)!, 1, artifacts, `send-${tag}`, true);
       }
       const added = async (tag: string) => {
-        const result = await analysisJson<{ added_factor: number }>(
-          'tools.patchkit.pk_digikit_fxsend',
-          ['added-factor', pcm.get('zero')!, pcm.get(tag)!],
-          artifacts,
-          `send-${tag}-added-factor`,
-        );
+        const result = { added_factor: addedFactorOf(pcm.get('zero')!, pcm.get(tag)!) };
+        record(artifacts, `send-${tag}-added-factor`, result);
         return result.added_factor;
       };
       const full = await added('full');

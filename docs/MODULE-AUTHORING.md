@@ -636,8 +636,7 @@ The template `src/dsp/NAME.s` shows all of this in about 90 lines. Read it first
   effect its stored values only when the stored ID for its row is its own. Otherwise the effect gets its declared defaults. Effects count by row,
   so the same effects loaded in another order get defaults. A kit saved with effects also loads on stock firmware.
 - Not supported: p-locks, LFO and other modulation on a knob, MIDI CC, a second page for one effect, and a knob that does not reach the DSP as a
-  float. An image without `core/fxpages` refuses a module with a page (`E_NO_REGISTRY`). The Digitone II image needs `core/dynfx` and
-  `core/fxpages` in its module list (they are in its `device` patch set).
+  float. An image without the effect pages (`core/dynfx` and the page hooks of the fx service) refuses a module with a page (`E_NO_REGISTRY`). The Digitone II image needs `core/dynfx` in its module list (it is in its `device` patch set).
 - Text is printable ASCII. Write titles in mixed case. The firmware font draws a capital Q like an O.
 - Routes: a send effect gets the sum of the tracks' send amounts as its input block. Its wet output times MIX is added to the FX return. The
   user chooses the route in SETTINGS > FX ROUTING (the setting `fx/route/<module id>`; a pick reloads the module, so the effect keeps no state across it). A stored route that the effect no longer allows is
@@ -788,7 +787,9 @@ exports from `init`. For Rust providers using `dkrt_svc_rt::service!`, use its
 object that implements `Provider` (and the traits of the parts it adopts); its `service!` call names
 them: `service!(MyService, "my-service", &[], parts = [Tick], hooks = [], fills = [], exports = [...])`.
 
-A hook name may appear once per disjoint device set (`devices` in `[[hook]]`): the loader takes the entry for its own device and refuses a duplicate.
+A hook name may appear once per disjoint device set (`devices` in `[[hook]]`): the loader takes the entry for its own device and refuses a duplicate. `init` declares every hook of the file under its plain name, with no device in the Rust call: the loader matches each declaration to the manifest entry of its own device and drops the declaration of a hook that the manifest lists for another device only. A declaration that no entry of the manifest has, and an entry of its own device that was not declared, are refused (`E_DECL_KIND`).
+
+A service can also take a patch of the firmware: `[[patch]] name = "..."` (the name is a patch site of the port file) and `patches = [("name", 4, MyService::table)]` in `service!`; the function gives the bytes from the instance `start` made. See [PATCHING](PATCHING.md) "Patches".
 
 ```toml
 [[export]]

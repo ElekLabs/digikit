@@ -327,7 +327,7 @@ users = ["core/services/lfo"]
 doc = "The cell of the LFO page (UI task): for a wave 7 to 14 with a published shape graph D6 becomes the service's vector of four tiles and the byte at -0x11(A6) the unipolar mark; otherwise the tail runs the displaced `addi.l #TABLE,D6`. The wave is 0x18(A6). The vtable word of the tiles is read from the stock vector (the tail's displaced `addi` gives TABLE; TABLE + D6 is the vector, its first word the first Bitmap's vtable). Strict liveness: only the flags are dead; D0, D1, A0 and A1 are saved."
 
 # ---- The WAVE rows of the parameter table (docs/findings/149-lfo-waveforms.md, "Direct readers of the parameter table"): the rows of the parameters 79, 89 and 99, the WAVE of the three LFOs.
-# The lfo service writes the maximum word of each row (+0xc) in the RAM copy of the table that `core/params` makes, so the encoder stops at the highest loaded shape. A signature of the
+# The lfo service writes the maximum word of each row (+0xc) in the RAM copy of the table that `core/rows` makes, so the encoder stops at the highest loaded shape. A signature of the
 # row's words from its owner: the mirror index (+4), the minimum 0, the maximum 0x600 (RND), the default, the flag 0, the CC half (a wildcard: the CC and the NRPN halves differ between
 # the devices), the slot (+0x1c) and wildcards for the owner, name, template and formatter words (the addresses of each firmware).
 

@@ -4,30 +4,16 @@
   "metadata": {
     "runtimeAcceptance": [
       {
-        "files": [
-          "tests/fx-contract.device.test.ts"
-        ],
+        "files": ["tests/fx-contract.device.test.ts"],
         "dsp": "sharc",
-        "tags": [
-          "A:core/dynfx"
-        ],
-        "modules": [
-          "test/dyn-fx-gain",
-          "test/sine",
-          "core/services/machines",
-          "core/services/fx"
-        ],
+        "tags": ["A:core/dynfx"],
+        "modules": ["test/dyn-fx-gain", "test/sine", "core/services/machines", "core/services/fx"],
         "aliases": {
           "test/dyn-fx-gain-2": "test/dyn-fx-gain",
           "test/dyn-fx-gain-3": "test/dyn-fx-gain",
           "test/dyn-fx-gain-4": "test/dyn-fx-gain"
         },
-        "sources": [
-          "tools/patchkit/hook_ab.py",
-          "tools/patchkit/pk_digikit_fx.py",
-          "tools/patchkit/pk_digikit_fxroute.py",
-          "tools/patchkit/pk_digikit_fxroutes.py"
-        ],
+        "sources": ["tools/patchkit/hook_ab.py"],
         "plusdrive": true,
         "firmwareOnly": "PCM of the hooked FX chain through the firmware audio path, the stock FX pages staying without the fx service, and the deselect after a protocol restart"
       }

@@ -18,10 +18,8 @@ def test_machine_parameters_come_from_the_manifest_and_the_device_frame():
     # Module word 0 sits on knob B on both devices; DN2 has no stock TUNE knob.
     assert [(p.id, p.knob) for p in dn2.params] == [("level", 1)]
     assert dn2.frame.hw(3, 1) == dn2.frame.base + 3 * dn2.frame.stride + 1
-    # a run-time machine has no fixed number: the rig takes the first number of the run-time range of the device (core/machines types.toml)
-    types = tomllib.loads(
-        (c.ROOT / "image-modules/points/machines/types.toml").read_text()
-    )
+    # a run-time machine has no fixed number: the rig takes the first number of the run-time range of the device (core/rows types.toml)
+    types = tomllib.loads((c.ROOT / "runtime/platform/rows/types.toml").read_text())
     assert dt2.machine_type == types["dt2"]["dynamic_first"]
     assert dn2.machine_type == types["dn2"]["dynamic_first"]
     assert [p.default for p in dn2.params] == [32512]

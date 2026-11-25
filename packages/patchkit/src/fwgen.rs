@@ -97,6 +97,10 @@ struct Hook {
     /// (the displaced instructions are copied from flash after the hash check). `patchkit port build` lists it in the port file.
     #[serde(default)]
     stock: bool,
+    /// A patch site, not a hook: `patch = 4` names plain bytes (1, 2 or 4) at the `site` plus `offset` (an operand of an instruction, a table word) that a service writes at load
+    /// with a value of its own (`dk_service_declare_patch`) and restores at unload. The port file lists it as kind `patch` with the length and the check value of the stock bytes.
+    /// Only for a cf hook with mode "replace" and no handler, `tail`, `stock` or `exits`.
+    patch: Option<u32>,
     /// The places a raw hook may leave the site besides its end (`dk_exit_<hook>_<n>` of a service, `n` from 1): each is an expression like the ones of a module manifest,
     /// an anchor name with an optional offset (`"cf.machine.site.clone.5 + 12"`), evaluated on the port of the firmware of the port file.
     #[serde(default)]
@@ -272,6 +276,8 @@ pub struct HookDecl {
     pub devices: Vec<String>,
     pub tail: bool,
     pub stock: bool,
+    /// A patch site of this many bytes (1, 2 or 4), not a hook.
+    pub patch: Option<u32>,
     /// The declaration has a `handler`: a trampoline calls a C function. The port file has no trampolines, so a service may not take such a hook.
     pub handler: bool,
     pub exits: Vec<String>,
@@ -281,8 +287,8 @@ pub struct HookDecl {
 
 /// The prefix of a `users` entry that is a service module id.
 pub const SERVICE_USER_PREFIX: &str = "core/services/";
-/// The test fixture that takes a hook of its own (`test/svc-test`): a service for the port set like the core services.
-pub const TEST_SERVICE_USER: &str = "test/svc-test";
+/// The test fixtures that take a hook or patch of their own (`test/svc-test` a hook, `test/local-patch` a patch): services for the port set like the core services.
+pub const TEST_SERVICE_USERS: [&str; 2] = ["test/svc-test", "test/local-patch"];
 
 /// The ColdFire names and hooks of `ports/fw/` whose `users` list names a service (`core/services/*`): the set a port file lists. A hook may appear once per
 /// device (the same name, `devices` apart).
@@ -299,8 +305,10 @@ pub fn service_decls_with(
     test_users: bool,
 ) -> Result<(Vec<NameDecl>, Vec<HookDecl>)> {
     let is_service = |u: &[String]| {
-        u.iter()
-            .any(|x| x.starts_with(SERVICE_USER_PREFIX) || (test_users && x == TEST_SERVICE_USER))
+        u.iter().any(|x| {
+            x.starts_with(SERVICE_USER_PREFIX)
+                || (test_users && TEST_SERVICE_USERS.contains(&x.as_str()))
+        })
     };
     let (mut names, mut hooks) = (vec![], vec![]);
     for text in decls.iter().copied() {
@@ -327,6 +335,7 @@ pub fn service_decls_with(
                     devices: h.devices.clone(),
                     tail: h.tail,
                     stock: h.stock,
+                    patch: h.patch,
                     handler: h.handler.is_some(),
                     exits: h.exits.clone(),
                     users: h.users.clone(),
@@ -1177,6 +1186,22 @@ fn check_hook(
             "{name}: `stock = true` is only for a cf hook with mode \"replace\", no handler and no `tail` (a raw hook)"
         ));
     }
+    if let Some(n) = h.patch {
+        if h.handler.is_some()
+            || !cf
+            || h.mode != "replace"
+            || h.tail
+            || h.stock
+            || !h.exits.is_empty()
+        {
+            return Err(err!(
+                "{name}: `patch = N` is only for a cf hook with mode \"replace\", no handler, `tail`, `stock` or `exits` (a patch site)"
+            ));
+        }
+        if !dkneeds::keys::PATCH_LENS.contains(&(n as u16)) {
+            return Err(err!("{name}: `patch = {n}`: a patch is 1, 2 or 4 bytes"));
+        }
+    }
     if !h.exits.is_empty() && (h.handler.is_some() || !cf || h.mode != "replace") {
         return Err(err!(
             "{name}: `exits` is only for a cf hook with mode \"replace\" and no handler (a raw hook)"
@@ -1860,10 +1885,9 @@ pub fn image_hooks(decls: &[&str]) -> Result<Vec<(String, Vec<String>)>> {
                 .cpu
                 .as_deref()
                 .map_or(h.name.starts_with("cf."), |c| c == "cf");
-            let image = h
-                .users
-                .iter()
-                .any(|u| !u.starts_with(SERVICE_USER_PREFIX) && u != TEST_SERVICE_USER);
+            let image = h.users.iter().any(|u| {
+                !u.starts_with(SERVICE_USER_PREFIX) && !TEST_SERVICE_USERS.contains(&u.as_str())
+            });
             if cf && image {
                 out.push((h.name.clone(), h.devices.clone()));
             }

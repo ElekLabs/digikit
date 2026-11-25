@@ -5,6 +5,10 @@ use patchkit::svccheck::check;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// The two devices of the checker's per-device lists, in its order.
+const DEV_A: &str = "dt2";
+const DEV_B: &str = "dn2";
+
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -301,7 +305,7 @@ fn service_hooks_equal_the_hook_entries_per_device() {
     append(&dir.join("dks/module.toml"), &entry("cf.a.hook.x", ""));
     append(
         &dir.join("dks/module.toml"),
-        &entry("cf.a.hook.y", "devices = [\"dn2\"]\n"),
+        &entry("cf.a.hook.y", &format!("devices = [\"{DEV_B}\"]\n")),
     );
     assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
     // the call has a hook the manifest has not, and the manifest has one the call has not, each for its device
@@ -318,7 +322,7 @@ fn service_hooks_equal_the_hook_entries_per_device() {
     assert!(
         mentions(
             &found,
-            "[[hook]] `cf.a.hook.y` on dn2 is not in the service! hook list"
+            &format!("[[hook]] `cf.a.hook.y` on {DEV_B} is not in the service! hook list")
         ),
         "{found:?}"
     );
@@ -328,6 +332,66 @@ fn service_hooks_equal_the_hook_entries_per_device() {
         &problems(&dir, &sdk),
         "dks/src/hooks.rs is missing"
     ));
+}
+
+/// A hook declared with no device is the loader's to match (it takes the entry of its own device and drops the declaration of a hook that the table lists for another device only): the
+/// manifest needs an entry for it on some device, and every manifest entry still needs its declaration.
+#[test]
+fn a_plain_hook_needs_a_manifest_entry_on_some_device() {
+    let call = |hooks: &str| {
+        format!(
+            "#![no_std]\nmod hooks;\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [Records], hooks = [{hooks}]);\n"
+        )
+    };
+    let entry =
+        |name: &str, dev: &str| format!("\n[[hook]]\nname = \"{name}\"\nentry = \"e\"\n{dev}");
+    let (dir, sdk) = service("hooks-plain", &[]);
+    fs::write(dir.join("dks/src/hooks.rs"), "").unwrap();
+    append(
+        &dir.join("dks/module.toml"),
+        &entry("cf.a.hook.x", &format!("devices = [\"{DEV_A}\"]\n")),
+    );
+    append(
+        &dir.join("dks/module.toml"),
+        &entry("cf.a.hook.y", &format!("devices = [\"{DEV_B}\"]\n")),
+    );
+    // both declared plain: each has an entry on one device
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call("(\"cf.a.hook.x\", hooks::x), (\"cf.a.hook.y\", hooks::y)"),
+    )
+    .unwrap();
+    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
+    // a plain hook that no device's entry names is refused
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call(
+            "(\"cf.a.hook.x\", hooks::x), (\"cf.a.hook.y\", hooks::y), (\"cf.a.hook.z\", hooks::z)",
+        ),
+    )
+    .unwrap();
+    let found = problems(&dir, &sdk);
+    assert!(
+        mentions(
+            &found,
+            "service! takes the hook `cf.a.hook.z`, but dks/module.toml has no [[hook]] for it"
+        ),
+        "{found:?}"
+    );
+    // an entry the call leaves out is still refused, on its device
+    fs::write(
+        dir.join("dks/src/lib.rs"),
+        call("(\"cf.a.hook.x\", hooks::x)"),
+    )
+    .unwrap();
+    let found = problems(&dir, &sdk);
+    assert!(
+        mentions(
+            &found,
+            &format!("[[hook]] `cf.a.hook.y` on {DEV_B} is not in the service! hook list")
+        ),
+        "{found:?}"
+    );
 }
 
 /// The service with an adapters folder beside it that declares `[[slot]] frametype` with the given `devices` line.
@@ -772,7 +836,7 @@ fn a_row_anchor_has_one_service_in_its_users() {
         row("cf.a.data.row_ok", "[\"core/services/lfo\"]", words)
             + &row("cf.a.data.row_shared", "[\"core/services/lfo\", \"core/services/fx\"]", words)
             // a row that no service names, a service and a core module, and a code site (not a row)
-            + &row("cf.a.data.row_core", "[\"core/params\", \"core/services/lfo\"]", words)
+            + &row("cf.a.data.row_core", "[\"core/rows\", \"core/services/lfo\"]", words)
             + &row(
                 "cf.a.data.site",
                 "[\"core/services/lfo\", \"core/services/fx\"]",

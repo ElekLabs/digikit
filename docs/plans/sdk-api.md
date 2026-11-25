@@ -303,7 +303,7 @@ Fault instrumentation follow-ups (the base is in finding 77): only when a real b
 - [x] A live log panel in the workbench (docs/plans/workbench-device-log.md).
 - [ ] The same log panel on the site.
 - [ ] A "trace" tag for traced `.dkm` files on the site's Transfer page.
-- [ ] Module-source tags for the callbacks that `core/ui` and `core/params` make.
+- [ ] Module-source tags for the callbacks that `core/ui` and `core/rows` make.
 - [ ] A gdb bridge to the emulator's ColdFire, and the crash record as an m68k core file.
 - [ ] Host-side names for the runtime stack addresses of a panic record: patchkit `cf-link --json` emits the symbols and `text_ranges` (`packages/patchkit/src/build_cli.rs:212-216`); the patch plan of the image also has a symbol per runtime function. Look up the address minus 2: a call to a function that does not return is often the last instruction, so its return address is the first byte of the next function.
 - [ ] `api->fatal(code)` for C modules through the same fatal path as the runtime panic.

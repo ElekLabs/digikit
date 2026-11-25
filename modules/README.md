@@ -83,7 +83,7 @@ Numbers can be written as TOML integers or as strings holding an *expression* (s
 | `conflicts` | module ids that must not be selected |
 | `ports` | optional: only these ports, for example `["dt2-1.17"]` (empty: any firmware whose anchors resolve) |
 | `needs_device` | optional: tables of the device file the module reads, as dotted paths (`["input.keys"]`). Every device whose patch sets include the module (as a root or through `requires`) must have them; `patchkit gen` refuses a device without one, naming the table, the set and the module |
-| `dynamic` | optional, default false: a run-time module (a content module, see [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)). It is never patched into an image (patchkit refuses it). `patchkit pack` makes a `.dkm` from it. Its machines have no number in `image-modules/points/machines/types.toml`: the runtime assigns a type in 16 to 23 when it loads the module (docs/design/digikit-registry.md "Machine keys") |
+| `dynamic` | optional, default false: a run-time module (a content module, see [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md)). It is never patched into an image (patchkit refuses it). `patchkit pack` makes a `.dkm` from it. Its machines have no number in `runtime/platform/rows/types.toml`: the runtime assigns a type in 16 to 23 when it loads the module (docs/design/digikit-registry.md "Machine keys") |
 
 ```toml
 [module]
@@ -122,7 +122,7 @@ A built object that patchkit places in a region. One module may have several (fo
 | `place` | region: `dsp.l2` (SHARC+ code and data), `cf.expansion` (ColdFire code, data, bss) or `cf.flash_cave` (only the built-in loader) |
 | `devices` | optional: `["dt2"]`, `["dn2"]` or both (default: both) |
 | `[object.externs]` | undefined symbol of the object = anchor name (a symbol named exactly like an anchor needs no entry) |
-| `optional` (key of `[[object]]`) | undefined symbols that resolve to 0 when no selected module defines them (an optional link to another module; the runtime uses it for `core/dynreg`) |
+| `optional` (key of `[[object]]`) | undefined symbols that resolve to 0 when no selected module defines them (an optional link to another module; the runtime uses it for `core/rows`) |
 
 ```toml
 [[object]]
@@ -165,7 +165,7 @@ symbol = "pk_loader"
 ```
 
 ```toml
-[[op]]                       # raise every stock bound by the number of added rows (see core/params)
+[[op]]                       # raise every stock bound by the number of added rows (see core/rows)
 op = "write"
 anchors = "cf.param.sites.descriptor_table.bound.*"
 offset = 2
@@ -268,7 +268,7 @@ after a second agent checked it), `offset`, `len` (bytes).
 | `cf_func` | `hash`, `ordinal` (default 0), `offset` | `len` bytes at an offset in a function with this address-masked hash |
 | `cf_ptr` | `hash`, `ordinal`, `offset`, `len` | the table behind an address literal in a function |
 | `cf_words` | `words = [u32 or "*", ...]` | a table row by masked signature |
-| `cf_params_t1`, `cf_params_refs`, `cf_params_bounds`, `cf_params_sites` | | the parameter table and its readers (used by `core/params`; `exclude_anchors` drops sites inside named anchors) |
+| `cf_params_t1`, `cf_params_refs`, `cf_params_bounds`, `cf_params_sites` | | the parameter table and its readers (used by `core/rows`; `exclude_anchors` drops sites inside named anchors) |
 | `cf_reset_init_calls`, `cf_reset_helper` | `which = "copy"\|"clear"` | the reset-path calls (used by `core/expansion`) |
 
 ```toml
@@ -309,16 +309,16 @@ every entry.
 patchkit defines `<reg>.first`, `<reg>.count`, `<reg>.entries`, `<reg>.rows`, `<reg>.row_size` and
 `<reg>.<id>.index` (= first + k, entries in canonical module order; with an `index_table` see below).
 
-**Refusing entries (`refuse_entries`).** A `[[registry]]` with `refuse_entries = "reason"` takes no `[[entry]]` from a patched-in module: patchkit stops with the reason and the module that adds one (`core/machines`: a machine is a run-time module). `refuse_entries_except = ["module id"]` names modules that may still add entries (`core/dynreg` reserves the rows that run-time machines fill).
+**Refusing entries (`refuse_entries`).** A `[[registry]]` with `refuse_entries = "reason"` takes no `[[entry]]` from a patched-in module: patchkit stops with the reason and the module that adds one (`core/rows`: a machine is a run-time module). `refuse_entries_except = ["module id"]` names modules that may still add entries (`core/rows` reserves the rows that run-time machines fill).
 
 **Permanent numbers (`index_table`).** A project stores only a machine's type number, so the number must not depend
-on which other modules are selected. `core/machines` therefore ships `types.toml`:
+on which other modules are selected. `core/rows` therefore ships `types.toml`:
 
 ```toml
 [dt2]
 last = 23                          # the highest number the framework supports on this device
 [dt2.alloc]
-"core/dynreg:dyn16" = 16              # "<module id>:<entry id>" = number
+"core/rows:dyn16" = 16              # "<module id>:<entry id>" = number
 ```
 
 The numbers are allocated by hand (the next free number on each device) and committed with the module. A number is never reused or changed, also not
@@ -356,13 +356,19 @@ field. Numbers, strings for `cstr` fields and expressions or symbols for `sym` a
 [[entry]]
 registry = "voices"
 id = "pluck"
-type = "machines.pluck.index"     # the permanent type number of the machine below (core/machines types.toml)
+type = "machines.pluck.index"     # the permanent type number of the machine below (core/rows types.toml)
 pc = "_pk_render"                 # the routine, a symbol of this module's DSP object
 devices = ["dt2"]
 ```
 
 patchkit refuses an entry for an unknown registry, an unknown or missing field, a value that does not fit, a
 `cstr` that is too long and an id used twice.
+
+**Reservations (`count`).** A framework that makes room for rows of run-time modules states the number once: `count = "8 * fx_slots"` on an
+`[[entry]]` stands for `<id>0`, `<id>1`, ... on each device in `devices` (so `params.fp0.index` is the first), the count an expression over the
+device file's `[limits]` (`param_rows`, `send_rows`, `fx_slots`, ...; [device data](../docs/design/device-data.md)). The expansion happens when the manifest
+loads, so everything after it sees plain entries. `devices` is required; a count of 0 reserves nothing; a negative count or an unknown limit is an
+error. `core/rows` reserves the parameter rows this way.
 
 ### Machine rows
 
@@ -392,7 +398,7 @@ stale (`packages/patchkit/tests/typed.rs` runs it). The files hold no firmware b
 `gallery.json` is part of the web bundle (`files["build/gen/gallery.json"]`) and shown on the module card.
 
 A module can also ask for constants from the device files (`devices/*.toml`: `[board]`, `[digikit]`, `[card.store]`) and
-`core/machines` `types.toml` with `[[gen]]` entries in its `module.toml` (`kind` = `rust`, `gas-shared`, `gas`, `sharc` or `sharc-adapter` (only the `ADM_*` defines of `[adapter.machine]`), a
+`core/rows` `types.toml` with `[[gen]]` entries in its `module.toml` (`kind` = `rust`, `gas-shared`, `gas`, `sharc` or `sharc-adapter` (only the `ADM_*` defines of `[adapter.machine]`), a
 `path`, and for `rust`, `gas-shared`, `gas` and `sharc` a `uses` list of the constants the module reads; `{dev}` in the path makes one file per device). They are written by the same `patchkit gen` and checked by `gen --check`;
 what each kind holds, which fact lives where and what a new device needs are in `docs/design/device-data.md`.
 
@@ -419,7 +425,7 @@ then placed in a region. The firmware table is never stored in the repository.
 | `region` | where to place it |
 | `from` | `{ anchor, offset = 0, len = EXPR, expect_sha256 }`; `len` defaults to the rest of the anchor; `expect_sha256` is needed when the range reaches outside the anchor |
 | `append` | `{ registry, row = [EXPR, ...] }`: for each entry append the row; a word is `EXPR` (32-bit), `u8:EXPR` or `u16:EXPR`; `$field` is an entry field and `$index` its index |
-| `edit` | `{ registry, at = EXPR, fields = [{ offset, value = EXPR }, ...] }`: for each entry rewrite words of one copied row in place: `at` is the row's byte offset in the copied bytes, `offset` a word's offset in the row, `value` as a word of `append` (core/params `param_edits`) |
+| `edit` | `{ registry, at = EXPR, fields = [{ offset, value = EXPR }, ...] }`: for each entry rewrite words of one copied row in place: `at` is the row's byte offset in the copied bytes, `offset` a word's offset in the row, `value` as a word of `append` (core/rows `param_edits`) |
 | `align` | bytes, default 4 |
 | `devices` | optional device filter |
 
@@ -508,13 +514,13 @@ A machine is a run-time module, not a patch-time row: write it with the builder 
 ### An effect: run-time module
 
 An effect is a run-time module (`dynamic = true`, a `.dkm`), like a machine. It builds its effect in `init` with builder calls (`dk_module_ctx_add_fx`, `dk_fx_routes`; `modules/fx/digikit/freqshift/src/module.c`, `[[fx]]` in `module.toml`)
-and takes one of the 3 free rows that `core/dynfx` reserves in the registry `fx` of `core/fx` (the effects adapter, `image-modules/points/fx/`); `core/fxpages` reserves the pages. The chain runs in module order, at most
+and takes one of the 3 free rows that `core/dynfx` reserves in the registry `fx` of `core/fx` (the effects adapter, `image-modules/points/fx/`); the fx service (`services/fx`) makes the pages. The chain runs in module order, at most
 `DK_FX_MAX` (4) effects. patchkit refuses an `[[entry]] registry = "fx"` of any module except `core/dynfx`. The routine, its `dk_fx_desc` and its state block are symbols of the module's DSP object
 (`<dk/gen/fx.h>`, [docs/MODULE-AUTHORING.md](../docs/MODULE-AUTHORING.md), sections 5.4 and 7.2). An empty chain plays the stock audio.
 The format is `docs/design/digikit-dkm.md`; the design of the pages is "Effect pages" in `docs/design/digikit-registry.md`.
 Example and fixture: `tests/fixtures/modules/dyn-fx-gain`.
 
-The frameworks themselves are ordinary modules: `image-modules/points/machines/` (about 24 ColdFire anchors, six copied
-tables, the hooks in `src/cf/dt2/machines.s` and `src/cf/dn2/machines.s`), `image-modules/points/params/` and
-`image-modules/points/dsp-voice/`. Their routines are unit-tested on the emulated ColdFire core (`tools/patchkit/pk_cfunit.py`,
-`image-modules/points/machines/tests/test_pk_machines_fw.py`, `image-modules/points/params/tests/test_pk_params_fw.py`), and the proofs are the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`). Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).
+The frameworks themselves are ordinary modules: `runtime/platform/rows/` (the machine types: the registry, six copied tables, the dispatch of a type, the reserved rows; the parameter table; `rows_info`), the machine
+selection view in `runtime/platform/ui/`, the DSP selector in `runtime/platform/dyndsp/` and `image-modules/points/dsp-voice/`. What a machine needs at run time is the machines service's (`services/machines`: the list,
+the rank pairs, the hooks of the machine framework, the native pages). Their routines are unit-tested on the emulated ColdFire core (`packages/patchkit/tests/machines_fw.rs`: the dispatch and the hooks;
+the parameter table: `packages/patchkit/tests/rows.rs`), and the proofs are the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`). Contract and evidence: [finding 02](../docs/findings/02-machines-and-parameters.md).

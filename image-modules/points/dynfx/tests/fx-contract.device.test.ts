@@ -3,7 +3,8 @@ import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { describe, expect, test } from 'vitest';
 import { withWaitApi, type TestRuntime } from '@digi/regression/support.ts';
 import {
-  analysisJson,
+  peak,
+  readFloatWav,
   bounded,
   captureNote,
   compare,
@@ -47,7 +48,7 @@ for (const device of DEVICES) {
     const slots = slotsFor(device);
     const effects = Array.from({ length: slots + 1 }, (_, index) => (index === 0 ? GAIN : `${GAIN}-${index + 1}`));
     const inventory = [SINE, ...effects];
-    const symbols = ['DKRT_BOOT', 'dynreg_info'];
+    const symbols = ['DKRT_BOOT', 'rows_info'];
     let plainPcm: string;
 
     const capture = async (runtime: TestRuntime, context: ReturnType<typeof withPreparedFxSession>, tag: string) => {
@@ -62,12 +63,8 @@ for (const device of DEVICES) {
       const file = path.join(context.artifacts, `${tag}.wav`);
       // Same instruction offset after the DSP boundary, held for the whole 1500-frame capture.
       await captureNote(session, { file, trigger, tag: `FX contract ${tag}`, tapStarted: true });
-      const pcm = await analysisJson<{ peak: number }>(
-        'tools.patchkit.pk_digikit_fx',
-        ['pcm-peak', file],
-        context.artifacts,
-        `${tag}-peak`,
-      );
+      const pcm = { peak: peak(readFloatWav(file)) };
+      record(context.artifacts, `${tag}-peak`, pcm);
       if (tag !== 'full') expect(pcm.peak, `${tag}: audible sine`).toBeGreaterThan(0.01);
       return file;
     };
@@ -91,7 +88,7 @@ for (const device of DEVICES) {
       const context = withPreparedFxSession(device, 'FX contract dry/wet/full', {
         image: {
           name: 'fx-chain',
-          modules: [...RT, 'core/dynfx', 'core/fxpages'],
+          modules: [...RT, 'core/dynfx'],
           inventory,
           symbols: [...symbols, 'fx.rows', '_dl_area', 'DKRT_HOST_DIR', 'DKRT_LOG', 'DKRT_LOG_COUNT'],
           policy: 'default',

@@ -16,7 +16,7 @@ use dkrt_sdk::records::{
     KIND_ACTION, KIND_MACHINE, KIND_PAGE, KIND_PARAM, LEN_ACTION, LEN_MACHINE, LEN_PAGE, LEN_PARAM,
 };
 use dkrt_sdk::{limits, E_FORMAT};
-use dkrt_svc_rows::dynreg::MACH_TEXT;
+use dkrt_svc_rows::rows_info::MACH_TEXT;
 
 /// The `what` of each problem.
 pub mod what {

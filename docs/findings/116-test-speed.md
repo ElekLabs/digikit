@@ -11,7 +11,7 @@ Scope: measurements of 2026-11-07/08 on an M3 Max (12 performance and 4 efficien
 
 ## Per-file device targets (PR #331)
 
-- **[D]** An edit to one core/dynreg test file reran only that file (2m11s).
+- **[D]** An edit to one core/rows test file reran only that file (2m11s).
 - **[D]** An unchanged rerun replayed in 2.7-3.2 s.
 
 ## fast-roots (PR #331)

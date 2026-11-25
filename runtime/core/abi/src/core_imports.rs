@@ -1,5 +1,5 @@
 //! Interface C as the imports of a service file (docs/plans/runtime-and-services.md section 13.2): one `extern "C" fn dkc_*` per `CoreApi` method, in C shape, and
-//! the imports only a service file makes (`dk_provider_declare_row`, `dkc_panic`). The list is one macro; two crates expand it:
+//! the imports only a service file makes (`dk_provider_declare_row`, `dkc_panic`, `dk_service_declare_patch`). The list is one macro; two crates expand it:
 //!
 //! - `dkrt-svc-rt` declares the names in an `extern "C"` block and implements `CoreApi` over them (`ImportCore`);
 //! - the runtime checks one function of its own for each entry against the declared type and builds its second import table `SVC_IMPORTS` from the names.
@@ -82,6 +82,9 @@ macro_rules! core_imports {
             fn dkc_panic() -> !;
             // ---- appended: reload the loaded module `id` (`id_len` bytes) when possible, whether it opened its settings or not (`CoreApi::reload_when_possible`)
             fn dkc_reload_when_possible(id: *const u8, id_len: u32);
+            // Called in `init` after `Provider::start`, beside `dk_service_declare_hook`: a patch the service takes, `len` (1, 2 or 4) bytes of `value` (big-endian, the low bytes) at the
+            // patch site `site` (the `name_hash` of the `[[patch]]` name). The values are run-time facts (table addresses, counts), so they come from `start`, not from the file. A status.
+            fn dk_service_declare_patch(ctx: *mut u8, site: u32, value: u32, len: u32) -> i32;
         }
     };
 }

@@ -722,6 +722,7 @@ impl<'a> Active<'a> {
                 registry: r.def.name.clone(),
                 id: "(gap)".into(),
                 devices: vec![],
+                count: None,
                 fields: r.def.gap.clone().unwrap_or_default(),
             };
             let mut it = placed.into_iter().peekable();

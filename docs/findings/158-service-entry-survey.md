@@ -79,7 +79,7 @@ and the handler has not started at task entry anyway. Remaining [O]: the vector 
 non-maskable); the task's second reader can be preempted only by interrupts, which are masked during the write. Port hooks must be
 allowed to have the exits for both devices (already resolved, ports/fw/lfo.toml).
 
-### core/machines (image-modules/points/machines)
+### core/rows (image-modules/points/machines)
 
 | site | DT2 / DN2 addr | stock fn | ctx | entry today | recommended |
 | --- | --- | --- | --- | --- | --- |
@@ -94,7 +94,7 @@ The machines service already takes 13 more machine/page hooks at load (DT2: clon
 DN2: group, type_page.count/desc, param_code.map, type_reader.load, owner_type_load + the four page hooks). Those are option 2 and
 confirmed: each is `[[hook]]` without `handler`, installed by install.rs. [D]
 
-### core/dynreg (image-modules/points/dynreg)
+### core/rows (image-modules/points/dynreg)
 
 | site | addr DT2 / DN2 | what | ctx | entry today | recommended |
 | --- | --- | --- | --- | --- | --- |
@@ -102,7 +102,7 @@ confirmed: each is `[[hook]]` without `handler`, installed by install.rs. [D]
 | view.build hook (`dynreg_view_hook`) | 0x40060f50 / 0x4005b2c0 | entry of machine selection view item builder | task | image | 2, or delete: digikit-runtime.md l.173 says the view hook and rebuild are removed with the archive commit, but module.toml l.118-124 still has the op and the build contains `dynreg_view_hook` [O: stale doc or stale op] |
 | 8 machine rows, 16 param rows, 8 page rows (data) | data only | reserved rows | | image | stays as data (the registry area), not an entry |
 
-### core/params (image-modules/points/params)
+### core/rows (runtime/platform/rows)
 
 | site | addr DT2 / DN2 | what | ctx | entry today | recommended |
 | --- | --- | --- | --- | --- | --- |
@@ -166,7 +166,7 @@ module.toml of image-modules/points/* and runtime/platform/dyndsp; findings 02, 
 
 ### Table by table
 
-### 1. core/machines (image-modules/points/machines, 36 [[op]], 6 [[section]])
+### 1. core/rows (image-modules/points/machines, 36 [[op]], 6 [[section]])
 
 | Table | Stock addr, size, memory | First read / frequency | Reach | Verdict |
 | --- | --- | --- | --- | --- |
@@ -184,7 +184,7 @@ could be pointer-indirected in the flashed adapter code once; afterwards the ser
 (A). Cost today: the copies of names/permit/pertype with appended rows exist only to keep the stock readers bounded and to give each added type a row.
 Confidence 0.7 (not checked: every reader of the type byte beyond those anchors).
 
-### 2. core/params (6 [[op]], 2 [[section]] pf_table)
+### 2. core/rows (6 [[op]], 2 [[section]] pf_table)
 
 - Stock: DT2 descriptor table 0x4020f59c, 275 rows x 60 B (0x113 count from `cmpi.l #0x113` at 0x400c8932, accessor FUN_400c892e); DN2 0x401f83a4, 321 rows. Const data in DDR, no slack (next table at 0x40211a68 is another object).
 - Readers: 56 absolute references + 54 clamp bounds `cmpi.l #N` per device (anchors `cf.param.sites.descriptor_table.ref` / `.bound`; xref shows ~70 hits at
@@ -198,7 +198,7 @@ Confidence 0.7 (not checked: every reader of the type byte beyond those anchors)
   Pointer indirection is not available: all readers use absolute addresses. Recommendation: reserve generously at flash (cheap) rather than patch 110 sites at load. Confidence 0.8.
   [O] whether the 54 bounds are all of the form `cmpi.l #N,Dn` writable by one rule at load (they are today by one `write` op each, so yes, mechanically).
 
-### 3. core/dynreg (machine rows 16..23, param rows 16, DN2 page rows 8; dynreg_info)
+### 3. core/rows (machine rows 16..23, param rows 16, DN2 page rows 8; dynreg_info)
 
 - Rows are content of tables 1 and 2 above; `dynreg_copy` (DT2 0x40052b46 jsr; hook target) / `dynreg_list_hook` (DN2 0x4004d994) filter empty-name machines at the end of the list getter; `dynreg_view_hook` at FUN_40060f50 entry remembers the view so the runtime can rebuild the list (call FUN_40060f50 again; emulator-proven, finding 30).
 - Timing: list built once per boot (G2); rebuild path exists and ran without fault in emu; heap/cursor over many rebuilds not examined [O].

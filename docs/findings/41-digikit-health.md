@@ -159,7 +159,7 @@ formatting, the burn routine's bytes), `test_digikit_menu.py` and the runtime's 
 `core/health` is its own module: `core/runtime` only links its two functions as optional symbols and `core/dsp-link` is not touched (no DSP patch at all). An image patched without
 `core/health` has neither hook; the runtime's added code (`dkrt_health` and two small functions) changes only the runtime object, not any firmware byte of such an image. The DIGIKIT
 menu's new row and view change the menu's frames: `tests/golden/digikit_menu_frames.json` is regenerated (`digikit_menu_proof run --image IMAGE --quick --update` on all four; the
-DIGIKIT main page has three rows now). That proof's boot part (APPLY & RESTART, safe mode) no longer started at this commit: its image lacked `core/dynreg` and `core/dyndsp`, and the boot rig
+DIGIKIT main page has three rows now). That proof's boot part (APPLY & RESTART, safe mode) no longer started at this commit: its image lacked `core/rows` and `core/dyndsp`, and the boot rig
 reads the voice rows (`no symbol core/dsp-voice:voices.rows`); the image is now built with the runtime set of `pk_dkrt_boot.RT`, and the boot part passes on all four.
 
 ## Open

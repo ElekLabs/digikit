@@ -199,6 +199,16 @@ mark = "D"
 rule = "fw/filter:cf_func"
 
 [[anchor]]
+name = "cf.filter.site.test_bound"
+cpu = "cf"
+kind = "code"
+addr = 0x40052d42
+len = 4
+sha256 = "9848acff87566e6289c0f1bc686b1f088f09761a79a8b020d52fc0dbb90dc6ad"
+mark = "D"
+rule = "fw/filter:cf_func"
+
+[[anchor]]
 name = "cf.input.fn.enc_decoder"
 cpu = "cf"
 kind = "code"
@@ -4342,6 +4352,15 @@ mark = "D"
 rule = "fw/dsp/voice:sharc_literal"
 
 [[hook]]
+name = "cf.filter.hook.test_bound_patch"
+site = "cf.filter.site.test_bound"
+offset = 2
+mode = "replace"
+len = 2
+kind = "patch"
+check = "ca2fd00fa0011907"
+
+[[hook]]
 name = "cf.input.hook.key_event"
 site = "cf.input.site.key_event_walk"
 mode = "replace"
@@ -4450,22 +4469,13 @@ mode = "before"
 clobbers = ["d0", "ccr"]
 
 [[hook]]
-name = "cf.machine.hook.list.copy_target"
-site = "cf.machine.site.list.copy"
-mode = "retarget"
-clobbers = ["d0", "d1", "a0", "a1", "ccr"]
-
-[[hook]]
-name = "cf.machine.hook.list.entry"
-site = "cf.machine.fn.list.entry"
-mode = "before"
-clobbers = ["ccr"]
-
-[[hook]]
 name = "cf.machine.hook.list_rank_insert"
 site = "cf.machine.site.list_rank_insert"
-mode = "before"
+mode = "replace"
 clobbers = ["d0", "ccr"]
+len = 6
+kind = "tail"
+check = "cfbf7e1348764e92"
 
 [[hook]]
 name = "cf.machine.hook.param_code.args"
@@ -4475,6 +4485,51 @@ clobbers = ["d0", "ccr"]
 len = 8
 kind = "tail"
 check = "619ff3d560aa3491"
+
+[[hook]]
+name = "cf.machine.hook.patch_list_alloc"
+site = "cf.machine.site.list.alloc"
+offset = 2
+mode = "replace"
+len = 2
+kind = "patch"
+check = "774e33e878c3e22a"
+
+[[hook]]
+name = "cf.machine.hook.patch_list_buffer"
+site = "cf.machine.site.list.operands"
+offset = 0xc
+mode = "replace"
+len = 4
+kind = "patch"
+check = "7f3057962a732819"
+
+[[hook]]
+name = "cf.machine.hook.patch_list_buffer_end"
+site = "cf.machine.site.list.operands"
+offset = 2
+mode = "replace"
+len = 4
+kind = "patch"
+check = "b9978025e097a954"
+
+[[hook]]
+name = "cf.machine.hook.patch_list_copy"
+site = "cf.machine.site.list.copy"
+offset = 2
+mode = "replace"
+len = 4
+kind = "patch"
+check = "33970642e05bf171"
+
+[[hook]]
+name = "cf.machine.hook.patch_list_vector_end"
+site = "cf.machine.site.list.operands"
+offset = 8
+mode = "replace"
+len = 2
+kind = "patch"
+check = "774e33e878c3e22a"
 
 [[hook]]
 name = "cf.machine.hook.srcpage"

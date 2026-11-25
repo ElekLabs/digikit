@@ -44,7 +44,7 @@ Things to know:
 
 A run-time module: it is not patched into the firmware. The digikit runtime loads the `.dkm` from the card and sends the DSP code to the DSP. Pack it with
 `mise run module:pack -- digikit/freqshift --device dt2` (or `dn2`) and upload `out/patch/freqshift-dt2.dkm`, or load it with `mise run dk:run -- digikit/freqshift --emu`. The image needs the digikit runtime with
-`core/dynfx` and `core/fxpages` (the `emulator` and `device` patch sets of both devices have them).
+`core/dynfx` and the fx service `core/services/fx` (the `emulator` and `device` patch sets of both devices have them).
 
 Source and reference: `src/dsp/freqshift.s`, the float32 model `tests/freqshift_ref.py` (defines the arithmetic; `mise` is not needed to run it), the sound checks `tests/rig/freqshift.toml`, the model test
-`tests/test_freqshift_ref.py` and the rig cases. The adapter legs (pages, knob, routes, MIX bypass) are proved by `core/fxpages` `fx-bipolar.device.test.ts`. `mise run module:check digikit/freqshift` runs the conformance, the rig checks and the reference tests. A demo render for listening: `tests/freqshift_demo.py`.
+`tests/test_freqshift_ref.py` and the rig cases. The adapter legs (pages, knob, routes, MIX bypass) are proved by `core/fx` `fx-bipolar.device.test.ts`. `mise run module:check digikit/freqshift` runs the conformance, the rig checks and the reference tests. A demo render for listening: `tests/freqshift_demo.py`.

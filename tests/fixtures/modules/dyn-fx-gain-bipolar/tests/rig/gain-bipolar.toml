@@ -1,4 +1,4 @@
-# test/dyn-fx-gain-bipolar on the SHARC-only rig: the gain law out = in * (1 + bias / 64) that core/fxpages' fx-bipolar device test used to
+# test/dyn-fx-gain-bipolar on the SHARC-only rig: the gain law out = in * (1 + bias / 64) that core/fx' fx-bipolar device test used to
 # prove with PCM captures on the emulator. The bias cases observe the effect output. The MIX cases observe the master behind the adapter hook:
 # dry + mix * (wet - dry). The adapter ramps a mix change over the first block, so those checks start at block 1. The bias is the float word of
 # the row; the device test proves that the knob value reaches the row. 0.6796875 is -20.5 (1 - 20.5 / 64); +40 and +42 are what the knob raw

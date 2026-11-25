@@ -185,13 +185,13 @@ function dspSources(man: Toml, moddir: string, device: string): string[] {
 
 function typeNumber(mid: string, man: Toml, device: string, literal: string | null, n = 0): number {
   if (literal !== null && /^[0-9][0-9a-zA-Z_]*$/.test(String(literal))) return Number(literal);
-  const types = readToml(path.join(ROOT, 'image-modules/points/machines/types.toml'))[device];
+  const types = readToml(path.join(ROOT, 'runtime/platform/rows/types.toml'))[device];
   let mach: string | undefined = man.machine?.length ? man.machine[n].id : undefined;
   if (literal !== null) mach = String(literal).split('.')[1];
   const key = `${mid}:${mach}`;
   if (types.alloc && key in types.alloc) return Number(types.alloc[key]);
   if (man.module?.dynamic && 'dynamic_first' in types) return Number(types.dynamic_first);
-  throw new ConformError(`${mid}: no machine type for ${key} in core/machines types.toml [${device}]`);
+  throw new ConformError(`${mid}: no machine type for ${key} in core/rows types.toml [${device}]`);
 }
 
 function readGallery(moddir: string, mid: string, hint: string): Toml {

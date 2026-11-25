@@ -197,9 +197,9 @@ def _type_number(mid: str, man: dict, device: str, literal: str | None) -> int:
         and str(literal)[0].isdigit()
     ):
         return int(literal, 0)
-    types = tomllib.loads(
-        (ROOT / "image-modules/points/machines/types.toml").read_text()
-    )[device]
+    types = tomllib.loads((ROOT / "runtime/platform/rows/types.toml").read_text())[
+        device
+    ]
     # a module: the id of module.toml
     mach = man["machine"][0]["id"] if man.get("machine") else None
     if literal is not None:  # "machines.<name>.index": the type allocated to <name>
@@ -211,7 +211,7 @@ def _type_number(mid: str, man: dict, device: str, literal: str | None) -> int:
         # a run-time machine has no fixed number (the runtime assigns one at load); the rig only needs a type in the run-time range
         return int(types["dynamic_first"])
     raise ConformError(
-        f"{mid}: no machine type for {key} in core/machines types.toml [{device}]"
+        f"{mid}: no machine type for {key} in core/rows types.toml [{device}]"
     )
 
 

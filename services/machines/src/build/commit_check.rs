@@ -3,7 +3,7 @@ use super::*;
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::mem::iw;
 use dkrt_sdk::*;
-use dkrt_svc_rows::dynreg::w;
+use dkrt_svc_rows::rows_info::w;
 
 // ---- the commit checks -----------------------------------------------------------------------------------------------------------
 
@@ -54,7 +54,7 @@ pub fn check_commit(b: &Build, p: &Profile, keys: &KeysCopy, free: &Free) -> i32
 /// The free reserved machine, parameter and page rows of the registry.
 pub unsafe fn free_rows<C: dkrt_abi::core_api::CoreApi>(
     core: &C,
-    s: &dkrt_svc_rows::dynreg::RegState,
+    s: &dkrt_svc_rows::rows_info::RegState,
     inf: *const u32,
 ) -> Free {
     Free {

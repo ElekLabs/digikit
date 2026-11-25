@@ -13,7 +13,7 @@ from tools.patchkit import modroots, pk_device, port_resolve
 
 ROOT = REPO_ROOT
 TYPES = tomllib.loads(
-    (ROOT / "image-modules" / "points" / "machines" / "types.toml").read_text()
+    (ROOT / "runtime" / "platform" / "rows" / "types.toml").read_text()
 )
 
 
@@ -59,7 +59,7 @@ def test_the_store_geometry_is_the_device_files() -> None:
 
 
 def test_dynreg_reserves_one_machine_row_per_run_time_type() -> None:
-    d = module("core/dynreg")
+    d = module("core/rows")
     for dev in pk_device.dsp_devices():
         t = TYPES[dev]
         want = [f"dyn{n}" for n in range(t["dynamic_first"], t["last"] + 1)]
@@ -71,7 +71,7 @@ def test_dynreg_reserves_one_machine_row_per_run_time_type() -> None:
         assert rows == want, dev
         # and each row has its permanent number in types.toml
         for n in range(t["dynamic_first"], t["last"] + 1):
-            assert t["alloc"][f"core/dynreg:dyn{n}"] == n
+            assert t["alloc"][f"core/rows:dyn{n}"] == n
 
 
 def test_dyndsp_reserves_one_voice_row_per_run_time_type() -> None:

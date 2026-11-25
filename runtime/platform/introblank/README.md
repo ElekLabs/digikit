@@ -14,7 +14,7 @@ Optional. The stock intro draws the Elektron animation. With this adapter in the
 
 ```sh
 mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx \
-  --modules core/runtime,core/digikit-menu,core/health,core/dynreg,core/dyndsp,core/introblank \
+  --modules core/runtime,core/digikit-menu,core/health,core/rows,core/dyndsp,core/introblank \
   -o out/patch/digikit-dt2-introblank.syx
 ```
 

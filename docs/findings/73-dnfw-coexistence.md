@@ -7,7 +7,7 @@ dnfw (angellinares/dn2_firmware_explore) patches the same firmware with its own 
 site and region in use. `dnfw mods overlap` (dn2_firmware_explore PR #303) compares the two. This finding is its result for one
 mod set against the runtime's set.
 
-- digikit: `core/runtime`, `core/digikit-menu`, `core/health`, `core/dynreg`, `core/dyndsp` (with their requirements), from main
+- digikit: `core/runtime`, `core/digikit-menu`, `core/health`, `core/rows`, `core/dyndsp` (with their requirements), from main
   `359a229a`. This is the image `digikit-health1` (sha256 `968463e487ab581d`).
 - dnfw: waverider, layermidi, arpmodes, lfowaves, lfo4 and bootscreen, the set one user runs.
 
@@ -25,7 +25,7 @@ dnfw's `usbprobe` alone has none.
 ## The two machine frameworks patch the same sites
 
 **[D]** Most of the collisions are one fact. dnfw's platform has a hook bus that raises stock's bounds and counts for new
-parameters and machine types. `core/params` and `core/machines` raise the same ones.
+parameters and machine types. `core/rows` and `core/rows` raise the same ones.
 
 - 255 parameter-record bounds: dnfw's "the parameter records count" against `cf.params.bound.*` (for example `0x400366ac`,
   `cf.params.bound.2+2`). lfo4's parameter edits meet `cf.params.ref.*` 58 times.
@@ -38,7 +38,7 @@ parameters and machine types. `core/params` and `core/machines` raise the same o
 So the two cannot share an image by keeping apart: the sites are the same because the job is the same. One framework must own
 them, and the other must add its machines and parameters through it.
 
-**Decision (2026-10-28, the dnfw owner and Em):** `core/machines` and `core/params` own these sites. dnfw's mods move to digikit
+**Decision (2026-10-28, the dnfw owner and Em):** `core/rows` and `core/rows` own these sites. dnfw's mods move to digikit
 modules and add their machines and parameters through them. A machine that does not use the SDK goes in as a `raw` module
 (`docs/design/module-sdk.md` D2: no contract, only the generic load checks). Em's proposal on top: make the module's type and its
 category two fields, so a module can be a raw machine, a machine that bypasses the SDK. **[O]** That split is not designed yet.

@@ -4,13 +4,13 @@ import { button, waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { REDRAW, SETTLE, analysisJson, bounded, captureNote, frames, pickSine, readFloatWav, rpc, stableFrameHash, word } from '@digi/regression/runtime/fx-live.ts';
+import { REDRAW, SETTLE, bounded, captureNote, frames, pickSine, readFloatWav, rpc, stableFrameHash, word } from '@digi/regression/runtime/fx-live.ts';
 import { createFxKitUi } from '@digi/regression/runtime/fx-kit-ui.ts';
 import { kitMenu, kitSlotOne } from '@digi/regression/runtime/fx-track-ui.ts';
 import { serviceSymbol } from '@digi/regression/runtime/service-symbols.ts';
 import { effectPage, mainPage, pageKit } from '@digi/regression/runtime/fx-pages-ui.ts';
 import { wordBase } from '@digi/regression/runtime/memory.ts';
-import type { FxProfile } from '@digi/regression/runtime/fx-session.ts';
+import { fxProfile } from '@digi/regression/runtime/device-data.ts';
 import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { runtimeTests } from '@digi/regression/runtime/ready.ts';
@@ -75,12 +75,19 @@ const peakOf = (xs: Float32Array, from: number, to: number): number => {
   return p;
 };
 
+/** The selection index of the effect module: `prepare` installs `test/sine`, then the debug module, then the effect. */
+const FX_INDEX = 2;
+
 type Op = 'reload' | 'unload' | 'load';
 
 /** One live job on `file`, then what every job leaves (see the header). The job's end result is the proof that the live job ran; its state body and the `reloads` counter (one for each live job) are host tests (`reload.rs` `the_live_commands_answer_with_the_jobs_refusal_and_state_in_the_reload_state_body`, `a_job_that_changed_the_module_set_counts_one_reload_and_a_refusal_counts_none`). */
 async function job(rt: TestRuntime, _plan: RuntimePlan, op: Op, file: string, why: string, epoch: number, send: 0 | 1): Promise<void> {
+  // the effect row is claimed when the module's commit writes its rows (MODULE_COMMIT): the capacity read below waits for that event, not for the job's end
+  const events = op === 'unload' ? undefined : await rt.listen();
   const end = await (op === 'reload' ? rt.dk.reloadAndWait(file) : op === 'unload' ? rt.dk.unloadAndWait(file) : rt.dk.loadAndWait(file));
   expect(end, `${why}: ${op} of ${file}`).toEqual({ result: 0, unloaded: op !== 'load' });
+  // the event names no module, only its selection index (a live job keeps it): the effect module is the third of the install (the machine, the debug module, the effect)
+  await events?.until('MODULE_COMMIT', (e) => Number(e.fields.index) === FX_INDEX, { withinMs: 5000 });
   expect(await epochOf(rt), `${why}: a boot happened`).toBe(epoch);
   expect((await rt.dk.readLog()).filter((e) => e.kind === LOG_KIND.TABLE_BAD), `${why}: a table check failed`).toEqual([]);
   const cap = await rt.dk.capacity();
@@ -134,7 +141,7 @@ async function expectFxMaster(rt: TestRuntime): Promise<void> {
   expect(Math.abs(wet2 / wet - 1), `the level after the load (${wet2.toFixed(4)}) is the level before (${wet.toFixed(4)})`).toBeLessThan(0.03);
 
   // the GAIN knob in the kit's array: the user's value stays through a reload, an unload and a load
-  const profile = await analysisJson<FxProfile>('tools.patchkit.pk_digikit_fxroutes', ['profile', '--device', device], artifacts, 'profile');
+  const profile = fxProfile(device);
   const kit = pageKit(rt, profile);
   await kit.poke(profile.fx.value_indices[0]!, HALF_RAW);
   await rt.ui.wait({ ms: 200, why: 'the UI loop sends the changed knob to the DSP row (no observable state of the transfer)' });
@@ -242,7 +249,7 @@ async function pokeHalf(rt: TestRuntime, at: number, value: number): Promise<voi
 
 async function expectFxSend(rt: TestRuntime): Promise<void> {
   const { artifacts, plan, epoch, device, file: SEND_PATH } = await prepare(rt, 'reload-fx-send', SEND_ID);
-  const profile = await analysisJson<FxProfile>('tools.patchkit.pk_digikit_fxroutes', ['profile', '--device', device], artifacts, 'profile');
+  const profile = fxProfile(device);
   // the send amount of track 1 for cell 0 is the Sound array value `amount << 8`, as the firmware's knob writes it; the service reads it as a turn
   const sound = (await word(rt.session, profile.fx.kit_ptr)) + profile.fx.sound_off;
   await pokeHalf(rt, sound + 0x14 + 2 * profile.fx.send_indices[0]!, 127 << 8);

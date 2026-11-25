@@ -19,7 +19,7 @@ import {
 import { expect } from 'vitest';
 import { expectNoGuardHits, withReusablePatchedSession, type PatchedSession, type TestRuntime } from '../support.ts';
 import { record } from './artifacts.ts';
-import { comparePcmAligned } from './pcm-compare.ts';
+import { addedFactor, comparePcmAligned } from './pcm-compare.ts';
 import { bounded, rpc, word } from './guest-access.ts';
 import { plusdriveBinary } from './card-kit.ts';
 import { installSystemPackage } from './system-package.ts';
@@ -161,22 +161,30 @@ export async function stableFrameHash(rt: Rt): Promise<string> {
   return hash;
 }
 
-export async function analysisJson<T>(module: string, args: string[], artifacts: string, tag: string): Promise<T> {
-  try {
-    const result = await exec('uv', ['run', '--no-sync', 'python', '-m', module, ...args], {
-      cwd: root,
-      timeout: 180_000, // a heavy analysis (four 28 MB overlays) takes 8 s on an idle host and over 30 s under load: the wall time only guards against a hang
-      maxBuffer: 4 * 1024 * 1024,
-      env: { ...process.env, UV_NO_SYNC: '1' },
-    });
-    const value = JSON.parse(result.stdout) as T;
-    record(artifacts, tag, value);
-    return value;
-  } catch (error) {
-    const output = error as { stdout?: string; stderr?: string };
-    record(artifacts, tag, { error: String(error), stdout: output.stdout, stderr: output.stderr });
-    throw error;
-  }
+/** The samples of a completed capture: not empty and all finite (the FX send scenarios read them). */
+export function readPcm(file: string): Float32Array {
+  const samples = readFloatWav(file);
+  if (!samples.length) throw new Error(`${file}: empty PCM`);
+  if (!samples.every(Number.isFinite)) throw new Error(`${file}: PCM contains nonfinite samples`);
+  return samples;
+}
+
+/** The sample count, finiteness and peak of a capture. */
+export function pcmStats(file: string) {
+  const samples = readPcm(file);
+  return { samples: samples.length, finite: true, peak: peak(samples) };
+}
+
+/** The factor a send adds to the dry capture `base` in the capture `out` (`addedFactor`), refused when the window cannot be fitted. */
+export function addedFactorOf(base: string, out: string): number {
+  const [dry, wet] = [readPcm(base), readPcm(out)];
+  const n = Math.min(dry.length, wet.length) - 1200;
+  if (n <= 0) throw new Error('added-factor requires more than 1200 samples per WAV');
+  if (!dry.subarray(600, 600 + n).some((v) => v !== 0))
+    throw new Error('added-factor requires a non-silent reference fit window');
+  const value = addedFactor(dry, wet);
+  if (!Number.isFinite(value)) throw new Error('added-factor produced a nonfinite result');
+  return value;
 }
 
 export function expectGainRow(row: number[], oracle: FxExpectations): void {
@@ -457,7 +465,13 @@ export async function inspect(
   } catch (error) {
     throw new Error(`${(error as Error).message}${await moduleResultsNote(session, plan, results)}`);
   }
-  const capacity = await bounded(() => dk.capacity());
+  // the effect row is claimed in the commit's WRITE pass: the capacity word follows the module list, so wait for it
+  const capacity = await pollEmulated(
+    session,
+    () => bounded(() => dk.capacity()),
+    (c) => c.FX_SLOTS?.used === (wet ? 1 : 0),
+    { emulatedMs: 10_000, intervalMs: 200, message: 'the FX_SLOTS in use' },
+  );
   expect(capacity.FX_SLOTS).toEqual({ limit: slots, used: wet ? 1 : 0, largest: 0 });
   const settings = await bounded(() => readSettingsRecordIfPresent(dk));
   expect(settings === null ? null : settingsValue(settings, 'dk/fault')).toBeNull();

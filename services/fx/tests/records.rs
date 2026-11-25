@@ -1,6 +1,6 @@
 //! Host tests of the `fx` service over `FakeCore`: the handlers that need no firmware page (record refusal, the row words in publishing order, the clear
 //! sequence). The page rows, the send cells and the kit tables are written through `FwMem`: `tests/contract.rs` loads and unloads whole effects and compares them
-//! (the contract suite); the device tests (`core/fxpages`) cover the firmware's own use of them.
+//! (the contract suite); the device tests (`core/fx`) cover the firmware's own use of them.
 use dkrt_abi::dsp::{FXW_ENABLED, FXW_P0, FXW_PC, FX_FREE_PC, FX_ROW_WORDS, MIX_ONE, WIN_FX};
 use dkrt_abi::provider::{Consumer, ConsumerId, DspPart, Provider, Records, Ticker};
 use dkrt_abi::service::tick_phase;
@@ -12,13 +12,13 @@ use dkrt_test_support::contract::locked;
 use dkrt_test_support::{Call, FakeCore};
 use std::sync::MutexGuard;
 
-// A `FakeCore` has no `fxpages_info` table (`info_tables` is empty): an image without effect pages.
+// A `FakeCore` has no `rows_info` table (`info_tables` is empty): an image without effect pages.
 
 const REC: usize = 3;
 const FIRST_ROW: u32 = 6;
 
 /// A core whose `dynfx_info` says the effect table starts at row `FIRST_ROW`, with effect row 1 claimed by module record `REC` and published, and an owner that
-/// has not bound a table (no `fxpages_info` here).
+/// has not bound a table (no `rows_info` here).
 fn core_with_row() -> (MutexGuard<'static, ()>, FakeCore, Fx) {
     let rows_lock = locked();
     dkrt_svc_fx::rows::reset();
@@ -258,19 +258,10 @@ fn the_effects_step_needs_the_pages_and_the_rule_of_each_record() {
         run_check(&mut fx, &core, check_step::EFFECTS, &section(1)),
         Err(E_NO_REGISTRY)
     );
-    // with the table of the image, a record of zero bytes breaks the rule (no name, no knob rows)
+    // with the effect pages of the image (the blocks of `rows_info` for a device that has them), a record of zero bytes breaks the rule (no name, no knob rows)
     let mut with = FakeCore::new();
-    with.device = 1;
-    let mut t = vec![0u32; 64];
-    t[0] = 0x4658_5047;
-    t[1] = 4;
-    t[2] = 1;
-    t[4] = 0x2c;
-    t[6] = 3;
-    t[8] = 8;
-    t[15] = 32;
-    t[63] = 0x80;
-    with.info_tables.push((fxpage::INFO_HASH, t));
+    with.device = dkrt_svc_fx::fxpage::all_device_facts()[0].device;
+    with.set_rows_blocks(&[(2, 40, 24, 0x75), (3, 90, 2, 0x75)]);
     assert_eq!(
         run_check(&mut fx, &with, check_step::EFFECTS, &section(1)),
         Err(E_FORMAT)

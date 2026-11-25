@@ -118,7 +118,8 @@
       "sig": "void (u8 *dst, u8 *src, i32 x, i32 y, u8 centre)",
       "subsystem": "draw",
       "users": [
-        "core/ui"
+        "core/ui",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -179,7 +180,8 @@
       "sig": "void (u8 *bitmap, i32 x0, i32 y0, i32 x1, i32 y1, i32 color)",
       "subsystem": "draw",
       "users": [
-        "core/ui"
+        "core/ui",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -606,6 +608,47 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4004db8e"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004db8e"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052d44"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Test only: a patch site of two bytes, the low word of the immediate of `cmpi.l #0x3fffffff,D1` in the order vector copy. D1 is always 6 there, so the bound is dead; the fixture patches it and the loader restores it at unload.",
+      "file": "devices/fw/filter.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.filter.hook.test_bound_patch",
+      "offset": 2,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.filter.site.test_bound",
+      "subsystem": "filter",
+      "users": [
+        "test/local-patch"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4006eca0",
             "len": 8
           }
@@ -824,6 +867,51 @@
       "subsystem": "filter",
       "users": [
         "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004db8c",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004db8c",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052d42",
+            "len": 4
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The immediate of `cmpi.l #0x3fffffff,D1; bls` in the order vector copy (DT2 0x40052d40, DN2 0x4004db8a): the size bound before the allocation, never reached by the six-element vector. A patch site of the test fixture only.",
+      "file": "devices/fw/filter.toml",
+      "kind": "site",
+      "mark": "D",
+      "name": "cf.filter.site.test_bound",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 170
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 170
+        }
+      },
+      "subsystem": "filter",
+      "users": [
+        "test/local-patch"
       ],
       "was": []
     },
@@ -3300,7 +3388,7 @@
         "rust": "dkfw::machine::LIST_TABLE"
       },
       "cpu": "cf",
-      "doc": "Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/machines copies it with the added types inserted.",
+      "doc": "Table of the machine list: one long per stock machine type (28 bytes on DT2, 20 on DN2), read by the machine list builder; core/rows copies it with the added types inserted.",
       "file": "devices/fw/machine.toml",
       "kind": "data",
       "mark": "D",
@@ -3319,7 +3407,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.data.list_table",
@@ -3371,7 +3459,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.data.names_table",
@@ -3423,7 +3511,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.data.permit_table",
@@ -3461,7 +3549,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.data.pertype_table",
@@ -3497,9 +3585,10 @@
           "offset": 0
         }
       },
+      "sig": "i32 (u8 *view)",
       "subsystem": "machine",
       "users": [
-        "core/machines",
+        "core/rows",
         "core/services/machines"
       ],
       "was": [
@@ -3552,7 +3641,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.dispatch"
@@ -3603,7 +3692,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.fn.list_entry",
@@ -3636,7 +3725,7 @@
         "rust": "dkfw::machine::name_long"
       },
       "cpu": "cf",
-      "doc": "Long-name accessor of the machine name table: core/machines raises its bound (moveq at +1) and repoints the table pointer literal at +0x12 to the copied table.",
+      "doc": "Long-name accessor of the machine name table: core/rows raises its bound (moveq at +1) and repoints the table pointer literal at +0x12 to the copied table.",
       "file": "devices/fw/machine.toml",
       "kind": "fn",
       "mark": "D",
@@ -3655,7 +3744,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.fn.name.0",
@@ -3688,7 +3777,7 @@
         "rust": "dkfw::machine::permit"
       },
       "cpu": "cf",
-      "doc": "Permission accessor over the permit table; core/machines raises its type bound and repoints its lea at the copied table.",
+      "doc": "Permission accessor over the permit table; core/rows raises its type bound and repoints its lea at the copied table.",
       "file": "devices/fw/machine.toml",
       "kind": "fn",
       "mark": "D",
@@ -3707,7 +3796,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.permit"
@@ -3800,7 +3889,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.fn.typemap.0",
@@ -3830,7 +3919,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "DN2: returns the machine type of a sound (`mvs.b 0xde(A0),D0`); core/machines copies its 48 bytes as mf_reader_real for callers that want the real type.",
+      "doc": "DN2: returns the machine type of a sound (`mvs.b 0xde(A0),D0`); core/rows copies its 48 bytes as mf_reader_real for callers that want the real type.",
       "file": "devices/fw/machine.toml",
       "kind": "fn",
       "mark": "D",
@@ -3844,7 +3933,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.fn.reader_fn",
@@ -3901,7 +3990,7 @@
       "sig": "void (u32 view)",
       "subsystem": "machine",
       "users": [
-        "core/dynreg"
+        "core/ui"
       ],
       "was": [
         "cf.dynreg.msv_build"
@@ -3980,7 +4069,7 @@
       "site": "cf.machine.fn.dispatch",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": []
     },
@@ -4102,84 +4191,7 @@
       "site": "cf.machine.site.list.copy",
       "subsystem": "machine",
       "users": [
-        "core/dynreg"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dt2-1.17": [
-          {
-            "addr": "0x40052b46"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2"
-      ],
-      "doc": "The copy at the end of the machine list getter: `jsr copy(begin, end, dest)` (absolute, 6 bytes); the target becomes a copy that leaves out unfilled reserved machine types.",
-      "file": "devices/fw/machine.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "retarget",
-      "name": "cf.machine.hook.list.copy_target",
-      "regs": {
-        "clobbers": [
-          "d0",
-          "d1",
-          "a0",
-          "a1",
-          "ccr"
-        ],
-        "in": []
-      },
-      "site": "cf.machine.site.list.copy",
-      "subsystem": "machine",
-      "users": [
-        "core/dynreg"
-      ],
-      "was": []
-    },
-    {
-      "at": {
-        "dn2-1.11": [
-          {
-            "addr": "0x4004d8b6"
-          }
-        ],
-        "dn2-1.12": [
-          {
-            "addr": "0x4004d8b6"
-          }
-        ],
-        "dt2-1.17": [
-          {
-            "addr": "0x40052a08"
-          }
-        ]
-      },
-      "cpu": "cf",
-      "devices": [
-        "dt2",
-        "dn2"
-      ],
-      "doc": "Entry of the machine list builder; the hook builds the registry tables before the builder reads its list buffer.",
-      "file": "devices/fw/machine.toml",
-      "kind": "hook",
-      "mark": "D",
-      "mode": "before",
-      "name": "cf.machine.hook.list.entry",
-      "regs": {
-        "clobbers": [
-          "ccr"
-        ],
-        "in": []
-      },
-      "site": "cf.machine.fn.list.entry",
-      "subsystem": "machine",
-      "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -4199,7 +4211,7 @@
       "file": "devices/fw/machine.toml",
       "kind": "hook",
       "mark": "D",
-      "mode": "before",
+      "mode": "replace",
       "name": "cf.machine.hook.list_rank_insert",
       "regs": {
         "clobbers": [
@@ -4211,7 +4223,7 @@
       "site": "cf.machine.site.list_rank_insert",
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": []
     },
@@ -4323,6 +4335,200 @@
         ]
       },
       "site": "cf.machine.site.param_code.map",
+      "subsystem": "machine",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004d8e2"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004d8e2"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052a2e"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Patch: the operand word of the list builder's `pea 0x1c.w`, the allocation size of the list buffer: 4 bytes per listed type.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.machine.hook.patch_list_alloc",
+      "offset": 2,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.machine.site.list.alloc",
+      "subsystem": "machine",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004d90c"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004d90c"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052a58"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Patch: the address operand in the list builder of the start of the buffer it copies from: the service's list buffer.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.machine.hook.patch_list_buffer",
+      "offset": 12,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.machine.site.list.operands",
+      "subsystem": "machine",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004d902"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004d902"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052a4e"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Patch: the address operand in the list builder of the end of the buffer it copies from: the service's list buffer plus 4 bytes per listed type.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.machine.hook.patch_list_buffer_end",
+      "offset": 2,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.machine.site.list.operands",
+      "subsystem": "machine",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dt2-1.17": [
+          {
+            "addr": "0x40052b48"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2"
+      ],
+      "doc": "Patch: the absolute target of the `jsr copy(begin, end, dest)` at the end of the machine list getter: the machines service's copy, which leaves out unfilled reserved machine types (C ABI, result d0 = the end of the copy).",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.machine.hook.patch_list_copy",
+      "offset": 2,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.machine.site.list.copy",
+      "subsystem": "machine",
+      "users": [
+        "core/services/machines"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4004d908"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4004d908"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40052a54"
+          }
+        ]
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2"
+      ],
+      "doc": "Patch: the size operand word in the list builder that sets the end of the vector it fills: 4 bytes per listed type.",
+      "file": "devices/fw/machine.toml",
+      "kind": "hook",
+      "mark": "D",
+      "mode": "replace",
+      "name": "cf.machine.hook.patch_list_vector_end",
+      "offset": 8,
+      "regs": {
+        "clobbers": [],
+        "in": []
+      },
+      "site": "cf.machine.site.list.operands",
       "subsystem": "machine",
       "users": [
         "core/services/machines"
@@ -4535,7 +4741,7 @@
       "site": "cf.machine.fn.view.build",
       "subsystem": "machine",
       "users": [
-        "core/dynreg"
+        "core/ui"
       ],
       "was": []
     },
@@ -4566,7 +4772,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.clone.5"
@@ -4636,7 +4842,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.frametype"
@@ -4683,7 +4889,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.group"
@@ -4748,7 +4954,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "The list builder's `pea 0x1c.w` (4 bytes), the list buffer size for seven types; core/machines raises it to 4 bytes per type when types are added.",
+      "doc": "The list builder's `pea 0x1c.w` (4 bytes), the list buffer size for seven types; core/rows raises it to 4 bytes per type when types are added.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -4767,7 +4973,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": [
         "cf.machine.site.list_alloc",
@@ -4815,7 +5021,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/dynreg"
+        "core/services/machines"
       ],
       "was": [
         "cf.dynreg.list_copy",
@@ -4844,7 +5050,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "16 bytes in the machine list builder that hold the vector start and end sizes and the list buffer address; core/machines rewrites them so the builder copies its list with the added types.",
+      "doc": "16 bytes in the machine list builder that hold the vector start and end sizes and the list buffer address; core/rows rewrites them so the builder copies its list with the added types.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -4863,7 +5069,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": [
         "cf.machine.site.list",
@@ -4897,7 +5103,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/services/machines"
       ],
       "was": [
         "cf.machine.site.rank",
@@ -4926,7 +5132,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "The header-hint name accessor, 24 bytes (bound `moveq #last,D1` at +1, table reference at +0x14); core/machines raises the bound and points it at column 8 of the copied name table.",
+      "doc": "The header-hint name accessor, 24 bytes (bound `moveq #last,D1` at +1, table reference at +0x14); core/rows raises the bound and points it at column 8 of the copied name table.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -4945,7 +5151,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.site.name.2",
@@ -4974,7 +5180,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "The short-name accessor, 24 bytes (bound `moveq #last,D1` at +1, table reference at +0x14); core/machines raises the bound and points it at column 4 of the copied name table.",
+      "doc": "The short-name accessor, 24 bytes (bound `moveq #last,D1` at +1, table reference at +0x14); core/rows raises the bound and points it at column 4 of the copied name table.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -4993,7 +5199,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.site.name.1",
@@ -5033,7 +5239,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.site.owner",
@@ -5067,7 +5273,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.site.typearg.0",
@@ -5101,7 +5307,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.site.typearg.exit",
@@ -5141,7 +5347,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.site.typemap.2",
@@ -5161,7 +5367,7 @@
       "devices": [
         "dt2"
       ],
-      "doc": "First of six DT2 sites that read the per-type byte table; core/machines rewrites the type bound (moveq at +1) and the table reference (+8) for the added types.",
+      "doc": "First of six DT2 sites that read the per-type byte table; core/rows rewrites the type bound (moveq at +1) and the table reference (+8) for the added types.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -5175,7 +5381,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.pertype.0"
@@ -5194,7 +5400,7 @@
       "devices": [
         "dt2"
       ],
-      "doc": "Second of six DT2 sites that read the per-type byte table; core/machines rewrites the type bound (moveq at +1) and the table reference (+0xc) for the added types.",
+      "doc": "Second of six DT2 sites that read the per-type byte table; core/rows rewrites the type bound (moveq at +1) and the table reference (+0xc) for the added types.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -5208,7 +5414,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.pertype.1"
@@ -5227,7 +5433,7 @@
       "devices": [
         "dt2"
       ],
-      "doc": "Third of six DT2 sites that read the per-type byte table; core/machines rewrites the type bound (moveq at +1) and the table reference (+0xc) for the added types.",
+      "doc": "Third of six DT2 sites that read the per-type byte table; core/rows rewrites the type bound (moveq at +1) and the table reference (+0xc) for the added types.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -5241,7 +5447,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.pertype.2"
@@ -5260,7 +5466,7 @@
       "devices": [
         "dt2"
       ],
-      "doc": "Fourth of six DT2 sites that read the per-type byte table; core/machines rewrites the type bound (moveq at +1) and the table reference (+0x10) for the added types.",
+      "doc": "Fourth of six DT2 sites that read the per-type byte table; core/rows rewrites the type bound (moveq at +1) and the table reference (+0x10) for the added types.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -5274,7 +5480,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.pertype.3"
@@ -5293,7 +5499,7 @@
       "devices": [
         "dt2"
       ],
-      "doc": "Fifth of six DT2 sites that read the per-type byte table; core/machines rewrites the type bound (moveq at +1) and the table reference (+8) for the added types.",
+      "doc": "Fifth of six DT2 sites that read the per-type byte table; core/rows rewrites the type bound (moveq at +1) and the table reference (+8) for the added types.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -5307,7 +5513,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.pertype.4"
@@ -5326,7 +5532,7 @@
       "devices": [
         "dt2"
       ],
-      "doc": "Sixth of six DT2 sites that read the per-type byte table (38 bytes); core/machines rewrites the type bound (moveq at +1) and the table reference (+0x22) for the added types.",
+      "doc": "Sixth of six DT2 sites that read the per-type byte table (38 bytes); core/rows rewrites the type bound (moveq at +1) and the table reference (+0x22) for the added types.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -5340,7 +5546,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.pertype.5"
@@ -5368,7 +5574,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "The immediate of `(u8)(type + 1) < imm` in the sound loader (+0x9c); core/machines raises it by the added machine count so a stored added type survives loading.",
+      "doc": "The immediate of `(u8)(type + 1) < imm` in the sound loader (+0x9c); core/rows raises it by the added machine count so a stored added type survives loading.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -5387,7 +5593,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.site.persist",
@@ -5421,7 +5627,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.srcpage"
@@ -5454,7 +5660,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machines.srcpage.alt"
@@ -5493,7 +5699,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.site.typemap.1",
@@ -5533,7 +5739,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines",
+        "core/rows",
         "core/services/machines"
       ],
       "was": [
@@ -5574,7 +5780,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines",
+        "core/rows",
         "core/services/machines"
       ],
       "was": [
@@ -5615,7 +5821,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines",
+        "core/rows",
         "core/services/machines"
       ],
       "was": [
@@ -5656,7 +5862,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines",
+        "core/rows",
         "core/services/machines"
       ],
       "was": [
@@ -5697,7 +5903,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines",
+        "core/rows",
         "core/services/machines"
       ],
       "was": [
@@ -5738,7 +5944,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines",
+        "core/rows",
         "core/services/machines"
       ],
       "was": [
@@ -5779,7 +5985,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines",
+        "core/rows",
         "core/services/machines"
       ],
       "was": [
@@ -5820,7 +6026,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines",
+        "core/rows",
         "core/services/machines"
       ],
       "was": [
@@ -5861,7 +6067,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines",
+        "core/rows",
         "core/services/machines"
       ],
       "was": [
@@ -5902,7 +6108,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.site.reader",
@@ -5928,7 +6134,7 @@
       "devices": [
         "dn2"
       ],
-      "doc": "DN2: the tail jump (+0x46) of a (project, track) function into the type reader; core/machines repoints it to mf_reader_real, a copy of the reader with the stock load, for callers that want the real type.",
+      "doc": "DN2: the tail jump (+0x46) of a (project, track) function into the type reader; core/rows repoints it to mf_reader_real, a copy of the reader with the stock load, for callers that want the real type.",
       "file": "devices/fw/machine.toml",
       "kind": "site",
       "mark": "D",
@@ -5942,7 +6148,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "cf.machine.site.reader_tail",
@@ -8580,7 +8786,7 @@
         "rust": "dkfw::page::FX_KEY_LIST"
       },
       "cpu": "cf",
-      "doc": "The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. core/fxpages substitutes its own list.",
+      "doc": "The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. The fx service substitutes its own list.",
       "file": "devices/fw/page.toml",
       "kind": "data",
       "mark": "D",
@@ -8703,7 +8909,8 @@
       },
       "subsystem": "page",
       "users": [
-        "core/machines"
+        "core/rows",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -8745,7 +8952,8 @@
       "sig": "u8 *(u8 *sounds, u32 index)",
       "subsystem": "page",
       "users": [
-        "core/machines"
+        "core/rows",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -8787,7 +8995,8 @@
       "sig": "u32 (u8 *view)",
       "subsystem": "page",
       "users": [
-        "core/machines"
+        "core/rows",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -8849,8 +9058,9 @@
       "sig": "u8 *(u8 *sounds, u32 track)",
       "subsystem": "page",
       "users": [
-        "core/machines",
-        "core/runtime"
+        "core/rows",
+        "core/runtime",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -8880,7 +9090,7 @@
         "rust": "dkfw::page::page_desc"
       },
       "cpu": "cf",
-      "doc": "The page descriptor accessor `row = f(int page)`: entry `moveq N,D1; move.l 4(SP),D0` (6 bytes), then the bound check, the row address and rts. core/fxpages hooks it.",
+      "doc": "The page descriptor accessor `row = f(int page)`: entry `moveq N,D1; move.l 4(SP),D0` (6 bytes), then the bound check, the row address and rts. The fx service hooks it.",
       "file": "devices/fw/page.toml",
       "kind": "fn",
       "mark": "D",
@@ -8951,7 +9161,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": []
     },
@@ -9000,7 +9210,7 @@
       },
       "subsystem": "page",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": []
     },
@@ -9833,7 +10043,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "Common exit of the kit's effect value array initialiser, `movem.l (SP),{D2 A2-A5}; lea (0x20,SP),SP` (8 bytes; a2 = the array); core/fxpages gives each effect row its defaults here.",
+      "doc": "Common exit of the kit's effect value array initialiser, `movem.l (SP),{D2 A2-A5}; lea (0x20,SP),SP` (8 bytes; a2 = the array); the fx service gives each effect row its defaults here.",
       "file": "devices/fw/page.toml",
       "kind": "site",
       "mark": "D",
@@ -10025,7 +10235,7 @@
         ]
       },
       "cpu": "cf",
-      "doc": "The `moveq N,D1` (2 bytes) in the FX view builder that pushes the stock page count, N in the byte at +1; core/fxpages reads it as the stock count.",
+      "doc": "The `moveq N,D1` (2 bytes) in the FX view builder that pushes the stock page count, N in the byte at +1; the fx service reads it as the stock count.",
       "file": "devices/fw/page.toml",
       "kind": "site",
       "mark": "D",
@@ -10225,7 +10435,7 @@
         "dt2",
         "dn2"
       ],
-      "doc": "the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/params` makes.",
+      "doc": "the parameter table (60-byte rows), by the signature of its reader. The lfo service reads its address to name the stock rows of the WAVE parameters (`cf.lfo.data.wave_row.N`) in the RAM copy that `core/rows` makes.",
       "file": "devices/fw/param.toml",
       "kind": "data",
       "mark": "D",
@@ -10240,7 +10450,7 @@
       },
       "subsystem": "param",
       "users": [
-        "core/params",
+        "core/rows",
         "core/services/lfo"
       ],
       "was": [
@@ -10406,7 +10616,7 @@
       },
       "subsystem": "param",
       "users": [
-        "core/params"
+        "core/rows"
       ],
       "was": [
         "cf.param.fn.t2",
@@ -10454,7 +10664,7 @@
       "site": "cf.param.fn.value_class",
       "subsystem": "param",
       "users": [
-        "core/params"
+        "core/rows"
       ],
       "was": []
     },
@@ -11120,7 +11330,7 @@
         "dt2",
         "dn2"
       ],
-      "doc": "Every clamp bound of the descriptor table's readers (a 7-byte `cmpi.l #count` compare, the row count as the immediate at +2), except the one in the value_class accessor; core/params raises them.",
+      "doc": "Every clamp bound of the descriptor table's readers (a 7-byte `cmpi.l #count` compare, the row count as the immediate at +2), except the one in the value_class accessor; core/rows raises them.",
       "file": "devices/fw/param.toml",
       "kind": "sites",
       "mark": "D",
@@ -11135,7 +11345,7 @@
       },
       "subsystem": "param",
       "users": [
-        "core/params"
+        "core/rows"
       ],
       "was": [
         "cf.param.sites.bound",
@@ -11843,7 +12053,7 @@
       },
       "subsystem": "param",
       "users": [
-        "core/params"
+        "core/rows"
       ],
       "was": [
         "cf.param.sites.ref",
@@ -17605,7 +17815,8 @@
       "sig": "i32 (u8 *bitmap, u8 *font, i32 x, i32 y, u32 flags, const char *fmt, ...)",
       "subsystem": "text",
       "users": [
-        "core/ui"
+        "core/ui",
+        "core/services/machines"
       ],
       "was": []
     },
@@ -18674,7 +18885,8 @@
       "subsystem": "view",
       "users": [
         "core/digikit-menu",
-        "core/ui"
+        "core/ui",
+        "core/services/machines"
       ],
       "was": [
         "cf.menu.fn.invalidate"
@@ -21672,7 +21884,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "dsp.machine.data.selector",
@@ -21705,7 +21917,7 @@
       },
       "subsystem": "machine",
       "users": [
-        "core/machines"
+        "core/rows"
       ],
       "was": [
         "dsp.machine.value.selector_table",
@@ -25647,7 +25859,7 @@
       "name": "draw"
     },
     {
-      "count": 11,
+      "count": 13,
       "cpu": "cf",
       "file": "devices/fw/filter.toml",
       "meaning": "the filter type: accessor, getter and setter, list, name, graph, loader bound",
@@ -25675,7 +25887,7 @@
       "name": "link"
     },
     {
-      "count": 65,
+      "count": 68,
       "cpu": "cf",
       "file": "devices/fw/machine.toml",
       "meaning": "the machine framework: dispatch, names, per-type tables, the run-time registry",

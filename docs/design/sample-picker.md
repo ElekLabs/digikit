@@ -154,7 +154,7 @@ Tests:
 ## 5. Decisions
 
 1. The picker is shared source compiled into each sampler; a stand-alone module later needs a find call. (Em, 2026-11-01.)
-2. The list shows all 16 indexes, so the row number is the SMP value. Names on the knob come later (a formatter field in core/params).
+2. The list shows all 16 indexes, so the row number is the SMP value. Names on the knob come later (a formatter field in core/rows).
 3. YES on a slot opens the browser for that slot (empty or filled). YES on a file loads it into that slot, sets SMP to the slot and closes the whole flow in one press. Turning SMP chooses between the loaded slots. There is no "+ ADD" row. (Em, 2026-11-02, ui-rules.md.)
 4. No header preview in v1 (size only). 128 rows per folder, the picker sorts.
 5. Refusals: no dialog (Em, 2026-11-01, one-button flows); the flow closes and the page shows the error text as a toast.

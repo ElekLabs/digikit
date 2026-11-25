@@ -60,7 +60,7 @@ and `core/sample-pool` reach `main` with that branch. Paths without a directory 
 
 - Every adapter is its own patch-time module under `modules/core/adapters/`. patchkit writes its hooks into the OS image and places its
   objects in `cf.expansion` (ColdFire) or `dsp.l2` (SHARC). None is a `.dkm`.
-- `[patch_sets]` of the device files put the same eight roots into every image: `core/dynreg`, `dyndsp`, `dynfx`, `fxpages`, `ui`,
+- `[patch_sets]` of the device files put the same eight roots into every image: `core/rows`, `dyndsp`, `dynfx`, `fxpages`, `ui`,
   `digikit-menu`, `health`, `input`. `requires` adds the rest (`runtime`, `expansion`, `machines`, `params`, `dsp-link`, `dsp-voice`,
   `fx`). DT2 `device` and `emulator` include `core/sample-pool`; the `sample-tracks` set has the same roots.
 - Adapter code is small: from about 30 B of data (`dynfx`) to about 6 KB of text (`ui`).
@@ -118,7 +118,7 @@ From `modules/core/runtime/build/runtime.dko.json`:
 | `store.rs` | core + capability | Reader for the loader (`find`, `open`, `load_to_stage`, `layout`); `read_file`, `list`; the store figures for HEALTH (`note_commit`, `figures_stale`). |
 | `sha256.rs` | core (library) | Pure SHA-256. |
 | `assign.rs` | capability (rows) | Run-time machine type numbers; the sticky map in the selection record. |
-| `registry.rs` | capability (rows) | `register` records: PARAM, PAGE, MACHINE, EFFECT; writes parameter, page and machine rows; calls `fxpage::apply`/`remove`. Adapter `core/dynreg`. |
+| `registry.rs` | capability (rows) | `register` records: PARAM, PAGE, MACHINE, EFFECT; writes parameter, page and machine rows; calls `fxpage::apply`/`remove`. Adapter `core/rows`. |
 | `dsp.rs` | core + capability | DSP section check (versions 1-5), range reserve, relocation, the SEND and ROWS phases (core); voice rows, effect rows, bank and track records (capabilities). Optional `dl_*`, `dyndsp_info`, `dynfx_info`. |
 | `fxpage.rs` | capability (fx) | FX pages: effect records, page rows, kit load and save. Adapter `core/fxpages`. |
 | `fxsend.rs` | capability (fx) | FX routes and per-track send amounts; uses `settings`. |
