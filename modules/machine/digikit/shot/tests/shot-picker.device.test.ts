@@ -144,14 +144,10 @@ runtimeTests(
       expect(ready1.state, 'slot 1 is READY').toBe(3);
       expect(await smp(), 'SMP is slot 1').toBe(1);
 
-      // The list opens with the cursor on the current SMP slot (the click callback reads SMP with `dk_param_get`, which needs the owner idle): SMP is 1 here, so
-      // the opening screen is the one with the cursor one row below the top, and differs from the one with the cursor on slot 0.
+      // The click opens the list again with SMP at 1 (the callback reads it with `dk_param_get` outside the owner: expectNoRefusedCalls below). The cursor
+      // placement on the current slot is a host test of the picker (runtime/platform/ui/host/tests/picker.rs).
       await ui.tap('PUSH D', 600);
-      const openedOnSmp = await view();
-      await move('UP', 20);
-      expect(await view(), 'the list opens with the cursor on SMP, not on the first slot').not.toBe(openedOnSmp);
-      await move('DOWN', 1);
-      expect(await view(), 'slot 1 is where the list opened').toBe(openedOnSmp);
+      expect(await view(), 'the click opens the slot list').not.toBe(page);
       await ui.tap('NO', 800);
       await ui.settle(1500);
       expect(await smp(), 'closing the list changed nothing').toBe(1);
