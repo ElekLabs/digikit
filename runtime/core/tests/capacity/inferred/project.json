@@ -2,7 +2,7 @@
   "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime-inferred-needs-tests",
   "tags": ["test-only", "tier:full"],
-  "implicitDependencies": ["core/runtime-package"],
+  "implicitDependencies": ["core/runtime-package", "sdk", "dkneeds", "core/services/machines", "core/services/fx"],
   "metadata": {
     "runtimeAcceptance": [
       {

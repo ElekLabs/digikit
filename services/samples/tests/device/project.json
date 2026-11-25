@@ -6,7 +6,8 @@
   ],
   "implicitDependencies": [
     "core/services/samples",
-    "core/sample-pool"
+    "core/sample-pool",
+    "core/runtime-storage"
   ],
   "metadata": {
     "runtimeAcceptance": [

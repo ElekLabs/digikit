@@ -4,7 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": ["core/services/lfo"],
+  "implicitDependencies": ["core/services/lfo", "core/runtime-storage", "core/runtime-package"],
   "metadata": {
     "runtimeAcceptance": [
       {

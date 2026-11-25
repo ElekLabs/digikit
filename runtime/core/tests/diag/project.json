@@ -5,7 +5,8 @@
     "test-only"
   ],
   "implicitDependencies": [
-    "core/runtime"
+    "core/runtime",
+    "digikit/debug"
   ],
   "metadata": {
     "runtimeAcceptance": [

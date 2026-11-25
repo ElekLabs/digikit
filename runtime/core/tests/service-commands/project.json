@@ -2,7 +2,7 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "core/runtime-service-tests",
   "tags": ["test-only"],
-  "implicitDependencies": ["core/runtime-package"],
+  "implicitDependencies": ["core/runtime-package", "sdk"],
   "metadata": {
     "runtimeAcceptance": [
       {

@@ -5,7 +5,11 @@
     "test-only"
   ],
   "implicitDependencies": [
-    "core/runtime-package"
+    "core/runtime-package",
+    "sdk",
+    "core/services/fx",
+    "core/services/project",
+    "core/services/lfo"
   ],
   "metadata": {
     "runtimeAcceptance": [

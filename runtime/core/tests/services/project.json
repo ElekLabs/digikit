@@ -4,7 +4,7 @@
   "tags": [
     "test-only"
   ],
-  "implicitDependencies": ["core/runtime-package", "dkrt-svc-rt", "dkrt-lifecycle", "dkrt-abi"],
+  "implicitDependencies": ["core/runtime-package", "dkrt-svc-rt", "dkrt-lifecycle", "dkrt-abi", "sdk"],
   "metadata": {
     "runtimeAcceptance": [
       {
