@@ -24,7 +24,9 @@ def test_committed_objects_are_current_and_plain_coldfire():
     assert len(objects) >= 2 * 3, "params, rows-info and type-dispatch per device"
     for path in objects:
         obj = json.loads(path.read_text())
-        assert {r["type"] for r in obj["relocs"]} <= {"cf.32", "cf.pc32", "cf.pc16"}, path
+        assert {r["type"] for r in obj["relocs"]} <= {"cf.32", "cf.pc32", "cf.pc16"}, (
+            path
+        )
     front_end.build_module(MACHINES, check=True)
     if pk_toolchains.codegen_gcc_ready():
         front_end.build_module(RUNTIME, check=True)
