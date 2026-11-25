@@ -8,8 +8,12 @@ import { portFile } from '@digi/regression/runtime/device-data.ts';
 import { installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
 import { memory } from '@digi/regression/runtime/memory.ts';
 import { panelKeys } from '@digi/regression/runtime/flows/panel-keys.ts';
+import { expectNoRefusedCalls } from '@digi/regression/runtime/service-symbols.ts';
 import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+
+/** `DK_PARAM_E_STATE` (sdk/include/dk/platform/param.h). */
+const DK_PARAM_E_STATE = -0x10001;
 
 runtimeTests(
   'native callback page cycles and routes PARAM and LOCAL turns',
@@ -43,8 +47,8 @@ runtimeTests(
     async function observed() {
       const reply = await dk.request(0x3e);
       expect(reply.status).toBe(0);
-      // 7 words: draws, events, track, start, end, zoom, level seen.
-      expect(reply.body).toHaveLength(28);
+      // 8 words: draws, events, track, start, end, zoom, level seen, and the answer of dk_param_get in the last turn callback.
+      expect(reply.body).toHaveLength(32);
       const values = Buffer.from(reply.body);
       return {
         draws: values.readUInt32BE(0),
@@ -53,6 +57,7 @@ runtimeTests(
         start: values.readInt32BE(12),
         end: values.readInt32BE(16),
         zoom: values.readInt32BE(20),
+        param: values.readInt32BE(28),
       };
     }
     await ui.chord('TRK', 'TRIG 1');
@@ -97,6 +102,10 @@ runtimeTests(
     await shot(session, artifacts, 'page-one-after-turns');
     expect(local.events - right.events, 'one LOCAL callback per turn').toBe(1);
     expect(local.zoom - right.zoom).toBe(4);
+    // the turn callback called dk_param_get: a page turn ends the click flow, so the service answers DK_PARAM_E_STATE; the call entered the machines service outside its owner
+    // (the native turn runs in the act phase of a step), so the owner refused nothing
+    expect(local.param, 'dk_param_get from the turn callback answers E_STATE').toBe(DK_PARAM_E_STATE);
+    await expectNoRefusedCalls(runtime, plan, 'machines');
     expect([local.start, local.end]).toEqual([right.start, right.end]);
     await ui.turn('ENC B', 4);
     const unused = await observed();

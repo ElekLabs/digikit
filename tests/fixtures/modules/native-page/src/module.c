@@ -1,10 +1,12 @@
 /* Neutral SDK fixture: the second native page reuses two saved words.
- * LOCAL zoom is UI-only state, independent per source track. No firmware calls. */
+ * LOCAL zoom is UI-only state, independent per source track. The turn callback calls the machines service (dk_param_get), which a native page's turn reaches outside the
+ * service's owner. A page turn ends the click flow, so the answer is DK_PARAM_E_STATE: the status itself is the observed value. */
 #include <stddef.h>
 #include <dk/gen/machine.h>
 #include <dk/page/page.h>
 #include <dk/core/module.h>
 #include <dk/platform/host.h>
+#include <dk/platform/param.h>
 #include "module_ids.h"
 #include "frame-layout.h"
 
@@ -32,6 +34,8 @@ static int32_t zoom[16];
 /* Exported measurements let the harness check state without inferring numbers from pixels. */
 uint32_t native_draws, native_events, native_track;
 int32_t native_start_seen, native_end_seen, native_zoom_seen, native_level_seen;
+/* What dk_param_get answered in the last turn callback (0x7fffffff before any). */
+int32_t native_param_seen = 0x7fffffff;
 
 /* Read-only test observation; no parameter or UI mutations through RPC. */
 static int32_t status(uint32_t cmd, uint32_t seq, const void *request, uint32_t len, void *reply)
@@ -48,8 +52,9 @@ static int32_t status(uint32_t cmd, uint32_t seq, const void *request, uint32_t 
                         (uint32_t)native_start_seen,
                         (uint32_t)native_end_seen,
                         (uint32_t)native_zoom_seen,
-                        (uint32_t)native_level_seen};
-    for (unsigned i = 0; i < 7; i++) {
+                        (uint32_t)native_level_seen,
+                        (uint32_t)native_param_seen};
+    for (unsigned i = 0; i < 8; i++) {
         out[4 * i] = words[i] >> 24;
         out[4 * i + 1] = words[i] >> 16;
         out[4 * i + 2] = words[i] >> 8;
@@ -120,6 +125,7 @@ static void native_event(void *arg, const dk_page_event *event)
     if (event->version != 1 || event->size < sizeof(*event) || event->track >= 16 ||
         event->control != 0)
         return;
+    native_param_seen = dk_param_get(event->track, 0);
     int next = zoom[event->track] + event->delta;
     zoom[event->track] = next < 0 ? 0 : next > 127 ? 127 : next;
     native_events++;
