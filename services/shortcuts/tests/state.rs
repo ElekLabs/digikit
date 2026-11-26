@@ -457,3 +457,26 @@ fn start_in_gives_the_initial_state_over_whatever_the_slot_held() {
     s.table_mut().add(binding(1, [TRK, YES], &mut log));
     assert_eq!(s.table().len(), 1);
 }
+
+/// A service reload while a swallowed key is held: the new owner never saw the press, so the release is the firmware's (`Pass`) and queues nothing. The module that bound the key is
+/// down meanwhile (its `off` was dropped by `detach`, as for an unload).
+#[test]
+fn a_service_started_again_passes_the_release_of_a_key_it_never_saw_pressed_and_calls_nothing() {
+    let p = device();
+    let core = FakeCore::new();
+    let mut s = dkrt_test_support::start_boxed::<Shortcuts>(&core).unwrap();
+    let mut log = Box::new(Log::new());
+    s.table_mut().add(binding(1, [TRK, YES], &mut log));
+    key(&mut s, &p, C_TRK, 0);
+    assert_eq!(key(&mut s, &p, C_YES, 0), Verdict::Swallow);
+    assert_eq!(*log, ["on"]);
+    // the closure goes down: the module's bindings and the active one end without module code
+    detach(&mut s, 1);
+    assert_eq!(*log, ["on"], "detach calls no module code");
+    drop(s);
+    let mut s = dkrt_test_support::start_boxed::<Shortcuts>(&core).unwrap();
+    assert!(s.active().is_none() && s.table().len() == 0 && s.pending() == 0);
+    assert_eq!(key(&mut s, &p, C_YES, RELEASE), Verdict::Pass);
+    assert_eq!(key(&mut s, &p, C_TRK, RELEASE), Verdict::Pass);
+    assert_eq!((s.pending(), *log), (0, vec!["on"]));
+}
