@@ -1499,7 +1499,8 @@ node packages/sharc-rig-kit/src/pin-cli.ts write --wav CAPTURE.wav --pin PIN.jso
 
 `mise run wb:preview` simulates the Transfer content packs without a ColdFire compiler. Use `mise run wb:preview:real` to exercise actual compiled packs. Both serve the desktop pages
 (`apps/desktop/ui`) at http://127.0.0.1:5199/ over a fake device (state in the address:
-`?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=MiB/s&mode=modules|samples`).
+`?dev=ok|empty|noreply|error|slow&folder=files|empty|none&speed=MiB/s&mode=modules|samples`;
+Modules mode also takes `card=orphan|incomplete` (an unused service file; a module whose service is missing) and `live=ok|refuse|fail` (the answer to Load, Unload and Reload; scenes `transfer-live*`).
 `node tools/devtools/ui_shots.mjs --out DIR [--prefix before] [scene ...]` writes one PNG per scene at
 1440x900 and at 700 px wide (`--list` lists scenes). Look at the pictures before and after a UI change.
 `?emudev=<id>` shows another device's toolbar on the Emulator page (default `dn2`).

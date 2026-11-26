@@ -12,6 +12,7 @@ import { errorLine, formatBytes } from '../../src/modules/backend';
 import {
   ListRow,
   LocalPane,
+  type DependencyItem,
   DevicePane,
   SelectAll,
   createConfirm,
@@ -20,6 +21,8 @@ import {
   type ChipStatus,
   type PageCtx,
 } from './TransferParts';
+import { LIVE_LABEL, liveActions, liveResult, serviceAction, type LiveOp } from '../../src/transfer/live-ops';
+import { unusedServices, unusedServicesText } from '../../src/transfer/pane-groups';
 import { activateSystemPackage } from '../../src/runtime/activate-system-package';
 import { noteActivity } from '../../src/transfer/activity';
 import ModuleFilesArea from './ModuleFilesArea';
@@ -37,6 +40,8 @@ import {
   deleteDoneText,
   deletePaths,
   dependencyBadge,
+  dependencyItems,
+  deviceGroups,
   deviceTags,
   eventText,
   installModules,
@@ -46,7 +51,6 @@ import {
   localTags,
   tickedFit,
   tickedLoad,
-  onDeviceWithPending,
   rowKey,
   rowStatus,
   startProgress,
@@ -68,6 +72,8 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     delTicks,
     lastView,
     jobProgress,
+    liveResults,
+    setLiveResults,
     progress,
     readingAfterJob,
     setBrowseDevice,
@@ -228,14 +234,54 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     return v ? visibleRefusals(v, showTests()) : [];
   });
   const refusalMessages = createMemo(() => refusals().map(serviceRefusalText));
-  const deviceRows = createMemo(() => {
+  // the same groups as "On your computer", plus "Not in library"
+  const deviceGroupRows = createMemo(() => {
     const v = lastView();
-    return v ? onDeviceWithPending(v, progress(), busy() === 'Installing') : [];
+    return v ? deviceGroups(v, progress(), busy() === 'Installing') : [];
   });
   const deviceKeys = () =>
-    deviceRows()
+    deviceGroupRows()
+      .flatMap((g) => g.rows)
       .filter((r) => r.on_card !== 'no')
       .map((r) => r.path);
+  const unused = createMemo(() => {
+    const v = lastView();
+    return v ? unusedServices(v) : { paths: [], verified: true };
+  });
+  /** One live change of a module or service file on the card: one click, no confirm; the result stays on the row, then the card is read again. */
+  const live = (op: LiveOp, path: string) =>
+    run(`${LIVE_LABEL[op]}ing`, async () => {
+      const out = await transferBackend.live(op, [path]);
+      setLiveResults({ ...liveResults(), [path]: liveResult(op, path, out) });
+    });
+  const rowActions = (op: LiveOp, path: string) => ({
+    label: LIVE_LABEL[op],
+    title:
+      op === 'reload'
+        ? 'Load the file on the card again without a restart'
+        : op === 'unload'
+          ? 'Unload the module without a restart (its file stays on the card)'
+          : 'Load the module from the card without a restart',
+    disabled: !!busy(),
+    onClick: () => void live(op, path),
+  });
+  /** The popover lines of a module on the card: each service, with its Reload and the last result. */
+  const cardDependencies = (r: TransferRow) => {
+    const badge = dependencyBadge(r.card_services);
+    if (!badge) return undefined;
+    const items: DependencyItem[] = dependencyItems(r.card_services).map((it, i) => {
+      const sv = (r.card_services ?? [])[i]!;
+      const act = serviceAction(sv);
+      return {
+        line: it.line,
+        ...(act
+          ? { action: { ...rowActions(act.op, act.path), title: `Reload the ${sv.label} file on the card` } }
+          : {}),
+        ...(act && liveResults()[act.path] ? { result: liveResults()[act.path] } : {}),
+      };
+    });
+    return { ...badge, items };
+  };
   // the same selection model as the Samples lists: click, Shift, Cmd or Ctrl, a marquee, Cmd+A, Esc (no folders here)
   const lsel = createPaneSelect({
     keys: localKeys,
@@ -505,8 +551,25 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
         >
           <WaitNotice active={!!busy()} cancel={busy() !== 'Installing' && !readingAfterJob()} />
           <Show when={lastView()}>
+            <Show when={unused().paths.length}>
+              <p class="unused-services" role="status">
+                <span>{unusedServicesText(unused())}</span>
+                <button
+                  type="button"
+                  class="rowlink"
+                  disabled={writing(busy())}
+                  title="Tick these files for Delete"
+                  onClick={() => {
+                    setDelTicks(new Set(unused().paths));
+                    confirm.stop();
+                  }}
+                >
+                  Select for delete
+                </button>
+              </p>
+            </Show>
             <Show
-              when={deviceRows().length}
+              when={deviceGroupRows().length}
               fallback={
                 <p class="empty">
                   {browsing()
@@ -515,46 +578,57 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
                 </p>
               }
             >
-              <ul class="rows">
-                <For each={deviceRows()}>
-                  {(r) => (
-                    <ListRow
-                      rowKey={r.on_card === 'no' ? undefined : r.path}
-                      selected={delTicks().has(r.path) || (!!filesId(r) && selectedId() === filesId(r))}
-                      onSelect={
-                        r.on_card === 'no'
-                          ? undefined
-                          : (e) => {
-                              const f = filesId(r);
-                              if (f) setSelectedId(f);
-                              else {
-                                setSelectedId(undefined);
-                                dsel.click(r.path, e);
-                              }
+              <For each={deviceGroupRows()}>
+                {(g) => (
+                  <div class="group">
+                    <h4>{g.group}</h4>
+                    <ul class="rows">
+                      <For each={g.rows}>
+                        {(r) => (
+                          <ListRow
+                            rowKey={r.on_card === 'no' ? undefined : r.path}
+                            selected={delTicks().has(r.path) || (!!filesId(r) && selectedId() === filesId(r))}
+                            onSelect={
+                              r.on_card === 'no'
+                                ? undefined
+                                : (e) => {
+                                    const f = filesId(r);
+                                    if (f) setSelectedId(f);
+                                    else {
+                                      setSelectedId(undefined);
+                                      dsel.click(r.path, e);
+                                    }
+                                  }
                             }
-                      }
-                      check={
-                        r.on_card === 'no'
-                          ? undefined
-                          : {
-                              label: `Delete ${label(r)}`,
-                              checked: delTicks().has(r.path),
-                              disabled: writing(busy()),
-                              onChange: () => dsel.tick(r.path),
+                            check={
+                              r.on_card === 'no'
+                                ? undefined
+                                : {
+                                    label: `Delete ${label(r)}`,
+                                    checked: delTicks().has(r.path),
+                                    disabled: writing(busy()),
+                                    onChange: () => dsel.tick(r.path),
+                                  }
                             }
-                      }
-                      name={label(r)}
-                      title={r.path}
-                      tags={deviceTags(r)}
-                      dependencies={dependencyBadge(r.card_services)}
-                      version={r.version ?? ''}
-                      size={formatBytes(r.file_size)}
-                      status={status(r)}
-                      phase={phase(r)}
-                    />
-                  )}
-                </For>
-              </ul>
+                            name={label(r)}
+                            title={r.path}
+                            tags={deviceTags(r)}
+                            dependencies={cardDependencies(r)}
+                            live={{
+                              actions: liveActions(r).map((op) => rowActions(op, r.path)),
+                              result: liveResults()[r.path],
+                            }}
+                            version={r.version ?? ''}
+                            size={formatBytes(r.file_size)}
+                            status={status(r)}
+                            phase={phase(r)}
+                          />
+                        )}
+                      </For>
+                    </ul>
+                  </div>
+                )}
+              </For>
             </Show>
           </Show>
         </DevicePane>

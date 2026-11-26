@@ -7,6 +7,7 @@ import { addJob, removeJob, updateJob } from '../jobs/jobs-core';
 import { remembered, type KeyValue } from '../storage';
 import type { TransferEnv } from './env';
 import type { LinkState } from './link-core';
+import type { LiveResult } from './live-ops';
 import { parseMode, type Mode, type Progress, type TransferView, type Verified } from './transfer-core';
 
 export interface DeviceInfo {
@@ -47,6 +48,7 @@ export function createTransferState({
     setBrowsing(true);
     setDeviceInfo(undefined);
     setVerified({});
+    setLiveResults({});
     setDelTicks(new Set<string>());
   };
   /** The library modules ticked for install. */
@@ -54,6 +56,8 @@ export function createTransferState({
   /** The store paths ticked in the On device pane (for Delete). */
   const [delTicks, setDelTicks] = createSignal<Set<string>>(new Set());
   const [verified, setVerified] = createSignal<Verified>({});
+  /** The last live change (Load, Unload, Reload) per store path, shown on the row until the next change or target. */
+  const [liveResults, setLiveResults] = createSignal<Record<string, LiveResult>>({});
   const [progress, setProgress] = createSignal<Progress>();
   const [showTests, setShowTests] = createSignal(false);
   const [log, setLog] = createSignal<string[]>([]);
@@ -166,6 +170,8 @@ export function createTransferState({
     setDelTicks,
     verified,
     setVerified,
+    liveResults,
+    setLiveResults,
     progress,
     setProgress,
     showTests,

@@ -54,6 +54,7 @@ import {
   storageLine,
   DONE_ON_CARD,
 } from '@digi/workbench-core/transfer/transfer-core.ts';
+import { unusedServices } from '@digi/workbench-core/transfer/pane-groups.ts';
 import { parseSoftwareVersion } from '@digi/workbench-core/transfer/connection-core.ts';
 import { FakeDevice, concat, hex, sha } from '@digi/test-support/fakedevice';
 import { dkm, everythingFits, needsOf } from './support/dkm.ts';
@@ -981,29 +982,35 @@ test('the installed copy supplies the destination dependencies, including transi
   );
   assert.equal(dependencyBadge(view.card_only.find((r) => r.path === unused.path)?.card_services), undefined);
 
-  const visible = [cardOnly.path, libraryModuleCopy.path, port.path, unused.path];
+  // a service file is no row; the one no module needs is selected for Delete by the header link
+  const visible = [cardOnly.path, libraryModuleCopy.path, port.path];
   assert.deepEqual(
     onDeviceWithPending(view, undefined).map((r) => r.path),
     visible,
   );
-  assert.deepEqual(deletePaths(view, new Set(dev.files.keys())), visible);
+  assert.deepEqual(deletePaths(view, new Set(dev.files.keys())), [...visible, unused.path]);
   assert.equal(onDevice(view).length, 6);
   assert.match(storageLine(view), /^Modules: 6 files, /);
 
   const progress = startProgress([], false, {}, [{ id: 'fx', path: installedFx.path, bytes: 800 }]);
-  assert.equal(onDeviceWithPending(view, progress, true).find((r) => r.path === installedFx.path)?.on_card, 'no');
+  assert.equal(
+    onDeviceWithPending(view, progress, true).find((r) => r.path === installedFx.path),
+    undefined,
+  );
   assert.deepEqual(
     onDeviceWithPending(view, progress).map((r) => r.path),
     visible,
   );
 });
 
-test('an unread card header keeps services available for explicit deletion', async () => {
+test('an unread card header lists a service nothing known needs as possibly unused, still deletable', async () => {
   const dev = new FakeDevice();
   const fx = service('fx');
+  const spare = service('spare');
   dev.files.set('modules/shot.dkm', needing('someone/shot', ['fx']));
   dev.files.set('modules/unread.dkm', needing('someone/unread', []));
   dev.files.set(fx.path, fx.bytes);
+  dev.files.set(spare.path, spare.bytes);
   const s = session(dev);
   const header = s.header.bind(s);
   s.header = async (path) => {
@@ -1012,8 +1019,10 @@ test('an unread card header keeps services available for explicit deletion', asy
   };
   const view = await buildView(s, []);
   const paths = onDeviceWithPending(view, undefined).map((row) => row.path);
-  assert.ok(paths.includes(fx.path));
-  assert.deepEqual(deletePaths(view, new Set(paths)), paths);
+  // the service is no row; with an unread file it is listed as possibly unused, and stays deletable
+  assert.ok(!paths.includes(fx.path) && !paths.includes(spare.path));
+  assert.deepEqual(unusedServices(view), { paths: [spare.path], verified: false });
+  assert.deepEqual(deletePaths(view, new Set([...paths, fx.path, spare.path])), [...paths, spare.path]);
 });
 
 test('installed dependencies still appear without any library services', async () => {
@@ -1026,8 +1035,10 @@ test('installed dependencies still appear without any library services', async (
   const view = await buildView(session(dev), []);
   assert.deepEqual(
     onDeviceWithPending(view, undefined).map((r) => r.path),
-    ['modules/card-only.dkm', 'services/backup/fx.dks', 'services/fx-copy.dks'],
+    ['modules/card-only.dkm'],
   );
+  // the copies of the service at other paths are no row either, and a module on the card needs what they provide: none is unused
+  assert.deepEqual(unusedServices(view).paths, []);
   assert.deepEqual(dependencyBadge(view.card_only.find((r) => r.path === 'modules/card-only.dkm')?.card_services), {
     text: '1 dep',
     lines: ['fx service · on device · 1.2 · 800 B'],

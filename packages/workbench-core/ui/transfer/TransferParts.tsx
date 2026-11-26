@@ -10,6 +10,7 @@ import { createCheckingHint } from '../../src/transfer/checking-hint';
 import type { PaneSelect } from '../../src/transfer/pane-select';
 import { dragKind, selectState, toggleAll } from '../../src/transfer/select-core';
 import { linkHint, linkTag } from '../../src/transfer/link-core';
+import type { LiveResult } from '../../src/transfer/live-ops';
 import { deleteLabel, freeLine, tickCountText, writing, type RowTag } from '../../src/transfer/transfer-core';
 
 export type { CancelledRun } from '../../src/transfer/run-transfer';
@@ -104,6 +105,20 @@ function Tag(props: { tag: RowTag }): JSX.Element {
   );
 }
 
+/** A one-click button of a row or of a popover line. */
+export interface RowAction {
+  label: string;
+  title: string;
+  disabled?: boolean;
+  onClick: () => void;
+}
+/** A service line of a dependency popover: its text, its Reload (a service on the card) and the result of the last change. */
+export interface DependencyItem {
+  line: string;
+  action?: RowAction;
+  result?: LiveResult;
+}
+
 export interface ListRowProps {
   check?: { label: string; checked: boolean; disabled: boolean; onChange: () => void };
   /** The key of the row in the pane's selection (the marquee finds the row by it). */
@@ -123,8 +138,10 @@ export interface ListRowProps {
   dropPath?: string;
   /** Small labels after the name; only what says something (a usual state has none). */
   tags?: RowTag[];
-  /** A focusable badge for a module's service dependencies. */
-  dependencies?: { text: string; lines: string[] };
+  /** A focusable badge for a module's service dependencies; `items` give the popover one line per service, with an action where it has one. */
+  dependencies?: { text: string; lines: string[]; items?: DependencyItem[] };
+  /** Live actions of the row (Reload, Unload, Load; one click, no confirm) and the last result, shown inline. */
+  live?: { actions: RowAction[]; result?: LiveResult };
   /** The version (modules), a dim column before the size. */
   version?: string;
   /** The size, right-aligned. */
@@ -203,6 +220,17 @@ export function ListRow(props: ListRowProps): JSX.Element {
         <Show when={props.dependencies}>{(badge) => <DependencyBadge {...badge()} />}</Show>
         <For each={props.tags ?? []}>{(t) => <Tag tag={t} />}</For>
       </span>
+      <Show when={props.live?.actions.length}>
+        <span class="live">
+          <For each={props.live?.actions ?? []}>
+            {(a) => (
+              <button type="button" class="rowlink live-act" title={a.title} disabled={a.disabled} onClick={a.onClick}>
+                {a.label}
+              </button>
+            )}
+          </For>
+        </span>
+      </Show>
       <Show when={props.action}>
         {(a) => (
           <button type="button" class="rowlink" title={a().title} onClick={a().onClick}>
@@ -215,16 +243,41 @@ export function ListRow(props: ListRowProps): JSX.Element {
       </Show>
       <Show when={props.status}>{(st) => <Chip status={st()} />}</Show>
       <span class="size">{props.size ?? ''}</span>
+      <Show when={props.live?.result}>{(res) => <LiveResultText result={res()} line />}</Show>
     </li>
   );
 }
 
-function DependencyBadge(props: { text: string; lines: string[] }): JSX.Element {
+/** The result of the last live change of a row: done, refused with the runtime's reason, or failed (the module is not loaded). */
+export function LiveResultText(props: { result: LiveResult; line?: boolean }): JSX.Element {
+  return (
+    <span
+      class="live-result"
+      classList={{ [props.result.kind]: true, line: !!props.line }}
+      role="status"
+      title={props.result.text}
+    >
+      {props.result.text}
+    </span>
+  );
+}
+
+function DependencyBadge(props: { text: string; lines: string[]; items?: DependencyItem[] }): JSX.Element {
   const id = `dependency-${createUniqueId()}`;
   const [hovered, setHovered] = createSignal(false);
   const [focused, setFocused] = createSignal(false);
   const [dismissed, setDismissed] = createSignal(false);
-  const open = () => !dismissed() && (hovered() || focused());
+  const [pinned, setPinned] = createSignal(false);
+  const open = () => !dismissed() && (hovered() || focused() || pinned());
+  const interactive = () => !!props.items?.some((i) => i.action || i.result);
+  let leave: number | undefined;
+  // the pointer may cross the gap between the badge and the popover without closing it
+  const hover = (on: boolean) => {
+    window.clearTimeout(leave);
+    if (on || !interactive()) setHovered(on);
+    else leave = window.setTimeout(() => setHovered(false), 200);
+  };
+  onCleanup(() => window.clearTimeout(leave));
   let badge!: HTMLButtonElement;
   return (
     <>
@@ -233,11 +286,17 @@ function DependencyBadge(props: { text: string; lines: string[] }): JSX.Element 
         class="rtag dep-badge"
         ref={badge}
         aria-describedby={id}
+        aria-expanded={interactive() ? open() : undefined}
+        onClick={() => {
+          if (!interactive()) return;
+          setDismissed(false);
+          setPinned(!pinned());
+        }}
         onMouseEnter={() => {
           setDismissed(false);
-          setHovered(true);
+          hover(true);
         }}
-        onMouseLeave={() => setHovered(false)}
+        onMouseLeave={() => hover(false)}
         onFocus={() => {
           setDismissed(false);
           setFocused(true);
@@ -257,7 +316,7 @@ function DependencyBadge(props: { text: string; lines: string[] }): JSX.Element 
       </span>
       <Show when={open()}>
         <Portal>
-          <DependencyTooltip anchor={badge} lines={props.lines} />
+          <DependencyTooltip anchor={badge} lines={props.lines} items={props.items} onHover={hover} />
         </Portal>
       </Show>
     </>
@@ -265,7 +324,12 @@ function DependencyBadge(props: { text: string; lines: string[] }): JSX.Element 
 }
 
 /** The portal lets the tooltip extend beyond the scrollable pane and truncated row. */
-function DependencyTooltip(props: { anchor: HTMLElement; lines: string[] }): JSX.Element {
+function DependencyTooltip(props: {
+  anchor: HTMLElement;
+  lines: string[];
+  items?: DependencyItem[];
+  onHover: (on: boolean) => void;
+}): JSX.Element {
   let tip!: HTMLSpanElement;
   const place = () => {
     const anchor = props.anchor.getBoundingClientRect();
@@ -285,8 +349,30 @@ function DependencyTooltip(props: { anchor: HTMLElement; lines: string[] }): JSX
     });
   });
   return (
-    <span class="transfer-dependency-tooltip" role="tooltip" aria-hidden="true" ref={tip}>
-      <For each={props.lines}>{(line) => <span>{line}</span>}</For>
+    <span
+      class="transfer-dependency-tooltip"
+      classList={{ interactive: !!props.items?.some((i) => i.action || i.result) }}
+      role="tooltip"
+      aria-hidden={props.items?.some((i) => i.action || i.result) ? undefined : 'true'}
+      ref={tip}
+      onMouseEnter={() => props.onHover(true)}
+      onMouseLeave={() => props.onHover(false)}
+    >
+      <For each={props.items ?? props.lines.map((line) => ({ line }))}>
+        {(item: DependencyItem) => (
+          <span class="dep-line">
+            <span class="dep-text">{item.line}</span>
+            <Show when={item.action}>
+              {(a) => (
+                <button type="button" class="dep-act" title={a().title} disabled={a().disabled} onClick={a().onClick}>
+                  {a().label}
+                </button>
+              )}
+            </Show>
+            <Show when={item.result}>{(res) => <LiveResultText result={res()} />}</Show>
+          </span>
+        )}
+      </For>
     </span>
   );
 }

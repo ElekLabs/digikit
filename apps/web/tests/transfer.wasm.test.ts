@@ -449,7 +449,7 @@ test('services: tickedFit counts the services once and enforces the provider lim
   assert.equal(tickedLoad(withHeavy, new Set(['a/pluck'])), null);
 });
 
-test('services: refusal texts, the service mismatch tag, the needed-by tag', () => {
+test('services: refusal texts, the service mismatch tag, the needs tag', () => {
   const r = { module: 'pluck', service: 'machines' } as const;
   assert.equal(
     serviceRefusalText({
@@ -489,10 +489,13 @@ test('services: refusal texts, the service mismatch tag, the needed-by tag', () 
   const [tag] = localTags({ ...pluck, service_refusal: refusal }).filter((t) => t.text === 'service mismatch');
   assert.equal(tag.tone, 'warn');
   assert.equal(tag.title, 'machines service built for 0.5.0 (ABI 16be0e73), device runtime is 0.5.2 (ABI 5dbf8e20)');
-  const dks = { ...row(null, 'Tools'), path: 'services/machines.dks', needed_by: ['shot'] };
+  const needy = {
+    ...row('someone/shot', 'Tools'),
+    card_services: [{ label: 'machines service', state: 'not on device' }],
+  } as TransferRow;
   assert.deepEqual(
-    deviceTags(dks).map((t) => [t.text, t.tone]),
-    [['needed by shot', 'dim']],
+    deviceTags(needy).map((t) => [t.text, t.tone]),
+    [['needs machines', 'warn']],
   );
   assert.equal(
     neededServiceText('machines', ['shot']),

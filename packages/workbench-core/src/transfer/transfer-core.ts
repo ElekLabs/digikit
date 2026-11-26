@@ -10,8 +10,9 @@ import { fit, fitsSet, type Needs } from '../modules/fit.ts';
 import type { CardServiceRef, Group, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
 import { PROVIDER_MAX } from '../modules/services.ts';
 import type { ServiceRef, ServiceRefusal } from '../modules/services.ts';
+import { GROUPS, groupRows, isServiceRow, unusedServices, type RowGroup } from './pane-groups.ts';
 export type { Group, TransferEvent, TransferRow, TransferView };
-export const GROUPS: Group[] = ['Machines', 'Effects', 'LFO shapes', 'Tools'];
+export { GROUPS };
 
 // ---- the mode of the page ---------------------------------------------------------------------------------------------------------
 
@@ -49,12 +50,14 @@ export function onDevice(view: TransferView): TransferRow[] {
   return [...mine, ...view.card_only].sort((a, b) => a.path.localeCompare(b.path));
 }
 
-/** The "Available" list: the library modules in the three groups (test modules behind the toggle). */
-export function available(view: TransferView, showTests: boolean): { group: Group; rows: TransferRow[] }[] {
-  return GROUPS.map((group) => ({
-    group,
-    rows: view.modules.filter((r) => r.group === group && (showTests || !r.test)),
-  }));
+/** The "On your computer" list: the library modules in their groups (test modules behind the toggle). */
+export function available(view: TransferView, showTests: boolean): RowGroup[] {
+  return groupRows(view.modules.filter((r) => showTests || !r.test));
+}
+
+/** The "On device" list in the same groups as `available`, plus "Not in library"; a group without rows is left out. */
+export function deviceGroups(view: TransferView, p: Progress | undefined, installing = false): RowGroup[] {
+  return groupRows(onDeviceWithPending(view, p, installing), { notInLibrary: true }).filter((g) => g.rows.length);
 }
 
 /** Dependency refusals to show alongside the visible library rows. */
@@ -306,6 +309,17 @@ export function dependencyBadge(
   };
 }
 
+/** The lines of a dependency popover, one per service, with the service file's path when it is on the card (the popover offers its Reload). */
+export function dependencyItems(
+  services: readonly (ServiceRef | CardServiceRef)[] | undefined,
+): { line: string; path?: string }[] {
+  const lines = dependencyBadge(services)?.lines ?? [];
+  return (services ?? []).map((sv, i) => ({
+    line: lines[i] as string,
+    ...(sv.state === 'on device' && 'path' in sv && sv.path ? { path: sv.path } : {}),
+  }));
+}
+
 /**
  * The line for the ticked modules: do they fit the device together? The next boot loads the selection into an empty runtime, so the ticked modules
  * are taken in list order out of the device's limits (the sum rule: it does not model fragmentation, so it is conservative) and what is on the
@@ -373,17 +387,18 @@ export function deviceTags(r: TransferRow): RowTag[] {
       title: r.not_loaded,
       tone: 'warn',
     });
+  for (const sv of r.card_services ?? [])
+    if (sv.state === 'not on device')
+      out.push({
+        text: `needs ${sv.label.replace(/ service$/, '')}`,
+        title: `${sv.label} is not on the card, so this module cannot load; install a module that carries it`,
+        tone: 'warn',
+      });
   if (r.for_firmware)
     out.push({
       text: `for firmware ${r.for_firmware}`,
       title:
         'A port file of another firmware version: it stays on the card and serves no module while the device runs another firmware',
-      tone: 'dim',
-    });
-  else if (r.needed_by?.length)
-    out.push({
-      text: `needed by ${r.needed_by.join(', ')}`,
-      title: 'A module on the card needs this service; delete that module first',
       tone: 'dim',
     });
   else if (!r.id)
@@ -601,11 +616,9 @@ export function rowStatus(p: Progress | undefined, verified: Verified, path: str
   return v ? { kind: v } : undefined;
 }
 
-/** Attached services are represented by their module's badge and stay in the card inventory. */
+/** Service files are no rows: a module's badge lists them, and the header counts the unused ones (`unusedServices`). They stay in the card inventory. */
 function visibleDeviceRows(view: TransferView, rows = onDevice(view)): TransferRow[] {
-  if (view.incomplete_card_needs) return rows;
-  const attached = new Set(rows.flatMap((r) => (r.card_services ?? []).map((service) => service.path)));
-  return rows.filter((r) => !attached.has(r.path));
+  return rows.filter((r) => !isServiceRow(r));
 }
 
 /** The destination rows, with pending installs added so their progress stays visible.
@@ -616,8 +629,8 @@ export function onDeviceWithPending(view: TransferView, p: Progress | undefined,
   const have = new Set(rows.map((r) => r.path));
   const onCard = new Set(inventory.map((r) => r.path));
   for (const m of p?.modules ?? []) {
-    if (!m.path || have.has(m.path) || (onCard.has(m.path) && !installing)) continue;
-    const repo = m.kind === 'service' ? undefined : view.modules.find((r) => r.id === m.id);
+    if (!m.path || have.has(m.path) || m.kind === 'service' || (onCard.has(m.path) && !installing)) continue;
+    const repo = view.modules.find((r) => r.id === m.id);
     rows.push({
       ...(repo ?? { group: 'Tools', test: false, name: m.id, version: null }),
       id: m.id,
@@ -641,9 +654,8 @@ export function applyVerified(v: Verified, e: TransferEvent): Verified {
 
 /** The store paths ticked in the On device pane, in list order (ticks of rows that are gone are dropped). */
 export function deletePaths(view: TransferView, ticked: Set<string>): string[] {
-  return visibleDeviceRows(view)
-    .filter((r) => ticked.has(r.path))
-    .map((r) => r.path);
+  const rows = visibleDeviceRows(view).filter((r) => ticked.has(r.path));
+  return [...rows.map((r) => r.path), ...unusedServices(view).paths.filter((p) => ticked.has(p))];
 }
 
 /** A button label with the count in parentheses: "Upload (3)"; no count when nothing is ticked. */
