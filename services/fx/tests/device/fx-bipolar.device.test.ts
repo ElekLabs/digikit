@@ -3,9 +3,9 @@ import { encoder } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import { createFxKitUi } from '@digi/regression/runtime/fx-kit-ui.ts';
 import { bounded, word } from '@digi/regression/runtime/guest-access.ts';
-import { captureNote } from '@digi/regression/runtime/note-capture.ts';
+import { captureNote, pausedTrigger } from '@digi/regression/runtime/note-capture.ts';
 import { compare } from '@digi/regression/runtime/pcm-files.ts';
-import { frames, rows } from '@digi/regression/runtime/dsp-state.ts';
+import { rows } from '@digi/regression/runtime/dsp-state.ts';
 import { SINE, triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import { bits, cstring, mainPage, openPages, pageKit } from '@digi/regression/runtime/fx-pages-ui.ts';
 import { inspectFxBoot, selectSine, shot, withPreparedFxSession } from '@digi/regression/runtime/fx-session.ts';
@@ -84,8 +84,8 @@ for (const device of DEVICES) {
         return state;
       };
       const sound = async (tag: string, initial = false) => {
-        const current = await frames(runtime.session);
-        const trigger = initial ? triggerFrame(device) : current + 300;
+        const { current, trigger: next } = await pausedTrigger(runtime.session);
+        const trigger = initial ? triggerFrame(device) : next;
         record(artifacts, `${tag}-timing`, { currentFrame: current, triggerFrame: trigger });
         const file = path.join(artifacts, `${tag}.wav`);
         await captureNote(runtime.session, { file, trigger, tag: 'bipolar note', length: 1600 });

@@ -5,7 +5,8 @@ import { withWaitApi, type TestRuntime } from '@digi/regression/support.ts';
 import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
 import { compare, pcmMetrics } from '@digi/regression/runtime/pcm-files.ts';
-import { frames, rows } from '@digi/regression/runtime/dsp-state.ts';
+import { pausedTrigger } from '@digi/regression/runtime/note-capture.ts';
+import { rows } from '@digi/regression/runtime/dsp-state.ts';
 import { REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { GAIN, SINE } from '@digi/regression/runtime/fixtures.ts';
 import { createFxKitUi, watchFxKitRows, type FxKitObservation } from '@digi/regression/runtime/fx-kit-ui.ts';
@@ -143,7 +144,7 @@ for (const device of DEVICES) {
       const note = async (tag: string) => {
         await mainPage(runtime);
         const file = path.join(artifacts, `${tag}.wav`);
-        await trackNote(runtime, file, (await frames(session)) + 300);
+        await trackNote(runtime, file, (await pausedTrigger(session)).trigger);
         pcm.set(tag, file);
       };
       const ratio = (base: string, sample: string, gain: number, identical = false) =>
