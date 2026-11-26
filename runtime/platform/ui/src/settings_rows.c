@@ -142,17 +142,34 @@ int ui_rows_dirty(const ui_settings_rows *s)
     return s->menu && s->dirty;
 }
 
+void ui_rows_gone(ui_settings_rows *s, const uint8_t *menu)
+{
+    if (s->menu == menu) {
+        s->menu = 0;
+        s->dirty = 0;
+    }
+}
+
 int ui_rows_pass(ui_settings_rows *s, ui_rows_rebuild_fn *rebuild, uint32_t vtable)
 {
-    if (!ui_rows_dirty(s))
+    /* read once: the destructor hook may clear it from another task */
+    uint8_t *volatile menu = s->menu;
+    if (!menu || !s->dirty)
         return 0;
     /* clear first: a rebuild that fails to clear it must not run every pass */
     s->dirty = 0;
-    /* no rebuild or no vtable fact on this firmware, or the kept pointer is no SETTINGS list: do not call, forget the pointer */
-    if (!rebuild || !vtable || *(const uint32_t *)s->menu != vtable) {
+    if (!rebuild || !vtable) {
+        /* no rebuild or no vtable fact on this firmware: do not call, forget the pointer */
+        int first = !s->absent_seen;
+        s->absent_seen = 1;
+        s->menu = 0;
+        return first ? -1 : 0;
+    }
+    /* the kept pointer is no SETTINGS list: do not call, forget it */
+    if (*(const uint32_t *)menu != vtable) {
         s->menu = 0;
         return 0;
     }
-    rebuild(s->menu);
+    rebuild(menu);
     return 1;
 }

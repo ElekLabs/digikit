@@ -1086,6 +1086,16 @@ mark = "D"
 rule = "fw/menu:cf_func"
 
 [[anchor]]
+name = "cf.menu.fn.settings_dtor"
+cpu = "cf"
+kind = "code"
+addr = 0x401bb40e
+len = 8
+sha256 = "c9d9a1a15c3f0a79205158851148922e3fa7bdca40351edbb2fd1fc2c4342ea6"
+mark = "D"
+rule = "fw/menu:cf_func"
+
+[[anchor]]
 name = "cf.menu.fn.settings_list_rebuild"
 cpu = "cf"
 kind = "code"
@@ -4608,6 +4618,11 @@ check = "3ea856aea73810f4"
 [[hook]]
 name = "cf.machine.hook.view.build"
 site = "cf.machine.fn.view.build"
+mode = "before"
+
+[[hook]]
+name = "cf.menu.hook.settings_dtor"
+site = "cf.menu.fn.settings_dtor"
 mode = "before"
 
 [[hook]]

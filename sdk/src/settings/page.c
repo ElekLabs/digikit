@@ -1,4 +1,5 @@
 /* The settings page: see <dk/settings/page.h>. The statics hold the one page of the module. */
+#include <dk/core/log.h>
 #include <dk/settings/page.h>
 #include "field.h"
 
@@ -64,13 +65,17 @@ static void open_choice(void *arg, int32_t field)
     if (!g_desc || !g_ui || field < 0 || (uint32_t)field >= g_desc->count)
         return;
     f = &g_desc->fields[field];
-    dk_ui_choice(g_ui, f->label, f->labels, f->max + 1, on_pick, (void *)(uintptr_t)field);
+    dk_ui_choice_at(g_ui, f->label, f->labels, f->max + 1, g_value[field], on_pick,
+                    (void *)(uintptr_t)field);
 }
 
 int32_t dk_settings_page_init(const dk_settings_page_desc *desc, dk_settings *settings, dk_ui *ui)
 {
     int32_t rc;
-    g_desc = 0;
+    if (g_desc) { /* one page for each module: the first one keeps its rows, values and callbacks */
+        dk_log(DK_LOG_WARN, "settings page twice", 0);
+        return DK_E_EXISTS;
+    }
     g_menu = 0;
     g_failed = g_restart = 0;
     if (!desc || !settings)

@@ -29,6 +29,7 @@ extern "C" {
 
 const E_FORMAT: i32 = -5;
 const E_NOT_FOUND: i32 = -1;
+const E_EXISTS: i32 = -18;
 const E_MISSING: i32 = -73;
 const E_SET_FULL: i32 = -67;
 
@@ -167,6 +168,11 @@ fn an_enum_opens_the_choice_and_a_pick_saves_and_shows_the_option() {
     assert_eq!(kind, DialogKind::Choice);
     assert_eq!(title, "MODE");
     assert_eq!(items, ["OFF", "SLOW", "FAST"]);
+    assert_eq!(
+        choice_selected(),
+        Some(1),
+        "opens on the stored value, SLOW"
+    );
     pick_choice(2);
     assert_eq!(rows()[3], "MODE FAST");
     assert_eq!(stored("mode").as_deref(), Some("2"));
@@ -177,6 +183,7 @@ fn an_enum_opens_the_choice_and_a_pick_saves_and_shows_the_option() {
     assert_eq!(unsafe { sp_changed_calls() }, 1);
     // NO on the popup changes nothing
     press_yes(3);
+    assert_eq!(choice_selected(), Some(2), "opens on the new value");
     press_no();
     assert_eq!(rows()[3], "MODE FAST");
     assert_eq!(unsafe { sp_changed_calls() }, 1);
@@ -228,7 +235,7 @@ fn set_saves_and_shows_but_does_not_call_changed() {
 #[test]
 fn set_after_the_page_closed_saves_without_filling_the_menu_again() {
     let (_g, p) = page();
-    unsafe { dk_ui_menu_close(p) };
+    dk_ui_menu_close(p);
     let fills = unsafe { sp_fills() };
     assert_eq!(unsafe { sp_set(1, 20) }, 0);
     assert_eq!(stored("gain").as_deref(), Some("20"));
@@ -261,7 +268,20 @@ fn init_needs_the_handles_and_a_ui_only_for_an_enum() {
         "the table has an enum"
     );
     assert_eq!(unsafe { sp_init_bool_only() }, 0);
-    assert_eq!(unsafe { sp_init_without(1, 1) }, 0);
+}
+
+#[test]
+fn a_second_init_in_one_module_is_refused_and_the_first_page_stays() {
+    let (_g, _p) = page();
+    assert_eq!(unsafe { sp_set(1, 20) }, 0);
+    assert_eq!(unsafe { sp_init_bool_only() }, E_EXISTS);
+    assert_eq!(unsafe { sp_init() }, E_EXISTS);
+    assert_eq!(
+        unsafe { sp_value(1) },
+        20,
+        "the first page keeps its values"
+    );
+    assert_eq!(rows().len(), 5, "and its rows");
 }
 
 #[test]
@@ -291,4 +311,26 @@ fn values_are_decimal_text_of_at_most_four_characters() {
     assert_eq!(enc(7), "7");
     assert_eq!(enc(-99), "-99");
     assert_eq!(enc(999), "999");
+}
+
+#[test]
+fn a_start_index_outside_the_items_opens_on_the_first() {
+    let _g = session();
+    let items = [c"A".as_ptr(), c"B".as_ptr()];
+    for (start, want) in [(1, 1), (2, 0), (-1, 0)] {
+        let rc = unsafe {
+            dk_ui_choice_at(
+                std::ptr::null_mut(),
+                c"T".as_ptr(),
+                items.as_ptr(),
+                2,
+                start,
+                None,
+                std::ptr::null_mut(),
+            )
+        };
+        assert_eq!(rc, 0);
+        assert_eq!(choice_selected(), Some(want), "start {start}");
+        pick_choice(0);
+    }
 }

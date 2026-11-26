@@ -1,11 +1,12 @@
-import { emulatorRead, readTopMenuItems, viewStackFacts, type Device } from '@digi/test-support';
+import { emulatorClock, emulatorRead, pollUntil, readTopMenuItems, viewStackFacts, type Device } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { cardRig } from '@digi/regression/runtime/card-rig.ts';
+import { readChoiceWindow } from '@digi/regression/runtime/choice-window.ts';
 import { cardStore } from '@digi/regression/runtime/device-data.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { openDigikitMenu } from '@digi/regression/runtime/flows/menu.ts';
-import { REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
+import { REDRAW } from '@digi/regression/runtime/panel-waits.ts';
 import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 import { RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 
@@ -16,7 +17,6 @@ import { RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
  */
 const REPORT = 0x0f;
 const MODULE = 'test/settings-page';
-const DELAY_MS = 2000; // the runtime writes the settings record this long after the last change
 
 type Report = { loud: number; gain: number; mode: number; calls: number; field: number; value: number };
 
@@ -30,6 +30,9 @@ for (const device of DEVICES) {
       initial: () => ({ selection: [] }),
       storeExtra: [s.setA, s.setB],
     });
+    /** A sector of one of the two settings record copies (the selection record and the other store sectors do not count). */
+    const inSettingsCopy = (sector: number) =>
+      [s.setA, s.setB].some((first) => sector >= first && sector < first + s.setCopySectors);
     const spec = () => ({ modules: [MODULE], selection: [kit.mod(MODULE).name] });
 
     const report = async (rt: TestRuntime): Promise<Report> => {
@@ -65,22 +68,26 @@ for (const device of DEVICES) {
       const facts = viewStackFacts(rt.session.options.device as Device);
       if (!facts) throw new Error(`${device} has no [ui] facts`);
       expect(await readTopMenuItems(emulatorRead(rt.session), facts), 'the Menu object of the page holds the three fields').toBe(3);
-      await rt.ui.wait({ ms: DELAY_MS + 500, why: SETTLE });
       kit.allowStoreWrites(await kit.storeWrites());
     });
 
     test('an enum picked in the stock popup reaches the module and is read in init after a restart', async () => {
       const rt = await kit.load('enum', spec());
       await openPage(rt);
-      // MODE is the third row; the popup opens on its first option (OFF), FAST is two below
+      // MODE is the third row; the popup opens on the stored option (SLOW, the default, index 1), FAST is one below
       await press(rt, 'DOWN');
       await press(rt, 'DOWN');
       await press(rt, 'YES');
-      await press(rt, 'DOWN');
+      expect((await readChoiceWindow(rt.session))?.selected, 'the popup opens on the stored value').toBe(1);
       await press(rt, 'DOWN');
       await press(rt, 'YES');
       expect(await report(rt), 'changed ran once, after the pick').toMatchObject({ mode: 2, calls: 1, field: 2, value: 2 });
-      await rt.ui.wait({ ms: DELAY_MS + 500, why: SETTLE });
+      // the runtime writes the settings record some time after the last change: wait for that write to reach the store, not for a time
+      await pollUntil(emulatorClock(rt.session), () => kit.storeWrites(), (sectors) => sectors.some(inSettingsCopy), {
+        withinMs: 30_000,
+        intervalMs: 500,
+        message: 'the settings record was written to the store',
+      });
       const reboot = await kit.restart(rt);
       expect(await report(reboot), 'the value of the earlier boot, read in init; no edit in this boot').toMatchObject({
         loud: 1,

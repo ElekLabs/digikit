@@ -6674,7 +6674,7 @@
         "rust": "dkfw::menu::SETTINGS_VTABLE"
       },
       "cpu": "cf",
-      "doc": "The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list.",
+      "doc": "The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list. Optional for core/ui (`optional_anchors`), like `cf.menu.fn.settings_list_rebuild`: without it no rebuild runs.",
       "file": "devices/fw/menu.toml",
       "kind": "data",
       "mark": "D",
@@ -7794,6 +7794,68 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x401aad94",
+            "len": 8
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401ab074",
+            "len": 8
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401bb40e",
+            "len": 8
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401859a6",
+            "len": 8
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_menu_settings_dtor",
+        "rust": "dkfw::menu::settings_dtor"
+      },
+      "cpu": "cf",
+      "doc": "The destructor of the SETTINGS menu (DigisharcSettingsMenu, Syntakt DiddySettingsMenu; vtable slot 0, called by the deleting destructor in slot 1 and by the shared_ptr control block): `menu` = this. The firmware builds the menu once in the main screen's constructor and never destroys it in a normal session, but the owner of the pointer is not a field a module can read (the constructor keeps it in a shared_ptr that it moves into the view), so core/ui drops its kept pointer from a hook here. Decoded on dt2-1.17 0x401bb40e, dn2-1.12 0x401ab074, st-1.42 0x401859a6 (the DN2 1.11 image has the same bytes). Optional for core/ui (`optional_anchors`), like the rebuild and vtable anchors: without it the vtable check in the rows pass is the only guard against a stale menu pointer.",
+      "file": "devices/fw/menu.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.menu.fn.settings_dtor",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 8,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 8,
+          "mark": "D",
+          "offset": 0
+        }
+      },
+      "sig": "void (u8 *menu)",
+      "subsystem": "menu",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4009fa7c",
             "len": 24
           }
@@ -7822,7 +7884,7 @@
         "rust": "dkfw::menu::settings_list_rebuild"
       },
       "cpu": "cf",
-      "doc": "The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only.",
+      "doc": "The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only. Optional for core/ui (`optional_anchors`): a port without it keeps the rows of the first build and core/ui logs `DK_LOG_MENU` action 1 once when a later change asks for a rebuild.",
       "file": "devices/fw/menu.toml",
       "kind": "fn",
       "mark": "D",
@@ -8037,6 +8099,66 @@
       "was": [
         "cf.menu.fn.view_ctor"
       ]
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401aad94"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401ab074"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401bb40e"
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401859a6"
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_menu_settings_dtor_hook",
+        "gas": "dk_fw_menu_settings_dtor_hook",
+        "rust": "dkfw::menu::SettingsDtorHook"
+      },
+      "cpu": "cf",
+      "devices": [
+        "dt2",
+        "dn2",
+        "st"
+      ],
+      "doc": "Entry of the SETTINGS menu destructor (menu at 4(sp)); core/ui forgets the menu pointer it kept for the list rebuild.",
+      "file": "devices/fw/menu.toml",
+      "handler": {
+        "args": [
+          "sp+4"
+        ],
+        "sig": "void (u8 *menu)"
+      },
+      "kind": "hook",
+      "mark": "D",
+      "mode": "before",
+      "name": "cf.menu.hook.settings_dtor",
+      "regs": {
+        "clobbers": [
+          "ccr"
+        ],
+        "in": []
+      },
+      "sig": "void (u8 *menu)",
+      "site": "cf.menu.fn.settings_dtor",
+      "subsystem": "menu",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
     },
     {
       "at": {
@@ -20355,7 +20477,7 @@
         "rust": "MultiChoiceWindow"
       },
       "cpu": "cf",
-      "doc": "MultiChoiceWindow (OverlayWindow base, Observer sub-object at +0x58), 0xd8 bytes; the make_shared block is 0xe8. items is a vector of COW strings (4 bytes each), title the title lines, cb `std::function<void(int)>`, selected the index passed to cb.",
+      "doc": "MultiChoiceWindow (OverlayWindow base, Observer sub-object at +0x58), 0xd8 bytes; the make_shared block is 0xe8. items is a vector of COW strings (4 bytes each), title the title lines, cb `std::function<void(int)>`, selected the index passed to cb. The constructor clears `selected` (DT2 0x40116c52, DN2 0x401185c6: `clr.l (0x9c,A6)`); the key handler, the paint and the callback read only that field, so a store after the constructor sets the start item (`dk_ui_choice_at`).",
       "fields": [
         {
           "name": "items_begin",
@@ -26167,7 +26289,7 @@
       "name": "mem"
     },
     {
-      "count": 34,
+      "count": 36,
       "cpu": "cf",
       "file": "devices/fw/menu.toml",
       "meaning": "Menu, MenuItem, menu views, the SETTINGS menu",

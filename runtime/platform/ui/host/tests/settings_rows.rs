@@ -262,6 +262,7 @@ mod rebuild {
         fn sr_menu_word(w: u32);
         fn sr_pass_absent(no_rebuild: c_int) -> c_int;
         fn sr_has_menu() -> c_int;
+        fn sr_gone(kept: c_int);
     }
 
     #[test]
@@ -330,9 +331,39 @@ mod rebuild {
             unsafe { sr_reset() };
             unsafe { sr_built(1) };
             add(1, "A", 0);
-            assert_eq!(unsafe { sr_pass_absent(no_rebuild) }, 0);
+            assert_eq!(
+                unsafe { sr_pass_absent(no_rebuild) },
+                -1,
+                "the first refusal is reported"
+            );
             assert_eq!(unsafe { sr_rebuilds() }, 0);
             assert_eq!(unsafe { sr_has_menu() }, 0);
+            unsafe { sr_built(1) };
+            add(2, "B", 0);
+            assert_eq!(unsafe { sr_pass_absent(no_rebuild) }, 0, "and only once");
         }
+    }
+
+    #[test]
+    fn a_destroyed_menu_is_forgotten_and_never_rebuilt() {
+        let _g = session();
+        unsafe { sr_reset() };
+        unsafe { sr_built(1) };
+        unsafe { sr_gone(0) };
+        assert_eq!(
+            unsafe { sr_has_menu() },
+            1,
+            "another object's destructor changes nothing"
+        );
+        unsafe { sr_gone(1) };
+        assert_eq!(unsafe { sr_has_menu() }, 0, "the kept menu is gone");
+        add(1, "A", 0);
+        assert_eq!(unsafe { sr_dirty() }, 0);
+        assert_eq!(unsafe { sr_pass() }, 0);
+        assert_eq!(
+            unsafe { sr_rebuilds() },
+            0,
+            "no call into a destroyed object"
+        );
     }
 }
