@@ -29,7 +29,10 @@ fn a_reload_tells_the_host_the_services_are_up_before_the_first_consumer_comes_b
     let calls = probe.calls();
     assert_eq!(calls.iter().filter(|c| **c == ServicesUp).count(), 1);
     assert!(before(&calls, Activate(id(1)), ServicesUp));
-    assert!(before(&calls, ServicesUp, Place(id(2))), "the consumers start with numbers the new service gave");
+    assert!(
+        before(&calls, ServicesUp, Place(id(2))),
+        "the consumers start with numbers the new service gave"
+    );
 }
 
 #[test]
