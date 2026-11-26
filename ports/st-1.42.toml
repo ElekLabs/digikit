@@ -391,6 +391,16 @@ mark = "D"
 rule = "fw/menu:cf_func"
 
 [[anchor]]
+name = "cf.menu.fn.settings_dtor"
+cpu = "cf"
+kind = "code"
+addr = 0x401859a6
+len = 4
+sha256 = "d3d6c46cca8440b9eccecf4eda3b162d4ebb9dbf713195ba9dd62f632b9c6c05"
+mark = "D"
+rule = "fw/menu:cf_func"
+
+[[anchor]]
 name = "cf.menu.fn.settings_list_rebuild"
 cpu = "cf"
 kind = "code"
@@ -1336,6 +1346,11 @@ len = 4
 sha256 = "8eec9a3b88ec1a2c27362042d5db3189319dcecf6cb1a3a36c63eb1a75ca2e08"
 mark = "O"
 rule = "fw/window:cf_ptr"
+
+[[hook]]
+name = "cf.menu.hook.settings_dtor"
+site = "cf.menu.fn.settings_dtor"
+mode = "before"
 
 [[hook]]
 name = "cf.menu.hook.settings_list.tail"
