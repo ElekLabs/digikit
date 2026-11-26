@@ -6646,6 +6646,67 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x401ec3b8",
+            "len": 160
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401ec7c8",
+            "len": 160
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40203bd8",
+            "len": 160
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401d0d14",
+            "len": 160
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_menu_settings_vtable",
+        "rust": "dkfw::menu::SETTINGS_VTABLE"
+      },
+      "cpu": "cf",
+      "doc": "The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list.",
+      "file": "devices/fw/menu.toml",
+      "kind": "data",
+      "mark": "D",
+      "name": "cf.menu.data.settings_vtable",
+      "rule": {
+        "dn2": {
+          "kind": "cf_ptr",
+          "len": 160,
+          "offset": 104
+        },
+        "dt2": {
+          "kind": "cf_ptr",
+          "len": 160,
+          "offset": 104
+        },
+        "st": {
+          "kind": "cf_ptr",
+          "len": 160,
+          "mark": "D",
+          "offset": 112
+        }
+      },
+      "subsystem": "menu",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4011690e",
             "len": 4
           }
@@ -7723,6 +7784,68 @@
         }
       },
       "sig": "void (u8 *view, u8 on)",
+      "subsystem": "menu",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4009fa7c",
+            "len": 24
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4009fbe0",
+            "len": 24
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400a5b04",
+            "len": 24
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4005ed72",
+            "len": 24
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_menu_settings_list_rebuild",
+        "rust": "dkfw::menu::settings_list_rebuild"
+      },
+      "cpu": "cf",
+      "doc": "The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only.",
+      "file": "devices/fw/menu.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.menu.fn.settings_list_rebuild",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 24,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 24,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 24,
+          "mark": "D",
+          "offset": 0
+        }
+      },
+      "sig": "void (u8 *menu)",
       "subsystem": "menu",
       "users": [
         "core/ui"
@@ -26044,7 +26167,7 @@
       "name": "mem"
     },
     {
-      "count": 32,
+      "count": 34,
       "cpu": "cf",
       "file": "devices/fw/menu.toml",
       "meaning": "Menu, MenuItem, menu views, the SETTINGS menu",

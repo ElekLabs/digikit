@@ -210,6 +210,17 @@ mark = "D"
 rule = "fw/menu:cf_ptr"
 
 [[anchor]]
+name = "cf.menu.data.settings_vtable"
+cpu = "cf"
+kind = "data"
+addr = 0x401d0d14
+src = 0x4005f210
+len = 160
+sha256 = "21c53a19306db74de4a87231140eef0d0d7bb80abbdb1afdad21197b775ba9ab"
+mark = "D"
+rule = "fw/menu:cf_ptr"
+
+[[anchor]]
 name = "cf.menu.fn.add_item"
 cpu = "cf"
 kind = "code"
@@ -376,6 +387,16 @@ kind = "code"
 addr = 0x400f56ac
 len = 4
 sha256 = "e59cdca0d536f67a27bdb308b1683f2c5d97565cb4d2dfe566afb0c8f6dae402"
+mark = "D"
+rule = "fw/menu:cf_func"
+
+[[anchor]]
+name = "cf.menu.fn.settings_list_rebuild"
+cpu = "cf"
+kind = "code"
+addr = 0x4005ed72
+len = 24
+sha256 = "76d077c0df9b922a164230e5addaf625e283516f2e5598c6e05eb4a423851e85"
 mark = "D"
 rule = "fw/menu:cf_func"
 
