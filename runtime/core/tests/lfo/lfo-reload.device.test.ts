@@ -1,6 +1,6 @@
-import { L_E_BOOT_ONLY } from '@digi/dk-session/gen_bulk';
 import { expect, test } from 'vitest';
 import { CARD_SYMBOLS, cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { bootWith, shapeWords, SHAPE_A } from './lfo-cards.ts';
 import { describeSamples, evalTable, fitShape, FIRST_SHAPE, KNOB_WORD, LfoRig, OK, RAMP_SAMPLES } from './lfo-rig.ts';
 
@@ -28,7 +28,7 @@ cardRigs('lfo reload', { dsp: 'zero', symbols: CARD_SYMBOLS, initial: () => ({})
     const waveBefore = await rig.word(KNOB_WORD.WAVE);
 
     const end = await h.usb(rt, (dk) => dk.reloadAndWait('services/lfo.dks'));
-    expect(end, 'the reload of the lfo service is refused before anything is taken down').toEqual({ result: L_E_BOOT_ONLY, unloaded: false });
+    expect(end, 'the reload of the lfo service is refused before anything is taken down').toEqual({ result: loadCode('E_BOOT_ONLY'), unloaded: false });
 
     expect(await rig.word(KNOB_WORD.WAVE), 'the WAVE knob word is unchanged').toBe(waveBefore);
     const second = await rig.sample(dest, READS, GAP_MS);
