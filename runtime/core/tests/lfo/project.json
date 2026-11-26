@@ -63,6 +63,17 @@
           "runtime/core/tests/lfo/goldens.json"
         ],
         "plusdrive": true
+      },
+      {
+        "files": [
+          "lfo-reload.device.test.ts"
+        ],
+        "modules": [
+          "test/lfo-shape",
+          "core/services/lfo"
+        ],
+        "plusdrive": true,
+        "firmwareOnly": "the LFO output through the vector 191 tick and the wave rows the service wrote keep working after the service is reloaded; the job's steps and the number restoring are host tests"
       }
     ]
   }
