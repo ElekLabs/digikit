@@ -946,7 +946,7 @@
   "tools/devtools/browser_bench.mjs": 2,
   "tools/devtools/commit_records.ts": 9,
   "tools/devtools/core_choice.py": 2,
-  "tools/devtools/core_store.py": 8,
+  "tools/devtools/core_store.py": 7,
   "tools/devtools/coupled_ab.py": 12,
   "tools/devtools/dual_core_check.py": 27,
   "tools/devtools/emu_live.py": 5,
