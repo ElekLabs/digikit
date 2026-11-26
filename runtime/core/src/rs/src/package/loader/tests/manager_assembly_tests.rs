@@ -330,6 +330,43 @@ fn a_busy_restore_in_the_take_down_of_a_failed_dsp_part_keeps_it_pending_and_a_l
     }
 }
 
+/// A queued DSP load given up while a restore is busy leaves the manager's take-down pending (the DSP loader still steps). A second DSP part that fails in that window gets
+/// `RestorePending` from the manager: that is a wait like a busy restore, not a permanent failure that retains the DSP state.
+#[test]
+fn a_dsp_part_that_fails_while_a_queued_take_down_is_pending_waits_and_does_not_retain_the_dsp_state() {
+    use crate::package::dsp;
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, _plan) = planned(dev, &image, &[], &[&SVC_USER], &[SVC_TEST]);
+            let rec = boot_record(&[SVC_USER.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot_with(&rec, &capacity(&l.p));
+            let (user, service) = (id(0), id(MAX_MODULES));
+            // the queued DSP load of the service is given up while a restore is busy: nothing is in flight, the take-down stays pending
+            dsp::ds().nwait = 1;
+            dsp::ds().waiting[0].rec = service.0 as u32;
+            l.busy_restores = 1;
+            assert!(rt.cancel_dsp(service.0 as usize, dkrt_sdk::E_DSP_XFER), "{}", dev.name);
+            assert!(rt.manager().unwrap().restore_pending().is_some(), "{}", dev.name);
+            // another DSP part fails in that window
+            dsp::ds().phase = dsp::PH_ROWS;
+            dsp::ds().pending.rec = user.0 as u32;
+            assert!(rt.cancel_dsp(user.0 as usize, dkrt_sdk::E_DSP_XFER), "{}", dev.name);
+            assert!(!dsp::retained(), "{}: the refusal while a take-down is pending is a wait", dev.name);
+            assert_eq!(dsp::ds().phase, dsp::PH_ROWS, "{}: the load stays pending", dev.name);
+            // a later pass finishes the take-down and the failure
+            rt.dsp_step(crate::package::handlers::tests::two());
+            assert!(!dsp::retained(), "{}", dev.name);
+            assert_eq!(dsp::ds().phase, dsp::PH_IDLE, "{}", dev.name);
+            let m = rt.manager().unwrap();
+            assert!(!m.live().contains(user) && !m.live().contains(service), "{}: the closure is down", dev.name);
+        }
+        clean_state();
+    }
+}
+
 #[test]
 fn the_live_jobs_steps_unload_a_module_and_load_it_again_and_another_with_the_service_staying_up() {
     let _g = clean();
