@@ -66,3 +66,19 @@ impl TaskParks {
         Gate { live, parks: if self.known { Some(&self.items[..self.n]) } else { None } }
     }
 }
+
+/// A device whose tasks all wait, for the host tests that load or unload a service at run time through the real port file: each waiter word holds its task's TCB (the cell of
+/// the BgWorker points at an object of its own).
+#[cfg(test)]
+pub(super) fn park_all(p: &crate::fake_platform::FakePlatform, parks: &TaskParks) {
+    let put = |at: u32, v: u32| p.put_code(at, &v.to_be_bytes());
+    for k in &parks.items[..parks.n] {
+        let mut at = k.wait;
+        if k.indirect {
+            let object = 0x7f00_0000 + k.wait % 0x1000;
+            put(at, object);
+            at = object;
+        }
+        put(at + k.off, k.tcb);
+    }
+}

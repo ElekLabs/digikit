@@ -46,13 +46,23 @@ fn a_service_with_a_patch_installs_it_and_the_firmware_is_stock_after_the_unload
             crate::package::boot_idx::set(u32::MAX);
             assert_eq!(bytes_at(&l, site, 2), stock);
 
+            // a boot, as `Rt::boot_with` runs it: no task has run yet, so the installer does not wait for them
+            l.set_phase(PhaseKind::Boot);
             let report = pm.boot(&[user]).unwrap();
+            l.set_phase(PhaseKind::Closed);
             assert!(report.refused().is_empty(), "{}: {:?}", dev.name, report.refused().iter().map(|r| r.reason).collect::<Vec<_>>());
             assert_eq!(report.brought_up().as_slice(), [port, service, user], "{}", dev.name);
             // the patch is in: the installer holds it, the site has the bytes `start` computed and nothing else of the firmware changed
             assert_eq!((l.installer.patch_count(), l.installer.count()), (1, 0), "{}", dev.name);
             assert_eq!(bytes_at(&l, site, 2), (PATCH_TEST_VALUE as u16).to_be_bytes(), "{}: the patch bytes are at the site", dev.name);
             let patched = l.p.code.borrow().clone();
+            // the unload runs at run time: the patch is a task-context site, so the BgWorker and the console task wait, as they do on a device that runs the loader (their words
+            // are new addresses, in `before` as well)
+            super::super::park::park_all(&l.p, &l.task_parks());
+            let mut before = before;
+            for (a, b) in l.p.code.borrow().iter() {
+                before.entry(*a).or_insert(*b);
+            }
             let changed: Vec<u32> = patched.iter().filter(|(a, b)| before.get(a) != Some(b)).map(|(a, _)| *a).collect();
             assert_eq!(changed, [site + 1], "{}: only the second byte of the site changed (0xff to 0xfe)", dev.name);
 
