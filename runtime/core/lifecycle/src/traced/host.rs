@@ -69,7 +69,9 @@ impl<S: ProviderHost, T: Trace> ProviderHost for Traced<S, T> {
         // most packages have no DSP part: only the start of one is an event (a note: the part comes up over later passes, and the host reports its end)
         let coming = self.inner.start_dsp(package);
         if coming && self.trace.on() {
-            self.trace.event(Phase::Note, Step::DspLoad, package, 0);
+            let name = self.trace.name_of(package);
+            self.trace
+                .event(Phase::Note, Step::DspLoad, package, name, 0);
         }
         coming
     }

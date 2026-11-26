@@ -14,8 +14,44 @@ fn status_of(r: &Result<(), InstallError>) -> i32 {
         1002
     } else if *e == InstallError::AlreadyInstalled {
         1003
-    } else {
+    } else if *e == InstallError::Partial {
         1004
+    } else {
+        // a variant `status_of_covers_every_error` does not know yet fails there (its match stops compiling)
+        STATUS_UNKNOWN
+    }
+}
+
+/// The status of an error `status_of` has no code for.
+const STATUS_UNKNOWN: i32 = 1000;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One code for each error, written as a `match`: a new variant stops this from compiling until it has a code in `status_of`.
+    fn expected(e: InstallError) -> i32 {
+        match e {
+            InstallError::TableFull => 1001,
+            InstallError::OwnerOutOfRange => 1002,
+            InstallError::AlreadyInstalled => 1003,
+            InstallError::Partial => 1004,
+            InstallError::Backend(s) => s,
+        }
+    }
+
+    #[test]
+    fn status_of_covers_every_error() {
+        for e in [
+            InstallError::TableFull,
+            InstallError::OwnerOutOfRange,
+            InstallError::AlreadyInstalled,
+            InstallError::Partial,
+            InstallError::Backend(-7),
+        ] {
+            assert_eq!(status_of(&Err(e)), expected(e));
+        }
+        assert_eq!(status_of(&Ok(())), 0);
     }
 }
 

@@ -109,7 +109,7 @@ impl Gate<'_> {
                     crate::package::lifecycle::trace_emit(
                         dkrt_lifecycle::Phase::Note,
                         dkrt_lifecycle::Step::ParkWait,
-                        dkrt_abi::package::PackageId(0xff),
+                        crate::package::lifecycle::TRACE_NO_PACKAGE,
                         0,
                         E_BUSY,
                         i as u32,

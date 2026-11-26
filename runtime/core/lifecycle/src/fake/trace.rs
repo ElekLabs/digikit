@@ -10,11 +10,14 @@ pub struct Event {
     pub step: Step,
     pub package: PackageId,
     pub status: i32,
+    /// The name the trace resolved: a fresh number for each resolve, so a step whose end resolved again shows.
+    pub name: u32,
 }
 
 #[derive(Default)]
 struct Inner {
     off: Cell<bool>,
+    resolved: Cell<u32>,
     events: RefCell<Vec<Event>>,
 }
 
@@ -41,12 +44,20 @@ impl Trace for RecordingTrace {
         !self.0.off.get()
     }
 
-    fn event(&self, phase: Phase, step: Step, package: PackageId, status: i32) {
+    type Name = u32;
+
+    fn name_of(&self, _package: PackageId) -> u32 {
+        self.0.resolved.set(self.0.resolved.get() + 1);
+        self.0.resolved.get()
+    }
+
+    fn event(&self, phase: Phase, step: Step, package: PackageId, name: u32, status: i32) {
         self.0.events.borrow_mut().push(Event {
             phase,
             step,
             package,
             status,
+            name,
         });
     }
 }

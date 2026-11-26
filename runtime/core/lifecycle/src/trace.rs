@@ -18,8 +18,15 @@ pub trait Trace: Clone {
     /// Whether events are wanted now. A wrapper asks first and skips the event when it is `false`, so a producer pays this one test while nothing listens.
     fn on(&self) -> bool;
 
-    /// One event: `step` of `package` began, ended with `status` (0 is success; the status the call answered), or is a note.
-    fn event(&self, phase: Phase, step: Step, package: PackageId, status: i32);
+    /// What names a package in an event (the runtime: the hash of its file name). A step reads it once, at its begin, and gives it to its end: a call can change what names the
+    /// package (a free clears its path), and a begin and an end of one step must agree.
+    type Name: Copy;
+
+    /// The name of `package` now.
+    fn name_of(&self, package: PackageId) -> Self::Name;
+
+    /// One event: `step` of `package` (named `name`) began, ended with `status` (0 is success; the status the call answered), or is a note.
+    fn event(&self, phase: Phase, step: Step, package: PackageId, name: Self::Name, status: i32);
 }
 
 /// The trace that is off: no event is ever produced.
@@ -31,5 +38,9 @@ impl Trace for NoTrace {
         false
     }
 
-    fn event(&self, _phase: Phase, _step: Step, _package: PackageId, _status: i32) {}
+    type Name = ();
+
+    fn name_of(&self, _package: PackageId) {}
+
+    fn event(&self, _phase: Phase, _step: Step, _package: PackageId, _name: (), _status: i32) {}
 }

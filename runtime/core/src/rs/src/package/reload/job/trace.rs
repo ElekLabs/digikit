@@ -1,6 +1,6 @@
 //! The live job's lifecycle events (`LIFECYCLE`, docs/INSTRUMENTATION.md): one begin and end for each step the job passes, and a note for each busy answer it asks again after.
 use super::{step, Job, NO_REC};
-use crate::package::lifecycle::{stem_hash, trace_emit, trace_on};
+use crate::package::lifecycle::{stem_hash, trace_emit, trace_on, TRACE_NO_PACKAGE};
 use dkrt_abi::package::PackageId;
 use dkrt_lifecycle::{Phase, Step};
 use dkrt_sdk::E_BUSY;
@@ -18,6 +18,18 @@ fn step_of(s: u8) -> Option<Step> {
     STEPS.get(s as usize).copied().flatten()
 }
 
+/// The events one `sync` adds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) struct Plan {
+    end: Option<Step>,
+    begin: Option<Step>,
+    note: bool,
+}
+
+impl Plan {
+    const NONE: Plan = Plan { end: None, begin: None, note: false };
+}
+
 impl JobTrace {
     pub(super) const fn new() -> JobTrace {
         JobTrace { open: step::IDLE }
@@ -29,29 +41,42 @@ impl JobTrace {
         crate::package::lifecycle::trace_next_op();
     }
 
-    /// The job is at `job.step`: end the step that was open and begin the new one. A finished job ends its step with the job's result and adds a note for `JobDone`.
-    pub(super) fn sync(&mut self, job: &Job) {
-        if !trace_on() {
-            self.open = job.step;
-            return;
+    /// What the log gets when the job is at `at`: the end of the step whose begin the log has, then the begin of the new step, or for a `finished` job a note for `JobDone`.
+    /// `on` is false while nothing listens: nothing is emitted, and no step counts as begun, so a sink that attaches in the middle of a step gets no end without its begin.
+    pub(super) fn plan(&mut self, on: bool, at: u8, finished: bool) -> Plan {
+        if !on {
+            self.open = step::IDLE;
+            return Plan::NONE;
         }
+        if self.open == at && !finished {
+            return Plan::NONE;
+        }
+        let end = step_of(self.open).filter(|_| self.open != step::DONE);
+        let begin = if finished { None } else { step_of(at) };
+        self.open = if finished { step::IDLE } else if begin.is_some() { at } else { step::IDLE };
+        Plan { end, begin, note: finished }
+    }
+
+    /// The job is at `job.step`: log the plan for it.
+    pub(super) fn sync(&mut self, job: &Job) {
         let finished = job.phase == 2;
-        if self.open == job.step && !finished {
+        let plan = self.plan(trace_on(), job.step, finished);
+        if plan.end.is_none() && plan.begin.is_none() && !plan.note {
             return;
         }
         // SAFETY: the job's path is a NUL terminated buffer of its own
         unsafe {
             let (package, hash) = (package_of(job), stem_hash(job.path.as_ptr()));
-            if let Some(s) = step_of(self.open).filter(|_| self.open != step::DONE) {
+            if let Some(s) = plan.end {
                 trace_emit(Phase::End, s, package, hash, if finished { job.result } else { 0 }, 0);
             }
-            if finished {
+            if plan.note {
                 trace_emit(Phase::Note, Step::JobDone, package, hash, job.result, 0);
-            } else if let Some(s) = step_of(job.step) {
+            }
+            if let Some(s) = plan.begin {
                 trace_emit(Phase::Begin, s, package, hash, 0, 0);
             }
         }
-        self.open = if finished { step::IDLE } else { job.step };
     }
 
     /// The job asks its step again on a later pass because it answered `E_BUSY`.
@@ -64,5 +89,34 @@ impl JobTrace {
 }
 
 fn package_of(job: &Job) -> PackageId {
-    PackageId(if job.rec == NO_REC { 0xff } else { job.rec as u8 })
+    if job.rec == NO_REC { TRACE_NO_PACKAGE } else { PackageId(job.rec as u8) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_step_ends_only_when_its_begin_was_logged() {
+        let mut t = JobTrace::new();
+        // the sink is off during the check: nothing is logged, nothing is open
+        assert_eq!(t.plan(false, step::CHECK, false), Plan::NONE);
+        // it attaches during the quiesce: that step begins, and the check has no end
+        let p = t.plan(true, step::QUIESCE, false);
+        assert_eq!((p.end, p.begin), (None, Some(Step::JobQuiesce)));
+        let p = t.plan(true, step::UNLOAD, false);
+        assert_eq!((p.end, p.begin), (Some(Step::JobQuiesce), Some(Step::JobUnload)));
+        // the same step again: no event
+        assert_eq!(t.plan(true, step::UNLOAD, false), Plan::NONE);
+        let p = t.plan(true, step::DONE, true);
+        assert_eq!((p.end, p.begin, p.note), (Some(Step::JobUnload), None, true));
+    }
+
+    #[test]
+    fn a_sink_that_attaches_before_the_end_of_the_job_gets_no_end() {
+        let mut t = JobTrace::new();
+        t.plan(false, step::UNLOAD, false);
+        let p = t.plan(true, step::DONE, true);
+        assert_eq!((p.end, p.begin, p.note), (None, None, true));
+    }
 }

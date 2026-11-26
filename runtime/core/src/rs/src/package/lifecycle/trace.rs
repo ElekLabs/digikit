@@ -42,6 +42,9 @@ pub(crate) fn on() -> bool {
     dlog::log_on()
 }
 
+/// The package of an event that belongs to none (a load whose file is in no record yet, a park wait): kind and record are those of no real package.
+pub(crate) const NO_PACKAGE: PackageId = PackageId(0xff);
+
 /// The kind word of an event: a record below `MAX_MODULES` is a module, above it a service.
 fn kind_of(package: PackageId) -> u32 {
     (package.0 as usize >= MAX_MODULES) as u32
@@ -73,13 +76,18 @@ impl<P: PackagePlatform, M: Images, R: Registry> Trace for RtTrace<P, M, R> {
         on()
     }
 
-    fn event(&self, phase: Phase, step: Step, package: PackageId, status: i32) {
+    type Name = u32;
+
+    fn name_of(&self, package: PackageId) -> u32 {
         unsafe {
             let (s, _) = self.0.get();
             let mut buf = [0u8; crate::package::loader::discover::PATH_CAP + 1];
-            let hash = stem_hash(s.path_of(package, &mut buf).unwrap_or(core::ptr::null()));
-            emit(phase, step, package, hash, status, 0);
+            stem_hash(s.path_of(package, &mut buf).unwrap_or(core::ptr::null()))
         }
+    }
+
+    fn event(&self, phase: Phase, step: Step, package: PackageId, name: u32, status: i32) {
+        unsafe { emit(phase, step, package, name, status, 0) }
     }
 }
 

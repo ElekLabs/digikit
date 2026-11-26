@@ -154,7 +154,34 @@ fn the_start_of_a_dsp_part_is_a_note() {
             phase: Phase::Note,
             step: Step::DspLoad,
             package: id(1),
-            status: 0
+            status: 0,
+            name: notes[0].name
         }]
     );
+}
+
+#[test]
+fn a_begin_and_its_end_carry_the_name_read_at_the_begin() {
+    // the recording trace gives each resolve a new name, as a cleared path gives a new hash
+    for run in 0..3 {
+        let (mut pm, probe, trace) = world();
+        pm.boot(&[id(1), id(2)]).unwrap();
+        probe.clear();
+        trace.clear();
+        match run {
+            0 => drop(pm.unload(id(2)).unwrap()),
+            1 => drop(pm.reload(id(1)).unwrap()),
+            _ => {
+                pm.unload(id(2)).unwrap();
+                trace.clear();
+                drop(pm.load(id(2)).unwrap());
+            }
+        }
+        let ev = trace.events();
+        assert!(!ev.is_empty());
+        for pair in ev.chunks(2) {
+            assert_eq!((pair[0].phase, pair[1].phase), (Phase::Begin, Phase::End));
+            assert_eq!(pair[0].name, pair[1].name, "{pair:?}");
+        }
+    }
 }

@@ -32,9 +32,11 @@ impl<S, T: Trace> Traced<S, T> {
         if !self.trace.on() {
             return call(&mut self.inner);
         }
-        self.trace.event(Phase::Begin, step, package, 0);
+        let name = self.trace.name_of(package);
+        self.trace.event(Phase::Begin, step, package, name, 0);
         let r = call(&mut self.inner);
-        self.trace.event(Phase::End, step, package, status(&r));
+        self.trace
+            .event(Phase::End, step, package, name, status(&r));
         r
     }
 }
