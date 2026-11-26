@@ -29,12 +29,16 @@ impl<P: PackagePlatform, M: Images, R: Registry> Installer for RtColdFire<P, M, 
         }
     }
 
+    /// `E_BUSY` while a task below the UI task could be inside a site of the package: the entries stay and the manager retries (`retry_pending`, once per UI pass).
     fn restore(&mut self, owner: PackageId) -> Result<(), Status> {
         unsafe {
             let (_, l) = self.0.get();
-            l.package_restore(owner);
+            if l.package_restore(owner) {
+                Ok(())
+            } else {
+                Err(E_BUSY)
+            }
         }
-        Ok(())
     }
 }
 

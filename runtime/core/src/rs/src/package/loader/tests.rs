@@ -18,6 +18,7 @@ mod host_boot_env;
 mod host_ops;
 mod manager_assembly_tests;
 mod patch_assembly_tests;
+mod park_tests;
 mod seam_tests;
 mod check;
 mod commit;
@@ -470,11 +471,25 @@ unsafe fn provider_loader(file: Vec<u8>, init: Init) -> Fake {
     l
 }
 
+/// The names of the task facts (`park.rs`) flagged absent, sorted as the port file lists them: a firmware without those tasks.
+fn absent_task_names() -> Vec<dkneeds::keys::NameRec> {
+    use dkneeds::keys::{name_hash_bytes, NameRec, FLAG_ABSENT, NAME_FW};
+    let mut v: Vec<NameRec> = park::TASK_NAMES.iter().map(|n| NameRec { hash: name_hash_bytes(n), addr: 0, n: 0, kind: NAME_FW, flags: FLAG_ABSENT }).collect();
+    v.sort_by_key(|n| n.hash);
+    v
+}
+
 /// A port file in provider record `PROVIDER_MAX - 1` with the sites `((hook, address, length, kind, check value), flags)` and no name: its table copy is leaked.
 unsafe fn put_port(l: &mut Fake, sites: &[((&str, u32, u16, u8, [u8; 8]), u8)]) {
+    // the firmware of these tests has neither the BgWorker nor the console task: the installer has no task to wait for (the gate has its own tests)
+    put_port_names(l, sites, &absent_task_names());
+}
+
+/// [`put_port`] with the names `names` (sorted by hash) in the table.
+unsafe fn put_port_names(l: &mut Fake, sites: &[((&str, u32, u16, u8, [u8; 8]), u8)], names: &[dkneeds::keys::NameRec]) {
     use dkneeds::keys::{name_hash, write_table, Pair, SiteRec, Table};
     let recs: Vec<SiteRec> = sites.iter().map(|&((h, addr, len, kind, check), flags)| SiteRec { hash: name_hash(h), addr, len, kind, flags, check }).collect();
-    let t = Table { provides: &[Pair { a: name_hash("port"), b: 0x000100 }], fw: &[FW_ID], sites: &recs, ..Default::default() };
+    let t = Table { provides: &[Pair { a: name_hash("port"), b: 0x000100 }], fw: &[FW_ID], names, sites: &recs, ..Default::default() };
     let mut bytes = vec![0u8; dkneeds::keys::table_size(&t)];
     write_table(&t, &mut bytes).unwrap();
     let j = PROVIDER_MAX - 1;

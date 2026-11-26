@@ -14,14 +14,14 @@ fn id(n: usize) -> PackageId {
 }
 
 /// Module 0 at `PATH`, and the shared state of the seams over `l`.
-fn shared(l: &mut Fake) -> Session<FakePlatform, FakeImages, FakeRegistry> {
+pub(super) fn shared(l: &mut Fake) -> Session<FakePlatform, FakeImages, FakeRegistry> {
     let mut paths = [None; MAX_MODULES];
     paths[0] = Some(PATH.as_ptr());
     Session::new(l as *mut Fake, paths)
 }
 
 /// Provider `j` of the search is the file at `PATH` (the one file of the fake store).
-fn found_at(l: &mut Fake, j: usize) {
+pub(super) fn found_at(l: &mut Fake, j: usize) {
     l.found.paths[j][..PATH.len() - 1].copy_from_slice(&PATH[..PATH.len() - 1]);
     l.found.path_len[j] = PATH.len() - 1;
     l.found.n = j + 1;
