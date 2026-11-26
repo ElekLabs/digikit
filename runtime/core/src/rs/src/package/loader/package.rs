@@ -24,6 +24,11 @@ pub(crate) struct Flight {
 }
 
 impl Flight {
+    /// Where the image of the package went and how many bytes it holds with its bss (device address and size; both 0 before a place): the detail of the place end event.
+    pub(crate) fn placed_span(&self) -> (u32, u32) {
+        (self.placed.place.base, self.placed.place.image_size + self.placed.place.bss)
+    }
+
     pub(crate) const fn new() -> Flight {
         Flight { c: Checked::empty(), placed: Placed { place: PlaceArgs { file: core::ptr::null(), keys_off: 0, keys_len: 0, image_size: 0, dsp_image: 0, mem: core::ptr::null_mut(), base: 0, bss: 0 }, init: 0, tick: 0 }, package: None }
     }

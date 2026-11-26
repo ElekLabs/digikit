@@ -87,7 +87,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Trace for RtTrace<P, M, R> {
     }
 
     fn event(&self, phase: Phase, step: Step, package: PackageId, name: u32, status: i32) {
-        unsafe { emit(phase, step, package, name, status, 0) }
+        unsafe {
+            // the end of a place says where the image went, so a spinning program counter of a device run maps to its package (the size is in the module list)
+            let detail = if phase == Phase::End && step == Step::Place && status == 0 { self.0.get().0.flight.placed_span().0 } else { 0 };
+            emit(phase, step, package, name, status, detail)
+        }
     }
 }
 

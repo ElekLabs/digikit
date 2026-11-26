@@ -28,6 +28,7 @@ use std::path::{Path, PathBuf};
 use std::string::String;
 use std::vec::Vec;
 
+mod lfo_closure_reload;
 mod lifecycle_events;
 mod settings_page;
 mod workbench;

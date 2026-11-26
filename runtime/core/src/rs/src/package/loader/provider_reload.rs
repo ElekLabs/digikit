@@ -107,6 +107,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// task can be parked out of it, so the closure reload cannot take it down safely (`E_BOOT_ONLY`: a restart reloads the service). A hook the port file does not list is no
     /// interrupt entry here (the load refuses it elsewhere).
     unsafe fn interrupt_entered(&self, keys: &Keys) -> bool {
+        #[cfg(test)]
+        if self.irq_guard_off {
+            return false;
+        }
         let Some((port, ..)) = self.port_keys() else {
             return false;
         };

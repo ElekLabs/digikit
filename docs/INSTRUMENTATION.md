@@ -588,6 +588,7 @@ The runtime logs each step of the package lifecycle as a `LIFECYCLE` event (kind
 - **Gating.** Events are sent only while a log sink listens (the debug module sets one when it loads; `dlog::log_on`). Without one a producer pays that one test and builds no event. They are never kept in the runtime's small ring, so a boot without a debug module is unchanged, and a debug module that loads later does not see the earlier events (the boot's, before it started). They are not error events and have no level.
 - **Reading them.** In the workbench log and `dklog` they show as `LIFECYCLE` with the fields `op, hash, phase, step, kind, package, status, detail`. In a test, `events.untilLifecycle(file, step, phase)` waits for one (`file` is the path or the name; the helper hashes it).
 - **A hang** is a `begin` without its `end`: the last `LIFECYCLE` event of the log that is a begin names the step, the package and the operation that has not returned. A step that answers busy ends with `status` `E_BUSY` and is asked again by the caller, so a run of end events with `E_BUSY` and `busy_retry` notes is a wait, not a hang.
+- **Place detail.** The `detail` word of a good place `end` is the device address the package's image was placed at, so a program counter seen in a device run maps to its package.
 - **Cost.** One more test of the log's sink word per seam call while nothing listens. With a sink, each call logs two events (32 bytes each, copied to the sink under the interrupt mask like any other event).
 
 ## `MACHINE_TYPE_EVICTED` of the machines service (E5d)
