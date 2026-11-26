@@ -606,6 +606,35 @@ without running it.
 - The merge gate uses `nx affected` to select conformance and the other targets from changed declared inputs, including dependency outputs; device tests are selected by ownership ("Nx gate"). A selected task with an unchanged key replays its cached result. Use `nx show target inputs PROJECT:TARGET --check PATH` to inspect direct file inputs and `mise run test:plan` to see task selection. After a change to untracked firmware, snapshots or override binaries, or to what `tools/nx/device-inputs.mjs` or `coupled-inputs.mjs` hash, run named targets or the full tier.
 - Shared loader and public SDK edits select the common machine and effect load fixture through the patched image and retain the other affected device behavior checks. Changes to an individual machine's or effect's private pack inputs select that shipped artifact's own load, as described in “Nx gate.” Use the owner targets for iteration and inspect `mise run test:plan` before the merge gate.
 
+### Retiring idle lane builds
+
+Run `mise run clean:lanes` from the main checkout to inventory `dist/native-target`
+in linked Git worktrees. The default is a dry run. Pass lane names or absolute
+worktree paths to narrow the list, and pass `--apply` to retire the eligible
+directories. For example:
+
+```sh
+mise run clean:lanes
+mise run clean:lanes -- --idle-days 7 --max-gib 150 --keep my-lane
+mise run clean:lanes -- --apply old-lane
+```
+
+Each row reports allocated GiB and why a target is kept or eligible. The default
+age is seven days since the last build-file change. A budget chooses the oldest
+eligible targets first and never overrides a protection. Git-locked worktrees,
+lanes with uncommitted changes, the invoking worktree, and lanes named by
+`--keep` are protected. On a host with `lsof`, the tool also protects lanes
+used by running processes. An idle shell tab alone does not keep a lane warm.
+If process visibility is unavailable the command stops. Finish or pause work
+in the selected lanes before applying: a process that starts after the final
+check is not covered by that check.
+
+Only ignored `dist/native-target` directories in linked worktrees are in scope.
+Their next Cargo build will be cold if the artifact isn't already in a shared
+store. The worktrees, source files, plain `target/`, main build directories, Nx
+cache, shared binaries and profiles are not removed. APFS snapshots and clones
+can make the gain in filesystem free space smaller than the measured output.
+
 ### Remote cache
 
 All worktrees of a clone share one Cacheiro server on `127.0.0.1:47311`. Its state is in
