@@ -4,9 +4,11 @@
 //! The table holds the loaded rows sorted by callback order (the order the manifest packs) and the hash of the service name; a file without an order follows every file with
 //! one. The order of callbacks is independent of the order files load in. At most `PROVIDER_MAX` rows are loaded.
 //!
-//! `Rows` holds the owners and the count; the rows are in the slice it is given, so a host test uses a table of its own.
+//! `Rows` holds the owners and the count; the rows are in the slice it is given, so a host test uses a table of its own. The MIDI task reads the table (priority 7, above the UI
+//! task that loads), so the runtime adds and removes under the interrupt mask (`add_masked`, `remove_masked`): a reader sees the table before or after, never half shifted.
 use core::ffi::c_void;
 use core::ops::Range;
+use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::provider::{ProviderHandle, ProviderRow};
 use dkrt_abi::service::ServiceTable;
 use dkrt_sdk::{E_PLAN_FIT, E_PLAN_OWNER, OK, PROVIDER_MAX};
@@ -63,6 +65,9 @@ impl Rows {
     /// Add `row` of module record `rec` to `table` (room for `PROVIDER_MAX`): `E_PLAN_OWNER` when a row of that name is there already (a service is one owner's), `E_PLAN_FIT`
     /// when the room is full. A row that does not resolve is refused with the status of `RowSource::resolve`, before anything changes.
     ///
+    /// The shift of the rows below the new one is not atomic: a task that reads the table meanwhile sees a row twice or a row half moved. When another task reads the table, use
+    /// [`Rows::add_masked`].
+    ///
     /// # Safety
     /// The rows of `table[..len()]` are valid, and so is `row`.
     pub unsafe fn add(&mut self, table: &mut [ProviderHandle], rec: usize, row: RowSource<'_>, order: Option<u32>) -> i32 {
@@ -70,7 +75,32 @@ impl Rows {
             Ok(row) => row,
             Err(e) => return e,
         };
-        let hash = row.name();
+        self.insert(table, rec, row, order)
+    }
+
+    /// [`Rows::add`] with the interrupt mask held for the shift: the MIDI task (priority 7, above the UI task that loads) reads the table for the CAPACITY and MODULES commands, and
+    /// it sees the rows before the add or after it, never in between. The row is resolved before the mask.
+    ///
+    /// # Safety
+    /// As [`Rows::add`].
+    pub unsafe fn add_masked<P: PackagePlatform>(&mut self, p: &P, table: &mut [ProviderHandle], rec: usize, row: RowSource<'_>, order: Option<u32>) -> i32 {
+        let row = match row.resolve() {
+            Ok(row) => row,
+            Err(e) => return e,
+        };
+        // a refusal changes nothing, so it needs no mask
+        let refused = self.refusal(table, row.name());
+        if refused != OK {
+            return refused;
+        }
+        let sr = p.irq_mask();
+        let r = self.insert(table, rec, row, order);
+        p.irq_restore(sr);
+        r
+    }
+
+    /// `E_PLAN_OWNER` when a row of the name `hash` is loaded, `E_PLAN_FIT` when the room is full, else `OK`.
+    fn refusal(&self, table: &[ProviderHandle], hash: u32) -> i32 {
         let mut i = 0;
         while i < self.n {
             if table[i].name() == hash {
@@ -79,7 +109,17 @@ impl Rows {
             i += 1;
         }
         if self.n == PROVIDER_MAX {
-            return E_PLAN_FIT;
+            E_PLAN_FIT
+        } else {
+            OK
+        }
+    }
+
+    unsafe fn insert(&mut self, table: &mut [ProviderHandle], rec: usize, row: ProviderHandle, order: Option<u32>) -> i32 {
+        let hash = row.name();
+        let refused = self.refusal(table, hash);
+        if refused != OK {
+            return refused;
         }
         // Insert before the next higher order, breaking ties by service name.
         let mut at = self.n;
@@ -119,7 +159,17 @@ impl Rows {
         None
     }
 
-    /// Take the row of module record `rec` out of `table` (nothing when it has none).
+    /// [`Rows::remove`] with the interrupt mask held for the shift (see [`Rows::add_masked`]).
+    pub fn remove_masked<P: PackagePlatform>(&mut self, p: &P, table: &mut [ProviderHandle], rec: usize) {
+        if self.index_of(rec).is_none() {
+            return;
+        }
+        let sr = p.irq_mask();
+        self.remove(table, rec);
+        p.irq_restore(sr);
+    }
+
+    /// Take the row of module record `rec` out of `table` (nothing when it has none). The shift is not atomic (see [`Rows::add`]); [`Rows::remove_masked`] is.
     pub fn remove(&mut self, table: &mut [ProviderHandle], rec: usize) {
         let mut at = 0;
         while at < self.n && self.owner[at] != rec as u8 + 1 {
@@ -149,13 +199,13 @@ static mut LIVE: Rows = Rows::new();
 /// `Registry::add` of the runtime: the row of a service file joins the table of the services.
 pub unsafe fn add(rec: usize, row: RowSource<'_>, order: Option<u32>) -> i32 {
     let t = &mut *core::ptr::addr_of_mut!(crate::package::gen_services::ROWS);
-    (*core::ptr::addr_of_mut!(LIVE)).add(t, rec, row, order)
+    (*core::ptr::addr_of_mut!(LIVE)).add_masked(&crate::package::resident::platform::PLATFORM, t, rec, row, order)
 }
 
 /// `Registry::remove` of the runtime.
 pub unsafe fn remove(rec: usize) {
     let t = &mut *core::ptr::addr_of_mut!(crate::package::gen_services::ROWS);
-    (*core::ptr::addr_of_mut!(LIVE)).remove(t, rec)
+    (*core::ptr::addr_of_mut!(LIVE)).remove_masked(&crate::package::resident::platform::PLATFORM, t, rec)
 }
 
 /// The row the loaded service file of record `rec` declared, as a table of its own: the lifecycle calls into one service are the table's, over this one row.

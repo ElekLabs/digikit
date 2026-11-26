@@ -365,14 +365,14 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         OK
     }
 
-    /// The length and check value of the hook site at `addr` in the loaded port file: what the ColdFire installer needs besides the address and the target of a hook entry.
-    pub(crate) unsafe fn port_site_at(&self, addr: u32) -> Option<(u32, [u8; 8])> {
+    /// The length, check value and context of the hook site at `addr` in the loaded port file: what the ColdFire installer needs besides the address and the target of a hook entry.
+    pub(crate) unsafe fn port_site_at(&self, addr: u32) -> Option<(u32, [u8; 8], u8)> {
         let (keys, ..) = self.port_keys()?;
         let mut i = 0;
         while let Some(s) = keys.site(i) {
             i += 1;
             if s.addr == addr {
-                return Some((s.len as u32, s.check));
+                return Some((s.len as u32, s.check, dkneeds::keys::site_context(s.flags)));
             }
         }
         None
@@ -384,18 +384,18 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         // the image of the package: a hook target must lie in it (a module has no hook: its image size is 0)
         let (base, image_size) = if rec >= MAX_MODULES { (records::module(rec).base, self.provs[rec - MAX_MODULES].image_size) } else { (0, 0) };
         let mut hooks = [role_hook(); SITES_MAX];
-        let mut patches = [install::PatchItem { addr: 0, len: 0, check: [0; 8], value: 0 }; PATCHES_MAX];
+        let mut patches = [install::PatchItem { addr: 0, len: 0, check: [0; 8], value: 0, ctx: 0 }; PATCHES_MAX];
         let mut slots = [(0u32, 0u32); dkneeds::SLOTS_MAX as usize];
         let (mut nh, mut np, mut ns) = (0, 0, 0);
         // the entries of this CPU; the others are another backend's
         for e in entries.iter().filter(|e| e.cpu() == Cpu::ColdFire) {
             match *e {
                 Entry::Hook { site, target } => {
-                    let (len, check) = self.port_site_at(site.addr()).ok_or(E_IMPORT)?;
+                    let (len, check, ctx) = self.port_site_at(site.addr()).ok_or(E_IMPORT)?;
                     if nh == hooks.len() {
                         return Err(E_PLAN_FIT);
                     }
-                    hooks[nh] = install::HookItem { addr: site.addr(), len, check, entry: target.wrapping_sub(base) };
+                    hooks[nh] = install::HookItem { addr: site.addr(), len, check, entry: target.wrapping_sub(base), ctx };
                     nh += 1;
                 }
                 Entry::Slot { slot, target } => {
@@ -407,7 +407,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                 }
                 // a table pointer or bound written as bytes: the port file gives the site's length and the check value of its stock bytes; the entry has the bytes
                 Entry::Patch { site, bytes } => {
-                    let (len, check) = self.port_site_at(site.addr()).ok_or(E_IMPORT)?;
+                    let (len, check, ctx) = self.port_site_at(site.addr()).ok_or(E_IMPORT)?;
                     let b = bytes.as_slice();
                     if b.len() != len as usize || b.len() > 4 {
                         return Err(E_FORMAT);
@@ -417,14 +417,23 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                     }
                     let mut value = [0u8; 4];
                     value[4 - b.len()..].copy_from_slice(b);
-                    patches[np] = install::PatchItem { addr: site.addr(), len, check, value: u32::from_be_bytes(value) };
+                    patches[np] = install::PatchItem { addr: site.addr(), len, check, value: u32::from_be_bytes(value), ctx };
                     np += 1;
                 }
             }
         }
         // the entries carry absolute targets; the installer takes the offset in the image (a target before the image wraps past its size) and refuses one outside it
-        let cf = CfItems { hooks: &hooks[..nh], patches: &patches[..np], image_base: base, image_size, slots: &slots[..ns] };
-        Backend::install(&mut self.installer, &self.p, rec as u8, &cf)
+        // at run time a `task` site is written only while the BgWorker and the console task wait (`Gate`); at the boot no task has run
+        let parks = self.task_parks();
+        let gate = parks.gate(self.live());
+        let cf = CfItems { hooks: &hooks[..nh], patches: &patches[..np], image_base: base, image_size, slots: &slots[..ns], gate };
+        let r = Backend::install(&mut self.installer, &self.p, rec as u8, &cf);
+        // a run-time task site with no task facts in the port file answers `E_IMPORT` as a missing import does: the load's log names the cause (`MOD_NEEDS`, "NEEDS port:no-task")
+        let task_site = hooks[..nh].iter().any(|h| h.ctx == dkneeds::keys::CTX_TASK) || patches[..np].iter().any(|q| q.ctx == dkneeds::keys::CTX_TASK);
+        if r == Err(E_IMPORT) && gate.live && gate.parks.is_none() && task_site && self.missing[0] == 0 {
+            self.missing = *b"port:no-task";
+        }
+        r
     }
 
     /// Claim the DSP slots of `entries` for package `id` (`DspInstaller`): the stubs stay stock until the DSP acknowledges the code (`dsp_step`).
@@ -450,9 +459,20 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         self.uninstall_dsp(record_of(id))
     }
 
-    /// Return the hook sites and slot words of package `id` to stock.
-    pub(crate) unsafe fn package_restore(&mut self, id: PackageId) {
-        self.uninstall_cf(record_of(id));
+    /// Return the hook sites and slot words of package `id` to stock. `false` (`E_BUSY`) when a site that a task below the UI task can be inside cannot be written yet: nothing was
+    /// changed, and the manager asks again (`retry_pending`).
+    pub(crate) unsafe fn package_restore(&mut self, id: PackageId) -> bool {
+        self.uninstall_cf(record_of(id))
+    }
+
+    /// The task facts of the loaded port file, for the gate of an install or restore.
+    pub(super) unsafe fn task_parks(&self) -> park::TaskParks {
+        park::TaskParks::read(self.port_keys().as_ref().map(|k| &k.0))
+    }
+
+    /// Whether the loader runs after the boot (the live job, a reload, a take-down): the tasks run then, and the installer waits for them.
+    pub(super) fn live(&self) -> bool {
+        self.phase != Phase::Boot
     }
 
     /// Take the started package `id` down (after `package_deactivate` and the restore of its entries): `fini`, the registry, the DSP rows, the memory (`unload_body`). The entries are restored before, by
@@ -545,5 +565,5 @@ pub(crate) enum PhaseKind {
 }
 
 fn role_hook() -> install::HookItem {
-    install::HookItem { addr: 0, len: 0, check: [0; 8], entry: 0 }
+    install::HookItem { addr: 0, len: 0, check: [0; 8], entry: 0, ctx: 0 }
 }

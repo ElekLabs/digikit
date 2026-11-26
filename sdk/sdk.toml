@@ -2302,7 +2302,7 @@ E_SEL_COUNT = { code = -41, text = "more selection paths than the record holds" 
 E_SEL_WRITE = { code = -42, text = "the firmware's block write failed" }
 E_CARD_BUSY = { code = -43, text = "a card transfer is in flight" }
 E_SAFE_MODE = { code = -44, text = "this boot is in safe mode: no module was loaded" }
-E_BOOT_ONLY = { code = -45, text = "the module set is fixed after the boot hook (a reload of a loaded module is the only later load)" }
+E_BOOT_ONLY = { code = -45, text = "the module set is fixed after the boot hook: a service that must start at boot cannot load now, restart the device to load it (a reload of a loaded module is the only later load)" }
 E_RANGE = { code = -46, text = "a card write outside the store range" }
 E_CARD_RO = { code = -47, text = "the card's store area is not ours and not blank" }
 E_CONTRACT = { code = -48, text = "the module needs another runtime version than this one (another major or minor, or a higher patch)" }

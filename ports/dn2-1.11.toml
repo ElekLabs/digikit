@@ -2859,6 +2859,50 @@ mark = "D"
 rule = "fw/rtos:cf_words"
 
 [[anchor]]
+name = "cf.rtos.value.bgworker.cell"
+cpu = "cf"
+kind = "value"
+addr = 0x44647930
+src = 0x400f2674
+len = 4
+sha256 = "c640105c98cbe76d5026eb09329ce377345273c76937882cc24e698aaf79eb92"
+mark = "D"
+rule = "fw/rtos:cf_literal"
+
+[[anchor]]
+name = "cf.rtos.value.bgworker.tcb"
+cpu = "cf"
+kind = "value"
+addr = 0x42c691d0
+src = 0x400f260e
+len = 4
+sha256 = "12f1bd188f976a96dc76fd711c7aca95c233674a2dbdf46628c398a8a2ee2246"
+mark = "D"
+rule = "fw/rtos:cf_literal"
+
+[[anchor]]
+name = "cf.rtos.value.console.queue"
+cpu = "cf"
+kind = "value"
+addr = 0x4038ae9c
+src = 0x400cea7c
+len = 4
+sha256 = "849118ef55624fda834ea963f664e569947c00c14ebae1c6895045aea5fdab01"
+mark = "D"
+rule = "fw/rtos:cf_literal"
+
+[[anchor]]
+name = "cf.rtos.value.console.tcb"
+cpu = "cf"
+kind = "value"
+addr = 0x40385e48
+src = 0x400cea9a
+len = 4
+sha256 = "dcf430e7e1a754b3bb1321a3949620eaf390b11effc8fa9ce6ae87bbb9ad02b5"
+mark = "D"
+rule = "fw/rtos:cf_literal"
+
+[[anchor]]
 name = "cf.rtos.value.current_tcb"
 cpu = "cf"
 kind = "value"

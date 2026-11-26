@@ -128,6 +128,7 @@ tail = true
 regs = { in = ["a2"], clobbers = ["d0-d1", "a0-a1", "ccr"] }   # d0, d1, a0 and a1 are saved around the call
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "ui"
 users = ["test/svc-test", "test/local-step"]
 doc = "Test only: the last step of the SETTINGS item list rebuild, as a service hook. The fixture counts the runs and runs the displaced instructions through the tail."
 

@@ -75,6 +75,8 @@ pub struct Found {
     pub n: usize,
     /// The limits of the search that were passed (`TRUNC_*` bits: no provider slot left, more `.dks` files than `CAND_MAX`, more needs than `WANT_MAX`): a provider may be missing from the result.
     pub truncated: u8,
+    /// The store was busy (`E_BUSY`) at a listing or a file read of the last search: the result may lack providers that are on the card.
+    pub busy: bool,
     // the search's work arrays live here, not on the boot thread's stack: the files of the folder and whether each is taken, and the service hashes searched for
     cands: [DkrtStoreEntry; CAND_MAX + 1],
     c_used: [bool; CAND_MAX],
@@ -90,6 +92,7 @@ impl Found {
         Found {
             n: 0,
             truncated: 0,
+            busy: false,
             cands: unsafe { core::mem::zeroed() },
             c_used: [false; CAND_MAX],
             search: [0; WANT_MAX],
@@ -202,7 +205,10 @@ unsafe fn read_provider<C: Cards>(cards: &mut C, c: usize, out: &mut Found, role
     path[..at].copy_from_slice(&out.paths[k][..at]);
     let staged = match cards.stage(path.as_ptr()) {
         Ok(s) => s,
-        Err(_) => return false,
+        Err(e) => {
+            out.busy |= e == dkrt_sdk::E_BUSY;
+            return false;
+        }
     };
     let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
     if table_of(file, k, out, role, fw) {
@@ -256,8 +262,17 @@ unsafe fn find_port<C: Cards>(cards: &mut C, fw: Option<[u8; 8]>, out: &mut Foun
         out.truncated |= TRUNC_TABLE;
         return;
     }
+    // the port provider may be in `out` already (a live search after one that found it): it is not added twice
+    let mut j = 0;
+    while j < out.n {
+        if is_port_path(out.path(j)) {
+            return;
+        }
+        j += 1;
+    }
     let found = cards.list(b"ports/\0".as_ptr(), out.cands.as_mut_ptr(), (CAND_MAX + 1) as u32);
     if found <= 0 {
+        out.busy |= found == dkrt_sdk::E_BUSY;
         return;
     }
     let nc = if found as usize > CAND_MAX {
@@ -281,12 +296,30 @@ unsafe fn find_port<C: Cards>(cards: &mut C, fw: Option<[u8; 8]>, out: &mut Foun
 pub unsafe fn find<C: Cards>(cards: &mut C, want: &[u32], fw: Option<[u8; 8]>, out: &mut Found) {
     out.n = 0;
     out.truncated = 0;
+    search(cards, want, fw, out);
+}
+
+/// Find the providers for `want` and add them after the ones `out` holds (a live load whose service the boot did not look for): the providers already in `out` keep their
+/// slots (their records may be up) and their files are not read again. `OK`, or `E_BUSY` when the store was busy (a provider may be on the card that was not read: the caller
+/// asks again later, and does not take the result for "no such service"); any other listing error finds nothing, as in `find`.
+pub unsafe fn find_more<C: Cards>(cards: &mut C, want: &[u32], fw: Option<[u8; 8]>, out: &mut Found) -> i32 {
+    search(cards, want, fw, out);
+    if out.busy {
+        dkrt_sdk::E_BUSY
+    } else {
+        dkrt_sdk::OK
+    }
+}
+
+unsafe fn search<C: Cards>(cards: &mut C, want: &[u32], fw: Option<[u8; 8]>, out: &mut Found) {
+    out.busy = false;
     if want.is_empty() {
         return;
     }
     // the folder is listed once: the `.dks` files are remembered
     out.c_used = [false; CAND_MAX];
     let found = cards.list(b"services/\0".as_ptr(), out.cands.as_mut_ptr(), (CAND_MAX + 1) as u32);
+    out.busy |= found == dkrt_sdk::E_BUSY;
     let nc = if found <= 0 {
         0
     } else if found as usize > CAND_MAX {
@@ -295,6 +328,18 @@ pub unsafe fn find<C: Cards>(cards: &mut C, want: &[u32], fw: Option<[u8; 8]>, o
     } else {
         found as usize
     };
+    // the files of the providers already found are taken
+    let mut c = 0;
+    while c < nc {
+        let mut j = 0;
+        while j < out.n {
+            if out.path(j) == path_of(&out.cands[c]) {
+                out.c_used[c] = true;
+            }
+            j += 1;
+        }
+        c += 1;
+    }
     // the search list: the needs given, then the needs of each provider found
     let mut ns = 0;
     let mut i = 0;
@@ -763,5 +808,35 @@ mod tests {
         assert_eq!(out.n, 1);
         assert_eq!(out.path(0), b"services/b.dks");
         assert!(out.table_len[0] > 0, "the slot of the failed read holds the next provider");
+    }
+
+    #[test]
+    fn find_more_reports_a_busy_store_and_a_later_search_finds_the_provider() {
+        let mut fs = store_with(&[("lfo", 1, &[])]);
+        let want = [name_hash("lfo")];
+        let mut out = Found::new();
+        fs.busy = true;
+        assert_eq!(unsafe { find_more(&mut fs, &want, None, &mut out) }, dkrt_sdk::E_BUSY);
+        assert_eq!(out.n, 0);
+        fs.busy = false;
+        assert_eq!(unsafe { find_more(&mut fs, &want, None, &mut out) }, dkrt_sdk::OK);
+        assert_eq!((out.n, out.path(0)), (1, &b"services/lfo.dks"[..]));
+        // `find` keeps its rule: a busy store finds nothing without an error
+        fs.busy = true;
+        assert_eq!(run_fw(&mut fs, &["lfo"], None).n, 0);
+    }
+
+    #[test]
+    fn a_second_search_does_not_add_the_port_provider_twice() {
+        let mut fs = cards(vec![("ports/p.dkport".into(), port_file(FW_A)), ("services/lfo.dks".into(), file(1, "lfo", &["port"]))]);
+        let mut out = Found::new();
+        unsafe {
+            find(&mut fs, &[name_hash("port")], Some(FW_A), &mut out);
+            assert_eq!((out.n, out.path(0)), (1, &b"ports/p.dkport"[..]));
+            // a service that needs the port is searched for afterwards: the port hash is in the search again
+            assert_eq!(find_more(&mut fs, &[name_hash("lfo")], Some(FW_A), &mut out), dkrt_sdk::OK);
+        }
+        assert_eq!(out.n, 2);
+        assert_eq!((out.path(0), out.path(1)), (&b"ports/p.dkport"[..], &b"services/lfo.dks"[..]));
     }
 }

@@ -6,6 +6,8 @@ use dkrt_abi::provider::{
     name_hash, LifecycleV1, PartRef, Provider, Records, RecordsV1, TickV1, Ticker, LIFECYCLE_NEWEST, PART_LIFECYCLE, PART_RECORDS, PART_TICK, RECORDS_NEWEST, TICK_NEWEST,
 };
 use dkrt_sdk::E_SVC_ABI;
+use crate::fake_platform::{Call, FakePlatform};
+use dkrt_abi::profiles;
 use std::sync::Mutex;
 use std::vec::Vec;
 
@@ -328,4 +330,33 @@ fn a_provider_row_is_found_by_its_name_hash_and_has_one_owner() {
     }
     assert_eq!(r.len(), 1);
     assert_eq!(r.index_of(0), Some(0));
+}
+
+/// The MIDI task reads the table while the UI task loads: the shift of an add and of a remove is one step under the interrupt mask, and a refusal or a row that is not there
+/// never masks.
+#[test]
+fn the_shift_of_an_add_and_of_a_remove_is_made_under_one_mask() {
+    let f = FakePlatform::new(profiles::ALL[0]);
+    let mut t = [empty(); PROVIDER_MAX];
+    let mut r = Rows::new();
+    let masked = || vec![Call::Mask, Call::Restore];
+    unsafe {
+        // a row in front of the loaded one: the loaded rows shift
+        assert_eq!(r.add_masked(&f, &mut t, 1, row!("b"), Some(200)), OK);
+        assert_eq!(*f.calls.borrow(), masked());
+        f.calls.borrow_mut().clear();
+        assert_eq!(r.add_masked(&f, &mut t, 2, row!("a"), Some(100)), OK);
+        assert_eq!(*f.calls.borrow(), masked(), "one mask for the whole shift");
+        assert_eq!(order(&t, r.len()), hashes(&["a", "b"]));
+        f.calls.borrow_mut().clear();
+        // a name that has an owner is refused: nothing shifted, so no mask
+        assert_eq!(r.add_masked(&f, &mut t, 3, row!("a"), Some(1)), E_PLAN_OWNER);
+        assert!(f.calls.borrow().is_empty());
+    }
+    r.remove_masked(&f, &mut t, 2);
+    assert_eq!(*f.calls.borrow(), masked());
+    assert_eq!((order(&t, r.len()), t[r.len()].name(), f.depth.get()), (hashes(&["b"]), 0, 0), "the gap closed and the mask is given back");
+    f.calls.borrow_mut().clear();
+    r.remove_masked(&f, &mut t, 2);
+    assert!(f.calls.borrow().is_empty(), "a row that is not there is no change");
 }

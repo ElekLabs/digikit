@@ -112,6 +112,7 @@ tail = true
 regs = { in = [], clobbers = ["d1", "ccr"] }
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"
 users = ["core/services/project"]
 doc = "Records the slot the setter was called with (also a call with the current slot: the setter ignores it, so the service does) and runs the displaced `mvs.b` in the tail. D1 and the flags are written by that instruction first."
 
@@ -134,6 +135,7 @@ tail = true
 regs = { in = ["d0", "d3"], clobbers = [] }
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"
 users = ["core/services/project"]
 doc = "Before the rts of the save: when D0.b is nonzero and D3 is not 0x80 it records the slot D3. Strict liveness leaves every register and the flags live at the return, so the routine saves D1 and the flags and keeps D0 and D3."
 
@@ -156,6 +158,7 @@ tail = true
 regs = { in = [], clobbers = [] }
 devices = ["dt2", "dn2"]
 mark = "V"
+context = "task"
 users = ["core/services/project"]
 doc = "At the exit of the clear callback, after the card write and the listing refresh: records the slot **(0x3c(SP)) as cleared, always (a failed clear then archives a `.dkp` that is still needed, which is recoverable). The routine saves D0, D1, D2, A0, A1 and the flags (strict liveness proves only A0 dead)."
 
@@ -178,6 +181,7 @@ tail = true
 regs = { in = [], clobbers = [] }
 devices = ["dt2", "dn2"]
 mark = "V"
+context = "task"
 users = ["core/services/project"]
 doc = "At the exit of the multi-slot clear callback: re-reads the vector from the job and records each slot as cleared, always (at most 129 entries are read). The routine saves D0, D1, D2, A0, A1 and the flags."
 
@@ -200,5 +204,6 @@ tail = true
 regs = { in = ["d0", "d6"], clobbers = [] }
 devices = ["dt2", "dn2"]
 mark = "V"
+context = "task"
 users = ["core/services/project"]
 doc = "Before the rts of the paste: when D0.b is nonzero it records the destination slot D6 as pasted over (a paste that did not reach the card write records nothing). The routine saves D1, A0, A1 and the flags and keeps D0 and D6."

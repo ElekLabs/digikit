@@ -181,7 +181,7 @@ export const LOAD_STATUS: [number, string, string][] = [
   [
     -45,
     'E_BOOT_ONLY',
-    'the module set is fixed after the boot hook (a reload of a loaded module is the only later load)',
+    'the module set is fixed after the boot hook: a service that must start at boot cannot load now, restart the device to load it (a reload of a loaded module is the only later load)',
   ],
   [-46, 'E_RANGE', 'a card write outside the store range'],
   [-47, 'E_CARD_RO', "the card's store area is not ours and not blank"],

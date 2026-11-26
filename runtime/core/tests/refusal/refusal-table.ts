@@ -105,7 +105,7 @@ export const ROWS: Record<string, Row> = {
   E_SEL_WRITE: { kind: 'open', reason: 'the block write of the selection record fails: needs a card that refuses writes' },
   E_CARD_BUSY: { kind: 'open', reason: 'a card transfer in flight while the selection is saved' },
   E_SAFE_MODE: { fail: { file: SAFE, test: 'the safe-once flag gives safe mode' }, pass: { file: CAPACITY, test: 'files: a file of the staging buffer size' } },
-  E_BOOT_ONLY: { kind: 'open', reason: 'a load call after the boot hook: no module or host command makes one' },
+  E_BOOT_ONLY: { kind: 'open', reason: 'a load call after the boot hook, or a live load of a service that must start at boot (menu text RESTART TO LOAD): no module or host command makes the first; the second is the live-load case of loader/tests/assembly_tests.rs' },
   E_RANGE: { kind: 'not-a-load', reason: 'a card write outside the store', covered: [{ file: 'runtime/core/tests/storage/card-safety.device.test.ts', test: 'E_RANGE' }] },
   E_CARD_RO: { kind: 'not-a-load', reason: 'the card area is not ours', covered: [{ file: 'runtime/core/tests/storage/card-safety.device.test.ts', test: 'E_CARD_RO' }] },
   E_CONTRACT: { fail: { file: IMAGE_RS, test: 'a_need_of_another_major_or_minor_or_a_higher_patch_is_refused' }, pass: loads },

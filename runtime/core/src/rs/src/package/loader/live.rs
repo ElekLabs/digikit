@@ -63,6 +63,117 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
     }
 
+    /// Search the card for the services the table `new` needs that no provider of the boot's search offers (the boot looks only for what its selection needs, so a service file
+    /// transferred since, or never needed by the selection, is not in `found`). The providers found are added after the others (`discover::find_more`), so the graph the live
+    /// check and the manager build holds them; the manager brings them up when it loads the module, through the checks of every service. A need the card does not meet stays
+    /// unmet (`E_MISSING`).
+    unsafe fn live_find(&mut self, new: &[u8]) -> i32 {
+        let Ok(t) = Keys::parse(new) else { return OK };
+        let mut want = [0u32; plan::WANT_MAX];
+        let nw = plan::unmet_needs(&[Some(t)], &mut want);
+        let mut missing = [0u32; plan::WANT_MAX];
+        let mut nm = 0;
+        let mut i = 0;
+        while i < nw {
+            let mut met = false;
+            let mut j = 0;
+            while j < self.found.n.min(PROVIDER_MAX) {
+                if let Ok(p) = Keys::parse(self.found.table(j)) {
+                    let mut w = 0;
+                    while let Some(h) = p.words(dkneeds::keys::tag::PROVIDES, w) {
+                        met |= h.0 == want[i];
+                        w += 1;
+                    }
+                }
+                j += 1;
+            }
+            if !met {
+                missing[nm] = want[i];
+                nm += 1;
+            }
+            i += 1;
+        }
+        if nm != 0 {
+            return discover::find_more(&mut self.m, &missing[..nm], dkrt_abi::fw_id::image_fw_id(&self.p), &mut self.found);
+        }
+        OK
+    }
+
+    /// Would the load of the table `new` bring up, at run time, a service that keeps per-project state? Such a service registers the settings overlay (its file imports
+    /// `dkc_settings_overlay_set`) and learns the current project only from the next project load event, so a bring-up in the middle of a project would run it unbound.
+    /// The firmware's current project is not cheap to read from here, so the load is refused (`E_BOOT_ONLY`: the service belongs to the boot's set) and a restart brings it up
+    /// bound. Only the providers the new file reaches through its hard needs count: found, not up, usable.
+    unsafe fn live_brings_up_overlay(&mut self, new: &[u8]) -> bool {
+        use dkneeds::keys::tag;
+        let Ok(t) = Keys::parse(new) else { return false };
+        let mut reach = [0u32; plan::WANT_MAX];
+        let mut nr = plan::unmet_needs(&[Some(t)], &mut reach);
+        let mut seen = [false; PROVIDER_MAX];
+        let mut grew = true;
+        while grew {
+            grew = false;
+            let mut j = 0;
+            while j < self.found.n.min(PROVIDER_MAX) {
+                if !seen[j] && !self.unusable[j] && records::module(MAX_MODULES + j).used == 0 {
+                    let mut hit = false;
+                    if let Ok(p) = Keys::parse(self.found.table(j)) {
+                        let mut w = 0;
+                        while let Some(h) = p.words(tag::PROVIDES, w) {
+                            hit |= reach[..nr].contains(&h.0);
+                            w += 1;
+                        }
+                        if hit {
+                            let mut i = 0;
+                            while let Some(n) = p.words(tag::NEEDS, i) {
+                                i += 1;
+                                if n.2 & 1 != 0 && !reach[..nr].contains(&n.0) && nr < plan::WANT_MAX {
+                                    reach[nr] = n.0;
+                                    nr += 1;
+                                }
+                            }
+                        }
+                    }
+                    if hit {
+                        seen[j] = true;
+                        grew = true;
+                        let at = self.found.path(j).len();
+                        let mut path = [0u8; discover::PATH_CAP + 1];
+                        path[..at].copy_from_slice(self.found.path(j));
+                        if let Ok(s) = self.m.stage(path.as_ptr()) {
+                            if imports_name(core::slice::from_raw_parts(s.ptr, s.size as usize), b"dkc_settings_overlay_set") {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                j += 1;
+            }
+        }
+        false
+    }
+
+    /// Is the import `import` (name hash), which the last file check could not resolve (`import_name`), exported by a provider of `found` that is not up yet? Only then does the
+    /// refusal wait for the manager, which brings the service up and links the module; any other unresolved import stays a refusal.
+    unsafe fn needs_service_down(&self, import: u32) -> bool {
+        if import == 0 {
+            return false;
+        }
+        let mut j = 0;
+        while j < self.found.n.min(PROVIDER_MAX) {
+            if let Ok(p) = Keys::parse(self.found.table(j)) {
+                let mut w = 0;
+                while let Some(h) = p.words(dkneeds::keys::tag::EXPORTS, w) {
+                    if h.0 == import && !self.unusable[j] && records::module(MAX_MODULES + j).used == 0 {
+                        return true;
+                    }
+                    w += 1;
+                }
+            }
+            j += 1;
+        }
+        false
+    }
+
     /// The live check of the table `new` at selection index `k` (the old module's slot for a reload, the index of a load): `OK`, or the refusal of its needs, then of the file by
     /// the rules of the core, then of any live module that no longer fits with it (`caps`: `live_caps`, which counts every live module again).
     pub(super) unsafe fn live_plan(&self, k: usize, new: &[u8], caps: &[DkrtCap]) -> i32 {
@@ -274,15 +385,41 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             }
             if let Some(table) = table_of_file(file) {
                 if Keys::parse(table).is_ok() {
-                    let r = self.live_plan(k, table, caps);
+                    // the search stages the provider files, so the module's file is staged again after it
+                    let r = self.live_find(table);
                     if r != OK {
+                        // a busy store: nothing is known about the card, the job asks again later (not "no such service")
                         return r;
+                    }
+                    match self.m.stage(path) {
+                        Ok(staged) => {
+                            let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+                            if let Some(table) = table_of_file(file) {
+                                let r = self.live_plan(k, table, caps);
+                                if r != OK {
+                                    return r;
+                                }
+                                // (the staged bytes are replaced by this look at the providers' files: `table` is not used after it)
+                                if self.live_brings_up_overlay(table) {
+                                    return E_BOOT_ONLY;
+                                }
+                            }
+                        }
+                        Err(e) => return e,
                     }
                 }
             }
         }
         let mut c = Checked::empty();
-        let r = self.check_file(path, Slot::Free, &mut c);
+        let mut r = self.check_file(path, Slot::Free, &mut c);
+        if r == E_IMPORT && self.needs_service_down(self.import_name) {
+            // an import of a service that is not up yet resolves when the manager brings the service up and links the module (`resolve_imports` with the module's needs); an
+            // import that still has no owner then refuses the load, which gives back everything it took
+            r = self.check_head(path, Slot::Free, &mut c);
+            if r == OK {
+                r = self.check_body(&mut c);
+            }
+        }
         if r != OK {
             return r;
         }
@@ -412,4 +549,21 @@ pub(crate) fn live_caps(caps: &mut [DkrtCap], own: (u32, u32)) {
 /// The selection indices at which a module is loaded.
 pub(crate) unsafe fn live_indices() -> [bool; SEL_MAX] {
     loader().live_at(SEL_MAX)
+}
+
+/// Does the module or service file `file` list `name` among its imports?
+fn imports_name(file: &[u8], name: &[u8]) -> bool {
+    let be = |p: usize| file.get(p..p + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize);
+    let (Some(off), Some(n)) = (be(dkneeds::H_IMPORT_OFF as usize), be(dkneeds::H_IMPORT_N as usize)) else { return false };
+    let len = dkneeds::CF_IMPORT_LEN as usize;
+    let mut i = 0;
+    while i < n {
+        let Some(e) = file.get(off + i * len..off + (i + 1) * len) else { return false };
+        let end = e.iter().position(|b| *b == 0).unwrap_or(len);
+        if &e[..end] == name {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }

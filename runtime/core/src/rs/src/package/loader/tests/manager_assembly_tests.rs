@@ -292,6 +292,44 @@ fn a_failed_dsp_part_takes_down_the_closure_of_its_package_and_marks_the_modules
     }
 }
 
+/// A restore that answers busy inside the take-down of a failed DSP part (a task below the UI task is not parked) does not retain the DSP state: the load stays pending, a later pass
+/// finishes the take-down, the DSP loader goes idle and the next job is not refused with `E_RELOAD_RETAINED`.
+#[test]
+fn a_busy_restore_in_the_take_down_of_a_failed_dsp_part_keeps_it_pending_and_a_later_pass_ends_it() {
+    use crate::package::dsp;
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            // the service has hooks: its take-down restores them (a package without entries has nothing to restore)
+            let (mut l, _plan) = planned(dev, &image, &[], &[&SVC_USER], &[SVC_TEST]);
+            let rec = boot_record(&[SVC_USER.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot_with(&rec, &capacity(&l.p));
+            let (user, service) = (id(0), id(MAX_MODULES));
+            assert!(rt.manager().unwrap().live().contains(service), "{}", dev.name);
+            assert!(l.installer.count() > 0, "{}: the hooks are in", dev.name);
+            // the DSP part of the service is in flight and given up while a restore is busy once
+            dsp::ds().phase = dsp::PH_ROWS;
+            dsp::ds().pending.rec = service.0 as u32;
+            l.busy_restores = 1;
+            assert!(rt.cancel_dsp(service.0 as usize, dkrt_sdk::E_DSP_XFER), "{}", dev.name);
+            assert!(!dsp::retained(), "{}: a busy restore does not retain the DSP state", dev.name);
+            assert_eq!(dsp::ds().phase, dsp::PH_ROWS, "{}: the load stays pending", dev.name);
+            assert!(rt.manager().unwrap().restore_pending().is_some(), "{}: the manager holds the take-down", dev.name);
+            // the next pass: the tasks are parked, the restore completes and the failure is final
+            rt.dsp_step(crate::package::handlers::tests::two());
+            assert!(!dsp::retained(), "{}", dev.name);
+            assert_eq!(dsp::ds().phase, dsp::PH_IDLE, "{}: the loader is idle again", dev.name);
+            let m = rt.manager().unwrap();
+            assert!(!m.live().contains(user) && !m.live().contains(service), "{}: the closure is down", dev.name);
+            assert_eq!(l.installer.count(), 0, "{}: the hooks are out", dev.name);
+            assert_eq!(crate::boot::info().results[0], dkrt_sdk::E_MISSING, "{}", dev.name);
+        }
+        clean_state();
+    }
+}
+
 #[test]
 fn the_live_jobs_steps_unload_a_module_and_load_it_again_and_another_with_the_service_staying_up() {
     let _g = clean();
@@ -474,6 +512,29 @@ fn a_live_load_refused_before_anything_is_placed_logs_its_own_detail_and_not_tha
             let path = std::format!("modules/{}.dkm\0", LOCAL_PING_USER.leaf).into_bytes();
             assert_eq!(rt.live_load_with(1, path.as_ptr(), &live_cap(&l)), dkrt_sdk::E_MISSING, "{}", dev.name);
             assert_eq!((crate::package::loader::missing(), l.decl_diff, l.import_hash), ([0; dkrt_sdk::NEEDS_LEN], (0, 0), 0), "{}: the refusal logs its own detail", dev.name);
+        }
+        clean_state();
+    }
+}
+
+#[test]
+fn a_live_load_finds_a_packed_service_on_the_card_that_the_boot_selection_did_not_need() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            // the card holds `local-ping` and its user, but the selection is `svc-test-user`, whose boot search looks for `svc-test` only
+            let (mut l, _plan) = planned(dev, &image, &[], &[&SVC_USER, &LOCAL_PING_USER], &[SVC_TEST, LOCAL_PING]);
+            let mut rec = boot_record(&[SVC_USER.leaf]);
+            rec.count = 1;
+            crate::boot::info().count = 1;
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot_with(&rec, &capacity(&l.p));
+            let path = std::format!("modules/{}.dkm\0", LOCAL_PING_USER.leaf).into_bytes();
+            assert_eq!(l.live_check_load(1, path.as_ptr(), &live_cap(&l)), dkrt_sdk::OK, "{}: the check finds the service", dev.name);
+            assert_eq!(rt.live_load_with(1, path.as_ptr(), &live_cap(&l)), dkrt_sdk::OK, "{}", dev.name);
+            assert!(rt.manager().unwrap().live().contains(id(1)), "{}: the module is up", dev.name);
+            assert!(l.found.n >= 2, "{}: the provider was added to the boot's", dev.name);
         }
         clean_state();
     }

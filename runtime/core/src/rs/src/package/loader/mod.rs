@@ -69,6 +69,7 @@ pub(crate) mod install;
 mod live;
 mod load;
 pub(crate) mod package;
+mod park;
 pub(crate) use package::PhaseKind;
 mod plan;
 mod port;
@@ -186,6 +187,8 @@ pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     decl_diff: (u32, u32),
     /// The name hash that the port file did not list, of the last service file that failed with E_IMPORT for it (`port::Lookup::Unlisted`); 0: none.
     import_hash: u32,
+    /// The name hash of the import that the last `check_file` could not resolve (0: none). A live check relaxes the refusal only when a found provider that is not up yet exports that name.
+    import_name: u32,
     /// The header table of the module at each selection index, kept while the boot reads each file once (`capture`); `table_len` 0: none (the file
     /// is missing, torn, of the old format or has a larger table).
     tables: [[u8; TABLE_MAX]; SEL_MAX],
@@ -220,6 +223,9 @@ pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     sel_of_rec: [u8; MAX_MODULES],
     /// The steps of a teardown that ran for each record (`TORN_*`): a second `unload_body` after `E_BUSY` skips them, so `fini` and the role's undo run once.
     torn: [u8; records::REC_MAX],
+    /// Host tests: the next this many restores answer busy, as when a task below the UI task is not parked (the gate itself is covered by `park_tests`).
+    #[cfg(test)]
+    busy_restores: u32,
     /// The tick address of a module whose tick the teardown stopped (valid while `TORN_TICK` is set): a reload that cannot finish gives it back.
     saved_tick: [u32; MAX_MODULES],
     /// The block count when a reload closed the entries of each module (`TORN_DRAIN`); `None`: the platform has no block clock.
@@ -342,10 +348,13 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             m,
             r,
             phase: Phase::Closed,
+            #[cfg(test)]
+            busy_restores: 0,
             roles: [0; records::REC_MAX],
             missing: [0; NEEDS_LEN],
             decl_diff: (0, 0),
             import_hash: 0,
+            import_name: 0,
             tables: [[0; TABLE_MAX]; SEL_MAX],
             table_len: [0; SEL_MAX],
             accepted: [false; SEL_MAX],

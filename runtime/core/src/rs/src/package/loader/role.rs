@@ -136,7 +136,7 @@ unsafe fn hook_items<P: PackagePlatform, M: Images, R: Registry>(l: &mut Loader<
         if n == SITES_MAX {
             return Err(E_PLAN_FIT);
         }
-        out[n] = HookItem { addr: s.addr, len: s.len as u32, check: s.check, entry };
+        out[n] = HookItem { addr: s.addr, len: s.len as u32, check: s.check, entry, ctx: dkneeds::keys::site_context(s.flags) };
         n += 1;
     }
     Ok(n)
@@ -198,7 +198,7 @@ unsafe fn patch_items<P: PackagePlatform, M: Images, R: Registry>(
         if n == out.len() {
             return Err(E_PLAN_FIT);
         }
-        out[n] = PatchItem { addr: s.addr, len: s.len as u32, check: s.check, value };
+        out[n] = PatchItem { addr: s.addr, len: s.len as u32, check: s.check, value, ctx: dkneeds::keys::site_context(s.flags) };
         n += 1;
     }
     Ok(n)
@@ -461,9 +461,9 @@ pub(super) struct ServiceItems {
 impl ServiceItems {
     pub(super) const fn empty() -> ServiceItems {
         ServiceItems {
-            hooks: [HookItem { addr: 0, len: 0, check: [0; 8], entry: 0 }; SITES_MAX],
+            hooks: [HookItem { addr: 0, len: 0, check: [0; 8], entry: 0, ctx: 0 }; SITES_MAX],
             nh: 0,
-            patches: [PatchItem { addr: 0, len: 0, check: [0; 8], value: 0 }; SERVICE_PATCHES_MAX],
+            patches: [PatchItem { addr: 0, len: 0, check: [0; 8], value: 0, ctx: 0 }; SERVICE_PATCHES_MAX],
             np: 0,
             slots: [(0u32, 0u32); dkneeds::SLOTS_MAX as usize],
             ns: 0,
@@ -537,7 +537,8 @@ unsafe fn service_activate<P: PackagePlatform, M: Images, R: Registry>(l: &mut L
     if let Err(e) = Backend::install(&mut l.dsp_install, &l.p, rec as u8, &DspItems { slots: &it.dsp_slots[..it.nd] }) {
         return e;
     }
-    let cf = CfItems { hooks: &it.hooks[..it.nh], patches: &it.patches[..it.np], image_base: base, image_size, slots: &it.slots[..it.ns] };
+    let parks = l.task_parks();
+    let cf = CfItems { hooks: &it.hooks[..it.nh], patches: &it.patches[..it.np], image_base: base, image_size, slots: &it.slots[..it.ns], gate: parks.gate(l.live()) };
     match Backend::install(&mut l.installer, &l.p, rec as u8, &cf) {
         Ok(()) => {
             l.provs[index_of(rec)].query_v1 = query_v1;

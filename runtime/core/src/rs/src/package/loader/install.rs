@@ -10,6 +10,7 @@
 
 use dkrt_abi::link::Sequence;
 use dkrt_abi::package_platform::PackagePlatform;
+use dkneeds::keys::CTX_TASK;
 use dkrt_sdk::*;
 
 /// What one installer backend installs for one record and takes down again. The ColdFire backend ([`Installer`]) writes `jmp.l` over hook sites and fills slot words in
@@ -27,13 +28,15 @@ pub trait Backend {
 }
 
 /// One hook site a service takes, from the port file's `SITES` item of the hook and the service's `HOOKS` item: where the site is, how many stock bytes it
-/// displaces, the check value of those bytes (the first 8 bytes of their SHA-256) and the image offset of the service's entry that the site jumps to.
+/// displaces, the check value of those bytes (the first 8 bytes of their SHA-256), the image offset of the service's entry that the site jumps to and the context of the
+/// firmware code at the site (`dkneeds::keys::CTX_*`, from the flags of the `SITES` item; `CTX_TASK` when the port file names none).
 #[derive(Clone, Copy)]
 pub struct HookItem {
     pub addr: u32,
     pub len: u32,
     pub check: [u8; 8],
     pub entry: u32,
+    pub ctx: u8,
 }
 
 /// One patch a service takes, from the port file's `SITES` item of the patch and the value the service declared in `init`: where the bytes are, how many (1, 2 or 4), the check value
@@ -44,15 +47,87 @@ pub struct PatchItem {
     pub len: u32,
     pub check: [u8; 8],
     pub value: u32,
+    /// As [`HookItem::ctx`]: the context of the code that reads the bytes.
+    pub ctx: u8,
 }
 
-/// The ColdFire items of one record: its hook sites (`hooks`, with the entries in the image at `image_base`), its patches and the slot words it fills (address, value).
+/// The ColdFire items of one record: its hook sites (`hooks`, with the entries in the image at `image_base`), its patches and the slot words it fills (address, value), and the
+/// [`Gate`] of the install.
 pub struct CfItems<'a> {
     pub hooks: &'a [HookItem],
     pub patches: &'a [PatchItem],
     pub image_base: u32,
     pub image_size: u32,
     pub slots: &'a [(u32, u32)],
+    pub gate: Gate<'a>,
+}
+
+/// A task of a priority below the UI task's that can be inside a `task` hook (the BgWorker, the console task) and the place of the word that says whether it waits: the task is
+/// parked iff the waiter word of its top-level wait object holds its own TCB (the kernel's pend stores the TCB there before it blocks and the post clears it, so a task that is
+/// running or was just woken reads "not parked"). The waiter word is at `*wait + off` when `indirect` (the wait object hangs off a cell: the BgWorker singleton), else at
+/// `wait + off`; a cell that holds 0 is a task without its object yet, which reads "not parked".
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Park {
+    pub tcb: u32,
+    pub wait: u32,
+    pub indirect: bool,
+    pub off: u32,
+}
+
+/// Most tasks the installer waits for.
+pub const PARKS_MAX: usize = 4;
+
+/// When the installer may write: a hook site or patch of context `CTX_TASK` is written or restored at run time (`live`) only while every task of `parks` is parked, checked
+/// under the interrupt mask, which keeps the UI task (the task that writes) from being preempted between the check and the writes. Otherwise `E_BUSY` and nothing changed; the
+/// caller asks again on a later pass. `ui` and `irq` sites never wait, and nothing waits at the boot, when the tasks have not run yet. `parks` is `None` when the port file
+/// does not list the facts: a `task` site then answers `E_IMPORT`.
+#[derive(Clone, Copy)]
+pub struct Gate<'a> {
+    pub live: bool,
+    pub parks: Option<&'a [Park]>,
+}
+
+impl Gate<'static> {
+    /// The boot (and a test that has no task): no waiting.
+    pub const BOOT: Gate<'static> = Gate { live: false, parks: Some(&[]) };
+}
+
+impl Gate<'_> {
+    /// `Ok` when every task is parked (or the gate is not live). Call it under the mask.
+    unsafe fn clear<P: PackagePlatform>(&self, p: &P) -> Result<(), i32> {
+        if !self.live {
+            return Ok(());
+        }
+        let Some(parks) = self.parks else {
+            return Err(E_IMPORT);
+        };
+        let mut i = 0;
+        while i < parks.len() {
+            if !parked(p, &parks[i]) {
+                return Err(E_BUSY);
+            }
+            i += 1;
+        }
+        Ok(())
+    }
+}
+
+unsafe fn word<P: PackagePlatform>(p: &P, addr: u32) -> u32 {
+    let mut b = [0u8; 4];
+    p.read_code(addr, &mut b);
+    u32::from_be_bytes(b)
+}
+
+/// Whether the task of `k` waits at its top-level wait object now.
+unsafe fn parked<P: PackagePlatform>(p: &P, k: &Park) -> bool {
+    let mut at = k.wait;
+    if k.indirect {
+        at = word(p, at);
+        if at == 0 {
+            return false;
+        }
+    }
+    word(p, at.wrapping_add(k.off)) == k.tcb
 }
 
 /// Installed sites at most (`[limits.format] install_sites` of sdk/sdk.toml): 48 today, over all providers.
@@ -72,10 +147,12 @@ pub struct Site {
     pub rec: u8,
     pub addr: u32,
     pub len: u8,
+    /// The context of the code at the site (`dkneeds::keys::CTX_*`): the restore waits for the tasks to be parked for a `CTX_TASK` site.
+    pub ctx: u8,
     pub stock: [u8; 64],
 }
 
-const EMPTY_SITE: Site = Site { rec: 0, addr: 0, len: 0, stock: [0; 64] };
+const EMPTY_SITE: Site = Site { rec: 0, addr: 0, len: 0, ctx: 0, stock: [0; 64] };
 
 /// One installed patch, owned by record `rec`: the log entry that gives the stock bytes back.
 #[derive(Clone, Copy)]
@@ -83,10 +160,11 @@ pub struct PatchSite {
     pub rec: u8,
     pub addr: u32,
     pub len: u8,
+    pub ctx: u8,
     pub stock: [u8; 4],
 }
 
-const EMPTY_PATCH: PatchSite = PatchSite { rec: 0, addr: 0, len: 0, stock: [0; 4] };
+const EMPTY_PATCH: PatchSite = PatchSite { rec: 0, addr: 0, len: 0, ctx: 0, stock: [0; 4] };
 
 /// The slot words the ColdFire backend filled for each record, kept so that `restore` needs only the record.
 const SLOT_WORDS_MAX: usize = dkneeds::SLOTS_MAX as usize * dkrt_sdk::PROVIDER_MAX;
@@ -242,6 +320,22 @@ impl Installer {
         image_size: u32,
         slots: &[(u32, u32)],
     ) -> Result<(), i32> {
+        self.install_gated(p, rec, hooks, patches, image_base, image_size, slots, &Gate::BOOT)
+    }
+
+    /// [`Installer::install`] with a [`Gate`]: at run time a `task` site is written only while the tasks of the gate are parked (checked under the mask, with the compare of the
+    /// live bytes), else `E_BUSY` (`E_IMPORT` when the port file lists no task facts) with nothing written. The loader's install paths all give the gate of their phase.
+    pub unsafe fn install_gated<P: PackagePlatform>(
+        &mut self,
+        p: &P,
+        rec: u8,
+        hooks: &[HookItem],
+        patches: &[PatchItem],
+        image_base: u32,
+        image_size: u32,
+        slots: &[(u32, u32)],
+        gate: &Gate<'_>,
+    ) -> Result<(), i32> {
         if self.disarmed {
             return Ok(());
         }
@@ -257,7 +351,7 @@ impl Installer {
             if super::port::bytes_check(&stock[..len]) != b.check {
                 return Err(E_HOOK_STOCK);
             }
-            self.sites[first + i] = Site { rec, addr: b.addr, len: b.len as u8, stock };
+            self.sites[first + i] = Site { rec, addr: b.addr, len: b.len as u8, ctx: b.ctx, stock };
             i += 1;
         }
         let mut i = 0;
@@ -269,10 +363,17 @@ impl Installer {
             if super::port::bytes_check(&stock[..len]) != b.check {
                 return Err(E_HOOK_STOCK);
             }
-            self.patches[firstp + i] = PatchSite { rec, addr: b.addr, len: b.len as u8, stock };
+            self.patches[firstp + i] = PatchSite { rec, addr: b.addr, len: b.len as u8, ctx: b.ctx, stock };
             i += 1;
         }
         let sr = p.irq_mask();
+        // a site that a task below the UI task can be inside is written only while those tasks wait: the UI task holds the mask, so no task runs between this check and the writes
+        if hooks.iter().any(|h| h.ctx == CTX_TASK) || patches.iter().any(|h| h.ctx == CTX_TASK) {
+            if let Err(e) = gate.clear(p) {
+                p.irq_restore(sr);
+                return Err(e);
+            }
+        }
         // the compare under the mask: nothing may have changed the sites since the copies were read
         let mut i = 0;
         while i < hooks.len() {
@@ -347,11 +448,24 @@ impl Installer {
     /// Write the stock bytes back for every patch and hook site of `rec`, clear the slot words it filled and drop the sites. One mask. The patches go back in the reverse of the
     /// order they went in (the log is a stack), then the hooks.
     pub unsafe fn restore<P: PackagePlatform>(&mut self, p: &P, rec: u8) {
+        // the boot gate never refuses
+        let _ = self.restore_gated(p, rec, &Gate::BOOT);
+    }
+
+    /// [`Installer::restore`] with a [`Gate`]: at run time a record with a `task` site is restored only while the tasks of the gate are parked (checked under the mask), else
+    /// `E_BUSY` and nothing changed (the caller asks again on a later pass); a record with `ui` and `irq` sites only never waits.
+    pub unsafe fn restore_gated<P: PackagePlatform>(&mut self, p: &P, rec: u8, gate: &Gate<'_>) -> Result<(), i32> {
         // a record that installed nothing (a file that failed before its install) costs no platform call
         if !self.sites[..self.n].iter().any(|s| s.rec == rec) && !self.patches[..self.np].iter().any(|s| s.rec == rec) && !self.slot_words[..self.ns].iter().any(|s| s.0 == rec) {
-            return;
+            return Ok(());
         }
         let sr = p.irq_mask();
+        if self.sites[..self.n].iter().any(|s| s.rec == rec && s.ctx == CTX_TASK) || self.patches[..self.np].iter().any(|s| s.rec == rec && s.ctx == CTX_TASK) {
+            if let Err(e) = gate.clear(p) {
+                p.irq_restore(sr);
+                return Err(e);
+            }
+        }
         let mut i = self.np;
         while i > 0 {
             i -= 1;
@@ -396,14 +510,16 @@ impl Installer {
             }
         }
         p.irq_restore(sr);
+        Ok(())
     }
 }
 
 impl Backend for Installer {
     type Items<'a> = CfItems<'a>;
     unsafe fn install<P: PackagePlatform>(&mut self, p: &P, rec: u8, items: &CfItems<'_>) -> Result<(), i32> {
-        Installer::install(self, p, rec, items.hooks, items.patches, items.image_base, items.image_size, items.slots)
+        Installer::install_gated(self, p, rec, items.hooks, items.patches, items.image_base, items.image_size, items.slots, &items.gate)
     }
+    /// The boot gate: the loader restores through [`Installer::restore_gated`], which has the gate of its phase.
     unsafe fn restore<P: PackagePlatform>(&mut self, p: &P, rec: u8) {
         Installer::restore(self, p, rec)
     }
@@ -536,6 +652,9 @@ fn flush_site<P: PackagePlatform>(p: &P, addr: u32, len: u8) {
 }
 
 #[cfg(test)]
+mod gate_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::fake_platform::{Call, FakePlatform};
@@ -572,7 +691,7 @@ mod tests {
                     }
                     check.copy_from_slice(&out[..8]);
                 }
-                HookItem { addr: b.addr, len: b.len, check, entry: 0x40 }
+                HookItem { addr: b.addr, len: b.len, check, entry: 0x40, ctx: CTX_TASK }
             })
             .collect()
     }
@@ -805,7 +924,7 @@ mod tests {
 
     /// A patch of `len` bytes at `addr` whose stock bytes are the first `len` of `stock`; the check value is theirs.
     fn patch(addr: u32, len: u32, stock: &[u8], value: u32) -> PatchItem {
-        PatchItem { addr, len, check: crate::package::loader::port::bytes_check(&stock[..len as usize]), value }
+        PatchItem { addr, len, check: crate::package::loader::port::bytes_check(&stock[..len as usize]), value, ctx: CTX_TASK }
     }
 
     fn fake_with(patches: &[(u32, &[u8])]) -> FakePlatform {

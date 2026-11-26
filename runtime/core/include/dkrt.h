@@ -249,7 +249,7 @@
 #define DKRT_E_SEL_WRITE (-42)           /* the firmware's block write failed */
 #define DKRT_E_CARD_BUSY (-43)           /* a card transfer is in flight */
 #define DKRT_E_SAFE_MODE (-44)           /* this boot is in safe mode: no module was loaded */
-#define DKRT_E_BOOT_ONLY (-45)           /* the module set is fixed after the boot hook (a reload of a loaded module is the only later load) */
+#define DKRT_E_BOOT_ONLY (-45)           /* the module set is fixed after the boot hook: a service that must start at boot cannot load now, restart the device to load it (a reload of a loaded module is the only later load) */
 #define DKRT_E_RANGE (-46)               /* a card write outside the store range */
 #define DKRT_E_CARD_RO (-47)             /* the card's store area is not ours and not blank */
 #define DKRT_E_CONTRACT (-48)            /* the module needs another runtime version than this one (another major or minor, or a higher patch) */

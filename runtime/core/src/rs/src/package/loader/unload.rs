@@ -2,9 +2,16 @@
 use super::*;
 
 impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
-    /// The ColdFire part of `uninstall`: the hook sites back to stock and the slot words zero.
-    pub(super) unsafe fn uninstall_cf(&mut self, rec: usize) {
-        self.installer.restore(&self.p, rec as u8);
+    /// The ColdFire part of `uninstall`: the hook sites back to stock and the slot words zero. False when a site that a task below the UI task can be inside cannot be written
+    /// yet (the tasks do not wait): nothing was changed.
+    pub(super) unsafe fn uninstall_cf(&mut self, rec: usize) -> bool {
+        #[cfg(test)]
+        if self.busy_restores > 0 {
+            self.busy_restores -= 1;
+            return false;
+        }
+        let parks = self.task_parks();
+        self.installer.restore_gated(&self.p, rec as u8, &parks.gate(self.live())).is_ok()
     }
 
     /// The DSP part of `uninstall`: the DSP slots zero. False when the DSP does not take the clear.

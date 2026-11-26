@@ -130,6 +130,57 @@ mark = "D"
 users = ["core/runtime"]
 doc = "The kernel's current-TCB pointer variable (DT2 1.17 0x47db3f64, DN2 1.12 0x4664bcdc: the literal that cf.rtos.fn.sem_pend loads first; it stores the value as the semaphore's waiting task). Read the word at this address to learn which task runs now; the kernel is byte-identical on all three images."
 
+# The task facts of the installer (runtime/core/src/rs/src/package/loader/install.rs): a hook site that firmware code of a task below the UI task's priority can be inside
+# is written or restored only while every such task waits at its top-level wait object (u0-entry-contexts.md section 3). A task is parked iff the waiter word of that wait
+# object holds its own TCB: the kernel's pend stores the current TCB there before it blocks (the pend functions 0x400013a6 counting and 0x4000141a binary, the same on both images: `move.l A0,(0x4,A1)` with A0 the current TCB)
+# and the post clears the word, so a woken or running task reads "not parked". Two tasks reach a `task` hook: the BgWorker (project load, save, clear, paste) and the
+# console task (`#PLAY_PATTERN`). `port_file = true` lists the names in the port file, where the loader reads them; `codegen = false`: no binding, the runtime reads them from the port file. [D]: read from the images by one agent.
+[[value]]
+name = "cf.rtos.value.bgworker.tcb"
+cpu = "cf"
+rule = { kind = "cf_literal", hash = "f032bf16fa7967b8f4f75e47dc3055ae", offset = 0x1a, len = 4 }
+devices = ["dt2", "dn2"]
+port_file = true
+codegen = false
+mark = "D"
+users = ["core/runtime"]
+doc = "The static TCB of the BgWorker task (priority 2), the literal `pea (tcb).l` that BgWorker::ctor passes to the task constructor (DT2 1.17 0x43172de4, DN2 1.12 0x42c6a1d0; the function is 0x400f0d7c and 0x400f2758)."
+
+[[value]]
+name = "cf.rtos.value.bgworker.cell"
+cpu = "cf"
+rule = { kind = "cf_literal", hash = "3ad9ebe9ba92b0f367fe6fb5c4846806", ordinal = 0, offset = 0xa, len = 4 }
+devices = ["dt2", "dn2"]
+port_file = true
+codegen = false
+mark = "D"
+users = ["core/runtime"]
+doc = "The cell that holds the BgWorker singleton (DT2 1.17 0x44f37090, DN2 1.12 0x44648930; the `tst.l` of the task entry, which creates the object when the cell is 0 and then runs the job loop on the object). The job loop pends on the semaphore at object + 0x14, so its waiter word is at *cell + 0x18: it is an indirection, the cell is 0 until the object exists."
+
+[[value]]
+name = "cf.rtos.value.console.tcb"
+cpu = "cf"
+rule.dt2 = { kind = "cf_literal", hash = "9d6efd6eebbf956849b58bc3cd1cd556", offset = 0x2c, len = 4 }
+rule.dn2 = { kind = "cf_literal", hash = "0cfa77e0415e93225c42eafae994ed9f", offset = 0x2c, len = 4 }
+devices = ["dt2", "dn2"]
+port_file = true
+codegen = false
+mark = "D"
+users = ["core/runtime"]
+doc = "The static TCB of the serial console command task (priority 2), the literal that its creation function passes to cf.rtos.fn.task_create (DT2 1.17 0x4039be58, DN2 1.12 0x40386e48; the function is 0x400cc79e and 0x400cebd2)."
+
+[[value]]
+name = "cf.rtos.value.console.queue"
+cpu = "cf"
+rule.dt2 = { kind = "cf_literal", hash = "9d6efd6eebbf956849b58bc3cd1cd556", offset = 0xe, len = 4 }
+rule.dn2 = { kind = "cf_literal", hash = "0cfa77e0415e93225c42eafae994ed9f", offset = 0xe, len = 4 }
+devices = ["dt2", "dn2"]
+port_file = true
+codegen = false
+mark = "D"
+users = ["core/runtime"]
+doc = "The queue the console task pops its command lines from (DT2 1.17 0x403a0eac, DN2 1.12 0x4038be9c; the literal of the queue init in its creation function). The pop pends on the queue's semaphore at queue + 8, so the waiter word is at queue + 0xc (the queue layout is the kernel's, the same on both images)."
+
 [[value]]
 name = "cf.rtos.value.reset.clear_helper"
 was = ["cf.reset.clear_helper", "cf.rtos.value.reset_clear_helper"]

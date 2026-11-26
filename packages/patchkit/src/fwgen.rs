@@ -71,6 +71,10 @@ struct Entry {
     /// Its anchor resolves and is checked like any other, but a module that does not use it never sees it change.
     #[serde(default = "yes")]
     codegen: bool,
+    /// `port_file = true`: the name is listed in the port file although no service uses it, for a fact that the runtime's own loader reads at run time (the task facts of the
+    /// installer: `cf.rtos.value.bgworker.tcb`). Only for a `cf` entry.
+    #[serde(default)]
+    port_file: bool,
 }
 
 fn yes() -> bool {
@@ -114,6 +118,9 @@ struct Hook {
     #[serde(default)]
     users: Vec<String>,
     doc: Option<String>,
+    /// The context the firmware code at the site runs in, for a hook a service takes: `"ui"` (the UI task only), `"above_ui"` (a task of a higher priority than the UI task, or an interrupt handler: never in flight while the UI task runs) or `"task"` (a task of a lower priority: the BgWorker, the console task). The port file packs it into the flags of the site; the installer waits for the
+    /// lower tasks to be parked before it writes or restores a `task` site at run time. No `context` means `task` (the safe default).
+    context: Option<String>,
 }
 
 /// The registers of a hook: the ones the stub reads and the ones it may change. A SHARC hook can also name the mode state.
@@ -283,6 +290,8 @@ pub struct HookDecl {
     pub exits: Vec<String>,
     /// The `users` of the declaration (module ids).
     pub users: Vec<String>,
+    /// `dkneeds::keys::CTX_TASK`, `CTX_UI` or `CTX_ABOVE_UI`: the `context` of the declaration (task when it has none).
+    pub context: u8,
 }
 
 /// The prefix of a `users` entry that is a service module id.
@@ -317,7 +326,7 @@ pub fn service_decls_with(
             .into_iter()
             .flatten()
         {
-            if e.cpu == "cf" && is_service(&e.users) {
+            if e.cpu == "cf" && (e.port_file || is_service(&e.users)) {
                 names.push(NameDecl {
                     name: e.name.clone(),
                     devices: e.devices.clone(),
@@ -330,6 +339,17 @@ pub fn service_decls_with(
                 .as_deref()
                 .map_or(h.name.starts_with("cf."), |c| c == "cf");
             if cf && is_service(&h.users) {
+                let context = match h.context.as_deref() {
+                    None | Some("task") => dkneeds::keys::CTX_TASK,
+                    Some("ui") => dkneeds::keys::CTX_UI,
+                    Some("above_ui") => dkneeds::keys::CTX_ABOVE_UI,
+                    Some(c) => {
+                        return Err(err!(
+                            "{}: context {c:?} is not ui, above_ui or task",
+                            h.name
+                        ));
+                    }
+                };
                 hooks.push(HookDecl {
                     name: h.name.clone(),
                     devices: h.devices.clone(),
@@ -339,6 +359,7 @@ pub fn service_decls_with(
                     handler: h.handler.is_some(),
                     exits: h.exits.clone(),
                     users: h.users.clone(),
+                    context,
                 });
             }
         }
@@ -1831,7 +1852,62 @@ pub fn generate_with_ports(root: &Path) -> Result<Vec<(String, String)>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{c_comment, render};
+    use super::{c_comment, render, service_decls};
+    use dkneeds::keys::{CTX_ABOVE_UI, CTX_TASK, CTX_UI};
+
+    fn hook_text(context: &str) -> String {
+        format!(
+            r#"
+[[hook]]
+name = "cf.view.hook.probe"
+site = "cf.view.site.probe"
+cpu = "cf"
+mode = "replace"
+regs = {{ in = [], clobbers = [] }}
+users = ["core/services/probe"]
+doc = "A probe."
+{context}
+"#
+        )
+    }
+
+    #[test]
+    fn a_hook_context_is_read_and_no_context_means_task() {
+        let ctx = |c: &str| service_decls(&[hook_text(c).as_str()]).unwrap().1[0].context;
+        assert_eq!(ctx(""), CTX_TASK);
+        assert_eq!(ctx("context = \"task\""), CTX_TASK);
+        assert_eq!(ctx("context = \"ui\""), CTX_UI);
+        assert_eq!(ctx("context = \"above_ui\""), CTX_ABOVE_UI);
+        let bad = service_decls(&[hook_text("context = \"main\"").as_str()]).unwrap_err();
+        assert!(
+            bad.to_string().contains("not ui, above_ui or task"),
+            "{bad}"
+        );
+    }
+
+    #[test]
+    fn a_port_file_name_is_listed_without_a_service_user() {
+        let value = |extra: &str| {
+            format!(
+                r#"
+[[value]]
+name = "cf.rtos.value.probe"
+cpu = "cf"
+rule = {{ kind = "cf_literal", hash = "00", offset = 0, len = 4 }}
+users = ["core/runtime"]
+doc = "A probe."
+{extra}
+"#
+            )
+        };
+        let listed = |t: String| service_decls(&[t.as_str()]).unwrap().0.len();
+        assert_eq!(
+            listed(value("")),
+            0,
+            "a runtime-only name stays out of the port file"
+        );
+        assert_eq!(listed(value("port_file = true")), 1);
+    }
 
     #[test]
     fn c_comment_has_no_comment_delimiters() {
