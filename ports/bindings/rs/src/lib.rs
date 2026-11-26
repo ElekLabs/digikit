@@ -423,6 +423,12 @@ pub mod menu {
     }
 
     unsafe extern "C" {
+        /// The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only.
+        #[link_name = "cf.menu.fn.settings_list_rebuild"]
+        pub fn settings_list_rebuild(menu: *mut u8);
+    }
+
+    unsafe extern "C" {
         /// Menu vtable slot 26: calls `check` through slot 21 when `is_checked` (slot 25) says no, else `uncheck` through slot 22. A subclass that overrides those slots changes this.
         #[link_name = "cf.menu.fn.toggle_check"]
         pub fn toggle_check(menu: *mut u8, index: i32);
@@ -450,6 +456,12 @@ pub mod menu {
         /// The MenuWithPopoutSideBarsView vtable, slot 0 at the stored address (DT2 0x4021d1b0, DN2 0x40206b7c), 43 slots (0 to 42) of 4 bytes. It copies slots 0 to 38 of the CompactVerticalMenuView table, overrides 31 paint, 32 key, 33 encoder, 38, and adds 39 main-list paint hook, 40 rebuild (empty stub 0x401d181a), 41 populate the right panel (empty stub 0x401d181c), 42 left-panel hook (DT2 0x401ba394). A subclass copies the table and overrides 39, 41 and 42.
         #[link_name = "cf.menu.data.popout_vtable"]
         pub static POPOUT_VTABLE: u8;
+    }
+
+    unsafe extern "C" {
+        /// The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list.
+        #[link_name = "cf.menu.data.settings_vtable"]
+        pub static SETTINGS_VTABLE: u8;
     }
 
     unsafe extern "C" {

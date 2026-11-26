@@ -19,7 +19,9 @@ import { pollEmulated } from '@digi/regression/runtime/waits.ts';
  * - the full-screen view is a new top view of the stack (its vptr is not the one below), draws on every frame and gets the keys; YES opens the stock NameView (another top view);
  *   YES on it calls `done` with the text, NO calls nothing; NO closes the view and `closed` runs;
  * - the overlay is a new top view and goes away on the module's request;
- * - an unload with the view open takes it off the stack (the stack is what it was before the view) and removes the rows (the item count is what it was before the module), without a fault.
+ * - an unload with the view open takes it off the stack (the stack is what it was before the view) and removes the rows (the item count is what it was before the module), without a fault;
+ * - the stock list is built again after a row is added or removed after its first build, without a project change: after the unload the open SETTINGS list and a list opened later have the stock rows only,
+ *   and after the reload the rows are back (core/ui `ui_rows_pass`; the rule itself is a host test).
  */
 const REPORT = 0x0f;
 /** The elements of a menu's item vector are `shared_ptr<MenuItem>`: two words (core/ui `rows_of`). */
@@ -201,9 +203,11 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await viewClosed();
   await sameStack(beforeUnload.slice(1), 'only the SETTINGS menu is left under the removed view');
   await session.expectNoFault('the unload closed the view');
+  // the unload marks the stock list dirty and core/ui rebuilds it on the next UI pass, here with the SETTINGS menu still on the stack: the rows of the module go without a project change
+  await pollEmulated(session, () => fw.topMenuItems(), (n) => n === rowsBefore, { emulatedMs: 10_000, message: 'the open SETTINGS list still has the rows of the unloaded module' });
   await leave(rt);
   expect((await dk.modules()).map((m) => m.name), 'the module is not loaded').not.toContain('test/ui-views');
-  // the rows stay in the SETTINGS list that the firmware has built until its next rebuild (core/ui README, "SETTINGS rows"): the row count is not asserted here, and running such a row is a no-op (below)
+  expect(await stockRows(), 'a SETTINGS menu opened after the unload has no rows of the module').toBe(rowsBefore);
   await session.expectNoFault('the SETTINGS menu after the unload');
 
   // The pool is not stuck: the module loads again and opens a view (a slot of the unloaded one is free).
@@ -217,15 +221,12 @@ async function expectUiViews(rt: TestRuntime): Promise<void> {
   await until(rt, (r) => r.closedFull === 1, 'the view of the reloaded module did not close');
   await leave(rt);
 
-  // A stock row that was built before the unload does nothing when it is run afterwards.
+  // An unload with the SETTINGS menu open: the open list is built again without the module's rows (a row that the old list held would run nothing: unit test `after_an_unload_the_old_stock_row_does_nothing`).
   await tap('SETTINGS');
-  for (let i = 0; i < rowsWith; i++) await tap('UP');
-  for (let i = 0; i < row1; i++) await tap('DOWN');
-  const settingsOnly = await fw.vptrs();
+  await pollEmulated(session, () => fw.topMenuItems(), (n) => n === rowsWith, { emulatedMs: 10_000, message: 'the SETTINGS list of the reloaded module has no rows' });
   await unload('the unload with the SETTINGS menu open');
-  await tap('YES');
-  expect(await fw.vptrs(), 'YES on the row of an unloaded module opened no view').toEqual(settingsOnly);
-  await session.expectNoFault('a stale SETTINGS row');
+  await pollEmulated(session, () => fw.topMenuItems(), (n) => n === rowsBefore, { emulatedMs: 10_000, message: 'the SETTINGS list was not built again after the unload' });
+  await session.expectNoFault('the rebuild of the open SETTINGS list');
   await leave(rt);
 
   // An unload with the text input open: YES calls nothing of the unloaded module, the screen goes, and a text input of the reloaded module works.

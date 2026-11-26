@@ -251,3 +251,88 @@ fn owner_name_follows_the_handle_to_its_record() {
         "a name of 32 bytes could share a key"
     );
 }
+
+mod rebuild {
+    use super::*;
+    extern "C" {
+        fn sr_built(with_menu: c_int);
+        fn sr_pass() -> c_int;
+        fn sr_rebuilds() -> c_int;
+        fn sr_dirty() -> c_int;
+        fn sr_menu_word(w: u32);
+        fn sr_pass_absent(no_rebuild: c_int) -> c_int;
+        fn sr_has_menu() -> c_int;
+    }
+
+    #[test]
+    fn a_row_added_before_the_first_build_needs_no_rebuild() {
+        let _g = session();
+        unsafe { sr_reset() };
+        add(1, "A", 0);
+        assert_eq!(unsafe { sr_dirty() }, 0);
+        assert_eq!(unsafe { sr_pass() }, 0);
+        assert_eq!(unsafe { sr_rebuilds() }, 0);
+    }
+
+    #[test]
+    fn a_row_added_after_the_build_makes_one_rebuild_on_the_next_pass() {
+        let _g = session();
+        unsafe { sr_reset() };
+        unsafe { sr_built(1) };
+        add(1, "A", 0);
+        assert_eq!(unsafe { sr_dirty() }, 1);
+        assert_eq!(unsafe { sr_pass() }, 1);
+        assert_eq!(unsafe { sr_pass() }, 0, "the rebuild cleared the mark");
+        assert_eq!(unsafe { sr_rebuilds() }, 1);
+    }
+
+    #[test]
+    fn removing_a_row_at_unload_rebuilds_but_removing_nothing_does_not() {
+        let _g = session();
+        unsafe { sr_reset() };
+        add(1, "A", 0);
+        unsafe { sr_built(1) };
+        assert_eq!(unsafe { sr_remove(2) }, 0, "an owner without rows");
+        assert_eq!(unsafe { sr_pass() }, 0);
+        assert_eq!(unsafe { sr_remove(1) }, 1);
+        assert_eq!(unsafe { sr_pass() }, 1);
+        assert_eq!(unsafe { sr_rebuilds() }, 1);
+    }
+
+    #[test]
+    fn with_no_list_nothing_is_called() {
+        let _g = session();
+        unsafe { sr_reset() };
+        unsafe { sr_built(0) };
+        add(1, "A", 0);
+        unsafe { sr_remove(1) };
+        assert_eq!(unsafe { sr_pass() }, 0);
+        assert_eq!(unsafe { sr_rebuilds() }, 0);
+    }
+
+    #[test]
+    fn a_kept_pointer_that_is_no_settings_list_is_not_called_and_is_dropped() {
+        let _g = session();
+        unsafe { sr_reset() };
+        unsafe { sr_built(1) };
+        unsafe { sr_menu_word(0x1234_5678) };
+        add(1, "A", 0);
+        assert_eq!(unsafe { sr_pass() }, 0, "the vtable word differs");
+        assert_eq!(unsafe { sr_rebuilds() }, 0, "no call");
+        assert_eq!(unsafe { sr_has_menu() }, 0, "the pointer is dropped");
+        assert_eq!(unsafe { sr_dirty() }, 0, "and no list means no more passes");
+    }
+
+    #[test]
+    fn a_firmware_without_the_rebuild_or_the_vtable_anchor_never_rebuilds() {
+        for no_rebuild in [1, 0] {
+            let _g = session();
+            unsafe { sr_reset() };
+            unsafe { sr_built(1) };
+            add(1, "A", 0);
+            assert_eq!(unsafe { sr_pass_absent(no_rebuild) }, 0);
+            assert_eq!(unsafe { sr_rebuilds() }, 0);
+            assert_eq!(unsafe { sr_has_menu() }, 0);
+        }
+    }
+}

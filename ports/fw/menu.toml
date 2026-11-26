@@ -10,6 +10,17 @@ mark = "D"
 users = ["core/ui"]
 doc = "`Menu::addItem(menu, item)` (Menu vtable slot 2, also callable directly): `item` is a raw `MenuItem *` from `operator new(0x54)` that the call wraps in a `shared_ptr<MenuItem>` it keeps; the caller does not free it (read in LedSettingsMenuView 0x400970a8)."
 
+[[fn]]
+name = "cf.menu.fn.settings_list_rebuild"
+cpu = "cf"
+sig = "void (u8 *menu)"
+rule.dt2 = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset = 0x0, len = 24 }
+rule.dn2 = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset = 0x0, len = 24 }
+rule.st = { kind = "cf_func", hash = "39d0c862c76cde230315ac00e6a93ebf", offset = 0x0, len = 24, mark = "D" }
+mark = "D"
+users = ["core/ui"]
+doc = "The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only."
+
 # `(item, label cstr, &action, icon, &fn4)`: constructs a MenuItem in `item`; copies both functions.
 [[fn]]
 name = "cf.menu.fn.item_builder"
@@ -290,6 +301,16 @@ rule = { kind = "cf_func", hash = "2c0093e6273f166cad7eb8f51ed1ab1f", offset = 0
 mark = "D"
 users = ["core/ui"]
 doc = "Menu vtable slot 30: when multi-select is on, empties the check list, reserves room for the item count (slot 3) and calls `check` (slot 21) for every row index."
+
+[[data]]
+name = "cf.menu.data.settings_vtable"
+cpu = "cf"
+rule.dt2 = { kind = "cf_ptr", hash = "e7980e7b34a4920ffef8a2721b36fc19", offset = 0x68, len = 160 }
+rule.dn2 = { kind = "cf_ptr", hash = "e7980e7b34a4920ffef8a2721b36fc19", offset = 0x68, len = 160 }
+rule.st = { kind = "cf_ptr", hash = "4ccb160e5ccd7b25215aeeca4224aea4", offset = 0x70, len = 160, mark = "D" }
+mark = "D"
+users = ["core/ui"]
+doc = "The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list."
 
 # Vtables: the anchor is slot 0 (the address the constructor stores in the object, vtable + 8); the hash covers the whole slot array.
 [[data]]

@@ -97,6 +97,8 @@ int32_t ui_rows_add(ui_settings_rows *s, uintptr_t owner, const char *name, int 
     r->owner = owner;
     r->key = key;
     s->n++;
+    if (s->menu)
+        s->dirty = 1;
     return DK_OK;
 }
 
@@ -114,6 +116,8 @@ uint32_t ui_rows_remove_owner(ui_settings_rows *s, uintptr_t owner)
     for (uint32_t i = to; i < s->n; i++)
         s->row[i].open = 0;
     s->n = to;
+    if (from && s->menu)
+        s->dirty = 1;
     return from;
 }
 
@@ -125,4 +129,30 @@ int ui_rows_run(const ui_settings_rows *s, const ui_row_key *key)
             return 1;
         }
     return 0;
+}
+
+void ui_rows_built(ui_settings_rows *s, uint8_t *menu)
+{
+    s->menu = menu;
+    s->dirty = 0;
+}
+
+int ui_rows_dirty(const ui_settings_rows *s)
+{
+    return s->menu && s->dirty;
+}
+
+int ui_rows_pass(ui_settings_rows *s, ui_rows_rebuild_fn *rebuild, uint32_t vtable)
+{
+    if (!ui_rows_dirty(s))
+        return 0;
+    /* clear first: a rebuild that fails to clear it must not run every pass */
+    s->dirty = 0;
+    /* no rebuild or no vtable fact on this firmware, or the kept pointer is no SETTINGS list: do not call, forget the pointer */
+    if (!rebuild || !vtable || *(const uint32_t *)s->menu != vtable) {
+        s->menu = 0;
+        return 0;
+    }
+    rebuild(s->menu);
+    return 1;
 }
