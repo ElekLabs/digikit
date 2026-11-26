@@ -1,4 +1,4 @@
-import { emulatorRead, readTopMenuItems, viewStackFacts, type Device } from '@digi/test-support';
+import { emulatorClock, emulatorRead, pollUntil, readTopMenuItems, viewStackFacts, type Device } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { cardRig } from '@digi/regression/runtime/card-rig.ts';
@@ -70,7 +70,6 @@ for (const device of DEVICES) {
 
     test('an enum picked in the stock popup reaches the module and is read in init after a restart', async () => {
       const rt = await kit.load('enum', spec());
-      const events = await rt.listen();
       await openPage(rt);
       // MODE is the third row; the popup opens on the stored option (SLOW, the default, index 1), FAST is one below
       await press(rt, 'DOWN');
@@ -80,8 +79,12 @@ for (const device of DEVICES) {
       await press(rt, 'DOWN');
       await press(rt, 'YES');
       expect(await report(rt), 'changed ran once, after the pick').toMatchObject({ mode: 2, calls: 1, field: 2, value: 2 });
-      // the runtime writes the settings record some time after the last change: wait for that write, not for a time
-      await events.untilSettingsWrite();
+      // the runtime writes the settings record some time after the last change: wait for that write to reach the store, not for a time
+      await pollUntil(emulatorClock(rt.session), () => kit.storeWrites(), (sectors) => sectors.length > 0, {
+        withinMs: 30_000,
+        intervalMs: 500,
+        message: 'the settings record was written to the store',
+      });
       const reboot = await kit.restart(rt);
       expect(await report(reboot), 'the value of the earlier boot, read in init; no edit in this boot').toMatchObject({
         loud: 1,
