@@ -24,60 +24,10 @@ static struct {
     char last_path[DK_CHOOSER_PATH];
 } sm;
 
-/* The fake settings: a small key/value table; put_result < 0 refuses every put. */
-#define NKEYS 32
-static struct {
-    int used[NKEYS];
-    char key[NKEYS][16];
-    char val[NKEYS][DK_CHOOSER_PATH];
-    uint32_t len[NKEYS];
-    int put_result, puts, removes;
-} st;
-
-static int st_find(const char *key)
-{
-    int i;
-    for (i = 0; i < NKEYS; i++)
-        if (st.used[i] && !strcmp(st.key[i], key))
-            return i;
-    return -1;
-}
-int32_t dk_settings_get(dk_settings *s, const char *key, void *out, uint32_t cap)
-{
-    int i = st_find(key);
-    (void)s;
-    if (i < 0)
-        return DK_E_SET_NOKEY;
-    if (st.len[i] > cap)
-        return DK_E_SET_VALUE;
-    memcpy(out, st.val[i], st.len[i]);
-    return (int32_t)st.len[i];
-}
-int32_t dk_settings_put(dk_settings *s, const char *key, const void *value, uint32_t len)
-{
-    int i = st_find(key);
-    (void)s;
-    st.puts++;
-    if (st.put_result < 0)
-        return st.put_result;
-    if (i < 0)
-        for (i = 0; st.used[i]; i++)
-            ;
-    st.used[i] = 1;
-    strcpy(st.key[i], key);
-    memcpy(st.val[i], value, len);
-    st.len[i] = len;
-    return 0;
-}
-int32_t dk_settings_remove(dk_settings *s, const char *key)
-{
-    int i = st_find(key);
-    (void)s;
-    st.removes++;
-    if (i >= 0)
-        st.used[i] = 0;
-    return 0;
-}
+/* The fake settings are in settings_store.c. */
+void fs_reset(void);
+void fs_put_result(int rc);
+int fs_removes(void);
 
 int32_t dk_files_list(dk_files *f, uint32_t root, const char *path, dk_files_event_fn *notify,
                       void *arg)
@@ -173,7 +123,7 @@ void pf_reset(void)
 {
     memset(&fl, 0, sizeof fl);
     memset(&sm, 0, sizeof sm);
-    memset(&st, 0, sizeof st);
+    fs_reset();
     g_settings = 0;
     g_pool = 0;
     g_ui = 0;
@@ -221,11 +171,11 @@ const char *pf_stored(const char *key)
 }
 void pf_put_result(int rc)
 {
-    st.put_result = rc;
+    fs_put_result(rc);
 }
 int pf_removes(void)
 {
-    return st.removes;
+    return fs_removes();
 }
 void pf_open_pool(int current, int with_pick)
 {
