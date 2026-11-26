@@ -41,8 +41,8 @@ pub trait ProviderHost {
     fn stop(&mut self, package: PackageId);
 
     /// A boot has tried every service and is about to bring up the first module (or has no module to bring up): `live` holds the services that are up. The host
-    /// plans what the services keep for each module that can still come up, which is one whose services are all in `live`. Called once per boot, never for a
-    /// load.
+    /// plans what the services keep for each module that can still come up, which is one whose services are all in `live`. Called once per boot and once per reload (the
+    /// services that came back have fresh state; a reload numbers again before its first consumer starts), never for a load.
     fn services_up(&mut self, _graph: &PackageGraph, _live: &LiveSet) {}
 
     /// `package` is `Active`: start its DSP part, if it has one. The DSP part comes up over later UI passes, so this call returns at once: `true` when a DSP part is

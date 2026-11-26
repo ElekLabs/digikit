@@ -26,6 +26,7 @@ mod live;
 mod load;
 mod plan;
 mod port;
+mod provider_reload;
 mod unload;
 
 // ---- the single-record steps the loader tests drive ------------------------------------------------------------------------------------------------------

@@ -71,10 +71,14 @@ A hook of a service runs in the context of the firmware code it replaces (static
 (`dkrt_svc_rt::Owner`) admits a hook that enters the owner only in the UI task and refuses it, counted, inside a part call of the same service. An interrupt hook must never enter the owner.
 Host tests fire a hook in a context with `dkrt_test_support::hook_context::HookContext` (`UiTask`, `InPartCall`, `Interrupt`).
 
+A hook declared `context = "interrupt"` (`CTX_IRQ`, flag bits 1..2 = 3) is installed like an `above_ui` one. A live RELOAD of a service that has such a hook is refused with `E_BOOT_ONLY` (the menu shows "RESTART TO LOAD"), because no task can be parked out of an interrupt entry (`Loader::provider_rules`, checked on the loaded and on the new file).
+
+**Open item.** The lfo reload hang: the UNLOAD step of an lfo closure reload never returns on DN2. Diagnosis so far is in `out/runs/hot-reload/`. The guard keeps the hang out of reach until it is understood; remove the `interrupt` context from the lfo tick hooks only together with the fix.
+
 | service | hooks | context | enters the owner |
 | --- | --- | --- | --- |
 | shortcuts | `cf.input.hook.key_event` | UI task | yes: refused and counted inside a part call (`a_key_that_arrives_inside_a_call_of_the_service_is_refused_and_counted`) |
-| lfo | tick and read hooks, `call`, `slew`, `start`, both devices | interrupt, vector 191, IPL 5 | no: `dk_lfo_eval` reads the static shape table (`an_lfo_hook_fired_in_an_interrupt_never_enters_the_owner`) |
+| lfo | tick hooks, `tick_call`, `tick_slew`, `tick_start`, both devices (declared `context = "interrupt"`) | interrupt, vector 191, IPL 5 | no: `dk_lfo_eval` reads the static shape table (`an_lfo_hook_fired_in_an_interrupt_never_enters_the_owner`) |
 | lfo | `wave_name`, `wave_name3`, `graph_vec` | UI task (MOD page) | no (`an_lfo_page_hook_fired_inside_a_part_call_never_enters_the_owner`) |
 | machines | `source_key`, `source_turn` | UI task [O] | yes |
 | machines | `frametype` and `type_reader` (DN2) | frame builder, may be an interrupt [O] | no: static table |

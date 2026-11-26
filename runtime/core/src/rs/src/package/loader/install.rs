@@ -112,6 +112,18 @@ impl Gate<'_> {
     }
 }
 
+/// Copy the part of `stock` (the bytes at `at`) that lies inside `[addr, end)` into `cur` (the bytes at `addr`).
+fn overlay(cur: &mut [u8], addr: u32, end: u32, at: u32, stock: &[u8]) {
+    let stock_end = at.wrapping_add(stock.len() as u32);
+    let from = addr.max(at);
+    let to = end.min(stock_end);
+    let mut a = from;
+    while a < to {
+        cur[(a - addr) as usize] = stock[(a - at) as usize];
+        a += 1;
+    }
+}
+
 unsafe fn word<P: PackagePlatform>(p: &P, addr: u32) -> u32 {
     let mut b = [0u8; 4];
     p.read_code(addr, &mut b);
@@ -203,8 +215,9 @@ impl Installer {
     /// The layout of the items, no platform call: capacity, lengths and entries, and that no site overlaps an installed one or another item of the batch. Errors: `E_RANGE` (length, a patch value wider than its length,
     /// entry), `E_PLAN_FIT` (no room in the site table or the patch log), `E_PLAN_OWNER` (an installed site or patch, or an earlier item, overlaps).
     #[inline(never)]
-    fn layout(&self, hooks: &[HookItem], patches: &[PatchItem], image_size: u32) -> Result<(), i32> {
-        if self.n + hooks.len() > SITES_MAX || self.np + patches.len() > PATCHES_MAX {
+    fn layout(&self, hooks: &[HookItem], patches: &[PatchItem], image_size: u32, except: Option<u8>) -> Result<(), i32> {
+        let (own_sites, own_patches) = self.held_by(except);
+        if self.n - own_sites + hooks.len() > SITES_MAX || self.np - own_patches + patches.len() > PATCHES_MAX {
             return Err(E_PLAN_FIT);
         }
         let mut i = 0;
@@ -214,7 +227,7 @@ impl Installer {
             if !(6..=64).contains(&len) || len % 2 != 0 || b.entry >= image_size {
                 return Err(E_RANGE);
             }
-            if self.taken(b.addr, b.len) {
+            if self.taken(b.addr, b.len, except) {
                 return Err(E_PLAN_OWNER);
             }
             let end = b.addr.wrapping_add(b.len);
@@ -238,7 +251,7 @@ impl Installer {
             if b.len < 4 && b.value >> (8 * b.len) != 0 {
                 return Err(E_RANGE);
             }
-            if self.taken(b.addr, b.len) {
+            if self.taken(b.addr, b.len, except) {
                 return Err(E_PLAN_OWNER);
             }
             let end = b.addr.wrapping_add(b.len);
@@ -263,12 +276,12 @@ impl Installer {
     }
 
     /// Whether `len` bytes at `addr` overlap an installed hook site or patch.
-    fn taken(&self, addr: u32, len: u32) -> bool {
+    fn taken(&self, addr: u32, len: u32, except: Option<u8>) -> bool {
         let end = addr.wrapping_add(len);
         let mut j = 0;
         while j < self.n {
             let s = &self.sites[j];
-            if addr < s.addr + s.len as u32 && s.addr < end {
+            if Some(s.rec) != except && addr < s.addr + s.len as u32 && s.addr < end {
                 return true;
             }
             j += 1;
@@ -276,7 +289,7 @@ impl Installer {
         let mut j = 0;
         while j < self.np {
             let s = &self.patches[j];
-            if addr < s.addr + s.len as u32 && s.addr < end {
+            if Some(s.rec) != except && addr < s.addr + s.len as u32 && s.addr < end {
                 return true;
             }
             j += 1;
@@ -288,7 +301,7 @@ impl Installer {
     /// file's own check (`service_check`) runs it before `init`, so a firmware that is not stock refuses the file before anything is allocated.
     #[inline(never)]
     pub unsafe fn check<P: PackagePlatform>(&self, p: &P, hooks: &[HookItem], patches: &[PatchItem], image_size: u32) -> Result<(), i32> {
-        self.layout(hooks, patches, image_size)?;
+        self.layout(hooks, patches, image_size, None)?;
         let mut i = 0;
         while i < hooks.len() {
             if super::port::site_check(p, hooks[i].addr, hooks[i].len as usize) != hooks[i].check {
@@ -304,6 +317,58 @@ impl Installer {
             i += 1;
         }
         Ok(())
+    }
+
+    /// The sites and patches installed for record `except` (zero when none).
+    fn held_by(&self, except: Option<u8>) -> (usize, usize) {
+        let Some(r) = except else { return (0, 0) };
+        (self.sites[..self.n].iter().filter(|s| s.rec == r).count(), self.patches[..self.np].iter().filter(|s| s.rec == r).count())
+    }
+
+    /// [`Installer::check`] for a file that is to replace record `rec`, which is installed now: the sites and patches of `rec` do not count as taken, and where the live bytes lie
+    /// inside a site of `rec` the saved stock bytes stand in for them (the live ones are the `jmp.l` to the old code). The reload's check, before anything is taken down.
+    #[inline(never)]
+    pub unsafe fn check_replacing<P: PackagePlatform>(&self, p: &P, rec: u8, hooks: &[HookItem], patches: &[PatchItem], image_size: u32) -> Result<(), i32> {
+        self.layout(hooks, patches, image_size, Some(rec))?;
+        let mut i = 0;
+        while i < hooks.len() {
+            if self.stock_check(p, rec, hooks[i].addr, hooks[i].len as usize) != hooks[i].check {
+                return Err(E_HOOK_STOCK);
+            }
+            i += 1;
+        }
+        let mut i = 0;
+        while i < patches.len() {
+            if self.stock_check(p, rec, patches[i].addr, patches[i].len as usize) != patches[i].check {
+                return Err(E_HOOK_STOCK);
+            }
+            i += 1;
+        }
+        Ok(())
+    }
+
+    /// The check value of `len` bytes at `addr` as they were before record `rec` installed anything: the live bytes, with the saved stock bytes of `rec`'s sites and patches over them.
+    unsafe fn stock_check<P: PackagePlatform>(&self, p: &P, rec: u8, addr: u32, len: usize) -> [u8; 8] {
+        let mut cur = [0u8; super::port::SITE_LEN_MAX as usize];
+        p.read_code(addr, &mut cur[..len]);
+        let end = addr.wrapping_add(len as u32);
+        let mut j = 0;
+        while j < self.n {
+            let s = &self.sites[j];
+            if s.rec == rec {
+                overlay(&mut cur[..len], addr, end, s.addr, &s.stock[..s.len as usize]);
+            }
+            j += 1;
+        }
+        let mut j = 0;
+        while j < self.np {
+            let s = &self.patches[j];
+            if s.rec == rec {
+                overlay(&mut cur[..len], addr, end, s.addr, &s.stock[..s.len as usize]);
+            }
+            j += 1;
+        }
+        super::port::bytes_check(&cur[..len])
     }
 
     /// Install the hooks and patches of record `rec` and fill `slots` (slot address, value). Safe mode (not armed): `Ok` with no platform call. The layout is checked, the live bytes
@@ -339,7 +404,7 @@ impl Installer {
         if self.disarmed {
             return Ok(());
         }
-        self.layout(hooks, patches, image_size)?;
+        self.layout(hooks, patches, image_size, None)?;
         // the saved copies go to the free end of the tables; they count only once the writes are made. The check value is of the copy, not of a second read of the live bytes.
         let (first, firstp) = (self.n, self.np);
         let mut i = 0;

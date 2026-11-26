@@ -596,6 +596,76 @@ fn the_wave_rows_of_the_copy_follow_the_highest_loaded_shape_and_go_back_to_stoc
     set_firmware(0, [0; 3]);
 }
 
+/// A service reload: the consumers detach first (the shape modules go down), the service stops, a new owner object starts over the same core, and the consumers come back,
+/// in another order. The wave numbers come from the sticky setting, so a sound that names one keeps its shape, and the rows of the parameter table hold the stock maximum
+/// while no shape is loaded, which is where the new owner reads its stock pair from.
+#[test]
+fn a_service_started_again_numbers_the_same_keys_with_the_same_waves_and_finds_the_rows_at_stock() {
+    let (_g, mut core, mut lfo) = fresh();
+    image_with_rows(&mut core);
+    settle(&mut lfo, &core, &[&[KEY_A], &[KEY_B]]);
+    core.boot_index.set(0);
+    assert_eq!(
+        apply(&mut lfo, &core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"DOWN", 0)),
+        OK
+    );
+    core.boot_index.set(1);
+    assert_eq!(
+        apply(&mut lfo, &core, 2, KIND_LFO_SHAPE, &body(KEY_B, b"UP  ", 0)),
+        OK
+    );
+    let (a, b) = (shape(7).unwrap(), shape(8).unwrap());
+    assert_eq!(wave_words(&core), [0x800; 3]);
+    // the closure goes down, consumers first: nothing of the shapes or the raised maximum is left when the service stops
+    detach(&mut lfo, &core, 2);
+    detach(&mut lfo, &core, 1);
+    assert_eq!((used(), highest(), wave_max()), (0, 0, 0));
+    assert_eq!(
+        wave_words(&core),
+        [0x600; 3],
+        "the stock maximum is back before the old service stops"
+    );
+    drop(lfo);
+    // the new owner object (`Provider::start_in` makes it from zero bytes) and the consumers back in the other order
+    image_with_rows(&mut core);
+    let mut lfo = *dkrt_test_support::start_boxed::<Lfo>(&core).unwrap();
+    assert_eq!(
+        (lfo.number_of(0, KEY_A), lfo.number_of(0, KEY_B)),
+        (0, 0),
+        "no number before the settle"
+    );
+    settle(&mut lfo, &core, &[&[KEY_B], &[KEY_A]]);
+    assert_eq!(
+        (lfo.number_of(1, KEY_A), lfo.number_of(0, KEY_B)),
+        (7, 8),
+        "the numbers are the sticky ones, not the order of the selection"
+    );
+    core.boot_index.set(1);
+    assert_eq!(
+        apply(&mut lfo, &core, 2, KIND_LFO_SHAPE, &body(KEY_A, b"DOWN", 0)),
+        OK
+    );
+    core.boot_index.set(0);
+    assert_eq!(
+        apply(&mut lfo, &core, 1, KIND_LFO_SHAPE, &body(KEY_B, b"UP  ", 0)),
+        OK
+    );
+    assert_eq!(
+        (shape(7), shape(8)),
+        (Some(a), Some(b)),
+        "the same waves hold the same shapes"
+    );
+    assert_eq!(wave_words(&core), [0x800; 3]);
+    detach(&mut lfo, &core, 1);
+    detach(&mut lfo, &core, 2);
+    assert_eq!(
+        wave_words(&core),
+        [0x600; 3],
+        "the stock pair the new owner read goes back, not a raised one"
+    );
+    set_firmware(0, [0; 3]);
+}
+
 #[test]
 fn an_image_without_the_registry_table_refuses_a_shape_and_writes_nothing() {
     let (_g, core, mut lfo) = fresh();

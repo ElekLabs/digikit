@@ -25,7 +25,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     }
 
     /// The live modules' tables by selection index, and `None` for the others.
-    unsafe fn live_modules(&self, except: usize) -> [Option<Keys<'_>>; SEL_MAX] {
+    pub(super) unsafe fn live_modules(&self, except: usize) -> [Option<Keys<'_>>; SEL_MAX] {
         let mut mods: [Option<Keys>; SEL_MAX] = [None; SEL_MAX];
         let mut r = 0;
         while r < MAX_MODULES {
@@ -552,7 +552,7 @@ pub(crate) unsafe fn live_indices() -> [bool; SEL_MAX] {
 }
 
 /// Does the module or service file `file` list `name` among its imports?
-fn imports_name(file: &[u8], name: &[u8]) -> bool {
+pub(super) fn imports_name(file: &[u8], name: &[u8]) -> bool {
     let be = |p: usize| file.get(p..p + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize);
     let (Some(off), Some(n)) = (be(dkneeds::H_IMPORT_OFF as usize), be(dkneeds::H_IMPORT_N as usize)) else { return false };
     let len = dkneeds::CF_IMPORT_LEN as usize;

@@ -118,15 +118,13 @@ pub const CTX_UI: u8 = 1;
 /// The code at the site is never in flight while the UI task runs: it runs in a task of a priority above the UI task's (the engine task, priority 8), which the UI task cannot
 /// preempt, or in an interrupt handler (same class, same rule: neither can be inside the site while the UI task runs, so the installer never waits for it).
 pub const CTX_ABOVE_UI: u8 = 2;
+/// The code at the site is entered from an interrupt handler (the LFO tick, vector 191). The installer treats it like [`CTX_ABOVE_UI`]; a live reload of a service that has such a
+/// hook is refused (`E_BOOT_ONLY`), since no task can be parked out of an interrupt entry.
+pub const CTX_IRQ: u8 = 3;
 
-/// The context of a `SITES` item (its flags bits 1 and 2): [`CTX_TASK`], [`CTX_UI`] or [`CTX_ABOVE_UI`]. The value 3 is not assigned and reads as [`CTX_TASK`].
+/// The context of a `SITES` item (its flags bits 1 and 2): [`CTX_TASK`], [`CTX_UI`], [`CTX_ABOVE_UI`] or [`CTX_IRQ`]. A runtime older than `CTX_IRQ` reads 3 as task, the safe side.
 pub fn site_context(flags: u8) -> u8 {
-    let c = (flags & FLAG_CTX_MASK) >> FLAG_CTX_SHIFT;
-    if c == CTX_UI || c == CTX_ABOVE_UI {
-        c
-    } else {
-        CTX_TASK
-    }
+    (flags & FLAG_CTX_MASK) >> FLAG_CTX_SHIFT
 }
 /// The kinds of a `FWNAMES` item: a firmware name (`dk_fw_<hash>`) and an exit (`dk_exit_<hash>_<n>`).
 pub const NAME_FW: u8 = 0;
@@ -1635,7 +1633,7 @@ mod tests {
         // no context in the flags, an absent site and an unassigned value all read as task (the safe default)
         assert_eq!(site_context(0), CTX_TASK);
         assert_eq!(site_context(FLAG_ABSENT), CTX_TASK);
-        assert_eq!(site_context(3 << FLAG_CTX_SHIFT), CTX_TASK);
+        assert_eq!(site_context(3 << FLAG_CTX_SHIFT), CTX_IRQ);
         assert_eq!(site_context(CTX_UI << FLAG_CTX_SHIFT), CTX_UI);
         assert_eq!(
             site_context(CTX_ABOVE_UI << FLAG_CTX_SHIFT | FLAG_ABSENT),

@@ -17,7 +17,7 @@
 //!     u32 addr   the site address; 0 when absent
 //!     u16 len    bytes of the displaced whole instructions
 //!     u8  kind   0 raw, 1 tail, 2 stock (the last two: the displaced bytes are copied from flash after the check)
-//!     u8  flags  bit 0: absent; bits 1..2: the context of the code at the site (0 task, 1 ui, 2 above_ui: `dkneeds::keys::site_context`); bits 4..7: number of fixups that follow (reserved, 0 today)
+//!     u8  flags  bit 0: absent; bits 1..2: the context of the code at the site (0 task, 1 ui, 2 above_ui, 3 interrupt: `dkneeds::keys::site_context`); bits 4..7: number of fixups that follow (reserved, 0 today)
 //!     [u8; 8]    the first 8 bytes of the sha256 of the displaced bytes
 //! ```
 
@@ -83,7 +83,7 @@ pub struct SiteItem {
     pub len: u16,
     pub kind: SiteKind,
     pub absent: bool,
-    /// `CTX_TASK`, `CTX_UI` or `CTX_ABOVE_UI`, packed into flag bits 1 and 2.
+    /// `CTX_TASK`, `CTX_UI`, `CTX_ABOVE_UI` or `CTX_IRQ`, packed into flag bits 1 and 2.
     pub context: u8,
     pub check: [u8; 8],
 }

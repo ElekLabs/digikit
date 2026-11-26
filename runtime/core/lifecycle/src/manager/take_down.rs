@@ -114,7 +114,8 @@ where
                 roots: work.rebuild.as_slice(),
                 pin: false,
                 stop_on_failure: true,
-                numbering: false,
+                // the services that came back have fresh state: the host numbers the keys again (`ProviderHost::services_up`) before the first consumer starts
+                numbering: true,
             };
             self.run_bring_up(&order, &request, &mut report);
             if let Some(refused) = report.refused().first() {

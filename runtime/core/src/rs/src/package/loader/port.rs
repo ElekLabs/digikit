@@ -13,7 +13,7 @@
 use dkneeds::keys::{Keys, SiteRec, FLAG_ABSENT, NAME_EXIT, NAME_FW, PATCH_LENS, SITE_PATCH, SITE_RAW, SITE_STOCK};
 
 /// The longest displaced run of a site (the longest stock run a bound file held).
-const SITE_LEN_MAX: u16 = 64;
+pub(super) const SITE_LEN_MAX: u16 = 64;
 /// The shortest: `jmp.l` is 6 bytes.
 const SITE_LEN_MIN: u16 = 6;
 /// Bytes after a copied run: `jmp.l <address>`.
