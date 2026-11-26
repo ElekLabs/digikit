@@ -12,6 +12,8 @@ pub(crate) struct Dialog {
     pub title: String,
     pub text: String,
     pub items: Vec<String>,
+    /// The item the popup opens on (a choice only).
+    pub selected: usize,
     pub confirm_done: Option<extern "C" fn(Ctx, c_int)>,
     pub ctx: Ctx,
 }
@@ -35,6 +37,7 @@ pub extern "C" fn dk_ui_confirm(
             title,
             text,
             items: vec![],
+            selected: 0,
             confirm_done: done,
             ctx,
         });
@@ -48,10 +51,27 @@ pub extern "C" fn dk_ui_confirm(
 /// `items` points at `n` valid C strings.
 #[no_mangle]
 pub unsafe extern "C" fn dk_ui_choice(
+    ui: *mut c_void,
+    title: *const c_char,
+    items: *const *const c_char,
+    n: c_int,
+    done: Option<extern "C" fn(Ctx, c_int)>,
+    ctx: Ctx,
+) -> c_int {
+    unsafe { dk_ui_choice_at(ui, title, items, n, 0, done, ctx) }
+}
+
+/// The popup opens on item `start`; one outside 0..n-1 opens on item 0, as the real service does.
+///
+/// # Safety
+/// `items` points at `n` valid C strings.
+#[no_mangle]
+pub unsafe extern "C" fn dk_ui_choice_at(
     _ui: *mut c_void,
     title: *const c_char,
     items: *const *const c_char,
     n: c_int,
+    start: c_int,
     done: Option<extern "C" fn(Ctx, c_int)>,
     ctx: Ctx,
 ) -> c_int {
@@ -69,6 +89,7 @@ pub unsafe extern "C" fn dk_ui_choice(
             title,
             text: String::new(),
             items,
+            selected: if (0..n).contains(&start) { start as usize } else { 0 },
             confirm_done: done,
             ctx,
         });

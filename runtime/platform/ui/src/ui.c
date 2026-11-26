@@ -937,8 +937,12 @@ static void choice_item(char *buf, uint32_t size, const char *item, int col)
     buf[n] = 0;
 }
 
-int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int32_t n,
-                     dk_ui_choice_fn *done, void *arg)
+/* The stock constructor starts the selection (u32 at object +0x9c, `selected` of cf.window.struct.MultiChoiceWindow) at 0; the key handler, the
+   paint and the callback read only that field, so a store after the constructor is the start. */
+#define CHOICE_SELECTED offsetof(MultiChoiceWindow, selected)
+
+int32_t dk_ui_choice_at(dk_ui *ui, const char *title, const char *const *items, int32_t n, int32_t start,
+                        dk_ui_choice_fn *done, void *arg)
 {
     if (ui_dialog_is_open(&g_dialog) || !items || n <= 0 || n > MAX_CHOICE)
         return -1;
@@ -965,6 +969,7 @@ int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int
     fn cb = make_fn(0, 0, inv_answer);
     uint32_t serial = ++g_serial;
     dk_fw_window_multichoice_ctor(blk + 0x10, vec, &st, (const std_function *)&cb, 1);
+    *(uint32_t *)(blk + 0x10 + CHOICE_SELECTED) = (start >= 0 && start < n) ? (uint32_t)start : 0;
     dk_fw_string_std_string_dtor(&st);
     for (int i = 0; i < n; i++)
         dk_fw_string_std_string_dtor(&strs[i]);
@@ -975,6 +980,12 @@ int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int
         return -1;
     }
     return 0;
+}
+
+int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int32_t n,
+                     dk_ui_choice_fn *done, void *arg)
+{
+    return dk_ui_choice_at(ui, title, items, n, 0, done, arg);
 }
 
 int32_t dk_ui_toast(dk_ui *ui, const char *text)

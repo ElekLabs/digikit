@@ -239,6 +239,16 @@ pub fn dialog() -> Option<(DialogKind, String, String, Vec<String>)> {
     })
 }
 
+/// The item the open choice popup is on, or None when no choice is open.
+pub fn choice_selected() -> Option<usize> {
+    with(|s| {
+        s.dialog
+            .as_ref()
+            .filter(|d| d.kind == DialogKind::Choice)
+            .map(|d| d.selected)
+    })
+}
+
 /// Answers the open confirm. The dialog closes first, then `done` runs.
 pub fn answer_confirm(yes: bool) {
     let dlg = with(|s| s.dialog.take()).expect("no dialog is open");

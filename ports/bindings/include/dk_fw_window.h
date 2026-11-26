@@ -27,7 +27,7 @@ _Static_assert(offsetof(ConfirmWindow, lines) == 0x58, "ConfirmWindow.lines offs
 _Static_assert(offsetof(ConfirmWindow, cb) == 0x5c, "ConfirmWindow.cb offset");
 _Static_assert(offsetof(ConfirmWindow, flag) == 0x6c, "ConfirmWindow.flag offset");
 
-/* MultiChoiceWindow (OverlayWindow base, Observer sub-object at +0x58), 0xd8 bytes; the make_shared block is 0xe8. items is a vector of COW strings (4 bytes each), title the title lines, cb `std::function<void(int)>`, selected the index passed to cb. */
+/* MultiChoiceWindow (OverlayWindow base, Observer sub-object at +0x58), 0xd8 bytes; the make_shared block is 0xe8. items is a vector of COW strings (4 bytes each), title the title lines, cb `std::function<void(int)>`, selected the index passed to cb. The constructor clears `selected` (DT2 0x40116c52, DN2 0x401185c6: `clr.l (0x9c,A6)`); the key handler, the paint and the callback read only that field, so a store after the constructor sets the start item (`dk_ui_choice_at`). */
 typedef struct MultiChoiceWindow {
     uint8_t _pad0[116];
     uint32_t items_begin;

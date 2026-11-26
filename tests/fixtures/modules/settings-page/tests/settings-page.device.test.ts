@@ -2,6 +2,7 @@ import { emulatorRead, readTopMenuItems, viewStackFacts, type Device } from '@di
 import { describe, expect, test } from 'vitest';
 import type { TestRuntime } from '@digi/regression/support.ts';
 import { cardRig } from '@digi/regression/runtime/card-rig.ts';
+import { readChoiceWindow } from '@digi/regression/runtime/choice-window.ts';
 import { cardStore } from '@digi/regression/runtime/device-data.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { openDigikitMenu } from '@digi/regression/runtime/flows/menu.ts';
@@ -72,11 +73,11 @@ for (const device of DEVICES) {
     test('an enum picked in the stock popup reaches the module and is read in init after a restart', async () => {
       const rt = await kit.load('enum', spec());
       await openPage(rt);
-      // MODE is the third row; the popup opens on its first option (OFF), FAST is two below
+      // MODE is the third row; the popup opens on the stored option (SLOW, the default, index 1), FAST is one below
       await press(rt, 'DOWN');
       await press(rt, 'DOWN');
       await press(rt, 'YES');
-      await press(rt, 'DOWN');
+      expect((await readChoiceWindow(rt.session))?.selected, 'the popup opens on the stored value').toBe(1);
       await press(rt, 'DOWN');
       await press(rt, 'YES');
       expect(await report(rt), 'changed ran once, after the pick').toMatchObject({ mode: 2, calls: 1, field: 2, value: 2 });

@@ -1326,7 +1326,7 @@ pub mod window {
         assert!(core::mem::offset_of!(ConfirmWindow, flag) == 0x6c);
     };
 
-    /// MultiChoiceWindow (OverlayWindow base, Observer sub-object at +0x58), 0xd8 bytes; the make_shared block is 0xe8. items is a vector of COW strings (4 bytes each), title the title lines, cb `std::function<void(int)>`, selected the index passed to cb.
+    /// MultiChoiceWindow (OverlayWindow base, Observer sub-object at +0x58), 0xd8 bytes; the make_shared block is 0xe8. items is a vector of COW strings (4 bytes each), title the title lines, cb `std::function<void(int)>`, selected the index passed to cb. The constructor clears `selected` (DT2 0x40116c52, DN2 0x401185c6: `clr.l (0x9c,A6)`); the key handler, the paint and the callback read only that field, so a store after the constructor sets the start item (`dk_ui_choice_at`).
     #[repr(C)]
     pub struct MultiChoiceWindow {
         pub _pad0: [u8; 116],

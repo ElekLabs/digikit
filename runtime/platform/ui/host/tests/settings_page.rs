@@ -167,6 +167,7 @@ fn an_enum_opens_the_choice_and_a_pick_saves_and_shows_the_option() {
     assert_eq!(kind, DialogKind::Choice);
     assert_eq!(title, "MODE");
     assert_eq!(items, ["OFF", "SLOW", "FAST"]);
+    assert_eq!(choice_selected(), Some(1), "opens on the stored value, SLOW");
     pick_choice(2);
     assert_eq!(rows()[3], "MODE FAST");
     assert_eq!(stored("mode").as_deref(), Some("2"));
@@ -177,6 +178,7 @@ fn an_enum_opens_the_choice_and_a_pick_saves_and_shows_the_option() {
     assert_eq!(unsafe { sp_changed_calls() }, 1);
     // NO on the popup changes nothing
     press_yes(3);
+    assert_eq!(choice_selected(), Some(2), "opens on the new value");
     press_no();
     assert_eq!(rows()[3], "MODE FAST");
     assert_eq!(unsafe { sp_changed_calls() }, 1);
@@ -291,4 +293,18 @@ fn values_are_decimal_text_of_at_most_four_characters() {
     assert_eq!(enc(7), "7");
     assert_eq!(enc(-99), "-99");
     assert_eq!(enc(999), "999");
+}
+
+#[test]
+fn a_start_index_outside_the_items_opens_on_the_first() {
+    let _g = session();
+    let items = [c"A".as_ptr(), c"B".as_ptr()];
+    for (start, want) in [(1, 1), (2, 0), (-1, 0)] {
+        let rc = unsafe {
+            dk_ui_choice_at(std::ptr::null_mut(), c"T".as_ptr(), items.as_ptr(), 2, start, None, std::ptr::null_mut())
+        };
+        assert_eq!(rc, 0);
+        assert_eq!(choice_selected(), Some(want), "start {start}");
+        pick_choice(0);
+    }
 }
