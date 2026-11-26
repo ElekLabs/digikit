@@ -97,6 +97,14 @@ pub fn labels() -> Vec<String> {
     with(|s| s.menus[id].rows.iter().map(|r| r.text.clone()).collect())
 }
 
+/// A toggle or value changed: core/ui writes the labels of a list or wide page again before it calls `changed` (`value_changed` of ui.c), so a fill
+/// that reads module state sees the new value.
+fn value_changed(id: usize) {
+    if desc_of(id).is_some_and(|d| d.flags & (DK_UI_LIST | DK_UI_WIDE) != 0) {
+        refill(id);
+    }
+}
+
 fn activate(id: usize, row: usize) {
     match row_kind(id, row) {
         Kind::Action { f, ctx, arg } => {
@@ -113,6 +121,7 @@ fn activate(id: usize, row: usize) {
             if !value.is_null() {
                 unsafe { *value = new };
             }
+            value_changed(id);
             if let Some(f) = f {
                 f(ctx, new)
             }
@@ -155,6 +164,7 @@ pub fn turn(row: usize, delta: i32) {
     let new = old.saturating_add(delta).clamp(min, max);
     unsafe { *value = new };
     if new != old {
+        value_changed(id);
         if let Some(f) = f {
             f(ctx, new)
         }
