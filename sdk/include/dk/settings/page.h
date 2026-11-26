@@ -38,8 +38,9 @@
 enum { DK_SETTINGS_BOOL, DK_SETTINGS_INT, DK_SETTINGS_ENUM };
 enum { DK_SETTINGS_RESTART = 1 }; /* flags: the value applies at the next restart */
 
-#define DK_SETTINGS_FIELDS 12     /* fields per page, at most */
-#define DK_SETTINGS_KEY 31        /* characters of a key, at most (the store allows 47 for module name and key together) */
+#define DK_SETTINGS_FIELDS 12 /* fields per page, at most */
+#define DK_SETTINGS_KEY                                                                            \
+    31 /* characters of a key, at most (the store allows 47 for module name and key together) */
 
 typedef struct dk_settings_field {
     const char *key;   /* printable ASCII without space, "/" and ".." */

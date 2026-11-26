@@ -96,7 +96,13 @@ fn stored_values_are_read_in_init_and_a_bad_one_reads_as_the_default() {
     });
     assert_eq!(
         rows(),
-        ["LOUD OFF", "GAIN 007", "TRIM -05", "MODE SLOW", "BOOT FAST ON"]
+        [
+            "LOUD OFF",
+            "GAIN 007",
+            "TRIM -05",
+            "MODE SLOW",
+            "BOOT FAST ON"
+        ]
     );
     assert_eq!(unsafe { sp_value(1) }, 7);
     assert_eq!(unsafe { sp_value(9) }, 0, "no such field");

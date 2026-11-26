@@ -3,7 +3,7 @@
 #include <dk/platform/ui_text.h>
 
 static const uint32_t ROW = DK_UI_ROW; /* characters of a row with its NUL */
-#define VALUE_PX 60                      /* the pixel column of the value of a toggle or a value row in a wide page */
+#define VALUE_PX 60 /* the pixel column of the value of a toggle or a value row in a wide page */
 
 static uint32_t text_len(const char *s)
 {

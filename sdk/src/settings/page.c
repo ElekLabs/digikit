@@ -2,15 +2,15 @@
 #include <dk/settings/page.h>
 #include "field.h"
 
-static dk_settings_page_desc g_copy;          /* the descriptor, copied: the module's may be on its stack */
-static const dk_settings_page_desc *g_desc;   /* &g_copy once init succeeded */
+static dk_settings_page_desc g_copy; /* the descriptor, copied: the module's may be on its stack */
+static const dk_settings_page_desc *g_desc; /* &g_copy once init succeeded */
 static dk_settings *g_settings;
 static dk_ui *g_ui;
-static dk_ui_menu *g_menu;       /* the page being shown (set by fill) */
+static dk_ui_menu *g_menu; /* the page being shown (set by fill) */
 static int32_t g_value[DK_SETTINGS_FIELDS];
 static int32_t g_saved[DK_SETTINGS_FIELDS];
-static uint8_t g_failed;         /* the last save failed */
-static uint8_t g_restart;        /* a restart field changed */
+static uint8_t g_failed;  /* the last save failed */
+static uint8_t g_restart; /* a restart field changed */
 
 static void refresh(void)
 {
@@ -84,7 +84,8 @@ int32_t dk_settings_page_init(const dk_settings_page_desc *desc, dk_settings *se
     for (uint32_t i = 0; i < desc->count; i++) {
         char text[8];
         int32_t n = dk_settings_get(settings, desc->fields[i].key, text, sizeof text);
-        g_value[i] = n > 0 ? dk_settings_field_decode(&desc->fields[i], text, (uint32_t)n) : desc->fields[i].def;
+        g_value[i] = n > 0 ? dk_settings_field_decode(&desc->fields[i], text, (uint32_t)n)
+                           : desc->fields[i].def;
         g_saved[i] = g_value[i];
     }
     g_copy = *desc;

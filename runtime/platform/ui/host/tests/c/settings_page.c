@@ -24,15 +24,13 @@ static const dk_settings_field GOOD[] = {
     {.key = "mode", .label = "MODE", .kind = DK_SETTINGS_ENUM, .def = 1, .max = 2, .labels = MODES},
     {.key = "boot", .label = "BOOT FAST", .kind = DK_SETTINGS_BOOL, .flags = DK_SETTINGS_RESTART},
 };
-static const dk_settings_field NO_KEY[] = {
-    {.key = "", .label = "A", .kind = DK_SETTINGS_BOOL}};
+static const dk_settings_field NO_KEY[] = {{.key = "", .label = "A", .kind = DK_SETTINGS_BOOL}};
 static const dk_settings_field SLASH_KEY[] = {
     {.key = "a/b", .label = "A", .kind = DK_SETTINGS_BOOL}};
 static const dk_settings_field DOTS_KEY[] = {
     {.key = "a..b", .label = "A", .kind = DK_SETTINGS_BOOL}};
-static const dk_settings_field SAME_KEY[] = {
-    {.key = "a", .label = "A", .kind = DK_SETTINGS_BOOL},
-    {.key = "a", .label = "B", .kind = DK_SETTINGS_BOOL}};
+static const dk_settings_field SAME_KEY[] = {{.key = "a", .label = "A", .kind = DK_SETTINGS_BOOL},
+                                             {.key = "a", .label = "B", .kind = DK_SETTINGS_BOOL}};
 static const dk_settings_field BAD_BOOL_DEF[] = {
     {.key = "a", .label = "A", .kind = DK_SETTINGS_BOOL, .def = 2}};
 static const dk_settings_field BAD_INT_RANGE[] = {
@@ -121,33 +119,79 @@ dk_ui_menu *sp_page(void)
 int sp_check_case(int n)
 {
     switch (n) {
-    case 0: return (int)dk_settings_fields_check(GOOD, 5);
-    case 1: return (int)dk_settings_fields_check(GOOD, 0);
-    case 2: return (int)dk_settings_fields_check(GOOD, DK_SETTINGS_FIELDS + 1);
-    case 3: return (int)dk_settings_fields_check(0, 1);
-    case 4: return (int)dk_settings_fields_check(NO_KEY, 1);
-    case 5: return (int)dk_settings_fields_check(SLASH_KEY, 1);
-    case 6: return (int)dk_settings_fields_check(DOTS_KEY, 1);
-    case 7: return (int)dk_settings_fields_check(SAME_KEY, 2);
-    case 8: return (int)dk_settings_fields_check(BAD_BOOL_DEF, 1);
-    case 9: return (int)dk_settings_fields_check(BAD_INT_RANGE, 1);
-    case 10: return (int)dk_settings_fields_check(BAD_INT_DEF, 1);
-    case 11: return (int)dk_settings_fields_check(ENUM_NO_LABELS, 1);
-    case 12: return (int)dk_settings_fields_check(ENUM_ONE_OPTION, 1);
-    case 13: return (int)dk_settings_fields_check(ENUM_ROW_TOO_WIDE, 1);
-    case 14: return (int)dk_settings_fields_check(BAD_KIND, 1);
-    default: return 1;
+    case 0:
+        return (int)dk_settings_fields_check(GOOD, 5);
+    case 1:
+        return (int)dk_settings_fields_check(GOOD, 0);
+    case 2:
+        return (int)dk_settings_fields_check(GOOD, DK_SETTINGS_FIELDS + 1);
+    case 3:
+        return (int)dk_settings_fields_check(0, 1);
+    case 4:
+        return (int)dk_settings_fields_check(NO_KEY, 1);
+    case 5:
+        return (int)dk_settings_fields_check(SLASH_KEY, 1);
+    case 6:
+        return (int)dk_settings_fields_check(DOTS_KEY, 1);
+    case 7:
+        return (int)dk_settings_fields_check(SAME_KEY, 2);
+    case 8:
+        return (int)dk_settings_fields_check(BAD_BOOL_DEF, 1);
+    case 9:
+        return (int)dk_settings_fields_check(BAD_INT_RANGE, 1);
+    case 10:
+        return (int)dk_settings_fields_check(BAD_INT_DEF, 1);
+    case 11:
+        return (int)dk_settings_fields_check(ENUM_NO_LABELS, 1);
+    case 12:
+        return (int)dk_settings_fields_check(ENUM_ONE_OPTION, 1);
+    case 13:
+        return (int)dk_settings_fields_check(ENUM_ROW_TOO_WIDE, 1);
+    case 14:
+        return (int)dk_settings_fields_check(BAD_KIND, 1);
+    default:
+        return 1;
     }
 }
 
-int sp_changed_calls(void) { return ch.calls; }
-int sp_changed_field(void) { return (int)ch.field; }
-int sp_changed_value(void) { return ch.value; }
-int sp_puts_at_changed(void) { return ch.puts_at_call; }
-int sp_puts(void) { return fs_puts(); }
-void sp_put_result(int rc) { fs_put_result(rc); }
-int sp_value(int field) { return dk_settings_page_value((uint32_t)field); }
-int sp_set(int field, int value) { return (int)dk_settings_page_set((uint32_t)field, value); }
+int sp_changed_calls(void)
+{
+    return ch.calls;
+}
+int sp_changed_field(void)
+{
+    return (int)ch.field;
+}
+int sp_changed_value(void)
+{
+    return ch.value;
+}
+int sp_puts_at_changed(void)
+{
+    return ch.puts_at_call;
+}
+int sp_puts(void)
+{
+    return fs_puts();
+}
+void sp_put_result(int rc)
+{
+    fs_put_result(rc);
+}
+int sp_value(int field)
+{
+    return dk_settings_page_value((uint32_t)field);
+}
+int sp_set(int field, int value)
+{
+    return (int)dk_settings_page_set((uint32_t)field, value);
+}
 
-int sp_fills(void) { return ch.fills; }
-int sp_fills_at_changed(void) { return ch.fills_at_call; }
+int sp_fills(void)
+{
+    return ch.fills;
+}
+int sp_fills_at_changed(void)
+{
+    return ch.fills_at_call;
+}
