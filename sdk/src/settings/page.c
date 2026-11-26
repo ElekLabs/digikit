@@ -14,7 +14,7 @@ static uint8_t g_restart; /* a restart field changed */
 
 static void refresh(void)
 {
-    if (g_menu)
+    if (g_menu && dk_ui_menu_is_open(g_menu)) /* a closed page is filled again when it opens */
         dk_ui_menu_refresh(g_menu);
 }
 

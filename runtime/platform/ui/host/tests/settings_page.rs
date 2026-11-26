@@ -226,6 +226,22 @@ fn set_saves_and_shows_but_does_not_call_changed() {
 }
 
 #[test]
+fn set_after_the_page_closed_saves_without_filling_the_menu_again() {
+    let (_g, p) = page();
+    unsafe { dk_ui_menu_close(p) };
+    let fills = unsafe { sp_fills() };
+    assert_eq!(unsafe { sp_set(1, 20) }, 0);
+    assert_eq!(stored("gain").as_deref(), Some("20"));
+    assert_eq!(
+        unsafe { sp_fills() },
+        fills,
+        "a closed page is not refreshed"
+    );
+    assert_eq!(open(p), 0);
+    assert_eq!(rows()[1], "GAIN 020", "the next open shows the saved value");
+}
+
+#[test]
 fn a_page_that_was_not_initialised_shows_one_text_row() {
     let _g = session();
     unsafe { sp_reset() };
