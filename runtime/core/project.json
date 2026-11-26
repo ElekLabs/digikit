@@ -13,7 +13,7 @@
         "{workspaceRoot}/runtime/core/src/rs/**/*",
         {
           "input": "production",
-          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"]
+          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-lifecycle", "dkrt-svc-rt", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"]
         },
         "{workspaceRoot}/.cargo/**/*",
         "{workspaceRoot}/rust-toolchain*",
@@ -37,11 +37,11 @@
       "cache": true,
       "description": "The system package artifact: dist/syspkg/runtime/system.dksp, the card file digikit/system.dksp (`patchkit syspkg build` of the committed [system_package] object build/package.dko.json and the DIGIKIT menu's [package_part] object: header, image, bss size, relocations). A stale object is the failure of patchkit:objects-check.",
       "inputs": [
-        "{projectRoot}/build/package.dko.json",
+        { "dependentTasksOutputFiles": "runtime/core/build/package.dko.json", "transitive": false },
         "{workspaceRoot}/runtime/apps/digikit-menu/build/digikit-menu.dko.json",
         { "dependentTasksOutputFiles": "dist/patchkit/patchkit" }
       ],
-      "dependsOn": ["patchkit:cli"],
+      "dependsOn": ["patchkit:cli", "build-objects"],
       "outputs": ["{workspaceRoot}/dist/syspkg/runtime"],
       "options": {
         "command": "dist/patchkit/patchkit --root . syspkg build runtime/core/build/package.dko.json --part runtime/apps/digikit-menu/build/digikit-menu.dko.json --out dist/syspkg/runtime/system.dksp",
@@ -56,7 +56,7 @@
         "{workspaceRoot}/runtime/core/src/rs/**/*",
         {
           "input": "production",
-          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"]
+          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-lifecycle", "dkrt-svc-rt", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"]
         },
         "{workspaceRoot}/.cargo/**/*",
         "{workspaceRoot}/rust-toolchain*",
