@@ -94,10 +94,35 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if imports_name(file, b"dkc_settings_overlay_set") {
             return Err(E_BOOT_ONLY);
         }
+        if self.interrupt_entered(&old) || self.interrupt_entered(&new) {
+            return Err(E_BOOT_ONLY);
+        }
         match self.provider_needs(j, &file[off..off + len]) {
             OK => Ok((off, len)),
             e => Err(e),
         }
+    }
+
+    /// Does a hook of the table `keys` (for this device) sit at a site the port file declares `interrupt` (`CTX_IRQ`)? Such a hook is entered from an interrupt handler: no
+    /// task can be parked out of it, so the closure reload cannot take it down safely (`E_BOOT_ONLY`: a restart reloads the service). A hook the port file does not list is no
+    /// interrupt entry here (the load refuses it elsewhere).
+    unsafe fn interrupt_entered(&self, keys: &Keys) -> bool {
+        let Some((port, ..)) = self.port_keys() else {
+            return false;
+        };
+        let mut i = 0;
+        while let Some((hash, entry, _)) = keys.words(dkneeds::keys::tag::HOOKS, i) {
+            i += 1;
+            if !dkneeds::keys::hook_for_device(entry, self.p.device_id()) || dkneeds::keys::hook_is_patch(entry) {
+                continue;
+            }
+            if let Some(s) = port.find_site(hash) {
+                if s.flags & dkneeds::keys::FLAG_ABSENT == 0 && dkneeds::keys::site_context(s.flags) == dkneeds::keys::CTX_IRQ {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// The needs of every live package, as the package manager would meet them with the table `new` for provider `j`: the live modules (by selection index) and the providers the

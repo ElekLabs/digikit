@@ -122,9 +122,9 @@ exits = ["cf.lfo.site.tick_rand", "cf.lfo.site.tick_done"]
 regs = { in = ["d1", "d2", "d3", "a3"], clobbers = ["d0", "d2", "ccr"] }   # scratch of the hook: d0
 devices = ["dt2"]
 mark = "D"
-context = "above_ui"
+context = "interrupt"
 users = ["core/services/lfo"]
-doc = "The LFO tick, the compare of the clamped wave D3 with 6 before the call of the wave function table (the engine task, priority 8, above the UI task). exit.1 is the RAND code, exit.2 the code after the call (the result in d0); the end of the site is the table call of the stock waves. DT2 0x40139804: `moveq 6,D7; cmp.l D3,D7; beq 0x40139832`. Dead at the RAND code (0x40139832): D0 and the flags (strict); at the code after the call (0x4013989e): D2, D3, D5, D7 and the flags, D1 is live (the stock call path keeps it in its frame, the routine saves it); A0 and A1 are not proven dead there (strict), so the routine saves them too. The block is A3 (wave byte at 2(a3))."
+doc = "The LFO tick, the compare of the clamped wave D3 with 6 before the call of the wave function table (entered from an interrupt, vector 191, IPL 5). exit.1 is the RAND code, exit.2 the code after the call (the result in d0); the end of the site is the table call of the stock waves. DT2 0x40139804: `moveq 6,D7; cmp.l D3,D7; beq 0x40139832`. Dead at the RAND code (0x40139832): D0 and the flags (strict); at the code after the call (0x4013989e): D2, D3, D5, D7 and the flags, D1 is live (the stock call path keeps it in its frame, the routine saves it); A0 and A1 are not proven dead there (strict), so the routine saves them too. The block is A3 (wave byte at 2(a3))."
 
 [[hook]]
 name = "cf.lfo.hook.tick_call"
@@ -135,9 +135,9 @@ exits = ["cf.lfo.site.tick_rand", "cf.lfo.site.tick_done"]
 regs = { in = ["d2", "d3", "a4"], clobbers = ["d0", "d1", "d2", "ccr"] }   # scratch of the hook: d0
 devices = ["dn2"]
 mark = "D"
-context = "above_ui"
+context = "interrupt"
 users = ["core/services/lfo"]
-doc = "The LFO tick, the compare of the clamped wave D3 with 6 before the call of the wave function table (the engine task, priority 8, above the UI task). exit.1 is the RAND code, exit.2 the code after the call (the result in d0); the end of the site is the table call of the stock waves. DN2 0x40137cc6: `moveq 6,D0; cmp.l D3,D0; beq 0x40137cec`. Dead at the RAND code (0x40137cec): D0 and the flags; at the code after the call (0x40137d52): D1, D2 and the flags (the DN2 stock call path keeps no register in its frame, so the routine saves no D1); A0 and A1 are not proven dead there (strict), so the routine saves them. The block is A4 (wave byte at 0x4c(a4))."
+doc = "The LFO tick, the compare of the clamped wave D3 with 6 before the call of the wave function table (entered from an interrupt, vector 191, IPL 5). exit.1 is the RAND code, exit.2 the code after the call (the result in d0); the end of the site is the table call of the stock waves. DN2 0x40137cc6: `moveq 6,D0; cmp.l D3,D0; beq 0x40137cec`. Dead at the RAND code (0x40137cec): D0 and the flags; at the code after the call (0x40137d52): D1, D2 and the flags (the DN2 stock call path keeps no register in its frame, so the routine saves no D1); A0 and A1 are not proven dead there (strict), so the routine saves them. The block is A4 (wave byte at 0x4c(a4))."
 
 [[hook]]
 name = "cf.lfo.hook.tick_slew"
@@ -148,9 +148,9 @@ exits = ["cf.lfo.site.tick_done"]
 regs = { in = ["d3", "a3"], clobbers = ["d2", "ccr"] }   # scratch of the hook: d2
 devices = ["dt2"]
 mark = "D"
-context = "above_ui"
+context = "interrupt"
 users = ["core/services/lfo"]
-doc = "The LFO tick, the compare of D3 with 6 before the slew code of RAND (the engine task, priority 8, above the UI task). exit.1 skips the slew code; the end of the site is the slew code. DT2 0x4013986c: `moveq 6,D2; cmp.l D3,D2; bne 0x4013989e`. Dead where the stock fall-through (the slew code, 0x40139872) continues: D0, D2, D3, D5, D7, A0, A1 and N Z V C; at 0x4013989e: D2, D3, D5, D7 and the flags. D0 (the table result) and D1 are live."
+doc = "The LFO tick, the compare of D3 with 6 before the slew code of RAND (entered from an interrupt, vector 191, IPL 5). exit.1 skips the slew code; the end of the site is the slew code. DT2 0x4013986c: `moveq 6,D2; cmp.l D3,D2; bne 0x4013989e`. Dead where the stock fall-through (the slew code, 0x40139872) continues: D0, D2, D3, D5, D7, A0, A1 and N Z V C; at 0x4013989e: D2, D3, D5, D7 and the flags. D0 (the table result) and D1 are live."
 
 [[hook]]
 name = "cf.lfo.hook.tick_slew"
@@ -161,9 +161,9 @@ exits = ["cf.lfo.site.tick_done"]
 regs = { in = ["d3", "a4"], clobbers = ["d1", "ccr"] }   # scratch of the hook: d1
 devices = ["dn2"]
 mark = "D"
-context = "above_ui"
+context = "interrupt"
 users = ["core/services/lfo"]
-doc = "The LFO tick, the compare of D3 with 6 before the slew code of RAND (the engine task, priority 8, above the UI task). exit.1 skips the slew code; the end of the site is the slew code. DN2 0x40137d1e: `moveq 6,D1; cmp.l D3,D1; bne 0x40137d52`. Dead where the stock fall-through (the slew code, 0x40137d24) continues: D0, D1, D2, A0, A1 and N Z V C; at 0x40137d52: D1, D2 and the flags. D0 (the table result) is live."
+doc = "The LFO tick, the compare of D3 with 6 before the slew code of RAND (entered from an interrupt, vector 191, IPL 5). exit.1 skips the slew code; the end of the site is the slew code. DN2 0x40137d1e: `moveq 6,D1; cmp.l D3,D1; bne 0x40137d52`. Dead where the stock fall-through (the slew code, 0x40137d24) continues: D0, D1, D2, A0, A1 and N Z V C; at 0x40137d52: D1, D2 and the flags. D0 (the table result) is live."
 
 [[hook]]
 name = "cf.lfo.hook.tick_start"
@@ -174,9 +174,9 @@ exits = ["cf.lfo.site.tick_start_rand"]
 regs = { in = ["d3", "a3"], clobbers = ["d2", "ccr"] }   # scratch of the hook: d2
 devices = ["dt2"]
 mark = "D"
-context = "above_ui"
+context = "interrupt"
 users = ["core/services/lfo"]
-doc = "The LFO tick, the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger (the engine task, priority 8, above the UI task). exit.1 is the clear; the end of the site is the SPH-based phase. DT2 0x4013977e: `moveq 6,D0; cmp.l D3,D0; beq 0x4013979a`. Dead at the clear (0x4013979a): D1, D2, D7 and N Z V C; at the SPH phase code (0x40139784): D0, D1, D2, D7 and N Z V C."
+doc = "The LFO tick, the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger (entered from an interrupt, vector 191, IPL 5). exit.1 is the clear; the end of the site is the SPH-based phase. DT2 0x4013977e: `moveq 6,D0; cmp.l D3,D0; beq 0x4013979a`. Dead at the clear (0x4013979a): D1, D2, D7 and N Z V C; at the SPH phase code (0x40139784): D0, D1, D2, D7 and N Z V C."
 
 [[hook]]
 name = "cf.lfo.hook.tick_start"
@@ -187,9 +187,9 @@ exits = ["cf.lfo.site.tick_start_rand"]
 regs = { in = ["d3", "a4"], clobbers = ["d2", "ccr"] }   # scratch of the hook: d2
 devices = ["dn2"]
 mark = "D"
-context = "above_ui"
+context = "interrupt"
 users = ["core/services/lfo"]
-doc = "The LFO tick, the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger (the engine task, priority 8, above the UI task). exit.1 is the clear; the end of the site is the SPH-based phase. DN2 0x40137c40: `moveq 6,D0; cmp.l D3,D0; beq 0x40137c5c`. Dead at the clear (0x40137c5c): D1, D2, D7 and N Z V C; at the SPH phase code (0x40137c46): D0, D1, D2, D7 and N Z V C."
+doc = "The LFO tick, the compare of D3 with 6 that gives RAND a start phase of 0 at a trigger (entered from an interrupt, vector 191, IPL 5). exit.1 is the clear; the end of the site is the SPH-based phase. DN2 0x40137c40: `moveq 6,D0; cmp.l D3,D0; beq 0x40137c5c`. Dead at the clear (0x40137c5c): D1, D2, D7 and N Z V C; at the SPH phase code (0x40137c46): D0, D1, D2, D7 and N Z V C."
 
 [[hook]]
 name = "cf.lfo.hook.read_call"
