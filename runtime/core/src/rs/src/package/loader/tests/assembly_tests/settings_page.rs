@@ -32,7 +32,7 @@ fn a_settings_page_module_links_the_component_over_existing_imports_and_needs_co
             "dk_ui_menu_add_value",
             "dk_ui_menu_add_action",
             "dk_ui_menu_refresh",
-            "dk_ui_choice",
+            "dk_ui_choice_at",
         ] {
             assert!(imports.iter().any(|i| i == want), "{}: the packed page does not import {want}", dev.name);
         }

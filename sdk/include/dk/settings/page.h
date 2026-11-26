@@ -62,7 +62,7 @@ typedef struct dk_settings_page_desc {
 } dk_settings_page_desc;
 
 /* Call in `init` with the module's `dk_settings` and `dk_ui` handles (`ui` may be 0 for a table without an ENUM). Checks the table (DK_E_FORMAT for a bad
-   key, kind, range or label, or a bad count), then loads every value. DK_E_MISSING for a missing handle. DK_OK otherwise. */
+   key, kind, range or label, or a bad count), then loads every value. DK_E_MISSING for a missing handle. A module has one page: a second call after a successful one is refused with DK_E_EXISTS (and a log line) and changes nothing. DK_OK otherwise. */
 int32_t dk_settings_page_init(const dk_settings_page_desc *desc, dk_settings *settings, dk_ui *ui);
 /* The rows of the page; call from `dk_module.menu`. Adds a text row for a page that was not initialised. */
 void dk_settings_page_fill(dk_ui_menu *menu);

@@ -105,6 +105,12 @@ int sr_pass_absent(int no_rebuild)
 {
     return ui_rows_pass(&reg, no_rebuild ? 0 : fake_rebuild, no_rebuild ? FAKE_VTABLE : 0);
 }
+/* the destructor hook of the SETTINGS menu: of the kept menu (1) or of another object (0) */
+void sr_gone(int kept)
+{
+    static uint32_t other[2] = {FAKE_VTABLE, 0};
+    ui_rows_gone(&reg, kept ? (const uint8_t *)fake_menu : (const uint8_t *)other);
+}
 int sr_has_menu(void)
 {
     return reg.menu != 0;

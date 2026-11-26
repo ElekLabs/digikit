@@ -32,6 +32,20 @@
   },
   {
    "addend": 0,
+   "offset": 62,
+   "section": ".text",
+   "symbol": "ui_settings_menu_gone",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 78,
+   "section": ".text",
+   "symbol": "_dk_dtor_tail",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 30,
    "section": ".text.fn_manager",
    "symbol": ".sec..rodata.typeinfo_dummy",
@@ -256,6 +270,13 @@
   },
   {
    "addend": 0,
+   "offset": 42,
+   "section": ".text.fwt_emit",
+   "symbol": "dk_log_event",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
    "offset": 6,
    "section": ".text.key_is_down",
    "symbol": "cf.input.fn.key_down",
@@ -273,13 +294,6 @@
    "offset": 18,
    "section": ".text.run_settings_row",
    "symbol": "ui_rows_run",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 42,
-   "section": ".text.fwt_emit",
-   "symbol": "dk_log_event",
    "type": "cf.32"
   },
   {
@@ -487,133 +501,140 @@
   },
   {
    "addend": 0,
-   "offset": 154,
+   "offset": 170,
    "section": ".text.ui_poll",
    "symbol": ".sec..text.key_is_down",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 160,
+   "offset": 176,
    "section": ".text.ui_poll",
    "symbol": ".sec..bss.g_defer",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 166,
+   "offset": 182,
    "section": ".text.ui_poll",
    "symbol": "ui_defer_poll",
    "type": "cf.32"
   },
   {
    "addend": 128,
-   "offset": 176,
+   "offset": 192,
    "section": ".text.ui_poll",
    "symbol": ".sec..bss.g_views",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 184,
+   "offset": 200,
    "section": ".text.ui_poll",
    "symbol": ".sec..bss.g_views",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 190,
+   "offset": 206,
    "section": ".text.ui_poll",
    "symbol": "ui_views_poll",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 198,
+   "offset": 214,
    "section": ".text.ui_poll",
    "symbol": "cf.menu.fn.settings_list_rebuild",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 208,
+   "offset": 224,
    "section": ".text.ui_poll",
    "symbol": "cf.menu.data.settings_vtable",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 228,
+   "offset": 244,
    "section": ".text.ui_poll",
    "symbol": ".sec..bss.g_rows",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 234,
+   "offset": 250,
    "section": ".text.ui_poll",
    "symbol": "ui_rows_pass",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 248,
+   "offset": 296,
+   "section": ".text.ui_poll",
+   "symbol": "dk_log_event",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 312,
    "section": ".text.ui_poll",
    "symbol": ".sec..bss.g_views",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 254,
+   "offset": 318,
    "section": ".text.ui_poll",
    "symbol": "ui_views_used",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 266,
+   "offset": 330,
    "section": ".text.ui_poll",
    "symbol": ".sec..bss.g_defer",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 272,
+   "offset": 336,
    "section": ".text.ui_poll",
    "symbol": "ui_defer_pending",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 284,
+   "offset": 348,
    "section": ".text.ui_poll",
    "symbol": ".sec..bss.g_rows",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 290,
+   "offset": 354,
    "section": ".text.ui_poll",
    "symbol": "ui_rows_dirty",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 302,
+   "offset": 366,
    "section": ".text.ui_poll",
    "symbol": ".sec..bss.g_polling",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 314,
+   "offset": 378,
    "section": ".text.ui_poll",
    "symbol": "dkrt_poll_remove",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 320,
+   "offset": 384,
    "section": ".text.ui_poll",
    "symbol": ".sec..bss.g_polling",
    "type": "cf.32"
@@ -1769,155 +1790,155 @@
   {
    "addend": 0,
    "offset": 10,
-   "section": ".text.dk_ui_choice",
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..bss.g_dialog",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 24,
-   "section": ".text.dk_ui_choice",
+   "offset": 20,
+   "section": ".text.dk_ui_choice_at",
    "symbol": "ui_dialog_is_open",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 60,
-   "section": ".text.dk_ui_choice",
+   "offset": 58,
+   "section": ".text.dk_ui_choice_at",
    "symbol": "cf.window.site.multichoice_cb_vptr_lit",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 70,
-   "section": ".text.dk_ui_choice",
+   "offset": 68,
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..text.new_block",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 80,
-   "section": ".text.dk_ui_choice",
+   "offset": 78,
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..text.fw_new",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 108,
-   "section": ".text.dk_ui_choice",
+   "offset": 106,
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..text.choice_item.constprop.0",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 144,
-   "section": ".text.dk_ui_choice",
+   "offset": 146,
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..text.dk_ui_px_of",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 176,
-   "section": ".text.dk_ui_choice",
+   "offset": 178,
+   "section": ".text.dk_ui_choice_at",
    "symbol": "cf.string.fn.std_string.ctor",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 246,
-   "section": ".text.dk_ui_choice",
+   "offset": 252,
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..text.cut",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 278,
-   "section": ".text.dk_ui_choice",
-   "symbol": ".sec..bss.g_serial",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 284,
-   "section": ".text.dk_ui_choice",
-   "symbol": ".sec..text.fn_manager",
+   "section": ".text.dk_ui_choice_at",
+   "symbol": ".sec..bss.g_serial",
    "type": "cf.32"
   },
   {
    "addend": 0,
    "offset": 290,
-   "section": ".text.dk_ui_choice",
+   "section": ".text.dk_ui_choice_at",
+   "symbol": ".sec..text.fn_manager",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 300,
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..text.inv_answer",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 322,
-   "section": ".text.dk_ui_choice",
+   "offset": 328,
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..bss.g_serial",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 328,
-   "section": ".text.dk_ui_choice",
+   "offset": 334,
+   "section": ".text.dk_ui_choice_at",
    "symbol": "cf.window.fn.multichoice_ctor",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 340,
-   "section": ".text.dk_ui_choice",
+   "offset": 364,
+   "section": ".text.dk_ui_choice_at",
    "symbol": "cf.string.fn.std_string.dtor",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 352,
-   "section": ".text.dk_ui_choice",
-   "symbol": "cf.string.fn.std_string.dtor",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
-   "offset": 372,
-   "section": ".text.dk_ui_choice",
+   "offset": 390,
+   "section": ".text.dk_ui_choice_at",
    "symbol": "cf.mem.fn.free",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 392,
-   "section": ".text.dk_ui_choice",
+   "offset": 410,
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..bss.g_dialog",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 398,
-   "section": ".text.dk_ui_choice",
+   "offset": 416,
+   "section": ".text.dk_ui_choice_at",
    "symbol": "ui_dialog_begin",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 408,
-   "section": ".text.dk_ui_choice",
+   "offset": 426,
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..text.show",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 424,
-   "section": ".text.dk_ui_choice",
+   "offset": 442,
+   "section": ".text.dk_ui_choice_at",
    "symbol": ".sec..bss.g_dialog",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 430,
-   "section": ".text.dk_ui_choice",
+   "offset": 448,
+   "section": ".text.dk_ui_choice_at",
    "symbol": "ui_dialog_detach",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text.dk_ui_choice",
+   "symbol": ".sec..text.dk_ui_choice_at",
    "type": "cf.32"
   },
   {
@@ -2030,6 +2051,20 @@
    "offset": 66,
    "section": ".text.ui_settings_rows_tail",
    "symbol": ".sec..text.run_settings_row",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 6,
+   "section": ".text.ui_settings_menu_gone",
+   "symbol": ".sec..bss.g_rows",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 12,
+   "section": ".text.ui_settings_menu_gone",
+   "symbol": "ui_rows_gone",
    "type": "cf.32"
   },
   {
@@ -2489,13 +2524,6 @@
   },
   {
    "addend": 0,
-   "offset": 12,
-   "section": ".text.ui_rows_pass",
-   "symbol": ".sec..text.ui_rows_dirty",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 58,
    "section": ".text.push_deferred",
    "symbol": ".sec..text.push_slot",
@@ -2827,10 +2855,10 @@
  "sections": [
   {
    "align": 4,
-   "hex": "206f00042f2f000c2f2f000c4eb900000000508f4e752f0a4eb900000000588f2f0a4eb900000000588f4ef900000000",
+   "hex": "206f00042f2f000c2f2f000c4eb900000000508f4e752f0a4eb900000000588f2f0a4eb900000000588f4ef9000000004feffff048d703032f2f00144eb900000000588f4cd703034fef00104ef900000000",
    "kind": "text",
    "name": ".text",
-   "size": 48
+   "size": 82
   },
   {
    "align": 2,
@@ -2960,6 +2988,13 @@
   },
   {
    "align": 2,
+   "hex": "4e56ffec2d6e0014ffec486effec2f2e001042aefff442aefff842aefffc2f2e000c2d6e0018fff04eb9000000004fef000c4e5e4e75",
+   "kind": "text",
+   "name": ".text.fwt_emit",
+   "size": 54
+  },
+  {
+   "align": 2,
    "hex": "2f2f00084eb900000000588f4a8056c0710044804e75",
    "kind": "text",
    "name": ".text.key_is_down",
@@ -2971,13 +3006,6 @@
    "kind": "text",
    "name": ".text.run_settings_row",
    "size": 22
-  },
-  {
-   "align": 2,
-   "hex": "4e56ffec2d6e0014ffec486effec2f2e001042aefff442aefff842aefffc2f2e000c2d6e0018fff04eb9000000004fef000c4e5e4e75",
-   "kind": "text",
-   "name": ".text.fwt_emit",
-   "size": 54
   },
   {
    "align": 2,
@@ -3058,10 +3086,10 @@
   },
   {
    "align": 2,
-   "hex": "4fefffdc48d7443c4eb9000000004a806600013e203900000000528023c000000000767845f90000000042822c4a20564a886740222e000c4c0318000681000003e70c81000003e763000110283c000003e84c441001224093ee0010b28962142d4000102f2e00042f40001c4e90588f202f001852824dee00147204b28266ae9dce42804a926702528e528045ea00147804b88066ee42a74879000000004879000000004eb9000000004fef000c4ab900000000670e4879000000004eb900000000588f2a3c000000002f45001c203c000000002f400020202f00202f002f2f00204879000000004eb9000000004fef000c4a8e66504879000000004eb900000000588f4a80663e4879000000004eb900000000588f4a80662c4879000000004eb900000000588f4a80661a4ab9000000006712487afeca4eb90000000042b900000000588f4cd7443c4fef00244e75263c000005dc6000fecc72016000fef8",
+   "hex": "4e56ffc448d70c3c4eb9000000004a806600017e203900000000528023c000000000767845f90000000042822d4affdc226effdc20514a8867442229000c4c0318000681000003e70c81000003e76300014a283c000003e84c441001266effdc224093eb0010b2896214274000102f2b00042d40ffe04e90588f202effe072145282d3aeffdc7804b88266a442aeffdc42804a92670452aeffdc528045ea00147a04ba8066ec42a74879000000004879000000004eb9000000004fef000c4ab900000000670e4879000000004eb900000000588f43f9000000002d49ffe447f9000000002d4bffe8202effe82f002f2effe44879000000004eb9000000004fef000c4a806c2a486effec700142a7487800082d40ffec42aefff042aefff442aefff842aefffc4eb9000000004fef000c4aaeffdc66504879000000004eb900000000588f4a80663e4879000000004eb900000000588f4a80662c4879000000004eb900000000588f4a80661a4ab9000000006712487afe8a4eb90000000042b900000000588f4cee0c3cffc44e5e4e75263c000005dc6000fe8c72016000febe",
    "kind": "text",
    "name": ".text.ui_poll",
-   "size": 352
+   "size": 416
   },
   {
    "align": 2,
@@ -3233,10 +3261,17 @@
   },
   {
    "align": 2,
-   "hex": "4e56ff6048d73cfc487900000000266e00102c2e00144eb900000000588f28004a80660001904a8b6700018a20065380ea88660001802406e58a487900000000487800d84eb90000000024402f024eb9000000004fef000c2d40ff884a8a670001544a806700014e420049f9000000004285260e2a4c0683ffffffb01d40ff8f4878ffff2f335c002f034e942f034eb9000000004fef0010b0846f0228005285ba8666dc2e0e42850687ffffff8f49f9000000002f042f3358002f034e952f072f032c2eff882046487058004e9458854fef0018ba8266dc206eff88d4882f2e000c487800182f032d48ff942d42ff982d42ff9c4eb9000000002f072f03280e0684ffffff902f044e9448780001486effa02f04263900000000203c00000000223c000000005283486eff942d40ffa82d41ffac486a001042aeffa042aeffa423c3000000004eb9000000004fef00282e8441f9000000004e90588f2f0641f90000000058864e90588fbc8266ee2f2eff884eb9000000002f2e001c2f2e00182f2e00082f034879000000004eb9000000002f032f0a4eb9000000004fef00204a8067122f034879000000004eb900000000508f70ff4cee3cfcff604e5e4e75",
+   "hex": "4e56ff6048d73cfc4879000000002c2e00144eb900000000588f28004a80660001a64aae00106700019e20065380ea88660001942406e58a487900000000487800d84eb90000000024402f024eb9000000004fef000c2d40ff884a8a670001684a8067000162420047f9000000004285260e2a4b0683ffffffb01d40ff8f206e00104878ffff2f305c002f034e932f034eb9000000004fef0010b0846f0228005285ba8666d82e0e97cb0687ffffff8f49f900000000206e00102f042f30b8002f034e952f072f032c2eff8820464870b8004e94588b4fef0018b7c266d8206eff88d4882f2e000c487800182f032d48ff942d42ff982d42ff9c4eb9000000002f072f03280e0684ffffff902f044e9448780001486effa02f04263900000000203c00000000486eff94223c000000005283486a001042aeffa042aeffa42d40ffa82d41ffac23c3000000004eb9000000004fef002c4aae00186d06baae00186e704280254000ac2f0447f9000000004e93588f2f064e935886588fbc8266f42f2eff884eb9000000002f2e00202f2e001c2f2e00082f034879000000004eb9000000002f032f0a4eb9000000004fef00204a8067122f034879000000004eb900000000508f70ff4cee3cfcff604e5e4e75202e0018608c",
+   "kind": "text",
+   "name": ".text.dk_ui_choice_at",
+   "size": 472
+  },
+  {
+   "align": 2,
+   "hex": "2f2f00182f2f001842a72f2f001c2f2f001c2f2f001c2f2f001c4eb9000000004fef001c4e75",
    "kind": "text",
    "name": ".text.dk_ui_choice",
-   "size": 448
+   "size": 38
   },
   {
    "align": 2,
@@ -3258,6 +3293,13 @@
    "kind": "text",
    "name": ".text.ui_settings_rows_tail",
    "size": 90
+  },
+  {
+   "align": 2,
+   "hex": "2f2f00044879000000004eb900000000508f4e75",
+   "kind": "text",
+   "name": ".text.ui_settings_menu_gone",
+   "size": 20
   },
   {
    "align": 2,
@@ -3583,10 +3625,17 @@
   },
   {
    "align": 2,
-   "hex": "598f2f0a246f000c2f0a4eb900000000588f4a8067244201154101d84aaf001067124aaf0014670c206a01d4222f0014b290670c42aa01d44280245f588f4e752f08206f00142f4000084e90588f202f000460e6",
+   "hex": "206f0004202f0008b0a801d4660a420042a801d4114001d84e75",
+   "kind": "text",
+   "name": ".text.ui_rows_gone",
+   "size": 26
+  },
+  {
+   "align": 2,
+   "hex": "598f2f0e206f000c226f0010202f00142f6801d400044aaf000467064a2801d8660842802c5f588f4e754201114101d84a8967044a806616102801d9720142a801d44a0057c0114101d9710060d62c6f0004b096670642a801d460c62f2f00044e91588f700160bc",
    "kind": "text",
    "name": ".text.ui_rows_pass",
-   "size": 84
+   "size": 104
   },
   {
    "align": 2,
@@ -3911,7 +3960,7 @@
    "size": 72
   }
  ],
- "source_sha256": "74e9d4bc3d5fd2a138f3672f85f77f42359e76cbf2f2ab43f83d72e726145fc0",
+ "source_sha256": "6ce6e0b754b27639075dd37062c066a2f50cc973018dcf9b7c138db3f1e35040",
  "symbols": [
   {
    "global": false,
@@ -4151,6 +4200,12 @@
    "global": false,
    "name": ".sec..text.defer_start",
    "section": ".text.defer_start",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text.dk_ui_choice_at",
+   "section": ".text.dk_ui_choice_at",
    "value": 0
   },
   {
@@ -4449,12 +4504,6 @@
   },
   {
    "global": false,
-   "name": ".sec..text.ui_rows_dirty",
-   "section": ".text.ui_rows_dirty",
-   "value": 0
-  },
-  {
-   "global": false,
    "name": ".sec..text.ui_text_input_check",
    "section": ".text.ui_text_input_check",
    "value": 0
@@ -4469,6 +4518,12 @@
    "global": false,
    "name": ".sec..text.value_changed",
    "section": ".text.value_changed",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dk_dtor_tail",
+   "section": null,
    "value": 0
   },
   {
@@ -4803,6 +4858,12 @@
   },
   {
    "global": true,
+   "name": "dk_dtor_hook",
+   "section": ".text",
+   "value": 48
+  },
+  {
+   "global": true,
    "name": "dk_hook",
    "section": ".text",
    "value": 22
@@ -4823,6 +4884,12 @@
    "global": true,
    "name": "dk_ui_choice",
    "section": ".text.dk_ui_choice",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "dk_ui_choice_at",
+   "section": ".text.dk_ui_choice_at",
    "value": 0
   },
   {
@@ -5589,6 +5656,12 @@
   },
   {
    "global": true,
+   "name": "ui_rows_gone",
+   "section": ".text.ui_rows_gone",
+   "value": 0
+  },
+  {
+   "global": true,
    "name": "ui_rows_pass",
    "section": ".text.ui_rows_pass",
    "value": 0
@@ -5603,6 +5676,12 @@
    "global": true,
    "name": "ui_rows_run",
    "section": ".text.ui_rows_run",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_settings_menu_gone",
+   "section": ".text.ui_settings_menu_gone",
    "value": 0
   },
   {
@@ -5718,8 +5797,8 @@
   "as": "GNU assembler (GNU Binutils) 2.47.20260726",
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
-  "instructions_redecoded": "4118",
-  "isa_check": "d84aad4b898621cb3cff9e4c17488a66768519d99cfd6d4633383a8f72b55701",
+  "instructions_redecoded": "4181",
+  "isa_check": "0d408b0cd3c5a4ae0380936e410b472c27e45a57909af8c34d202f2595a6c3a9",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

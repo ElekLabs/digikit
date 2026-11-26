@@ -4,6 +4,8 @@
 |   stack; this adapts the cdecl call from C. It makes the control block (use count 1) and registers a detach callback on the
 |   view that clears the shared_ptr at parent+0x90. Core/ui passes a parent that is a zeroed heap block, so that clear changes
 |   nothing, and keeps the returned shared_ptr for the session: the firmware then never frees the view.
+    .include "dk_fw_menu.inc"
+
     .text
     .globl dk_make_sp
 dk_make_sp:
@@ -27,3 +29,9 @@ dk_hook:
     jsr     ui_settings_rows_tail   | the rows of modules (dk_ui_settings_row); C code keeps d2-d7 and a2-a6
     addq.l  #4,%sp
     jmp     _dk_tail
+
+| dk_dtor_hook: the entry of the SETTINGS menu destructor (cf.menu.hook.settings_dtor, menu at 4(sp)): ui_settings_menu_gone drops the kept pointer. The macro keeps every
+|   register; the displaced instructions run in the tail.
+    .globl dk_dtor_hook
+dk_dtor_hook:
+    dk_fw_menu_settings_dtor_hook ui_settings_menu_gone, _dk_dtor_tail
