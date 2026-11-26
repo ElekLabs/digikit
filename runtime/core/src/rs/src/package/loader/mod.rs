@@ -223,6 +223,9 @@ pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     sel_of_rec: [u8; MAX_MODULES],
     /// The steps of a teardown that ran for each record (`TORN_*`): a second `unload_body` after `E_BUSY` skips them, so `fini` and the role's undo run once.
     torn: [u8; records::REC_MAX],
+    /// Host tests: the next this many restores answer busy, as when a task below the UI task is not parked (the gate itself is covered by `park_tests`).
+    #[cfg(test)]
+    busy_restores: u32,
     /// The tick address of a module whose tick the teardown stopped (valid while `TORN_TICK` is set): a reload that cannot finish gives it back.
     saved_tick: [u32; MAX_MODULES],
     /// The block count when a reload closed the entries of each module (`TORN_DRAIN`); `None`: the platform has no block clock.
@@ -345,6 +348,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             m,
             r,
             phase: Phase::Closed,
+            #[cfg(test)]
+            busy_restores: 0,
             roles: [0; records::REC_MAX],
             missing: [0; NEEDS_LEN],
             decl_diff: (0, 0),
