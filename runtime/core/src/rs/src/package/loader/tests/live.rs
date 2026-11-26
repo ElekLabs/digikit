@@ -543,3 +543,21 @@ fn an_unrelated_missing_import_refuses_early_even_when_a_found_service_is_not_up
         assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), E_IMPORT);
     }
 }
+
+#[test]
+fn a_live_load_refuses_a_service_that_registers_the_settings_overlay_and_keeps_the_reboot_path() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = card_without_the_service();
+        let _rt = boot_selection(&mut l, &[PATH]);
+        // the service file imports the overlay registration: it keeps per-project state and would run unbound
+        let f = service_file_of(module_file_with(&[], &[b"dkc_settings_overlay_set"]), &svc_table(), 0);
+        l.m.files.insert(SVC_PATH.to_vec(), f);
+        assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), E_BOOT_ONLY);
+        assert_eq!(records::module(MAX_MODULES).used, 0, "nothing was brought up");
+        // a module that does not reach it is not refused
+        l.m.files.remove(&SVC_PATH.to_vec());
+        l.m.files.insert(SVC_PATH.to_vec(), service_file(&svc_table(), 0));
+        assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), OK);
+    }
+}

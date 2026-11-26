@@ -99,6 +99,59 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         OK
     }
 
+    /// Would the load of the table `new` bring up, at run time, a service that keeps per-project state? Such a service registers the settings overlay (its file imports
+    /// `dkc_settings_overlay_set`) and learns the current project only from the next project load event, so a bring-up in the middle of a project would run it unbound.
+    /// The firmware's current project is not cheap to read from here, so the load is refused (`E_BOOT_ONLY`: the service belongs to the boot's set) and a restart brings it up
+    /// bound. Only the providers the new file reaches through its hard needs count: found, not up, usable.
+    unsafe fn live_brings_up_overlay(&mut self, new: &[u8]) -> bool {
+        use dkneeds::keys::tag;
+        let Ok(t) = Keys::parse(new) else { return false };
+        let mut reach = [0u32; plan::WANT_MAX];
+        let mut nr = plan::unmet_needs(&[Some(t)], &mut reach);
+        let mut seen = [false; PROVIDER_MAX];
+        let mut grew = true;
+        while grew {
+            grew = false;
+            let mut j = 0;
+            while j < self.found.n.min(PROVIDER_MAX) {
+                if !seen[j] && !self.unusable[j] && records::module(MAX_MODULES + j).used == 0 {
+                    let mut hit = false;
+                    if let Ok(p) = Keys::parse(self.found.table(j)) {
+                        let mut w = 0;
+                        while let Some(h) = p.words(tag::PROVIDES, w) {
+                            hit |= reach[..nr].contains(&h.0);
+                            w += 1;
+                        }
+                        if hit {
+                            let mut i = 0;
+                            while let Some(n) = p.words(tag::NEEDS, i) {
+                                i += 1;
+                                if n.2 & 1 != 0 && !reach[..nr].contains(&n.0) && nr < plan::WANT_MAX {
+                                    reach[nr] = n.0;
+                                    nr += 1;
+                                }
+                            }
+                        }
+                    }
+                    if hit {
+                        seen[j] = true;
+                        grew = true;
+                        let at = self.found.path(j).len();
+                        let mut path = [0u8; discover::PATH_CAP + 1];
+                        path[..at].copy_from_slice(self.found.path(j));
+                        if let Ok(s) = self.m.stage(path.as_ptr()) {
+                            if imports_name(core::slice::from_raw_parts(s.ptr, s.size as usize), b"dkc_settings_overlay_set") {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                j += 1;
+            }
+        }
+        false
+    }
+
     /// Is the import `import` (name hash), which the last file check could not resolve (`import_name`), exported by a provider of `found` that is not up yet? Only then does the
     /// refusal wait for the manager, which brings the service up and links the module; any other unresolved import stays a refusal.
     unsafe fn needs_service_down(&self, import: u32) -> bool {
@@ -188,7 +241,24 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
 }
 
 impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
-    /// The checks of a reload of module record `rec` by the file at `path`, before anything is unloaded: nothing changes but the staging buffer. In this order: the
+    /// Does the module or service file `file` list `name` among its imports?
+fn imports_name(file: &[u8], name: &[u8]) -> bool {
+    let be = |p: usize| file.get(p..p + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize);
+    let (Some(off), Some(n)) = (be(dkneeds::H_IMPORT_OFF as usize), be(dkneeds::H_IMPORT_N as usize)) else { return false };
+    let len = dkneeds::CF_IMPORT_LEN as usize;
+    let mut i = 0;
+    while i < n {
+        let Some(e) = file.get(off + i * len..off + (i + 1) * len) else { return false };
+        let end = e.iter().position(|b| *b == 0).unwrap_or(len);
+        if &e[..end] == name {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// The checks of a reload of module record `rec` by the file at `path`, before anything is unloaded: nothing changes but the staging buffer. In this order: the
     /// record is a live module of the boot selection; the file passes every check of a load (`check_file`), has the same name, a header table the planner can keep, and
     /// every key of the old file (`E_RELOAD_KEYS`); the planner accepts the live set with the file in the old module's slot (`caps`: `live_caps`). `OK`, or the refusal.
     ///
@@ -346,6 +416,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                                 if r != OK {
                                     return r;
                                 }
+                                // (the staged bytes are replaced by this look at the providers' files: `table` is not used after it)
+                                if self.live_brings_up_overlay(table) {
+                                    return E_BOOT_ONLY;
+                                }
                             }
                         }
                         Err(e) => return e,
@@ -492,4 +566,21 @@ pub(crate) fn live_caps(caps: &mut [DkrtCap], own: (u32, u32)) {
 /// The selection indices at which a module is loaded.
 pub(crate) unsafe fn live_indices() -> [bool; SEL_MAX] {
     loader().live_at(SEL_MAX)
+}
+
+/// Does the module or service file `file` list `name` among its imports?
+fn imports_name(file: &[u8], name: &[u8]) -> bool {
+    let be = |p: usize| file.get(p..p + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize);
+    let (Some(off), Some(n)) = (be(dkneeds::H_IMPORT_OFF as usize), be(dkneeds::H_IMPORT_N as usize)) else { return false };
+    let len = dkneeds::CF_IMPORT_LEN as usize;
+    let mut i = 0;
+    while i < n {
+        let Some(e) = file.get(off + i * len..off + (i + 1) * len) else { return false };
+        let end = e.iter().position(|b| *b == 0).unwrap_or(len);
+        if &e[..end] == name {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }
