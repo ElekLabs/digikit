@@ -604,3 +604,4 @@ Written while building `modules/core/adapters/ui` and checked in the emulator on
 - **Toast [D].** A toast is drawn by the main screen: with a menu open it is not visible. It shows on the main screen after the menus
   closed.
 - **Compact paint [D].** The title is drawn with `draw_fmt(canvas, font, 0x40, 0x41 - [view+0x84], 2, title)`; `[view+0x84]` is 7.
+- **MultiChoice paint reads `selected` only for the highlight [D].** The paint (DT2 0x4011693c, DN2 0x401182b0) compares each item index with `[+0x9c]` to draw the highlight box; item positions come from the item and title vectors, `vertical` (+0xac) and the layout fields (+0xa0, +0xb0, +0xb4), so a start index stored before the first paint (`dk_ui_choice_at`) moves no scroll offset.
