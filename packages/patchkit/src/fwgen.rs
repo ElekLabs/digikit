@@ -344,7 +344,10 @@ pub fn service_decls_with(
                     Some("ui") => dkneeds::keys::CTX_UI,
                     Some("above_ui") => dkneeds::keys::CTX_ABOVE_UI,
                     Some(c) => {
-                        return Err(err!("{}: context {c:?} is not ui, above_ui or task", h.name));
+                        return Err(err!(
+                            "{}: context {c:?} is not ui, above_ui or task",
+                            h.name
+                        ));
                     }
                 };
                 hooks.push(HookDecl {
@@ -1876,7 +1879,10 @@ doc = "A probe."
         assert_eq!(ctx("context = \"ui\""), CTX_UI);
         assert_eq!(ctx("context = \"above_ui\""), CTX_ABOVE_UI);
         let bad = service_decls(&[hook_text("context = \"main\"").as_str()]).unwrap_err();
-        assert!(bad.to_string().contains("not ui, above_ui or task"), "{bad}");
+        assert!(
+            bad.to_string().contains("not ui, above_ui or task"),
+            "{bad}"
+        );
     }
 
     #[test]
