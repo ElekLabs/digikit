@@ -1102,18 +1102,19 @@ static void run_settings_row(void *key, int32_t unused)
 /* Called from dk_hook (shim.s) after the app's rows. */
 void ui_settings_rows_tail(uint8_t *settings_menu)
 {
+    /* the one list of the session: ui_poll builds it again when the rows change */
     for (uint32_t i = 0; i < g_rows.n; i++)
         dk_ui_stock_row(settings_menu, g_rows.row[i].text, run_settings_row,
                         (void *)g_rows.row[i].key);
-    ui_rows_built(&g_rows, settings_menu); /* the list is the one the firmware builds for the session: ui_poll builds it again when the rows change */
+    ui_rows_built(&g_rows, settings_menu);
 }
 
 int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *open, void *arg)
 {
     char name[DK_UI_MODULE_NAME];
     ui_owner_name(owner_of(ui), dkrt_record_name, name);
-    int32_t r = ui_rows_add(&g_rows, owner_of(ui), name, dkrt_phase() == DKRT_PHASE_INIT, text,
-                            open, arg);
+    int32_t r =
+        ui_rows_add(&g_rows, owner_of(ui), name, dkrt_phase() == DKRT_PHASE_INIT, text, open, arg);
     if (r == 0 && ui_rows_dirty(&g_rows))
         poll_start(); /* a row added after the stock list was built: the next pass builds it again */
     return r;

@@ -146,7 +146,8 @@ int ui_rows_pass(ui_settings_rows *s, ui_rows_rebuild_fn *rebuild)
 {
     if (!ui_rows_dirty(s))
         return 0;
-    s->dirty = 0; /* the rebuild clears it too; clearing first keeps a failing rebuild from running every pass */
+    /* clear first: a rebuild that fails to clear it must not run every pass */
+    s->dirty = 0;
     rebuild(s->menu);
     return 1;
 }
