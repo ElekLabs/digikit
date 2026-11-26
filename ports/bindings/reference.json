@@ -7791,7 +7791,32 @@
       "was": []
     },
     {
-      "at": {},
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401aad94",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401ab074",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401bb40e",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401859a6",
+            "len": 4
+          }
+        ]
+      },
       "bindings": {
         "c": "dk_fw_menu_settings_dtor",
         "rust": "dkfw::menu::settings_dtor"
@@ -8076,7 +8101,28 @@
       ]
     },
     {
-      "at": {},
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401aad94"
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401ab074"
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401bb40e"
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x401859a6"
+          }
+        ]
+      },
       "bindings": {
         "c": "dk_fw_menu_settings_dtor_hook",
         "gas": "dk_fw_menu_settings_dtor_hook",
