@@ -425,8 +425,15 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         // the entries carry absolute targets; the installer takes the offset in the image (a target before the image wraps past its size) and refuses one outside it
         // at run time a `task` site is written only while the BgWorker and the console task wait (`Gate`); at the boot no task has run
         let parks = self.task_parks();
-        let cf = CfItems { hooks: &hooks[..nh], patches: &patches[..np], image_base: base, image_size, slots: &slots[..ns], gate: parks.gate(self.live()) };
-        Backend::install(&mut self.installer, &self.p, rec as u8, &cf)
+        let gate = parks.gate(self.live());
+        let cf = CfItems { hooks: &hooks[..nh], patches: &patches[..np], image_base: base, image_size, slots: &slots[..ns], gate };
+        let r = Backend::install(&mut self.installer, &self.p, rec as u8, &cf);
+        // a run-time task site with no task facts in the port file answers `E_IMPORT` as a missing import does: the load's log names the cause (`MOD_NEEDS`, "NEEDS port:no-task")
+        let task_site = hooks[..nh].iter().any(|h| h.ctx == dkneeds::keys::CTX_TASK) || patches[..np].iter().any(|q| q.ctx == dkneeds::keys::CTX_TASK);
+        if r == Err(E_IMPORT) && gate.live && gate.parks.is_none() && task_site && self.missing[0] == 0 {
+            self.missing = *b"port:no-task";
+        }
+        r
     }
 
     /// Claim the DSP slots of `entries` for package `id` (`DspInstaller`): the stubs stay stock until the DSP acknowledges the code (`dsp_step`).

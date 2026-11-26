@@ -152,3 +152,23 @@ fn the_facts_come_from_the_port_file_a_task_the_firmware_lacks_is_left_out_and_a
     // the boot gate does not use them
     assert!(!park::TaskParks::read(None).gate(false).live);
 }
+
+#[test]
+fn a_run_time_task_site_with_no_task_facts_is_e_import_and_the_load_names_the_cause() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // a port file of an older build: the site is listed, the task names are not
+        let (mut l, svc, _) = started(0, &[]);
+        found_at(&mut l, 1);
+        let mut s = shared(&mut l);
+        let manifest = RtManifest::of(&mut s, 0);
+        let (mut placer, mut linker, mut installers, mut host) = s.seams();
+        let base = placer.place(svc).unwrap();
+        linker.link(svc, base, &[]).unwrap();
+        host.start(svc).unwrap();
+        l.set_phase(PhaseKind::Closed);
+        assert_eq!(installers.install(svc, manifest.entries(svc)), Err(InstallError::Backend(E_IMPORT)));
+        assert_eq!(l.missing(), *b"port:no-task", "the cause is in the failure detail the load logs");
+        assert_eq!(site(&l), STOCK.to_vec());
+    }
+}
