@@ -10,10 +10,6 @@ summary = "Test fixture: a module whose SETTINGS page comes from a field table (
 requires = ["core/ui"]
 conflicts = []
 
-[targets]
-"dt2-1.17" = "experimental"
-"dn2-1.12" = "experimental"
-
 # C, built by `patchkit build`. Loaded by the digikit runtime from the card store (`patchkit pack test/settings-page`).
 [[object]]
 path = "build/settings-page.dko.json"

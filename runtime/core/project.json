@@ -108,6 +108,7 @@
         "core/services/samples:pack",
         "core/services/project:pack",
         "test/track-select:pack",
+        "test/settings-page:pack",
         "digikit/debug:pack",
         "patchkit:ports-test",
         "patchkit:cli",

@@ -28,6 +28,7 @@ use std::path::{Path, PathBuf};
 use std::string::String;
 use std::vec::Vec;
 
+mod settings_page;
 mod workbench;
 
 fn repo() -> PathBuf {
