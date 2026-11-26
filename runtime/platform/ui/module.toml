@@ -12,7 +12,7 @@ requires = ["core/runtime"]
 conflicts = []
 ports = ["dt2-1.17", "dn2-1.12", "st-1.42"]
 # The anchors of module screens (views, text input): a port without them (st-1.42) still takes core/ui, and a module's view or text input is refused there.
-optional_anchors = ["cf.text.fn.width", "cf.view.fn.view_ctor", "cf.window.fn.name_ctor", "cf.window.site.name_cb_vptr_lit", "cf.text.data.font_large", "cf.menu.fn.settings_list_rebuild", "cf.menu.data.settings_vtable"]
+optional_anchors = ["cf.text.fn.width", "cf.view.fn.view_ctor", "cf.window.fn.name_ctor", "cf.window.site.name_cb_vptr_lit", "cf.text.data.font_large", "cf.menu.fn.settings_list_rebuild", "cf.menu.data.settings_vtable", "cf.menu.fn.settings_dtor", "cf.menu.hook.settings_dtor"]
 # The key ids of the firmware's key events (build/gen/ui-<dev>.inc): a device without the table would give zeros.
 needs_device = ["input.keys"]
 
@@ -42,7 +42,7 @@ to = "dk_hook"
 [[claim]]
 resource = "cf.menu.site.settings_list.tail"
 
-# The destructor of the SETTINGS menu: core/ui forgets the menu pointer it kept for the list rebuild (ui_settings_menu_gone).
+# Optional (a port without the destructor anchor skips the op and the tail link is 0; the vtable check is then the only guard). The destructor of the SETTINGS menu: core/ui forgets the menu pointer it kept for the list rebuild (ui_settings_menu_gone).
 [[op]]
 op = "hook"
 hook = "cf.menu.hook.settings_dtor"

@@ -423,7 +423,7 @@ pub mod menu {
     }
 
     unsafe extern "C" {
-        /// The destructor of the SETTINGS menu (DigisharcSettingsMenu, Syntakt DiddySettingsMenu; vtable slot 0, called by the deleting destructor in slot 1 and by the shared_ptr control block): `menu` = this. The firmware builds the menu once in the main screen's constructor and never destroys it in a normal session, but the owner of the pointer is not a field a module can read (the constructor keeps it in a shared_ptr that it moves into the view), so core/ui drops its kept pointer from a hook here. Decoded on dt2-1.17 0x401bb40e, dn2-1.12 0x401ab074, st-1.42 0x401859a6 (the DN2 1.11 image has the same bytes).
+        /// The destructor of the SETTINGS menu (DigisharcSettingsMenu, Syntakt DiddySettingsMenu; vtable slot 0, called by the deleting destructor in slot 1 and by the shared_ptr control block): `menu` = this. The firmware builds the menu once in the main screen's constructor and never destroys it in a normal session, but the owner of the pointer is not a field a module can read (the constructor keeps it in a shared_ptr that it moves into the view), so core/ui drops its kept pointer from a hook here. Decoded on dt2-1.17 0x401bb40e, dn2-1.12 0x401ab074, st-1.42 0x401859a6 (the DN2 1.11 image has the same bytes). Optional for core/ui (`optional_anchors`), like the rebuild and vtable anchors: without it the vtable check in the rows pass is the only guard against a stale menu pointer.
         #[link_name = "cf.menu.fn.settings_dtor"]
         pub fn settings_dtor(menu: *mut u8);
     }

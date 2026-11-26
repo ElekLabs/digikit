@@ -30,6 +30,9 @@ for (const device of DEVICES) {
       initial: () => ({ selection: [] }),
       storeExtra: [s.setA, s.setB],
     });
+    /** A sector of one of the two settings record copies (the selection record and the other store sectors do not count). */
+    const inSettingsCopy = (sector: number) =>
+      [s.setA, s.setB].some((first) => sector >= first && sector < first + s.setCopySectors);
     const spec = () => ({ modules: [MODULE], selection: [kit.mod(MODULE).name] });
 
     const report = async (rt: TestRuntime): Promise<Report> => {
@@ -80,7 +83,7 @@ for (const device of DEVICES) {
       await press(rt, 'YES');
       expect(await report(rt), 'changed ran once, after the pick').toMatchObject({ mode: 2, calls: 1, field: 2, value: 2 });
       // the runtime writes the settings record some time after the last change: wait for that write to reach the store, not for a time
-      await pollUntil(emulatorClock(rt.session), () => kit.storeWrites(), (sectors) => sectors.length > 0, {
+      await pollUntil(emulatorClock(rt.session), () => kit.storeWrites(), (sectors) => sectors.some(inSettingsCopy), {
         withinMs: 30_000,
         intervalMs: 500,
         message: 'the settings record was written to the store',

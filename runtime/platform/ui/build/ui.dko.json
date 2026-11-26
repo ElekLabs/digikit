@@ -2524,13 +2524,6 @@
   },
   {
    "addend": 0,
-   "offset": 12,
-   "section": ".text.ui_rows_pass",
-   "symbol": ".sec..text.ui_rows_dirty",
-   "type": "cf.32"
-  },
-  {
-   "addend": 0,
    "offset": 58,
    "section": ".text.push_deferred",
    "symbol": ".sec..text.push_slot",
@@ -3639,10 +3632,10 @@
   },
   {
    "align": 2,
-   "hex": "598f2f0a246f000c2f0a4eb900000000588f4a8067264201154101d84aaf001067064aaf0014661a102a01d9720142aa01d44a0057c0154101d97100245f588f4e75206a01d4222f0014b290670842aa01d4428060e62f08206f00142f4000084e90588f202f000460d2",
+   "hex": "598f2f0e206f000c226f0010202f00142f6801d400044aaf000467064a2801d8660842802c5f588f4e754201114101d84a8967044a806616102801d9720142a801d44a0057c0114101d9710060d62c6f0004b096670642a801d460c62f2f00044e91588f700160bc",
    "kind": "text",
    "name": ".text.ui_rows_pass",
-   "size": 106
+   "size": 104
   },
   {
    "align": 2,
@@ -3967,7 +3960,7 @@
    "size": 72
   }
  ],
- "source_sha256": "51e16219e56b8ebda7c39eadb484a24afb77c70641d521c2d7df4005a8020755",
+ "source_sha256": "6ce6e0b754b27639075dd37062c066a2f50cc973018dcf9b7c138db3f1e35040",
  "symbols": [
   {
    "global": false,
@@ -4507,12 +4500,6 @@
    "global": false,
    "name": ".sec..text.ui_poll",
    "section": ".text.ui_poll",
-   "value": 0
-  },
-  {
-   "global": false,
-   "name": ".sec..text.ui_rows_dirty",
-   "section": ".text.ui_rows_dirty",
    "value": 0
   },
   {
@@ -5811,7 +5798,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "4181",
-  "isa_check": "14046392d79487be95b5a921b72f1a393660855f3471063d1e8a3399831cee0e",
+  "isa_check": "0d408b0cd3c5a4ae0380936e410b472c27e45a57909af8c34d202f2595a6c3a9",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }
