@@ -390,7 +390,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         match m.take_down_closure(id) {
             Ok(report) => Down::Done(self.settle_down(id, &report)),
             Err(LifecycleError::NotLive { .. }) => Down::Done(!self.session.retained(id)),
-            Err(LifecycleError::Busy { .. }) => Down::Busy,
+            // `RestorePending`: an earlier take-down (a queued load given up) still waits for a task to park: this one waits with it
+            Err(LifecycleError::Busy { .. } | LifecycleError::RestorePending { .. }) => Down::Busy,
             Err(_) => Down::Done(false),
         }
     }
@@ -454,7 +455,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
 
     /// One UI-loop pass of the DSP loader. A take-down that waits for a busy restore goes on first (`retry_pending`): when it ends the DSP part's failure is settled, and while a
     /// failed load in flight waits for it the loader does not step. After `GUARD_TICKS` passes the failure is final and the DSP state stays retained. A DSP part that failed takes its
-    /// package's closure down through the manager (`take_down_dsp`) before the loader tells the boot record and starts the next load.
+    /// package's closure down through the manager (`take_down_dsp`) before the loader tells the boot record and starts the next load. After a permanent failure or the `GUARD_TICKS`
+    /// timeout `dsp_down` is cleared while the manager keeps its pending take-down and retries it silently (acceptable: the retained state ends the session).
     pub unsafe fn dsp_step(&mut self, l: ServiceTable) {
         if let Some(m) = self.mgr() {
             if m.restore_pending().is_some() {
