@@ -22,7 +22,7 @@ import {
   type PageCtx,
 } from './TransferParts';
 import { LIVE_LABEL, liveActions, liveResult, serviceAction, type LiveOp } from '../../src/transfer/live-ops';
-import { unusedServices, unusedServicesText } from '../../src/transfer/pane-groups';
+import { portLine, unusedServices, unusedServicesText } from '../../src/transfer/pane-groups';
 import { activateSystemPackage } from '../../src/runtime/activate-system-package';
 import { noteActivity } from '../../src/transfer/activity';
 import ModuleFilesArea from './ModuleFilesArea';
@@ -247,6 +247,10 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
   const unused = createMemo(() => {
     const v = lastView();
     return v ? unusedServices(v) : { paths: [], verified: true };
+  });
+  const port = createMemo(() => {
+    const v = lastView();
+    return v ? portLine(v) : undefined;
   });
   /** One live change of a module or service file on the card: one click, no confirm; the result stays on the row, then the card is read again. */
   const live = (op: LiveOp, path: string) =>
@@ -551,6 +555,32 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
         >
           <WaitNotice active={!!busy()} cancel={busy() !== 'Installing' && !readingAfterJob()} />
           <Show when={lastView()}>
+            <Show when={port()}>
+              {(pl) => (
+                <p
+                  class="unused-services port-line"
+                  classList={{ ok: pl().state === 'ok' }}
+                  role="status"
+                  title="The port file lets services run on the connected firmware"
+                >
+                  <span>{pl().text}</span>
+                  <Show when={pl().stale.length}>
+                    <button
+                      type="button"
+                      class="rowlink"
+                      disabled={writing(busy())}
+                      title="Tick the port files for another firmware for Delete"
+                      onClick={() => {
+                        setDelTicks(new Set(pl().stale));
+                        confirm.stop();
+                      }}
+                    >
+                      Select for delete
+                    </button>
+                  </Show>
+                </p>
+              )}
+            </Show>
             <Show when={unused().paths.length}>
               <p class="unused-services" role="status">
                 <span>{unusedServicesText(unused())}</span>

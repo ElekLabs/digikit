@@ -10,7 +10,7 @@ import { fit, fitsSet, type Needs } from '../modules/fit.ts';
 import type { CardServiceRef, Group, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
 import { PROVIDER_MAX } from '../modules/services.ts';
 import type { ServiceRef, ServiceRefusal } from '../modules/services.ts';
-import { GROUPS, groupRows, isServiceRow, unusedServices, type RowGroup } from './pane-groups.ts';
+import { GROUPS, groupRows, isSystemRow, portLine, unusedServices, type RowGroup } from './pane-groups.ts';
 export type { Group, TransferEvent, TransferRow, TransferView };
 export { GROUPS };
 
@@ -616,9 +616,9 @@ export function rowStatus(p: Progress | undefined, verified: Verified, path: str
   return v ? { kind: v } : undefined;
 }
 
-/** Service files are no rows: a module's badge lists them, and the header counts the unused ones (`unusedServices`). They stay in the card inventory. */
+/** System files are no rows: a module's badge lists the services, and the header counts the unused ones (`unusedServices`) and shows the port file (`portLine`). They stay in the card inventory. */
 function visibleDeviceRows(view: TransferView, rows = onDevice(view)): TransferRow[] {
-  return rows.filter((r) => !isServiceRow(r));
+  return rows.filter((r) => !isSystemRow(r));
 }
 
 /** The destination rows, with pending installs added so their progress stays visible.
@@ -655,7 +655,11 @@ export function applyVerified(v: Verified, e: TransferEvent): Verified {
 /** The store paths ticked in the On device pane, in list order (ticks of rows that are gone are dropped). */
 export function deletePaths(view: TransferView, ticked: Set<string>): string[] {
   const rows = visibleDeviceRows(view).filter((r) => ticked.has(r.path));
-  return [...rows.map((r) => r.path), ...unusedServices(view).paths.filter((p) => ticked.has(p))];
+  return [
+    ...rows.map((r) => r.path),
+    ...unusedServices(view).paths.filter((p) => ticked.has(p)),
+    ...(portLine(view)?.stale ?? []).filter((p) => ticked.has(p)),
+  ];
 }
 
 /** A button label with the count in parentheses: "Upload (3)"; no count when nothing is ticked. */

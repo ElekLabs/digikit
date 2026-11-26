@@ -4,8 +4,8 @@ import { CAP } from '@digi/dk-session/gen_proto';
 import { expect, test, vi } from 'vitest';
 import { liveModules, type TransferRow, type TransferView } from '../src/modules/dktransfer';
 import { createFakeSessions, createFakeTransferApp } from '../src/transfer/fake-app';
-import { LIVE_LABEL, liveActions, liveReason, liveResult, serviceAction } from '../src/transfer/live-ops';
-import { NOT_IN_LIBRARY, groupRows, unusedServices, unusedServicesText } from '../src/transfer/pane-groups';
+import { LIVE_LABEL, liveActions, liveCode, liveReason, liveResult, serviceAction } from '../src/transfer/live-ops';
+import { NOT_IN_LIBRARY, groupRows, portLine, unusedServices, unusedServicesText } from '../src/transfer/pane-groups';
 import { available, dependencyItems, deletePaths, deviceGroups, deviceTags } from '../src/transfer/transfer-core';
 
 const row = (over: Partial<TransferRow> & { path: string }): TransferRow => ({
@@ -74,6 +74,28 @@ test('a service file is never a row; the unused one is counted and can be delete
   ]);
 });
 
+test('a port file is no row; the header shows it, warns when it is for another firmware or missing', () => {
+  const port = (path: string, over: Partial<TransferRow> = {}) => svc(path, over);
+  const ok = view({ card_only: [...view().card_only, port('ports/dn2-1.12.dkport')] });
+  expect(
+    deviceGroups(ok, undefined)
+      .flatMap((g) => g.rows)
+      .some((r) => r.path.endsWith('.dkport')),
+  ).toBe(false);
+  expect(portLine(ok)).toEqual({ state: 'ok', text: 'port dn2-1.12 ✓', stale: [] });
+  const other = view({ card_only: [port('ports/dn2-1.11.dkport', { for_firmware: 'abcd' })] });
+  expect(portLine(other)).toMatchObject({ state: 'other', stale: ['ports/dn2-1.11.dkport'] });
+  expect(deletePaths(other, new Set(['ports/dn2-1.11.dkport']))).toEqual(['ports/dn2-1.11.dkport']);
+  // a matching file is shown next to a stale one; only the stale one is deletable from the header
+  const both = view({
+    card_only: [port('ports/dn2-1.12.dkport'), port('ports/dn2-1.11.dkport', { for_firmware: 'abcd' })],
+  });
+  expect(portLine(both)).toMatchObject({ state: 'ok', stale: ['ports/dn2-1.11.dkport'] });
+  // missing is a warning only when a module on the card needs a service
+  expect(portLine(view())?.state).toBe('missing');
+  expect(portLine(view({ modules: [], card_only: [] }))).toBeUndefined();
+});
+
 test('an unreadable card file makes the unused count a hint, not a fact', () => {
   const u = unusedServices(view({ incomplete_card_needs: true }));
   expect(u.verified).toBe(false);
@@ -106,14 +128,19 @@ test('a result is done, refused with the runtime reason (nothing changed) or fai
   expect(liveResult('reload', p, { ...none, done: [p] })).toEqual({ op: 'reload', kind: 'done', text: 'Reloaded.' });
   const refused = liveResult('reload', p, { ...none, refused: [{ path: p, result: -12 }] });
   expect(refused.kind).toBe('refused');
-  expect(refused.text).toContain('a task is still inside the module');
-  expect(refused.text).toContain('Nothing changed');
-  expect(liveResult('load', p, { ...none, refused: [{ path: p, result: -45 }] }).text).toContain('restart the device');
+  expect(refused.text).toBe('Busy: a task is still using it. Try again. Nothing changed.');
+  expect(refused.detail).toContain('E_BUSY');
+  expect(refused.text).not.toContain('E_BUSY');
+  expect(liveResult('load', p, { ...none, refused: [{ path: p, result: -45 }] }).text).toContain('Restart the device');
   const failed = liveResult('reload', p, { ...none, failed: [{ path: p, result: -8 }] });
   expect(failed).toMatchObject({ kind: 'failed' });
   expect(failed.text).toContain('not loaded');
-  expect(liveReason(-87)).toContain('restart the device');
-  expect(liveReason(-999)).toBe('status -999');
+  expect(liveReason(-87)).toContain('Restart the device');
+  expect(liveReason(-999)).toBe('Status -999.');
+  // a code with no plain sentence falls back to the runtime's text, never to the bare code
+  expect(liveReason(-16)).toBe('The sample pool is full.');
+  expect(liveCode(-12)).toBe('E_BUSY: a task is still inside the module, or the store is in use (try again)');
+  expect(liveCode(-87)).toContain('-87');
   expect(LIVE_LABEL.unload).toBe('Unload');
 });
 

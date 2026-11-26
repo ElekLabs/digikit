@@ -370,6 +370,10 @@
   max-width: 48ch;
   white-space: normal;
 }
+/* the port file line above the device list is quiet when the file matches the firmware */
+.transfer-page .unused-services.port-line.ok {
+  color: var(--ink-3);
+}
 /* the warning above the device list: service files no module needs */
 .transfer-page .unused-services {
   display: flex;

@@ -255,7 +255,7 @@ export function LiveResultText(props: { result: LiveResult; line?: boolean }): J
       class="live-result"
       classList={{ [props.result.kind]: true, line: !!props.line }}
       role="status"
-      title={props.result.text}
+      title={props.result.detail ?? props.result.text}
     >
       {props.result.text}
     </span>
