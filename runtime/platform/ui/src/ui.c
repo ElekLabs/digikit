@@ -24,6 +24,7 @@
 #include <stddef.h>
 #include <dk/core/status.h>
 #include <dk/gen/imports.h>
+#include <dk/gen/log_kinds.h>
 #include <dk/platform/ui.h>
 #include "dk_ui_core.h"
 #include <dk/platform/ui_text.h>
@@ -53,6 +54,7 @@ extern const uint8_t fw_name_cb_vt __asm__("cf.window.site.name_cb_vptr_lit");
 /* assembly shim */
 void dk_make_sp(shared_ptr *out, uint8_t *parent, uint8_t *view);
 
+#define UI_MENU_ROWS_NO_REBUILD 1 /* DK_LOG_MENU action: the port has no SETTINGS list rebuild, so a row added later waits for the next stock build */
 #define VIEW_AT 0x38     /* the View sub-object of a Menu view */
 #define CMP_FONT_AT 0x94 /* CompactVerticalMenuView: the font object itself */
 #define POP_PANEL_AT 0x380
@@ -1057,7 +1059,11 @@ static void ui_poll(void)
         /* both anchors are optional (a port without them: no rebuild; volatile, so that the compiler keeps the test) */
         ui_rows_rebuild_fn *volatile rebuild = dk_fw_menu_settings_list_rebuild;
         const volatile uint32_t vtable = (uint32_t)(uintptr_t)&dk_fw_menu_settings_vtable;
-        ui_rows_pass(&g_rows, rebuild, vtable);
+        if (ui_rows_pass(&g_rows, rebuild, vtable) < 0) {
+            /* once: this firmware port has no list rebuild, so a row added after the first build shows after the next stock build only */
+            uint32_t args[5] = {UI_MENU_ROWS_NO_REBUILD, 0, 0, 0, 0};
+            dk_log_event(DK_LOG_MENU, 0, args);
+        }
     }
     if (timers == 0 && views_used() == 0 && ui_defer_pending(&g_defer) == 0 &&
         !ui_rows_dirty(&g_rows) && g_polling) {
@@ -1123,6 +1129,12 @@ void ui_settings_rows_tail(uint8_t *settings_menu)
         dk_ui_stock_row(settings_menu, g_rows.row[i].text, run_settings_row,
                         (void *)g_rows.row[i].key);
     ui_rows_built(&g_rows, settings_menu);
+}
+
+/* Called from dk_dtor_hook (shim.s) at the entry of the SETTINGS menu destructor: the kept menu pointer must not outlive the object. */
+void ui_settings_menu_gone(uint8_t *settings_menu)
+{
+    ui_rows_gone(&g_rows, settings_menu);
 }
 
 int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *open, void *arg)

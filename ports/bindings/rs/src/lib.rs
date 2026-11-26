@@ -423,7 +423,13 @@ pub mod menu {
     }
 
     unsafe extern "C" {
-        /// The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only.
+        /// The destructor of the SETTINGS menu (DigisharcSettingsMenu, Syntakt DiddySettingsMenu; vtable slot 0, called by the deleting destructor in slot 1 and by the shared_ptr control block): `menu` = this. The firmware builds the menu once in the main screen's constructor and never destroys it in a normal session, but the owner of the pointer is not a field a module can read (the constructor keeps it in a shared_ptr that it moves into the view), so core/ui drops its kept pointer from a hook here. Decoded on dt2-1.17 0x401bb40e, dn2-1.12 0x401ab074, st-1.42 0x401859a6 (the DN2 1.11 image has the same bytes).
+        #[link_name = "cf.menu.fn.settings_dtor"]
+        pub fn settings_dtor(menu: *mut u8);
+    }
+
+    unsafe extern "C" {
+        /// The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only. Optional for core/ui (`optional_anchors`): a port without it keeps the rows of the first build and core/ui logs `DK_LOG_MENU` action 1 once when a later change asks for a rebuild.
         #[link_name = "cf.menu.fn.settings_list_rebuild"]
         pub fn settings_list_rebuild(menu: *mut u8);
     }
@@ -459,7 +465,7 @@ pub mod menu {
     }
 
     unsafe extern "C" {
-        /// The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list.
+        /// The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list. Optional for core/ui (`optional_anchors`), like `cf.menu.fn.settings_list_rebuild`: without it no rebuild runs.
         #[link_name = "cf.menu.data.settings_vtable"]
         pub static SETTINGS_VTABLE: u8;
     }
@@ -475,6 +481,9 @@ pub mod menu {
         #[link_name = "cf.menu.site.vertical_menu_view_ctor.font_ref"]
         pub static VERTICAL_MENU_VIEW_CTOR_FONT_REF: u8;
     }
+
+    /// Entry of the SETTINGS menu destructor (menu at 4(sp)); core/ui forgets the menu pointer it kept for the list rebuild.
+    pub type SettingsDtorHook = unsafe extern "C" fn(menu: *mut u8);
 
     /// Last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding an item.
     pub type SettingsListTailHook = unsafe extern "C" fn(menu: *mut u8);

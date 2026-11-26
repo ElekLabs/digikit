@@ -35,6 +35,7 @@ typedef struct ui_settings_rows {
        after the build or still shows one that was removed. Set only once a menu is known: a row added before the first build needs no rebuild. */
     uint8_t *menu;
     uint8_t dirty;
+    uint8_t absent_seen; /* a pass already refused for missing rebuild anchors: it reports that once */
 } ui_settings_rows;
 
 /* Add a row at the end. `name`: the name of the owner's record, a module or a service file (at most DK_UI_MODULE_NAME - 1 characters are kept); the row's
@@ -62,9 +63,13 @@ void ui_rows_built(ui_settings_rows *s, uint8_t *menu);
 /* Rows were added or removed since the last build and a list exists. */
 int ui_rows_dirty(const ui_settings_rows *s);
 
+/* The SETTINGS menu object is destroyed (the hook at the entry of its destructor): forget it when it is the kept one, so no later pass touches it. */
+void ui_rows_gone(ui_settings_rows *s, const uint8_t *menu);
+
 /* One UI pass: when the list is dirty, call `rebuild(menu)` (the stock rebuild, which ends in ui_rows_built) and return 1; otherwise return 0 and call nothing.
-   Before the call the first word of the kept menu must be `vtable` (the SETTINGS menu vtable, slot 0): with a different word, or with no rebuild function or no
-   vtable (0: the firmware's port lacks the anchor), nothing is called, the pointer is dropped (no list is known until the next build) and the pass returns 0. */
+   Before the call the first word of the kept menu must be `vtable` (the SETTINGS menu vtable, slot 0): with a different word nothing is called, the pointer is
+   dropped (no list is known until the next build) and the pass returns 0. With no rebuild function or no vtable (the firmware's port lacks the anchors) nothing is
+   called either and the pointer is dropped; the first such pass returns -1 (the caller logs it), later ones 0. */
 typedef void ui_rows_rebuild_fn(uint8_t *menu);
 int ui_rows_pass(ui_settings_rows *s, ui_rows_rebuild_fn *rebuild, uint32_t vtable);
 

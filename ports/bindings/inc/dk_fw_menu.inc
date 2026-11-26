@@ -43,6 +43,18 @@
 .equ VerticalMenuView_view, 0x38
 .equ VerticalMenuView_icon, 0xa4
 
+/* cf.menu.hook.settings_dtor: Entry of the SETTINGS menu destructor (menu at 4(sp)); core/ui forgets the menu pointer it kept for the list rebuild. */
+.macro dk_fw_menu_settings_dtor_hook handler, next
+    lea     -16(%sp),%sp
+    movem.l %d0-%d1/%a0-%a1,(%sp)
+    move.l  20(%sp),-(%sp)
+    jsr     \handler
+    addq.l  #4,%sp
+    movem.l (%sp),%d0-%d1/%a0-%a1
+    lea     16(%sp),%sp
+    jmp     \next
+.endm
+
 /* cf.menu.hook.settings_list.tail: Last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding an item. */
 .macro dk_fw_menu_settings_list_tail_hook handler, next
     move.l  %a2,-(%sp)

@@ -19,7 +19,18 @@ rule.dn2 = { kind = "cf_func", hash = "8db782f6fd735f89d3b7c856316c0b90", offset
 rule.st = { kind = "cf_func", hash = "39d0c862c76cde230315ac00e6a93ebf", offset = 0x0, len = 24, mark = "D" }
 mark = "D"
 users = ["core/ui"]
-doc = "The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only."
+doc = "The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only. Optional for core/ui (`optional_anchors`): a port without it keeps the rows of the first build and core/ui logs `DK_LOG_MENU` action 1 once when a later change asks for a rebuild."
+
+[[fn]]
+name = "cf.menu.fn.settings_dtor"
+cpu = "cf"
+sig = "void (u8 *menu)"
+rule.dt2 = { kind = "cf_func", hash = "bf1cb427af141a9366ac7667823ca554", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "bf1cb427af141a9366ac7667823ca554", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "77bb2a2327c1753158d9de6d8fb5be56", offset = 0x0, len = 4, mark = "D" }
+mark = "D"
+users = ["core/ui"]
+doc = "The destructor of the SETTINGS menu (DigisharcSettingsMenu, Syntakt DiddySettingsMenu; vtable slot 0, called by the deleting destructor in slot 1 and by the shared_ptr control block): `menu` = this. The firmware builds the menu once in the main screen's constructor and never destroys it in a normal session, but the owner of the pointer is not a field a module can read (the constructor keeps it in a shared_ptr that it moves into the view), so core/ui drops its kept pointer from a hook here. Decoded on dt2-1.17 0x401bb40e, dn2-1.12 0x401ab074, st-1.42 0x401859a6 (the DN2 1.11 image has the same bytes)."
 
 # `(item, label cstr, &action, icon, &fn4)`: constructs a MenuItem in `item`; copies both functions.
 [[fn]]
@@ -127,6 +138,18 @@ devices = ["dt2", "dn2", "st"]
 mark = "D"
 users = ["core/digikit-menu"]
 doc = "Last step of the SETTINGS item list rebuild, before the selection is restored (a2 = the settings menu); the hook point for adding an item."
+
+[[hook]]
+name = "cf.menu.hook.settings_dtor"
+site = "cf.menu.fn.settings_dtor"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = [] }
+handler = { sig = "void (u8 *menu)", args = ["sp+4"] }
+devices = ["dt2", "dn2", "st"]
+mark = "D"
+users = ["core/ui"]
+doc = "Entry of the SETTINGS menu destructor (menu at 4(sp)); core/ui forgets the menu pointer it kept for the list rebuild."
 
 # The hook of the test service `test/svc-test` (tests/fixtures/modules/svc-test): the same site as the hook above, as a raw hook of a service file (its routine calls a C
 # function with a2, then the tail runs the displaced instructions). Only the test fixture takes it.
@@ -310,7 +333,7 @@ rule.dn2 = { kind = "cf_ptr", hash = "e7980e7b34a4920ffef8a2721b36fc19", offset 
 rule.st = { kind = "cf_ptr", hash = "4ccb160e5ccd7b25215aeeca4224aea4", offset = 0x70, len = 160, mark = "D" }
 mark = "D"
 users = ["core/ui"]
-doc = "The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list."
+doc = "The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list. Optional for core/ui (`optional_anchors`), like `cf.menu.fn.settings_list_rebuild`: without it no rebuild runs."
 
 # Vtables: the anchor is slot 0 (the address the constructor stores in the object, vtable + 8); the hash covers the whole slot array.
 [[data]]

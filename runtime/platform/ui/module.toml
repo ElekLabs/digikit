@@ -31,6 +31,7 @@ place = "cf.expansion"
 
 [object.externs]
 _dk_tail = "hook.cf.menu.site.settings_list.tail.tail"
+_dk_dtor_tail = "hook.cf.menu.fn.settings_dtor.tail"
 
 # Hook before the last step of the rebuild (the selection restore); the displaced instructions run in the tail.
 [[op]]
@@ -40,6 +41,15 @@ to = "dk_hook"
 
 [[claim]]
 resource = "cf.menu.site.settings_list.tail"
+
+# The destructor of the SETTINGS menu: core/ui forgets the menu pointer it kept for the list rebuild (ui_settings_menu_gone).
+[[op]]
+op = "hook"
+hook = "cf.menu.hook.settings_dtor"
+to = "dk_dtor_hook"
+
+[[claim]]
+resource = "cf.menu.fn.settings_dtor"
 
 # The view capture (both devices): the hook remembers the view the firmware builds its item list for, and `machine_view` names the word that holds it. A loaded service can build the view's list again after a reload.
 [[object]]

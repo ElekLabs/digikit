@@ -29,6 +29,7 @@ extern "C" {
 
 const E_FORMAT: i32 = -5;
 const E_NOT_FOUND: i32 = -1;
+const E_EXISTS: i32 = -18;
 const E_MISSING: i32 = -73;
 const E_SET_FULL: i32 = -67;
 
@@ -234,7 +235,7 @@ fn set_saves_and_shows_but_does_not_call_changed() {
 #[test]
 fn set_after_the_page_closed_saves_without_filling_the_menu_again() {
     let (_g, p) = page();
-    unsafe { dk_ui_menu_close(p) };
+    dk_ui_menu_close(p);
     let fills = unsafe { sp_fills() };
     assert_eq!(unsafe { sp_set(1, 20) }, 0);
     assert_eq!(stored("gain").as_deref(), Some("20"));
@@ -267,7 +268,16 @@ fn init_needs_the_handles_and_a_ui_only_for_an_enum() {
         "the table has an enum"
     );
     assert_eq!(unsafe { sp_init_bool_only() }, 0);
-    assert_eq!(unsafe { sp_init_without(1, 1) }, 0);
+}
+
+#[test]
+fn a_second_init_in_one_module_is_refused_and_the_first_page_stays() {
+    let (_g, _p) = page();
+    assert_eq!(unsafe { sp_set(1, 20) }, 0);
+    assert_eq!(unsafe { sp_init_bool_only() }, E_EXISTS);
+    assert_eq!(unsafe { sp_init() }, E_EXISTS);
+    assert_eq!(unsafe { sp_value(1) }, 20, "the first page keeps its values");
+    assert_eq!(rows().len(), 5, "and its rows");
 }
 
 #[test]
