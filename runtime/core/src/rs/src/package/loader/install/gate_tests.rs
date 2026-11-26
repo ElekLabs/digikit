@@ -26,7 +26,7 @@ fn put(f: &FakePlatform, addr: u32, v: u32) {
 
 /// A platform with the site in stock bytes and both tasks parked (each waiter word holds its TCB).
 fn fake() -> FakePlatform {
-    let f = FakePlatform::new(profiles::DN2);
+    let f = FakePlatform::new(profiles::ALL[0]);
     f.put_code(SITE, &STOCK);
     put(&f, QUEUE + 0xc, TCB_A);
     put(&f, CELL, OBJECT);

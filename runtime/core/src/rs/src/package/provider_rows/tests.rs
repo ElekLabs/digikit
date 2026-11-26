@@ -336,7 +336,7 @@ fn a_provider_row_is_found_by_its_name_hash_and_has_one_owner() {
 /// never masks.
 #[test]
 fn the_shift_of_an_add_and_of_a_remove_is_made_under_one_mask() {
-    let f = FakePlatform::new(profiles::DN2);
+    let f = FakePlatform::new(profiles::ALL[0]);
     let mut t = [empty(); PROVIDER_MAX];
     let mut r = Rows::new();
     let masked = || vec![Call::Mask, Call::Restore];
