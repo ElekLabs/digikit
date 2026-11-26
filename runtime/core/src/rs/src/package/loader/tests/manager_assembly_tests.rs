@@ -515,6 +515,64 @@ fn a_service_reload_that_is_refused_before_the_take_down_leaves_both_up_and_a_me
     }
 }
 
+/// The live job `RELOAD` of `path`, polled to its end over the real seams of the host (`HostOps`): the job and its result.
+unsafe fn reload_job(l: &mut Boot, rt: &mut Rt<FakePlatform, Card, DeviceRegistry>, path: &[u8]) -> (crate::package::reload::Job, i32) {
+    use crate::package::reload::{step, Job};
+    let mut job = Job::new();
+    let mut ops = super::host_ops::HostOps { l, rt };
+    let queued = job.queue(&mut ops, LIVE_RELOAD, path.as_ptr());
+    if queued != dkrt_sdk::OK {
+        return (job, queued);
+    }
+    for _ in 0..8000 {
+        if job.phase != 1 {
+            break;
+        }
+        job.poll(&mut ops);
+        ops.l.p.tick(25);
+    }
+    assert!(job.phase == 2 && job.step == step::DONE, "the job did not end: phase {} step {}", job.phase, job.step);
+    let result = job.result;
+    (job, result)
+}
+
+#[test]
+fn the_live_job_reloads_a_service_file_with_its_consumer_and_refuses_a_closure_with_a_dsp_part() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, _plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            let rec = boot_record(&[LOCAL_PING_USER.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot_with(&rec, &capacity(&l.p));
+            let hash = dkneeds::keys::name_hash("local_ping_value");
+            let path = std::format!("services/{}.dks\0", LOCAL_PING.leaf).into_bytes();
+            l.m.files.iter_mut().find(|(n, _)| n == &path[..path.len() - 1]).unwrap().1 = local_ping_v2(dev);
+            // a DSP part in the closure: refused at the checks, nothing changed
+            let area = crate::package::dsp::ds().mod_len[0];
+            crate::package::dsp::ds().mod_len[0] = 64;
+            let v1 = l.exports.owned(hash).unwrap().0;
+            let (job, result) = reload_job(&mut l, &mut rt, &path);
+            assert_eq!((job.phase, result, job.torn), (2, dkrt_sdk::E_BOOT_ONLY, false), "{}", dev.name);
+            assert_eq!(l.exports.owned(hash).unwrap().0, v1, "{}: nothing was reloaded", dev.name);
+            crate::package::dsp::ds().mod_len[0] = area;
+            // without it the job reloads the closure: the consumer reads the second version's export
+            let (job, result) = reload_job(&mut l, &mut rt, &path);
+            assert_eq!((job.phase, result, job.torn), (2, dkrt_sdk::OK, true), "{}", dev.name);
+            let m = rt.manager().unwrap();
+            assert!(m.live().contains(id(0)) && m.live().contains(id(MAX_MODULES)), "{}", dev.name);
+            let v2 = l.exports.owned(hash).unwrap().0;
+            assert_eq!(arena_bytes(&l, v2, 2), [0x70, 0x2b], "{}", dev.name);
+            // a load and an unload of the service file stay refused
+            let mut j = crate::package::reload::Job::new();
+            let mut ops = super::host_ops::HostOps { l: &mut l, rt: &mut rt };
+            assert_eq!(j.queue(&mut ops, LIVE_UNLOAD, path.as_ptr()), dkrt_sdk::E_FORMAT, "{}", dev.name);
+        }
+        clean_state();
+    }
+}
+
 #[test]
 fn a_busy_module_keeps_its_tick_and_stays_loaded_when_the_live_job_asks_the_manager_to_unload_it() {
     let _g = clean();

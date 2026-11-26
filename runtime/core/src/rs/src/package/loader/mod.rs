@@ -306,15 +306,20 @@ pub unsafe fn dsp_progress() -> u32 {
 
 /// Is `path` the store path of a loaded provider (a service file)?
 pub unsafe fn is_provider_path(path: *const u8) -> bool {
+    provider_of_path(path).is_some()
+}
+
+/// The provider record loaded from the store path `path` (NUL terminated): what a live job names a service by.
+pub unsafe fn provider_of_path(path: *const u8) -> Option<usize> {
     let mut j = 0;
     while j < PROVIDER_MAX {
         let rec = MAX_MODULES + j;
         if records::module(rec).used != 0 && cstr_eq(records::path(rec).as_ptr(), path) {
-            return true;
+            return Some(rec);
         }
         j += 1;
     }
-    false
+    None
 }
 
 /// The name of the missing module of the last load that failed with `E_IMPORT` (`Loader::missing`).

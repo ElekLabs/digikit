@@ -9,7 +9,7 @@ use dkrt_sdk::{LIVE_LOAD, LIVE_RELOAD, LIVE_UNLOAD, OK};
 
 /// Queue a live job (`reload::Job`) for the module at the store path in the body (NUL terminated; the file of a load or a reload is on the card already) and answer `cmd` with its
 /// status: 0, `E_MSG` (no path), `E_BUSY` (a job is queued or running), `E_STATE` (an upload is open or a store write is in flight), `E_RELOAD_RETAINED`, `E_NOT_FOUND` (an
-/// unload or a reload: no loaded content module came from that path), `E_LOADED` (a load: a module of that path is loaded), `E_FORMAT` (the path is the file of a service).
+/// unload or a reload: no loaded content module or service came from that path), `E_LOADED` (a load: a module of that path is loaded), `E_FORMAT` (a load or an unload of the path of a service: a service is reloaded, with its consumers, and loaded by them).
 unsafe fn cmd_live(cmd: u8, op: u32, seq: u32, body: *const u8, blen: usize) -> i32 {
     if blen < 2 || *body.add(blen - 1) != 0 {
         return reply(cmd, seq, E_MSG, 0);

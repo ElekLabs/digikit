@@ -79,7 +79,7 @@ fn a_service_queues_a_live_job_and_reads_its_state_through_the_core_imports() {
 }
 
 #[test]
-fn a_service_cannot_load_unload_or_reload_the_file_of_a_loaded_service() {
+fn a_service_cannot_load_or_unload_the_file_of_a_loaded_service_and_a_reload_of_it_is_queued() {
     use crate::package::svc_imports::shims::dkc_live;
     let _g = crate::test_lock::LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
@@ -90,11 +90,14 @@ fn a_service_cannot_load_unload_or_reload_the_file_of_a_loaded_service() {
         let path = b"services/svc.dks\0";
         crate::package::loader::records::module(rec).used = 1;
         crate::package::loader::records::path(rec)[..path.len()].copy_from_slice(path);
-        let answers = [LIVE_LOAD, LIVE_UNLOAD, LIVE_RELOAD].map(|op| dkc_live(op, path.as_ptr()));
+        let answers = [LIVE_LOAD, LIVE_UNLOAD].map(|op| dkc_live(op, path.as_ptr()));
+        assert_eq!(answers, [E_FORMAT; 2]);
+        assert_eq!(job().phase, 0, "nothing is queued");
+        assert_eq!(dkc_live(LIVE_RELOAD, path.as_ptr()), OK);
+        assert_eq!((job().phase, job().op), (1, LIVE_RELOAD as u8), "the reload of a service is queued");
+        *job() = Job::new();
         crate::package::loader::records::module(rec).used = 0;
         crate::package::loader::records::path(rec)[..path.len()].fill(0);
-        assert_eq!(answers, [E_FORMAT; 3]);
-        assert_eq!(job().phase, 0, "nothing is queued");
     }
 }
 
@@ -121,9 +124,9 @@ fn queueing_resolves_the_path_refuses_a_service_file_a_bad_path_and_a_second_job
         assert_eq!(k.queue(&mut s, 0, b"mods/x.dkm\0".as_ptr()), dkrt_sdk::proto::E_MSG);
         assert_eq!(k.queue(&mut s, 9, b"mods/x.dkm\0".as_ptr()), dkrt_sdk::proto::E_MSG);
         assert_eq!(k.phase, 0);
-        // the file of a service is no module
+        // the file of a service is no module: only a reload takes it (`tests/service.rs`)
         s.service = true;
-        for op in [LIVE_LOAD, LIVE_UNLOAD, LIVE_RELOAD] {
+        for op in [LIVE_LOAD, LIVE_UNLOAD] {
             assert_eq!(k.queue(&mut s, op, b"services/fx.dks\0".as_ptr()), E_FORMAT);
         }
         assert_eq!(k.phase, 0);

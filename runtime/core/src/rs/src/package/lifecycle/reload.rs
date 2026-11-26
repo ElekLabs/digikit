@@ -36,14 +36,70 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         members[..n].iter().any(|&r| crate::package::dsp::ds().mod_len[r] != 0)
     }
 
+    /// Was a menu object built for a module of the closure of record `rec` (it points into the module's code)?
+    pub unsafe fn closure_menu_built(&self, rec: usize) -> bool {
+        let mut members = [0usize; REC_MAX];
+        let n = self.closure(rec, &mut members);
+        members[..n].iter().any(|&r| r < MAX_MODULES && crate::package::resident::state::menus_held(r))
+    }
+
+    /// The refusals of a reload of service record `rec` that the system facts do not hold: the menu of a consumer, a DSP part in the closure (`E_BOOT_ONLY`: the closure reload has
+    /// no DSP step, a restart reloads it) and the `can_stop` of the closure (`refusal`).
+    pub unsafe fn closure_refusal(&mut self, rec: usize) -> Option<i32> {
+        if self.closure_menu_built(rec) {
+            return Some(E_RELOAD_MENUS);
+        }
+        if self.closure_has_dsp(rec) {
+            return Some(E_BOOT_ONLY);
+        }
+        self.refusal(rec)
+    }
+
+    /// The drain of every member of the closure of record `rec` (`Loader::reload_quiesce`): `E_NOT_FOUND` when a record is gone, `E_BUSY` while one is not drained, else `OK`.
+    /// Each member's call is repeatable.
+    pub unsafe fn closure_quiesce(&mut self, rec: usize) -> i32 {
+        let mut members = [0usize; REC_MAX];
+        let n = self.closure(rec, &mut members);
+        if n == 0 {
+            return E_NOT_FOUND;
+        }
+        let mut out = OK;
+        for &r in &members[..n] {
+            let q = self.loader().reload_quiesce(r);
+            if q == E_NOT_FOUND {
+                return q;
+            }
+            if q != OK {
+                out = q;
+            }
+        }
+        out
+    }
+
+    /// A reload of service record `rec` cannot go on: every member gets its tick back (`Loader::reload_abort`). False when the reload went on (a member is down, or a restore of the
+    /// closure waits: it is left to `dsp_step`).
+    pub unsafe fn closure_abort(&mut self, rec: usize) -> bool {
+        if self.reload_torn || self.reloading {
+            self.reloading = false;
+            return false;
+        }
+        let mut members = [0usize; REC_MAX];
+        let n = self.closure(rec, &mut members);
+        for &r in &members[..n] {
+            self.loader().reload_abort(r);
+        }
+        true
+    }
+
     /// Has the reload of a service taken a member down (the live job reports it as torn)? Meaningful after `reload_closure` answered anything but `OK`.
     pub fn reload_torn(&self) -> bool {
         self.reload_torn
     }
 
-    /// The live job gives up waiting for a busy restore: the manager keeps its pending take-down and `dsp_step` retries it silently, as after a failed DSP part.
-    pub fn reload_abandon(&mut self) {
+    /// A new reload starts: what an earlier one left is forgotten.
+    pub fn reload_reset(&mut self) {
         self.reloading = false;
+        self.reload_torn = false;
     }
 
     /// Reload service record `rec` from the file at `path` with its consumers (`Loader::provider_prepare`, then `PackageManager::reload`), called once per UI pass by the live job.
@@ -66,12 +122,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         };
         if self.reloading {
             let out = m.retry_pending();
-            return self.reload_end(out, &[]);
+            return self.reload_end(out, rec, &[]);
         }
         if rec < MAX_MODULES || !m.live().contains(id) {
             return E_NOT_FOUND;
         }
-        self.reload_torn = false;
         let mut members = [0usize; REC_MAX];
         let n = self.closure(rec, &mut members);
         let members = &members[..n];
@@ -107,10 +162,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         };
         let down = members.iter().any(|&r| !m.live().contains(PackageId(r as u8))) || m.restore_pending().is_some();
         if down || out.is_ok() {
-            return self.reload_end(out, members);
+            return self.reload_end(out, rec, members);
         }
         // refused before the take-down: the old file stays loaded with its own table
-        let code = self.reload_end(out, members);
+        let code = self.reload_end(out, rec, members);
         l.provider_table_restore(rec, &old[..old_len]);
         m.manifest_mut().reread(SEL_MAX);
         let _ = m.refresh_graph();
@@ -118,13 +173,21 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     }
 
     /// The end of one call of the reload: the code, and whether a restore keeps the rest pending.
-    unsafe fn reload_end(&mut self, out: Result<Report, LifecycleError>, members: &[usize]) -> i32 {
+    unsafe fn reload_end(&mut self, out: Result<Report, LifecycleError>, root: usize, members: &[usize]) -> i32 {
         let Some(m) = self.mgr() else {
             return E_NOT_FOUND;
         };
         match out {
             Ok(_) => {
                 self.reloading = false;
+                // every module that is back hears it (a module of the closure has no DSP part: the job refused one)
+                let mut now = [0usize; REC_MAX];
+                let n = self.closure(root, &mut now);
+                for &r in &now[..n] {
+                    if r < MAX_MODULES {
+                        crate::package::handlers::services().on_loaded(r);
+                    }
+                }
                 OK
             }
             Err(e) => {
