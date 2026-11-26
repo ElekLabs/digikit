@@ -138,6 +138,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         } else {
             None
         };
+        self.import_name = 0;
         let mut i = 0;
         while i < import_n as usize {
             let p = f.add(import_off as usize + i * dkneeds::CF_IMPORT_LEN as usize);
@@ -173,6 +174,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                         }
                         None => {}
                     }
+                    self.import_name = name_hash;
                     return E_IMPORT;
                 }
             }
@@ -198,6 +200,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                 };
             }
             if a == 0 {
+                self.import_name = name_hash;
                 // the first import that belongs to a module that is not in the image: the boot keeps its name (`MISSING`)
                 if let (Some(n), true) = (self.m.import_needs(p), self.missing[0] == 0) {
                     let b = n.as_bytes();

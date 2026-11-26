@@ -480,6 +480,29 @@ fn a_live_load_refused_before_anything_is_placed_logs_its_own_detail_and_not_tha
 }
 
 #[test]
+fn a_live_load_finds_a_packed_service_on_the_card_that_the_boot_selection_did_not_need() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            // the card holds `local-ping` and its user, but the selection is `svc-test-user`, whose boot search looks for `svc-test` only
+            let (mut l, _plan) = planned(dev, &image, &[], &[&SVC_USER, &LOCAL_PING_USER], &[SVC_TEST, LOCAL_PING]);
+            let mut rec = boot_record(&[SVC_USER.leaf]);
+            rec.count = 1;
+            crate::boot::info().count = 1;
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot_with(&rec, &capacity(&l.p));
+            let path = std::format!("modules/{}.dkm\0", LOCAL_PING_USER.leaf).into_bytes();
+            assert_eq!(l.live_check_load(1, path.as_ptr(), &live_cap(&l)), dkrt_sdk::OK, "{}: the check finds the service", dev.name);
+            assert_eq!(rt.live_load_with(1, path.as_ptr(), &live_cap(&l)), dkrt_sdk::OK, "{}", dev.name);
+            assert!(rt.manager().unwrap().live().contains(id(1)), "{}: the module is up", dev.name);
+            assert!(l.found.n >= 2, "{}: the provider was added to the boot's", dev.name);
+        }
+        clean_state();
+    }
+}
+
+#[test]
 fn a_selected_file_that_is_not_on_the_card_is_reported_and_the_rest_of_the_selection_loads() {
     let _g = clean();
     for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {

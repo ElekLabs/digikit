@@ -115,6 +115,11 @@ struct FakeImages {
     log: Vec<Ev>,
     /// The selection index that `BOOT_IDX` held at each `stage` (the index the services read to find the module that loads).
     boot_at_stage: Vec<u32>,
+    /// Every listing answers `E_BUSY` (the store lock is taken).
+    busy: bool,
+    /// The n-th (from 1) `stage` of this path fails with this code, and the count of stages of it so far.
+    stage_fails: Option<(Vec<u8>, u32, i32)>,
+    stage_count: u32,
 }
 
 /// The one import the fake runtime has.
@@ -130,6 +135,14 @@ impl Images for FakeImages {
         self.boot_at_stage.push(crate::package::boot_idx::get());
         let n = cstr_len(path, 64);
         let key = core::slice::from_raw_parts(path, n).to_vec();
+        if let Some((p, nth, code)) = self.stage_fails.clone() {
+            if p == key {
+                self.stage_count += 1;
+                if self.stage_count == nth {
+                    return Err(code);
+                }
+            }
+        }
         match self.files.get(&key) {
             None => Err(E_NOT_FOUND),
             Some(f) => {
@@ -178,6 +191,9 @@ impl Images for FakeImages {
         self.log.push(Ev::Free(addr));
     }
     unsafe fn list(&mut self, prefix: *const u8, out: *mut dkrt_sdk::DkrtStoreEntry, max: u32) -> i32 {
+        if self.busy {
+            return E_BUSY;
+        }
         let n = cstr_len(prefix, 64);
         let prefix = core::slice::from_raw_parts(prefix, n);
         let mut k = 0;
@@ -399,7 +415,7 @@ unsafe fn loader_of(init: Init, file: Vec<u8>) -> Fake {
     crate::package::cleanup_tests::lenient_tick_drop();
     let mut files = BTreeMap::new();
     files.insert(PATH[..PATH.len() - 1].to_vec(), file);
-    let imgs = FakeImages { files, staged: Vec::new(), live: Vec::new(), allocs: 0, fail_alloc: None, init, log: Vec::new(), boot_at_stage: Vec::new() };
+    let imgs = FakeImages { files, staged: Vec::new(), live: Vec::new(), allocs: 0, fail_alloc: None, init, log: Vec::new(), boot_at_stage: Vec::new(), busy: false, stage_fails: None, stage_count: 0 };
     let reg = FakeRegistry {
         abi: true,
         add_result: OK,

@@ -131,6 +131,20 @@ cardRigs('service providers', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS },
     expect(logged(log, 'local-ping')).toEqual([42]);
   });
 
+  test('a module whose service the boot selection did not need loads live after the transfer: the live job finds the service on the card', async () => {
+    const { debug } = modules();
+    const client = h.mod('test/local-ping-user', 'local-ping-user');
+    // the card holds the client and its service (the card builder adds `services/local-ping.dks` and the port file), the boot selection holds the debug module only
+    const rt = await h.load('local-ping-live', { modules: [debug, client], selection: [debug.name] });
+    const before = await h.usb(rt, (dk) => dk.readLog());
+    expect(providerOf(before, nameHash('local-ping')), 'the boot looked for no service').toEqual([]);
+    const live = await h.usb(rt, (dk) => dk.loadAndWait(client.name));
+    expect(live, 'the live load finds the service on the card and brings it up').toEqual({ result: 0, unloaded: false });
+    const log = await h.usb(rt, (dk) => dk.readLog());
+    expect(logged(log, 'local-ping'), 'the service is up and the module called it').toEqual([42]);
+    await rt.session.expectNoFault('live load of a module with a service from the card');
+  });
+
   test('a provider installs its hook and the consumer calls it; a safe boot leaves the site stock', async () => {
     const bound = bind(h);
     const { debug, user } = modules();

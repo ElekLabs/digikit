@@ -19,6 +19,9 @@ struct Script {
     /// Whether the old module can still be given back (`fini` has not run).
     can_abort: bool,
     load: i32,
+    /// `check` and `load` answer `E_BUSY` this many times first (`u32::MAX`: always).
+    check_busy: u32,
+    load_busy: u32,
     /// The DSP part answers `None` this many polls, then this result.
     dsp: (u32, i32),
     /// Whether `cancel_dsp` finds a load to take down.
@@ -41,7 +44,7 @@ struct Script {
 
 impl Script {
     fn new() -> Script {
-        Script { found: Some((2, 5)), alloc: Ok(5), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false, menu_after: u32::MAX }
+        Script { found: Some((2, 5)), alloc: Ok(5), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, check_busy: 0, load_busy: 0, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false, menu_after: u32::MAX }
     }
 }
 
@@ -76,6 +79,10 @@ impl Ops for Script {
     }
     unsafe fn check(&mut self, _: u32, _: usize, _: usize, _: *const u8) -> i32 {
         self.log.push("check");
+        if self.check_busy > 0 {
+            self.check_busy = if self.check_busy == u32::MAX { u32::MAX } else { self.check_busy - 1 };
+            return E_BUSY;
+        }
         self.check
     }
     fn phase(&mut self, owner: u8) {
@@ -120,6 +127,10 @@ impl Ops for Script {
     }
     unsafe fn load(&mut self, op: u32, _: usize, k: usize, _: *const u8) -> i32 {
         self.log.push("load");
+        if self.load_busy > 0 {
+            self.load_busy = if self.load_busy == u32::MAX { u32::MAX } else { self.load_busy - 1 };
+            return E_BUSY;
+        }
         // the loader chose a record for a load that got as far as a record
         if op == LIVE_LOAD && (self.load == OK || self.load == LOADING) {
             self.found = Some((2, k));

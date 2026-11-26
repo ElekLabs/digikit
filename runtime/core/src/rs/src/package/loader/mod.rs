@@ -187,6 +187,8 @@ pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     decl_diff: (u32, u32),
     /// The name hash that the port file did not list, of the last service file that failed with E_IMPORT for it (`port::Lookup::Unlisted`); 0: none.
     import_hash: u32,
+    /// The name hash of the import that the last `check_file` could not resolve (0: none). A live check relaxes the refusal only when a found provider that is not up yet exports that name.
+    import_name: u32,
     /// The header table of the module at each selection index, kept while the boot reads each file once (`capture`); `table_len` 0: none (the file
     /// is missing, torn, of the old format or has a larger table).
     tables: [[u8; TABLE_MAX]; SEL_MAX],
@@ -347,6 +349,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             missing: [0; NEEDS_LEN],
             decl_diff: (0, 0),
             import_hash: 0,
+            import_name: 0,
             tables: [[0; TABLE_MAX]; SEL_MAX],
             table_len: [0; SEL_MAX],
             accepted: [false; SEL_MAX],

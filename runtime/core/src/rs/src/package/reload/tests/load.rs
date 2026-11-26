@@ -103,3 +103,30 @@ fn a_load_into_a_retained_dsp_is_refused_at_the_queue_and_in_a_running_job() {
     assert_eq!((j.phase, j.result), (2, E_RELOAD_RETAINED));
     nothing_changed(&s, "retained");
 }
+
+#[test]
+fn a_busy_install_changes_nothing_and_the_load_completes_on_the_next_pass() {
+    let mut s = Script::new();
+    s.load_busy = 1;
+    assert_eq!(run_op(&mut s, LIVE_LOAD), (2, OK, step::DONE));
+    assert_eq!(s.log.iter().filter(|l| **l == "load").count(), 2);
+    assert!(!s.log.contains(&"retire") && !s.log.contains(&"finish failed"), "{:?}", s.log);
+    assert_eq!(s.log.iter().filter(|l| **l == "finish ok").count(), 1);
+}
+
+#[test]
+fn a_busy_store_in_the_checks_is_asked_again_and_a_store_that_stays_busy_ends_the_load_with_e_busy() {
+    let mut s = Script::new();
+    s.check_busy = 2;
+    assert_eq!(run_op(&mut s, LIVE_LOAD), (2, OK, step::DONE));
+    assert_eq!(s.log.iter().filter(|l| **l == "check").count(), 3);
+    assert_eq!(s.log.iter().filter(|l| **l == "alloc").count(), 1, "the index is taken once");
+    let mut s = Script::new();
+    s.check_busy = u32::MAX;
+    assert_eq!(run_op(&mut s, LIVE_LOAD), (2, E_BUSY, step::DONE));
+    assert!(!s.log.contains(&"begin load"));
+    let mut s = Script::new();
+    s.load_busy = u32::MAX;
+    assert_eq!(run_op(&mut s, LIVE_LOAD), (2, E_BUSY, step::DONE));
+    assert!(s.log.contains(&"retire"));
+}
