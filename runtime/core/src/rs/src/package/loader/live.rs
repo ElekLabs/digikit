@@ -25,7 +25,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     }
 
     /// The live modules' tables by selection index, and `None` for the others.
-    unsafe fn live_modules(&self, except: usize) -> [Option<Keys<'_>>; SEL_MAX] {
+    pub(super) unsafe fn live_modules(&self, except: usize) -> [Option<Keys<'_>>; SEL_MAX] {
         let mut mods: [Option<Keys>; SEL_MAX] = [None; SEL_MAX];
         let mut r = 0;
         while r < MAX_MODULES {

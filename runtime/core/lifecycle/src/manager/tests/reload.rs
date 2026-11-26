@@ -21,6 +21,18 @@ fn reloading_a_service_reloads_its_consumers_and_ends_with_the_same_live_set() {
 }
 
 #[test]
+fn a_reload_tells_the_host_the_services_are_up_before_the_first_consumer_comes_back() {
+    let (mut pm, probe) = world(&[reference(), user(2), user(3)]);
+    pm.boot(&[id(1), id(2), id(3)]).unwrap();
+    probe.clear();
+    pm.reload(id(1)).unwrap();
+    let calls = probe.calls();
+    assert_eq!(calls.iter().filter(|c| **c == ServicesUp).count(), 1);
+    assert!(before(&calls, Activate(id(1)), ServicesUp));
+    assert!(before(&calls, ServicesUp, Place(id(2))), "the consumers start with numbers the new service gave");
+}
+
+#[test]
 fn reloading_a_module_leaves_its_service_alone() {
     let (mut pm, probe) = world(&[reference(), user(2), user(3)]);
     pm.load(id(2)).unwrap();

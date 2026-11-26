@@ -20,12 +20,16 @@ pub type Manager<P, M, R> = PackageManager<RtManifest<P, M, R>, RtPlacer<P, M, R
 /// The runtime's package lifecycle: the session the seams share and the manager over them. It lives for the whole run: the boot brings the selection up through it, the live job loads,
 /// unloads and reloads modules through it, and the DSP loader reports a failed DSP part to it. It must not move once `init` has run (the seams point into the session).
 pub struct Rt<P: PackagePlatform, M: Images, R: Registry> {
-    session: Session<P, M, R>,
+    pub(super) session: Session<P, M, R>,
     /// Written in place by `init`; valid while `up`.
     manager: MaybeUninit<Manager<P, M, R>>,
     up: bool,
     /// The take-down of a DSP part whose restore answered busy (a task below the UI task is not parked): the DSP load stays pending and a later UI pass finishes it.
     dsp_down: DspDown,
+    /// The reload of a service waits for a busy restore (`Rt::reload_closure`): the live job asks again on its next pass, and `dsp_step` leaves the manager's pending take-down to it.
+    pub(super) reloading: bool,
+    /// A reload of a service took a member down before it ended with a refusal.
+    pub(super) reload_torn: bool,
 }
 
 /// A DSP part's take-down that waits for a busy restore (`Rt::take_down_dsp`): the record, its boot index, the failure code, the passes spent, and whether the load in flight
@@ -60,6 +64,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         Session::init(addr_of_mut!((*out).session), loader);
         addr_of_mut!((*out).up).write(false);
         addr_of_mut!((*out).dsp_down).write(DspDown::NONE);
+        addr_of_mut!((*out).reloading).write(false);
+        addr_of_mut!((*out).reload_torn).write(false);
     }
 
     /// The lifecycle over `loader`, by value (host tests; nothing is started yet, so it may move until `boot`).
@@ -90,7 +96,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     }
 
     /// The manager, as a reference that is not tied to a borrow of `self` (like `loader`): one call at a time on one task.
-    unsafe fn mgr<'a>(&self) -> Option<&'a mut Manager<P, M, R>> {
+    pub(super) unsafe fn mgr<'a>(&self) -> Option<&'a mut Manager<P, M, R>> {
         if self.up {
             Some(&mut *(self.manager.as_ptr() as *mut Manager<P, M, R>))
         } else {
@@ -107,7 +113,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     }
 
     /// The loader. Not tied to a borrow of `self`: the manager and the session reach it through their own pointers, one call at a time on one task.
-    unsafe fn loader<'a>(&self) -> &'a mut Loader<P, M, R> {
+    pub(super) unsafe fn loader<'a>(&self) -> &'a mut Loader<P, M, R> {
         &mut *self.session.loader
     }
 
@@ -459,7 +465,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// timeout `dsp_down` is cleared while the manager keeps its pending take-down and retries it silently (acceptable: the retained state ends the session).
     pub unsafe fn dsp_step(&mut self, l: ServiceTable) {
         if let Some(m) = self.mgr() {
-            if m.restore_pending().is_some() {
+            if m.restore_pending().is_some() && !self.reloading {
                 let r = m.retry_pending();
                 if self.dsp_down.live {
                     let mut w = self.dsp_down;

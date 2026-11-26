@@ -86,8 +86,9 @@ use check::{Checked, Placed};
 use plan::{parse_provs, service_import_owner, table_of_file, table_span};
 #[cfg(test)]
 pub(crate) use plan::table_keys;
+use plan::settle_ctx;
 #[cfg(test)]
-use plan::{settle_ctx, unmet_needs, WANT_MAX};
+use plan::{unmet_needs, WANT_MAX};
 #[cfg(test)]
 pub(crate) use live::{live_caps, own_use};
 pub use live::{live_check_load, reload_check, retire_index};

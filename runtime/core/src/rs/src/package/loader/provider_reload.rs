@@ -144,6 +144,81 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     }
 }
 
+impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
+    /// The header table the search kept for service record `rec`, copied into `out`; its length (0 when there is none).
+    pub(crate) unsafe fn provider_table_into(&self, rec: usize, out: &mut [u8; TABLE_MAX]) -> usize {
+        let Some(j) = rec.checked_sub(MAX_MODULES).filter(|j| *j < self.found.n.min(PROVIDER_MAX)) else {
+            return 0;
+        };
+        let t = self.found.table(j);
+        out[..t.len()].copy_from_slice(t);
+        t.len()
+    }
+
+    /// Put back the table `provider_table_into` copied: a reload that was refused before anything went down keeps the old file, so its table stays the old one.
+    pub(crate) unsafe fn provider_table_restore(&mut self, rec: usize, table: &[u8]) {
+        if let Some(j) = rec.checked_sub(MAX_MODULES).filter(|j| *j < self.found.n.min(PROVIDER_MAX)) {
+            self.found.tables[j][..table.len()].copy_from_slice(table);
+            self.found.table_len[j] = table.len();
+        }
+    }
+
+    /// What the records of `members` (a closure: a service and its consumers) hold that its reload gives back before the files load again: (arena bytes of the image blocks and
+    /// record blocks, DSP area bytes), as `own_use` counts them for one module.
+    pub(crate) unsafe fn closure_own(&self, members: &[usize]) -> (u32, u32) {
+        let block = |n: u32| if n == 0 { 0 } else { dkneeds::arena_block(n).unwrap_or(n) };
+        let mut own = (0u32, 0u32);
+        for &rec in members {
+            let (a, d) = if rec < MAX_MODULES { super::live::own_use(rec) } else { (block(records::module(rec).size), dsp::ds().mod_len[rec]) };
+            own = (own.0 + a, own.1 + d);
+        }
+        own
+    }
+
+    /// The admission a closure reload starts from (see `seed_live`): the providers that are up and the live modules have taken their share, but not the members of the closure,
+    /// which the manager admits again as it brings them back.
+    pub(crate) unsafe fn seed_live_without(&self, adm: &mut Admission, members: &[usize]) {
+        let np = self.found.n.min(PROVIDER_MAX);
+        let provs = parse_provs(&self.found, np);
+        let mut j = 0;
+        while j < np {
+            if records::module(MAX_MODULES + j).used != 0 && !members.contains(&(MAX_MODULES + j)) {
+                adm.provider_is_there(j);
+            }
+            j += 1;
+        }
+        let mut mods = self.live_modules(SEL_MAX);
+        for &rec in members {
+            let at = if rec < MAX_MODULES { self.sel_of(rec) as usize } else { SEL_MAX };
+            if at < SEL_MAX {
+                mods[at] = None;
+            }
+        }
+        let mut i = 0;
+        while i < SEL_MAX {
+            if mods[i].is_some() {
+                adm.judge_module(&services(), &mods, &provs[..np], i);
+            }
+            i += 1;
+        }
+    }
+
+    /// The services number the keys of every module the plan accepted again: a service that came back after a reload has an owner object that knows no number, and its
+    /// sticky map gives the same ones (`settle`). Modules of the closure are down at that moment, so the acceptance and not the live records says which stay.
+    pub(crate) unsafe fn settle_accepted(&mut self) {
+        let mut n = 0;
+        let mut i = 0;
+        while i < SEL_MAX {
+            if self.accepted[i] {
+                n = i + 1;
+            }
+            i += 1;
+        }
+        let sel = settle_ctx(&self.accepted, &self.tables, &self.table_len, n);
+        services().settle(&sel);
+    }
+}
+
 /// A service reload's check (`Loader::provider_check`): `OK` when nothing refuses the file, else the refusal; nothing changes but the staging buffer.
 pub unsafe fn provider_check(rec: usize, path: *const u8) -> i32 {
     loader().provider_check(rec, path)

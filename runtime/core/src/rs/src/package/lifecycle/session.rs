@@ -167,6 +167,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Session<P, M, R> {
     /// A refused module takes no number from a service.
     pub(super) unsafe fn number_keys(&mut self, graph: &PackageGraph, live: &LiveSet) {
         if self.numbered {
+            // after the boot only a reload asks again: the services that came back know no number, and their sticky maps give the same ones
+            (*self.loader).settle_accepted();
             return;
         }
         self.numbered = true;

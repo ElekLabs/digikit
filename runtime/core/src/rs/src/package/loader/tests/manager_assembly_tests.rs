@@ -418,6 +418,103 @@ fn the_live_jobs_steps_unload_a_module_and_load_it_again_and_another_with_the_se
 }
 
 
+/// The packed `local-ping` service with the constant of its one export changed (`moveq #42,d0` is `moveq #43,d0`): the second version of the file, sealed again.
+fn local_ping_v2(dev: Dev) -> Vec<u8> {
+    let mut f = packed(dev, "local-ping", "dks", "test/local-ping");
+    let at = f.windows(4).position(|w| w == [0x70, 0x2a, 0x4e, 0x75]).expect("local_ping_value is moveq #42,d0; rts");
+    f[at + 1] = 0x2b;
+    seal(&mut f);
+    f
+}
+
+/// The bytes at device address `addr` in the arena of the card (a block of a live load), `n` of them.
+fn arena_bytes(l: &Boot, addr: u32, n: usize) -> Vec<u8> {
+    let (base, mem) = l.m.live.iter().find(|(b, mem)| addr >= *b && ((addr - *b) as usize) < mem.len() * 16).expect("the address is in a live block");
+    let bytes = unsafe { core::slice::from_raw_parts(mem.as_ptr() as *const u8, mem.len() * 16) };
+    bytes[(addr - base) as usize..(addr - base) as usize + n].to_vec()
+}
+
+#[test]
+fn a_service_reload_runs_the_new_file_and_the_consumer_binds_to_its_export() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, _plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            let rec = boot_record(&[LOCAL_PING_USER.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot_with(&rec, &capacity(&l.p));
+            let (user, service) = (id(0), id(MAX_MODULES));
+            let hash = dkneeds::keys::name_hash("local_ping_value");
+            assert!(rt.manager().unwrap().live().contains(user) && rt.manager().unwrap().live().contains(service), "{}", dev.name);
+            let v1 = l.exports.owned(hash).expect("the service published its export").0;
+            assert_eq!(arena_bytes(&l, v1, 2), [0x70, 0x2a], "{}: the first version returns 42", dev.name);
+            assert_eq!(ping_counters(), (1, 0), "{}", dev.name);
+            let table = l.found.table(0).to_vec();
+
+            // the new file is checked before anything goes down, and the check changes nothing
+            let path = std::format!("services/{}.dks\0", LOCAL_PING.leaf).into_bytes();
+            l.m.files.iter_mut().find(|(n, _)| n == &path[..path.len() - 1]).unwrap().1 = local_ping_v2(dev);
+            assert_eq!(rt.refusal(MAX_MODULES), None, "{}: nothing refuses the reload of the service", dev.name);
+            assert_eq!(l.provider_check(MAX_MODULES, path.as_ptr()), dkrt_sdk::OK, "{}", dev.name);
+            assert_eq!(l.exports.owned(hash).unwrap().0, v1, "{}: the check touched nothing", dev.name);
+            assert!(!rt.closure_has_dsp(MAX_MODULES), "{}", dev.name);
+
+            // the closure: the consumer, then the service; the job's call takes both down and brings both back from the new file
+            let mut members = [0usize; records::REC_MAX];
+            assert_eq!(rt.closure(MAX_MODULES, &mut members), 2);
+            assert_eq!(members[..2], [0, MAX_MODULES], "{}: consumers first", dev.name);
+            assert_eq!(rt.reload_closure_with(MAX_MODULES, path.as_ptr(), &live_cap(&l)), dkrt_sdk::OK, "{}", dev.name);
+            let m = rt.manager().unwrap();
+            assert!(m.live().contains(user) && m.live().contains(service), "{}: both are back", dev.name);
+            assert_eq!([records::module(0).used, records::module(MAX_MODULES).used], [1, 1], "{}", dev.name);
+            // the consumer is bound to the export of the new copy, which returns 43
+            let v2 = l.exports.owned(hash).expect("the new service published its export").0;
+            assert_eq!(arena_bytes(&l, v2, 2), [0x70, 0x2b], "{}: the second version returns 43", dev.name);
+            let bound = l.m.live.iter().any(|(_, mem)| {
+                let words = core::slice::from_raw_parts(mem.as_ptr() as *const u8, mem.len() * 16);
+                words.windows(4).any(|w| u32::from_be_bytes([w[0], w[1], w[2], w[3]]) == v2)
+            });
+            assert!(bound, "{}: an image holds the address of the new export", dev.name);
+            // the owner object was made again by `start_in` and the consumer attached to it
+            assert_eq!(ping_counters(), (1, 0), "{}", dev.name);
+            assert_eq!(l.found.table(0), &table[..], "{}: the file's table is the same one", dev.name);
+            assert!(!rt.reload_torn() && l.exports.resolve(hash).is_none(), "{}", dev.name);
+        }
+        clean_state();
+    }
+}
+
+#[test]
+fn a_service_reload_that_is_refused_before_the_take_down_leaves_both_up_and_a_member_with_a_dsp_part_is_seen() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, _plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            let rec = boot_record(&[LOCAL_PING_USER.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot_with(&rec, &capacity(&l.p));
+            let (user, service) = (id(0), id(MAX_MODULES));
+            let table = l.found.table(0).to_vec();
+            // the new file is not on the card: refused with nothing changed
+            assert_eq!(rt.reload_closure_with(MAX_MODULES, b"services/not-there.dks\0".as_ptr(), &live_cap(&l)), dkrt_sdk::E_NOT_FOUND, "{}", dev.name);
+            assert_eq!(rt.reload_closure_with(0, b"modules/x.dkm\0".as_ptr(), &live_cap(&l)), dkrt_sdk::E_NOT_FOUND, "{}: a module is no service", dev.name);
+            let m = rt.manager().unwrap();
+            assert!(m.live().contains(user) && m.live().contains(service), "{}", dev.name);
+            assert!(!rt.reload_torn(), "{}", dev.name);
+            assert_eq!(l.found.table(0), &table[..], "{}", dev.name);
+            // a member with a DSP part: the job refuses the closure (the DSP area range of the record is set)
+            let area = crate::package::dsp::ds().mod_len[0];
+            crate::package::dsp::ds().mod_len[0] = 64;
+            assert!(rt.closure_has_dsp(MAX_MODULES), "{}", dev.name);
+            crate::package::dsp::ds().mod_len[0] = area;
+            assert!(!rt.closure_has_dsp(MAX_MODULES), "{}", dev.name);
+        }
+        clean_state();
+    }
+}
+
 #[test]
 fn a_busy_module_keeps_its_tick_and_stays_loaded_when_the_live_job_asks_the_manager_to_unload_it() {
     let _g = clean();
