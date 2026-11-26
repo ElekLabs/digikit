@@ -24,6 +24,13 @@ export interface NoteOptions {
   during?: () => Promise<void>;
 }
 
+/** Pauses the run, then reads the frame counter: a trigger `lead` frames on is relative to a stopped clock, so host load cannot move the firmware's phase at the key press. */
+export async function pausedTrigger(session: Session, lead = 300): Promise<{ current: number; trigger: number }> {
+  await rpc(session, 'run.mode', { mode: 'paused' });
+  const current = await frames(session);
+  return { current, trigger: current + lead };
+}
+
 /** The shared note sequence: run to `trigger`, capture `length` frames with TRIG 1 held, then check for faults. */
 export async function captureNote(session: Session, opts: NoteOptions): Promise<void> {
   const { file, trigger, tag, length = 1500 } = opts;
@@ -55,8 +62,8 @@ export async function capture(runtime: Rt, file: string, selection?: number, tri
   await rpc(session, 'run.mode', { mode: 'paused' });
   await rpc(session, 'pcm.tap', { action: 'start' });
   await pickSine(runtime, selection);
-  const current = await frames(session);
-  const trig = triggerFrame ?? current + 300;
+  const { current, trigger } = await pausedTrigger(session);
+  const trig = triggerFrame ?? trigger;
   record(path.dirname(file), `${path.basename(file, path.extname(file))}-timing`, {
     currentFrame: current,
     triggerFrame: trig,

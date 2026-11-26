@@ -3,7 +3,7 @@ import { button, encoder } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { addedFactorOf, compare } from '@digi/regression/runtime/pcm-files.ts';
 import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
-import { frames } from '@digi/regression/runtime/dsp-state.ts';
+import { pausedTrigger } from '@digi/regression/runtime/note-capture.ts';
 import { REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { FX, SINE } from '@digi/regression/runtime/fixtures.ts';
 import { shot, selectSine } from '@digi/regression/runtime/fx-session.ts';
@@ -158,7 +158,7 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
           ).toBe(true);
           await runtime.ui.tap('NO', { until: { ms: 300, why: REDRAW } });
           const file = path.join(artifacts, 'send.wav');
-          await trackNote(runtime, file, (await frames(session)) + 300);
+          await trackNote(runtime, file, (await pausedTrigger(session)).trigger);
           pcm.set('send', file);
           const result = { added_factor: addedFactorOf(pcm.get('dry')!, file) };
           record(artifacts, 'send-added-factor', result);

@@ -4,7 +4,8 @@ import { describe, expect, test } from 'vitest';
 import { withWaitApi, type TestRuntime } from '@digi/regression/support.ts';
 import { compare } from '@digi/regression/runtime/pcm-files.ts';
 import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
-import { frames, runToFrame } from '@digi/regression/runtime/dsp-state.ts';
+import { pausedTrigger } from '@digi/regression/runtime/note-capture.ts';
+import { runToFrame } from '@digi/regression/runtime/dsp-state.ts';
 import { pickSine, REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { SEND, SINE, triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import { withRouteFxSession } from '@digi/regression/runtime/fx-route-live.ts';
@@ -82,8 +83,8 @@ for (const device of DEVICES) {
           expect(selected, 'the selected DT2 machine is the runtime sine').toBe(sine!.types[0]);
         } else await pickSine(runtime, hint);
         await runtime.ui.tap('NO', { until: { ms: 300, why: REDRAW } });
-        const current = await frames(session);
-        const trigger = Math.max(triggerFrame(device), current + 300);
+        const { current, trigger: next } = await pausedTrigger(session);
+        const trigger = Math.max(triggerFrame(device), next);
         record(artifacts, `${tag}-timing`, { currentFrame: current, triggerFrame: trigger });
         const file = path.join(artifacts, `${tag}.wav`);
         try {

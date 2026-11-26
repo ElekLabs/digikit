@@ -3,7 +3,8 @@ import { describe, expect, test } from 'vitest';
 import { withWaitApi, type TestRuntime } from '@digi/regression/support.ts';
 import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
 import { compare, pcmMetrics } from '@digi/regression/runtime/pcm-files.ts';
-import { frames, rows } from '@digi/regression/runtime/dsp-state.ts';
+import { pausedTrigger } from '@digi/regression/runtime/note-capture.ts';
+import { rows } from '@digi/regression/runtime/dsp-state.ts';
 import { REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { GAIN, SINE, triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import {
@@ -109,8 +110,8 @@ for (const device of DEVICES) {
         };
         const note = async (runtime: TestRuntime, tag: string, at?: number) => {
           const file = path.join(artifacts, `${tag}.wav`);
-          const current = await frames(runtime.session);
-          const chosen = at ?? current + 300;
+          const { current, trigger } = await pausedTrigger(runtime.session);
+          const chosen = at ?? trigger;
           record(artifacts, `${tag}-timing`, { currentFrame: current, triggerFrame: chosen });
           await trackNote(runtime, file, chosen);
           return file;
