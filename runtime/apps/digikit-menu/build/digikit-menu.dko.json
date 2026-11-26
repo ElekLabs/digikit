@@ -5855,91 +5855,91 @@
    "type": "cf.32"
   },
   {
-   "addend": 0,
-   "offset": 20,
-   "section": ".rodata.text_boot",
-   "symbol": ".sec..rodata.panel_settings.str1.1",
-   "type": "cf.32"
-  },
-  {
    "addend": 557,
+   "offset": 20,
+   "section": ".rodata.text_boot",
+   "symbol": ".sec..rodata.str1.1",
+   "type": "cf.32"
+  },
+  {
+   "addend": 573,
    "offset": 24,
    "section": ".rodata.text_boot",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 570,
+   "addend": 586,
    "offset": 28,
    "section": ".rodata.text_boot",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 580,
+   "addend": 596,
    "offset": 32,
    "section": ".rodata.text_boot",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 594,
+   "addend": 610,
    "offset": 36,
    "section": ".rodata.text_boot",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 604,
+   "addend": 620,
    "offset": 0,
    "section": ".rodata.text_dsp",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 616,
+   "addend": 632,
    "offset": 4,
    "section": ".rodata.text_dsp",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 629,
+   "addend": 645,
    "offset": 8,
    "section": ".rodata.text_dsp",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 640,
+   "addend": 656,
    "offset": 12,
    "section": ".rodata.text_dsp",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 653,
+   "addend": 669,
    "offset": 16,
    "section": ".rodata.text_dsp",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 666,
+   "addend": 682,
    "offset": 20,
    "section": ".rodata.text_dsp",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 675,
+   "addend": 691,
    "offset": 24,
    "section": ".rodata.text_dsp",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 688,
+   "addend": 704,
    "offset": 28,
    "section": ".rodata.text_dsp",
    "symbol": ".sec..rodata.str1.1",
@@ -5960,70 +5960,70 @@
    "type": "cf.32"
   },
   {
-   "addend": 703,
+   "addend": 719,
    "offset": 0,
    "section": ".rodata.text_registry",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 675,
+   "addend": 691,
    "offset": 4,
    "section": ".rodata.text_registry",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 715,
+   "addend": 731,
    "offset": 8,
    "section": ".rodata.text_registry",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 724,
+   "addend": 740,
    "offset": 12,
    "section": ".rodata.text_registry",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 734,
+   "addend": 750,
    "offset": 16,
    "section": ".rodata.text_registry",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 747,
+   "addend": 763,
    "offset": 20,
    "section": ".rodata.text_registry",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 759,
+   "addend": 775,
    "offset": 24,
    "section": ".rodata.text_registry",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 771,
+   "addend": 787,
    "offset": 28,
    "section": ".rodata.text_registry",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 778,
+   "addend": 794,
    "offset": 32,
    "section": ".rodata.text_registry",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 788,
+   "addend": 804,
    "offset": 36,
    "section": ".rodata.text_registry",
    "symbol": ".sec..rodata.str1.1",
@@ -6037,7 +6037,7 @@
    "type": "cf.32"
   },
   {
-   "addend": 800,
+   "addend": 816,
    "offset": 4,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
@@ -6051,84 +6051,84 @@
    "type": "cf.32"
   },
   {
-   "addend": 810,
+   "addend": 826,
    "offset": 12,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 821,
+   "addend": 837,
    "offset": 16,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 829,
+   "addend": 845,
    "offset": 20,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 840,
+   "addend": 856,
    "offset": 24,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 852,
+   "addend": 868,
    "offset": 28,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 862,
+   "addend": 878,
    "offset": 32,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 872,
+   "addend": 888,
    "offset": 36,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 884,
+   "addend": 900,
    "offset": 40,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 899,
+   "addend": 915,
    "offset": 44,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 910,
+   "addend": 926,
    "offset": 48,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 915,
+   "addend": 931,
    "offset": 52,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
    "type": "cf.32"
   },
   {
-   "addend": 923,
+   "addend": 939,
    "offset": 56,
    "section": ".rodata.text_runtime",
    "symbol": ".sec..rodata.str1.1",
@@ -6796,10 +6796,10 @@
   },
   {
    "align": 1,
-   "hex": "454e54455200464f554e440053544f434b0043414c4c0052455400434f505900444f4e4500322042414420424f4f5453004b45592048454c4400524551554553544544004350552050414e49430052454144204641494c454400446967696b69744d6f64756c65734d656e7500446967696b6974496e666f4d656e7500446967696b69744d656d6f72794d656e7500446967696b69744865616c74684d656e7500446967696b697441626f75744d656e7500446967696b69744d656e750044535020202000435055202020004d4f44532020004d414348202000564f4943452000504152414d20005041474520200053454c454354494f4e00435055204d454d4f52590046494c4500445350204d454d4f5259004d41434820524f575300564f49434520524f575300504152414d20524f5753005041474520524f575300465820534c4f5453004d41500053544f52450053455454494e47530053454e4420534c4f545300445350204c4f41440044535020564f494345530053544f5020504c41594241434b00484153204d454e5553004f4e20414e20465820524f555445004b455953204348414e474544005245535441525420444556494345004e4f205345525649434500544f4f204d414e592043414c4c53004e4f204f574e45520054574f204f574e455253004b4559205457494345004e4f2046495400424144204b494e4400424144205041544800544f4f204d414e59005752495445204641494c454400434152442042555359004f5554204f462052414e47450052454144204f4e4c59004f544845522052554e54494d45005441424c4520424144004e4f20445350204c494e4b004241442044535020434f44450044535020494d504f5254004e4f20445350205350414345004e4f20564f49434520524f57004453502058464552004f54484552204445564943450042414420564f4943452054595045004e4f20524547495354525900424144205459504500545950452055534544004e4f20504152414d20524f57004e4f205041474520524f57005459504520494e2055534500424144204944004f5645522055534553004658204944205457494345004e4f5420464f554e440052454144204552524f5200424144205348410042414420464f524d41540052554e54494d45204f4c44004e4f20494d504f5254004e4f204d454d4f525900494e4954204641494c454400414c5245414459204c4f4144454400534c4f542054414b454e004255535900544f4f20424947005441424c452046554c4c00",
+   "hex": "454e54455200464f554e440053544f434b0043414c4c0052455400434f505900444f4e4500322042414420424f4f5453004b45592048454c4400524551554553544544004350552050414e49430052454144204641494c454400446967696b69744d6f64756c65734d656e7500446967696b6974496e666f4d656e7500446967696b69744d656d6f72794d656e7500446967696b69744865616c74684d656e7500446967696b697441626f75744d656e7500446967696b69744d656e750044535020202000435055202020004d4f44532020004d414348202000564f4943452000504152414d20005041474520200053454c454354494f4e00435055204d454d4f52590046494c4500445350204d454d4f5259004d41434820524f575300564f49434520524f575300504152414d20524f5753005041474520524f575300465820534c4f5453004d41500053544f52450053455454494e47530053454e4420534c4f545300445350204c4f41440044535020564f494345530053544f5020504c41594241434b00484153204d454e5553004f4e20414e20465820524f555445004b455953204348414e474544005245535441525420444556494345004e4f205345525649434500544f4f204d414e592043414c4c53004e4f204f574e45520054574f204f574e455253004b4559205457494345004e4f2046495400424144204b494e4400424144205041544800544f4f204d414e59005752495445204641494c454400434152442042555359005245535441525420544f204c4f4144004f5554204f462052414e47450052454144204f4e4c59004f544845522052554e54494d45005441424c4520424144004e4f20445350204c494e4b004241442044535020434f44450044535020494d504f5254004e4f20445350205350414345004e4f20564f49434520524f57004453502058464552004f54484552204445564943450042414420564f4943452054595045004e4f20524547495354525900424144205459504500545950452055534544004e4f20504152414d20524f57004e4f205041474520524f57005459504520494e2055534500424144204944004f5645522055534553004658204944205457494345004e4f5420464f554e440052454144204552524f5200424144205348410042414420464f524d41540052554e54494d45204f4c44004e4f20494d504f5254004e4f204d454d4f525900494e4954204641494c454400414c5245414459204c4f4144454400534c4f542054414b454e004255535900544f4f20424947005441424c452046554c4c00",
    "kind": "data",
    "name": ".rodata.str1.1",
-   "size": 934
+   "size": 950
   },
   {
    "align": 2,
@@ -7439,7 +7439,7 @@
    "size": 4
   }
  ],
- "source_sha256": "9a2becd0d82b36b01a6f65d45b57a295b7c695431237d573595af2ecd57424cf",
+ "source_sha256": "b5c353afcbd78ab7f493709619989260e91d0c4908da5bed3e7064e169f52239",
  "symbols": [
   {
    "global": false,
@@ -9679,7 +9679,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "3775",
-  "isa_check": "d2e2caf7bf3ce34a98b921bd68d2c8f9384b4ec4999562f724f581f67d314516",
+  "isa_check": "d90c7bfcb0d88b9d7f8a853d141fd9ad4954cb3f236ba923c40a9cf6a68290f8",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

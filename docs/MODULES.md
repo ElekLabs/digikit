@@ -246,7 +246,7 @@ A module that emits records of a generic kind (a kind a service owns that has no
  fini(ctx)      failure paths and restart only
 ```
 
-All checks run on the staged file before any write. The module set is fixed after the boot hook; a later load returns `E_BOOT_ONLY`. The firmware builds its machine view after the boot hook, so rows written at commit are in place before the firmware reads them.
+All checks run on the staged file before any write. The module set is fixed after the boot hook; a later load returns `E_BOOT_ONLY` (a service that must start at boot also gets it from a live load: restart the device). The firmware builds its machine view after the boot hook, so rows written at commit are in place before the firmware reads them.
 
 Why the DSP check and reserve stay before `init`: they need only the static DSP section and the keys table. They keep pointers into the staged file only until `reserve`. The cheap refusals come first.
 

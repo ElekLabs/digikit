@@ -275,8 +275,8 @@ static const char *const text_dsp[10] = {
     "",
 };
 static const char *const text_boot[10] = {
-    "BAD PATH", "TOO MANY",     "WRITE FAILED", "CARD BUSY",     "SAFE MODE",
-    "",         "OUT OF RANGE", "READ ONLY",    "OTHER RUNTIME", "TABLE BAD",
+    "BAD PATH",        "TOO MANY",     "WRITE FAILED", "CARD BUSY",     "SAFE MODE",
+    "RESTART TO LOAD", "OUT OF RANGE", "READ ONLY",    "OTHER RUNTIME", "TABLE BAD",
 };
 /* The boot plan and the declarations: -73..-79 (E_MISSING, E_DECL_FULL, E_PLAN_KIND, E_PLAN_OWNER, E_PLAN_KEY, E_PLAN_FIT, E_DECL_KIND). */
 static const char *const text_plan[7] = {
