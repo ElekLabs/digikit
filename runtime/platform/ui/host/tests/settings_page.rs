@@ -276,7 +276,11 @@ fn a_second_init_in_one_module_is_refused_and_the_first_page_stays() {
     assert_eq!(unsafe { sp_set(1, 20) }, 0);
     assert_eq!(unsafe { sp_init_bool_only() }, E_EXISTS);
     assert_eq!(unsafe { sp_init() }, E_EXISTS);
-    assert_eq!(unsafe { sp_value(1) }, 20, "the first page keeps its values");
+    assert_eq!(
+        unsafe { sp_value(1) },
+        20,
+        "the first page keeps its values"
+    );
     assert_eq!(rows().len(), 5, "and its rows");
 }
 

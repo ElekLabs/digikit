@@ -54,7 +54,8 @@ extern const uint8_t fw_name_cb_vt __asm__("cf.window.site.name_cb_vptr_lit");
 /* assembly shim */
 void dk_make_sp(shared_ptr *out, uint8_t *parent, uint8_t *view);
 
-#define UI_MENU_ROWS_NO_REBUILD 1 /* DK_LOG_MENU action: the port has no SETTINGS list rebuild, so a row added later waits for the next stock build */
+#define UI_MENU_ROWS_NO_REBUILD                                                                    \
+    1 /* DK_LOG_MENU action: the port has no SETTINGS list rebuild, so a row added later waits for the next stock build */
 #define VIEW_AT 0x38     /* the View sub-object of a Menu view */
 #define CMP_FONT_AT 0x94 /* CompactVerticalMenuView: the font object itself */
 #define POP_PANEL_AT 0x380

@@ -35,7 +35,8 @@ typedef struct ui_settings_rows {
        after the build or still shows one that was removed. Set only once a menu is known: a row added before the first build needs no rebuild. */
     uint8_t *menu;
     uint8_t dirty;
-    uint8_t absent_seen; /* a pass already refused for missing rebuild anchors: it reports that once */
+    uint8_t
+        absent_seen; /* a pass already refused for missing rebuild anchors: it reports that once */
 } ui_settings_rows;
 
 /* Add a row at the end. `name`: the name of the owner's record, a module or a service file (at most DK_UI_MODULE_NAME - 1 characters are kept); the row's
