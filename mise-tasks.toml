@@ -184,10 +184,6 @@ description = "Slowest tasks, recent failures and tasks that got slower, from th
 
 # --- tests ---
 
-["clean:lanes"]
-run = "uv run python -m tools.devtools.lane_clean"
-description = "Report old Cargo build output in linked worktrees. Pass --apply to retire eligible dist/native-target directories, leaving the worktrees intact."
-
 ["clean:runs"]
 run = "uv run python -m tools.devtools.clean_runs"
 description = "Dry run: list old digi-* run directories in the temp dir and orphan digi-emud processes; -- --yes deletes the directories (never kills), -- --hours N sets the minimum age (default 24)"

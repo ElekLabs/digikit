@@ -31,14 +31,50 @@ dependencies = ["sharc-rt"]
 [[package]]
 name = "sharc-rt"
 version = "0.0.1"
-dependencies = ["external"]
-
-[[package]]
-name = "external"
-version = "1.0.0"
-source = "registry+https://example.invalid/index"
-checksum = "old"
 """
+
+
+def metadata(root: Path, *, external: bool = False) -> dict:
+    ids = [f"path+{(root / crate).as_uri()}#0.0.1" for crate in core_store.CORE_CRATES]
+    local = [
+        {
+            "id": ident,
+            "source": None,
+            "version": "0.0.1",
+            "manifest_path": str(root / crate / "Cargo.toml"),
+        }
+        for ident, crate in zip(ids, core_store.CORE_CRATES, strict=True)
+    ]
+    registry = {
+        "id": "registry+https://example.invalid/index#dependency@1.0.0",
+        "source": "registry+https://example.invalid/index",
+        "version": "1.0.0",
+        "manifest_path": "/cargo/registry/dependency-1.0.0/Cargo.toml",
+    }
+    links = {
+        ids[0]: ids[1:],
+        ids[1]: [ids[2]],
+        ids[2]: [registry["id"]] if external else [],
+        registry["id"]: [],
+    }
+    return {
+        "packages": [*local, registry],
+        "resolve": {
+            "root": ids[0],
+            "nodes": [
+                {"id": ident, "dependencies": deps, "features": []}
+                for ident, deps in links.items()
+            ],
+        },
+    }
+
+
+@pytest.fixture(autouse=True)
+def cargo_graph(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Keep store unit tests independent of Cargo installation and registry cache.
+    monkeypatch.setattr(
+        core_store, "cargo_metadata", lambda _plan, _triple, root: metadata(root)
+    )
 
 
 def make_repo(tmp_path: Path) -> Path:
@@ -111,28 +147,37 @@ def test_key_follows_every_input(tmp_path: Path) -> None:
     assert key(repo, plan) != base
 
 
-def test_key_follows_only_the_core_lockfile_closure(tmp_path: Path) -> None:
+def test_unrelated_lockfile_change_does_not_invalidate_local_core(
+    tmp_path: Path,
+) -> None:
     main = make_repo(tmp_path / "main")
     lane = make_repo(tmp_path / "lane")
     plan = make_plan(tmp_path)
-    # A second version elsewhere makes Cargo spell out the core reference.
-    # Neither this nor a Patchkit-only dependency invalidates the core.
-    lock = lane / "Cargo.lock"
-    unrelated = LOCKFILE.replace(
-        'name = "patchkit"\nversion = "1.0.0"',
-        'name = "patchkit"\nversion = "1.0.0"\ndependencies = ["external 2.0.0"]',
-    ).replace('dependencies = ["external"]', 'dependencies = ["external 1.0.0"]')
-    unrelated += """
-[[package]]
-name = "external"
-version = "2.0.0"
-source = "registry+https://example.invalid/index"
-checksum = "unused"
-"""
-    lock.write_text(unrelated)
+    (lane / "Cargo.lock").write_text(
+        LOCKFILE.replace(
+            'name = "patchkit"\nversion = "1.0.0"',
+            'name = "patchkit"\nversion = "2.0.0"',
+        )
+    )
     assert key(main, plan) == key(lane, plan)
-    lock.write_text(unrelated.replace('checksum = "old"', 'checksum = "replaced"'))
-    assert key(main, plan) != key(lane, plan)
+
+
+@pytest.mark.parametrize("reason", ["external dependency", "offline cache unavailable"])
+def test_unproven_resolution_falls_back_to_whole_lockfile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: str
+) -> None:
+    repo = make_repo(tmp_path)
+    plan = make_plan(tmp_path)
+
+    def cargo(_plan: core_store.Plan, _triple: str, root: Path) -> dict:
+        if reason == "offline cache unavailable":
+            raise FileNotFoundError("Cargo metadata unavailable")
+        return metadata(root, external=True)
+
+    monkeypatch.setattr(core_store, "cargo_metadata", cargo)
+    base = key(repo, plan)
+    (repo / "Cargo.lock").write_text(LOCKFILE + "\n# changed")
+    assert key(repo, plan) != base
 
 
 def test_key_follows_the_flags_the_build_runs_with(tmp_path: Path) -> None:
@@ -293,9 +338,8 @@ def test_concurrent_insert_of_the_same_key_uses_the_winner(tmp_path: Path) -> No
 
 def test_input_change_during_the_build_is_an_error(tmp_path: Path) -> None:
     stand = Stand(tmp_path)
-    stand.on_build = lambda: (stand.repo / "Cargo.lock").write_text(
-        LOCKFILE.replace('checksum = "old"', 'checksum = "changed"')
-    )
+    source = stand.repo / "packages/emulator/sharc-rt/src/lib.rs"
+    stand.on_build = lambda: source.write_text("fn edited_during_build() {}")
     root = tmp_path / "store"
     try:
         stand.ensure(root)

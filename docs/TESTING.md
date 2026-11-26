@@ -608,32 +608,29 @@ without running it.
 
 ### Retiring idle lane builds
 
-Run `mise run clean:lanes` from the main checkout to inventory `dist/native-target`
-in linked Git worktrees. The default is a dry run. Pass lane names or absolute
-worktree paths to narrow the list, and pass `--apply` to retire the eligible
-directories. For example:
+Use `git worktree list` to choose a lane that is not in use. From that
+worktree, list its build output and find the concrete Cargo targets:
 
 ```sh
-mise run clean:lanes
-mise run clean:lanes -- --idle-days 7 --max-gib 150 --keep my-lane
-mise run clean:lanes -- --apply old-lane
+du -sh dist/native-target
+find dist/native-target -name CACHEDIR.TAG -print
 ```
 
-Each row reports allocated GiB and why a target is kept or eligible. The default
-age is seven days since the last build-file change. A budget chooses the oldest
-eligible targets first and never overrides a protection. Git-locked worktrees,
-lanes with uncommitted changes, the invoking worktree, and lanes named by
-`--keep` are protected. On a host with `lsof`, the tool also protects lanes
-used by running processes. An idle shell tab alone does not keep a lane warm.
-If process visibility is unavailable the command stops. Finish or pause work
-in the selected lanes before applying: a process that starts after the final
-check is not covered by that check.
+Choose a target directory from that list. For example, if the Workbench
+ColdFire-profile build has a tag in `dist/native-target/nogen/cfprof`:
 
-Only ignored `dist/native-target` directories in linked worktrees are in scope.
-Their next Cargo build will be cold if the artifact isn't already in a shared
-store. The worktrees, source files, plain `target/`, main build directories, Nx
-cache, shared binaries and profiles are not removed. APFS snapshots and clones
-can make the gain in filesystem free space smaller than the measured output.
+```sh
+cargo clean --dry-run --target-dir dist/native-target/nogen/cfprof
+# Once the lane is idle and the preview matches what you want:
+cargo clean --target-dir dist/native-target/nogen/cfprof
+```
+
+Cargo requires the tag. The `dist/native-target` parent groups several Cargo
+targets and is not itself a target directory. Cleaning a selected target leaves
+the worktree, sources, plain `target/`, and the shared core, daemon and Nx stores
+in place. The next local build may be cold on a shared-artifact miss. APFS
+snapshots and clones can make the gain in free disk space smaller than the
+reported output size.
 
 ### Remote cache
 
@@ -1394,12 +1391,13 @@ used within the last hour; it renames an entry to `.tmp-evict-*` before it remov
 than an hour. `DIGI_SHARC_CORE_STORE` moves the store (tests only).
 
 Key and build come from one description, `core_store.build_plan` (the argv and environment of the cargo call). The key follows the
-daemon key's scheme (`emud_key.key_of`): the content of the repository files in `CORE_SOURCE_GLOBS` (the `sharc-core-lib`,
-`sharc-gen` and `sharc-rt` crates, `Cargo.toml`, `rust-toolchain*`, `.cargo`), the reachable package records
-in `Cargo.lock` from `sharc-core-lib` (including package sources and checksums), every file of the gen dir, `rustc -vV`, the target triple, the argv without the target dir (profile, `-p sharc-core-lib`, features) and the rustc flag, `CARGO_PROFILE_*` and `CARGO_TARGET_*` variables of the build environment. The tooling scripts (`core_store.py`, `digi_env.py`, ...) are not in the key: what they decide is in the plan, so an edit that leaves the plan alone keeps every stored library. The key is known before the first build, so
-a lookup needs no build. A complete entry with the exact old whole-lockfile key is adopted on the first lookup,
-so an already built core can seed both the main tree and lanes that differ only in unrelated dependencies.
-After a build the dependency file of cargo is audited against the key: a file the build read that the key
+daemon key's scheme (`emud_key.key_of`): the content of the files in `CORE_SOURCE_GLOBS` (the three SHARC library
+crates, `Cargo.toml`, `rust-toolchain*`, and `.cargo`), every file in the gen dir, the toolchain and version, target,
+build flags and PGO profile. The pinned Cargo's `metadata --locked --offline` resolves the library manifest. If all
+reachable crates are already covered by the source key, only their checkout-independent resolution is hashed, not
+the workspace lockfile. If metadata is unavailable or the closure includes other crates, the full lockfile remains
+an input. An exact match of the old whole-lockfile key can seed the new entry without recompiling.
+After a build the Cargo dependency file is audited against the key: a file the build read that the key
 does not cover fails the build and stores nothing (add it to `CORE_SOURCE_GLOBS`).
 
 ```sh
