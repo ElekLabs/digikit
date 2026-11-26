@@ -63,6 +63,17 @@
           "runtime/core/tests/lfo/goldens.json"
         ],
         "plusdrive": true
+      },
+      {
+        "files": [
+          "lfo-reload.device.test.ts"
+        ],
+        "modules": [
+          "test/lfo-shape",
+          "core/services/lfo"
+        ],
+        "plusdrive": true,
+        "firmwareOnly": "the LFO output through the vector 191 tick keeps running after the refused reload of the service (nothing is taken down); the refusal itself is a host test"
       }
     ]
   }
