@@ -515,6 +515,62 @@ fn a_service_reload_that_is_refused_before_the_take_down_leaves_both_up_and_a_me
     }
 }
 
+#[test]
+fn a_service_reload_that_leaves_the_consumer_down_says_so_in_the_boot_record() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, _plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            let rec = boot_record(&[LOCAL_PING_USER.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot_with(&rec, &capacity(&l.p));
+            assert_eq!(crate::boot::info().states[0], dkrt_sdk::STATE_ACTIVE, "{}", dev.name);
+            assert_eq!(crate::boot::info().loaded, 1, "{}", dev.name);
+            // the consumer's file is damaged after the check of the service: the take-down goes through, the consumer does not come back
+            let path = std::format!("services/{}.dks\0", LOCAL_PING.leaf).into_bytes();
+            l.m.files.iter_mut().find(|(n, _)| n == &path[..path.len() - 1]).unwrap().1 = local_ping_v2(dev);
+            l.m.files.iter_mut().find(|(n, _)| n.starts_with(b"modules/local-ping-user.dkm")).unwrap().1[0] ^= 0xff;
+            let r = rt.reload_closure_with(MAX_MODULES, path.as_ptr(), &live_cap(&l));
+            assert_ne!(r, dkrt_sdk::OK, "{}: the consumer cannot come back", dev.name);
+            assert!(rt.reload_torn(), "{}", dev.name);
+            assert!(!rt.manager().unwrap().live().contains(id(0)), "{}", dev.name);
+            let info = crate::boot::info();
+            assert_eq!(info.states[0], dkrt_sdk::STATE_FAILED, "{}: the consumer is not ACTIVE any more", dev.name);
+            assert_eq!(info.results[0], r, "{}: with the code of the reload", dev.name);
+            assert_eq!(info.loaded, 0, "{}", dev.name);
+        }
+        clean_state();
+    }
+}
+
+#[test]
+fn a_service_reload_waits_while_a_member_is_not_ready_to_retire_and_changes_nothing() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (mut l, _plan) = planned(dev, &image, &[], &[&LOCAL_PING_USER], &[LOCAL_PING]);
+            let rec = boot_record(&[LOCAL_PING_USER.leaf]);
+            let mut rt = Rt::new(&mut l as *mut _);
+            rt.boot_with(&rec, &capacity(&l.p));
+            let hash = dkneeds::keys::name_hash("local_ping_value");
+            let v1 = l.exports.owned(hash).unwrap().0;
+            let path = std::format!("services/{}.dks\0", LOCAL_PING.leaf).into_bytes();
+            l.m.files.iter_mut().find(|(n, _)| n == &path[..path.len() - 1]).unwrap().1 = local_ping_v2(dev);
+            // the DSP loader holds rows it cannot clear: the member is not ready, as in a module unload
+            crate::package::dsp::ds().phase = crate::package::dsp::PH_RETAINED;
+            assert_eq!(rt.reload_closure_with(MAX_MODULES, path.as_ptr(), &live_cap(&l)), dkrt_sdk::E_BUSY, "{}", dev.name);
+            assert!(!rt.reload_torn(), "{}", dev.name);
+            assert!(rt.manager().unwrap().live().contains(id(0)) && rt.manager().unwrap().live().contains(id(MAX_MODULES)), "{}", dev.name);
+            assert_eq!(l.exports.owned(hash).unwrap().0, v1, "{}: nothing was taken down", dev.name);
+            crate::package::dsp::ds().phase = crate::package::dsp::PH_IDLE;
+            assert_eq!(rt.reload_closure_with(MAX_MODULES, path.as_ptr(), &live_cap(&l)), dkrt_sdk::OK, "{}", dev.name);
+        }
+        clean_state();
+    }
+}
+
 /// The live job `RELOAD` of `path`, polled to its end over the real seams of the host (`HostOps`): the job and its result.
 unsafe fn reload_job(l: &mut Boot, rt: &mut Rt<FakePlatform, Card, DeviceRegistry>, path: &[u8]) -> (crate::package::reload::Job, i32) {
     use crate::package::reload::{step, Job};

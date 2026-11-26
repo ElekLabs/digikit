@@ -76,6 +76,21 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         out
     }
 
+    /// Does the session still hold the memory of a member of the closure of record `rec`?
+    unsafe fn closure_retained(&mut self, rec: usize) -> bool {
+        let mut members = [0usize; REC_MAX];
+        let n = self.closure(rec, &mut members);
+        let mut any = false;
+        for &r in &members[..n] {
+            let id = PackageId(r as u8);
+            if self.session.retained(id) {
+                self.session.retry_free(id);
+                any |= self.session.retained(id);
+            }
+        }
+        any
+    }
+
     /// A reload of service record `rec` cannot go on: every member gets its tick back (`Loader::reload_abort`). False when the reload went on (a member is down, or a restore of the
     /// closure waits: it is left to `dsp_step`).
     pub unsafe fn closure_abort(&mut self, rec: usize) -> bool {
@@ -121,8 +136,15 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             return E_NOT_FOUND;
         };
         if self.reloading {
-            let out = m.retry_pending();
-            return self.reload_end(out, rec, &[]);
+            if m.restore_pending().is_some() {
+                let out = m.retry_pending();
+                return self.reload_end(out, rec, &[]);
+            }
+            // the manager is done: the old copies' memory may still be held (a file or I/O step in flight)
+            if self.closure_retained(rec) {
+                return E_BUSY;
+            }
+            return self.reload_end(Ok(Report::default()), rec, &[]);
         }
         if rec < MAX_MODULES || !m.live().contains(id) {
             return E_NOT_FOUND;
@@ -130,6 +152,12 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         let mut members = [0usize; REC_MAX];
         let n = self.closure(rec, &mut members);
         let members = &members[..n];
+        // as a module unload: a member whose file or I/O step still runs, or whose memory is held, is not taken down (nothing has changed)
+        for &r in members {
+            if !self.loader().package_retire_ready(PackageId(r as u8)) {
+                return E_BUSY;
+            }
+        }
         let l = self.loader();
         // the old table, for a refusal before anything is taken down
         let mut old = [0u8; TABLE_MAX];
@@ -161,6 +189,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             Err(e) => Err(e),
         };
         let down = members.iter().any(|&r| !m.live().contains(PackageId(r as u8))) || m.restore_pending().is_some();
+        if out.is_ok() && !down && self.closure_retained(rec) {
+            // up again, but an old copy's memory is not back yet: the job asks again
+            self.reloading = true;
+            return E_BUSY;
+        }
         if down || out.is_ok() {
             return self.reload_end(out, rec, members);
         }
@@ -170,6 +203,28 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         m.manifest_mut().reread(SEL_MAX);
         let _ = m.refresh_graph();
         code
+    }
+
+    /// The reload failed and the restore is not pending: the members that are not back are down for good. The boot record says what is true for each: a consumer that was ACTIVE is
+    /// FAILED with `code` (`report_taken_down`, the late take-down's record), and the service's failure goes to the log like a provider that did not load.
+    unsafe fn report_closure_down(&mut self, members: &[usize], code: i32) {
+        let Some(m) = self.mgr() else {
+            return;
+        };
+        for &r in members {
+            if m.live().contains(PackageId(r as u8)) {
+                continue;
+            }
+            let l = self.loader();
+            if let Some(j) = r.checked_sub(MAX_MODULES) {
+                crate::package::resident::boot::report_provider(l.provider_file(j), code, l.provided_hash(j), 0);
+            } else {
+                let k = l.sel_index(r);
+                if k != u8::MAX {
+                    crate::package::resident::boot::report_taken_down(k as u32, code);
+                }
+            }
+        }
     }
 
     /// The end of one call of the reload: the code, and whether a restore keeps the rest pending.
@@ -195,7 +250,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                 if !members.is_empty() {
                     self.reload_torn = self.reloading || members.iter().any(|&r| !m.live().contains(PackageId(r as u8)));
                 }
-                code_of(&e)
+                let code = code_of(&e);
+                if self.reload_torn && !self.reloading {
+                    self.report_closure_down(members, code);
+                }
+                code
             }
         }
     }

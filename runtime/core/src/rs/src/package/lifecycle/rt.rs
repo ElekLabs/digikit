@@ -294,8 +294,12 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             if !self.session.loader.as_mut().is_some_and(|l| l.package_retire_ready(id)) {
                 return E_BUSY;
             }
-            if let Err(e) = m.take_down_closure(id) {
-                return code_of(&e);
+            match m.take_down_closure(id) {
+                // the consumers that went with the module are no longer active in the boot record (the job marks the module itself)
+                Ok(report) => {
+                    self.settle_down(id, &report);
+                }
+                Err(e) => return code_of(&e),
             }
         } else if self.session.retained(id) {
             self.session.retry_free(id);
