@@ -4,11 +4,41 @@ import json
 import os
 import subprocess
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from tools.devtools import core_store, emud_key, store
+
+LOCKFILE = """
+version = 4
+
+[[package]]
+name = "patchkit"
+version = "1.0.0"
+
+[[package]]
+name = "sharc-core-lib"
+version = "0.0.1"
+dependencies = ["sharc-gen", "sharc-rt"]
+
+[[package]]
+name = "sharc-gen"
+version = "0.0.1"
+dependencies = ["sharc-rt"]
+
+[[package]]
+name = "sharc-rt"
+version = "0.0.1"
+dependencies = ["external"]
+
+[[package]]
+name = "external"
+version = "1.0.0"
+source = "registry+https://example.invalid/index"
+checksum = "old"
+"""
 
 
 def make_repo(tmp_path: Path) -> Path:
@@ -16,7 +46,7 @@ def make_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     files = {
         "Cargo.toml": "[workspace]",
-        "Cargo.lock": "lock 1",
+        "Cargo.lock": LOCKFILE,
         "packages/emulator/sharc-rt/src/lib.rs": "fn rt() {}",
         "packages/emulator/sharc-gen/src/lib.rs": "fn gen() {}",
         "packages/emulator/sharc-gen/build.rs": "fn main() {}",
@@ -57,7 +87,6 @@ def test_key_follows_every_input(tmp_path: Path) -> None:
     base = key(repo, plan)
     assert key(repo, plan) == base
     for name in (
-        "Cargo.lock",
         "Cargo.toml",
         "packages/emulator/sharc-gen/src/lib.rs",
         "packages/emulator/sharc-gen/build.rs",
@@ -80,6 +109,30 @@ def test_key_follows_every_input(tmp_path: Path) -> None:
     assert key(repo, plan, "rustc 2") != base
     (plan.gen / "new.rs").write_text("")
     assert key(repo, plan) != base
+
+
+def test_key_follows_only_the_core_lockfile_closure(tmp_path: Path) -> None:
+    main = make_repo(tmp_path / "main")
+    lane = make_repo(tmp_path / "lane")
+    plan = make_plan(tmp_path)
+    # A second version elsewhere makes Cargo spell out the core reference.
+    # Neither this nor a Patchkit-only dependency invalidates the core.
+    lock = lane / "Cargo.lock"
+    unrelated = LOCKFILE.replace(
+        'name = "patchkit"\nversion = "1.0.0"',
+        'name = "patchkit"\nversion = "1.0.0"\ndependencies = ["external 2.0.0"]',
+    ).replace('dependencies = ["external"]', 'dependencies = ["external 1.0.0"]')
+    unrelated += """
+[[package]]
+name = "external"
+version = "2.0.0"
+source = "registry+https://example.invalid/index"
+checksum = "unused"
+"""
+    lock.write_text(unrelated)
+    assert key(main, plan) == key(lane, plan)
+    lock.write_text(unrelated.replace('checksum = "old"', 'checksum = "replaced"'))
+    assert key(main, plan) != key(lane, plan)
 
 
 def test_key_follows_the_flags_the_build_runs_with(tmp_path: Path) -> None:
@@ -132,6 +185,10 @@ class Stand:
         self.builds = 0
         self.on_build = lambda: None
 
+    @property
+    def device(self) -> str:
+        return core_store.gen_image(self.plan.gen).partition("-")[0]
+
     def resolve(self) -> tuple[core_store.Plan, emud_key.EmudInputs]:
         return self.plan, core_store.key_inputs(self.plan, "t", "rustc 1", self.repo)
 
@@ -148,7 +205,7 @@ class Stand:
 
     def ensure(self, root: Path, worktrees: list[Path] | None = None) -> Path:
         return core_store.ensure_core(
-            "dn2",
+            self.device,
             root,
             resolve=self.resolve,
             build=self.build,
@@ -169,6 +226,36 @@ def test_miss_hit_and_header(tmp_path: Path) -> None:
     assert (first.parent / "key.txt").read_text().strip() == first.parent.name
     assert stand.ensure(root) == first
     assert stand.builds == 1
+
+
+def test_exact_legacy_hit_seeds_a_hit_for_another_worktree(tmp_path: Path) -> None:
+    stand = Stand(tmp_path / "base")
+    root = tmp_path / "store"
+    _, inputs = stand.resolve()
+    # A cache entry written before the lockfile projection.
+    legacy = replace(
+        inputs,
+        files={**inputs.files, "Cargo.lock": stand.repo / "Cargo.lock"},
+        flags={k: v for k, v in inputs.flags.items() if k != core_store.LOCK_CLOSURE},
+    )
+    old_key = emud_key.key_of(legacy)
+    group = root / stand.device
+    make_entry(group, old_key, time.time())
+    assert stand.ensure(root).read_bytes() == b"x"
+    assert stand.builds == 0
+
+    lane = Stand(tmp_path / "lane")
+    (lane.repo / "Cargo.lock").write_text(
+        LOCKFILE.replace(
+            'name = "patchkit"\nversion = "1.0.0"',
+            'name = "patchkit"\nversion = "2.0.0"',
+        )
+    )
+    assert lane.ensure(root) == stand.ensure(root)
+    assert lane.builds == 0
+    (lane.repo / "packages/emulator/sharc-rt/src/lib.rs").write_text("fn changed() {}")
+    assert lane.ensure(root) != stand.ensure(root)
+    assert lane.builds == 1
 
 
 def test_partial_entry_is_a_miss(tmp_path: Path) -> None:
@@ -206,7 +293,9 @@ def test_concurrent_insert_of_the_same_key_uses_the_winner(tmp_path: Path) -> No
 
 def test_input_change_during_the_build_is_an_error(tmp_path: Path) -> None:
     stand = Stand(tmp_path)
-    stand.on_build = lambda: (stand.repo / "Cargo.lock").write_text("changed")
+    stand.on_build = lambda: (stand.repo / "Cargo.lock").write_text(
+        LOCKFILE.replace('checksum = "old"', 'checksum = "changed"')
+    )
     root = tmp_path / "store"
     try:
         stand.ensure(root)

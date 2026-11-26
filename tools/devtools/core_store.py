@@ -11,7 +11,7 @@ Key and build come from one source: `build_plan` returns the exact argv and envi
 `key_inputs` hashes the parts of that plan that change the library (the argv without the target dir, the rustc
 flag variables after `digi_env.rust_env` and the PGO flags, the cargo profile variables). The key scheme is the
 daemon key's (tools/devtools/emud_key.py `key_of`): a fixed list of source globs (CORE_SOURCE_GLOBS: the
-`sharc-core-lib`, `sharc-gen` and `sharc-rt` crates, Cargo.toml, Cargo.lock, rust-toolchain, .cargo), every file of
+`sharc-core-lib`, `sharc-gen` and `sharc-rt` crates, Cargo.toml, rust-toolchain, .cargo), the core's reachable Cargo.lock package records, every file of
 the gen dir, the PGO profile content (or `plain`), the pinned toolchain (in the argv) and `rustc -vV`. The tooling scripts
 are not in the key: what they decide (argv, environment, flags, target) is in the plan, so an edit of a script that leaves
 the plan alone keeps every stored library (the DN2 one takes 13 to 20 minutes). The library file and `header.json` (made
@@ -34,12 +34,12 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
-from tools.devtools import emud_key, store  # noqa: E402
+from tools.devtools import cargo_lock, emud_key, store  # noqa: E402
 
 CRATE = "packages/emulator/sharc-core-lib"
 CRATE_NAME = "sharc-core-lib"
@@ -48,6 +48,7 @@ PROFILE = "release"
 FEATURES: tuple[str, ...] = ()
 STORE_NAME = "sharc-core-cache"
 INSTRUMENT_STORE_NAME = "sharc-core-pgo-instrument"
+LOCK_CLOSURE = "cargo-lock-closure"
 RUSTFLAG_VARS = ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS")
 # Compiler wrappers change the built code too; CARGO_TARGET_<TRIPLE>_* (rustflags, linker, runner) is matched by prefix.
 WRAPPER_VARS = ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER")
@@ -55,7 +56,6 @@ WRAPPER_VARS = ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER")
 # git pathspecs (glob magic) of the repository files cargo reads for the library.
 CORE_SOURCE_GLOBS = (
     "Cargo.toml",
-    "Cargo.lock",
     "rust-toolchain",
     "rust-toolchain.toml",
     ".cargo/**",
@@ -191,7 +191,7 @@ def key_inputs(
 ) -> emud_key.EmudInputs:
     """What the library depends on, in the daemon key's form: the argv without the target dir, the rustc flag and cargo
     profile variables of the plan's environment (the profile path replaced by its content hash), the repository files, the gen
-    dir, the PGO profile, `rustc -vV`."""
+    dir, the reachable lockfile records, the PGO profile, `rustc -vV`."""
     argv = list(plan.argv)
     if "--target-dir" in argv:
         at = argv.index("--target-dir")
@@ -211,8 +211,35 @@ def key_inputs(
     flags["pgo"] = (
         "profdata" if plan.profdata else "instrument" if plan.instrument else "plain"
     )
+    flags[LOCK_CLOSURE] = lock_closure(root / "Cargo.lock")
     names = emud_key.repo_files(root, CORE_SOURCE_GLOBS)
     return emud_key.EmudInputs(names, {"gen": plan.gen}, plan.profdata, rustc, flags)
+
+
+def lock_closure(lockfile: Path) -> str:
+    try:
+        return cargo_lock.closure_hash(lockfile, CRATE_NAME)
+    except (KeyError, ValueError) as exc:
+        raise CoreStoreError(f"cannot resolve the core lockfile inputs: {exc}") from exc
+
+
+def legacy_library(group: Path, inputs: emud_key.EmudInputs) -> Path | None:
+    """Adopt a pre-projection entry only for an exact match of the old inputs."""
+    manifest = inputs.files.get("Cargo.toml")
+    if manifest is None or LOCK_CLOSURE not in inputs.flags:
+        return None
+    lockfile = manifest.with_name("Cargo.lock")
+    if lock_closure(lockfile) != inputs.flags[LOCK_CLOSURE]:
+        raise CoreStoreError("the core lockfile dependencies changed during lookup")
+    legacy = replace(
+        inputs,
+        files={**inputs.files, "Cargo.lock": lockfile},
+        flags={
+            name: value for name, value in inputs.flags.items() if name != LOCK_CLOSURE
+        },
+    )
+    entry = group / emud_key.key_of(legacy)
+    return entry / lib_name() if whole(entry) else None
 
 
 def current(
@@ -340,7 +367,10 @@ def ensure_core(
         return final / lib_name()
     if final.exists():  # a partial entry: not a hit
         store.remove(final)
-    built = build(plan, inputs)
+    legacy = legacy_library(group, inputs)
+    if legacy is not None and not store.mark_used(legacy.parent):
+        legacy = None
+    built = legacy or build(plan, inputs)
     if emud_key.key_of(resolve()[1]) != key:
         raise CoreStoreError(f"the inputs of {device} changed during the build")
 
@@ -360,7 +390,8 @@ def ensure_core(
         (tmp / "header.json").write_text(json.dumps(record, indent=1) + "\n")
 
     if store.insert(group, key, "header.json", fill):
-        print(f"{device} core: built {key[:12]}{kind}", flush=True)
+        status = "restored" if legacy else "built"
+        print(f"{device} core: {status} {key[:12]}{kind}", flush=True)
     else:
         print(
             f"{device} core: restored {key[:12]} (inserted by another process)",
@@ -420,11 +451,12 @@ def restored_library(
     """The stored library of DEVICE for the current inputs (and PROFDATA: the PGO one), or None: restore only, nothing is
     built."""
     try:
-        key = emud_key.key_of(current(device, profdata=profdata)[1])
+        _, inputs = current(device, profdata=profdata)
+        group = (store_root() if root is None else root) / device
+        entry = group / emud_key.key_of(inputs)
+        return entry / lib_name() if whole(entry) else legacy_library(group, inputs)
     except (CoreStoreError, OSError, SystemExit):
         return None
-    entry = (store_root() if root is None else root) / device / key
-    return entry / lib_name() if whole(entry) else None
 
 
 def main(argv: list[str] | None = None) -> int:

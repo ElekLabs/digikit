@@ -1366,9 +1366,11 @@ than an hour. `DIGI_SHARC_CORE_STORE` moves the store (tests only).
 
 Key and build come from one description, `core_store.build_plan` (the argv and environment of the cargo call). The key follows the
 daemon key's scheme (`emud_key.key_of`): the content of the repository files in `CORE_SOURCE_GLOBS` (the `sharc-core-lib`,
-`sharc-gen` and `sharc-rt` crates, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo`), every file of
-the gen dir, `rustc -vV`, the target triple, the argv without the target dir (profile, `-p sharc-core-lib`, features) and the rustc flag, `CARGO_PROFILE_*` and `CARGO_TARGET_*` variables of the build environment. The tooling scripts (`core_store.py`, `digi_env.py`, ...) are not in the key: what they decide is in the plan, so an edit that leaves the plan alone keeps every stored library. The key is known before the first build, so
-a lookup needs no build. After a build the dependency file of cargo is audited against the key: a file the build read that the key
+`sharc-gen` and `sharc-rt` crates, `Cargo.toml`, `rust-toolchain*`, `.cargo`), the reachable package records
+in `Cargo.lock` from `sharc-core-lib` (including package sources and checksums), every file of the gen dir, `rustc -vV`, the target triple, the argv without the target dir (profile, `-p sharc-core-lib`, features) and the rustc flag, `CARGO_PROFILE_*` and `CARGO_TARGET_*` variables of the build environment. The tooling scripts (`core_store.py`, `digi_env.py`, ...) are not in the key: what they decide is in the plan, so an edit that leaves the plan alone keeps every stored library. The key is known before the first build, so
+a lookup needs no build. A complete entry with the exact old whole-lockfile key is adopted on the first lookup,
+so an already built core can seed both the main tree and lanes that differ only in unrelated dependencies.
+After a build the dependency file of cargo is audited against the key: a file the build read that the key
 does not cover fails the build and stores nothing (add it to `CORE_SOURCE_GLOBS`).
 
 ```sh

@@ -608,7 +608,7 @@
   "tests/control/test_runtime_load.py": 3,
   "tests/devtools/render_inputs.json": 2,
   "tests/devtools/test_core_choice.py": 28,
-  "tests/devtools/test_core_store.py": 58,
+  "tests/devtools/test_core_store.py": 57,
   "tests/devtools/test_emud_key.py": 3,
   "tests/devtools/test_fast_roots.py": 2,
   "tests/devtools/test_render_cache.py": 7,
