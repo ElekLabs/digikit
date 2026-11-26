@@ -1882,7 +1882,8 @@ doc = "A probe."
         assert_eq!(ctx("context = \"interrupt\""), dkneeds::keys::CTX_IRQ);
         let bad = service_decls(&[hook_text("context = \"main\"").as_str()]).unwrap_err();
         assert!(
-            bad.to_string().contains("not ui, above_ui, interrupt or task"),
+            bad.to_string()
+                .contains("not ui, above_ui, interrupt or task"),
             "{bad}"
         );
     }

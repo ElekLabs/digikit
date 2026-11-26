@@ -8,7 +8,7 @@ import { describeSamples, evalTable, fitShape, FIRST_SHAPE, KNOB_WORD, LfoRig, O
  * Hot reload of the lfo service is refused (hot reload slice 1, guard): the tick of the service is entered from the block interrupt (vector 191), which no task can be parked out of,
  * so `RELOAD services/lfo.dks` answers `E_BOOT_ONLY` (the menu shows RESTART TO LOAD) before anything is taken down. With the RAMP shape loaded and WAVE on its number the LFO output follows
  * the shape's table before and after the refused job (`fitShape`: free rate and start phase, so the proof is the fit error), the wave numbers are the same and nothing faults. The check
- * itself is a host test (`provider_reload.rs`); this one needs the firmware to show that nothing was taken down. The hang of an accepted lfo reload (the UNLOAD step never returns on DN2)
+ * itself is a host test (`provider_reload.rs`); this one needs the firmware to show that nothing was taken down. The hang of an accepted lfo reload (the UNLOAD step never returns)
  * is an open item (ports/fw/README.md).
  */
 const READS = 100;
