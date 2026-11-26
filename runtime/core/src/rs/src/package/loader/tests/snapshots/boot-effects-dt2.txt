@@ -139,7 +139,7 @@ service rows
   local-ping kinds []
 arena blocks
   0x00100000 208 bytes
-  0x00200000 2624 bytes
+  0x00200000 2672 bytes
   0x00400000 87776 bytes
   0x00500000 464 bytes
   0x00700000 51552 bytes
@@ -205,7 +205,7 @@ service rows
   local-ping kinds []
 arena blocks
   0x00100000 208 bytes
-  0x00200000 2624 bytes
+  0x00200000 2672 bytes
   0x00400000 87776 bytes
   0x00500000 464 bytes
   0x00700000 51552 bytes
@@ -266,7 +266,7 @@ service rows
   local-ping kinds []
 arena blocks
   0x00100000 208 bytes
-  0x00200000 2624 bytes
+  0x00200000 2672 bytes
   0x00400000 87776 bytes
   0x00500000 464 bytes
   0x00700000 51552 bytes
@@ -329,7 +329,7 @@ service rows
   local-ping kinds []
 arena blocks
   0x00100000 208 bytes
-  0x00200000 2624 bytes
+  0x00200000 2672 bytes
   0x00400000 87776 bytes
   0x00500000 464 bytes
   0x00700000 51552 bytes
@@ -391,7 +391,7 @@ service rows
   local-ping kinds []
 arena blocks
   0x00100000 208 bytes
-  0x00200000 2624 bytes
+  0x00200000 2672 bytes
   0x00400000 87776 bytes
   0x00500000 464 bytes
   0x00700000 51552 bytes
