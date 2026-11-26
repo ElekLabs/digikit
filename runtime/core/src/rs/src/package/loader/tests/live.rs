@@ -500,3 +500,46 @@ fn a_live_check_answers_e_missing_when_the_card_has_no_such_service_and_a_servic
         assert_eq!((records::module(MAX_MODULES).used, records::module(1).used), (0, 0));
     }
 }
+
+#[test]
+fn a_busy_store_at_job_time_answers_e_busy_not_e_missing_and_a_later_pass_loads() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = card_without_the_service();
+        let mut rt = boot_selection(&mut l, &[PATH]);
+        l.m.busy = true;
+        assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), E_BUSY, "the card could not be read: not \"no such service\"");
+        assert_eq!(l.found.n, 0);
+        l.m.busy = false;
+        assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), OK);
+        assert_eq!(rt.live_load_with(1, PATH_B.as_ptr(), &wide()), OK);
+        assert_eq!((records::module(MAX_MODULES).used, records::module(1).used), (1, 1));
+    }
+}
+
+#[test]
+fn a_file_that_cannot_be_staged_again_after_the_search_gives_its_error() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = card_without_the_service();
+        let _rt = boot_selection(&mut l, &[PATH]);
+        // stages of the module's file: the numbering, the plan's look, then the one after the search
+        l.m.stage_fails = Some((PATH_B[..PATH_B.len() - 1].to_vec(), 3, E_BUSY));
+        l.m.stage_count = 0;
+        assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), E_BUSY);
+    }
+}
+
+#[test]
+fn an_unrelated_missing_import_refuses_early_even_when_a_found_service_is_not_up() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = card_without_the_service();
+        let _rt = boot_selection(&mut l, &[PATH]);
+        let mut b = consumer_file_with_import(&user_table(), b"dk_nobody_exports_this");
+        b[dkneeds::H_NAME as usize] = b'b';
+        seal(&mut b);
+        l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), b);
+        assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), E_IMPORT);
+    }
+}

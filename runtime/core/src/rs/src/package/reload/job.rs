@@ -96,6 +96,8 @@ pub struct Job {
     passes: u32,
     /// `Ops::dsp_progress` at the last pass of the DSP wait.
     progress: u32,
+    /// The refusals before the file's own checks passed (`check` runs them once; a busy answer of the checks asks again on a later pass).
+    pre: bool,
 }
 
 /// What `poll` reads about the operation: a load has no old module, an unload no new file.
@@ -123,7 +125,7 @@ impl Job {
     }
 
     pub const fn new() -> Job {
-        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, serial: 0, done_serial: 0, done_result: OK, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0 }
+        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, serial: 0, done_serial: 0, done_result: OK, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0, pre: false }
     }
 
     /// Queue job `op` for the module at `path` (NUL terminated, at most 63 bytes): a load of a file that no loaded module came from, or an unload or a reload of the module
@@ -172,6 +174,7 @@ impl Job {
         self.rec = NO_REC;
         self.passes = 0;
         self.start = None;
+        self.pre = false;
         OK
     }
 
@@ -214,40 +217,48 @@ impl Job {
     #[inline(never)]
     unsafe fn check<O: Ops>(&mut self, o: &mut O) {
         let path = self.path.as_ptr();
-        let found = o.find(path);
-        let mut rec = None;
-        if is_load(self.op) {
-            if found.is_some() {
-                return self.refused(E_LOADED);
-            }
-            match o.alloc_index(path) {
-                Ok(k) => self.sel = k,
-                Err(e) => return self.refused(e),
-            }
-        } else {
-            match found {
-                Some((r, k)) => {
-                    self.rec = r;
-                    self.sel = k;
-                    rec = Some(r);
+        if !self.pre {
+            let found = o.find(path);
+            let mut rec = None;
+            if is_load(self.op) {
+                if found.is_some() {
+                    return self.refused(E_LOADED);
                 }
-                None => return self.refused(E_NOT_FOUND),
+                match o.alloc_index(path) {
+                    Ok(k) => self.sel = k,
+                    Err(e) => return self.refused(e),
+                }
+            } else {
+                match found {
+                    Some((r, k)) => {
+                        self.rec = r;
+                        self.sel = k;
+                        rec = Some(r);
+                    }
+                    None => return self.refused(E_NOT_FOUND),
+                }
+                // the phase is on for the checks of a reload too: the services leave the module's own rows out of "used by another module" (types, rows)
+                if is_reload(self.op) {
+                    o.phase(self.rec as u8 + 1);
+                }
             }
-            // the phase is on for the checks of a reload too: the services leave the module's own rows out of "used by another module" (types, rows)
-            if is_reload(self.op) {
-                o.phase(self.rec as u8 + 1);
+            if o.dsp_retained() {
+                o.phase(0);
+                return self.refused(E_RELOAD_RETAINED);
             }
-        }
-        if o.dsp_retained() {
-            o.phase(0);
-            return self.refused(E_RELOAD_RETAINED);
-        }
-        if let Some(r) = o.refusal(rec) {
-            o.phase(0);
-            return self.refused(r);
+            if let Some(r) = o.refusal(rec) {
+                o.phase(0);
+                return self.refused(r);
+            }
+            self.pre = true;
+            self.wait_restart(o);
         }
         if !is_unload(self.op) {
             let r = o.check(self.op as u32, self.rec, self.sel, path);
+            if r == E_BUSY && !self.timed_out(o) {
+                // the store was busy: nothing changed, the checks run again on a later pass
+                return;
+            }
             if r != OK {
                 o.phase(0);
                 return self.refused(r);
@@ -255,6 +266,7 @@ impl Job {
         }
         if is_load(self.op) {
             o.begin_load(self.sel);
+            self.wait_restart(o);
             self.step = step::LOAD;
         } else {
             self.wait_restart(o);
@@ -295,6 +307,7 @@ impl Job {
                     self.end(o, OK, true);
                 } else {
                     o.begin_load(self.sel);
+                    self.wait_restart(o);
                     self.step = step::LOAD;
                 }
             } else if r != E_BUSY || o.dsp_retained() || self.timed_out(o) {
@@ -317,6 +330,8 @@ impl Job {
                 self.wait_restart(o);
                 self.progress = o.dsp_progress();
                 self.step = step::DSP;
+            } else if r == E_BUSY && !self.timed_out(o) {
+                // the install found a task not parked: nothing changed, the load runs again on a later pass
             } else {
                 self.end(o, r, false);
             }
