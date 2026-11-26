@@ -55,7 +55,7 @@ cardRigs('service reload', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS, uplo
     const v2 = await packModuleVariant({
       moduleDir: 'tests/fixtures/modules/svc-test',
       id: 'test/svc-test',
-      device: h.device as 'dt2' | 'dn2',
+      device: h.device as Parameters<typeof packModuleVariant>[0]['device'],
       edits: [{ file: 'src/c/svc_test.c', from: 'return 42;', to: 'return 43;' }],
       out: path.join(out, 'svc-test-v2.dks'),
     });
