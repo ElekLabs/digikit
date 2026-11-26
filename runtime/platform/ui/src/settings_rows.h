@@ -31,6 +31,10 @@ typedef struct ui_settings_rows {
     uint32_t n;
     /* the keys of every row that was ever added: room for the rows of several loads of a few modules */
     ui_row_key key[DK_UI_SETTINGS_ROWS * 2];
+    /* The stock list: the menu of its last build (0 before the first build) and whether the registry changed since, so the list shows a row that was added
+       after the build or still shows one that was removed. Set only once a menu is known: a row added before the first build needs no rebuild. */
+    uint8_t *menu;
+    uint8_t dirty;
 } ui_settings_rows;
 
 /* Add a row at the end. `name`: the name of the owner's record, a module or a service file (at most DK_UI_MODULE_NAME - 1 characters are kept); the row's
@@ -51,5 +55,15 @@ uint32_t ui_rows_remove_owner(ui_settings_rows *s, uintptr_t owner);
 
 /* Call `open(arg)` of the row that now has this key. 1 when the row is there (also a row of a reloaded module), 0 when there is none (its module is unloaded). */
 int ui_rows_run(const ui_settings_rows *s, const ui_row_key *key);
+
+/* The stock list was built (the end of its rebuild, with the rows of the registry added): remember its menu and clear the dirty mark. `menu` 0 is no list. */
+void ui_rows_built(ui_settings_rows *s, uint8_t *menu);
+
+/* Rows were added or removed since the last build and a list exists. */
+int ui_rows_dirty(const ui_settings_rows *s);
+
+/* One UI pass: when the list is dirty, call `rebuild(menu)` (the stock rebuild, which ends in ui_rows_built) and return 1; otherwise return 0 and call nothing. */
+typedef void ui_rows_rebuild_fn(uint8_t *menu);
+int ui_rows_pass(ui_settings_rows *s, ui_rows_rebuild_fn *rebuild);
 
 #endif

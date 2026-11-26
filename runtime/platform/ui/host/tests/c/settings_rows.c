@@ -75,3 +75,29 @@ int sr_owner_name(uintptr_t handle, char *out)
 {
     return ui_owner_name(handle, fake_record_name, out);
 }
+
+/* The stock list rebuild trigger. The fake rebuild does what the stock one does through the hook: it ends in ui_rows_built. */
+static int rebuilds;
+static uint8_t fake_menu[1];
+static void fake_rebuild(uint8_t *menu)
+{
+    rebuilds++;
+    ui_rows_built(&reg, menu);
+}
+void sr_built(int with_menu)
+{
+    ui_rows_built(&reg, with_menu ? fake_menu : 0);
+    rebuilds = 0;
+}
+int sr_pass(void)
+{
+    return ui_rows_pass(&reg, fake_rebuild);
+}
+int sr_rebuilds(void)
+{
+    return rebuilds;
+}
+int sr_dirty(void)
+{
+    return ui_rows_dirty(&reg);
+}
