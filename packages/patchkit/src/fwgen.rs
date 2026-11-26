@@ -118,8 +118,7 @@ struct Hook {
     #[serde(default)]
     users: Vec<String>,
     doc: Option<String>,
-    /// The context the firmware code at the site runs in, for a hook a service takes: `"ui"` (the UI task only), `"irq"` (an interrupt handler or a task of a higher priority than
-    /// the UI task) or `"task"` (a task of a lower priority: the BgWorker, the console task). The port file packs it into the flags of the site; the installer waits for the
+    /// The context the firmware code at the site runs in, for a hook a service takes: `"ui"` (the UI task only), `"above_ui"` (a task of a higher priority than the UI task, or an interrupt handler: never in flight while the UI task runs) or `"task"` (a task of a lower priority: the BgWorker, the console task). The port file packs it into the flags of the site; the installer waits for the
     /// lower tasks to be parked before it writes or restores a `task` site at run time. No `context` means `task` (the safe default).
     context: Option<String>,
 }
@@ -291,7 +290,7 @@ pub struct HookDecl {
     pub exits: Vec<String>,
     /// The `users` of the declaration (module ids).
     pub users: Vec<String>,
-    /// `dkneeds::keys::CTX_TASK`, `CTX_UI` or `CTX_IRQ`: the `context` of the declaration (task when it has none).
+    /// `dkneeds::keys::CTX_TASK`, `CTX_UI` or `CTX_ABOVE_UI`: the `context` of the declaration (task when it has none).
     pub context: u8,
 }
 
@@ -343,9 +342,9 @@ pub fn service_decls_with(
                 let context = match h.context.as_deref() {
                     None | Some("task") => dkneeds::keys::CTX_TASK,
                     Some("ui") => dkneeds::keys::CTX_UI,
-                    Some("irq") => dkneeds::keys::CTX_IRQ,
+                    Some("above_ui") => dkneeds::keys::CTX_ABOVE_UI,
                     Some(c) => {
-                        return Err(err!("{}: context {c:?} is not ui, irq or task", h.name));
+                        return Err(err!("{}: context {c:?} is not ui, above_ui or task", h.name));
                     }
                 };
                 hooks.push(HookDecl {
@@ -1851,7 +1850,7 @@ pub fn generate_with_ports(root: &Path) -> Result<Vec<(String, String)>> {
 #[cfg(test)]
 mod tests {
     use super::{c_comment, render, service_decls};
-    use dkneeds::keys::{CTX_IRQ, CTX_TASK, CTX_UI};
+    use dkneeds::keys::{CTX_ABOVE_UI, CTX_TASK, CTX_UI};
 
     fn hook_text(context: &str) -> String {
         format!(
@@ -1875,9 +1874,9 @@ doc = "A probe."
         assert_eq!(ctx(""), CTX_TASK);
         assert_eq!(ctx("context = \"task\""), CTX_TASK);
         assert_eq!(ctx("context = \"ui\""), CTX_UI);
-        assert_eq!(ctx("context = \"irq\""), CTX_IRQ);
+        assert_eq!(ctx("context = \"above_ui\""), CTX_ABOVE_UI);
         let bad = service_decls(&[hook_text("context = \"main\"").as_str()]).unwrap_err();
-        assert!(bad.to_string().contains("not ui, irq or task"), "{bad}");
+        assert!(bad.to_string().contains("not ui, above_ui or task"), "{bad}");
     }
 
     #[test]

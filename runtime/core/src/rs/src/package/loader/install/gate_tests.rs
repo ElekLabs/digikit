@@ -1,7 +1,7 @@
 //! The gate of the installer: a `task` site is written or restored at run time only while the tasks that can be inside it are parked.
 use super::*;
 use crate::fake_platform::{Call, FakePlatform};
-use dkneeds::keys::{CTX_IRQ, CTX_UI};
+use dkneeds::keys::{CTX_ABOVE_UI, CTX_UI};
 use dkrt_abi::profiles;
 
 const BASE: u32 = 0x4100_0000;
@@ -94,9 +94,9 @@ fn a_wait_word_that_holds_another_task_or_a_missing_object_is_not_parked() {
 }
 
 #[test]
-fn ui_and_irq_sites_never_wait() {
+fn ui_and_above_ui_sites_never_wait() {
     let p = parks();
-    for ctx in [CTX_UI, CTX_IRQ] {
+    for ctx in [CTX_UI, CTX_ABOVE_UI] {
         let f = fake();
         put(&f, QUEUE + 0xc, 0);
         put(&f, OBJECT + 0x18, 0);

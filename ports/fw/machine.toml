@@ -633,7 +633,7 @@ mode = "replace"
 regs = { in = ["a0"], clobbers = ["d0", "a1", "ccr"] }   # continues at site+6
 devices = ["dn2"]
 mark = "D"
-context = "irq"
+context = "above_ui"
 users = ["core/services/machines"]
 doc = "Frame builder reads the track's machine type `move.b (0xd8c,A0),D0b; ext.w D0w` into TX frame word 0x94 + 2t (a0 = track); the hook sends an added type as its clone_of."
 

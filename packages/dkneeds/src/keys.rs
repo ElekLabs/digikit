@@ -115,13 +115,14 @@ pub const FLAG_CTX_MASK: u8 = 0b11 << FLAG_CTX_SHIFT;
 pub const CTX_TASK: u8 = 0;
 /// The code at the site runs only in the UI task (its message loop and the views it dispatches).
 pub const CTX_UI: u8 = 1;
-/// The code at the site runs only in an interrupt handler or in a task of a priority above the UI task's: neither can be inside the site while the UI task runs.
-pub const CTX_IRQ: u8 = 2;
+/// The code at the site is never in flight while the UI task runs: it runs in a task of a priority above the UI task's (the engine task, priority 8), which the UI task cannot
+/// preempt, or in an interrupt handler (same class, same rule: neither can be inside the site while the UI task runs, so the installer never waits for it).
+pub const CTX_ABOVE_UI: u8 = 2;
 
-/// The context of a `SITES` item (its flags bits 1 and 2): [`CTX_TASK`], [`CTX_UI`] or [`CTX_IRQ`]. The value 3 is not assigned and reads as [`CTX_TASK`].
+/// The context of a `SITES` item (its flags bits 1 and 2): [`CTX_TASK`], [`CTX_UI`] or [`CTX_ABOVE_UI`]. The value 3 is not assigned and reads as [`CTX_TASK`].
 pub fn site_context(flags: u8) -> u8 {
     let c = (flags & FLAG_CTX_MASK) >> FLAG_CTX_SHIFT;
-    if c == CTX_UI || c == CTX_IRQ {
+    if c == CTX_UI || c == CTX_ABOVE_UI {
         c
     } else {
         CTX_TASK
@@ -1637,8 +1638,8 @@ mod tests {
         assert_eq!(site_context(3 << FLAG_CTX_SHIFT), CTX_TASK);
         assert_eq!(site_context(CTX_UI << FLAG_CTX_SHIFT), CTX_UI);
         assert_eq!(
-            site_context(CTX_IRQ << FLAG_CTX_SHIFT | FLAG_ABSENT),
-            CTX_IRQ
+            site_context(CTX_ABOVE_UI << FLAG_CTX_SHIFT | FLAG_ABSENT),
+            CTX_ABOVE_UI
         );
         // the context stays clear of bit 0 (absent) and of bits 4 and up, which the runtime rejects (fixups)
         assert_eq!(FLAG_CTX_MASK & (FLAG_ABSENT | 0xf0), 0);
