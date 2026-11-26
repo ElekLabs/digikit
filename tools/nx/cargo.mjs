@@ -98,7 +98,7 @@ const CRATE_TARGETS = {
         '{workspaceRoot}/tools/nx/object-hash.mjs',
         { dependentTasksOutputFiles: '**/*', transitive: true },
       ],
-      dependsOn: [{ target: 'build-objects', projects: ['tag:acceptance-image'] }],
+      dependsOn: [{ target: 'build-objects', projects: ['tag:core-objects'] }],
       outputs: ['{workspaceRoot}/dist/bytes/core-objects.sha256'],
       options: { command: 'node tools/nx/device-bytes.mjs', cwd: '.' },
     },

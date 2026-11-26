@@ -127,6 +127,8 @@ export const createNodesV2 = [
         tags: ['module', `type:${m.type}`],
       };
       if (!isFixture(m) && m.category !== 'core') project.tags.push('release-module');
+      // every core module with a built object: the objects tools/nx/device-bytes.mjs hashes (tracked-objects.mjs, category core)
+      if (coreBuilds.has(m.id)) project.tags.push('core-objects');
       if (coreBuilds.has(m.id) && imageModules.has(m.id)) project.tags.push('acceptance-image');
       const tests = globSync('tests/**/*.test.ts', { cwd: join(ctx.workspaceRoot, root) }).filter(
         (t) =>
