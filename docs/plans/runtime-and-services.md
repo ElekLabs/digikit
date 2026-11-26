@@ -870,7 +870,7 @@ Flash adds the same `.dks` set to its job.
 **Code changes.**
 
 - `packages/workbench-core` `dktransfer.ts`: new `resolveServices` (needs to services, or a refusal naming module, service and versions); new `serviceFiles` (bind and cache); `install` runs the checks, then service uploads (event `upload` gains `kind: 'service'`), then modules, then removes stale unused `.dks`; `buildView` and `mergeView` nest service rows and list card `.dks` users; `deleteFiles` gets `planDelete`; the flash job adds the `.dks` set.
-- `transfer-core.ts`: `eventText`, `localTags`, `deviceTags` (new tags); `tickedFit` and `tickedLoad` count providers; new `installsWithLine` and `serviceRefusalText`; `startProgress` and `applyEvent` get service steps; `installModules` adds services.
+- `transfer-core.ts`: `eventText`, `localTags`, `deviceTags` (new tags); new `installsWithLine` and `serviceRefusalText`; `startProgress` and `applyEvent` get service steps; `installModules` adds services.
 - Pane UI, shared by desktop and site: `ModulesMode.tsx` (Flash button on mismatch), `TransferParts.tsx` (sub rows), `transfer-page.css` (`li.sub`).
 
 **Uninstall.** File DELETE and restart; nothing unloads at run time (`ARCHITECTURE.md:191`). Removing a module also removes its now-unused `.dks` in the same click. A `.dks` is unused when no `.dkm` on the card hard-needs it. Deleting a needed `.dks` is refused in the pane, naming the modules. If it disappears anyway, the planner refuses dependents with E_MISSING.

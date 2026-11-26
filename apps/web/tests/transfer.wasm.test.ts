@@ -39,11 +39,9 @@ import {
   freeText,
   freeLine,
   localTags,
-  tickedLoad,
   MODES,
   parseMode,
   storageLine,
-  tickedFit,
   warningText,
 } from '@digi/workbench-core/transfer/transfer-core.ts';
 
@@ -331,43 +329,6 @@ test('the device line: the free space in GiB from 1 GiB up, the same line for bo
   assert.equal(freeLine(undefined), '');
 });
 
-test('the ticked modules together: the sum rule against the device limits, in list order', () => {
-  const caps = {
-    MODULES: { limit: 8, used: 3, largest: 0 }, // what is loaded now does not count: the next boot starts empty
-    SELECTION: { limit: 8, used: 3, largest: 0 },
-    ARENA: { limit: 524288, used: 9000, largest: 100 },
-    STAGE: { limit: 65536, used: 0, largest: 65536 },
-    DSP_AREA: { limit: 524288, used: 400000, largest: 100 },
-  };
-  const m = (id: string, dsp: number) =>
-    row(id, 'Machines', { label: id, needs: { file_size: 900, ARENA: 64, DSP_AREA: dsp, DSP_ALIGN: 8 } });
-  const v = {
-    device: 'dt2',
-    runtime: '0.3.0',
-    free_bytes: 0,
-    loaded: [],
-    capacity: caps,
-    card_only: [],
-    modules: [m('a', 300000), m('b', 300000), m('c', 1000)],
-  };
-  assert.equal(tickedFit({ ...v, capacity: null }, new Set(['a'])), null, 'no CAPACITY, no verdict');
-  assert.equal(tickedFit(v, new Set()), null, 'nothing ticked');
-  assert.deepEqual(tickedFit(v, new Set(['a'])), { text: 'The ticked module fits the device.', tone: 'ok' });
-  assert.deepEqual(tickedFit(v, new Set(['a', 'c'])), {
-    text: 'The 2 ticked modules fit the device together.',
-    tone: 'ok',
-  });
-  const two = tickedFit(v, new Set(['a', 'b']))!;
-  assert.equal(two.tone, 'warn');
-  assert.match(two.text, /^b does not fit with the ticked modules before it: DSP memory 293 KiB needed, 219 KiB free$/);
-  const alone = tickedFit({ ...v, modules: [m('big', 600000)] }, new Set(['big']))!;
-  assert.match(alone.text, /^big does not fit the device: DSP memory 586 KiB needed, 511 KiB free$/);
-  // the load after the next boot, shown beside a set that fits; none for a set that does not
-  assert.match(tickedLoad(v, new Set(['a', 'c']))!, /^DSP \d+%/);
-  assert.equal(tickedLoad(v, new Set(['a', 'b'])), null);
-  assert.equal(tickedLoad(v, new Set()), null);
-});
-
 test('the storage line of Modules mode: files on the card, their size and the free space; no memory wording', () => {
   // three files of 100 bytes on the card (machine, effect, junk), 1000 bytes free
   assert.equal(storageLine(view), 'Modules: 3 files, 300 B · 1000 B free');
@@ -406,47 +367,6 @@ test('services: selection count and the services to upload', () => {
     { id: 'fx', path: 'services/fx.dks', bytes: 38400 },
   ]);
   assert.deepEqual(installModules(sv, new Set(['a/pluck'])), ['a/pluck']);
-});
-
-test('services: tickedFit counts the services once and enforces the provider limit', () => {
-  const caps = {
-    MODULES: { limit: 8, used: 0, largest: 0 },
-    SELECTION: { limit: 8, used: 0, largest: 0 },
-    ARENA: { limit: 524288, used: 0, largest: 524288 },
-    STAGE: { limit: 65536, used: 0, largest: 65536 },
-    DSP_AREA: { limit: 524288, used: 0, largest: 524288 },
-  };
-  const needs = { file_size: 900, ARENA: 64, DSP_AREA: 8, DSP_ALIGN: 8 };
-  const v = {
-    ...sv,
-    capacity: caps,
-    modules: [
-      { ...pluck, needs },
-      { ...shot, needs },
-    ],
-  };
-  assert.deepEqual(tickedFit(v, new Set(['a/pluck'])), {
-    text: 'The ticked module and its 2 services fit the device.',
-    tone: 'ok',
-  });
-  assert.equal(
-    tickedFit(v, new Set(['a/pluck', 'a/shot']))!.text,
-    'The 2 ticked modules and their 2 services fit the device together.',
-  );
-  const many = Array.from({ length: PROVIDER_MAX + 1 }, (_, i) => ({ ...fx, stem: `s${i}`, label: `s${i} service` }));
-  const big = { ...v, modules: [{ ...pluck, needs, services: many }] };
-  assert.deepEqual(tickedFit(big, new Set(['a/pluck'])), {
-    text: `The selection needs more than ${PROVIDER_MAX} services.`,
-    tone: 'warn',
-  });
-  assert.equal(tickedLoad(big, new Set(['a/pluck'])), null);
-  // the memory of a service counts: a module that fits alone does not fit with a service that needs more DSP area than is left
-  const heavy = { ...fx, needs: { file_size: 900, ARENA: 64, DSP_AREA: 600000, DSP_ALIGN: 8 } };
-  const withHeavy = { ...v, modules: [{ ...pluck, needs, services: [heavy] }] };
-  const noFit = tickedFit(withHeavy, new Set(['a/pluck']))!;
-  assert.equal(noFit.tone, 'warn');
-  assert.match(noFit.text, /^The services of the ticked modules do not fit the device with them: /);
-  assert.equal(tickedLoad(withHeavy, new Set(['a/pluck'])), null);
 });
 
 test('services: refusal texts, the service mismatch tag, the needs tag', () => {

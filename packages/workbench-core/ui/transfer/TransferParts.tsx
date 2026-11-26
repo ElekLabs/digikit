@@ -99,7 +99,7 @@ export function Chip(props: { status: ChipStatus }): JSX.Element {
 /** The small label after a name (`test`, `on device`, `WAV→`). */
 function Tag(props: { tag: RowTag }): JSX.Element {
   return (
-    <span class="rtag" classList={{ [props.tag.tone]: true }} title={props.tag.title}>
+    <span class="rtag" classList={{ [props.tag.tone]: true, wrap: !!props.tag.wrap }} title={props.tag.title}>
       {props.tag.text}
     </span>
   );

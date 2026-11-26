@@ -6,7 +6,7 @@
 
 import { fmtVersion } from '@digi/dk-session';
 import { formatBytes } from '../modules/backend.ts';
-import { fit, fitsNow, fitsSet, type Caps, type Needs } from '../modules/fit.ts';
+import { fitsNow, type Caps } from '../modules/fit.ts';
 import type { CardServiceRef, Group, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
 import { PROVIDER_MAX } from '../modules/services.ts';
 import type { ServiceRef, ServiceRefusal } from '../modules/services.ts';
@@ -38,7 +38,9 @@ export function freeLine(free: number | undefined): string {
 export function storageLine(view: TransferView): string {
   const rows = onDevice(view);
   const bytes = rows.reduce((n, r) => n + r.file_size, 0);
-  return `Modules: ${rows.length} file${rows.length === 1 ? '' : 's'}, ${formatBytes(bytes)} · ${freeText(view.free_bytes)} free`;
+  const files = `Modules: ${rows.length} file${rows.length === 1 ? '' : 's'}, ${formatBytes(bytes)}`;
+  // the storage bar shows the free space when the view has the usage
+  return view.usage ? files : `${files} · ${freeText(view.free_bytes)} free`;
 }
 
 /** The key of a row in the tick set. */
@@ -87,11 +89,6 @@ function tickedServices(view: TransferView, ticks: Set<string>): ServiceRef[] {
       }
   }
   return out;
-}
-
-/** The capacity needs of the ticked modules' services, each service once (a service without needs adds nothing). */
-function serviceNeeds(view: TransferView, ticks: Set<string>): Needs[] {
-  return tickedServices(view, ticks).flatMap((sv) => (sv.needs ? [sv.needs] : []));
 }
 
 /** The services to upload for the ticked modules, each once, dependencies first; a service that is on the device with the same hash is left out. */
@@ -276,6 +273,8 @@ export interface RowTag {
   text: string;
   title?: string;
   tone: 'ok' | 'warn' | 'dim';
+  /** A long text that wraps in the row instead of being cut (the capacity hint). */
+  wrap?: boolean;
 }
 
 /** The tags of a library module in the "On your computer" list: a test module and what the device holds of it. Installing is limited by the
@@ -313,6 +312,7 @@ export function capacityTag(r: TransferRow, cap?: Caps | null): RowTag | undefin
     text: short.describe_by,
     title: `Load is likely refused: ${short.describe}. The runtime decides when you Load.`,
     tone: 'warn',
+    wrap: true,
   };
 }
 
@@ -345,62 +345,6 @@ export function dependencyItems(
     line: lines[i] as string,
     ...(sv.state === 'on device' && 'path' in sv && sv.path ? { path: sv.path } : {}),
   }));
-}
-
-/**
- * The line for the ticked modules: do they fit the device together? The next boot loads the selection into an empty runtime, so the ticked modules
- * are taken in list order out of the device's limits (the sum rule: it does not model fragmentation, so it is conservative) and what is on the
- * device now is not counted. null when nothing is ticked or the device gave no CAPACITY.
- */
-export function tickedFit(view: TransferView, ticks: Set<string>): { text: string; tone: 'ok' | 'warn' } | null {
-  const rows = view.modules.filter((r) => r.id && ticks.has(rowKey(r)) && r.needs && !r.service_refusal);
-  if (!rows.length || !view.capacity) return null;
-  const nServices = tickedServices(view, ticks).length;
-  if (nServices > PROVIDER_MAX)
-    return { text: `The selection needs more than ${PROVIDER_MAX} services.`, tone: 'warn' };
-  const short = fitsSet([...rows.map((r) => r.needs!), ...serviceNeeds(view, ticks)], view.capacity, true);
-  if (!short) {
-    const withServices = nServices
-      ? rows.length === 1
-        ? ` and its ${plural(nServices, 'service', 'services')}`
-        : ` and their ${plural(nServices, 'service', 'services')}`
-      : '';
-    return {
-      text:
-        rows.length === 1
-          ? `The ticked module${withServices} ${nServices ? 'fit' : 'fits'} the device.`
-          : `The ${rows.length} ticked modules${withServices} fit the device together.`,
-      tone: 'ok',
-    };
-  }
-  // an index past the modules is one of their services (counted after the modules)
-  if (short.index >= rows.length)
-    return {
-      text: `The services of the ticked modules do not fit the device with them: ${short.describe}`,
-      tone: 'warn',
-    };
-  const row = rows[short.index] as (typeof rows)[number];
-  const name = row.label ?? row.name;
-  return {
-    text:
-      short.index === 0
-        ? `${name} does not fit the device: ${short.describe}`
-        : `${name} does not fit with the ticked modules before it: ${short.describe}`,
-    tone: 'warn',
-  };
-}
-
-/** The load of the device after the next boot with the ticked modules (`DSP 52% CPU 1%`, the fit rule's load line), or null when nothing is
- * ticked, the device gave no CAPACITY or the ticked modules do not fit together (tickedFit says which). */
-export function tickedLoad(view: TransferView, ticks: Set<string>): string | null {
-  const rows = view.modules.filter((r) => r.id && ticks.has(rowKey(r)) && r.needs && !r.service_refusal);
-  if (!rows.length || !view.capacity || tickedServices(view, ticks).length > PROVIDER_MAX) return null;
-  const answer = fit({
-    caps: view.capacity,
-    needs: [...rows.map((r) => r.needs!), ...serviceNeeds(view, ticks)],
-    empty: true,
-  });
-  return answer.set || !answer.line ? null : answer.line;
 }
 
 /** The tags of a file of the "On device" list: a loaded module says so first, a selected one that failed to load says why (`not_loaded`); a file the library does not have, and one that differs from

@@ -268,6 +268,13 @@
   color: var(--ink-3);
   background: var(--panel-2);
 }
+/* the capacity hint: wraps in the row, never cut */
+.transfer-page .rtag.wrap {
+  flex: 0 1 auto;
+  white-space: normal;
+  line-height: 13px;
+  padding: 2px 6px;
+}
 .transfer-page .rtag.ok {
   color: var(--status-ok-text);
   background: var(--status-ok-fill);
@@ -345,9 +352,7 @@
 }
 .live-result {
   color: var(--status-ok-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
   max-width: 28ch;
 }
 /* on a row the result is a line of its own under the name, so a long reason never squeezes the name */
@@ -694,6 +699,10 @@
     max-width: 11ch;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .transfer-page .rows .rtag.wrap {
+    max-width: 16ch;
+    overflow: visible;
   }
   .transfer-page .rows .nm {
     min-width: 7ch;

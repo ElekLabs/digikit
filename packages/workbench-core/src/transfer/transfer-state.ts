@@ -52,6 +52,7 @@ export function createTransferState({
     setDeviceInfo(undefined);
     setVerified({});
     setLiveResults({});
+    setSampleUsage(undefined);
     setDelTicks(new Set<string>());
   };
   /** The library modules ticked for install. */

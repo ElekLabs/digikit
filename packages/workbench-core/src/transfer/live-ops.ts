@@ -1,7 +1,7 @@
 // Live changes of the modules on the device (no boot), as the Transfer page offers them: which action a row gets, and what its result says.
 // The change itself is `liveModules` (src/modules/dktransfer.ts), the function `wb transfer load|unload|reload` calls too.
 import { LOAD_STATUS, STATUS } from '@digi/dk-session/gen_proto';
-import type { LiveOp, ReloadOutcome, TransferRow } from '../modules/dktransfer.ts';
+import type { LiveOp, ReloadOutcome, TransferRow, TransferView } from '../modules/dktransfer.ts';
 import type { CardServiceRef } from '../modules/dktransfer.ts';
 
 export type { LiveOp };
@@ -100,4 +100,32 @@ export function liveResult(op: LiveOp, path: string, out: LiveOutcome): LiveResu
     };
   if (!out.done.includes(path)) return { op, kind: 'failed', text: `${LIVE_LABEL[op]} did not finish.` };
   return { op, kind: 'done', text: `${PAST[op]}.` };
+}
+
+/**
+ * The results that a freshly read card still agrees with. A result is dropped when its file is gone from the card, or when the module's state
+ * contradicts it: a load or reload that ended `done`, or a refused unload or reload, on a module that is not loaded now; an unload that ended
+ * `done`, a `failed` result (the module was torn down) or a refused load on a module that is loaded now.
+ */
+export function reconcileLiveResults(
+  results: Record<string, LiveResult>,
+  view: TransferView,
+): Record<string, LiveResult> {
+  const rows = new Map<string, TransferRow>();
+  for (const r of [...view.modules, ...view.card_only]) if (r.on_card !== 'no') rows.set(r.path, r);
+  const servicePaths = new Set(
+    [...view.modules, ...view.card_only].flatMap((r) =>
+      (r.card_services ?? []).flatMap((sv) => (sv.state === 'on device' && 'path' in sv && sv.path ? [sv.path] : [])),
+    ),
+  );
+  const keep = ([path, res]: [string, LiveResult]): boolean => {
+    const row = rows.get(path);
+    if (!row) return servicePaths.has(path);
+    if (!path.endsWith('.dkm')) return true;
+    const loaded = !!row.loaded;
+    if (res.kind === 'failed') return !loaded;
+    if (res.kind === 'done') return res.op === 'unload' ? !loaded : loaded;
+    return res.op === 'load' ? !loaded : loaded;
+  };
+  return Object.fromEntries(Object.entries(results).filter(keep));
 }

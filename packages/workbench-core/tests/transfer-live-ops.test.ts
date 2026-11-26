@@ -4,7 +4,16 @@ import { CAP } from '@digi/dk-session/gen_proto';
 import { expect, test, vi } from 'vitest';
 import { liveModules, type TransferRow, type TransferView } from '../src/modules/dktransfer';
 import { createFakeSessions, createFakeTransferApp } from '../src/transfer/fake-app';
-import { LIVE_LABEL, liveActions, liveCode, liveReason, liveResult, serviceAction } from '../src/transfer/live-ops';
+import {
+  LIVE_LABEL,
+  liveActions,
+  liveCode,
+  liveReason,
+  liveResult,
+  reconcileLiveResults,
+  serviceAction,
+  type LiveResult,
+} from '../src/transfer/live-ops';
 import { NOT_IN_LIBRARY, groupRows, portLine, unusedServices, unusedServicesText } from '../src/transfer/pane-groups';
 import { setFitReader, type Short } from '../src/modules/fit';
 import { storageBar } from '../src/transfer/storage-bar';
@@ -18,6 +27,7 @@ import {
   deletePaths,
   deviceGroups,
   deviceTags,
+  storageLine,
 } from '../src/transfer/transfer-core';
 
 const row = (over: Partial<TransferRow> & { path: string }): TransferRow => ({
@@ -287,4 +297,28 @@ test('the page action runs the function the command line runs: same session call
   expect(pageOut.refused).toEqual([{ path: 'services/fx.dks', result: -12 }]);
   expect(session.reloadAndWait).toHaveBeenCalledTimes(4);
   expect(session.loadAndWait).not.toHaveBeenCalled();
+});
+
+test('a refreshed card drops the results it contradicts and keeps the ones it agrees with', () => {
+  const r = (op: LiveResult['op'], kind: LiveResult['kind']): LiveResult => ({ op, kind, text: kind });
+  const v = view(); // pluck is loaded, orphan is on the card and not loaded, chorus is not on the card
+  const results = {
+    'modules/pluck.dkm': r('load', 'refused'), // loaded now: the refused load is stale
+    'modules/orphan.dkm': r('load', 'failed'), // still not loaded: a failure still holds
+    'modules/chorus.dkm': r('load', 'done'), // the file is not on the card any more
+    'modules/gone.dkm': r('unload', 'done'), // no such file
+    'services/fx.dks': r('reload', 'done'), // a service file on the card: nothing to contradict it
+  };
+  expect(Object.keys(reconcileLiveResults(results, v)).sort()).toEqual(['modules/orphan.dkm', 'services/fx.dks']);
+  expect(reconcileLiveResults({ 'modules/pluck.dkm': r('reload', 'done') }, v)).toHaveProperty('modules/pluck.dkm');
+  expect(reconcileLiveResults({ 'modules/pluck.dkm': r('unload', 'done') }, v)).toEqual({});
+  expect(reconcileLiveResults({ 'modules/pluck.dkm': r('reload', 'failed') }, v)).toEqual({});
+  expect(reconcileLiveResults({ 'modules/orphan.dkm': r('reload', 'done') }, v)).toEqual({});
+});
+
+test('the right-pane header leaves the free space to the storage bar when the view has the usage', () => {
+  const v = view();
+  expect(storageLine(v)).toMatch(/ · .+ free$/);
+  const usage = { total: null, free: 1000, used: [], overhead: null };
+  expect(storageLine({ ...v, usage })).toMatch(/^Modules: \d+ files?, [^·]+$/);
 });
