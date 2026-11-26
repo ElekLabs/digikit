@@ -90,8 +90,8 @@ int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int
                      dk_ui_choice_fn *done, void *arg);
 
 /* Like dk_ui_choice, and the popup opens with item `start` selected; an index outside 0..n-1 selects item 0. Context: ui. Since runtime 0.13.3. */
-int32_t dk_ui_choice_at(dk_ui *ui, const char *title, const char *const *items, int32_t n, int32_t start,
-                        dk_ui_choice_fn *done, void *arg);
+int32_t dk_ui_choice_at(dk_ui *ui, const char *title, const char *const *items, int32_t n,
+                        int32_t start, dk_ui_choice_fn *done, void *arg);
 
 /* The other dialogs are in <dk/gen/imports.h>:
      int32_t dk_ui_confirm(ui, title, text, done, arg)   YES or NO; done(arg, yes) gets 1 for YES, 0 for NO. title and text: up to 80 characters each.

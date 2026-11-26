@@ -64,7 +64,8 @@ static void open_choice(void *arg, int32_t field)
     if (!g_desc || !g_ui || field < 0 || (uint32_t)field >= g_desc->count)
         return;
     f = &g_desc->fields[field];
-    dk_ui_choice_at(g_ui, f->label, f->labels, f->max + 1, g_value[field], on_pick, (void *)(uintptr_t)field);
+    dk_ui_choice_at(g_ui, f->label, f->labels, f->max + 1, g_value[field], on_pick,
+                    (void *)(uintptr_t)field);
 }
 
 int32_t dk_settings_page_init(const dk_settings_page_desc *desc, dk_settings *settings, dk_ui *ui)

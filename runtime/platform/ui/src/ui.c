@@ -941,8 +941,8 @@ static void choice_item(char *buf, uint32_t size, const char *item, int col)
    paint and the callback read only that field, so a store after the constructor is the start. */
 #define CHOICE_SELECTED offsetof(MultiChoiceWindow, selected)
 
-int32_t dk_ui_choice_at(dk_ui *ui, const char *title, const char *const *items, int32_t n, int32_t start,
-                        dk_ui_choice_fn *done, void *arg)
+int32_t dk_ui_choice_at(dk_ui *ui, const char *title, const char *const *items, int32_t n,
+                        int32_t start, dk_ui_choice_fn *done, void *arg)
 {
     if (ui_dialog_is_open(&g_dialog) || !items || n <= 0 || n > MAX_CHOICE)
         return -1;

@@ -89,7 +89,11 @@ pub unsafe extern "C" fn dk_ui_choice_at(
             title,
             text: String::new(),
             items,
-            selected: if (0..n).contains(&start) { start as usize } else { 0 },
+            selected: if (0..n).contains(&start) {
+                start as usize
+            } else {
+                0
+            },
             confirm_done: done,
             ctx,
         });
