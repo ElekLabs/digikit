@@ -1542,8 +1542,8 @@ export class DkSession {
     await this.ok(GCMD.RETRY, 'retry');
   }
   /**
-   * RELOAD (runtime capability RELOAD): queue the reload of the loaded module that came from the store path `path`; the new file is on the card already. The reply says only that the
-   * job is queued (E_BUSY: one runs, E_STATE: an upload is open, E_NOT_FOUND: no loaded module has that path). See `reloadState` and `reloadAndWait`.
+   * RELOAD (runtime capability RELOAD): queue the reload of the loaded module (or, with `services/<name>.dks`, the service and its consumers) that came from the store path `path`; the new file is on the card already. The reply says only that the
+   * job is queued (E_BUSY: one runs, E_STATE: an upload is open, E_NOT_FOUND: no loaded module or service has that path). See `reloadState` and `reloadAndWait`.
    */
   async reload(path: string): Promise<void> {
     await this.ok(GCMD.RELOAD, 'reload', concat(text.encode(path), Uint8Array.of(0)));

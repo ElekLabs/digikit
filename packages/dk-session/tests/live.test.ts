@@ -94,3 +94,13 @@ test('a refusal before anything changed and a failure after the teardown come ba
     (e) => e instanceof DkError && e.status === 'E_LOADED',
   );
 });
+
+test('RELOAD takes a service file path as it takes a module path: the client puts no check on the extension', async () => {
+  const dev = new FakeLive(1, 0, 1);
+  const s = new DkSession(dev, { timeoutMs: 200 });
+  assert.deepEqual(await s.reloadAndWait('services/lfo.dks', { pollMs: 0 }), { result: 0, unloaded: true });
+  assert.deepEqual(dev.seen, [{ cmd: CMD.RELOAD, path: 'services/lfo.dks' }]);
+  // a service closure that failed after its take-down is reported as a torn reload, like a module's
+  const torn = new DkSession(new FakeLive(0, -9, 1), { timeoutMs: 200 });
+  assert.deepEqual(await torn.reloadAndWait('services/lfo.dks', { pollMs: 0 }), { result: -9, unloaded: true });
+});
