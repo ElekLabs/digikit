@@ -8,6 +8,7 @@
 //! - `host`: [`RtHost`], `init` and `fini` of a module, the lifecycle calls into the rows of a service.
 //! - `install`: [`RtColdFire`] and [`RtSharc`], the two backends of the `Installers` the manager installs entries through.
 //! - `rt`: [`Rt`], the manager over the seams for the whole run: the boot's load and its report, the live job's load, unload and reload of a module, the DSP step.
+//! - `reload`: the reload of a service and its consumers, one call of the live job (`Rt::reload_closure`).
 //! - `codes`: the load status of each manager refusal (the codes the loader gave before).
 //! - `manifest`: [`RtManifest`], the header tables of the selected packages and the services they need.
 //!
@@ -23,6 +24,7 @@ mod install;
 mod linker;
 mod manifest;
 mod placer;
+mod reload;
 mod rt;
 mod session;
 

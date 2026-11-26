@@ -21,7 +21,7 @@ pub(super) struct Request<'a> {
     pub(super) roots: &'a [PackageId],
     pub(super) pin: bool,
     pub(super) stop_on_failure: bool,
-    /// A boot: the host plans what the services keep once every service has been tried ([`ProviderHost::services_up`]).
+    /// A boot or a reload: the host plans what the services keep once every service has been tried ([`ProviderHost::services_up`]).
     pub(super) numbering: bool,
 }
 

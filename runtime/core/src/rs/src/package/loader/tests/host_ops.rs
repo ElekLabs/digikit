@@ -15,7 +15,7 @@ pub(super) struct HostOps<'a> {
 
 impl Ops for HostOps<'_> {
     unsafe fn find(&mut self, path: *const u8) -> Option<(usize, usize)> {
-        self.l.rec_of_path(path)
+        self.l.rec_of_path(path).or_else(|| crate::package::loader::provider_of_path(path).map(|rec| (rec, usize::MAX)))
     }
     unsafe fn is_service(&mut self, path: *const u8) -> bool {
         RealOps.is_service(path)
@@ -25,11 +25,17 @@ impl Ops for HostOps<'_> {
     }
     unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32> {
         let rt = &mut *self.rt;
-        refusal_for(&self.l.p, rec, false, |r| rt.refusal(r))
+        match rec {
+            Some(r) if r >= dkrt_abi::MAX_MODULES => refusal_for(&self.l.p, None, false, |_| None).or_else(|| rt.closure_refusal(r)),
+            _ => refusal_for(&self.l.p, rec, false, |r| rt.refusal(r)),
+        }
     }
     unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
         if op == LIVE_LOAD {
             self.l.live_check_load(k, path, &live_cap(self.l))
+        } else if rec >= dkrt_abi::MAX_MODULES {
+            self.rt.reload_reset();
+            self.l.provider_check(rec, path)
         } else {
             self.l.reload_check(rec, path, &live_cap_with(self.l, crate::package::loader::own_use(rec)))
         }
@@ -38,13 +44,28 @@ impl Ops for HostOps<'_> {
         RealOps.phase(owner)
     }
     unsafe fn quiesce(&mut self, rec: usize) -> i32 {
+        if rec >= dkrt_abi::MAX_MODULES {
+            return self.rt.closure_quiesce(rec);
+        }
         self.l.reload_quiesce(rec)
     }
     unsafe fn abort(&mut self, rec: usize) -> bool {
+        if rec >= dkrt_abi::MAX_MODULES {
+            return self.rt.closure_abort(rec);
+        }
         self.l.reload_abort(rec)
     }
     unsafe fn menu_built(&mut self, rec: usize) -> bool {
+        if rec >= dkrt_abi::MAX_MODULES {
+            return self.rt.closure_menu_built(rec);
+        }
         RealOps.menu_built(rec)
+    }
+    unsafe fn reload_service(&mut self, rec: usize, path: *const u8) -> i32 {
+        let mut members = [0usize; crate::package::loader::records::REC_MAX];
+        let n = self.rt.closure(rec, &mut members);
+        let caps = live_cap_with(self.l, self.l.closure_own(&members[..n]));
+        self.rt.reload_closure_with(rec, path, &caps)
     }
     unsafe fn unload(&mut self, rec: usize) -> i32 {
         self.rt.unload(rec)

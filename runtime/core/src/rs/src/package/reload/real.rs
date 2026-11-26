@@ -62,7 +62,8 @@ pub struct RealOps;
 
 impl Ops for RealOps {
     unsafe fn find(&mut self, path: *const u8) -> Option<(usize, usize)> {
-        crate::package::loader::rec_of_path(path)
+        // a service has no selection index: the record says it is one (`>= MAX_MODULES`)
+        crate::package::loader::rec_of_path(path).or_else(|| crate::package::loader::provider_of_path(path).map(|rec| (rec, usize::MAX)))
     }
     unsafe fn is_service(&mut self, path: *const u8) -> bool {
         crate::package::loader::is_provider_path(path)
@@ -71,12 +72,23 @@ impl Ops for RealOps {
         crate::package::resident::boot::live_index(path, &crate::package::loader::live_indices())
     }
     unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32> {
-        // the service-specific refusals come from `can_stop` of the manager (every service's `can_stop`)
-        refusal_for(&crate::package::resident::platform::PLATFORM, rec, crate::package::resident::api::card_busy(), |r| crate::package::lifecycle::get().and_then(|rt| rt.refusal(r)))
+        let platform = &crate::package::resident::platform::PLATFORM;
+        let card_busy = crate::package::resident::api::card_busy();
+        match rec {
+            // a service record has no menus of its own and no module's facts: the generic refusals, then those of its closure
+            Some(r) if r >= dkrt_abi::MAX_MODULES => refusal_for(platform, None, card_busy, |_| None).or_else(|| crate::package::lifecycle::get().and_then(|rt| rt.closure_refusal(r))),
+            // the service-specific refusals come from `can_stop` of the manager (every service's `can_stop`)
+            _ => refusal_for(platform, rec, card_busy, |r| crate::package::lifecycle::get().and_then(|rt| rt.refusal(r))),
+        }
     }
     unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32 {
         if op == LIVE_LOAD {
             crate::package::loader::live_check_load(k, path)
+        } else if rec >= dkrt_abi::MAX_MODULES {
+            if let Some(rt) = crate::package::lifecycle::get() {
+                rt.reload_reset();
+            }
+            crate::package::loader::provider_check(rec, path)
         } else {
             crate::package::loader::reload_check(rec, path)
         }
@@ -85,13 +97,25 @@ impl Ops for RealOps {
         set_phase(owner)
     }
     unsafe fn quiesce(&mut self, rec: usize) -> i32 {
+        if rec >= dkrt_abi::MAX_MODULES {
+            return crate::package::lifecycle::get().map_or(dkrt_sdk::E_NOT_FOUND, |rt| rt.closure_quiesce(rec));
+        }
         crate::package::loader::reload_quiesce(rec)
     }
     unsafe fn abort(&mut self, rec: usize) -> bool {
+        if rec >= dkrt_abi::MAX_MODULES {
+            return crate::package::lifecycle::get().is_none_or(|rt| rt.closure_abort(rec));
+        }
         crate::package::loader::reload_abort(rec)
     }
     unsafe fn menu_built(&mut self, rec: usize) -> bool {
+        if rec >= dkrt_abi::MAX_MODULES {
+            return crate::package::lifecycle::get().is_some_and(|rt| rt.closure_menu_built(rec));
+        }
         crate::package::resident::state::menus_held(rec)
+    }
+    unsafe fn reload_service(&mut self, rec: usize, path: *const u8) -> i32 {
+        crate::package::lifecycle::get().map_or(dkrt_sdk::E_NOT_FOUND, |rt| rt.reload_closure(rec, path))
     }
     unsafe fn unload(&mut self, rec: usize) -> i32 {
         match crate::package::lifecycle::get() {

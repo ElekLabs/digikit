@@ -40,11 +40,14 @@ struct Script {
     stalled: bool,
     /// `menu_built` answers true from this many calls on (`u32::MAX`: never).
     menu_after: u32,
+    /// `reload_service` answers `E_BUSY` this many times, then `service_result`.
+    service_busy: u32,
+    service_result: i32,
 }
 
 impl Script {
     fn new() -> Script {
-        Script { found: Some((2, 5)), alloc: Ok(5), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, check_busy: 0, load_busy: 0, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false, menu_after: u32::MAX }
+        Script { found: Some((2, 5)), alloc: Ok(5), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, check_busy: 0, load_busy: 0, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false, menu_after: u32::MAX, service_busy: 0, service_result: OK }
     }
 }
 
@@ -121,6 +124,14 @@ impl Ops for Script {
             self.unload_busy -= 1;
             E_BUSY
         }
+    }
+    unsafe fn reload_service(&mut self, _: usize, _: *const u8) -> i32 {
+        self.log.push("reload service");
+        if self.service_busy > 0 {
+            self.service_busy = if self.service_busy == u32::MAX { u32::MAX } else { self.service_busy - 1 };
+            return E_BUSY;
+        }
+        self.service_result
     }
     unsafe fn begin_load(&mut self, _: usize) {
         self.log.push("begin load");
@@ -230,4 +241,5 @@ mod commands;
 mod load;
 mod refusals;
 mod reload;
+mod service;
 mod unload;

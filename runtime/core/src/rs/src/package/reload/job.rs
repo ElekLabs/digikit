@@ -3,28 +3,35 @@ use dkrt_sdk::*;
 
 /// What the live job asks of the system, one call per step. `op` is `LIVE_LOAD`, `LIVE_UNLOAD` or `LIVE_RELOAD`; a module of a load has no record yet (`None`). The real one (`RealOps`) calls the loader, the services and the boot record; a host test scripts it.
 pub trait Ops {
-    /// The module record and selection index of the loaded content module that came from `path`.
+    /// The record and selection index of the loaded content module that came from `path`; for a loaded service (a provider record, `is_service`) its record and no selection index.
     unsafe fn find(&mut self, path: *const u8) -> Option<(usize, usize)>;
-    /// Is `path` the file of a loaded service (a provider record)? A reload is for content modules only.
+    /// Is `path` the file of a loaded service (a provider record)? Only a reload takes it: a service is loaded by its consumers and not unloaded by the job.
     unsafe fn is_service(&mut self, path: *const u8) -> bool;
     /// The selection index a load of the file at `path` takes (`boot::live_index`), or `E_SEL_COUNT`.
     unsafe fn alloc_index(&mut self, path: *const u8) -> Result<usize, i32>;
     /// The refusals before anything changes: `reload::refusal` over the facts of the system (safe mode, an open upload or a card transfer), and for the module `rec` (an
-    /// unload or a reload) its menus and the services' `Provider::can_stop` (asked by the manager).
+    /// unload or a reload) its menus and the services' `Provider::can_stop` (asked by the manager). For a service record: the menus of every consumer, a DSP part in the closure
+    /// (`E_BOOT_ONLY`: a restart reloads it) and the `can_stop` of the closure.
     unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32>;
-    /// The checks of the file before anything changes: `Loader::reload_check` of a reload, `Loader::live_check_load` of a load at index `k`. An unload has no file to check.
+    /// The checks of the file before anything changes: `Loader::reload_check` of a reload (`Loader::provider_check` for a service), `Loader::live_check_load` of a load at index `k`.
+    /// An unload has no file to check.
     unsafe fn check(&mut self, op: u32, rec: usize, k: usize, path: *const u8) -> i32;
     /// The reload phase (`CoreApi::live_op`) of the module with this owner (record index + 1), or off (0).
     fn phase(&mut self, owner: u8);
-    /// `Loader::reload_quiesce`.
+    /// `Loader::reload_quiesce`; for a service record, of every member of its closure.
     unsafe fn quiesce(&mut self, rec: usize) -> i32;
-    /// `Loader::reload_abort`: the old module gets its tick and commands back; false when its `fini` ran.
+    /// `Loader::reload_abort`: the old module gets its tick and commands back; false when its `fini` ran. For a service record: every member gets them back, false when a member
+    /// is down (or a restore of the closure waits).
     unsafe fn abort(&mut self, rec: usize) -> bool;
-    /// Was a menu object built for module record `rec` since the refusal was read (`dkrt_menu_built`)? The drain lasts many UI passes, and a menu built meanwhile points into the
-    /// module's code, so the job asks again right before the teardown.
+    /// Was a menu object built for module record `rec` (for a service record: any consumer) since the refusal was read (`dkrt_menu_built`)? The drain lasts many UI passes, and a
+    /// menu built meanwhile points into the module's code, so the job asks again right before the teardown.
     unsafe fn menu_built(&mut self, rec: usize) -> bool;
     /// `Rt::unload`: the manager takes the module and its consumers down.
     unsafe fn unload(&mut self, rec: usize) -> i32;
+    /// The teardown and the load of a service reload in one call, repeated each pass while it answers `E_BUSY` (`Rt::reload_closure`): the consumers and the service go down and
+    /// come back from the new file, and the services hear `on_loaded` of each module. `OK`; `E_BUSY` while a restore waits for a task to park (or before anything changed); a
+    /// refusal or a failure otherwise (`abort` then says whether a member is down).
+    unsafe fn reload_service(&mut self, rec: usize, path: *const u8) -> i32;
     /// Does the DSP loader hold a module it could not release? Permanent until the next boot.
     unsafe fn dsp_retained(&mut self) -> bool;
     /// How far the DSP loader has got with its loads (a counter that moves with every image or row it sends and every load it starts).
@@ -72,7 +79,8 @@ const NO_REC: usize = usize::MAX;
 
 /// One live job at a time. `poll` runs one step per UI pass and never waits.
 ///
-/// The steps of each operation: load CHECK, LOAD, DSP (a module with a DSP part), DONE; unload CHECK, QUIESCE, UNLOAD, DONE; reload CHECK, QUIESCE, UNLOAD, LOAD, DSP, DONE.
+/// The steps of each operation: load CHECK, LOAD, DSP (a module with a DSP part), DONE; unload CHECK, QUIESCE, UNLOAD, DONE; reload CHECK, QUIESCE, UNLOAD, LOAD, DSP, DONE. The reload
+/// of a service has CHECK, QUIESCE (every member of the closure), UNLOAD (the one call that takes the closure down and brings it back, `service.rs`), DONE.
 pub struct Job {
     pub step: u8,
     /// 0 none yet, 1 queued or running, 2 finished.
@@ -98,6 +106,8 @@ pub struct Job {
     progress: u32,
     /// The refusals before the file's own checks passed (`check` runs them once; a busy answer of the checks asks again on a later pass).
     pre: bool,
+    /// The reload of a service has made its call (`service.rs`): the menus are not asked again, the closure may be down.
+    called: bool,
 }
 
 /// What `poll` reads about the operation: a load has no old module, an unload no new file.
@@ -110,6 +120,12 @@ fn is_unload(op: u8) -> bool {
 fn is_reload(op: u8) -> bool {
     op as u32 == LIVE_RELOAD
 }
+/// A service record (a provider): its reload is one call (`service.rs`) over the closure.
+fn is_service_rec(rec: usize) -> bool {
+    rec != NO_REC && rec >= dkrt_abi::MAX_MODULES
+}
+
+mod service;
 
 impl Job {
     /// A job in a given state, for the tests of `state` and `poll`'s readers.
@@ -125,12 +141,12 @@ impl Job {
     }
 
     pub const fn new() -> Job {
-        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, serial: 0, done_serial: 0, done_result: OK, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0, pre: false }
+        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, serial: 0, done_serial: 0, done_result: OK, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0, pre: false, called: false }
     }
 
     /// Queue job `op` for the module at `path` (NUL terminated, at most 63 bytes): a load of a file that no loaded module came from, or an unload or a reload of the module
     /// loaded from that path. `OK`; `E_BUSY` while one is queued or running; `E_MSG` for a path that does not fit or an unknown `op`; `E_RELOAD_RETAINED` while the DSP loader holds
-    /// a module it could not release (restart the device); `E_FORMAT` for the file of a service; `E_NOT_FOUND` when an unload or a reload names a path no loaded content module
+    /// a module it could not release (restart the device); `E_FORMAT` for a load or an unload of the file of a service (a service is reloaded, with its consumers); `E_NOT_FOUND` when an unload or a reload names a path no loaded content module
     /// came from; `E_LOADED` when a load names the path of a loaded module.
     pub unsafe fn queue<O: Ops>(&mut self, o: &mut O, op: u32, path: *const u8) -> i32 {
         if self.phase == 1 {
@@ -146,10 +162,11 @@ impl Job {
         if o.dsp_retained() {
             return E_RELOAD_RETAINED;
         }
-        if o.is_service(path) {
+        let service = o.is_service(path);
+        if service && op != LIVE_RELOAD {
             return E_FORMAT;
         }
-        let found = o.find(path).is_some();
+        let found = service || o.find(path).is_some();
         if op == LIVE_LOAD && found {
             return E_LOADED;
         }
@@ -175,6 +192,7 @@ impl Job {
         self.passes = 0;
         self.start = None;
         self.pre = false;
+        self.called = false;
         OK
     }
 
@@ -237,8 +255,8 @@ impl Job {
                     }
                     None => return self.refused(E_NOT_FOUND),
                 }
-                // the phase is on for the checks of a reload too: the services leave the module's own rows out of "used by another module" (types, rows)
-                if is_reload(self.op) {
+                // the phase is on for the checks of a reload too: the services leave the module's own rows out of "used by another module" (types, rows); a service has no rows of its own
+                if is_reload(self.op) && !is_service_rec(self.rec) {
                     o.phase(self.rec as u8 + 1);
                 }
             }
@@ -293,11 +311,14 @@ impl Job {
                 self.end(o, r, false);
             }
         } else if self.step == step::UNLOAD {
-            if !self.torn && o.menu_built(self.rec) {
+            if !self.torn && !self.called && o.menu_built(self.rec) {
                 // a page of the module's menus was built during the drain: nothing was freed, the old module gets its tick and commands back
                 o.abort(self.rec);
                 self.end(o, E_RELOAD_MENUS, false);
                 return;
+            }
+            if is_service_rec(self.rec) {
+                return self.reload_service(o);
             }
             let r = o.unload(self.rec);
             if r == OK {
