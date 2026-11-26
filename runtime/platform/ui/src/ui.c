@@ -1017,7 +1017,7 @@ static uint32_t views_used(void)
     return ui_views_used(&g_views);
 }
 
-/* On the runtime's per-pass list while a timer runs or a module view is open. */
+/* On the runtime's per-pass list while a timer runs, a module view is open or the stock SETTINGS list waits for a rebuild. */
 static int poll_start(void)
 {
     if (g_polling)
@@ -1042,7 +1042,9 @@ static void ui_poll(void)
     ui_defer_poll(&g_defer, key_is_down, 0);
     if (g_views.fw)
         ui_views_poll(&g_views);
-    if (timers == 0 && views_used() == 0 && ui_defer_pending(&g_defer) == 0 && g_polling) {
+    ui_rows_pass(&g_rows, dk_fw_menu_settings_list_rebuild);
+    if (timers == 0 && views_used() == 0 && ui_defer_pending(&g_defer) == 0 &&
+        !ui_rows_dirty(&g_rows) && g_polling) {
         dkrt_poll_remove((uintptr_t)ui_poll);
         g_polling = 0;
     }
@@ -1068,6 +1070,8 @@ static void ui_owner_gone(uint32_t owner)
 {
     uintptr_t key = (uintptr_t)owner + 1;
     ui_rows_remove_owner(&g_rows, key);
+    if (ui_rows_dirty(&g_rows))
+        poll_start(); /* the stock list still shows the owner's row: the next pass builds it again */
     ui_dialog_drop_owner(&g_dialog, key);
     ui_views_close_owner(&g_views, key);
     ui_ticks_remove_owner(&g_ticks, key);
@@ -1101,14 +1105,18 @@ void ui_settings_rows_tail(uint8_t *settings_menu)
     for (uint32_t i = 0; i < g_rows.n; i++)
         dk_ui_stock_row(settings_menu, g_rows.row[i].text, run_settings_row,
                         (void *)g_rows.row[i].key);
+    ui_rows_built(&g_rows, settings_menu); /* the list is the one the firmware builds for the session: ui_poll builds it again when the rows change */
 }
 
 int32_t dk_ui_settings_row(dk_ui *ui, const char *text, dk_ui_settings_open_fn *open, void *arg)
 {
     char name[DK_UI_MODULE_NAME];
     ui_owner_name(owner_of(ui), dkrt_record_name, name);
-    return ui_rows_add(&g_rows, owner_of(ui), name, dkrt_phase() == DKRT_PHASE_INIT, text, open,
-                       arg);
+    int32_t r = ui_rows_add(&g_rows, owner_of(ui), name, dkrt_phase() == DKRT_PHASE_INIT, text,
+                            open, arg);
+    if (r == 0 && ui_rows_dirty(&g_rows))
+        poll_start(); /* a row added after the stock list was built: the next pass builds it again */
+    return r;
 }
 
 /* -- canvas: the firmware side of canvas_map.h -- */
