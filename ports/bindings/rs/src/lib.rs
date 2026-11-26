@@ -423,6 +423,12 @@ pub mod menu {
     }
 
     unsafe extern "C" {
+        /// The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only.
+        #[link_name = "cf.menu.fn.settings_list_rebuild"]
+        pub fn settings_list_rebuild(menu: *mut u8);
+    }
+
+    unsafe extern "C" {
         /// Menu vtable slot 26: calls `check` through slot 21 when `is_checked` (slot 25) says no, else `uncheck` through slot 22. A subclass that overrides those slots changes this.
         #[link_name = "cf.menu.fn.toggle_check"]
         pub fn toggle_check(menu: *mut u8, index: i32);

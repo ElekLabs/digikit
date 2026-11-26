@@ -7733,6 +7733,68 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4009fa7c",
+            "len": 4
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4009fbe0",
+            "len": 4
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x400a5b04",
+            "len": 4
+          }
+        ],
+        "st-1.42": [
+          {
+            "addr": "0x4005ed72",
+            "len": 4
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_menu_settings_list_rebuild",
+        "rust": "dkfw::menu::settings_list_rebuild"
+      },
+      "cpu": "cf",
+      "doc": "The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only.",
+      "file": "devices/fw/menu.toml",
+      "kind": "fn",
+      "mark": "D",
+      "name": "cf.menu.fn.settings_list_rebuild",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 4,
+          "offset": 0
+        },
+        "st": {
+          "kind": "cf_func",
+          "len": 4,
+          "mark": "D",
+          "offset": 0
+        }
+      },
+      "sig": "void (u8 *menu)",
+      "subsystem": "menu",
+      "users": [
+        "core/ui"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4011648c",
             "len": 4
           }
@@ -26044,7 +26106,7 @@
       "name": "mem"
     },
     {
-      "count": 32,
+      "count": 33,
       "cpu": "cf",
       "file": "devices/fw/menu.toml",
       "meaning": "Menu, MenuItem, menu views, the SETTINGS menu",

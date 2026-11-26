@@ -149,6 +149,8 @@ void dk_fw_menu_select_all(uint8_t *menu) __asm__("cf.menu.fn.select_all");
 void dk_fw_menu_set_title(uint8_t *view, const uint32_t *title) __asm__("cf.menu.fn.set_title");
 /* Sets the title-bar flag at +0x1b8 of a CompactVerticalMenuView. When the flag changes, the visible rows (Menu vtable slots 16 and 17) change by one: 0 to nonzero takes a row, nonzero to 0 gives it back. The constructor stores its `sub_rows` argument in the same byte after it already subtracted it from the rows. So a view needs a title row either from `sub_rows` 1 in the constructor or from `set_title_bar(view, 1)` after a constructor with `sub_rows` 0; the second call after the first changes nothing. The stock PRESET MANAGER code calls it with 1 after `set_title`. */
 void dk_fw_menu_set_title_bar(uint8_t *view, uint8_t on) __asm__("cf.menu.fn.set_title_bar");
+/* The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack argument `menu`): saves the selection, clears the items, adds every item again (ending in `cf.menu.hook.settings_list.tail`), restores the selection. The stock callers are the menu constructor and the Project observer; call it from the UI task only. */
+void dk_fw_menu_settings_list_rebuild(uint8_t *menu) __asm__("cf.menu.fn.settings_list_rebuild");
 /* Menu vtable slot 26: calls `check` through slot 21 when `is_checked` (slot 25) says no, else `uncheck` through slot 22. A subclass that overrides those slots changes this. */
 void dk_fw_menu_toggle_check(uint8_t *menu, int32_t index) __asm__("cf.menu.fn.toggle_check");
 /* Menu vtable slot 22: removes the first entry equal to `index` from the check list; does nothing when it is not there. */
