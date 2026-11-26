@@ -37,6 +37,17 @@ pub trait ProviderHost {
     /// Whether `package` may go down now (the service's `can_stop`).
     fn can_stop(&mut self, package: PackageId) -> Result<(), Status>;
 
+    /// A reload of `package` is about to stop it: its entries are restored and nothing enters the service any more, so its state is final. The host takes the
+    /// service's state aside for the new copy (`ProviderHost::import_state`). Called only for a reload, once for each package of the reload's take-down (also after
+    /// a busy restore was retried), never for an unload or the take-down of a failed bring-up. The default does nothing.
+    fn export_state(&mut self, _package: PackageId) {}
+
+    /// `package` has started and its declarations match, before its entries are installed: the host hands it the state `export_state` took aside, or none (a new
+    /// start, or bytes it cannot take). An error fails the start like a failed `start`: the closure goes down and nothing is public. The default does nothing.
+    fn import_state(&mut self, _package: PackageId) -> Result<(), Status> {
+        Ok(())
+    }
+
     /// Last call before the entries are restored and the package is freed.
     fn stop(&mut self, package: PackageId);
 
