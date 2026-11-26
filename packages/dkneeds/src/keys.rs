@@ -106,6 +106,27 @@ pub const EXPORT_QUERY: u32 = 1 << 30;
 pub const EXPORT_FLAGS: u32 = EXPORT_BOUND | EXPORT_QUERY;
 /// Bit 0 of the flags of a `FWNAMES` or `SITES` item: the name or hook is absent on this firmware.
 pub const FLAG_ABSENT: u8 = 1;
+/// Bits 1 and 2 of the flags of a `SITES` item: the context the firmware code at the site runs in ([`site_context`]). The installer waits for the tasks to be parked before it
+/// writes or restores a [`CTX_TASK`] site at run time. A hook with no declared context packs as 0, which is [`CTX_TASK`]: the safe default.
+pub const FLAG_CTX_SHIFT: u8 = 1;
+pub const FLAG_CTX_MASK: u8 = 0b11 << FLAG_CTX_SHIFT;
+/// The code at the site can be in progress in a task of a priority below the UI task's (the BgWorker, the console task): the UI task can preempt it between two
+/// instructions. Value 0, so a flags byte that names no context means this.
+pub const CTX_TASK: u8 = 0;
+/// The code at the site runs only in the UI task (its message loop and the views it dispatches).
+pub const CTX_UI: u8 = 1;
+/// The code at the site runs only in an interrupt handler or in a task of a priority above the UI task's: neither can be inside the site while the UI task runs.
+pub const CTX_IRQ: u8 = 2;
+
+/// The context of a `SITES` item (its flags bits 1 and 2): [`CTX_TASK`], [`CTX_UI`] or [`CTX_IRQ`]. The value 3 is not assigned and reads as [`CTX_TASK`].
+pub fn site_context(flags: u8) -> u8 {
+    let c = (flags & FLAG_CTX_MASK) >> FLAG_CTX_SHIFT;
+    if c == CTX_UI || c == CTX_IRQ {
+        c
+    } else {
+        CTX_TASK
+    }
+}
 /// The kinds of a `FWNAMES` item: a firmware name (`dk_fw_<hash>`) and an exit (`dk_exit_<hash>_<n>`).
 pub const NAME_FW: u8 = 0;
 pub const NAME_EXIT: u8 = 1;
@@ -1606,6 +1627,40 @@ mod tests {
             Keys::parse(&raw(3, &[(tag::FWNAMES, 1, &[0u8; 8])])).unwrap_err(),
             KeysError::Size
         );
+    }
+
+    #[test]
+    fn the_site_context_sits_in_flag_bits_1_and_2_and_zero_means_task() {
+        // no context in the flags, an absent site and an unassigned value all read as task (the safe default)
+        assert_eq!(site_context(0), CTX_TASK);
+        assert_eq!(site_context(FLAG_ABSENT), CTX_TASK);
+        assert_eq!(site_context(3 << FLAG_CTX_SHIFT), CTX_TASK);
+        assert_eq!(site_context(CTX_UI << FLAG_CTX_SHIFT), CTX_UI);
+        assert_eq!(
+            site_context(CTX_IRQ << FLAG_CTX_SHIFT | FLAG_ABSENT),
+            CTX_IRQ
+        );
+        // the context stays clear of bit 0 (absent) and of bits 4 and up, which the runtime rejects (fixups)
+        assert_eq!(FLAG_CTX_MASK & (FLAG_ABSENT | 0xf0), 0);
+        // and it survives the table round trip with the other fields
+        let sites = [SiteRec {
+            hash: 1,
+            addr: 0x2000,
+            len: 6,
+            kind: SITE_RAW,
+            flags: CTX_UI << FLAG_CTX_SHIFT,
+            check: [0; 8],
+        }];
+        let t = Table {
+            sites: &sites,
+            fw: &[[9; 8]],
+            provides: &[Pair { a: 1, b: 2 }],
+            ..Table::default()
+        };
+        let mut b = vec![0u8; table_size(&t)];
+        write_table(&t, &mut b).unwrap();
+        let k = Keys::parse(&b).unwrap();
+        assert_eq!(site_context(k.find_site(1).unwrap().flags), CTX_UI);
     }
 
     #[test]

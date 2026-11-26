@@ -17,7 +17,7 @@
 //!     u32 addr   the site address; 0 when absent
 //!     u16 len    bytes of the displaced whole instructions
 //!     u8  kind   0 raw, 1 tail, 2 stock (the last two: the displaced bytes are copied from flash after the check)
-//!     u8  flags  bit 0: absent; bits 4..7: number of fixups that follow (reserved, 0 today)
+//!     u8  flags  bit 0: absent; bits 1..2: the context of the code at the site (0 task, 1 ui, 2 irq: `dkneeds::keys::site_context`); bits 4..7: number of fixups that follow (reserved, 0 today)
 //!     [u8; 8]    the first 8 bytes of the sha256 of the displaced bytes
 //! ```
 
@@ -28,8 +28,8 @@ use crate::fwnames::{FwRef, eval_exit_with, parse_import};
 use crate::port::{Hook, Port, Registry};
 use crate::prim;
 use dkneeds::keys::{
-    FLAG_ABSENT, Keys, NameRec, Pair, SITE_PATCH, SITE_RAW, SITE_STOCK, SITE_TAIL, SiteRec, Table,
-    name_hash, table_size, write_table,
+    FLAG_ABSENT, FLAG_CTX_SHIFT, Keys, NameRec, Pair, SITE_PATCH, SITE_RAW, SITE_STOCK, SITE_TAIL,
+    SiteRec, Table, name_hash, site_context, table_size, write_table,
 };
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -83,6 +83,8 @@ pub struct SiteItem {
     pub len: u16,
     pub kind: SiteKind,
     pub absent: bool,
+    /// `CTX_TASK`, `CTX_UI` or `CTX_IRQ`, packed into flag bits 1 and 2.
+    pub context: u8,
     pub check: [u8; 8],
 }
 
@@ -347,6 +349,7 @@ fn build_from(
                 len: 0,
                 kind: SiteKind::Raw,
                 absent: true,
+                context: 0,
                 check: [0; 8],
             });
             // a patch has no exit names, hooks and their exits do
@@ -459,6 +462,7 @@ fn site_of(port: &Port, h: &Hook, decl: &HookDecl, who: &str) -> Result<(SiteIte
             len: len as u16,
             kind,
             absent: false,
+            context: decl.context,
             check,
         },
         addr + len,
@@ -491,7 +495,7 @@ pub fn pack(data: &PortData) -> Result<Vec<u8>> {
             addr: x.addr,
             len: x.len,
             kind: x.kind as u8,
-            flags: if x.absent { FLAG_ABSENT } else { 0 },
+            flags: (if x.absent { FLAG_ABSENT } else { 0 }) | x.context << FLAG_CTX_SHIFT,
             check: x.check,
         })
         .collect();
@@ -561,6 +565,7 @@ pub fn parse(file: &[u8]) -> Result<PortData> {
                 k => return Err(err!("port file: site kind {k}")),
             },
             absent: x.flags & FLAG_ABSENT != 0,
+            context: site_context(x.flags),
             check: x.check,
         });
     }
@@ -664,6 +669,7 @@ mod tests {
                 len: 6,
                 kind: SiteKind::Tail,
                 absent: false,
+                context: dkneeds::keys::CTX_UI,
                 check: [9; 8],
             }],
         }
@@ -719,6 +725,7 @@ mod tests {
             handler: false,
             exits: exits.iter().map(|e| e.to_string()).collect(),
             users: vec![],
+            context: dkneeds::keys::CTX_TASK,
         };
         // the declaration of `a` comes first and has one exit; that of `b` has two
         let hooks = [
@@ -777,6 +784,7 @@ mod tests {
             patch: None,
             exits: vec![],
             users: vec![],
+            context: dkneeds::keys::CTX_TASK,
         };
         let port = Port::parse(&format!(
             "[port]\ndevice=\"d\"\nversion=\"1\"\nsyx_sha256=\"{0}\"\nmain_sha256=\"{0}\"\nresolved_by=\"t\"\n[limits]\ncontainer_max=1\nmain_staged_max=1\n[[anchor]]\nname=\"cf.x.site.y\"\ncpu=\"cf\"\naddr=0x4000_0200\nlen=6\nsha256=\"{0}\"\nmark=\"D\"\nrule=\"r\"\n",
@@ -830,6 +838,7 @@ mod tests {
             patch: Some(2),
             exits: vec![],
             users: vec![],
+            context: dkneeds::keys::CTX_TASK,
         };
         let port = Port::parse(&format!(
             "[port]\ndevice=\"d\"\nversion=\"1\"\nsyx_sha256=\"{0}\"\nmain_sha256=\"{0}\"\nresolved_by=\"t\"\n[limits]\ncontainer_max=1\nmain_staged_max=1\n[[anchor]]\nname=\"cf.x.site.y\"\ncpu=\"cf\"\naddr=0x4000_0200\nlen=4\nsha256=\"{0}\"\nmark=\"D\"\nrule=\"r\"\n",
@@ -881,6 +890,7 @@ mod tests {
             len,
             kind,
             absent,
+            context: 0,
             check: [0; 8],
         };
         let data = PortData {

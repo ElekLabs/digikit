@@ -529,6 +529,7 @@ tail = true
 regs = { in = [], clobbers = ["d0", "ccr"] }   # stack: 0 map, 4 begin, 8 end; the hook rewrites 4(sp) and 8(sp)
 devices = ["dt2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/machines"]
 doc = "The jsr of the sort comparator's std::map insert (stack: map, begin, end; d0 free); the hook swaps begin/end for the (type, position) pairs."
 
@@ -541,6 +542,7 @@ exits = ["cf.machine.site.group.alt"]
 regs = { in = ["d0"], clobbers = ["d0", "d1", "ccr"] }   # d0 := 0 for an added type on purpose; d1 is set by the first displaced move
 devices = ["dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/machines"]
 doc = "Entry of the DN2 group helper (types 0..3 group 1, 4 group 2, other 0); the hook maps added types to 0 so they fall in group 1."
 
@@ -553,6 +555,7 @@ exits = ["cf.machine.site.clone.5 + 12", "cf.machine.site.clone.5.alt"]
 regs = { in = ["d0"], clobbers = ["d0", "ccr"] }   # d0 := clone_of for an added type on purpose
 devices = ["dt2"]
 mark = "D"
+context = "ui"
 users = ["core/services/machines"]
 doc = "First four instructions of the masked test `(type & ~2) == 4` (d0 the type); the hook replaces an added type by its clone_of."
 
@@ -566,6 +569,7 @@ tail = true
 regs = { in = ["a0"], clobbers = ["d0", "ccr"] }   # rewrites 0x10(sp) for slots 29/30; second exit cf.machine.site.param_code.exit with d0 = the field
 devices = ["dt2"]
 mark = "D"
+context = "task"
 users = ["core/services/machines"]
 doc = "Mid-function of the parameter code mapping FUN(index, type, filter) (a0 = index, d1 live; d0 and a1 reloaded here); the hook answers added types."
 
@@ -578,6 +582,7 @@ exits = ["cf.machine.site.srcpage + 8", "cf.machine.site.srcpage.alt"]
 regs = { in = ["a2"], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # exits: site+8 and cf.machine.site.srcpage.alt
 devices = ["dt2"]
 mark = "D"
+context = "ui"
 users = ["core/services/machines"]
 doc = "First test of SourcePageView::vfunc_4 (a2 = view, d2 = draw context; d0, d1, a0, a1 free); the hook cuts the page vector to one page for an added type."
 
@@ -590,6 +595,7 @@ tail = true
 regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # own pages: rts with the count; else 4(sp) := clone_of
 devices = ["dn2"]
 mark = "D"
+context = "ui"
 users = ["core/services/machines"]
 doc = "Entry of the type -> page count function (type at 4(sp); d0, d1, a0, a1 free); the hook answers machines with own pages."
 
@@ -602,6 +608,7 @@ tail = true
 regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # the rts path pops the d2 the stock code saved; else 8(sp) := clone_of
 devices = ["dn2"]
 mark = "D"
+context = "ui"
 users = ["core/services/machines"]
 doc = "Page descriptor function FUN(type, page) after the stock code saved d2 (type at 8(sp), page at 0xc(sp); d0, d1, a0, a1 free); the hook answers machines with own pages."
 
@@ -614,6 +621,7 @@ tail = true
 regs = { in = ["a0"], clobbers = ["d0", "a1", "ccr"] }   # d1 (0x64) and a0 are set back; the rts path pops d2; else 0xc(sp) := clone_of
 devices = ["dn2"]
 mark = "D"
+context = "task"
 users = ["core/services/machines"]
 doc = "Parameter code map FUN(slot, type, sub) after the stock code loaded a0 = slot and d1 = 0x64 (d0, a1 free); the hook answers machines with own pages."
 
@@ -625,6 +633,7 @@ mode = "replace"
 regs = { in = ["a0"], clobbers = ["d0", "a1", "ccr"] }   # continues at site+6
 devices = ["dn2"]
 mark = "D"
+context = "irq"
 users = ["core/services/machines"]
 doc = "Frame builder reads the track's machine type `move.b (0xd8c,A0),D0b; ext.w D0w` into TX frame word 0x94 + 2t (a0 = track); the hook sends an added type as its clone_of."
 
@@ -637,6 +646,7 @@ exits = ["cf.machine.site.type_reader.load + 8"]
 regs = { in = ["a0"], clobbers = ["d0", "d1", "a0", "ccr"] }   # continues at the epilogue, site+8; a0 dead there is [O]
 devices = ["dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/machines"]
 doc = "Type reader FUN(track) `mvs.b (0xde,A0),D0` then bra.b to the epilogue (a0 = track); the hook returns clone_of for added types, except for the callers that want the real type."
 
@@ -648,6 +658,7 @@ mode = "replace"
 regs = { in = ["a0", "d2"], clobbers = ["d3", "ccr"] }   # the stock `move.l d2,-(sp)` is repeated; continues at site+6
 devices = ["dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/machines"]
 doc = "Owner test of SoundParameterSet::vfunc_21 `mvs.b (0xde,A0),D3; move.l D2,-(SP)` (a0 = sound, d3 = type); the hook makes a clone look like its original."
 
@@ -663,6 +674,7 @@ patch = 4
 regs = { in = [], clobbers = [] }
 devices = ["dt2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/machines"]
 doc = "Patch: the absolute target of the `jsr copy(begin, end, dest)` at the end of the machine list getter: the machines service's copy, which leaves out unfilled reserved machine types (C ABI, result d0 = the end of the copy)."
 
@@ -674,6 +686,7 @@ mode = "replace"
 regs = { in = ["a2"], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # the copy args are on the stack; continues at site+6
 devices = ["dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/machines"]
 doc = "The getter's `jsr (A3); move.l D0,(4,A2)` (6 bytes; a2 = the vector being returned); both are replaced by a routine that copies without unfilled reserved machine types."
 
@@ -689,6 +702,7 @@ patch = 2
 regs = { in = [], clobbers = [] }
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/machines"]
 doc = "Patch: the operand word of the list builder's `pea 0x1c.w`, the allocation size of the list buffer: 4 bytes per listed type."
 
@@ -702,6 +716,7 @@ patch = 2
 regs = { in = [], clobbers = [] }
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/machines"]
 doc = "Patch: the size operand word in the list builder that sets the end of the vector it fills: 4 bytes per listed type."
 
@@ -715,6 +730,7 @@ patch = 4
 regs = { in = [], clobbers = [] }
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/machines"]
 doc = "Patch: the address operand in the list builder of the end of the buffer it copies from: the service's list buffer plus 4 bytes per listed type."
 
@@ -728,5 +744,6 @@ patch = 4
 regs = { in = [], clobbers = [] }
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/machines"]
 doc = "Patch: the address operand in the list builder of the start of the buffer it copies from: the service's list buffer."

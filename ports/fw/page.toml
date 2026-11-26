@@ -185,6 +185,7 @@ stock = true
 regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # page at 4(sp); own pages rts, others re-enter at site+6
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "ui"
 users = ["core/services/fx"]
 doc = "Page descriptor accessor `row = f(int page)`, entry `moveq FX_PAGE_FIRST-1,D1; move.l 4(SP),D0` (6 bytes); the hook answers the run-time effect pages and the send page with its own rows."
 
@@ -197,6 +198,7 @@ exits = ["cf.page.site.tab_label_test + 0x1e"]
 regs = { in = ["d0"], clobbers = ["d0", "d1", "a0", "ccr"] }   # effect path pushes the row name and jumps to site+0x1e [O]
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "ui"
 users = ["core/services/fx"]
 doc = "FxPageView tab label, the third page test `move.b #n,D1b; cmp.l D0,D1` (6 bytes); the hook draws the name of an effect page's row through the label code's common tail."
 
@@ -209,6 +211,7 @@ exits = ["cf.page.site.filter_graph_test + 0x1c4"]
 regs = { in = ["d0", "d5"], clobbers = ["ccr"] }   # exits: site+6 (draw the graph) or site+0x1c4 (the beq.w target)
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "ui"
 users = ["core/services/fx"]
 doc = "FxPageView::vfunc_4 draw `cmp.l D0,D5; beq.w <after the graph>` (6 bytes) before the filter graph; the hook skips the graph for the effect pages too."
 
@@ -220,6 +223,7 @@ mode = "replace"
 regs = { in = [], clobbers = ["d0", "ccr"] }   # rewrites the pushed page count at (sp)
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/fx"]
 doc = "The FX view builder `move.l #<list>,D0` (6 bytes) with the count pushed just before it; the hook hands the builder the run-time page list and its count."
 
@@ -231,6 +235,7 @@ mode = "replace"
 regs = { in = ["a0", "a1"], clobbers = ["d0", "d1", "a0", "a2", "a3", "ccr"] }
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"
 users = ["core/services/fx"]
 doc = "Loader of the kit's effect value array after its table loop, `move.l (0x98,A0),(FX_TAIL_OFF,A1)` (6 bytes; a0 = the storage record, a1 = the array); the hook restores the effect values."
 
@@ -242,6 +247,7 @@ mode = "replace"
 regs = { in = ["a2", "a3"], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/fx"]
 doc = "Saver of the kit's effect value array after its table loop, `move.l (FX_TAIL_OFF,A3),(0x98,A2)` (6 bytes; a2 = the storage record, a3 = the array); the hook writes the effect values and IDs."
 
@@ -253,6 +259,7 @@ mode = "replace"
 regs = { in = ["a2"], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # the displaced movem/lea are repeated
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"
 users = ["core/services/fx"]
 doc = "Common exit of the effect value array initialiser `movem.l (SP),{D2 A2-A5}; lea (0x20,SP),SP` (8 bytes; a2 = the array or 0); the hook gives each effect row its defaults."
 
@@ -264,6 +271,7 @@ mode = "replace"
 regs = { in = [], clobbers = ["d0", "ccr"] }   # rewrites the pushed page count at (sp)
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
 users = ["core/services/fx"]
 doc = "The track FX key's one-page view in the FX view builder, `move.l #list,D0` (6 bytes) with the count pushed before it; the hook adds the send page to the list."
 
@@ -275,6 +283,7 @@ mode = "replace"
 regs = { in = ["d0"], clobbers = ["ccr"] }   # the displaced movem/lea are repeated
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "task"
 users = ["core/services/fx"]
 doc = "Common exit of the sound loader `movem.l (SP),{D2-D4 A2-A6}; lea (0x20,SP),SP` (8 bytes; a2 = the Sound, d0 = the result); the hook counts the load."
 
@@ -287,6 +296,7 @@ tail = true
 regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # view at 4(sp), event at 8(sp); the stock handler always runs after the hook
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "ui"
 users = ["core/services/machines"]
 doc = "Entry of the machine page's key handler; the hook sees every key event of the page and never consumes one."
 
@@ -299,6 +309,7 @@ tail = true
 regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # view at 4(sp), event at 8(sp); the stock handler always runs after the hook
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "ui"
 users = ["core/services/machines"]
 doc = "Entry of the machine page's encoder turn handler; ordinary PARAM turns continue natively, while opt-in native-page LOCAL/unused turns return one to consume."
 
@@ -370,6 +381,7 @@ tail = true
 regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "ui"
 users = ["core/services/machines"]
 doc = "Draw entry: opt-in page returns directly after bounded callback rendering; every other page resumes its prologue."
 
@@ -382,5 +394,6 @@ tail = true
 regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }
 devices = ["dt2", "dn2"]
 mark = "D"
+context = "ui"
 users = ["core/services/machines"]
 doc = "Encoder code entry: opt-in page returns its declarative code (zero for LOCAL/unused); other mappings resume unchanged."
