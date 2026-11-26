@@ -759,6 +759,33 @@ const SCENES = [
     },
   },
   {
+    name: 'transfer-live-ticked',
+    q: 'mode=modules',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.tick('^Install (pluck|analog)');
+      await p.until("document.querySelector('.transfer-page .storage-bar')", 'No storage bar');
+    },
+  },
+  {
+    name: 'transfer-live-samples',
+    q: 'mode=samples',
+    size: WIDE,
+    steps: async (p) => {
+      await p.until("document.querySelector('.transfer-page .storage-bar')", 'No storage bar');
+    },
+  },
+  {
+    name: 'transfer-live-samples-ticked',
+    q: 'mode=samples',
+    size: WIDE,
+    steps: async (p) => {
+      await p.until("document.querySelector('.transfer-page .storage-bar')", 'No storage bar');
+      await p.tick('^Upload (pad_warm_swell|loop_dub_chords_90)');
+    },
+  },
+  {
     name: 'transfer-live-popover',
     q: 'mode=modules',
     size: WIDE,

@@ -21,6 +21,8 @@ import {
 } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '@digi/dk-session/gen_proto';
 import { systemPackageReads } from '../runtime/system-package.ts';
+import type { StoreUsage } from '../target-ops/store.ts';
+import { usageOf } from '../target-ops/store.ts';
 import { fitsNow, keyWarnings, type Caps, type Needs } from './fit.ts';
 import {
   PORT_NAME,
@@ -92,6 +94,8 @@ export interface TransferView {
   coreOnly?: boolean;
   modules: TransferRow[];
   card_only: TransferRow[];
+  /** The store by kind (modules, services, data, samples, other) with its free space: the storage bar of the page. Absent when the card could not be listed. */
+  usage?: StoreUsage;
   /** Keep service files selectable when incomplete card reads prevent automatic service cleanup. */
   incomplete_card_needs?: boolean;
   /** The service refusals of the library modules (also on their rows); set only when the view was built with `InstallDeps`. */
@@ -877,11 +881,16 @@ export async function buildView(
     const row = merged.modules.find((m) => m.id === r.module);
     if (row) row.service_refusal = r;
   }
+  const usage = await s
+    .list()
+    .then((all) => usageOf(all, storeFree(info, cap)))
+    .catch(() => undefined);
   return {
     ...identity,
     loaded,
     free_bytes: storeFree(info, cap).free,
     capacity: cap,
+    ...(usage ? { usage } : {}),
     ...(pkg.coreOnly ? { coreOnly: true } : {}),
     ...merged,
     ...(incompleteCardNeeds ? { incomplete_card_needs: true } : {}),

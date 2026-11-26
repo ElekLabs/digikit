@@ -6,7 +6,7 @@
 
 import { fmtVersion } from '@digi/dk-session';
 import { formatBytes } from '../modules/backend.ts';
-import { fit, fitsSet, type Needs } from '../modules/fit.ts';
+import { fit, fitsNow, fitsSet, type Caps, type Needs } from '../modules/fit.ts';
 import type { CardServiceRef, Group, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
 import { PROVIDER_MAX } from '../modules/services.ts';
 import type { ServiceRef, ServiceRefusal } from '../modules/services.ts';
@@ -99,6 +99,21 @@ export function installServices(view: TransferView, ticks: Set<string>): { id: s
   return tickedServices(view, ticks)
     .filter((sv) => sv.state !== 'on device')
     .map((sv) => ({ id: sv.stem, path: `services/${sv.stem}.dks`, bytes: sv.size }));
+}
+
+/** The bytes an install of the ticked modules puts on the card: the files that are not on the card as they are, and the services that are not there. */
+export function installBytes(view: TransferView, ticks: Set<string>): number {
+  const mods = view.modules
+    .filter((r) => r.id && ticks.has(rowKey(r)) && r.on_card !== 'yes')
+    .reduce((a, r) => a + r.file_size, 0);
+  return view.coreOnly ? 0 : mods + installServices(view, ticks).reduce((a, s) => a + s.bytes, 0);
+}
+
+const kib = (bytes: number): string => `${Math.ceil(bytes / 1024)} KiB`;
+
+/** The refusal of an install or upload that the card cannot hold (`needed` against `free`), or null when it fits. */
+export function spaceError(needed: number, free: number): string | null {
+  return needed > free ? `The card is too full: needs ${kib(needed)}, ${kib(free)} free.` : null;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -263,17 +278,14 @@ export interface RowTag {
   tone: 'ok' | 'warn' | 'dim';
 }
 
-/** The tags of a library module in the "On your computer" list: a test module, what the device holds of it, and a module that does not fit the
- * device (from the needs inferred from its contents, next to the modules loaded now; the tooltip says what is short). Fitting is the usual
- * state and says nothing; the line above the list says how the ticked ones fit together. */
+/** The tags of a library module in the "On your computer" list: a test module and what the device holds of it. Installing is limited by the
+ * card's storage only (the storage bar, `spaceError`); the runtime's capacity is a question of loading, shown on the device rows (`capacityTag`). */
 export function localTags(r: TransferRow): RowTag[] {
   const out: RowTag[] = [];
   if (r.test) out.push({ text: 'test', tone: 'dim' });
   if (r.on_card === 'yes') out.push({ text: 'on device', tone: 'ok' });
   else if (r.on_card === 'other version')
     out.push({ text: 'differs', title: 'A different build is on the device; Install replaces it', tone: 'warn' });
-  const w = warningText(r);
-  if (w) out.push({ text: "won't fit", title: w, tone: 'warn' });
   const sr = r.service_refusal;
   if (sr)
     out.push({
@@ -287,6 +299,21 @@ export function localTags(r: TransferRow): RowTag[] {
       tone: 'warn',
     });
   return out;
+}
+
+/**
+ * The hint on a device row that is on the card and not loaded: which runtime resource is short now (`DSP memory 146 KiB short`, `machine rows 1 short`),
+ * from the needs of its contents and the CAPACITY next to the modules loaded now. Only a hint: the runtime's refusal at Load is authoritative.
+ */
+export function capacityTag(r: TransferRow, cap?: Caps | null): RowTag | undefined {
+  if (!cap || !r.id || r.loaded || r.on_card === 'no' || !r.needs) return undefined;
+  const short = fitsNow(r.needs, cap);
+  if (!short) return undefined;
+  return {
+    text: short.describe_by,
+    title: `Load is likely refused: ${short.describe}. The runtime decides when you Load.`,
+    tone: 'warn',
+  };
 }
 
 /** The dependency badge of either copy, with one tooltip line per hard service need. */
@@ -378,7 +405,7 @@ export function tickedLoad(view: TransferView, ticks: Set<string>): string | nul
 
 /** The tags of a file of the "On device" list: a loaded module says so first, a selected one that failed to load says why (`not_loaded`); a file the library does not have, and one that differs from
  * the library's build. A file that matches the library has no tag (that is the usual state), and one that is only going there has none yet. */
-export function deviceTags(r: TransferRow): RowTag[] {
+export function deviceTags(r: TransferRow, cap?: Caps | null): RowTag[] {
   const out: RowTag[] = [];
   if (r.loaded) out.push({ text: 'loaded', title: 'Loaded by the device until the next restart', tone: 'ok' });
   if (r.not_loaded)
@@ -409,6 +436,8 @@ export function deviceTags(r: TransferRow): RowTag[] {
     });
   else if (r.on_card === 'other version')
     out.push({ text: 'differs', title: 'Differs from the build in your library', tone: 'warn' });
+  const capacity = capacityTag(r, cap);
+  if (capacity) out.push(capacity);
   return out;
 }
 

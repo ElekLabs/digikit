@@ -54,7 +54,7 @@ import {
   storageLine,
   DONE_ON_CARD,
 } from '@digi/workbench-core/transfer/transfer-core.ts';
-import { unusedServices } from '@digi/workbench-core/transfer/pane-groups.ts';
+import { portLine, unusedServices } from '@digi/workbench-core/transfer/pane-groups.ts';
 import { parseSoftwareVersion } from '@digi/workbench-core/transfer/connection-core.ts';
 import { FakeDevice, concat, hex, sha } from '@digi/test-support/fakedevice';
 import { dkm, everythingFits, needsOf } from './support/dkm.ts';
@@ -983,13 +983,14 @@ test('the installed copy supplies the destination dependencies, including transi
   assert.equal(dependencyBadge(view.card_only.find((r) => r.path === unused.path)?.card_services), undefined);
 
   // a service file is no row; the one no module needs is selected for Delete by the header link
-  const visible = [cardOnly.path, libraryModuleCopy.path, port.path];
+  const visible = [cardOnly.path, libraryModuleCopy.path];
   assert.deepEqual(
     onDeviceWithPending(view, undefined).map((r) => r.path),
     visible,
   );
   assert.deepEqual(deletePaths(view, new Set(dev.files.keys())), [...visible, unused.path]);
   assert.equal(onDevice(view).length, 6);
+  assert.equal(portLine(view)?.state, 'ok', 'the port file shows in the header, not as a row');
   assert.match(storageLine(view), /^Modules: 6 files, /);
 
   const progress = startProgress([], false, {}, [{ id: 'fx', path: installedFx.path, bytes: 800 }]);

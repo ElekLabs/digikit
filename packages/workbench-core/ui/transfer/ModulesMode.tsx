@@ -49,8 +49,8 @@ import {
   serviceRefusalText,
   installOutcome,
   localTags,
-  tickedFit,
-  tickedLoad,
+  installBytes,
+  spaceError,
   rowKey,
   rowStatus,
   startProgress,
@@ -144,6 +144,8 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
     run('Installing', async () => {
       const v = lastView();
       if (!v || coreOnly()) return;
+      const refusal = spaceError(installBytes(v, ticks()), v.usage?.free ?? v.free_bytes);
+      if (refusal) throw new Error(refusal);
       const modules = installModules(v, ticks());
       const services = installServices(v, ticks());
       setProgress(
@@ -500,17 +502,6 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
                   </div>
                 )}
               </For>
-              <Show when={tickedFit(v(), ticks())?.tone === 'warn' && tickedFit(v(), ticks())}>
-                {(f) => (
-                  <p
-                    class="fitbar"
-                    role="status"
-                    title={tickedLoad(v(), ticks()) ? `${f().text}\n${tickedLoad(v(), ticks())}` : f().text}
-                  >
-                    {f().text}
-                  </p>
-                )}
-              </Show>
             </>
           )}
         </Show>
@@ -642,7 +633,7 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
                             }
                             name={label(r)}
                             title={r.path}
-                            tags={deviceTags(r)}
+                            tags={deviceTags(r, lastView()?.capacity)}
                             dependencies={cardDependencies(r)}
                             live={{
                               actions: liveActions(r).map((op) => rowActions(op, r.path)),

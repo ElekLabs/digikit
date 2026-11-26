@@ -367,6 +367,7 @@
   "packages/workbench-core/tests/session-share.test.ts": 2,
   "packages/workbench-core/tests/transfer-app.test.ts": 27,
   "packages/workbench-core/tests/transfer-connection.test.ts": 14,
+  "packages/workbench-core/tests/transfer-live-ops.test.ts": 11,
   "project.json": 2,
   "pyproject.toml": 3,
   "runtime/apps/digikit-menu/README.md": 5,

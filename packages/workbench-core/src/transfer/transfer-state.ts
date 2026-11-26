@@ -8,6 +8,7 @@ import { remembered, type KeyValue } from '../storage';
 import type { TransferEnv } from './env';
 import type { LinkState } from './link-core';
 import type { LiveResult } from './live-ops';
+import type { StoreUsage } from '../target-ops/store';
 import { parseMode, type Mode, type Progress, type TransferView, type Verified } from './transfer-core';
 
 export interface DeviceInfo {
@@ -37,6 +38,8 @@ export function createTransferState({
   jobs: JobsApp;
 }) {
   const [lastView, setLastView] = createSignal<TransferView>();
+  /** The store usage read in the Samples mode (the Modules mode has it in its view). */
+  const [sampleUsage, setSampleUsage] = createSignal<StoreUsage | undefined>();
   // Retain the local scan across disconnects, including when Transfer is unmounted.
   let libraryView: TransferView | undefined;
   const rememberLibrary = (view: TransferView) => {
@@ -163,6 +166,8 @@ export function createTransferState({
     rememberLibrary,
     forgetDevice,
     lastView,
+    sampleUsage,
+    setSampleUsage,
     setLastView,
     ticks,
     setTicks,

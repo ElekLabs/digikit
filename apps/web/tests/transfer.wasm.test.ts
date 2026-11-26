@@ -270,10 +270,10 @@ test('the tags: only what says something; the usual state has none', () => {
   assert.deepEqual(texts(localTags({ ...sine, on_card: 'other version' })), ['differs']);
   assert.match(localTags({ ...sine, on_card: 'other version' })[0].title!, /Install replaces it/);
   assert.deepEqual(texts(localTags({ ...sine0, test: true, on_card: 'yes' })), ['test', 'on device']);
-  const fit = localTags({ ...sine, warnings: ['arena 2 MiB is more than the free 1 MiB'] });
   assert.deepEqual(
-    [fit[0].text, fit[0].tone, fit[0].title],
-    ["won't fit", 'warn', 'arena 2 MiB is more than the free 1 MiB'],
+    texts(localTags({ ...sine, warnings: ['arena 2 MiB is more than the free 1 MiB'] })),
+    [],
+    'installing is limited by the card storage only: no capacity tag on the library side',
   );
   assert.deepEqual(
     texts(localTags({ ...sine, fits: true })),

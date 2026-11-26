@@ -270,6 +270,7 @@ export function createSamplesApp({
     readLocal: source.read,
     localChanged: source.changed,
     lines: destination.lines,
+    pendingBytes: () => source.picked().reduce((a, r) => a + r.size, 0),
     bar(busy) {
       const running = busy === 'Uploading';
       const info = destination.bar(running);

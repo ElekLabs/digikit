@@ -6,7 +6,19 @@ import { liveModules, type TransferRow, type TransferView } from '../src/modules
 import { createFakeSessions, createFakeTransferApp } from '../src/transfer/fake-app';
 import { LIVE_LABEL, liveActions, liveCode, liveReason, liveResult, serviceAction } from '../src/transfer/live-ops';
 import { NOT_IN_LIBRARY, groupRows, portLine, unusedServices, unusedServicesText } from '../src/transfer/pane-groups';
-import { available, dependencyItems, deletePaths, deviceGroups, deviceTags } from '../src/transfer/transfer-core';
+import { setFitReader, type Short } from '../src/modules/fit';
+import { storageBar } from '../src/transfer/storage-bar';
+import {
+  capacityTag,
+  installBytes,
+  localTags,
+  spaceError,
+  available,
+  dependencyItems,
+  deletePaths,
+  deviceGroups,
+  deviceTags,
+} from '../src/transfer/transfer-core';
 
 const row = (over: Partial<TransferRow> & { path: string }): TransferRow => ({
   id: null,
@@ -94,6 +106,85 @@ test('a port file is no row; the header shows it, warns when it is for another f
   // missing is a warning only when a module on the card needs a service
   expect(portLine(view())?.state).toBe('missing');
   expect(portLine(view({ modules: [], card_only: [] }))).toBeUndefined();
+});
+
+test('the library side carries no capacity tag; a not-loaded device row names the short resource', () => {
+  const short: Short = {
+    resource: 'DSP_AREA',
+    need: 400,
+    free: 254,
+    text: '',
+    brief: '',
+    describe: 'DSP memory 400 KiB needed, 254 KiB free',
+    describe_by: 'DSP memory 146 KiB short',
+  };
+  let answer: Short | null = short;
+  setFitReader({ fit: () => ({ each: [answer], set: null, line: '' }) });
+  const cap = { DSP_AREA: { limit: 1000, used: 746, largest: 254 } };
+  const r = row({
+    id: 'a/big',
+    path: 'modules/big.dkm',
+    needs: { DSP_AREA: 400 },
+    warnings: ['DSP memory 146 KiB short'],
+  });
+  expect(localTags(r).map((t) => t.text)).toEqual(['on device']);
+  expect(localTags(r).some((t) => /fit/.test(t.text + (t.title ?? '')))).toBe(false);
+  expect(deviceTags(r, cap).map((t) => t.text)).toEqual(['DSP memory 146 KiB short']);
+  expect(capacityTag(r, cap)?.text).not.toMatch(/fit/);
+  expect(capacityTag({ ...r, loaded: true }, cap)).toBeUndefined();
+  expect(capacityTag({ ...r, on_card: 'no' }, cap)).toBeUndefined();
+  expect(capacityTag(r, null)).toBeUndefined();
+  answer = null;
+  expect(capacityTag(r, cap)).toBeUndefined();
+});
+
+test('the storage bar splits the kind, the others and the free space, and previews what is ticked', () => {
+  const usage = {
+    total: 1000,
+    free: 300,
+    overhead: 50,
+    used: [
+      { key: 'modules' as const, label: 'Modules', bytes: 200, files: 2 },
+      { key: 'services' as const, label: 'Services', bytes: 100, files: 1 },
+      { key: 'samples' as const, label: 'Samples', bytes: 300, files: 5 },
+      { key: 'other' as const, label: 'Other', bytes: 50, files: 1 },
+    ],
+  };
+  const m = storageBar(usage, 'modules');
+  expect(m.segments.map((s) => [s.key, s.bytes])).toEqual([
+    ['modules', 200],
+    ['services', 100],
+    ['others', 400],
+    ['free', 300],
+  ]);
+  expect([m.base, m.added, m.overflow]).toEqual([1000, 0, 0]);
+  const s = storageBar(usage, 'samples');
+  expect(s.segments.map((x) => [x.key, x.bytes])).toEqual([
+    ['samples', 300],
+    ['others', 350 + 50],
+    ['free', 300],
+  ]);
+  const p = storageBar(usage, 'modules', 120);
+  expect(p.segments.map((x) => [x.key, x.bytes]).slice(-2)).toEqual([
+    ['preview', 120],
+    ['free', 180],
+  ]);
+  expect(p.overflow).toBe(0);
+  const over = storageBar(usage, 'samples', 500);
+  expect([over.overflow, over.segments.at(-1)?.bytes]).toEqual([200, 0]);
+  expect(over.text).toContain('too much');
+});
+
+test('an install that the card cannot hold is refused with the sizes; services not on the card count', () => {
+  const v = view({
+    modules: [
+      row({ id: 'a/x', path: 'modules/x.dkm', on_card: 'no', file_size: 2048 }),
+      row({ id: 'a/y', path: 'modules/y.dkm', on_card: 'yes', file_size: 5000 }),
+    ],
+  });
+  expect(installBytes(v, new Set(['a/x', 'a/y']))).toBe(2048);
+  expect(spaceError(2048, 1024)).toBe('The card is too full: needs 2 KiB, 1 KiB free.');
+  expect(spaceError(1024, 1024)).toBeNull();
 });
 
 test('an unreadable card file makes the unused count a hint, not a fact', () => {
