@@ -281,6 +281,16 @@ unsafe fn find_port<C: Cards>(cards: &mut C, fw: Option<[u8; 8]>, out: &mut Foun
 pub unsafe fn find<C: Cards>(cards: &mut C, want: &[u32], fw: Option<[u8; 8]>, out: &mut Found) {
     out.n = 0;
     out.truncated = 0;
+    search(cards, want, fw, out)
+}
+
+/// Find the providers for `want` and add them after the ones `out` holds (a live load whose service the boot did not look for): the providers already in `out` keep their
+/// slots (their records may be up) and their files are not read again.
+pub unsafe fn find_more<C: Cards>(cards: &mut C, want: &[u32], fw: Option<[u8; 8]>, out: &mut Found) {
+    search(cards, want, fw, out)
+}
+
+unsafe fn search<C: Cards>(cards: &mut C, want: &[u32], fw: Option<[u8; 8]>, out: &mut Found) {
     if want.is_empty() {
         return;
     }
@@ -295,6 +305,18 @@ pub unsafe fn find<C: Cards>(cards: &mut C, want: &[u32], fw: Option<[u8; 8]>, o
     } else {
         found as usize
     };
+    // the files of the providers already found are taken
+    let mut c = 0;
+    while c < nc {
+        let mut j = 0;
+        while j < out.n {
+            if out.path(j) == path_of(&out.cands[c]) {
+                out.c_used[c] = true;
+            }
+            j += 1;
+        }
+        c += 1;
+    }
     // the search list: the needs given, then the needs of each provider found
     let mut ns = 0;
     let mut i = 0;

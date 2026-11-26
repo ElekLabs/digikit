@@ -447,3 +447,56 @@ fn a_live_check_answers_e_missing_for_a_service_nobody_provides_before_it_looks_
         assert_eq!((st().modules[1].used, l.table_len[1], l.accepted[1]), (0, 0, false), "nothing was kept");
     }
 }
+
+/// The card of a boot of the one module `a` (no needs) whose card also holds the service `svc-test` at `services/svc-test.dks` and the module `b` that needs it at `PATH_B`: the boot
+/// found no provider, since its selection needs none.
+unsafe fn card_without_the_service() -> Fake {
+    let mut l = provider_loader(module_file(), svc_init());
+    l.m.files.insert(SVC_PATH.to_vec(), service_file(&svc_table(), 0));
+    let mut b = consumer_file(&user_table());
+    b[dkneeds::H_NAME as usize] = b'b';
+    seal(&mut b);
+    l.m.files.insert(PATH_B[..PATH_B.len() - 1].to_vec(), b);
+    l.reset_plan();
+    l.capture(0, &module_file());
+    l.find_providers(1);
+    assert_eq!(l.found.n, 0, "the boot's selection needs no service: nothing is searched");
+    l
+}
+
+#[test]
+fn a_live_load_finds_the_service_on_the_card_that_the_boot_did_not_look_for_and_brings_it_up() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let mut l = card_without_the_service();
+        let mut rt = boot_selection(&mut l, &[PATH]);
+        assert_eq!(records::module(MAX_MODULES).used, 0);
+        assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), OK, "the card has the service");
+        assert_eq!(l.found.n, 1);
+        assert_eq!(l.found.path(0), SVC_PATH);
+        assert_eq!(rt.live_load_with(1, PATH_B.as_ptr(), &wide()), OK);
+        assert_eq!((records::module(MAX_MODULES).used, records::module(1).used), (1, 1), "the service is up and the module with it");
+        // a second check does not add the provider again
+        assert_eq!(l.found.n, 1);
+    }
+}
+
+#[test]
+fn a_live_check_answers_e_missing_when_the_card_has_no_such_service_and_a_service_that_fails_to_come_up_refuses_the_module() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        // no service file on the card
+        let mut l = card_without_the_service();
+        let _rt = boot_selection(&mut l, &[PATH]);
+        l.m.files.remove(&SVC_PATH.to_vec());
+        assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), E_MISSING);
+        assert_eq!(l.found.n, 0);
+        // a service that fails when it comes up (its hook site is not stock) refuses the module with the service's own code
+        let mut l = card_without_the_service();
+        let mut rt = boot_selection(&mut l, &[PATH]);
+        l.p.put_code(SITE, &[0u8; 6]);
+        assert_eq!(l.live_check_load(1, PATH_B.as_ptr(), &wide()), OK);
+        assert_eq!(rt.live_load_with(1, PATH_B.as_ptr(), &wide()), E_HOOK_STOCK);
+        assert_eq!((records::module(MAX_MODULES).used, records::module(1).used), (0, 0));
+    }
+}

@@ -63,6 +63,68 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         }
     }
 
+    /// Search the card for the services the table `new` needs that no provider of the boot's search offers (the boot looks only for what its selection needs, so a service file
+    /// transferred since, or never needed by the selection, is not in `found`). The providers found are added after the others (`discover::find_more`), so the graph the live
+    /// check and the manager build holds them; the manager brings them up when it loads the module, through the checks of every service. A need the card does not meet stays
+    /// unmet (`E_MISSING`).
+    unsafe fn live_find(&mut self, new: &[u8]) {
+        let Ok(t) = Keys::parse(new) else { return };
+        let mut want = [0u32; plan::WANT_MAX];
+        let nw = plan::unmet_needs(&[Some(t)], &mut want);
+        let mut missing = [0u32; plan::WANT_MAX];
+        let mut nm = 0;
+        let mut i = 0;
+        while i < nw {
+            let mut met = false;
+            let mut j = 0;
+            while j < self.found.n.min(PROVIDER_MAX) {
+                if let Ok(p) = Keys::parse(self.found.table(j)) {
+                    let mut w = 0;
+                    while let Some(h) = p.words(dkneeds::keys::tag::PROVIDES, w) {
+                        met |= h.0 == want[i];
+                        w += 1;
+                    }
+                }
+                j += 1;
+            }
+            if !met {
+                missing[nm] = want[i];
+                nm += 1;
+            }
+            i += 1;
+        }
+        if nm != 0 {
+            discover::find_more(&mut self.m, &missing[..nm], dkrt_abi::fw_id::image_fw_id(&self.p), &mut self.found);
+        }
+    }
+
+    /// Does the staged file (`f`, `size` bytes) have a hard need that a provider of `found` meets and that is not up?
+    unsafe fn needs_service_down(&self, f: *const u8, size: u32) -> bool {
+        let file = core::slice::from_raw_parts(f, size as usize);
+        let Some(table) = table_of_file(file) else { return false };
+        let Ok(t) = Keys::parse(table) else { return false };
+        let mut want = [0u32; plan::WANT_MAX];
+        let nw = plan::unmet_needs(&[Some(t)], &mut want);
+        let mut i = 0;
+        while i < nw {
+            let mut j = 0;
+            while j < self.found.n.min(PROVIDER_MAX) {
+                if let Ok(p) = Keys::parse(self.found.table(j)) {
+                    let mut w = 0;
+                    while let Some(h) = p.words(dkneeds::keys::tag::PROVIDES, w) {
+                        if h.0 == want[i] && !self.unusable[j] && records::module(MAX_MODULES + j).used == 0 {
+                            return true;
+                        }
+                        w += 1;
+                    }
+                }
+                j += 1;
+            }
+            i += 1;
+        }
+        false
+    }
+
     /// The live check of the table `new` at selection index `k` (the old module's slot for a reload, the index of a load): `OK`, or the refusal of its needs, then of the file by
     /// the rules of the core, then of any live module that no longer fits with it (`caps`: `live_caps`, which counts every live module again).
     pub(super) unsafe fn live_plan(&self, k: usize, new: &[u8], caps: &[DkrtCap]) -> i32 {
@@ -274,15 +336,30 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             }
             if let Some(table) = table_of_file(file) {
                 if Keys::parse(table).is_ok() {
-                    let r = self.live_plan(k, table, caps);
-                    if r != OK {
-                        return r;
+                    // the search stages the provider files, so the module's file is staged again after it
+                    self.live_find(table);
+                    if let Ok(staged) = self.m.stage(path) {
+                        let file = core::slice::from_raw_parts(staged.ptr, staged.size as usize);
+                        if let Some(table) = table_of_file(file) {
+                            let r = self.live_plan(k, table, caps);
+                            if r != OK {
+                                return r;
+                            }
+                        }
                     }
                 }
             }
         }
         let mut c = Checked::empty();
-        let r = self.check_file(path, Slot::Free, &mut c);
+        let mut r = self.check_file(path, Slot::Free, &mut c);
+        if r == E_IMPORT && self.needs_service_down(c.f, c.size) {
+            // an import of a service that is not up yet resolves when the manager brings the service up and links the module (`resolve_imports` with the module's needs); an
+            // import that still has no owner then refuses the load, which gives back everything it took
+            r = self.check_head(path, Slot::Free, &mut c);
+            if r == OK {
+                r = self.check_body(&mut c);
+            }
+        }
         if r != OK {
             return r;
         }
