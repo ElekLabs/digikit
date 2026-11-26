@@ -459,6 +459,12 @@ pub mod menu {
     }
 
     unsafe extern "C" {
+        /// The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list.
+        #[link_name = "cf.menu.data.settings_vtable"]
+        pub static SETTINGS_VTABLE: u8;
+    }
+
+    unsafe extern "C" {
         /// The `pea (icon).l` instruction of the SYSTEM item (6 bytes of code); its operand is the address of a stock icon object built at run time.
         #[link_name = "cf.menu.site.settings_list.system_icon_ref"]
         pub static SETTINGS_LIST_SYSTEM_ICON_REF: u8;

@@ -259,6 +259,9 @@ mod rebuild {
         fn sr_pass() -> c_int;
         fn sr_rebuilds() -> c_int;
         fn sr_dirty() -> c_int;
+        fn sr_menu_word(w: u32);
+        fn sr_pass_absent(no_rebuild: c_int) -> c_int;
+        fn sr_has_menu() -> c_int;
     }
 
     #[test]
@@ -305,5 +308,31 @@ mod rebuild {
         unsafe { sr_remove(1) };
         assert_eq!(unsafe { sr_pass() }, 0);
         assert_eq!(unsafe { sr_rebuilds() }, 0);
+    }
+
+    #[test]
+    fn a_kept_pointer_that_is_no_settings_list_is_not_called_and_is_dropped() {
+        let _g = session();
+        unsafe { sr_reset() };
+        unsafe { sr_built(1) };
+        unsafe { sr_menu_word(0x1234_5678) };
+        add(1, "A", 0);
+        assert_eq!(unsafe { sr_pass() }, 0, "the vtable word differs");
+        assert_eq!(unsafe { sr_rebuilds() }, 0, "no call");
+        assert_eq!(unsafe { sr_has_menu() }, 0, "the pointer is dropped");
+        assert_eq!(unsafe { sr_dirty() }, 0, "and no list means no more passes");
+    }
+
+    #[test]
+    fn a_firmware_without_the_rebuild_or_the_vtable_anchor_never_rebuilds() {
+        for no_rebuild in [1, 0] {
+            let _g = session();
+            unsafe { sr_reset() };
+            unsafe { sr_built(1) };
+            add(1, "A", 0);
+            assert_eq!(unsafe { sr_pass_absent(no_rebuild) }, 0);
+            assert_eq!(unsafe { sr_rebuilds() }, 0);
+            assert_eq!(unsafe { sr_has_menu() }, 0);
+        }
     }
 }

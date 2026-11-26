@@ -62,8 +62,10 @@ void ui_rows_built(ui_settings_rows *s, uint8_t *menu);
 /* Rows were added or removed since the last build and a list exists. */
 int ui_rows_dirty(const ui_settings_rows *s);
 
-/* One UI pass: when the list is dirty, call `rebuild(menu)` (the stock rebuild, which ends in ui_rows_built) and return 1; otherwise return 0 and call nothing. */
+/* One UI pass: when the list is dirty, call `rebuild(menu)` (the stock rebuild, which ends in ui_rows_built) and return 1; otherwise return 0 and call nothing.
+   Before the call the first word of the kept menu must be `vtable` (the SETTINGS menu vtable, slot 0): with a different word, or with no rebuild function or no
+   vtable (0: the firmware's port lacks the anchor), nothing is called, the pointer is dropped (no list is known until the next build) and the pass returns 0. */
 typedef void ui_rows_rebuild_fn(uint8_t *menu);
-int ui_rows_pass(ui_settings_rows *s, ui_rows_rebuild_fn *rebuild);
+int ui_rows_pass(ui_settings_rows *s, ui_rows_rebuild_fn *rebuild, uint32_t vtable);
 
 #endif

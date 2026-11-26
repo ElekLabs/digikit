@@ -142,12 +142,17 @@ int ui_rows_dirty(const ui_settings_rows *s)
     return s->menu && s->dirty;
 }
 
-int ui_rows_pass(ui_settings_rows *s, ui_rows_rebuild_fn *rebuild)
+int ui_rows_pass(ui_settings_rows *s, ui_rows_rebuild_fn *rebuild, uint32_t vtable)
 {
     if (!ui_rows_dirty(s))
         return 0;
     /* clear first: a rebuild that fails to clear it must not run every pass */
     s->dirty = 0;
+    /* no rebuild or no vtable fact on this firmware, or the kept pointer is no SETTINGS list: do not call, forget the pointer */
+    if (!rebuild || !vtable || *(const uint32_t *)s->menu != vtable) {
+        s->menu = 0;
+        return 0;
+    }
     rebuild(s->menu);
     return 1;
 }

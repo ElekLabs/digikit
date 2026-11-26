@@ -5,6 +5,7 @@
 #include "../../../src/settings_rows.h"
 
 static ui_settings_rows reg;
+static int rebuilds;
 static int calls[8];
 static void *last_arg[8];
 
@@ -19,6 +20,7 @@ void sr_reset(void)
 {
     memset(&reg, 0, sizeof reg);
     memset(calls, 0, sizeof calls);
+    rebuilds = 0;
 }
 int sr_add(uintptr_t owner, const char *name, const char *text, int tag)
 {
@@ -77,8 +79,8 @@ int sr_owner_name(uintptr_t handle, char *out)
 }
 
 /* The stock list rebuild trigger. The fake rebuild does what the stock one does through the hook: it ends in ui_rows_built. */
-static int rebuilds;
-static uint8_t fake_menu[1];
+#define FAKE_VTABLE 0x40203bd8u
+static uint32_t fake_menu[2] = {FAKE_VTABLE, 0}; /* first word: the vtable of a SETTINGS menu */
 static void fake_rebuild(uint8_t *menu)
 {
     rebuilds++;
@@ -86,12 +88,26 @@ static void fake_rebuild(uint8_t *menu)
 }
 void sr_built(int with_menu)
 {
-    ui_rows_built(&reg, with_menu ? fake_menu : 0);
+    ui_rows_built(&reg, with_menu ? (uint8_t *)fake_menu : 0);
+    fake_menu[0] = FAKE_VTABLE;
     rebuilds = 0;
 }
 int sr_pass(void)
 {
-    return ui_rows_pass(&reg, fake_rebuild);
+    return ui_rows_pass(&reg, fake_rebuild, FAKE_VTABLE);
+}
+void sr_menu_word(uint32_t w)
+{
+    fake_menu[0] = w;
+}
+/* the anchors of the rebuild or of the vtable are absent on this firmware: 0 */
+int sr_pass_absent(int no_rebuild)
+{
+    return ui_rows_pass(&reg, no_rebuild ? 0 : fake_rebuild, no_rebuild ? FAKE_VTABLE : 0);
+}
+int sr_has_menu(void)
+{
+    return reg.menu != 0;
 }
 int sr_rebuilds(void)
 {

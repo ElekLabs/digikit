@@ -161,6 +161,8 @@ void dk_fw_menu_vertical_menu_view_ctor(uint8_t *this, const char *name, uint32_
 extern const uint8_t dk_fw_menu_compact_vtable __asm__("cf.menu.data.compact_vtable");
 /* The MenuWithPopoutSideBarsView vtable, slot 0 at the stored address (DT2 0x4021d1b0, DN2 0x40206b7c), 43 slots (0 to 42) of 4 bytes. It copies slots 0 to 38 of the CompactVerticalMenuView table, overrides 31 paint, 32 key, 33 encoder, 38, and adds 39 main-list paint hook, 40 rebuild (empty stub 0x401d181a), 41 populate the right panel (empty stub 0x401d181c), 42 left-panel hook (DT2 0x401ba394). A subclass copies the table and overrides 39, 41 and 42. */
 extern const uint8_t dk_fw_menu_popout_vtable __asm__("cf.menu.data.popout_vtable");
+/* The SETTINGS menu vtable (DigisharcSettingsMenu, Syntakt DiddySettingsMenu): slot 0 at the address the constructor stores at offset 0 of the object (the `move.l #vtable,(A2)` after the base constructors; DT2 0x40203bd8, DN2 0x401ec7c8, Syntakt 0x401d0d14), first 40 slots hashed. A menu pointer whose first word is not this address is not the SETTINGS list. */
+extern const uint8_t dk_fw_menu_settings_vtable __asm__("cf.menu.data.settings_vtable");
 /* The `pea (icon).l` instruction of the SYSTEM item (6 bytes of code); its operand is the address of a stock icon object built at run time. */
 extern const uint8_t dk_fw_menu_settings_list_system_icon_ref __asm__("cf.menu.site.settings_list.system_icon_ref");
 /* The `move.l #font,d0` instruction (6 bytes of code) in the VerticalMenuView constructor: its operand is the address of the font object that the constructor stores twice in the view. The field offset is not the same in every firmware, so a module reads the font from this literal, not from a fixed offset. */

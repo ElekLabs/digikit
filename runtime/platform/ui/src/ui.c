@@ -1042,7 +1042,12 @@ static void ui_poll(void)
     ui_defer_poll(&g_defer, key_is_down, 0);
     if (g_views.fw)
         ui_views_poll(&g_views);
-    ui_rows_pass(&g_rows, dk_fw_menu_settings_list_rebuild);
+    {
+        /* both anchors are optional (a port without them: no rebuild; volatile, so that the compiler keeps the test) */
+        ui_rows_rebuild_fn *volatile rebuild = dk_fw_menu_settings_list_rebuild;
+        const volatile uint32_t vtable = (uint32_t)(uintptr_t)&dk_fw_menu_settings_vtable;
+        ui_rows_pass(&g_rows, rebuild, vtable);
+    }
     if (timers == 0 && views_used() == 0 && ui_defer_pending(&g_defer) == 0 &&
         !ui_rows_dirty(&g_rows) && g_polling) {
         dkrt_poll_remove((uintptr_t)ui_poll);
