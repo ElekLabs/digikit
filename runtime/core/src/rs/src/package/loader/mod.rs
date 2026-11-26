@@ -73,6 +73,7 @@ mod park;
 pub(crate) use package::PhaseKind;
 mod plan;
 mod port;
+mod provider_reload;
 mod quiesce;
 pub(crate) mod records;
 pub(crate) mod role;
@@ -91,6 +92,7 @@ use plan::{settle_ctx, unmet_needs, WANT_MAX};
 pub(crate) use live::{live_caps, own_use};
 pub use live::{live_check_load, reload_check, retire_index};
 pub use quiesce::{reload_abort, reload_quiesce};
+pub use provider_reload::provider_check;
 pub(crate) use live::{live_capacity, live_indices};
 pub use plan::{capture, find_providers, keys_of, planned_dsp, reset_plan};
 pub(crate) use plan::{boot_caps, live_settle_ctx};
@@ -177,6 +179,8 @@ pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     m: M,
     r: R,
     phase: Phase,
+    /// The provider record whose file a reload check or prepare is reading (`provider_check`): the stock-bytes check of the new file does not count the sites that record holds.
+    replacing: Option<u8>,
     /// The role word of each record's file (0 module, 1 service, 2 port): which `RoleSteps` its undo uses.
     roles: [u8; records::REC_MAX],
     /// The name of the missing module of the last load that failed with E_IMPORT (`import_needs`), NUL padded; empty when none. The boot clears it before
@@ -226,10 +230,10 @@ pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     /// Host tests: the next this many restores answer busy, as when a task below the UI task is not parked (the gate itself is covered by `park_tests`).
     #[cfg(test)]
     busy_restores: u32,
-    /// The tick address of a module whose tick the teardown stopped (valid while `TORN_TICK` is set): a reload that cannot finish gives it back.
-    saved_tick: [u32; MAX_MODULES],
+    /// The tick address of a record (a module, or a service of a reload) whose tick the teardown stopped (valid while `TORN_TICK` is set): a reload that cannot finish gives it back.
+    saved_tick: [u32; records::REC_MAX],
     /// The block count when a reload closed the entries of each module (`TORN_DRAIN`); `None`: the platform has no block clock.
-    drain_at: [Option<u32>; MAX_MODULES],
+    drain_at: [Option<u32>; records::REC_MAX],
     /// A package the package manager starts applies the records of the services in the table first and leaves those of the loaded service files to `attach`
     /// (`package_attach`): set for the duration of `package_start`.
     split_apply: bool,
@@ -348,6 +352,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             m,
             r,
             phase: Phase::Closed,
+            replacing: None,
             #[cfg(test)]
             busy_restores: 0,
             roles: [0; records::REC_MAX],
@@ -370,8 +375,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             dsp_install: DspInstaller::new(),
             sel_of_rec: [0; MAX_MODULES],
             torn: [0; records::REC_MAX],
-            saved_tick: [0; MAX_MODULES],
-            drain_at: [None; MAX_MODULES],
+            saved_tick: [0; records::REC_MAX],
+            drain_at: [None; records::REC_MAX],
             split_apply: false,
             reg_block: [(core::ptr::null(), 0); MAX_MODULES],
         }

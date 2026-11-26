@@ -247,7 +247,11 @@ unsafe fn service_check<P: PackagePlatform, M: Images, R: Registry>(l: &mut Load
         Ok(n) => n,
         Err(e) => return e,
     };
-    match l.installer.check(&l.p, &hooks[..n], &patches[..np], head.image_size) {
+    let checked = match l.replacing {
+        Some(rec) => l.installer.check_replacing(&l.p, rec, &hooks[..n], &patches[..np], head.image_size),
+        None => l.installer.check(&l.p, &hooks[..n], &patches[..np], head.image_size),
+    };
+    match checked {
         Ok(()) => OK,
         Err(e) => e,
     }
