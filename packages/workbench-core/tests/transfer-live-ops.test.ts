@@ -2,6 +2,7 @@
 import { DkError, type DkInfoFull } from '@digi/dk-session';
 import { CAP } from '@digi/dk-session/gen_proto';
 import { expect, test, vi } from 'vitest';
+import { runtimeDeviceIds } from '../src/data/device-profiles';
 import { liveModules, type TransferRow, type TransferView } from '../src/modules/dktransfer';
 import { createFakeSessions, createFakeTransferApp } from '../src/transfer/fake-app';
 import {
@@ -30,6 +31,9 @@ import {
   storageLine,
 } from '../src/transfer/transfer-core';
 
+// neutral device ids from the device data: nothing here depends on which device it is
+const [DEV_A, DEV_B] = runtimeDeviceIds as readonly [string, string];
+
 const row = (over: Partial<TransferRow> & { path: string }): TransferRow => ({
   id: null,
   name: over.path,
@@ -46,7 +50,7 @@ const fx = { label: 'fx service', state: 'on device', path: 'services/fx.dks', v
 
 function view(over: Partial<TransferView> = {}): TransferView {
   return {
-    device: 'dn2',
+    device: DEV_A,
     runtime: '0.31.0',
     free_bytes: 1000,
     loaded: [],
@@ -98,21 +102,21 @@ test('a service file is never a row; the unused one is counted and can be delete
 
 test('a port file is no row; the header shows it, warns when it is for another firmware or missing', () => {
   const port = (path: string, over: Partial<TransferRow> = {}) => svc(path, over);
-  const ok = view({ card_only: [...view().card_only, port('ports/dn2-1.12.dkport')] });
+  const ok = view({ card_only: [...view().card_only, port(`ports/${DEV_A}-1.12.dkport`)] });
   expect(
     deviceGroups(ok, undefined)
       .flatMap((g) => g.rows)
       .some((r) => r.path.endsWith('.dkport')),
   ).toBe(false);
-  expect(portLine(ok)).toEqual({ state: 'ok', text: 'port dn2-1.12 ✓', stale: [] });
-  const other = view({ card_only: [port('ports/dn2-1.11.dkport', { for_firmware: 'abcd' })] });
-  expect(portLine(other)).toMatchObject({ state: 'other', stale: ['ports/dn2-1.11.dkport'] });
-  expect(deletePaths(other, new Set(['ports/dn2-1.11.dkport']))).toEqual(['ports/dn2-1.11.dkport']);
+  expect(portLine(ok)).toEqual({ state: 'ok', text: `port ${DEV_A}-1.12 ✓`, stale: [] });
+  const other = view({ card_only: [port(`ports/${DEV_A}-1.11.dkport`, { for_firmware: 'abcd' })] });
+  expect(portLine(other)).toMatchObject({ state: 'other', stale: [`ports/${DEV_A}-1.11.dkport`] });
+  expect(deletePaths(other, new Set([`ports/${DEV_A}-1.11.dkport`]))).toEqual([`ports/${DEV_A}-1.11.dkport`]);
   // a matching file is shown next to a stale one; only the stale one is deletable from the header
   const both = view({
-    card_only: [port('ports/dn2-1.12.dkport'), port('ports/dn2-1.11.dkport', { for_firmware: 'abcd' })],
+    card_only: [port(`ports/${DEV_A}-1.12.dkport`), port(`ports/${DEV_A}-1.11.dkport`, { for_firmware: 'abcd' })],
   });
-  expect(portLine(both)).toMatchObject({ state: 'ok', stale: ['ports/dn2-1.11.dkport'] });
+  expect(portLine(both)).toMatchObject({ state: 'ok', stale: [`ports/${DEV_A}-1.11.dkport`] });
   // missing is a warning only when a module on the card needs a service
   expect(portLine(view())?.state).toBe('missing');
   expect(portLine(view({ modules: [], card_only: [] }))).toBeUndefined();
@@ -220,7 +224,7 @@ test('a module row gets Reload and Unload when loaded, Load when only on the car
   expect(liveActions({ path: 'm.dkm', loaded: false, on_card: 'other version' })).toEqual(['load']);
   expect(liveActions({ path: 'm.dkm', loaded: false, on_card: 'no' })).toEqual([]);
   expect(liveActions({ path: 'services/fx.dks', loaded: true, on_card: 'yes' })).toEqual([]);
-  expect(liveActions({ path: 'ports/dt2-1.17.dkport', loaded: false, on_card: 'yes' })).toEqual([]);
+  expect(liveActions({ path: `ports/${DEV_B}-1.17.dkport`, loaded: false, on_card: 'yes' })).toEqual([]);
 });
 
 test('a result is done, refused with the runtime reason (nothing changed) or failed (not loaded)', () => {
