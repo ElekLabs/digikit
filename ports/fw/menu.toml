@@ -25,9 +25,9 @@ doc = "The SETTINGS item list rebuild (DigisharcSettingsMenu, cdecl, one stack a
 name = "cf.menu.fn.settings_dtor"
 cpu = "cf"
 sig = "void (u8 *menu)"
-rule.dt2 = { kind = "cf_func", hash = "bf1cb427af141a9366ac7667823ca554", offset = 0x0, len = 4 }
-rule.dn2 = { kind = "cf_func", hash = "bf1cb427af141a9366ac7667823ca554", offset = 0x0, len = 4 }
-rule.st = { kind = "cf_func", hash = "77bb2a2327c1753158d9de6d8fb5be56", offset = 0x0, len = 4, mark = "D" }
+rule.dt2 = { kind = "cf_func", hash = "bf1cb427af141a9366ac7667823ca554", offset = 0x0, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "bf1cb427af141a9366ac7667823ca554", offset = 0x0, len = 8 }
+rule.st = { kind = "cf_func", hash = "77bb2a2327c1753158d9de6d8fb5be56", offset = 0x0, len = 8, mark = "D" }
 mark = "D"
 users = ["core/ui"]
 doc = "The destructor of the SETTINGS menu (DigisharcSettingsMenu, Syntakt DiddySettingsMenu; vtable slot 0, called by the deleting destructor in slot 1 and by the shared_ptr control block): `menu` = this. The firmware builds the menu once in the main screen's constructor and never destroys it in a normal session, but the owner of the pointer is not a field a module can read (the constructor keeps it in a shared_ptr that it moves into the view), so core/ui drops its kept pointer from a hook here. Decoded on dt2-1.17 0x401bb40e, dn2-1.12 0x401ab074, st-1.42 0x401859a6 (the DN2 1.11 image has the same bytes)."

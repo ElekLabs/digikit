@@ -1159,8 +1159,8 @@ name = "cf.menu.fn.settings_dtor"
 cpu = "cf"
 kind = "code"
 addr = 0x401aad94
-len = 4
-sha256 = "d3d6c46cca8440b9eccecf4eda3b162d4ebb9dbf713195ba9dd62f632b9c6c05"
+len = 8
+sha256 = "e92dfc779453962bf5a411a137c3f4ccfe79ada54f91adf103e64d8da3cda4a6"
 mark = "D"
 rule = "fw/menu:cf_func"
 

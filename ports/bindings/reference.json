@@ -7795,25 +7795,25 @@
         "dn2-1.11": [
           {
             "addr": "0x401aad94",
-            "len": 4
+            "len": 8
           }
         ],
         "dn2-1.12": [
           {
             "addr": "0x401ab074",
-            "len": 4
+            "len": 8
           }
         ],
         "dt2-1.17": [
           {
             "addr": "0x401bb40e",
-            "len": 4
+            "len": 8
           }
         ],
         "st-1.42": [
           {
             "addr": "0x401859a6",
-            "len": 4
+            "len": 8
           }
         ]
       },
@@ -7830,17 +7830,17 @@
       "rule": {
         "dn2": {
           "kind": "cf_func",
-          "len": 4,
+          "len": 8,
           "offset": 0
         },
         "dt2": {
           "kind": "cf_func",
-          "len": 4,
+          "len": 8,
           "offset": 0
         },
         "st": {
           "kind": "cf_func",
-          "len": 4,
+          "len": 8,
           "mark": "D",
           "offset": 0
         }
