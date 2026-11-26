@@ -72,7 +72,10 @@ export const createNodesV2 = [
       .sort();
     const coreBuilds = new Set(
       [...byId]
-        .filter(([, { manifest, objects }]) => manifest.category === 'core' && objects.some((o) => o.sources?.length))
+        .filter(
+          ([, { manifest, objects, doc }]) =>
+            manifest.category === 'core' && [...objects, doc.package_part].some((o) => o?.sources?.length),
+        )
         .map(([id]) => id),
     );
     // Patch image composition follows module.requires, not acceptance-fixture graph edges.
