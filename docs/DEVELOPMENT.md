@@ -426,6 +426,9 @@ A boot screen is a script `x.mjs` that exports `ticks` and `draw(ctx, t)` and dr
 
 On runtime 0.11.4 with the matching Boot screen module, **Animation** lets you save an uploaded file or restore **Stock**. The choice applies on the next restart. With a project settings overlay active, choose the animation in the device menu.
 
+Use [Retiring idle lane builds](TESTING.md#retiring-idle-lane-builds) to see
+which linked worktrees' Cargo output can be discarded without removing the worktrees.
+
 ## Fast iteration: runtime, UI and modules
 
 One edit and one look take seconds, not a boot. Iterate on the Digitone II (its boot is about half as long), check the Digitakt II at the end, and finish with the owner's check (`module:check` for a content module, the named Nx device target for a fixture).

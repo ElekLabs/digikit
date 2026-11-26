@@ -606,6 +606,32 @@ without running it.
 - The merge gate uses `nx affected` to select conformance and the other targets from changed declared inputs, including dependency outputs; device tests are selected by ownership ("Nx gate"). A selected task with an unchanged key replays its cached result. Use `nx show target inputs PROJECT:TARGET --check PATH` to inspect direct file inputs and `mise run test:plan` to see task selection. After a change to untracked firmware, snapshots or override binaries, or to what `tools/nx/device-inputs.mjs` or `coupled-inputs.mjs` hash, run named targets or the full tier.
 - Shared loader and public SDK edits select the common machine and effect load fixture through the patched image and retain the other affected device behavior checks. Changes to an individual machine's or effect's private pack inputs select that shipped artifact's own load, as described in “Nx gate.” Use the owner targets for iteration and inspect `mise run test:plan` before the merge gate.
 
+### Retiring idle lane builds
+
+Use `git worktree list` to choose a lane that is not in use. From that
+worktree, list its build output and find the concrete Cargo targets:
+
+```sh
+du -sh dist/native-target
+find dist/native-target -name CACHEDIR.TAG -print
+```
+
+Choose a target directory from that list. For example, if the Workbench
+ColdFire-profile build has a tag in `dist/native-target/nogen/cfprof`:
+
+```sh
+cargo clean --dry-run --target-dir dist/native-target/nogen/cfprof
+# Once the lane is idle and the preview matches what you want:
+cargo clean --target-dir dist/native-target/nogen/cfprof
+```
+
+Cargo requires the tag. The `dist/native-target` parent groups several Cargo
+targets and is not itself a target directory. Cleaning a selected target leaves
+the worktree, sources, plain `target/`, and the shared core, daemon and Nx stores
+in place. The next local build may be cold on a shared-artifact miss. APFS
+snapshots and clones can make the gain in free disk space smaller than the
+reported output size.
+
 ### Remote cache
 
 All worktrees of a clone share one Cacheiro server on `127.0.0.1:47311`. Its state is in
@@ -1365,10 +1391,13 @@ used within the last hour; it renames an entry to `.tmp-evict-*` before it remov
 than an hour. `DIGI_SHARC_CORE_STORE` moves the store (tests only).
 
 Key and build come from one description, `core_store.build_plan` (the argv and environment of the cargo call). The key follows the
-daemon key's scheme (`emud_key.key_of`): the content of the repository files in `CORE_SOURCE_GLOBS` (the `sharc-core-lib`,
-`sharc-gen` and `sharc-rt` crates, `Cargo.toml`, `Cargo.lock`, `rust-toolchain*`, `.cargo`), every file of
-the gen dir, `rustc -vV`, the target triple, the argv without the target dir (profile, `-p sharc-core-lib`, features) and the rustc flag, `CARGO_PROFILE_*` and `CARGO_TARGET_*` variables of the build environment. The tooling scripts (`core_store.py`, `digi_env.py`, ...) are not in the key: what they decide is in the plan, so an edit that leaves the plan alone keeps every stored library. The key is known before the first build, so
-a lookup needs no build. After a build the dependency file of cargo is audited against the key: a file the build read that the key
+daemon key's scheme (`emud_key.key_of`): the content of the files in `CORE_SOURCE_GLOBS` (the three SHARC library
+crates, `Cargo.toml`, `rust-toolchain*`, and `.cargo`), every file in the gen dir, the toolchain and version, target,
+build flags and PGO profile. The pinned Cargo's `metadata --locked --offline` resolves the library manifest. If all
+reachable crates are already covered by the source key, only their checkout-independent resolution is hashed, not
+the workspace lockfile. If metadata is unavailable or the closure includes other crates, the full lockfile remains
+an input. An exact match of the old whole-lockfile key can seed the new entry without recompiling.
+After a build the Cargo dependency file is audited against the key: a file the build read that the key
 does not cover fails the build and stores nothing (add it to `CORE_SOURCE_GLOBS`).
 
 ```sh
