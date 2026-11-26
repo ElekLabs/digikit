@@ -8,14 +8,21 @@ use dkrt_abi::package::PackageId;
 use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::MAX_MODULES;
-use dkrt_lifecycle::{LifecycleError, PackageManager, Refusal, Report};
+use super::RtTrace;
+use dkrt_lifecycle::{LifecycleError, PackageManager, Refusal, Report, Traced};
 use dkrt_sdk::sel::Record;
 use core::mem::MaybeUninit;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::*;
 
 /// The package manager of the runtime over its seams.
-pub type Manager<P, M, R> = PackageManager<RtManifest<P, M, R>, RtPlacer<P, M, R>, RtLinker<P, M, R>, RtInstallers<P, M, R>, RtHost<P, M, R>>;
+pub type Manager<P, M, R> = PackageManager<
+    RtManifest<P, M, R>,
+    Traced<RtPlacer<P, M, R>, RtTrace<P, M, R>>,
+    Traced<RtLinker<P, M, R>, RtTrace<P, M, R>>,
+    Traced<RtInstallers<P, M, R>, RtTrace<P, M, R>>,
+    Traced<RtHost<P, M, R>, RtTrace<P, M, R>>,
+>;
 
 /// The runtime's package lifecycle: the session the seams share and the manager over them. It lives for the whole run: the boot brings the selection up through it, the live job loads,
 /// unloads and reloads modules through it, and the DSP loader reports a failed DSP part to it. It must not move once `init` has run (the seams point into the session).
@@ -88,7 +95,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             self.session.modules[k] = p.unwrap_or(core::ptr::null());
         }
         let manifest = RtManifest::of(&mut self.session, modules);
-        let (placer, linker, installers, host) = self.session.seams();
+        let (placer, linker, installers, host) = super::traced_seams(&mut self.session);
         self.up = false;
         PackageManager::init(self.manager.as_mut_ptr(), manifest, placer, linker, installers, host)?;
         self.up = true;
@@ -142,6 +149,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         for k in 0..count.min(MAX_MODULES) {
             paths[k] = Some(rec.paths[k].as_ptr());
         }
+        super::trace_next_op();
         let init = self.init(&paths, count);
         self.session.begin_boot(caps, count);
         for k in 0..count {

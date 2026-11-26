@@ -242,4 +242,5 @@ mod load;
 mod refusals;
 mod reload;
 mod service;
+mod trace;
 mod unload;

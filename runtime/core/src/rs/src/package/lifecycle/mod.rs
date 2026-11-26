@@ -8,6 +8,7 @@
 //! - `host`: [`RtHost`], `init` and `fini` of a module, the lifecycle calls into the rows of a service.
 //! - `install`: [`RtColdFire`] and [`RtSharc`], the two backends of the `Installers` the manager installs entries through.
 //! - `rt`: [`Rt`], the manager over the seams for the whole run: the boot's load and its report, the live job's load, unload and reload of a module, the DSP step.
+//! - `trace`: [`RtTrace`], the lifecycle events of the seams over the event log, and the emit function the live job and the installer's gate use.
 //! - `reload`: the reload of a service and its consumers, one call of the live job (`Rt::reload_closure`).
 //! - `codes`: the load status of each manager refusal (the codes the loader gave before).
 //! - `manifest`: [`RtManifest`], the header tables of the selected packages and the services they need.
@@ -27,6 +28,7 @@ mod placer;
 mod reload;
 mod rt;
 mod session;
+mod trace;
 
 pub(crate) use codes::code_of;
 pub(crate) use host::RtHost;
@@ -40,6 +42,7 @@ pub(crate) use rt::{verdict_of, Manager, Rt};
 #[cfg(test)]
 pub(crate) use rt::test_up;
 pub(crate) use session::Session;
+pub(crate) use trace::{emit as trace_emit, next_op as trace_next_op, on as trace_on, stem_hash, traced_seams, RtTrace};
 
 #[cfg(test)]
 mod assembly_tests;

@@ -108,6 +108,8 @@ pub struct Job {
     pre: bool,
     /// The reload of a service has made its call (`service.rs`): the menus are not asked again, the closure may be down.
     called: bool,
+    /// Which step the log has a begin of ([`JobTrace`]).
+    trace: JobTrace,
 }
 
 /// What `poll` reads about the operation: a load has no old module, an unload no new file.
@@ -126,6 +128,9 @@ fn is_service_rec(rec: usize) -> bool {
 }
 
 mod service;
+mod trace;
+
+use trace::JobTrace;
 
 impl Job {
     /// A job in a given state, for the tests of `state` and `poll`'s readers.
@@ -141,7 +146,7 @@ impl Job {
     }
 
     pub const fn new() -> Job {
-        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, serial: 0, done_serial: 0, done_result: OK, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0, pre: false, called: false }
+        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, serial: 0, done_serial: 0, done_result: OK, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0, pre: false, called: false, trace: JobTrace::new() }
     }
 
     /// Queue job `op` for the module at `path` (NUL terminated, at most 63 bytes): a load of a file that no loaded module came from, or an unload or a reload of the module
@@ -193,7 +198,14 @@ impl Job {
         self.start = None;
         self.pre = false;
         self.called = false;
+        self.trace.queued();
         OK
+    }
+
+    /// The step answered `E_BUSY`: note it, then count the pass (`timed_out`).
+    fn busy<O: Ops>(&mut self, o: &mut O) -> bool {
+        self.trace.busy(self);
+        self.timed_out(o)
     }
 
     /// One more pass of a wait: true when it has lasted too long, by the block count or, whatever that does, by the passes.
@@ -273,7 +285,7 @@ impl Job {
         }
         if !is_unload(self.op) {
             let r = o.check(self.op as u32, self.rec, self.sel, path);
-            if r == E_BUSY && !self.timed_out(o) {
+            if r == E_BUSY && !self.busy(o) {
                 // the store was busy: nothing changed, the checks run again on a later pass
                 return;
             }
@@ -292,11 +304,19 @@ impl Job {
         }
     }
 
-    /// One step. Called once per UI pass (`dkrt_tick`).
+    /// One step. Called once per UI pass (`dkrt_tick`). The log gets the begin of a step when the job reaches it and its end when the job leaves it.
     pub unsafe fn poll<O: Ops>(&mut self, o: &mut O) {
         if self.phase != 1 {
             return;
         }
+        let mut trace = self.trace;
+        trace.sync(self);
+        self.poll_step(o);
+        trace.sync(self);
+        self.trace = trace;
+    }
+
+    unsafe fn poll_step<O: Ops>(&mut self, o: &mut O) {
         let path = self.path.as_ptr();
         if self.step == step::CHECK {
             self.check(o);
@@ -305,7 +325,7 @@ impl Job {
             if r == OK {
                 self.wait_restart(o);
                 self.step = step::UNLOAD;
-            } else if r != E_BUSY || self.timed_out(o) {
+            } else if r != E_BUSY || self.busy(o) {
                 // the drain did not end: nothing was freed, the old module gets its tick and commands back
                 o.abort(self.rec);
                 self.end(o, r, false);
@@ -331,7 +351,7 @@ impl Job {
                     self.wait_restart(o);
                     self.step = step::LOAD;
                 }
-            } else if r != E_BUSY || o.dsp_retained() || self.timed_out(o) {
+            } else if r != E_BUSY || o.dsp_retained() || self.busy(o) {
                 // `Rt::unload` answers E_BUSY only before `fini` (a file or I/O step of the module still runs, or the DSP rows cannot be cleared), so the old module is whole and gets
                 // its tick and commands back. A DSP loader that holds rows it could not clear is permanent: say so at once instead of waiting out the budget.
                 o.abort(self.rec);
@@ -351,7 +371,7 @@ impl Job {
                 self.wait_restart(o);
                 self.progress = o.dsp_progress();
                 self.step = step::DSP;
-            } else if r == E_BUSY && !self.timed_out(o) {
+            } else if r == E_BUSY && !self.busy(o) {
                 // the install found a task not parked: nothing changed, the load runs again on a later pass
             } else {
                 self.end(o, r, false);

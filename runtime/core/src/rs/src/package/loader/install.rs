@@ -104,6 +104,17 @@ impl Gate<'_> {
         let mut i = 0;
         while i < parks.len() {
             if !parked(p, &parks[i]) {
+                // the task that is not parked (its place in the port file's list) is the event's detail
+                if crate::package::lifecycle::trace_on() {
+                    crate::package::lifecycle::trace_emit(
+                        dkrt_lifecycle::Phase::Note,
+                        dkrt_lifecycle::Step::ParkWait,
+                        dkrt_abi::package::PackageId(0xff),
+                        0,
+                        E_BUSY,
+                        i as u32,
+                    );
+                }
                 return Err(E_BUSY);
             }
             i += 1;

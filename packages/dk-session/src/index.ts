@@ -14,6 +14,7 @@ export * from './fault.ts';
 export * from './host-directory.ts';
 export * from './loads.ts';
 export * from './modules-reply.ts';
+export * from './lifecycle-event.ts';
 export * from './runtime-log.ts';
 export * from './runtime-events.ts';
 export {

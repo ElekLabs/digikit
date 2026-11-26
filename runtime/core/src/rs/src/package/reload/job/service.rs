@@ -11,7 +11,7 @@ impl Job {
         if r == OK {
             self.torn = true;
             self.end(o, OK, true);
-        } else if r == E_BUSY && !self.timed_out(o) {
+        } else if r == E_BUSY && !self.busy(o) {
             // nothing changed, or a restore waits: the call runs again on a later pass
         } else {
             self.torn = !o.abort(self.rec);

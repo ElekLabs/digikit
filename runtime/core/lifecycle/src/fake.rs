@@ -5,7 +5,8 @@
 //! - `probe`: [`Probe`] and [`Call`], the shared call log and fault list.
 //! - `placer`, `linker`, `host`, `installer`: [`FakePlacer`], [`FakeLinker`], [`FakeHost`], [`FakeInstaller`].
 //! - `manifest`: [`Pkg`], a package described in a line, and [`FakeManifest`], the header tables built from them.
-//! - `world`: [`manager`], a [`PackageManager`](crate::PackageManager) over all of it.
+//! - `trace`: [`RecordingTrace`], a [`Trace`](crate::Trace) that keeps its events.
+//! - `world`: [`manager`] and [`traced_manager`], a [`PackageManager`](crate::PackageManager) over all of it.
 
 mod host;
 mod installer;
@@ -13,6 +14,7 @@ mod linker;
 mod manifest;
 mod placer;
 mod probe;
+mod trace;
 mod world;
 
 pub use host::FakeHost;
@@ -21,4 +23,5 @@ pub use linker::FakeLinker;
 pub use manifest::{FakeManifest, Pkg};
 pub use placer::FakePlacer;
 pub use probe::{Call, Probe};
-pub use world::{manager, FakeManager};
+pub use trace::{Event, RecordingTrace};
+pub use world::{manager, traced_manager, FakeManager, TracedManager};

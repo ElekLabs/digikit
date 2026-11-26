@@ -79,6 +79,7 @@ KINDS: dict[int, tuple[str, tuple[str, str, str, str, str]]] = {
     63: ("PROJECT_MODULE", ("slot", "what", "status", "index", "id_hash")),
     64: ("VIEW_CHANGED", ("old_view", "view", "old_class", "class", "generation")),
     65: ("VALUE_CHANGED", ("scope", "key", "old", "new", "generation")),
+    66: ("LIFECYCLE", ("op", "name_hash", "info", "status", "detail")),
 }
 GUARD_KINDS: dict[int, str] = {1: "nonfinite", 2: "overlevel"}
 F_ERROR = 1

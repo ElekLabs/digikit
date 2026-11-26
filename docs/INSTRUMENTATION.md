@@ -580,6 +580,16 @@ a channel by calling `dk_sink_set(channel, sink)` (an import, runtime 0.7.1). Th
   sets a sink in `init` may still clear it in `fini` itself.
 - Cost with no sink: a producer tests one word per channel and calls nothing.
 
+## Lifecycle events
+
+The runtime logs each step of the package lifecycle as a `LIFECYCLE` event (kind 66), so a host can see where a boot, a live load, an unload or a reload is and where it hangs.
+
+- **What.** The package manager reaches the world through four seams (place and free, link and unbind, install and restore, and the calls into the package's own code). Each call is announced with a `begin` event before it runs and answered with an `end` event, carrying the status, after it returns (`runtime/core/lifecycle`, `Traced`). The live job adds a begin and an end for each of its steps (check, quiesce, unload, load, dsp), a `done` note with the job's result, a `busy_retry` note each time it asks a step again after `E_BUSY`, and the installer adds a `park_wait` note (detail: the place of the task that is not parked) when a hook write waits for a task. A `note` has no end. The words are `op, name_hash, info, status, detail`; the kind's comment in `sdk/sdk.toml` lists the steps and the layout of `info`. `op` groups the events of one boot, load, unload or reload; `name_hash` is the FNV-1a of the package's file name without the extension (`nameHash` in dk-session), which a record number is not (the next package takes the number).
+- **Gating.** Events are sent only while a log sink listens (the debug module sets one when it loads; `dlog::log_on`). Without one a producer pays that one test and builds no event. They are never kept in the runtime's small ring, so a boot without a debug module is unchanged, and a debug module that loads later does not see the earlier events (the boot's, before it started). They are not error events and have no level.
+- **Reading them.** In the workbench log and `dklog` they show as `LIFECYCLE` with the fields `op, hash, phase, step, kind, package, status, detail`. In a test, `events.untilLifecycle(file, step, phase)` waits for one (`file` is the path or the name; the helper hashes it).
+- **A hang** is a `begin` without its `end`: the last `LIFECYCLE` event of the log that is a begin names the step, the package and the operation that has not returned. A step that answers busy ends with `status` `E_BUSY` and is asked again by the caller, so a run of end events with `E_BUSY` and `busy_retry` notes is a wait, not a hang.
+- **Cost.** One more test of the log's sink word per seam call while nothing listens. With a sink, each call logs two events (32 bytes each, copied to the sink under the interrupt mask like any other event).
+
 ## `MACHINE_TYPE_EVICTED` of the machines service (E5d)
 
 Error event, arguments hash, type, why. The sticky map's own eviction logs it with why 0. The machines service logs it, once for each number until the number is parked again,

@@ -20,6 +20,8 @@ mod refusal;
 mod seams;
 mod state;
 mod steps;
+mod trace;
+mod traced;
 
 pub use dkrt_abi::package::PackageId;
 use dkrt_abi::REC_MAX;
@@ -41,3 +43,5 @@ pub use refusal::Refusal;
 pub use seams::{Linker, Manifest, PackageInstaller, Placer, ProviderHost};
 pub use state::State;
 pub use steps::{Steps, StepsIter};
+pub use trace::{NoTrace, Phase, Step, Trace};
+pub use traced::Traced;
