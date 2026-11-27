@@ -101,13 +101,20 @@ impl HookRecord {
         // SAFETY: as in `put_back`; the flags and bitmaps are cleared in the same masked section as they are read.
         let records = unsafe {
             let records = HookRecords {
-                slot_set: if core::ptr::read_volatile(core::ptr::addr_of!((*hooks).slot_flag)) != 0 {
-                    Some(core::ptr::read_volatile(core::ptr::addr_of!((*hooks).slot_val)))
+                slot_set: if core::ptr::read_volatile(core::ptr::addr_of!((*hooks).slot_flag)) != 0
+                {
+                    Some(core::ptr::read_volatile(core::ptr::addr_of!(
+                        (*hooks).slot_val
+                    )))
                 } else {
                     None
                 },
-                saved_slot: if core::ptr::read_volatile(core::ptr::addr_of!((*hooks).save_flag)) != 0 {
-                    Some(core::ptr::read_volatile(core::ptr::addr_of!((*hooks).save_slot)))
+                saved_slot: if core::ptr::read_volatile(core::ptr::addr_of!((*hooks).save_flag))
+                    != 0
+                {
+                    Some(core::ptr::read_volatile(core::ptr::addr_of!(
+                        (*hooks).save_slot
+                    )))
                 } else {
                     None
                 },

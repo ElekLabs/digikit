@@ -14,7 +14,6 @@ import {
   slotFile,
   type ProtocolRun,
 } from '@digi/regression/runtime/project-kit.ts';
-import { word } from '@digi/regression/runtime/guest-access.ts';
 import { bootReloads } from '@digi/regression/runtime/guest-mailbox.ts';
 import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 

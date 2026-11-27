@@ -212,7 +212,11 @@ pub mod host {
     pub(super) mod call {
         use super::{with, SAMPLES};
 
-        pub(in super::super) unsafe fn set(_entry: u32, wave: u32, samples: &[i16; SAMPLES]) -> i32 {
+        pub(in super::super) unsafe fn set(
+            _entry: u32,
+            wave: u32,
+            samples: &[i16; SAMPLES],
+        ) -> i32 {
             with(|s| s.set(wave, samples))
         }
 

@@ -14,7 +14,9 @@ mod writer;
 pub(super) use reader::CarryIn;
 pub(super) use writer::CarryOut;
 
-use super::{BoundProject, Env, HookRecord, ModuleRestore, Pending, ProjectService, Stage, StoreJob};
+use super::{
+    BoundProject, Env, HookRecord, ModuleRestore, Pending, ProjectService, Stage, StoreJob,
+};
 use crate::dkp::Ignore;
 use dkrt_sdk::logk;
 
@@ -34,7 +36,13 @@ impl ProjectService {
     }
 
     /// Write the state and the hooks' record `hooks` into `out` (at least `EXPORT_MAX`): the count written.
-    pub fn export_state<E: Env + ?Sized>(&self, env: &E, now: u32, hooks: &HookRecord, out: &mut [u8]) -> usize {
+    pub fn export_state<E: Env + ?Sized>(
+        &self,
+        env: &E,
+        now: u32,
+        hooks: &HookRecord,
+        out: &mut [u8],
+    ) -> usize {
         let hooks = hooks.read(env);
         let mut w = CarryOut::new(out);
         self.bound.export(now, &mut w);
