@@ -48,8 +48,7 @@ export function wireModuleQueries(
           { withinMs: CALL_WITHIN_MS, intervalMs: 30, message: 'Waiting for a module query' },
         );
       } catch (e) {
-        if (e instanceof PollTimeout)
-          throw new DkError({ error: e.message, kind: 'timeout' });
+        if (e instanceof PollTimeout) throw new DkError({ error: e.message, kind: 'timeout' });
         throw e;
       }
       if (bytes.length < 9 || bytes[0] !== 0 || bytes.length - 9 > QUERY_REPLY_MAX)

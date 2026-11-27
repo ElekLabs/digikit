@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DkError, wireModuleQueries, type DkSession, type ModuleQueryEndpoint, type RawQueryReply } from '@digi/dk-session';
+import {
+  DkError,
+  wireModuleQueries,
+  type DkSession,
+  type ModuleQueryEndpoint,
+  type RawQueryReply,
+} from '@digi/dk-session';
 import { deviceQueryChannel } from '../src/module-ui/device-queries.ts';
 
 const reply = (runtimeStatus: number, handlerResult = 0, bytes: number[] = []): RawQueryReply => ({
