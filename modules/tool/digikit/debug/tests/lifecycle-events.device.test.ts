@@ -1,7 +1,9 @@
 import { LIFECYCLE_STEPS } from '@digi/dk-session';
 import { expect } from 'vitest';
-import { installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { installWithDebug } from '@digi/regression/runtime/debug-install.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 
 /**
  * The runtime logs the steps of a live module load as LIFECYCLE events (docs/INSTRUMENTATION.md "Lifecycle events"): with the debug module loaded, the load job's check and load
