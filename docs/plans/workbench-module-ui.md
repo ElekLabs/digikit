@@ -98,13 +98,17 @@ static inline uint8_t settings_mode(dk_settings *s);   /* SETTINGS_MODE_SOFT, ..
 
 ### Cost
 
-| Item | Expected | Check |
+Measured on the merge of origin/main (e154c975a) with this branch; `patchkit pack` for both devices (the sizes are equal on DT2 and DN2).
+
+| Item | Measured | Check |
 | --- | --- | --- |
-| `.dkm` size | Descriptor in read-only data: 4-7 bytes per field plus id and label, about 10 more for an integer, the labels of a choice; at most 512. Getters are inline: no new imports, only used getters cost code. | `.dkm` size of settings-a and Boot screen before and after |
-| Runtime code | One-time checks for the new types, about 0.5-1 KB | runtime object size before and after |
-| Runtime RAM | No change: the registry already reserves a 512-byte descriptor and a field index per module slot (8 slots) | static size of `REGISTRY` |
+| `.dkm` size | settings-a 1268 -> 1520 bytes (image 564 -> 736, reloc 320 -> 360, import 192 -> 224, bss 136 unchanged). Boot screen 6020 -> 6020 bytes (no change: it stays a version 1 descriptor). Under the limit of 512 for the descriptor. | `.dkm` size of settings-a and Boot screen before and after |
+| Runtime code | Package `.text` 196424 -> 198420 bytes (+1996, about 2 KB; above the 0.5-1 KB estimate: three new types with their checks, the cursor and the getter job) | runtime object size before and after |
+| Runtime RAM | No change: `size_of::<Registry>()` is 16656 and `size_of::<Descriptor>()` 1092 on both sides (pinned by `typed_kinds_do_not_grow_the_registry`) | static size of `REGISTRY` |
 | CPU | None while Workbench is idle (the tick returns at an empty queue); one request per UI pass while it talks. Module reads cost the same as today. | none |
 | Page code | None on the device | none |
+
+settings-a grew by its three new settings and the settings getter call (one more import).
 
 ## Boot screen
 
