@@ -7,8 +7,10 @@
 #define WAVES 8u
 #define FIRST 7u
 
-const uint32_t lfo_table_info[LFO_INFO_WORDS] = {LFO_INFO_MAGIC, LFO_INFO_VERSION, FIRST, WAVES, LFO_SAMPLES, 0, 0};
-const uint32_t lfo_wave_fn[WAVES] = {0xa000, 0xa010, 0xa020, 0xa030, 0xa040, 0xa050, 0xa060, 0xa070};
+const uint32_t lfo_table_info[LFO_INFO_WORDS] = {
+    LFO_INFO_MAGIC, LFO_INFO_VERSION, FIRST, WAVES, LFO_SAMPLES, 0, 0};
+const uint32_t lfo_wave_fn[WAVES] = {0xa000, 0xa010, 0xa020, 0xa030,
+                                     0xa040, 0xa050, 0xa060, 0xa070};
 lfo_cell lfo_wave_cells[WAVES * LFO_SAMPLES];
 uint32_t lfo_fn_table[7 + WAVES];
 
@@ -48,7 +50,8 @@ static int failed;
 static void reset(void)
 {
     for (uint32_t i = 0; i < 7 + WAVES; i++)
-        lfo_fn_table[i] = i < 7 ? 0x4000u + 0x10u * i : 0x4010u; /* the stock entries, then the sine's (slot 1) */
+        lfo_fn_table[i] =
+            i < 7 ? 0x4000u + 0x10u * i : 0x4010u; /* the stock entries, then the sine's (slot 1) */
     memset(lfo_wave_cells, 0, sizeof lfo_wave_cells);
     depth = masks = restores = 0;
 }
@@ -103,7 +106,8 @@ int main(void)
 
     /* the first and the last wave */
     CHECK(lfo_table_set(FIRST, s) == 0 && lfo_fn_table[FIRST] == lfo_wave_fn[0]);
-    CHECK(lfo_table_set(FIRST + WAVES - 1, s) == 0 && lfo_fn_table[FIRST + WAVES - 1] == lfo_wave_fn[WAVES - 1]);
+    CHECK(lfo_table_set(FIRST + WAVES - 1, s) == 0 &&
+          lfo_fn_table[FIRST + WAVES - 1] == lfo_wave_fn[WAVES - 1]);
 
     /* clear: the entry is the sine's, in one mask; the cells stay (no reader reaches them) */
     masks = restores = 0;
@@ -124,7 +128,8 @@ int main(void)
         CHECK(lfo_table_set(outside[i], s) == -1);
         lfo_table_clear(outside[i]);
         CHECK(masks == 0 && restores == 0);
-        CHECK(memcmp(fn, lfo_fn_table, sizeof fn) == 0 && memcmp(cells, lfo_wave_cells, sizeof cells) == 0);
+        CHECK(memcmp(fn, lfo_fn_table, sizeof fn) == 0 &&
+              memcmp(cells, lfo_wave_cells, sizeof cells) == 0);
     }
 
     if (failed)

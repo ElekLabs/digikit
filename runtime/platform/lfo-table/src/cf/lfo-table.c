@@ -12,8 +12,10 @@
 extern const uint32_t lfo_table_info[]; /* lfo-wave.inc */
 extern const uint32_t lfo_wave_fn[];    /* lfo-wave.inc: the stub of added wave k */
 extern lfo_cell lfo_wave_cells[];       /* lfo-wave.inc (.bss): N x 32 cells */
-extern uint32_t lfo_fn_table[];         /* the copy of the wave function table (section lfo_fn): 7 stock entries, then N */
-extern uint32_t lfo_irq_mask(void);     /* lfo-wave.inc: raises the interrupt level to 7 and returns the old status register */
+extern uint32_t lfo_fn_table
+    []; /* the copy of the wave function table (section lfo_fn): 7 stock entries, then N */
+extern uint32_t lfo_irq_mask(
+    void); /* lfo-wave.inc: raises the interrupt level to 7 and returns the old status register */
 extern void lfo_irq_restore(uint32_t sr);
 
 int32_t lfo_table_set(uint32_t wave, const int16_t *samples)
