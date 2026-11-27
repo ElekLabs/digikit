@@ -1,71 +1,110 @@
-.pm-page {
+/* The Project Manager page. It borrows the Transfer page's classes (rows, rtag, empty, h3, h4, act) by wearing `transfer-page`; only the
+   layout of the two panes and the detail view are its own. */
+.transfer-page.pm-page {
+  flex: none;
   display: grid;
-  grid-template-columns: minmax(14rem, 20rem) 1fr;
-  gap: 1.25rem;
-  margin-top: 1rem;
+  grid-template-columns: minmax(14rem, 22rem) 1fr;
   align-items: start;
+  gap: 0;
+  margin: 0.75rem -1.25rem 0;
+  padding: 0;
+  background: none;
+  overflow: visible;
+  min-height: 24rem;
 }
 .pm-list,
-.pm-details {
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  border-radius: var(--r-s);
-  padding: 0.5rem;
+.pm-details,
+.pm-hint {
+  padding: 16px 20px 0;
 }
-.pm-list ul,
-.pm-modules {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.pm-list {
+  align-self: stretch;
+  border-right: 1px solid var(--line);
+}
+.pm-page .rows .rtag {
+  max-width: none;
+  overflow: visible;
+  white-space: nowrap;
 }
 .pm-project {
-  display: flex;
-  gap: 0.6rem;
-  align-items: baseline;
-  width: 100%;
-  padding: 0.4rem 0.6rem;
-  font: inherit;
-  text-align: left;
-  color: var(--ink);
-  background: none;
-  border: 0;
-  border-radius: var(--r-s);
   cursor: pointer;
 }
-.pm-project.on {
-  background: var(--surface);
-  outline: 1px solid var(--line-2);
+.pm-page .rows li {
+  cursor: pointer;
 }
-.pm-title {
-  font-family: var(--mono, monospace);
-  white-space: pre;
+.pm-details .rows li {
+  cursor: default;
 }
-.pm-mark {
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-.pm-note {
-  margin-left: auto;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-.pm-modules li {
+.pm-heading {
   display: flex;
-  gap: 1rem;
-  padding: 0.25rem 0;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 18px;
+  font-size: 16px;
 }
-.pm-details dl {
+.pm-number {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--action);
+}
+.pm-facts {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 0.25rem 1rem;
+  gap: 6px 24px;
+  margin: 0 0 16px;
 }
-.pm-details dt,
-.pm-hint {
-  color: var(--muted);
+.pm-facts dt {
+  color: var(--ink-3);
+}
+.pm-facts dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
 }
 .pm-error {
   color: var(--status-err, inherit);
 }
 .pm-more {
-  margin-top: 0.5rem;
+  margin-top: 10px;
+}
+.pm-skeleton {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  max-width: 28rem;
+}
+.pm-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.pm-bar {
+  height: 14px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  animation: pm-pulse 1.2s ease-in-out infinite alternate;
+}
+.pm-bar.big {
+  height: 28px;
+  width: 55%;
+}
+.pm-bar.short {
+  width: 40%;
+}
+@keyframes pm-pulse {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-bar {
+    animation: none;
+  }
 }

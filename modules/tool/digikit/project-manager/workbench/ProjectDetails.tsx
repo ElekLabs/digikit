@@ -54,7 +54,13 @@ export default function ProjectDetails(props: { client: ModuleClient; slot: numb
     <section class="pm-details" aria-label="Project details">
       <Switch>
         <Match when={shown().state === 'loading'}>
-          <p>Loading…</p>
+          <div class="pm-skeleton" role="status">
+            <span class="pm-sr">Loading…</span>
+            <span class="pm-bar big" />
+            <span class="pm-bar" />
+            <span class="pm-bar" />
+            <span class="pm-bar short" />
+          </div>
         </Match>
         <Match when={failure()}>
           {(text) => (
@@ -64,31 +70,36 @@ export default function ProjectDetails(props: { client: ModuleClient; slot: numb
           )}
         </Match>
         <Match when={shown().state === 'missing'}>
-          <p>The device has no data for project {slotNumber(props.slot)}.</p>
+          <p class="empty">The device has no data for project {slotNumber(props.slot)}.</p>
         </Match>
         <Match when={found()}>
           {(reply) => (
             <>
-              <h3>{projectTitle(reply().slot, reply().name)}</h3>
-              <dl>
-                <dt>Number</dt>
+              <h2 class="pm-heading">
+                <span class="pm-number">{slotNumber(reply().slot)}</span>
+                <span>{reply().name || 'no name'}</span>
+              </h2>
+              <dl class="pm-facts">
+                <dt>Slot</dt>
                 <dd>{slotNumber(reply().slot)}</dd>
-                <dt>Name</dt>
-                <dd>{reply().name || 'no name'}</dd>
                 <dt>Write counter</dt>
                 <dd>{reply().counter}</dd>
                 <dt>Save stamp</dt>
                 <dd>{hex32(reply().stamp)}</dd>
               </dl>
               <h4>Modules</h4>
-              <Show when={reply().modules.length} fallback={<p>No modules.</p>}>
-                <ul class="pm-modules">
+              <Show when={reply().modules.length} fallback={<p class="empty">No modules.</p>}>
+                <ul class="rows">
                   <For each={reply().modules}>
                     {(module) => (
                       <li>
-                        <span class="pm-title">{module.id}</span>
-                        <span class="pm-note">{module.loaded ? 'loaded' : 'not loaded'}</span>
-                        <span class="pm-note">
+                        <span class="name">
+                          <span class="nm">{module.id}</span>
+                          <span class="rtag" classList={{ ok: module.loaded }}>
+                            {module.loaded ? 'loaded' : 'not loaded'}
+                          </span>
+                        </span>
+                        <span class="size">
                           {module.settings} {module.settings === 1 ? 'setting' : 'settings'}
                         </span>
                       </li>

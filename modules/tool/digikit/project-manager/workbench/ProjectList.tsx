@@ -39,39 +39,45 @@ export default function ProjectList(props: {
 
   return (
     <section class="pm-list" aria-label="Projects">
-      <ul>
-        <For each={items()}>
-          {(item) => (
-            <li>
-              <button
-                type="button"
-                class="pm-project"
-                classList={{ on: props.selected === item.slot }}
-                aria-pressed={props.selected === item.slot}
-                onClick={() => props.onSelect(item.slot)}
-              >
-                <span class="pm-title">{projectTitle(item.slot, item.name)}</span>
-                <Show when={item.current}>
-                  <span class="pm-mark">current</span>
-                </Show>
-                <Show when={item.dataUnknown} fallback={<Show when={!item.hasData}><span class="pm-note">no digikit data</span></Show>}>
-                  <span class="pm-note">…</span>
-                </Show>
-              </button>
-            </li>
-          )}
-        </For>
-      </ul>
+      <h3>Projects</h3>
+      <Show when={items().length}>
+        <ul class="rows">
+          <For each={items()}>
+            {(item) => (
+              <li classList={{ sel: props.selected === item.slot }} onClick={() => props.onSelect(item.slot)}>
+                <span class="name">
+                  <button type="button" class="nm pm-project" aria-pressed={props.selected === item.slot}>
+                    {projectTitle(item.slot, item.name)}
+                  </button>
+                  <Show when={item.current}>
+                    <span class="rtag ok">current</span>
+                  </Show>
+                  <Show
+                    when={item.dataUnknown}
+                    fallback={
+                      <Show when={!item.hasData}>
+                        <span class="rtag">no digikit data</span>
+                      </Show>
+                    }
+                  >
+                    <span class="rtag">…</span>
+                  </Show>
+                </span>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
       <Show when={error()}>
         <p class="pm-error" role="alert">
           {error()}{' '}
-          <button type="button" class="btn" onClick={() => void load(next())} disabled={busy()}>
+          <button type="button" class="mini" onClick={() => void load(next())} disabled={busy()}>
             Try again
           </button>
         </p>
       </Show>
       <Show when={!error() && next() > 0}>
-        <button type="button" class="btn pm-more" onClick={() => void load(next())} disabled={busy()}>
+        <button type="button" class="act small pm-more" onClick={() => void load(next())} disabled={busy()}>
           More projects
         </button>
       </Show>

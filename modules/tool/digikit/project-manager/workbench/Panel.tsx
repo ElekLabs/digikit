@@ -13,9 +13,9 @@ export default function Panel(props: ModulePageProps) {
     return slot === undefined ? undefined : { slot };
   };
   return (
-    <div class="pm-page">
+    <div class="transfer-page pm-page">
       <ProjectList client={props.client} selected={selected()} onSelect={setSelected} />
-      <Show when={chosen()} fallback={<p class="pm-hint">Select a project to see its details.</p>}>
+      <Show when={chosen()} fallback={<p class="empty pm-hint">Select a project to see its details.</p>}>
         {(picked) => <ProjectDetails client={props.client} slot={picked().slot} />}
       </Show>
     </div>

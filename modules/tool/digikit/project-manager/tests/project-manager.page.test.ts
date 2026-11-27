@@ -20,7 +20,7 @@ function open(handlers: Handlers | MemoryQueryService) {
   const host = document.createElement('div');
   document.body.append(host);
   const dispose = render(() => createComponent(page.Page, { client: createModuleClient(channel) }), host);
-  const rows = () => [...host.querySelectorAll<HTMLButtonElement>('.pm-project')];
+  const rows = () => [...host.querySelectorAll<HTMLElement>('.pm-list .rows li')];
   const select = (text: string) =>
     rows()
       .find((row) => row.textContent?.includes(text))
