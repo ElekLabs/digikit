@@ -177,4 +177,19 @@ describe('set loading and check', () => {
     expect(report.warnings.some((w) => w.id === 'a/short' && /catalogue/.test(w.text))).toBe(true);
     expect(report.missingV1).toEqual(['a/gone']);
   });
+
+  it('reports a value glyph with a NaN frame count as an error', async () => {
+    const dir = makeSet({
+      'a/nan.glyph.mjs': "export default { size: 'small', range: 'unipolar', frames: NaN, draw(p) { p.px(0, 0); } };",
+    });
+    const report = checkSet(await loadSet(dir));
+    expect(report.errors.some((e) => e.id === 'a/nan' && /frame count/.test(e.text))).toBe(true);
+  });
+
+  it('reports a set directory without set.toml as a set-level error', async () => {
+    const dir = makeSet({});
+    rmSync(path.join(dir, 'set.toml'));
+    const report = checkSet(await loadSet(dir));
+    expect(report.errors.some((e) => e.id === '(set)' && /set\.toml/.test(e.text))).toBe(true);
+  });
 });

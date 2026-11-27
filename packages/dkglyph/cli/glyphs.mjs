@@ -13,11 +13,16 @@ import { checkSet, loadSet, setJson, sheetPng } from '../src/index.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const usage =
-  'usage: node packages/dkglyph/cli/glyphs.mjs check [SET] | sheet [SET] [-o PNG] | dev [SET] [--no-open] [--port N]';
+  'usage: node packages/dkglyph/cli/glyphs.mjs check [SET] | sheet [SET] [-o PNG] | json [SET] | dev [SET] [--no-open] [--port N]';
 
 function fail(message) {
   console.error(`error: ${message}`);
   process.exit(1);
+}
+
+function usageError(message) {
+  console.error(`error: ${message}\n${usage}`);
+  process.exit(2);
 }
 
 function parseArgs(argv) {
@@ -26,9 +31,15 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--no-open') flags.open = false;
-    else if (a === '--port') flags.port = Number(argv[++i]);
-    else if (a === '-o') flags.out = argv[++i];
-    else if (a.startsWith('-')) fail(`unknown option ${a}\n${usage}`);
+    else if (a === '--port') {
+      const v = argv[++i];
+      if (v === undefined || !/^\d+$/.test(v)) usageError('--port needs an integer');
+      flags.port = Number(v);
+    } else if (a === '-o') {
+      const v = argv[++i];
+      if (v === undefined) usageError('-o needs a file name');
+      flags.out = v;
+    } else if (a.startsWith('-')) fail(`unknown option ${a}\n${usage}`);
     else positional.push(a);
   }
   return { flags, set: path.resolve(positional[0] ?? path.join(root, 'sdk/glyphs/digikit')) };
@@ -102,13 +113,24 @@ async function dev(dir, flags) {
     });
   let cached;
   let pending;
+  let generation = 0;
+  const startBuild = () => {
+    const started = generation;
+    const p = build().then((body) => {
+      if (started === generation) {
+        cached = body;
+        pending = undefined;
+        return body;
+      }
+      // An edit arrived during the build: the result is stale, build again for the current generation.
+      pending = startBuild();
+      return pending;
+    });
+    return p;
+  };
   const getBody = () => {
     if (cached !== undefined) return Promise.resolve(cached);
-    pending ??= build().then((body) => {
-      cached = body;
-      pending = undefined;
-      return body;
-    });
+    pending ??= startBuild();
     return pending;
   };
   const plugin = {
@@ -127,6 +149,7 @@ async function dev(dir, flags) {
         clearTimeout(timer);
         timer = setTimeout(() => {
           console.log(`changed: ${name ?? dir}`);
+          generation += 1;
           cached = undefined;
           server.ws.send({ type: 'custom', event: 'glyphs:update', data: {} });
         }, 50);

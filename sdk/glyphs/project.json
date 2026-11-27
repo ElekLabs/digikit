@@ -6,7 +6,13 @@
     "check": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/packages/dkglyph/src/**/*", "{workspaceRoot}/packages/dkglyph/cli/**/*"],
+      "inputs": [
+        "{projectRoot}/**/*",
+        "{workspaceRoot}/packages/dkglyph/src/**/*",
+        "{workspaceRoot}/packages/dkglyph/cli/**/*",
+        "{workspaceRoot}/packages/dkglyph/package.json",
+        { "externalDependencies": ["smol-toml", "@napi-rs/canvas"] }
+      ],
       "outputs": [],
       "options": {
         "command": "node packages/dkglyph/cli/glyphs.mjs check sdk/glyphs/digikit",

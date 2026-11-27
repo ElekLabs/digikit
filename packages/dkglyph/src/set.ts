@@ -37,15 +37,18 @@ export interface LoadedSet {
   margins: Readonly<Record<string, number>>;
   catalogue: CatalogueEntry[];
   glyphs: LoadedGlyph[];
+  /** set-level problems (set.toml, sizes, margins, catalogue) that check reports as errors */
+  errors: string[];
 }
 
 const SUFFIX = '.glyph.mjs';
 
-function readToml(file: string): Record<string, unknown> {
+/** The parsed file, or undefined when it does not exist. */
+function readToml(file: string): Record<string, unknown> | undefined {
   try {
     return parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw new Error(`${path.basename(file)}: ${(e as Error).message}`);
   }
 }
@@ -53,7 +56,7 @@ function readToml(file: string): Record<string, unknown> {
 function glyphFiles(dir: string, rel = ''): string[] {
   const out: string[] = [];
   for (const e of readdirSync(path.join(dir, rel), { withFileTypes: true }).sort((a, b) =>
-    a.name.localeCompare(b.name),
+    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
   )) {
     const r = rel ? `${rel}/${e.name}` : e.name;
     if (e.isDirectory()) out.push(...glyphFiles(dir, r));
@@ -89,20 +92,33 @@ async function loadGlyph(dir: string, rel: string, sizes: SizeClasses): Promise<
 /** Load a set directory. A broken glyph file becomes an error entry; the rest of the set loads. */
 export async function loadSet(dir: string): Promise<LoadedSet> {
   const abs = path.resolve(dir);
-  const meta = readToml(path.join(abs, 'set.toml'));
+  const errors: string[] = [];
+  const metaFile = readToml(path.join(abs, 'set.toml'));
+  if (!metaFile) errors.push('set.toml is missing');
+  const meta = metaFile ?? {};
+  const posInt = (n: unknown) => typeof n === 'number' && Number.isInteger(n) && n >= 1;
   const sizes: Record<string, readonly [number, number]> = {};
   for (const [k, v] of Object.entries((meta.sizes as Record<string, unknown>) ?? {}))
-    if (Array.isArray(v) && v.length === 2) sizes[k] = [Number(v[0]), Number(v[1])];
+    if (Array.isArray(v) && v.length === 2 && posInt(v[0]) && posInt(v[1])) sizes[k] = [v[0] as number, v[1] as number];
+    else errors.push(`set.toml: [sizes] ${k} must be [w, h] with positive integers`);
   const margins: Record<string, number> = {};
   for (const [k, v] of Object.entries((meta.margins as Record<string, unknown>) ?? {}))
-    if (Number.isInteger(Number(v)) && Number(v) >= 0) margins[k] = Number(v);
-  const cat = readToml(path.join(abs, 'catalogue.toml'));
-  const catalogue = ((cat.glyph as Array<Record<string, unknown>>) ?? []).map((g) => ({
-    id: String(g.id),
-    group: String(g.group ?? String(g.id).split('/')[0]),
-    v1: g.v1 === true,
-    note: String(g.note ?? ''),
-  }));
+    if (typeof v === 'number' && Number.isInteger(v) && v >= 0) margins[k] = v;
+    else errors.push(`set.toml: [margins] ${k} must be a non-negative integer`);
+  const cat = readToml(path.join(abs, 'catalogue.toml')) ?? {};
+  const catalogue: CatalogueEntry[] = [];
+  ((cat.glyph as Array<Record<string, unknown>>) ?? []).forEach((g, i) => {
+    if (typeof g.id !== 'string') {
+      errors.push(`catalogue.toml: entry ${i + 1} has no string id`);
+      return;
+    }
+    catalogue.push({
+      id: g.id,
+      group: String(g.group ?? g.id.split('/')[0]),
+      v1: g.v1 === true,
+      note: String(g.note ?? ''),
+    });
+  });
   const glyphs: LoadedGlyph[] = [];
   for (const rel of glyphFiles(abs)) glyphs.push(await loadGlyph(abs, rel, sizes));
   return {
@@ -114,5 +130,6 @@ export async function loadSet(dir: string): Promise<LoadedSet> {
     margins,
     catalogue,
     glyphs,
+    errors,
   };
 }

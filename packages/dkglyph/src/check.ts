@@ -29,8 +29,8 @@ function glyphMessages(
   const r = g.rendered;
   for (const p of r.problems) err(p);
   if (r.clipped > 0) err(`${r.clipped} pixel${r.clipped === 1 ? '' : 's'} drawn outside the ${r.w}x${r.h} raster`);
-  if (r.kind === 'value' && (r.declaredFrames ?? 0) < 2)
-    err(`a value glyph needs at least 2 frames, has ${r.declaredFrames}`);
+  if (r.kind === 'value' && !(Number.isInteger(r.declaredFrames) && (r.declaredFrames ?? 0) >= 2))
+    err(`a value glyph needs an integer frame count of at least 2, has ${r.declaredFrames}`);
   const all = [...r.frames, ...(r.transitions ?? []).flatMap((t) => t.frames)];
   if (all.some((f) => f.count() === 0)) err('a frame is empty');
   const margin = typeof g.def.size === 'string' ? (margins[g.def.size] ?? 1) : 1;
@@ -50,9 +50,9 @@ function touchesMargin(f: Raster, m: number): boolean {
 export function checkSet(set: LoadedSet): CheckReport {
   const errors: Message[] = [];
   const warnings: Message[] = [];
+  for (const text of set.errors) errors.push({ id: '(set)', text });
   const seen = new Set<string>();
   for (const g of set.glyphs) {
-    if (seen.has(g.id)) errors.push({ id: g.id, text: 'duplicate glyph id' });
     seen.add(g.id);
     glyphMessages(g, set.margins, errors, warnings);
   }

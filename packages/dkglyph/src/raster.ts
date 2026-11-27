@@ -30,7 +30,7 @@ export class Raster {
   px(x: number, y: number, on: 0 | 1 | boolean = 1): this {
     const ix = Math.round(x);
     const iy = Math.round(y);
-    if (ix < 0 || iy < 0 || ix >= this.w || iy >= this.h) {
+    if (!Number.isFinite(ix) || !Number.isFinite(iy) || ix < 0 || iy < 0 || ix >= this.w || iy >= this.h) {
       this.#clipped += 1;
       return this;
     }

@@ -97,7 +97,8 @@ function renderStatic(def: StaticGlyphDef, w: number, h: number): RenderedGlyph 
 
 function renderValue(def: ValueGlyphDef, w: number, h: number): RenderedGlyph {
   const problems: string[] = [];
-  const n = Math.max(1, Math.floor(def.frames));
+  // an invalid count renders no frames; check reports it
+  const n = Number.isInteger(def.frames) && def.frames >= 1 ? def.frames : 0;
   const [lo, hi] = def.range === 'bipolar' ? [-1, 1] : [0, 1];
   const all: Raster[] = [];
   for (let i = 0; i < n; i += 1) {
@@ -141,10 +142,11 @@ function renderStates(def: StatesGlyphDef, w: number, h: number): RenderedGlyph 
     } else
       for (let from = 0; from < frames.length; from += 1)
         for (let to = 0; to < frames.length; to += 1) if (from !== to) wanted.push([from, to]);
+    const trFrames = Number.isInteger(tr.frames) && tr.frames >= 1 ? tr.frames : 0;
+    if (trFrames === 0) problems.push(`transition frames must be an integer of at least 1, has ${tr.frames}`);
     for (const [from, to] of wanted) {
       const list: Raster[] = [];
-      for (let k = 1; k <= tr.frames; k += 1)
-        list.push(drawOne(w, h, (p) => tr.draw(p, from, to, k / (tr.frames + 1))));
+      for (let k = 1; k <= trFrames; k += 1) list.push(drawOne(w, h, (p) => tr.draw(p, from, to, k / (trFrames + 1))));
       transitions.push({ from, to, frames: list });
     }
   }

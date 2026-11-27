@@ -131,7 +131,7 @@ description = "Boot screen authoring without a device: mise run bootscreen (no a
 
 ["glyphs"]
 run = "node packages/dkglyph/cli/glyphs.mjs"
-description = "Glyph authoring without a device: mise run glyphs -- check [SET] (errors, warnings, coverage) | -- sheet [SET] [-o PNG] | -- dev [SET] [--no-open] [--port N] (live preview); SET defaults to sdk/glyphs/digikit"
+description = "Glyph authoring without a device: mise run glyphs -- check [SET] (errors, warnings, coverage) | -- sheet [SET] [-o PNG] | -- json [SET] (built set as JSON) | -- dev [SET] [--no-open] [--port N] (live preview); SET defaults to sdk/glyphs/digikit"
 
 # --- scenarios (tests/scenarios/README.md) ---
 

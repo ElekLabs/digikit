@@ -36,6 +36,17 @@ export function renderDetail(root: HTMLElement, g: GlyphJson | undefined, s: Vie
       strip.append(c);
     }
     root.append(el('h2', {}, 'Frames'), strip);
+    if (g.kind === 'states' && g.states) {
+      for (const t of g.transitions ?? []) {
+        const row = el('div', { class: 'strip' });
+        for (const hex of [g.frames[t.from]!, ...t.frames, g.frames[t.to]!]) {
+          const c = canvasOf(g.w, g.h, 4);
+          draw(c, g, hex, s, 4);
+          row.append(c);
+        }
+        root.append(el('div', {}, `${g.states[t.from]} → ${g.states[t.to]}`), row);
+      }
+    }
   }
 
   if (g.kind === 'value' && g.valueMap) {

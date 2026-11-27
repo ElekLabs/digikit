@@ -44,7 +44,7 @@ function createApp(doc: Document) {
     const context = el('div', {});
     detail.replaceChildren(holder, context);
     renderDetail(holder, g, s);
-    renderContext(context, g);
+    renderContext(context, g, s.set ?? undefined);
     if (animated.length) raf = requestAnimationFrame(tick);
   };
 
