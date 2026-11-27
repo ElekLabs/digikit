@@ -25,6 +25,11 @@ fi
 
 git -C "$here" merge --ff-only --quiet "$base"
 
+# Merge driver for committed core objects (.gitattributes `merge=generated-object`): keep one side, objects-check
+# then demands a rebuild. The setting is in the shared repository config, so it covers every worktree.
+git -C "$here" config merge.generated-object.name "keep one side; objects-check forces a rebuild"
+git -C "$here" config merge.generated-object.driver true
+
 links=(
   out
   .venv
