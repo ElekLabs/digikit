@@ -1,0 +1,27 @@
+[module]
+id = "digikit/project-manager"
+version = "0.1.0"
+name = "Project manager"
+category = "tools"
+type = "service"
+author = "digikit"
+status = "experimental"
+summary = "Shows the current project and its save state in SETTINGS > PROJECT."
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = ["core/ui"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# A run-time module (`.dkm`), built from C. `init` adds the SETTINGS row PROJECT (core/ui); the screen calls dk_project_current and
+# dk_project_status, which make the project service a need of the module. The text logic in project_text.c has host tests (tests/logic.test.ts).
+[[object]]
+path = "build/project-manager.dko.json"
+sources = [
+  "src/c/project_manager.c",
+  "src/c/project_screen.c",
+  "src/c/project_text.c",
+]
+place = "cf.expansion"

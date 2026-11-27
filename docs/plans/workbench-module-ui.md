@@ -134,7 +134,10 @@ Uploading an animation leaves the saved choice alone. Save selects a file presen
 
 `modules/tool/digikit/project-manager` is a content module of kind `tool`, like track-manager.
 
-- Device side: a SETTINGS row PROJECT with the current project's number, name and status. It calls `dk_project_current` and `dk_project_status`. These imports make the project service a hard need, so Transfer uploads the service with the module and the boot plan loads it.
+- Device side: a SETTINGS row PROJECT with the current project's number, name and status. Screen text (read-only, `[NO]` closes; the screen reads the service each frame, so it follows a save):
+  - `NNN NAME`: slot + 1 in three digits, the firmware's name bytes without trailing spaces; `NO PROJECT` when there is no current project (then no other line).
+  - Line 2: `FILE IGNORED` (status bit 3), else `CARD BUSY - RETRYING` (bit 2), else `CHANGED - NOT SAVED` (bit 1), else `SAVED`.
+  - Line 4: `NO DIGIKIT DATA` when bit 0 (file loaded) is clear.
 - Services load only as hard needs of selected modules (`runtime/core/src/rs/src/package/loader/plan.rs` `find_providers`; the system package holds only the runtime and the DIGIKIT menu; Transfer's `serviceRefs` offers a service only for a module that needs it). On a user card the project service runs only while Project Manager, or another module that imports a project call, is loaded. Installing Project Manager turns on per-project settings for every module.
 - Workbench page: a list of all project slots by number and name, with a mark on the current project and on slots that carry digikit data. Selecting one shows its saved state (slot, name, save stamp, write counter), its module list with each module's state on the card (present, missing, hash differs), and the number of saved settings per module. The page is read-only: no delete, rename or load.
 
