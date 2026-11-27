@@ -203,7 +203,9 @@ export function dmaHoles(plan: RuntimePlan): [number, number][] {
   // The store listing's catalog reads (`storage_adapter.rs`: the Files calls of a service that lists the store) land by DMA in two private statics. They are
   // not exported, so the plan names them by their mangled path.
   const listing = (leaf: string, size: number) => {
-    const key = Object.keys(plan.symbols).find((k) => k.startsWith('core/runtime@') && new RegExp(`storage_adapter\\d+${leaf}$`).test(k));
+    const key = Object.keys(plan.symbols).find(
+      (k) => k.startsWith('core/runtime@') && new RegExp(`storage_adapter\\d+${leaf}$`).test(k),
+    );
     if (key !== undefined) holes.push([plan.symbols[key], size]);
   };
   listing('FP', 512);
