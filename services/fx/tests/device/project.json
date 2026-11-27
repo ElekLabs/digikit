@@ -34,40 +34,20 @@
         ]
       },
       {
-        "firmwareOnly": "signed FX page words and PCM gain through the firmware pages and the stock FX audio path; the page and row tables exist only in firmware memory",
+        "firmwareOnly": "the signed FX page words and the MIX endpoints through the firmware pages, the kit save and load and the project save and load reacting to the FX values and effect ids (kit objects of another pattern, Load Kit, project save menu), the storage record of the save hook, and the PCM of the stock FX audio path; the page and row tables exist only in firmware memory (the signed knob range, the page row and the reorder tables are host-tested: services/fx/tests/contract.rs)",
         "files": [
-          "fx-bipolar.device.test.ts"
+          "fx-kit.device.test.ts"
         ],
         "dsp": "sharc",
         "modules": [
           "test/dyn-fx-gain-bipolar",
+          "test/dyn-fx-gain",
           "test/sine",
           "core/services/machines",
           "core/services/fx"
         ],
         "sources": [
           "tools/patchkit/hook_ab.py"
-        ],
-        "plusdrive": true,
-        "incidental": [
-          {
-            "module": "core/services/machines",
-            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
-          }
-        ]
-      },
-      {
-        "firmwareOnly": "the firmware kit and project save and load reacting to the FX values and effect ids (kit objects, Load Kit, project save menu)",
-        "files": [
-          "fx-kit-persist.device.test.ts"
-        ],
-        "dsp": "sharc",
-        "modules": [
-          "test/dyn-fx-gain",
-          "test/dyn-fx-gain-b",
-          "test/sine",
-          "core/services/fx",
-          "core/services/machines"
         ],
         "plusdrive": true,
         "incidental": [
