@@ -290,6 +290,7 @@ mod tests {
         Module {
             manifest,
             objects: vec![],
+            payloads: vec![],
             alloc: Default::default(),
             digest: String::new(),
             dir: Default::default(),
@@ -445,6 +446,7 @@ mod tests {
         let obj = dsp_object(&["_foo_render", "_foo_note_on"], &[], &[], 0);
         let s = sections(&m, "test/m", "dn2", Some(&obj)).unwrap();
         let o = crate::dkm::Options {
+            payloads: vec![],
             name: "test/m".into(),
             version: 0x010203,
             trace: false,

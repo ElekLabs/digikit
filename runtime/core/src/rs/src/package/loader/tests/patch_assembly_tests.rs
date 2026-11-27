@@ -41,7 +41,7 @@ fn a_service_with_a_patch_installs_it_and_the_firmware_is_stock_after_the_unload
             let mut s = Session::new(&mut l as *mut _, at);
             let manifest = RtManifest::of(&mut s, 1);
             let (placer, linker, installers, host) = s.seams();
-            let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
+            let mut pm = PackageManager::new(manifest, placer, linker, installers, host, 50).unwrap();
             let (user, service, port) = (id(0), id(MAX_MODULES), id(MAX_MODULES + 1));
             crate::package::boot_idx::set(u32::MAX);
             assert_eq!(bytes_at(&l, site, 2), stock);
@@ -102,7 +102,7 @@ fn a_patch_site_that_is_not_stock_refuses_the_service_with_the_stock_status_and_
             let mut s = Session::new(&mut l as *mut _, at);
             let manifest = RtManifest::of(&mut s, 1);
             let (placer, linker, installers, host) = s.seams();
-            let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
+            let mut pm = PackageManager::new(manifest, placer, linker, installers, host, 50).unwrap();
             let report = pm.boot(&[id(0)]).unwrap();
             assert!(!report.brought_up().as_slice().contains(&id(MAX_MODULES)), "{}: the service is not up", dev.name);
             assert_eq!(refused_status(&report), [dkrt_sdk::E_HOOK_STOCK], "{}: the refusal says the site is not stock: {:?}", dev.name, report.refused().iter().map(|r| r.reason).collect::<Vec<_>>());
@@ -128,7 +128,7 @@ fn a_patch_declared_with_another_length_than_its_site_is_refused_and_leaves_the_
             let mut s = Session::new(&mut l as *mut _, at);
             let manifest = RtManifest::of(&mut s, 1);
             let (placer, linker, installers, host) = s.seams();
-            let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
+            let mut pm = PackageManager::new(manifest, placer, linker, installers, host, 50).unwrap();
             let report = pm.boot(&[id(0)]).unwrap();
             assert!(!report.brought_up().as_slice().contains(&id(MAX_MODULES)), "{}: the service is not up", dev.name);
             assert_eq!(refused_status(&report), [dkrt_sdk::E_FORMAT], "{}: {:?}", dev.name, report.refused().iter().map(|r| r.reason).collect::<Vec<_>>());

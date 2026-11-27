@@ -20,6 +20,7 @@ mod manager_assembly_tests;
 mod patch_assembly_tests;
 mod park_tests;
 mod seam_tests;
+mod payloads;
 mod state_reload_assembly_tests;
 mod check;
 mod commit;

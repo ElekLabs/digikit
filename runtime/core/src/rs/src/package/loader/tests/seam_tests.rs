@@ -363,7 +363,7 @@ fn the_manifest_holds_the_tables_of_the_modules_and_providers_and_the_apis_of_th
         assert!(m.resources(id(0)).is_empty() && m.wants(id(0)).is_empty() && m.core_resources().is_empty());
         // the graph the manager builds from it
         let (p, li, i, h) = s.seams();
-        let pm = PackageManager::new(m, p, li, i, h).unwrap();
+        let pm = PackageManager::new(m, p, li, i, h, 50).unwrap();
         assert!(pm.graph().node(id(0)).is_some() && pm.graph().node(id(MAX_MODULES + 1)).is_some());
     }
 }

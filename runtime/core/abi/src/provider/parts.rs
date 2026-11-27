@@ -1,6 +1,6 @@
 //! The optional parts of the service contract. Each one is a separate tagged table in the packed row (`row::PART_*`; the tables are in `tables/`); a service adopts
 //! only the parts it needs. In version 1 every callback is a method of exactly one part.
-use super::{Consumer, ConsumerId, Status, WordSink};
+use super::{Consumer, ConsumerId, Status, Step, WordSink};
 use crate::core_api::CoreApi;
 use crate::dsp::{DspSec, Job};
 use crate::service::{CheckCtx, Claim, ModuleCommitCtx, Problem, RowWrite, TableFault};
@@ -87,6 +87,38 @@ pub trait DspPart<C: CoreApi>: Sized {
     }
     /// The polled DSP diagnostics block, once for each poll that returned a full block.
     fn diag(&mut self, _core: &C, _words: &[u32; DIAG_WORDS]) {}
+}
+
+/// The bodies a module file carries for this service (the `PAYLOADS` entry of its header table; `[[object]] payload = "<service>.<kind>"` of its module.toml). The core checks the
+/// bounds and that the service is a hard need of the module, never reads a body, and keeps no table of kinds: the service owns them. `kind` is local to the service.
+///
+/// A module load runs: `check` before anything is placed (and in a reload's pre-check), then in the consumer's attach walk (`ProviderHost::attach`, after the records) `install` for
+/// each payload in table order until it answers `Done`; a consumer's detach walk runs `retire` before `Provider::detach`.
+pub trait Payloads<C: CoreApi>: Sized {
+    /// Would `install` take this payload? Writes nothing and holds nothing: the body is the file's bytes, valid for this call only. The default accepts.
+    fn check(
+        &mut self,
+        _core: &C,
+        _kind: u16,
+        _body: &[u8],
+        _consumer: ConsumerId,
+    ) -> Result<(), Status> {
+        Ok(())
+    }
+
+    /// Install one payload for `consumer`. `Ok(Step::Pending)` means call again on a later UI pass; the service keeps where it stands. The body is `Some` only on the first call
+    /// for a payload: the staging buffer it points into is reused after that call returns, so copy what is needed during it. An `Err` refuses the consumer: the host undoes
+    /// the walk (`retire` for the consumer).
+    fn install(
+        &mut self,
+        core: &C,
+        kind: u16,
+        body: Option<&[u8]>,
+        consumer: ConsumerId,
+    ) -> Result<Step, Status>;
+
+    /// Give back everything installed for `who` (a consumer, or the service itself when it goes down). Idempotent. `Step::Pending` means call again on a later pass.
+    fn retire(&mut self, core: &C, who: ConsumerId) -> Step;
 }
 
 /// Work in the UI-loop tick; `phase` is one of `service::tick_phase`.

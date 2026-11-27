@@ -6,6 +6,7 @@ use crate::seams::{Linker, Manifest, PackageInstaller, Placer, ProviderHost};
 use crate::state::State;
 use crate::steps::Steps;
 use crate::PackageId;
+use dkrt_abi::provider::Step;
 use dkrt_sdk::E_BUSY;
 
 impl<M, P, L, I, H> PackageManager<M, P, L, I, H>
@@ -32,6 +33,7 @@ where
             todo: order,
             rebuild: Steps::new(),
             down: Steps::new(),
+            by_manager: false,
         });
         self.run_pending_take_down()
     }
@@ -71,6 +73,7 @@ where
             todo: order,
             rebuild: Steps::new(),
             down: Steps::new(),
+            by_manager: false,
         });
         self.run_pending_take_down()
     }
@@ -86,7 +89,7 @@ where
         Ok(())
     }
 
-    /// Takes down the packages left in the pending work, in order. A busy restore keeps the work for a retry; at the end of a reload the packages come
+    /// Takes down the packages left in the pending work, in order. A busy restore or a pending detach keeps the work for a retry; at the end of a reload the packages come
     /// back up.
     pub(super) fn run_pending_take_down(&mut self) -> Result<Report, LifecycleError> {
         let mut work = self
@@ -138,10 +141,14 @@ where
         };
         if self.progress.attached(p) {
             let services = self.attach_order(p);
-            self.host.detach(p, services.as_slice());
+            if self.host.detach(p, services.as_slice()) == Step::Pending {
+                // a service is not done giving back (a payload retire): the package stays attached and counted live, and a retry asks again
+                self.progress.set(p, State::Detaching);
+                return Err(LifecycleError::Busy { package: p });
+            }
         }
         self.progress.set_attached(p, false);
-        // nothing is public while its entries are restored; a retry of a busy restore has done it
+        // nothing is public while its entries are restored; a retry of a busy restore has done it (a package that waited in `Detaching` has not)
         if state >= State::Activated && state < State::RestorePending {
             self.host.deactivate(p);
         }
