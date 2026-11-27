@@ -50,7 +50,13 @@ impl CCodec<'_> {
         )
         .unwrap();
         for (i, m) in service.methods.iter().enumerate() {
-            writeln!(self.out, "    {{{}, {prefix}_call_{}}},", i + 1, m.handler).unwrap();
+            writeln!(
+                self.out,
+                "    {{{prefix}_call_{}, {}, {{0}}}},",
+                m.handler,
+                i + 1
+            )
+            .unwrap();
         }
         writeln!(self.out, "}};").unwrap();
     }

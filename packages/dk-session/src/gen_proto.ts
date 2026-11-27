@@ -6,6 +6,8 @@ export const READ_MAX = 768;
 export const PEEK_MAX = 512;
 export const MAX_REQUEST_WIRE = 40960;
 export const MAX_REPLY_WIRE = 1024;
+export const QUERY_REQUEST_MAX = 149;
+export const QUERY_REPLY_MAX = 870;
 
 /** The `.dkm` loader's format limits (`[limits.format]`). */
 export const DKM_HEADER = 160;

@@ -6,6 +6,8 @@ READ_MAX = 768
 PEEK_MAX = 512
 MAX_REQUEST_WIRE = 40960
 MAX_REPLY_WIRE = 1024
+QUERY_REQUEST_MAX = 149
+QUERY_REPLY_MAX = 870
 
 # the .dkm loader's format limits ([limits.format])
 DKM_HEADER = 160

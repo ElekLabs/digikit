@@ -610,15 +610,18 @@ int32_t pm_list(dk_module_ctx *ctx, const pm_ListRequest *request, pm_ListReply 
 ```
 
 The handler runs in the UI task. It fills `reply` (zeroed before the call) and returns 0, or a negative `DK_E_*` code that the page sees as
-a refusal. Call `dk_workbench_register_queries(ctx, dk_workbench_queries, DK_WORKBENCH_QUERY_COUNT)` in `init`, after `dk_workbench_register`; the function comes with runtime 0.13.5.
+a refusal (the handler's result, separate from the runtime's own status). Call `dk_workbench_register_queries(ctx, dk_workbench_queries, DK_WORKBENCH_QUERY_COUNT)` in `init`, after `dk_workbench_register`; the function comes with runtime 0.13.5.
 The generated call function decodes the request (`DK_E_FORMAT` when it is malformed, when a bound is broken, or when a singular message field
 occurs twice; unknown fields are skipped), calls the handler and encodes the reply into the runtime's buffer (`DK_E_TOO_BIG` when it does
 not fit). The device does not check strings for UTF-8: the page checks what it shows. The packer links the wire helpers
 (`sdk/src/wire/wire.c`) when the module calls them.
 
-Budgets, checked when patchkit generates the code: a request is at most 149 bytes encoded, a reply at most 855 bytes, and the request and
+Budgets, checked when patchkit generates the code: a request is at most 149 bytes encoded, a reply at most 870 bytes (`query_request_max` and `query_reply_max` in `sdk/sdk.toml`, the numbers the runtime enforces), and the request and
 reply structs together at most 1024 bytes (they are on the stack). Patchkit names the method and the sizes when a schema is over; lower a
 `max_len` or `max_count`.
+
+The device runs one query at a time for all modules: a call answers busy while another call is queued, running or its reply
+unread (an unread reply is dropped after 2 s), and the client asks again.
 
 Methods are only appended: the method number a call carries is the method's position in the `service`. `patchkit workbench-ts MODDIR --write`
 writes `workbench/gen/<name>_pb.js`, `<name>_pb.d.ts` (protobuf-es; needs `node`; no `protoc`) and `<name>.methods` (the names in order)

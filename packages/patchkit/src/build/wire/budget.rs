@@ -5,10 +5,10 @@ use super::c_codec::{max_sizes, struct_sizes};
 use super::schema::Schema;
 use crate::error::*;
 
-/// The command body is at most 160 bytes; the call verb's envelope takes 11 (verb, record, instance, request id, method).
-pub const REQUEST_MAX: u32 = 149;
-/// The reply budget of the call: the host command reply body (879 bytes) less the poll envelope.
-pub const REPLY_MAX: u32 = 855;
+/// The request bytes a call command carries after its envelope, and the reply bytes of the poll after its header: `[protocol.limits]` of
+/// `sdk/sdk.toml`, the numbers the runtime enforces.
+pub const REQUEST_MAX: u32 = dkrt_sdk::proto::QUERY_REQUEST_MAX as u32;
+pub const REPLY_MAX: u32 = dkrt_sdk::proto::QUERY_REPLY_MAX as u32;
 /// The request struct and the reply struct together, as the call function keeps them on the stack.
 pub const STACK_MAX: u32 = 1024;
 

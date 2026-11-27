@@ -280,16 +280,20 @@ struct ProtoLimits {
     peek_max: u32,
     max_request_wire: u32,
     max_reply_wire: u32,
+    query_request_max: u32,
+    query_reply_max: u32,
 }
 impl ProtoLimits {
     /// (generated name, value) in file order.
-    fn all(&self) -> [(&'static str, u32); 5] {
+    fn all(&self) -> [(&'static str, u32); 7] {
         [
             ("MAX_CHUNK", self.max_chunk),
             ("READ_MAX", self.read_max),
             ("PEEK_MAX", self.peek_max),
             ("MAX_REQUEST_WIRE", self.max_request_wire),
             ("MAX_REPLY_WIRE", self.max_reply_wire),
+            ("QUERY_REQUEST_MAX", self.query_request_max),
+            ("QUERY_REPLY_MAX", self.query_reply_max),
         ]
     }
 }

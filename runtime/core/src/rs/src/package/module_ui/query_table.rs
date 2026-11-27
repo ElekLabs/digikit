@@ -1,7 +1,8 @@
 //! The query table a loaded module registered: `count` entries of a method number and the module's call function. The runtime keeps
 //! the module's own table (no copy; it stays valid while the module is loaded) and reads it only on the UI task.
 
-use core::mem::align_of;
+use core::mem::size_of;
+use core::ptr::read_unaligned;
 
 /// At most this many methods per module.
 pub(super) const QUERIES_MAX: usize = 16;
@@ -9,12 +10,18 @@ pub(super) const QUERIES_MAX: usize = 16;
 /// The module's function for one method. `out_len` holds the room in `out` when the call starts and the reply length when it returns 0.
 pub(super) type CallFn = unsafe extern "C" fn(*mut u8, *const u8, u32, *mut u8, *mut u32) -> i32;
 
-/// One entry as the module's C code lays it out: `{ uint8_t method; int32_t (*call)(...); }`.
+/// One entry as `<dk/query.h>` lays it out: `{ call; uint8_t method; uint8_t reserved[3]; }`, 8 bytes in the module's code. The ColdFire C
+/// compiler aligns pointers to 2 bytes, so a table may start on any 2-byte boundary and entries are read unaligned.
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub(super) struct Query {
-    method: u8,
     call: Option<CallFn>,
+    method: u8,
+    reserved: [u8; 3],
 }
+
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(size_of::<Query>() == 8);
 
 #[derive(Clone, Copy)]
 pub(super) struct QueryTable {
@@ -26,13 +33,18 @@ pub(super) struct QueryTable {
 impl Query {
     pub(super) const fn new(method: u8, call: CallFn) -> Self {
         Self {
-            method,
             call: Some(call),
+            method,
+            reserved: [0; 3],
         }
     }
 
     pub(super) const fn without_function(method: u8) -> Self {
-        Self { method, call: None }
+        Self {
+            call: None,
+            method,
+            reserved: [0; 3],
+        }
     }
 }
 
@@ -42,12 +54,9 @@ impl QueryTable {
         count: 0,
     };
 
-    /// Check a module's table: 1 to `QUERIES_MAX` entries, an aligned pointer, every function set, methods strictly increasing from 1.
+    /// Check a module's table: 1 to `QUERIES_MAX` entries, a 2-byte aligned pointer, every function set, methods strictly increasing from 1.
     pub(super) unsafe fn parse(table: *const u8, count: u32) -> Option<Self> {
-        if table.is_null()
-            || table as usize % align_of::<Query>() != 0
-            || count == 0
-            || count as usize > QUERIES_MAX
+        if table.is_null() || table as usize % 2 != 0 || count == 0 || count as usize > QUERIES_MAX
         {
             return None;
         }
@@ -55,7 +64,7 @@ impl QueryTable {
         let mut previous = 0u8;
         let mut i = 0;
         while i < count as usize {
-            let entry = &*entries.add(i);
+            let entry = read_unaligned(entries.add(i));
             if entry.method <= previous || entry.call.is_none() {
                 return None;
             }
@@ -77,7 +86,7 @@ impl QueryTable {
         let mut i = 0;
         while i < self.count as usize {
             // SAFETY: `parse` checked the table, and `withdraw` drops it before the module's memory is released.
-            let entry = unsafe { &*self.entries.add(i) };
+            let entry = unsafe { read_unaligned(self.entries.add(i)) };
             if entry.method == method {
                 return entry.call;
             }

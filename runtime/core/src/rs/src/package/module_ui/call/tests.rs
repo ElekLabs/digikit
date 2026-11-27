@@ -1,5 +1,5 @@
 use super::super::*;
-use super::REQUEST_MAX;
+use super::{OUTCOME_BLOCKS, REQUEST_MAX};
 use dkrt_sdk::proto::{E_MODULE_UI_METHOD, E_MODULE_UI_TOO_BIG};
 
 /// Echo the request reversed; method 1.
@@ -43,18 +43,27 @@ fn table() -> &'static [query_table::Query; 3] {
     &TABLE
 }
 
+/// Give module `rec` settings and the three queries, published.
+fn enroll_module(reg: &mut Registry, rec: usize) {
+    reg.modules[rec].descriptor =
+        Descriptor::parse(b"test/m", b"\x01\x04Tool\x01\x01k\x04Name\x04\x00\x00").unwrap();
+    assert_eq!(reg.set_queries(rec, table().as_ptr() as *const u8, 3), OK);
+    reg.publish(rec);
+}
+
 /// A registry whose module 0 has settings and the three queries, published.
 fn registry() -> Registry {
     let mut reg = Registry::EMPTY;
-    reg.modules[0].descriptor =
-        Descriptor::parse(b"test/m", b"\x01\x04Tool\x01\x01k\x04Name\x04\x00\x00").unwrap();
-    assert_eq!(reg.set_queries(0, table().as_ptr() as *const u8, 3), OK);
-    reg.publish(0);
+    enroll_module(&mut reg, 0);
     reg
 }
 
 fn call(instance: u32, ticket: u32, method: u8, request: &[u8]) -> Vec<u8> {
-    let mut body = std::vec![CALL, 0];
+    call_of(0, instance, ticket, method, request)
+}
+
+fn call_of(rec: u8, instance: u32, ticket: u32, method: u8, request: &[u8]) -> Vec<u8> {
+    let mut body = std::vec![CALL, rec];
     body.extend_from_slice(&instance.to_be_bytes());
     body.extend_from_slice(&ticket.to_be_bytes());
     body.push(method);
@@ -63,7 +72,11 @@ fn call(instance: u32, ticket: u32, method: u8, request: &[u8]) -> Vec<u8> {
 }
 
 fn poll(instance: u32, ticket: u32) -> Vec<u8> {
-    let mut body = std::vec![POLL, 0];
+    poll_of(0, instance, ticket)
+}
+
+fn poll_of(rec: u8, instance: u32, ticket: u32) -> Vec<u8> {
+    let mut body = std::vec![POLL, rec];
     body.extend_from_slice(&instance.to_be_bytes());
     body.extend_from_slice(&ticket.to_be_bytes());
     body
@@ -71,16 +84,22 @@ fn poll(instance: u32, ticket: u32) -> Vec<u8> {
 
 /// Run the queued call as the UI task does; the poll reply of `ticket`.
 fn run(reg: &mut Registry, instance: u32, ticket: u32) -> Vec<u8> {
-    let job = reg.start_call(|_| false).expect("a queued call");
-    let (status, len) = unsafe { job.run(core::ptr::null_mut()) };
-    reg.finish_call(&job, status, len);
-    let mut out = [0; REPLY_MAX + 5];
+    let job = reg.start_call(|_| false, 0).expect("a queued call");
+    let result = unsafe { job.run(core::ptr::null_mut()) };
+    reg.finish_call(&job, result, 0);
+    let mut out = [0; REPLY_MAX + 9];
     let n = reg.handle(&poll(instance, ticket), &mut out).unwrap();
     out[..n].to_vec()
 }
 
+/// The runtime status of a poll reply.
 fn status(reply: &[u8]) -> i32 {
     i32::from_be_bytes(reply[1..5].try_into().unwrap())
+}
+
+/// The handler result of a poll reply.
+fn handler(reply: &[u8]) -> i32 {
+    i32::from_be_bytes(reply[5..9].try_into().unwrap())
 }
 
 #[test]
@@ -90,30 +109,29 @@ fn a_call_queues_runs_on_the_ui_pass_and_its_reply_waits_for_the_poll() {
         .unwrap_or_else(|e| e.into_inner());
     let mut reg = registry();
     let instance = reg.modules[0].instance;
-    let mut out = [0; REPLY_MAX + 5];
+    let mut out = [0; REPLY_MAX + 9];
     assert_eq!(reg.handle(&call(instance, 9, 1, b"abc"), &mut out), Ok(0));
     // pending until the UI pass runs it
     let n = reg.handle(&poll(instance, 9), &mut out).unwrap();
     assert_eq!(&out[..n], [1]);
     let reply = run(&mut reg, instance, 9);
     assert_eq!(reply[0], 0);
-    assert_eq!(status(&reply), OK);
-    assert_eq!(&reply[5..], b"cba");
-    // the same poll again returns it again
-    let again = reg.handle(&poll(instance, 9), &mut out).unwrap();
-    assert_eq!(&out[..again], &reply[..]);
+    assert_eq!((status(&reply), handler(&reply)), (OK, OK));
+    assert_eq!(&reply[9..], b"cba");
+    // the poll handed the outcome over and freed it
+    assert_eq!(reg.handle(&poll(instance, 9), &mut out), Err(E_NOT_FOUND));
     // an unknown ticket
     assert_eq!(reg.handle(&poll(instance, 10), &mut out), Err(E_NOT_FOUND));
 }
 
 #[test]
-fn one_call_per_module_a_second_ticket_is_busy_and_a_repeat_is_not() {
+fn a_second_ticket_is_busy_and_a_repeat_is_not() {
     let _guard = crate::test_lock::LOCK
         .lock_with_package()
         .unwrap_or_else(|e| e.into_inner());
     let mut reg = registry();
     let instance = reg.modules[0].instance;
-    let mut out = [0; REPLY_MAX + 5];
+    let mut out = [0; REPLY_MAX + 9];
     assert_eq!(reg.handle(&call(instance, 1, 1, b"x"), &mut out), Ok(0));
     assert_eq!(
         reg.handle(&call(instance, 2, 1, b"x"), &mut out),
@@ -136,7 +154,7 @@ fn the_envelope_is_checked_before_queueing() {
         .unwrap_or_else(|e| e.into_inner());
     let mut reg = registry();
     let instance = reg.modules[0].instance;
-    let mut out = [0; REPLY_MAX + 5];
+    let mut out = [0; REPLY_MAX + 9];
     assert_eq!(reg.handle(&call(instance, 0, 1, b""), &mut out), Err(E_MSG));
     assert_eq!(
         reg.handle(&call(instance, 1, 1, &[0; REQUEST_MAX + 1]), &mut out),
@@ -163,7 +181,7 @@ fn an_unknown_method_has_its_own_error() {
         .unwrap_or_else(|e| e.into_inner());
     let mut reg = registry();
     let instance = reg.modules[0].instance;
-    let mut out = [0; REPLY_MAX + 5];
+    let mut out = [0; REPLY_MAX + 9];
     for method in [0, 3, 5, 255] {
         assert_eq!(
             reg.handle(&call(instance, 1, method, b""), &mut out),
@@ -171,7 +189,7 @@ fn an_unknown_method_has_its_own_error() {
         );
     }
     // nothing was queued
-    assert!(reg.start_call(|_| false).is_none());
+    assert!(reg.start_call(|_| false, 0).is_none());
     // a module that registered no table has no method
     reg.modules[0].queries = QueryTable::EMPTY;
     assert_eq!(
@@ -187,13 +205,16 @@ fn the_handler_error_code_passes_through_and_an_oversize_reply_is_too_big() {
         .unwrap_or_else(|e| e.into_inner());
     let mut reg = registry();
     let instance = reg.modules[0].instance;
-    let mut out = [0; REPLY_MAX + 5];
+    let mut out = [0; REPLY_MAX + 9];
     assert_eq!(reg.handle(&call(instance, 1, 2, b"x"), &mut out), Ok(0));
     let reply = run(&mut reg, instance, 1);
-    assert_eq!((status(&reply), reply.len()), (7, 5));
+    assert_eq!((status(&reply), handler(&reply), reply.len()), (OK, 7, 9));
     assert_eq!(reg.handle(&call(instance, 2, 4, b"x"), &mut out), Ok(0));
     let reply = run(&mut reg, instance, 2);
-    assert_eq!((status(&reply), reply.len()), (E_MODULE_UI_TOO_BIG, 5));
+    assert_eq!(
+        (status(&reply), handler(&reply), reply.len()),
+        (E_MODULE_UI_TOO_BIG, OK, 9)
+    );
 }
 
 #[test]
@@ -203,14 +224,13 @@ fn a_call_for_an_instance_that_is_gone_finishes_without_running() {
         .unwrap_or_else(|e| e.into_inner());
     let mut reg = registry();
     let instance = reg.modules[0].instance;
-    let mut out = [0; REPLY_MAX + 5];
+    let mut out = [0; REPLY_MAX + 9];
     assert_eq!(reg.handle(&call(instance, 1, 1, b"x"), &mut out), Ok(0));
     reg.modules[0].instance = instance.wrapping_add(7);
-    assert!(reg.start_call(|_| false).is_none());
-    let n = reg
-        .handle(&poll(instance.wrapping_add(7), 1), &mut out)
-        .unwrap();
-    assert_eq!(status(&out[..n]), E_NOT_FOUND);
+    assert!(reg.start_call(|_| false, 0).is_none());
+    reg.modules[0].instance = instance;
+    let n = reg.handle(&poll(instance, 1), &mut out).unwrap();
+    assert_eq!((status(&out[..n]), handler(&out[..n])), (E_NOT_FOUND, OK));
 }
 
 #[test]
@@ -220,28 +240,186 @@ fn a_draining_module_keeps_its_call_queued_and_unloading_cancels_it() {
         .unwrap_or_else(|e| e.into_inner());
     let mut reg = registry();
     let instance = reg.modules[0].instance;
-    let mut out = [0; REPLY_MAX + 5];
+    let mut out = [0; REPLY_MAX + 9];
     assert_eq!(reg.handle(&call(instance, 1, 1, b"x"), &mut out), Ok(0));
-    assert!(reg.start_call(|_| true).is_none());
+    assert!(reg.start_call(|_| true, 0).is_none());
     reg.withdraw(0);
-    assert!(reg.start_call(|_| false).is_none());
+    assert!(reg.start_call(|_| false, 0).is_none());
     assert_eq!(reg.handle(&poll(instance, 1), &mut out), Err(E_NOT_FOUND));
 }
 
 #[test]
-fn unloading_drops_a_finished_reply_of_that_module_only() {
+fn unloading_frees_the_call_of_that_module_only() {
     let _guard = crate::test_lock::LOCK
         .lock_with_package()
         .unwrap_or_else(|e| e.into_inner());
     let mut reg = registry();
     let instance = reg.modules[0].instance;
-    let mut out = [0; REPLY_MAX + 5];
+    let mut out = [0; REPLY_MAX + 9];
     reg.handle(&call(instance, 1, 1, b"x"), &mut out).unwrap();
-    run(&mut reg, instance, 1);
+    let job = reg.start_call(|_| false, 0).unwrap();
+    let result = unsafe { job.run(core::ptr::null_mut()) };
+    reg.finish_call(&job, result, 0);
     reg.withdraw(3);
-    assert!(reg.handle(&poll(instance, 1), &mut out).is_ok());
+    assert_eq!(
+        reg.handle(&call(instance, 2, 1, b"x"), &mut out),
+        Err(E_BUSY)
+    );
     reg.withdraw(0);
     assert_eq!(reg.handle(&poll(instance, 1), &mut out), Err(E_NOT_FOUND));
+}
+
+#[test]
+fn one_call_is_in_flight_for_the_whole_device() {
+    let _guard = crate::test_lock::LOCK
+        .lock_with_package()
+        .unwrap_or_else(|e| e.into_inner());
+    let mut reg = registry();
+    enroll_module(&mut reg, 1);
+    let (a, b) = (reg.modules[0].instance, reg.modules[1].instance);
+    let mut out = [0; REPLY_MAX + 9];
+    // queued
+    assert_eq!(reg.handle(&call_of(0, a, 1, 1, b"ab"), &mut out), Ok(0));
+    assert_eq!(
+        reg.handle(&call_of(1, b, 1, 1, b"x"), &mut out),
+        Err(E_BUSY)
+    );
+    // running
+    let job = reg.start_call(|_| false, 0).unwrap();
+    assert_eq!(
+        reg.handle(&call_of(1, b, 1, 1, b"x"), &mut out),
+        Err(E_BUSY)
+    );
+    // finished, the outcome unread
+    let result = unsafe { job.run(core::ptr::null_mut()) };
+    reg.finish_call(&job, result, 0);
+    assert_eq!(
+        reg.handle(&call_of(1, b, 1, 1, b"x"), &mut out),
+        Err(E_BUSY)
+    );
+    // the other module's poll does not see or take it, even with the same ticket
+    assert_eq!(reg.handle(&poll_of(1, b, 1), &mut out), Err(E_NOT_FOUND));
+    // the owner's poll gets its own result and frees the slot
+    let n = reg.handle(&poll_of(0, a, 1), &mut out).unwrap();
+    assert_eq!(&out[9..n], b"ba");
+    assert_eq!(reg.handle(&call_of(1, b, 1, 1, b"xyz"), &mut out), Ok(0));
+    let job = reg.start_call(|_| false, 0).unwrap();
+    let result = unsafe { job.run(core::ptr::null_mut()) };
+    reg.finish_call(&job, result, 0);
+    let n = reg.handle(&poll_of(1, b, 1), &mut out).unwrap();
+    assert_eq!(&out[9..n], b"zyx");
+}
+
+#[test]
+fn an_unread_outcome_is_freed_after_the_timeout() {
+    let _guard = crate::test_lock::LOCK
+        .lock_with_package()
+        .unwrap_or_else(|e| e.into_inner());
+    let mut reg = registry();
+    let instance = reg.modules[0].instance;
+    let mut out = [0; REPLY_MAX + 9];
+    reg.handle(&call(instance, 1, 1, b"x"), &mut out).unwrap();
+    let job = reg.start_call(|_| false, 100).unwrap();
+    let result = unsafe { job.run(core::ptr::null_mut()) };
+    reg.finish_call(&job, result, 100);
+    reg.age_out(100 + OUTCOME_BLOCKS - 1, OUTCOME_BLOCKS);
+    assert_eq!(
+        reg.handle(&call(instance, 2, 1, b"x"), &mut out),
+        Err(E_BUSY)
+    );
+    reg.age_out(100 + OUTCOME_BLOCKS, OUTCOME_BLOCKS);
+    assert_eq!(reg.handle(&poll(instance, 1), &mut out), Err(E_NOT_FOUND));
+    assert_eq!(reg.handle(&call(instance, 2, 1, b"x"), &mut out), Ok(0));
+    // a queued or running call is not aged out
+    reg.age_out(u32::MAX, 1);
+    assert_eq!(reg.handle(&poll(instance, 2), &mut out), Ok(1));
+}
+
+#[test]
+fn a_reload_into_the_same_slot_cannot_take_the_old_calls_result() {
+    let _guard = crate::test_lock::LOCK
+        .lock_with_package()
+        .unwrap_or_else(|e| e.into_inner());
+    let mut reg = registry();
+    let old = reg.modules[0].instance;
+    let mut out = [0; REPLY_MAX + 9];
+    reg.handle(&call(old, 1, 1, b"old"), &mut out).unwrap();
+    let job = reg.start_call(|_| false, 0).unwrap();
+    // the module is replaced while its call is out, and the new copy asks with the same ticket
+    reg.withdraw(0);
+    enroll_module(&mut reg, 0);
+    let new = reg.modules[0].instance;
+    assert_ne!(old, new);
+    reg.handle(&call(new, 1, 1, b"new"), &mut out).unwrap();
+    // the old call finishes: its result belongs to no one
+    let result = unsafe { job.run(core::ptr::null_mut()) };
+    reg.finish_call(&job, result, 0);
+    assert_eq!(reg.handle(&poll(new, 1), &mut out), Ok(1));
+    assert_eq!(out[0], 1);
+    let reply = run(&mut reg, new, 1);
+    assert_eq!(&reply[9..], b"wen");
+}
+
+#[test]
+fn a_table_on_a_two_byte_boundary_is_read() {
+    use query_table::Query;
+    let _guard = crate::test_lock::LOCK
+        .lock_with_package()
+        .unwrap_or_else(|e| e.into_inner());
+    let size = core::mem::size_of::<Query>();
+    let mut bytes = std::vec![0u8; 3 * size + 4];
+    let start = (0..4)
+        .find(|at| (bytes.as_ptr() as usize + at) % 4 == 2)
+        .unwrap();
+    for (i, q) in [
+        Query::new(1, echo),
+        Query::new(2, refuse),
+        Query::new(4, too_big),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let raw = unsafe { core::slice::from_raw_parts(&q as *const Query as *const u8, size) };
+        bytes[start + i * size..start + (i + 1) * size].copy_from_slice(raw);
+    }
+    let mut reg = Registry::EMPTY;
+    reg.modules[0].descriptor =
+        Descriptor::parse(b"test/m", b"\x01\x04Tool\x01\x01k\x04Name\x04\x00\x00").unwrap();
+    assert_eq!(
+        reg.set_queries(0, unsafe { bytes.as_ptr().add(start) }, 3),
+        OK
+    );
+    reg.publish(0);
+    let instance = reg.modules[0].instance;
+    let mut out = [0; REPLY_MAX + 9];
+    reg.handle(&call(instance, 1, 4, b"x"), &mut out).unwrap();
+    assert_eq!(handler(&run(&mut reg, instance, 1)), OK);
+}
+
+#[test]
+fn calls_and_settings_requests_are_served_in_turn() {
+    use super::super::serve;
+    let (mut calls, mut settings) = (0, 0);
+    let mut first = false;
+    for _ in 0..10 {
+        first = !first;
+        serve(
+            first,
+            || {
+                calls += 1;
+                true
+            },
+            || {
+                settings += 1;
+                true
+            },
+        );
+    }
+    assert_eq!((calls, settings), (5, 5));
+    // a kind with nothing pending does not hold the pass
+    assert!(serve(true, || false, || true));
+    assert!(serve(false, || false, || true));
+    assert!(!serve(true, || false, || false));
 }
 
 #[test]

@@ -509,7 +509,7 @@ service = "runtime"
 since = "0.13.5"
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, const dk_workbench_query *table, u32 count)"
-doc = "Register this content module's Workbench query table during init, once per load, after `dk_workbench_register`. The runtime keeps the pointer (the table must stay valid while the module is loaded; it is not copied): `count` entries (1 to 16) of `{ u8 method; i32 (*call)(dk_module_ctx *ctx, const u8 *in, u32 in_len, u8 *out, u32 *out_len); }`, `method` strictly increasing from 1. `call` runs on the UI task with `*out_len` set to the room in `out` and returns 0 with `*out_len` the reply length, or an error code the Workbench receives as refused. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad table, or DK_E_STATE if queries are registered already or no settings descriptor is."
+doc = "Register this content module's Workbench query table during init, once per load, after `dk_workbench_register`. The runtime keeps the pointer (the table must stay valid while the module is loaded; it is not copied): `count` entries (1 to 16) of `dk_workbench_query` (<dk/query.h>: `{ call; u8 method; u8 reserved[3]; }`, 8 bytes, 2-byte aligned), `method` strictly increasing from 1. `call` runs on the UI task with `*out_len` set to the room in `out` and returns 0 with `*out_len` the reply length, or an error code the Workbench receives as refused. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad table, or DK_E_STATE if queries are registered already or no settings descriptor is."
 
 [[import]]
 name = "dk_settings_open"
@@ -1924,9 +1924,11 @@ read_max = 768      # bytes of one READ (and SETTINGS) reply
 peek_max = 512      # bytes of one PEEK reply
 max_request_wire = 40960  # the largest request on the wire, SysEx-encoded (40 KiB)
 max_reply_wire = 1024     # the largest reply on the wire, SysEx-encoded
+query_request_max = 149   # a module query: the request bytes after the call envelope (verb, record, instance, request id, method: 11 bytes of the 160-byte command body)
+query_reply_max = 870     # a module query: the reply bytes after the poll header ([state u8][runtime status i32][handler result i32]: 9 bytes of the 879-byte reply body)
 
 [protocol.commands] # command numbers; never reuse or renumber (additive only)
-MODULE_UI = 0x00    # describe, queue and poll an operation, or call a query (verb 5, `[rec][instance u32][request id u32][method u8][request]`, at most 160 request bytes), on the enrolled module named by slot and instance
+MODULE_UI = 0x00    # describe, queue and poll an operation, or call a query, on the enrolled module named by slot and instance. Call (verb 5): `[rec][instance u32][request id u32][method u8][request]`, at most `query_request_max` request bytes; one call is in flight for the whole device, a second call from any module answers E_BUSY until the first one's reply was polled or 2 s passed. Poll of a call (verb 4, `[rec][instance u32][request id u32]`): `[state u8]` 1 while queued or running, else `[0][runtime status i32][handler result i32][reply bytes]`, at most `query_reply_max` reply bytes; the runtime status is 0 when the handler ran (E_MODULE_UI_METHOD, E_MODULE_UI_TOO_BIG or E_NOT_FOUND when it did not) and the handler's own return value is only in the handler field; the poll releases the reply
 INFO = 0x01
 LIST = 0x02
 MODULES = 0x03      # the loaded modules with their ranges, types and faults

@@ -9,9 +9,17 @@
 #include <stdint.h>
 #include <dk/gen/imports.h>
 
-typedef struct {
-    uint8_t method;
+/* The layout is explicit because the ColdFire compiler aligns pointers to 2 bytes (no -malign-int): the function pointer first, the method
+ * number, three zero bytes. 8 bytes in the module and in the runtime; the table may start on any 2-byte boundary. The type is the one
+ * `imports.h` declares (a handle type); this is its only definition. */
+struct dk_workbench_query {
     int32_t (*call)(dk_module_ctx *, const uint8_t *in, uint32_t in_len, uint8_t *out,
                     uint32_t *out_len);
-} dk_workbench_query;
+    uint8_t method;
+    uint8_t reserved[3];
+};
+/* The ColdFire build has 32-bit pointers; a host compile of the generated code (the codec round-trip) does not. */
+#if UINTPTR_MAX == 0xffffffffu
+_Static_assert(sizeof(dk_workbench_query) == 8, "dk_workbench_query is 8 bytes");
+#endif
 #endif

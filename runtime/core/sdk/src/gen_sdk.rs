@@ -283,6 +283,8 @@ pub mod proto {
     pub const PEEK_MAX: usize = 512;
     pub const MAX_REQUEST_WIRE: usize = 40960;
     pub const MAX_REPLY_WIRE: usize = 1024;
+    pub const QUERY_REQUEST_MAX: usize = 149;
+    pub const QUERY_REPLY_MAX: usize = 870;
     pub const CMD_MODULE_UI: u8 = 0x00;
     pub const CMD_INFO: u8 = 0x01;
     pub const CMD_LIST: u8 = 0x02;
@@ -930,7 +932,7 @@ pub mod api {
     /// `dk_workbench_register`: Register this content module's Workbench settings descriptor during init, once per load. The runtime copies the descriptor (up to 512 bytes; version 1 holds text and file-name settings, version 2 also integer, boolean and choice settings and needs runtime 0.13.4); see the Workbench settings schema in the module authoring guide. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad descriptor, or DK_E_STATE if already registered. Workbench may read settings while a settings overlay is installed; use the device menu to edit them in that case.
     pub type DkWorkbenchRegisterFn = unsafe extern "C" fn(ctx: *mut u8, descriptor: *const u8, size: u32) -> i32;
 
-    /// `dk_workbench_register_queries`: Register this content module's Workbench query table during init, once per load, after `dk_workbench_register`. The runtime keeps the pointer (the table must stay valid while the module is loaded; it is not copied): `count` entries (1 to 16) of `{ u8 method; i32 (*call)(dk_module_ctx *ctx, const u8 *in, u32 in_len, u8 *out, u32 *out_len); }`, `method` strictly increasing from 1. `call` runs on the UI task with `*out_len` set to the room in `out` and returns 0 with `*out_len` the reply length, or an error code the Workbench receives as refused. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad table, or DK_E_STATE if queries are registered already or no settings descriptor is.
+    /// `dk_workbench_register_queries`: Register this content module's Workbench query table during init, once per load, after `dk_workbench_register`. The runtime keeps the pointer (the table must stay valid while the module is loaded; it is not copied): `count` entries (1 to 16) of `dk_workbench_query` (<dk/query.h>: `{ call; u8 method; u8 reserved[3]; }`, 8 bytes, 2-byte aligned), `method` strictly increasing from 1. `call` runs on the UI task with `*out_len` set to the room in `out` and returns 0 with `*out_len` the reply length, or an error code the Workbench receives as refused. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad table, or DK_E_STATE if queries are registered already or no settings descriptor is.
     pub type DkWorkbenchRegisterQueriesFn = unsafe extern "C" fn(ctx: *mut u8, table: *const u8, count: u32) -> i32;
 
     /// `dk_settings_open`: Open this module's settings: `*out` is the handle (the same one every time), the result 0. A negative result outside init (DK_E_NOT_FOUND) or for a bad context (DK_E_CONTRACT); `*out` is untouched then.
