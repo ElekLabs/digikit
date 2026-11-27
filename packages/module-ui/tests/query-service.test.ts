@@ -7,7 +7,7 @@ import {
   QueryRefusal,
   type ModuleChannel,
 } from '../src/index.ts';
-import { ListReplySchema, ProjectManager } from '../../wire/src/gen/project_manager_pb.js';
+import { ListReplySchema, ProjectManager } from '@digi/wire/gen/project_manager_pb.js';
 import { schema } from './schema.ts';
 
 const projects = [

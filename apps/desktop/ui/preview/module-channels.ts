@@ -49,6 +49,7 @@ export function createPreviewChannels(
           return memory.putSetting(id, bytes, revision);
         },
       },
+      queries: memory,
       files,
     });
   };

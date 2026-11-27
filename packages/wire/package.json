@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./dk/options_pb.js": "./src/gen/dk/options_pb.js"
+    "./dk/options_pb.js": "./src/gen/dk/options_pb.js",
+    "./gen/*": "./src/gen/*"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

@@ -42,3 +42,4 @@ export * from './bulk-select.ts';
 export * from './identify.ts';
 export * from './midi-out.ts';
 export * from './module-settings.ts';
+export * from './module-queries.ts';

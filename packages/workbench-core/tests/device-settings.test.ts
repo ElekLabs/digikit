@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DkError, type ModuleSettingsEndpoint } from '@digi/dk-session';
 import { createModuleClient, type DescribedSchema } from '@digi/module-ui';
 import { createDeviceModuleChannel } from '../src/module-ui/device-module-channel.ts';
+import { deviceQueryChannel } from '../src/module-ui/device-queries.ts';
 import { deviceSettingsChannel, settingErrorOf } from '../src/module-ui/device-settings.ts';
 
 // The descriptor the device reports for `schema` (the shape is checked against patchkit's bytes by the shared vectors).
@@ -40,7 +41,9 @@ const files = {
 };
 const settingsOf = (endpoint: ModuleSettingsEndpoint) => deviceSettingsChannel('Typed', async () => endpoint);
 const deviceSettings = (s: DescribedSchema, endpoint: ModuleSettingsEndpoint) =>
-  createModuleClient(createDeviceModuleChannel({ settings: settingsOf(endpoint), files })).settings(s);
+  createModuleClient(
+    createDeviceModuleChannel({ settings: settingsOf(endpoint), queries: deviceQueryChannel(), files }),
+  ).settings(s);
 
 function endpoint(over: Partial<ModuleSettingsEndpoint> = {}) {
   const sent: { field: number; value?: Uint8Array; revision: number }[] = [];
@@ -167,7 +170,11 @@ describe('createDeviceModuleChannel', () => {
       send: async (_name: string, _bytes: Uint8Array, progress: (sent: number, total: number) => void) =>
         progress(1, 2),
     };
-    const channel = createDeviceModuleChannel({ settings: deviceSettingsChannel('Typed'), files: sent });
+    const channel = createDeviceModuleChannel({
+      settings: deviceSettingsChannel('Typed'),
+      queries: deviceQueryChannel(),
+      files: sent,
+    });
     const events: unknown[] = [];
     channel.subscribe((e) => events.push(e));
     await channel.sendFile(4, 'a.dkbs', Uint8Array.of(1, 2));

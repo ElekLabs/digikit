@@ -13,7 +13,8 @@ import {
 } from '@digi/dk-session';
 import { CAP, MAX_CHUNK, PROTO_VERSION } from '@digi/dk-session/gen_proto';
 import type { DeviceProfile } from '@digi/workbench-core/data/device-profiles.ts';
-import { headerInfo, modulePath, portPath, servicePath } from '@digi/workbench-core/modules/dktransfer.ts';
+import { headerInfo, portPath, servicePath } from '@digi/workbench-core/modules/dktransfer.ts';
+import { modulePath } from '@digi/workbench-core/modules/module-path.ts';
 import { fakeDkm } from '@digi/workbench-core/target-ops/fake-store.ts';
 import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
 import type { PreviewLibrary } from './module-library';

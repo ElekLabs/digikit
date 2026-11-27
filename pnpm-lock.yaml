@@ -390,6 +390,9 @@ importers:
         specifier: 1.9.15
         version: 1.9.15
     devDependencies:
+      '@digi/wire':
+        specifier: workspace:*
+        version: link:../wire
       '@types/node':
         specifier: 22.15.0
         version: 22.15.0
