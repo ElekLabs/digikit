@@ -13,15 +13,28 @@ export const loadAreas = (file = DATA) => JSON.parse(readFileSync(file, 'utf8'))
 
 const any = (file, globs = []) => globs.some((g) => matchesGlob(file, g));
 
-/** How a file is governed: { kind: 'area', area } | { kind: 'host-proven' } | { kind: 'unclassified' } | undefined (not a runtime-area file). */
+/** How a file is governed: { kind: 'area', areas: [names] } (every area whose globs match: a union) | { kind: 'host-proven' } |
+ * { kind: 'unclassified' } | undefined (not a runtime-area file). An area match wins over `hostProven`. */
 export const classify = (file, areas) => {
   const governed = any(file, areas.scope) && !any(file, areas.exclude);
   if (governed && any(file, areas.testSources)) return { kind: 'host-proven' };
-  const named = Object.entries(areas.areas).find(([, a]) => any(file, a.globs));
-  if (named) return { kind: 'area', area: named[0] };
-  if (!any(file, areas.scope) || any(file, areas.exclude)) return undefined;
+  const named = Object.entries(areas.areas)
+    .filter(([, a]) => any(file, a.globs))
+    .map(([name]) => name);
+  if (named.length) return { kind: 'area', areas: named };
+  if (!governed) return undefined;
   return any(file, areas.hostProven) ? { kind: 'host-proven' } : { kind: 'unclassified' };
 };
+
+/** The entries an area runs; '@all' is every entry of every other area. */
+export const entriesOf = (area, areas) =>
+  areas.areas[area].tests.flatMap((entry) =>
+    entry === '@all'
+      ? Object.entries(areas.areas)
+          .filter(([name]) => name !== area)
+          .flatMap(([name]) => entriesOf(name, areas))
+      : [entry],
+  );
 
 /** The test records of a 'project:file' / 'project:*' entry: [{ project, file, dsp, targets }]; [] when it names none. */
 const recordsOf = (entry, projects) => {
@@ -40,8 +53,10 @@ const recordsOf = (entry, projects) => {
 
 /** Entries of the map that name no test: [{ area, entry }]. The host test keeps the map true to the project records. */
 export const danglingEntries = (areas, projects) =>
-  Object.entries(areas.areas).flatMap(([area, a]) =>
-    a.tests.filter((entry) => !recordsOf(entry, projects).length).map((entry) => ({ area, entry })),
+  Object.keys(areas.areas).flatMap((area) =>
+    entriesOf(area, areas)
+      .filter((entry) => !recordsOf(entry, projects).length)
+      .map((entry) => ({ area, entry })),
   );
 
 /** Changed files -> { tests, governed: Set of files the areas decided, notes: lines the gate prints }.
@@ -59,17 +74,24 @@ export const areaSelection = (projects, changed, areas = loadAreas()) => {
   const notes = [];
   const hit = new Map(); // area -> files
   const unclassified = [];
+  const reasons = [];
   for (const file of changed) {
     const c = classify(file, areas);
     if (!c) continue;
     governed.add(file);
     if (c.kind === 'area') {
-      hit.set(c.area, [...(hit.get(c.area) ?? []), file]);
-      for (const entry of areas.areas[c.area].tests)
-        for (const rec of recordsOf(entry, projects)) add(rec, file, `area ${c.area}`);
+      reasons.push(`${file} -> area ${c.areas.join(', ')}`);
+      for (const area of c.areas) {
+        hit.set(area, [...(hit.get(area) ?? []), file]);
+        for (const entry of entriesOf(area, areas))
+          for (const rec of recordsOf(entry, projects)) add(rec, file, `area ${area}`);
+      }
     } else if (c.kind === 'unclassified') unclassified.push(file);
+    else reasons.push(`${file} -> host-proven (no device test)`);
   }
   for (const [area, files] of hit) notes.push(`area ${area}: ${files.length} file(s), e.g. ${files[0]}`);
+  if (hit.has('image')) notes.push('area image: a whole-image file changed, so the tests of every area run');
+  notes.push(...reasons);
   return { tests: [...byKey.values()], governed, notes, unclassified };
 };
 

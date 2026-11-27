@@ -189,7 +189,7 @@ const gitShow = (root, ref, file) => {
 };
 const readIfExists = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : null);
 
-const loadProjects = (root) => {
+export const loadProjects = (root) => {
   const dir = resolve(root, 'out/runs/test-subset');
   mkdirSync(dir, { recursive: true });
   const file = resolve(dir, 'graph.json');
