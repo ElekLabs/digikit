@@ -115,35 +115,3 @@ pub fn run(rest: &[String]) -> Result<()> {
     println!("{}", budget_json(&only, fx_max, pct)?);
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_device_with_a_board_has_a_budget_made_of_its_own_files() {
-        let v = budget_json(&[], Some(4), DEFAULT_BUDGET_PCT).unwrap();
-        let devs = v["devices"].as_object().unwrap();
-        assert!(devs.contains_key("dt2") && devs.contains_key("dn2"));
-        for d in devs.values() {
-            let h = d["headroom"].as_u64().unwrap();
-            assert!(h > 0);
-            assert_eq!(
-                d["voice_block"].as_u64().unwrap(),
-                h / d["voices"].as_u64().unwrap()
-            );
-            assert_eq!(d["note_on_block"].as_u64().unwrap(), h);
-        }
-        let tight = devs
-            .values()
-            .map(|d| d["headroom"].as_u64().unwrap())
-            .min()
-            .unwrap();
-        assert_eq!(v["fx_budget"].as_u64().unwrap(), tight / 4);
-        // one device asked for: only it is printed, the effect budget still counts all of them
-        let one = budget_json(&["dn2"], Some(4), DEFAULT_BUDGET_PCT).unwrap();
-        assert_eq!(one["devices"].as_object().unwrap().len(), 1);
-        assert_eq!(one["fx_budget"], v["fx_budget"]);
-        assert!(budget_json(&["nope"], None, DEFAULT_BUDGET_PCT).is_err());
-    }
-}

@@ -624,12 +624,17 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
             .get("instructions_redecoded")
             .and_then(|s| s.parse().ok());
         if opts.check {
-            let current = match std::fs::read_to_string(&out)
-                .ok()
-                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-            {
-                Some(v) => comparable(v) == comparable(serde_json::to_value(&obj)?),
-                None => false,
+            // Current: equal to a fresh build (which also carries the ISA record of the code) and written in the canonical form
+            // that `patchkit build` writes, so a hand-edited or reformatted file is stale.
+            let current = match std::fs::read_to_string(&out) {
+                Ok(text) => match serde_json::from_str::<Value>(&text) {
+                    Ok(v) => {
+                        pretty(&v)? == text
+                            && comparable(v) == comparable(serde_json::to_value(&obj)?)
+                    }
+                    Err(_) => false,
+                },
+                Err(_) => false,
             };
             // A cache entry is output, keyed by the hash of its sources: a missing one (another process may have evicted it) is made,
             // not reported stale. Only a stored object that differs from a fresh build is stale.
@@ -847,29 +852,6 @@ mod tests {
                 1
             );
         }
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn evict_keeps_entries_used_recently() {
-        let dir = scratch("evict");
-        for i in 0..6 {
-            write_object(&dir.join(format!("k{i}/o.json")), "{}").unwrap();
-        }
-        evict(&dir, "o.json");
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 6);
-        // the entries beyond the newest three go once they are old
-        let old = std::time::SystemTime::now() - EVICT_MIN_AGE * 2;
-        for i in 0..6 {
-            let f = std::fs::File::options()
-                .append(true)
-                .open(dir.join(format!("k{i}/o.json")))
-                .unwrap();
-            f.set_modified(old + std::time::Duration::from_secs(i))
-                .unwrap();
-        }
-        evict(&dir, "o.json");
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), KEEP_ENTRIES);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -12,17 +12,16 @@
         "{projectRoot}/src/core/**/*",
         "jsToolchain",
         "{workspaceRoot}/vitest.host.config.ts",
-        "{workspaceRoot}/vitest.host/nx-host.json",
+        "{workspaceRoot}/vitest.host/sdk-host.json",
         "{workspaceRoot}/tsconfig*.json",
         { "externalDependencies": ["vitest"] },
-        "{workspaceRoot}/tools/nx/tests/sdk-contract.test.ts",
         "{workspaceRoot}/tests/fixtures/modules/sine/src/module.c",
         "{workspaceRoot}/tests/fixtures/modules/dyn-fx-gain-both/src/module.c"
       ],
       "outputs": [],
       "options": {
         "forwardAllArgs": false,
-        "command": "pnpm exec vitest run --config vitest.host.config.ts --project nx-host tools/nx/tests/sdk-contract.test.ts",
+        "command": "pnpm exec vitest run --config vitest.host.config.ts --project sdk-host",
         "cwd": "."
       }
     },

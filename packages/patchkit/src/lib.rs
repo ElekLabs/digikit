@@ -28,6 +28,8 @@ pub mod bootrom;
 pub mod budget_cli;
 pub mod build;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod catalog_check;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod coverage_cli;
 pub mod dkm;
 pub mod dkm_identity;
@@ -58,6 +60,8 @@ pub mod record;
 pub mod record_rules;
 pub mod records_cli;
 pub mod register;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod row_layout;
 pub mod sdkgen;
 pub mod service_decl;
 pub mod service_record;

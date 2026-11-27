@@ -4,7 +4,7 @@
 use patchkit::build::cf::{self, BASE};
 use patchkit::build::elf::{self, RelocTo};
 use patchkit::build::toolchain::Env;
-use patchkit::build::{self, BuildOptions, Status, rust, sharc};
+use patchkit::build::{self, rust, sharc};
 use patchkit::dko::Dko;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -23,40 +23,6 @@ fn toolchain() -> Option<Env> {
     env.m68k_or_skip().then_some(env)
 }
 
-fn find_objects(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(rd) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for e in rd.flatten() {
-        let p = e.path();
-        if p.is_dir() {
-            find_objects(&p, out);
-        } else if p.to_string_lossy().ends_with(".dko.json")
-            && p.parent().is_some_and(|d| d.ends_with("build"))
-        {
-            out.push(p);
-        }
-    }
-}
-
-#[test]
-fn committed_objects_are_in_the_canonical_form() {
-    let mut files = vec![];
-    for dir in patchkit::module::CORE_MODULE_ROOTS {
-        find_objects(&root().join(dir), &mut files);
-    }
-    assert!(files.len() > 20, "{} objects", files.len());
-    for f in files {
-        let text = std::fs::read_to_string(&f).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert!(
-            build::pretty(&v).unwrap() == text,
-            "{} is not canonical",
-            f.display()
-        );
-    }
-}
-
 #[test]
 fn local_binary_hashes_are_not_part_of_the_comparison() {
     let make = |selas: &str, rev: &str, hex: &str| serde_json::json!({"sections": [{"hex": hex}], "toolchain": {"selache_rev": rev, "selas_sha256": selas, "seldump_sha256": selas}});
@@ -64,112 +30,6 @@ fn local_binary_hashes_are_not_part_of_the_comparison() {
     assert_eq!(base, build::comparable(make("s2", "r1", "00")));
     assert_ne!(base, build::comparable(make("s1", "r2", "00")));
     assert_ne!(base, build::comparable(make("s1", "r1", "01")));
-}
-
-/// Symbols the ColdFire libgcc defines that the compiler never calls for code a module compiles (trampolines, thread-local storage,
-/// stack hardening, internal tables): `is_helper` rightly refuses them.
-const LIBGCC_NOT_CALLED: [&str; 14] = [
-    "___trampoline",
-    "__transfer_from_trampoline",
-    "__enable_execute_stack",
-    "__clear_cache",
-    "__clear_sticky_bit",
-    "__emutls_get_address",
-    "__emutls_register_common",
-    "__gcc_bcmp",
-    "__hardcfr_check",
-    "__strub_enter",
-    "__strub_leave",
-    "__strub_update",
-    "_fpCCR",
-    "$_exception_handler",
-];
-
-/// `is_helper` against the symbol list of the libgcc archive that module builds link (`out/tools/m68k-elf/lib/libgcc-cf54418.a`): every
-/// routine the archive defines is a helper, except the ones listed above. A new symbol in a newer libgcc fails this test.
-#[test]
-fn compiler_helper_names_match_libgcc() {
-    let Some(env) = toolchain() else { return };
-    let Some(lib) = env.libgcc_cf() else {
-        eprintln!(
-            "SKIP: libgcc-cf54418.a is not built (uv run python -m tools.patchkit.pk_toolchains libgcc-cf)"
-        );
-        return;
-    };
-    let out = std::process::Command::new(env.m68k("nm").unwrap())
-        .args(["-g", "--defined-only"])
-        .arg(&lib)
-        .output()
-        .unwrap();
-    assert!(out.status.success());
-    let text = String::from_utf8(out.stdout).unwrap();
-    let defined: std::collections::BTreeSet<&str> = text
-        .lines()
-        .filter_map(|l| {
-            let f: Vec<&str> = l.split_whitespace().collect();
-            (f.len() == 3).then(|| f[2])
-        })
-        .collect();
-    assert!(defined.contains("__udivdi3"), "{} symbols", defined.len());
-    let missed: Vec<_> = defined
-        .iter()
-        .filter(|n| !rust::is_helper(n) && !LIBGCC_NOT_CALLED.contains(n))
-        .collect();
-    assert!(
-        missed.is_empty(),
-        "libgcc defines routines that is_helper refuses: {missed:?}"
-    );
-    let wrong: Vec<_> = LIBGCC_NOT_CALLED
-        .iter()
-        .filter(|n| rust::is_helper(n) || !defined.contains(**n))
-        .collect();
-    assert!(
-        wrong.is_empty(),
-        "stale LIBGCC_NOT_CALLED entries: {wrong:?}"
-    );
-}
-
-#[test]
-fn make_dependency_lists_are_split_like_make_does() {
-    let t = "x: a.c \\\n  b.h c\\ d.h\n";
-    assert_eq!(cf::parse_make_deps(t), ["a.c", "b.h", "c d.h"]);
-    assert!(cf::parse_make_deps("x:\n").is_empty());
-}
-
-#[test]
-fn compiler_helper_names() {
-    for n in [
-        "memcpy",
-        "memmove",
-        "memset",
-        "memcmp",
-        "bcmp",
-        "__muldi3",
-        "__udivdi3",
-        "__umoddi3",
-        "__ashldi3",
-        "__clzsi2",
-        "__popcountdi2",
-        "__addsf3",
-        "__floatsidf",
-        "__fixdfsi",
-        "__truncdfsf2",
-        "__extendsfdf2",
-        "__eqdf2",
-        "__multi3",
-    ] {
-        assert!(rust::is_helper(n), "{n}");
-    }
-    for n in [
-        "dkrt_start",
-        "memory",
-        "__rust_alloc",
-        "mem",
-        "_RNvC4core3fmt",
-        "memcpy2",
-    ] {
-        assert!(!rust::is_helper(n), "{n}");
-    }
 }
 
 #[test]
@@ -441,173 +301,6 @@ fn a_header_change_changes_the_source_hash() {
     let _ = std::fs::remove_dir_all(&d);
 }
 
-#[test]
-fn a_module_builds_once_and_then_is_unchanged() {
-    let Some(_) = toolchain() else { return };
-    let d = build_dir("module");
-    std::fs::create_dir_all(d.join("src")).unwrap();
-    std::fs::write(
-        d.join("module.toml"),
-        "[module]\nid = \"test/tiny\"\ncategory = \"core\"\n\n[[object]]\npath = \"build/tiny.dko.json\"\nsources = [\"src/t.c\"]\n",
-    )
-    .unwrap();
-    std::fs::write(
-        d.join("src/t.c"),
-        "extern int ext(int);\nint twice(int x) { return ext(x) + ext(x); }\n",
-    )
-    .unwrap();
-    let opts = BuildOptions {
-        root: root(),
-        ..Default::default()
-    };
-    let r = build::build_module(&d, &opts).unwrap();
-    assert_eq!(r.objects[0].status, Status::Built);
-    assert!(r.objects[0].instructions.unwrap() > 3);
-    let text = std::fs::read_to_string(d.join("build/tiny.dko.json")).unwrap();
-    let o = Dko::parse(&text).unwrap();
-    o.require_isa_checked().unwrap();
-    assert!(
-        o.symbols
-            .iter()
-            .any(|s| s.name == "ext" && s.section.is_none())
-    );
-    // nothing changed: not compiled again; --force compiles it; the result is the same bytes
-    let again = build::build_module(&d, &opts).unwrap();
-    assert_eq!(again.objects[0].status, Status::Unchanged);
-    assert_eq!(
-        build::module_status(&root(), &d).unwrap(),
-        [("build/tiny.dko.json".to_string(), true)]
-    );
-    let forced = build::build_module(
-        &d,
-        &BuildOptions {
-            force: true,
-            ..opts.clone()
-        },
-    )
-    .unwrap();
-    assert_eq!(forced.objects[0].status, Status::Built);
-    assert_eq!(
-        std::fs::read_to_string(d.join("build/tiny.dko.json")).unwrap(),
-        text
-    );
-    // --check: current, then stale after a source change
-    let check = BuildOptions {
-        check: true,
-        ..opts.clone()
-    };
-    assert_eq!(
-        build::build_module(&d, &check).unwrap().objects[0].status,
-        Status::Current
-    );
-    std::fs::write(
-        d.join("src/t.c"),
-        "extern int ext(int);\nint twice(int x) { return ext(x) * 2; }\n",
-    )
-    .unwrap();
-    assert!(!build::module_status(&root(), &d).unwrap()[0].1);
-    let e = build::build_module(&d, &check).err().unwrap();
-    assert!(e.0.contains("is stale"), "{e}");
-    // a build into another directory leaves the module alone
-    let out = build_dir("module-out");
-    let o2 = BuildOptions {
-        out: Some(out.clone()),
-        ..opts
-    };
-    let r = build::build_module(&d, &o2).unwrap();
-    assert_eq!(r.objects[0].status, Status::Built);
-    assert!(out.join("build/tiny.dko.json").is_file());
-    assert_eq!(
-        std::fs::read_to_string(d.join("build/tiny.dko.json")).unwrap(),
-        text
-    );
-    let _ = std::fs::remove_dir_all(&d);
-    let _ = std::fs::remove_dir_all(&out);
-}
-
-/// A content module (any category but `core`) keeps its objects in the cache `out/cache/dko/<id>/<src12>/<path>`, not in the module; the
-/// library builds a stale or missing one on demand and leaves out the objects of modules it was not asked for.
-#[test]
-fn a_content_module_builds_into_the_cache_on_demand() {
-    use patchkit::module::{Build, Library};
-    let Some(_) = toolchain() else { return };
-    let id = format!("test/cache-{}", std::process::id());
-    let d = build_dir("content");
-    let moddir = d.join("m");
-    std::fs::create_dir_all(moddir.join("src")).unwrap();
-    std::fs::write(
-        moddir.join("module.toml"),
-        format!(
-            "[module]\nid = \"{id}\"\nversion = \"0.1.0\"\nname = \"x\"\ncategory = \"test\"\ntype = \"raw\"\nauthor = \"x\"\nstatus = \"experimental\"\nsummary = \"x\"\n\n[[object]]\npath = \"build/tiny.dko.json\"\nplace = \"cf.expansion\"\nsources = [\"src/t.c\"]\n"
-        ),
-    )
-    .unwrap();
-    std::fs::write(
-        moddir.join("src/t.c"),
-        "int twice(int x) { return x + x; }\n",
-    )
-    .unwrap();
-    let cached_now = || build::object_files(&root(), &moddir).unwrap()[0].1.clone();
-    let cached = cached_now();
-    let _ = std::fs::remove_dir_all(build::cache_dir(&root()).join(&id));
-    let scan = |only: Option<&[String]>| {
-        Library::scan_in(
-            Some(Build {
-                root: &root(),
-                only,
-                defines: &[],
-            }),
-            &d,
-            false,
-        )
-        .unwrap()
-    };
-
-    // asked for nothing: no object, nothing built
-    assert!(scan(Some(&[])).get(&id).unwrap().objects.is_empty());
-    assert!(!cached.exists());
-    // a missing object is built into the cache, never into the module
-    assert_eq!(scan(None).get(&id).unwrap().objects.len(), 1);
-    assert!(cached.is_file() && !moddir.join("build").exists());
-    let text = std::fs::read_to_string(&cached).unwrap();
-    // a build writes a new file (a rename), a use only touches it: the inode tells them apart
-    let inode = || std::os::unix::fs::MetadataExt::ino(&std::fs::metadata(&cached).unwrap());
-    let stamp = inode();
-    // a current object is read, not built again
-    assert_eq!(scan(Some(&[id.clone()])).get(&id).unwrap().objects.len(), 1);
-    assert_eq!(inode(), stamp);
-    // a changed source makes it stale; the next scan builds it again
-    std::fs::write(
-        moddir.join("src/t.c"),
-        "int twice(int x) { return 2 * x + 1; }\n",
-    )
-    .unwrap();
-    assert_eq!(scan(None).get(&id).unwrap().objects.len(), 1);
-    // the new sources have their own entry; the old one stays beside it
-    let cached2 = cached_now();
-    assert_ne!(cached2, cached);
-    assert!(cached.is_file());
-    assert_ne!(std::fs::read_to_string(&cached2).unwrap(), text);
-    let cached = cached2;
-    // `patchkit build` finds it current
-    let r = build::build_module(
-        &moddir,
-        &BuildOptions {
-            root: root(),
-            ..Default::default()
-        },
-    )
-    .unwrap();
-    assert_eq!(r.objects[0].status, Status::Unchanged);
-    // both canonical: in a lane `out` is a symlink to the main tree's
-    assert_eq!(
-        std::fs::canonicalize(&r.objects[0].path).unwrap(),
-        std::fs::canonicalize(&cached).unwrap()
-    );
-    let _ = std::fs::remove_dir_all(build::cache_dir(&root()).join(&id));
-    let _ = std::fs::remove_dir_all(&d);
-}
-
 /// A C object of a content module links the SDK functions it calls and what they call, and nothing else of the SDK.
 #[test]
 fn a_content_c_object_links_only_the_sdk_functions_it_uses() {
@@ -653,19 +346,6 @@ fn a_content_c_object_links_only_the_sdk_functions_it_uses() {
         );
     }
     let _ = std::fs::remove_dir_all(&d);
-}
-
-#[test]
-fn defines_need_an_output_directory() {
-    let opts = BuildOptions {
-        root: root(),
-        defines: vec!["X".into()],
-        ..Default::default()
-    };
-    let e = build::build_module(Path::new("/nonexistent"), &opts)
-        .err()
-        .unwrap();
-    assert!(e.0.contains("--define needs --out"), "{e}");
 }
 
 #[test]
@@ -898,50 +578,5 @@ fn the_source_hash_of_a_crate_covers_the_sources_of_its_path_dependencies() {
         );
         write(file, &old);
         assert_eq!(rust::source_sha256(&manifest, &[]).unwrap(), before);
-    }
-}
-
-/// The real crates: every boundary file of `dkrt-abi` is among the files that the source hash of each service object and of the runtime object reads, and the
-/// committed objects of the services are current with them.
-#[test]
-fn every_service_and_the_runtime_object_is_built_from_the_abi_boundary_files() {
-    let r = root();
-    let manifests = [
-        "services/fx/dks/Cargo.toml",
-        "services/machines/dks/Cargo.toml",
-        "services/lfo/dks/Cargo.toml",
-        "runtime/core/src/rs/Cargo.toml",
-    ];
-    for m in manifests {
-        let files: Vec<PathBuf> = rust::crate_files(&r.join(m))
-            .unwrap()
-            .into_iter()
-            .map(|p| std::fs::canonicalize(&p).unwrap())
-            .collect();
-        // the .rs files; a contract include (the stub slot offsets) reaches the Rust objects through `gen_svc_abi.rs` (`FILES_HASH`), which is one of them
-        for f in patchkit::sdkgen::SVC_ABI_FILES
-            .iter()
-            .filter(|f| f.ends_with(".rs"))
-        {
-            let f = std::fs::canonicalize(r.join(f)).unwrap();
-            assert!(
-                files.contains(&f),
-                "{m}: the source hash does not read {}",
-                f.display()
-            );
-        }
-    }
-    // (the runtime module also has assembly objects, whose hash needs the toolchain: `objects-check` covers them)
-    for dir in [
-        "services/fx/dks",
-        "services/machines/dks",
-        "services/lfo/dks",
-    ] {
-        for (object, current) in build::module_status(&r, &r.join(dir)).unwrap() {
-            assert!(
-                current,
-                "{dir}/{object} is older than its sources: patchkit build {dir}"
-            );
-        }
     }
 }

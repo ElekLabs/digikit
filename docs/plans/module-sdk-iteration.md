@@ -2,7 +2,7 @@
 
 Status: current scoped iteration complete on `test/module-sdk-iteration` (2026-11-04); follow-ups below are deferred. This plan follows the Nx workflow work merged in #285 and the SDK host fixture and zero-DSP card safety work merged in #286.
 
-Representative affected-plan regression cases are in [`tools/nx/tests/selection.test.ts`](../../tools/nx/tests/selection.test.ts): module source/manifest, runtime loader, public API header and mixed menu/UI changes around lines 225–230; shared harness `ready.ts` around line 675; and broad public SDK contract coverage around line 886. The checkpoint evidence below closes this iteration's selection and fixture work. No full device gate has run on this branch under the user-approved broad-suite exception; deferred work is not part of this closeout.
+The affected-plan regression cases that were in `tools/nx/tests/selection.test.ts` (module source/manifest, runtime loader, public API header, mixed menu/UI changes, the shared harness and the public SDK contract) were removed with the Nx tooling tests; `pnpm nx:pilot show target inputs` and `mise run test:plan` answer the same questions. The checkpoint evidence below closes this iteration's selection and fixture work. No full device gate has run on this branch under the user-approved broad-suite exception; deferred work is not part of this closeout.
 
 ## Checkpoint: selected module work
 

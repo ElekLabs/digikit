@@ -1,4 +1,4 @@
-// Checks the cargo dep-info files of the cached rust-tests targets (HERMETIC in tools/nx/cargo.mjs) against their
+// Checks the cargo dep-info files of the cached rust-tests targets (HERMETIC and LIB_TESTS in tools/nx/cargo.mjs) against their
 // declared inputs. Every repository file that a test unit compiles in must be under its crate, under a crate it
 // depends on by path (transitively), in the extra inputs of one of those crates, or the root Cargo.toml/Cargo.lock.
 // Run after the targets ran: `node tools/nx/cargo-depfiles.mjs`. Exit 1 on uncovered files.
@@ -8,7 +8,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'smol-toml';
 import { matchesGlob } from 'node:path';
-import { DAEMON_NODSP_EXTRA, HERMETIC, pathDeps } from './cargo.mjs';
+import { DAEMON_NODSP_EXTRA, HERMETIC, LIB_TESTS, pathDeps } from './cargo.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const WS = '{workspaceRoot}/';
@@ -77,11 +77,14 @@ for (const file of (existsSync(depsDir) ? readdirSync(depsDir) : []).filter((f) 
   if (first.startsWith('..')) continue;
   const owner = roots.filter((r) => under(first, r)).sort((a, b) => b.length - a.length)[0];
   const name = owner && rootToName.get(owner);
-  if (!name || !(name in HERMETIC)) continue;
+  if (!name || !(name in HERMETIC || name in LIB_TESTS)) continue;
   units++;
   owners.add(name);
   const crates = closure(name);
-  const extras = new Set(crates.flatMap((c) => HERMETIC[c] ?? []).map((e) => e.replace(WS, '')));
+  const extras = crates
+    .flatMap((c) => HERMETIC[c] ?? LIB_TESTS[c]?.inputs ?? [])
+    .filter((e) => !e.startsWith('!'))
+    .map((e) => e.replace(WS, ''));
   for (const dep of deps) {
     const path = rel(dep);
     if (path.startsWith('..') || under(path, 'dist')) continue;
@@ -89,7 +92,7 @@ for (const file of (existsSync(depsDir) ? readdirSync(depsDir) : []).filter((f) 
       crates.some((c) => under(path, byName.get(c))) ||
       path === 'Cargo.toml' ||
       path === 'Cargo.lock' ||
-      extras.has(path);
+      extras.some((e) => matchesGlob(path, e));
     if (!ok) bad.push(`${name}: ${path} (${file})`);
   }
 }

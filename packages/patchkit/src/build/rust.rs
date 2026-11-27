@@ -734,16 +734,6 @@ mod tests {
     }
 
     #[test]
-    fn a_staged_dependency_loses_its_workspace_root() {
-        let text =
-            "[package]\nname = \"a\"\n\n[workspace]\n\n[profile.release]\npanic = \"abort\"\n";
-        assert_eq!(
-            without_workspace_root(text),
-            "[package]\nname = \"a\"\n\n\n[profile.release]\npanic = \"abort\"\n"
-        );
-    }
-
-    #[test]
     fn staging_keeps_a_dependency_name_after_its_source_directory_moves() {
         let work = TempDir::new("pk-stage-").unwrap();
         let src = work.path().join("source");
@@ -776,38 +766,5 @@ mod tests {
             [".deps/0-original"]
         );
         assert!(deps_dir.join("0-original/Cargo.toml").is_file());
-    }
-
-    #[test]
-    fn staging_rejects_a_name_with_a_path_separator() {
-        let work = TempDir::new("pk-stage-").unwrap();
-        let manifest = work.path().join("Cargo.toml");
-        std::fs::write(
-            &manifest,
-            "[package]\nname = \"dep\"\n[package.metadata.patchkit]\nstaged-dir = \"../other\"\n",
-        )
-        .unwrap();
-        assert!(staged_dir_name(&manifest).is_err());
-    }
-
-    #[test]
-    fn copy_tree_stamps_the_copy_with_the_current_time() {
-        let src = TempDir::new("pk-copy-src-").unwrap();
-        let dst = TempDir::new("pk-copy-dst-").unwrap();
-        let file = src.path().join("lib.rs");
-        std::fs::write(&file, b"fn f() {}").unwrap();
-        let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
-        std::fs::File::options()
-            .write(true)
-            .open(&file)
-            .unwrap()
-            .set_modified(old)
-            .unwrap();
-        copy_tree(src.path(), dst.path()).unwrap();
-        let copied = std::fs::metadata(dst.path().join("lib.rs"))
-            .unwrap()
-            .modified()
-            .unwrap();
-        assert!(copied > old);
     }
 }

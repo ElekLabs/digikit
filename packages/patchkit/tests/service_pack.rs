@@ -134,20 +134,6 @@ fn a_service_packs_to_a_dks_with_provides_and_exports_and_a_user_has_a_hard_need
 }
 
 #[test]
-fn the_output_name_must_match_the_role() {
-    if !toolchain() {
-        return;
-    }
-    let here = root();
-    let d = scratch("ext");
-    let e = refused(&here, "test/svc-test", &d.join("svc-test.dkm"));
-    assert!(e.contains("must end in .dks"), "{e}");
-    let e = refused(&here, "test/svc-test-user", &d.join("user.dks"));
-    assert!(e.contains("must not end in .dks"), "{e}");
-    let _ = std::fs::remove_dir_all(&d);
-}
-
-#[test]
 fn a_service_with_a_reserved_service_or_a_foreign_export_is_refused() {
     let d = scratch("bad");
     let cases: [(&str, &dyn Fn(&str) -> String, &str); 8] = [

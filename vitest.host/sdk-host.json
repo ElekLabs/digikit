@@ -1,0 +1,5 @@
+{
+  "name": "sdk-host",
+  "dir": ".",
+  "include": "sdk/tests/*.test.ts"
+}

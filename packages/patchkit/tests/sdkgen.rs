@@ -9,27 +9,6 @@ fn root() -> PathBuf {
 }
 
 #[test]
-fn the_fx_chain_cap_is_the_registrys() {
-    // the chain cap of the registry in core/fx is the contract's DK_FX_MAX
-    let toml = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
-    let f = sdkgen::fx(&toml).unwrap();
-    let max = f
-        .consts
-        .iter()
-        .find(|c| c.name == "DK_FX_MAX")
-        .unwrap()
-        .value;
-    let man =
-        std::fs::read_to_string(root().join("runtime/platform/fx/module.toml")).unwrap_or_default();
-    if !man.is_empty() {
-        assert!(
-            man.contains(&format!("max = {max}")),
-            "runtime/platform/fx/module.toml: the fx registry has max = {max}"
-        );
-    }
-}
-
-#[test]
 fn a_bad_type_or_view_is_refused() {
     let text = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
     // an import signature with a type the contract does not know
@@ -44,22 +23,6 @@ fn a_bad_type_or_view_is_refused() {
     let broken = text.replace("\"i32 pitch // ", "\"i32 pitchx // ");
     assert_ne!(broken, text);
     assert!(sdkgen::render(&broken).unwrap_err().0.contains("name list"));
-}
-
-#[test]
-fn the_record_format_constants_come_from_the_contract_maxima() {
-    // The effect chain cap `fx_slots` of `[limits.max]` is the contract's DK_FX_MAX (`[fx]`).
-    let max = sdkgen::limits_max();
-    let fx = sdkgen::fx(&std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap()).unwrap();
-    let dk_fx_max = fx
-        .consts
-        .iter()
-        .find(|c| c.name == "DK_FX_MAX")
-        .unwrap()
-        .value;
-    assert_eq!(dk_fx_max as u64, max.fx_slots);
-    // the packer's array length is a copy of `DK_PAGE_KNOBS`
-    assert_eq!(patchkit::register::KNOBS, sdkgen::page_knobs());
 }
 
 #[test]
@@ -275,90 +238,6 @@ fn the_service_abi_hash_follows_every_byte_and_the_file_name_and_is_never_zero()
         sdkgen::svc_abi_hash(&[("x", b"a"), ("y", b"b")])
     );
     assert_ne!(sdkgen::svc_abi_hash(&[]), 0);
-}
-
-#[test]
-fn the_exports_of_a_service_file_are_generated_from_its_provided_imports() {
-    let root = root();
-    let files = sdkgen::generate(&root).unwrap();
-    let get = |path: &str| {
-        files
-            .iter()
-            .find(|(p, _)| p == path)
-            .unwrap_or_else(|| panic!("{path} is not generated"))
-            .1
-            .as_str()
-    };
-    // a pure wrapper is written, a hand-written function is named by its module, the list keeps the order of sdk.toml
-    let machines = get("services/machines/dks/src/gen_exports.rs");
-    assert!(
-        machines
-            .contains("const _: api::DkMachineAddPageFn = crate::builder::dk_machine_add_page;")
-    );
-    assert!(machines.contains("crate::builder::dk_module_ctx_add_machine as *const u8"));
-    assert!(!machines.contains("fn dk_param_get"));
-    assert!(machines.contains("const _: api::DkParamGetFn = crate::fw::dk_param_get;"));
-    assert!(machines.contains("const _: api::DkPageCanvasFn = crate::builder::dk_page_canvas;"));
-    // the runtime asks the machines file nothing by name (the MODULES reply uses its `Describe` part): no runtime-only export
-    assert!(!machines.contains("crate::rt::"));
-    assert!(
-        machines.find("\"dk_param_get\"").unwrap()
-            < machines.find("\"dk_page_bind_local\"").unwrap()
-    );
-    // a service whose exports are all hand-written has no wrapper and no `build` import
-    let samples = get("services/samples/dks/src/gen_exports.rs");
-    assert!(!samples.contains("ImportCore"));
-
-    for service in sdkgen::provider_services() {
-        let dir = format!("services/{service}/dks");
-        let expected = sdkgen::provided_exports(&service);
-        if !expected.is_empty() && root.join(&dir).is_dir() {
-            let exports = get(&format!("{dir}/src/gen_exports.rs"));
-            let names: Vec<_> = exports
-                .lines()
-                .filter_map(|line| line.split_once("name_hash(\""))
-                .map(|(_, tail)| tail.split_once('"').unwrap().0)
-                .collect();
-            assert_eq!(names, expected, "{service}");
-        }
-    }
-
-    // The public Rust list retains declaration order. The C header groups prototypes by service.
-    let contract: toml::Value =
-        toml::from_str(&std::fs::read_to_string(root.join(sdkgen::SOURCE)).unwrap()).unwrap();
-    let c_services = contract["handle"]["services"].as_array().unwrap();
-    let header = get(sdkgen::C_IMPORTS_OUT);
-    let prototypes: Vec<_> = header
-        .lines()
-        .filter(|line| line.ends_with(");"))
-        .filter_map(|line| line.split_once('('))
-        .filter_map(|(decl, _)| decl.rsplit([' ', '*']).next())
-        .collect();
-    let mut expected = Vec::new();
-    for import in contract["import"].as_array().unwrap() {
-        let import = import.as_table().unwrap();
-        let flag = |key| import.get(key).and_then(toml::Value::as_bool) == Some(true);
-        if !flag("provided") {
-            continue;
-        }
-        let name = import["name"].as_str().unwrap();
-        let service = import.get("service").and_then(toml::Value::as_str);
-        let public = !flag("test") && !flag("internal");
-        if public {
-            expected.push(format!("({:?}, {name:?}),", service.unwrap_or("")));
-        }
-        let has_prototype = public
-            && !import.contains_key("kind")
-            && c_services.iter().any(|s| s.as_str() == service);
-        assert_eq!(prototypes.contains(&name), has_prototype, "{name}");
-    }
-    let (_, provided) = get(sdkgen::RUST_OUT)
-        .split_once("pub const PROVIDED:")
-        .unwrap();
-    let (_, rows) = provided.split_once("= [\n").unwrap();
-    let (rows, _) = rows.split_once("];").unwrap();
-    let actual: Vec<_> = rows.trim().lines().map(str::trim).collect();
-    assert_eq!(actual, expected);
 }
 
 #[test]

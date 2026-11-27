@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "name": "gate-rust-modules",
-  "description": "Rust tests of patchkit and elektron-native-boot that build or scan the module library; runs when module sources, fixtures, devices or the SDK manifest change.",
+  "description": "Rust tests of elektron-native-boot that scan the module library; runs when module sources, fixtures, devices or the SDK manifest change. The patchkit tests are its own targets: rust-tests (cached library tests) and rust-tests-integration.",
   "targets": {
     "rust-tests": {
       "executor": "nx:run-commands",
@@ -20,7 +20,7 @@
         "{workspaceRoot}/sdk/sdk.toml",
         "{workspaceRoot}/tools/patchkit/toolchain/**/*", { "externalDependencies": ["smol-toml"] }],
       "options": {
-        "command": "node tools/nx/rust-env.mjs -- cargo nextest run -p patchkit --features record-rules -p elektron-native-boot --release --locked --offline",
+        "command": "node tools/nx/rust-env.mjs -- cargo nextest run -p elektron-native-boot --release --locked --offline",
         "cwd": "."
       }
     }

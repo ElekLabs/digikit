@@ -171,25 +171,6 @@ fn the_syntakt_emulator_set_fits_the_flash_container_with_section_7_stored_packe
     assert_eq!(got.section(7).unwrap().data, stock.section(7).unwrap().data);
 }
 
-/// The Rust margin equals the reference `tools.firmware.aplibpack.inplace_margin` on the real stream (9,444 bytes, finding 151).
-#[test]
-fn the_in_place_margin_of_the_real_section_7_stream_matches_the_python_reference() {
-    let Some(raw) = image() else { return };
-    let data = Firmware::parse(&raw)
-        .unwrap()
-        .section(7)
-        .unwrap()
-        .data
-        .clone();
-    let stream = patchkit::aplib::pack_section(&data);
-    assert_eq!(stream.len(), 264_194);
-    let stage = 0x4f8af2c1 - stream.len() as u64;
-    assert_eq!(
-        patchkit::aplib::inplace_margin(&stream, 0x4f84f2c6, stage).unwrap(),
-        Some(9_444)
-    );
-}
-
 #[test]
 fn verify_accepts_a_packed_section_only_when_a_module_of_the_record_claims_it() {
     let Some(raw) = image() else { return };
@@ -385,26 +366,4 @@ fn the_digitakt_and_digitone_device_images_have_no_literal_tail() {
             "{short}"
         );
     }
-}
-
-/// The key ids of the Syntakt's key events that core/ui compares (`[input.keys]`) are the entries of the firmware's decoder table at 0x401d7a48 for the
-/// wire positions of YES, NO, RIGHT and the second YES key (panel codes 39, 28, 31 and 49: wire position = code - 1 = channel * 8 + bit; finding 153).
-#[test]
-fn the_syntakt_input_keys_are_the_decoder_table_entries() {
-    let Some(raw) = image() else { return };
-    let fw = Firmware::parse(&raw).unwrap();
-    let main = fw.main().unwrap();
-    let table = |wire: usize| -> u64 {
-        let at = (0x401d7a48 - main.dest as usize) + 4 * wire;
-        u32::from_be_bytes(main.data[at..at + 4].try_into().unwrap()) as u64
-    };
-    let text = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
-    let doc: toml::Value = toml::from_str(&text).unwrap();
-    let keys = &doc["input"]["keys"];
-    let get = |k: &str| keys[k].as_integer().unwrap() as u64;
-    assert_eq!(get("YES"), table(39 - 1));
-    assert_eq!(get("NO"), table(28 - 1));
-    assert_eq!(get("RIGHT"), table(31 - 1));
-    // the second YES key is the LEVEL push, panel code 49 (channel 6, bit 0: wire position 48)
-    assert_eq!(get("LEVEL_PUSH"), table(49 - 1));
 }

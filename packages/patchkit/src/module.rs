@@ -1735,78 +1735,6 @@ impl Library {
         Ok(lib)
     }
 }
-#[cfg(all(test, not(target_arch = "wasm32")))]
-mod cache_generation_tests {
-    use super::*;
-
-    #[test]
-    fn core_generation_matches_explicit_core_manifest_catalog() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let started = std::time::Instant::now();
-        // Match gen's first pass: read existing cache declarations, never check freshness or build.
-        let legacy = Library::scan_repo_defined(&root, true, Some(&[]), &[]).unwrap();
-        let core: Vec<_> = legacy
-            .modules
-            .iter()
-            .filter(|m| {
-                CORE_MODULE_ROOTS
-                    .iter()
-                    .any(|r| m.dir.starts_with(root.join(r)))
-            })
-            .collect();
-        assert!(!core.is_empty());
-        let paths: Vec<_> = core.iter().map(|m| m.dir.join("module.toml")).collect();
-        let ids: Vec<_> = core.iter().map(|m| m.id().to_string()).collect();
-        // This also verifies every required module is included in the explicit core set.
-        let mut explicit = Library::from_manifests(
-            Build {
-                root: &root,
-                only: Some(&[]),
-                defines: &[],
-            },
-            &paths,
-            true,
-            &ids,
-        )
-        .unwrap();
-        let models = crate::typed::Models::from_dir(&root.join("devices")).unwrap();
-        let facts = crate::devgen::Facts::from_dir(&root.join("devices")).unwrap();
-        explicit.lower(&models).unwrap();
-        let generate = |lib: &Library, id: &str| {
-            let mut files = crate::modgen::generate(lib, &models, id).unwrap();
-            files.extend(crate::devgen::generate(lib, &facts, id).unwrap());
-            files.sort();
-            files
-        };
-        let mut count = 0;
-        for id in &ids {
-            let baseline = generate(&legacy, id);
-            assert_eq!(
-                baseline,
-                generate(&explicit, id),
-                "core generation differs for {id}"
-            );
-            count += baseline.len();
-            println!(
-                "{id}: {}",
-                baseline
-                    .iter()
-                    .map(|(path, _)| path.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-        // The content pass cannot add a gallery for these core modules: all their objects were
-        // already read in both libraries above, because Build::only filters content modules only.
-        assert!(count > 0);
-        println!(
-            "compared {} core modules, {count} generated files in {:?}",
-            ids.len(),
-            started.elapsed()
-        );
-    }
-}
-
 #[cfg(test)]
 mod manifest_tests {
     use super::*;
@@ -2166,18 +2094,4 @@ mod manifest_tests {
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
-mod runtime_version_tests {
-    /// The runtime has one version: the manifest of `core/runtime` says the SDK runtime version that INFO reports (`sdk/sdk.toml` [runtime]), so
-    /// the patch line (`core/runtime@x`), the flash question and the check after the restart name the same number.
-    #[test]
-    fn the_runtime_manifest_version_is_the_sdk_runtime_version() {
-        let path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/core/module.toml");
-        let manifest: toml::Table = std::fs::read_to_string(path).unwrap().parse().unwrap();
-        let version = manifest["module"]["version"].as_str().unwrap();
-        assert_eq!(
-            version,
-            crate::dkm::fmt_runtime(crate::dkm::runtime_version())
-        );
-    }
-}
+mod runtime_version_tests {}

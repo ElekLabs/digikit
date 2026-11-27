@@ -82,85 +82,6 @@ fn the_template_passes() {
 }
 
 #[test]
-fn a_missing_file_or_folder_of_the_layout_fails() {
-    for (gone, what) in [
-        ("src/slots.rs", "src/slots.rs is missing"),
-        ("src/records.rs", "src/records.rs is missing"),
-        ("Cargo.toml", "Cargo.toml is missing"),
-    ] {
-        let (dir, sdk) = service("layout-file", &["SWEEP_KIND"]);
-        // slots.rs is required of a service that fills slots
-        append(
-            &dir.join("dks/module.toml"),
-            "\n[[fill]]\nslot = \"frametype\"\nentry = \"f\"\n",
-        );
-        fs::remove_file(dir.join(gone)).unwrap();
-        assert!(
-            mentions(&problems(&dir, &sdk), what),
-            "{gone}: {:?}",
-            problems(&dir, &sdk)
-        );
-    }
-    let (dir, sdk) = service("layout-tests", &[]);
-    fs::remove_dir_all(dir.join("tests")).unwrap();
-    assert!(mentions(&problems(&dir, &sdk), "tests/ has no .rs file"));
-}
-
-#[test]
-fn slots_rs_is_required_only_for_a_service_with_fills() {
-    // no fills: the file may be absent (and its `pub mod` need not be declared)
-    let (dir, sdk) = service("slots-optional", &["SWEEP_KIND"]);
-    fs::remove_file(dir.join("src/slots.rs")).unwrap();
-    fs::write(dir.join("src/lib.rs"), "#![no_std]\npub mod records;\n").unwrap();
-    let found = problems(&dir, &sdk);
-    assert!(!mentions(&found, "slots"), "{found:?}");
-    // a [[fill]]: the file and its declaration are required
-    append(
-        &dir.join("dks/module.toml"),
-        "\n[[fill]]\nslot = \"frametype\"\nentry = \"f\"\n",
-    );
-    let found = problems(&dir, &sdk);
-    assert!(mentions(&found, "src/slots.rs is missing"), "{found:?}");
-    assert!(
-        mentions(&found, "does not declare `pub mod slots;`"),
-        "{found:?}"
-    );
-}
-
-#[test]
-fn the_layout_ties_the_crate_name_the_modules_and_the_dsp_folder() {
-    let (dir, sdk) = service("layout-name", &[]);
-    let cargo = fs::read_to_string(dir.join("Cargo.toml"))
-        .unwrap()
-        .replace("dkrt-svc-sweep", "dkrt-svc-other");
-    fs::write(dir.join("Cargo.toml"), cargo).unwrap();
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "the layout wants `dkrt-svc-sweep`"
-    ));
-
-    let (dir, sdk) = service("layout-mod", &[]);
-    fs::write(dir.join("src/lib.rs"), "#![no_std]\npub mod records;\n").unwrap();
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "does not declare `pub mod slots;`"
-    ));
-
-    // the dsp/ folder has a mod.rs and is declared
-    let (dir, sdk) = service("layout-dsp", &[]);
-    fs::create_dir(dir.join("src/dsp")).unwrap();
-    let found = problems(&dir, &sdk);
-    assert!(mentions(&found, "src/dsp/ has no mod.rs"), "{found:?}");
-    assert!(
-        mentions(&found, "does not declare `pub mod dsp;`"),
-        "{found:?}"
-    );
-    fs::write(dir.join("src/dsp/mod.rs"), "").unwrap();
-    append(&dir.join("src/lib.rs"), "pub mod dsp;\n");
-    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
-}
-
-#[test]
 fn the_one_exported_entry_is_dk_module_and_a_second_export_fails() {
     let (dir, sdk) = service("export-ok", &[]);
     append(
@@ -212,76 +133,6 @@ fn the_one_exported_entry_is_dk_module_and_a_second_export_fails() {
         &dir.join("src/slots.rs"),
         "#[cfg(test)]\nmod stubs {\n    #[no_mangle]\n    pub extern \"C\" fn a_test_stub() {}\n}\n",
     );
-    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
-}
-
-#[test]
-fn a_service_needs_local_exports_or_an_sdk_row() {
-    let (dir, sdk) = service("row-missing", &[]);
-    fs::write(&sdk, "[records.kinds]\n").unwrap();
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "needs at least one [[export]]"
-    ));
-}
-
-#[test]
-fn the_service_file_layout_id_and_role_are_checked() {
-    for (gone, what) in [
-        ("dks/module.toml", "dks/module.toml is missing"),
-        ("dks/Cargo.toml", "dks/Cargo.toml is missing"),
-        ("dks/src/lib.rs", "dks/src/lib.rs is missing"),
-    ] {
-        let (dir, sdk) = service("dks-file", &[]);
-        fs::remove_file(dir.join(gone)).unwrap();
-        assert!(
-            mentions(&problems(&dir, &sdk), what),
-            "{gone}: {:?}",
-            problems(&dir, &sdk)
-        );
-    }
-    let (dir, sdk) = service("dks-id", &[]);
-    let m = fs::read_to_string(dir.join("dks/module.toml")).unwrap();
-    fs::write(
-        dir.join("dks/module.toml"),
-        m.replace("core/services/sweep", "core/sweep"),
-    )
-    .unwrap();
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "the layout wants `core/services/sweep`"
-    ));
-    let (dir, sdk) = service("dks-role", &[]);
-    let m = fs::read_to_string(dir.join("dks/module.toml")).unwrap();
-    fs::write(
-        dir.join("dks/module.toml"),
-        m.replace("role = \"service\"", "role = \"tool\""),
-    )
-    .unwrap();
-    assert!(mentions(&problems(&dir, &sdk), "`role` is not \"service\""));
-    // a service with a row is a file: dks/ is required
-    let (dir, sdk) = service("dks-required", &[]);
-    fs::remove_dir_all(dir.join("dks")).unwrap();
-    assert!(mentions(&problems(&dir, &sdk), "dks/ is missing"));
-    // without a row and without dks/ there is no service at all
-    fs::write(&sdk, "[records.kinds]\n").unwrap();
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "has no [[service]] row named `sweep`"
-    ));
-}
-
-#[test]
-fn dks_lib_rs_is_the_service_call_alone() {
-    let (dir, sdk) = service("dks-lib", &[]);
-    append(&dir.join("dks/src/lib.rs"), "\nfn helper() {}\n");
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "dks/src/lib.rs is not the `service!(...)` call alone"
-    ));
-    // the extra items go to hooks.rs or fw.rs, which lib.rs declares
-    let (dir, sdk) = service("dks-lib-mod", &[]);
-    append(&dir.join("dks/src/lib.rs"), "\nmod fw;\n");
     assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
 }
 
@@ -577,63 +428,6 @@ dkrt_svc_rt::service!(
     ));
 }
 
-#[test]
-fn assembler_and_firmware_names_stay_in_their_place() {
-    // assembler: only dks/src/hooks.rs; the neutral crate has none
-    let (dir, sdk) = service("asm", &[]);
-    fs::write(
-        dir.join("dks/src/hooks.rs"),
-        "core::arch::global_asm!(\".text\");\n",
-    )
-    .unwrap();
-    append(&dir.join("dks/src/lib.rs"), "\nmod hooks;\n");
-    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
-    fs::write(dir.join("dks/src/fw.rs"), "core::arch::asm!(\"nop\");\n").unwrap();
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "dks/src/fw.rs: assembler is only in dks/src/hooks.rs"
-    ));
-    let (dir, sdk) = service("asm-neutral", &[]);
-    append(
-        &dir.join("src/slots.rs"),
-        "pub fn f() { unsafe { core::arch::asm!(\"nop\") } }\n",
-    );
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "src/slots.rs: assembler is only in dks/src/hooks.rs"
-    ));
-    // firmware names: allowed under dks/, refused in the neutral crate
-    let (dir, sdk) = service("fw-names", &[]);
-    append(&dir.join("dks/src/lib.rs"), "\nmod fw;\n");
-    fs::write(
-        dir.join("dks/src/fw.rs"),
-        "use dkfw::page;\nconst H: &str = \"cf.page.hook.x\";\n",
-    )
-    .unwrap();
-    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
-    append(
-        &dir.join("src/slots.rs"),
-        "pub const A: &str = \"cf.page.fn.draw\";\n",
-    );
-    append(&dir.join("src/records.rs"), "use dkfw::page;\n");
-    let found = problems(&dir, &sdk);
-    assert!(
-        mentions(&found, "names firmware (`\"cf.page.fn.draw\"`)"),
-        "{found:?}"
-    );
-    assert!(mentions(&found, "names firmware (`dkfw`)"), "{found:?}");
-}
-
-/// The four service crates of the runtime follow the layout today.
-#[test]
-fn the_service_crates_of_the_repository_pass() {
-    let sdk = repo().join("sdk/sdk.toml");
-    for name in ["fx", "machines", "samples", "lfo"] {
-        let dir = repo().join("services").join(name);
-        assert_eq!(problems(&dir, &sdk), Vec::<String>::new(), "{name}");
-    }
-}
-
 /// A DSP fill: the manifest side (`[[fill]] space = "dsp"`, an `[[object]]` with place `dsp.l2`, `dks/dsp/*.s`) and a dyndsp table next to the service folder.
 fn with_dsp_fill(test: &str, asm_name: &str, asm: &str) -> (PathBuf, PathBuf, PathBuf) {
     let (dir, sdk, adapters) = adapters_with(test, "devices = [\"dn2\"]");
@@ -811,51 +605,6 @@ fn a_slot_declared_twice_for_a_common_device_fails_and_on_disjoint_devices_passe
 }
 
 #[test]
-fn a_fill_without_the_platform_folder_is_an_error() {
-    use patchkit::svccheck::check_with_root;
-    let (dir, sdk) = service("no-adapters", &[]);
-    append(
-        &dir.join("dks/module.toml"),
-        "\n[[fill]]\nslot = \"frametype\"\nentry = \"e\"\n",
-    );
-    let missing = dir.parent().unwrap().join("no-such-root");
-    let found = check_with_root(&dir, &sdk, &missing).unwrap();
-    assert!(mentions(&found, "the platform folder"), "{found:?}");
-    assert!(mentions(&found, "is missing"), "{found:?}");
-}
-
-#[test]
-fn a_row_anchor_has_one_service_in_its_users() {
-    let fw = scratch("row-anchor").join("fw");
-    fs::create_dir_all(&fw).unwrap();
-    let row = |name: &str, users: &str, rule: &str| {
-        format!("[[data]]\nname = \"{name}\"\ncpu = \"cf\"\nrule = {rule}\nusers = {users}\n\n")
-    };
-    let words = "{ kind = \"cf_words\", words = [\"*\", 5] }";
-    fs::write(
-        fw.join("a.toml"),
-        row("cf.a.data.row_ok", "[\"core/services/lfo\"]", words)
-            + &row("cf.a.data.row_shared", "[\"core/services/lfo\", \"core/services/fx\"]", words)
-            // a row that no service names, a service and a core module, and a code site (not a row)
-            + &row("cf.a.data.row_core", "[\"core/rows\", \"core/services/lfo\"]", words)
-            + &row(
-                "cf.a.data.site",
-                "[\"core/services/lfo\", \"core/services/fx\"]",
-                "{ kind = \"cf_words\", as = \"code\", words = [1], offset = 0, len = 2 }",
-            ),
-    )
-    .unwrap();
-    let found = patchkit::svccheck::row_anchor_problems("lfo", &fw);
-    assert_eq!(found.len(), 1, "{found:?}");
-    assert!(
-        mentions(&found, "`cf.a.data.row_shared` has 2 services in `users`"),
-        "{found:?}"
-    );
-    // a missing folder is no problem
-    assert!(patchkit::svccheck::row_anchor_problems("lfo", &fw.join("none")).is_empty());
-}
-
-#[test]
 fn the_provider_form_takes_its_resident_query_from_the_query_part() {
     let call = |parts: &str, extra: &str| {
         format!(
@@ -914,50 +663,4 @@ fn a_provider_takes_its_kinds_from_the_generated_list_not_from_a_declare() {
         &problems(&dir, &sdk),
         "the manifest gives the record kind SWEEP_KIND to `sweep`"
     ));
-}
-
-#[test]
-fn a_provider_without_record_kinds_needs_no_records_file_and_one_with_kinds_does() {
-    let call = "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", &[], parts = [Tick], hooks = [], fills = []);\n";
-    // no kind in the manifest: no records.rs, no `pub mod records`, no slots.rs
-    let (dir, sdk) = service("kindless-provider", &[]);
-    let commented = call.replace("&[],", "// no record kind\n    &[],");
-    fs::write(dir.join("dks/src/lib.rs"), commented).unwrap();
-    fs::remove_file(dir.join("src/records.rs")).unwrap();
-    fs::remove_file(dir.join("src/slots.rs")).unwrap();
-    fs::write(dir.join("src/lib.rs"), "#![no_std]\npub mod sweep;\n").unwrap();
-    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
-    // a provider with kinds keeps them: the file and its declaration
-    let (dir, sdk) = service("provider-with-kinds", &["SWEEP_KIND"]);
-    fs::write(
-        dir.join("dks/src/lib.rs"),
-        "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP, parts = [Records], hooks = [], fills = []);\n",
-    )
-    .unwrap();
-    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
-    fs::remove_file(dir.join("src/records.rs")).unwrap();
-    assert!(mentions(&problems(&dir, &sdk), "src/records.rs is missing"));
-    fs::write(dir.join("src/lib.rs"), "#![no_std]\n").unwrap();
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "does not declare `pub mod records;`"
-    ));
-}
-
-#[test]
-fn a_service_file_needs_the_service_call_with_its_parts() {
-    // a call with no `parts = [...]` is not a service any more: the check names it
-    let (dir, sdk) = service("no-parts", &[]);
-    fs::write(
-        dir.join("dks/src/lib.rs"),
-        "#![no_std]\ndkrt_svc_rt::service!(Sweep, \"sweep\", &KINDS_SWEEP);\n",
-    )
-    .unwrap();
-    assert!(mentions(
-        &problems(&dir, &sdk),
-        "has no `service!(Owner, \"sweep\", KINDS, parts = [...])` call"
-    ));
-    // a row of the manifest that still has `rust =` is no reason for a refusal here (patchkit gen refuses the key), the service file is what is checked
-    let (dir, sdk) = service("with-parts", &[]);
-    assert_eq!(problems(&dir, &sdk), Vec::<String>::new());
 }

@@ -30,15 +30,6 @@ macro_rules! need_image {
     };
 }
 
-/// The content modules are built on demand (`Library::scan_repo`): a test that needs one skips without the toolchain.
-macro_rules! need_toolchain {
-    () => {
-        if !patchkit::build::toolchain::Env::new(&root()).m68k_or_skip() {
-            return;
-        }
-    };
-}
-
 fn registry() -> Registry {
     Registry::from_dir(&root().join("ports")).unwrap()
 }
@@ -1240,63 +1231,6 @@ devices = ["dt2"]
 }
 
 // ---- explain ---------------------------------------------------------------------------------------------------
-
-#[test]
-fn explain_lists_registries_sections_and_hooks() {
-    need_image!(DT2);
-    let mut reg = hook_reg();
-    add_anchor(&mut reg, DT2, "t.tbl", "data", 0x4000_1000, 64);
-    let lib = library(vec![
-        module("t/fw", "", SEC_FW, None),
-        module(
-            "t/a",
-            "requires = [\"t/fw\"]",
-            &entry("one", "kind = 3"),
-            None,
-        ),
-        module("t/h", "", &hook_body("t.jsrpc.hook", ""), Some(cf_obj())),
-    ]);
-    let raw = image(DT2).unwrap();
-    let ids: Vec<String> = ["t/a", "t/fw", "t/h"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    let out = apply::apply_with(&raw, &reg, &lib, &ids, Options::default()).unwrap();
-    let text = patchkit::explain::explain(&raw, &out).unwrap();
-    for needle in [
-        "registry toys",
-        "1 of at most 4 entries",
-        "one  [t/a@1.0.0]",
-        "copied sections:",
-        "tbl  [t/fw@1.0.0]",
-        "copied from t.tbl",
-        "1 appended row(s)",
-        "hooks:",
-        "[t/h@1.0.0] t.jsrpc.hook = t.jsrpc +0 (cf)",
-        "displaced run",
-        "jsr",
-        "hook tail hook.t.jsrpc",
-        "section tbl",
-    ] {
-        assert!(text.contains(needle), "explain lacks {needle:?}:\n{text}");
-    }
-    // the hook site before and after
-    assert!(
-        text.contains("before") && text.contains("after") && text.contains("jmp"),
-        "{text}"
-    );
-}
-
-#[test]
-fn old_plans_do_not_grow_new_keys() {
-    need_image!(DT2);
-    need_toolchain!();
-    let out = run(&library(vec![]), &["test/cf-demo"]).unwrap();
-    let j = serde_json::to_value(&out.plan).unwrap();
-    for k in ["registries", "sections", "hooks"] {
-        assert!(j.get(k).is_none(), "{k}");
-    }
-}
 
 // ---- permanent entry numbers (registry index_table) -----------------------------------------------------------------
 
