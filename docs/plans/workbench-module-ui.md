@@ -139,22 +139,12 @@ Uploading an animation leaves the saved choice alone. Save selects a file presen
   - Line 2: `FILE IGNORED` (status bit 3), else `CARD BUSY - RETRYING` (bit 2), else `CHANGED - NOT SAVED` (bit 1), else `SAVED`.
   - Line 4: `NO DIGIKIT DATA` when bit 0 (file loaded) is clear.
 - Services load only as hard needs of selected modules (`runtime/core/src/rs/src/package/loader/plan.rs` `find_providers`; the system package holds only the runtime and the DIGIKIT menu; Transfer's `serviceRefs` offers a service only for a module that needs it). On a user card the project service runs only while Project Manager, or another module that imports a project call, is loaded. Installing Project Manager turns on per-project settings for every module.
-- Workbench page: a list of all project slots by number and name, with a mark on the current project and on slots that carry digikit data. Selecting one shows its saved state (slot, name, save stamp, write counter), its module list with each module's state on the card (present, missing, hash differs), and the number of saved settings per module. The page is read-only: no delete, rename or load.
+- Workbench page (`workbench/index.tsx`, built): left a list of the device's projects by number (slot + 1) and name, 16 per page with "More projects" (the reply's `next`), the current project marked, "no digikit data" for slots without data and "…" while that is unknown; right the selected project's number, name, write counter, save stamp and its modules with id, loaded or not, and settings count. For a project other than the current one the device reads its file first: `Get` answers `loading` and the page shows "Loading…" and asks again every 200 ms until it does not, stopping when the selection changes or the page closes. A failed query shows its reason in plain words. The page is read-only: no delete, rename or load.
 
-```text
-Modules > Project Manager
-+ Projects ------------+ + 012  DUB SKETCH ---------------------+
-| 003  INTRO           | | Saved     write 14, stamp 6A1F02C3   |
-| 012  DUB SKETCH      | | Modules   digikit/pluck   on card    |
-| 047  LIVE SET 2      | |           digikit/shot    missing    |
-|                      | | Settings  digikit/pluck   3 keys  >  |
-+----------------------+ +--------------------------------------+
-```
+Data path (built): page -> `client.service(ProjectManager)` -> `workbench/project_manager.proto` (`List`, `Get`) -> C handlers in `src/c/project_queries.c` -> `dk_project_list` / `dk_project_get` of the project service. `DK_E_AGAIN` becomes `loading`, `DK_E_NOT_FOUND` becomes `found = false`; the mapping is in `project_query.c` (host tests in `tests/`). The preview answers from `workbench/preview.ts` (fake projects; INTRO answers `loading` twice). The `.dkp` format stays private to the service. Page tests: `apps/desktop/ui/tests/project-manager-page.test.tsx` (memory channel). No device test of its own: the fixtures cover the query path.
 
-Data path: page -> `ModuleClient` operation -> module handler -> project service export -> runtime. The `.dkp` format stays private to the service.
+Open: the runtime takes a query table only from a module that registered a settings descriptor, and a descriptor needs at least one setting. Project Manager has none, so on a device its `dk_workbench_register_queries` is refused (init ignores the result) and the page gets no answers until the runtime accepts a module with queries alone (or the module gets a setting). The preview gives the module an empty schema in `preview.ts`.
 
-- `list(cursor)`: the module calls a new service export over the service's slot scan. A page holds up to 16 summaries (slot, name, flags: current, has digikit data) and a continuation cursor.
-- `get(slot)`: the module calls a new service export that returns a bounded summary of one project: header fields, the module list with each module's state on the card, and the number of settings keys per module. It fits one reply; a longer module list pages by cursor.
 - Loading and renaming come later through the same path; the service owns their consistency (slot reuse, stamps, concurrent changes).
 
 ## Queries (phase 2)
