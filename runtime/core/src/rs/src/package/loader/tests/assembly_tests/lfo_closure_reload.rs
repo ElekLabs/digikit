@@ -12,11 +12,14 @@ use crate::package::reload::{step, Job};
 use dkrt_lifecycle::{Phase as LPhase, Step};
 use dkrt_sdk::logk;
 
-static mut SEEN: Vec<Ev> = Vec::new();
+// The log sink takes only the event (no context pointer), so each test thread owns its buffer.
+std::thread_local! {
+    static SEEN: core::cell::RefCell<Vec<Ev>> = const { core::cell::RefCell::new(Vec::new()) };
+}
 
 unsafe extern "C" fn keep(e: *const Ev) {
     if (*e).kind == logk::LIFECYCLE {
-        (*core::ptr::addr_of_mut!(SEEN)).push(*e);
+        SEEN.with(|s| s.borrow_mut().push(*e));
     }
 }
 
@@ -53,7 +56,7 @@ fn the_closure_reload_of_the_lfo_service_brings_the_shape_module_up_again_throug
     for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
         let image = Image::read(dev, "emulator");
         unsafe {
-            (*core::ptr::addr_of_mut!(SEEN)).clear();
+            SEEN.with(|s| s.borrow_mut().clear());
             let (mut l, plan) = planned(dev, &image, &[], &[&LFO_SHAPE], &SERVICES);
             let _dsp = dsp_env(dev, &l, &plan);
             let rec = boot_record(&[LFO_SHAPE.leaf]);
@@ -71,7 +74,7 @@ fn the_closure_reload_of_the_lfo_service_brings_the_shape_module_up_again_throug
             let path = b"services/lfo.dks\0";
             let mut job = Job::new();
             let mut ops = super::super::host_ops::HostOps { l: &mut l, rt: &mut rt };
-            let before = (*core::ptr::addr_of!(SEEN)).len();
+            let before = SEEN.with(|s| s.borrow().len());
             assert_eq!(job.queue(&mut ops, LIVE_RELOAD, path.as_ptr()), OK, "{}: the job takes the reload", dev.name);
             let mut polls = 0;
             while job.phase == 1 && polls < 8000 {
@@ -81,7 +84,8 @@ fn the_closure_reload_of_the_lfo_service_brings_the_shape_module_up_again_throug
             }
             let (phase, at, result) = (job.phase, job.step, job.result);
             dlog::test_reset_sinks();
-            let seen: Vec<_> = (*core::ptr::addr_of!(SEEN)).iter().map(parts).collect();
+            let all: Vec<Ev> = SEEN.with(|s| s.borrow().clone());
+            let seen: Vec<_> = all.iter().map(parts).collect();
             let tail = &seen[before.min(seen.len())..];
             assert!(phase == 2 && at == step::DONE, "{}: the job did not end in {polls} polls: phase {phase} step {at}; events of the reload: {tail:?}", dev.name);
             assert_eq!(result, OK, "{}: the reload ended {result}", dev.name);
@@ -95,7 +99,7 @@ fn the_closure_reload_of_the_lfo_service_brings_the_shape_module_up_again_throug
             }
             // the end of a place carries the base of the placed image
             let shape = unsafe { stem_hash(b"modules/lfo-shape.dkm\0".as_ptr()) };
-            for e in (*core::ptr::addr_of!(SEEN)).iter().filter(|e| parts(e).4 == shape && parts(e).1 == LPhase::End as u32 && parts(e).2 == Step::Place as u32) {
+            for e in all.iter().filter(|e| parts(e).4 == shape && parts(e).1 == LPhase::End as u32 && parts(e).2 == Step::Place as u32) {
                 assert_ne!(e.a[4], 0, "{}: the place end names the base of the image", dev.name);
             }
             for (op, what) in [(boot_op, "boot"), (reload_op, "reload")] {

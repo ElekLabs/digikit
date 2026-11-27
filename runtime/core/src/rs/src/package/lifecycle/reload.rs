@@ -110,7 +110,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         for &r in &members[..n] {
             self.loader().reload_abort(r);
         }
-        self.session.carried.release_all(self.loader());
+        let l = self.loader();
+        self.reload.reset(&mut self.session.carried, l);
         true
     }
 
@@ -209,14 +210,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             }
             Err(e) => Err(e),
         };
-        if m.restore_pending().is_none() {
-            // the new copies took what they take (or the reload ended before the take-down): nothing waits for the bytes
-            self.session.carried.release_all(l);
-        }
         let down = members.iter().any(|&r| !m.live().contains(PackageId(r as u8))) || m.restore_pending().is_some();
         if out.is_ok() && !down && self.closure_retained(rec) {
             // up again, but an old copy's memory is not back yet: the job asks again
-            self.reload.wait_retained();
+            self.reload.wait_retained(&mut self.session.carried, l);
             return E_BUSY;
         }
         if down || out.is_ok() {
@@ -257,9 +254,6 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         let Some(m) = self.mgr() else {
             return E_NOT_FOUND;
         };
-        if m.restore_pending().is_none() {
-            self.session.carried.release_all(self.loader());
-        }
         match out {
             Ok(_) => {
                 let l = self.loader();

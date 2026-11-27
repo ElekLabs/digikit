@@ -45,8 +45,9 @@ impl ReloadState {
     }
 
     /// The closure is up again and an old copy's memory is not back: the job asks again.
-    pub(crate) fn wait_retained(&mut self) {
+    pub(crate) unsafe fn wait_retained(&mut self, carry: &mut CarriedState, arena: &mut impl Blocks) {
         *self = ReloadState::Retained;
+        self.settle(carry, arena);
     }
 
     /// The reload ended well.

@@ -58,11 +58,11 @@ fn a_refusal_before_the_take_down_is_not_torn() {
 fn a_retained_closure_waits_and_is_not_torn() {
     let (mut c, mut a) = nothing();
     let mut s = at(Called);
-    s.wait_retained();
+    unsafe { s.wait_retained(&mut c, &mut a) };
     assert!(s.is_waiting() && !s.is_torn());
     unsafe { s.stop_waiting(&mut c, &mut a) };
     assert_eq!(s, Idle);
-    s.wait_retained();
+    unsafe { s.wait_retained(&mut c, &mut a) };
     unsafe { s.done(&mut c, &mut a) };
     assert_eq!(s, Idle);
 }
