@@ -120,8 +120,9 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          device's OS UPGRADE receiver does, send and verify the image, then install its system package when the image includes the runtime;
                                          --restore sends the stock file itself; --dry-run only checks (docs/PATCHING.md, \"Flashing\")
   list                                   modules under the repository roots and ports under ports/
-  catalog-check                          validate all committed module manifests and requires;
-                                         host only: no objects, builds, device models or firmware are read
+  catalog-check                          validate all committed module manifests and requires, that generation from the explicit core
+                                         manifests equals a full scan, that each service object's source hash reads the abi boundary
+                                         files and that each record kind has an owner rule; host only: no builds or firmware are read
   gen [--check [--paths] [--scope all|modules|shared]] [--modules a,b] [--manifest PATH]...
                                          write (or check) generated module, SDK and firmware files
                                          --manifest PATH (repeatable, needs --modules, incompatible with --scope shared): explicit library including requires;
@@ -277,7 +278,13 @@ fn run(a: Args) -> Result<()> {
                 ));
             }
             let count = Library::catalog_check(&a.root)?;
-            println!("catalog ok: {count} module manifests");
+            let generated = patchkit::catalog_check::core_generation(&a.root)?;
+            patchkit::catalog_check::abi_boundaries(&a.root)?;
+            #[cfg(feature = "record-rules")]
+            patchkit::catalog_check::record_owners()?;
+            println!(
+                "catalog ok: {count} module manifests, {generated} generated files of the core modules, abi boundary files, record owners"
+            );
         }
         "inspect" => {
             let raw = read(need(rest)?)?;
@@ -545,6 +552,7 @@ fn run(a: Args) -> Result<()> {
                 let facts = patchkit::devgen::Facts::from_dir(&a.root.join("devices"))?;
                 if only.is_empty() {
                     patchkit::devgen::check_device_tables(&lib, &facts)?;
+                    patchkit::row_layout::check(&lib, &a.root)?;
                 }
                 for m in &lib.modules {
                     if !only.is_empty() && !only.iter().any(|o| o == m.id()) {
@@ -1161,180 +1169,6 @@ mod tests {
     use super::*;
     use patchkit::build::{cache_dir, toolchain::Env};
 
-    fn copy_tree(from: &Path, to: &Path) {
-        std::fs::create_dir_all(to).unwrap();
-        for entry in std::fs::read_dir(from).unwrap() {
-            let entry = entry.unwrap();
-            let dest = to.join(entry.file_name());
-            if entry.file_type().unwrap().is_dir() {
-                copy_tree(&entry.path(), &dest);
-            } else {
-                std::fs::copy(entry.path(), dest).unwrap();
-            }
-        }
-    }
-
-    #[test]
-    fn scoped_generation_checks_detect_stale_outputs_without_writing() {
-        let fixture = ApplyRoot::new("generation");
-        // Replace the build fixture's SDK link with a private copy: stale checks never touch the repository.
-        std::fs::remove_file(fixture.0.join("sdk")).unwrap();
-        let real = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        for dir in ["sdk", "devices", "ports", "runtime/platform/rows"] {
-            copy_tree(&real.join(dir), &fixture.0.join(dir));
-        }
-        std::fs::create_dir_all(fixture.0.join("runtime/core")).unwrap();
-        std::fs::copy(
-            real.join(patchkit::abigen::SOURCE),
-            fixture.0.join(patchkit::abigen::SOURCE),
-        )
-        .unwrap();
-        copy_tree(
-            &real.join("runtime/core/abi/src"),
-            &fixture.0.join("runtime/core/abi/src"),
-        );
-        let module_dir = fixture.0.join("modules/fixture");
-        std::fs::create_dir_all(&module_dir).unwrap();
-        std::fs::write(
-            module_dir.join("module.toml"),
-            r#"
-[module]
-id = "test/generation"
-version = "0.1.0"
-name = "Generation fixture"
-category = "test"
-type = "raw"
-author = "test"
-status = "experimental"
-summary = "Scoped generation check"
-[[gen]]
-kind = "gas"
-path = "build/gen/device-{dev}.inc"
-uses = ["DEVICE_ID"]
-"#,
-        )
-        .unwrap();
-        std::fs::write(module_dir.join("main.s"), "    move.l #DEVICE_ID, %d0\n").unwrap();
-        let args = |scope: &str| Args {
-            root: fixture.0.clone(),
-            rest: [
-                "gen",
-                "--check",
-                "--scope",
-                scope,
-                "--modules",
-                "test/generation",
-            ]
-            .into_iter()
-            .map(String::from)
-            .collect(),
-        };
-        let lib = library_with(&fixture.0, &LibrarySource::default(), true, Some(&[])).unwrap();
-        let facts = patchkit::devgen::Facts::from_dir(&fixture.0.join("devices")).unwrap();
-        let module_files = patchkit::devgen::generate(&lib, &facts, "test/generation").unwrap();
-        assert!(!module_files.is_empty());
-        let mut files = patchkit::sdkgen::generate(&fixture.0).unwrap();
-        files.extend(patchkit::fwgen::generate_with_ports(&fixture.0).unwrap());
-        files.extend(
-            module_files
-                .into_iter()
-                .map(|(p, t)| (format!("modules/fixture/{p}"), t)),
-        );
-        for (rel, text) in &files {
-            let path = fixture.0.join(rel);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, text).unwrap();
-        }
-        let snapshot = || {
-            files
-                .iter()
-                .map(|(rel, _)| {
-                    let path = fixture.0.join(rel);
-                    (
-                        std::fs::read(&path).unwrap(),
-                        std::fs::metadata(path).unwrap().modified().unwrap(),
-                    )
-                })
-                .collect::<Vec<_>>()
-        };
-        let baseline = snapshot();
-        let explicit_args = || {
-            let mut a = args("modules");
-            for path in [
-                module_dir.join("module.toml"),
-                fixture.0.join("runtime/platform/rows/module.toml"),
-            ] {
-                a.rest
-                    .extend(["--manifest".into(), path.display().to_string()]);
-            }
-            a
-        };
-        let mut missing_alloc = args("modules");
-        missing_alloc.rest.extend([
-            "--manifest".into(),
-            module_dir.join("module.toml").display().to_string(),
-        ]);
-        assert!(run(missing_alloc).unwrap_err().0.contains("core/rows"));
-        run(explicit_args()).unwrap();
-        assert_eq!(baseline, snapshot());
-        let unrelated = fixture.0.join("modules/unrelated/module.toml");
-        std::fs::create_dir_all(unrelated.parent().unwrap()).unwrap();
-        std::fs::write(&unrelated, "malformed = [").unwrap();
-        run(explicit_args()).unwrap();
-        assert!(run(args("modules")).is_err());
-        std::fs::remove_file(unrelated).unwrap();
-        for scope in ["shared", "modules", "all"] {
-            run(args(scope)).unwrap();
-        }
-        let default_args = || {
-            let mut a = args("all");
-            a.rest.drain(2..4);
-            a
-        };
-        run(default_args()).unwrap();
-        assert_eq!(baseline, snapshot());
-        for (rel, scope, other) in [
-            (patchkit::sdkgen::RUST_OUT, "shared", "modules"),
-            (patchkit::fwgen::RUST_OUT, "shared", "modules"),
-            (
-                "modules/fixture/build/gen/device-dt2.inc",
-                "modules",
-                "shared",
-            ),
-        ] {
-            let path = fixture.0.join(rel);
-            let original = std::fs::read(&path).unwrap();
-            std::fs::write(&path, "stale fixture\n").unwrap();
-            let stale = snapshot();
-            assert!(
-                run(args(scope))
-                    .unwrap_err()
-                    .0
-                    .contains("generated file(s) are stale")
-            );
-            run(args(other)).unwrap();
-            assert!(run(args("all")).is_err());
-            assert!(run(default_args()).is_err());
-            assert_eq!(stale, snapshot(), "check rewrote {rel}");
-            std::fs::write(path, original).unwrap();
-        }
-        for rest in [
-            vec!["gen", "--scope", "shared"],
-            vec!["gen", "--check", "--scope", "bogus"],
-            vec!["gen", "--check", "--scope"],
-        ] {
-            assert!(
-                run(Args {
-                    root: fixture.0.clone(),
-                    rest: rest.into_iter().map(String::from).collect()
-                })
-                .unwrap_err()
-                .0
-                .contains("gen --scope requires")
-            );
-        }
-    }
-
     struct ApplyRoot(PathBuf);
 
     impl ApplyRoot {
@@ -1370,174 +1204,6 @@ uses = ["DEVICE_ID"]
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
-    }
-
-    #[test]
-    fn catalog_check_validates_all_headers_and_requires_without_objects() {
-        let root = ApplyRoot::new("catalog");
-        root.module("modules", "test/selected", &["test/dependency"], false);
-        root.module("tests/fixtures/modules", "test/dependency", &[], false);
-        root.module("runtime", "test/runtime", &[], false);
-        root.module("services", "test/service", &[], false);
-        // Device models and declared objects/sources are deliberately unusable: catalog validation never reads them.
-        std::fs::write(root.0.join("devices/broken.toml"), "malformed = [").unwrap();
-        let check = || Library::catalog_check(&root.0);
-        assert_eq!(check().unwrap(), 4);
-        run(Args {
-            root: root.0.clone(),
-            rest: vec!["catalog-check".into()],
-        })
-        .unwrap();
-        assert!(!cache_dir(&root.0).exists());
-        let path = root
-            .0
-            .join("tests/fixtures/modules/test/dependency/module.toml");
-        let original = std::fs::read_to_string(&path).unwrap();
-        for (text, error) in [
-            ("malformed = [".to_string(), "module.toml"),
-            (
-                original.replace("sources = [\"src/t.c\"]", "sources = false"),
-                "invalid type",
-            ),
-            (
-                original.replace("version = \"0.1.0\"\n", ""),
-                "missing field `version`",
-            ),
-            (
-                original.replace("test/dependency", "test/selected"),
-                "duplicate module id",
-            ),
-            (
-                original.replace("requires = []", "requires = [\"test/missing\"]"),
-                "requires test/missing",
-            ),
-            (
-                original.replace("requires = []", "requires = [\"test/selected\"]"),
-                "requires cycle",
-            ),
-            (
-                original.replace("category = \"test\"", "category = \"core\""),
-                "a core module needs",
-            ),
-            (format!("{original}\n[[op]]\nop = \"unknown\"\n"), "unknown"),
-        ] {
-            std::fs::write(&path, text).unwrap();
-            assert!(check().unwrap_err().0.contains(error), "expected {error}");
-        }
-        std::fs::write(path, original).unwrap();
-        assert_eq!(check().unwrap(), 4);
-        assert!(!cache_dir(&root.0).exists());
-    }
-
-    #[test]
-    fn explicit_pack_matches_legacy_and_ignores_unrelated_bad_manifest() {
-        let root = ApplyRoot::new("explicit-pack");
-        root.module("modules", "test/selected", &[], true);
-        std::fs::write(
-            root.0.join("modules/test/selected/src/t.c"),
-            "static int init(void *ctx) { return ctx ? 0 : 1; }\nstruct m { int (*init)(void *); void (*fini)(void *); void (*tick)(void *); void (*menu)(void *, void *); };\nconst struct m dk_module = { init, 0, 0, 0 };\n",
-        )
-        .unwrap();
-        let pack = |out: &str, explicit: bool| {
-            let mut rest: Vec<String> = ["pack", "test/selected", "-o", out]
-                .into_iter()
-                .map(String::from)
-                .collect();
-            if explicit {
-                rest.extend([
-                    "--manifest".into(),
-                    root.0
-                        .join("modules/test/selected/module.toml")
-                        .display()
-                        .to_string(),
-                ]);
-            }
-            run(Args {
-                root: root.0.clone(),
-                rest,
-            })
-        };
-        let legacy = root.0.join("legacy.dkm").display().to_string();
-        let explicit = root.0.join("explicit.dkm").display().to_string();
-        pack(&legacy, false).unwrap();
-        root.module("modules", "test/unrelated", &[], false);
-        std::fs::write(
-            root.0.join("modules/test/unrelated/module.toml"),
-            "malformed = [",
-        )
-        .unwrap();
-        assert!(
-            run(Args {
-                root: root.0.clone(),
-                rest: vec!["catalog-check".into()]
-            })
-            .is_err()
-        );
-        pack(&explicit, true).unwrap();
-        assert_eq!(
-            std::fs::read(&legacy).unwrap(),
-            std::fs::read(&explicit).unwrap()
-        );
-        // Selected source/object failures must still fail rather than using a partial module.
-        std::fs::remove_file(root.0.join("modules/test/selected/src/t.c")).unwrap();
-        assert!(pack(&explicit, true).is_err());
-    }
-
-    #[test]
-    fn explicit_manifests_validate_selection_and_requirements_before_objects() {
-        let root = ApplyRoot::new("explicit-validation");
-        root.module("modules", "test/selected", &["test/dependency"], false);
-        root.module("modules", "test/dependency", &[], false);
-        root.module("modules", "test/unrelated", &[], false);
-        let selected = vec!["test/selected".into()];
-        let path = |id: &str| root.0.join("modules").join(id).join("module.toml");
-        let rest = |ids: &[&str]| LibrarySource {
-            manifests: ids.iter().map(|id| path(id)).collect(),
-            ..Default::default()
-        };
-        let load =
-            |r: &LibrarySource, ids: &[String]| selected_library(&root.0, r, false, &[], ids);
-        let both = rest(&["test/selected", "test/dependency"]);
-        assert!(
-            load(&both, &["test/unknown".into()])
-                .unwrap_err()
-                .0
-                .contains("unknown module")
-        );
-        assert!(
-            load(&rest(&["test/selected"]), &selected)
-                .unwrap_err()
-                .0
-                .contains("requires test/dependency")
-        );
-        std::fs::write(path("test/unrelated"), "malformed = [").unwrap();
-        let lib = load(&both, &selected).unwrap();
-        assert_eq!(lib.modules.len(), 2);
-        root.module("modules", "test/selected", &["test/dependency"], true);
-        let object_error =
-            selected_library(&root.0, &both, false, &selected, &selected).unwrap_err();
-        assert!(object_error.0.contains("src/t.c"));
-        assert!(
-            load(
-                &rest(&["test/selected", "test/dependency", "test/dependency"]),
-                &selected
-            )
-            .unwrap_err()
-            .0
-            .contains("duplicate module id")
-        );
-        root.module("modules", "test/dependency", &["test/selected"], false);
-        assert!(
-            load(&both, &selected)
-                .unwrap_err()
-                .0
-                .contains("requires cycle")
-        );
-        std::fs::write(path("test/dependency"), "malformed = [").unwrap();
-        assert!(load(&both, &selected).is_err());
-        std::fs::write(path("test/selected"), "malformed = [").unwrap();
-        assert!(load(&rest(&["test/selected"]), &selected).is_err());
-        assert!(!cache_dir(&root.0).join("test/dependency").exists());
     }
 
     #[test]

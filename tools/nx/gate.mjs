@@ -20,6 +20,7 @@ const MERGE_TARGETS = [
   'rust-tests-integration',
   'catalog-check',
   'objects-check',
+  'repo-check',
   'pack',
   'test-device',
   'test-conformance',
@@ -42,7 +43,17 @@ const MERGE_TARGETS = [
 
 export const TIERS = {
   changed: {
-    targets: ['lint', 'fmt-check', 'rust-fmt', 'typecheck', 'test-host', 'python-checks', 'objects-check'],
+    targets: [
+      'lint',
+      'fmt-check',
+      'rust-fmt',
+      'typecheck',
+      'test-host',
+      'python-checks',
+      'objects-check',
+      'catalog-check',
+      'repo-check',
+    ],
     access: 'rw',
     narrow: false,
     // The cached Rust unit tests (tag `rust-cached`) as a second command: a replay when their inputs did not change.
@@ -180,15 +191,8 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       : ['pnpm', ['nx:pilot', ...command]];
   const commands = [tier?.runMany ? ['run-many', ...args] : ['affected', ...args]];
   if (tier?.cachedRustTests) {
-    commands.push([
-      'affected',
-      '--base',
-      process.env.DIGI_GATE_BASE,
-      '-t',
-      'rust-tests',
-      '--projects',
-      'tag:rust-cached',
-    ]);
+    // run-many over the tag: `affected` has no --projects and hands the flag to cargo. A project whose inputs did not change replays.
+    commands.push(['run-many', '-t', 'rust-tests', '--projects', 'tag:rust-cached']);
   }
   console.log(`gate: ${commands[0][0]} ${tier ? 'over the tier targets' : 'with the given arguments'}`);
   // The device tests the changed files select by ownership and the fixed smoke set: test-subset.mjs plans the run (it runs it itself, with the

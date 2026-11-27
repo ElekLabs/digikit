@@ -82,19 +82,6 @@ impl Main {
         }
         panic!("{addr:#x}+{n} is not in the patched MAIN OS");
     }
-    fn u32s(&self, addr: u32, n: usize) -> Vec<u32> {
-        self.read(addr, n * 4)
-            .chunks(4)
-            .map(|c| u32::from_be_bytes(c.try_into().unwrap()))
-            .collect()
-    }
-    fn cstr(&self, addr: u32) -> String {
-        (0..64)
-            .map(|i| self.read(addr + i, 1)[0])
-            .take_while(|&b| b != 0)
-            .map(|b| b as char)
-            .collect()
-    }
 }
 
 fn stock_len(file: &str) -> usize {
@@ -117,15 +104,6 @@ fn reg<'a>(p: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
         .iter()
         .find(|r| r["name"] == name)
         .unwrap_or_else(|| panic!("no registry {name}"))
-}
-
-fn section<'a>(p: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
-    p["sections"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|s| s["name"] == name)
-        .unwrap_or_else(|| panic!("no section {name}"))
 }
 
 const PAIR: [&str; 1] = ["core/rows"];

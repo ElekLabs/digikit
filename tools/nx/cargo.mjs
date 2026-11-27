@@ -371,7 +371,7 @@ const COMPILE_SOURCE = {
 
 // Crates whose library unit tests are cached while their integration tests (`tests/*.rs`, the binary's tests) stay uncached.
 // Unit tests of patchkit read the module library, ports, devices and the toolchain pins at run time; those files are inputs
-// besides what cargo compiles in (the list mirrors `gate-rust-modules:rust-tests`, without its test-source exclusions: the tests are the subject here). They read no firmware and no `out/` data
+// besides what cargo compiles in (the list is also an input of the integration tests, which select on the same files). They read no firmware and no `out/` data
 // (checked with both absent); `DIGI_REQUIRE_TOOLCHAINS=1` makes a missing toolchain a failure, so no skip is ever cached.
 export const LIB_TESTS = {
   patchkit: {
@@ -512,6 +512,10 @@ export const createNodesV2 = [
           '{workspaceRoot}/tools/nx/rust-env.mjs',
           ...(COMPILE_SOURCE[name] ?? []),
           ...(FIXTURE_SOURCE[name] ?? []),
+          // The integration tests scan the module library, the devices and the ports at run time: an edit there selects them
+          // (the library tests list the same files).
+          ...LIB_TESTS[name].inputs,
+          '{workspaceRoot}/devices/**/*',
         ],
         options: {
           command: `node tools/nx/rust-env.mjs -- cargo nextest run -p ${name} --bins --test '*' --features ${LIB_TESTS[name].features} --release --locked --offline`,

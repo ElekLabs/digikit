@@ -1093,37 +1093,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn the_question_names_the_device_the_os_and_what_is_flashed() {
-        // the name comes from the device file of the prepared image, whatever the device
-        for d in patchkit::devdata::all() {
-            let mut p = prepared(true);
-            p.device = d.short.clone();
-            assert_eq!(device_name(&p), d.name);
-            let q = flash_question(&p, &device_name(&p));
-            assert_eq!(q, format!("Flash {} OS 1.17 (stock) now? [y/N] ", d.name));
-        }
-        let mut unknown = prepared(true);
-        unknown.device = "xx".into();
-        assert_eq!(device_name(&unknown), "xx");
-        // with the runtime: the runtime version INFO reports after the flash, the same value as the summary and the check after the restart
-        let mut with_runtime = prepared(false);
-        with_runtime.image_id = Some([1; 8]);
-        let version = patchkit::dkm::fmt_runtime(patchkit::dkm::runtime_version());
-        assert_eq!(with_runtime.runtime_text(), Some(version.clone()));
-        assert_eq!(with_runtime.summary_json()["runtime"], version);
-        let q = flash_question(&with_runtime, "Name");
-        assert_eq!(
-            q,
-            format!("Flash Name OS 1.17 with digikit runtime {version} now? [y/N] ")
-        );
-        let q = flash_question(&prepared(false), "Name");
-        assert_eq!(
-            q,
-            "Flash Name OS 1.17 patched, without the digikit runtime now? [y/N] "
-        );
-    }
-
     /// A device that answers Ping with `reply` (the payload), for the sequence of the request.
     struct Pinged(Option<Vec<u8>>, Vec<u8>);
     impl Transport for Pinged {

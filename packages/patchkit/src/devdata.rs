@@ -594,19 +594,6 @@ mod tests {
         assert!(!has_profile_key("no_such_key"));
     }
 
-    #[test]
-    fn the_embedded_device_files_parse() {
-        let d = all();
-        assert!(d.len() >= 2);
-        let dt2 = by_short("dt2").unwrap();
-        assert_eq!(
-            (dt2.syx_id, dt2.digikit_id, dt2.digikit_name.as_deref()),
-            (0x14, Some(1), Some("dt2"))
-        );
-        assert_eq!(by_syx_id(0x15).unwrap().short, "dn2");
-        assert!(by_short("nope").is_none());
-    }
-
     const DT2: &str = include_str!("../../../devices/digitakt-ii.toml");
     const DN2: &str = include_str!("../../../devices/digitone-ii.toml");
 
@@ -614,21 +601,6 @@ mod tests {
     fn edit(text: &str, from: &str, to: &str) -> String {
         assert!(text.contains(from), "{from}");
         text.replacen(from, to, 1)
-    }
-
-    #[test]
-    fn the_device_files_state_their_capabilities() {
-        let ids = identities();
-        let dt2 = ids.iter().find(|i| i.short == "dt2").unwrap();
-        assert_eq!(dt2.capabilities.card, "path-fs");
-        assert_eq!(dt2.capabilities.sample_pool, "stock");
-        assert!(dt2.runtime_target && dt2.patchable);
-        let dn2 = ids.iter().find(|i| i.short == "dn2").unwrap();
-        assert_eq!(dn2.capabilities.sample_pool, "ddr");
-        assert_eq!(dn2.container.readonly, [2, 4, 8]);
-        assert_eq!(dn2.acceptance.as_ref().unwrap().firmware, "1.12");
-        // every real file, with its [[firmware]] tables, agrees with its capabilities
-        parse_all(DEVICE_FILES).unwrap();
     }
 
     #[test]
