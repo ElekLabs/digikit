@@ -148,7 +148,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         for k in 0..count.min(MAX_MODULES) {
             paths[k] = Some(rec.paths[k].as_ptr());
         }
-        super::trace_next_op();
+        let op = self.next_op();
+        self.enter_op(op);
         let init = self.init(&paths, count);
         self.session.begin_boot(caps, count);
         for k in 0..count {
@@ -189,6 +190,22 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         }
         self.report_boot(rec, report);
         crate::package::boot_idx::set(u32::MAX);
+        self.leave_op();
+    }
+
+    /// Number a new operation (a boot or a live job): its events carry the number once it is entered.
+    pub unsafe fn next_op(&mut self) -> u32 {
+        self.loader().next_op()
+    }
+
+    /// Operation `op` runs now: the events of the manager's seams and of the installer's gate carry its number until `leave_op`.
+    pub unsafe fn enter_op(&mut self, op: u32) {
+        self.loader().enter_op(op);
+    }
+
+    /// The running operation ended.
+    pub unsafe fn leave_op(&mut self) {
+        self.loader().leave_op();
     }
 
     /// The name hash of the service package `service` provides (0 when it provides none).

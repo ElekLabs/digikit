@@ -39,7 +39,7 @@ fn hook(ctx: u8) -> HookItem {
 }
 
 fn live<'a>(parks: &'a [Park]) -> Gate<'a> {
-    Gate { live: true, parks: Some(parks) }
+    Gate { live: true, parks: Some(parks), op: 0 }
 }
 
 fn bytes(f: &FakePlatform) -> Vec<u8> {
@@ -117,7 +117,7 @@ fn the_boot_never_waits() {
     let p = parks();
     let mut ins = Installer::new();
     // no task has run at the boot: the words are 0 and the gate is not live
-    assert_eq!(install(&mut ins, &f, CTX_TASK, &Gate { live: false, parks: Some(&p) }), Ok(()));
+    assert_eq!(install(&mut ins, &f, CTX_TASK, &Gate { live: false, parks: Some(&p), op: 0 }), Ok(()));
     assert_eq!(bytes(&f), JMP.to_vec());
     assert_eq!(unsafe { ins.restore_gated(&f, 1, &Gate::BOOT) }, Ok(()));
     assert_eq!(bytes(&f), STOCK.to_vec());
@@ -161,7 +161,7 @@ fn a_patch_of_task_context_waits_too() {
 fn a_port_file_without_the_task_facts_refuses_a_task_site_at_run_time() {
     let f = fake();
     let mut ins = Installer::new();
-    let g = Gate { live: true, parks: None };
+    let g = Gate { live: true, parks: None, op: 0 };
     assert_eq!(install(&mut ins, &f, CTX_TASK, &g), Err(E_IMPORT));
     assert_eq!(bytes(&f), STOCK.to_vec());
     // a device with no such task has an empty list: nothing to wait for

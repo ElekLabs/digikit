@@ -196,4 +196,17 @@ impl Ops for RealOps {
     fn blocks(&mut self) -> Option<u32> {
         crate::package::resident::platform::fw_blocks()
     }
+    unsafe fn next_op(&mut self) -> u32 {
+        crate::package::lifecycle::get().map_or(0, |rt| rt.next_op())
+    }
+    unsafe fn enter_op(&mut self, op: u32) {
+        if let Some(rt) = crate::package::lifecycle::get() {
+            rt.enter_op(op);
+        }
+    }
+    unsafe fn leave_op(&mut self) {
+        if let Some(rt) = crate::package::lifecycle::get() {
+            rt.leave_op();
+        }
+    }
 }

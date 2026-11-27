@@ -63,7 +63,7 @@ impl TaskParks {
 
     /// The gate for an install or restore: `live` is false at the boot, when no task has run yet.
     pub(super) fn gate(&self, live: bool) -> Gate<'_> {
-        Gate { live, parks: if self.known { Some(&self.items[..self.n]) } else { None } }
+        Gate { live, parks: if self.known { Some(&self.items[..self.n]) } else { None }, op: 0 }
     }
 }
 

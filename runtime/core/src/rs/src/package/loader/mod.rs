@@ -67,6 +67,7 @@ pub(crate) mod discover;
 pub(crate) mod exports;
 pub(crate) mod install;
 mod live;
+mod op_clock;
 mod load;
 pub(crate) mod package;
 mod park;
@@ -228,6 +229,8 @@ pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     sel_of_rec: [u8; MAX_MODULES],
     /// The steps of a teardown that ran for each record (`TORN_*`): a second `unload_body` after `E_BUSY` skips them, so `fini` and the role's undo run once.
     torn: [u8; records::REC_MAX],
+    /// The operation (a boot or the live job) the lifecycle events belong to (`Rt` enters and leaves it; the installer gate reads it).
+    ops: op_clock::OpClock,
     /// Host tests: the next this many restores answer busy, as when a task below the UI task is not parked (the gate itself is covered by `park_tests`).
     #[cfg(test)]
     busy_restores: u32,
@@ -386,6 +389,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             dsp_install: DspInstaller::new(),
             sel_of_rec: [0; MAX_MODULES],
             torn: [0; records::REC_MAX],
+            ops: op_clock::OpClock::new(),
             saved_tick: [0; records::REC_MAX],
             drain_at: [None; records::REC_MAX],
             split_apply: false,

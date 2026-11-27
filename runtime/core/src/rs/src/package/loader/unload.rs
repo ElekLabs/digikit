@@ -11,7 +11,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             return false;
         }
         let parks = self.task_parks();
-        self.installer.restore_gated(&self.p, rec as u8, &parks.gate(self.live())).is_ok()
+        self.installer.restore_gated(&self.p, rec as u8, &parks.gate(self.live()).in_op(self.op())).is_ok()
     }
 
     /// The DSP part of `uninstall`: the DSP slots zero. False when the DSP does not take the clear.

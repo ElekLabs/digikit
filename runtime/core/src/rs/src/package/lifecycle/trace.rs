@@ -2,37 +2,18 @@
 //! calls of the live job and the installer's gate add the events only they can see.
 //!
 //! An event names the package by the FNV-1a hash of its file name without the extension (a record number is reused by the next package that takes the place, a hash is
-//! not) and the operation by a number that counts up for each boot and each live job. Events are sent only while a log sink listens (`dlog::log_on`): they are never kept
+//! not) and the operation by a number that counts up for each boot and each live job (`Loader::next_op`; the operation that runs is the loader's `op`). Events are sent only while a log sink listens (`dlog::log_on`): they are never kept
 //! in the small ring, so a boot's own events stay in it. The producer pays one test while nothing listens.
 
 use super::session::Handle;
 use crate::package::resident::dlog;
 use crate::package::loader::{Images, Registry};
-use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 use dkrt_abi::package::PackageId;
 use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::MAX_MODULES;
 use super::{RtHost, RtInstallers, RtLinker, RtPlacer, Session};
 use dkrt_lifecycle::{Phase, Step, Trace, Traced};
 use dkrt_sdk::logk;
-
-/// The operation now running (a boot, or the live job): 0 before the first.
-static mut OP: u32 = 0;
-
-/// A boot or a live job starts: its events carry a new operation number, which the caller keeps for the events it emits itself (`emit`). The manager's seams (`RtTrace`)
-/// read the number of the operation now running (`current_op`).
-pub(crate) fn next_op() -> u32 {
-    unsafe {
-        let op = read_volatile(addr_of!(OP)).wrapping_add(1);
-        write_volatile(addr_of_mut!(OP), op);
-        op
-    }
-}
-
-/// The operation now running, for the events of the manager's seams.
-pub(crate) fn current_op() -> u32 {
-    unsafe { read_volatile(addr_of!(OP)) }
-}
 
 /// FNV-1a 32 of the file name in the NUL terminated `path`, without its directory and its extension (0 for no path).
 pub(crate) unsafe fn stem_hash(path: *const u8) -> u32 {
@@ -67,14 +48,14 @@ pub(crate) unsafe fn emit(op: u32, phase: Phase, step: Step, package: PackageId,
 }
 
 /// Log what the state handoff did for the service named `name_hash` (`STATE_CARRIED`): nothing for a service that started fresh.
-pub(crate) unsafe fn emit_state(name_hash: u32, outcome: &super::carried_state::Outcome) {
+pub(crate) unsafe fn emit_state(op: u32, name_hash: u32, outcome: &super::carried_state::Outcome) {
     use super::carried_state::Outcome;
     let (code, version, len) = match *outcome {
         Outcome::Fresh => return,
         Outcome::Carried { version, len } => (0, version, len),
         Outcome::Dropped { why, version, len } => (why as u32, version, len),
     };
-    dlog::ev(logk::STATE_CARRIED, dlog::INFO, [current_op(), name_hash, code, version as u32, len]);
+    dlog::ev(logk::STATE_CARRIED, dlog::INFO, [op, name_hash, code, version as u32, len]);
 }
 
 /// The trace of one manager's seams: it finds the file name of a package through the session the seams share.
@@ -110,8 +91,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Trace for RtTrace<P, M, R> {
     fn event(&self, phase: Phase, step: Step, package: PackageId, name: u32, status: i32) {
         unsafe {
             // the end of a place says where the image went, so a spinning program counter of a device run maps to its package (the size is in the module list)
-            let detail = if phase == Phase::End && step == Step::Place && status == 0 { self.0.get().0.flight.placed_span().0 } else { 0 };
-            emit(current_op(), phase, step, package, name, status, detail)
+            let (s, l) = self.0.get();
+            let detail = if phase == Phase::End && step == Step::Place && status == 0 { s.flight.placed_span().0 } else { 0 };
+            emit(l.op(), phase, step, package, name, status, detail)
         }
     }
 }

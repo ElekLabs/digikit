@@ -108,4 +108,13 @@ impl Ops for HostOps<'_> {
     fn blocks(&mut self) -> Option<u32> {
         RealOps.blocks()
     }
+    unsafe fn next_op(&mut self) -> u32 {
+        self.rt.next_op()
+    }
+    unsafe fn enter_op(&mut self, op: u32) {
+        self.rt.enter_op(op)
+    }
+    unsafe fn leave_op(&mut self) {
+        self.rt.leave_op()
+    }
 }

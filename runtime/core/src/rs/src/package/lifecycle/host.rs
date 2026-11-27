@@ -115,12 +115,12 @@ impl<P: PackagePlatform, M: Images, R: Registry> ProviderHost for RtHost<P, M, R
 
     fn import_state(&mut self, package: PackageId) -> Result<(), Status> {
         unsafe {
-            let (s, _) = self.0.get();
+            let (s, l) = self.0.get();
             let Some(copy) = ServiceCopy::of(package.0 as usize) else {
                 return Ok(());
             };
             let (status, outcome) = s.carried.import(package.0 as usize, &copy);
-            super::trace::emit_state(copy.name(), &outcome);
+            super::trace::emit_state(l.op(), copy.name(), &outcome);
             if status == OK {
                 Ok(())
             } else {

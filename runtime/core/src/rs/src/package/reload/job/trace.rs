@@ -38,9 +38,14 @@ impl JobTrace {
     }
 
     /// A job was queued: the next events are its own.
-    pub(super) fn queued(&mut self) {
+    pub(super) fn queued(&mut self, op: u32) {
         self.open = step::IDLE;
-        self.op = crate::package::lifecycle::trace_next_op();
+        self.op = op;
+    }
+
+    /// The operation number of the job.
+    pub(super) fn op(&self) -> u32 {
+        self.op
     }
 
     /// What the log gets when the job is at `at`: the end of the step whose begin the log has, then the begin of the new step, or for a `finished` job a note for `JobDone`.

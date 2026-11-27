@@ -430,7 +430,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         // the entries carry absolute targets; the installer takes the offset in the image (a target before the image wraps past its size) and refuses one outside it
         // at run time a `task` site is written only while the BgWorker and the console task wait (`Gate`); at the boot no task has run
         let parks = self.task_parks();
-        let gate = parks.gate(self.live());
+        let gate = parks.gate(self.live()).in_op(self.op());
         let cf = CfItems { hooks: &hooks[..nh], patches: &patches[..np], image_base: base, image_size, slots: &slots[..ns], gate };
         let r = Backend::install(&mut self.installer, &self.p, rec as u8, &cf);
         // a run-time task site with no task facts in the port file answers `E_IMPORT` as a missing import does: the load's log names the cause (`MOD_NEEDS`, "NEEDS port:no-task")
@@ -549,6 +549,26 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     pub(crate) unsafe fn package_retire_ready(&mut self, id: PackageId) -> bool {
         let rec = record_of(id);
         retire_jobs(rec) && dsp::quiesce(rec)
+    }
+
+    /// Number a new operation (a boot or a live job); it runs once it enters.
+    pub(crate) fn next_op(&mut self) -> u32 {
+        self.ops.next()
+    }
+
+    /// `op` runs now: the events of the manager's seams and the installer's gate carry its number.
+    pub(crate) fn enter_op(&mut self, op: u32) {
+        self.ops.enter(op);
+    }
+
+    /// The running operation ended.
+    pub(crate) fn leave_op(&mut self) {
+        self.ops.leave();
+    }
+
+    /// The number of the running operation (0: none).
+    pub(crate) fn op(&self) -> u32 {
+        self.ops.current()
     }
 
     /// Set the loader's phase for the duration of a bring-up that the package manager drives: the services read it (`resident_query` is for after the boot).

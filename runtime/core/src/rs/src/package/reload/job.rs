@@ -56,6 +56,12 @@ pub trait Ops {
     unsafe fn finish(&mut self, ok: bool, changed: bool);
     /// The block count, `None` without a block clock.
     fn blocks(&mut self) -> Option<u32>;
+    /// Number a new operation for the lifecycle events (`Rt::next_op`): the job takes one when it is queued and keeps it to its end.
+    unsafe fn next_op(&mut self) -> u32;
+    /// The job runs as operation `op` (`Rt::enter_op`): called at each pass until the job ends.
+    unsafe fn enter_op(&mut self, op: u32);
+    /// The job ended (`Rt::leave_op`).
+    unsafe fn leave_op(&mut self);
 }
 
 /// Where the job is (`RELOAD_STATE` step byte).
@@ -193,7 +199,7 @@ impl Job {
         self.passes = 0;
         self.start = None;
         self.pre = false;
-        self.trace.queued();
+        self.trace.queued(o.next_op());
         OK
     }
 
@@ -314,10 +320,14 @@ impl Job {
             return;
         }
         let mut trace = self.trace;
+        o.enter_op(trace.op());
         trace.sync(self);
         self.poll_step(o);
         trace.sync(self);
         self.trace = trace;
+        if self.phase == 2 {
+            o.leave_op();
+        }
     }
 
     unsafe fn poll_step<O: Ops>(&mut self, o: &mut O) {
