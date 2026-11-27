@@ -6,6 +6,7 @@ use super::codes::code_of;
 use super::service_copy::ServiceCopy;
 use super::rt::Rt;
 use crate::package::admission::Admission;
+use crate::package::loader::records::is_service_rec;
 use crate::package::loader::{records, Images, PhaseKind, Registry, TABLE_MAX};
 use dkrt_abi::package::PackageId;
 use dkrt_abi::package_platform::PackagePlatform;
@@ -41,7 +42,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     pub unsafe fn closure_menu_built(&self, rec: usize) -> bool {
         let mut members = [0usize; REC_MAX];
         let n = self.closure(rec, &mut members);
-        members[..n].iter().any(|&r| r < MAX_MODULES && crate::package::resident::state::menus_held(r))
+        members[..n].iter().any(|&r| !is_service_rec(r) && crate::package::resident::state::menus_held(r))
     }
 
     /// The refusals of a reload of service record `rec` that the system facts do not hold: the menu of a consumer, a DSP part in the closure (`E_BOOT_ONLY`: the closure reload has
@@ -149,7 +150,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             }
             return self.reload_end(Ok(Report::default()), rec, &[]);
         }
-        if rec < MAX_MODULES || !m.live().contains(id) {
+        if !is_service_rec(rec) || !m.live().contains(id) {
             return E_NOT_FOUND;
         }
         let mut members = [0usize; REC_MAX];
@@ -183,7 +184,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         let caps = &live[..k];
         for &r in members {
             // a consumer comes back from the file it came from; the path pointer a live load gave is the job's buffer, which holds this job's path now
-            if r < MAX_MODULES {
+            if !is_service_rec(r) {
                 self.session.modules[r] = records::path(r).as_ptr();
             }
             self.session.outcome[r] = super::session::Outcome::NONE;
@@ -261,7 +262,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                 let mut now = [0usize; REC_MAX];
                 let n = self.closure(root, &mut now);
                 for &r in &now[..n] {
-                    if r < MAX_MODULES {
+                    if !is_service_rec(r) {
                         crate::package::handlers::services().on_loaded(r);
                     }
                 }

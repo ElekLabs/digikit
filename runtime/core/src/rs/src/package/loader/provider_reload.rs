@@ -206,7 +206,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         let block = |n: u32| if n == 0 { 0 } else { dkneeds::arena_block(n).unwrap_or(n) };
         let mut own = (0u32, 0u32);
         for &rec in members {
-            let (a, d) = if rec < MAX_MODULES { super::live::own_use(rec) } else { (block(records::module(rec).size), dsp::ds().mod_len[rec]) };
+            let (a, d) = if !records::is_service_rec(rec) { super::live::own_use(rec) } else { (block(records::module(rec).size), dsp::ds().mod_len[rec]) };
             own = (own.0 + a, own.1 + d);
         }
         own

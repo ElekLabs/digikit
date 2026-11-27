@@ -124,7 +124,7 @@ fn is_reload(op: u8) -> bool {
 }
 /// A service record (a provider): its reload is one call (`service.rs`) over the closure.
 fn is_service_rec(rec: usize) -> bool {
-    rec != NO_REC && rec >= dkrt_abi::MAX_MODULES
+    rec != NO_REC && crate::package::loader::records::is_service_rec(rec)
 }
 
 mod service;

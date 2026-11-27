@@ -4,7 +4,7 @@ use crate::package::loader::{Block, Images, Loader, Registry};
 use dkrt_abi::dev_addr::DevAddr;
 use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::provider::ProviderHandle;
-use dkrt_abi::MAX_MODULES;
+use crate::package::loader::records::is_service_rec;
 
 /// The row of service record `rec` as it is loaded now.
 pub(crate) struct ServiceCopy(ProviderHandle);
@@ -12,7 +12,7 @@ pub(crate) struct ServiceCopy(ProviderHandle);
 impl ServiceCopy {
     /// The loaded copy of record `rec`; none for a module record or a record with no row.
     pub(crate) fn of(rec: usize) -> Option<ServiceCopy> {
-        if rec < MAX_MODULES {
+        if !is_service_rec(rec) {
             return None;
         }
         crate::package::provider_rows::row_of(rec).and_then(|r| r.first()).map(|h| ServiceCopy(*h))

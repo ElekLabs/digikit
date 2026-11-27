@@ -15,6 +15,13 @@ use dkrt_sdk::PROVIDER_MAX;
 pub static mut DKRT_PROVIDERS: [Module; PROVIDER_MAX] = unsafe { core::mem::zeroed() };
 static mut PROVIDER_PATHS: [[u8; 64]; PROVIDER_MAX] = [[0; 64]; PROVIDER_MAX];
 
+/// Is record `rec` a service (a provider record)? The records below `MAX_MODULES` are the modules of the selection, the rest are the services the search found: the one
+/// place that says where the split is.
+pub const fn is_service_rec(rec: usize) -> bool {
+    rec >= MAX_MODULES
+}
+
+
 /// The record `rec` (below `REC_MAX`).
 pub unsafe fn module(rec: usize) -> &'static mut Module {
     if rec < MAX_MODULES {
