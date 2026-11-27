@@ -9,49 +9,25 @@ installer calls
   flush freed:blk1+0 214
   flush freed:blk1+0 214
   flush freed:blk1+4 210
-  flush freed:blk4+0 23138
-  flush freed:blk4+0 23138
+  flush freed:blk4+0 20314
+  flush freed:blk4+0 20314
   mask
-  write 0x40137932 6
-  write 0x40137cc6 6
   write 0x4000766c 6
   write 0x4010e1b0 6
-  write 0x40137d1e 6
-  write 0x40137836 6
-  write 0x40137c40 6
-  write 0x401378c4 6
   write 0x400e3610 6
-  flush 0x40137930 16
-  flush 0x40137cc0 16
   flush 0x40007660 32
   flush 0x4010e1b0 16
-  flush 0x40137d10 32
-  flush 0x40137830 16
-  flush 0x40137c40 16
-  flush 0x401378c0 16
   flush 0x400e3610 16
   restore
   flush blk7+0 1760
   flush blk7+0 1760
   mask
-  write 0x40137932 6
-  flush 0x40137930 16
-  write 0x400e3610 6
-  flush 0x400e3610 16
-  write 0x401378c4 6
-  flush 0x401378c0 16
-  write 0x40137c40 6
-  flush 0x40137c40 16
-  write 0x40137836 6
-  flush 0x40137830 16
-  write 0x40137d1e 6
-  flush 0x40137d10 32
-  write 0x4010e1b0 6
-  flush 0x4010e1b0 16
   write 0x4000766c 6
   flush 0x40007660 32
-  write 0x40137cc6 6
-  flush 0x40137cc0 16
+  write 0x400e3610 6
+  flush 0x400e3610 16
+  write 0x4010e1b0 6
+  flush 0x4010e1b0 16
   restore
 card writes
   sector 5094 512 bytes
