@@ -326,19 +326,12 @@ fn bit_instructions() {
 }
 
 #[test]
-fn btst_dynamic_on_immediate() {
-    // btst d1,#0x85 three times: the bit number is taken modulo 8 and the
-    // tested byte is the immediate (CFPRM p.92)
-    let (mut cpu, mut ram) = machine(&[0x033c, 0x0085, 0x033c, 0x0085, 0x033c, 0x0085]);
-    cpu.d[1] = 7; // bit 7 of 0x85 is set
+fn btst_immediate_destination_takes_illegal_vector() {
+    // Dynamic BTST does not take an immediate destination (CFPRM3 p.4-25).
+    let (mut cpu, mut ram) = machine(&[0x033c, 0x0085]);
     cpu.step(&mut ram).unwrap();
-    assert_eq!(cpu.sr & sr::Z, 0);
-    cpu.d[1] = 1; // bit 1 is clear
-    cpu.step(&mut ram).unwrap();
-    assert_eq!(cpu.sr & sr::Z, sr::Z);
-    cpu.d[1] = 8; // 8 mod 8 = bit 0, set
-    cpu.step(&mut ram).unwrap();
-    assert_eq!(cpu.sr & sr::Z, 0);
+    assert_eq!(cpu.pc, 0x4000 + 0x10 * vector::ILLEGAL as u32);
+    assert_eq!(ram.read32(0x8000 - 4).unwrap(), 0x1000); // PC of the fault
 }
 
 #[test]

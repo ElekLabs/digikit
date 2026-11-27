@@ -73,7 +73,7 @@ fn tpf_lengths() {
 fn length_limit_and_ea_restrictions() {
     // 48-bit limit (CFPRM p.35): MOVE.L #imm,(d16,An) would be 8 bytes
     assert!(dec(0, &[0x217c, 0x1234, 0x5678]).is_none());
-    // V4 allows MOVE.W #imm,(d16,An) (CFPRM p.113)
+    // ISA_B allows MOVE.W #imm,(d16,An) (CFPRM3 p.4-48)
     assert_eq!(
         text(0, &[0x317c, 0x1234, 0x0010]),
         "move.w #0x1234,(0x10,a0) [6]"
@@ -81,7 +81,7 @@ fn length_limit_and_ea_restrictions() {
     // (d16,Ay) source to (xxx).L destination is excluded (CFPRM p.113)
     assert!(dec(0, &[0x23e8, 0x0004]).is_none());
     // (d8,Ay,Xi), (d8,PC,Xi) and (xxx).W sources to a (d16,Ax) destination
-    // are excluded too (CFPRM p.113); these fit in 6 bytes, so only the
+    // are excluded too (CFPRM3 p.4-48); these fit in 6 bytes, so only the
     // deny rule rejects them
     assert!(dec(0, &[0x2370, 0x0800, 0x0010]).is_none());
     assert!(dec(0, &[0x237b, 0x0800, 0x0010]).is_none());
@@ -97,6 +97,13 @@ fn length_limit_and_ea_restrictions() {
     assert!(dec(0, &[0x4a08]).is_none());
     assert!(dec(0, &[0x9000]).is_none());
     assert_eq!(dec(0, &[0x4afc]).unwrap().form, Form::Illegal);
+}
+
+#[test]
+fn btst_dynamic_destination_modes() {
+    // CFPRM3 p.4-25: the destination can be PC-relative but not immediate.
+    assert!(dec(0, &[0x033c, 0x0085]).is_none());
+    assert_eq!(dec(0, &[0x033a, 0x0010]).unwrap().form, Form::BtstR);
 }
 
 #[test]

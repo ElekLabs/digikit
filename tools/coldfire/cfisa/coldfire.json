@@ -3,6 +3,7 @@
     "title": "ColdFire V4e (MCF5441x) instruction encodings: ISA_A/B/C, EMAC, FPU",
     "sources": {
       "CFPRM": "ColdFire Family Programmer's Reference Manual, Rev. 2, 07/2001 (out/refs/CFPRM). Page numbers are PDF pages (out/refs/CFPRM/pages/pNNNN.txt).",
+      "CFPRM3": "ColdFire Family Programmer's Reference Manual, Rev. 3, 03/2005 (https://www.nxp.com/docs/en/reference-manual/CFPRM.pdf). Page numbers are printed pages.",
       "RM": "MCF5441x Reference Manual (out/refs/MCF5441XRM). Page numbers are PDF pages."
     },
     "notes": [
@@ -63,7 +64,7 @@
     {"id": "byterev", "mn": "byterev", "enc": ["0000 0010 1100 0ddd"], "size": "l", "ops": ["d:d"], "unit": "isa_c", "page": "RM p.97 Table 3-4, RM p.113"},
     {"id": "ff1", "mn": "ff1", "enc": ["0000 0100 1100 0ddd"], "size": "l", "ops": ["d:d"], "unit": "isa_c", "page": "RM p.97 Table 3-4, RM p.113"},
 
-    {"id": "btst_r", "mn": "btst", "enc": ["0000 yyy1 00mm mrrr"], "size": {"f": "m", "map": {"0": "l"}, "else": "b"}, "ops": ["d:y", "ea:m,r:data"], "unit": "isa_a", "page": "CFPRM p.92"},
+    {"id": "btst_r", "mn": "btst", "enc": ["0000 yyy1 00mm mrrr"], "size": {"f": "m", "map": {"0": "l"}, "else": "b"}, "ops": ["d:y", "ea:m,r:data"], "deny": [{"ops": {"1": ["imm"]}}], "unit": "isa_a", "page": "CFPRM p.92 (encoding); CFPRM3 p.4-25 (destination modes)"},
     {"id": "bchg_r", "mn": "bchg", "enc": ["0000 yyy1 01mm mrrr"], "size": {"f": "m", "map": {"0": "l"}, "else": "b"}, "ops": ["d:y", "ea:m,r:dalt"], "unit": "isa_a", "page": "CFPRM p.84"},
     {"id": "bclr_r", "mn": "bclr", "enc": ["0000 yyy1 10mm mrrr"], "size": {"f": "m", "map": {"0": "l"}, "else": "b"}, "ops": ["d:y", "ea:m,r:dalt"], "unit": "isa_a", "page": "CFPRM p.86"},
     {"id": "bset_r", "mn": "bset", "enc": ["0000 yyy1 11mm mrrr"], "size": {"f": "m", "map": {"0": "l"}, "else": "b"}, "ops": ["d:y", "ea:m,r:dalt"], "unit": "isa_a", "page": "CFPRM p.89"},
@@ -77,7 +78,7 @@
               {"ops": {"0": ["idx", "pcidx", "absw", "absl"], "1": ["disp", "idx", "absw", "absl"]}},
               {"ops": {"0": ["imm"], "1": ["idx", "absw", "absl"]}},
               {"ops": {"0": ["imm"], "1": ["disp"]}, "sizes": ["l"]}],
-     "unit": "isa_a", "page": "CFPRM p.112-113 (source/destination combinations p.113)"},
+     "unit": "isa_a", "page": "CFPRM p.112-113; CFPRM3 p.4-48 (source/destination combinations)"},
     {"id": "movea", "mn": "movea", "enc": ["00ss aaa0 01mm mrrr"], "size": {"f": "s", "map": {"3": "w", "2": "l"}}, "ops": ["ea:m,r:all", "a:a"], "unit": "isa_a", "page": "CFPRM p.114"},
 
     {"id": "negx", "mn": "negx", "enc": ["0100 0000 1000 0ddd"], "size": "l", "ops": ["d:d"], "unit": "isa_a", "page": "CFPRM p.127"},
