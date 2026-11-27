@@ -42,6 +42,9 @@ pub struct GenCore {
     pub blocks: &'static [(u32, BlockFn)],
     /// Code ranges of the image: start, length in short words, SHA-256 of the words.
     pub code_ranges: &'static [(u32, u32, &'static str)],
+    /// Full block bounds (entry, exclusive end), sorted by entry PC. An empty table
+    /// also covers images generated before this metadata was available.
+    pub block_bounds: &'static [(u32, u32)],
     /// Entry PCs per region, for barring blocks after a code change (None: generated without).
     pub region_entries: Option<&'static [&'static [u32]]>,
     /// Entry PCs of blocks that are safe with the peripheral models on.
@@ -143,6 +146,7 @@ impl GenCore {
         env_suffix: "",
         blocks: &[],
         code_ranges: &[],
+        block_bounds: &[],
         region_entries: None,
         model_safe: &[],
         loop_ends: &[],

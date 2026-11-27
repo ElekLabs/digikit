@@ -1533,9 +1533,13 @@ def generate(
             '(%#x, %d, "%s")' % (lo, n, h) for lo, n, h in code_ranges(mem, blocks)
         ),
         "",
+        "/// Each generated block's full short-word span: entry and exclusive end,",
+        "/// sorted by entry. An entry inside another block does not end that block.",
+        "pub static BLOCK_BOUNDS: &[(u32, u32)] = &[%s];"
+        % ", ".join("(%#x, %#x)" % (b.start, b.end) for b in blocks),
+        "",
         "/// The entry PCs of each generated region (a region's bodies pass control",
-        "/// directly, so the engine bars all of a region's entries when any of its",
-        "/// code ranges no longer matches CODE_RANGES).",
+        "/// directly, so the engine bars all of its entries if one block changes).",
         "pub static REGION_ENTRIES: &[&[u32]] = &[%s];"
         % ", ".join(
             "&[%s]" % ", ".join("%#x" % st for st in sorted(starts_))

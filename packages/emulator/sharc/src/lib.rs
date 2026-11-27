@@ -1164,9 +1164,9 @@ impl Engine {
     /// per-region data, record which entries a mismatch bars (`code_barred`)
     /// and end chains at them. A range whose hash differs is narrowed down:
     /// the loaded words are decoded and compared with the generated
-    /// instruction table, and only the regions with a block that holds a
-    /// differing PC are barred (`code_diff`). A range that cannot be narrowed
-    /// down (too many differing PCs, or none) bars all its regions.
+    /// instruction table, and regions whose blocks span a differing
+    /// instruction PC are barred (`code_diff`). A range that cannot be
+    /// narrowed down (too many differing PCs, or none) bars all its regions.
     fn verify_code(&mut self) -> bool {
         let core = self.s.core;
         if core.has_image {
@@ -1207,13 +1207,13 @@ impl Engine {
                     }
                 }
                 changed.sort_unstable();
-                let range_of = |pc: u32| {
-                    let i = ranges.partition_point(|r| r.0 <= pc).checked_sub(1)?;
-                    (pc < ranges[i].0 + ranges[i].1).then_some(i)
-                };
-                let barred = code_diff::barred_entries(region_entries, &changed, |pc| {
-                    range_of(pc).is_none_or(|i| whole.contains(&i))
-                });
+                let barred =
+                    code_diff::barred_entries(region_entries, core.block_bounds, &changed, |pc| {
+                        let i = ranges.partition_point(|r| r.0 <= pc).checked_sub(1)?;
+                        let (start, len, _) = ranges[i];
+                        let end = start + len;
+                        (pc < end && !whole.contains(&i)).then_some(end)
+                    });
                 for &pc in &barred {
                     self.s.chain_stop_add(pc);
                 }

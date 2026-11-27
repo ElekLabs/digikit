@@ -3,16 +3,11 @@
 //! `verify_code` hashes the loaded code per range. A range is a merged span of
 //! many blocks, so one patched word used to bar every region with an entry in
 //! the range. On a range whose hash differs the engine now decodes the loaded
-//! words, compares them with the generated instruction table, and bars only
-//! the regions with a block that holds a differing PC. These functions hold
-//! that logic without any generated data, so unit tests can run them.
+//! words, compares them with the generated instruction table, and bars the
+//! regions with a block spanning a differing instruction PC. The merged
+//! ranges cover decoder lookahead and bound blocks from older generators.
 
 use crate::rt::Insn;
-
-/// `CODE_LOOKAHEAD` of tools/sharc_dev/sharc_rsgen.py: the short words after a
-/// block that the decoder may read. A block is taken to end that many words
-/// after the next block's start (more than it needs: when in doubt, bar more).
-pub const LOOKAHEAD: u32 = 6;
 
 /// A range with more differing PCs than this is barred as a whole (a range
 /// not loaded yet differs everywhere, and a decode per PC is not worth it).
@@ -59,31 +54,25 @@ pub fn changed_pcs<K: PartialEq>(
     Some(out)
 }
 
-/// The entry PCs (sorted) that stay off after a code change: those of every
-/// region that has a block holding a PC of `changed` (sorted), and those of a
-/// region with an entry for which `whole` is true (its range could not be
-/// narrowed down). A region's bodies pass control to each other directly, so
-/// all its entries go together. A block is `[its start, the next block's
-/// start + LOOKAHEAD)`; the block starts are the entries of all regions.
+/// The entry PCs (sorted) that stay off after a code change. Bar a block if a
+/// PC in `changed` (sorted) falls within its generated bounds (sorted by entry).
+/// If the block has no bounds, use the hashed range's exclusive end. Bar the
+/// block outright if `range_end` returns None for an unknown or wholly barred
+/// range. A region's bodies pass control directly, so all its entries go together.
 pub fn barred_entries(
     region_entries: &[&[u32]],
+    block_bounds: &[(u32, u32)],
     changed: &[u32],
-    whole: impl Fn(u32) -> bool,
+    range_end: impl Fn(u32) -> Option<u32>,
 ) -> Vec<u32> {
-    let mut starts: Vec<u32> = region_entries
-        .iter()
-        .flat_map(|e| e.iter().copied())
-        .collect();
-    starts.sort_unstable();
-    starts.dedup();
     let hit = |pc: u32| {
-        if whole(pc) {
+        let Some(range_end) = range_end(pc) else {
             return true;
-        }
-        let i = starts.partition_point(|&s| s < pc);
-        let end = starts
-            .get(i + 1)
-            .map_or(u32::MAX, |&n| n.saturating_add(LOOKAHEAD));
+        };
+        let end = block_bounds
+            .binary_search_by_key(&pc, |&(start, _)| start)
+            .ok()
+            .map_or(range_end, |i| block_bounds[i].1);
         let first = changed.partition_point(|&c| c < pc);
         changed.get(first).is_some_and(|&c| c < end)
     };
@@ -102,72 +91,88 @@ pub fn barred_entries(
 mod tests {
     use super::*;
 
-    /// Three blocks of thirty words (starts 0, 30, 60, the last ends at 90),
-    /// the regions {0, 60} and {30}. A toy decoder: the instruction at PC is
-    /// the three words from PC on (the decoder's lookahead), and every PC is
-    /// an instruction.
-    const ENTRIES: [&[u32]; 2] = [&[0, 60], &[30]];
-    const WORDS: usize = 100;
+    const WORDS: usize = 130;
 
     fn insn(words: &[u16], pc: u32) -> Option<[u16; 3]> {
         let at = pc as usize;
         (at + 3 <= words.len()).then(|| [words[at], words[at + 1], words[at + 2]])
     }
 
-    /// The entries barred when the loaded words are the stock ones with the
-    /// words at PATCHED changed.
-    fn barred(patched: &[usize]) -> Vec<u32> {
+    #[test]
+    fn no_patch_bars_nothing() {
+        assert!(barred_entries(&[&[10], &[30]], &[], &[], |_| Some(60)).is_empty());
+    }
+
+    #[test]
+    fn generated_bounds_keep_earlier_blocks_and_bar_overlaps_and_their_regions() {
+        // PC 45 starts another entry and is also in two earlier blocks.
+        // Block 10 is also in the merged range but ends much earlier.
+        // Block 20 ends exactly at PC 45.
+        let entries: [&[u32]; 5] = [&[10], &[20], &[25, 100], &[30], &[45]];
+        let bounds = [(10, 16), (20, 45), (25, 50), (30, 55), (45, 52), (100, 110)];
+        let range_end = |pc| if pc < 100 { Some(60) } else { Some(120) };
+        assert_eq!(
+            barred_entries(&entries, &bounds, &[45], range_end),
+            vec![25, 30, 45, 100]
+        );
+        assert_eq!(
+            barred_entries(&entries, &[], &[45], range_end),
+            vec![10, 20, 25, 30, 45, 100]
+        );
+    }
+
+    #[test]
+    fn older_generated_blocks_are_bounded_by_their_merged_range() {
+        // Without block bounds, entries earlier in the changed range are
+        // barred, including a region companion in a separate clean range.
+        let entries: [&[u32]; 5] = [&[10], &[20, 100], &[30], &[60], &[110]];
+        let range_end = |pc| match pc {
+            10..16 => Some(16),
+            20..80 => Some(80),
+            100..120 => Some(120),
+            _ => None,
+        };
+        assert_eq!(
+            barred_entries(&entries, &[], &[45], range_end),
+            vec![20, 30, 100]
+        );
+        assert_eq!(
+            barred_entries(&entries, &[], &[30, 110], range_end),
+            vec![20, 30, 100, 110]
+        );
+    }
+
+    #[test]
+    fn lookahead_can_change_an_instruction_before_the_patched_word() {
         let stock: Vec<u16> = (0..WORDS as u16).collect();
         let mut loaded = stock.clone();
-        for &p in patched {
-            loaded[p] ^= 0x8000;
-        }
+        loaded[31] ^= 0x8000;
         let changed = changed_pcs(
-            0,
-            90 + LOOKAHEAD,
+            10,
+            30,
             |pc| insn(&stock, pc),
             |pc| insn(&loaded, pc),
             MAX_CHANGED,
         )
         .unwrap();
-        barred_entries(&ENTRIES, &changed, |_| false)
-    }
-
-    #[test]
-    fn no_patch_bars_nothing() {
-        assert_eq!(barred(&[]), Vec::<u32>::new());
-    }
-
-    #[test]
-    fn a_word_inside_a_block_bars_only_that_blocks_region() {
-        // The middle block: region {30} only.
-        assert_eq!(barred(&[45]), vec![30]);
-        // The last block: the region of blocks 0 and 60 goes together, but
-        // not the middle block's region.
-        assert_eq!(barred(&[75]), vec![0, 60]);
-        // The first block.
-        assert_eq!(barred(&[10]), vec![0, 60]);
-    }
-
-    #[test]
-    fn a_word_in_the_lookahead_bars_the_preceding_block() {
-        // Word 60 starts the last block and is read by the instructions at 58
-        // and 59 of the middle block: both regions.
-        assert_eq!(barred(&[60]), vec![0, 30, 60]);
-        // Word 31 is read by the instructions 29 to 31: the first block's
-        // region as well as the middle block's.
-        assert_eq!(barred(&[31]), vec![0, 30, 60]);
-        // Word 62 is read from 60 on; the margin of LOOKAHEAD words after the
-        // next start keeps the middle block in.
-        assert_eq!(barred(&[62]), vec![0, 30, 60]);
+        assert_eq!(changed, vec![29, 30, 31]);
+        assert_eq!(
+            barred_entries(
+                &[&[10], &[30], &[32]],
+                &[(10, 30), (30, 32), (32, 35)],
+                &changed,
+                |_| Some(40)
+            ),
+            vec![10, 30]
+        );
     }
 
     #[test]
     fn a_range_that_cannot_be_narrowed_bars_its_regions() {
-        let changed: Vec<u32> = vec![];
-        // The first block's range is whole: its region, not the middle one.
-        let barred = barred_entries(&ENTRIES, &changed, |pc| pc < 30);
-        assert_eq!(barred, vec![0, 60]);
+        let entries: [&[u32]; 3] = [&[10, 60], &[20], &[30]];
+        let bounds = [(10, 12), (20, 23), (30, 39), (60, 63)];
+        let barred = barred_entries(&entries, &bounds, &[], |pc| (pc >= 30).then_some(70));
+        assert_eq!(barred, vec![10, 20, 60]);
     }
 
     #[test]
