@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { createComponent } from 'solid-js';
 import { render } from 'solid-js/web';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import {
   createMemoryModuleChannel,
   createModuleClient,
@@ -27,8 +27,6 @@ function open(handlers: Handlers | MemoryQueryService) {
       ?.click();
   return { host, dispose, rows, select };
 }
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const summary = {
   found: true,
@@ -154,6 +152,8 @@ describe('the Project Manager page', () => {
   });
 
   it('stops asking when the selection changes and when the page closes', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => void vi.useRealTimers());
     const asked: number[] = [];
     const view = open({
       list: () => ({
@@ -174,13 +174,13 @@ describe('the Project Manager page', () => {
     view.select('B');
     await vi.waitFor(() => expect(asked).toContain(2));
     const forA = asked.filter((s) => s === 1).length;
-    await wait(500);
+    await vi.advanceTimersByTimeAsync(500);
     expect(asked.filter((s) => s === 1).length).toBeLessThanOrEqual(forA + 1); // at most the reply that was already in flight
     expect(asked.filter((s) => s === 2).length).toBeGreaterThanOrEqual(2);
     view.dispose();
-    await wait(50);
+    await vi.advanceTimersByTimeAsync(50);
     const total = asked.length;
-    await wait(600);
+    await vi.advanceTimersByTimeAsync(600);
     expect(asked.length).toBeLessThanOrEqual(total + 1);
   });
 });
