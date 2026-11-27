@@ -106,7 +106,7 @@ impl CCodec<'_> {
             }
             (Kind::Message(m), None) => {
                 let inner = self.ty(*m);
-                writeln!(o, "            if (t != DK_WIRE_LEN)\n                return -1;\n            s = dk_wire_get_len(&r, &len);\n            if (r.err || {inner}_decode(s, len, &out->{n}) < 0)\n                return -1;\n            out->has_{n} = 1;").unwrap();
+                writeln!(o, "            if (t != DK_WIRE_LEN)\n                return -1;\n            s = dk_wire_get_len(&r, &len);\n            if (r.err || out->has_{n} || {inner}_decode(s, len, &out->{n}) < 0)\n                return -1;\n            out->has_{n} = 1;").unwrap();
             }
             (Kind::Message(m), Some(max)) => {
                 let inner = self.ty(*m);

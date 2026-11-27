@@ -52,11 +52,31 @@ pub(super) struct EnumDef {
     pub(super) values: Vec<(String, i32)>,
 }
 
+/// One `rpc` of the service: its position in the service (from 1) is the method number of the query table.
+#[derive(Clone, Debug)]
+pub(super) struct Method {
+    pub(super) name: String,
+    /// The C name part of the handler the author writes: `ListAll` gives `list_all`.
+    pub(super) handler: String,
+    /// Indexes into `Schema::messages`.
+    pub(super) request: usize,
+    pub(super) reply: usize,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct Service {
+    pub(super) name: String,
+    pub(super) methods: Vec<Method>,
+}
+
 /// The checked messages of one `.proto` file, every message after the messages it holds.
 #[derive(Debug)]
 pub struct Schema {
+    /// The proto package (`pm`); the C names start with it.
+    pub(super) package: String,
     pub(super) messages: Vec<Message>,
     pub(super) enums: Vec<EnumDef>,
+    pub(super) service: Option<Service>,
 }
 
 fn length_option(pool: &DescriptorPool, name: &str) -> Result<ExtensionDescriptor> {
@@ -91,8 +111,10 @@ impl Schema {
         let max_len = length_option(pool, "dk.max_len")?;
         let max_count = length_option(pool, "dk.max_count")?;
         let mut schema = Schema {
+            package: fd.package_name().to_string(),
             messages: vec![],
             enums: vec![],
+            service: None,
         };
         let mut all: Vec<MessageDescriptor> = vec![];
         for m in fd.messages() {
@@ -110,7 +132,59 @@ impl Schema {
         for m in &all {
             schema.add(m, &all, &(&max_len, &max_count), &mut done, &mut stack)?;
         }
+        schema.service = schema.read_service(&fd)?;
         Ok(schema)
+    }
+
+    /// The `service` of the file: none, or one (a module has one).
+    fn read_service(&self, fd: &prost_reflect::FileDescriptor) -> Result<Option<Service>> {
+        let mut services = fd.services();
+        let Some(s) = services.next() else {
+            return Ok(None);
+        };
+        if let Some(second) = services.next() {
+            return Err(err!(
+                "{}: a module has one service, this file has {} and {}",
+                fd.name(),
+                s.name(),
+                second.name()
+            ));
+        }
+        let package = fd.package_name();
+        let message = |m: &MessageDescriptor, who: &str| -> Result<usize> {
+            let name = local_name(m.full_name(), package);
+            self.messages
+                .iter()
+                .position(|x| x.name == name)
+                .ok_or_else(|| err!("{who}: message {} is from another file", m.full_name()))
+        };
+        let mut methods = vec![];
+        for m in s.methods() {
+            let who = m.full_name().to_string();
+            if m.is_client_streaming() || m.is_server_streaming() {
+                return Err(err!("{who}: a streaming method is not accepted"));
+            }
+            let handler = snake_case(m.name());
+            if methods.iter().any(|x: &Method| x.handler == handler) {
+                return Err(err!("{who}: the handler name {handler} is used twice"));
+            }
+            methods.push(Method {
+                name: m.name().to_string(),
+                handler,
+                request: message(&m.input(), &who)?,
+                reply: message(&m.output(), &who)?,
+            });
+        }
+        if methods.len() > 255 {
+            return Err(err!(
+                "{}: a method number is one byte (at most 255 methods)",
+                s.full_name()
+            ));
+        }
+        Ok(Some(Service {
+            name: s.name().to_string(),
+            methods,
+        }))
     }
 
     /// Adds `m` after the messages it holds; a message that holds itself, directly or not, is refused.
@@ -271,6 +345,25 @@ fn local_name(full: &str, package: &str) -> String {
         .strip_prefix(package)
         .map_or(full, |r| r.trim_start_matches('.'));
     rest.replace('.', "_")
+}
+
+/// `ListAll` -> `list_all`, `GetURL` -> `get_url`.
+fn snake_case(name: &str) -> String {
+    let chars: Vec<char> = name.chars().collect();
+    let mut out = String::new();
+    for (i, c) in chars.iter().enumerate() {
+        if c.is_ascii_uppercase() {
+            let prev_lower = i > 0 && !chars[i - 1].is_ascii_uppercase() && chars[i - 1] != '_';
+            let next_lower = chars.get(i + 1).is_some_and(char::is_ascii_lowercase);
+            if i > 0 && chars[i - 1] != '_' && (prev_lower || next_lower) {
+                out.push('_');
+            }
+            out.push(c.to_ascii_lowercase());
+        } else {
+            out.push(*c);
+        }
+    }
+    out
 }
 
 fn collect(m: &MessageDescriptor, out: &mut Vec<MessageDescriptor>) {

@@ -90,9 +90,10 @@ const USAGE: &str = "usage: patchkit [--root DIR] COMMAND ...
                                          --define NAME[=V] selects an #ifdef of the DSP sources (needs --out; the stored objects
                                          stay). --status prints {module: \"unchanged\"|\"needs build\"} as JSON and builds nothing.
                                          --paths prints {module: {object path: stored file}} for the sources now and builds nothing.
-  workbench-ts MODDIR [--write|--check]  the TypeScript settings file MODDIR/workbench/gen/settings.ts from MODDIR/workbench.toml: printed,
-                                         written (--write), or checked (--check: exit 1 and the path when it is missing or differs).
-                                         A module without workbench.toml has nothing to do.
+  workbench-ts MODDIR [--write|--check]  the TypeScript settings file MODDIR/workbench/gen/settings.ts from MODDIR/workbench.toml, and from
+                                         MODDIR/workbench/*.proto the protobuf-es files <name>_pb.js and .d.ts and <name>.methods there
+                                         (needs node): printed, written (--write; refuses a removed or reordered method), or checked
+                                         (--check: exit 1 and the paths when missing or different). A module with neither has nothing to do.
                                          --tree DIR: every module under DIR only.
   objdiff OLD.dko.json NEW.dko.json [--format text|json] [--strict] [--erase TYPE]... [--owners owners.toml]
                                          do two objects hold the same code up to names, order and addresses? (proof for moves of Rust items;
@@ -334,7 +335,7 @@ fn run(a: Args) -> Result<()> {
         #[cfg(not(target_arch = "wasm32"))]
         "dko" => build_cli::dko(rest)?,
         #[cfg(not(target_arch = "wasm32"))]
-        "workbench-ts" => workbench_cli::run(rest)?,
+        "workbench-ts" => workbench_cli::run(&a.root, rest)?,
         "owners" => {
             patchkit::owners::run(rest)?;
         }

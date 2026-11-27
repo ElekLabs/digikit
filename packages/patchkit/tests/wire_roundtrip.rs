@@ -18,7 +18,9 @@ fn harness(dir: &std::path::Path) -> PathBuf {
     let wire = root().join("tests/fixtures/wire");
     let sdk_proto = root().join("sdk/proto");
     let schema = Schema::read(&[&wire, &sdk_proto], "project_manager.proto").unwrap();
-    std::fs::write(dir.join("pm.h"), CCodec::render(&schema, "pm")).unwrap();
+    let generated = CCodec::render(&schema, "pm", "pm.h");
+    std::fs::write(dir.join("pm.h"), generated.header).unwrap();
+    std::fs::write(dir.join("pm.c"), generated.source).unwrap();
     let exe = dir.join("harness");
     let build = Command::new("cc")
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-I"])
@@ -28,6 +30,7 @@ fn harness(dir: &std::path::Path) -> PathBuf {
         .arg("-o")
         .arg(&exe)
         .arg(wire.join("harness.c"))
+        .arg(root().join("sdk/src/wire/wire.c"))
         .output()
         .expect("this test needs a host C compiler named cc on PATH");
     assert!(
@@ -48,28 +51,17 @@ fn the_c_codec_decodes_and_encodes_the_bytes_of_protobuf_es() {
     .unwrap();
     let cases = vectors["cases"].as_array().unwrap();
     assert!(cases.len() > 200, "{} cases", cases.len());
-    let mut child = Command::new(exe)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut stdin = child.stdin.take().unwrap();
-    let input: String = cases
+    let input: Vec<String> = cases
         .iter()
         .map(|c| {
             format!(
-                "{} {}\n",
+                "{} {}",
                 c["message"].as_str().unwrap(),
                 c["input_hex"].as_str().unwrap()
             )
         })
         .collect();
-    let writer = std::thread::spawn(move || stdin.write_all(input.as_bytes()).unwrap());
-    let out = child.wait_with_output().unwrap();
-    writer.join().unwrap();
-    assert!(out.status.success());
-    let out = String::from_utf8(out.stdout).unwrap();
-    let lines: Vec<&str> = out.lines().collect();
+    let lines = run_harness(&exe, &input);
     assert_eq!(lines.len(), cases.len());
     let mut failures = vec![];
     for (case, got) in cases.iter().zip(lines) {
@@ -90,6 +82,26 @@ fn the_c_codec_decodes_and_encodes_the_bytes_of_protobuf_es() {
     );
 }
 
+/// The harness's answer to each line.
+fn run_harness(exe: &std::path::Path, lines: &[String]) -> Vec<String> {
+    let mut child = Command::new(exe)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let input: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    let writer = std::thread::spawn(move || stdin.write_all(input.as_bytes()).unwrap());
+    let out = child.wait_with_output().unwrap();
+    writer.join().unwrap();
+    assert!(out.status.success());
+    String::from_utf8(out.stdout)
+        .unwrap()
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
 #[test]
 fn the_generated_code_compiles_for_the_coldfire_and_passes_its_isa_check() {
     let env = Env::new(&root());
@@ -102,32 +114,43 @@ fn the_generated_code_compiles_for_the_coldfire_and_passes_its_isa_check() {
     // code, which `check_text` refuses
     std::fs::write(
         dir.path().join("all.c"),
-        "#include <stdint.h>\n#include \"pm.h\"\n",
+        "#include <stdint.h>\n#include \"pm.h\"\n#include \"pm.c\"\n",
     )
     .unwrap();
-    let object = dir.path().join("all.o");
-    let build = Command::new(env.m68k("gcc").unwrap())
-        .args(CFLAGS)
-        .arg("-DDK_WIRE_FN=")
-        .arg("-I")
-        .arg(dir.path())
-        .arg("-I")
-        .arg(root().join("sdk/include"))
-        .arg("-c")
-        .arg(dir.path().join("all.c"))
-        .arg("-o")
-        .arg(&object)
-        .output()
-        .unwrap();
-    assert!(
-        build.status.success(),
-        "{}",
-        String::from_utf8_lossy(&build.stderr)
-    );
-    let text = elf::text_sections(&std::fs::read(&object).unwrap()).unwrap();
+    let compile = |source: PathBuf, name: &str| {
+        let object = dir.path().join(name);
+        let build = Command::new(env.m68k("gcc").unwrap())
+            .args(CFLAGS)
+            .arg("-DDK_WIRE_FN=")
+            .arg("-I")
+            .arg(dir.path())
+            .arg("-I")
+            .arg(root().join("sdk/include"))
+            .arg("-c")
+            .arg(source)
+            .arg("-o")
+            .arg(&object)
+            .output()
+            .unwrap();
+        assert!(
+            build.status.success(),
+            "{}",
+            String::from_utf8_lossy(&build.stderr)
+        );
+        elf::text_sections(&std::fs::read(&object).unwrap()).unwrap()
+    };
+    // the generated code and the SDK component it calls
+    let text = compile(dir.path().join("all.c"), "all.o");
     assert!(
         text.iter()
             .any(|(name, _)| name.contains("pm_Coverage_decode"))
     );
     cf::check_text(&text, "wire: ").unwrap();
+    let helpers = compile(root().join("sdk/src/wire/wire.c"), "wire.o");
+    assert!(
+        helpers
+            .iter()
+            .any(|(name, _)| name.contains("dk_wire_get_varint"))
+    );
+    cf::check_text(&helpers, "wire helpers: ").unwrap();
 }

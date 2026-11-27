@@ -1,6 +1,7 @@
 //! `<prefix>_<Msg>_encode` and `_size`.
 
-use super::{CCodec, Kind, Scalar, key_len};
+use super::size::key_len;
+use super::{CCodec, Kind, Scalar};
 use crate::build::wire::schema::Field;
 use std::fmt::Write as _;
 

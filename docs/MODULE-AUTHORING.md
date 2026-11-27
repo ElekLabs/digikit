@@ -591,6 +591,40 @@ Choice labels must turn into distinct, non-empty C names (only letters and digit
 `patchkit workbench-ts MODDIR --write` writes `MODDIR/workbench/gen/settings.ts` (the schema and the `Settings` type for the module's page);
 `--check` exits 1 and prints the path when the file is missing or differs.
 
+### 5.8a Queries
+
+A module can answer read-only queries from its Workbench page (live state, lists, details). Write the schema as one file
+`workbench/<name>.proto` (proto3) with one `service` of methods, `rpc Name(Request) returns (Reply)`. One `.proto` and one `service` per module;
+import `dk/options.proto` for the bounds. A schema may use `uint32`, `int32`, `bool`, enums, `string` and `bytes` with `[(dk.max_len) = N]`,
+nested messages, and `repeated` with `[(dk.max_count) = N]` (scalars packed). Patchkit refuses maps, `oneof`, `optional`, floats, 64-bit
+and other integer types, groups, a repeated `bytes`, an unbounded string, bytes or repeated field, a message that contains itself and a
+streaming method.
+
+Patchkit generates the C at build time (the same temporary include directory as `<workbench_descriptor.h>`). Include
+`<workbench_queries.h>`, which holds the structs (`<package>_<Message>`), the enum constants, `<PACKAGE>_<Message>_MAX_SIZE`,
+`DK_WORKBENCH_QUERY_COUNT` and `dk_workbench_queries[]` (`<dk/query.h>`), and write one handler per method. The name is the package, `_`, and the
+method name in snake case (`List` in package `pm`: `pm_list`):
+
+```c
+int32_t pm_list(dk_module_ctx *ctx, const pm_ListRequest *request, pm_ListReply *reply);
+```
+
+The handler runs in the UI task. It fills `reply` (zeroed before the call) and returns 0, or a negative `DK_E_*` code that the page sees as
+a refusal. Call `dk_workbench_register_queries(ctx, dk_workbench_queries, DK_WORKBENCH_QUERY_COUNT)` in `init`, after `dk_workbench_register`.
+The generated call function decodes the request (`DK_E_FORMAT` when it is malformed, when a bound is broken, or when a singular message field
+occurs twice; unknown fields are skipped), calls the handler and encodes the reply into the runtime's buffer (`DK_E_TOO_BIG` when it does
+not fit). The device does not check strings for UTF-8: the page checks what it shows. The packer links the wire helpers
+(`sdk/src/wire/wire.c`) when the module calls them.
+
+Budgets, checked when patchkit generates the code: a request is at most 149 bytes encoded, a reply at most 855 bytes, and the request and
+reply structs together at most 1024 bytes (they are on the stack). Patchkit names the method and the sizes when a schema is over; lower a
+`max_len` or `max_count`.
+
+Methods are only appended: the method number a call carries is the method's position in the `service`. `patchkit workbench-ts MODDIR --write`
+writes `workbench/gen/<name>_pb.js`, `<name>_pb.d.ts` (protobuf-es; needs `node`; no `protoc`) and `<name>.methods` (the names in order)
+and refuses a method that was removed or moved; `--check` exits 1 when one of these files is missing or stale. To retire a method, keep it in
+the `service` and answer it with an error.
+
 ### 5.9 Module files and `dk_intro_take`
 
 A module's own files live under `data/<module id>/` in the store, not next to the `.dkm`: the `modules/` list holds at most 32 entries. `dk_data_path` (`<dk/platform/data.h>`)

@@ -1,9 +1,20 @@
-/* Host harness of the generated query codec. stdin: one line per case, "<Message> <hex>". stdout: "REFUSE" when decode fails, else the hex
- * of the message encoded again. Built by the tests (packages/patchkit/tests/wire_roundtrip.rs, packages/wire/tests/codec.test.ts)
- * against the header `patchkit wire c --prefix pm` writes for project_manager.proto. */
+/* Host harness of the generated query code. Built by the tests (packages/patchkit/tests/wire_roundtrip.rs,
+ * packages/wire/tests/codec.test.ts) from the header and source `patchkit wire c --prefix pm` writes for project_manager.proto, and
+ * the SDK component sdk/src/wire/wire.c. stdin, one line per case:
+ *   "<Message> <hex>"  stdout: "REFUSE" when decode fails, else the hex of the message encoded again. */
 #include <stdio.h>
 #include <string.h>
 #include "pm.h"
+#include "pm.c"
+
+/* The generated table refers to the handler of List; the codec cases do not call it. */
+int32_t pm_list(dk_module_ctx *ctx, const pm_ListRequest *request, pm_ListReply *reply)
+{
+    (void)ctx;
+    (void)request;
+    (void)reply;
+    return 0;
+}
 
 static int unhex(const char *s, uint8_t *out, uint32_t cap, uint32_t *n)
 {

@@ -44,6 +44,8 @@ beforeAll(() => {
     join(root, 'sdk/proto'),
     '--out',
     join(dir, 'pm.h'),
+    '--source-out',
+    join(dir, 'pm.c'),
   ]);
   const exe = join(dir, 'harness');
   execFileSync('cc', [
@@ -58,6 +60,7 @@ beforeAll(() => {
     '-o',
     exe,
     join(wire, 'harness.c'),
+    join(root, 'sdk/src/wire/wire.c'),
   ]);
   const input = cases.map((c) => `${c.message} ${c.input_hex}\n`).join('');
   results = execFileSync(exe, { input, maxBuffer: 1 << 26 })

@@ -4652,6 +4652,12 @@
    "message": "Coverage",
    "input_hex": "4a01614a01614a01614a0161",
    "expect": "refuse"
+  },
+  {
+   "name": "coverage-project-twice",
+   "message": "Coverage",
+   "input_hex": "2a002a00",
+   "expect": "refuse"
   }
  ]
 }

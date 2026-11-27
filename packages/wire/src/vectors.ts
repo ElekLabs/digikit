@@ -166,5 +166,7 @@ export function cases(): Case[] {
     refuse('coverage-levels-packed-truncated', 'Coverage', '22' + '02' + '01' + '80'),
     refuse('coverage-tag-5', 'Coverage', '4a05' + '61'.repeat(5)),
     refuse('coverage-4-tags', 'Coverage', '4a0161'.repeat(4)),
+    // protobuf merges a repeated singular message; the device refuses it (the decoder has no room to merge)
+    refuse('coverage-project-twice', 'Coverage', '2a00' + '2a00'),
   ];
 }
