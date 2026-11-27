@@ -17,7 +17,7 @@ pub const COUNTERS_LEN: usize = 12;
 
 /// The operation of the query that answers `count` (the state the part carries) as one big-endian word.
 pub const OP_COUNT: u32 = 2;
-/// The layout of the bytes the state part exports. It is no small number on purpose: the host assembly test finds the pair in the packed file and moves `ACCEPTS_FROM` past it.
+/// The layout of the bytes the state part exports: the count as one big-endian word. The number is no small one so that a test tells a layout from a count.
 pub const STATE_VERSION: u16 = 0x0107;
 
 /// The owner object: what it saw since `start`.
@@ -87,7 +87,10 @@ impl<C: CoreApi> State<C> for LocalPing {
     }
 
     fn export(&mut self, _: &C, out: &mut [u8]) -> usize {
-        out[..4].copy_from_slice(&self.count.to_be_bytes());
+        let Some(room) = out.get_mut(..4) else {
+            return 0;
+        };
+        room.copy_from_slice(&self.count.to_be_bytes());
         4
     }
 
