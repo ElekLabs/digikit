@@ -81,7 +81,7 @@ pub unsafe extern "C" fn dk_project_get(slot: u32, out: *mut u8) -> i32 {
     }
     DK_SVC_OWNER
         .with(|p| {
-            // SAFETY: the caller's `dk_project_summary`, 4-byte aligned as the C struct is.
+            // SAFETY: the caller's `dk_project_summary`: ColdFire aligns a u32 to 2 bytes and the layout uses explicit pads, so the struct is 2-byte aligned.
             let summary = &mut *(out as *mut ProjectSummary);
             p.summary(slot, summary)
         })

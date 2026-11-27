@@ -174,8 +174,10 @@ impl SlotScan {
     /// One pass of the scan: start the listing, then take the rows that are ready.
     pub fn step<E: Env + ?Sized>(&mut self, env: &mut E) -> ScanStep {
         if let ScanPhase::Unstarted = self.phase {
-            // a load and a read for the Project Manager read the store: they wait while a live operation stages
-            if (self.scan_for == ScanFor::Load || self.scan_for == ScanFor::Peek)
+            // a load and the reads for the Project Manager and the data bit read the store: they wait while a live operation stages
+            if (self.scan_for == ScanFor::Load
+                || self.scan_for == ScanFor::Peek
+                || self.scan_for == ScanFor::Index)
                 && env.live_op() != 0
             {
                 return ScanStep::Waiting;
@@ -216,6 +218,9 @@ impl SlotScan {
         let Some(row_slot) = name::slot_of_row(row) else {
             return;
         };
+        if row_slot >= 128 {
+            return;
+        }
         if self.scan_for == ScanFor::Index {
             self.found[(row_slot / 8) as usize] |= 1 << (row_slot % 8);
         } else if row_slot == self.slot {

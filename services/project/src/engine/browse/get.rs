@@ -19,7 +19,7 @@ impl ProjectService {
             out.mark_loaded(env);
             return OK;
         }
-        let answer = self.peek.answer(slot);
+        let answer = self.peek.answer(slot, env.now_ms());
         if answer == PeekAnswer::Ready {
             *out = *self.peek.summary();
             out.mark_loaded(env);

@@ -191,18 +191,138 @@ fn a_save_a_clear_and_a_paste_keep_the_data_bit() {
 }
 
 #[test]
-fn a_file_the_loader_does_not_use_loses_the_data_bit() {
+fn a_file_the_loader_does_not_use_keeps_the_data_bit_while_it_stays() {
     let mut r = Rig::new();
-    // the file of slot 12 has the stamp of another project
+    // the file of slot 12 has the stamp of another project; the file of slot 13 is no project file at all
     r.rec(12, b"SONG", 0x1212);
+    r.rec(13, b"JUNK", 0x1313);
     r.f.store.insert(
         path(12, b"SONG"),
         file_bytes(12, b"SONG", 0x9999, 1, &[(b"test/owner/k", b"v")]),
     );
+    r.f.store.insert(path(13, b"JUNK"), vec![0xff; 40]);
     r.settle();
     assert_eq!(flags_of(&r, 12), ENTRY_DATA, "the listing sees a file");
     r.load(12);
-    assert_eq!(flags_of(&r, 12), ENTRY_CURRENT, "the loader ignores it");
+    assert_eq!(
+        flags_of(&r, 12),
+        ENTRY_CURRENT | ENTRY_DATA,
+        "the loader ignores it but it stays in projects/"
+    );
+    r.load(13);
+    assert_eq!(flags_of(&r, 13), ENTRY_CURRENT | ENTRY_DATA);
+    // a clear archives the files that pass the checks; the refused file stays
+    r.hook_clear(13);
+    r.settle();
+    assert_eq!(
+        flags_of(&r, 13),
+        ENTRY_CURRENT | ENTRY_DATA,
+        "the file stays after the clear"
+    );
+    r.hook_clear(12);
+    r.settle();
+    assert_eq!(
+        flags_of(&r, 12),
+        0,
+        "the last file of the number is archived"
+    );
+}
+
+#[test]
+fn a_row_with_a_number_above_the_slots_is_ignored_by_the_listing() {
+    let mut r = Rig::new();
+    r.rec(7, b"SONG", 0x77);
+    r.f.store.insert(
+        b"projects/200-X.dkp".to_vec(),
+        file_bytes(0, b"X", 0x1, 1, &[]),
+    );
+    r.f.store.insert(
+        b"projects/129-X.dkp".to_vec(),
+        file_bytes(0, b"X", 0x1, 1, &[]),
+    );
+    r.settle();
+    assert_eq!(list(&r, 0, 128), [(7, 0)]);
+}
+
+#[test]
+fn a_read_that_finds_fewer_modules_clears_the_entries_after_them() {
+    let two = file_full(1, b"A", 1, 1, &[(b"a/x", 1), (b"b/y", 2)], &[]);
+    let none = file_full(1, b"A", 1, 2, &[], &[]);
+    let mut s = ProjectSummary::new();
+    s.read_image(&two, 1, 1);
+    assert_eq!(s.module_count, 2);
+    s.read_image(&none, 1, 2);
+    assert_eq!(s.module_count, 0);
+    assert!(
+        s.modules.iter().all(|m| m.id_len == 0 && m.hash == 0),
+        "no module of the earlier read is left"
+    );
+}
+
+#[test]
+fn a_busy_store_during_a_get_never_defers_the_project_work() {
+    let mut r = rig_with_files();
+    r.load(7);
+    r.settle();
+    r.f.busy_reads.insert(path(20, b"TWENTY"), u32::MAX);
+    for _ in 0..60 {
+        summary(&mut r, 20);
+        r.pass();
+        r.f.now += RETRY_MS + 1;
+    }
+    assert_eq!(r.p.status() & ST_DEFERRED, 0);
+    assert_eq!(r.f.count(dkrt_sdk::logk::PROJECT_DEFERRED), 0);
+    assert_eq!(r.f.count(dkrt_sdk::logk::PROJECT_IGNORED), 0);
+}
+
+#[test]
+fn a_failed_read_of_a_get_starts_at_most_one_read_per_retry_time() {
+    let mut r = rig_with_files();
+    r.load(7);
+    r.settle();
+    r.f.busy_reads.insert(path(20, b"TWENTY"), u32::MAX);
+    assert_eq!(summary(&mut r, 20).0, E_AGAIN);
+    r.settle();
+    let reads = r.f.reads;
+    assert!(reads > 0);
+    for _ in 0..10 {
+        assert_eq!(summary(&mut r, 20).0, E_AGAIN);
+        r.settle();
+    }
+    assert_eq!(r.f.reads, reads, "no new read before the retry time");
+    assert!(
+        r.p.can_carry(&r.job),
+        "a waiting get is no work a reload must wait for"
+    );
+    r.f.now += PEEK_RETRY_MS + 1;
+    assert_eq!(summary(&mut r, 20).0, E_AGAIN);
+    r.settle();
+    assert_eq!(r.f.reads, reads + 1, "one read after the retry time");
+}
+
+#[test]
+fn a_queued_get_does_not_hold_back_the_carry_of_a_reload() {
+    let mut r = rig_with_files();
+    r.load(7);
+    r.settle();
+    r.f.live_op = 3;
+    assert_eq!(summary(&mut r, 20).0, E_AGAIN);
+    r.pass();
+    assert!(r.p.can_carry(&r.job));
+}
+
+#[test]
+fn the_listing_for_the_data_bit_waits_while_a_live_operation_runs() {
+    let mut r = rig_with_files();
+    r.f.live_op = 3;
+    for _ in 0..10 {
+        r.pass();
+    }
+    assert!(!r.f.listing, "no listing started");
+    assert!(list(&r, 0, 16).iter().all(|e| e.1 & ENTRY_UNKNOWN != 0));
+    r.f.live_op = 0;
+    r.settle();
+    assert_eq!(flags_of(&r, 20), ENTRY_DATA);
 }
 
 #[test]

@@ -16,5 +16,5 @@ mod summary;
 
 pub use data_index::DataIndex;
 pub use entry::{ProjectEntry, ENTRY_CURRENT, ENTRY_DATA, ENTRY_UNKNOWN};
-pub use peek::{PeekAnswer, PeekCache};
+pub use peek::{PeekAnswer, PeekCache, PEEK_RETRY_MS};
 pub use summary::{ProjectModule, ProjectSummary, MODULE_LOADED, MODULE_UNKNOWN};

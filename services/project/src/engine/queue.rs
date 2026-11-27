@@ -128,14 +128,14 @@ impl WorkQueue {
         }
     }
 
-    /// Does nothing wait to start (and no save waits for the firmware's record)?
+    /// Does nothing wait to start (and no save waits for the firmware's record)? A read for the Project Manager is no work a reload must wait for: it is not carried, and its `get`
+    /// asks again.
     pub fn is_empty(&self) -> bool {
         self.load.is_none()
             && self.save.is_none()
             && self.cleared.is_empty()
             && self.pasted.is_empty()
             && self.save_wait.is_none()
-            && self.peek.is_none()
     }
 
     /// Queue what the hooks recorded. A later setter call or save replaces an earlier one that was not started.
@@ -250,6 +250,9 @@ impl WorkQueue {
             self.index = IndexAsk::NotStarted;
         }
         if self.index == IndexAsk::NotStarted {
+            if env.live_op() != 0 {
+                return None;
+            }
             self.index = IndexAsk::Started;
             return Some(Work::Index);
         }

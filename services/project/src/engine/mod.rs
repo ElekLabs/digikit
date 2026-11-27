@@ -38,7 +38,7 @@ pub use bound::{
 };
 pub use browse::{
     DataIndex, PeekAnswer, PeekCache, ProjectEntry, ProjectModule, ProjectSummary, ENTRY_CURRENT,
-    ENTRY_DATA, ENTRY_UNKNOWN, MODULE_LOADED, MODULE_UNKNOWN,
+    ENTRY_DATA, ENTRY_UNKNOWN, MODULE_LOADED, MODULE_UNKNOWN, PEEK_RETRY_MS,
 };
 pub use buffer::FileBuffer;
 pub use carry::{EXPORT_MAX as CARRY_MAX, VERSION as CARRY_VERSION};
@@ -300,8 +300,11 @@ impl ProjectService {
         }
         let slot = self.scan.slot();
         let load = self.scan.scan_for() == ScanFor::Load;
-        // a read for the Project Manager is no project's failure: no log of its own, no toast
-        let browse = self.scan.scan_for() == ScanFor::Peek;
+        if self.scan.scan_for() == ScanFor::Peek {
+            // a read for the Project Manager is no project's failure: no log, no toast, no share of the busy clock; the next `get` asks again after a while
+            self.peek.give_up(env.now_ms());
+            return;
+        }
         let repeat = load && self.bound.failed_load() == Some(slot);
         if is_busy(status) {
             let BusyVerdict::GiveUp { waited, first } = self.clock.note_busy(env.now_ms()) else {
@@ -314,16 +317,13 @@ impl ProjectService {
                     [slot, status as u32, waited / 1000, 0, 0],
                 );
             }
-        } else if !repeat && !browse {
+        } else if !repeat {
             env.log(
                 logk::PROJECT_IGNORED,
                 [slot, Ignore::Store as u32, status as u32, 0, 0],
             );
         }
         self.clock.answered();
-        if self.scan.scan_for() == ScanFor::Peek {
-            self.peek.give_up();
-        }
         if load {
             let now = env.now_ms();
             self.bound.fail_load(env, job.lend(), slot, now);

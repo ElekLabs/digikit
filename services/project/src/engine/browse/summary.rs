@@ -101,6 +101,11 @@ impl ProjectSummary {
             module.hash = hash;
             self.module_count += 1;
         }
+        let mut at = self.module_count as usize;
+        while at < MODULES_MAX {
+            self.modules[at] = ProjectModule::EMPTY;
+            at += 1;
+        }
         for (owner, _key, _value) in dkp::entries(image) {
             let mut at = 0;
             while at < self.module_count as usize {
