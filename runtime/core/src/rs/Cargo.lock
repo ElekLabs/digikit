@@ -127,6 +127,8 @@ dependencies = [
 name = "dkrt-svc-lfo-dks"
 version = "0.1.0"
 dependencies = [
+ "dkneeds",
+ "dkrt-abi",
  "dkrt-sdk",
  "dkrt-svc-lfo",
  "dkrt-svc-rt",

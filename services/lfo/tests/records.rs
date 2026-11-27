@@ -1,5 +1,5 @@
 //! Host tests of the `lfo` service over `FakeCore`: what it declares, how it numbers, checks, applies and removes `lfo_shape` records, how the interrupt
-//! site's lookup reads the table, and that it ignores a record of another service. The statics of the crate (the shape table, the settled keys) are shared,
+//! wave table receives the samples, and that it ignores a record of another service. The statics of the crate (the shape table, the settled keys) are shared,
 //! so each test takes `LOCK` and starts from an empty table.
 //! The runtime's own tests (`handlers/lfo_tests.rs` in the runtime crate) drive the same service through the collector, the registry walkers and the planner.
 use dkrt_abi::mem::FwMem;
@@ -11,36 +11,47 @@ use dkrt_svc_lfo::graph;
 use dkrt_svc_lfo::lfo::Lfo;
 use dkrt_svc_lfo::records::{MAX_SHAPES, NAME_LEN, RANGE, SAMPLES, SETTING};
 use dkrt_svc_lfo::shapes::{
-    eval, highest, interp, name_into, name_of, owner_of, shape, tri, unipolar_of, used,
+    highest, interp, name_into, name_of, owner_of, shape, unipolar_of, used,
 };
 use dkrt_svc_lfo::wave::{set_firmware, wave_max};
 use dkrt_test_support::FakeCore;
+use std::sync::atomic::Ordering;
 use std::sync::{Mutex, MutexGuard};
 use std::vec::Vec;
+
+#[path = "support/fake_wave_table.rs"]
+mod fake_wave_table;
+use fake_wave_table::{Call, FakeWaveTable, NO_TABLE, WAVES};
+
+/// The owner over the fake table of added waves.
+type Owner = Lfo<FakeWaveTable>;
 
 static LOCK: Mutex<()> = Mutex::new(());
 
 /// The lock, with an empty shape table and no settled keys, and a started owner object.
-fn fresh() -> (MutexGuard<'static, ()>, FakeCore, Lfo) {
+fn fresh() -> (MutexGuard<'static, ()>, FakeCore, Owner) {
     let g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let core = FakeCore::new();
+    NO_TABLE.store(false, Ordering::SeqCst);
+    WAVES.store(8, Ordering::SeqCst);
     set_firmware(0, [0; 3]);
-    let mut lfo = *dkrt_test_support::start_boxed::<Lfo>(&core).unwrap();
+    let mut lfo = *dkrt_test_support::start_boxed::<Owner>(&core).unwrap();
     for owner in 0..=8u8 {
         detach(&mut lfo, &core, owner);
     }
     Provider::settle(&mut lfo, &core, &SettleCtx::new());
     assert_eq!(used(), 0);
+    lfo.table_mut().forget();
     (g, core, lfo)
 }
 
 /// A module goes down: `Provider::detach`.
-fn detach(lfo: &mut Lfo, core: &FakeCore, owner: u8) {
+fn detach(lfo: &mut Owner, core: &FakeCore, owner: u8) {
     Provider::detach(lfo, core, ConsumerId::new(owner));
 }
 
 /// `settle` over modules that provide these shape keys (module `k` at selection index `k`).
-fn settle(lfo: &mut Lfo, core: &FakeCore, modules: &[&[u32]]) {
+fn settle(lfo: &mut Owner, core: &FakeCore, modules: &[&[u32]]) {
     let mut sel = SettleCtx::new();
     sel.count = modules.len();
     for (k, keys) in modules.iter().enumerate() {
@@ -71,7 +82,7 @@ fn section(shapes: &[(u32, i16)]) -> Vec<u8> {
     s
 }
 
-fn check(lfo: &mut Lfo, core: &FakeCore, step: u32, sec: &[u8]) -> i32 {
+fn check(lfo: &mut Owner, core: &FakeCore, step: u32, sec: &[u8]) -> i32 {
     let c = CheckCtx {
         reg: sec.as_ptr(),
         image_size: 0x1000,
@@ -79,7 +90,7 @@ fn check(lfo: &mut Lfo, core: &FakeCore, step: u32, sec: &[u8]) -> i32 {
     Records::check(lfo, core, step, &c).map_or_else(|e| e, |()| OK)
 }
 
-fn apply(lfo: &mut Lfo, core: &FakeCore, owner: u8, kind: u32, body: &[u8]) -> i32 {
+fn apply(lfo: &mut Owner, core: &FakeCore, owner: u8, kind: u32, body: &[u8]) -> i32 {
     let records = [(kind, body)];
     Records::apply(
         lfo,
@@ -350,28 +361,83 @@ fn a_record_of_another_service_and_the_other_check_steps_are_not_its_business() 
 }
 
 #[test]
-fn each_write_to_the_table_takes_the_interrupt_mask_once_and_releases_it() {
+fn a_shape_reaches_the_wave_table_when_it_is_applied_and_leaves_it_when_the_module_goes() {
     let (_g, core, mut lfo) = fresh();
     settle(&mut lfo, &core, &[&[KEY_A]]);
     core.boot_index.set(0);
-    let before = core.host.masks_taken.get();
+    assert_eq!(
+        lfo.table().playing(7),
+        None,
+        "an empty wave plays the stock sine"
+    );
+    assert_eq!(
+        apply(
+            &mut lfo,
+            &core,
+            1,
+            KIND_LFO_SHAPE,
+            &body(KEY_A, b"RAMP", -1000)
+        ),
+        OK
+    );
+    assert_eq!(
+        lfo.table().playing(7),
+        shape(7),
+        "the wave plays the samples of the shape"
+    );
+    assert_eq!(lfo.table().calls(), [Call::Set(7, -1000, 2100)]);
+    detach(&mut lfo, &core, 1);
+    assert_eq!(lfo.table().playing(7), None, "the wave is the sine again");
+    assert_eq!(
+        lfo.table().calls(),
+        [Call::Set(7, -1000, 2100), Call::Clear(7, true)],
+        "the graph of the shape is withdrawn before its wave is cleared"
+    );
+    // a module that kept nothing clears nothing
+    detach(&mut lfo, &core, 2);
+    assert_eq!(lfo.table().calls().len(), 2);
+}
+
+#[test]
+fn a_table_with_fewer_waves_than_the_service_has_numbers_refuses_the_rest_as_full() {
+    let (_g, core, lfo) = fresh();
+    WAVES.store(1, Ordering::SeqCst);
+    let mut lfo = {
+        drop(lfo);
+        *dkrt_test_support::start_boxed::<Owner>(&core).unwrap()
+    };
+    settle(&mut lfo, &core, &[&[KEY_A], &[KEY_B]]);
+    core.boot_index.set(1);
+    assert_eq!((lfo.number_of(0, KEY_A), lfo.number_of(1, KEY_B)), (7, 8));
+    // wave 8 is no wave of the table: the check says so, and apply changes nothing
+    let sec = section(&[(KEY_B, 0)]);
+    assert_eq!(check(&mut lfo, &core, check_step::ROWS, &sec), E_TABLE_FULL);
+    assert_eq!(
+        apply(&mut lfo, &core, 2, KIND_LFO_SHAPE, &body(KEY_B, b"UP  ", 0)),
+        E_TABLE_FULL
+    );
+    assert_eq!((used(), shape(8), lfo.table().calls().len()), (0, None, 0));
+    // wave 7 is
+    core.boot_index.set(0);
+    let sec = section(&[(KEY_A, 0)]);
+    assert_eq!(check(&mut lfo, &core, check_step::ROWS, &sec), OK);
     assert_eq!(
         apply(&mut lfo, &core, 1, KIND_LFO_SHAPE, &body(KEY_A, b"RAMP", 0)),
         OK
     );
+    assert_eq!(used(), 1);
+}
+
+#[test]
+fn an_image_without_the_wave_table_does_not_start_the_service() {
+    let (_g, core, lfo) = fresh();
+    drop(lfo);
+    NO_TABLE.store(true, Ordering::SeqCst);
     assert_eq!(
-        core.host.masks_taken.get(),
-        before + 1,
-        "the shape is stored under the mask"
+        dkrt_test_support::start_boxed::<Owner>(&core).err(),
+        Some(E_NO_REGISTRY)
     );
-    assert_eq!(core.host.masked.get(), 0);
-    detach(&mut lfo, &core, 1);
-    assert_eq!(
-        core.host.masks_taken.get(),
-        before + 2,
-        "the slot is freed under the mask"
-    );
-    assert_eq!(core.host.masked.get(), 0);
+    NO_TABLE.store(false, Ordering::SeqCst);
 }
 
 #[test]
@@ -402,7 +468,7 @@ fn name(value: i32, width: usize) -> (usize, [u8; 8]) {
 }
 
 /// Loads shape `key` at selection index `at` as record owner `owner` with `name`.
-fn load(lfo: &mut Lfo, core: &FakeCore, owner: u8, key: u32, nm: &[u8; NAME_LEN]) {
+fn load(lfo: &mut Owner, core: &FakeCore, owner: u8, key: u32, nm: &[u8; NAME_LEN]) {
     core.boot_index.set(0);
     assert_eq!(
         apply(lfo, core, owner, KIND_LFO_SHAPE, &body(key, nm, 0)),
@@ -430,8 +496,15 @@ fn the_name_formatters_get_the_name_of_a_loaded_shape_and_stock_behaviour_otherw
     // the three-character formatter of the Digitone II: the first three characters, then the NUL
     let (n, buf) = name(7 << 8, 3);
     assert_eq!((n, &buf[..5]), (3, &b"RAM\0\xaa"[..]));
-    // a number that no module keeps (8 is assigned, not loaded), stock numbers, numbers above the range and negative values: no name, nothing written
-    for value in [8 << 8, 6 << 8, 15 << 8, 127 << 8, -1, i32::MIN, 0] {
+    // an empty number inside the range (8) prints dashes, never "ERR"
+    let (n, buf) = name(8 << 8, 4);
+    assert_eq!(
+        (n, &buf[..6]),
+        (4, &b"----\0\xaa"[..]),
+        "empty wave above the highest"
+    );
+    // stock numbers, numbers above the range and negative values: no name, nothing written
+    for value in [6 << 8, 15 << 8, 127 << 8, -1, i32::MIN, 0] {
         let (n, buf) = name(value, 4);
         assert_eq!((n, buf), (0, [0xaa; 8]), "value {value:#x}");
     }
@@ -447,8 +520,8 @@ fn the_name_formatters_get_the_name_of_a_loaded_shape_and_stock_behaviour_otherw
         (3, &b"---\0\xaa"[..]),
         "a gap on the short formatter"
     );
-    // above the highest loaded number and below the range: stock "ERR" (no name)
-    assert_eq!(name(9 << 8, 4).0, 0);
+    // above the highest loaded number: dashes too; below the range: no name
+    assert_eq!(name(9 << 8, 4).0, 4);
     assert_eq!(name(6 << 8, 4).0, 0);
     detach(&mut lfo, &core, 2);
     assert_eq!(
@@ -615,6 +688,7 @@ fn a_service_started_again_numbers_the_same_keys_with_the_same_waves_and_finds_t
         OK
     );
     let (a, b) = (shape(7).unwrap(), shape(8).unwrap());
+    let calls = lfo.table().calls();
     assert_eq!(wave_words(&core), [0x800; 3]);
     // the closure goes down, consumers first: nothing of the shapes or the raised maximum is left when the service stops
     detach(&mut lfo, &core, 2);
@@ -628,7 +702,7 @@ fn a_service_started_again_numbers_the_same_keys_with_the_same_waves_and_finds_t
     drop(lfo);
     // the new owner object (`Provider::start_in` makes it from zero bytes) and the consumers back in the other order
     image_with_rows(&mut core);
-    let mut lfo = *dkrt_test_support::start_boxed::<Lfo>(&core).unwrap();
+    let mut lfo = *dkrt_test_support::start_boxed::<Owner>(&core).unwrap();
     assert_eq!(
         (lfo.number_of(0, KEY_A), lfo.number_of(0, KEY_B)),
         (0, 0),
@@ -654,6 +728,15 @@ fn a_service_started_again_numbers_the_same_keys_with_the_same_waves_and_finds_t
         (shape(7), shape(8)),
         (Some(a), Some(b)),
         "the same waves hold the same shapes"
+    );
+    assert_eq!(
+        lfo.table().calls(),
+        calls,
+        "the new owner asks its table for the same waves with the same samples"
+    );
+    assert_eq!(
+        (lfo.table().playing(7), lfo.table().playing(8)),
+        (Some(a), Some(b))
     );
     assert_eq!(wave_words(&core), [0x800; 3]);
     detach(&mut lfo, &core, 1);
@@ -741,47 +824,6 @@ fn the_last_cell_wraps_to_the_first_sample() {
 }
 
 #[test]
-fn the_fallback_is_the_stock_triangle() {
-    // the stock function: 0 at phase 0, full scale at a quarter, -1 at a half, negative full scale at three quarters
-    assert_eq!(tri(0), 0);
-    assert_eq!(tri(0x4000_0000), 0x7fff_ffff);
-    assert_eq!(tri(0x8000_0000u32), -1);
-    assert_eq!(tri(0xc000_0000u32), i32::MIN);
-}
-
-#[test]
-fn eval_reads_the_shape_of_the_number_and_falls_back_to_tri_when_no_module_keeps_it() {
-    let (_g, core, mut lfo) = fresh();
-    settle(&mut lfo, &core, &[&[KEY_A]]);
-    core.boot_index.set(0);
-    assert_eq!(
-        eval(7, 0x4000_0000),
-        tri(0x4000_0000),
-        "no module keeps number 7 yet"
-    );
-    assert_eq!(
-        apply(
-            &mut lfo,
-            &core,
-            1,
-            KIND_LFO_SHAPE,
-            &body(KEY_A, b"RAMP", -1000)
-        ),
-        OK
-    );
-    assert_eq!(eval(7, 0), -1000 << 16);
-    assert_eq!(eval(7, 1 << 26), -950 << 16);
-    assert_eq!(eval(8, 1 << 26), tri(1 << 26), "number 8 has no shape");
-    assert_eq!(
-        eval(100, 0x4000_0000),
-        tri(0x4000_0000),
-        "a number outside the range"
-    );
-    detach(&mut lfo, &core, 1);
-    assert_eq!(eval(7, 0), tri(0), "an unloaded shape falls back");
-}
-
-#[test]
 fn a_shape_without_a_negative_sample_is_unipolar() {
     let (_g, core, mut lfo) = fresh();
     settle(&mut lfo, &core, &[&[KEY_A]]);
@@ -795,72 +837,6 @@ fn a_shape_without_a_negative_sample_is_unipolar() {
 }
 
 /// A fixed pseudo-random sequence (xorshift32), so a failure repeats.
-fn next(x: &mut u32) -> u32 {
-    *x ^= *x << 13;
-    *x ^= *x >> 17;
-    *x ^= *x << 5;
-    *x
-}
-
-#[test]
-fn the_delta_table_gives_the_same_value_as_the_plain_formula_for_random_tables_and_phases() {
-    let (_g, core, mut lfo) = fresh();
-    settle(&mut lfo, &core, &[&[KEY_A]]);
-    core.boot_index.set(0);
-    let mut x = 0x2468_ace1u32;
-    for round in 0..40 {
-        let mut samples = [0i16; SAMPLES];
-        for (i, v) in samples.iter_mut().enumerate() {
-            *v = match round {
-                // the largest steps: full swing up and down
-                0 => {
-                    if i % 2 == 0 {
-                        i16::MIN
-                    } else {
-                        i16::MAX
-                    }
-                }
-                1 => {
-                    if i % 2 == 0 {
-                        i16::MAX
-                    } else {
-                        i16::MIN
-                    }
-                }
-                _ => next(&mut x) as i16,
-            };
-        }
-        let mut b = KEY_A.to_be_bytes().to_vec();
-        b.extend_from_slice(b"RND ");
-        for v in samples {
-            b.extend_from_slice(&v.to_be_bytes());
-        }
-        detach(&mut lfo, &core, 1);
-        assert_eq!(apply(&mut lfo, &core, 1, KIND_LFO_SHAPE, &b), OK);
-        assert_eq!(shape(7), Some(samples), "the samples are read back");
-        let mut phases = vec![
-            0,
-            u32::MAX,
-            0x7fff_ffff,
-            0x8000_0000,
-            31 << 27,
-            (31 << 27) | 0x07ff_ffff,
-        ];
-        for _ in 0..2000 {
-            phases.push(next(&mut x));
-        }
-        for p in phases {
-            assert_eq!(
-                eval(7, p),
-                interp(&samples, p),
-                "round {round} phase {p:#x}"
-            );
-        }
-    }
-}
-
-/// A reload runs `settle` again over the live modules and the new file in the old slot: loaded shapes keep their numbers, a shape the new file adds takes a free one,
-/// and a second run over the same set changes nothing.
 #[test]
 fn a_second_settle_over_the_live_set_keeps_every_number_and_numbers_an_added_shape() {
     const KEY_C: u32 = 0x00c1_0100;

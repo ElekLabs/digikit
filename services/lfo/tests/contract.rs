@@ -5,12 +5,12 @@ use dkrt_abi::mem::FwMem;
 use dkrt_abi::profiles::ALL;
 use dkrt_sdk::records::{KINDS_LFO, KIND_LFO_SHAPE, LEN_LFO_SHAPE};
 use dkrt_svc_lfo::graph;
-use dkrt_svc_lfo::lfo::Lfo;
 use dkrt_svc_lfo::records::SAMPLES;
 use dkrt_svc_lfo::shapes::{name_of, owner_of, shape, used};
 use dkrt_svc_lfo::wave::set_firmware;
 use dkrt_test_support::contract::{Dsp, Fixture, Init, Module, Rows};
 use dkrt_test_support::{provider_contract, subject, FakeCore, Recipe, RowBuilder};
+use file::image_table::host;
 use std::sync::Mutex;
 
 // the core imports of the file's code (no runtime is linked)
@@ -27,9 +27,9 @@ pub use file::DK_SVC_OWNER;
 struct LfoRecipe;
 
 impl Recipe for LfoRecipe {
-    type P = Lfo;
+    type P = file::Owner;
     const NAME: &'static str = "lfo";
-    fn parts(b: RowBuilder<Lfo>) -> RowBuilder<Lfo> {
+    fn parts(b: RowBuilder<file::Owner>) -> RowBuilder<file::Owner> {
         use dkrt_abi::provider::{
             check, PartLookup, DESCRIBE_NEWEST, DSP_NEWEST, PART_DESCRIBE, PART_DSP, PART_QUERY,
             PART_RECORDS, PART_TICK, QUERY_NEWEST, RECORDS_NEWEST, TICK_NEWEST,
@@ -99,6 +99,8 @@ fn image(core: &mut FakeCore) {
     t[27] = 60;
     t[23] = 300;
     core.set_rows_info(t);
+    core.set_lfo_table(7, 8, 0x1000, 0x1010);
+    host::reset();
     for (c, def) in CODES.iter().zip([0x100, 0, 0]) {
         unsafe {
             core.wr(COPY + 60 * c + 8, 0);
@@ -114,11 +116,16 @@ fn state(core: &FakeCore) -> Vec<u32> {
     let mut v = vec![used() as u32];
     for key in [SHAPE_A, SHAPE_B] {
         // modules `a` and `b` are at selection indexes 0 and 1
-        let num = subject::<Lfo, _>(|l| l.number_of(if key == SHAPE_A { 0 } else { 1 }, key));
+        let num =
+            subject::<file::Owner, _>(|l| l.number_of(if key == SHAPE_A { 0 } else { 1 }, key));
         v.push(num);
         v.push(owner_of(num) as u32);
         v.push(name_of(num).map_or(0, |n| u32::from_be_bytes(n)));
         v.push(shape(num).map_or(0xffff, |s| {
+            s[0] as u16 as u32 | (s[SAMPLES - 1] as u16 as u32) << 16
+        }));
+        // what the image's table plays for the number: the samples of the shape, or nothing (the stock sine)
+        v.push(host::playing(num).map_or(0xffff, |s| {
             s[0] as u16 as u32 | (s[SAMPLES - 1] as u16 as u32) << 16
         }));
     }
@@ -209,6 +216,7 @@ fn the_lfo_service_passes_the_contract_on_every_device_with_a_dsp() {
 #[test]
 fn the_row_reaches_the_object_through_the_owner_guard() {
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    host::install();
     file::dk_svc_start().expect("start");
     dkrt_test_support::contract::row_is_guarded(
         file::dk_svc_row(),
@@ -220,34 +228,12 @@ fn the_row_reaches_the_object_through_the_owner_guard() {
     file::dk_svc_stop();
 }
 
-/// The LFO tick hooks run in an interrupt (vector 191, IPL 5) and may preempt a part call: they read the static shape table and never enter the owner, so the owner's guard
-/// neither refuses nor counts them. A hook that took the owner would be refused here.
-#[test]
-fn an_lfo_hook_fired_in_an_interrupt_never_enters_the_owner() {
-    use dkrt_test_support::hook_context::HookContext;
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    file::dk_svc_start().expect("start");
-    let hold = |f: &mut dyn FnMut()| {
-        DK_SVC_OWNER.run((), |_| f());
-    };
-    let refused = || DK_SVC_OWNER.refused();
-    let phase = 0x4000_0000;
-    let fired =
-        HookContext::Interrupt.fire(&hold, &refused, &mut || file::hooks::dk_lfo_eval(phase, 7));
-    assert_eq!(
-        fired.result,
-        dkrt_svc_lfo::shapes::eval(7, phase),
-        "the table answers while the owner is busy"
-    );
-    assert_eq!(fired.refused, 0, "the hook did not enter the owner");
-    file::dk_svc_stop();
-}
-
 /// The name and graph formatters of the MOD page run in the UI task, also inside a part call: they read the static tables and do not enter the owner.
 #[test]
 fn an_lfo_page_hook_fired_inside_a_part_call_never_enters_the_owner() {
     use dkrt_test_support::hook_context::HookContext;
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    host::install();
     file::dk_svc_start().expect("start");
     let hold = |f: &mut dyn FnMut()| {
         DK_SVC_OWNER.run((), |_| f());
@@ -260,4 +246,12 @@ fn an_lfo_page_hook_fired_inside_a_part_call_never_enters_the_owner() {
     assert_eq!(fired.result, 0, "no shape is loaded for wave 7");
     assert_eq!(fired.refused, 0, "the hook did not enter the owner");
     file::dk_svc_stop();
+}
+
+/// An image without `lfo_table_info` (a stock one, or one patched without core/lfo-table) does not start the file: no shape could be played.
+#[test]
+fn the_file_does_not_start_on_an_image_without_the_wave_table() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    host::uninstall();
+    assert_eq!(file::dk_svc_start().err(), Some(dkrt_sdk::E_NO_REGISTRY));
 }

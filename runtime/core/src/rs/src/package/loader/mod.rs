@@ -234,9 +234,6 @@ pub struct Loader<P: PackagePlatform, M: Images, R: Registry> {
     /// Host tests: the next this many restores answer busy, as when a task below the UI task is not parked (the gate itself is covered by `park_tests`).
     #[cfg(test)]
     busy_restores: u32,
-    /// Host tests: the closure reload does not refuse a service whose hooks sit at interrupt sites (`interrupt_entered`), so a case can run the reload of `lfo` that the guard refuses on the device.
-    #[cfg(test)]
-    irq_guard_off: bool,
     /// The tick address of a record (a module, or a service of a reload) whose tick the teardown stopped (valid while `TORN_TICK` is set): a reload that cannot finish gives it back.
     saved_tick: [u32; records::REC_MAX],
     /// The block count when a reload closed the entries of each module (`TORN_DRAIN`); `None`: the platform has no block clock.
@@ -367,8 +364,6 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             replacing: None,
             #[cfg(test)]
             busy_restores: 0,
-            #[cfg(test)]
-            irq_guard_off: false,
             roles: [0; records::REC_MAX],
             missing: [0; NEEDS_LEN],
             decl_diff: (0, 0),
