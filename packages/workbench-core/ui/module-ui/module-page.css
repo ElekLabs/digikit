@@ -125,3 +125,22 @@
 .module-file-choice p {
   flex-basis: 100%;
 }
+.module-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.module-tab {
+  padding: 0.4rem 0.9rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.module-tab.on {
+  color: inherit;
+  border-bottom-color: currentcolor;
+}

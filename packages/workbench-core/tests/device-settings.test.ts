@@ -110,6 +110,22 @@ describe('deviceSettings', () => {
       error: { code: 'invalid' },
     });
   });
+  it('carries the revision of a refused read into invalid-stored', async () => {
+    const refused = Object.assign(new DkError({ error: 'Bad value.', kind: 'device', status: 'E_SET_VALUE' }), {
+      revision: 9,
+    });
+    const channel = settingsOf(
+      endpoint({
+        get: async () => {
+          throw refused;
+        },
+      }).point,
+    );
+    expect(await channel.getSetting('gain')).toEqual({
+      ok: false,
+      error: { code: 'invalid-stored', message: 'Bad value.', revision: 9 },
+    });
+  });
   it('maps each device status to its typed error', () => {
     const status = (name: string) => settingErrorOf(new DkError({ error: 'x', kind: 'device', status: name })).code;
     expect(status('E_MODULE_UI_CONFLICT')).toBe('conflict');

@@ -58,7 +58,7 @@ export function wireModuleSettings(
           kind: 'device',
           status: 'E_MODULE_UI_CONFLICT',
         });
-      throw deviceError('Module settings', result);
+      throw Object.assign(deviceError('Module settings', result), { revision: u32(bytes, 5) });
     }
     if (bytes[9]! > 1 || (!bytes[9] && bytes.length !== 10)) throw new Error('Invalid module setting value.');
     return { revision: u32(bytes, 5), value: bytes[9] ? bytes.slice(10) : undefined };

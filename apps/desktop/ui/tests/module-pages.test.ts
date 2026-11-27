@@ -39,7 +39,10 @@ function harness(options: { definition?: ModulePageDefinition; gate?: Promise<vo
   const dispose = createRoot((dispose) => {
     lookup = runtimeModulePages(host, channels, registry, (id, schema: DescribedSchema, definition, channel) => {
       built.push({ id, definition, channel: channel(() => true) });
-      return { descriptor: { id, name: schema.name, schema }, open: () => ({}) };
+      return {
+        descriptor: { id, name: schema.name, schema, hasPage: definition !== undefined, hasFiles: false },
+        open: () => ({}),
+      };
     });
     return dispose;
   });

@@ -69,7 +69,12 @@ export class ModuleSettings<S extends SettingsSchema> implements TypedSettings<S
     const setting = this.#schema.settings.find((s) => s.id === id);
     if (!setting) return invalid(`Unknown public setting ${id}.`);
     const raw = await call(setting);
-    if (!raw.ok) return raw;
+    if (!raw.ok) {
+      // A stored value that fails its rule still has a revision: remember it so the page can overwrite or reset the value.
+      if (raw.error.code === 'invalid-stored' && raw.error.revision !== undefined)
+        this.#seen.set(id, raw.error.revision);
+      return raw;
+    }
     this.#seen.set(id, raw.revision);
     if (raw.value === undefined) {
       const value = setting.kind === 'text' || setting.kind === 'file-name' ? null : setting.default;

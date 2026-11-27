@@ -170,7 +170,7 @@ A loaded module can expose named, typed operations beside its settings. The modu
 
 `tests/fixtures/modules/settings-a/` stays the authoring example. Phase 1 adds one setting of each new type to it, or a second fixture if a distinct module identity is needed for a version 2 descriptor.
 
-- The preview seeds the sample as installed and loaded on the default simulated card, routes its instance to the memory client and uses the real sidebar discovery, generated form and page. One settings map per simulated target; a fresh client on reload; released on unload or disconnect. The preview never inserts a menu item by hand.
+- The preview seeds the sample as installed and loaded on the default simulated card, routes its instance to the memory client and uses the real sidebar discovery, generated form and page. One settings store per simulated target, kept for the target's life (device settings persist across module reloads); a fresh client and channel on each page open; channels are released on unload, disconnect or target change. The preview never inserts a menu item by hand.
 - `createMemoryModuleChannel(schema, options)` lives in `@digi/module-ui`: a `ModuleChannel` with values, a revision and files (module-owned operation handlers come in phase 2), with no Tauri, MIDI, filesystem or firmware dependency. It shares the pure validation code with the real client.
 
 | Test owner | Observable behaviour |

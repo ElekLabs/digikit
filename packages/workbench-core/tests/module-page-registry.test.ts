@@ -44,4 +44,18 @@ describe('the module page registry', () => {
     fail = false;
     expect((await registry.find('test/a'))?.id).toBe('test/a');
   });
+  it('lets a failing or slow loader hide no other page, and logs the failure once', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const registry = createModulePageRegistry({
+      '/bad/workbench/index.tsx': async () => {
+        throw new Error('syntax');
+      },
+      '/slow/workbench/index.tsx': () => new Promise(() => {}),
+      '/ok/workbench/index.tsx': async () => page('test/ok'),
+    });
+    expect((await registry.find('test/ok'))?.id).toBe('test/ok');
+    expect((await registry.find('test/ok'))?.id).toBe('test/ok');
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
 });

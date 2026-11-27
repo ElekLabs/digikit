@@ -113,4 +113,20 @@ describe('a stored value that fails the setting rule', () => {
     const refused = createModuleClient({ ...channel, ...bad('invalid-stored') });
     expect(await refused.settings(schema).get('gain')).toMatchObject({ ok: false, error: { code: 'invalid-stored' } });
   });
+  it('keeps the revision of a refused read, so a later put and reset succeed', async () => {
+    const { channel, inspect } = createMemoryModuleChannel(schema);
+    const refuse = { ok: false, error: { code: 'invalid-stored', message: 'x', revision: 0 } } as const;
+    const s = createModuleClient({ ...channel, getSetting: async () => refuse }).settings(schema);
+    expect(await s.get('gain')).toMatchObject({ ok: false, error: { code: 'invalid-stored' } });
+    expect(await s.put('gain', 0.4)).toMatchObject({ ok: true, value: 0.4, revision: 1 });
+    expect(inspect.store.read('gain')).toMatchObject({ ok: true, revision: 1 });
+  });
+  it('keeps it over the memory channel, which refuses a read through its behavior hook', async () => {
+    const { channel } = createMemoryModuleChannel(schema, {
+      behavior: ({ method }) => (method === 'get' ? { code: 'invalid-stored', message: 'x', revision: 0 } : undefined),
+    });
+    const s = createModuleClient(channel).settings(schema);
+    expect(await s.get('gain')).toMatchObject({ ok: false, error: { code: 'invalid-stored', revision: 0 } });
+    expect(await s.reset('gain')).toMatchObject({ ok: true, unset: true });
+  });
 });

@@ -95,3 +95,9 @@ test('a binary value that is not UTF-8 passes through unchanged', async () => {
   expect(put).toEqual({ revision: 5, value: bytes });
   expect(Array.from(requests[0]!.slice(10))).toEqual([1, 0, 0, 0, 4, ...bytes]);
 });
+
+test('a refused read carries the revision of the reply, so the setting can be overwritten', async () => {
+  const { session } = scripted([new Uint8Array(), Uint8Array.of(1), done(7, undefined, -69)]);
+  const endpoint = wireModuleSettings(session, 3, 0x1234, () => true);
+  await expect(endpoint.get(0)).rejects.toMatchObject({ status: 'E_SET_VALUE', revision: 7 });
+});

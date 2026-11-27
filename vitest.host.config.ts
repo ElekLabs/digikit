@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import solid from 'vite-plugin-solid';
 import { configDefaults, defineConfig } from 'vitest/config';
 // The Nx test-host targets read this file; host tests are device-free.
 import projects from './vitest.host.projects.json' with { type: 'json' };
@@ -17,9 +18,12 @@ export default defineConfig({
         include: string;
         exclude?: string[];
         conditions?: string[];
+        solid?: boolean;
         alias?: Record<string, string>;
         testTimeout?: number;
       }) => ({
+        // desktop-host compiles the .tsx files its tests render (a page, a view) with Solid.
+        ...(p.solid ? { plugins: [solid()] } : {}),
         // Module tests reach workspace packages by path.
         resolve: {
           alias: {
@@ -37,6 +41,8 @@ export default defineConfig({
         test: {
           ...(p.conditions ? { server: { deps: { inline: ['solid-js'] } } } : {}),
           name: p.name,
+          // the Solid plugin defaults tests to jsdom; a test that needs a DOM names happy-dom in its own docblock
+          ...(p.solid ? { environment: 'node' } : {}),
           root: fileURLToPath(new URL(p.dir, import.meta.url)),
           include: [p.include],
           exclude: [...configDefaults.exclude, '**/*.device.test.ts', ...(p.exclude ?? [])],

@@ -117,6 +117,8 @@ export function moduleFilePage(app: TransferApp, id: string, parts: ModulePagePa
       id,
       name: schema?.name ?? spec?.name ?? id,
       schema: schema ?? { version: 1, settings: [] },
+      hasPage: definition !== undefined,
+      hasFiles: spec !== undefined,
     },
     open(current) {
       const client = createModuleClient(channel(current));
@@ -124,27 +126,20 @@ export function moduleFilePage(app: TransferApp, id: string, parts: ModulePagePa
       const { files } = client;
       return {
         settings,
-        Panel:
-          spec || definition
-            ? () => (
-                <>
-                  <Show when={spec}>
-                    {(spec) => (
-                      <FilePanel
-                        id={id}
-                        spec={spec()}
-                        files={files}
-                        app={app}
-                        current={current}
-                        settings={settings}
-                        choices={choices}
-                      />
-                    )}
-                  </Show>
-                  <Show when={definition}>{(page) => <Dynamic component={page().Page} client={client} />}</Show>
-                </>
-              )
-            : undefined,
+        Panel: spec
+          ? () => (
+              <FilePanel
+                id={id}
+                spec={spec}
+                files={files}
+                app={app}
+                current={current}
+                settings={settings}
+                choices={choices}
+              />
+            )
+          : undefined,
+        Page: definition ? () => <Dynamic component={definition.Page} client={client} /> : undefined,
       };
     },
   };

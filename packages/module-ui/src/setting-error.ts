@@ -17,6 +17,12 @@ export type SettingErrorCode =
 export interface SettingError {
   code: SettingErrorCode;
   message: string;
+  /** The setting's revision, when the device sent it with the refusal. `invalid-stored` carries it so a page can overwrite the bad value. */
+  revision?: number;
 }
 
-export const settingError = (code: SettingErrorCode, message: string): SettingError => ({ code, message });
+export const settingError = (code: SettingErrorCode, message: string, revision?: number): SettingError => ({
+  code,
+  message,
+  ...(revision === undefined ? {} : { revision }),
+});

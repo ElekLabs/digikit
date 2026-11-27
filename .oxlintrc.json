@@ -173,8 +173,8 @@
           {
             "patterns": [
               {
-                "group": ["**", "!@digi/module-ui", "!solid-js", "!solid-js/**", "!./**", "!../*"],
-                "message": "A module page imports only @digi/module-ui, solid-js and files of its own module folder (./ and one ../ step)."
+                "group": ["**", "!@digi/module-ui", "!solid-js", "!solid-js/**", "!./**", "./**/../**"],
+                "message": "A module page imports only @digi/module-ui, solid-js and files inside its own workbench folder (./ paths, never ../)."
               }
             ]
           }

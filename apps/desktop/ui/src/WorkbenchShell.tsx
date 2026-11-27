@@ -14,6 +14,7 @@ import {
 } from 'solid-js';
 import CopyErrorButton from '@digi/workbench-core/ui/components/CopyErrorButton.tsx';
 import ModulePageView from '@digi/workbench-core/ui/module-ui/ModulePageView.tsx';
+import { hasModuleEntry } from '@digi/workbench-core/module-ui/module-page-tabs.ts';
 import { moduleFilePage, moduleFilePages } from './module-file-pages';
 import { runtimeModulePages } from './runtime-module-pages';
 import { modulePageLoaders } from './module-page-loaders';
@@ -143,7 +144,7 @@ export default function WorkbenchShell(
     return app.inventory.modules().flatMap((module) => {
       const { name } = module;
       const view = runtimePage(module) ?? filePages.get(name);
-      return view ? [{ id: name, name: view.descriptor.name, view }] : [];
+      return view && hasModuleEntry(view.descriptor) ? [{ id: name, name: view.descriptor.name, view }] : [];
     });
   });
   function openModule(id: string) {

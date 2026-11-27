@@ -20,6 +20,7 @@ export type ModuleSettingsChannel = Pick<
 export function settingErrorOf(e: unknown, request: 'get' | 'change' = 'change'): SettingError {
   const message = e instanceof Error ? e.message : String(e);
   const status = e instanceof DkError ? e.status : undefined;
+  const revision = e instanceof DkError ? e.revision : undefined;
   switch (status) {
     case 'E_MODULE_UI_CONFLICT':
       return settingError('conflict', message);
@@ -29,7 +30,7 @@ export function settingErrorOf(e: unknown, request: 'get' | 'change' = 'change')
       return settingError('busy', message);
     case 'E_SET_VALUE':
       // A read the device refuses as E_SET_VALUE found a stored value that fails the setting's rule; a write refused so is a bad value.
-      return settingError(request === 'get' ? 'invalid-stored' : 'invalid', message);
+      return request === 'get' ? settingError('invalid-stored', message, revision) : settingError('invalid', message);
     case 'E_MSG':
       return settingError('invalid', message);
     default:
