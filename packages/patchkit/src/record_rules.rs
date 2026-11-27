@@ -1,7 +1,7 @@
 //! The rule for the records of a built module: for each record kind, the validator of the service that owns the kind.
 //!
 //! `dkneeds::KINDS` names the owner of each kind (`[records.kinds]` of sdk/sdk.toml). The services are Rust crates and the map from an owner's name to its crate is written by hand
-//! below, one line each (`owner_rule`); the test at the end fails for an owner without a line. Each line names the free `validate` of the service's `records.rs` (`dkrt_svc_lfo::records::validate`), which is the function the
+//! below, one line each (`owner_rule`); `patchkit catalog-check` fails for an owner without a line. Each line names the free `validate` of the service's `records.rs` (`dkrt_svc_lfo::records::validate`), which is the function the
 //! service's `Records::validate` runs, so patchkit needs no core and no host fake to call it.
 //!
 //! What the validators cover is what the records' own bytes decide: each service's `validate` module names its checks. What needs the device, the module's image, another record kind or the registry
@@ -10,7 +10,7 @@ use dkrt_abi::service::Problem;
 
 type Rule = fn(u32, &[&[u8]], &mut dyn FnMut(Problem));
 
-/// The services that own record kinds, by the name of `[[service]]` in sdk/sdk.toml. Add a line when a service gets a kind: the test below fails until then.
+/// The services that own record kinds, by the name of `[[service]]` in sdk/sdk.toml. Add a line when a service gets a kind: `patchkit catalog-check` fails until then.
 fn owner_rule(owner: &str) -> Option<Rule> {
     match owner {
         "lfo" => Some(dkrt_svc_lfo::records::validate),
@@ -19,6 +19,15 @@ fn owner_rule(owner: &str) -> Option<Rule> {
         "machines" => Some(dkrt_svc_machines::records::validate),
         _ => None,
     }
+}
+
+/// The record kinds whose owner has no rule, as `(kind, owner)`: empty when each owner has a line in `owner_rule`.
+pub fn unruled_kinds() -> Vec<(u32, &'static str)> {
+    dkneeds::KINDS
+        .iter()
+        .filter(|(_, _, owner)| owner_rule(owner).is_none())
+        .map(|(kind, _, owner)| (*kind, *owner))
+        .collect()
 }
 
 /// The name of the owner of record kind `kind`.
@@ -43,16 +52,6 @@ pub fn validate(kind: u32, bodies: &[&[u8]]) -> Vec<Problem> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn every_record_kind_has_an_owner_with_a_rule() {
-        for (kind, _, owner) in dkneeds::KINDS {
-            assert!(
-                owner_rule(owner).is_some(),
-                "kind {kind}: add the service {owner:?} to owner_rule"
-            );
-        }
-    }
 
     #[test]
     fn the_owner_of_a_kind_judges_its_records() {

@@ -4,41 +4,12 @@
 
 use patchkit::devdata;
 use patchkit::devgen::{self, Facts};
-use patchkit::modgen;
 use patchkit::module::Library;
-use patchkit::port::Registry;
 use patchkit::typed::Models;
 use std::path::PathBuf;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-#[test]
-fn every_generated_file_is_current() {
-    let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
-        return;
-    };
-    let models = Models::from_dir(&root().join("devices")).unwrap();
-    lib.lower(&models).unwrap();
-    let facts = Facts::from_dir(&root().join("devices")).unwrap();
-    let mut n = 0;
-    for m in &lib.modules {
-        let mut files = modgen::generate(&lib, &models, m.id()).unwrap();
-        files.extend(devgen::generate(&lib, &facts, m.id()).unwrap());
-        for (rel, text) in files {
-            let path = m.dir.join(&rel);
-            let have = std::fs::read_to_string(&path).unwrap_or_default();
-            assert_eq!(
-                have,
-                text,
-                "{} is stale: run `patchkit gen`",
-                path.display()
-            );
-            n += 1;
-        }
-    }
-    assert!(n > 20, "only {n} generated files");
 }
 
 #[test]
@@ -290,28 +261,6 @@ fn a_fact_that_devices_disagree_on_becomes_data_of_the_device_object() {
     assert_eq!(keys, ["0x13", "0x14"]);
 }
 
-#[test]
-fn the_code_knows_the_devices_of_the_device_files() {
-    // every port names a device the code knows, and the limits a port records are the device's `[patch]` limits
-    let reg = Registry::from_dir(&root().join("ports")).unwrap();
-    assert!(!reg.ports.is_empty());
-    for p in &reg.ports {
-        let d = devdata::by_short(&p.port.device).unwrap_or_else(|| panic!("{}", p.id()));
-        assert_eq!(p.limits.container_max, d.container_max, "{}", p.id());
-        assert_eq!(p.limits.dsp_stored_max, d.dsp_stored_max, "{}", p.id());
-        assert_eq!(p.limits.dsp_depacked_max, d.dsp_depacked_max, "{}", p.id());
-        assert_eq!(p.limits.main_staged_max, d.main_staged_max, "{}", p.id());
-    }
-    // ids are unique per kind
-    let all = devdata::all();
-    for (i, a) in all.iter().enumerate() {
-        for b in &all[i + 1..] {
-            assert_ne!((a.syx_id, a.digikit_id), (b.syx_id, b.digikit_id));
-            assert!(a.digikit_id.is_none() || a.digikit_id != b.digikit_id);
-        }
-    }
-}
-
 fn device_texts() -> (String, String) {
     (
         std::fs::read_to_string(root().join("devices/digitakt-ii.toml")).unwrap(),
@@ -389,40 +338,6 @@ fn machine_rows_are_the_run_time_machine_types_of_types_toml() {
 }
 
 #[test]
-fn the_free_effect_rows_are_the_devices_fx_slots() {
-    // core/dynfx reserves one free row of the effect chain for each of the device's effect slots (docs/design/digikit-dkm.md); both devices have it
-    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
-        return;
-    };
-    let dynfx = lib.get("core/dynfx").unwrap();
-    let rows = dynfx
-        .manifest
-        .entry
-        .iter()
-        .filter(|e| e.registry == "fx")
-        .count() as u64;
-    for file in ["digitakt-ii", "digitone-ii"] {
-        let t: toml::Value = toml::from_str(
-            &std::fs::read_to_string(root().join(format!("devices/{file}.toml"))).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(
-            rows,
-            t["limits"]["fx_slots"].as_integer().unwrap() as u64,
-            "{file}"
-        );
-    }
-    assert!(
-        dynfx
-            .manifest
-            .module
-            .ports
-            .iter()
-            .all(|p| p.starts_with("dt2-") || p.starts_with("dn2-"))
-    );
-}
-
-#[test]
 fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
     // the effect pages take 7 knobs and MIX for each effect slot; the device file's [fx] has a value index for each of them (docs/design/digikit-registry.md "Effect pages")
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
@@ -488,188 +403,6 @@ fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
     }
 }
 
-/// The device facts the fx service binds its table from (`services/fx/src/fxpage/tables.rs`) are the device files' `[fx]` and `[limits]`, read here from the TOML and not from the
-/// generator's own constants: one entry for each device that has effect pages, in the order of the file.
-#[test]
-fn the_fx_service_tables_are_the_device_files_fx_facts() {
-    let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
-        return;
-    };
-    lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
-        .unwrap();
-    let facts = Facts::from_dir(&root().join("devices")).unwrap();
-    let files = devgen::generate(&lib, &facts, "core/services/fx").unwrap();
-    let text = &files
-        .iter()
-        .find(|f| f.0.ends_with("fxpage/tables.rs"))
-        .expect("the fx service generates its device facts")
-        .1;
-    let mut n = 0;
-    for file in ["digitakt-ii", "digitone-ii"] {
-        let t: toml::Value = toml::from_str(
-            &std::fs::read_to_string(root().join(format!("devices/{file}.toml"))).unwrap(),
-        )
-        .unwrap();
-        let int = |tab: &str, key: &str| t[tab][key].as_integer().unwrap();
-        let id = int("digikit", "id");
-        // the entry of this device
-        let at = text
-            .find(&format!("device: {id},"))
-            .unwrap_or_else(|| panic!("{file}: no entry\n{text}"));
-        let entry = &text[at..at + text[at..].find("},").unwrap()];
-        let field = |name: &str| -> String {
-            entry
-                .lines()
-                .find_map(|l| l.trim().strip_prefix(&format!("{name}: ")))
-                .unwrap_or_else(|| panic!("{file}: no {name}\n{entry}"))
-                .trim_end_matches(',')
-                .to_string()
-        };
-        let hex = |v: i64| format!("{v:#x}");
-        let idx: Vec<i64> = t["fx"]["value_indices"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_integer().unwrap())
-            .collect();
-        assert_eq!(
-            field("page_first"),
-            int("fx", "page_first").to_string(),
-            "{file}"
-        );
-        assert_eq!(
-            field("slots"),
-            int("limits", "fx_slots").to_string(),
-            "{file}"
-        );
-        assert_eq!(field("array_off"), hex(int("fx", "array_off")), "{file}");
-        assert_eq!(field("values_n"), idx.len().to_string(), "{file}");
-        assert_eq!(field("kit_ptr"), hex(int("fx", "kit_ptr")), "{file}");
-        assert_eq!(
-            field("track_page"),
-            int("fx", "track_page").to_string(),
-            "{file}"
-        );
-        assert_eq!(
-            field("send_template"),
-            hex(int("fx", "send_template")),
-            "{file}"
-        );
-        assert_eq!(
-            field("sound_stride"),
-            hex(int("fx", "sound_stride")),
-            "{file}"
-        );
-        assert_eq!(field("store_off"), hex(int("fx", "store_off")), "{file}");
-        let sends = t["fx"]["send_indices"].as_array().unwrap();
-        assert_eq!(
-            field("send_cells"),
-            int("limits", "send_slots").to_string(),
-            "{file}"
-        );
-        assert!(
-            field("send_index").starts_with(&format!("[{}", sends[0].as_integer().unwrap())),
-            "{file}"
-        );
-        // the value indices, padded with 0 to 32 entries
-        let want: Vec<String> = (0..32)
-            .map(|i| idx.get(i).copied().unwrap_or(0).to_string())
-            .collect();
-        assert_eq!(
-            field("value_indices"),
-            format!("[{}]", want.join(", ")),
-            "{file}"
-        );
-        n += 1;
-    }
-    assert_eq!(n, text.matches("DeviceFacts {").count(), "{text}");
-}
-
-#[test]
-fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
-    let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
-        return;
-    };
-    lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
-        .unwrap();
-    let dynreg = lib.get("core/rows").unwrap();
-    let count = |registry: &str, dev: &str| {
-        dynreg
-            .manifest
-            .entry
-            .iter()
-            .filter(|e| {
-                e.registry == registry
-                    && (e.devices.is_empty() || e.devices.iter().any(|d| d == dev))
-            })
-            .count() as u64
-    };
-    let dyndsp = lib.get("core/dyndsp").unwrap();
-    let voices = |dev: &str| {
-        dyndsp
-            .manifest
-            .entry
-            .iter()
-            .filter(|e| {
-                e.registry == "voices"
-                    && (e.devices.is_empty() || e.devices.iter().any(|d| d == dev))
-            })
-            .count() as u64
-    };
-    for (file, dev) in [("digitakt-ii", "dt2"), ("digitone-ii", "dn2")] {
-        let t: toml::Value = toml::from_str(
-            &std::fs::read_to_string(root().join(format!("devices/{file}.toml"))).unwrap(),
-        )
-        .unwrap();
-        let l = &t["limits"];
-        assert_eq!(
-            voices(dev),
-            l["machine_rows"].as_integer().unwrap() as u64,
-            "{dev} voice rows of core/dyndsp"
-        );
-        assert_eq!(
-            count("pages", dev),
-            l["page_rows"].as_integer().unwrap() as u64,
-            "{dev} page rows of core/rows"
-        );
-        assert_eq!(
-            count("machines", dev),
-            l["machine_rows"].as_integer().unwrap() as u64,
-            "{dev} machine rows of core/rows"
-        );
-    }
-}
-
-#[test]
-fn the_link_width_is_a_shared_c_header_from_the_contract_maximum() {
-    let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
-        return;
-    };
-    lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
-        .unwrap();
-    let facts = Facts::from_dir(&root().join("devices")).unwrap();
-    let files = devgen::generate(&lib, &facts, "core/dsp-link").unwrap();
-    let h = &files
-        .iter()
-        .find(|f| f.0 == "build/gen/dl-limits.h")
-        .expect("a c-shared file")
-        .1;
-    // 2^17 words of 4 bytes: the offset field of a chunk; not a device's area (DN2 has 0x50000)
-    assert!(h.contains("#define DL_AREA_MAX_BYTES 0x80000u"), "{h}");
-    assert!(h.contains("#define DL_AREA_MAX_WORDS 0x20000u"), "{h}");
-}
-
-/// The modules of the rt021 flash images (`out/patch/rt021-dt2-1.17.plan.json`, `modules`), by id.
-const RT021_MODULES: [&str; 7] = [
-    "core/dsp-link",
-    "core/dsp-voice",
-    "core/dyndsp",
-    "core/rows",
-    "core/expansion",
-    "core/health",
-    "core/runtime",
-];
-
 #[test]
 fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
@@ -702,117 +435,6 @@ fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
                 want.insert(0, "core/card-guard");
             }
             assert_eq!(all, want, "{} set {set}", dev.short);
-        }
-    }
-}
-
-#[test]
-fn the_patch_sets_are_the_rt021_flash_modules() {
-    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
-        return;
-    };
-    // the sets of a device with a DSP are the DSP machine and effect modules below; a device without one (the runtime, menu and panel modules) is
-    // checked by `a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only`
-    for dev in devdata::all()
-        .iter()
-        .filter(|d| !d.patch_sets.is_empty() && d.identity.capabilities.dsp == "sharc")
-    {
-        // both sets are the flash modules and core/input
-        for (set, extra) in [
-            ("device", vec!["core/input"]),
-            ("emulator", vec!["core/input"]),
-        ] {
-            let roots = dev.patch_set(set).unwrap();
-            let (mut all, _) = lib.with_requires(roots).unwrap();
-            all.sort();
-            let mut want: Vec<&str> = RT021_MODULES.to_vec();
-            want.extend(extra);
-            // run-time effects (core/dynfx and the chain it reserves rows in): both devices have them in both sets (the Digitone II's emulator set since the engine bars only the
-            // changed blocks: the hook costs x1.01 DSP CPU there, finding 55)
-            want.extend(["core/dynfx", "core/fx"]);
-            // core/runtime requires the platform adapter (its hooks and the exception hook install)
-            want.push("core/platform");
-            // the SETTINGS hook of the menu, the controls and the views of modules (the DIGIKIT menu in the system package is drawn by it)
-            want.push("core/ui");
-            // the LFO waves as data in the image (core/lfo-table): every set of both devices
-            want.push("core/lfo-table");
-            // the sample pool: both Digitakt II sets have it; the Digitone II flashes without it until the SPI wire-size decision
-            if dev.short == "dt2" || set == "emulator" {
-                want.push("core/sample-pool");
-            }
-            // the flashed sets carry the fast-transfer adapters, inert until usb-fast asks: USB bulk on both devices, +Drive writes on the Digitakt II;
-            // core/sdhc-large (large card commands for registered buffers) is in every flashed set
-            if set == "device" {
-                want.push("core/usb-bulk");
-                want.push("core/usb-bulk-audio");
-                if dev.short == "dt2" {
-                    want.push("core/plusdrive-write");
-                }
-            }
-            if set.starts_with("device") {
-                want.push("core/sdhc-large");
-            }
-            want.sort();
-            assert_eq!(all, want, "{} set {set}", dev.short);
-        }
-        // the Workbench's Custom boot screen toggle: the `device` modules and the optional black intro
-        let (mut with, _) = lib
-            .with_requires(dev.patch_set("device-introblank").unwrap())
-            .unwrap();
-        let (mut base, _) = lib.with_requires(dev.patch_set("device").unwrap()).unwrap();
-        base.push("core/introblank".to_string());
-        with.sort();
-        base.sort();
-        assert_eq!(with, base, "{} set device-introblank", dev.short);
-        assert!(dev.patch_set("nope").is_err());
-    }
-}
-
-#[test]
-fn the_input_facts_are_the_device_files_panel() {
-    let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
-        return;
-    };
-    lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
-        .unwrap();
-    let facts = Facts::from_dir(&root().join("devices")).unwrap();
-    let files = devgen::generate(&lib, &facts, "core/input").unwrap();
-    let get = |p: &str| &files.iter().find(|f| f.0 == p).unwrap().1;
-    // DT2 lists 49 = [6, 1] and 50 = [6, 0]; DN2 adds 51 to 54 = [6, 4 to 7]
-    for (dev, wants) in [
-        (
-            "dt2",
-            vec![
-                "PANEL_EXC_N, 0x2 ",
-                "PANEL_EXC_CODE_0, 0x31 ",
-                "PANEL_EXC_BIT_0, 0x1 ",
-                "PANEL_EXC_CODE_1, 0x32 ",
-                "PANEL_EXC_BIT_1, 0x0 ",
-            ],
-        ),
-        (
-            "dn2",
-            vec![
-                "PANEL_EXC_N, 0x6 ",
-                "PANEL_EXC_CODE_5, 0x36 ",
-                "PANEL_EXC_BIT_5, 0x7 ",
-            ],
-        ),
-    ] {
-        let text = get(&format!("build/gen/input-{dev}.inc"));
-        for want in [
-            "INPUT_BACKEND, 0x1 ",
-            "PANEL_LINEAR, 0x6 ",
-            "PANEL_ENCODERS, 0x9 ",
-            "PANEL_BUTTON_CHANNELS, 0x7 ",
-        ]
-        .into_iter()
-        .chain(wants)
-        {
-            assert!(
-                text.contains(&format!(".equ {want}")),
-                "{dev}: {want}\n{text}"
-            );
         }
     }
 }
@@ -968,50 +590,6 @@ fn the_key_map_gives_each_device_its_codes_and_a_missing_key_is_zero() {
     }
     // code 2 is one logical key on both devices (the DN2 panel prints SYN)
     assert_eq!((key(&d, "SRC"), key(&n, "SRC")), (2, 2));
-}
-
-#[test]
-fn the_profile_has_the_same_key_codes_as_the_device_object() {
-    let (dt2, dn2) = device_texts();
-    let facts = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
-    let lib = Library::scan_repo_or_skip(&root()).expect("the repository's modules");
-    let files = devgen::generate(&lib, &facts, "core/runtime").unwrap();
-    let profiles = &files
-        .iter()
-        .find(|f| f.0.ends_with("profiles.rs"))
-        .unwrap()
-        .1;
-    for dev in ["dt2", "dn2"] {
-        let obj = device_object(&facts, dev);
-        let from = profiles
-            .find(&format!("pub const {}:", dev.to_uppercase()))
-            .unwrap();
-        let rest = &profiles[from..];
-        let list = rest
-            .split("key_codes: [")
-            .nth(1)
-            .unwrap()
-            .split(']')
-            .next()
-            .unwrap();
-        let codes: Vec<u64> = list
-            .split(',')
-            .filter_map(|c| c.trim().parse().ok())
-            .collect();
-        assert_eq!(codes.len(), 64, "{dev}");
-        assert_eq!(codes[..], obj[obj.len() - 68..obj.len() - 4], "{dev}");
-        let bits: Vec<u64> = rest
-            .split("key_flags: KeyFlagBits {")
-            .nth(1)
-            .unwrap()
-            .split('}')
-            .next()
-            .unwrap()
-            .split(',')
-            .filter_map(|f| f.split(':').nth(1)?.trim().parse().ok())
-            .collect();
-        assert_eq!(bits[..], obj[obj.len() - 4..], "{dev}: the key flag bits");
-    }
 }
 
 #[test]

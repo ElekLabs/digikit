@@ -20,7 +20,7 @@ On a Syntakt, DIGIKIT > MODULES showed an empty list ("NO STORE") and no key wor
 `[input.keys]` of the device file (name = the key's id in the firmware's key events, the one table of key names; `[input.key_flags]` names the flag bits) holds the key ids; core/ui takes YES,
 LEVEL_PUSH (the second YES key), NO and RIGHT from it by name (`patchkit gen` refuses a device that names keys without one of them); `patchkit gen` writes `build/gen/ui-<dev>.inc`; a small
 per-device object (`core/ui/src/keys/<dev>.s`) holds the four ids and the press and release flag bits, and `ui.c` reads them (`dk_ui_view_keys`). Digitakt II and Digitone II: 10, 0x31, 12, 15 (as before). Syntakt: 12, 48, 13, 17.
-The patchkit test `the_syntakt_input_keys_are_the_decoder_table_entries` reads the table from the stock image and compares.
+The ids were read from the decoder table of the stock image at 0x401d7a48 for the wire positions of YES, NO, RIGHT and the second YES key (panel codes 39, 28, 31 and 49: wire position = code - 1 = channel * 8 + bit); a patchkit test that compared them was removed (it tested data against firmware bytes, not behaviour).
 
 ## Data of the same kind, and what is not device data
 

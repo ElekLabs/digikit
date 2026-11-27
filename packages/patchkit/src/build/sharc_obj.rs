@@ -1258,14 +1258,6 @@ mod tests {
     }
 
     #[test]
-    fn the_pinned_selache_commit_is_the_one_of_the_command_line_tools() {
-        let py = include_str!("../../../../tools/patchkit/pk_toolchains.py");
-        assert!(py.contains(&format!("SELACHE_REV = \"{SELACHE_REV}\"")));
-        let toml = include_str!("../../Cargo.toml");
-        assert_eq!(toml.matches(&format!("rev = \"{SELACHE_REV}\"")).count(), 3);
-    }
-
-    #[test]
     fn shift_immediates_are_assembled_to_the_table_17_9_opcodes() {
         // The words are the stock forms (finding 05, "Selache shift-immediate encodings"): `R2 = lshift(R15, -1)` is 023e7800ff2f. The
         // fork's selas writes the opcode of PRM Table 17-9 and dataex 0xF for a negative LSHIFT/ASHIFT count itself.

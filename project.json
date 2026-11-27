@@ -48,8 +48,50 @@
       },
       "description": "Every target that runs a Vitest project of vitest.host/ names that project's file in its inputs, and every file has a target (reads the resolved project graph, so generated targets count)."
     },
+    "device-keys": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/**/project.json",
+        "{workspaceRoot}/**/package.json",
+        "{workspaceRoot}/nx.json",
+        "{workspaceRoot}/tools/nx/*.{mjs,json}",
+        "{workspaceRoot}/config/test-source-patterns.json",
+        "{workspaceRoot}/{modules,runtime,services}/**/module.toml",
+        "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
+        "{workspaceRoot}/**/Cargo.toml",
+        "{workspaceRoot}/{modules,runtime,services,tests,packages}/**/*.{ts,tsx}",
+        "{workspaceRoot}/devices/*.toml",
+        { "externalDependencies": [] }
+      ],
+      "outputs": [],
+      "options": {
+        "command": "node tools/nx/check-keys.mjs",
+        "cwd": "."
+      },
+      "description": "The key of every device-test half names the test file, the sources its record lists and the files its test imports (read independently of the import reader that builds the key); the devices a record declares are the ones the test source pins; the test-source exclusions of nx.json and of subjectInputs are the ones the rule derives (reads the resolved project graph)."
+    },
+    "runtime-areas": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/**/project.json",
+        "{workspaceRoot}/tools/nx/*.{mjs,json}",
+        "{workspaceRoot}/runtime/**/*",
+        "{workspaceRoot}/{modules,services}/**/module.toml",
+        "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
+        "{workspaceRoot}/**/Cargo.toml",
+        { "externalDependencies": [] }
+      ],
+      "outputs": [],
+      "options": {
+        "command": "node tools/nx/check-areas.mjs",
+        "cwd": "."
+      },
+      "description": "Every tracked runtime file is in an area of tools/nx/runtime-areas.json or host-proven, and every test the map names exists in the project graph."
+    },
     "lint": {
-      "dependsOn": ["device-literals", "test-source", "vitest-host"],
+      "dependsOn": ["device-literals", "test-source", "vitest-host", "device-keys", "runtime-areas"],
       "executor": "nx:run-commands",
       "cache": true,
       "outputs": [],

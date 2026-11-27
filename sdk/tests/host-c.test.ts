@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { it } from 'vitest';
 
-const root = fileURLToPath(new URL('../../../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 
 function runHostC(source: string, ...extra: string[]) {
   const scratch = mkdtempSync(join(tmpdir(), 'digikit-sdk-host-'));

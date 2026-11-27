@@ -59,6 +59,41 @@
         "cwd": "."
       }
     },
+    "repo-check": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "description": "Repository checks that are commands, not tests: every generated file is current (`gen --check`: module, SDK and firmware files, and the row layouts against the assembly that reads them), every service crate follows the service layout and declares what its manifest lists (`service-check`), every item of the runtime object has an owner in owners.toml (`owners`), and every gallery lists the devices of its manifest (`tools/nx/check-gallery.mjs`). Run with the packed patchkit CLI; takes about two seconds.",
+      "inputs": [
+        "default",
+        "{workspaceRoot}/{modules,runtime,services}/**/*",
+        "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
+        "{workspaceRoot}/{devices,ports,sdk}/**/*",
+        "{workspaceRoot}/packages/dksharc/src/rules_table.rs",
+        "{workspaceRoot}/packages/dkneeds/src/gen_limits.rs",
+        "{workspaceRoot}/packages/dkupload/src/gen_proto.rs",
+        "{workspaceRoot}/packages/dk-session/src/gen_proto.ts",
+        "{workspaceRoot}/tools/device/dklog_kinds.py",
+        "{workspaceRoot}/tools/device/dkproto.py",
+        "{workspaceRoot}/tools/nx/{check-gallery,module-manifests}.mjs",
+        "{workspaceRoot}/packages/sharc-rig-kit/src/gallery-gaps.mjs",
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
+      ],
+      "dependsOn": ["cli"],
+      "outputs": [],
+      "options": {
+        "commands": [
+          "dist/patchkit/patchkit --root . gen --check",
+          "dirs=; for m in services/*/dks/module.toml; do dirs=\"$dirs ${m%/dks/module.toml}\"; done; dist/patchkit/patchkit --root . service-check $dirs",
+          "node tools/nx/check-gallery.mjs",
+          "out=$(mktemp -d) && dist/patchkit/patchkit --root . owners runtime/core/build/runtime.dko.json --owners runtime/core/owners.toml --out \"$out\" > /dev/null; status=$?; rm -rf \"$out\"; exit $status"
+        ],
+        "parallel": false,
+        "cwd": "."
+      }
+    },
     "ports": {
       "executor": "nx:run-commands",
       "cache": true,

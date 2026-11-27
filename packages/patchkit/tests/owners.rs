@@ -5,7 +5,6 @@ use patchkit::error::hex;
 use patchkit::objdiff::diff_owned;
 use patchkit::owners::{Owners, hashes};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 const OWNERS: &str = r#"
 shared = ["core", "dkrt::state"]
@@ -291,26 +290,4 @@ fn the_report_of_objdiff_names_the_owner() {
     assert!(r.text().contains("apply  [S:fx]"), "{}", r.text());
     let plain = diff_owned(&a, &b, false, None).unwrap();
     assert_eq!(plain.differences[0].owner, "");
-}
-
-fn runtime_object() -> Dko {
-    let p =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/core/build/runtime.dko.json");
-    Dko::parse(&std::fs::read_to_string(p).unwrap()).unwrap()
-}
-
-#[test]
-fn every_item_of_the_runtime_object_has_an_owner() {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/core/owners.toml");
-    let owners = Owners::read(&p).unwrap();
-    let o = runtime_object();
-    let h = hashes(&o, &owners).unwrap();
-    for tag in owners.tags() {
-        assert!(h.contains_key(tag), "{tag}");
-    }
-    let items: usize = h.values().map(|(n, _)| n).sum();
-    assert!(items > 500, "{items}");
-    assert!(h["shared"].0 > 0 && h["C:storage"].0 > 0);
-    // deterministic
-    assert_eq!(h, hashes(&o, &owners).unwrap());
 }
