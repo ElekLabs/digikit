@@ -1,11 +1,14 @@
 //! The Workbench settings registered by loaded content modules. MIDI submits bounded work and reads completions.
 //! Only the UI task accesses the real module settings. The shared queue is touched with interrupts masked.
 
+mod cursor;
 mod descriptor;
+mod job;
+mod kind;
 
-use self::descriptor::{
-    file_name_ok, Descriptor, DESCRIPTOR_MAX, EXTENSION_MAX, FIELDS_MAX, TEXT_MAX,
-};
+use self::descriptor::{Descriptor, DESCRIPTOR_MAX, FIELDS_MAX};
+use self::job::Job;
+use self::kind::{Kind, TEXT_MAX};
 use super::loader::records;
 use super::resident::{platform, settings, store, transport};
 use super::{entry, files, module_cmds, settings_overlay};
@@ -153,14 +156,8 @@ impl Enrollment {
         }
         let field = self.descriptor.field(request.index).ok_or(E_SET_KEY)?;
         let value = request.value();
-        if request.verb == PUT {
-            let extension = field.extension(self.descriptor.bytes());
-            if value.len() > field.max as usize
-                || core::str::from_utf8(value).is_err()
-                || (!extension.is_empty() && !file_name_ok(value, extension))
-            {
-                return Err(E_SET_VALUE);
-            }
+        if request.verb == PUT && !field.accepts(self.descriptor.bytes(), value) {
+            return Err(E_SET_VALUE);
         }
         self.pending = request;
         Ok(0)
@@ -369,28 +366,28 @@ pub(crate) unsafe fn command(seq: u32, _buf: *mut u8, body: *const u8, len: usiz
     }
 }
 
-unsafe fn read_setting(rec: usize, key: &[u8], cap: u8, revision: u32) -> Outcome {
+unsafe fn read_setting(job: &Job) -> Outcome {
     let mut outcome = Outcome {
-        revision,
+        revision: job.revision(),
         ..Outcome::EMPTY
     };
     let n = settings::module_get(
-        rec as u32 + 1,
-        key.as_ptr(),
+        job.rec() as u32 + 1,
+        job.key(),
         outcome.value.as_mut_ptr(),
-        cap as u32,
+        job.max() as u32,
     );
     if n == E_SET_NOKEY {
         return outcome;
     }
     if n < 0 {
         outcome.result = n;
-    } else if let Some(text) = outcome
+    } else if let Some(stored) = outcome
         .value
         .get(..n as usize)
-        .filter(|text| core::str::from_utf8(text).is_ok())
+        .filter(|stored| job.accepts(stored))
     {
-        outcome.len = text.len() as u8;
+        outcome.len = stored.len() as u8;
         outcome.present = true;
     } else {
         outcome.result = E_SET_VALUE;
@@ -410,34 +407,19 @@ pub(crate) unsafe fn tick() {
         let slot = &registry.modules[rec];
         let request = slot.pending;
         let field = slot.descriptor.field(request.index)?;
-        let bytes = slot.descriptor.bytes();
-        let raw_key = field.key(bytes);
-        let mut key = [0; KEY_MAX + 1];
-        key[..raw_key.len()].copy_from_slice(raw_key);
-        let raw_extension = field.extension(bytes);
-        let mut extension = [0; EXTENSION_MAX];
-        extension[..raw_extension.len()].copy_from_slice(raw_extension);
-        Some((
+        Some(Job::new(
             rec,
             request,
-            key,
-            field.max,
+            field,
+            slot.descriptor.bytes(),
             slot.revision(request.index),
-            extension,
-            raw_extension.len(),
         ))
     });
-    let Some((rec, request, key, cap, revision, extension, extension_len)) = job else {
+    let Some(job) = job else {
         return;
     };
-    let outcome = apply(
-        rec,
-        request,
-        &key,
-        cap,
-        revision,
-        &extension[..extension_len],
-    );
+    let rec = job.rec();
+    let outcome = apply(job);
     locked(|registry| registry.modules[rec].complete(outcome));
 }
 
@@ -467,15 +449,9 @@ unsafe fn check_file(rec: usize, leaf: &[u8]) -> Result<(), i32> {
     Ok(())
 }
 
-unsafe fn apply(
-    rec: usize,
-    request: Request,
-    key: &[u8],
-    cap: u8,
-    revision: u32,
-    extension: &[u8],
-) -> Outcome {
-    let mut before = read_setting(rec, key, cap, revision);
+unsafe fn apply(mut job: Job) -> Outcome {
+    let (rec, request) = (job.rec(), job.request());
+    let mut before = read_setting(&job);
     if request.verb == GET {
         return before;
     }
@@ -483,7 +459,7 @@ unsafe fn apply(
         before.result = E_MODULE_UI_SCOPE;
         return before;
     }
-    if request.revision != revision {
+    if request.revision != job.revision() {
         before.result = E_MODULE_UI_CONFLICT;
         return before;
     }
@@ -492,7 +468,7 @@ unsafe fn apply(
     }
     let client = rec as u32 + 1;
     let result = if request.verb == PUT {
-        if !extension.is_empty() {
+        if job.kind() == Kind::FileName {
             if let Err(status) = check_file(rec, request.value()) {
                 before.result = status;
                 return before;
@@ -503,7 +479,7 @@ unsafe fn apply(
         }
         entry::module_put(
             client,
-            key.as_ptr(),
+            job.key(),
             request.value.as_ptr(),
             request.len as u32,
         )
@@ -511,15 +487,17 @@ unsafe fn apply(
         if !before.present && before.result == OK {
             return before;
         }
-        entry::module_remove(client, key.as_ptr())
+        entry::module_remove(client, job.key())
     };
     if result != OK {
         before.result = result;
         return before;
     }
-    let revision = locked(|registry| registry.modules[rec].revision(request.index));
-    read_setting(rec, key, cap, revision)
+    job.refresh_revision();
+    read_setting(&job)
 }
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod vectors;

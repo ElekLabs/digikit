@@ -525,7 +525,15 @@ fn valid_name(n: &str) -> bool {
 /// Pack a ColdFire object. The entry points are the fields of its `dk_module` constant. Every undefined symbol is an import resolved by the
 /// runtime's table at load time; only 32-bit absolute relocations may name one.
 pub fn pack(obj: &Dko, o: &Options) -> Result<Vec<u8>> {
-    pack_inner(Some(obj), false, &[], &[], o, max_file(), &[])
+    pack_inner(
+        Some(obj),
+        false,
+        &[],
+        &[],
+        o,
+        max_file(),
+        &Declared::default(),
+    )
 }
 
 /// The image of a data-only module: `init` is `moveq #0,d0; rts`. The `register` records do the work.
@@ -567,33 +575,42 @@ pub fn pack_full_max(
     o: &Options,
     max_file: usize,
 ) -> Result<Vec<u8>> {
-    pack_inner(obj, obj.is_none(), keys, dsp, o, max_file, &[])
-}
-
-/// Pack an object (or none), the keys table and a DSP section (see [`crate::dkmdsp`]; empty: none). The table at the header's 0x90 pair is the
-/// keys table (`dkneeds::keys`, from `dkneeds::keys::write_keys`; size 0 for a module with no machine and no effect). The module declares its
-/// machines, pages and parameters with builder calls in `init`.
-pub fn pack_keys(obj: Option<&Dko>, keys: &[u8], dsp: &[u8], o: &Options) -> Result<Vec<u8>> {
-    pack_keys_with_service_imports(obj, keys, dsp, o, &[])
-}
-
-/// Pack a manifest's objects with its locally declared service imports.
-pub(crate) fn pack_keys_with_service_imports(
-    obj: Option<&Dko>,
-    keys: &[u8],
-    dsp: &[u8],
-    o: &Options,
-    service_imports: &[crate::module::ServiceImport],
-) -> Result<Vec<u8>> {
     pack_inner(
         obj,
         obj.is_none(),
         keys,
         dsp,
         o,
-        max_file(),
-        service_imports,
+        max_file,
+        &Declared::default(),
     )
+}
+
+/// Pack an object (or none), the keys table and a DSP section (see [`crate::dkmdsp`]; empty: none). The table at the header's 0x90 pair is the
+/// keys table (`dkneeds::keys`, from `dkneeds::keys::write_keys`; size 0 for a module with no machine and no effect). The module declares its
+/// machines, pages and parameters with builder calls in `init`.
+pub fn pack_keys(obj: Option<&Dko>, keys: &[u8], dsp: &[u8], o: &Options) -> Result<Vec<u8>> {
+    pack_keys_with_declared(obj, keys, dsp, o, &Declared::default())
+}
+
+/// What a manifest declares beyond its objects.
+#[derive(Default)]
+pub(crate) struct Declared<'a> {
+    /// The locally declared service imports.
+    pub service_imports: &'a [crate::module::ServiceImport],
+    /// The least runtime the file needs, besides what its imports and tables need (0: none).
+    pub runtime_floor: u32,
+}
+
+/// Pack a manifest's objects with what it declares.
+pub(crate) fn pack_keys_with_declared(
+    obj: Option<&Dko>,
+    keys: &[u8],
+    dsp: &[u8],
+    o: &Options,
+    declared: &Declared,
+) -> Result<Vec<u8>> {
+    pack_inner(obj, obj.is_none(), keys, dsp, o, max_file(), declared)
 }
 
 #[derive(Default)]
@@ -673,7 +690,15 @@ pub fn pack_data_only_max(
     o: &Options,
     max_file: usize,
 ) -> Result<Vec<u8>> {
-    pack_inner(Some(obj), true, keys, dsp, o, max_file, &[])
+    pack_inner(
+        Some(obj),
+        true,
+        keys,
+        dsp,
+        o,
+        max_file,
+        &Declared::default(),
+    )
 }
 
 fn pack_inner(
@@ -683,7 +708,7 @@ fn pack_inner(
     dsp: &[u8],
     o: &Options,
     max_file: usize,
-    service_imports: &[crate::module::ServiceImport],
+    declared: &Declared,
 ) -> Result<Vec<u8>> {
     if let Some(obj) = obj {
         obj.require_isa_checked()?;
@@ -743,7 +768,7 @@ fn pack_inner(
         }
     }
     let imports: Vec<&str> = imports.into_iter().collect();
-    let local = LocalImports::of(o, &imports, service_imports)?;
+    let local = LocalImports::of(o, &imports, declared.service_imports)?;
     for n in &imports {
         if n.len() >= IMPORT_LEN {
             return Err(err!("import name {n} is longer than {}", IMPORT_LEN - 1));
@@ -1017,6 +1042,7 @@ fn pack_inner(
         runtime_word: needed_runtime(imports.iter().copied())
             .max(crate::sdkgen::table_runtime())
             .max(registration_floor)
+            .max(declared.runtime_floor)
             | if o.trace { FLAG_TRACE } else { 0 },
         svc_abi,
         image: &image,
@@ -1289,7 +1315,7 @@ impl Dkm {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::dko::*;
 
@@ -1321,7 +1347,7 @@ mod tests {
     }
     /// text: `jsr imp.l; jsr f.l; rts` plus a data pointer to bss and to an import with an addend, and the `dk_module` record (init, fini, tick, menu) at data offset 8
     /// with `init` and `tick` set. Carries the build's ISA check record.
-    fn object() -> Dko {
+    pub(crate) fn object() -> Dko {
         let mut o = unstamped();
         o.stamp_isa();
         o
@@ -2012,6 +2038,22 @@ mod tests {
             get(&pack(&object(), &opts()).unwrap(), H_RUNTIME),
             crate::sdkgen::table_runtime()
         );
+    }
+
+    #[test]
+    fn a_declared_runtime_floor_raises_the_runtime_word_and_none_leaves_it() {
+        let packed = |runtime_floor| {
+            let declared = Declared {
+                runtime_floor,
+                ..Declared::default()
+            };
+            let f = pack_keys_with_declared(Some(&object()), &[], &[], &opts(), &declared).unwrap();
+            Dkm::parse(&f).unwrap().runtime_min
+        };
+        let typed = crate::sdkgen::workbench_typed_runtime();
+        assert!(typed > crate::sdkgen::table_runtime());
+        assert_eq!(packed(0), crate::sdkgen::table_runtime());
+        assert_eq!(packed(typed), typed);
     }
 
     #[test]

@@ -208,6 +208,7 @@ fn the_lfo_service_passes_the_contract_on_every_device_with_a_dsp() {
         }
     }
     let _reset = Reset;
+    host::install();
     for p in ALL.iter().filter(|p| p.dyn_types > 0) {
         provider_contract::<LfoRecipe>(&fixture(p.id));
     }

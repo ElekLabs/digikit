@@ -1,8 +1,9 @@
 {
   "name": "desktop-host",
   "dir": "apps/desktop",
-  "include": "ui/tests/*.test.ts",
+  "include": "ui/tests/*.test.{ts,tsx}",
   "conditions": [
     "browser"
-  ]
+  ],
+  "solid": true
 }

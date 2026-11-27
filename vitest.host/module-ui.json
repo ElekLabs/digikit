@@ -1,0 +1,5 @@
+{
+  "name": "module-ui",
+  "dir": "packages/module-ui",
+  "include": "tests/*.test.ts"
+}

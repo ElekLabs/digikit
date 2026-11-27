@@ -844,6 +844,8 @@ struct Runtime {
     service_registration: String,
     /// The runtime version that first handles resident query exports separately.
     resident_query: String,
+    /// The runtime version that first accepts a version 2 Workbench settings descriptor.
+    workbench_typed: String,
 }
 /// The runtime version of a parsed file as (major, minor, patch).
 fn runtime_parts(sdk: &Sdk) -> Result<(u8, u8, u8)> {
@@ -900,6 +902,12 @@ pub fn service_registration_runtime() -> u32 {
 pub fn resident_query_runtime() -> u32 {
     parse_runtime(&sdk_embedded().runtime.resident_query)
         .expect("sdk/sdk.toml [runtime] resident_query")
+}
+
+/// Minimum runtime for a module whose Workbench settings descriptor is version 2.
+pub fn workbench_typed_runtime() -> u32 {
+    parse_runtime(&sdk_embedded().runtime.workbench_typed)
+        .expect("sdk/sdk.toml [runtime] workbench_typed")
 }
 
 pub fn embedded_runtime() -> u32 {
@@ -1055,6 +1063,12 @@ fn parse(text: &str) -> Result<Sdk> {
     if query < registration || query > version {
         return Err(err!(
             "{SOURCE}: [runtime] resident_query must be between service_registration and version"
+        ));
+    }
+    let typed = parse_runtime(&sdk.runtime.workbench_typed)?;
+    if typed < query || typed > version {
+        return Err(err!(
+            "{SOURCE}: [runtime] workbench_typed must be between resident_query and version"
         ));
     }
     for (i, (n, k)) in sdk.records.kinds.iter().enumerate() {

@@ -130,99 +130,110 @@ mod call {
 #[cfg(not(target_arch = "m68k"))]
 use host::call;
 
-/// The host stand-in of the image's two calls: a table of 16 waves in memory, for the tests that load the file without an image.
+/// The host stand-in of the image's two calls: a table of 16 waves in memory, for the tests that load the file without an image. The table is an owner object, one for each test
+/// thread (`libtest` runs every test on its own thread), so tests that run in parallel never share it and none has to reset it.
 #[cfg(not(target_arch = "m68k"))]
 pub mod host {
     use super::SAMPLES;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Mutex;
+    use std::cell::RefCell;
 
     const WAVES: usize = 16;
 
-    static INSTALLED: AtomicBool = AtomicBool::new(false);
-
-    /// The image has the table (7 .. 14, two entries that are never called): the next `open` binds it. Without this call the image has none.
-    pub fn install() {
-        INSTALLED.store(true, Ordering::SeqCst);
-    }
-
-    /// The image has no table again.
-    pub fn uninstall() {
-        INSTALLED.store(false, Ordering::SeqCst);
-    }
-
-    pub(super) fn words() -> Option<[u32; super::WORDS]> {
-        INSTALLED.load(Ordering::SeqCst).then_some([
-            super::MAGIC,
-            super::VERSION,
-            7,
-            8,
-            super::SAMPLES as u32,
-            0x1000,
-            0x1010,
-        ])
-    }
-
-    struct Table {
+    /// The stand-in image: whether it has the table, the samples of its waves, and the calls it took.
+    #[derive(Default)]
+    pub struct Stand {
+        installed: bool,
         samples: [Option<[i16; SAMPLES]>; WAVES],
         sets: usize,
         clears: usize,
     }
 
-    static TABLE: Mutex<Table> = Mutex::new(Table {
-        samples: [None; WAVES],
-        sets: 0,
-        clears: 0,
-    });
+    impl Stand {
+        fn words(&self) -> Option<[u32; super::WORDS]> {
+            self.installed.then_some([
+                super::MAGIC,
+                super::VERSION,
+                7,
+                8,
+                super::SAMPLES as u32,
+                0x1000,
+                0x1010,
+            ])
+        }
 
-    fn table() -> std::sync::MutexGuard<'static, Table> {
-        TABLE.lock().unwrap_or_else(|e| e.into_inner())
+        fn set(&mut self, wave: u32, samples: &[i16; SAMPLES]) -> i32 {
+            match self.samples.get_mut(wave as usize) {
+                Some(slot) => {
+                    *slot = Some(*samples);
+                    self.sets += 1;
+                    0
+                }
+                None => -1,
+            }
+        }
+
+        fn clear(&mut self, wave: u32) {
+            if let Some(slot) = self.samples.get_mut(wave as usize) {
+                *slot = None;
+                self.clears += 1;
+            }
+        }
+    }
+
+    thread_local! {
+        static STAND: RefCell<Stand> = RefCell::new(Stand::default());
+    }
+
+    fn with<R>(f: impl FnOnce(&mut Stand) -> R) -> R {
+        STAND.with(|s| f(&mut s.borrow_mut()))
+    }
+
+    /// The image has the table (7 .. 14, two entries that are never called): the next `open` binds it. Without this call the image has none.
+    pub fn install() {
+        with(|s| s.installed = true);
+    }
+
+    /// The image has no table again.
+    pub fn uninstall() {
+        with(|s| s.installed = false);
+    }
+
+    pub(super) fn words() -> Option<[u32; super::WORDS]> {
+        with(|s| s.words())
     }
 
     pub(super) mod call {
-        use super::{table, SAMPLES, WAVES};
+        use super::{with, SAMPLES};
 
         pub(in super::super) unsafe fn set(
             _entry: u32,
             wave: u32,
             samples: &[i16; SAMPLES],
         ) -> i32 {
-            let mut t = table();
-            match t.samples.get_mut(wave as usize) {
-                Some(slot) if (wave as usize) < WAVES => {
-                    *slot = Some(*samples);
-                    t.sets += 1;
-                    0
-                }
-                _ => -1,
-            }
+            with(|s| s.set(wave, samples))
         }
 
         pub(in super::super) unsafe fn clear(_entry: u32, wave: u32) {
-            let mut t = table();
-            if let Some(slot) = t.samples.get_mut(wave as usize) {
-                *slot = None;
-                t.clears += 1;
-            }
+            with(|s| s.clear(wave))
         }
     }
 
     /// The samples wave `wave` plays now (`None`: empty, the stock sine).
     pub fn playing(wave: u32) -> Option<[i16; SAMPLES]> {
-        table().samples.get(wave as usize).copied().flatten()
+        with(|s| s.samples.get(wave as usize).copied().flatten())
     }
 
     /// The calls of `lfo_table_set` and `lfo_table_clear` so far.
     pub fn calls() -> (usize, usize) {
-        let t = table();
-        (t.sets, t.clears)
+        with(|s| (s.sets, s.clears))
     }
 
-    /// Every wave empty, the counts 0.
+    /// Every wave empty, the counts 0, for a test that starts several images one after the other.
     pub fn reset() {
-        let mut t = table();
-        t.samples = [None; WAVES];
-        t.sets = 0;
-        t.clears = 0;
+        with(|s| {
+            s.samples = [None; WAVES];
+            s.sets = 0;
+            s.clears = 0;
+        });
     }
 }

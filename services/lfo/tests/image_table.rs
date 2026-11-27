@@ -3,13 +3,10 @@
 use dkrt_sdk::{E_NO_REGISTRY, E_TABLE_FULL};
 use dkrt_svc_lfo::wave_table::WaveTable;
 use dkrt_test_support::FakeCore;
-use std::sync::Mutex;
 
 #[path = "../dks/src/image_table.rs"]
 mod image_table;
 use image_table::{host, ImageTable};
-
-static LOCK: Mutex<()> = Mutex::new(());
 
 const GOOD: [u32; 7] = [0x4c46_4f54, 1, 7, 8, 32, 0x1000, 0x1010];
 
@@ -32,7 +29,6 @@ fn the_words_of_a_table_this_service_knows_bind_and_any_other_refuses() {
 
 #[test]
 fn an_image_without_the_table_refuses_and_one_with_it_holds_its_waves() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     host::uninstall();
     let mut core = FakeCore::new();
     // SAFETY: as above
@@ -49,8 +45,7 @@ fn an_image_without_the_table_refuses_and_one_with_it_holds_its_waves() {
 
 #[test]
 fn the_calls_reach_the_image_for_a_wave_of_its_range_only() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    host::reset();
+    host::install();
     let mut core = FakeCore::new();
     core.set_lfo_table(7, 4, 0x1000, 0x1010);
     let mut t = bound(&core);

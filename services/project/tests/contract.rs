@@ -9,7 +9,7 @@
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::profiles::ALL;
 use dkrt_svc_project::dkp;
-use dkrt_svc_project::engine::{Pending, StoreJob};
+use dkrt_svc_project::engine::{HookRecord, Pending, StoreJob};
 use dkrt_svc_project::project::Project;
 use dkrt_test_support::contract::{Dsp, Fixture, Init, Module, Rows};
 use dkrt_test_support::{provider_contract, subject, FakeCore, Recipe, RowBuilder};
@@ -44,15 +44,15 @@ fn current(p: &mut Owner) {
     }
     let job = StoreJob::new();
     p.tick(
-        &Pending {
+        &HookRecord::new(Pending {
             slot_val: 3,
             slot_flag: 1,
             ..Pending::new()
-        },
+        }),
         &job,
     );
     for _ in 0..4 {
-        p.tick(&Pending::new(), &job);
+        p.tick(&HookRecord::default(), &job);
     }
     assert_eq!(p.engine().slot(), 3);
 }

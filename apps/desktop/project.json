@@ -29,6 +29,7 @@
         "desktopPackages",
         "{workspaceRoot}/modules/*/*/*/module.toml",
         "{workspaceRoot}/modules/*/*/*/workbench.toml",
+        "{workspaceRoot}/modules/*/*/*/workbench/**/*",
         "{workspaceRoot}/config/emulator.json",
         "{workspaceRoot}/devices/*.toml",
         "{workspaceRoot}/devices/calibration/**/*",
@@ -68,9 +69,8 @@
     "check:ui": {
       "cache": true,
       "inputs": [
-        "{workspaceRoot}/tests/fixtures/modules/settings-a/module.toml",
-        "{workspaceRoot}/tests/fixtures/modules/settings-a/workbench.toml",
-        "{workspaceRoot}/tests/fixtures/modules/settings-a/workbench/*",
+        "{workspaceRoot}/modules/*/*/*/workbench/**/*",
+        "{workspaceRoot}/tests/fixtures/modules/*/workbench/**/*",
         "default",
         {
           "input": "production",
@@ -93,9 +93,8 @@
       "description": "Host tests; the Log names tests load the real dkprof.wasm (dkprof:wasm, built on demand, keyed on the Rust crates below).",
       "dependsOn": [{ "projects": ["dkprof"], "target": "wasm" }],
       "inputs": [
-        "{workspaceRoot}/tests/fixtures/modules/settings-a/module.toml",
-        "{workspaceRoot}/tests/fixtures/modules/settings-a/workbench.toml",
-        "{workspaceRoot}/tests/fixtures/modules/settings-a/workbench/*",
+        "{workspaceRoot}/modules/*/*/*/workbench/**/*",
+        "{workspaceRoot}/tests/fixtures/modules/*/workbench/**/*",
         "{projectRoot}/ui/**/*",
         "!{projectRoot}/ui/dist/**/*",
         "{projectRoot}/package.json",
@@ -137,9 +136,8 @@
     },
     "typecheck": {
       "inputs": [
-        "{workspaceRoot}/tests/fixtures/modules/settings-a/module.toml",
-        "{workspaceRoot}/tests/fixtures/modules/settings-a/workbench.toml",
-        "{workspaceRoot}/tests/fixtures/modules/settings-a/workbench/*",
+        "{workspaceRoot}/modules/*/*/*/workbench/**/*",
+        "{workspaceRoot}/tests/fixtures/modules/*/workbench/**/*",
         "default",
         {
           "input": "production",

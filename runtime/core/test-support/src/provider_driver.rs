@@ -206,13 +206,16 @@ pub trait Recipe {
 /// The cases of the contract for the provider `R` describes, on the profile of `f`.
 pub fn provider_contract<R: Recipe>(f: &Fixture) {
     run::<Provided<R>>(f);
-    state_round_trip::<R>();
+    state_round_trip::<R>(f);
 }
 
 /// The state part of a service that adopts it (nothing to check otherwise): what one copy exports another takes and exports again as it was, the bytes fit the room
 /// `export_max` asked for, and `import(None)` gives the start state of a fresh copy. The runtime's own checks (name, version range) are the loader's and sit in its tests.
-fn state_round_trip<R: Recipe>() {
-    let core = FakeCore::new();
+fn state_round_trip<R: Recipe>(f: &Fixture) {
+    // the core of the fixture's profile and image: a service that binds an image table at its start (lfo, machines) is refused with `E_NO_REGISTRY` on a bare core
+    let mut core = FakeCore::new();
+    core.device = f.device;
+    (f.image)(&mut core);
     let start = |core: &FakeCore| {
         R::parts(RowBuilder::<R::P>::new(R::NAME))
             .start(core)

@@ -125,6 +125,22 @@ export const packTarget = (workspaceRoot, byId, m, devices) => {
   };
 };
 
+// A module with a `workbench.toml` keeps a generated `workbench/gen/settings.ts`. The check fails when it is missing or differs from what
+// `patchkit workbench-ts` writes. It reads the two files, the generated file and the patchkit binary (the output of `patchkit:cli`).
+export const workbenchTsCheckTarget = (root) => ({
+  executor: 'nx:run-commands',
+  cache: true,
+  inputs: [
+    `{workspaceRoot}/${root}/workbench.toml`,
+    `{workspaceRoot}/${root}/module.toml`,
+    `{workspaceRoot}/${root}/workbench/gen/settings.ts`,
+    { dependentTasksOutputFiles: '**/*', transitive: true },
+  ],
+  dependsOn: ['patchkit:cli'],
+  outputs: [],
+  options: { command: `${PK} workbench-ts ${root} --check`, cwd: '.' },
+});
+
 // Returns undefined when no record names an alias with a known source module.
 export const packAliasesTarget = (workspaceRoot, byId, recs) => {
   const aliasCmds = [];
