@@ -127,7 +127,10 @@ fn a_detach_that_answers_pending_keeps_the_take_down_waiting_and_a_retry_resumes
     probe.pending_detach(id(2), 2);
     assert_eq!(
         err(pm.unload(id(2))),
-        LifecycleError::Busy { package: id(2) }
+        LifecycleError::Busy {
+            package: id(2),
+            task: None
+        }
     );
     assert_eq!(pm.state_of(id(2)), Some(State::Detaching));
     assert_eq!(pm.restore_pending(), Some(id(2)));
@@ -148,7 +151,10 @@ fn a_detach_that_answers_pending_keeps_the_take_down_waiting_and_a_retry_resumes
     // the second detach still answers pending, the third is done
     assert_eq!(
         err(pm.retry_pending()),
-        LifecycleError::Busy { package: id(2) }
+        LifecycleError::Busy {
+            package: id(2),
+            task: None
+        }
     );
     probe.clear();
     let r = pm.retry_pending().unwrap();

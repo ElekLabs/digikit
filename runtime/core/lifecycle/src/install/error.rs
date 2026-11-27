@@ -13,6 +13,9 @@ pub enum InstallError {
     /// An install failed and the rollback of the backend that had succeeded failed too: the owner is partly installed. The caller calls `restore`
     /// again until it answers `Ok`.
     Partial,
-    /// A backend answered with this status (for `restore`, the first error of the backends asked; `E_BUSY` means "retry next pass").
+    /// A restore that cannot write yet: a task that could be inside a hook site is not parked (`task`: its place in the port file's list, when the backend knows it). The entries
+    /// stay and the caller retries on a later pass. Only a restore answers it.
+    Busy { task: Option<u32> },
+    /// A backend answered with this status (for `restore`, the first error of the backends asked).
     Backend(Status),
 }

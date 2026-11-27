@@ -4,37 +4,45 @@
 //! leaves it at its end; the events of the manager's seams and of the installer's gate read the number from the loader they work on, so two operations never share a number
 //! and no event reads another operation's.
 
-/// The number a retry of a pending take-down runs as: its seams and its gate log nothing (the retry owner logs a note when the wait changes). No numbered operation has it.
-pub(crate) const QUIET_OP: u32 = u32::MAX;
-
 /// The operations of one loader: how many were numbered, and the one running (0: none).
 pub(crate) struct OpClock {
     last: u32,
     current: u32,
+    /// The running operation logs nothing (a retry of a pending take-down: its owner logs a note when the wait changes). A property of the operation, not a number.
+    quiet: bool,
 }
 
 impl OpClock {
     pub(crate) const fn new() -> Self {
-        OpClock { last: 0, current: 0 }
+        OpClock { last: 0, current: 0, quiet: false }
     }
 
     /// Number a new operation. It does not run until it enters.
     pub(crate) fn next(&mut self) -> u32 {
         self.last = self.last.wrapping_add(1).max(1);
-        if self.last == QUIET_OP {
-            self.last = 1;
-        }
         self.last
     }
 
     /// `op` runs now: the events of the seams carry its number.
     pub(crate) fn enter(&mut self, op: u32) {
         self.current = op;
+        self.quiet = false;
+    }
+
+    /// The running operation turns quiet until it is left or `leave_quiet`.
+    pub(crate) fn enter_quiet(&mut self) {
+        self.quiet = true;
+    }
+
+    /// The running operation logs again.
+    pub(crate) fn leave_quiet(&mut self) {
+        self.quiet = false;
     }
 
     /// The running operation ended.
     pub(crate) fn leave(&mut self) {
         self.current = 0;
+        self.quiet = false;
     }
 
     /// The number of the running operation (0: none).
@@ -44,7 +52,7 @@ impl OpClock {
 
     /// Does the running operation log nothing (a quiet retry)?
     pub(crate) fn is_quiet(&self) -> bool {
-        self.current == QUIET_OP
+        self.quiet
     }
 }
 
@@ -71,16 +79,21 @@ mod tests {
     }
 
     #[test]
-    fn the_quiet_number_is_entered_and_left_and_never_numbered() {
+    fn quiet_is_a_flag_of_the_running_operation() {
         let mut c = OpClock::new();
         let job = c.next();
         c.enter(job);
         assert!(!c.is_quiet());
-        c.enter(QUIET_OP);
+        c.enter_quiet();
         assert!(c.is_quiet());
-        c.enter(job);
+        assert_eq!(c.current(), job, "the operation keeps its number");
+        c.leave_quiet();
         assert!(!c.is_quiet());
-        c.last = QUIET_OP - 1;
-        assert_ne!(c.next(), QUIET_OP);
+        c.enter_quiet();
+        c.leave();
+        assert!(!c.is_quiet(), "an operation that ended is not quiet");
+        c.enter_quiet();
+        c.enter(job);
+        assert!(!c.is_quiet(), "entering an operation starts it loud");
     }
 }
