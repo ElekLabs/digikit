@@ -126,7 +126,7 @@ export async function moduleRingEvents(
  * A cursor over the runtime's small ring for a test that waits on events without the debug module (a card rig's runtime has none: the log commands exist only while
  * digikit/debug is loaded). `next` waits in emulated time (the memory reads step nothing; `clock` steps a paused daemon) for the next event of `kind` that `match` accepts
  * after the ones the cursor has passed; `none` fails when such an event comes within `withinMs`. The ring keeps 32 events, so a wait polls every 100 ms. Needs `RING_SYMBOLS`
- * in the runtime plan (`CARD_SYMBOLS` of card-rig.ts has them). Starts after the newest event unless `fromBoot`.
+ * in the runtime plan (`CARD_SYMBOLS` of card-symbols.ts has them). Starts after the newest event unless `fromBoot`.
  */
 export async function ringWatch(
   rt: { session: Session; clock: Clock },
