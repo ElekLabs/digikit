@@ -53,6 +53,28 @@ export declare type Project = Message<"pm.Project"> & {
 export declare const ProjectSchema: GenMessage<Project>;
 
 /**
+ * equal value names in nested enums: the generated constants carry the enum name
+ *
+ * @generated from enum pm.Project.State
+ */
+export enum Project_State {
+  /**
+   * @generated from enum value: STATE_IDLE = 0;
+   */
+  IDLE = 0,
+
+  /**
+   * @generated from enum value: STATE_NONE = 1;
+   */
+  NONE = 1,
+}
+
+/**
+ * Describes the enum pm.Project.State.
+ */
+export declare const Project_StateSchema: GenEnum<Project_State>;
+
+/**
  * @generated from message pm.ListReply
  */
 export declare type ListReply = Message<"pm.ListReply"> & {
@@ -123,6 +145,21 @@ export declare type Coverage = Message<"pm.Coverage"> & {
    * @generated from field: repeated string tags = 9;
    */
   tags: string[];
+
+  /**
+   * @generated from field: repeated int32 deltas = 10;
+   */
+  deltas: number[];
+
+  /**
+   * @generated from field: repeated bool bits = 11;
+   */
+  bits: boolean[];
+
+  /**
+   * @generated from field: repeated pm.Mode modes = 12;
+   */
+  modes: Mode[];
 };
 
 /**
@@ -130,6 +167,26 @@ export declare type Coverage = Message<"pm.Coverage"> & {
  * Use `create(CoverageSchema)` to create a new message.
  */
 export declare const CoverageSchema: GenMessage<Coverage>;
+
+/**
+ * @generated from enum pm.Coverage.Level
+ */
+export enum Coverage_Level {
+  /**
+   * @generated from enum value: LEVEL_NONE = 0;
+   */
+  LEVEL_NONE = 0,
+
+  /**
+   * @generated from enum value: STATE_NONE = 2;
+   */
+  STATE_NONE = 2,
+}
+
+/**
+ * Describes the enum pm.Coverage.Level.
+ */
+export declare const Coverage_LevelSchema: GenEnum<Coverage_Level>;
 
 /**
  * @generated from enum pm.Mode

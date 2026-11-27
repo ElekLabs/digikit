@@ -1,4 +1,4 @@
-// Field options of module query schemas (docs/plans/workbench-module-ui.md "Operations"). patchkit refuses a string or bytes field
+// Field options of module query schemas (docs/plans/workbench-module-ui.md "Queries"). patchkit refuses a string or bytes field
 // without max_len and a repeated field without max_count: the generated C codec has fixed buffers.
 syntax = "proto3";
 

@@ -217,7 +217,7 @@ fn the_generated_header_compiles_and_its_accessors_follow_the_rules() {
     assert!(cc.status.success(), "cc --version failed");
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let dir = module_dir("pk-workbench-cc-", TYPED, PROGRAM);
-    let header = Header::read(dir.path(), "test/typed", Some("Typed"))
+    let header = Header::read(&root, dir.path(), "test/typed", Some("Typed"))
         .unwrap()
         .unwrap();
     let exe = dir.path().join("check");
@@ -247,8 +247,9 @@ fn the_generated_header_compiles_and_its_accessors_follow_the_rules() {
 #[test]
 fn the_digest_changes_with_the_declaration_and_the_name() {
     let dir = module_dir("pk-workbench-digest-", DECLARATION, "");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let digest = |name: &str| {
-        *Header::read(dir.path(), "test/m", Some(name))
+        *Header::read(&root, dir.path(), "test/m", Some(name))
             .unwrap()
             .unwrap()
             .digest()

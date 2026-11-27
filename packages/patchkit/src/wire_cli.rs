@@ -1,6 +1,7 @@
 //! `patchkit wire`: the C codec and the descriptor set of a module query schema (`.proto`, see `build::wire`).
 //!
-//! - `patchkit wire c --proto FILE --include DIR... --prefix NAME [--out FILE]`: the C header (stdout without `--out`).
+//! - `patchkit wire c --proto FILE --include DIR... --prefix NAME --out FILE [--source-out FILE]`: the C header, and with `--source-out`
+//!   the C source that includes it by `--out`'s file name (the module build writes both as `workbench_queries.h` and `.c`).
 //! - `patchkit wire descriptor --proto FILE --include DIR... --out FILE`: the binary descriptor set, `dk` options kept (input of the
 //!   TypeScript generator).
 //!
@@ -33,12 +34,21 @@ pub fn run(rest: &[String]) -> Result<()> {
     let bytes = match verb.as_str() {
         "c" => {
             let prefix = one("--prefix").ok_or_else(|| err!("--prefix NAME is required"))?;
+            let out = one("--out").ok_or_else(|| err!("--out FILE is required"))?;
             let schema = Schema::read(&includes, &proto)?;
-            CCodec::render(&schema, &prefix).into_bytes()
+            let header_name = Path::new(&out)
+                .file_name()
+                .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+            let generated = CCodec::render(&schema, &prefix, &header_name);
+            if let Some(source) = one("--source-out") {
+                std::fs::write(&source, generated.source).map_err(|e| err!("{source}: {e}"))?;
+            }
+            generated.header.into_bytes()
         }
         "descriptor" => Schema::descriptor_set(&includes, &proto)?,
         other => return Err(err!("patchkit wire: unknown verb {other}")),
     };
+    // the `c` verb needs `--out`; the descriptor verb too (stdout is for a quick look)
     match one("--out") {
         Some(out) => std::fs::write(&out, bytes).map_err(|e| err!("{out}: {e}")),
         None => {

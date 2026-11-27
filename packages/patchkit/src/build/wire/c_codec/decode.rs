@@ -28,21 +28,11 @@ impl CCodec<'_> {
         }
         let mut cases = String::new();
         for (k, f) in fields.iter().enumerate() {
-            let mut branch = String::new();
-            self.read_field(&mut branch, f);
             // an if chain, not a switch: the compiler makes a jump table of a switch, and a table inside the code is no valid
             // ColdFire instruction for the ISA check
-            let mut lines = branch.lines();
-            let head = lines.next().unwrap_or_default();
-            let num = head
-                .trim()
-                .trim_start_matches("case ")
-                .trim_end_matches(':');
             let opening = if k == 0 { "if" } else { "} else if" };
-            writeln!(cases, "        {opening} (f == {num}) {{").unwrap();
-            for line in lines.filter(|l| l.trim() != "break;") {
-                writeln!(cases, "{line}").unwrap();
-            }
+            writeln!(cases, "        {opening} (f == {}) {{", f.number).unwrap();
+            self.read_field(&mut cases, f);
         }
         if !fields.is_empty() {
             cases.push_str("        } else {\n            dk_wire_skip(&r, t);\n        }\n");
@@ -84,8 +74,7 @@ impl CCodec<'_> {
     }
 
     fn read_field(&self, o: &mut String, f: &Field) {
-        let (n, num) = (&f.name, f.number);
-        writeln!(o, "        case {num}:").unwrap();
+        let n = &f.name;
         match (&f.kind, f.repeated) {
             (Kind::Scalar(s), None) => {
                 writeln!(o, "            if (t != DK_WIRE_VARINT)\n                return -1;\n            out->{n} = {};", s.read("&r")).unwrap();
@@ -106,7 +95,7 @@ impl CCodec<'_> {
             }
             (Kind::Message(m), None) => {
                 let inner = self.ty(*m);
-                writeln!(o, "            if (t != DK_WIRE_LEN)\n                return -1;\n            s = dk_wire_get_len(&r, &len);\n            if (r.err || {inner}_decode(s, len, &out->{n}) < 0)\n                return -1;\n            out->has_{n} = 1;").unwrap();
+                writeln!(o, "            if (t != DK_WIRE_LEN)\n                return -1;\n            s = dk_wire_get_len(&r, &len);\n            if (r.err || out->has_{n} || {inner}_decode(s, len, &out->{n}) < 0)\n                return -1;\n            out->has_{n} = 1;").unwrap();
             }
             (Kind::Message(m), Some(max)) => {
                 let inner = self.ty(*m);
@@ -114,6 +103,5 @@ impl CCodec<'_> {
             }
             (Kind::Bytes(_), Some(_)) => unreachable!("refused by the schema"),
         }
-        writeln!(o, "            break;").unwrap();
     }
 }

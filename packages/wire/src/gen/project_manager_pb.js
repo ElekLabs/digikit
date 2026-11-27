@@ -9,7 +9,7 @@ import { file_dk_options } from "./dk/options_pb.js";
  * Describes the file project_manager.proto.
  */
 export const file_project_manager = /*@__PURE__*/
-  fileDesc("ChVwcm9qZWN0X21hbmFnZXIucHJvdG8SAnBtIh0KC0xpc3RSZXF1ZXN0Eg4KBmN1cnNvchgBIAEoDSI8CgdQcm9qZWN0EgwKBHNsb3QYASABKA0SEgoEbmFtZRgCIAEoCUIEyPMYEBIPCgdjdXJyZW50GAMgASgIIjsKCUxpc3RSZXBseRIgCgVpdGVtcxgBIAMoCzILLnBtLlByb2plY3RCBNDzGBASDAoEbmV4dBgCIAEoDSLEAQoIQ292ZXJhZ2USFgoEbW9kZRgBIAEoDjIILnBtLk1vZGUSDgoGb2Zmc2V0GAIgASgFEhIKBGJsb2IYAyABKAxCBMjzGAgSFAoGbGV2ZWxzGAQgAygNQgTQ8xgGEhwKB3Byb2plY3QYBSABKAsyCy5wbS5Qcm9qZWN0EgwKBGZsYWcYBiABKAgSDQoFY291bnQYByABKA0SEwoFbGFiZWwYCCABKAlCBMjzGAUSFgoEdGFncxgJIAMoCUIIyPMYBNDzGAMqMgoETW9kZRIMCghNT0RFX09GRhAAEg0KCU1PREVfU09GVBABEg0KCU1PREVfSEFSRBACMjgKDlByb2plY3RNYW5hZ2VyEiYKBExpc3QSDy5wbS5MaXN0UmVxdWVzdBoNLnBtLkxpc3RSZXBseWIGcHJvdG8z", [file_dk_options]);
+  fileDesc("ChVwcm9qZWN0X21hbmFnZXIucHJvdG8SAnBtIh0KC0xpc3RSZXF1ZXN0Eg4KBmN1cnNvchgBIAEoDSJlCgdQcm9qZWN0EgwKBHNsb3QYASABKA0SEgoEbmFtZRgCIAEoCUIEyPMYEBIPCgdjdXJyZW50GAMgASgIIicKBVN0YXRlEg4KClNUQVRFX0lETEUQABIOCgpTVEFURV9OT05FEAEiOwoJTGlzdFJlcGx5EiAKBWl0ZW1zGAEgAygLMgsucG0uUHJvamVjdEIE0PMYEBIMCgRuZXh0GAIgASgNIrYCCghDb3ZlcmFnZRIWCgRtb2RlGAEgASgOMggucG0uTW9kZRIOCgZvZmZzZXQYAiABKAUSEgoEYmxvYhgDIAEoDEIEyPMYCBIUCgZsZXZlbHMYBCADKA1CBNDzGAYSHAoHcHJvamVjdBgFIAEoCzILLnBtLlByb2plY3QSDAoEZmxhZxgGIAEoCBINCgVjb3VudBgHIAEoDRITCgVsYWJlbBgIIAEoCUIEyPMYBRIWCgR0YWdzGAkgAygJQgjI8xgE0PMYAxIUCgZkZWx0YXMYCiADKAVCBNDzGAQSEgoEYml0cxgLIAMoCEIE0PMYBRIdCgVtb2RlcxgMIAMoDjIILnBtLk1vZGVCBNDzGAMiJwoFTGV2ZWwSDgoKTEVWRUxfTk9ORRAAEg4KClNUQVRFX05PTkUQAioyCgRNb2RlEgwKCE1PREVfT0ZGEAASDQoJTU9ERV9TT0ZUEAESDQoJTU9ERV9IQVJEEAIyOAoOUHJvamVjdE1hbmFnZXISJgoETGlzdBIPLnBtLkxpc3RSZXF1ZXN0Gg0ucG0uTGlzdFJlcGx5YgZwcm90bzM", [file_dk_options]);
 
 /**
  * Describes the message pm.ListRequest.
@@ -26,6 +26,20 @@ export const ProjectSchema = /*@__PURE__*/
   messageDesc(file_project_manager, 1);
 
 /**
+ * Describes the enum pm.Project.State.
+ */
+export const Project_StateSchema = /*@__PURE__*/
+  enumDesc(file_project_manager, 1, 0);
+
+/**
+ * equal value names in nested enums: the generated constants carry the enum name
+ *
+ * @generated from enum pm.Project.State
+ */
+export const Project_State = /*@__PURE__*/
+  tsEnum(Project_StateSchema);
+
+/**
  * Describes the message pm.ListReply.
  * Use `create(ListReplySchema)` to create a new message.
  */
@@ -38,6 +52,18 @@ export const ListReplySchema = /*@__PURE__*/
  */
 export const CoverageSchema = /*@__PURE__*/
   messageDesc(file_project_manager, 3);
+
+/**
+ * Describes the enum pm.Coverage.Level.
+ */
+export const Coverage_LevelSchema = /*@__PURE__*/
+  enumDesc(file_project_manager, 3, 0);
+
+/**
+ * @generated from enum pm.Coverage.Level
+ */
+export const Coverage_Level = /*@__PURE__*/
+  tsEnum(Coverage_LevelSchema);
 
 /**
  * Describes the enum pm.Mode.
