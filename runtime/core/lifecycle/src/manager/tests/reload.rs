@@ -215,10 +215,19 @@ fn a_busy_restore_in_a_reload_exports_once_after_the_retry() {
 
 /// The copy of `p` that failed to take its state is stopped, then freed, after the import (the old copy's own stop and free came before it).
 fn assert_unwound_after_import(calls: &[Call], p: PackageId) {
-    let at = calls.iter().position(|c| *c == ImportState(p)).expect("an import");
+    let at = calls
+        .iter()
+        .position(|c| *c == ImportState(p))
+        .expect("an import");
     let after = &calls[at..];
-    let stop = after.iter().position(|c| *c == Stop(p)).expect("a stop after the failed import");
-    let free = after.iter().position(|c| *c == Free(p)).expect("a free after the failed import");
+    let stop = after
+        .iter()
+        .position(|c| *c == Stop(p))
+        .expect("a stop after the failed import");
+    let free = after
+        .iter()
+        .position(|c| *c == Free(p))
+        .expect("a free after the failed import");
     assert!(stop < free, "{calls:?}");
 }
 
@@ -257,8 +266,16 @@ fn a_busy_import_is_not_retried_it_is_a_clean_failure() {
             if package == id(1) && status == dkrt_sdk::E_BUSY
     ));
     let calls = probe.calls();
-    assert_eq!(calls.iter().filter(|c| **c == ImportState(id(1))).count(), 1, "asked once");
+    assert_eq!(
+        calls.iter().filter(|c| **c == ImportState(id(1))).count(),
+        1,
+        "asked once"
+    );
     assert_unwound_after_import(&calls, id(1));
     assert_eq!(live(&pm, &[1, 2]), []);
-    assert_eq!(pm.restore_pending(), None, "nothing waits: the unwind is whole");
+    assert_eq!(
+        pm.restore_pending(),
+        None,
+        "nothing waits: the unwind is whole"
+    );
 }
