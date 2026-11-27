@@ -8,6 +8,7 @@
 
 /* Opaque handles ([handle] types): the runtime or the provider module gives one out in `init`. */
 typedef struct dk_module_ctx dk_module_ctx;
+typedef struct dk_workbench_query dk_workbench_query;
 typedef struct dk_settings dk_settings;
 typedef struct dk_files dk_files;
 typedef struct dk_sample_pool dk_sample_pool;
@@ -91,6 +92,9 @@ uint32_t dk_module_ctx_runtime_version(dk_module_ctx *ctx);
 
 /* Register this content module's Workbench settings descriptor during init, once per load. The runtime copies the descriptor (up to 512 bytes; version 1 holds text and file-name settings, version 2 also integer, boolean and choice settings and needs runtime 0.13.4); see the Workbench settings schema in the module authoring guide. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad descriptor, or DK_E_STATE if already registered. Workbench may read settings while a settings overlay is installed; use the device menu to edit them in that case. Context: init. Since runtime 0.11.4. */
 int32_t dk_workbench_register(dk_module_ctx *ctx, const uint8_t *descriptor, uint32_t size);
+
+/* Register this content module's Workbench query table during init, once per load, after `dk_workbench_register`. The runtime keeps the pointer (the table must stay valid while the module is loaded; it is not copied): `count` entries (1 to 16) of `dk_workbench_query` (<dk/query.h>: `{ call; u8 method; u8 reserved[3]; }`, 8 bytes, 2-byte aligned), `method` strictly increasing from 1. `call` runs on the UI task with `*out_len` set to the room in `out` and returns 0 with `*out_len` the reply length, or an error code the Workbench receives as refused. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad table, or DK_E_STATE if queries are registered already or no settings descriptor is. Context: init. Since runtime 0.13.5. */
+int32_t dk_workbench_register_queries(dk_module_ctx *ctx, const dk_workbench_query *table, uint32_t count);
 
 /* Open this module's settings: `*out` is the handle (the same one every time), the result 0. A negative result outside init (DK_E_NOT_FOUND) or for a bad context (DK_E_CONTRACT); `*out` is untouched then. Context: init. Since runtime 0.7.0. */
 int32_t dk_settings_open(dk_module_ctx *ctx, dk_settings **out);
@@ -321,6 +325,12 @@ int32_t dk_project_current(uint32_t *slot, uint8_t *name);
 
 /* The state of the project service as bits: bit 0 a `.dkp` file is loaded for the current project, bit 1 the data has changes the file does not hold (written at the next successful stock save), bit 2 a write was deferred after 30 s of a busy store, bit 3 a file of the slot was not used (a stamp, device, version or crc mismatch). Context: ui. Since runtime 0.11.0. */
 uint32_t dk_project_status(void);
+
+/* The firmware's projects from slot `first_slot` upward into `out`, an array of `max` `dk_project_entry` (19 bytes: slot, flags, name length, 16 name bytes; <dk/platform/project.h>): the number written, at most `max`, empty slots skipped; call again with the last slot + 1 for the next page (the last slot is 127). The flags are DK_PROJECT_CURRENT, DK_PROJECT_DATA (a `.dkp` file of the slot is in the store) and DK_PROJECT_DATA_UNKNOWN (the first listing of the store folder has not ended: bit 1 is not known yet). No card access. Context: ui. Since runtime 0.13.5. */
+int32_t dk_project_list(uint32_t first_slot, void *out, uint32_t max);
+
+/* The summary of project `slot` into `out`, a `dk_project_summary` (name, save stamp, write counter, the module list with each module's id, store hash, number of settings entries and state; <dk/platform/project.h>). The current project is answered at once (0). For another slot the first call queues a read of its `.dkp` and returns DK_E_AGAIN, as does every call until the read ended; then 0, or DK_E_NOT_FOUND when the slot has no usable file or the firmware lists none. The service keeps one summary: a call for another slot replaces it, and a change of the slot's file drops it. A module's state is DK_PROJECT_MODULE_LOADED or DK_PROJECT_MODULE_UNKNOWN (the card is not looked at). DK_E_RANGE for a null `out`. Context: ui. Since runtime 0.13.5. */
+int32_t dk_project_get(uint32_t slot, void *out);
 
 /* ---- service ui ---- */
 

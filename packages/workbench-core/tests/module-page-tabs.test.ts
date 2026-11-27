@@ -15,6 +15,11 @@ describe('the tabs of a module view', () => {
     expect(modulePageTabs(view(true, withSettings()))).toEqual(['page']);
     expect(modulePageTabs(view(true, withSettings(file)))).toEqual(['page']);
   });
+  it('lists a module with zero settings and a page as one entry with the page tab and no Settings tab', () => {
+    const zero = view(true, withSettings());
+    expect(modulePageTabs(zero)).toEqual(['page']);
+    expect(hasModuleEntry({ id: 'x', name: 'X', ...zero })).toBe(true);
+  });
   it('shows the form alone without a page', () => {
     expect(modulePageTabs(view(false, withSettings(text)))).toEqual(['settings']);
   });

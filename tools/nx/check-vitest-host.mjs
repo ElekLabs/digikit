@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const PREFIX = '{workspaceRoot}/vitest.host/';
-const RUN = /\bvitest\b[^"]*?--project[ =]([\w-]+)/g;
+const RUN = /\bvitest\b[^"]*/g;
+const PROJECT = /--project[ =]([\w-]+)/g;
 
 const entries = readdirSync(join(root, 'vitest.host'))
   .filter((f) => f.endsWith('.json'))
@@ -38,7 +39,7 @@ for (const [project, node] of Object.entries(nodes)) {
   for (const [name, target] of Object.entries(node.data.targets ?? {})) {
     const text = JSON.stringify([target.options ?? {}, target.metadata?.scriptContent ?? '']);
     if (!text.includes('vitest.host.config.ts')) continue; // another Vitest config (tests/regression) has its own projects
-    const names = [...new Set([...text.matchAll(RUN)].map((m) => m[1]))];
+    const names = [...new Set([...text.matchAll(RUN)].flatMap((m) => [...m[0].matchAll(PROJECT)].map((p) => p[1])))];
     if (names.length === 0) continue;
     const at = `${project}:${name}`;
     const inputs = (target.inputs ?? []).filter((i) => typeof i === 'string');

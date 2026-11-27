@@ -88,6 +88,8 @@ fn a_load_that_stays_busy_fails_and_a_save_into_the_slot_loads_it_again() {
     r.rec(5, b"PROJ", 0x55);
     let file = file_bytes(5, b"PROJ", 0x55, 4, &[(b"test/owner/k", b"kept")]);
     r.f.store.insert(path(5, b"PROJ"), file.clone());
+    // the first listing of the folder (the data bit) is done before the store refuses the load's
+    r.settle();
     r.f.refuse_list = u32::MAX;
     r.hook_slot(5);
     r.settle();

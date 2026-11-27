@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package project_user;
+
+import "dk/options.proto";
+
+// What the project service's exports return (dk_project_list, dk_project_get), as a module sees them. The device holds at most 128 projects (slots 0 to 127).
+service ProjectUser {
+  // The projects from first_slot upward, 16 at most; next is the slot to ask for the next page, 0 when there are no more.
+  rpc List(ListRequest) returns (ListReply);
+  // The summary of one project. loading is true while the device reads the project's file: ask again.
+  rpc Get(GetRequest) returns (GetReply);
+}
+
+message ListRequest {
+  uint32 first_slot = 1;
+}
+
+message Project {
+  uint32 slot = 1;
+  string name = 2 [(dk.max_len) = 16];
+  bool current = 3;
+  bool has_data = 4;
+  // has_data is not known yet (the device has not finished listing its store).
+  bool data_unknown = 5;
+}
+
+message ListReply {
+  repeated Project items = 1 [(dk.max_count) = 16];
+  uint32 next = 2;
+}
+
+message GetRequest {
+  uint32 slot = 1;
+}
+
+message Module {
+  string id = 1 [(dk.max_len) = 31];
+  uint32 hash = 2;
+  // The number of settings entries the project holds for the module.
+  uint32 settings = 3;
+  bool loaded = 4;
+}
+
+message GetReply {
+  bool loading = 1;
+  bool found = 2;
+  uint32 slot = 3;
+  string name = 4 [(dk.max_len) = 16];
+  uint32 stamp = 5;
+  uint32 counter = 6;
+  repeated Module modules = 7 [(dk.max_count) = 8];
+}

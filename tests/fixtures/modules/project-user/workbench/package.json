@@ -1,0 +1,9 @@
+{
+  "name": "@digi-fixture/project-user-queries",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bufbuild/protobuf": "2.17.0",
+    "@digi/wire": "workspace:*"
+  }
+}

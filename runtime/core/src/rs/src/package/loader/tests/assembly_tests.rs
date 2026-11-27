@@ -406,6 +406,8 @@ pub(super) enum Builder {
     Machine(u32),
     Fx(u32),
     Workbench { offset: usize, len: usize },
+    /// `dk_workbench_register_queries` with a table of `count` entries whose method numbers are `methods`, read from the packed table. The host cannot run ColdFire code, so each entry gets a host stand-in function.
+    Queries { count: u32, methods: [u8; crate::package::module_ui::QUERIES_MAX] },
 }
 
 impl Card {
@@ -522,6 +524,14 @@ impl Images for Card {
                 match *call {
                     Builder::Machine(i) => crate::package::handlers::machines_fixture::add_machine(ctx, i),
                     Builder::Fx(i) => crate::package::handlers::fx_fixture::add_fx(ctx, i),
+                    Builder::Queries { count, methods } => {
+                        let table = crate::package::module_ui::stand_in_queries(&methods[..count as usize]);
+                        let status = crate::package::module_ui::dk_workbench_register_queries(ctx, table, count);
+                        if status != OK {
+                            crate::dlog::leave_module(prev);
+                            return status;
+                        }
+                    }
                     Builder::Workbench { offset, len } => {
                         let bytes = &f[offset..offset + len];
                         let status = crate::package::module_ui::dk_workbench_register(ctx, bytes.as_ptr(), len as u32);
@@ -1479,8 +1489,8 @@ fn a_project_user_loads_with_the_project_service_file_and_takes_its_hooks() {
             .count();
         assert_eq!(keys.count(tag::HOOKS), 5, "{}", dev.name);
         assert_eq!(present, 5, "{}: every hook has a site", dev.name);
-        // the two functions the service gives modules
-        assert_eq!(keys.count(tag::EXPORTS), 2, "{}", dev.name);
+        // the functions the service gives modules: current, status, list, get
+        assert_eq!(keys.count(tag::EXPORTS), 4, "{}", dev.name);
     }
 }
 

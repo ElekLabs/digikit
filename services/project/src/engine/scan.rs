@@ -41,6 +41,10 @@ pub enum ScanFor {
     Save,
     Clear,
     Paste,
+    /// A read for the Project Manager: the summary of one other project (`dk_project_get`).
+    Peek,
+    /// The one listing of the whole folder that tells which slots have a file (`dk_project_list`).
+    Index,
 }
 
 /// The answer of one step of a scan.
@@ -87,6 +91,8 @@ pub struct SlotScan {
     want_len: usize,
     /// Paste: the file to copy, once `finish` chose it.
     paste_source: Option<Path>,
+    /// Index: one bit per slot (byte `slot / 8`, bit `slot % 8`) whose file the listing saw.
+    found: [u8; 16],
 }
 
 /// What a finished scan found, for the planner: a view of the scan's own tables.
@@ -135,6 +141,7 @@ impl SlotScan {
             want: [0; name::NAME_MAX],
             want_len: 0,
             paste_source: None,
+            found: [0; 16],
         }
     }
 
@@ -149,6 +156,12 @@ impl SlotScan {
         self.same_name_count = 0;
         self.want_len = 0;
         self.paste_source = None;
+        self.found = [0; 16];
+    }
+
+    /// Index: the slots whose file the listing saw.
+    pub fn found(&self) -> [u8; 16] {
+        self.found
     }
 
     pub fn scan_for(&self) -> ScanFor {
@@ -161,8 +174,12 @@ impl SlotScan {
     /// One pass of the scan: start the listing, then take the rows that are ready.
     pub fn step<E: Env + ?Sized>(&mut self, env: &mut E) -> ScanStep {
         if let ScanPhase::Unstarted = self.phase {
-            // a load reads: it waits while a live operation stages
-            if self.scan_for == ScanFor::Load && env.live_op() != 0 {
+            // a load and the reads for the Project Manager and the data bit read the store: they wait while a live operation stages
+            if (self.scan_for == ScanFor::Load
+                || self.scan_for == ScanFor::Peek
+                || self.scan_for == ScanFor::Index)
+                && env.live_op() != 0
+            {
                 return ScanStep::Waiting;
             }
             self.record = env.slot_record(self.slot);
@@ -201,7 +218,12 @@ impl SlotScan {
         let Some(row_slot) = name::slot_of_row(row) else {
             return;
         };
-        if row_slot == self.slot {
+        if row_slot >= 128 {
+            return;
+        }
+        if self.scan_for == ScanFor::Index {
+            self.found[(row_slot / 8) as usize] |= 1 << (row_slot % 8);
+        } else if row_slot == self.slot {
             if self.row_count < SLOT_FILES_MAX {
                 if let Some(path) = Path::from_bytes(row) {
                     self.rows[self.row_count] = path;

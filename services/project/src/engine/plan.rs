@@ -28,7 +28,7 @@ pub fn plan(result: &ScanResult, bound: &BoundView, run: &mut TaskRun) -> Option
 }
 
 /// The best usable file of the slot: passes the checks and has the slot's stamp, the highest write counter wins.
-fn pick_winner(files: &[SlotFile], record: &Option<SlotRecord>) -> Option<usize> {
+pub(super) fn pick_winner(files: &[SlotFile], record: &Option<SlotRecord>) -> Option<usize> {
     let mut best: Option<usize> = None;
     let mut at = 0;
     while at < files.len() {
@@ -86,6 +86,7 @@ fn plan_load(result: &ScanResult, run: &mut TaskRun) -> Option<Plan> {
             }
             at += 1;
         }
+        run.set_data_after(slot, true);
         let to = name::file_path(slot, &record.name);
         if !bytes_equal(to.as_bytes(), files[win].path.as_bytes()) {
             let mut superseded = [Path::EMPTY; 3];
@@ -110,7 +111,9 @@ fn plan_load(result: &ScanResult, run: &mut TaskRun) -> Option<Plan> {
             }),
         });
     }
-    // no usable file: stock project without digikit data, or a file that is not this project's
+    // no usable file: stock project without digikit data, or a file that is not this project's (it stays in the store, but the loader does not use it)
+    // the files stay in projects/ (the loader does not use them): the slot still has a file
+    run.set_data_after(slot, !files.is_empty());
     let ignored = if files.is_empty() {
         None
     } else {
@@ -132,6 +135,7 @@ fn plan_load(result: &ScanResult, run: &mut TaskRun) -> Option<Plan> {
 fn plan_clear(result: &ScanResult, bound: &BoundView, run: &mut TaskRun) -> Option<Plan> {
     let slot = result.slot();
     archive_usable(result.files(), run);
+    run.set_data_after(slot, refused_left(result.files()));
     let effect = if bound.slot.as_i32() == slot as i32 {
         Some(Effect::EmptyCurrent {
             slot,
@@ -148,6 +152,10 @@ fn plan_clear(result: &ScanResult, bound: &BoundView, run: &mut TaskRun) -> Opti
 fn plan_paste(result: &ScanResult, run: &mut TaskRun) -> Option<Plan> {
     let record = result.record()?;
     archive_usable(result.files(), run);
+    run.set_data_after(
+        result.slot(),
+        result.paste_source().is_some() || refused_left(result.files()),
+    );
     if let Some(from) = result.paste_source() {
         run.push(Task::Copy {
             from,
@@ -231,6 +239,7 @@ fn plan_save(result: &ScanResult, bound: &BoundView, run: &mut TaskRun) -> Optio
             }
         }
     }
+    run.set_data_after(slot, bound.has_data || refused_left(files));
     run.set_save_end(SaveEnd {
         slot,
         bytes,
@@ -239,6 +248,11 @@ fn plan_save(result: &ScanResult, bound: &BoundView, run: &mut TaskRun) -> Optio
     Some(Plan {
         effect: Some(Effect::AdoptForSave { slot }),
     })
+}
+
+/// Does a file stay in the slot after `archive_usable`? The files that fail the checks are not archived. The data bit means that a `.dkp` file of the slot's number exists.
+fn refused_left(files: &[SlotFile]) -> bool {
+    files.iter().any(|file| file.head.is_err())
 }
 
 /// Every usable file of the slot goes to the archive.

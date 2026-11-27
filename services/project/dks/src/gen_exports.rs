@@ -8,11 +8,15 @@ use dkrt_sdk::api;
 // the entries have the types sdk/sdk.toml gives the imports
 const _: api::DkProjectCurrentFn = crate::glue::dk_project_current;
 const _: api::DkProjectStatusFn = crate::glue::dk_project_status;
+const _: api::DkProjectListFn = crate::glue::dk_project_list;
+const _: api::DkProjectGetFn = crate::glue::dk_project_get;
 
 /// The entries `service!` declares, by name hash, in the order of `sdk/sdk.toml`.
-pub fn exports() -> [(u32, *const u8); 2] {
+pub fn exports() -> [(u32, *const u8); 4] {
     [
         (dkrt_svc_rt::name_hash("dk_project_current"), crate::glue::dk_project_current as *const u8),
         (dkrt_svc_rt::name_hash("dk_project_status"), crate::glue::dk_project_status as *const u8),
+        (dkrt_svc_rt::name_hash("dk_project_list"), crate::glue::dk_project_list as *const u8),
+        (dkrt_svc_rt::name_hash("dk_project_get"), crate::glue::dk_project_get as *const u8),
     ]
 }

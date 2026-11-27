@@ -6,6 +6,7 @@
 // the same framing and every command of the protocol (INFO, LIST, upload, DELETE, CLEAR, ABORT, MODULES, CAPACITY, READ, VERIFY, SELECT,
 // RESTART, LOG), with the numbers generated from sdk/sdk.toml (`gen_proto.ts`). The desktop app uses it (no wasm, no Python).
 import { wireModuleSettings } from './module-settings.ts';
+import { wireModuleQueries } from './module-queries.ts';
 import { decodeModulesPage, OLD_MODULES } from './modules-reply.ts';
 import {
   CAP as GCAP,
@@ -1449,6 +1450,10 @@ export class DkSession {
 
   moduleSettings(slot: number, instance: number, current: () => boolean) {
     return wireModuleSettings(this, slot, instance, current);
+  }
+
+  moduleQueries(slot: number, instance: number, current: () => boolean) {
+    return wireModuleQueries(this, slot, instance, current);
   }
 
   /** CAPACITY (runtime 0.2.2): per resource `{limit, used, largest}`, keyed by the kind's name. */

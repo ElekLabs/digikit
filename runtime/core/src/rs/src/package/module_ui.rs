@@ -1,16 +1,22 @@
 //! The Workbench settings registered by loaded content modules. MIDI submits bounded work and reads completions.
 //! Only the UI task accesses the real module settings. The shared queue is touched with interrupts masked.
 
+mod call;
 mod cursor;
 mod descriptor;
 mod job;
 mod kind;
+mod query_table;
 
+use self::call::{CallSlot, OUTCOME_BLOCKS, OUTCOME_PASSES, REPLY_MAX};
 use self::descriptor::{Descriptor, DESCRIPTOR_MAX, FIELDS_MAX};
 use self::job::Job;
 use self::kind::{Kind, TEXT_MAX};
+use self::query_table::QueryTable;
+#[cfg(test)]
+pub(crate) use self::query_table::{QUERIES_MAX, WIRE_ENTRY_SIZE, WIRE_METHOD_OFFSET};
 use super::loader::records;
-use super::resident::{platform, settings, store, transport};
+use super::resident::{dlog, platform, settings, store, transport};
 use super::{entry, files, module_cmds, settings_overlay};
 use core::ptr::addr_of_mut;
 use dkrt_abi::{mem::cstr_len, MAX_MODULES};
@@ -25,6 +31,7 @@ const GET: u8 = 1;
 const PUT: u8 = 2;
 const RESET: u8 = 3;
 const POLL: u8 = 4;
+const CALL: u8 = 5;
 const RETAINED: usize = 4;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -102,6 +109,7 @@ struct Enrollment {
     pending: Request,
     completions: [Completion; RETAINED],
     next: usize,
+    queries: QueryTable,
 }
 
 impl Enrollment {
@@ -113,6 +121,7 @@ impl Enrollment {
         pending: Request::NONE,
         completions: [Completion::EMPTY; RETAINED],
         next: 0,
+        queries: QueryTable::EMPTY,
     };
 
     fn rescope(&mut self, revision: u32) {
@@ -238,6 +247,12 @@ struct Registry {
     modules: [Enrollment; MAX_MODULES],
     serial: u32,
     next_rec: usize,
+    /// The one query call of the device (`call.rs`).
+    call: CallSlot,
+    /// The next UI pass serves a call before a settings request (and the other way round), so neither starves.
+    call_first: bool,
+    /// UI passes, the clock of an unread outcome when the DSP block counter is absent.
+    passes: u32,
 }
 
 impl Registry {
@@ -245,6 +260,9 @@ impl Registry {
         modules: [const { Enrollment::EMPTY }; MAX_MODULES],
         serial: 0,
         next_rec: 0,
+        call: CallSlot::IDLE,
+        call_first: false,
+        passes: 0,
     };
 
     fn next(&mut self) -> u32 {
@@ -253,13 +271,19 @@ impl Registry {
     }
 
     fn publish(&mut self, rec: usize) {
-        if self.modules[rec].descriptor.count() == 0 {
+        if !self.modules[rec].descriptor.is_registered() {
             return;
         }
         let instance = self.next();
         let slot = &mut self.modules[rec];
         slot.instance = instance;
         slot.scope_revision = instance;
+    }
+
+    /// The module unloads: its enrollment, queued call and held outcome go before its code is released.
+    fn withdraw(&mut self, rec: usize) {
+        self.modules[rec] = Enrollment::EMPTY;
+        self.cancel_calls(rec);
     }
 
     fn changed(&mut self, rec: usize, key: &[u8]) {
@@ -279,13 +303,39 @@ impl Registry {
         let (&verb, rest) = body.split_first().ok_or(E_MSG)?;
         let (&rec, mut rest) = rest.split_first().ok_or(E_MSG)?;
         let instance = take_word(&mut rest)?;
+        let rec = rec as usize;
         let slot = self
             .modules
-            .get_mut(rec as usize)
+            .get_mut(rec)
             .filter(|slot| slot.matches(instance))
             .ok_or(E_NOT_FOUND)?;
-        let draining = unsafe { module_cmds::is_draining(rec as usize) };
-        slot.handle(verb, rest, out, draining)
+        let draining = unsafe { module_cmds::is_draining(rec) };
+        if verb == CALL {
+            return self.queue_call(rec, rest, draining);
+        }
+        let result = slot.handle(verb, rest, out, draining);
+        if verb == POLL && result == Err(E_NOT_FOUND) {
+            let mut tail = rest;
+            let ticket = take_word(&mut tail)?;
+            return self.poll_call(rec, instance, ticket, out);
+        }
+        result
+    }
+
+    /// Keep the module's own query table (no copy). Registered once, after the module's descriptor: the instance exists only for a
+    /// module that registered one.
+    fn set_queries(&mut self, rec: usize, table: *const u8, count: u32) -> i32 {
+        let slot = &mut self.modules[rec];
+        if !slot.descriptor.is_registered() || !slot.queries.is_empty() {
+            return E_STATE;
+        }
+        match unsafe { QueryTable::parse(table, count) } {
+            Some(parsed) => {
+                slot.queries = parsed;
+                OK
+            }
+            None => E_FORMAT,
+        }
     }
 }
 
@@ -327,12 +377,38 @@ pub(crate) unsafe extern "C" fn dk_workbench_register(
     };
     locked(|registry| {
         let slot = &mut registry.modules[rec];
-        if slot.descriptor.count() != 0 {
+        if slot.descriptor.is_registered() {
             return E_STATE;
         }
         slot.descriptor = descriptor;
         OK
     })
+}
+
+pub(crate) unsafe extern "C" fn dk_workbench_register_queries(
+    ctx: *mut u8,
+    table: *const u8,
+    count: u32,
+) -> i32 {
+    let Some(rec) = entry::own_rec(ctx).filter(|&rec| rec < MAX_MODULES) else {
+        return E_CONTEXT;
+    };
+    if !files::in_init(rec) {
+        return E_CONTEXT;
+    }
+    locked(|registry| registry.set_queries(rec, table, count))
+}
+
+/// A query table for host tests that stands in for the one a module hands over: one entry per method number, each answering one byte 0xAB.
+#[cfg(test)]
+pub(crate) fn stand_in_queries(methods: &[u8]) -> *const u8 {
+    unsafe extern "C" fn answer(_: *mut u8, _: *const u8, _: u32, out: *mut u8, out_len: *mut u32) -> i32 {
+        *out = 0xAB;
+        *out_len = 1;
+        0
+    }
+    let table: Vec<query_table::Query> = methods.iter().map(|&m| query_table::Query::new(m, answer)).collect();
+    Vec::leak(table).as_ptr() as *const u8
 }
 
 pub(crate) unsafe fn publish(rec: usize) {
@@ -341,12 +417,18 @@ pub(crate) unsafe fn publish(rec: usize) {
 
 pub(crate) unsafe fn withdraw(rec: usize) {
     if rec < MAX_MODULES {
-        locked(|registry| registry.modules[rec] = Enrollment::EMPTY);
+        locked(|registry| registry.withdraw(rec));
     }
 }
 
 pub(crate) unsafe fn instance(rec: usize) -> u32 {
     locked(|registry| registry.modules[rec].instance)
+}
+
+/// The number of queries the record registered (tests: what Workbench discovery depends on).
+#[cfg(test)]
+pub(crate) unsafe fn query_count(rec: usize) -> usize {
+    locked(|registry| registry.modules[rec].queries.len())
 }
 
 pub(crate) unsafe fn setting_changed(rec: usize, key: &[u8]) {
@@ -359,7 +441,7 @@ pub(crate) unsafe fn scope_changed() {
 
 pub(crate) unsafe fn command(seq: u32, _buf: *mut u8, body: *const u8, len: usize) -> i32 {
     use dkrt_sdk::proto::CMD_MODULE_UI;
-    let out = core::slice::from_raw_parts_mut(transport::rbody().add(1), DESCRIPTOR_MAX);
+    let out = core::slice::from_raw_parts_mut(transport::rbody().add(1), REPLY_MAX + 5);
     match locked(|registry| registry.handle(core::slice::from_raw_parts(body, len), out)) {
         Ok(size) => transport::reply(CMD_MODULE_UI, seq, OK, size),
         Err(status) => transport::reply(CMD_MODULE_UI, seq, status, 0),
@@ -395,8 +477,53 @@ unsafe fn read_setting(job: &Job) -> Outcome {
     outcome
 }
 
-/// Process at most one request per UI pass. A pending ticket remains visible during settings I/O.
+/// Process at most one request per UI pass. A pending ticket remains visible during settings I/O. The pass serves the call and the
+/// settings request in turn, so a stream of one kind cannot starve the other.
 pub(crate) unsafe fn tick() {
+    let (call_first, now) = locked(|registry| {
+        registry.passes = registry.passes.wrapping_add(1);
+        registry.call_first = !registry.call_first;
+        let (now, limit) = match platform::fw_blocks() {
+            Some(blocks) => (blocks, OUTCOME_BLOCKS),
+            None => (registry.passes, OUTCOME_PASSES),
+        };
+        registry.age_out(now, limit);
+        (registry.call_first, now)
+    });
+    serve(call_first, || tick_call(now), || tick_setting());
+}
+
+/// Run one of the two kinds of work: `first`'s kind when it has any, else the other's. Returns whether something ran.
+fn serve(
+    call_first: bool,
+    mut call: impl FnMut() -> bool,
+    mut setting: impl FnMut() -> bool,
+) -> bool {
+    if call_first {
+        call() || setting()
+    } else {
+        setting() || call()
+    }
+}
+
+/// Run the queued query: the module's function runs unlocked on the UI task with the module as the source of what it logs. The unload
+/// of a module also runs on the UI task (`reload::poll`, in the pass before this one), so the code stays until the call has returned.
+unsafe fn tick_call(now: u32) -> bool {
+    let Some(job) =
+        locked(|registry| registry.start_call(|rec| module_cmds::is_draining(rec), now))
+    else {
+        return false;
+    };
+    let rec = job.rec();
+    let prev = dlog::enter_module(rec, dlog::PHASE_CALLBACK);
+    let result = job.run(entry::ctx_ptr(rec) as *mut u8);
+    dlog::leave_module(prev);
+    locked(|registry| registry.finish_call(&job, result, now));
+    true
+}
+
+/// Run the next queued setting operation; false when there was none.
+unsafe fn tick_setting() -> bool {
     let job = locked(|registry| {
         let rec = (0..MAX_MODULES)
             .map(|i| (registry.next_rec + i) % MAX_MODULES)
@@ -416,11 +543,12 @@ pub(crate) unsafe fn tick() {
         ))
     });
     let Some(job) = job else {
-        return;
+        return false;
     };
     let rec = job.rec();
     let outcome = apply(job);
     locked(|registry| registry.modules[rec].complete(outcome));
+    true
 }
 
 /// Check the file by its exact store path. The module id comes from the enrolled record.

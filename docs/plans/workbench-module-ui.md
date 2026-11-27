@@ -10,7 +10,7 @@ Status: runtime 0.11.4 has public `text` and `file-name` settings, used by Boot 
 Module page (Solid, modules/<kind>/<author>/<name>/workbench/)
   | imports only @digi/module-ui, service host packages and solid-js
   v
-@digi/module-ui    ModuleClient: typed settings, scoped files, operations (phase 2)
+@digi/module-ui    ModuleClient: typed settings, scoped files, queries (phase 2)
   |                memory client for preview and tests
   v
 workbench-core     page registry, generic form, sidebar discovery (desktop and site)
@@ -21,8 +21,8 @@ firmware           module -> service -> runtime
 ```
 
 - `@digi/module-ui` is the TypeScript contract of a module page, as the C SDK is the contract of module code. A page cannot reach Tauri, dk-session or workbench-core internals. oxlint enforces the import rule.
-- `ModuleChannel` is the boundary: the only interface that crosses to a sandboxed page. Every request is async and takes and returns structured-clone data; progress and other notifications are `ModuleChannelEvent` messages through `subscribe`. The same page then runs compiled into the app or inside a sandboxed iframe (section "Distribution"). The real channel is workbench-core over dk-session; the memory channel serves preview and tests.
-- `ModuleClient` (`createModuleClient(channel)`) is a page-side helper: typed settings (validation, scaling, revisions) and the files helper with its `progress` callback. It never crosses the boundary.
+- `ModuleChannel` is the boundary: the only interface that crosses to a sandboxed page. Every request is async and takes and returns structured-clone data; `callQuery(method, request)` carries one encoded query and returns a `QueryResult` (reply bytes or a `QueryError`: `busy`, `refused` with the handler's code, `unavailable`, `too-big`, `format`, `unknown-method`, `timeout`); progress and other notifications are `ModuleChannelEvent` messages through `subscribe`. The same page then runs compiled into the app or inside a sandboxed iframe (section "Distribution"). The real channel is workbench-core over dk-session; the memory channel serves preview and tests.
+- `ModuleClient` (`createModuleClient(channel)`) is a page-side helper: typed settings (validation, scaling, revisions), the files helper with its `progress` callback and `service(desc)`, one async function per method of a protobuf-es service over `callQuery`. It never crosses the boundary.
 - A page reaches device data only through its module: settings, the module's own files and the module's operations. A service's files and formats stay private to the service; the module asks the service through its SDK exports.
 
 ## Discovery
@@ -134,34 +134,39 @@ Uploading an animation leaves the saved choice alone. Save selects a file presen
 
 `modules/tool/digikit/project-manager` is a content module of kind `tool`, like track-manager.
 
-- Device side: a SETTINGS row PROJECT with the current project's number, name and status. It calls `dk_project_current` and `dk_project_status`. These imports make the project service a hard need, so Transfer uploads the service with the module and the boot plan loads it.
+- Device side: a SETTINGS row PROJECT with the current project's number, name and status. Screen text (read-only, `[NO]` closes; the screen reads the service each frame, so it follows a save):
+  - `NNN NAME`: slot + 1 in three digits, the firmware's name bytes without trailing spaces; `NO PROJECT` when there is no current project (then no other line).
+  - Line 2: `FILE IGNORED` (status bit 3), else `CARD BUSY - RETRYING` (bit 2), else `CHANGED - NOT SAVED` (bit 1), else `SAVED`.
+  - Line 4: `NO DIGIKIT DATA` when bit 0 (file loaded) is clear.
 - Services load only as hard needs of selected modules (`runtime/core/src/rs/src/package/loader/plan.rs` `find_providers`; the system package holds only the runtime and the DIGIKIT menu; Transfer's `serviceRefs` offers a service only for a module that needs it). On a user card the project service runs only while Project Manager, or another module that imports a project call, is loaded. Installing Project Manager turns on per-project settings for every module.
-- Workbench page: a list of all project slots by number and name, with a mark on the current project and on slots that carry digikit data. Selecting one shows its saved state (slot, name, save stamp, write counter), its module list with each module's state on the card (present, missing, hash differs), and the number of saved settings per module. The page is read-only: no delete, rename or load.
+- Workbench page (`workbench/index.tsx`, built): left a list of the device's projects by number (slot + 1) and name, 16 per page with "More projects" (the reply's `next`), the current project marked, "no digikit data" for slots without data and "…" while that is unknown; right the selected project's number, name, write counter, save stamp and its modules with id, loaded or not, and settings count. For a project other than the current one the device reads its file first: `Get` answers `loading` and the page shows "Loading…" and asks again every 200 ms until it does not, stopping when the selection changes or the page closes. A failed query shows its reason in plain words. The page is read-only: no delete, rename or load.
 
-```text
-Modules > Project Manager
-+ Projects ------------+ + 012  DUB SKETCH ---------------------+
-| 003  INTRO           | | Saved     write 14, stamp 6A1F02C3   |
-| 012  DUB SKETCH      | | Modules   digikit/pluck   on card    |
-| 047  LIVE SET 2      | |           digikit/shot    missing    |
-|                      | | Settings  digikit/pluck   3 keys  >  |
-+----------------------+ +--------------------------------------+
-```
+Data path (built): page -> `client.service(ProjectManager)` -> `workbench/project_manager.proto` (`List`, `Get`) -> C handlers in `src/c/project_queries.c` -> `dk_project_list` / `dk_project_get` of the project service. `DK_E_AGAIN` becomes `loading`, `DK_E_NOT_FOUND` becomes `found = false`; the mapping is in `project_query.c` (host tests in `tests/`). The preview answers from `workbench/preview.ts` (fake projects; INTRO answers `loading` twice). The `.dkp` format stays private to the service. Page tests: `modules/tool/digikit/project-manager/tests/project-manager.page.test.ts` (memory channel). No device test of its own: the fixtures cover the query path.
 
-Data path: page -> `ModuleClient` operation -> module handler -> project service export -> runtime. The `.dkp` format stays private to the service.
+A module with a page and no settings registers a zero-settings descriptor, its Workbench registration; Project Manager does, and the `test/project-user` fixture covers that contract.
 
-- `list(cursor)`: the module calls a new service export over the service's slot scan. A page holds up to 16 summaries (slot, name, flags: current, has digikit data) and a continuation cursor.
-- `get(slot)`: the module calls a new service export that returns a bounded summary of one project: header fields, the module list with each module's state on the card, and the number of settings keys per module. It fits one reply; a longer module list pages by cursor.
+Next (agreed, follow-up PR): saved settings per module. Click a module row to expand its saved settings.
+- Path: page -> `getSettings({ slot, module, version, cursor })` -> Project Manager handler (maps structs to protobuf only) -> new project service export `dk_project_settings(slot, module_id, version, cursor, out, max)`, which owns the `.dkp` reading and paging. Runtime and transport unchanged.
+- The request names the module by id and the project's write counter (`version`); a mismatch answers "project changed" and the page reloads the project.
+- Each entry: key, full value length, the first 64 bytes of the value; a few entries per reply and a cursor.
+- The open project answers from memory; another project re-reads its `.dkp` per page (`DK_E_AGAIN` until read), no extra RAM.
+- The page shows a value as text when printable, else hex, with its size. Typed values need each module's schema and are later.
+- Tests: service units (paging, version mismatch, truncation, open vs other project), handler mapping units, page units (expand, paging, loading, text/hex); `test/project-user` gets the same query and its device case checks one saved setting.
+
 - Loading and renaming come later through the same path; the service owns their consistency (slot reuse, stamps, concurrent changes).
 
-## Operations (phase 2)
+## Queries (phase 2)
 
-A loaded module can expose named, typed operations beside its settings. The module owns the definitions, the C handlers and its page. Workbench supplies a client bound to the selected target and instance. The runtime supplies one dispatcher and one codec on the ColdFire. Modules supply operation metadata and handlers.
+A loaded module can answer typed, read-only queries from its page: live state, lists, details. Actions that change state come later as their own step with retry safety (retained results, repeat request ids, an explicit unknown outcome).
 
-- Schema: operations are declared in `workbench.toml` with the setting types plus bounded lists of records. Patchkit generates the C request and response structs, the dispatch table and handler signatures, and the TypeScript types. The author implements named functions, for example `pm_list(ctx, request, response)`.
-- Codec: a tag-length-value format with field ids, generated as `sdk/sdk.toml` is today (`packages/patchkit/src/sdkgen.rs`), with shared vectors. Field ids give the same schema evolution as protobuf. Nanopb is not used for settings. It is the fallback for operations only if a measurement favours it: a scratch probe linked 7,742 bytes of codec, descriptors and handler per module, and it adds a third-party C codec, a Python generator and a host protobuf library.
-- Transport: the operation envelope extends the MODULE_UI command with capability negotiation and is versioned apart from the runtime release. The MIDI handler acknowledges with a ticket; the UI task rechecks the instance and runs the handler; the client polls with a deadline. A repeated request id within one live instance returns its original result within a bounded window. A stale ticket yields an explicit unknown outcome, and the client rereads state before another mutation. The device reports busy when its queue is full. Unloading cancels queued work before the module's code is released.
-- Budget: the protocol allows 160 request bytes and 879 reply bytes. Reserve up to 24 bytes for the envelope (operation, instance, request id, revision or cursor). A project-list page is at most 16 summaries of up to 32 bytes. Larger data uses the files API.
+- **Schema:** a module-local `workbench/<name>.proto` holding one `service` of read-only methods. A subset of proto3 only: `uint32`, `int32`, `bool`, enums, `string`/`bytes` with `[(dk.max_len)]`, nested messages, `repeated` with `[(dk.max_count)]` (`sdk/proto/dk/options.proto`). Patchkit refuses maps, `oneof`, floats, 64-bit fields, groups and unbounded fields.
+- **Code generation, at build time, in patchkit (Rust, `protox`):** per message a C struct with straight-line `_decode` and `_encode` functions and a maximum encoded size; per method a call function (decode request, call the handler, encode reply) and the handler prototype the author implements, e.g. `int32_t pm_list(dk_module_ctx *, const pm_ListRequest *, pm_ListReply *)`; the query table. Decoders skip unknown fields. Patchkit refuses a method whose request or reply can exceed the transport budget, and a struct over the stack budget. No tables are interpreted on the device; nothing from nanopb or Python.
+- **Wire helpers:** varint, key, length and skip helpers (`sdk/include/dk/wire.h`, `sdk/src/wire/wire.c`) are linked into each module that uses queries (about 600 bytes). The runtime may provide them once as SDK imports later, when several modules use queries.
+- **TypeScript:** `protobuf-es` from the same `.proto`. Patchkit writes the descriptor set; `packages/wire` feeds it to `protoc-gen-es` (no `protoc` or `buf`). Pages call `client.service(ProjectManager).list(...)`.
+- **Binary interface:** in `init` the module calls `dk_workbench_register_queries(ctx, const dk_workbench_query *table, uint32_t count)` after `dk_workbench_register`. `dk_workbench_query` (`sdk/include/dk/query.h`, the one definition) is `{ int32_t (*call)(dk_module_ctx *, const uint8_t *in, uint32_t in_len, uint8_t *out, uint32_t *out_len); uint8_t method; uint8_t reserved[3]; }`: 8 bytes in the module and in the runtime (`#[repr(C)]`, asserted on both sides). The layout is explicit because the ColdFire compiler aligns pointers to 2 bytes (no `-malign-int`), so a table may start on any 2-byte boundary and the runtime reads entries unaligned. `method` is the method's 1-based position in the `service`; methods are only appended, and patchkit checks that against the previous descriptor. The runtime treats requests and replies as bytes.
+- **Transport:** the MODULE_UI command gains a call verb: `[verb][rec][instance u32][request id u32][method u8][request bytes]`. The limits are in `sdk/sdk.toml` `[protocol.limits]` (`query_request_max` 149 request bytes after the envelope, `query_reply_max` 870 reply bytes after the poll header); the runtime and patchkit's budget check read the same values. The MIDI handler checks the envelope and queues; on the next UI pass the runtime checks the loaded instance, calls the module's function with an output buffer of the reply budget, and keeps the outcome for the poll verb. The poll reply of a call is `[state u8][runtime status i32][handler result i32][reply bytes]`: the runtime status is OK when the handler ran, the handler's return value is only in its own field. One call is in flight for the whole device (one request buffer, one outcome buffer): a new call from any module answers busy while a call is queued, running or its outcome is unread. The poll hands the outcome over and frees it; an unread outcome is freed after 2 s. The settings request and the call are served in turn, one per UI pass. A call is matched by module, instance and request id, so a reload into the same slot cannot take the old call's result; unloading runs on the UI task, never inside a call, and cancels a queued call or held outcome before the code is released. Capability bit `MODULE_QUERIES`; patchkit writes the new minimum runtime only for modules that declare queries.
+- **Client results:** `{ ok: true, value }` or `{ ok: false, error }` with `busy`, `refused` (the handler's error code), `unavailable`, `too-big`, `timeout`. A read is safe to repeat, so a lost reply is asked again.
+- **Tests:** codec round trips against `protobuf-es` (`runtime/core/vectors/wire-vectors.json`) on the host; patchkit schema and budget units; runtime queue units; `@digi/module-ui` client units with the memory channel; one assembly case (the packed fixture registers its table and one call round-trips); one device test per device (a call reaches the handler on the UI task).
 
 ## Distribution
 
@@ -175,7 +180,7 @@ A loaded module can expose named, typed operations beside its settings. The modu
 `tests/fixtures/modules/settings-a/` stays the authoring example. Phase 1 adds one setting of each new type to it, or a second fixture if a distinct module identity is needed for a version 2 descriptor.
 
 - The preview seeds the sample as installed and loaded on the default simulated card, routes its instance to the memory client and uses the real sidebar discovery, generated form and page. One settings store per simulated target, kept for the target's life (device settings persist across module reloads); a fresh client and channel on each page open; channels are released on unload, disconnect or target change. The preview never inserts a menu item by hand.
-- `createMemoryModuleChannel(schema, options)` lives in `@digi/module-ui`: a `ModuleChannel` with values, a revision and files (module-owned operation handlers come in phase 2), with no Tauri, MIDI, filesystem or firmware dependency. It shares the pure validation code with the real client.
+- `createMemoryModuleChannel(schema, options)` lives in `@digi/module-ui`: a `ModuleChannel` with values, a revision and files and one query service (`memoryQueryService(desc, handlers)`; a handler throws `QueryRefusal(code)` to refuse; `inspect.failNextQuery` forces `busy` or `timeout`), with no Tauri, MIDI, filesystem or firmware dependency. It shares the pure validation code with the real client.
 
 | Test owner | Observable behaviour |
 | --- | --- |
@@ -196,7 +201,7 @@ A loaded module can expose named, typed operations beside its settings. The modu
 ## Phases
 
 1. Typed settings and page plumbing (about 1-1.5 days): new types in patchkit, runtime and TS; generated C and TS; `@digi/module-ui` with the memory client; generated page registry; Transfer Open; settings-a migrated; descriptor TOML reader deleted; cost table measured.
-2. Operations (about 2-3 days, medium confidence): envelope and dispatch on the UI task, generated codec and handler signatures, typed `ops` in `ModuleClient`, memory client handlers, one operation on the settings-a fixture.
+2. Queries (about 1.5-2 days): generated codecs and call functions, runtime call verb and queue, `client.service()` and memory-channel handlers, one query on the settings-a fixture.
 3. Project Manager, read-only (about 1-1.5 days): module with the SETTINGS row; service exports for list and get; `list` and `get` operations; the page.
 
 Later: `.dkmod` import in Workbench with the iframe sandbox; a generic device-side settings page under DIGIKIT driven by the same descriptor.

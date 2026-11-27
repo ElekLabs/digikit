@@ -108,6 +108,19 @@
     ],
     "version": 2
    }
+  },
+  {
+   "name": "v1_zero_settings",
+   "module": "test/none",
+   "module_name": "Zero",
+   "toml": "[workbench]\nversion = 1\n",
+   "bytes_hex": "01045a65726f00",
+   "expected_schema": {
+    "module": "test/none",
+    "name": "Zero",
+    "settings": [],
+    "version": 1
+   }
   }
  ],
  "values": [

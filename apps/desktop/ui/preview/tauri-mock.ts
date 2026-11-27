@@ -146,6 +146,8 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
         return (await cardCall(method, (args?.params as Record<string, unknown>) ?? {})) as T;
       return {} as T; // midi.usb.in / midi.usb.out: nothing is ever answered
     }
+    case 'session_set_actions_enabled':
+      return undefined as T; // the native Session menu; the preview has none
     default:
       throw new Error(`preview: no mock for the Tauri command ${cmd}`);
   }

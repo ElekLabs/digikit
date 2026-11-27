@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DkModule } from '@digi/dk-session';
 import { createModuleClient, type ModuleFileClient } from '@digi/module-ui';
 import { schema as sample } from '../../../../tests/fixtures/modules/settings-a/workbench/gen/settings';
+import { SettingsA } from '../../../../tests/fixtures/modules/settings-a/workbench/gen/settings_a_pb.js';
 import { schema as bootscreen } from '../../../../modules/tool/tools/bootscreen/workbench/gen/settings';
 import { createPreviewChannels } from '../preview/module-channels';
 import { previewSampleIds, previewSettingsSchemas } from '../preview/module-schemas';
@@ -64,5 +65,22 @@ describe('the preview channels of simulated targets', () => {
         error: { code: 'invalid', message: /missing/ },
       });
     expect(await settings.put('active', 'intro.dkbs')).toMatchObject({ ok: true, value: 'intro.dkbs' });
+  });
+  it('answers BootAtInit with the boot value the store held when the instance loaded', async () => {
+    const factory = createPreviewChannels(schemas(), () => noFiles());
+    const request = (live: { on: boolean }) =>
+      factory({ target: 'A', module: module(sample.module), current: () => live.on });
+    const first = createModuleClient(request({ on: true }));
+    expect(await first.service(SettingsA).bootAtInit({})).toMatchObject({ ok: true, value: { present: false } });
+    const settings = first.settings(sample);
+    await settings.get('boot');
+    expect(await settings.put('boot', 'intro.dkbs')).toMatchObject({ ok: true });
+    // the same instance still reports init's value; a reloaded instance reads the new one
+    expect(await first.service(SettingsA).bootAtInit({})).toMatchObject({ value: { present: false } });
+    const again = createModuleClient(request({ on: true }));
+    expect(await again.service(SettingsA).bootAtInit({})).toMatchObject({
+      ok: true,
+      value: { present: true, value: 'intro.dkbs' },
+    });
   });
 });

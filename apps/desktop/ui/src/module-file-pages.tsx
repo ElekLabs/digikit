@@ -9,6 +9,7 @@ import {
 } from '@digi/module-ui';
 import { For, Show, createSignal } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
+import { deviceQueryChannel } from '@digi/workbench-core/module-ui/device-queries.ts';
 import { createDeviceModuleChannel } from '@digi/workbench-core/module-ui/device-module-channel.ts';
 import { deviceSettingsChannel } from '@digi/workbench-core/module-ui/device-settings.ts';
 import { bindModuleFiles } from '@digi/workbench-core/module-ui/module-files.ts';
@@ -154,6 +155,7 @@ export function moduleFilePages(app: TransferApp) {
         channel: (current) =>
           createDeviceModuleChannel({
             settings: deviceSettingsChannel(id),
+            queries: deviceQueryChannel(),
             files: bindModuleFiles(id, app.target.bindSession(), current),
           }),
       }),

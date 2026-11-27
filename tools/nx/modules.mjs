@@ -4,7 +4,7 @@
 // metadata.runtimeAcceptance), test-host, test-device and test-conformance (vitest directly, after the packs).
 // This file wires the plugin. Build and pack targets are in module-build.mjs, device-test cache keys in
 // device-test-keys.mjs, and the shape of device, conformance and test-only targets in device-tests.mjs.
-import { existsSync, globSync, readFileSync } from 'node:fs';
+import { existsSync, globSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   read,
@@ -155,14 +155,17 @@ export const createNodesV2 = [
         );
       if (devices.length && packable.has(m.id)) targets.pack = packTarget(ctx.workspaceRoot, byId, m, devices);
       // The merge gate's static checks run `lint`: it carries the generated-file check of a module with a Workbench declaration.
-      if (existsSync(join(ctx.workspaceRoot, root, 'workbench.toml'))) {
+      const hasQueries =
+        existsSync(join(ctx.workspaceRoot, root, 'workbench')) &&
+        readdirSync(join(ctx.workspaceRoot, root, 'workbench')).some((f) => f.endsWith('.proto'));
+      if (existsSync(join(ctx.workspaceRoot, root, 'workbench.toml')) || hasQueries) {
         targets['workbench-ts-check'] = workbenchTsCheckTarget(root);
         // Nx lets the project's own `lint` replace a target of this plugin, so such a lint must list the check itself.
         const own = projectFiles.find(([f]) => dirname(f) === root)?.[1].targets?.lint;
         if (!own) targets.lint = { executor: 'nx:noop', cache: false, dependsOn: ['workbench-ts-check'] };
         else if (!own.dependsOn?.includes('workbench-ts-check'))
           throw new Error(
-            `${root}/project.json: its lint target must list workbench-ts-check in dependsOn (the module has a workbench.toml)`,
+            `${root}/project.json: its lint target must list workbench-ts-check in dependsOn (the module has a workbench.toml or a workbench/*.proto)`,
           );
       }
       const aliasesTarget = packAliasesTarget(ctx.workspaceRoot, byId, recs);
@@ -171,10 +174,14 @@ export const createNodesV2 = [
         targets['test-host'] = {
           executor: 'nx:run-commands',
           cache: false,
-          inputs: ['hostTests', '{workspaceRoot}/vitest.host/module-tests.json'],
+          inputs: [
+            'hostTests',
+            '{workspaceRoot}/vitest.host/module-tests.json',
+            '{workspaceRoot}/vitest.host/module-pages.json',
+          ],
           outputs: [],
           options: {
-            command: `pnpm exec vitest run --config vitest.host.config.ts --project module-tests ${root}/`,
+            command: `pnpm exec vitest run --config vitest.host.config.ts --project module-tests --project module-pages ${root}/`,
             cwd: '.',
           },
         };

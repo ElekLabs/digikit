@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@bufbuild/protobuf": "2.17.0",
     "@digi/module-ui": "workspace:*",
+    "@digi/wire": "workspace:*",
     "solid-js": "1.9.15"
   }
 }

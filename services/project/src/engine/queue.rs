@@ -59,6 +59,10 @@ pub enum Work {
     Load(u32),
     /// The setter got a value that is no slot (-1 or the live mirror): the project is left and none is current.
     Leave { setter_value: u32 },
+    /// `dk_project_get` asked for the summary of the slot: read its file.
+    Peek(u32),
+    /// The first listing of the whole folder, for the data bit of `dk_project_list`.
+    Index,
 }
 
 impl Work {
@@ -72,6 +76,10 @@ impl Work {
             Some((ScanFor::Save, slot))
         } else if let Work::Load(slot) = *self {
             Some((ScanFor::Load, slot))
+        } else if let Work::Peek(slot) = *self {
+            Some((ScanFor::Peek, slot))
+        } else if let Work::Index = *self {
+            Some((ScanFor::Index, 0))
         } else {
             None
         }
@@ -87,7 +95,24 @@ pub struct WorkQueue {
     pasted: SlotSet,
     /// A save that waits for the firmware's record of its slot: since when.
     save_wait: Option<u32>,
+    /// The slot whose summary `dk_project_get` asked for: the latest request replaces an earlier one that was not started.
+    peek: Option<u32>,
+    /// The listing for the data bit: not started yet (zero: it starts when nothing else waits), started, or refused and waiting for its retry time.
+    index: IndexAsk,
+    index_retry_at: u32,
 }
+
+/// Where the listing for the data bit is.
+#[repr(u8)] // zero first: the service is a bss static
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum IndexAsk {
+    NotStarted,
+    Started,
+    Refused,
+}
+
+/// A refused listing for the data bit is asked again after this time. It has its own clock: it never holds back the work of a project.
+pub const INDEX_RETRY_MS: u32 = 5000;
 
 impl WorkQueue {
     pub const fn new() -> WorkQueue {
@@ -97,10 +122,14 @@ impl WorkQueue {
             cleared: SlotSet::new(),
             pasted: SlotSet::new(),
             save_wait: None,
+            peek: None,
+            index: IndexAsk::NotStarted,
+            index_retry_at: 0,
         }
     }
 
-    /// Does nothing wait to start (and no save waits for the firmware's record)?
+    /// Does nothing wait to start (and no save waits for the firmware's record)? A read for the Project Manager is no work a reload must wait for: it is not carried, and its `get`
+    /// asks again.
     pub fn is_empty(&self) -> bool {
         self.load.is_none()
             && self.save.is_none()
@@ -130,6 +159,10 @@ impl WorkQueue {
             self.pasted.insert(slot);
         } else if scan_for == ScanFor::Save {
             self.save.get_or_insert(slot);
+        } else if scan_for == ScanFor::Peek {
+            self.peek.get_or_insert(slot);
+        } else if scan_for == ScanFor::Index {
+            self.index = IndexAsk::NotStarted;
         } else {
             self.load.get_or_insert(slot);
         }
@@ -138,6 +171,17 @@ impl WorkQueue {
     /// Queue a load of `slot` (no hook asked for it).
     pub fn add_load(&mut self, slot: u32) {
         self.load = Some(slot);
+    }
+
+    /// The store refused the listing for the data bit at `now`: it is asked again after `INDEX_RETRY_MS`.
+    pub fn index_refused(&mut self, now: u32) {
+        self.index = IndexAsk::Refused;
+        self.index_retry_at = now.wrapping_add(INDEX_RETRY_MS);
+    }
+
+    /// Queue the read of the summary of `slot` (`dk_project_get`); a request that was not started is replaced.
+    pub fn add_peek(&mut self, slot: u32) {
+        self.peek = Some(slot);
     }
 
     /// Queue the quiet retry of a failed load of `slot`, unless a load is queued already.
@@ -191,6 +235,26 @@ impl WorkQueue {
                 return Some(Work::Leave { setter_value: load });
             }
             return Some(Work::Load(load));
+        }
+        // the Project Manager's reads wait for the work of the project; the listing for the data bit comes when nothing else is queued
+        if let Some(slot) = self.peek {
+            if env.live_op() != 0 {
+                return None;
+            }
+            self.peek = None;
+            return Some(Work::Peek(slot));
+        }
+        if self.index == IndexAsk::Refused
+            && (env.now_ms().wrapping_sub(self.index_retry_at) as i32) >= 0
+        {
+            self.index = IndexAsk::NotStarted;
+        }
+        if self.index == IndexAsk::NotStarted {
+            if env.live_op() != 0 {
+                return None;
+            }
+            self.index = IndexAsk::Started;
+            return Some(Work::Index);
         }
         None
     }

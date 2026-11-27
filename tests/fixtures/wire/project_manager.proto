@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package pm;
+
+import "dk/options.proto";
+
+service ProjectManager {
+  rpc List(ListRequest) returns (ListReply);
+}
+
+message ListRequest {
+  uint32 cursor = 1;
+}
+
+message Project {
+  uint32 slot = 1;
+  string name = 2 [(dk.max_len) = 16];
+  bool current = 3;
+  // equal value names in nested enums: the generated constants carry the enum name
+  enum State {
+    STATE_IDLE = 0;
+    STATE_NONE = 1;
+  }
+}
+
+message ListReply {
+  repeated Project items = 1 [(dk.max_count) = 16];
+  uint32 next = 2;
+}
+
+enum Mode {
+  MODE_OFF = 0;
+  MODE_SOFT = 1;
+  MODE_HARD = 2;
+}
+
+// Every allowed field type once.
+message Coverage {
+  Mode mode = 1;
+  int32 offset = 2;
+  bytes blob = 3 [(dk.max_len) = 8];
+  repeated uint32 levels = 4 [(dk.max_count) = 6];
+  Project project = 5;
+  bool flag = 6;
+  uint32 count = 7;
+  string label = 8 [(dk.max_len) = 5];
+  repeated string tags = 9 [(dk.max_len) = 4, (dk.max_count) = 3];
+  repeated int32 deltas = 10 [(dk.max_count) = 4];
+  repeated bool bits = 11 [(dk.max_count) = 5];
+  repeated Mode modes = 12 [(dk.max_count) = 3];
+  enum Level {
+    LEVEL_NONE = 0;
+    STATE_NONE = 2;
+  }
+}

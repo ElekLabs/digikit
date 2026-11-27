@@ -1,0 +1,5 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "digikit/project-manager",
+  "implicitDependencies": ["core/services/project", "dkrt-svc-project"]
+}

@@ -209,6 +209,9 @@ pub struct TaskRun {
     save_end: Option<SaveEnd>,
     /// The status that ended the run: `OK`, or the last status of a write that gave up.
     result: i32,
+    /// What the run leaves in the store for the data index: the slot, and 0 for none, 1 for no file, 2 for a file.
+    data_slot: u32,
+    data_state: u8,
 }
 
 impl TaskRun {
@@ -219,15 +222,33 @@ impl TaskRun {
             at: 0,
             save_end: None,
             result: OK,
+            data_slot: 0,
+            data_state: 0,
         }
     }
 
-    /// Start a new list (in place): no tasks, no SAVED event.
+    /// Start a new list (in place): no tasks, no SAVED event, no change of the data index.
     pub fn begin(&mut self) {
         self.count = 0;
         self.at = 0;
         self.save_end = None;
         self.result = OK;
+        self.data_state = 0;
+    }
+
+    /// When the run ended well, `slot` has a file (`has`) or none.
+    pub fn set_data_after(&mut self, slot: u32, has: bool) {
+        self.data_slot = slot;
+        self.data_state = if has { 2 } else { 1 };
+    }
+
+    /// What the run left for the data index, once it ended well.
+    pub fn data_after(&self) -> Option<(u32, bool)> {
+        if self.data_state == 0 || self.result != OK {
+            None
+        } else {
+            Some((self.data_slot, self.data_state == 2))
+        }
     }
     pub fn push(&mut self, task: Task) {
         if self.count < TASK_MAX {

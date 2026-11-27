@@ -438,5 +438,23 @@ fn a_stored_file_name_is_checked_on_read_against_the_declared_extension() {
 fn typed_kinds_do_not_grow_the_registry() {
     // Static RAM: bounds are read from the stored descriptor bytes, a field keeps offsets only. Unchanged by the typed kinds.
     assert_eq!(core::mem::size_of::<Descriptor>(), 1092);
-    assert_eq!(core::mem::size_of::<Registry>(), 16656);
+    assert_eq!(core::mem::size_of::<Registry>(), 17840);
+}
+
+#[test]
+fn a_module_without_settings_registers_queries_and_answers_a_setting_as_unknown() {
+    use super::query_table::Query;
+    unsafe extern "C" fn call(_: *mut u8, _: *const u8, _: u32, _: *mut u8, _: *mut u32) -> i32 {
+        0
+    }
+    static TABLE: [Query; 2] = [Query::new(1, call), Query::new(2, call)];
+    let mut reg = Registry::EMPTY;
+    reg.modules[0].descriptor = Descriptor::parse(b"test/m", b"\x01\x04Tool\x00").unwrap();
+    assert_eq!(reg.set_queries(0, TABLE.as_ptr() as *const u8, 2), OK);
+    reg.publish(0);
+    let instance = reg.modules[0].instance;
+    assert_ne!(instance, 0);
+    let mut out = [0; DESCRIPTOR_MAX];
+    let get = request(GET, instance, 1, 0, 0, b"");
+    assert_eq!(reg.handle(&get, &mut out), Err(E_SET_KEY));
 }

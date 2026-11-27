@@ -75,6 +75,8 @@ fn a_clear_the_store_refuses_for_another_reason_is_logged_and_dropped() {
     r.rec(5, b"PROJ", 0x55);
     let file = file_bytes(5, b"PROJ", 0x55, 1, &[(b"test/owner/k", b"x")]);
     r.f.store.insert(path(5, b"PROJ"), file.clone());
+    // the first listing of the folder (the data bit) is done before the store refuses the clear's
+    r.settle();
     r.f.refuse_list = 2;
     r.f.refuse_status = dkrt_sdk::proto::E_NOSTORE;
     r.hook_clear(5);

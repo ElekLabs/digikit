@@ -1,4 +1,3 @@
-use super::*;
 use crate::build::workbench::fixture::{vector_descriptors, vector_values};
 use crate::build::workbench::schema::Schema;
 

@@ -649,6 +649,8 @@ SC_ALLOWED_PREFIXES = (
 # and the runtimeAcceptance metadata may name them; runtime implementation may not.
 # The device-literal baseline lists file paths, among them module directories.
 SC_PATH_LIST = "tools/nx/device-literals.baseline.json"
+# Generated lockfiles list every workspace package by path (generated file).
+SC_GENERATED = ("pnpm-lock.yaml",)
 SC_RUNTIME_TEST = "runtime/core/tests/capacity/inferred/inferred-needs.device.test.ts"
 SC_RUNTIME_PROJECT = "runtime/core/tests/capacity/inferred/project.json"
 SC_SKIP_DIRS = {".git", "out", "node_modules", "target", "firmware", ".venv", "dist"}
@@ -1454,7 +1456,7 @@ def sc_hits(root: Path, mods: list[Module]) -> list[tuple[str, int, Module, str]
         if (
             f.endswith(".md")
             or f.startswith(SC_ALLOWED_PREFIXES)
-            or f in (SC_RUNTIME_TEST, SC_PATH_LIST)
+            or f in (SC_RUNTIME_TEST, SC_PATH_LIST, *SC_GENERATED)
         ):
             continue
         data = (root / f).read_bytes()

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package settings_a;
+
+import "dk/options.proto";
+
+// The boot value the module read from its settings at init (not the current setting).
+service SettingsA {
+  rpc BootAtInit(BootAtInitRequest) returns (BootAtInitReply);
+}
+
+message BootAtInitRequest {}
+
+message BootAtInitReply {
+  bool present = 1;
+  string value = 2 [(dk.max_len) = 16];
+}
