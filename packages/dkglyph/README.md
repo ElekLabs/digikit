@@ -56,7 +56,10 @@ From a clean checkout (`pnpm install` once). SET defaults to `sdk/glyphs/digikit
 mise run glyphs -- check [SET]            # errors, warnings, coverage; exit 1 on errors
 mise run glyphs -- sheet [SET] [-o PNG]   # contact sheet, default out/glyphs/<set>.png
 mise run glyphs -- dev [SET] [--no-open] [--port N]   # live preview
+mise run glyphs -- json [SET]             # the built set as JSON on stdout (what dev serves)
 ```
+
+Helper modules (any non-`.glyph.mjs` file in the set that glyph files import) are allowed; `dev` rebuilds the set in a fresh process, so helper edits reload too.
 
 `check` prints one line per message and then the totals:
 

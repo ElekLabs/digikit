@@ -59,6 +59,13 @@ describe('Raster', () => {
     }
   });
 
+  it('plots an exact 45 degree line as one pixel per column', () => {
+    const p = new Raster(9, 9);
+    p.plot((t) => 1 - 2 * t, { x0: 0, y0: 0, w: 9, h: 9 });
+    expect(p.count()).toBe(9);
+    for (let x = 0; x < 9; x += 1) expect(p.get(x, x)).toBe(1);
+  });
+
   it('counts clipped pixels instead of drawing them', () => {
     const p = new Raster(4, 4);
     p.line(-2, 0, 5, 0);

@@ -3,8 +3,9 @@
 //
 //     node packages/dkglyph/cli/glyphs.mjs check [SET]                    errors, warnings, coverage; exit 1 on errors
 //     node packages/dkglyph/cli/glyphs.mjs sheet [SET] [-o PNG]           contact sheet, default out/glyphs/<set>.png
+//     node packages/dkglyph/cli/glyphs.mjs json [SET]                     the built set as JSON on stdout
 //     node packages/dkglyph/cli/glyphs.mjs dev [SET] [--no-open] [--port N]   Vite preview that reloads when a glyph file changes
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdirSync, watch, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +64,13 @@ async function sheet(dir, out) {
   console.log(`wrote ${path.relative(process.cwd(), file) || file}`);
 }
 
+async function json(dir) {
+  const set = await loadSet(dir);
+  const report = checkSet(set);
+  const errors = set.glyphs.filter((g) => g.error).map((g) => ({ id: g.id, ...g.error }));
+  process.stdout.write(JSON.stringify({ ...setJson(set), report, errors, catalogue: set.catalogue }));
+}
+
 function openBrowser(url) {
   const [cmd, ...a] =
     process.platform === 'darwin'
@@ -77,26 +85,41 @@ function openBrowser(url) {
 
 async function dev(dir, flags) {
   const { createServer } = await import('vite');
-  const build = async () => {
-    const set = await loadSet(dir);
-    const report = checkSet(set);
-    const errors = set.glyphs.filter((g) => g.error).map((g) => ({ id: g.id, ...g.error }));
-    return { ...setJson(set), report, errors, catalogue: set.catalogue };
+  // A fresh process per build: Node's ESM cache would keep stale helper modules.
+  const build = () =>
+    new Promise((resolve) => {
+      execFile(
+        process.execPath,
+        [fileURLToPath(import.meta.url), 'json', dir],
+        { cwd: root, env: process.env, maxBuffer: 256 * 1024 * 1024 },
+        (err, stdout, stderr) => {
+          if (err) {
+            const message = (stderr || err.message).trim();
+            resolve(JSON.stringify({ error: message, errors: [{ id: '(set)', message }] }));
+          } else resolve(stdout);
+        },
+      );
+    });
+  let cached;
+  let pending;
+  const getBody = () => {
+    if (cached !== undefined) return Promise.resolve(cached);
+    pending ??= build().then((body) => {
+      cached = body;
+      pending = undefined;
+      return body;
+    });
+    return pending;
   };
   const plugin = {
     name: 'glyphs-dev',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         if ((req.url ?? '').split('?')[0] !== '/set.json') return next();
-        try {
-          const body = JSON.stringify(await build());
-          res.setHeader('content-type', 'application/json');
-          res.setHeader('cache-control', 'no-store');
-          res.end(body);
-        } catch (e) {
-          res.statusCode = 500;
-          res.end(JSON.stringify({ error: e.message }));
-        }
+        const body = await getBody();
+        res.setHeader('content-type', 'application/json');
+        res.setHeader('cache-control', 'no-store');
+        res.end(body);
       });
       let timer;
       watch(dir, { recursive: true }, (_event, name) => {
@@ -104,6 +127,7 @@ async function dev(dir, flags) {
         clearTimeout(timer);
         timer = setTimeout(() => {
           console.log(`changed: ${name ?? dir}`);
+          cached = undefined;
           server.ws.send({ type: 'custom', event: 'glyphs:update', data: {} });
         }, 50);
       }).unref();
@@ -125,5 +149,6 @@ const [command = 'check', ...rest] = process.argv.slice(2);
 const { flags, set } = parseArgs(rest);
 if (command === 'check') await check(set);
 else if (command === 'sheet') await sheet(set, flags.out);
+else if (command === 'json') await json(set);
 else if (command === 'dev') await dev(set, flags);
 else fail(`unknown command ${command}\n${usage}`);

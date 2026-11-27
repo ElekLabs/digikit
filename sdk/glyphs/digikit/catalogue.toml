@@ -1,6 +1,483 @@
-# One entry per glyph the set should have. `v1 = true` marks a glyph the first release needs.
-# [[glyph]]
-# id = "control/knob"
-# group = "control"
-# v1 = true
-# note = "unipolar parameter value"
+# Glyphs the digikit set should provide. v1 = true marks the first batch.
+# Groups: control, toggle, play, transport, wave, lfo, filter, env, synth, fx, mod, system, font.
+
+# control: value glyphs for parameter slots (knob class unless noted)
+[[glyph]]
+id = "control/knob"
+group = "control"
+v1 = true
+note = "unipolar ring + pointer, 270 deg sweep"
+[[glyph]]
+id = "control/knob-bipolar"
+group = "control"
+v1 = true
+note = "ring + pointer, top tick, - and + beside the gap"
+[[glyph]]
+id = "control/fader"
+group = "control"
+v1 = true
+note = "vertical bar on a dotted scale"
+[[glyph]]
+id = "control/pan"
+group = "control"
+v1 = true
+note = "L/R position marker on a horizontal scale"
+[[glyph]]
+id = "control/tune"
+group = "control"
+v1 = true
+note = "bipolar pitch: semitone ticks, centre detent"
+[[glyph]]
+id = "control/bar"
+group = "control"
+v1 = false
+note = "horizontal amount bar"
+[[glyph]]
+id = "control/steps"
+group = "control"
+v1 = false
+note = "stepped selector, N detents"
+[[glyph]]
+id = "control/mix"
+group = "control"
+v1 = false
+note = "dry/wet balance"
+
+# toggle: two or more states with optional transitions
+[[glyph]]
+id = "toggle/switch"
+group = "toggle"
+v1 = true
+note = "off/on slide switch, 3-frame transition"
+[[glyph]]
+id = "toggle/check"
+group = "toggle"
+v1 = false
+note = "icon class checkbox"
+[[glyph]]
+id = "toggle/led"
+group = "toggle"
+v1 = false
+note = "inline dot, outline/filled"
+[[glyph]]
+id = "toggle/lock"
+group = "toggle"
+v1 = true
+note = "unlocked/locked, shackle animates"
+[[glyph]]
+id = "toggle/mute"
+group = "toggle"
+v1 = true
+note = "speaker on/muted"
+[[glyph]]
+id = "toggle/solo"
+group = "toggle"
+v1 = false
+[[glyph]]
+id = "toggle/link"
+group = "toggle"
+v1 = true
+note = "unlinked/linked chain"
+[[glyph]]
+id = "toggle/latch"
+group = "toggle"
+v1 = false
+note = "momentary vs latch button"
+
+# play: sample playback (shot); one glyph per mode, same on every device
+[[glyph]]
+id = "play/fwd"
+group = "play"
+v1 = true
+[[glyph]]
+id = "play/rev"
+group = "play"
+v1 = true
+[[glyph]]
+id = "play/fwd-loop"
+group = "play"
+v1 = true
+[[glyph]]
+id = "play/rev-loop"
+group = "play"
+v1 = true
+[[glyph]]
+id = "play/mode"
+group = "play"
+v1 = true
+note = "states glyph combining the four modes, with transitions"
+[[glyph]]
+id = "play/start"
+group = "play"
+v1 = true
+note = "start marker, icon class"
+[[glyph]]
+id = "play/end"
+group = "play"
+v1 = true
+note = "end marker, icon class"
+[[glyph]]
+id = "play/slot"
+group = "play"
+v1 = true
+note = "sample slot / picker"
+[[glyph]]
+id = "play/zoom"
+group = "play"
+v1 = false
+[[glyph]]
+id = "play/retrig"
+group = "play"
+v1 = false
+[[glyph]]
+id = "play/oneshot"
+group = "play"
+v1 = false
+
+# transport (icon class)
+[[glyph]]
+id = "transport/play"
+group = "transport"
+v1 = true
+[[glyph]]
+id = "transport/stop"
+group = "transport"
+v1 = true
+[[glyph]]
+id = "transport/rec"
+group = "transport"
+v1 = true
+[[glyph]]
+id = "transport/pause"
+group = "transport"
+v1 = false
+
+# wave: oscillator and LFO waveforms (knob tiles; panel variants later)
+[[glyph]]
+id = "wave/sine"
+group = "wave"
+v1 = true
+[[glyph]]
+id = "wave/tri"
+group = "wave"
+v1 = true
+[[glyph]]
+id = "wave/saw"
+group = "wave"
+v1 = true
+[[glyph]]
+id = "wave/square"
+group = "wave"
+v1 = true
+[[glyph]]
+id = "wave/pulse"
+group = "wave"
+v1 = true
+note = "value glyph: width"
+[[glyph]]
+id = "wave/noise"
+group = "wave"
+v1 = true
+[[glyph]]
+id = "wave/random"
+group = "wave"
+v1 = true
+note = "sample and hold steps"
+[[glyph]]
+id = "wave/expo"
+group = "wave"
+v1 = false
+[[glyph]]
+id = "wave/ramp"
+group = "wave"
+v1 = false
+[[glyph]]
+id = "wave/morph"
+group = "wave"
+v1 = false
+note = "value glyph: sine to saw to square"
+
+# lfo: lfo_shapes_1 shapes
+[[glyph]]
+id = "lfo/stp4"
+group = "lfo"
+v1 = false
+[[glyph]]
+id = "lfo/puls"
+group = "lfo"
+v1 = false
+[[glyph]]
+id = "lfo/hsin"
+group = "lfo"
+v1 = false
+[[glyph]]
+id = "lfo/absn"
+group = "lfo"
+v1 = false
+[[glyph]]
+id = "lfo/soft"
+group = "lfo"
+v1 = false
+[[glyph]]
+id = "lfo/duck"
+group = "lfo"
+v1 = false
+[[glyph]]
+id = "lfo/wobl"
+group = "lfo"
+v1 = false
+[[glyph]]
+id = "lfo/trig-mode"
+group = "lfo"
+v1 = false
+note = "states: FRE TRG HLD ONE HLF"
+
+# filter: response curves (knob tiles); resonance animates the peak
+[[glyph]]
+id = "filter/lp"
+group = "filter"
+v1 = true
+[[glyph]]
+id = "filter/hp"
+group = "filter"
+v1 = true
+[[glyph]]
+id = "filter/bp"
+group = "filter"
+v1 = true
+[[glyph]]
+id = "filter/notch"
+group = "filter"
+v1 = false
+[[glyph]]
+id = "filter/peak"
+group = "filter"
+v1 = false
+[[glyph]]
+id = "filter/comb"
+group = "filter"
+v1 = false
+[[glyph]]
+id = "filter/resonator"
+group = "filter"
+v1 = false
+note = "resonator bank: several narrow peaks"
+[[glyph]]
+id = "filter/resonance"
+group = "filter"
+v1 = false
+note = "value glyph: LP peak height"
+
+# env: envelopes (knob tiles)
+[[glyph]]
+id = "env/ad"
+group = "env"
+v1 = true
+[[glyph]]
+id = "env/adsr"
+group = "env"
+v1 = true
+[[glyph]]
+id = "env/ar"
+group = "env"
+v1 = false
+[[glyph]]
+id = "env/curve"
+group = "env"
+v1 = false
+note = "value glyph: log to lin to exp"
+[[glyph]]
+id = "env/decay"
+group = "env"
+v1 = false
+note = "value glyph: decay length"
+
+# synth: synthesis parameters (knob tiles, mostly value glyphs)
+[[glyph]]
+id = "synth/fold"
+group = "synth"
+v1 = true
+note = "value glyph: sine folding over"
+[[glyph]]
+id = "synth/drive"
+group = "synth"
+v1 = true
+note = "value glyph: sine clipping"
+[[glyph]]
+id = "synth/pd"
+group = "synth"
+v1 = false
+note = "phase distortion bend"
+[[glyph]]
+id = "synth/detune"
+group = "synth"
+v1 = false
+[[glyph]]
+id = "synth/sub"
+group = "synth"
+v1 = false
+[[glyph]]
+id = "synth/fm"
+group = "synth"
+v1 = false
+note = "ratio: carrier and modulator"
+[[glyph]]
+id = "synth/bright"
+group = "synth"
+v1 = false
+note = "spectral tilt"
+[[glyph]]
+id = "synth/pluck"
+group = "synth"
+v1 = false
+[[glyph]]
+id = "synth/accent"
+group = "synth"
+v1 = false
+[[glyph]]
+id = "synth/slide"
+group = "synth"
+v1 = false
+[[glyph]]
+id = "synth/bend"
+group = "synth"
+v1 = false
+
+# fx: effect parameters
+[[glyph]]
+id = "fx/freqshift"
+group = "fx"
+v1 = false
+[[glyph]]
+id = "fx/feedback"
+group = "fx"
+v1 = false
+[[glyph]]
+id = "fx/spread"
+group = "fx"
+v1 = false
+[[glyph]]
+id = "fx/drift"
+group = "fx"
+v1 = false
+[[glyph]]
+id = "fx/rate"
+group = "fx"
+v1 = false
+[[glyph]]
+id = "fx/delay"
+group = "fx"
+v1 = false
+[[glyph]]
+id = "fx/reverb"
+group = "fx"
+v1 = false
+[[glyph]]
+id = "fx/chorus"
+group = "fx"
+v1 = false
+
+# mod: modulation and time
+[[glyph]]
+id = "mod/phase"
+group = "mod"
+v1 = false
+note = "start phase marker"
+[[glyph]]
+id = "mod/sync"
+group = "mod"
+v1 = false
+[[glyph]]
+id = "mod/depth"
+group = "mod"
+v1 = false
+[[glyph]]
+id = "mod/random"
+group = "mod"
+v1 = false
+note = "dice"
+
+# system: runtime menu, services, transfer (icon class)
+[[glyph]]
+id = "system/machine"
+group = "system"
+v1 = true
+note = "module kind"
+[[glyph]]
+id = "system/effect"
+group = "system"
+v1 = true
+note = "module kind"
+[[glyph]]
+id = "system/service"
+group = "system"
+v1 = true
+note = "module kind"
+[[glyph]]
+id = "system/tool"
+group = "system"
+v1 = true
+note = "module kind"
+[[glyph]]
+id = "system/load"
+group = "system"
+v1 = true
+note = "states: unloaded/loaded"
+[[glyph]]
+id = "system/card"
+group = "system"
+v1 = true
+[[glyph]]
+id = "system/usb"
+group = "system"
+v1 = true
+[[glyph]]
+id = "system/busy"
+group = "system"
+v1 = true
+note = "value glyph used as a looping spinner"
+[[glyph]]
+id = "system/health"
+group = "system"
+v1 = true
+note = "states: ok/warn/error"
+[[glyph]]
+id = "system/progress"
+group = "system"
+v1 = false
+note = "value glyph: transfer progress"
+[[glyph]]
+id = "system/track"
+group = "system"
+v1 = false
+[[glyph]]
+id = "system/edit"
+group = "system"
+v1 = false
+[[glyph]]
+id = "system/settings"
+group = "system"
+v1 = false
+[[glyph]]
+id = "system/back"
+group = "system"
+v1 = false
+[[glyph]]
+id = "system/enter"
+group = "system"
+v1 = false
+[[glyph]]
+id = "system/log"
+group = "system"
+v1 = false
+[[glyph]]
+id = "system/bootscreen"
+group = "system"
+v1 = false
+
+# font: 3x5 digits and letters for label tiles (one states glyph per range)
+[[glyph]]
+id = "font/digits"
+group = "font"
+v1 = false
+note = "states 0-9, 3x5"

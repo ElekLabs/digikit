@@ -1,42 +1,34 @@
-// Two-state switch: a rounded track with a knob at the left (off) or right (on), three frames of slide in between.
+// Slide switch in the vertical middle of a knob tile: rounded track, 5x5 knob that slides right.
+// Off = outline knob, on = filled knob.
 const track = (p) => {
-  p.line(2, 0, 10, 0);
-  p.line(2, 6, 10, 6);
-  p.px(1, 1);
-  p.px(0, 2);
-  p.px(0, 3);
-  p.px(0, 4);
+  p.line(2, 4, 14, 4);
+  p.line(2, 12, 14, 12);
+  p.line(0, 6, 0, 10);
+  p.line(16, 6, 16, 10);
   p.px(1, 5);
-  p.px(11, 1);
-  p.px(12, 2);
-  p.px(12, 3);
-  p.px(12, 4);
-  p.px(11, 5);
+  p.px(1, 11);
+  p.px(15, 5);
+  p.px(15, 11);
 };
-
-/** Knob 3 px wide whose left edge is at x. */
-const knob = (p, x, filled) => {
-  if (filled) p.rect(x, 2, 3, 3);
-  else p.frame(x, 2, 3, 3);
-};
+const knob = (p, x, filled) => (filled ? p.rect(x, 6, 5, 5) : p.frame(x, 6, 5, 5));
 
 /** @type {import('../../../../packages/dkglyph/src/glyph.ts').StatesGlyphDef} */
 export default {
   title: 'Switch',
-  size: [13, 7],
+  size: 'knob',
   states: ['off', 'on'],
-  tags: ['control', 'toggle'],
+  tags: ['toggle'],
   invertible: false,
   draw(p, i) {
     track(p);
-    knob(p, i === 0 ? 2 : 8, i === 1);
+    knob(p, i === 0 ? 2 : 10, i === 1);
   },
   transition: {
     frames: 3,
     draw(p, from, to, t) {
       track(p);
-      const a = from === 0 ? 2 : 8;
-      const b = to === 0 ? 2 : 8;
+      const a = from === 0 ? 2 : 10;
+      const b = to === 0 ? 2 : 10;
       knob(p, Math.round(a + (b - a) * t), t >= 0.5 ? to === 1 : from === 1);
     },
   },

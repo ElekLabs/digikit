@@ -4,6 +4,7 @@ import { el } from './element.ts';
 import type { ViewState } from './state.ts';
 
 const DETAIL_SCALE = 16;
+const DETAIL_MAX_WIDTH = 420;
 
 function draw(canvas: HTMLCanvasElement, g: GlyphJson, hex: string, s: ViewState, scale = DETAIL_SCALE): void {
   drawBits(canvas.getContext('2d')!, decode(hex, g.w, g.h), g.w, g.h, 0, 0, {
@@ -20,8 +21,9 @@ export function renderDetail(root: HTMLElement, g: GlyphJson | undefined, s: Vie
     root.append(el('p', { class: 'muted' }, 'Click a glyph for details.'));
     return;
   }
-  const big = canvasOf(g.w, g.h, DETAIL_SCALE);
-  const show = (hex: string) => draw(big, g, hex, s);
+  const bigScale = Math.max(1, Math.min(DETAIL_SCALE, Math.floor(DETAIL_MAX_WIDTH / g.w)));
+  const big = canvasOf(g.w, g.h, bigScale);
+  const show = (hex: string) => draw(big, g, hex, s, bigScale);
   const info = `${g.id}  ${g.w}x${g.h}  ${g.frames.length} frame${g.frames.length === 1 ? '' : 's'}  ${g.kind}${g.range ? ` ${g.range}` : ''}`;
   root.append(el('h2', {}, 'Detail'), el('div', {}, info), big);
   show(g.frames[0]!);

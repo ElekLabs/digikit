@@ -3,6 +3,8 @@ export interface PlotBox {
   y0: number;
   w: number;
   h: number;
+  /** When set, sample at t = i / period instead of i / (w - 1). */
+  period?: number;
 }
 
 /** A 1-bit pixel grid with integer coordinates. Drawing outside is clipped and counted. */
@@ -124,19 +126,22 @@ export class Raster {
 
   /**
    * Plot fn(t), t in [0,1], to [-1,1] (1 is the top row), one sample per column.
-   * Neighbouring samples are joined vertically at their midpoint, so the stroke never breaks.
+   * A column joins halfway to a neighbour only when that neighbour is 2 or more rows away, so the stroke never
+   * breaks and 45 degree runs stay one pixel per column. With box.period, t = i / period.
    */
   plot(fn: (t: number) => number, box: PlotBox, on: 0 | 1 = 1): this {
-    const { x0, y0, w, h } = box;
+    const { x0, y0, w, h, period } = box;
     const ys: number[] = [];
     for (let i = 0; i < w; i += 1) {
-      const v = Math.max(-1, Math.min(1, fn(w === 1 ? 0 : i / (w - 1))));
+      const t = period !== undefined ? i / period : w === 1 ? 0 : i / (w - 1);
+      const v = Math.max(-1, Math.min(1, fn(t)));
       ys.push(y0 + Math.round(((1 - v) / 2) * (h - 1)));
     }
     for (let i = 0; i < w; i += 1) {
       const y = ys[i]!;
-      const from = i === 0 ? y : Math.round((ys[i - 1]! + y) / 2);
-      const to = i === w - 1 ? y : Math.round((y + ys[i + 1]!) / 2);
+      const reach = (n: number): number => (Math.abs(n - y) < 2 ? y : Math.round((n + y) / 2));
+      const from = i === 0 ? y : reach(ys[i - 1]!);
+      const to = i === w - 1 ? y : reach(ys[i + 1]!);
       for (let j = Math.min(from, y, to); j <= Math.max(from, y, to); j += 1) this.px(x0 + i, j, on);
     }
     return this;

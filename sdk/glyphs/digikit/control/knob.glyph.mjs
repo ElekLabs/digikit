@@ -1,5 +1,5 @@
-// Unipolar knob: a 270 degree arc that fills clockwise from the lower left (135 degrees) to the lower right (45 degrees),
-// a centre dot and a pointer. Angles grow clockwise on the screen, 0 is right.
+// Stock knob: 1 px ring (centre 8,8 radius 8), pointer from the centre to one pixel inside the ring.
+// Sweep 135 deg (lower left) clockwise through 270 (top) to 405 (lower right).
 const START = 135;
 const SWEEP = 270;
 
@@ -12,10 +12,8 @@ export default {
   tags: ['control', 'value'],
   invertible: false,
   draw(p, v) {
-    const a = START + SWEEP * v;
-    if (v > 0) p.arc(6, 6, 6, START, a);
-    const rad = (a * Math.PI) / 180;
-    p.line(6, 6, 6 + 3 * Math.cos(rad), 6 + 3 * Math.sin(rad));
-    p.px(6, 6);
+    p.circle(8, 8, 8);
+    const a = ((START + SWEEP * v) * Math.PI) / 180;
+    p.line(8, 8, 8 + 7 * Math.cos(a), 8 + 7 * Math.sin(a));
   },
 };

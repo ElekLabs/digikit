@@ -73,6 +73,7 @@ async function loadGlyph(dir: string, rel: string, sizes: SizeClasses): Promise<
   const file = path.join(dir, rel);
   const out: LoadedGlyph = { id, group: id.split('/')[0]!, file };
   try {
+    // The query only refreshes this file; helpers it imports stay cached, so they are fresh only in a new process.
     const mod = await import(`${pathToFileURL(file).href}?v=${statSync(file).mtimeMs}`);
     if (!mod.default) throw new Error('the file must export a glyph definition as default');
     out.def = glyph(mod.default as GlyphDef);
