@@ -23,12 +23,24 @@ case $days in '' | *[!0-9]*) echo "error: --days must be a whole number" >&2; ex
 
 # Read the whole listing (see tools/devtools/worktree-setup.sh about SIGPIPE).
 listing=$(git worktree list --porcelain)
-main=$(printf '%s\n' "$listing" | awk '/^worktree / && !n {print $2; n=1}')
+main=$(printf '%s\n' "$listing" | awk '/^worktree / && !n {print substr($0, 10); n=1}')
 lanes_dir="$(dirname "$main")/lanes"
+if [[ -d $lanes_dir ]]; then lanes_dir=$(cd "$lanes_dir" && pwd -P); fi
 git -C "$main" fetch -q origin main
 now=$(date +%s)
 
-mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1"; }
+if [[ $(uname -s) == Darwin ]]; then
+  mtime() { stat -f %m "$1" 2>/dev/null; }
+else
+  mtime() { stat -c %Y "$1" 2>/dev/null; }
+fi
+
+# Resolve a listed worktree path the same way as lanes_dir.
+resolve() {
+  local d b
+  d=$(dirname "$1"); b=$(basename "$1")
+  if [[ -d $d ]]; then echo "$(cd "$d" && pwd -P)/$b"; else echo "$1"; fi
+}
 
 # Newest of the worktree's gitdir index, HEAD and logs/HEAD, and the lane
 # directory's own mtime.
@@ -37,7 +49,7 @@ newest_mtime() {
   gitdir=$(git -C "$lane" rev-parse --absolute-git-dir)
   for f in "$gitdir/index" "$gitdir/HEAD" "$gitdir/logs/HEAD" "$lane"; do
     if [[ -e $f ]]; then
-      t=$(mtime "$f")
+      t=$(mtime "$f") || return 1
       if ((t > best)); then best=$t; fi
     fi
   done
@@ -83,21 +95,31 @@ lane_processes() {
 
 # Why a lane is kept ("" when it may go).
 keep_reason() {
-  local lane=$1 head newest users idle_days
-  if [[ -n $(git --no-optional-locks -C "$lane" status --porcelain) ]]; then echo "uncommitted or untracked files"; return; fi
+  local lane=$1 head newest users idle_days st
+  if ! st=$(git --no-optional-locks -C "$lane" status --porcelain </dev/null 2>/dev/null); then echo "git status failed"; return; fi
+  if [[ -n $st ]]; then echo "uncommitted or untracked files"; return; fi
   head=$(git -C "$lane" rev-parse HEAD)
   if ! git -C "$main" merge-base --is-ancestor "$head" origin/main; then echo "not merged into origin/main"; return; fi
-  newest=$(newest_mtime "$lane")
+  if ! newest=$(newest_mtime "$lane"); then echo "cannot read idle time"; return; fi
   idle_days=$(((now - newest) / 86400))
   if ((now - newest < days * 86400)); then echo "idle ${idle_days}d, under ${days}d"; return; fi
   users=$(lane_processes "$lane")
-  if [[ $dry == 0 && $users == *daemon* && -x $lane/node_modules/.bin/nx ]]; then
-    (cd "$lane" && ./node_modules/.bin/nx daemon --stop >/dev/null 2>&1) || true
-    sleep 1
-    users=$(lane_processes "$lane")
+  if [[ -x $lane/node_modules/.bin/nx ]]; then
+    if [[ $dry == 0 && $users == *daemon* ]]; then
+      (cd "$lane" && ./node_modules/.bin/nx daemon --stop >/dev/null 2>&1 </dev/null) || true
+      sleep 1
+      users=$(lane_processes "$lane")
+    fi
+    # A daemon the real run can stop does not count as use.
+    users=$(printf '%s\n' "$users" | grep -v ' daemon$' || true)
   fi
-  if [[ $dry == 1 ]]; then users=$(printf '%s\n' "$users" | grep -v ' daemon$' || true); fi
   if [[ -n $users ]]; then
+    local dpid
+    dpid=$(printf '%s\n' "$users" | awk '$2 == "daemon" {print $1; exit}')
+    if [[ -n $dpid && -z $(printf '%s\n' "$users" | awk '$2 != "daemon"') ]]; then
+      echo "in use by pid $dpid (nx daemon, no nx binary to stop it)"
+      return
+    fi
     echo "in use by pid $(printf '%s\n' "$users" | awk '{printf "%s%s", s, $1; s=","}')"
     return
   fi
@@ -106,10 +128,12 @@ keep_reason() {
 removed=0
 kept=0
 seen=" "
-while read -r lane; do
+while IFS= read -r lane <&3; do
   [[ -n $lane ]] || continue
-  name=${lane#"$lanes_dir"/}
+  lane=$(resolve "$lane")
   # Only direct children of the lanes directory.
+  [[ $lane == "$lanes_dir"/* ]] || continue
+  name=${lane#"$lanes_dir"/}
   [[ $name != */* ]] || continue
   if [[ ${#only[@]} -gt 0 ]]; then
     hit=0
@@ -122,23 +146,25 @@ while read -r lane; do
   fi
   branch=$(git -C "$lane" symbolic-ref -q --short HEAD || true)
   reason=$(keep_reason "$lane")
-  idle_days=$(((now - $(newest_mtime "$lane")) / 86400))
   if [[ -n $reason ]]; then
     echo "kept $name: $reason"; kept=$((kept + 1)); continue
   fi
+  idle_days=$(((now - $(newest_mtime "$lane")) / 86400))
   if [[ $dry == 1 ]]; then
     echo "would remove $name (branch ${branch:-none}, idle ${idle_days}d)"
     removed=$((removed + 1)); continue
   fi
-  git -C "$main" worktree remove "$lane"
+  if ! git -C "$main" worktree remove "$lane" </dev/null; then
+    echo "kept $name: git worktree remove failed"; kept=$((kept + 1)); continue
+  fi
   note=""
   if [[ -n $branch ]]; then
-    if ! git -C "$main" branch -d "$branch" >/dev/null 2>&1; then note="; branch $branch kept: git refuses a safe delete"; fi
+    if ! git -C "$main" branch -d "$branch" >/dev/null 2>&1 </dev/null; then note="; branch $branch kept: git refuses a safe delete"; fi
   fi
-  git -C "$main" worktree prune
+  git -C "$main" worktree prune </dev/null || true
   echo "removed $name (branch ${branch:-none}, idle ${idle_days}d)$note"
   removed=$((removed + 1))
-done < <(printf '%s\n' "$listing" | awk -v d="$lanes_dir/" '/^worktree / { p = substr($0, 10); if (index(p, d) == 1) print p }')
+done 3< <(printf '%s\n' "$listing" | awk '/^worktree / { print substr($0, 10) }')
 
 for o in ${only[@]+"${only[@]}"}; do
   case $seen in *" $o "*) ;; *) echo "kept $o: no such lane"; kept=$((kept + 1)) ;; esac

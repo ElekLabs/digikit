@@ -19,7 +19,7 @@ fi
 
 name=${1:?usage: tools/devtools/lane.sh NAME [BASE]}
 # Read the whole listing (see tools/devtools/worktree-setup.sh about SIGPIPE).
-main=$(git worktree list --porcelain | awk '/^worktree / && !n {print $2; n=1}')
+main=$(git worktree list --porcelain | awk '/^worktree / && !n {print substr($0, 10); n=1}')
 base=${2:-$(git -C "$main" rev-parse --abbrev-ref HEAD)}
 lane="$(dirname "$main")/lanes/$name"
 

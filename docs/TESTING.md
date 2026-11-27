@@ -649,6 +649,11 @@ all five rules hold:
    directory. An Nx daemon of the lane does not count; it is stopped first
    (`node_modules/.bin/nx daemon --stop`) and the check runs again.
 
+A pruned lane loses its ignored files too (`dist/`, and `out/` run results and
+logs): copy anything you need out of `out/runs/` first. A warm lane reset to main
+and untouched for N days is pruned by design; it costs a cold build when the
+name is used again. Use a larger `--days` to keep warm lanes longer.
+
 Removal runs `git worktree remove` (never `--force`), `git branch -d` on the
 lane branch (kept with a note when git refuses) and `git worktree prune`. Remote
 branches stay. Run `--dry-run` first; it changes nothing:
