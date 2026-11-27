@@ -51,7 +51,8 @@ static void state_lines(void)
     assert(strcmp(project_text_state(PROJECT_STATUS_DEFERRED), "CARD BUSY - RETRYING") == 0);
     assert(strcmp(project_text_state(PROJECT_STATUS_IGNORED), "FILE IGNORED") == 0);
     /* the order of the bits: ignored, then busy, then changed */
-    assert(strcmp(project_text_state(PROJECT_STATUS_DIRTY | PROJECT_STATUS_DEFERRED), "CARD BUSY - RETRYING") == 0);
+    assert(strcmp(project_text_state(PROJECT_STATUS_DIRTY | PROJECT_STATUS_DEFERRED),
+                  "CARD BUSY - RETRYING") == 0);
     assert(strcmp(project_text_state(7u | PROJECT_STATUS_IGNORED), "FILE IGNORED") == 0);
 }
 

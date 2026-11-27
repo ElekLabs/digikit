@@ -10,7 +10,9 @@
 #define TITLE_Y 0
 #define PROJECT_Y (GLYPH_H + 8)
 #define STATE_Y (PROJECT_Y + GLYPH_H + LINE_GAP)
-#define DATA_Y (STATE_Y + GLYPH_H + LINE_GAP + GLYPH_H + LINE_GAP) /* line 4: one row is left empty below the state */
+#define DATA_Y                                                                                     \
+    (STATE_Y + GLYPH_H + LINE_GAP + GLYPH_H +                                                      \
+     LINE_GAP) /* line 4: one row is left empty below the state */
 
 static dk_ui *ui;
 static dk_ui_view *view;

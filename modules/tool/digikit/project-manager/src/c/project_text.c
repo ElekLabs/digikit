@@ -1,7 +1,8 @@
 /* project_text: see project_text.h. */
 #include "project_text.h"
 
-void project_text_title(char out[PROJECT_LINE_MAX], uint32_t slot, const uint8_t name[PROJECT_NAME_BYTES])
+void project_text_title(char out[PROJECT_LINE_MAX], uint32_t slot,
+                        const uint8_t name[PROJECT_NAME_BYTES])
 {
     uint32_t n = slot + 1, hundreds = 0, tens = 0;
     while (n >= 1000)
