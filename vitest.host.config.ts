@@ -24,6 +24,7 @@ export default defineConfig({
         resolve: {
           alias: {
             '@digi/dkbs': fileURLToPath(new URL('packages/dkbs/src/index.ts', import.meta.url)),
+            '@digi/dkglyph': fileURLToPath(new URL('packages/dkglyph/src/index.ts', import.meta.url)),
             '@digi/sharc-rig-kit/suite': fileURLToPath(new URL('packages/sharc-rig-kit/src/suite.ts', import.meta.url)),
             '@digi/sharc-rig-kit': fileURLToPath(new URL('packages/sharc-rig-kit/src/index.ts', import.meta.url)),
             // the aliases of the project's tsconfig (paths), relative to the repository root
