@@ -1,7 +1,8 @@
 import path from 'node:path';
 import type { DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
-import { withWaitApi, type TestRuntime } from '@digi/regression/support.ts';
+import { withWaitApi } from '@digi/regression/wait-api.ts';
+import { type TestRuntime } from '@digi/regression/test-runtime.ts';
 import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
 import { compare, pcmMetrics } from '@digi/regression/runtime/pcm-files.ts';

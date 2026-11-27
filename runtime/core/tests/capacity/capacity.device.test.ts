@@ -2,10 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DkModule } from '@digi/dk-session';
 import { expect, test } from 'vitest';
-import { cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
+import { type CardRig } from '@digi/regression/runtime/card-rig-api.ts';
 import { needsOf, parseDspSection, relocate } from '@digi/regression/runtime/dkm.ts';
 import { dspBytes } from '@digi/regression/runtime/dsp-state.ts';
-import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
 import { systemPackagePlacedBytes } from '@digi/regression/runtime/system-package.ts';
 import { bootEntries, COUPLED_ROOTS, expectBoot, SYMBOLS, type Entry } from './capacity-helpers.ts';
 import {

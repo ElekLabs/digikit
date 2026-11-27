@@ -1,6 +1,6 @@
 import { emulatorClock, emulatorRead, pollUntil, readTopMenuItems, viewStackFacts, type Device } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 import { cardRig } from '@digi/regression/runtime/card-rig.ts';
 import { readChoiceWindow } from '@digi/regression/runtime/choice-window.ts';
 import { cardStore } from '@digi/regression/runtime/device-data.ts';

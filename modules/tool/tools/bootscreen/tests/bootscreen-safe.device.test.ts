@@ -2,7 +2,9 @@ import { be32 } from '@digi/dk-session';
 import { expect, test } from 'vitest';
 import { button } from '@digi/test-support';
 import { currentRecord } from '@digi/regression/runtime/card-record.ts';
-import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { intro, lastFrame, SAFE_COUNTER, SAFE_KEY, spec, valid } from './bootscreen-support.ts';
 
 /** tools/bootscreen, safe mode (see bootscreen.device.test.ts): by the REC key and by the boot counter after resets from the intro callback. */

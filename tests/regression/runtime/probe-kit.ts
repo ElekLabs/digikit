@@ -1,6 +1,7 @@
 import { expect } from 'vitest';
-import type { PatchedSession } from '../support.ts';
-import { installModules, moduleArtifact } from './install.ts';
+import type { PatchedSession } from '../test-runtime.ts';
+import { installModules } from './module-install.ts';
+import { moduleArtifact } from './module-artifact.ts';
 import { expectRuntimeReady } from './ready.ts';
 
 /** The probe transport (with remote also selected): the SHARC probe effect sends one framed word per block through the module step word, and the ColdFire collector keeps it. */

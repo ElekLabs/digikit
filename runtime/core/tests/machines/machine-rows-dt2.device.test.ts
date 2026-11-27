@@ -2,7 +2,8 @@ import { expectNoRefusedCalls } from '@digi/regression/runtime/service-symbols.t
 import { pollUntil } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';
-import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
+import { cardRig } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
 import { portAnchorAddress } from '@digi/regression/runtime/device-data.ts';
 import { dspBytes } from '@digi/regression/runtime/dsp-state.ts';

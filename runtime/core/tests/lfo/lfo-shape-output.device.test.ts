@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { pollUntil } from '@digi/test-support';
-import { CARD_SYMBOLS, cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { sendCc } from '@digi/regression/runtime/midi.ts';
 import { bootWith, shapeWords, SHAPE_A } from './lfo-cards.ts';
 import {

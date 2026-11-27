@@ -6,7 +6,7 @@ Map for porting the Python device scenarios (`tools/patchkit/pk_dkrt_boot.py`, `
 - NEW: added in `runtime/card-kit.ts`.
 - MISSING: not provided yet; the last column says what it needs.
 
-In TypeScript a helper that reads guest memory takes `(session, plan, ...)`, where `plan` is the `RuntimePlan` of the patched image (`runtime-plan.ts`). A Python `rig` is a `PatchedSession` (`support.ts`: `session` and `dk`).
+In TypeScript a helper that reads guest memory takes `(session, plan, ...)`, where `plan` is the `RuntimePlan` of the patched image (`runtime-plan.ts`). A Python `rig` is a `PatchedSession` (`test-runtime.ts`: `session` and `dk`).
 
 | Python call | TypeScript helper (file) | Status / note |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ In TypeScript a helper that reads guest memory takes `(session, plan, ...)`, whe
 | `card_after(c, base, overlay)` | `applyOverlay(base, overlay, out)` (`runtime/write-safety.ts`) | EXISTS. Get the overlay with `rpc(session, 'card.overlay', {path})` (`fx-live.ts`) |
 | `M.sym` | `planSymbol(plan, name)` (`runtime/runtime-plan.ts`) | EXISTS |
 | `_poke_u32` / `emu.poke32` | `pokeWord`, `pokeKnob(session, plan, name, value)` (`card-kit.ts`) | NEW. Wraps `mem.cf.poke` |
-| `common_checks` | `runtimeSafety`, `overlayWrites`, `runtimeWatchEnv` (`runtime/write-safety.ts`), `expectNoGuardHits` (`support.ts`) | EXISTS for the default and FX policies; MISSING: `firmware_areas` / `store_extra` as scenario arguments (only the named `SafetyPolicy` values) |
+| `common_checks` | `runtimeSafety`, `overlayWrites`, `runtimeWatchEnv` (`runtime/write-safety.ts`), `expectNoGuardHits` (`free-region-guard.ts`) | EXISTS for the default and FX policies; MISSING: `firmware_areas` / `store_extra` as scenario arguments (only the named `SafetyPolicy` values) |
 | `common_checks_upload` | `runtimeSafety` plus `overlayWrites` | MISSING: the upload rules (project writes allowed, store sectors written by the transfer) are not a policy yet |
 | `M.pcm_check` / `pcm_pin` | `capture`, `compare` (`runtime/fx-live.ts`) | MISSING for pins: `tests/scenarios/*.json` pin reading needs Em's approval to change; no TS reader yet |
 | `decode_tables` / `diff_tables` | none | MISSING: needs the `pk_digikit_scen.py:490-610` table layout ported (reads of firmware tables through `word`) |

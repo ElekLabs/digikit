@@ -1,7 +1,7 @@
 import { button, encoder as encoderCode, pollUntil, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';
-import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
+import type { CardRig } from '@digi/regression/runtime/card-rig-api.ts';
 import { bootInfo, E_LOADING } from '@digi/regression/runtime/guest-mailbox.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { bounded, word } from '@digi/regression/runtime/guest-access.ts';

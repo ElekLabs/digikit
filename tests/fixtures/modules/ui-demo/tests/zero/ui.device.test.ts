@@ -3,8 +3,9 @@ import { expect } from 'vitest';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
 import { shot } from '@digi/regression/runtime/fx-session.ts';
-import { installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { installModule } from '@digi/regression/runtime/module-install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**

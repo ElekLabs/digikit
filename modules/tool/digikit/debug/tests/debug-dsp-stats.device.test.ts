@@ -1,12 +1,12 @@
 import { expect } from 'vitest';
 import type { DspStats, RuntimeEvents } from '@digi/dk-session';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { pickSine } from '@digi/regression/runtime/panel-waits.ts';
-import { DEBUG_MODULE } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE } from '@digi/regression/runtime/debug-module.ts';
 import { selectTrack } from '@digi/regression/runtime/fx-track-ui.ts';
 import { sendCc, sendNote } from '@digi/regression/runtime/midi.ts';
-import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
 
 /**

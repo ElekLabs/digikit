@@ -3,12 +3,14 @@ import path from 'node:path';
 import { fileHashHex } from '@digi/dk-session';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
+import type { PatchedSession } from '@digi/regression/test-runtime.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { portFile } from '@digi/regression/runtime/service-files.ts';
 import { SYSTEM_PACKAGE_STORE_PATH } from '@digi/regression/runtime/system-package.ts';
-import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { DEBUG_MODULE } from '@digi/regression/runtime/debug-module.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-cli.ts';
 import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
