@@ -4,12 +4,13 @@
 //!
 //! A shape is a value of the LFO WAVE parameter. The service gives each shape key a wave number from the sticky allocator (`dkrt_sdk::sticky`, the range
 //! [`RANGE`], the settings key `lfo.shapes`), so a sound that names the number keeps its shape while the module stays in the map. The numbers stay below 0x80:
-//! stock code clamps a wave byte of 7 to 127 to RAND and a negative byte to TRI (finding 149), so a number is safe in a sound when the service is not loaded.
+//! an image without `core/lfo-table` clamps a wave byte of 7 to 127 to RAND and a negative byte to TRI (finding 149), and with it a wave byte of 15 to 127 plays RAND, so a number is safe in a sound when the service is not loaded.
 //!
-//! The table (`shapes`) is indexed by `number - RANGE.lo`. It is read in the interrupt of the LFO tick (`eval`), so it is written under the interrupt mask. One owner per number.
+//! The table (`shapes`) is indexed by `number - RANGE.lo`; the samples also go to the image's table of added waves (`WaveTable::set`), which is what the LFO plays. One owner per number.
 use crate::lfo::Lfo;
 use crate::shapes::{self, slot};
 use crate::wave::{has_firmware, sync_range, wave_rows};
+use crate::wave_table::WaveTable;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::rd32;
 use dkrt_abi::provider::{Consumer, Records, Status};
@@ -41,7 +42,7 @@ pub fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
     }
 }
 
-impl<C: CoreApi> Records<C> for Lfo {
+impl<C: CoreApi, T: WaveTable> Records<C> for Lfo<T> {
     fn validate(kind: u32, bodies: &[&[u8]], report: &mut dyn FnMut(Problem)) {
         validate(kind, bodies, report)
     }
@@ -93,7 +94,8 @@ impl<C: CoreApi> Records<C> for Lfo {
             unsafe {
                 each(c.reg, |kind, b| {
                     if kind == KIND_LFO_SHAPE && r == OK {
-                        if slot(self.number_of(at, rd32(b))).is_none() {
+                        let number = self.number_of(at, rd32(b));
+                        if slot(number).is_none() || !self.table().holds(number) {
                             r = E_TABLE_FULL;
                         }
                         add += 1;
@@ -161,8 +163,9 @@ impl<C: CoreApi> Records<C> for Lfo {
             neg |= samples[s] < 0;
             s += 1;
         }
-        // the tick reads the entry in an interrupt: no half-written shape
-        shapes::store(core, i, owner, !neg, name, &samples);
+        // the LFO plays the samples from the image's table: a table without the wave refuses before anything changes
+        self.table_mut().set(RANGE.lo + i as u32, &samples)?;
+        shapes::put(i, owner, !neg, name, &samples);
         // the page's picture (UI task): published last, after the table entry
         // SAFETY: `i` is a slot of the table; one writer at a time (the service's apply and detach)
         unsafe { crate::graph::publish(i, &samples, !neg) };

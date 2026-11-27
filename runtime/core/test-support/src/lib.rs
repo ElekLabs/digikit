@@ -236,6 +236,15 @@ impl FakeCore {
         self.set_rows_info(t);
     }
 
+    /// The image has the table `lfo_table_info` (core/lfo-table) with `waves` added waves from number `first`, 32 samples a shape, and the entries `set` and `clear` of its two calls:
+    /// the lfo service binds it through `CoreApi::info`.
+    pub fn set_lfo_table(&mut self, first: u32, waves: u32, set: u32, clear: u32) {
+        let hash = fnv1a("lfo_table_info");
+        self.info_tables.retain(|(h, _)| *h != hash);
+        self.info_tables
+            .push((hash, std::vec![0x4c46_4f54, 1, first, waves, 32, set, clear]));
+    }
+
     /// The image has the table `dyndsp_info` (the DSP's voice registry and area) with `area_bytes` bytes of area, the first free voice row at `first` and `free` rows
     /// (the magic is set here): the services find it through `CoreApi::info`.
     pub fn set_dyndsp(&mut self, area_bytes: u32, first: u32, free: u32) {

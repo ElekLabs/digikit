@@ -2,8 +2,13 @@
 use dkrt_svc_lfo::graph::{
     build, digest, lookup, publish, retract, tiles_of, Tile, MASK_WORD, TILE_W,
 };
+use dkrt_svc_lfo::lfo::Lfo;
 use dkrt_svc_lfo::records::{MAX_SHAPES, SAMPLES};
 use std::sync::{Mutex, MutexGuard};
+
+#[path = "support/fake_wave_table.rs"]
+mod fake_wave_table;
+type Owner = Lfo<fake_wave_table::FakeWaveTable>;
 
 static LOCK: Mutex<()> = Mutex::new(());
 
@@ -113,9 +118,10 @@ fn a_graph_is_published_looked_up_and_withdrawn() {
     let _g = lock();
     let flag = |f: &mut u8| f as *mut u8;
     let mut f = 9u8;
-    assert!(
-        unsafe { lookup(7, 0x4021_cff8, flag(&mut f)) }.is_null(),
-        "nothing published"
+    assert_eq!(
+        unsafe { lookup(7, 0x4021_cff8, flag(&mut f)) },
+        dkrt_svc_lfo::graph::STOCK_SIN,
+        "nothing published: the wave is empty and plays the stock sine"
     );
     assert_eq!(digest(), 0);
     unsafe { publish(0, &triangle(), false) };
@@ -150,9 +156,10 @@ fn a_graph_is_published_looked_up_and_withdrawn() {
     assert_eq!(tile, &build(&triangle())[2]);
     let mask = unsafe { std::slice::from_raw_parts(ptr(e(2, 20)), TILE_W) };
     assert!(mask.iter().all(|w| *w == MASK_WORD));
-    assert!(
-        unsafe { lookup(8, 0x4021_cff8, flag(&mut f)) }.is_null(),
-        "another number"
+    assert_eq!(
+        unsafe { lookup(8, 0x4021_cff8, flag(&mut f)) },
+        dkrt_svc_lfo::graph::STOCK_SIN,
+        "another added wave, empty"
     );
     assert!(
         unsafe { lookup(7 + MAX_SHAPES as u32, 0x4021_cff8, flag(&mut f)) }.is_null(),
@@ -164,23 +171,25 @@ fn a_graph_is_published_looked_up_and_withdrawn() {
     );
     assert_ne!(digest(), 0);
     unsafe { retract(0) };
-    assert!(unsafe { lookup(7, 0x4021_cff8, flag(&mut f)) }.is_null());
+    assert_eq!(
+        unsafe { lookup(7, 0x4021_cff8, flag(&mut f)) },
+        dkrt_svc_lfo::graph::STOCK_SIN
+    );
     assert!(tiles_of(7).is_none());
     assert_eq!(digest(), 0);
 }
 
 #[test]
-fn a_gap_number_gets_the_stock_tri_marker() {
+fn a_wave_with_no_shape_gets_the_stock_sin_marker() {
     use dkrt_abi::provider::{Consumer, ConsumerId, Provider, Records};
     use dkrt_abi::service::SettleCtx;
     use dkrt_sdk::records::KIND_LFO_SHAPE;
-    use dkrt_svc_lfo::graph::STOCK_TRI;
-    use dkrt_svc_lfo::lfo::Lfo;
+    use dkrt_svc_lfo::graph::STOCK_SIN;
     use dkrt_svc_lfo::records::NAME_LEN;
     use dkrt_test_support::FakeCore;
     let _g = lock();
     let core = FakeCore::new();
-    let mut lfo = *dkrt_test_support::start_boxed::<Lfo>(&core).unwrap();
+    let mut lfo = *dkrt_test_support::start_boxed::<Owner>(&core).unwrap();
     let (key_a, key_b) = (0x00a1_0100u32, 0x00b2_0200u32);
     let mut sel = SettleCtx::new();
     sel.count = 1;
@@ -206,23 +215,29 @@ fn a_gap_number_gets_the_stock_tri_marker() {
     let vt = 0x4021_cff8;
     assert_eq!(
         unsafe { lookup(7, vt, &mut f) },
-        STOCK_TRI,
-        "a gap below the highest"
+        STOCK_SIN,
+        "a gap below the highest plays the stock sine"
     );
     assert!(!unsafe { lookup(8, vt, &mut f) }.is_null());
-    assert_ne!(unsafe { lookup(8, vt, &mut f) }, STOCK_TRI);
-    assert!(
-        unsafe { lookup(9, vt, &mut f) }.is_null(),
-        "above the highest"
+    assert_ne!(unsafe { lookup(8, vt, &mut f) }, STOCK_SIN);
+    assert_eq!(
+        unsafe { lookup(9, vt, &mut f) },
+        STOCK_SIN,
+        "a wave above the highest is empty too"
     );
     assert!(
         unsafe { lookup(6, vt, &mut f) }.is_null(),
         "RAND stays the firmware's"
     );
     Provider::detach(&mut lfo, &core, ConsumerId::new(1));
+    assert_eq!(
+        unsafe { lookup(7, vt, &mut f) },
+        STOCK_SIN,
+        "nothing kept: every added wave plays the sine"
+    );
     assert!(
-        unsafe { lookup(7, vt, &mut f) }.is_null(),
-        "nothing kept, no gap"
+        unsafe { lookup(15, vt, &mut f) }.is_null(),
+        "15 is no added wave: RAND stays the firmware's"
     );
 }
 
