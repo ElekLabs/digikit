@@ -18,6 +18,11 @@ impl ServiceCopy {
         crate::package::provider_rows::row_of(rec).and_then(|r| r.first()).map(|h| ServiceCopy(*h))
     }
 
+    /// `Provider::can_stop` of this copy.
+    pub(crate) unsafe fn can_stop(&self) -> i32 {
+        self.0.can_stop(self.core())
+    }
+
     fn core(&self) -> *const core::ffi::c_void {
         &crate::package::core_api::REAL_CORE as *const _ as *const core::ffi::c_void
     }

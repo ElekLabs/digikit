@@ -36,6 +36,33 @@ fn a_service_reload_checks_drains_reloads_the_closure_in_one_call_and_ends_with_
 }
 
 #[test]
+fn a_service_that_is_busy_gets_the_refusals_asked_again_until_it_is_not() {
+    let mut s = service_script();
+    s.refusal_busy = 3;
+    assert_eq!(run(&mut s), (2, OK, step::DONE));
+    assert_eq!(s.log.iter().filter(|l| **l == "refusal").count(), 4, "three busy answers, then the one that passes");
+    assert_eq!(s.log.iter().filter(|l| **l == "check").count(), 1, "the file is checked once the refusals pass");
+    assert!(s.log.contains(&"reload service"));
+}
+
+#[test]
+fn a_service_that_stays_busy_ends_the_job_busy_with_nothing_changed() {
+    let mut s = service_script();
+    s.refusal_busy = u32::MAX;
+    assert_eq!(run(&mut s), (2, E_BUSY, step::DONE));
+    changed_nothing(&s, "a service busy until the timeout");
+    assert!(s.log.iter().filter(|l| **l == "refusal").count() > 50, "it asked on every pass until the wait ran out");
+}
+
+#[test]
+fn a_busy_module_refusal_is_not_asked_again() {
+    let mut s = Script::new();
+    s.refusal_busy = 1;
+    assert_eq!(run(&mut s).1, E_BUSY);
+    assert_eq!(s.log.iter().filter(|l| **l == "refusal").count(), 1);
+}
+
+#[test]
 fn a_service_reload_refused_before_the_call_changes_nothing() {
     for (what, refusal, check) in [("a refusal", Some(E_RELOAD_PLAYING), OK), ("a check", None, E_RELOAD_KEYS), ("a drain that does not end", None, OK)] {
         let mut s = service_script();

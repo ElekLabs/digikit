@@ -277,6 +277,15 @@ impl Job {
                 return self.refused(E_RELOAD_RETAINED);
             }
             if let Some(r) = o.refusal(rec) {
+                // a service says busy while work is in flight (its own `can_stop`): nothing changed, the refusals are asked again on a later pass while the service's tick runs
+                if r == E_BUSY && is_service_rec(self.rec) {
+                    if self.passes == 0 {
+                        self.wait_restart(o);
+                    }
+                    if !self.busy(o) {
+                        return;
+                    }
+                }
                 o.phase(0);
                 return self.refused(r);
             }

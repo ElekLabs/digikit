@@ -11,6 +11,8 @@ struct Script {
     /// The index a load is given (`Ops::alloc_index`).
     alloc: Result<usize, i32>,
     refusal: Option<i32>,
+    /// `refusal` answers `E_BUSY` this many times first (`u32::MAX`: always).
+    refusal_busy: u32,
     check: i32,
     /// `quiesce` answers `E_BUSY` this many times, then `OK` (`u32::MAX`: always busy).
     quiesce_busy: u32,
@@ -47,7 +49,7 @@ struct Script {
 
 impl Script {
     fn new() -> Script {
-        Script { found: Some((2, 5)), alloc: Ok(5), refusal: None, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, check_busy: 0, load_busy: 0, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false, menu_after: u32::MAX, service_busy: 0, service_result: OK }
+        Script { found: Some((2, 5)), alloc: Ok(5), refusal: None, refusal_busy: 0, check: OK, quiesce_busy: 0, unload_busy: 0, can_abort: true, load: OK, check_busy: 0, load_busy: 0, dsp: (0, OK), cancels: true, service: false, torn_seen: false, retained: false, progressing: false, progress: 0, log: Vec::new(), phase_on: false, now: Some(0), stalled: false, menu_after: u32::MAX, service_busy: 0, service_result: OK }
     }
 }
 
@@ -78,6 +80,10 @@ impl Ops for Script {
     }
     unsafe fn refusal(&mut self, rec: Option<usize>) -> Option<i32> {
         self.log.push(if rec.is_some() { "refusal" } else { "refusal load" });
+        if self.refusal_busy > 0 {
+            self.refusal_busy = if self.refusal_busy == u32::MAX { u32::MAX } else { self.refusal_busy - 1 };
+            return Some(E_BUSY);
+        }
         self.refusal
     }
     unsafe fn check(&mut self, _: u32, _: usize, _: usize, _: *const u8) -> i32 {
