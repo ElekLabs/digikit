@@ -101,7 +101,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// closure waits: it is left to `dsp_step`).
     pub unsafe fn closure_abort(&mut self, rec: usize) -> bool {
         if self.reload.is_torn() || self.reload.is_waiting() {
-            self.reload.stop_waiting();
+            let l = self.loader();
+            self.reload.stop_waiting(&mut self.session.carried, l);
             return false;
         }
         let mut members = [0usize; REC_MAX];
@@ -120,8 +121,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
 
     /// A new reload starts: what an earlier one left is forgotten.
     pub fn reload_reset(&mut self) {
-        self.reload.reset();
-        unsafe { self.session.carried.release_all(self.loader()) };
+        let l = unsafe { self.loader() };
+        unsafe { self.reload.reset(&mut self.session.carried, l) };
     }
 
     /// Reload service record `rec` from the file at `path` with its consumers (`Loader::provider_prepare`, then `PackageManager::reload`), called once per UI pass by the live job.
@@ -261,7 +262,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         }
         match out {
             Ok(_) => {
-                self.reload.done();
+                let l = self.loader();
+                self.reload.done(&mut self.session.carried, l);
                 // every module that is back hears it (a module of the closure has no DSP part: the job refused one)
                 let mut now = [0usize; REC_MAX];
                 let n = self.closure(root, &mut now);
@@ -274,7 +276,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             }
             Err(e) => {
                 let down = (!members.is_empty()).then(|| members.iter().any(|&r| !m.live().contains(PackageId(r as u8))));
-                self.reload.failed(m.restore_pending().is_some(), down);
+                let l = self.loader();
+                self.reload.failed(m.restore_pending().is_some(), down, &mut self.session.carried, l);
                 let code = code_of(&e);
                 if self.reload.is_torn() && !self.reload.is_waiting() {
                     self.report_closure_down(members, code);

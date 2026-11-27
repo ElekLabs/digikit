@@ -120,10 +120,8 @@ fn is_unload(op: u8) -> bool {
 fn is_reload(op: u8) -> bool {
     op as u32 == LIVE_RELOAD
 }
-/// A service record (a provider): its reload is one call (`service.rs`) over the closure.
-fn is_service_rec(rec: usize) -> bool {
-    rec != NO_REC && crate::package::loader::records::is_service_rec(rec)
-}
+
+use crate::package::loader::records::is_service_rec;
 
 mod service;
 mod trace;

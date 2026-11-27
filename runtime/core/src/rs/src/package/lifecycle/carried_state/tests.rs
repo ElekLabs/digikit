@@ -213,3 +213,37 @@ fn modules_have_no_slot() {
         assert_eq!(c.import(0, &&old).1, Outcome::Fresh);
     }
 }
+
+#[test]
+fn every_end_of_a_reload_frees_the_blocks_except_a_restore_that_waits() {
+    use super::super::reload_state::ReloadState;
+    unsafe {
+        let take = |a: &mut Arena| {
+            let mut c = CarriedState::NEW;
+            let old = Copy::new(NAME, Some((1, 1)), b"x");
+            assert_eq!(c.reserve(&[SVC], |_| Some(&old), a), OK);
+            c
+        };
+        // a restore that waits keeps them
+        let mut a = Arena::new(4);
+        let mut c = take(&mut a);
+        let mut s = ReloadState::Called;
+        s.failed(true, Some(false), &mut c, &mut a);
+        assert!(c.is_held() && a.out.len() == 1);
+        // the job times out while the restore waits: `stop_waiting` frees them
+        s.stop_waiting(&mut c, &mut a);
+        assert_eq!(s, ReloadState::Down);
+        assert!(!c.is_held() && a.out.is_empty());
+        // each other end frees them too
+        for end in 0..3 {
+            let mut c = take(&mut a);
+            let mut s = ReloadState::Called;
+            match end {
+                0 => s.done(&mut c, &mut a),
+                1 => s.failed(false, Some(true), &mut c, &mut a),
+                _ => s.reset(&mut c, &mut a),
+            }
+            assert!(!c.is_held() && a.out.is_empty(), "end {end}");
+        }
+    }
+}

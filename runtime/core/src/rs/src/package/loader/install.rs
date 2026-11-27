@@ -107,6 +107,7 @@ impl Gate<'_> {
                 // the task that is not parked (its place in the port file's list) is the event's detail
                 if crate::package::lifecycle::trace_on() {
                     crate::package::lifecycle::trace_emit(
+                        crate::package::lifecycle::trace_current_op(),
                         dkrt_lifecycle::Phase::Note,
                         dkrt_lifecycle::Step::ParkWait,
                         crate::package::lifecycle::TRACE_NO_PACKAGE,

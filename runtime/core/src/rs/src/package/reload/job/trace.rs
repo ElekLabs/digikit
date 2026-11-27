@@ -9,6 +9,8 @@ use dkrt_sdk::E_BUSY;
 #[derive(Clone, Copy)]
 pub(super) struct JobTrace {
     open: u8,
+    /// The operation number of the job, taken when it was queued: every event of the job carries it, whatever else runs.
+    op: u32,
 }
 
 /// The log's step of each job step, by `RELOAD_STATE` number (a table, not a `match`: the ColdFire code check reads a compiler's jump table as illegal code).
@@ -32,13 +34,13 @@ impl Plan {
 
 impl JobTrace {
     pub(super) const fn new() -> JobTrace {
-        JobTrace { open: step::IDLE }
+        JobTrace { open: step::IDLE, op: 0 }
     }
 
     /// A job was queued: the next events are its own.
     pub(super) fn queued(&mut self) {
         self.open = step::IDLE;
-        crate::package::lifecycle::trace_next_op();
+        self.op = crate::package::lifecycle::trace_next_op();
     }
 
     /// What the log gets when the job is at `at`: the end of the step whose begin the log has, then the begin of the new step, or for a `finished` job a note for `JobDone`.
@@ -68,13 +70,13 @@ impl JobTrace {
         unsafe {
             let (package, hash) = (package_of(job), stem_hash(job.path.as_ptr()));
             if let Some(s) = plan.end {
-                trace_emit(Phase::End, s, package, hash, if finished { job.result } else { 0 }, 0);
+                trace_emit(self.op, Phase::End, s, package, hash, if finished { job.result } else { 0 }, 0);
             }
             if plan.note {
-                trace_emit(Phase::Note, Step::JobDone, package, hash, job.result, 0);
+                trace_emit(self.op, Phase::Note, Step::JobDone, package, hash, job.result, 0);
             }
             if let Some(s) = plan.begin {
-                trace_emit(Phase::Begin, s, package, hash, 0, 0);
+                trace_emit(self.op, Phase::Begin, s, package, hash, 0, 0);
             }
         }
     }
@@ -83,7 +85,7 @@ impl JobTrace {
     pub(super) fn busy(&self, job: &Job) {
         if trace_on() {
             // SAFETY: as for `sync`
-            unsafe { trace_emit(Phase::Note, Step::BusyRetry, package_of(job), stem_hash(job.path.as_ptr()), E_BUSY, 0) }
+            unsafe { trace_emit(self.op, Phase::Note, Step::BusyRetry, package_of(job), stem_hash(job.path.as_ptr()), E_BUSY, 0) }
         }
     }
 }

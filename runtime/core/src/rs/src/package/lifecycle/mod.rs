@@ -47,7 +47,7 @@ pub(crate) use rt::{verdict_of, Manager, Rt};
 #[cfg(test)]
 pub(crate) use rt::test_up;
 pub(crate) use session::Session;
-pub(crate) use trace::{emit as trace_emit, NO_PACKAGE as TRACE_NO_PACKAGE, next_op as trace_next_op, on as trace_on, stem_hash, traced_seams, RtTrace};
+pub(crate) use trace::{emit as trace_emit, NO_PACKAGE as TRACE_NO_PACKAGE, next_op as trace_next_op, current_op as trace_current_op, on as trace_on, stem_hash, traced_seams, RtTrace};
 
 #[cfg(test)]
 mod assembly_tests;

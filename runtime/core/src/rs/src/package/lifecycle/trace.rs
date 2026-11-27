@@ -19,9 +19,19 @@ use dkrt_sdk::logk;
 /// The operation now running (a boot, or the live job): 0 before the first.
 static mut OP: u32 = 0;
 
-/// A boot or a live job starts: its events carry a new operation number.
-pub(crate) fn next_op() {
-    unsafe { write_volatile(addr_of_mut!(OP), read_volatile(addr_of!(OP)).wrapping_add(1)) }
+/// A boot or a live job starts: its events carry a new operation number, which the caller keeps for the events it emits itself (`emit`). The manager's seams (`RtTrace`)
+/// read the number of the operation now running (`current_op`).
+pub(crate) fn next_op() -> u32 {
+    unsafe {
+        let op = read_volatile(addr_of!(OP)).wrapping_add(1);
+        write_volatile(addr_of_mut!(OP), op);
+        op
+    }
+}
+
+/// The operation now running, for the events of the manager's seams.
+pub(crate) fn current_op() -> u32 {
+    unsafe { read_volatile(addr_of!(OP)) }
 }
 
 /// FNV-1a 32 of the file name in the NUL terminated `path`, without its directory and its extension (0 for no path).
@@ -50,10 +60,10 @@ fn kind_of(package: PackageId) -> u32 {
     (package.0 as usize >= MAX_MODULES) as u32
 }
 
-/// Log one event. `detail` is the fifth word: what the step adds (the task a park wait waits for), else 0.
-pub(crate) unsafe fn emit(phase: Phase, step: Step, package: PackageId, name_hash: u32, status: i32, detail: u32) {
+/// Log one event of operation `op`. `detail` is the fifth word: what the step adds (the task a park wait waits for), else 0.
+pub(crate) unsafe fn emit(op: u32, phase: Phase, step: Step, package: PackageId, name_hash: u32, status: i32, detail: u32) {
     let info = phase as u32 | (step as u32) << 8 | kind_of(package) << 16 | (package.0 as u32) << 24;
-    dlog::ev(logk::LIFECYCLE, dlog::INFO, [read_volatile(addr_of!(OP)), name_hash, info, status as u32, detail]);
+    dlog::ev(logk::LIFECYCLE, dlog::INFO, [op, name_hash, info, status as u32, detail]);
 }
 
 /// Log what the state handoff did for the service named `name_hash` (`STATE_CARRIED`): nothing for a service that started fresh.
@@ -64,7 +74,7 @@ pub(crate) unsafe fn emit_state(name_hash: u32, outcome: &super::carried_state::
         Outcome::Carried { version, len } => (0, version, len),
         Outcome::Dropped { why, version, len } => (why as u32, version, len),
     };
-    dlog::ev(logk::STATE_CARRIED, dlog::INFO, [read_volatile(addr_of!(OP)), name_hash, code, version as u32, len]);
+    dlog::ev(logk::STATE_CARRIED, dlog::INFO, [current_op(), name_hash, code, version as u32, len]);
 }
 
 /// The trace of one manager's seams: it finds the file name of a package through the session the seams share.
@@ -101,7 +111,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Trace for RtTrace<P, M, R> {
         unsafe {
             // the end of a place says where the image went, so a spinning program counter of a device run maps to its package (the size is in the module list)
             let detail = if phase == Phase::End && step == Step::Place && status == 0 { self.0.get().0.flight.placed_span().0 } else { 0 };
-            emit(phase, step, package, name, status, detail)
+            emit(current_op(), phase, step, package, name, status, detail)
         }
     }
 }
