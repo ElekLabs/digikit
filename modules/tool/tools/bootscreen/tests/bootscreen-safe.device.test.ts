@@ -5,6 +5,8 @@ import { currentRecord } from '@digi/regression/runtime/card-record.ts';
 import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
 import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { RT } from '@digi/regression/runtime/runtime-roots.ts';
+import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
+import { safeFrame } from '@digi/regression/runtime/intro-frame.ts';
 import { intro, lastFrame, SAFE_COUNTER, SAFE_KEY, spec, valid } from './bootscreen-support.ts';
 
 /** tools/bootscreen, safe mode (see bootscreen.device.test.ts): by the REC key and by the boot counter after resets from the intro callback. */
@@ -13,20 +15,23 @@ cardRigs(
   'boot screen with REC held',
   { dsp: 'sharc',
     relaxFs: true,
-    roots: RT,
+    roots: rootsOf('ib'), // the image with the intro adapter: the safe-mode frame replaces its black intro
     symbols: CARD_SYMBOLS,
+    startEmpty: true,
     initialButtons: [{ code: button('RECORD'), down: true }],
     initial: () => ({ modules: [], selection: [] }),
   },
   (h) => {
     test(
-      'REC held from cold with a valid file: safe mode by key, the module is not loaded, the stock intro runs',
+      'REC held from cold with a valid file: safe mode by key, the module is not loaded, the safe-mode frame replaces the black intro',
       async () => {
         // not `h.load`: it waits for the runtime UI, which a boot in safe mode by key does not reach
         await h.boot(await h.card(spec(h, { name: 'test.dkbs', file: valid })));
         const info = await h.ready(true);
         expect(info).toMatchObject({ safe: 1, reason: SAFE_KEY, loaded: 0 });
-        expect((await intro(h)).equals(lastFrame), 'not the module frame').toBe(false);
+        const shown = await intro(h);
+        expect(shown.equals(safeFrame('key')), 'the SAFE MODE / REC HELD frame').toBe(true);
+        expect(shown.equals(lastFrame), 'not the module frame').toBe(false);
       },
     );
   },

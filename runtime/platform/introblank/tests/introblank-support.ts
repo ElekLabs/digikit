@@ -7,9 +7,8 @@ import { introFramebuffer } from '@digi/regression/runtime/intro-frame.ts';
 import { encodeSettings } from '@digi/regression/runtime/project-kit.ts';
 import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 
-/** Shared by introblank.device.test.ts and introblank-rec.device.test.ts. */
+/** Card for introblank.device.test.ts. */
 
-export const SAFE_KEY = 2;
 const FILE = 'data/tools/bootscreen/test.dkbs';
 const ACTIVE = 'tools/bootscreen/active';
 
