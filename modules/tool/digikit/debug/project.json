@@ -57,6 +57,17 @@
         ]
       },
       {
+        "files": ["tests/lifecycle-events.device.test.ts"],
+        "firmwareOnly": "the runtime emits lifecycle events to the debug module's log on the device: a live load of a module logs a begin and an end for each step, named by the module file",
+        "modules": ["digikit/debug", "digikit/probe"],
+        "incidental": [
+          {
+            "module": "digikit/probe",
+            "reason": "the module that is unloaded and loaded again; it is only a package with an init that logs"
+          }
+        ]
+      },
+      {
         "files": [
           "tests/setup.device.test.ts"
         ],

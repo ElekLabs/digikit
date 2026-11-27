@@ -83,6 +83,14 @@ impl ProviderHost for FakeHost {
         self.probe.record(Call::CanStop(package))
     }
 
+    fn export_state(&mut self, package: PackageId) {
+        let _ = self.probe.record(Call::ExportState(package));
+    }
+
+    fn import_state(&mut self, package: PackageId) -> Result<(), Status> {
+        self.probe.record(Call::ImportState(package))
+    }
+
     fn stop(&mut self, package: PackageId) {
         let _ = self.probe.record(Call::Stop(package));
     }

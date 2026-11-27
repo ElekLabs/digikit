@@ -1,3 +1,5 @@
+use super::carried_state::Donor;
+use super::service_copy::ServiceCopy;
 use super::session::Handle;
 use crate::package::handlers::services;
 use crate::package::loader::{Images, Registry};
@@ -22,7 +24,7 @@ use dkrt_sdk::OK;
 /// - `detach` is `Provider::detach` of the same rows for the consumer's owner id, the last row first: the services free what they hold for it. The consumer's `stop` repeats it for
 ///   every row; it is idempotent.
 /// - `can_stop` of a module asks every row `Provider::can_stop` (a routed effect refuses): the manager asks every package it would take down. `can_stop` names no
-///   consumer, and no service refuses yet.
+///   consumer. `can_stop` of a service asks its own row only.
 /// - `stop` is `fini` and the rest of the unload (`Loader::package_stop`); it cannot refuse, so a record that still has a file or I/O step answers busy and the placer's
 ///   `free` repeats it.
 pub struct RtHost<P: PackagePlatform, M: Images, R: Registry>(Handle<P, M, R>);
@@ -90,11 +92,40 @@ impl<P: PackagePlatform, M: Images, R: Registry> ProviderHost for RtHost<P, M, R
 
     fn can_stop(&mut self, package: PackageId) -> Result<(), Status> {
         if package.0 as usize >= dkrt_abi::MAX_MODULES {
-            return Ok(());
+            // a service answers for itself: `E_BUSY` is work in flight, which the live job asks again (a service that adopted no answer says OK)
+            return match ServiceCopy::of(package.0 as usize).map_or(OK, |c| unsafe { c.can_stop() }) {
+                OK => Ok(()),
+                status => Err(status),
+            };
         }
         match unsafe { services().can_stop() } {
             OK => Ok(()),
             status => Err(status),
+        }
+    }
+
+    fn export_state(&mut self, package: PackageId) {
+        unsafe {
+            let (s, _) = self.0.get();
+            if let Some(copy) = ServiceCopy::of(package.0 as usize) {
+                s.carried.export(package.0 as usize, &copy);
+            }
+        }
+    }
+
+    fn import_state(&mut self, package: PackageId) -> Result<(), Status> {
+        unsafe {
+            let (s, l) = self.0.get();
+            let Some(copy) = ServiceCopy::of(package.0 as usize) else {
+                return Ok(());
+            };
+            let (status, outcome) = s.carried.import(package.0 as usize, &copy);
+            super::trace::emit_state(l.op(), copy.name(), &outcome);
+            if status == OK {
+                Ok(())
+            } else {
+                Err(status)
+            }
         }
     }
 

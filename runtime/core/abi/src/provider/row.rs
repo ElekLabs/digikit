@@ -26,6 +26,8 @@ pub const PART_DSP: u32 = 3;
 pub const PART_TICK: u32 = 4;
 pub const PART_QUERY: u32 = 5;
 pub const PART_DESCRIBE: u32 = 6;
+/// The state a service hands to its next copy over a reload (`State`, `StateV1`).
+pub const PART_STATE: u32 = 7;
 
 /// One part of a service: its tag, its version (a new callback is a new version of one part) and its function table.
 ///

@@ -2,7 +2,7 @@ use super::row::{check, CheckedRow, PartLookup};
 use super::tables::*;
 use super::{
     ProviderRow, Status, PART_DESCRIBE, PART_DSP, PART_LIFECYCLE, PART_QUERY, PART_RECORDS,
-    PART_TICK,
+    PART_STATE, PART_TICK,
 };
 use crate::dsp::{DspSec, Job};
 use crate::service::{ApplyCtx, CheckCtx, Claim, ModuleCommitCtx, RowWrite, SettleCtx, TableFault};
@@ -24,6 +24,7 @@ pub struct ProviderHandle {
     tick: *const TickV1,
     query: *const QueryV1,
     describe: *const DescribeV1,
+    state: *const StateV1,
 }
 
 /// The table of a part that is inside `extent` and aligned, or the refusal.
@@ -54,6 +55,7 @@ impl ProviderHandle {
         tick: core::ptr::null(),
         query: core::ptr::null(),
         describe: core::ptr::null(),
+        state: core::ptr::null(),
     };
 
     /// Resolve `row` (read from a package that lies in `extent`) for `instance`. `E_FORMAT` for a row, a table or a record kinds array outside `extent` or a null instance, `E_SVC_ABI` for a
@@ -96,6 +98,7 @@ impl ProviderHandle {
             tick: table_of(row.part(PART_TICK, TICK_NEWEST), &extent)?,
             query: table_of(row.part(PART_QUERY, QUERY_NEWEST), &extent)?,
             describe: table_of(row.part(PART_DESCRIBE, DESCRIBE_NEWEST), &extent)?,
+            state: table_of(row.part(PART_STATE, STATE_NEWEST), &extent)?,
         })
     }
 
@@ -311,6 +314,46 @@ impl ProviderHandle {
         match self.describe.as_ref() {
             Some(d) => (d.describe)(core, owner, out.as_mut_ptr(), out.len() as u32) as usize,
             None => 0,
+        }
+    }
+
+    // ---- the state part
+
+    /// The `(version, accepts_from)` of the state part; None without it.
+    pub fn state_versions(&self) -> Option<(u16, u16)> {
+        // SAFETY: a non-null table was checked inside the package by `resolve`.
+        unsafe { self.state.as_ref() }.map(|t| (t.version, t.accepts_from))
+    }
+    /// Can this copy take bytes of `old` layout: `accepts_from <= old <= version`. False without the part.
+    pub fn state_accepts(&self, old: u16) -> bool {
+        self.state_versions()
+            .is_some_and(|(version, from)| from <= old && old <= version)
+    }
+    /// The most bytes `state_export` writes: 0 without the part (or when the owner is busy).
+    pub unsafe fn state_export_max(&self, core: *const c_void) -> usize {
+        match self.state.as_ref() {
+            Some(t) => (t.export_max)(self.instance, core) as usize,
+            None => 0,
+        }
+    }
+    /// Export into `out`: the count written (at most `out.len()`); 0 without the part.
+    pub unsafe fn state_export(&self, core: *const c_void, out: &mut [u8]) -> usize {
+        match self.state.as_ref() {
+            Some(t) => ((t.export)(self.instance, core, out.as_mut_ptr(), out.len() as u32)
+                as usize)
+                .min(out.len()),
+            None => 0,
+        }
+    }
+    /// Import into this copy. `from` is the old copy's `(version, bytes)`; it reaches the service only when `state_accepts(version)`, else the service gets `None`.
+    /// OK without the part.
+    pub unsafe fn state_import(&self, core: *const c_void, from: Option<(u16, &[u8])>) -> i32 {
+        let Some(t) = self.state.as_ref() else {
+            return OK;
+        };
+        match from.filter(|(v, _)| self.state_accepts(*v)) {
+            Some((_, b)) => (t.import)(self.instance, core, b.as_ptr(), b.len() as u32, true),
+            None => (t.import)(self.instance, core, core::ptr::null(), 0, false),
         }
     }
 }

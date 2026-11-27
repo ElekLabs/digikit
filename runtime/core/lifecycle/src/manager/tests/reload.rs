@@ -160,3 +160,122 @@ fn a_reload_still_counts_the_claims_of_packages_outside_its_closure() {
     ));
     assert!(probe.calls().is_empty());
 }
+
+#[test]
+fn a_reload_exports_state_after_the_restore_and_before_stop_and_imports_after_start() {
+    let (mut pm, probe) = world(&[reference(), user(2)]);
+    pm.boot(&[id(1), id(2)]).unwrap();
+    probe.clear();
+    pm.reload(id(1)).unwrap();
+    let calls = probe.calls();
+    for n in [1, 2] {
+        assert_eq!(
+            calls.iter().filter(|c| **c == ExportState(id(n))).count(),
+            1
+        );
+        assert!(before(&calls, Restore(id(n)), ExportState(id(n))));
+        assert!(before(&calls, ExportState(id(n)), Stop(id(n))));
+        assert!(before(&calls, Start(id(n)), ImportState(id(n))));
+        assert!(before(&calls, ImportState(id(n)), Install(id(n))));
+    }
+    // the new copy of the service takes the state after the old one gave it
+    assert!(before(&calls, ExportState(id(1)), ImportState(id(1))));
+}
+
+#[test]
+fn an_unload_and_a_plain_load_export_nothing() {
+    let (mut pm, probe) = world(&[reference(), user(2)]);
+    pm.boot(&[id(1), id(2)]).unwrap();
+    pm.unload(id(2)).unwrap();
+    pm.load(id(2)).unwrap();
+    pm.unload(id(2)).unwrap();
+    assert!(!probe.calls().iter().any(|c| matches!(c, ExportState(_))));
+    assert!(probe.calls().contains(&ImportState(id(2))));
+}
+
+#[test]
+fn a_busy_restore_in_a_reload_exports_once_after_the_retry() {
+    let (mut pm, probe) = world(&[reference(), user(2)]);
+    pm.boot(&[id(1), id(2)]).unwrap();
+    probe.clear();
+    probe.busy_restore(id(2), 1);
+    assert!(matches!(err(pm.reload(id(1))), LifecycleError::Busy { .. }));
+    assert!(
+        !probe.calls().contains(&ExportState(id(2))),
+        "the busy restore stopped before the export"
+    );
+    pm.retry_pending().unwrap();
+    let calls = probe.calls();
+    assert_eq!(
+        calls.iter().filter(|c| **c == ExportState(id(2))).count(),
+        1
+    );
+    assert!(before(&calls, ExportState(id(2)), Stop(id(2))));
+}
+
+/// The copy of `p` that failed to take its state is stopped, then freed, after the import (the old copy's own stop and free came before it).
+fn assert_unwound_after_import(calls: &[Call], p: PackageId) {
+    let at = calls
+        .iter()
+        .position(|c| *c == ImportState(p))
+        .expect("an import");
+    let after = &calls[at..];
+    let stop = after
+        .iter()
+        .position(|c| *c == Stop(p))
+        .expect("a stop after the failed import");
+    let free = after
+        .iter()
+        .position(|c| *c == Free(p))
+        .expect("a free after the failed import");
+    assert!(stop < free, "{calls:?}");
+}
+
+#[test]
+fn a_failed_import_fails_the_start_and_leaves_the_rest_down() {
+    let (mut pm, probe) = world(&[reference(), user(2), user(3)]);
+    pm.boot(&[id(1), id(2), id(3)]).unwrap();
+    probe.clear();
+    probe.fail(ImportState(id(1)), dkrt_sdk::E_CONTRACT);
+    assert!(matches!(
+        err(pm.reload(id(1))),
+        LifecycleError::Failed { package, status, .. }
+            if package == id(1) && status == dkrt_sdk::E_CONTRACT
+    ));
+    assert_eq!(
+        live(&pm, &[1, 2, 3]),
+        [],
+        "the service and its consumers stay down"
+    );
+    assert!(!probe.calls().contains(&Install(id(2))));
+    assert_eq!(pm.restore_pending(), None);
+    let calls = probe.calls();
+    assert_unwound_after_import(&calls, id(1));
+}
+
+#[test]
+fn a_busy_import_is_not_retried_it_is_a_clean_failure() {
+    // a copy that has just started has nothing in flight, so busy is not a wait the manager can offer: the start fails like any other, the closure goes down whole
+    let (mut pm, probe) = world(&[reference(), user(2)]);
+    pm.boot(&[id(1), id(2)]).unwrap();
+    probe.clear();
+    probe.fail(ImportState(id(1)), dkrt_sdk::E_BUSY);
+    assert!(matches!(
+        err(pm.reload(id(1))),
+        LifecycleError::Failed { package, status, .. }
+            if package == id(1) && status == dkrt_sdk::E_BUSY
+    ));
+    let calls = probe.calls();
+    assert_eq!(
+        calls.iter().filter(|c| **c == ImportState(id(1))).count(),
+        1,
+        "asked once"
+    );
+    assert_unwound_after_import(&calls, id(1));
+    assert_eq!(live(&pm, &[1, 2]), []);
+    assert_eq!(
+        pm.restore_pending(),
+        None,
+        "nothing waits: the unwind is whole"
+    );
+}

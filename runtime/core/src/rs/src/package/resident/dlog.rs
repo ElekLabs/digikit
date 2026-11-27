@@ -57,6 +57,13 @@ pub(crate) fn sink_present() -> bool {
     (table().dlog.sink_present)()
 }
 
+/// Does anything take the log's events (the legacy sink or the `SINK_LOG` channel)? Producers of optional, frequent events (`LIFECYCLE`) test this first: they pay these two
+/// tests while nothing listens and build no event.
+#[inline(always)]
+pub(crate) fn log_on() -> bool {
+    sink_present() || sink_on(SINK_LOG)
+}
+
 /// Start a span: the clock's value, `None` when no span is measured now.
 #[inline(always)]
 pub(crate) fn span_t0() -> Option<u32> {
