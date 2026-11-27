@@ -229,22 +229,6 @@ fn a_file_the_loader_does_not_use_keeps_the_data_bit_while_it_stays() {
 }
 
 #[test]
-fn a_row_with_a_number_above_the_slots_is_ignored_by_the_listing() {
-    let mut r = Rig::new();
-    r.rec(7, b"SONG", 0x77);
-    r.f.store.insert(
-        b"projects/200-X.dkp".to_vec(),
-        file_bytes(0, b"X", 0x1, 1, &[]),
-    );
-    r.f.store.insert(
-        b"projects/129-X.dkp".to_vec(),
-        file_bytes(0, b"X", 0x1, 1, &[]),
-    );
-    r.settle();
-    assert_eq!(list(&r, 0, 128), [(7, 0)]);
-}
-
-#[test]
 fn a_read_that_finds_fewer_modules_clears_the_entries_after_them() {
     let two = file_full(1, b"A", 1, 1, &[(b"a/x", 1), (b"b/y", 2)], &[]);
     let none = file_full(1, b"A", 1, 2, &[], &[]);

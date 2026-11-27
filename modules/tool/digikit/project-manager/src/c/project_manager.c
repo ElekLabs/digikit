@@ -5,6 +5,7 @@
 #include <dk/platform/ui.h>
 
 #include "project_screen.h"
+#include "workbench_queries.h"
 
 #define SETTINGS_ROW_TEXT "PROJECT"
 
@@ -15,6 +16,9 @@ static int32_t init(dk_module_ctx *ctx)
     if (r != DK_OK)
         return r;
     project_screen_init(ui);
+    /* The runtime takes queries only from a module that registered a settings descriptor, which this module has none of: the refusal leaves the
+     * row working and the page without answers until the runtime accepts a module with queries alone. */
+    (void)dk_workbench_register_queries(ctx, dk_workbench_queries, DK_WORKBENCH_QUERY_COUNT);
     return dk_ui_settings_row(ui, SETTINGS_ROW_TEXT, project_screen_open, 0);
 }
 

@@ -4,7 +4,9 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "../src/c/project_query.h"
 #include "../src/c/project_text.h"
+#include <dk/core/status.h>
 
 static void title_of(uint32_t slot, const char *name, size_t bytes, char out[PROJECT_LINE_MAX])
 {
@@ -66,11 +68,69 @@ static void data_line(void)
     assert(strcmp(project_text_none(), "NO PROJECT") == 0);
 }
 
+static void query_text(void)
+{
+    char out[PROJECT_QUERY_NAME_MAX + 1];
+    uint8_t name[16] = {'D', 'U', 'B', ' ', ' ', 0};
+    assert(project_query_text(out, sizeof out, name, 16) == 3); /* zero ends it, trailing spaces go */
+    assert(strcmp(out, "DUB") == 0);
+    uint8_t odd[4] = {'A', 0x80, 0x1f, 'Z'};
+    assert(project_query_text(out, sizeof out, odd, 4) == 4); /* not printable: '?', so the text is valid UTF-8 */
+    assert(strcmp(out, "A??Z") == 0);
+    uint8_t full[16];
+    memset(full, 'Q', sizeof full); /* no zero: all 16 bytes fit with the terminator */
+    assert(project_query_text(out, sizeof out, full, 16) == 16);
+    assert(out[16] == 0);
+    char small[4];
+    assert(project_query_text(small, sizeof small, full, 16) == 3); /* never past the capacity */
+    assert(strcmp(small, "QQQ") == 0);
+    assert(project_query_text(out, sizeof out, name, 0) == 0); /* an empty name */
+    assert(out[0] == 0);
+    uint8_t blank[3] = {' ', ' ', ' '};
+    assert(project_query_text(out, sizeof out, blank, 3) == 0);
+}
+
+static void query_flags(void)
+{
+    uint8_t current, data, unknown;
+    project_query_flags(0, &current, &data, &unknown);
+    assert(!current && !data && !unknown);
+    project_query_flags(PROJECT_QUERY_CURRENT | PROJECT_QUERY_DATA, &current, &data, &unknown);
+    assert(current == 1 && data == 1 && unknown == 0);
+    project_query_flags(PROJECT_QUERY_DATA_UNKNOWN, &current, &data, &unknown);
+    assert(current == 0 && data == 0 && unknown == 1);
+}
+
+static void query_next(void)
+{
+    assert(project_query_next(16, 16, 20) == 21); /* a full page: ask after its last slot */
+    assert(project_query_next(5, 16, 20) == 0);   /* a short page is the end */
+    assert(project_query_next(0, 16, 0) == 0);
+    assert(project_query_next(16, 16, 127) == 0); /* the last slot of the device */
+}
+
+static void query_get_outcome(void)
+{
+    uint8_t loading = 9, found = 9;
+    assert(project_query_get_outcome(0, &loading, &found) == 0);
+    assert(loading == 0 && found == 1);
+    assert(project_query_get_outcome(DK_E_AGAIN, &loading, &found) == 0);
+    assert(loading == 1 && found == 0);
+    assert(project_query_get_outcome(DK_E_NOT_FOUND, &loading, &found) == 0);
+    assert(loading == 0 && found == 0);
+    assert(project_query_get_outcome(DK_E_RANGE, &loading, &found) == DK_E_RANGE); /* any other code is the handler's refusal */
+    assert(loading == 0 && found == 0);
+}
+
 int main(void)
 {
     title_numbers();
     title_names();
     state_lines();
     data_line();
+    query_text();
+    query_flags();
+    query_next();
+    query_get_outcome();
     return 0;
 }

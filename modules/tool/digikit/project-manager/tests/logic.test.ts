@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 
-test('project_text, built from the module C files', () => {
+test('project_text and project_query, built from the module C files', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'project-manager-'));
   try {
     const binary = path.join(directory, 'logic');
@@ -20,6 +20,7 @@ test('project_text, built from the module C files', () => {
         path.join(here, '../../../../../sdk/include'),
         path.join(here, 'logic-driver.c'),
         path.join(here, '../src/c/project_text.c'),
+        path.join(here, '../src/c/project_query.c'),
         '-o',
         binary,
       ],

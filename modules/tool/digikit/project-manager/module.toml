@@ -6,7 +6,7 @@ category = "tools"
 type = "service"
 author = "digikit"
 status = "experimental"
-summary = "Shows the current project and its save state in SETTINGS > PROJECT."
+summary = "Shows the current project and its save state in SETTINGS > PROJECT, and lists the firmware projects on its Workbench page."
 ports = ["dt2-1.17", "dn2-1.12"]
 requires = ["core/ui"]
 conflicts = []
@@ -15,12 +15,16 @@ conflicts = []
 "dt2-1.17" = "experimental"
 "dn2-1.12" = "experimental"
 
-# A run-time module (`.dkm`), built from C. `init` adds the SETTINGS row PROJECT (core/ui); the screen calls dk_project_current and
+# A run-time module (`.dkm`), built from C. `init` adds the SETTINGS row PROJECT (core/ui) and registers the Workbench queries of workbench/project_manager.proto;
+# the screen and the queries call the project service (dk_project_current, dk_project_status, dk_project_list, dk_project_get), which makes it a need of the module.
+# The text and query mapping logic (project_text.c, project_query.c) has host tests (tests/logic.test.ts).
 # dk_project_status, which make the project service a need of the module. The text logic in project_text.c has host tests (tests/logic.test.ts).
 [[object]]
 path = "build/project-manager.dko.json"
 sources = [
   "src/c/project_manager.c",
+  "src/c/project_queries.c",
+  "src/c/project_query.c",
   "src/c/project_screen.c",
   "src/c/project_text.c",
 ]
