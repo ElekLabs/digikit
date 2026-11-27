@@ -136,6 +136,7 @@
   "modules/tool/digikit/debug/tests/debug-module.device.test.ts": 2,
   "modules/tool/digikit/debug/tests/parameter-observer.device.test.ts": 3,
   "modules/tool/digikit/probe/module.toml": 3,
+  "modules/tool/digikit/project-manager/module.toml": 2,
   "modules/tool/digikit/remote/module.toml": 4,
   "modules/tool/digikit/track-manager/module.toml": 2,
   "modules/tool/digikit/usb-fast/README.md": 8,
