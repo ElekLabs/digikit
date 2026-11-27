@@ -19,7 +19,6 @@
           "digikit/debug",
           "test/dyn-fx-gain-send",
           "test/dyn-fx-hang",
-          "test/dyn-fx-nan",
           "core/services/machines",
           "core/services/fx"
         ],
