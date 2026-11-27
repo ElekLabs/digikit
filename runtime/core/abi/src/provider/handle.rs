@@ -1,8 +1,9 @@
 use super::row::{check, CheckedRow, PartLookup};
 use super::tables::*;
+use super::Step;
 use super::{
-    ProviderRow, Status, PART_DESCRIBE, PART_DSP, PART_LIFECYCLE, PART_QUERY, PART_RECORDS,
-    PART_STATE, PART_TICK,
+    ProviderRow, Status, PART_DESCRIBE, PART_DSP, PART_LIFECYCLE, PART_PAYLOADS, PART_QUERY,
+    PART_RECORDS, PART_STATE, PART_TICK,
 };
 use crate::dsp::{DspSec, Job};
 use crate::service::{ApplyCtx, CheckCtx, Claim, ModuleCommitCtx, RowWrite, SettleCtx, TableFault};
@@ -25,6 +26,7 @@ pub struct ProviderHandle {
     query: *const QueryV1,
     describe: *const DescribeV1,
     state: *const StateV1,
+    payloads: *const PayloadsV1,
 }
 
 /// The table of a part that is inside `extent` and aligned, or the refusal.
@@ -56,6 +58,7 @@ impl ProviderHandle {
         query: core::ptr::null(),
         describe: core::ptr::null(),
         state: core::ptr::null(),
+        payloads: core::ptr::null(),
     };
 
     /// Resolve `row` (read from a package that lies in `extent`) for `instance`. `E_FORMAT` for a row, a table or a record kinds array outside `extent` or a null instance, `E_SVC_ABI` for a
@@ -99,6 +102,7 @@ impl ProviderHandle {
             query: table_of(row.part(PART_QUERY, QUERY_NEWEST), &extent)?,
             describe: table_of(row.part(PART_DESCRIBE, DESCRIBE_NEWEST), &extent)?,
             state: table_of(row.part(PART_STATE, STATE_NEWEST), &extent)?,
+            payloads: table_of(row.part(PART_PAYLOADS, PAYLOADS_NEWEST), &extent)?,
         })
     }
 
@@ -314,6 +318,67 @@ impl ProviderHandle {
         match self.describe.as_ref() {
             Some(d) => (d.describe)(core, owner, out.as_mut_ptr(), out.len() as u32) as usize,
             None => 0,
+        }
+    }
+
+    // ---- the payloads part
+
+    /// Does the service adopt the payloads part?
+    pub fn has_payloads(&self) -> bool {
+        !self.payloads.is_null()
+    }
+    /// `Payloads::check` of one payload: `OK` when accepted. A service without the part accepts nothing (`E_MISSING`): the core checks `has_payloads` first, so this is never a silent
+    /// accept of a body nobody can install.
+    pub unsafe fn payload_check(
+        &self,
+        core: *const c_void,
+        kind: u16,
+        body: &[u8],
+        consumer: u8,
+    ) -> i32 {
+        match self.payloads.as_ref() {
+            Some(t) => (t.check)(
+                self.instance,
+                core,
+                kind as u32,
+                body.as_ptr(),
+                body.len() as u32,
+                consumer,
+            ),
+            None => dkrt_sdk::E_MISSING,
+        }
+    }
+    /// `Payloads::install`: `body` is `Some` on the first call for a payload only. The step, or the service's refusal.
+    pub unsafe fn payload_install(
+        &self,
+        core: *const c_void,
+        kind: u16,
+        body: Option<&[u8]>,
+        consumer: u8,
+    ) -> Result<Step, Status> {
+        let Some(t) = self.payloads.as_ref() else {
+            return Err(dkrt_sdk::E_MISSING);
+        };
+        let (at, len) = match body {
+            Some(b) => (b.as_ptr(), b.len() as u32),
+            None => (core::ptr::null(), 0),
+        };
+        Step::of_code((t.install)(
+            self.instance,
+            core,
+            kind as u32,
+            at,
+            len,
+            body.is_some(),
+            consumer,
+        ))
+    }
+    /// `Payloads::retire` for `who` (a consumer's owner id, or the service's own). `Done` without the part: nothing was installed.
+    pub unsafe fn payload_retire(&self, core: *const c_void, who: u8) -> Step {
+        match self.payloads.as_ref() {
+            // a refusal of retire is not a status the walk can act on: it asks again, as for a busy owner
+            Some(t) => Step::of_code((t.retire)(self.instance, core, who)).unwrap_or(Step::Pending),
+            None => Step::Done,
         }
     }
 

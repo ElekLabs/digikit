@@ -344,6 +344,7 @@ mod tests {
         crate::dkm::pack(
             &o,
             &crate::dkm::Options {
+                payloads: vec![],
                 name: "test/x".into(),
                 version: 0x010000,
                 trace: false,

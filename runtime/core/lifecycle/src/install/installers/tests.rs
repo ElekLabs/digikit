@@ -4,7 +4,6 @@ use super::*;
 use crate::install::{PatchBytes, SiteRef, SlotRef};
 use crate::MAX_PACKAGES;
 use dkrt_abi::provider::{Status, MAX_ENTRIES};
-use dkrt_sdk::E_BUSY;
 use std::vec::Vec;
 
 /// Records the calls it gets; fails `install` when told to.
@@ -14,7 +13,7 @@ struct Recorder {
     installed: Vec<Vec<Entry>>,
     restored: Vec<PackageId>,
     fail_install: Option<Status>,
-    fail_restore: Option<Status>,
+    fail_restore: Option<InstallError>,
     /// `restore` of an owner that was not installed here is an error (E_RANGE).
     strict: bool,
     held: Vec<PackageId>,
@@ -38,10 +37,10 @@ impl Installer for Recorder {
         }
     }
 
-    fn restore(&mut self, owner: PackageId) -> Result<(), Status> {
+    fn restore(&mut self, owner: PackageId) -> Result<(), InstallError> {
         self.restored.push(owner);
         if self.strict && !self.held.contains(&owner) {
-            return Err(dkrt_sdk::E_RANGE);
+            return Err(InstallError::Backend(dkrt_sdk::E_RANGE));
         }
         match self.fail_restore {
             Some(e) => Err(e),
@@ -140,12 +139,12 @@ fn a_failure_of_the_first_backend_never_reaches_the_second() {
 #[test]
 fn restore_asks_both_and_answers_the_first_error() {
     let cf = Recorder {
-        fail_restore: Some(E_BUSY),
+        fail_restore: Some(InstallError::Busy { task: Some(3) }),
         ..cf_rec()
     };
     let mut i = Installers::new(cf, sharc_rec());
     i.install(OWNER, &[cf_hook(), dsp_slot()]).unwrap();
-    assert_eq!(i.restore(OWNER), Err(InstallError::Backend(E_BUSY)));
+    assert_eq!(i.restore(OWNER), Err(InstallError::Busy { task: Some(3) }));
     assert_eq!(
         (i.coldfire().restored.len(), i.sharc().restored.len()),
         (1, 1)
@@ -181,7 +180,7 @@ fn a_second_install_for_an_installed_owner_is_refused_until_restore() {
 #[test]
 fn a_rollback_that_fails_leaves_the_owner_partial_and_a_later_restore_finishes_it() {
     let cf = Recorder {
-        fail_restore: Some(E_BUSY),
+        fail_restore: Some(InstallError::Busy { task: None }),
         ..cf_rec()
     };
     let sharc = Recorder {
@@ -197,7 +196,7 @@ fn a_rollback_that_fails_leaves_the_owner_partial_and_a_later_restore_finishes_i
         i.install(OWNER, &[cf_hook()]),
         Err(InstallError::AlreadyInstalled)
     );
-    assert_eq!(i.restore(OWNER), Err(InstallError::Backend(E_BUSY)));
+    assert_eq!(i.restore(OWNER), Err(InstallError::Busy { task: None }));
     i.coldfire.fail_restore = None;
     assert_eq!(i.restore(OWNER), Ok(()));
     assert_eq!(i.install(OWNER, &[cf_hook()]), Ok(()));

@@ -24,6 +24,14 @@ pub(crate) struct Flight {
 }
 
 impl Flight {
+    /// The `bytes` bytes at `offset` of the staged file of the package just brought up: `None` outside the file or before a place. Valid until the next `stage`.
+    pub(crate) unsafe fn staged_bytes(&self, offset: u32, bytes: u32) -> Option<&[u8]> {
+        if self.c.f.is_null() || !in_file(offset, bytes, self.c.size) {
+            return None;
+        }
+        Some(core::slice::from_raw_parts(self.c.f.add(offset as usize), bytes as usize))
+    }
+
     /// Where the image of the package went and how many bytes it holds with its bss (device address and size; both 0 before a place): the detail of the place end event.
     pub(crate) fn placed_span(&self) -> (u32, u32) {
         (self.placed.place.base, self.placed.place.image_size + self.placed.place.bss)
@@ -139,6 +147,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
             return Err(r);
         }
         let r = self.check_body(&mut f.c);
+        if r != OK {
+            return Err(r);
+        }
+        // the services that own the file's payloads are up (the manager brings them up first): each adopts the part and takes its body, before anything is taken
+        let r = self.check_payload_owners(&f.c, rec as u8 + 1, true);
         if r != OK {
             return Err(r);
         }
@@ -430,7 +443,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         // the entries carry absolute targets; the installer takes the offset in the image (a target before the image wraps past its size) and refuses one outside it
         // at run time a `task` site is written only while the BgWorker and the console task wait (`Gate`); at the boot no task has run
         let parks = self.task_parks();
-        let gate = parks.gate(self.live()).in_op(self.op());
+        let gate = parks.gate(self.live()).in_op(self.logging_op());
         let cf = CfItems { hooks: &hooks[..nh], patches: &patches[..np], image_base: base, image_size, slots: &slots[..ns], gate };
         let r = Backend::install(&mut self.installer, &self.p, rec as u8, &cf);
         // a run-time task site with no task facts in the port file answers `E_IMPORT` as a missing import does: the load's log names the cause (`MOD_NEEDS`, "NEEDS port:no-task")
@@ -464,9 +477,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         self.uninstall_dsp(record_of(id))
     }
 
-    /// Return the hook sites and slot words of package `id` to stock. `false` (`E_BUSY`) when a site that a task below the UI task can be inside cannot be written yet: nothing was
-    /// changed, and the manager asks again (`retry_pending`).
-    pub(crate) unsafe fn package_restore(&mut self, id: PackageId) -> bool {
+    /// Return the hook sites and slot words of package `id` to stock. A refusal (busy, naming the task) when a site that a task below the UI task can be inside cannot be written
+    /// yet: nothing was changed, and the manager asks again (`retry_pending`).
+    pub(crate) unsafe fn package_restore(&mut self, id: PackageId) -> Result<(), Refusal> {
         self.uninstall_cf(record_of(id))
     }
 
@@ -574,6 +587,25 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// Does the running operation log nothing (a quiet retry of a pending take-down)?
     pub(crate) fn quiet(&self) -> bool {
         self.ops.is_quiet()
+    }
+
+    /// The number the events of the running operation carry; `None` while it is quiet. The one place an emitter outside the manager's seams asks.
+    pub(crate) fn logging_op(&self) -> Option<u32> {
+        if self.quiet() {
+            None
+        } else {
+            Some(self.op())
+        }
+    }
+
+    /// The running operation turns quiet until `leave_quiet`: nothing of the seams or the gate is logged meanwhile (the caller notes what changed). Its number stays.
+    pub(crate) fn enter_quiet(&mut self) {
+        self.ops.enter_quiet();
+    }
+
+    /// The running operation logs again.
+    pub(crate) fn leave_quiet(&mut self) {
+        self.ops.leave_quiet();
     }
 
     /// Set the loader's phase for the duration of a bring-up that the package manager drives: the services read it (`resident_query` is for after the boot).

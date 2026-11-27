@@ -1,0 +1,23 @@
+[module]
+id = "test/local-payload"
+version = "1.0.0"
+name = "Local payload service"
+category = "test"
+role = "service"
+service = "local-payload"
+callback_order = 460
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Fixture for a service that takes payloads: the Payloads part, with an install that answers Pending N times"
+requires = []
+conflicts = []
+
+
+[[export]]
+name = "dk_service_query_v1"
+
+[[object]]
+path = "build/local-payload.dko.json"
+sources = ["Cargo.toml"]
+place = "cf.expansion"

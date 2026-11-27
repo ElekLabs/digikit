@@ -11,7 +11,6 @@
 use dkrt_abi::link::Sequence;
 use dkrt_abi::package_platform::PackagePlatform;
 use dkneeds::keys::CTX_TASK;
-use super::op_clock::QUIET_OP;
 use dkrt_sdk::*;
 
 /// What one installer backend installs for one record and takes down again. The ColdFire backend ([`Installer`]) writes `jmp.l` over hook sites and fills slot words in
@@ -89,47 +88,59 @@ pub const PARKS_MAX: usize = 4;
 pub struct Gate<'a> {
     pub live: bool,
     pub parks: Option<&'a [Park]>,
-    /// The operation whose events a wait adds (`Loader::op`): 0 for none.
-    pub op: u32,
+    /// The operation whose events a wait adds (`Loader::logging_op`): `None` while the operation is quiet (a retry that logs nothing), 0 for no numbered operation.
+    pub op: Option<u32>,
+}
+
+/// Why a gate does not let a write through.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Refusal {
+    /// A task is not parked: `task` is the first one found so, its place in the port file's list (read under the same mask as the answer). Nothing changed; ask again on a later pass.
+    Busy { task: usize },
+    /// The port file lists no task facts, so a `task` site cannot be gated.
+    NoTaskFacts,
+}
+
+impl Refusal {
+    /// The status an install answers with.
+    pub fn status(self) -> i32 {
+        if let Refusal::Busy { .. } = self {
+            E_BUSY
+        } else {
+            E_IMPORT
+        }
+    }
 }
 
 impl Gate<'static> {
     /// The boot (and a test that has no task): no waiting.
-    pub const BOOT: Gate<'static> = Gate { live: false, parks: Some(&[]), op: 0 };
+    pub const BOOT: Gate<'static> = Gate { live: false, parks: Some(&[]), op: Some(0) };
 }
 
 impl<'a> Gate<'a> {
     /// The gate whose wait events belong to operation `op`.
-    pub fn in_op(mut self, op: u32) -> Gate<'a> {
+    pub fn in_op(mut self, op: Option<u32>) -> Gate<'a> {
         self.op = op;
         self
     }
 }
 
 impl Gate<'_> {
-    /// The first task of the gate that is not parked (its place in the port file's list); `None` when all are parked, the gate is not live or its tasks are unknown.
-    pub unsafe fn waiting<P: PackagePlatform>(&self, p: &P) -> Option<usize> {
-        if !self.live {
-            return None;
-        }
-        self.parks?.iter().position(|k| !parked(p, k))
-    }
-
-    /// `Ok` when every task is parked (or the gate is not live). Call it under the mask.
-    unsafe fn clear<P: PackagePlatform>(&self, p: &P) -> Result<(), i32> {
+    /// `Ok` when every task is parked (or the gate is not live); else the first task that is not. Call it under the mask. The gate evaluates the tasks once.
+    unsafe fn clear<P: PackagePlatform>(&self, p: &P) -> Result<(), Refusal> {
         if !self.live {
             return Ok(());
         }
-        if self.parks.is_none() {
-            return Err(E_IMPORT);
-        }
-        let Some(i) = self.waiting(p) else {
+        let Some(parks) = self.parks else {
+            return Err(Refusal::NoTaskFacts);
+        };
+        let Some(i) = parks.iter().position(|k| !parked(p, k)) else {
             return Ok(());
         };
-        // the task that is not parked is the event's detail; a quiet retry logs nothing (its owner notes a change)
-        if self.op != QUIET_OP && crate::package::lifecycle::trace_on() {
+        // the task that is not parked is the event's detail; a quiet operation has no number to log under (its owner notes a change)
+        if let (Some(op), true) = (self.op, crate::package::lifecycle::trace_on()) {
             crate::package::lifecycle::trace_emit(
-                self.op,
+                op,
                 dkrt_lifecycle::Phase::Note,
                 dkrt_lifecycle::Step::ParkWait,
                 crate::package::lifecycle::TRACE_NO_PACKAGE,
@@ -138,7 +149,7 @@ impl Gate<'_> {
                 i as u32,
             );
         }
-        Err(E_BUSY)
+        Err(Refusal::Busy { task: i })
     }
 }
 
@@ -225,18 +236,11 @@ pub struct Installer {
     ns: usize,
     /// True in safe mode: `install` does nothing. (Stored inverted: the zero fill of the static keeps the whole loader out of `.data`.)
     disarmed: bool,
-    /// The task (its place in the port file's list) that the last restore answered `E_BUSY` for, read under the same mask as the answer; `None` after any other result.
-    waited: Option<u32>,
 }
 
 impl Installer {
     pub const fn new() -> Installer {
-        Installer { sites: [EMPTY_SITE; SITES_MAX], n: 0, patches: [EMPTY_PATCH; PATCHES_MAX], np: 0, slot_words: [(0, 0); SLOT_WORDS_MAX], ns: 0, disarmed: false, waited: None }
-    }
-
-    /// The task that the last restore waited for when it answered `E_BUSY` (the one the gate found unparked under its mask); `None` otherwise.
-    pub fn waited(&self) -> Option<u32> {
-        self.waited
+        Installer { sites: [EMPTY_SITE; SITES_MAX], n: 0, patches: [EMPTY_PATCH; PATCHES_MAX], np: 0, slot_words: [(0, 0); SLOT_WORDS_MAX], ns: 0, disarmed: false }
     }
 
     pub fn set_armed(&mut self, armed: bool) {
@@ -477,7 +481,7 @@ impl Installer {
         if hooks.iter().any(|h| h.ctx == CTX_TASK) || patches.iter().any(|h| h.ctx == CTX_TASK) {
             if let Err(e) = gate.clear(p) {
                 p.irq_restore(sr);
-                return Err(e);
+                return Err(e.status());
             }
         }
         // the compare under the mask: nothing may have changed the sites since the copies were read
@@ -560,8 +564,7 @@ impl Installer {
 
     /// [`Installer::restore`] with a [`Gate`]: at run time a record with a `task` site is restored only while the tasks of the gate are parked (checked under the mask), else
     /// `E_BUSY` and nothing changed (the caller asks again on a later pass); a record with `ui` and `irq` sites only never waits.
-    pub unsafe fn restore_gated<P: PackagePlatform>(&mut self, p: &P, rec: u8, gate: &Gate<'_>) -> Result<(), i32> {
-        self.waited = None;
+    pub unsafe fn restore_gated<P: PackagePlatform>(&mut self, p: &P, rec: u8, gate: &Gate<'_>) -> Result<(), Refusal> {
         // a record that installed nothing (a file that failed before its install) costs no platform call
         if !self.sites[..self.n].iter().any(|s| s.rec == rec) && !self.patches[..self.np].iter().any(|s| s.rec == rec) && !self.slot_words[..self.ns].iter().any(|s| s.0 == rec) {
             return Ok(());
@@ -569,7 +572,6 @@ impl Installer {
         let sr = p.irq_mask();
         if self.sites[..self.n].iter().any(|s| s.rec == rec && s.ctx == CTX_TASK) || self.patches[..self.np].iter().any(|s| s.rec == rec && s.ctx == CTX_TASK) {
             if let Err(e) = gate.clear(p) {
-                self.waited = gate.waiting(p).map(|i| i as u32);
                 p.irq_restore(sr);
                 return Err(e);
             }

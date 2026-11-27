@@ -6,7 +6,7 @@ pub trait PackageInstaller {
     /// Install all `entries` of `owner`, or none.
     fn install(&mut self, owner: PackageId, entries: &[Entry]) -> Result<(), InstallError>;
 
-    /// Return the firmware to stock for `owner`; idempotent. `Backend(E_BUSY)` means "not now": the entries stay and the caller retries.
+    /// Return the firmware to stock for `owner`; idempotent. `Busy` means "not now": the entries stay and the caller retries.
     fn restore(&mut self, owner: PackageId) -> Result<(), InstallError>;
 }
 

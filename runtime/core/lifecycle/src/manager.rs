@@ -5,7 +5,8 @@
 //! - this file: the struct and its small queries.
 //! - `bring_up`: `boot` and `load`, the steps of one package with the unwind of a failure, and what an operation does after a failure (continue with the
 //!   packages that do not need the failed one, take down the services it started and nothing needs).
-//! - `take_down`: `unload`, the take-down of one package, `retry_pending` for a busy restore.
+//! - `take_down`: `unload`, the take-down of one package, `retry_pending` for a busy restore or a detach that answered pending.
+//! - `attach`: `step`, once per UI pass: the attaches that answered pending go on, and one that fails or does not end takes its closure down.
 //! - `reload`: `reload` of a module or a service (a service reloads its consumers).
 //! - `resources`: the edge to the ledger and the fit plan of a bring-up, package by package.
 //! - `error`, `refused`, `report`: the typed refusals and what an operation did; `progress`, `pending_take_down`: private bookkeeping.
@@ -22,6 +23,7 @@ use core::mem::MaybeUninit;
 use core::ptr::addr_of_mut;
 use dkrt_fit::ledger::{Owner, ResourceLedger};
 
+mod attach;
 mod bring_up;
 mod error;
 mod pending_take_down;
@@ -47,6 +49,8 @@ pub struct PackageManager<M, P, L, I, H> {
     live: LiveSet,
     progress: Progress,
     pending_take_down: Option<PendingTakeDown>,
+    /// The passes (`step` calls) an attach may stay pending before its package is taken down.
+    attach_limit: u32,
     placer: P,
     linker: L,
     installer: I,
@@ -62,18 +66,27 @@ where
     H: ProviderHost,
 {
     /// A manager with nothing up: the graph of the manifest's header tables and the core's pools declared. It is built by value: a manager is 6 KB, so the runtime
-    /// (which has little stack) uses [`PackageManager::init`].
+    /// (which has little stack) uses [`PackageManager::init`]. `attach_limit` is the number of [`PackageManager::step`] passes an attach may stay pending.
     pub fn new(
         manifest: M,
         placer: P,
         linker: L,
         installer: I,
         host: H,
+        attach_limit: u32,
     ) -> Result<Self, LifecycleError> {
         let mut at = MaybeUninit::<Self>::uninit();
         // SAFETY: `init` writes every field before it answers `Ok`
         unsafe {
-            Self::init(at.as_mut_ptr(), manifest, placer, linker, installer, host)?;
+            Self::init(
+                at.as_mut_ptr(),
+                manifest,
+                placer,
+                linker,
+                installer,
+                host,
+                attach_limit,
+            )?;
             Ok(at.assume_init())
         }
     }
@@ -90,6 +103,7 @@ where
         linker: L,
         installer: I,
         host: H,
+        attach_limit: u32,
     ) -> Result<(), LifecycleError> {
         PackageGraph::init_from_tables(
             addr_of_mut!((*out).graph),
@@ -107,6 +121,7 @@ where
         addr_of_mut!((*out).live).write(LiveSet::new());
         addr_of_mut!((*out).progress).write(Progress::new());
         addr_of_mut!((*out).pending_take_down).write(None);
+        addr_of_mut!((*out).attach_limit).write(attach_limit);
         addr_of_mut!((*out).manifest).write(manifest);
         addr_of_mut!((*out).placer).write(placer);
         addr_of_mut!((*out).linker).write(linker);
@@ -126,7 +141,7 @@ where
         &self.graph
     }
 
-    /// The packages that are up (`Active`, or waiting for a restore).
+    /// The packages that are up (`Active`, attaching, or waiting for a restore).
     pub fn live(&self) -> &LiveSet {
         &self.live
     }
@@ -140,8 +155,8 @@ where
         self.progress.state(package)
     }
 
-    /// The package whose restore is busy or failed, if any: its take-down waits for [`PackageManager::retry_pending`], which finishes it with the packages
-    /// behind it in order. Until then every other operation is refused with `RestorePending`.
+    /// The package whose detach or restore is pending, busy or failed, if any: its take-down waits for [`PackageManager::retry_pending`] (or, for a take-down the
+    /// manager started itself, [`PackageManager::step`]), which finishes it with the packages behind it in order. Until then every other operation is refused with `RestorePending`.
     pub fn restore_pending(&self) -> Option<PackageId> {
         self.progress.pending()
     }

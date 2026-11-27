@@ -542,7 +542,7 @@ unsafe fn service_activate<P: PackagePlatform, M: Images, R: Registry>(l: &mut L
         return e;
     }
     let parks = l.task_parks();
-    let cf = CfItems { hooks: &it.hooks[..it.nh], patches: &it.patches[..it.np], image_base: base, image_size, slots: &it.slots[..it.ns], gate: parks.gate(l.live()).in_op(l.op()) };
+    let cf = CfItems { hooks: &it.hooks[..it.nh], patches: &it.patches[..it.np], image_base: base, image_size, slots: &it.slots[..it.ns], gate: parks.gate(l.live()).in_op(l.logging_op()) };
     match Backend::install(&mut l.installer, &l.p, rec as u8, &cf) {
         Ok(()) => {
             l.provs[index_of(rec)].query_v1 = query_v1;
@@ -577,7 +577,7 @@ pub fn role_ok(role: u32, keys: &Keys) -> Result<(), i32> {
     // the entries the table has, one bit per tag
     let mut has = 0u32;
     let mut t = tag::NEEDS;
-    while t <= tag::SERVICE_IMPORTS {
+    while t <= tag::PAYLOADS {
         if keys.count(t) != 0 {
             has |= 1 << t;
         }
@@ -622,7 +622,7 @@ mod tests {
     use std::vec::Vec;
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[], callback_order: None, service_imports: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[], callback_order: None, service_imports: &[], payloads: &[] };
 
     fn bytes(t: &Table) -> Vec<u8> {
         let mut b = vec![0u8; dkneeds::keys::table_size(t)];

@@ -282,6 +282,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if c.reg_size as usize > TABLE_MAX {
             return E_TOO_BIG;
         }
+        // a reload keeps its services up: the new file's payloads are checked by their owners now, before anything is taken down
+        let r = self.check_payload_owners(&c, rec as u8 + 1, true);
+        if r != OK {
+            return r;
+        }
         let new = match Keys::parse(core::slice::from_raw_parts(c.f.add(c.reg_off as usize), c.reg_size as usize)) {
             Ok(t) => t,
             Err(_) => return E_FORMAT,
@@ -436,7 +441,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if Keys::parse(core::slice::from_raw_parts(c.f.add(c.reg_off as usize), c.reg_size as usize)).is_err() {
             return E_FORMAT;
         }
-        OK
+        // an owner that is up has its say now; one that the load brings up is asked by the place step
+        self.check_payload_owners(&c, 0, false)
     }
 
     /// The part of `live_load` before the file loads (see `reload_prepare`): the file's header table kept at index `k`, the services' numbering.

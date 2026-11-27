@@ -1,5 +1,7 @@
 use crate::{Entry, InstallError, PackageId, PackageInstaller, Step, Trace, Traced};
 
+use dkrt_sdk::E_BUSY;
+
 /// The status an install error is logged with: a backend's own status, and for the errors of the installer itself a code of this crate (1001 and up) that is no SDK status.
 fn status_of(r: &Result<(), InstallError>) -> i32 {
     // comparisons, not a `match`: a dense match compiles to a jump table, which the runtime's ColdFire code check reads as illegal code
@@ -8,6 +10,8 @@ fn status_of(r: &Result<(), InstallError>) -> i32 {
     };
     if let InstallError::Backend(s) = e {
         *s
+    } else if let InstallError::Busy { .. } = e {
+        E_BUSY
     } else if *e == InstallError::TableFull {
         1001
     } else if *e == InstallError::OwnerOutOfRange {
@@ -37,6 +41,7 @@ mod tests {
             InstallError::AlreadyInstalled => 1003,
             InstallError::Partial => 1004,
             InstallError::Backend(s) => s,
+            InstallError::Busy { .. } => E_BUSY,
         }
     }
 
@@ -48,6 +53,7 @@ mod tests {
             InstallError::AlreadyInstalled,
             InstallError::Partial,
             InstallError::Backend(-7),
+            InstallError::Busy { task: Some(1) },
         ] {
             assert_eq!(status_of(&Err(e)), expected(e));
         }
