@@ -75,7 +75,7 @@ in `tools/nx/tests/selection.test.ts` verify native Nx input resolution and affe
 Device targets may build their declared packs, CLIs and daemons on demand; direct Vitest invocations
 require those artifacts to exist already (see "Inputs").
 
-`test:changed` runs only affected lint, format, types, host tests and Python checks. `test` runs the
+`test:changed` runs only affected lint, format, types, host tests, cached Rust unit tests and Python checks. `test` runs the
 complete affected target list, with `test:plan` adding Nx `--explain` to that same invocation.
 The default gate requests affected module `pack` targets directly, even when a module has no device-test
 target. A `module.toml` edit also selects the host-only `patchkit:catalog-check` target once to validate
@@ -104,7 +104,7 @@ A `runtimeAcceptance` record of a device test of the runtime loading and lifecyc
 
 | Command | What runs |
 | --- | --- |
-| `mise run test:changed` | `nx affected` against `DIGI_GATE_BASE` (default `main`) over the targets `lint`, `fmt-check`, `typecheck`, `test-host`, `python-checks` and `objects-check` (about 25 s uncached; `patchkit` is affected by edits of its own files, of core module sources, manifests or toolchain inputs, so a stale committed `.dko.json` fails here). Does not run Rust, module builds or devices. |
+| `mise run test:changed` | `nx affected` against `DIGI_GATE_BASE` (default `main`) over the targets `lint`, `fmt-check`, `typecheck`, `test-host`, `python-checks` and `objects-check`, then the cached Rust unit tests (`rust-tests` of the projects tagged `rust-cached`: the `HERMETIC` crates and patchkit's library tests; a replay unless an input changed) (about 25 s uncached; `patchkit` is affected by edits of its own files, of core module sources, manifests or toolchain inputs, so a stale committed `.dko.json` fails here). Does not run the uncached Rust tests, `rust-tests-integration`, module builds or devices. |
 | `pnpm test:host` | The Vitest projects of `vitest.host/*.json` except `web-wasm` (the Nx `test-host` set): control-client, test-support, dk-session, web-transfer, desktop-host, regression-host, module-tests, nx-host, dkbs, module-ui. One worker by default; `-- --maxWorkers N` changes it. |
 | `pnpm verify:host` | oxlint, Prettier check, host Vitest, typecheck of control-client, dk-session, test-support, regression and desktop. Stops at the first failure. |
 | `pnpm --filter @digi/web test-wasm` | The Vitest project `web-wasm` (`tests/*.wasm.test.ts`, 120 s limit per test). Needs `public/*.wasm` (`@digi/web:test-wasm` builds it). Cases that need firmware skip when absent. |
@@ -161,7 +161,7 @@ outcomes and skip reasons test by test after moving tests.
 
 `dkrt_test_support::provider_contract::<Recipe>(&Fixture)` (`runtime/core/test-support/src/contract.rs`) proves for a service (an owner object behind the part tables of its row) that a module can be loaded, unloaded and loaded again (docs/plans/extension-model.md 3.5). Each service crate runs it in `tests/contract.rs` for the DT2 and the DN2 profile; it is part of the crate's `rust-tests` (about a second): `pnpm nx:pilot run dkrt-svc-lfo:rust-tests` (and `-fx`, `-machines`, `-samples`).
 
-After editing the shared contract suite or rebasing such an edit, run the affected Rust targets against the gate base. `mise run test:changed` omits `rust-tests`. The merge gate includes them.
+After editing the shared contract suite or rebasing such an edit, run the affected Rust targets against the gate base. `mise run test:changed` runs only the cached `rust-tests`. The merge gate includes all of them.
 
 ```sh
 pnpm nx:pilot affected -t rust-tests --base "${DIGI_GATE_BASE:-main}"
@@ -1373,7 +1373,10 @@ stays uncached, because it writes a content-keyed store outside Nx), `typecheck`
 module's device tests), `@digi/web:check`, `@digi/desktop:build:ui` and `check:ui`, `workspace:lint`, the
 host tests, and `rust-tests` of the crates in `HERMETIC` in `tools/nx/cargo.mjs`
 (coldfire, periph, emmc-card, dkneeds, dkrt-sdk, dkrt-fit, device-profile, dkupload, dksample, machine,
-sharc-rt, dkmidi). Those run
+sharc-rt, dkmidi) and of patchkit (`LIB_TESTS`: `--lib --features record-rules`; the unit tests read the module
+library, ports, devices and toolchain pins at run time, so those files are inputs, and they read no firmware or `out/`
+data). `patchkit:rust-tests-integration` (`tests/*.rs` and the binary's tests; firmware, toolchains, `out/`; uncached,
+`DIGI_REQUIRE_TOOLCHAINS=1`) is a merge-gate target and not part of `test:changed`. The HERMETIC crates run
 `rustup run <mise rust> cargo nextest run -p NAME --release --locked --offline --target-dir dist/cargo-tests`.
 Their runtime key includes the sorted present `CARGO_PROFILE_RELEASE_*` names and values, including
 build-override options; changing these environment settings requires a direct target invocation when

@@ -330,7 +330,7 @@ export const HERMETIC = {
   'dkrt-sdk': ['{workspaceRoot}/runtime/core/vectors/settings-vectors.json'],
   'dkrt-fit': ['{workspaceRoot}/runtime/core/vectors/fit-vectors.json'],
   'dkrt-lifecycle': [],
-  'device-profile': ['{workspaceRoot}/devices/digitakt-ii.toml', '{workspaceRoot}/devices/digitone-ii.toml'],
+  'device-profile': ['{workspaceRoot}/devices/*.toml'],
   dkupload: [],
   dksample: [],
   machine: [],
@@ -362,10 +362,35 @@ const COMPILE_SOURCE = {
     '{workspaceRoot}/runtime/core/vectors/settings-vectors.json',
     '{workspaceRoot}/tests/fixtures/ping-vectors.json', // flash_rpc.rs: `include_str!` in its unit test
     '{workspaceRoot}/devices/*.toml',
+    '{workspaceRoot}/devices/*.json', // cycle-factors.json: `include_str!`
     '{workspaceRoot}/tools/patchkit/toolchain/pins.toml',
     '{workspaceRoot}/tools/patchkit/toolchain/m68k-cf-none-elf-a2.json',
     '{workspaceRoot}/tools/patchkit/pk_toolchains.py',
   ],
+};
+
+// Crates whose library unit tests are cached while their integration tests (`tests/*.rs`, the binary's tests) stay uncached.
+// Unit tests of patchkit read the module library, ports, devices and the toolchain pins at run time; those files are inputs
+// besides what cargo compiles in (the list mirrors `gate-rust-modules:rust-tests`, without its test-source exclusions: the tests are the subject here). They read no firmware and no `out/` data
+// (checked with both absent); `DIGI_REQUIRE_TOOLCHAINS=1` makes a missing toolchain a failure, so no skip is ever cached.
+export const LIB_TESTS = {
+  patchkit: {
+    features: 'record-rules',
+    env: { DIGI_REQUIRE_TOOLCHAINS: '1' },
+    inputs: [
+      ...COMPILE_SOURCE.patchkit,
+      '{workspaceRoot}/{modules,runtime,services}/**/module.toml',
+      '{workspaceRoot}/{modules,runtime,services,ports/bindings}/**/build/**/*',
+      '{workspaceRoot}/{modules,runtime,services,ports/bindings}/**/src/**/*',
+      '{workspaceRoot}/{modules,runtime,services,ports/bindings}/**/include/**/*',
+      '{workspaceRoot}/tests/fixtures/{modules,runtime,services}/**/*',
+      '{workspaceRoot}/ports/*.toml',
+      '{workspaceRoot}/ports/fw/**/*',
+      '{workspaceRoot}/tools/patchkit/toolchain/**/*',
+      '{workspaceRoot}/config/test-source-patterns.json',
+      '{workspaceRoot}/runtime/core/vectors/workbench-vectors.json',
+    ],
+  },
 };
 
 // Normalized repo-relative roots of the path dependencies of a crate (all dependency tables).
@@ -443,42 +468,67 @@ export const createNodesV2 = [
         { env: 'RUSTC_WORKSPACE_WRAPPER' },
         { env: 'RUST_TEST_THREADS' },
       ];
+      const cachedTests = (name, command, extra = [], env) => ({
+        executor: 'nx:run-commands',
+        cache: true,
+        inputs: [...hermeticInputs, ...extra],
+        outputs: [],
+        options: { command, cwd: '.', ...(env && { env }) },
+      });
       const rustTests = (name) =>
         name in HERMETIC
-          ? {
-              executor: 'nx:run-commands',
-              cache: true,
-              inputs: [...hermeticInputs, ...HERMETIC[name]],
-              outputs: [],
-              options: {
-                command: `rustup run ${rust} cargo nextest run -p ${name} --release --locked --offline --target-dir dist/cargo-tests`,
-                cwd: '.',
-              },
-            }
-          : {
-              executor: 'nx:run-commands',
-              cache: false,
-              inputs: [
-                ...inputs,
-                '{workspaceRoot}/tools/nx/rust-env.mjs',
-                ...(COMPILE_SOURCE[name] ?? []),
-                ...(FIXTURE_SOURCE[name] ?? []),
-              ],
-              options: {
-                command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name}${name === 'patchkit' ? ' --features record-rules' : ''} --release --locked --offline`,
-                cwd: '.',
-                ...(name === 'patchkit' && { env: { DIGI_REQUIRE_TOOLCHAINS: '1' } }),
-              },
-            };
+          ? cachedTests(
+              name,
+              `rustup run ${rust} cargo nextest run -p ${name} --release --locked --offline --target-dir dist/cargo-tests`,
+              HERMETIC[name],
+            )
+          : name in LIB_TESTS
+            ? cachedTests(
+                name,
+                `rustup run ${rust} cargo nextest run -p ${name} --lib --features ${LIB_TESTS[name].features} --release --locked --offline --target-dir dist/cargo-tests`,
+                LIB_TESTS[name].inputs,
+                LIB_TESTS[name].env,
+              )
+            : {
+                executor: 'nx:run-commands',
+                cache: false,
+                inputs: [
+                  ...inputs,
+                  '{workspaceRoot}/tools/nx/rust-env.mjs',
+                  ...(COMPILE_SOURCE[name] ?? []),
+                  ...(FIXTURE_SOURCE[name] ?? []),
+                ],
+                options: {
+                  command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name} --release --locked --offline`,
+                  cwd: '.',
+                },
+              };
+      // The rest of a crate with cached library tests: tests/*.rs and the binary's tests (firmware, toolchains, out/ data), uncached.
+      const rustTestsIntegration = (name) => ({
+        executor: 'nx:run-commands',
+        cache: false,
+        inputs: [
+          ...inputs,
+          '{workspaceRoot}/tools/nx/rust-env.mjs',
+          ...(COMPILE_SOURCE[name] ?? []),
+          ...(FIXTURE_SOURCE[name] ?? []),
+        ],
+        options: {
+          command: `node tools/nx/rust-env.mjs -- cargo nextest run -p ${name} --bins --test '*' --features ${LIB_TESTS[name].features} --release --locked --offline`,
+          cwd: '.',
+          env: LIB_TESTS[name].env,
+        },
+      });
       const projects = {};
       for (const root of read(ctx.workspaceRoot, f).workspace?.members ?? []) {
         const { name } = read(ctx.workspaceRoot, join(root, 'Cargo.toml')).package;
         projects[root] = {
           name,
           root,
-          tags: ['rust'],
+          tags: ['rust', ...(name in HERMETIC || name in LIB_TESTS ? ['rust-cached'] : [])],
           targets: {
             ...(!NO_TESTS.has(name) && { 'rust-tests': rustTests(name) }),
+            ...(name in LIB_TESTS && { 'rust-tests-integration': rustTestsIntegration(name) }),
             ...(CLI[name] && {
               cli: cliTarget({ ...CLI[name], inputs: builtInputs(ctx.workspaceRoot, root, CLI[name].inputs) }),
             }),

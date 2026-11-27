@@ -17,6 +17,7 @@ const MERGE_TARGETS = [
   'build:ui',
   'check:ui',
   'rust-tests',
+  'rust-tests-integration',
   'catalog-check',
   'objects-check',
   'pack',
@@ -44,6 +45,8 @@ export const TIERS = {
     targets: ['lint', 'fmt-check', 'rust-fmt', 'typecheck', 'test-host', 'python-checks', 'objects-check'],
     access: 'rw',
     narrow: false,
+    // The cached Rust unit tests (tag `rust-cached`) as a second command: a replay when their inputs did not change.
+    cachedRustTests: true,
   },
   // The merge tier selects device tests by ownership (tools/nx/test-subset.mjs `--gate`, docs/TESTING.md "Nx gate"):
   // `affected` runs every target below except `test-device` and `test-conformance`; `--all-affected` puts them back (the old selection).
@@ -176,6 +179,17 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
       ? ['node', ['tools/nx/remote-cache.mjs', 'exec', '--access', tier.access, '--', 'pnpm', 'nx:pilot', ...command]]
       : ['pnpm', ['nx:pilot', ...command]];
   const commands = [tier?.runMany ? ['run-many', ...args] : ['affected', ...args]];
+  if (tier?.cachedRustTests) {
+    commands.push([
+      'affected',
+      '--base',
+      process.env.DIGI_GATE_BASE,
+      '-t',
+      'rust-tests',
+      '--projects',
+      'tag:rust-cached',
+    ]);
+  }
   console.log(`gate: ${commands[0][0]} ${tier ? 'over the tier targets' : 'with the given arguments'}`);
   // The device tests the changed files select by ownership and the fixed smoke set: test-subset.mjs plans the run (it runs it itself, with the
   // remote cache and the compact output); the plan alone with --explain. Each command has its own trace dir and summary.

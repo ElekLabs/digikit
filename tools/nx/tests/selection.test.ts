@@ -235,7 +235,6 @@ describe('workspace selection', () => {
     const graph = selected('tools/nx/cargo-profile-env.mjs', 'rust-tests');
     expect(graph.tasks['dkneeds:rust-tests']).toBeDefined();
     expect(graph.tasks['device-profile:rust-tests']).toBeDefined();
-    expect(graph.tasks['patchkit:rust-tests']).toBeUndefined();
   }, 660_000);
 
   it.each(['contract.rs', 'lib.rs'])(
