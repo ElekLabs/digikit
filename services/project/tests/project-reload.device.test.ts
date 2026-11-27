@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { DkError } from '@digi/dk-session';
 import { pollUntil } from '@digi/test-support';
 import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
 import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
@@ -14,7 +15,7 @@ import {
   type ProtocolRun,
 } from '@digi/regression/runtime/project-kit.ts';
 import { word } from '@digi/regression/runtime/guest-access.ts';
-import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
+import { bootReloads } from '@digi/regression/runtime/guest-mailbox.ts';
 import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 
 /**
@@ -22,7 +23,7 @@ import type { TestRuntime } from '@digi/regression/test-runtime.ts';
  * (binding, the live image with its unsaved value, dirty flag, epoch, module-restore state, the hooks' record) to the new copy and brings both back. The state carry, its refusals and the
  * order of the steps are unit and assembly tests (`services/project/tests/carry.rs`, `state_reload_assembly_tests.rs`); the cases here show what only the firmware shows:
  * - DF-S1: after the reload the project has the same slot and name, is dirty, the module reads the unsaved value, and a stock save (the hooks of the new copy) writes it;
- * - DF-S2: a stock save started while the job runs is not lost (the file holds the value) or the job refuses cleanly;
+ * - DF-S2: a stock save started while the job runs is saved: the service refuses its take-down (`can_stop`: E_BUSY) while hook work is queued, and a save that starts later runs on the new copy's carried hooks, so the file holds the value and the job ends well;
  * - DF-S3: no module is live-loaded again (no PROJECT_MODULE, the same module list);
  * - DF-S5: a module that needs the project service is refused at run time with E_BOOT_ONLY when the service was not loaded at the boot (the first live load).
  * Not driven here: carried bytes of an older layout (DF-S4). A second file of the service in an older layout is a build variant of the crate (`packModuleVariant` copies one module
@@ -41,6 +42,8 @@ const CMD_PUT = 0x38;
 const CMD_READ = 0x39;
 const STABLE_BLOCKS = 300;
 const WITHIN_MS = 30_000;
+/** A hang guard of the whole reload (wall time); the job's end is what the wait is for. */
+const RELOAD_WITHIN_MS = 1_800_000;
 const E_BOOT_ONLY = -45;
 /** `dk_project_status` bits: 0 file loaded, 1 dirty. */
 const BIT_LOADED = 1;
@@ -71,8 +74,10 @@ cardRigs(
         if (r.status !== 0) return null;
         const b = Buffer.from(r.body);
         return { initRc: b.readInt32BE(0), puts: b.readUInt32BE(4), value: b.readUInt32BE(12), status: b.readUInt32BE(28) };
-      } catch {
-        return null;
+      } catch (e) {
+        // a refusal the device reports (the module is not there yet); a USB failure or a fault is not one
+        if (e instanceof DkError) return null;
+        throw e;
       }
     }
     const answers = async (rt: TestRuntime, ok: (s: NonNullable<Awaited<ReturnType<typeof userState>>>) => boolean, message: string) =>
@@ -84,7 +89,7 @@ cardRigs(
       void after;
     }
     const modules = async (rt: TestRuntime) => (await run.usb(rt, (dk) => dk.modules())).map((m) => m.name).sort();
-    const reloadsAt = (rt: TestRuntime) => word(rt.session, planSymbol(run.plan, 'DKRT_BOOT') + 252);
+    const reloadsAt = (rt: TestRuntime) => bootReloads(rt.session, run.plan);
     const fileOf = async (rt: TestRuntime) => {
       const path = slotFile(await projectPaths(usbOf(rt)), SLOT)!;
       return { path, file: dkpOf(await run.usb(rt, (dk) => readStoreFile(dk, path))) };
@@ -109,12 +114,7 @@ cardRigs(
       const modulesBefore = await modules(rt);
       const reloadsBefore = await reloadsAt(rt);
       const since = await log.mark();
-      // `run.usb` bounds one operation by wall time: queue the job, then poll its state on the emulated clock, one request each (`reloadAndWait` inside one operation outlasts the bound)
-      await run.usb(rt, (dk) => dk.reload(SERVICE));
-      const end = await pollUntil(rt.clock, () => run.usb(rt, (dk) => dk.reloadState()), (v) => v.phase === 2, {
-        withinMs: WITHIN_MS,
-        message: 'the reload of the project service ended',
-      }).catch(async (e: Error) => {
+      const end = await run.usb(rt, (dk) => dk.reloadAndWait(SERVICE, { withinMs: RELOAD_WITHIN_MS })).catch(async (e: Error) => {
         await log.pump();
         const steps = log.all('LIFECYCLE', () => true, since).slice(0, 40).map((x) => JSON.stringify(x.fields));
         throw new Error(`${e.message}; first lifecycle events: ${steps.join(' ')}`);
@@ -140,10 +140,10 @@ cardRigs(
       await rt.session.expectNoFault('project reload');
     }, 1_800_000);
 
-    test('DF-S2: a stock save during the job is not lost', async () => {
+    test('DF-S2: a stock save during the job is saved, and the job ends well', async () => {
       const { rt, log, saved } = await bootDirty('project-reload-save');
       await run.usb(rt, (dk) => dk.reload(SERVICE));
-      // the save sequence runs through the panel while the job is queued or running
+      // the save sequence runs through the panel while the job is queued or running; the job's end is read on the emulated clock, one request each (the save needs the panel between the two)
       const event = await savePanelProject(rt, { events: log, from: SLOT });
       expect(event!.args[3], 'the save is ok').toBe(0);
       const end = await pollUntil(rt.clock, () => run.usb(rt, (dk) => dk.reloadState()), (s) => s.phase === 2, {
