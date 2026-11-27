@@ -330,6 +330,30 @@ fn newer_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
     &ROW
 }
 
+/// The row of the provider fixture whose state part accepts only layouts newer than its own (an empty range): a thin variant, as the file's table cannot differ on the host
+/// (the row is the test binary's). The parts are the fixture's own tables.
+fn state_beyond_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
+    use dkrt_abi::provider::{LifecycleV1, PartRef, ProviderRow, QueryV1, StateV1, TickV1};
+    use dkrt_abi::provider::{LIFECYCLE_NEWEST, PART_LIFECYCLE, PART_QUERY, PART_STATE, PART_TICK, QUERY_NEWEST, STATE_NEWEST, TICK_NEWEST};
+    use crate::package::core_api::RealCore;
+    use dkrt_fixture_local_ping::LocalPing;
+    static LIFE: LifecycleV1 = LifecycleV1::of::<LocalPing, RealCore>();
+    static TICK: TickV1 = TickV1::of::<LocalPing, RealCore>();
+    static QUERY: QueryV1 = QueryV1::of::<LocalPing>();
+    static STATE: StateV1 = {
+        let own = StateV1::of::<LocalPing, RealCore>();
+        StateV1 { accepts_from: own.version + 1, ..own }
+    };
+    static PARTS: [PartRef; 4] = [
+        PartRef::new(PART_LIFECYCLE, LIFECYCLE_NEWEST, &LIFE as *const _ as *const ()),
+        PartRef::new(PART_TICK, TICK_NEWEST, &TICK as *const _ as *const ()),
+        PartRef::new(PART_QUERY, QUERY_NEWEST, &QUERY as *const _ as *const ()),
+        PartRef::new(PART_STATE, STATE_NEWEST, &STATE as *const _ as *const ()),
+    ];
+    static ROW: ProviderRow = ProviderRow::new(dkrt_abi::provider::name_hash("local-ping"), &PARTS);
+    &ROW
+}
+
 fn other_name_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
     use dkrt_abi::provider::{LifecycleV1, PartRef, ProviderRow, LIFECYCLE_NEWEST, PART_LIFECYCLE};
     use crate::package::core_api::RealCore;
@@ -346,7 +370,9 @@ pub(super) struct Card {
     staged: Vec<u8>,
     staged_path: Vec<u8>,
     pub(super) live: Vec<(u32, Vec<u128>)>,
-    allocs: u32,
+    pub(super) allocs: u32,
+    /// The allocation (counted by `allocs`) that finds the arena full: a case that needs a refusal for lack of room.
+    pub(super) fail_alloc: Option<u32>,
     /// The blocks given back: (address, bytes). Only a load that fails flushes a block after its free (its cleanup), so a golden shows `freed:` only for such a path.
     freed: Vec<(u32, u32)>,
     /// The runtime id of the device whose `init` the card replays.
@@ -368,6 +394,8 @@ pub(super) struct Card {
     pub(super) newer_parts: bool,
     /// The `local-ping` row declares another service name than the file PROVIDES.
     pub(super) wrong_name: bool,
+    /// The provider fixture's state part accepts no layout the old copy has (`state_beyond_ping_row`).
+    pub(super) state_beyond: bool,
     /// The device addresses of the runtime's functions that the imports of a service file name (`svc_import_addr`).
     imports: crate::fake_platform::address_map::AddressMap,
 }
@@ -398,6 +426,7 @@ impl Card {
             staged_path: Vec::new(),
             live: Vec::new(),
             allocs: 0,
+            fail_alloc: None,
             freed: Vec::new(),
             device,
             init_calls: Vec::new(),
@@ -408,6 +437,7 @@ impl Card {
             provider_recs: Vec::new(),
             newer_parts: false,
             wrong_name: false,
+            state_beyond: false,
             imports: crate::fake_platform::address_map::AddressMap::new(),
         }
     }
@@ -427,6 +457,9 @@ impl Images for Card {
     }
     unsafe fn alloc(&mut self, n: u32) -> Option<Block> {
         self.allocs += 1;
+        if self.fail_alloc == Some(self.allocs) {
+            return None;
+        }
         let addr = 0x0010_0000 * self.allocs;
         let mut mem = std::vec![0u128; (n as usize + 15) / 16];
         let ptr = mem.as_mut_ptr() as *mut u8;
@@ -556,7 +589,7 @@ impl Images for Card {
             dkrt_fixture_local_ping::dk_svc_stop();
             let instance = dkrt_fixture_local_ping::dk_svc_start().expect("the instance of local-ping starts");
             self.provider_recs.push(rec);
-            let row = if self.wrong_name { other_name_ping_row() } else if self.newer_parts { newer_ping_row() } else { dkrt_fixture_local_ping::dk_svc_row() };
+            let row = if self.wrong_name { other_name_ping_row() } else if self.newer_parts { newer_ping_row() } else if self.state_beyond { state_beyond_ping_row() } else { dkrt_fixture_local_ping::dk_svc_row() };
             return crate::package::collect::dk_provider_declare_row(ctx, row, instance);
         }
         let name: &'static str = Box::leak(stem.into_boxed_str());
@@ -1932,7 +1965,7 @@ fn the_service_query_is_private_to_its_provider_and_reaches_its_typed_dispatcher
             assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS, core::ptr::null(), 0, out, len), E_MISSING, "no owner, no provider");
             dkrt_fixture_local_ping::dk_svc_start().expect("the owner starts");
             assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS, core::ptr::null(), 0, out, len), len as i32, "the reply is the counters");
-            assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS + 1, core::ptr::null(), 0, out, len), E_NOT_FOUND);
+            assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNT + 1, core::ptr::null(), 0, out, len), E_NOT_FOUND);
             assert_eq!(ask(dkrt_fixture_local_ping::OP_COUNTERS, core::ptr::null(), 0, out, len - 1), E_TOO_BIG);
         }
         clean_state();

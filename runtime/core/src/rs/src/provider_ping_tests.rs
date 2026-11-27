@@ -3,19 +3,19 @@
 //! query and the stop.
 use dkrt_abi::keys::KeysCopy;
 use dkrt_abi::profiles::ALL;
-use dkrt_fixture_local_ping::{LocalPing, COUNTERS_LEN, OP_COUNTERS};
+use dkrt_fixture_local_ping::{LocalPing, COUNTERS_LEN, OP_COUNT, OP_COUNTERS, STATE_VERSION};
 use dkrt_sdk::{E_NOT_FOUND, E_TOO_BIG};
 use dkrt_test_support::contract::{Dsp, Fixture, Init, Module, Rows};
 use dkrt_test_support::{provider_contract, Driver, FakeCore, ProviderDriver, Recipe, RowBuilder};
 
-/// The parts the file adopts (`service!(LocalPing, "local-ping", &[], parts = [Tick, Query], ...)`).
+/// The parts the file adopts (`service!(LocalPing, "local-ping", &[], parts = [Tick, Query, State], ...)`).
 struct PingRecipe;
 
 impl Recipe for PingRecipe {
     type P = LocalPing;
     const NAME: &'static str = "local-ping";
     fn parts(b: RowBuilder<LocalPing>) -> RowBuilder<LocalPing> {
-        b.tick().query()
+        b.tick().query().state()
     }
 }
 
@@ -118,7 +118,7 @@ fn the_tick_counts_in_every_phase_and_the_query_answers_what_the_instance_holds(
     assert_eq!(counters(&d), (0, 0, 3));
     // an unknown operation and a reply buffer that is too short are refused with their own statuses
     let mut reply = [0u8; COUNTERS_LEN];
-    assert_eq!(unsafe { d.handle().query(OP_COUNTERS + 1, &[], &mut reply) }, E_NOT_FOUND);
+    assert_eq!(unsafe { d.handle().query(OP_COUNT + 1, &[], &mut reply) }, E_NOT_FOUND);
     assert_eq!(unsafe { d.handle().query(OP_COUNTERS, &[], &mut reply[..COUNTERS_LEN - 1]) }, E_TOO_BIG);
 }
 
@@ -130,4 +130,33 @@ fn the_service_may_stop_and_its_instance_is_taken_by_stop() {
     unsafe { d.attach_without_records(&core, 1) };
     unsafe { d.remove(&core, 1) };
     d.stop(&core);
+}
+
+#[test]
+fn the_count_of_consumers_survives_through_the_state_part_and_a_start_without_bytes_counts_from_zero() {
+    let core = FakeCore::new();
+    let old = <ProviderDriver<PingRecipe> as Driver>::start(&core);
+    unsafe {
+        old.attach_without_records(&core, 1);
+        old.attach_without_records(&core, 2);
+        old.remove(&core, 1);
+    }
+    let c = &core as *const FakeCore as *const core::ffi::c_void;
+    let mut bytes = [0u8; 4];
+    assert_eq!(unsafe { old.handle().state_export_max(c) }, 4);
+    assert_eq!(unsafe { old.handle().state_export(c, &mut bytes) }, 4);
+    assert_eq!(bytes, 2u32.to_be_bytes(), "the count is the attaches, whatever the detaches did");
+    old.stop(&core);
+
+    let new = <ProviderDriver<PingRecipe> as Driver>::start(&core);
+    assert_eq!(new.handle().state_versions(), Some((STATE_VERSION, STATE_VERSION)));
+    assert_eq!(unsafe { new.handle().state_import(c, Some((STATE_VERSION, &bytes))) }, dkrt_sdk::OK);
+    unsafe { new.attach_without_records(&core, 1) };
+    let mut reply = [0u8; 4];
+    assert_eq!(unsafe { new.handle().query(OP_COUNT, &[], &mut reply) }, 4);
+    assert_eq!(u32::from_be_bytes(reply), 3, "the carried 2 and the attach of the new copy");
+    // bytes of the wrong length are refused (the service's status), and import(None) starts again from zero
+    assert_eq!(unsafe { new.handle().state_import(c, Some((STATE_VERSION, &bytes[..3]))) }, dkrt_sdk::E_RANGE);
+    assert_eq!(unsafe { new.handle().state_import(c, None) }, dkrt_sdk::OK);
+    new.with_instance(|p| assert_eq!(p.count(), 0));
 }
