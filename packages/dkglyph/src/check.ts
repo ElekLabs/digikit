@@ -43,8 +43,7 @@ function glyphMessages(
 
 function touchesMargin(f: Raster, m: number): boolean {
   for (let y = 0; y < f.h; y += 1)
-    for (let x = 0; x < f.w; x += 1)
-      if ((x < m || y < m || x >= f.w - m || y >= f.h - m) && f.get(x, y)) return true;
+    for (let x = 0; x < f.w; x += 1) if ((x < m || y < m || x >= f.w - m || y >= f.h - m) && f.get(x, y)) return true;
   return false;
 }
 

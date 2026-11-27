@@ -1,4 +1,4 @@
-import { BOX, colPlot } from './shape.mjs';
+import { colPlot } from './shape.mjs';
 // Ramp up at 45 degrees from the bottom to the top, then hold (the ramp that does not repeat, unipolar).
 export default {
   title: 'Ramp',
