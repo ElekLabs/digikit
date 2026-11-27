@@ -136,6 +136,3 @@ impl Schema {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;
