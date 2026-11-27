@@ -40,6 +40,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
 
     /// Was a menu object built for a module of the closure of record `rec` (it points into the module's code)?
     pub unsafe fn closure_menu_built(&self, rec: usize) -> bool {
+        // once the reload has its room the closure may be down: the menus are not asked again
+        if self.reload.is_called() {
+            return false;
+        }
         let mut members = [0usize; REC_MAX];
         let n = self.closure(rec, &mut members);
         members[..n].iter().any(|&r| !is_service_rec(r) && crate::package::resident::state::menus_held(r))
@@ -96,8 +100,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// A reload of service record `rec` cannot go on: every member gets its tick back (`Loader::reload_abort`). False when the reload went on (a member is down, or a restore of the
     /// closure waits: it is left to `dsp_step`).
     pub unsafe fn closure_abort(&mut self, rec: usize) -> bool {
-        if self.reload_torn || self.reloading {
-            self.reloading = false;
+        if self.reload.is_torn() || self.reload.is_waiting() {
+            self.reload.stop_waiting();
             return false;
         }
         let mut members = [0usize; REC_MAX];
@@ -111,19 +115,18 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
 
     /// Has the reload of a service taken a member down (the live job reports it as torn)? Meaningful after `reload_closure` answered anything but `OK`.
     pub fn reload_torn(&self) -> bool {
-        self.reload_torn
+        self.reload.is_torn()
     }
 
     /// A new reload starts: what an earlier one left is forgotten.
     pub fn reload_reset(&mut self) {
-        self.reloading = false;
-        self.reload_torn = false;
+        self.reload.reset();
         unsafe { self.session.carried.release_all(self.loader()) };
     }
 
     /// Reload service record `rec` from the file at `path` with its consumers (`Loader::provider_prepare`, then `PackageManager::reload`), called once per UI pass by the live job.
     /// `OK`; `E_BUSY` while a restore waits for a task to park (nothing is lost, the job asks again and the same call finishes it); or the refusal in the loader's codes. A refusal
-    /// before the take-down leaves everything as it was (`reload_torn` false); after it the closure is down.
+    /// before the take-down leaves everything as it was (`reload_torn()` false); after it the closure is down.
     pub unsafe fn reload_closure(&mut self, rec: usize, path: *const u8) -> i32 {
         let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
         let mut members = [0usize; REC_MAX];
@@ -139,7 +142,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         let Some(m) = self.mgr() else {
             return E_NOT_FOUND;
         };
-        if self.reloading {
+        if self.reload.is_waiting() {
             if m.restore_pending().is_some() {
                 let out = m.retry_pending();
                 return self.reload_end(out, rec, &[]);
@@ -176,6 +179,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             l.provider_table_restore(rec, &old[..old_len]);
             return carry;
         }
+        self.reload.call();
         let mut live = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
         let k = caps.len().min(CAP_MAX);
         live[..k].copy_from_slice(&caps[..k]);
@@ -211,7 +215,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         let down = members.iter().any(|&r| !m.live().contains(PackageId(r as u8))) || m.restore_pending().is_some();
         if out.is_ok() && !down && self.closure_retained(rec) {
             // up again, but an old copy's memory is not back yet: the job asks again
-            self.reloading = true;
+            self.reload.wait_retained();
             return E_BUSY;
         }
         if down || out.is_ok() {
@@ -257,7 +261,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         }
         match out {
             Ok(_) => {
-                self.reloading = false;
+                self.reload.done();
                 // every module that is back hears it (a module of the closure has no DSP part: the job refused one)
                 let mut now = [0usize; REC_MAX];
                 let n = self.closure(root, &mut now);
@@ -269,12 +273,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                 OK
             }
             Err(e) => {
-                self.reloading = m.restore_pending().is_some();
-                if !members.is_empty() {
-                    self.reload_torn = self.reloading || members.iter().any(|&r| !m.live().contains(PackageId(r as u8)));
-                }
+                let down = (!members.is_empty()).then(|| members.iter().any(|&r| !m.live().contains(PackageId(r as u8))));
+                self.reload.failed(m.restore_pending().is_some(), down);
                 let code = code_of(&e);
-                if self.reload_torn && !self.reloading {
+                if self.reload.is_torn() && !self.reload.is_waiting() {
                     self.report_closure_down(members, code);
                 }
                 code

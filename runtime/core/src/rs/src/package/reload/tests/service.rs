@@ -20,8 +20,7 @@ fn a_service_reload_checks_drains_reloads_the_closure_in_one_call_and_ends_with_
     let mut s = service_script();
     s.quiesce_busy = 2;
     s.service_busy = 3;
-    // the menus are asked once, before the call: a menu built after it is the closure's own business (it is down)
-    s.menu_after = 1;
+    // the job asks the menus on every pass of the UNLOAD step; the owner stops saying yes once the call has its room (`ReloadState::is_called`)
     assert_eq!(run(&mut s), (2, OK, step::DONE));
     let at = |name: &str| first(&s, name);
     assert!(at("find") < at("refusal") && at("refusal") < at("check") && at("check") < at("quiesce") && at("quiesce") < at("reload service"));

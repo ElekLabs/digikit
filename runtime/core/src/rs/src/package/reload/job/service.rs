@@ -6,7 +6,6 @@ impl Job {
     /// the same call finishes it). `OK` ends the job with the closure back from the new file. A refusal or failure ends it too: when no member went down (`Ops::abort` gives every
     /// member its tick back) the old service runs on, else the closure is down and the job says so (`torn`). Nothing is rolled back.
     pub(super) unsafe fn reload_service<O: Ops>(&mut self, o: &mut O) {
-        self.called = true;
         let r = o.reload_service(self.rec, self.path.as_ptr());
         if r == OK {
             self.torn = true;

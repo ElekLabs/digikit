@@ -106,8 +106,6 @@ pub struct Job {
     progress: u32,
     /// The refusals before the file's own checks passed (`check` runs them once; a busy answer of the checks asks again on a later pass).
     pre: bool,
-    /// The reload of a service has made its call (`service.rs`): the menus are not asked again, the closure may be down.
-    called: bool,
     /// Which step the log has a begin of ([`JobTrace`]).
     trace: JobTrace,
 }
@@ -146,7 +144,7 @@ impl Job {
     }
 
     pub const fn new() -> Job {
-        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, serial: 0, done_serial: 0, done_result: OK, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0, pre: false, called: false, trace: JobTrace::new() }
+        Job { step: step::IDLE, phase: 0, result: OK, torn: false, op: 0, serial: 0, done_serial: 0, done_result: OK, path: [0; 64], rec: NO_REC, sel: 0, start: None, passes: 0, progress: 0, pre: false, trace: JobTrace::new() }
     }
 
     /// Queue job `op` for the module at `path` (NUL terminated, at most 63 bytes): a load of a file that no loaded module came from, or an unload or a reload of the module
@@ -197,7 +195,6 @@ impl Job {
         self.passes = 0;
         self.start = None;
         self.pre = false;
-        self.called = false;
         self.trace.queued();
         OK
     }
@@ -340,7 +337,7 @@ impl Job {
                 self.end(o, r, false);
             }
         } else if self.step == step::UNLOAD {
-            if !self.torn && !self.called && o.menu_built(self.rec) {
+            if !self.torn && o.menu_built(self.rec) {
                 // a page of the module's menus was built during the drain: nothing was freed, the old module gets its tick and commands back
                 o.abort(self.rec);
                 self.end(o, E_RELOAD_MENUS, false);

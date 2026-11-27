@@ -11,6 +11,7 @@
 //! - `trace`: [`RtTrace`], the lifecycle events of the seams over the event log, and the emit function the live job and the installer's gate use.
 //! - `reload`: the reload of a service and its consumers, one call of the live job (`Rt::reload_closure`).
 //! - `carried_state`: [`CarriedState`], the state a reload of a service hands to its next copy.
+//! - `reload_state`: [`ReloadState`], where a reload of a service stands.
 //! - `codes`: the load status of each manager refusal (the codes the loader gave before).
 //! - `manifest`: [`RtManifest`], the header tables of the selected packages and the services they need.
 //!
@@ -28,6 +29,7 @@ mod linker;
 mod manifest;
 mod placer;
 mod reload;
+mod reload_state;
 mod rt;
 mod service_copy;
 mod session;

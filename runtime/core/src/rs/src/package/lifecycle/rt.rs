@@ -1,3 +1,4 @@
+use super::reload_state::ReloadState;
 use super::{RtHost, RtInstallers, RtLinker, RtManifest, RtPlacer, Session};
 use super::codes::code_of;
 use crate::package::dsp;
@@ -33,10 +34,9 @@ pub struct Rt<P: PackagePlatform, M: Images, R: Registry> {
     up: bool,
     /// The take-down of a DSP part whose restore answered busy (a task below the UI task is not parked): the DSP load stays pending and a later UI pass finishes it.
     dsp_down: DspDown,
-    /// The reload of a service waits for a busy restore (`Rt::reload_closure`): the live job asks again on its next pass, and `dsp_step` leaves the manager's pending take-down to it.
-    pub(super) reloading: bool,
-    /// A reload of a service took a member down before it ended with a refusal.
-    pub(super) reload_torn: bool,
+    /// Where the reload of a service stands (`Rt::reload_closure`): whether the live job must ask again (`dsp_step` then leaves the manager's pending take-down to it) and whether a
+    /// member went down.
+    pub(super) reload: ReloadState,
 }
 
 /// A DSP part's take-down that waits for a busy restore (`Rt::take_down_dsp`): the record, its boot index, the failure code, the passes spent, and whether the load in flight
@@ -71,8 +71,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         Session::init(addr_of_mut!((*out).session), loader);
         addr_of_mut!((*out).up).write(false);
         addr_of_mut!((*out).dsp_down).write(DspDown::NONE);
-        addr_of_mut!((*out).reloading).write(false);
-        addr_of_mut!((*out).reload_torn).write(false);
+        addr_of_mut!((*out).reload).write(ReloadState::Idle);
     }
 
     /// The lifecycle over `loader`, by value (host tests; nothing is started yet, so it may move until `boot`).
@@ -477,7 +476,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// timeout `dsp_down` is cleared while the manager keeps its pending take-down and retries it silently (acceptable: the retained state ends the session).
     pub unsafe fn dsp_step(&mut self, l: ServiceTable) {
         if let Some(m) = self.mgr() {
-            if m.restore_pending().is_some() && !self.reloading {
+            if m.restore_pending().is_some() && !self.reload.is_waiting() {
                 let r = m.retry_pending();
                 if self.dsp_down.live {
                     let mut w = self.dsp_down;
