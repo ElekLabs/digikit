@@ -27,6 +27,7 @@ mod host;
 mod install;
 mod linker;
 mod manifest;
+mod pending_watch;
 mod placer;
 mod reload;
 mod reload_state;

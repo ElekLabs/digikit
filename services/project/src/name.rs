@@ -39,6 +39,13 @@ impl Path {
         }
         self.n += s.len();
     }
+    /// A path as the store holds it: bytes of 0x20 to 0x7e only (a carried path is checked with this).
+    pub fn from_store_bytes(s: &[u8]) -> Option<Path> {
+        if !s.iter().all(|b| (0x20..=0x7e).contains(b)) {
+            return None;
+        }
+        Path::from_bytes(s)
+    }
     pub fn from_bytes(s: &[u8]) -> Option<Path> {
         if s.len() > PATH_MAX {
             return None;

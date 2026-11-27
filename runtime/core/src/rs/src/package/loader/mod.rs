@@ -68,6 +68,7 @@ pub(crate) mod exports;
 pub(crate) mod install;
 mod live;
 mod op_clock;
+pub(crate) use op_clock::QUIET_OP;
 mod load;
 pub(crate) mod package;
 mod park;

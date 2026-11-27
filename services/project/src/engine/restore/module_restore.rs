@@ -8,6 +8,8 @@ use dkrt_sdk::{
     E_RELOAD_PLAYING, E_SEL_PATH, E_TOO_BIG, LIVE_LOAD, OK,
 };
 
+mod carry;
+
 /// The restore asks again after this long when the transport played.
 pub const PLAY_WAIT_MS: u32 = 1000;
 /// The restore asks again after this long when the card is busy, at most `CARD_TRIES_MAX` times for one entry (the way the runtime's reload of changed settings counts).
