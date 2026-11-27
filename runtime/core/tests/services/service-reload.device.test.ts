@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
-import { button, emulatorClock, MS, repoRoot, waitClock } from '@digi/test-support';
+import { button, emulatorClock, MS, pollUntil, repoRoot } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { cardRigs, CARD_SYMBOLS, RT } from '@digi/regression/runtime/card-rig.ts';
@@ -98,8 +98,13 @@ cardRigs('service reload', { dsp: 'zero', roots: RT, symbols: CARD_SYMBOLS, uplo
 
     // the hook runs with the new owner object: a tap on SETTINGS rebuilds the list, the consumer logs the hook count
     await rt.session.client.inputTap(button('SETTINGS'), 100 * MS);
-    await waitClock(emulatorClock(rt.session), 3000); // the SETTINGS rebuild after the tap: no event marks it
-    const hits = logged(await h.usb(rt, (dk) => dk.readLog()), 'svctest-hits').filter((e) => e.seq > pings[1]!.seq);
+    // the consumer's own MOD_LOG event marks the rebuild: wait for it in emulated time
+    const hits = await pollUntil(
+      emulatorClock(rt.session),
+      async () => logged(await h.usb(rt, (dk) => dk.readLog()), 'svctest-hits').filter((e) => e.seq > pings[1]!.seq),
+      (v) => v.length > 0,
+      { withinMs: 30_000, message: 'the hook of the new copy logs a hit after the SETTINGS tap' },
+    );
     expect(hits.length, 'the new copy of the hook ran after the reload').toBeGreaterThan(0);
     await rt.session.expectNoFault('service reload');
   }, 900_000);
