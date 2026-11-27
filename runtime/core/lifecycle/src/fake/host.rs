@@ -1,6 +1,6 @@
 use super::{Call, Probe};
 use crate::{LiveSet, PackageGraph, PackageId, ProviderHost};
-use dkrt_abi::provider::{Declarations, Limit, Status};
+use dkrt_abi::provider::{Declarations, Limit, Status, Step};
 use std::vec::Vec;
 
 /// Declares what it was told per package (nothing for a package it was not told about).
@@ -69,14 +69,24 @@ impl ProviderHost for FakeHost {
         }
     }
 
-    fn attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<(), Status> {
+    fn attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<Step, Status> {
         self.probe.walk(consumer, services);
-        self.probe.record(Call::Attach(consumer))
+        self.probe.record(Call::Attach(consumer))?;
+        Ok(if self.probe.take_pending_attach(consumer) {
+            Step::Pending
+        } else {
+            Step::Done
+        })
     }
 
-    fn detach(&mut self, consumer: PackageId, services: &[PackageId]) {
+    fn detach(&mut self, consumer: PackageId, services: &[PackageId]) -> Step {
         self.probe.walk(consumer, services);
         let _ = self.probe.record(Call::Detach(consumer));
+        if self.probe.take_pending_detach(consumer) {
+            Step::Pending
+        } else {
+            Step::Done
+        }
     }
 
     fn can_stop(&mut self, package: PackageId) -> Result<(), Status> {

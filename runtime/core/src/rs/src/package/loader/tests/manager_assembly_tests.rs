@@ -44,7 +44,7 @@ fn the_manager_brings_up_the_packed_local_ping_fixtures_and_takes_them_down_with
             let mut s = Session::new(&mut l as *mut _, at);
             let manifest = RtManifest::of(&mut s, 2);
             let (placer, linker, installers, host) = s.seams();
-            let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
+            let mut pm = PackageManager::new(manifest, placer, linker, installers, host, 50).unwrap();
             let (user, user_b, service) = (id(0), id(1), id(MAX_MODULES));
 
             // bring-up: the service first, then the consumers, each pinned by the selection
@@ -108,7 +108,7 @@ fn a_packed_service_is_an_owner_and_its_unload_reaches_the_observers() {
             let mut s = Session::new(&mut l as *mut _, at);
             let manifest = RtManifest::of(&mut s, 1);
             let (placer, linker, installers, host) = s.seams();
-            let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
+            let mut pm = PackageManager::new(manifest, placer, linker, installers, host, 50).unwrap();
             let (user, service) = (id(0), id(MAX_MODULES));
             (*core::ptr::addr_of_mut!(GONE)).clear();
             assert_eq!(crate::api::dkrt_unload_observer_add(observer as *const () as usize), dkrt_sdk::OK);
@@ -144,7 +144,7 @@ fn the_manager_installs_the_hooks_of_a_service_and_the_firmware_is_stock_after_t
             let mut s = Session::new(&mut l as *mut _, at);
             let manifest = RtManifest::of(&mut s, 1);
             let (placer, linker, installers, host) = s.seams();
-            let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
+            let mut pm = PackageManager::new(manifest, placer, linker, installers, host, 50).unwrap();
             // the services of the search in the order of `found`: svc-test, then the port file that its hooks name
             let (user, service, port) = (id(0), id(MAX_MODULES), id(MAX_MODULES + 1));
             crate::package::boot_idx::set(u32::MAX);
@@ -182,7 +182,7 @@ fn a_provider_row_with_a_part_newer_than_the_core_knows_is_refused_and_leaves_no
             let mut s = Session::new(&mut l as *mut _, at);
             let manifest = RtManifest::of(&mut s, 1);
             let (placer, linker, installers, host) = s.seams();
-            let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
+            let mut pm = PackageManager::new(manifest, placer, linker, installers, host, 50).unwrap();
             let report = pm.boot(&[id(0)]).unwrap();
             assert!(report.brought_up().is_empty(), "{}", dev.name);
             assert!(
@@ -219,7 +219,7 @@ fn a_provider_row_that_names_another_service_is_refused_and_its_owner_is_stopped
             let mut s = Session::new(&mut l as *mut _, at);
             let manifest = RtManifest::of(&mut s, 1);
             let (placer, linker, installers, host) = s.seams();
-            let mut pm = PackageManager::new(manifest, placer, linker, installers, host).unwrap();
+            let mut pm = PackageManager::new(manifest, placer, linker, installers, host, 50).unwrap();
             let report = pm.boot(&[id(0)]).unwrap();
             assert!(report.brought_up().is_empty(), "{}", dev.name);
             assert!(!report.refused().is_empty(), "{}", dev.name);

@@ -5,7 +5,7 @@ use crate::package::handlers::services;
 use crate::package::loader::{Images, Registry};
 use dkrt_abi::package::PackageId;
 use dkrt_abi::package_platform::PackagePlatform;
-use dkrt_abi::provider::{Declarations, Status};
+use dkrt_abi::provider::{Declarations, Status, Step};
 use dkrt_lifecycle::{LiveSet, PackageGraph, ProviderHost};
 use dkrt_sdk::OK;
 
@@ -75,18 +75,19 @@ impl<P: PackagePlatform, M: Images, R: Registry> ProviderHost for RtHost<P, M, R
         crate::package::provider_rows::rank_of(service.0 as usize)
     }
 
-    fn attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<(), Status> {
+    fn attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<Step, Status> {
         unsafe {
             let (s, l) = self.0.get();
-            let r = l.package_attach(consumer, services);
+            let r = l.package_attach(consumer, services).map(|()| Step::Done);
             s.track(consumer, r)
         }
     }
 
-    fn detach(&mut self, consumer: PackageId, services: &[PackageId]) {
+    fn detach(&mut self, consumer: PackageId, services: &[PackageId]) -> Step {
         unsafe {
             let (_, l) = self.0.get();
             l.package_detach(consumer, services);
+            Step::Done
         }
     }
 

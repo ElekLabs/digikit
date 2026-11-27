@@ -24,4 +24,4 @@ pub use manifest::{FakeManifest, Pkg};
 pub use placer::FakePlacer;
 pub use probe::{Call, Probe};
 pub use trace::{Event, RecordingTrace};
-pub use world::{manager, traced_manager, FakeManager, TracedManager};
+pub use world::{manager, traced_manager, FakeManager, TracedManager, ATTACH_LIMIT};

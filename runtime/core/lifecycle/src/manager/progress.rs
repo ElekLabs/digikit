@@ -1,6 +1,7 @@
 //! How far each package of the manager has come: its [`State`] and whether it is attached to its services.
 
 use crate::state::State;
+use crate::steps::{sort, Steps};
 use crate::{PackageId, MAX_PACKAGES};
 
 #[derive(Clone, Copy)]
@@ -9,6 +10,8 @@ struct Slot {
     state: State,
     /// Whether `attach` answered `Ok` for the package (and `detach` has not run since).
     attached: bool,
+    /// The passes an `Attaching` package has waited for its attach to end.
+    waited: u32,
 }
 
 /// The progress of every package that is not absent: placed, being brought up or down, active or waiting for a restore.
@@ -42,13 +45,20 @@ impl Progress {
     /// Sets the state of `p` (a new package is not attached). A graph never holds more packages than slots.
     pub(super) fn set(&mut self, p: PackageId, state: State) {
         match self.find(p) {
-            Some(i) => self.slots[i].as_mut().unwrap().state = state,
+            Some(i) => {
+                let s = self.slots[i].as_mut().unwrap();
+                if s.state != state {
+                    s.waited = 0;
+                }
+                s.state = state;
+            }
             None => {
                 if let Some(free) = self.slots.iter().position(|s| s.is_none()) {
                     self.slots[free] = Some(Slot {
                         package: p,
                         state,
                         attached: false,
+                        waited: 0,
                     });
                 }
             }
@@ -67,13 +77,40 @@ impl Progress {
         }
     }
 
-    /// The lowest-id package waiting for a restore.
+    /// The lowest-id package whose take-down waits: a detach that answered pending or a restore that answered busy.
     pub(super) fn pending(&self) -> Option<PackageId> {
         self.slots
             .iter()
             .flatten()
-            .filter(|s| s.state == State::RestorePending)
+            .filter(|s| s.state == State::RestorePending || s.state == State::Detaching)
             .map(|s| s.package)
             .min()
+    }
+
+    /// The packages in `Attaching`, ascending by id.
+    pub(super) fn attaching(&self) -> Steps {
+        let mut out = Steps::new();
+        for s in self
+            .slots
+            .iter()
+            .flatten()
+            .filter(|s| s.state == State::Attaching)
+        {
+            out.push(s.package);
+        }
+        sort(&mut out);
+        out
+    }
+
+    /// Counts one more pass of `p` waiting for its attach and gives the count; 0 for an absent package.
+    pub(super) fn wait_one_more(&mut self, p: PackageId) -> u32 {
+        match self.find(p) {
+            Some(i) => {
+                let s = self.slots[i].as_mut().unwrap();
+                s.waited = s.waited.saturating_add(1);
+                s.waited
+            }
+            None => 0,
+        }
     }
 }

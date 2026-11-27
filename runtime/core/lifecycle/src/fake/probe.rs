@@ -36,6 +36,8 @@ struct Inner {
     calls: Vec<Call>,
     faults: Vec<(Call, Status)>,
     busy: Vec<(PackageId, usize)>,
+    attach_pending: Vec<(PackageId, usize)>,
+    detach_pending: Vec<(PackageId, usize)>,
     walks: Vec<(PackageId, Vec<PackageId>)>,
     admits: Vec<PackageId>,
 }
@@ -82,6 +84,16 @@ impl Probe {
         self.0.borrow_mut().busy.push((package, times));
     }
 
+    /// The next `times` `attach` calls for `package` that would succeed answer `Pending` first (the call is recorded each time).
+    pub fn pending_attach(&self, package: PackageId, times: usize) {
+        self.0.borrow_mut().attach_pending.push((package, times));
+    }
+
+    /// The next `times` `detach` calls for `package` answer `Pending` (the call is recorded each time).
+    pub fn pending_detach(&self, package: PackageId, times: usize) {
+        self.0.borrow_mut().detach_pending.push((package, times));
+    }
+
     /// The services of the last `attach` or `detach` of `consumer`, in the order the call gave them.
     pub fn walk_of(&self, consumer: PackageId) -> Vec<PackageId> {
         let i = self.0.borrow();
@@ -107,6 +119,26 @@ impl Probe {
         match i.faults.iter().position(|(c, _)| *c == call) {
             Some(k) => Err(i.faults.remove(k).1),
             None => Ok(()),
+        }
+    }
+
+    /// Whether the `attach` of `package` answers pending now (counts one down).
+    pub(super) fn take_pending_attach(&self, package: PackageId) -> bool {
+        Self::count_down(&mut self.0.borrow_mut().attach_pending, package)
+    }
+
+    /// Whether the `detach` of `package` answers pending now (counts one down).
+    pub(super) fn take_pending_detach(&self, package: PackageId) -> bool {
+        Self::count_down(&mut self.0.borrow_mut().detach_pending, package)
+    }
+
+    fn count_down(list: &mut [(PackageId, usize)], package: PackageId) -> bool {
+        match list.iter_mut().find(|(p, n)| *p == package && *n > 0) {
+            Some((_, n)) => {
+                *n -= 1;
+                true
+            }
+            None => false,
         }
     }
 

@@ -787,7 +787,7 @@ pub(super) unsafe fn boot_run(l: &mut Boot, plan: &Plan, modules: &[&Fixture], p
     s.begin_boot(&capacity(&l.p), modules.len());
     let manifest = RtManifest::of(&mut *s, modules.len());
     let (placer, linker, installers, host) = crate::package::lifecycle::traced_seams(&mut *s);
-    let mut pm = Manager::new(manifest, placer, linker, installers, host).unwrap();
+    let mut pm = Manager::new(manifest, placer, linker, installers, host, 50).unwrap();
     let mut roots: Vec<PackageId> = (0..modules.len()).map(|k| PackageId(k as u8)).collect();
     if pin_services {
         roots.extend((0..plan.np).map(|j| PackageId((MAX_MODULES + j) as u8)));

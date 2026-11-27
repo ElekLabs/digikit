@@ -18,6 +18,9 @@ pub type TracedManager = PackageManager<
     Traced<FakeHost, RecordingTrace>,
 >;
 
+/// The passes an attach may stay pending in the fake worlds.
+pub const ATTACH_LIMIT: u32 = 5;
+
 /// The fake host of `pkgs`: each service declares the pools of its [`Pkg`].
 fn host_of(pkgs: &[Pkg], probe: &Probe) -> FakeHost {
     let mut host = FakeHost::new(probe.clone());
@@ -47,6 +50,7 @@ pub fn manager(pkgs: &[Pkg]) -> (FakeManager, Probe) {
         FakeLinker::new(probe.clone()),
         FakeInstaller::new(probe.clone()),
         host_of(pkgs, &probe),
+        ATTACH_LIMIT,
     )
     .expect("the fake packages form a graph");
     (pm, probe)
@@ -62,6 +66,7 @@ pub fn traced_manager(pkgs: &[Pkg]) -> (TracedManager, Probe, RecordingTrace) {
         Traced::new(FakeLinker::new(probe.clone()), trace.clone()),
         Traced::new(FakeInstaller::new(probe.clone()), trace.clone()),
         Traced::new(host_of(pkgs, &probe), trace.clone()),
+        ATTACH_LIMIT,
     )
     .expect("the fake packages form a graph");
     (pm, probe, trace)

@@ -16,6 +16,10 @@ use core::mem::MaybeUninit;
 use core::ptr::addr_of_mut;
 use dkrt_sdk::*;
 
+/// The UI passes (`PackageManager::step`) an attach may stay pending before its package is taken down: 6000 passes, a minute or more, since a payload that takes over a DSP range
+/// waits for the link.
+const ATTACH_PASSES: u32 = 6000;
+
 /// The package manager of the runtime over its seams.
 pub type Manager<P, M, R> = PackageManager<
     RtManifest<P, M, R>,
@@ -96,7 +100,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         let manifest = RtManifest::of(&mut self.session, modules);
         let (placer, linker, installers, host) = super::traced_seams(&mut self.session);
         self.up = false;
-        PackageManager::init(self.manager.as_mut_ptr(), manifest, placer, linker, installers, host)?;
+        PackageManager::init(self.manager.as_mut_ptr(), manifest, placer, linker, installers, host, ATTACH_PASSES)?;
         self.up = true;
         Ok(())
     }
@@ -229,7 +233,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             Err(e) => (&empty, Some(*e)),
         };
         let up = |id: PackageId| report.brought_up().as_slice().contains(&id);
-        let dsp_part = |id: PackageId| report.dsp_pending().as_slice().contains(&id);
+        // a package whose DSP part or attach is not over is LOADING: the end of either is reported later (`dsp_step`)
+        let dsp_part = |id: PackageId| report.dsp_pending().as_slice().contains(&id) || report.attaching().as_slice().contains(&id);
         let refusal = |id: PackageId| report.refused().iter().find(|r| r.package == id).map(|r| r.reason);
         let l = self.loader();
         // the providers: log only, in the order the manager tried them (a provider nothing needed was never tried)
@@ -397,7 +402,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         l.set_phase(PhaseKind::Closed);
         match out {
             Ok(report) => {
-                if report.dsp_pending().as_slice().contains(&id) {
+                if report.dsp_pending().as_slice().contains(&id) || report.attaching().as_slice().contains(&id) {
                     LOADING
                 } else {
                     OK
@@ -445,6 +450,39 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         reclaimed
     }
 
+    /// One UI pass of what waits in the manager: the attaches that answered `Pending` (`PackageManager::step`). The end of each is reported to the boot record the way the end of a
+    /// DSP part is: a module that was LOADING is ACTIVE, or FAILED with the code of the refusal, and the modules that went down with a failed package are marked taken down.
+    pub(super) unsafe fn step_attaches(&mut self) {
+        let Some(m) = self.mgr() else {
+            return;
+        };
+        let report = m.step();
+        for &p in report.brought_up().as_slice() {
+            if let Some(idx) = self.boot_index(p) {
+                crate::package::resident::boot::report_dsp(idx, OK);
+            }
+        }
+        for r in report.refused() {
+            let code = code_of(&r.reason);
+            self.settle_down(r.package, &report);
+            if let Some(idx) = self.boot_index(r.package) {
+                crate::package::resident::boot::report_dsp(idx, code);
+            } else if let Some(j) = (r.package.0 as usize).checked_sub(MAX_MODULES) {
+                let l = self.loader();
+                crate::package::resident::boot::report_provider(l.provider_file(j), code, l.provided_hash(j), 0);
+            }
+        }
+    }
+
+    /// The selection index of package `p` when it is a module that has one (the boot record's index).
+    unsafe fn boot_index(&self, p: PackageId) -> Option<u32> {
+        if (p.0 as usize) >= MAX_MODULES {
+            return None;
+        }
+        let k = self.session.loader.as_ref().map_or(u8::MAX, |l| l.sel_index(p.0 as usize));
+        (k != u8::MAX).then_some(k as u32)
+    }
+
     /// The take-down of a DSP part waits for a busy restore: remember it, the DSP load stays pending.
     fn wait_down(&mut self, rec: usize, idx: u32, code: i32, in_flight: bool) {
         self.dsp_down = DspDown { live: true, in_flight, rec, idx, code, tries: 0 };
@@ -482,6 +520,16 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                 Down::Busy => self.wait_down(rec, idx, code, false),
             }
             true
+        } else if let Some(m) = self.mgr().filter(|m| m.state_of(PackageId(rec as u8)) == Some(dkrt_lifecycle::State::Attaching)) {
+            // not a DSP load: an attach that stays pending (a payload) is given up the same way
+            let id = PackageId(rec as u8);
+            if let Ok(report) = m.cancel_attach(id, LifecycleError::Failed { package: id, entering: dkrt_lifecycle::State::Active, status: code }) {
+                self.settle_down(id, &report);
+                if let Some(idx) = self.boot_index(id) {
+                    crate::package::resident::boot::report_dsp(idx, code);
+                }
+            }
+            true
         } else {
             false
         }
@@ -492,6 +540,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// package's closure down through the manager (`take_down_dsp`) before the loader tells the boot record and starts the next load. After a permanent failure or the `GUARD_TICKS`
     /// timeout `dsp_down` is cleared while the manager keeps its pending take-down and retries it silently (acceptable: the retained state ends the session).
     pub unsafe fn dsp_step(&mut self, l: ServiceTable) {
+        self.step_attaches();
         if let Some(m) = self.mgr() {
             if m.restore_pending().is_some() && !self.reload.is_waiting() {
                 let r = m.retry_pending();
