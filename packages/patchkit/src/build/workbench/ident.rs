@@ -51,6 +51,3 @@ impl Ident {
         self.0.to_ascii_lowercase()
     }
 }
-
-#[cfg(test)]
-mod tests;

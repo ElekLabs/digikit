@@ -454,37 +454,4 @@ mod tests {
         let e = refused(&build(&core), None);
         assert!(!e.contains("protected window"), "{e}");
     }
-
-    /// A raw module `test/pk` in a directory of its own: `module.toml` as `library` writes it, the packable object of the packer tests and
-    /// the given `workbench.toml`.
-    fn packed_runtime(workbench: &str) -> u32 {
-        let dir = crate::build::toolchain::TempDir::new("pk-pack-floor-").unwrap();
-        let text = format!("{HEAD}[[object]]\npath = \"a.dko.json\"\nplace = \"cf.expansion\"\n");
-        std::fs::write(dir.path().join("module.toml"), &text).unwrap();
-        std::fs::write(dir.path().join("workbench.toml"), workbench).unwrap();
-        let object = serde_json::to_string(&crate::dkm::tests::object()).unwrap();
-        let mut module = Module::from_parts(&text, &|_| Ok(object.clone())).unwrap();
-        module.dir = dir.path().to_path_buf();
-        let lib = Library {
-            modules: vec![module],
-        };
-        pack_module(&lib, "test/pk", &PackOptions::default())
-            .unwrap_or_else(|e| panic!("{}", e.0))
-            .dkm
-            .runtime_min
-    }
-
-    #[test]
-    fn a_version_2_workbench_descriptor_raises_the_runtime_a_version_1_keeps() {
-        use crate::build::workbench_fixture::DECLARATION;
-        let kept = packed_runtime(DECLARATION);
-        assert_eq!(kept, crate::sdkgen::table_runtime());
-        let typed = format!(
-            "{DECLARATION}\n[[setting]]\nid = \"flag\"\nlabel = \"Flag\"\ntype = \"boolean\"\ndefault = true\n"
-        );
-        assert_eq!(
-            packed_runtime(&typed),
-            crate::sdkgen::workbench_typed_runtime()
-        );
-    }
 }

@@ -1,30 +1,6 @@
-//! Test data shared by the tests of this folder: a declaration with a text and a file-name setting, and the shared vectors.
+//! Test data shared by the tests of this folder: the shared vectors.
 
 use serde_json::Value;
-
-pub(crate) const DECLARATION: &str = r#"
-[workbench]
-version = 1
-component = "workbench/Panel.tsx"
-
-[[setting]]
-id = "boot"
-label = "État"
-type = "text"
-max_bytes = 16
-
-[[setting]]
-id = "active"
-label = "Animation"
-type = "file-name"
-max_bytes = 47
-apply = "next-restart"
-extension = "dkbs"
-
-[[operation]]
-id = "readAtInit"
-output = "optional-text"
-"#;
 
 /// The declaration of the vector `name` of `runtime/core/vectors/workbench-vectors.json`: (module id, module name, toml, bytes).
 pub(super) struct VectorDescriptor {
@@ -59,7 +35,7 @@ fn text(v: &Value, key: &str) -> String {
     v[key].as_str().unwrap().to_string()
 }
 
-pub(super) fn unhex(hex: &str) -> Vec<u8> {
+fn unhex(hex: &str) -> Vec<u8> {
     (0..hex.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
