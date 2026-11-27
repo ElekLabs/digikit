@@ -25,8 +25,7 @@
         "{workspaceRoot}/runtime/core/tests/storage/contract.toml",
         "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/module.toml",
         "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/src/**/*",
-        { "dependentTasksOutputFiles": "dist/modules/*/{dyn-fx-gain,sine,svc-test,svc-test-user}.*", "transitive": false }
-      ],
+        { "dependentTasksOutputFiles": "dist/modules/*/{dyn-fx-gain,sine,svc-test,svc-test-user}.*", "transitive": false }, { "externalDependencies": [] }],
       "dependsOn": ["test/dyn-fx-gain:pack", "test/sine:pack", "test/svc-test:pack", "test/svc-test-user:pack"],
       "outputs": [],
       "options": {

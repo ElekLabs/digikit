@@ -14,7 +14,8 @@
         "{workspaceRoot}/Cargo.toml",
         "{workspaceRoot}/Cargo.lock",
         "{workspaceRoot}/rust-toolchain*",
-        "{workspaceRoot}/tools/nx/rust-env.mjs"
+        "{workspaceRoot}/tools/nx/rust-env.mjs",
+        { "externalDependencies": [] }
       ],
       "options": {
         "command": "node tools/nx/rust-env.mjs --gen -- cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --target-dir .nx/target/check-desktop-clean",

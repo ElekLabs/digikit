@@ -22,8 +22,7 @@
         "{workspaceRoot}/sdk/src/core/path.c",
         "{workspaceRoot}/sdk/src/sample/picker.c",
         "{workspaceRoot}/sdk/src/chooser/chooser.c",
-        "{workspaceRoot}/sdk/src/settings/*.{c,h}"
-      ]
+        "{workspaceRoot}/sdk/src/settings/*.{c,h}", { "externalDependencies": [] }]
     }
   }
 }
