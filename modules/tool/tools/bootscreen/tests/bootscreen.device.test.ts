@@ -1,7 +1,9 @@
 import { expect, test } from 'vitest';
 import { asciiOf } from '@digi/dk-session';
 import { bootInfo, bootInfoLoaded } from '@digi/regression/runtime/guest-mailbox.ts';
-import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { ringEvents } from '@digi/regression/runtime/runtime-menu.ts';
 import { intro, lastFrame, spec, valid } from './bootscreen-support.ts';
 import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';

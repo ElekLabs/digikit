@@ -5,12 +5,13 @@ import { openSamples } from '@digi/dk-session/samples';
 import { RpcFiles } from '@digi/dk-session/rpcfiles';
 import { repoRoot } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { PatchedSession } from '../support.ts';
+import type { PatchedSession } from '../test-runtime.ts';
 import { liveArtifacts, record } from './artifacts.ts';
-import { installModule, moduleArtifact } from './install.ts';
+import { installModule } from './module-install.ts';
+import { moduleArtifact } from './module-artifact.ts';
 import { memory } from './memory.ts';
 import { panelKeys } from './flows/panel-keys.ts';
-import { runtimeTests } from './ready.ts';
+import { runtimeTests } from './runtime-tests.ts';
 import { expectPollEmulated } from './waits.ts';
 
 // DT2 1.17 stock sample pool (findings 81, 82, 85). All firmware state is read with peeks.

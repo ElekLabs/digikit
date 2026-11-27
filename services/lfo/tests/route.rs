@@ -18,39 +18,37 @@ fn shape_index_is_none_outside_the_range() {
     assert_eq!(shape_index(u32::MAX), None);
 }
 
-/// Every `cmpi.l #N,Dn` of a hook file is one of the two bounds, each hook has the pair, and the bounds are `RANGE`'s.
+/// The UI hook assembler tests the wave number inline: the name formatters the value `wave << 8` against `RANGE.lo << 8` and `RANGE.hi << 8 | 0xff`, the graph hook the wave minus `RANGE.lo`
+/// against the width of `RANGE`.
 #[test]
-fn the_hook_assembler_bounds_are_the_range() {
-    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("dks/src");
-    let mut devs: Vec<String> = std::fs::read_dir(&src)
-        .unwrap()
-        .filter_map(|e| {
-            let name = e.ok()?.file_name().into_string().ok()?;
-            let id = name.strip_prefix("hooks-")?.strip_suffix(".s")?;
-            (id != "ui").then(|| id.to_string())
-        })
-        .collect();
-    devs.sort();
-    assert!(!devs.is_empty(), "no hooks-<device>.s in {}", src.display());
-    for dev in devs {
-        let path = src.join(format!("hooks-{dev}.s"));
-        let text = std::fs::read_to_string(&path).unwrap();
-        let bounds: Vec<u32> = text
-            .lines()
-            .filter_map(|l| l.trim_start().strip_prefix("cmpi.l"))
-            .filter_map(|r| {
-                r.trim_start()
-                    .strip_prefix('#')?
-                    .split(',')
-                    .next()?
-                    .parse()
-                    .ok()
-            })
-            .collect();
-        // six hooks, each tests the low bound then the high bound
-        assert_eq!(bounds.len(), 12, "{dev}: {bounds:?}");
-        for pair in bounds.chunks(2) {
-            assert_eq!(pair, [RANGE.lo, RANGE.hi], "{dev}");
+fn the_ui_hook_assembler_bounds_are_the_range() {
+    let text =
+        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("dks/src/hooks-ui.s"))
+            .unwrap();
+    let num = |t: &str| {
+        let t = t
+            .trim()
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .next()
+            .unwrap();
+        match t.strip_prefix("0x") {
+            Some(h) => u32::from_str_radix(h, 16).unwrap(),
+            None => t.parse().unwrap(),
         }
-    }
+    };
+    let operands = |op: &str| -> Vec<u32> {
+        text.lines()
+            .filter_map(|l| l.trim_start().strip_prefix(op))
+            .filter_map(|r| r.trim_start().strip_prefix('#').map(num))
+            .collect()
+    };
+    // the name formatters (a macro, expanded twice by the file) and the graph hook
+    let cmp = operands("cmpi.l");
+    assert!(
+        cmp.contains(&(RANGE.lo << 8)) && cmp.contains(&((RANGE.hi << 8) | 0xff)),
+        "{cmp:?}"
+    );
+    // the graph hook: `subq.l #lo,d0; cmpi.l #(hi - lo),d0`
+    assert_eq!(operands("subq.l"), [RANGE.lo]);
+    assert!(cmp.contains(&(RANGE.hi - RANGE.lo)), "{cmp:?}");
 }

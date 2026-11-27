@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { golden } from '@digi/test-support';
-import { armFreeRegionGuard, expectNoGuardHits, withSession } from '../support.ts';
+import { armFreeRegionGuard, expectNoGuardHits } from '../free-region-guard.ts';
+import { withSession } from '../session-handle.ts';
 
 // Replays tests/scenarios/dt2.json "dt2-rec-play" (exact_events: events land at their at_instr). The reference is
 // `coupled-run --dsp zero --trace` on the same scenario; the expected hashes live in tests/regression/goldens/dt2-1.17.json.

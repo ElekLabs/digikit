@@ -1,10 +1,11 @@
 import { emulatorClock, remoteInput, waitClock } from '@digi/test-support';
 import { SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
-import type { PatchedSession, TestRuntime } from '@digi/regression/support.ts';
+import type { PatchedSession, TestRuntime } from '@digi/regression/test-runtime.ts';
 import { timePhase } from '@digi/regression/timing.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
-import { runtimeTests, expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import {
   captureRemoteOled,
   expectRemoteEnabled,

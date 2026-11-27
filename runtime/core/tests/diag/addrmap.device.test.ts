@@ -3,8 +3,11 @@ import path from 'node:path';
 import { expect } from 'vitest';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { resolveAddresses, readLoadTable } from '@digi/regression/runtime/addrmap.ts';
-import { DEBUG_MODULE, installModules, moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { DEBUG_MODULE } from '@digi/regression/runtime/debug-module.ts';
+import { installModules } from '@digi/regression/runtime/module-install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 
 /**

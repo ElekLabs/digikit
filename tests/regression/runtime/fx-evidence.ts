@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { readSettingsRecordIfPresent, settingsValue, type DkModule } from '@digi/dk-session';
 import { expect } from 'vitest';
-import { expectNoGuardHits, type PatchedSession } from '../support.ts';
+import { expectNoGuardHits } from '../free-region-guard.ts';
+import { type PatchedSession } from '../test-runtime.ts';
 import { record } from './artifacts.ts';
 import { dspBytes, FREE_PC, rows } from './dsp-state.ts';
 import type { FxExpectations } from './dkm-parse.ts';

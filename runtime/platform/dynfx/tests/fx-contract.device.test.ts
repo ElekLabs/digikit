@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { describe, expect, test } from 'vitest';
-import { withWaitApi, type TestRuntime } from '@digi/regression/support.ts';
+import { withWaitApi } from '@digi/regression/wait-api.ts';
+import { type TestRuntime } from '@digi/regression/test-runtime.ts';
 import { peak, readFloatWav, compare } from '@digi/regression/runtime/pcm-files.ts';
 import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
 import { captureNote } from '@digi/regression/runtime/note-capture.ts';

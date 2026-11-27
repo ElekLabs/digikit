@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import { expect } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
-import { installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import type { PatchedSession } from '@digi/regression/test-runtime.ts';
+import { installModule } from '@digi/regression/runtime/module-install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { neededServices, portFile } from '@digi/regression/runtime/service-files.ts';
 
 const A = 'test/lfo-shape';

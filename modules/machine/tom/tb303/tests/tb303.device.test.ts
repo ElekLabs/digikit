@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { button } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
-import { installWithDebug } from '@digi/regression/runtime/install.ts';
+import { installWithDebug } from '@digi/regression/runtime/debug-install.ts';
 import { panelKeys } from '@digi/regression/runtime/flows/panel-keys.ts';
-import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 
 // DT2 1.17: tom/tb303 (machine contract 1.6, DK_MACHINE_GATE) loads, plays one note on track 1 and ends it after the note-off.
 // The audio is the coupled PCM of the stock chain (pcm.tap, 48 kHz stereo float).

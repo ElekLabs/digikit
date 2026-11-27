@@ -1,9 +1,10 @@
-//! `Lfo`: the owner object of the service. It keeps the keys of the boot's selection and the wave numbers `settle` gave them, and is the `Provider` of the file: `start`
-//! (in the file's `init`), `settle` (the boot's plan of numbers, kept in the settings key `lfo.shapes`) and `detach` (a module's shapes go; the page's picture first). The
-//! `Records` part is in `records.rs`. The shape table itself stays a named static (`shapes::SHAPES`: the interrupt of the LFO tick reads it and the file's hooks reach it by
-//! symbol), and so does the table of the WAVE rows (`wave::WAVE`, set at `start`).
+//! `Lfo<T>`: the owner object of the service. It keeps the keys of the boot's selection and the wave numbers `settle` gave them, the image's table of added waves (`T`, a
+//! [`WaveTable`]) and is the `Provider` of the file: `start` (in the file's `init`: it binds the table, and refuses without one), `settle` (the boot's plan of numbers, kept in
+//! the settings key `lfo.shapes`) and `detach` (a module's shapes go: the page's picture first, then the wave back to the sine). The `Records` part is in `records.rs`. The
+//! table of shapes stays a named static (`shapes::SHAPES`: the UI hooks of the file reach it by symbol), and so does the table of the WAVE rows (`wave::WAVE`, set at `start`).
 use crate::records::{MAX_SHAPES, RANGE, SETTING};
 use crate::shapes;
+use crate::wave_table::WaveTable;
 use core::mem::MaybeUninit;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::{ConsumerId, Provider, Status};
@@ -19,8 +20,8 @@ extern "C" {
     static DKRT_LFO_FW: [u32; 4];
 }
 
-/// The owner object: no key settled, no module in the selection. All-zero bytes are this state (`Provider::start_in`).
-pub struct Lfo {
+/// The owner object: no key settled, no module in the selection, the table not bound. All-zero bytes are this state (`Provider::start_in`; `WaveTable`'s contract).
+pub struct Lfo<T: WaveTable> {
     /// keys in the lists below
     n: usize,
     /// selection index of the module of each key
@@ -30,17 +31,19 @@ pub struct Lfo {
     num: [u32; MAX_KEYS],
     /// modules of the selection
     modules: usize,
+    /// the image's table of added waves
+    table: T,
 }
 
-impl Lfo {
-    pub const fn new() -> Lfo {
-        Lfo {
-            n: 0,
-            at: [0; MAX_KEYS],
-            key: [0; MAX_KEYS],
-            num: [0; MAX_KEYS],
-            modules: 0,
-        }
+impl<T: WaveTable> Lfo<T> {
+    /// The table of added waves (for a test or a query).
+    pub fn table(&self) -> &T {
+        &self.table
+    }
+
+    /// The table of added waves, to change it.
+    pub fn table_mut(&mut self) -> &mut T {
+        &mut self.table
     }
 
     /// The wave number of the shape key `key` of the module at selection index `at` (0: none was given).
@@ -68,12 +71,6 @@ impl Lfo {
             i += 1;
         }
         false
-    }
-}
-
-impl Default for Lfo {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -125,17 +122,21 @@ fn save<C: CoreApi>(core: &C, map: &[u32; MAX_SHAPES]) -> bool {
     unsafe { core.settings_put(SETTING, &raw) == OK }
 }
 
-impl<C: CoreApi> Provider<C> for Lfo {
-    /// The state is made where it lives: all-zero bytes are the initial state (`Lfo::new`; `tests/state.rs` checks it), so this is one fill.
-    fn start_in(_core: &C, slot: &mut MaybeUninit<Lfo>) -> Result<(), Status> {
+impl<C: CoreApi, T: WaveTable> Provider<C> for Lfo<T> {
+    /// The state is made where it lives: all-zero bytes are the initial state (`WaveTable`'s contract; `tests/state.rs` checks it), so this is one fill. Then the table of the
+    /// image is bound: without one the service does not start (`E_NO_REGISTRY`), so no shape is ever accepted that no LFO could play.
+    fn start_in(core: &C, slot: &mut MaybeUninit<Lfo<T>>) -> Result<(), Status> {
         bind_firmware();
-        // SAFETY: every field of `Lfo` is valid as zero bytes (integers and arrays of them).
-        unsafe { slot.as_mut_ptr().write_bytes(0, 1) };
-        Ok(())
+        // SAFETY: every field of `Lfo` is valid as zero bytes (integers, arrays of them and the table, by the contract of `WaveTable`).
+        let lfo = unsafe {
+            slot.as_mut_ptr().write_bytes(0, 1);
+            &mut *slot.as_mut_ptr()
+        };
+        lfo.table.open(core)
     }
 
-    /// A module unloads (also one that never attached, or only in part): its shapes leave the table, the page's picture first, and the WAVE maximum follows the highest
-    /// number that is left (the stock pair when none is).
+    /// A module unloads (also one that never attached, or only in part): its shapes leave, the page's picture first, then the wave goes back to the sine, and the WAVE maximum
+    /// follows the highest number that is left (the stock pair when none is).
     fn detach(&mut self, core: &C, consumer: ConsumerId) {
         let owner = consumer.get();
         let mut i = 0;
@@ -144,7 +145,8 @@ impl<C: CoreApi> Provider<C> for Lfo {
                 // the hook gives the page the stock picture first
                 // SAFETY: `i` is a slot of the table; one writer at a time
                 unsafe { crate::graph::retract(i) };
-                shapes::free(core, i);
+                self.table.clear(RANGE.lo + i as u32);
+                shapes::free(i);
             }
             i += 1;
         }

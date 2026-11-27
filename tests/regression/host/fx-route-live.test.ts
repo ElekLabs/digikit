@@ -4,7 +4,8 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { Device, Session } from '@digi/test-support';
 import { DkSession } from '@digi/dk-session';
-import { withWaitApi, type PatchedSession } from '../support.ts';
+import { withWaitApi } from '../wait-api.ts';
+import { type PatchedSession } from '../test-runtime.ts';
 import { fxProfile } from '../runtime/device-data.ts';
 import type { RuntimePlan } from '../runtime/runtime-plan.ts';
 
@@ -23,9 +24,12 @@ const fake = vi.hoisted(() => ({
 vi.mock('node:child_process', () => ({
   execFile: Object.assign(vi.fn(), { [Symbol.for('nodejs.util.promisify.custom')]: fake.exec }),
 }));
-vi.mock('../support.ts', async (original) => ({
+vi.mock('../reusable-session.ts', async (original) => ({
   ...(await original<object>()),
   withReusablePatchedSession: fake.fixture,
+}));
+vi.mock('../free-region-guard.ts', async (original) => ({
+  ...(await original<object>()),
   expectNoGuardHits: fake.noGuardHits,
 }));
 vi.mock('../runtime/runtime-plan.ts', async (original) => ({

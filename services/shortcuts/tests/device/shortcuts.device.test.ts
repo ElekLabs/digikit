@@ -1,11 +1,13 @@
 import { emulatorRead, pollUntil, readViewStack, viewStackFacts } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import type { DkLogEvent } from '@digi/dk-session';
-import { CARD_SYMBOLS, cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { type CardRig } from '@digi/regression/runtime/card-rig-api.ts';
 import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
-import { moduleStorePath } from '@digi/regression/runtime/install.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
 import { ringWatch } from '@digi/regression/runtime/runtime-menu.ts';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 
 /**
  * The `shortcuts` service on the device (docs/plans/track-manager.md, phase 3): the key hook at the entry of the firmware's key walker.

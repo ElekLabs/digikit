@@ -642,6 +642,8 @@ pub(super) fn clean() -> Clean {
         *dsp::ds() = core::mem::zeroed();
         dsp::init_once();
         CALLED_NEED = [0; NEEDS_LEN];
+        // the host image has the lfo table of added waves (a case of an image without it uninstalls it)
+        crate::package::handlers::lfo_tests::image_has_wave_table(true);
         // a case that ended early left the instance of the provider fixture started
         dkrt_fixture_local_ping::dk_svc_stop();
         crate::package::handlers::dks_decls::fx_stop();
@@ -1123,58 +1125,27 @@ const LFO_TICK_SITES: [(&str, &str, [u8; 6]); 12] = [
 #[test]
 fn an_lfo_loads_with_the_lfo_service_file() {
     let _g = clean();
-    // one file for every device: each device above loads the same bytes (the hooks of the other device carry a device mask that the loader skips)
+    // one file for every device
     let files: Vec<Vec<u8>> = DEVICES.iter().map(|d| service_file(*d, "lfo", "core/services/lfo")).collect();
     assert!(files.len() > 1 && files.iter().all(|f| *f == files[0]), "lfo.dks differs between devices");
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
-        // there is no image half: `fits` loads the file and installs each hook it declares (the six interrupt hooks of the tick and the UI hooks) over the stock bytes
         unsafe {
             fits(*dev, "emulator", &[&LFO_SHAPE], &["lfo"]);
         }
         let _ = clean_state();
-        // the hooks: the port file lists each hook the lfo service takes and the device has: the six interrupt sites of the LFO tick (`moveq 6,Dn; cmp.l D3,Dn; b<cc>`), the name
-        // formatter and the page cell's vector pick (the Digitone II also its three-character formatter: `link.w A6,-0x1c; moveq 6,D0`), over the stock bytes of the firmware.
-        // The check value of each is what the loader compares at the install.
+        // the file declares no hook at an interrupt site of the LFO tick (the waves come through the image's table), and the port names none
         let file = service_file(*dev, "lfo", "core/services/lfo");
         let table = table_of(&file);
         let keys = Keys::parse(&table).unwrap();
-        let pf = port_file(*dev);
-        let pt = table_of(&pf);
+        let pt = table_of(&port_file(*dev));
         let port = Keys::parse(&pt).unwrap();
-        let stock = stock_sites(*dev);
-        let mut got = Vec::new();
-        for i in 0..keys.count(tag::HOOKS) {
-            let (hash, entry, _) = keys.words(tag::HOOKS, i).unwrap();
-            if dkneeds::keys::hook_for_device(entry, dev.profile.id) && port.find_site(hash).is_some_and(|s| s.flags & dkneeds::keys::FLAG_ABSENT == 0) {
-                got.push((hash, stock[&hash].1.clone()));
-            }
+        let hooks: Vec<u32> = (0..keys.count(tag::HOOKS)).map(|i| keys.words(tag::HOOKS, i).unwrap().0).collect();
+        for s in LFO_TICK_SITES.iter().filter(|s| s.0 == dev.name) {
+            let h = name_hash(std::format!("cf.lfo.hook.{}", s.1).as_str());
+            assert!(!hooks.contains(&h), "{}: lfo.dks declares a hook at {}", dev.name, s.1);
+            assert!(port.find_site(h).is_none(), "{}: the port file still names cf.lfo.hook.{}", dev.name, s.1);
         }
-        let name = |h: &str| name_hash(std::format!("cf.lfo.hook.{h}").as_str());
-        let mut want: Vec<(u32, Vec<u8>)> = LFO_TICK_SITES
-            .iter()
-            .filter(|s| s.0 == dev.name)
-            .map(|s| (name(s.1), s.2.to_vec()))
-            .collect();
-        want.extend(std::vec![
-            (name("wave_name"), std::vec![0x4e, 0x56, 0xff, 0xe4, 0x70, 0x06]),
-            // the vector pick of the page's cell: `addi.l #TABLE,D6` with the base of the firmware's RAM table of tile vectors (the hook's tail replays it)
-            (
-                name("graph_vec"),
-                [0x06u8, 0x86]
-                    .into_iter()
-                    .chain(if dev.name == "dn2" { 0x4450_8b68u32 } else { 0x44d2_e37cu32 }.to_be_bytes())
-                    .collect(),
-            ),
-        ]);
-        if dev.name == "dn2" {
-            want.push((name("wave_name3"), std::vec![0x4e, 0x56, 0xff, 0xe4, 0x70, 0x06]));
-        }
-        got.sort();
-        want.sort();
-        assert_eq!(got, want, "{}: the sites of lfo.dks", dev.name);
-        // the four firmware words of the WAVE maximum (`DKRT_LFO_FW`): the stock parameter table and the rows of the codes 79, 89 and 99, which the file imports from the port file
-        // (`dk_fw_<hash>` of each name). A name the port lacks would refuse the file, and an absent one would make the service write nothing, so each must be an address;
-        // the rows lie 60 bytes apart in the table
+        // the four firmware words of the WAVE maximum (`DKRT_LFO_FW`) come from the port file
         let addr = |n: &str| match port.find_name(dkneeds::keys::NAME_FW, name_hash(n), 0) {
             Some(x) if x.flags & dkneeds::keys::FLAG_ABSENT == 0 => x.addr,
             other => panic!("{}: {n} is {other:?} in the port file", dev.name),
@@ -1186,63 +1157,46 @@ fn an_lfo_loads_with_the_lfo_service_file() {
     }
 }
 
-/// The six interrupt hooks of the LFO tick are `jmp` at their stock sites after the load, and the unload of the lfo service writes the stock bytes back (docs/plans/runtime-contract-and-lifecycle.md, RC4).
+/// The lfo service reloads as a closure (its shape modules go down and come back) and passes `provider_rules`.
 #[test]
-fn the_lfo_tick_hooks_patch_their_stock_sites_and_the_unload_restores_them() {
+fn a_closure_reload_of_the_lfo_service_passes_the_provider_rules() {
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
-        // the port file of the first device is a loaded provider: each device starts from a clean state
-        clean_state();
         let image = Image::read(*dev, "emulator");
         unsafe {
             let (mut l, plan) = planned(*dev, &image, &[], &[&LFO_SHAPE], &SERVICES);
             let _dsp = dsp_env(*dev, &l, &plan);
-            let mut run = boot_run(&mut l, &plan, &[&LFO_SHAPE], true);
-            let lfo = lfo_package(&l, &plan);
-            assert!(run.is_up(lfo), "{}: lfo.dks is up", dev.name);
-            let stock = stock_sites(*dev);
-            let sites: Vec<(u32, [u8; 6])> = LFO_TICK_SITES
-                .iter()
-                .filter(|s| s.0 == dev.name)
-                .map(|s| (stock[&name_hash(std::format!("cf.lfo.hook.{}", s.1).as_str())].0, s.2))
-                .collect();
-            assert_eq!(sites.len(), 6, "{}", dev.name);
-            let read = |l: &Boot, addr: u32| {
-                let mut b = [0u8; 6];
-                l.p.read_code(addr, &mut b);
-                b
-            };
-            for (addr, bytes) in &sites {
-                let live = read(&l, *addr);
-                assert_eq!(live[..2], 0x4ef9u16.to_be_bytes(), "{}: {addr:#x} is not a jmp after the load", dev.name);
-                assert_ne!(live, *bytes, "{}: {addr:#x} is still stock", dev.name);
-            }
-            run.pm.unload(lfo).unwrap();
-            for (addr, bytes) in &sites {
-                assert_eq!(read(&l, *addr), *bytes, "{}: {addr:#x} after the unload", dev.name);
-            }
+            let rec = boot_record(&["lfo-shape"]);
+            let mut rt = Box::new(crate::package::lifecycle::Rt::new(&mut l as *mut _));
+            rt.boot_with(&rec, &capacity(&l.p));
+            let lfo = lfo_package(&l, &plan).0 as usize;
+            let path = "services/lfo.dks\0";
+            assert_eq!(rt.refusal(lfo), None, "{}", dev.name);
+            assert_eq!(l.provider_check(lfo, path.as_ptr()), OK, "{}: provider_rules refuses lfo.dks", dev.name);
+            let mut members = [0usize; records::REC_MAX];
+            assert_eq!(rt.closure(lfo, &mut members), 2, "{}", dev.name);
+            assert_eq!(rt.reload_closure_with(lfo, path.as_ptr(), &live_cap(&l)), OK, "{}", dev.name);
+            let m = rt.manager().unwrap();
+            assert!(m.live().contains(PackageId(0)) && m.live().contains(PackageId(lfo as u8)), "{}: both are back", dev.name);
         }
+        let _ = clean_state();
     }
+}
+
+/// An image without `lfo_table_info` (stock, or patched without core/lfo-table): the service refuses at its start (`E_NO_REGISTRY`), which `init` returns as its status, so the
+/// file is not loaded and a shape module needing it is refused (`E_MISSING`, as in `an_lfo_shape_without_the_lfo_service_file_is_refused_naming_the_service`). The boot's host
+/// seam replays a file's declarations and does not run its `init`, so the start is called as `init` does.
+#[test]
+fn an_image_without_the_wave_table_refuses_the_lfo_service_at_its_start() {
+    let _g = clean();
+    crate::package::handlers::lfo_tests::image_has_wave_table(false);
+    assert_eq!(crate::package::handlers::lfo_tests::start_status(), Some(dkrt_sdk::E_NO_REGISTRY));
 }
 
 /// The package of `lfo.dks` among the providers the search found.
 fn lfo_package(l: &Boot, plan: &Plan) -> PackageId {
     let j = (0..plan.np).find(|j| l.found.path(*j) == b"services/lfo.dks").expect("lfo.dks is found");
     PackageId((MAX_MODULES + j) as u8)
-}
-
-/// The hook sites of the lfo service hold their stock bytes (the live bytes of `planned`).
-fn lfo_sites_are_stock(dev: Dev, l: &Boot) {
-    let stock = stock_sites(dev);
-    let mut n = 0;
-    for s in LFO_TICK_SITES.iter().filter(|s| s.0 == dev.name) {
-        let (addr, _) = stock[&name_hash(std::format!("cf.lfo.hook.{}", s.1).as_str())];
-        let mut b = [0u8; 6];
-        unsafe { l.p.read_code(addr, &mut b) };
-        assert_eq!(b, s.2, "{}: {addr:#x} is not stock", dev.name);
-        n += 1;
-    }
-    assert_eq!(n, 6, "{}", dev.name);
 }
 
 /// An `lfo.dks` built for another ABI is refused by its own load (`E_SVC_ABI`) before anything is allocated, installed or written.
@@ -1263,7 +1217,6 @@ fn an_lfo_service_file_of_another_abi_is_refused_before_anything_is_written() {
             let why = run.report.refused().iter().find(|r| r.package == lfo).expect("lfo.dks is refused").reason;
             assert_eq!(crate::package::lifecycle::code_of(&why), E_SVC_ABI, "{}", dev.name);
             assert_eq!(l.installer.count(), 0);
-            lfo_sites_are_stock(*dev, &l);
         }
         let _ = clean_state();
     }
@@ -1283,7 +1236,6 @@ fn an_lfo_init_that_declares_another_kind_handler_than_the_table_is_refused() {
             let why = run.report.refused().iter().find(|r| r.package == lfo).expect("lfo.dks is refused").reason;
             assert_eq!(crate::package::lifecycle::code_of(&why), E_DECL_KIND, "{}", dev.name);
             assert_eq!(l.installer.count(), 0);
-            lfo_sites_are_stock(*dev, &l);
         }
         let _ = clean_state();
     }

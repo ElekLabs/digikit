@@ -1,6 +1,6 @@
 import { CAP, SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
+import type { PatchedSession } from '@digi/regression/test-runtime.ts';
 import { BOOT_FIELDS } from '@digi/regression/runtime/ready.ts';
 import { readSmallRing } from '@digi/regression/runtime/runtime-menu.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';

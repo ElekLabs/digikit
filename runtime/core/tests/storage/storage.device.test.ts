@@ -3,11 +3,13 @@ import path from 'node:path';
 import { expect } from 'vitest';
 import { parse } from 'smol-toml';
 import { openSamples } from '@digi/dk-session/samples';
-import { installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { installModule } from '@digi/regression/runtime/module-install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
-import type { PatchedSession } from '@digi/regression/support.ts';
+import type { PatchedSession } from '@digi/regression/test-runtime.ts';
 
 /**
  * The Storage contract (`contract.toml`) on the real adapter of each device. The host side is the `FakeStorage` test of the runtime crate

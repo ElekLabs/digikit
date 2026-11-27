@@ -632,6 +632,44 @@ in place. The next local build may be cold on a shared-artifact miss. APFS
 snapshots and clones can make the gain in free disk space smaller than the
 reported output size.
 
+### Removing finished lanes
+
+`tools/devtools/lane.sh --prune [--days N] [--dry-run] [--only NAME]...` removes
+lanes that are finished and lists every other lane with the reason it was kept.
+`--only NAME` (repeatable) limits the run to these lanes. A lane goes only when
+all five rules hold:
+
+1. It is a worktree directly under the lanes directory (next to the main tree);
+   the main worktree, `.claude/worktrees/*` and `/private/tmp/*` are never touched.
+2. It is clean: `git status --porcelain` is empty (no untracked files that are not ignored).
+3. It is merged: after `git fetch origin main`, its HEAD is an ancestor of `origin/main`.
+4. It is idle for at least N days (default 7): the newest mtime of the worktree
+   gitdir's `index`, `HEAD` and `logs/HEAD` and of the lane directory itself.
+5. It is not in use: no process has the lane in its command line or working
+   directory. An Nx daemon of the lane does not count; it is stopped first
+   (`node_modules/.bin/nx daemon --stop`) and the check runs again.
+
+A pruned lane loses its ignored files too (`dist/`, and `out/` run results and
+logs): copy anything you need out of `out/runs/` first. A warm lane reset to main
+and untouched for N days is pruned by design; it costs a cold build when the
+name is used again. Use a larger `--days` to keep warm lanes longer.
+
+Removal runs `git worktree remove` (never `--force`), `git branch -d` on the
+lane branch (kept with a note when git refuses) and `git worktree prune`. Remote
+branches stay. Run `--dry-run` first; it changes nothing:
+
+```text
+$ tools/devtools/lane.sh --prune --dry-run
+kept bootscreen-transfer: not merged into origin/main
+kept cap-fix: idle 1d, under 7d
+kept deps: uncommitted or untracked files
+...
+would remove 0, kept 40
+```
+
+A real run prints `removed NAME (branch B, idle Nd)` per lane. A pruned lane
+costs a cold build (about 25 minutes) when its name is used again.
+
 ### Remote cache
 
 All worktrees of a clone share one Cacheiro server on `127.0.0.1:47311`. Its state is in
@@ -1545,7 +1583,7 @@ Memory panel.
 
 - `rt.listen()` and `events.until(kind, match, { withinMs })` read the runtime log; the log commands exist only while `digikit/debug` is loaded (`installWithDebug`).
 - `ringWatch` (`tests/regression/runtime/runtime-menu.ts`) reads the runtime's small ring (32 events) straight from guest memory, so it works without the debug module, for
-  example in a card rig whose runtime has none (`CARD_SYMBOLS` of `card-rig.ts` carries the symbols). `next(kind, match, { withinMs })` waits in emulated time; poll every
+  example in a card rig whose runtime has none (`CARD_SYMBOLS` of `card-symbols.ts` carries the symbols). `next(kind, match, { withinMs })` waits in emulated time; poll every
   100 ms, as the ring is short. Events a test must see are logged with `DK_LOG_F_KEEP`, which the ring keeps.
   Use `rt.listen()` when the debug module is loaded anyway, `ringWatch` otherwise.
 - `viewStackFacts(device)` and `readViewStack(read, facts)` (`packages/test-support`, `boot-window.ts`) give the firmware's view stack from guest memory, the top view first (object, class

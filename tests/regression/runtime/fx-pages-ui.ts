@@ -1,6 +1,6 @@
 import { encoder, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { TestRuntime } from '../support.ts';
+import type { TestRuntime } from '../test-runtime.ts';
 import { REDRAW, SETTLE, type Rt } from './panel-waits.ts';
 import { bounded, rpc, word } from './guest-access.ts';
 import { shot, type FxProfile } from './fx-session.ts';

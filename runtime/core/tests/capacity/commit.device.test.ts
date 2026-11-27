@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { dspBytes } from '@digi/regression/runtime/dsp-state.ts';
 import { word } from '@digi/regression/runtime/guest-access.ts';
-import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { dynType } from '@digi/regression/runtime/project-kit.ts';
 import { moduleRingEvents } from '@digi/regression/runtime/runtime-menu.ts';

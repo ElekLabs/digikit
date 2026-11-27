@@ -7,12 +7,13 @@ import {
   type ParameterKey,
 } from '@digi/dk-session';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
-import { installWithDebug } from '@digi/regression/runtime/install.ts';
+import { installWithDebug } from '@digi/regression/runtime/debug-install.ts';
 import { deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { memory } from '@digi/regression/runtime/memory.ts';
 import { sendCc } from '@digi/regression/runtime/midi.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { readSmallRing, RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { panelInput, scheduledTurns } from '@digi/test-support';

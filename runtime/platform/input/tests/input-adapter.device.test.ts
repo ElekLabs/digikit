@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { probeInput, type Device } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
-import { startPatchedSession } from '@digi/regression/support.ts';
+import { startPatchedSession } from '@digi/regression/patched-session.ts';
 import { timePhase, timingContext } from '@digi/regression/timing.ts';
 import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { openDigikitMenu, openRuntimeAbout } from '@digi/regression/runtime/flows/menu.ts';
@@ -9,7 +9,7 @@ import { meaningfulAboutRows } from '@digi/regression/runtime/runtime-menu.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { liveOptions } from '@digi/regression/runtime/live-options.ts';
-import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
 import { liveProtocol } from '@digi/regression/runtime/protocol.ts';
 import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
 import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
