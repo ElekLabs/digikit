@@ -23,7 +23,8 @@ static uint8_t op, vlen;
 static volatile uint32_t pending;
 #ifndef PROOF_VIA_JOB
 /* The query BootAtInit (workbench/settings_a.proto): the boot value init read, whether it was set. */
-int32_t settings_a_boot_at_init(dk_module_ctx *ctx, const settings_a_BootAtInitRequest *request, settings_a_BootAtInitReply *reply)
+int32_t settings_a_boot_at_init(dk_module_ctx *ctx, const settings_a_BootAtInitRequest *request,
+                                settings_a_BootAtInitReply *reply)
 {
     (void)ctx;
     (void)request;

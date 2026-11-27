@@ -17,9 +17,10 @@
 #include <stdint.h>
 
 /* dk_project_entry.flags */
-#define DK_PROJECT_CURRENT 1u      /* the project is the current one */
-#define DK_PROJECT_DATA 2u         /* a `.dkp` file of the slot is in the store */
-#define DK_PROJECT_DATA_UNKNOWN 4u /* bit 1 is not known yet: the first listing of the store folder has not ended */
+#define DK_PROJECT_CURRENT 1u /* the project is the current one */
+#define DK_PROJECT_DATA 2u    /* a `.dkp` file of the slot is in the store */
+#define DK_PROJECT_DATA_UNKNOWN                                                                    \
+    4u /* bit 1 is not known yet: the first listing of the store folder has not ended */
 
 /* One project of the firmware's list. */
 typedef struct dk_project_entry {
@@ -43,8 +44,8 @@ _Static_assert(offsetof(dk_project_entry, name) == 3, "dk_project_entry.name");
 typedef struct dk_project_module {
     uint8_t id_len;
     uint8_t id[DK_PROJECT_ID_MAX]; /* `<author>/<name>`, not NUL terminated */
-    uint32_t hash;                 /* the store hash of the module file at the project's last save */
-    uint8_t settings;              /* the settings entries the project holds for the module (at most 255) */
+    uint32_t hash;    /* the store hash of the module file at the project's last save */
+    uint8_t settings; /* the settings entries the project holds for the module (at most 255) */
     uint8_t state;
     uint8_t pad[2];
 } dk_project_module;
@@ -64,7 +65,8 @@ typedef struct dk_project_summary {
     uint8_t pad2[3];
     dk_project_module modules[DK_PROJECT_MODULES_MAX];
 } dk_project_summary;
-_Static_assert(sizeof(dk_project_summary) == 32 + 40 * DK_PROJECT_MODULES_MAX, "dk_project_summary layout");
+_Static_assert(sizeof(dk_project_summary) == 32 + 40 * DK_PROJECT_MODULES_MAX,
+               "dk_project_summary layout");
 _Static_assert(offsetof(dk_project_summary, stamp) == 20, "dk_project_summary.stamp");
 _Static_assert(offsetof(dk_project_summary, module_count) == 28, "dk_project_summary.module_count");
 _Static_assert(offsetof(dk_project_summary, modules) == 32, "dk_project_summary.modules");

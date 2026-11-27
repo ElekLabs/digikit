@@ -72,10 +72,12 @@ static void query_text(void)
 {
     char out[PROJECT_QUERY_NAME_MAX + 1];
     uint8_t name[16] = {'D', 'U', 'B', ' ', ' ', 0};
-    assert(project_query_text(out, sizeof out, name, 16) == 3); /* zero ends it, trailing spaces go */
+    assert(project_query_text(out, sizeof out, name, 16) ==
+           3); /* zero ends it, trailing spaces go */
     assert(strcmp(out, "DUB") == 0);
     uint8_t odd[4] = {'A', 0x80, 0x1f, 'Z'};
-    assert(project_query_text(out, sizeof out, odd, 4) == 4); /* not printable: '?', so the text is valid UTF-8 */
+    assert(project_query_text(out, sizeof out, odd, 4) ==
+           4); /* not printable: '?', so the text is valid UTF-8 */
     assert(strcmp(out, "A??Z") == 0);
     uint8_t full[16];
     memset(full, 'Q', sizeof full); /* no zero: all 16 bytes fit with the terminator */
@@ -118,7 +120,8 @@ static void query_get_outcome(void)
     assert(loading == 1 && found == 0);
     assert(project_query_get_outcome(DK_E_NOT_FOUND, &loading, &found) == 0);
     assert(loading == 0 && found == 0);
-    assert(project_query_get_outcome(DK_E_RANGE, &loading, &found) == DK_E_RANGE); /* any other code is the handler's refusal */
+    assert(project_query_get_outcome(DK_E_RANGE, &loading, &found) ==
+           DK_E_RANGE); /* any other code is the handler's refusal */
     assert(loading == 0 && found == 0);
 }
 
