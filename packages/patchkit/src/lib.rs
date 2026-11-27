@@ -72,3 +72,5 @@ pub mod typed;
 pub mod uses;
 pub mod verify;
 pub mod wasm;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod wire_cli;

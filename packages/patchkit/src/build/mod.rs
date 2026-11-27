@@ -26,6 +26,7 @@ pub mod sharc_obj;
 pub mod show;
 pub mod test_source;
 pub mod toolchain;
+pub mod wire;
 mod workbench;
 pub use workbench::TsFile;
 #[cfg(test)]

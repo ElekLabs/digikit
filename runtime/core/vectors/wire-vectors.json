@@ -1,0 +1,4657 @@
+{
+ "schema": "tests/fixtures/wire/project_manager.proto",
+ "cases": [
+  {
+   "name": "request-empty",
+   "message": "ListRequest",
+   "input_hex": "",
+   "expect": "ok",
+   "output_hex": "",
+   "json": {}
+  },
+  {
+   "name": "request-cursor",
+   "message": "ListRequest",
+   "input_hex": "08ac02",
+   "expect": "ok",
+   "output_hex": "08ac02",
+   "json": {
+    "cursor": 300
+   }
+  },
+  {
+   "name": "request-max",
+   "message": "ListRequest",
+   "input_hex": "08ffffffff0f",
+   "expect": "ok",
+   "output_hex": "08ffffffff0f",
+   "json": {
+    "cursor": 4294967295
+   }
+  },
+  {
+   "name": "request-overlong-varint",
+   "message": "ListRequest",
+   "input_hex": "088100",
+   "expect": "ok",
+   "output_hex": "0801",
+   "json": {
+    "cursor": 1
+   }
+  },
+  {
+   "name": "request-last-duplicate-wins",
+   "message": "ListRequest",
+   "input_hex": "08010809",
+   "expect": "ok",
+   "output_hex": "0809",
+   "json": {
+    "cursor": 9
+   }
+  },
+  {
+   "name": "request-skips-unknown",
+   "message": "ListRequest",
+   "input_hex": "7801080572036162636d01020304610102030405060708",
+   "expect": "ok",
+   "output_hex": "0805",
+   "json": {
+    "cursor": 5
+   }
+  },
+  {
+   "name": "project-typical",
+   "message": "Project",
+   "input_hex": "0803120444656d6f1801",
+   "expect": "ok",
+   "output_hex": "0803120444656d6f1801",
+   "json": {
+    "slot": 3,
+    "name": "Demo",
+    "current": true
+   }
+  },
+  {
+   "name": "project-name-16",
+   "message": "Project",
+   "input_hex": "0801121030313233343536373839616263646566",
+   "expect": "ok",
+   "output_hex": "0801121030313233343536373839616263646566",
+   "json": {
+    "slot": 1,
+    "name": "0123456789abcdef"
+   }
+  },
+  {
+   "name": "project-all-default",
+   "message": "Project",
+   "input_hex": "",
+   "expect": "ok",
+   "output_hex": "",
+   "json": {}
+  },
+  {
+   "name": "reply-empty",
+   "message": "ListReply",
+   "input_hex": "",
+   "expect": "ok",
+   "output_hex": "",
+   "json": {}
+  },
+  {
+   "name": "reply-one",
+   "message": "ListReply",
+   "input_hex": "0a0508021201781003",
+   "expect": "ok",
+   "output_hex": "0a0508021201781003",
+   "json": {
+    "items": [
+     {
+      "slot": 2,
+      "name": "x"
+     }
+    ],
+    "next": 3
+   }
+  },
+  {
+   "name": "reply-full",
+   "message": "ListReply",
+   "input_hex": "0a12121070726f6a6563742030787878787878780a140801121070726f6a6563742031787878787878780a140802121070726f6a6563742032787878787878780a160803121070726f6a65637420337878787878787818010a140804121070726f6a6563742034787878787878780a140805121070726f6a6563742035787878787878780a140806121070726f6a6563742036787878787878780a140807121070726f6a6563742037787878787878780a140808121070726f6a6563742038787878787878780a140809121070726f6a6563742039787878787878780a14080a121070726f6a6563742031307878787878780a14080b121070726f6a6563742031317878787878780a14080c121070726f6a6563742031327878787878780a14080d121070726f6a6563742031337878787878780a14080e121070726f6a6563742031347878787878780a14080f121070726f6a6563742031357878787878781010",
+   "expect": "ok",
+   "output_hex": "0a12121070726f6a6563742030787878787878780a140801121070726f6a6563742031787878787878780a140802121070726f6a6563742032787878787878780a160803121070726f6a65637420337878787878787818010a140804121070726f6a6563742034787878787878780a140805121070726f6a6563742035787878787878780a140806121070726f6a6563742036787878787878780a140807121070726f6a6563742037787878787878780a140808121070726f6a6563742038787878787878780a140809121070726f6a6563742039787878787878780a14080a121070726f6a6563742031307878787878780a14080b121070726f6a6563742031317878787878780a14080c121070726f6a6563742031327878787878780a14080d121070726f6a6563742031337878787878780a14080e121070726f6a6563742031347878787878780a14080f121070726f6a6563742031357878787878781010",
+   "json": {
+    "items": [
+     {
+      "name": "project 0xxxxxxx"
+     },
+     {
+      "slot": 1,
+      "name": "project 1xxxxxxx"
+     },
+     {
+      "slot": 2,
+      "name": "project 2xxxxxxx"
+     },
+     {
+      "slot": 3,
+      "name": "project 3xxxxxxx",
+      "current": true
+     },
+     {
+      "slot": 4,
+      "name": "project 4xxxxxxx"
+     },
+     {
+      "slot": 5,
+      "name": "project 5xxxxxxx"
+     },
+     {
+      "slot": 6,
+      "name": "project 6xxxxxxx"
+     },
+     {
+      "slot": 7,
+      "name": "project 7xxxxxxx"
+     },
+     {
+      "slot": 8,
+      "name": "project 8xxxxxxx"
+     },
+     {
+      "slot": 9,
+      "name": "project 9xxxxxxx"
+     },
+     {
+      "slot": 10,
+      "name": "project 10xxxxxx"
+     },
+     {
+      "slot": 11,
+      "name": "project 11xxxxxx"
+     },
+     {
+      "slot": 12,
+      "name": "project 12xxxxxx"
+     },
+     {
+      "slot": 13,
+      "name": "project 13xxxxxx"
+     },
+     {
+      "slot": 14,
+      "name": "project 14xxxxxx"
+     },
+     {
+      "slot": 15,
+      "name": "project 15xxxxxx"
+     }
+    ],
+    "next": 16
+   }
+  },
+  {
+   "name": "reply-empty-item",
+   "message": "ListReply",
+   "input_hex": "0a00",
+   "expect": "ok",
+   "output_hex": "0a00",
+   "json": {
+    "items": [
+     {}
+    ]
+   }
+  },
+  {
+   "name": "coverage-all",
+   "message": "Coverage",
+   "input_hex": "080210fbffffffffffffffff011a04000102ff220601ac02f0a2042a070807120170180130013809420561626364654a004a0261624a0463646566",
+   "expect": "ok",
+   "output_hex": "080210fbffffffffffffffff011a04000102ff220601ac02f0a2042a070807120170180130013809420561626364654a004a0261624a0463646566",
+   "json": {
+    "mode": "MODE_HARD",
+    "offset": -5,
+    "blob": "AAEC/w==",
+    "levels": [
+     1,
+     300,
+     70000
+    ],
+    "project": {
+     "slot": 7,
+     "name": "p",
+     "current": true
+    },
+    "flag": true,
+    "count": 9,
+    "label": "abcde",
+    "tags": [
+     "",
+     "ab",
+     "cdef"
+    ]
+   }
+  },
+  {
+   "name": "coverage-int32-min",
+   "message": "Coverage",
+   "input_hex": "1080808080f8ffffffff01",
+   "expect": "ok",
+   "output_hex": "1080808080f8ffffffff01",
+   "json": {
+    "offset": -2147483648
+   }
+  },
+  {
+   "name": "coverage-int32-max",
+   "message": "Coverage",
+   "input_hex": "10ffffffff07",
+   "expect": "ok",
+   "output_hex": "10ffffffff07",
+   "json": {
+    "offset": 2147483647
+   }
+  },
+  {
+   "name": "coverage-unknown-enum-value",
+   "message": "Coverage",
+   "input_hex": "0807",
+   "expect": "ok",
+   "output_hex": "0807",
+   "json": {
+    "mode": 7
+   }
+  },
+  {
+   "name": "coverage-empty-project-present",
+   "message": "Coverage",
+   "input_hex": "2a00",
+   "expect": "ok",
+   "output_hex": "2a00",
+   "json": {
+    "project": {}
+   }
+  },
+  {
+   "name": "coverage-blob-8",
+   "message": "Coverage",
+   "input_hex": "1a08ffffffffffffffff",
+   "expect": "ok",
+   "output_hex": "1a08ffffffffffffffff",
+   "json": {
+    "blob": "//////////8="
+   }
+  },
+  {
+   "name": "coverage-levels-6",
+   "message": "Coverage",
+   "input_hex": "2206000102030405",
+   "expect": "ok",
+   "output_hex": "2206000102030405",
+   "json": {
+    "levels": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5
+    ]
+   }
+  },
+  {
+   "name": "coverage-unpacked-levels",
+   "message": "Coverage",
+   "input_hex": "200120022003",
+   "expect": "ok",
+   "output_hex": "2203010203",
+   "json": {
+    "levels": [
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  {
+   "name": "coverage-skips-unknown-in-nested",
+   "message": "Coverage",
+   "input_hex": "2a06080178017200",
+   "expect": "ok",
+   "output_hex": "2a020801",
+   "json": {
+    "project": {
+     "slot": 1
+    }
+   }
+  },
+  {
+   "name": "random-request-0",
+   "message": "ListRequest",
+   "input_hex": "0801",
+   "expect": "ok",
+   "output_hex": "0801",
+   "json": {
+    "cursor": 1
+   }
+  },
+  {
+   "name": "random-project-1",
+   "message": "Project",
+   "input_hex": "12102d2dc3bc2030c3a9305a615ac3bc20301801",
+   "expect": "ok",
+   "output_hex": "12102d2dc3bc2030c3a9305a615ac3bc20301801",
+   "json": {
+    "name": "--ü 0é0ZaZü 0",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-2",
+   "message": "ListReply",
+   "input_hex": "0a0a08bcfaf2970f120220300a1408011210c3a92d5ae282ac2de282ac5ac3a9205a0a11120fe99fb3e99fb320c3bc20e99fb3c3bc0a121210615a612030e99fb3c3bce282ac202d610a0d08ffffffff0f12055a6161c3bc0a0f08808080011206205ae282ac2d18010a0b08fd9e93a50d12015a18010a1808bcecb7b1021210c3a9206161c3a9c3a9e99fb3c3a961300a0f08ac021208612061c3a92d203018010a020801107f",
+   "expect": "ok",
+   "output_hex": "0a0a08bcfaf2970f120220300a1408011210c3a92d5ae282ac2de282ac5ac3a9205a0a11120fe99fb3e99fb320c3bc20e99fb3c3bc0a121210615a612030e99fb3c3bce282ac202d610a0d08ffffffff0f12055a6161c3bc0a0f08808080011206205ae282ac2d18010a0b08fd9e93a50d12015a18010a1808bcecb7b1021210c3a9206161c3a9c3a9e99fb3c3a961300a0f08ac021208612061c3a92d203018010a020801107f",
+   "json": {
+    "items": [
+     {
+      "slot": 4076649788,
+      "name": " 0"
+     },
+     {
+      "slot": 1,
+      "name": "é-Z€-€Zé Z"
+     },
+     {
+      "name": "音音 ü 音ü"
+     },
+     {
+      "name": "aZa 0音ü€ -a"
+     },
+     {
+      "slot": 4294967295,
+      "name": "Zaaü"
+     },
+     {
+      "slot": 2097152,
+      "name": " Z€-",
+      "current": true
+     },
+     {
+      "slot": 3567570813,
+      "name": "Z",
+      "current": true
+     },
+     {
+      "slot": 640546364,
+      "name": "é aaéé音éa0"
+     },
+     {
+      "slot": 300,
+      "name": "a aé- 0",
+      "current": true
+     },
+     {
+      "slot": 1
+     }
+    ],
+    "next": 127
+   }
+  },
+  {
+   "name": "random-coverage-3",
+   "message": "Coverage",
+   "input_hex": "080210b6bb98e1fdffffffff011a0792647cdbf099212208ac028080800101013880014205e282ac30304a02c3bc4a00",
+   "expect": "ok",
+   "output_hex": "080210b6bb98e1fdffffffff011a0792647cdbf099212208ac028080800101013880014205e282ac30304a02c3bc4a00",
+   "json": {
+    "mode": "MODE_HARD",
+    "offset": -601481802,
+    "blob": "kmR82/CZIQ==",
+    "levels": [
+     300,
+     2097152,
+     1,
+     1
+    ],
+    "count": 128,
+    "label": "€00",
+    "tags": [
+     "ü",
+     ""
+    ]
+   }
+  },
+  {
+   "name": "random-request-4",
+   "message": "ListRequest",
+   "input_hex": "0801",
+   "expect": "ok",
+   "output_hex": "0801",
+   "json": {
+    "cursor": 1
+   }
+  },
+  {
+   "name": "random-project-5",
+   "message": "Project",
+   "input_hex": "089ce4e8990d120ac3bc61e99fb3612dc3bc1801",
+   "expect": "ok",
+   "output_hex": "089ce4e8990d120ac3bc61e99fb3612dc3bc1801",
+   "json": {
+    "slot": 3543806492,
+    "name": "üa音a-ü",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-6",
+   "message": "ListReply",
+   "input_hex": "0a1108808080800112092d61e282ac202020200a1608ecbb9d79120de99fb3e99fb33020c3bce99fb318010a0d0880808001120630613030c3a90a0812042de99fb3180110ac02",
+   "expect": "ok",
+   "output_hex": "0a1108808080800112092d61e282ac202020200a1608ecbb9d79120de99fb3e99fb33020c3bce99fb318010a0d0880808001120630613030c3a90a0812042de99fb3180110ac02",
+   "json": {
+    "items": [
+     {
+      "slot": 268435456,
+      "name": "-a€    "
+     },
+     {
+      "slot": 254238188,
+      "name": "音音0 ü音",
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": "0a00é"
+     },
+     {
+      "name": "-音",
+      "current": true
+     }
+    ],
+    "next": 300
+   }
+  },
+  {
+   "name": "random-coverage-7",
+   "message": "Coverage",
+   "input_hex": "0801107f1a082b79328ac8992c88221280808080018001a2e18afd0d00ffffffff0f3880800142023030",
+   "expect": "ok",
+   "output_hex": "0801107f1a082b79328ac8992c88221280808080018001a2e18afd0d00ffffffff0f3880800142023030",
+   "json": {
+    "mode": "MODE_SOFT",
+    "offset": 127,
+    "blob": "K3kyisiZLIg=",
+    "levels": [
+     268435456,
+     128,
+     3751981218,
+     0,
+     4294967295
+    ],
+    "count": 16384,
+    "label": "00"
+   }
+  },
+  {
+   "name": "random-request-8",
+   "message": "ListRequest",
+   "input_hex": "088001",
+   "expect": "ok",
+   "output_hex": "088001",
+   "json": {
+    "cursor": 128
+   }
+  },
+  {
+   "name": "random-project-9",
+   "message": "Project",
+   "input_hex": "08ac0212085ae282ace282ac2d1801",
+   "expect": "ok",
+   "output_hex": "08ac0212085ae282ace282ac2d1801",
+   "json": {
+    "slot": 300,
+    "name": "Z€€-",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-10",
+   "message": "ListReply",
+   "input_hex": "108001",
+   "expect": "ok",
+   "output_hex": "108001",
+   "json": {
+    "next": 128
+   }
+  },
+  {
+   "name": "random-coverage-11",
+   "message": "Coverage",
+   "input_hex": "1080808080f8ffffffff011a03fb606238808080014204c3bc205a4a035a61614a0430e282ac",
+   "expect": "ok",
+   "output_hex": "1080808080f8ffffffff011a03fb606238808080014204c3bc205a4a035a61614a0430e282ac",
+   "json": {
+    "offset": -2147483648,
+    "blob": "+2Bi",
+    "count": 2097152,
+    "label": "ü Z",
+    "tags": [
+     "Zaa",
+     "0€"
+    ]
+   }
+  },
+  {
+   "name": "random-request-12",
+   "message": "ListRequest",
+   "input_hex": "08ffffffff0f",
+   "expect": "ok",
+   "output_hex": "08ffffffff0f",
+   "json": {
+    "cursor": 4294967295
+   }
+  },
+  {
+   "name": "random-project-13",
+   "message": "Project",
+   "input_hex": "08808001120d612de99fb35ac3a9e99fb330611801",
+   "expect": "ok",
+   "output_hex": "08808001120d612de99fb35ac3a9e99fb330611801",
+   "json": {
+    "slot": 16384,
+    "name": "a-音Zé音0a",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-14",
+   "message": "ListReply",
+   "input_hex": "0a0f0880808001120861c3bcc3bc2d2d5a0a090880011204e99fb3200a10088080800112092dc3a92020c3bc615a0a15088001120e30c3bcc3a9302d2d20e99fb3c3bc18010a1808808001121020e282acc3a9c3a9e282ac61e99fb33018010a1412105a2d5a5a5a2d61e282ac302d20205a2018010a1a08ffffffff0f1210c3bce99fb3c3a930e282ace99fb35a5a18010a1408011210e282ac5a615ac3bce282acc3a9c3a9610a1908808080011210c3bc2de282ace99fb35ae282ac61c3bc18011080808001",
+   "expect": "ok",
+   "output_hex": "0a0f0880808001120861c3bcc3bc2d2d5a0a090880011204e99fb3200a10088080800112092dc3a92020c3bc615a0a15088001120e30c3bcc3a9302d2d20e99fb3c3bc18010a1808808001121020e282acc3a9c3a9e282ac61e99fb33018010a1412105a2d5a5a5a2d61e282ac302d20205a2018010a1a08ffffffff0f1210c3bce99fb3c3a930e282ace99fb35a5a18010a1408011210e282ac5a615ac3bce282acc3a9c3a9610a1908808080011210c3bc2de282ace99fb35ae282ac61c3bc18011080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 2097152,
+      "name": "aüü--Z"
+     },
+     {
+      "slot": 128,
+      "name": "音 "
+     },
+     {
+      "slot": 2097152,
+      "name": "-é  üaZ"
+     },
+     {
+      "slot": 128,
+      "name": "0üé0-- 音ü",
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": " €éé€a音0",
+      "current": true
+     },
+     {
+      "name": "Z-ZZZ-a€0-  Z ",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "ü音é0€音ZZ",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "€ZaZü€ééa"
+     },
+     {
+      "slot": 2097152,
+      "name": "ü-€音Z€aü",
+      "current": true
+     }
+    ],
+    "next": 2097152
+   }
+  },
+  {
+   "name": "random-coverage-15",
+   "message": "Coverage",
+   "input_hex": "10011a0657d73b82fb072a0d0880800112075ae282ac2d302038ffffffff0f42055a3061202d4a045ac3a95a4a004a0420e99fb3",
+   "expect": "ok",
+   "output_hex": "10011a0657d73b82fb072a0d0880800112075ae282ac2d302038ffffffff0f42055a3061202d4a045ac3a95a4a004a0420e99fb3",
+   "json": {
+    "offset": 1,
+    "blob": "V9c7gvsH",
+    "project": {
+     "slot": 16384,
+     "name": "Z€-0 "
+    },
+    "count": 4294967295,
+    "label": "Z0a -",
+    "tags": [
+     "ZéZ",
+     "",
+     " 音"
+    ]
+   }
+  },
+  {
+   "name": "random-request-16",
+   "message": "ListRequest",
+   "input_hex": "08ae82bbd602",
+   "expect": "ok",
+   "output_hex": "08ae82bbd602",
+   "json": {
+    "cursor": 718192942
+   }
+  },
+  {
+   "name": "random-project-17",
+   "message": "Project",
+   "input_hex": "08f8e9f2df0f120720e99fb3c3a961",
+   "expect": "ok",
+   "output_hex": "08f8e9f2df0f120720e99fb3c3a961",
+   "json": {
+    "slot": 4227642616,
+    "name": " 音éa"
+   }
+  },
+  {
+   "name": "random-reply-18",
+   "message": "ListReply",
+   "input_hex": "0a07080112016118010a0a0880011203e282ac18010a170880011210e282acc3bcc3bcc3bc2dc3a930c3a95a18010a03120130108080808001",
+   "expect": "ok",
+   "output_hex": "0a07080112016118010a0a0880011203e282ac18010a170880011210e282acc3bcc3bcc3bc2dc3a930c3a95a18010a03120130108080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 1,
+      "name": "a",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "€",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "€üüü-é0éZ",
+      "current": true
+     },
+     {
+      "name": "0"
+     }
+    ],
+    "next": 268435456
+   }
+  },
+  {
+   "name": "random-coverage-19",
+   "message": "Coverage",
+   "input_hex": "10ffffffff07220cac02ffffffff0f80808080013880014203202d614a032030614a045ae282ac4a0320c3a9",
+   "expect": "ok",
+   "output_hex": "10ffffffff07220cac02ffffffff0f80808080013880014203202d614a032030614a045ae282ac4a0320c3a9",
+   "json": {
+    "offset": 2147483647,
+    "levels": [
+     300,
+     4294967295,
+     268435456
+    ],
+    "count": 128,
+    "label": " -a",
+    "tags": [
+     " 0a",
+     "Z€",
+     " é"
+    ]
+   }
+  },
+  {
+   "name": "random-request-20",
+   "message": "ListRequest",
+   "input_hex": "0801",
+   "expect": "ok",
+   "output_hex": "0801",
+   "json": {
+    "cursor": 1
+   }
+  },
+  {
+   "name": "random-project-21",
+   "message": "Project",
+   "input_hex": "08808080011210e99fb320e282ac5a5ae99fb3c3a930201801",
+   "expect": "ok",
+   "output_hex": "08808080011210e99fb320e282ac5a5ae99fb3c3a930201801",
+   "json": {
+    "slot": 2097152,
+    "name": "音 €ZZ音é0 ",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-22",
+   "message": "ListReply",
+   "input_hex": "0a16080112105a61e99fb3e282ac5a2d5ac3bc20202d18010a1808ffffffff0f1210c3a9e282ac6161c3a9e99fb3c3bc5a5a0a16087f12105ae99fb361e99fb320616130c3a95a2d18010a0b08808080011202c3a9180110ffffffff0f",
+   "expect": "ok",
+   "output_hex": "0a16080112105a61e99fb3e282ac5a2d5ac3bc20202d18010a1808ffffffff0f1210c3a9e282ac6161c3a9e99fb3c3bc5a5a0a16087f12105ae99fb361e99fb320616130c3a95a2d18010a0b08808080011202c3a9180110ffffffff0f",
+   "json": {
+    "items": [
+     {
+      "slot": 1,
+      "name": "Za音€Z-Zü  -",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "é€aaé音üZZ"
+     },
+     {
+      "slot": 127,
+      "name": "Z音a音 aa0éZ-",
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": "é",
+      "current": true
+     }
+    ],
+    "next": 4294967295
+   }
+  },
+  {
+   "name": "random-coverage-23",
+   "message": "Coverage",
+   "input_hex": "080210eaace5a0041a081cdc80c072287db6220c8080018080800100808080013001388001420561c3bcc3bc4a03302d304a03202d5a4a00",
+   "expect": "ok",
+   "output_hex": "080210eaace5a0041a081cdc80c072287db6220c8080018080800100808080013001388001420561c3bcc3bc4a03302d304a03202d5a4a00",
+   "json": {
+    "mode": "MODE_HARD",
+    "offset": 1142511210,
+    "blob": "HNyAwHIofbY=",
+    "levels": [
+     16384,
+     2097152,
+     0,
+     2097152
+    ],
+    "flag": true,
+    "count": 128,
+    "label": "aüü",
+    "tags": [
+     "0-0",
+     " -Z",
+     ""
+    ]
+   }
+  },
+  {
+   "name": "random-request-24",
+   "message": "ListRequest",
+   "input_hex": "08808001",
+   "expect": "ok",
+   "output_hex": "08808001",
+   "json": {
+    "cursor": 16384
+   }
+  },
+  {
+   "name": "random-project-25",
+   "message": "Project",
+   "input_hex": "087f1202c3a9",
+   "expect": "ok",
+   "output_hex": "087f1202c3a9",
+   "json": {
+    "slot": 127,
+    "name": "é"
+   }
+  },
+  {
+   "name": "random-reply-26",
+   "message": "ListReply",
+   "input_hex": "0a130801120f203020e99fb3c3bcc3a9e282acc3a90a14087f12105a5a2061e99fb32d20c3a9c3bcc3a95a0a16087f12103020e99fb35ae99fb32de99fb3c3bc6118010a0f08ac02120820612de99fb3c3a918010a1008808001120a2061202030c3bcc3a9300a141210302d206161e282ac61c3bc2d6120c3bc18010a1508ac021210e282ace282ace99fb32dc3a9c3bcc3a90a1008ffffffff0f1208e99fb3e282acc3bc0a150880011210305ac3bc2d6161c3a9e99fb361615a200a18088080808001120e20c3a9e99fb36120c3bc2de99fb318010a1508800112105ae282ace99fb361e282acc3bc5a61201080808001",
+   "expect": "ok",
+   "output_hex": "0a130801120f203020e99fb3c3bcc3a9e282acc3a90a14087f12105a5a2061e99fb32d20c3a9c3bcc3a95a0a16087f12103020e99fb35ae99fb32de99fb3c3bc6118010a0f08ac02120820612de99fb3c3a918010a1008808001120a2061202030c3bcc3a9300a141210302d206161e282ac61c3bc2d6120c3bc18010a1508ac021210e282ace282ace99fb32dc3a9c3bcc3a90a1008ffffffff0f1208e99fb3e282acc3bc0a150880011210305ac3bc2d6161c3a9e99fb361615a200a18088080808001120e20c3a9e99fb36120c3bc2de99fb318010a1508800112105ae282ace99fb361e282acc3bc5a61201080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 1,
+      "name": " 0 音üé€é"
+     },
+     {
+      "slot": 127,
+      "name": "ZZ a音- éüéZ"
+     },
+     {
+      "slot": 127,
+      "name": "0 音Z音-音üa",
+      "current": true
+     },
+     {
+      "slot": 300,
+      "name": " a-音é",
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": " a  0üé0"
+     },
+     {
+      "name": "0- aa€aü-a ü",
+      "current": true
+     },
+     {
+      "slot": 300,
+      "name": "€€音-éüé"
+     },
+     {
+      "slot": 4294967295,
+      "name": "音€ü"
+     },
+     {
+      "slot": 128,
+      "name": "0Zü-aaé音aaZ "
+     },
+     {
+      "slot": 268435456,
+      "name": " é音a ü-音",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "Z€音a€üZa "
+     }
+    ],
+    "next": 2097152
+   }
+  },
+  {
+   "name": "random-coverage-27",
+   "message": "Coverage",
+   "input_hex": "08071080ffffffffffffffff011a02b10c220affffffff0f80808080012a0f0801120be282ac30c3bce99fb32d20387f4204c3bcc3bc",
+   "expect": "ok",
+   "output_hex": "08071080ffffffffffffffff011a02b10c220affffffff0f80808080012a0f0801120be282ac30c3bce99fb32d20387f4204c3bcc3bc",
+   "json": {
+    "mode": 7,
+    "offset": -128,
+    "blob": "sQw=",
+    "levels": [
+     4294967295,
+     268435456
+    ],
+    "project": {
+     "slot": 1,
+     "name": "€0ü音- "
+    },
+    "count": 127,
+    "label": "üü"
+   }
+  },
+  {
+   "name": "random-request-28",
+   "message": "ListRequest",
+   "input_hex": "087f",
+   "expect": "ok",
+   "output_hex": "087f",
+   "json": {
+    "cursor": 127
+   }
+  },
+  {
+   "name": "random-project-29",
+   "message": "Project",
+   "input_hex": "1210e282ace282ac30e99fb35a30c3a96120",
+   "expect": "ok",
+   "output_hex": "1210e282ace282ac30e99fb35a30c3a96120",
+   "json": {
+    "name": "€€0音Z0éa "
+   }
+  },
+  {
+   "name": "random-reply-30",
+   "message": "ListReply",
+   "input_hex": "0a0f120de282ac30c3a92dc3a9305a2d610a16088080808001120e2de99fb3c3a920c3bce99fb3c3bc0a170880011210c3a9c3a9e282ac202dc3bc2de282ac6118010a0b0880011206c3bc2d2dc3bc0a190880808001121020e99fb320e99fb330e282ac20e99fb318010a1908ffffffff0f120f5ac3a9c3bce99fb35ae282ace282ac18010a1908808080011210612d30c3bc2dc3a920e282acc3a92d5a18010a0b08808080011202c3bc18010a121210e99fb35a5a2d20c3bc30c3bce99fb32d0a14088001120f30c3a95ae99fb3c3a9c3a961e282ac0a160880808001120fc3bcc3bc205a615a2de282ace99fb30a15088080808001120be99fb32061e282ace282ac18010a1608011210e99fb33061612d61c3a92d20c3bc3030180110ffffffff0f",
+   "expect": "ok",
+   "output_hex": "0a0f120de282ac30c3a92dc3a9305a2d610a16088080808001120e2de99fb3c3a920c3bce99fb3c3bc0a170880011210c3a9c3a9e282ac202dc3bc2de282ac6118010a0b0880011206c3bc2d2dc3bc0a190880808001121020e99fb320e99fb330e282ac20e99fb318010a1908ffffffff0f120f5ac3a9c3bce99fb35ae282ace282ac18010a1908808080011210612d30c3bc2dc3a920e282acc3a92d5a18010a0b08808080011202c3bc18010a121210e99fb35a5a2d20c3bc30c3bce99fb32d0a14088001120f30c3a95ae99fb3c3a9c3a961e282ac0a160880808001120fc3bcc3bc205a615a2de282ace99fb30a15088080808001120be99fb32061e282ace282ac18010a1608011210e99fb33061612d61c3a92d20c3bc3030180110ffffffff0f",
+   "json": {
+    "items": [
+     {
+      "name": "€0é-é0Z-a"
+     },
+     {
+      "slot": 268435456,
+      "name": "-音é ü音ü"
+     },
+     {
+      "slot": 128,
+      "name": "éé€ -ü-€a",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "ü--ü"
+     },
+     {
+      "slot": 2097152,
+      "name": " 音 音0€ 音",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "Zéü音Z€€",
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": "a-0ü-é €é-Z",
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": "ü",
+      "current": true
+     },
+     {
+      "name": "音ZZ- ü0ü音-"
+     },
+     {
+      "slot": 128,
+      "name": "0éZ音ééa€"
+     },
+     {
+      "slot": 2097152,
+      "name": "üü ZaZ-€音"
+     },
+     {
+      "slot": 268435456,
+      "name": "音 a€€",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "音0aa-aé- ü00",
+      "current": true
+     }
+    ],
+    "next": 4294967295
+   }
+  },
+  {
+   "name": "random-coverage-31",
+   "message": "Coverage",
+   "input_hex": "080710011a019c22017f2a14080112102de99fb32d2020c3bc5a2020e99fb3303880014205c3a920c3a94a03e282ac4a00",
+   "expect": "ok",
+   "output_hex": "080710011a019c22017f2a14080112102de99fb32d2020c3bc5a2020e99fb3303880014205c3a920c3a94a03e282ac4a00",
+   "json": {
+    "mode": 7,
+    "offset": 1,
+    "blob": "nA==",
+    "levels": [
+     127
+    ],
+    "project": {
+     "slot": 1,
+     "name": "-音-  üZ  音0"
+    },
+    "count": 128,
+    "label": "é é",
+    "tags": [
+     "€",
+     ""
+    ]
+   }
+  },
+  {
+   "name": "random-request-32",
+   "message": "ListRequest",
+   "input_hex": "088080808001",
+   "expect": "ok",
+   "output_hex": "088080808001",
+   "json": {
+    "cursor": 268435456
+   }
+  },
+  {
+   "name": "random-project-33",
+   "message": "Project",
+   "input_hex": "",
+   "expect": "ok",
+   "output_hex": "",
+   "json": {}
+  },
+  {
+   "name": "random-reply-34",
+   "message": "ListReply",
+   "input_hex": "0a14121020e99fb32d615ac3bc613020c3a9c3a918010a140801121061c3bcc3a9c3bc616130c3a9c3a9c3bc0a12120ec3bce99fb36161c3a9e282acc3bc18010a1508ac021210615a2de99fb32d20302dc3a9c3bc2d2d0a180880800112102d6120302d61e282ac5ac3a920e282ac18010a180880808080011210e99fb3e282ac205a615ac3a95ac3bc5a0a1408ac02120d30c3a95ae282ac61302dc3a96118010a1708ffffffff0f120fc3a961c3a9c3bce99fb320e99fb35a1090fdbab108",
+   "expect": "ok",
+   "output_hex": "0a14121020e99fb32d615ac3bc613020c3a9c3a918010a140801121061c3bcc3a9c3bc616130c3a9c3a9c3bc0a12120ec3bce99fb36161c3a9e282acc3bc18010a1508ac021210615a2de99fb32d20302dc3a9c3bc2d2d0a180880800112102d6120302d61e282ac5ac3a920e282ac18010a180880808080011210e99fb3e282ac205a615ac3a95ac3bc5a0a1408ac02120d30c3a95ae282ac61302dc3a96118010a1708ffffffff0f120fc3a961c3a9c3bce99fb320e99fb35a1090fdbab108",
+   "json": {
+    "items": [
+     {
+      "name": " 音-aZüa0 éé",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "aüéüaa0ééü"
+     },
+     {
+      "name": "ü音aaé€ü",
+      "current": true
+     },
+     {
+      "slot": 300,
+      "name": "aZ-音- 0-éü--"
+     },
+     {
+      "slot": 16384,
+      "name": "-a 0-a€Zé €",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "name": "音€ ZaZéZüZ"
+     },
+     {
+      "slot": 300,
+      "name": "0éZ€a0-éa",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "éaéü音 音Z"
+     }
+    ],
+    "next": 2251210384
+   }
+  },
+  {
+   "name": "random-coverage-35",
+   "message": "Coverage",
+   "input_hex": "08011080808080f8ffffffff011a0775206b9de56c842212ac02ffffffff0fffffffff0f8080010080012a16088080011210c3bc5a2de282ac2d2d2de99fb3615a203001420561c3bc5a5a",
+   "expect": "ok",
+   "output_hex": "08011080808080f8ffffffff011a0775206b9de56c842212ac02ffffffff0fffffffff0f8080010080012a16088080011210c3bc5a2de282ac2d2d2de99fb3615a203001420561c3bc5a5a",
+   "json": {
+    "mode": "MODE_SOFT",
+    "offset": -2147483648,
+    "blob": "dSBrneVshA==",
+    "levels": [
+     300,
+     4294967295,
+     4294967295,
+     16384,
+     0,
+     128
+    ],
+    "project": {
+     "slot": 16384,
+     "name": "üZ-€---音aZ "
+    },
+    "flag": true,
+    "label": "aüZZ"
+   }
+  },
+  {
+   "name": "random-request-36",
+   "message": "ListRequest",
+   "input_hex": "0801",
+   "expect": "ok",
+   "output_hex": "0801",
+   "json": {
+    "cursor": 1
+   }
+  },
+  {
+   "name": "random-project-37",
+   "message": "Project",
+   "input_hex": "0880011207e99fb3203061301801",
+   "expect": "ok",
+   "output_hex": "0880011207e99fb3203061301801",
+   "json": {
+    "slot": 128,
+    "name": "音 0a0",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-38",
+   "message": "ListReply",
+   "input_hex": "0a150801120fc3a9e99fb32d61e99fb33061e99fb318010a0f120d305a20c3bce99fb35a5a20c3bc0a08088080011202c3bc0a0608ac02120120108001",
+   "expect": "ok",
+   "output_hex": "0a150801120fc3a9e99fb32d61e99fb33061e99fb318010a0f120d305a20c3bce99fb35a5a20c3bc0a08088080011202c3bc0a0608ac02120120108001",
+   "json": {
+    "items": [
+     {
+      "slot": 1,
+      "name": "é音-a音0a音",
+      "current": true
+     },
+     {
+      "name": "0Z ü音ZZ ü"
+     },
+     {
+      "slot": 16384,
+      "name": "ü"
+     },
+     {
+      "slot": 300,
+      "name": " "
+     }
+    ],
+    "next": 128
+   }
+  },
+  {
+   "name": "random-coverage-39",
+   "message": "Coverage",
+   "input_hex": "107f1a0202052212808080018b92b7eb038080808001808080013001388080014203e282ac4a03e282ac4a00",
+   "expect": "ok",
+   "output_hex": "107f1a0202052212808080018b92b7eb038080808001808080013001388080014203e282ac4a03e282ac4a00",
+   "json": {
+    "offset": 127,
+    "blob": "AgU=",
+    "levels": [
+     2097152,
+     1030605067,
+     268435456,
+     2097152
+    ],
+    "flag": true,
+    "count": 16384,
+    "label": "€",
+    "tags": [
+     "€",
+     ""
+    ]
+   }
+  },
+  {
+   "name": "random-request-40",
+   "message": "ListRequest",
+   "input_hex": "08808001",
+   "expect": "ok",
+   "output_hex": "08808001",
+   "json": {
+    "cursor": 16384
+   }
+  },
+  {
+   "name": "random-project-41",
+   "message": "Project",
+   "input_hex": "08fed691a10812102d61c3bce99fb3c3bcc3bc5ac3bc2020",
+   "expect": "ok",
+   "output_hex": "08fed691a10812102d61c3bce99fb3c3bcc3bc5ac3bc2020",
+   "json": {
+    "slot": 2216979326,
+    "name": "-aü音üüZü  "
+   }
+  },
+  {
+   "name": "random-reply-42",
+   "message": "ListReply",
+   "input_hex": "0a0b08808080800112012d18010a14087f1210e282acc3bcc3a9c3bce282acc3a9c3bc0a1a088080808001121030205a61e99fb361c3bc20e99fb3c3a918010a1608ffd7651210e99fb3e99fb330c3bce282ac5ae99fb30a0d08808080011206202061e282ac0a08088080800112015a0a100801120ce99fb3e282ace99fb3c3bc200a1a08c79affec091210c3bce99fb3c3a961c3bc2dc3a920c3a918010a051201611801109f89de8302",
+   "expect": "ok",
+   "output_hex": "0a0b08808080800112012d18010a14087f1210e282acc3bcc3a9c3bce282acc3a9c3bc0a1a088080808001121030205a61e99fb361c3bc20e99fb3c3a918010a1608ffd7651210e99fb3e99fb330c3bce282ac5ae99fb30a0d08808080011206202061e282ac0a08088080800112015a0a100801120ce99fb3e282ace99fb3c3bc200a1a08c79affec091210c3bce99fb3c3a961c3bc2dc3a920c3a918010a051201611801109f89de8302",
+   "json": {
+    "items": [
+     {
+      "slot": 268435456,
+      "name": "-",
+      "current": true
+     },
+     {
+      "slot": 127,
+      "name": "€üéü€éü"
+     },
+     {
+      "slot": 268435456,
+      "name": "0 Za音aü 音é",
+      "current": true
+     },
+     {
+      "slot": 1666047,
+      "name": "音音0ü€Z音"
+     },
+     {
+      "slot": 2097152,
+      "name": "  a€"
+     },
+     {
+      "slot": 2097152,
+      "name": "Z"
+     },
+     {
+      "slot": 1,
+      "name": "音€音ü "
+     },
+     {
+      "slot": 2644495687,
+      "name": "ü音éaü-é é",
+      "current": true
+     },
+     {
+      "name": "a",
+      "current": true
+     }
+    ],
+    "next": 544703647
+   }
+  },
+  {
+   "name": "random-coverage-43",
+   "message": "Coverage",
+   "input_hex": "10ffffffffffffffffff011a0401b269e9220dffffffff0f8001ffffffff0f00300138808080014205e99fb3c3a94a045ae282ac",
+   "expect": "ok",
+   "output_hex": "10ffffffffffffffffff011a0401b269e9220dffffffff0f8001ffffffff0f00300138808080014205e99fb3c3a94a045ae282ac",
+   "json": {
+    "offset": -1,
+    "blob": "AbJp6Q==",
+    "levels": [
+     4294967295,
+     128,
+     4294967295,
+     0
+    ],
+    "flag": true,
+    "count": 2097152,
+    "label": "音é",
+    "tags": [
+     "Z€"
+    ]
+   }
+  },
+  {
+   "name": "random-request-44",
+   "message": "ListRequest",
+   "input_hex": "08ac02",
+   "expect": "ok",
+   "output_hex": "08ac02",
+   "json": {
+    "cursor": 300
+   }
+  },
+  {
+   "name": "random-project-45",
+   "message": "Project",
+   "input_hex": "08808080011206e99fb33061301801",
+   "expect": "ok",
+   "output_hex": "08808080011206e99fb33061301801",
+   "json": {
+    "slot": 2097152,
+    "name": "音0a0",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-46",
+   "message": "ListReply",
+   "input_hex": "0a0b0880808001120430c3a95a0a17088001121030e99fb32d5ac3a930e282acc3a95a5a18010a18088fbf8ab30c120ee99fb3e282ace99fb3c3a9202d2d18010a1808b893edcd031210305ac3bcc3a92d2de99fb3c3bce99fb30a0c0880800112062d6120e99fb30a0e08daabe3ef0412062dc3bc5a20200a150885d4ef940b120de99fb320e282acc3bcc3a92d5a0a1708ac021210c3a9e282ac2d3061c3bc6161c3a9c3bc18010a1508dce3a7a20f120d61e99fb3e282ace282ace99fb30a1708800112102d612dc3a95ae282ac61e99fb3e282ac180110c5fdc5fa06",
+   "expect": "ok",
+   "output_hex": "0a0b0880808001120430c3a95a0a17088001121030e99fb32d5ac3a930e282acc3a95a5a18010a18088fbf8ab30c120ee99fb3e282ace99fb3c3a9202d2d18010a1808b893edcd031210305ac3bcc3a92d2de99fb3c3bce99fb30a0c0880800112062d6120e99fb30a0e08daabe3ef0412062dc3bc5a20200a150885d4ef940b120de99fb320e282acc3bcc3a92d5a0a1708ac021210c3a9e282ac2d3061c3bc6161c3a9c3bc18010a1508dce3a7a20f120d61e99fb3e282ace282ace99fb30a1708800112102d612dc3a95ae282ac61e99fb3e282ac180110c5fdc5fa06",
+   "json": {
+    "items": [
+     {
+      "slot": 2097152,
+      "name": "0éZ"
+     },
+     {
+      "slot": 128,
+      "name": "0音-Zé0€éZZ",
+      "current": true
+     },
+     {
+      "slot": 3328352143,
+      "name": "音€音é --",
+      "current": true
+     },
+     {
+      "slot": 968575416,
+      "name": "0Züé--音ü音"
+     },
+     {
+      "slot": 16384,
+      "name": "-a 音"
+     },
+     {
+      "slot": 1308153306,
+      "name": "-üZ  "
+     },
+     {
+      "slot": 2996562437,
+      "name": "音 €üé-Z"
+     },
+     {
+      "slot": 300,
+      "name": "é€-0aüaaéü",
+      "current": true
+     },
+     {
+      "slot": 4098486748,
+      "name": "a音€€音"
+     },
+     {
+      "slot": 128,
+      "name": "-a-éZ€a音€",
+      "current": true
+     }
+    ],
+    "next": 1867611845
+   }
+  },
+  {
+   "name": "random-coverage-47",
+   "message": "Coverage",
+   "input_hex": "10011a012e220880800100008080012a0808ac02120320c3a938014203302d614a0461612d614a004a035ac3a9",
+   "expect": "ok",
+   "output_hex": "10011a012e220880800100008080012a0808ac02120320c3a938014203302d614a0461612d614a004a035ac3a9",
+   "json": {
+    "offset": 1,
+    "blob": "Lg==",
+    "levels": [
+     16384,
+     0,
+     0,
+     16384
+    ],
+    "project": {
+     "slot": 300,
+     "name": " é"
+    },
+    "count": 1,
+    "label": "0-a",
+    "tags": [
+     "aa-a",
+     "",
+     "Zé"
+    ]
+   }
+  },
+  {
+   "name": "random-request-48",
+   "message": "ListRequest",
+   "input_hex": "087f",
+   "expect": "ok",
+   "output_hex": "087f",
+   "json": {
+    "cursor": 127
+   }
+  },
+  {
+   "name": "random-project-49",
+   "message": "Project",
+   "input_hex": "08808080011801",
+   "expect": "ok",
+   "output_hex": "08808080011801",
+   "json": {
+    "slot": 2097152,
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-50",
+   "message": "ListReply",
+   "input_hex": "0a0b0880808080011203e99fb30a0b088080808001120320c3a91001",
+   "expect": "ok",
+   "output_hex": "0a0b0880808080011203e99fb30a0b088080808001120320c3a91001",
+   "json": {
+    "items": [
+     {
+      "slot": 268435456,
+      "name": "音"
+     },
+     {
+      "slot": 268435456,
+      "name": " é"
+     }
+    ],
+    "next": 1
+   }
+  },
+  {
+   "name": "random-coverage-51",
+   "message": "Coverage",
+   "input_hex": "0807107f1a022d6c22010038ffffffff0f4205c3a95ac3a94a03e99fb34a004a03c3bc20",
+   "expect": "ok",
+   "output_hex": "0807107f1a022d6c22010038ffffffff0f4205c3a95ac3a94a03e99fb34a004a03c3bc20",
+   "json": {
+    "mode": 7,
+    "offset": 127,
+    "blob": "LWw=",
+    "levels": [
+     0
+    ],
+    "count": 4294967295,
+    "label": "éZé",
+    "tags": [
+     "音",
+     "",
+     "ü "
+    ]
+   }
+  },
+  {
+   "name": "random-request-52",
+   "message": "ListRequest",
+   "input_hex": "08808001",
+   "expect": "ok",
+   "output_hex": "08808001",
+   "json": {
+    "cursor": 16384
+   }
+  },
+  {
+   "name": "random-project-53",
+   "message": "Project",
+   "input_hex": "088080011204c3bc61201801",
+   "expect": "ok",
+   "output_hex": "088080011204c3bc61201801",
+   "json": {
+    "slot": 16384,
+    "name": "üa ",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-54",
+   "message": "ListReply",
+   "input_hex": "0a0a08ac021205c3a92dc3bc0a0608e0d1b6b20f0a1808808080800112105ae99fb3205ac3bce282ac2de282ac5a0a15088080808001120bc3a961c3bce282ac61c3bc18011001",
+   "expect": "ok",
+   "output_hex": "0a0a08ac021205c3a92dc3bc0a0608e0d1b6b20f0a1808808080800112105ae99fb3205ac3bce282ac2de282ac5a0a15088080808001120bc3a961c3bce282ac61c3bc18011001",
+   "json": {
+    "items": [
+     {
+      "slot": 300,
+      "name": "é-ü"
+     },
+     {
+      "slot": 4132284640
+     },
+     {
+      "slot": 268435456,
+      "name": "Z音 Zü€-€Z"
+     },
+     {
+      "slot": 268435456,
+      "name": "éaü€aü",
+      "current": true
+     }
+    ],
+    "next": 1
+   }
+  },
+  {
+   "name": "random-coverage-55",
+   "message": "Coverage",
+   "input_hex": "080210ffffffffffffffffff011a02fed6300142052061e282ac",
+   "expect": "ok",
+   "output_hex": "080210ffffffffffffffffff011a02fed6300142052061e282ac",
+   "json": {
+    "mode": "MODE_HARD",
+    "offset": -1,
+    "blob": "/tY=",
+    "flag": true,
+    "label": " a€"
+   }
+  },
+  {
+   "name": "random-request-56",
+   "message": "ListRequest",
+   "input_hex": "0801",
+   "expect": "ok",
+   "output_hex": "0801",
+   "json": {
+    "cursor": 1
+   }
+  },
+  {
+   "name": "random-project-57",
+   "message": "Project",
+   "input_hex": "120fe99fb32d2d61e99fb3c3a95ae282ac1801",
+   "expect": "ok",
+   "output_hex": "120fe99fb32d2d61e99fb3c3a95ae282ac1801",
+   "json": {
+    "name": "音--a音éZ€",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-58",
+   "message": "ListReply",
+   "input_hex": "0a11120fc3a930e99fb320c3bce99fb3e282ac10ffffffff0f",
+   "expect": "ok",
+   "output_hex": "0a11120fc3a930e99fb320c3bce99fb3e282ac10ffffffff0f",
+   "json": {
+    "items": [
+     {
+      "name": "é0音 ü音€"
+     }
+    ],
+    "next": 4294967295
+   }
+  },
+  {
+   "name": "random-coverage-59",
+   "message": "Coverage",
+   "input_hex": "080710011a06fcb0e110283122060180808001012a14121030e99fb35ac3bcc3a9e282acc3bc303018013880014204c3a920304a01304a042d5ac3bc",
+   "expect": "ok",
+   "output_hex": "080710011a06fcb0e110283122060180808001012a14121030e99fb35ac3bcc3a9e282acc3bc303018013880014204c3a920304a01304a042d5ac3bc",
+   "json": {
+    "mode": 7,
+    "offset": 1,
+    "blob": "/LDhECgx",
+    "levels": [
+     1,
+     2097152,
+     1
+    ],
+    "project": {
+     "name": "0音Züé€ü00",
+     "current": true
+    },
+    "count": 128,
+    "label": "é 0",
+    "tags": [
+     "0",
+     "-Zü"
+    ]
+   }
+  },
+  {
+   "name": "random-request-60",
+   "message": "ListRequest",
+   "input_hex": "08ac02",
+   "expect": "ok",
+   "output_hex": "08ac02",
+   "json": {
+    "cursor": 300
+   }
+  },
+  {
+   "name": "random-project-61",
+   "message": "Project",
+   "input_hex": "08808080011210c3bc2dc3a9e282ac2030e99fb35a2d30",
+   "expect": "ok",
+   "output_hex": "08808080011210c3bc2dc3a9e282ac2030e99fb35a2d30",
+   "json": {
+    "slot": 2097152,
+    "name": "ü-é€ 0音Z-0"
+   }
+  },
+  {
+   "name": "random-reply-62",
+   "message": "ListReply",
+   "input_hex": "0a05087f12012d0a1a08cbb58b8307121030615a5a2de282ac5a61205a2de99fb318010a15088080808001120d61202d30e282ace282ac30c3bc0a14080112105ac3bce99fb32de282ac2dc3a9c3bc610a1808ffffffff0f1210c3bce99fb3e99fb330e282acc3a92d200a0d08ac021206c3bc30c3a9611801107f",
+   "expect": "ok",
+   "output_hex": "0a05087f12012d0a1a08cbb58b8307121030615a5a2de282ac5a61205a2de99fb318010a15088080808001120d61202d30e282ace282ac30c3bc0a14080112105ac3bce99fb32de282ac2dc3a9c3bc610a1808ffffffff0f1210c3bce99fb3e99fb330e282acc3a92d200a0d08ac021206c3bc30c3a9611801107f",
+   "json": {
+    "items": [
+     {
+      "slot": 127,
+      "name": "-"
+     },
+     {
+      "slot": 1885526731,
+      "name": "0aZZ-€Za Z-音",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "name": "a -0€€0ü"
+     },
+     {
+      "slot": 1,
+      "name": "Zü音-€-éüa"
+     },
+     {
+      "slot": 4294967295,
+      "name": "ü音音0€é- "
+     },
+     {
+      "slot": 300,
+      "name": "ü0éa",
+      "current": true
+     }
+    ],
+    "next": 127
+   }
+  },
+  {
+   "name": "random-coverage-63",
+   "message": "Coverage",
+   "input_hex": "10011a06a9e6ff26b2cc2211ac02feadebfc07ac020180019080a68a0b2a16080112102dc3a930305a2dc3a9c3a9c3bce99fb31801300138ac0242055a5ae99fb34a004a04c3bc6130",
+   "expect": "ok",
+   "output_hex": "10011a06a9e6ff26b2cc2211ac02feadebfc07ac020180019080a68a0b2a16080112102dc3a930305a2dc3a9c3a9c3bce99fb31801300138ac0242055a5ae99fb34a004a04c3bc6130",
+   "json": {
+    "offset": 1,
+    "blob": "qeb/JrLM",
+    "levels": [
+     300,
+     2140854014,
+     300,
+     1,
+     128,
+     2974384144
+    ],
+    "project": {
+     "slot": 1,
+     "name": "-é00Z-ééü音",
+     "current": true
+    },
+    "flag": true,
+    "count": 300,
+    "label": "ZZ音",
+    "tags": [
+     "",
+     "üa0"
+    ]
+   }
+  },
+  {
+   "name": "random-request-64",
+   "message": "ListRequest",
+   "input_hex": "0801",
+   "expect": "ok",
+   "output_hex": "0801",
+   "json": {
+    "cursor": 1
+   }
+  },
+  {
+   "name": "random-project-65",
+   "message": "Project",
+   "input_hex": "1210c3bce282acc3a92dc3a9e282acc3a95a1801",
+   "expect": "ok",
+   "output_hex": "1210c3bce282acc3a92dc3a9e282acc3a95a1801",
+   "json": {
+    "name": "ü€é-é€éZ",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-66",
+   "message": "ListReply",
+   "input_hex": "0a0a08ac021203c3bc6118010a1608ffffffff0f120e6130e282ac5ae282acc3bc202d2d0a16080112105a61c3bce99fb35a5ac3bc30c3bc2d5a18010a18088080808001120e20e282ac5ac3a930615a30e282ac18010a160880800112102de99fb3e282ac2061615ac3bce99fb30a1708808080011210e99fb3c3a9c3a9e99fb3e282ace282ac0a1508ffffffff0f120de99fb3e99fb3615a2de282ac200a1a08ffffffff0f12105ac3a920305a61e99fb3c3a9e282ac3018010a1908c0a6e6e804120f2de282ac30e282ac5ae282ace99fb318010a1908808080011210e99fb3302030202dc3bc5a2de282ac2d18010a1a08ffffffff0f1210205a2dc3a9c3bc612de282ac302dc3a918010a12088001120d6161c3a92d5ae282acc3a9c3a90a14087f1210c3a9e99fb3c3a9c3bcc3bce282acc3a90a1708ffffffff0f120f2d5ae99fb3c3bcc3a9e99fb32dc3a90a1608ac02120fc3bce282acc3bcc3a9e282ac5a5a6118011001",
+   "expect": "ok",
+   "output_hex": "0a0a08ac021203c3bc6118010a1608ffffffff0f120e6130e282ac5ae282acc3bc202d2d0a16080112105a61c3bce99fb35a5ac3bc30c3bc2d5a18010a18088080808001120e20e282ac5ac3a930615a30e282ac18010a160880800112102de99fb3e282ac2061615ac3bce99fb30a1708808080011210e99fb3c3a9c3a9e99fb3e282ace282ac0a1508ffffffff0f120de99fb3e99fb3615a2de282ac200a1a08ffffffff0f12105ac3a920305a61e99fb3c3a9e282ac3018010a1908c0a6e6e804120f2de282ac30e282ac5ae282ace99fb318010a1908808080011210e99fb3302030202dc3bc5a2de282ac2d18010a1a08ffffffff0f1210205a2dc3a9c3bc612de282ac302dc3a918010a12088001120d6161c3a92d5ae282acc3a9c3a90a14087f1210c3a9e99fb3c3a9c3bcc3bce282acc3a90a1708ffffffff0f120f2d5ae99fb3c3bcc3a9e99fb32dc3a90a1608ac02120fc3bce282acc3bcc3a9e282ac5a5a6118011001",
+   "json": {
+    "items": [
+     {
+      "slot": 300,
+      "name": "üa",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "a0€Z€ü --"
+     },
+     {
+      "slot": 1,
+      "name": "Zaü音ZZü0ü-Z",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "name": " €Zé0aZ0€",
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": "-音€ aaZü音"
+     },
+     {
+      "slot": 2097152,
+      "name": "音éé音€€"
+     },
+     {
+      "slot": 4294967295,
+      "name": "音音aZ-€ "
+     },
+     {
+      "slot": 4294967295,
+      "name": "Zé 0Za音é€0",
+      "current": true
+     },
+     {
+      "slot": 1293521728,
+      "name": "-€0€Z€音",
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": "音0 0 -üZ-€-",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": " Z-éüa-€0-é",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "aaé-Z€éé"
+     },
+     {
+      "slot": 127,
+      "name": "é音éüü€é"
+     },
+     {
+      "slot": 4294967295,
+      "name": "-Z音üé音-é"
+     },
+     {
+      "slot": 300,
+      "name": "ü€üé€ZZa",
+      "current": true
+     }
+    ],
+    "next": 1
+   }
+  },
+  {
+   "name": "random-coverage-67",
+   "message": "Coverage",
+   "input_hex": "08011080808080f8ffffffff011a0724a70b80fe45e02214ac02ffffffff0fffffffff0ffc9aa4d10201ac023887cfc5d90f4205e282ac2d5a4a004a04c3bc2061",
+   "expect": "ok",
+   "output_hex": "08011080808080f8ffffffff011a0724a70b80fe45e02214ac02ffffffff0fffffffff0ffc9aa4d10201ac023887cfc5d90f4205e282ac2d5a4a004a04c3bc2061",
+   "json": {
+    "mode": "MODE_SOFT",
+    "offset": -2147483648,
+    "blob": "JKcLgP5F4A==",
+    "levels": [
+     300,
+     4294967295,
+     4294967295,
+     707333500,
+     1,
+     300
+    ],
+    "count": 4214318983,
+    "label": "€-Z",
+    "tags": [
+     "",
+     "ü a"
+    ]
+   }
+  },
+  {
+   "name": "random-request-68",
+   "message": "ListRequest",
+   "input_hex": "08c6a19fcc02",
+   "expect": "ok",
+   "output_hex": "08c6a19fcc02",
+   "json": {
+    "cursor": 696766662
+   }
+  },
+  {
+   "name": "random-project-69",
+   "message": "Project",
+   "input_hex": "087f121061e99fb3c3bc612d6161615a5a30c3a91801",
+   "expect": "ok",
+   "output_hex": "087f121061e99fb3c3bc612d6161615a5a30c3a91801",
+   "json": {
+    "slot": 127,
+    "name": "a音üa-aaaZZ0é",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-70",
+   "message": "ListReply",
+   "input_hex": "0a1708ac0212105ae99fb32d20e99fb320c3bce282ac3018010a190880808001121020c3a92d612de99fb3e99fb361c3bc3018010a04080118010a1608ffffffff0f120e2dc3a9e99fb3e282acc3a9c3a961108080808001",
+   "expect": "ok",
+   "output_hex": "0a1708ac0212105ae99fb32d20e99fb320c3bce282ac3018010a190880808001121020c3a92d612de99fb3e99fb361c3bc3018010a04080118010a1608ffffffff0f120e2dc3a9e99fb3e282acc3a9c3a961108080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 300,
+      "name": "Z音- 音 ü€0",
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": " é-a-音音aü0",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "-é音€ééa"
+     }
+    ],
+    "next": 268435456
+   }
+  },
+  {
+   "name": "random-coverage-71",
+   "message": "Coverage",
+   "input_hex": "107f1a077ec5f82228d8c9220ce9cfe730808001018080017f3001388080014202c3bc",
+   "expect": "ok",
+   "output_hex": "107f1a077ec5f82228d8c9220ce9cfe730808001018080017f3001388080014202c3bc",
+   "json": {
+    "offset": 127,
+    "blob": "fsX4IijYyQ==",
+    "levels": [
+     102361065,
+     16384,
+     1,
+     16384,
+     127
+    ],
+    "flag": true,
+    "count": 16384,
+    "label": "ü"
+   }
+  },
+  {
+   "name": "random-request-72",
+   "message": "ListRequest",
+   "input_hex": "",
+   "expect": "ok",
+   "output_hex": "",
+   "json": {}
+  },
+  {
+   "name": "random-project-73",
+   "message": "Project",
+   "input_hex": "080112072d305ae282ac2d1801",
+   "expect": "ok",
+   "output_hex": "080112072d305ae282ac2d1801",
+   "json": {
+    "slot": 1,
+    "name": "-0Z€-",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-74",
+   "message": "ListReply",
+   "input_hex": "0a180880800112102dc3a92020c3bce282ace282ac30302d18010a0f08f181baa90b12075ac3bc5a30c3bc0a1a08ffffffff0f121030e99fb3c3bc615ae99fb3305ac3bc2d18010a141210e99fb330e282ac61615ae282ace99fb318010a0e08800112092de282ac5ac3a9c3a90a0c0880011205e282acc3bc18010a12120e205a202de282ac205a61c3a95a5a18010a17088080800112105a5a202dc3bcc3a9e282acc3a9c3a92d0a150880011210c3bcc3bcc3bc30305ae99fb3e99fb3200a0d088fbbada70b1205e282ac5a200a1408011210c3bce99fb361e99fb35a206130e99fb30a170880011210e99fb32de99fb3c3bcc3bc5ae282ac3018010a1412103061c3bcc3a92d30c3bcc3bce99fb32018011001",
+   "expect": "ok",
+   "output_hex": "0a180880800112102dc3a92020c3bce282ace282ac30302d18010a0f08f181baa90b12075ac3bc5a30c3bc0a1a08ffffffff0f121030e99fb3c3bc615ae99fb3305ac3bc2d18010a141210e99fb330e282ac61615ae282ace99fb318010a0e08800112092de282ac5ac3a9c3a90a0c0880011205e282acc3bc18010a12120e205a202de282ac205a61c3a95a5a18010a17088080800112105a5a202dc3bcc3a9e282acc3a9c3a92d0a150880011210c3bcc3bcc3bc30305ae99fb3e99fb3200a0d088fbbada70b1205e282ac5a200a1408011210c3bce99fb361e99fb35a206130e99fb30a170880011210e99fb32de99fb3c3bcc3bc5ae282ac3018010a1412103061c3bcc3a92d30c3bcc3bce99fb32018011001",
+   "json": {
+    "items": [
+     {
+      "slot": 16384,
+      "name": "-é  ü€€00-",
+      "current": true
+     },
+     {
+      "slot": 3039723761,
+      "name": "ZüZ0ü"
+     },
+     {
+      "slot": 4294967295,
+      "name": "0音üaZ音0Zü-",
+      "current": true
+     },
+     {
+      "name": "音0€aaZ€音",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "-€Zéé"
+     },
+     {
+      "slot": 128,
+      "name": "€ü",
+      "current": true
+     },
+     {
+      "name": " Z -€ ZaéZZ",
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": "ZZ -üé€éé-"
+     },
+     {
+      "slot": 128,
+      "name": "üüü00Z音音 "
+     },
+     {
+      "slot": 3035323791,
+      "name": "€Z "
+     },
+     {
+      "slot": 1,
+      "name": "ü音a音Z a0音"
+     },
+     {
+      "slot": 128,
+      "name": "音-音üüZ€0",
+      "current": true
+     },
+     {
+      "name": "0aüé-0üü音 ",
+      "current": true
+     }
+    ],
+    "next": 1
+   }
+  },
+  {
+   "name": "random-coverage-75",
+   "message": "Coverage",
+   "input_hex": "1080808080f8ffffffff011a04e55b6ad02a051201301801387f4204c3bcc3bc4a02c3bc4a004a00",
+   "expect": "ok",
+   "output_hex": "1080808080f8ffffffff011a04e55b6ad02a051201301801387f4204c3bcc3bc4a02c3bc4a004a00",
+   "json": {
+    "offset": -2147483648,
+    "blob": "5Vtq0A==",
+    "project": {
+     "name": "0",
+     "current": true
+    },
+    "count": 127,
+    "label": "üü",
+    "tags": [
+     "ü",
+     "",
+     ""
+    ]
+   }
+  },
+  {
+   "name": "random-request-76",
+   "message": "ListRequest",
+   "input_hex": "0801",
+   "expect": "ok",
+   "output_hex": "0801",
+   "json": {
+    "cursor": 1
+   }
+  },
+  {
+   "name": "random-project-77",
+   "message": "Project",
+   "input_hex": "0880808001120cc3a9e99fb361e282ace282ac",
+   "expect": "ok",
+   "output_hex": "0880808001120cc3a9e99fb361e282ace282ac",
+   "json": {
+    "slot": 2097152,
+    "name": "é音a€€"
+   }
+  },
+  {
+   "name": "random-reply-78",
+   "message": "ListReply",
+   "input_hex": "0a150801120fe99fb3c3a9c3bc61c3bce282acc3a918011080808001",
+   "expect": "ok",
+   "output_hex": "0a150801120fe99fb3c3a9c3bc61c3bce282acc3a918011080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 1,
+      "name": "音éüaü€é",
+      "current": true
+     }
+    ],
+    "next": 2097152
+   }
+  },
+  {
+   "name": "random-coverage-79",
+   "message": "Coverage",
+   "input_hex": "107f1a027d9938808080014201204a04e282ac614a0330c3bc",
+   "expect": "ok",
+   "output_hex": "107f1a027d9938808080014201204a04e282ac614a0330c3bc",
+   "json": {
+    "offset": 127,
+    "blob": "fZk=",
+    "count": 2097152,
+    "label": " ",
+    "tags": [
+     "€a",
+     "0ü"
+    ]
+   }
+  },
+  {
+   "name": "random-request-80",
+   "message": "ListRequest",
+   "input_hex": "",
+   "expect": "ok",
+   "output_hex": "",
+   "json": {}
+  },
+  {
+   "name": "random-project-81",
+   "message": "Project",
+   "input_hex": "08ffffffff0f1210e282ac615a6120302d30e282ac2dc3bc",
+   "expect": "ok",
+   "output_hex": "08ffffffff0f1210e282ac615a6120302d30e282ac2dc3bc",
+   "json": {
+    "slot": 4294967295,
+    "name": "€aZa 0-0€-ü"
+   }
+  },
+  {
+   "name": "random-reply-82",
+   "message": "ListReply",
+   "input_hex": "0a190880808001121020c3bce99fb3e99fb3c3a9e99fb3612d1801107f",
+   "expect": "ok",
+   "output_hex": "0a190880808001121020c3bce99fb3e99fb3c3a9e99fb3612d1801107f",
+   "json": {
+    "items": [
+     {
+      "slot": 2097152,
+      "name": " ü音音é音a-",
+      "current": true
+     }
+    ],
+    "next": 127
+   }
+  },
+  {
+   "name": "random-coverage-83",
+   "message": "Coverage",
+   "input_hex": "080710ffffffff071a06faca2286842a220b010100bdc3999f0f8001002a070880808001180138ac024205e99fb35a614a0130",
+   "expect": "ok",
+   "output_hex": "080710ffffffff071a06faca2286842a220b010100bdc3999f0f8001002a070880808001180138ac024205e99fb35a614a0130",
+   "json": {
+    "mode": 7,
+    "offset": 2147483647,
+    "blob": "+soihoQq",
+    "levels": [
+     1,
+     1,
+     0,
+     4091961789,
+     128,
+     0
+    ],
+    "project": {
+     "slot": 2097152,
+     "current": true
+    },
+    "count": 300,
+    "label": "音Za",
+    "tags": [
+     "0"
+    ]
+   }
+  },
+  {
+   "name": "random-request-84",
+   "message": "ListRequest",
+   "input_hex": "08ffffffff0f",
+   "expect": "ok",
+   "output_hex": "08ffffffff0f",
+   "json": {
+    "cursor": 4294967295
+   }
+  },
+  {
+   "name": "random-project-85",
+   "message": "Project",
+   "input_hex": "0801120fe99fb32061e282acc3bce282ac3030",
+   "expect": "ok",
+   "output_hex": "0801120fe99fb32061e282acc3bce282ac3030",
+   "json": {
+    "slot": 1,
+    "name": "音 a€ü€00"
+   }
+  },
+  {
+   "name": "random-reply-86",
+   "message": "ListReply",
+   "input_hex": "0a1108bdc98cb80e1209e99fb3e99fb32dc3a90a1708808001120fe99fb35a2d20e99fb3c3bc61e282ac18010a0808808080800118011080808001",
+   "expect": "ok",
+   "output_hex": "0a1108bdc98cb80e1209e99fb3e99fb32dc3a90a1708808001120fe99fb35a2d20e99fb3c3bc61e282ac18010a0808808080800118011080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 3875742909,
+      "name": "音音-é"
+     },
+     {
+      "slot": 16384,
+      "name": "音Z- 音üa€",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "current": true
+     }
+    ],
+    "next": 2097152
+   }
+  },
+  {
+   "name": "random-coverage-87",
+   "message": "Coverage",
+   "input_hex": "1080808080f8ffffffff011a08b098159aea2c77b32a0b08b7aebfc303120361306138808001420361c3bc4a004a0161",
+   "expect": "ok",
+   "output_hex": "1080808080f8ffffffff011a08b098159aea2c77b32a0b08b7aebfc303120361306138808001420361c3bc4a004a0161",
+   "json": {
+    "offset": -2147483648,
+    "blob": "sJgVmuosd7M=",
+    "project": {
+     "slot": 946853687,
+     "name": "a0a"
+    },
+    "count": 16384,
+    "label": "aü",
+    "tags": [
+     "",
+     "a"
+    ]
+   }
+  },
+  {
+   "name": "random-request-88",
+   "message": "ListRequest",
+   "input_hex": "0880808001",
+   "expect": "ok",
+   "output_hex": "0880808001",
+   "json": {
+    "cursor": 2097152
+   }
+  },
+  {
+   "name": "random-project-89",
+   "message": "Project",
+   "input_hex": "08808001120c5a5ac3bc5ac3bc5ac3bc2d5a",
+   "expect": "ok",
+   "output_hex": "08808001120c5a5ac3bc5ac3bc5ac3bc2d5a",
+   "json": {
+    "slot": 16384,
+    "name": "ZZüZüZü-Z"
+   }
+  },
+  {
+   "name": "random-reply-90",
+   "message": "ListReply",
+   "input_hex": "0a1208ffffffff0f1208e282ac20c3bc302018010a17088080808001120f61e99fb32d5ac3a9e99fb32de282ac0a1108ac02120a2de282ace282ace99fb318010a1008ffffffff0f12085ac3a9c3a92dc3a90a1708ac021210616130e99fb3e99fb35ac3bcc3bc305a18010a1608011210e99fb330e99fb3e282acc3bce99fb32d18010a1408808001120e5ac3bc6161e99fb3e99fb361c3bc0a1808ffffffff0f1210e99fb3e282acc3bce99fb3e99fb32d200a0e0801120a5ae99fb3c3bcc3bc2d300a0f08800112086120c3bc30e99fb318010a180880808080011210e282ace99fb330e282ac5ac3a9c3a9300a1708ffffffff0f120fe282ac30e99fb3c3a9e282acc3bc30",
+   "expect": "ok",
+   "output_hex": "0a1208ffffffff0f1208e282ac20c3bc302018010a17088080808001120f61e99fb32d5ac3a9e99fb32de282ac0a1108ac02120a2de282ace282ace99fb318010a1008ffffffff0f12085ac3a9c3a92dc3a90a1708ac021210616130e99fb3e99fb35ac3bcc3bc305a18010a1608011210e99fb330e99fb3e282acc3bce99fb32d18010a1408808001120e5ac3bc6161e99fb3e99fb361c3bc0a1808ffffffff0f1210e99fb3e282acc3bce99fb3e99fb32d200a0e0801120a5ae99fb3c3bcc3bc2d300a0f08800112086120c3bc30e99fb318010a180880808080011210e282ace99fb330e282ac5ac3a9c3a9300a1708ffffffff0f120fe282ac30e99fb3c3a9e282acc3bc30",
+   "json": {
+    "items": [
+     {
+      "slot": 4294967295,
+      "name": "€ ü0 ",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "name": "a音-Zé音-€"
+     },
+     {
+      "slot": 300,
+      "name": "-€€音",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "Zéé-é"
+     },
+     {
+      "slot": 300,
+      "name": "aa0音音Züü0Z",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "音0音€ü音-",
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": "Züaa音音aü"
+     },
+     {
+      "slot": 4294967295,
+      "name": "音€ü音音- "
+     },
+     {
+      "slot": 1,
+      "name": "Z音üü-0"
+     },
+     {
+      "slot": 128,
+      "name": "a ü0音",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "name": "€音0€Zéé0"
+     },
+     {
+      "slot": 4294967295,
+      "name": "€0音é€ü0"
+     }
+    ]
+   }
+  },
+  {
+   "name": "random-coverage-91",
+   "message": "Coverage",
+   "input_hex": "080122017f2a0c12085ac3bc205a205a5a180138ffffffff0f4201614a032d5a204a004a0120",
+   "expect": "ok",
+   "output_hex": "080122017f2a0c12085ac3bc205a205a5a180138ffffffff0f4201614a032d5a204a004a0120",
+   "json": {
+    "mode": "MODE_SOFT",
+    "levels": [
+     127
+    ],
+    "project": {
+     "name": "Zü Z ZZ",
+     "current": true
+    },
+    "count": 4294967295,
+    "label": "a",
+    "tags": [
+     "-Z ",
+     "",
+     " "
+    ]
+   }
+  },
+  {
+   "name": "random-request-92",
+   "message": "ListRequest",
+   "input_hex": "088efea0990f",
+   "expect": "ok",
+   "output_hex": "088efea0990f",
+   "json": {
+    "cursor": 4079501070
+   }
+  },
+  {
+   "name": "random-project-93",
+   "message": "Project",
+   "input_hex": "088001120130",
+   "expect": "ok",
+   "output_hex": "088001120130",
+   "json": {
+    "slot": 128,
+    "name": "0"
+   }
+  },
+  {
+   "name": "random-reply-94",
+   "message": "ListReply",
+   "input_hex": "0a0b08ffffffff0f1203302d300a0e087f12082dc3a93061e99fb318010a14088001120f20e99fb3c3a9e282ac2d30e282ac2d0a16087f1210e99fb32030c3a9c3a9e282ac2020c3a918010a1508808001120f2dc3bc20e282ace282ace99fb3c3a90a1208808080011209c3a9c3a95ae99fb32d18010a0c087f1206e282ace282ac18010a1308cce29ab2021209c3a93030e282ac2d2018011080808001",
+   "expect": "ok",
+   "output_hex": "0a0b08ffffffff0f1203302d300a0e087f12082dc3a93061e99fb318010a14088001120f20e99fb3c3a9e282ac2d30e282ac2d0a16087f1210e99fb32030c3a9c3a9e282ac2020c3a918010a1508808001120f2dc3bc20e282ace282ace99fb3c3a90a1208808080011209c3a9c3a95ae99fb32d18010a0c087f1206e282ace282ac18010a1308cce29ab2021209c3a93030e282ac2d2018011080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 4294967295,
+      "name": "0-0"
+     },
+     {
+      "slot": 127,
+      "name": "-é0a音",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": " 音é€-0€-"
+     },
+     {
+      "slot": 127,
+      "name": "音 0éé€  é",
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": "-ü €€音é"
+     },
+     {
+      "slot": 2097152,
+      "name": "ééZ音-",
+      "current": true
+     },
+     {
+      "slot": 127,
+      "name": "€€",
+      "current": true
+     },
+     {
+      "slot": 642167116,
+      "name": "é00€- ",
+      "current": true
+     }
+    ],
+    "next": 2097152
+   }
+  },
+  {
+   "name": "random-coverage-95",
+   "message": "Coverage",
+   "input_hex": "080710ffffffff071a03ed1b94220300ac023001388080014203c3a95a4a015a4a0361c3a9",
+   "expect": "ok",
+   "output_hex": "080710ffffffff071a03ed1b94220300ac023001388080014203c3a95a4a015a4a0361c3a9",
+   "json": {
+    "mode": 7,
+    "offset": 2147483647,
+    "blob": "7RuU",
+    "levels": [
+     0,
+     300
+    ],
+    "flag": true,
+    "count": 16384,
+    "label": "éZ",
+    "tags": [
+     "Z",
+     "aé"
+    ]
+   }
+  },
+  {
+   "name": "random-request-96",
+   "message": "ListRequest",
+   "input_hex": "08808001",
+   "expect": "ok",
+   "output_hex": "08808001",
+   "json": {
+    "cursor": 16384
+   }
+  },
+  {
+   "name": "random-project-97",
+   "message": "Project",
+   "input_hex": "08ffffffff0f120e61e282acc3bce99fb32d2030c3a9",
+   "expect": "ok",
+   "output_hex": "08ffffffff0f120e61e282acc3bce99fb32d2030c3a9",
+   "json": {
+    "slot": 4294967295,
+    "name": "a€ü音- 0é"
+   }
+  },
+  {
+   "name": "random-reply-98",
+   "message": "ListReply",
+   "input_hex": "0a1808ffffffff0f1210e99fb3c3a9e282acc3a9c3a920c3a92d1001",
+   "expect": "ok",
+   "output_hex": "0a1808ffffffff0f1210e99fb3c3a9e282acc3a9c3a920c3a92d1001",
+   "json": {
+    "items": [
+     {
+      "slot": 4294967295,
+      "name": "音é€éé é-"
+     }
+    ],
+    "next": 1
+   }
+  },
+  {
+   "name": "random-coverage-99",
+   "message": "Coverage",
+   "input_hex": "0802107f1a044bc6d264221480808080010080808001ffffffff0fffffffff0f3880014205c3a9e282ac4a02c3bc4a03c3bc204a02202d",
+   "expect": "ok",
+   "output_hex": "0802107f1a044bc6d264221480808080010080808001ffffffff0fffffffff0f3880014205c3a9e282ac4a02c3bc4a03c3bc204a02202d",
+   "json": {
+    "mode": "MODE_HARD",
+    "offset": 127,
+    "blob": "S8bSZA==",
+    "levels": [
+     268435456,
+     0,
+     2097152,
+     4294967295,
+     4294967295
+    ],
+    "count": 128,
+    "label": "é€",
+    "tags": [
+     "ü",
+     "ü ",
+     " -"
+    ]
+   }
+  },
+  {
+   "name": "random-request-100",
+   "message": "ListRequest",
+   "input_hex": "08c1caf0e607",
+   "expect": "ok",
+   "output_hex": "08c1caf0e607",
+   "json": {
+    "cursor": 2094802241
+   }
+  },
+  {
+   "name": "random-project-101",
+   "message": "Project",
+   "input_hex": "087f1202c3bc1801",
+   "expect": "ok",
+   "output_hex": "087f1202c3bc1801",
+   "json": {
+    "slot": 127,
+    "name": "ü",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-102",
+   "message": "ListReply",
+   "input_hex": "0a081206c3bce282ac5a0a17088001121020e99fb3c3a92020205a6130e99fb32d18010a0208010a18088080011210e99fb330c3bce282ac612d61e99fb35a18010a1508800112102d2d30c3bc5ac3a9e282ace282ac5a610a1708ac0212105a5a20e282acc3bc2de282ac2dc3a92018010a0c08011208305a612de282ac5a0a10120ee99fb3e99fb32dc3a9e99fb32d610a17088080800112102d302d61e99fb35a30c3bc61e99fb35a0a0a08acc9dbd60b1202c3a9107f",
+   "expect": "ok",
+   "output_hex": "0a081206c3bce282ac5a0a17088001121020e99fb3c3a92020205a6130e99fb32d18010a0208010a18088080011210e99fb330c3bce282ac612d61e99fb35a18010a1508800112102d2d30c3bc5ac3a9e282ace282ac5a610a1708ac0212105a5a20e282acc3bc2de282ac2dc3a92018010a0c08011208305a612de282ac5a0a10120ee99fb3e99fb32dc3a9e99fb32d610a17088080800112102d302d61e99fb35a30c3bc61e99fb35a0a0a08acc9dbd60b1202c3a9107f",
+   "json": {
+    "items": [
+     {
+      "name": "ü€Z"
+     },
+     {
+      "slot": 128,
+      "name": " 音é   Za0音-",
+      "current": true
+     },
+     {
+      "slot": 1
+     },
+     {
+      "slot": 16384,
+      "name": "音0ü€a-a音Z",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "--0üZé€€Za"
+     },
+     {
+      "slot": 300,
+      "name": "ZZ €ü-€-é ",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "0Za-€Z"
+     },
+     {
+      "name": "音音-é音-a"
+     },
+     {
+      "slot": 2097152,
+      "name": "-0-a音Z0üa音Z"
+     },
+     {
+      "slot": 3134645420,
+      "name": "é"
+     }
+    ],
+    "next": 127
+   }
+  },
+  {
+   "name": "random-coverage-103",
+   "message": "Coverage",
+   "input_hex": "08071080ffffffffffffffff011a088b88637fae9574c6220e7f800196c5fa9f088080018001013880808080014a00",
+   "expect": "ok",
+   "output_hex": "08071080ffffffffffffffff011a088b88637fae9574c6220e7f800196c5fa9f088080018001013880808080014a00",
+   "json": {
+    "mode": 7,
+    "offset": -128,
+    "blob": "i4hjf66VdMY=",
+    "levels": [
+     127,
+     128,
+     2214503062,
+     16384,
+     128,
+     1
+    ],
+    "count": 268435456,
+    "tags": [
+     ""
+    ]
+   }
+  },
+  {
+   "name": "random-request-104",
+   "message": "ListRequest",
+   "input_hex": "087f",
+   "expect": "ok",
+   "output_hex": "087f",
+   "json": {
+    "cursor": 127
+   }
+  },
+  {
+   "name": "random-project-105",
+   "message": "Project",
+   "input_hex": "1210e282ac6120c3a95ac3bc205ac3a9615a1801",
+   "expect": "ok",
+   "output_hex": "1210e282ac6120c3a95ac3bc205ac3a9615a1801",
+   "json": {
+    "name": "€a éZü ZéaZ",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-106",
+   "message": "ListReply",
+   "input_hex": "0a13088001120cc3a92de99fb32d20c3a95a6118010a11088001120a5ae282ac30c3a9e282ac18010a16088080011210e282acc3a95a305ae282ace99fb361300a0208010a13088080808001120b20615a302d2d206130c3a9108080808001",
+   "expect": "ok",
+   "output_hex": "0a13088001120cc3a92de99fb32d20c3a95a6118010a11088001120a5ae282ac30c3a9e282ac18010a16088080011210e282acc3a95a305ae282ace99fb361300a0208010a13088080808001120b20615a302d2d206130c3a9108080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 128,
+      "name": "é-音- éZa",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "Z€0é€",
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": "€éZ0Z€音a0"
+     },
+     {
+      "slot": 1
+     },
+     {
+      "slot": 268435456,
+      "name": " aZ0-- a0é"
+     }
+    ],
+    "next": 268435456
+   }
+  },
+  {
+   "name": "random-coverage-107",
+   "message": "Coverage",
+   "input_hex": "10bcb8a5351a045c8ef7462211ffffffff0f008001808080018080808001300138014205c3bcc3a95a",
+   "expect": "ok",
+   "output_hex": "10bcb8a5351a045c8ef7462211ffffffff0f008001808080018080808001300138014205c3bcc3a95a",
+   "json": {
+    "offset": 111762492,
+    "blob": "XI73Rg==",
+    "levels": [
+     4294967295,
+     0,
+     128,
+     2097152,
+     268435456
+    ],
+    "flag": true,
+    "count": 1,
+    "label": "üéZ"
+   }
+  },
+  {
+   "name": "random-request-108",
+   "message": "ListRequest",
+   "input_hex": "087f",
+   "expect": "ok",
+   "output_hex": "087f",
+   "json": {
+    "cursor": 127
+   }
+  },
+  {
+   "name": "random-project-109",
+   "message": "Project",
+   "input_hex": "08ac021210616161615a30c3a95ae282ace99fb3201801",
+   "expect": "ok",
+   "output_hex": "08ac021210616161615a30c3a95ae282ace99fb3201801",
+   "json": {
+    "slot": 300,
+    "name": "aaaaZ0éZ€音 ",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-110",
+   "message": "ListReply",
+   "input_hex": "0a1708ac02121030306161302030c3a9e99fb36161c3a918010a17088080808001120fc3a9c3a9c3bc61e99fb33020e282ac0a180880800112105a2d2de282ac205a61c3bc2dc3bc2d6118010a180880808080011210c3bce282acc3bcc3a95a2d3020e282ac0a1408011210e99fb3e99fb3e282ac5ae282ac302d200a0b08ac021206e99fb35ac3bc0a1708808001120f2061305a20612d2dc3a9302020c3bc1801108001",
+   "expect": "ok",
+   "output_hex": "0a1708ac02121030306161302030c3a9e99fb36161c3a918010a17088080808001120fc3a9c3a9c3bc61e99fb33020e282ac0a180880800112105a2d2de282ac205a61c3bc2dc3bc2d6118010a180880808080011210c3bce282acc3bcc3a95a2d3020e282ac0a1408011210e99fb3e99fb3e282ac5ae282ac302d200a0b08ac021206e99fb35ac3bc0a1708808001120f2061305a20612d2dc3a9302020c3bc1801108001",
+   "json": {
+    "items": [
+     {
+      "slot": 300,
+      "name": "00aa0 0é音aaé",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "name": "ééüa音0 €"
+     },
+     {
+      "slot": 16384,
+      "name": "Z--€ Zaü-ü-a",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "name": "ü€üéZ-0 €"
+     },
+     {
+      "slot": 1,
+      "name": "音音€Z€0- "
+     },
+     {
+      "slot": 300,
+      "name": "音Zü"
+     },
+     {
+      "slot": 16384,
+      "name": " a0Z a--é0  ü",
+      "current": true
+     }
+    ],
+    "next": 128
+   }
+  },
+  {
+   "name": "random-coverage-111",
+   "message": "Coverage",
+   "input_hex": "10ffffffff071a04f502c1df380142012d",
+   "expect": "ok",
+   "output_hex": "10ffffffff071a04f502c1df380142012d",
+   "json": {
+    "offset": 2147483647,
+    "blob": "9QLB3w==",
+    "count": 1,
+    "label": "-"
+   }
+  },
+  {
+   "name": "random-request-112",
+   "message": "ListRequest",
+   "input_hex": "08ac02",
+   "expect": "ok",
+   "output_hex": "08ac02",
+   "json": {
+    "cursor": 300
+   }
+  },
+  {
+   "name": "random-project-113",
+   "message": "Project",
+   "input_hex": "08808001120861e282acc3bcc3a91801",
+   "expect": "ok",
+   "output_hex": "08808001120861e282acc3bcc3a91801",
+   "json": {
+    "slot": 16384,
+    "name": "a€üé",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-114",
+   "message": "ListReply",
+   "input_hex": "0a13087f120f2030e99fb3c3bc20e282ac615a305a0a110880808080011207c3bcc3bce99fb3180110808001",
+   "expect": "ok",
+   "output_hex": "0a13087f120f2030e99fb3c3bc20e282ac615a305a0a110880808080011207c3bcc3bce99fb3180110808001",
+   "json": {
+    "items": [
+     {
+      "slot": 127,
+      "name": " 0音ü €aZ0Z"
+     },
+     {
+      "slot": 268435456,
+      "name": "üü音",
+      "current": true
+     }
+    ],
+    "next": 16384
+   }
+  },
+  {
+   "name": "random-coverage-115",
+   "message": "Coverage",
+   "input_hex": "080710ffffffff07221280808001ffffffff0f8001ffffffff0f8001300138ffffffff0f4205e282acc3bc4a004a042de282ac",
+   "expect": "ok",
+   "output_hex": "080710ffffffff07221280808001ffffffff0f8001ffffffff0f8001300138ffffffff0f4205e282acc3bc4a004a042de282ac",
+   "json": {
+    "mode": 7,
+    "offset": 2147483647,
+    "levels": [
+     2097152,
+     4294967295,
+     128,
+     4294967295,
+     128
+    ],
+    "flag": true,
+    "count": 4294967295,
+    "label": "€ü",
+    "tags": [
+     "",
+     "-€"
+    ]
+   }
+  },
+  {
+   "name": "random-request-116",
+   "message": "ListRequest",
+   "input_hex": "087f",
+   "expect": "ok",
+   "output_hex": "087f",
+   "json": {
+    "cursor": 127
+   }
+  },
+  {
+   "name": "random-project-117",
+   "message": "Project",
+   "input_hex": "08ac02120be282ac612061612061c3bc1801",
+   "expect": "ok",
+   "output_hex": "08ac02120be282ac612061612061c3bc1801",
+   "json": {
+    "slot": 300,
+    "name": "€a aa aü",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-118",
+   "message": "ListReply",
+   "input_hex": "0a11120f6161e282ace99fb361c3a9e99fb35a0a170880808001120e6161c3bce282ac20e99fb330c3bc18010a160801121030e282ac205ac3a92de282acc3bcc3bc18010a0d08800112065a5a612d5a5a180110ffffffff0f",
+   "expect": "ok",
+   "output_hex": "0a11120f6161e282ace99fb361c3a9e99fb35a0a170880808001120e6161c3bce282ac20e99fb330c3bc18010a160801121030e282ac205ac3a92de282acc3bcc3bc18010a0d08800112065a5a612d5a5a180110ffffffff0f",
+   "json": {
+    "items": [
+     {
+      "name": "aa€音aé音Z"
+     },
+     {
+      "slot": 2097152,
+      "name": "aaü€ 音0ü",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "0€ Zé-€üü",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "ZZa-ZZ",
+      "current": true
+     }
+    ],
+    "next": 4294967295
+   }
+  },
+  {
+   "name": "random-coverage-119",
+   "message": "Coverage",
+   "input_hex": "080710ffffffff071a05c6783cc282220e80808080018001808080018001002a170880808001120ec3a9e282ac61c3bc30e282ac20611801300138ac024205e282ac615a4a01614a01304a04e282ac20",
+   "expect": "ok",
+   "output_hex": "080710ffffffff071a05c6783cc282220e80808080018001808080018001002a170880808001120ec3a9e282ac61c3bc30e282ac20611801300138ac024205e282ac615a4a01614a01304a04e282ac20",
+   "json": {
+    "mode": 7,
+    "offset": 2147483647,
+    "blob": "xng8woI=",
+    "levels": [
+     268435456,
+     128,
+     2097152,
+     128,
+     0
+    ],
+    "project": {
+     "slot": 2097152,
+     "name": "é€aü0€ a",
+     "current": true
+    },
+    "flag": true,
+    "count": 300,
+    "label": "€aZ",
+    "tags": [
+     "a",
+     "0",
+     "€ "
+    ]
+   }
+  },
+  {
+   "name": "random-request-120",
+   "message": "ListRequest",
+   "input_hex": "087f",
+   "expect": "ok",
+   "output_hex": "087f",
+   "json": {
+    "cursor": 127
+   }
+  },
+  {
+   "name": "random-project-121",
+   "message": "Project",
+   "input_hex": "08ffffffff0f12042d5ac3a9",
+   "expect": "ok",
+   "output_hex": "08ffffffff0f12042d5ac3a9",
+   "json": {
+    "slot": 4294967295,
+    "name": "-Zé"
+   }
+  },
+  {
+   "name": "random-reply-122",
+   "message": "ListReply",
+   "input_hex": "0a1a088080808001121061c3bc6120c3a95a30c3bc2061e282ac18010a1508800112105ae282ac612d205a61202d5a61e99fb30a17088080800112105a2dc3a961c3a9c3bce99fb35a205a200a071205e282ac30200a0218010a1908808080011210e99fb3e282ac30c3bc61e99fb3c3a92d18010a1908e389c0de02120f5ae99fb3e99fb32de282ac5a61c3a918010a0e08ac021207e282ac20e282ac18010a0f0880800112076161c3a920c3a918010a1308899ca6eb09120bc3a9c3a9c3a930302dc3bc0a0f0880800112095ac3a9303030e99fb30a0c08ffffffff0f1204c3bc302d0a100880808080011206612020e282ac18011080808001",
+   "expect": "ok",
+   "output_hex": "0a1a088080808001121061c3bc6120c3a95a30c3bc2061e282ac18010a1508800112105ae282ac612d205a61202d5a61e99fb30a17088080800112105a2dc3a961c3a9c3bce99fb35a205a200a071205e282ac30200a0218010a1908808080011210e99fb3e282ac30c3bc61e99fb3c3a92d18010a1908e389c0de02120f5ae99fb3e99fb32de282ac5a61c3a918010a0e08ac021207e282ac20e282ac18010a0f0880800112076161c3a920c3a918010a1308899ca6eb09120bc3a9c3a9c3a930302dc3bc0a0f0880800112095ac3a9303030e99fb30a0c08ffffffff0f1204c3bc302d0a100880808080011206612020e282ac18011080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 268435456,
+      "name": "aüa éZ0ü a€",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "Z€a- Za -Za音"
+     },
+     {
+      "slot": 2097152,
+      "name": "Z-éaéü音Z Z "
+     },
+     {
+      "name": "€0 "
+     },
+     {
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": "音€0üa音é-",
+      "current": true
+     },
+     {
+      "slot": 735053027,
+      "name": "Z音音-€Zaé",
+      "current": true
+     },
+     {
+      "slot": 300,
+      "name": "€ €",
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": "aaé é",
+      "current": true
+     },
+     {
+      "slot": 2640940553,
+      "name": "ééé00-ü"
+     },
+     {
+      "slot": 16384,
+      "name": "Zé000音"
+     },
+     {
+      "slot": 4294967295,
+      "name": "ü0-"
+     },
+     {
+      "slot": 268435456,
+      "name": "a  €",
+      "current": true
+     }
+    ],
+    "next": 2097152
+   }
+  },
+  {
+   "name": "random-coverage-123",
+   "message": "Coverage",
+   "input_hex": "08021080ffffffffffffffff011a012422047f8080012a14087f120ec3a92de282ace282ace282acc3a9180138ac024201304a042de282ac",
+   "expect": "ok",
+   "output_hex": "08021080ffffffffffffffff011a012422047f8080012a14087f120ec3a92de282ace282ace282acc3a9180138ac024201304a042de282ac",
+   "json": {
+    "mode": "MODE_HARD",
+    "offset": -128,
+    "blob": "JA==",
+    "levels": [
+     127,
+     16384
+    ],
+    "project": {
+     "slot": 127,
+     "name": "é-€€€é",
+     "current": true
+    },
+    "count": 300,
+    "label": "0",
+    "tags": [
+     "-€"
+    ]
+   }
+  },
+  {
+   "name": "random-request-124",
+   "message": "ListRequest",
+   "input_hex": "087f",
+   "expect": "ok",
+   "output_hex": "087f",
+   "json": {
+    "cursor": 127
+   }
+  },
+  {
+   "name": "random-project-125",
+   "message": "Project",
+   "input_hex": "088080800112102d202d20e282ac5ae282ac5ac3a9c3a9",
+   "expect": "ok",
+   "output_hex": "088080800112102d202d20e282ac5ae282ac5ac3a9c3a9",
+   "json": {
+    "slot": 2097152,
+    "name": "- - €Z€Zéé"
+   }
+  },
+  {
+   "name": "random-reply-126",
+   "message": "ListReply",
+   "input_hex": "10ffffffff0f",
+   "expect": "ok",
+   "output_hex": "10ffffffff0f",
+   "json": {
+    "next": 4294967295
+   }
+  },
+  {
+   "name": "random-coverage-127",
+   "message": "Coverage",
+   "input_hex": "08071a08c9742ac3605f959322077f0180808080012a0808ac0212033061204204c3a9c3bc",
+   "expect": "ok",
+   "output_hex": "08071a08c9742ac3605f959322077f0180808080012a0808ac0212033061204204c3a9c3bc",
+   "json": {
+    "mode": 7,
+    "blob": "yXQqw2BflZM=",
+    "levels": [
+     127,
+     1,
+     268435456
+    ],
+    "project": {
+     "slot": 300,
+     "name": "0a "
+    },
+    "label": "éü"
+   }
+  },
+  {
+   "name": "random-request-128",
+   "message": "ListRequest",
+   "input_hex": "087f",
+   "expect": "ok",
+   "output_hex": "087f",
+   "json": {
+    "cursor": 127
+   }
+  },
+  {
+   "name": "random-project-129",
+   "message": "Project",
+   "input_hex": "08ffffffff0f1210e282ac206120e99fb3303030c3a9c3a91801",
+   "expect": "ok",
+   "output_hex": "08ffffffff0f1210e282ac206120e99fb3303030c3a9c3a91801",
+   "json": {
+    "slot": 4294967295,
+    "name": "€ a 音000éé",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-130",
+   "message": "ListReply",
+   "input_hex": "0a06089ea485a6050a14087f1210c3bc5ac3bcc3bc2d5ae99fb32dc3bc300a080801120461205a200a16088080011210e99fb36120c3a9c3bcc3a9e99fb3c3bc0a0b088080011203e99fb318010a1408ffffffff0f120c2d6120202d20c3a9e99fb3300a16080112102de282ace282ac5a6120e282ac2d612d180110cca2c4e301",
+   "expect": "ok",
+   "output_hex": "0a06089ea485a6050a14087f1210c3bc5ac3bcc3bc2d5ae99fb32dc3bc300a080801120461205a200a16088080011210e99fb36120c3a9c3bcc3a9e99fb3c3bc0a0b088080011203e99fb318010a1408ffffffff0f120c2d6120202d20c3a9e99fb3300a16080112102de282ace282ac5a6120e282ac2d612d180110cca2c4e301",
+   "json": {
+    "items": [
+     {
+      "slot": 1421955614
+     },
+     {
+      "slot": 127,
+      "name": "üZüü-Z音-ü0"
+     },
+     {
+      "slot": 1,
+      "name": "a Z "
+     },
+     {
+      "slot": 16384,
+      "name": "音a éüé音ü"
+     },
+     {
+      "slot": 16384,
+      "name": "音",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "-a  - é音0"
+     },
+     {
+      "slot": 1,
+      "name": "-€€Za €-a-",
+      "current": true
+     }
+    ],
+    "next": 477172044
+   }
+  },
+  {
+   "name": "random-coverage-131",
+   "message": "Coverage",
+   "input_hex": "109099f6d8041a08453909a0b502e5dc220aac02808080800101ac022a0d0880800112055ae282ac3018013001388080014203c3a9614a032d202d4a042de99fb3",
+   "expect": "ok",
+   "output_hex": "109099f6d8041a08453909a0b502e5dc220aac02808080800101ac022a0d0880800112055ae282ac3018013001388080014203c3a9614a032d202d4a042de99fb3",
+   "json": {
+    "offset": 1260227728,
+    "blob": "RTkJoLUC5dw=",
+    "levels": [
+     300,
+     268435456,
+     1,
+     300
+    ],
+    "project": {
+     "slot": 16384,
+     "name": "Z€0",
+     "current": true
+    },
+    "flag": true,
+    "count": 16384,
+    "label": "éa",
+    "tags": [
+     "- -",
+     "-音"
+    ]
+   }
+  },
+  {
+   "name": "random-request-132",
+   "message": "ListRequest",
+   "input_hex": "088001",
+   "expect": "ok",
+   "output_hex": "088001",
+   "json": {
+    "cursor": 128
+   }
+  },
+  {
+   "name": "random-project-133",
+   "message": "Project",
+   "input_hex": "087f121030205ae282ac30c3bc612030e282ac301801",
+   "expect": "ok",
+   "output_hex": "087f121030205ae282ac30c3bc612030e282ac301801",
+   "json": {
+    "slot": 127,
+    "name": "0 Z€0üa 0€0",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-134",
+   "message": "ListReply",
+   "input_hex": "0a1808ffffffff0f1210e282ac306161c3bcc3a9202dc3bc612d0a1a08ffffffff0f12105a30615ac3bcc3a9e99fb32030c3a95a18010a12088001120be99fb3c3a96130e99fb33018010a12087f120e61e282ac5a30e99fb3c3bc61c3bc0a06088080808001107f",
+   "expect": "ok",
+   "output_hex": "0a1808ffffffff0f1210e282ac306161c3bcc3a9202dc3bc612d0a1a08ffffffff0f12105a30615ac3bcc3a9e99fb32030c3a95a18010a12088001120be99fb3c3a96130e99fb33018010a12087f120e61e282ac5a30e99fb3c3bc61c3bc0a06088080808001107f",
+   "json": {
+    "items": [
+     {
+      "slot": 4294967295,
+      "name": "€0aaüé -üa-"
+     },
+     {
+      "slot": 4294967295,
+      "name": "Z0aZüé音 0éZ",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "音éa0音0",
+      "current": true
+     },
+     {
+      "slot": 127,
+      "name": "a€Z0音üaü"
+     },
+     {
+      "slot": 268435456
+     }
+    ],
+    "next": 127
+   }
+  },
+  {
+   "name": "random-coverage-135",
+   "message": "Coverage",
+   "input_hex": "107f1a03f3e915220591d891de042a180880808001120fe99fb330c3a95a206130c3a9e282ac180138ac024203e282ac4a04e99fb32d4a025a5a4a0461c3a930",
+   "expect": "ok",
+   "output_hex": "107f1a03f3e915220591d891de042a180880808001120fe99fb330c3a95a206130c3a9e282ac180138ac024203e282ac4a04e99fb32d4a025a5a4a0461c3a930",
+   "json": {
+    "offset": 127,
+    "blob": "8+kV",
+    "levels": [
+     1271163921
+    ],
+    "project": {
+     "slot": 2097152,
+     "name": "音0éZ a0é€",
+     "current": true
+    },
+    "count": 300,
+    "label": "€",
+    "tags": [
+     "音-",
+     "ZZ",
+     "aé0"
+    ]
+   }
+  },
+  {
+   "name": "random-request-136",
+   "message": "ListRequest",
+   "input_hex": "087f",
+   "expect": "ok",
+   "output_hex": "087f",
+   "json": {
+    "cursor": 127
+   }
+  },
+  {
+   "name": "random-project-137",
+   "message": "Project",
+   "input_hex": "08ffffffff0f120ac3a920e99fb32d5ac3a9",
+   "expect": "ok",
+   "output_hex": "08ffffffff0f120ac3a920e99fb32d5ac3a9",
+   "json": {
+    "slot": 4294967295,
+    "name": "é 音-Zé"
+   }
+  },
+  {
+   "name": "random-reply-138",
+   "message": "ListReply",
+   "input_hex": "0a1608808001121061c3bc5ac3a9e282ace99fb3c3bcc3a90a16088080011210c3a9615a30c3bc30e99fb3c3bcc3bc610a0f08aaecdc860112055a20e282ac1801108080808001",
+   "expect": "ok",
+   "output_hex": "0a1608808001121061c3bc5ac3a9e282ace99fb3c3bcc3a90a16088080011210c3a9615a30c3bc30e99fb3c3bcc3bc610a0f08aaecdc860112055a20e282ac1801108080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 16384,
+      "name": "aüZé€音üé"
+     },
+     {
+      "slot": 16384,
+      "name": "éaZ0ü0音üüa"
+     },
+     {
+      "slot": 282539562,
+      "name": "Z €",
+      "current": true
+     }
+    ],
+    "next": 268435456
+   }
+  },
+  {
+   "name": "random-coverage-139",
+   "message": "Coverage",
+   "input_hex": "10011a08cc6229cff4a65192221580808001a7a7d18e0affffffff0fe5b7bb8802ac022a0e08808080800112042d20c3a918013001388080014203c3a92d",
+   "expect": "ok",
+   "output_hex": "10011a08cc6229cff4a65192221580808001a7a7d18e0affffffff0fe5b7bb8802ac022a0e08808080800112042d20c3a918013001388080014203c3a92d",
+   "json": {
+    "offset": 1,
+    "blob": "zGIpz/SmUZI=",
+    "levels": [
+     2097152,
+     2715046823,
+     4294967295,
+     554621925,
+     300
+    ],
+    "project": {
+     "slot": 268435456,
+     "name": "- é",
+     "current": true
+    },
+    "flag": true,
+    "count": 16384,
+    "label": "é-"
+   }
+  },
+  {
+   "name": "random-request-140",
+   "message": "ListRequest",
+   "input_hex": "",
+   "expect": "ok",
+   "output_hex": "",
+   "json": {}
+  },
+  {
+   "name": "random-project-141",
+   "message": "Project",
+   "input_hex": "08800112102d5a5a612dc3bc615a61e282ac2d2d2d",
+   "expect": "ok",
+   "output_hex": "08800112102d5a5a612dc3bc615a61e282ac2d2d2d",
+   "json": {
+    "slot": 128,
+    "name": "-ZZa-üaZa€---"
+   }
+  },
+  {
+   "name": "random-reply-142",
+   "message": "ListReply",
+   "input_hex": "0a0508800118010a16089ef6e8f00b120e6120e282acc3bce99fb35a20615a0a1708ac02121061c3bcc3bcc3a9c3a95ac3a9c3a9616118010a11088080011209c3a92de282acc3bc6118010a1108ffffffff0f12073030e282acc3bc18010a07080112012018010a07087f1203e282ac",
+   "expect": "ok",
+   "output_hex": "0a0508800118010a16089ef6e8f00b120e6120e282acc3bce99fb35a20615a0a1708ac02121061c3bcc3bcc3a9c3a95ac3a9c3a9616118010a11088080011209c3a92de282acc3bc6118010a1108ffffffff0f12073030e282acc3bc18010a07080112012018010a07087f1203e282ac",
+   "json": {
+    "items": [
+     {
+      "slot": 128,
+      "current": true
+     },
+     {
+      "slot": 3189390110,
+      "name": "a €ü音Z aZ"
+     },
+     {
+      "slot": 300,
+      "name": "aüüééZééaa",
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": "é-€üa",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "00€ü",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": " ",
+      "current": true
+     },
+     {
+      "slot": 127,
+      "name": "€"
+     }
+    ]
+   }
+  },
+  {
+   "name": "random-coverage-143",
+   "message": "Coverage",
+   "input_hex": "080710f5c0a3e1021a03f78093220c80808001ac0201ffffffff0f2a0708808080011801300138014205c3a9202d5a4a004a00",
+   "expect": "ok",
+   "output_hex": "080710f5c0a3e1021a03f78093220c80808001ac0201ffffffff0f2a0708808080011801300138014205c3a9202d5a4a004a00",
+   "json": {
+    "mode": 7,
+    "offset": 740876405,
+    "blob": "94CT",
+    "levels": [
+     2097152,
+     300,
+     1,
+     4294967295
+    ],
+    "project": {
+     "slot": 2097152,
+     "current": true
+    },
+    "flag": true,
+    "count": 1,
+    "label": "é -Z",
+    "tags": [
+     "",
+     ""
+    ]
+   }
+  },
+  {
+   "name": "random-request-144",
+   "message": "ListRequest",
+   "input_hex": "08808001",
+   "expect": "ok",
+   "output_hex": "08808001",
+   "json": {
+    "cursor": 16384
+   }
+  },
+  {
+   "name": "random-project-145",
+   "message": "Project",
+   "input_hex": "08808080011210e99fb32d61615a6161e99fb3c3a92d301801",
+   "expect": "ok",
+   "output_hex": "08808080011210e99fb32d61615a6161e99fb3c3a92d301801",
+   "json": {
+    "slot": 2097152,
+    "name": "音-aaZaa音é-0",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-146",
+   "message": "ListReply",
+   "input_hex": "0a1a0884cfeebd0a121020615a2d2030e99fb3e282ac305a2d2018010a0508ac0218010a0808ffffffff0f18010a1508808001120d61c3bc2d5ac3a9e282ace99fb318010a0c088080800112052d6130615a0a1808b190d4e5031210e99fb32061c3bce282ac612020e282ac0a1408ffffffff0f120c5a5ac3bce99fb33020e282ac0a0508800118010a1508ac0212105ae282acc3bc30c3bce282ac61c3bc5a0a10087f120a61e282ac2de99fb3205a18010a0b0880800112056120e99fb31080808001",
+   "expect": "ok",
+   "output_hex": "0a1a0884cfeebd0a121020615a2d2030e99fb3e282ac305a2d2018010a0508ac0218010a0808ffffffff0f18010a1508808001120d61c3bc2d5ac3a9e282ace99fb318010a0c088080800112052d6130615a0a1808b190d4e5031210e99fb32061c3bce282ac612020e282ac0a1408ffffffff0f120c5a5ac3bce99fb33020e282ac0a0508800118010a1508ac0212105ae282acc3bc30c3bce282ac61c3bc5a0a10087f120a61e282ac2de99fb3205a18010a0b0880800112056120e99fb31080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 2814093188,
+      "name": " aZ- 0音€0Z- ",
+      "current": true
+     },
+     {
+      "slot": 300,
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": "aü-Zé€音",
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": "-a0aZ"
+     },
+     {
+      "slot": 1018497073,
+      "name": "音 aü€a  €"
+     },
+     {
+      "slot": 4294967295,
+      "name": "ZZü音0 €"
+     },
+     {
+      "slot": 128,
+      "current": true
+     },
+     {
+      "slot": 300,
+      "name": "Z€ü0ü€aüZ"
+     },
+     {
+      "slot": 127,
+      "name": "a€-音 Z",
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": "a 音"
+     }
+    ],
+    "next": 2097152
+   }
+  },
+  {
+   "name": "random-coverage-147",
+   "message": "Coverage",
+   "input_hex": "0807108cdbfad4031a02a16f2207808001808080012a1108ac02120ae282ac2d205a2dc3bc5a180130013880014202c3a9",
+   "expect": "ok",
+   "output_hex": "0807108cdbfad4031a02a16f2207808001808080012a1108ac02120ae282ac2d205a2dc3bc5a180130013880014202c3a9",
+   "json": {
+    "mode": 7,
+    "offset": 983477644,
+    "blob": "oW8=",
+    "levels": [
+     16384,
+     2097152
+    ],
+    "project": {
+     "slot": 300,
+     "name": "€- Z-üZ",
+     "current": true
+    },
+    "flag": true,
+    "count": 128,
+    "label": "é"
+   }
+  },
+  {
+   "name": "random-request-148",
+   "message": "ListRequest",
+   "input_hex": "088001",
+   "expect": "ok",
+   "output_hex": "088001",
+   "json": {
+    "cursor": 128
+   }
+  },
+  {
+   "name": "random-project-149",
+   "message": "Project",
+   "input_hex": "087f1210e282acc3bc3020c3a92d2dc3a9e99fb3",
+   "expect": "ok",
+   "output_hex": "087f1210e282acc3bc3020c3a92d2dc3a9e99fb3",
+   "json": {
+    "slot": 127,
+    "name": "€ü0 é--é音"
+   }
+  },
+  {
+   "name": "random-reply-150",
+   "message": "ListReply",
+   "input_hex": "0a1808808080800112105a5ae99fb35ac3bce99fb361c3a9c3bc0a1708b7e9928a0f120fc3bc5a2de99fb320202030e99fb3200a0a1206e99fb3e282ac18010a1508ac02120ee282ac5a20613020c3bcc3a9c3a918010a110880808080011209c3a95ae282acc3bc2d0a0608800112015a108001",
+   "expect": "ok",
+   "output_hex": "0a1808808080800112105a5ae99fb35ac3bce99fb361c3a9c3bc0a1708b7e9928a0f120fc3bc5a2de99fb320202030e99fb3200a0a1206e99fb3e282ac18010a1508ac02120ee282ac5a20613020c3bcc3a9c3a918010a110880808080011209c3a95ae282acc3bc2d0a0608800112015a108001",
+   "json": {
+    "items": [
+     {
+      "slot": 268435456,
+      "name": "ZZ音Zü音aéü"
+     },
+     {
+      "slot": 4047811767,
+      "name": "üZ-音   0音 "
+     },
+     {
+      "name": "音€",
+      "current": true
+     },
+     {
+      "slot": 300,
+      "name": "€Z a0 üéé",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "name": "éZ€ü-"
+     },
+     {
+      "slot": 128,
+      "name": "Z"
+     }
+    ],
+    "next": 128
+   }
+  },
+  {
+   "name": "random-coverage-151",
+   "message": "Coverage",
+   "input_hex": "107f1a05c6d482fd7b22067f80808080012a1808ffffffff0f1210616130e282ac2061c3bc61e282acc3a9387f42055ae99fb32d",
+   "expect": "ok",
+   "output_hex": "107f1a05c6d482fd7b22067f80808080012a1808ffffffff0f1210616130e282ac2061c3bc61e282acc3a9387f42055ae99fb32d",
+   "json": {
+    "offset": 127,
+    "blob": "xtSC/Xs=",
+    "levels": [
+     127,
+     268435456
+    ],
+    "project": {
+     "slot": 4294967295,
+     "name": "aa0€ aüa€é"
+    },
+    "count": 127,
+    "label": "Z音-"
+   }
+  },
+  {
+   "name": "random-request-152",
+   "message": "ListRequest",
+   "input_hex": "0880808001",
+   "expect": "ok",
+   "output_hex": "0880808001",
+   "json": {
+    "cursor": 2097152
+   }
+  },
+  {
+   "name": "random-project-153",
+   "message": "Project",
+   "input_hex": "08011207e282ace99fb330",
+   "expect": "ok",
+   "output_hex": "08011207e282ace99fb330",
+   "json": {
+    "slot": 1,
+    "name": "€音0"
+   }
+  },
+  {
+   "name": "random-reply-154",
+   "message": "ListReply",
+   "input_hex": "0a0b0880808080011203e99fb30a1808ffffffff0f12102d20c3a920c3bc612d20c3bce282ac300a0e08acb6915c120730e282ac20c3bc0a121210e99fb361e282ac615a20e99fb3c3a9300a170880808001121020e282ace99fb32dc3bce282acc3a9610a18088b93aef801121020612d2dc3bc61202d302d2d5ac3bc200a1a0880808080011210e99fb32d5a5ac3a93061c3a9c3a9202018010a0a087f120461e282ac18010a0c120a5a302d2dc3bcc3bcc3a90a030880010a061204e282ac5a108080808001",
+   "expect": "ok",
+   "output_hex": "0a0b0880808080011203e99fb30a1808ffffffff0f12102d20c3a920c3bc612d20c3bce282ac300a0e08acb6915c120730e282ac20c3bc0a121210e99fb361e282ac615a20e99fb3c3a9300a170880808001121020e282ace99fb32dc3bce282acc3a9610a18088b93aef801121020612d2dc3bc61202d302d2d5ac3bc200a1a0880808080011210e99fb32d5a5ac3a93061c3a9c3a9202018010a0a087f120461e282ac18010a0c120a5a302d2dc3bcc3bcc3a90a030880010a061204e282ac5a108080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 268435456,
+      "name": "音"
+     },
+     {
+      "slot": 4294967295,
+      "name": "- é üa- ü€0"
+     },
+     {
+      "slot": 193223468,
+      "name": "0€ ü"
+     },
+     {
+      "name": "音a€aZ 音é0"
+     },
+     {
+      "slot": 2097152,
+      "name": " €音-ü€éa"
+     },
+     {
+      "slot": 520849803,
+      "name": " a--üa -0--Zü "
+     },
+     {
+      "slot": 268435456,
+      "name": "音-ZZé0aéé  ",
+      "current": true
+     },
+     {
+      "slot": 127,
+      "name": "a€",
+      "current": true
+     },
+     {
+      "name": "Z0--üüé"
+     },
+     {
+      "slot": 128
+     },
+     {
+      "name": "€Z"
+     }
+    ],
+    "next": 268435456
+   }
+  },
+  {
+   "name": "random-coverage-155",
+   "message": "Coverage",
+   "input_hex": "080110011a070a1d8811497ce9220e0001ffffffff0f800180808080013001387f4205c3a9c3bc614a012d4a00",
+   "expect": "ok",
+   "output_hex": "080110011a070a1d8811497ce9220e0001ffffffff0f800180808080013001387f4205c3a9c3bc614a012d4a00",
+   "json": {
+    "mode": "MODE_SOFT",
+    "offset": 1,
+    "blob": "Ch2IEUl86Q==",
+    "levels": [
+     0,
+     1,
+     4294967295,
+     128,
+     268435456
+    ],
+    "flag": true,
+    "count": 127,
+    "label": "éüa",
+    "tags": [
+     "-",
+     ""
+    ]
+   }
+  },
+  {
+   "name": "random-request-156",
+   "message": "ListRequest",
+   "input_hex": "0880808001",
+   "expect": "ok",
+   "output_hex": "0880808001",
+   "json": {
+    "cursor": 2097152
+   }
+  },
+  {
+   "name": "random-project-157",
+   "message": "Project",
+   "input_hex": "087f1210e99fb3e99fb3e282acc3bce282acc3bc1801",
+   "expect": "ok",
+   "output_hex": "087f1210e99fb3e99fb3e282acc3bce282acc3bc1801",
+   "json": {
+    "slot": 127,
+    "name": "音音€ü€ü",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-158",
+   "message": "ListReply",
+   "input_hex": "0a170880011210c3a9c3a95ac3a92061e282ace282ac2018010a1408ac02120f30e282ac5ae99fb3e99fb3e282ac5a0a1508808001120dc3bc5ae99fb330e282acc3a9611801107f",
+   "expect": "ok",
+   "output_hex": "0a170880011210c3a9c3a95ac3a92061e282ace282ac2018010a1408ac02120f30e282ac5ae99fb3e99fb3e282ac5a0a1508808001120dc3bc5ae99fb330e282acc3a9611801107f",
+   "json": {
+    "items": [
+     {
+      "slot": 128,
+      "name": "ééZé a€€ ",
+      "current": true
+     },
+     {
+      "slot": 300,
+      "name": "0€Z音音€Z"
+     },
+     {
+      "slot": 16384,
+      "name": "üZ音0€éa",
+      "current": true
+     }
+    ],
+    "next": 127
+   }
+  },
+  {
+   "name": "random-coverage-159",
+   "message": "Coverage",
+   "input_hex": "080110cb85c087fcffffffff011a019522089ffcd8eb0100800138e6d284f0014a0330305a4a01614a032d6161",
+   "expect": "ok",
+   "output_hex": "080110cb85c087fcffffffff011a019522089ffcd8eb0100800138e6d284f0014a0330305a4a01614a032d6161",
+   "json": {
+    "mode": "MODE_SOFT",
+    "offset": -1058012469,
+    "blob": "lQ==",
+    "levels": [
+     494288415,
+     0,
+     128
+    ],
+    "count": 503392614,
+    "tags": [
+     "00Z",
+     "a",
+     "-aa"
+    ]
+   }
+  },
+  {
+   "name": "random-request-160",
+   "message": "ListRequest",
+   "input_hex": "0880808001",
+   "expect": "ok",
+   "output_hex": "0880808001",
+   "json": {
+    "cursor": 2097152
+   }
+  },
+  {
+   "name": "random-project-161",
+   "message": "Project",
+   "input_hex": "08808080011210e282acc3a9c3bce282ace282acc3bc301801",
+   "expect": "ok",
+   "output_hex": "08808080011210e282acc3a9c3bce282ace282acc3bc301801",
+   "json": {
+    "slot": 2097152,
+    "name": "€éü€€ü0",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-162",
+   "message": "ListReply",
+   "input_hex": "0a121210202de99fb3c3a930e282ace282ac305a0a1a0880808080011210c3bcc3a9e282ace99fb3e99fb32dc3a918010a0e08b3e1adf70b120420c3bc6118010a10088001120930e99fb361e99fb32d18010a0d088080800112062d5a612d20200a1708ac021210c3bc302de99fb3e282ac30c3bc5a5a30180110ac02",
+   "expect": "ok",
+   "output_hex": "0a121210202de99fb3c3a930e282ace282ac305a0a1a0880808080011210c3bcc3a9e282ace99fb3e99fb32dc3a918010a0e08b3e1adf70b120420c3bc6118010a10088001120930e99fb361e99fb32d18010a0d088080800112062d5a612d20200a1708ac021210c3bc302de99fb3e282ac30c3bc5a5a30180110ac02",
+   "json": {
+    "items": [
+     {
+      "name": " -音é0€€0Z"
+     },
+     {
+      "slot": 268435456,
+      "name": "üé€音音-é",
+      "current": true
+     },
+     {
+      "slot": 3203100851,
+      "name": " üa",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "0音a音-",
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": "-Za-  "
+     },
+     {
+      "slot": 300,
+      "name": "ü0-音€0üZZ0",
+      "current": true
+     }
+    ],
+    "next": 300
+   }
+  },
+  {
+   "name": "random-coverage-163",
+   "message": "Coverage",
+   "input_hex": "0807107f1a07010efc2ffd683f2a0f088001120a30613020e99fb3c3bc6138014205e99fb32d2d",
+   "expect": "ok",
+   "output_hex": "0807107f1a07010efc2ffd683f2a0f088001120a30613020e99fb3c3bc6138014205e99fb32d2d",
+   "json": {
+    "mode": 7,
+    "offset": 127,
+    "blob": "AQ78L/1oPw==",
+    "project": {
+     "slot": 128,
+     "name": "0a0 音üa"
+    },
+    "count": 1,
+    "label": "音--"
+   }
+  },
+  {
+   "name": "random-request-164",
+   "message": "ListRequest",
+   "input_hex": "08808001",
+   "expect": "ok",
+   "output_hex": "08808001",
+   "json": {
+    "cursor": 16384
+   }
+  },
+  {
+   "name": "random-project-165",
+   "message": "Project",
+   "input_hex": "087f120fc3bce282acc3bcc3a920c3a9e282ac",
+   "expect": "ok",
+   "output_hex": "087f120fc3bce282acc3bcc3a920c3a9e282ac",
+   "json": {
+    "slot": 127,
+    "name": "ü€üé é€"
+   }
+  },
+  {
+   "name": "random-reply-166",
+   "message": "ListReply",
+   "input_hex": "0a1a08eca1b6aa0b12105ae99fb3e282ac6120e282acc3bcc3bc18010a0a08011204c3bcc3a918010a14087f1210c3a95ac3bc202de99fb3c3a9e99fb3200a100801120c2de99fb3c3a9c3bc61e282ac0a1208b4bef360120b30305a61615a2d305a612d0a0c087f1208e99fb3c3a920c3a90a1508ac0212105ac3bc61615ac3bc61c3bc5ac3bc615a0a13120f2d61e282ac2020e99fb3615ae99fb318010a1a08ffffffff0f1210c3a9305ae282ac2d3020612dc3bc302d18010a1908808080011210612d30c3a9c3bce282acc3a9c3bc616118010a0c08011206e99fb361c3bc1801108001",
+   "expect": "ok",
+   "output_hex": "0a1a08eca1b6aa0b12105ae99fb3e282ac6120e282acc3bcc3bc18010a0a08011204c3bcc3a918010a14087f1210c3a95ac3bc202de99fb3c3a9e99fb3200a100801120c2de99fb3c3a9c3bc61e282ac0a1208b4bef360120b30305a61615a2d305a612d0a0c087f1208e99fb3c3a920c3a90a1508ac0212105ac3bc61615ac3bc61c3bc5ac3bc615a0a13120f2d61e282ac2020e99fb3615ae99fb318010a1a08ffffffff0f1210c3a9305ae282ac2d3020612dc3bc302d18010a1908808080011210612d30c3a9c3bce282acc3a9c3bc616118010a0c08011206e99fb361c3bc1801108001",
+   "json": {
+    "items": [
+     {
+      "slot": 3041759468,
+      "name": "Z音€a €üü",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "üé",
+      "current": true
+     },
+     {
+      "slot": 127,
+      "name": "éZü -音é音 "
+     },
+     {
+      "slot": 1,
+      "name": "-音éüa€"
+     },
+     {
+      "slot": 203218740,
+      "name": "00ZaaZ-0Za-"
+     },
+     {
+      "slot": 127,
+      "name": "音é é"
+     },
+     {
+      "slot": 300,
+      "name": "ZüaaZüaüZüaZ"
+     },
+     {
+      "name": "-a€  音aZ音",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "é0Z€-0 a-ü0-",
+      "current": true
+     },
+     {
+      "slot": 2097152,
+      "name": "a-0éü€éüaa",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "音aü",
+      "current": true
+     }
+    ],
+    "next": 128
+   }
+  },
+  {
+   "name": "random-coverage-167",
+   "message": "Coverage",
+   "input_hex": "080110fc92a1d9051a045a6d7e4a221299c4bcc80eb1d492bb01ffffffff0f80800138800142025a614a004a004a00",
+   "expect": "ok",
+   "output_hex": "080110fc92a1d9051a045a6d7e4a221299c4bcc80eb1d492bb01ffffffff0f80800138800142025a614a004a004a00",
+   "json": {
+    "mode": "MODE_SOFT",
+    "offset": 1529366908,
+    "blob": "Wm1+Sg==",
+    "levels": [
+     3910083097,
+     392473137,
+     4294967295,
+     16384
+    ],
+    "count": 128,
+    "label": "Za",
+    "tags": [
+     "",
+     "",
+     ""
+    ]
+   }
+  },
+  {
+   "name": "random-request-168",
+   "message": "ListRequest",
+   "input_hex": "0880808001",
+   "expect": "ok",
+   "output_hex": "0880808001",
+   "json": {
+    "cursor": 2097152
+   }
+  },
+  {
+   "name": "random-project-169",
+   "message": "Project",
+   "input_hex": "08808080011210205ac3a92d2d205ae282ace282ac5a301801",
+   "expect": "ok",
+   "output_hex": "08808080011210205ac3a92d2d205ae282ace282ac5a301801",
+   "json": {
+    "slot": 2097152,
+    "name": " Zé-- Z€€Z0",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-170",
+   "message": "ListReply",
+   "input_hex": "0a1208ffffffff0f120ae282acc3a9203030612010ffffffff0f",
+   "expect": "ok",
+   "output_hex": "0a1208ffffffff0f120ae282acc3a9203030612010ffffffff0f",
+   "json": {
+    "items": [
+     {
+      "slot": 4294967295,
+      "name": "€é 00a "
+     }
+    ],
+    "next": 4294967295
+   }
+  },
+  {
+   "name": "random-coverage-171",
+   "message": "Coverage",
+   "input_hex": "08021080808080f8ffffffff011a02ee48221580808080018080800180800180808080018080800138808080014a032030204a004a0420c3bc61",
+   "expect": "ok",
+   "output_hex": "08021080808080f8ffffffff011a02ee48221580808080018080800180800180808080018080800138808080014a032030204a004a0420c3bc61",
+   "json": {
+    "mode": "MODE_HARD",
+    "offset": -2147483648,
+    "blob": "7kg=",
+    "levels": [
+     268435456,
+     2097152,
+     16384,
+     268435456,
+     2097152
+    ],
+    "count": 2097152,
+    "tags": [
+     " 0 ",
+     "",
+     " üa"
+    ]
+   }
+  },
+  {
+   "name": "random-request-172",
+   "message": "ListRequest",
+   "input_hex": "0880808001",
+   "expect": "ok",
+   "output_hex": "0880808001",
+   "json": {
+    "cursor": 2097152
+   }
+  },
+  {
+   "name": "random-project-173",
+   "message": "Project",
+   "input_hex": "0801120761e99fb361205a1801",
+   "expect": "ok",
+   "output_hex": "0801120761e99fb361205a1801",
+   "json": {
+    "slot": 1,
+    "name": "a音a Z",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-174",
+   "message": "ListReply",
+   "input_hex": "0a0e08808080011207c3a95a61202d300a1508800112105a5ae99fb3e282ace99fb3e282ac5a300a1208808001120ce99fb3c3bcc3a930c3a9c3bc0a12121020c3bce99fb3e282ac30e99fb32030610a000a0f08011209e99fb3305a30c3a92018010a0c0880808080011202302018010a0c0890c6acad04120430e282ac0a1708c89acade0f120dc3bc2dc3a9c3bce99fb3e282ac18010a08087f1204c3bc20200a0b0880011204205ac3bc18010a0712035a302018010a140801121020e99fb3e99fb3c3a92de99fb320303010fdf0d1e202",
+   "expect": "ok",
+   "output_hex": "0a0e08808080011207c3a95a61202d300a1508800112105a5ae99fb3e282ace99fb3e282ac5a300a1208808001120ce99fb3c3bcc3a930c3a9c3bc0a12121020c3bce99fb3e282ac30e99fb32030610a000a0f08011209e99fb3305a30c3a92018010a0c0880808080011202302018010a0c0890c6acad04120430e282ac0a1708c89acade0f120dc3bc2dc3a9c3bce99fb3e282ac18010a08087f1204c3bc20200a0b0880011204205ac3bc18010a0712035a302018010a140801121020e99fb3e99fb3c3a92de99fb320303010fdf0d1e202",
+   "json": {
+    "items": [
+     {
+      "slot": 2097152,
+      "name": "éZa -0"
+     },
+     {
+      "slot": 128,
+      "name": "ZZ音€音€Z0"
+     },
+     {
+      "slot": 16384,
+      "name": "音üé0éü"
+     },
+     {
+      "name": " ü音€0音 0a"
+     },
+     {},
+     {
+      "slot": 1,
+      "name": "音0Z0é ",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "name": "0 ",
+      "current": true
+     },
+     {
+      "slot": 1168843536,
+      "name": "0€"
+     },
+     {
+      "slot": 4224879944,
+      "name": "ü-éü音€",
+      "current": true
+     },
+     {
+      "slot": 127,
+      "name": "ü  "
+     },
+     {
+      "slot": 128,
+      "name": " Zü",
+      "current": true
+     },
+     {
+      "name": "Z0 ",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": " 音音é-音 00"
+     }
+    ],
+    "next": 743733373
+   }
+  },
+  {
+   "name": "random-coverage-175",
+   "message": "Coverage",
+   "input_hex": "08021081b9d1151a061ceb9dd0df16220a01b0d382ee03808080012a14088080808001120a5ac3a961e99fb32dc3bc180138e5c3caa2044205c3bc612d2d4a023061",
+   "expect": "ok",
+   "output_hex": "08021081b9d1151a061ceb9dd0df16220a01b0d382ee03808080012a14088080808001120a5ac3a961e99fb32dc3bc180138e5c3caa2044205c3bc612d2d4a023061",
+   "json": {
+    "mode": "MODE_HARD",
+    "offset": 45374593,
+    "blob": "HOud0N8W",
+    "levels": [
+     1,
+     1036036528,
+     2097152
+    ],
+    "project": {
+     "slot": 268435456,
+     "name": "Zéa音-ü",
+     "current": true
+    },
+    "count": 1146266085,
+    "label": "üa--",
+    "tags": [
+     "0a"
+    ]
+   }
+  },
+  {
+   "name": "random-request-176",
+   "message": "ListRequest",
+   "input_hex": "087f",
+   "expect": "ok",
+   "output_hex": "087f",
+   "json": {
+    "cursor": 127
+   }
+  },
+  {
+   "name": "random-project-177",
+   "message": "Project",
+   "input_hex": "08e0ccd6ae0b12102d2de99fb35ac3bcc3bcc3a92d612061",
+   "expect": "ok",
+   "output_hex": "08e0ccd6ae0b12102d2de99fb35ac3bcc3bcc3a92d612061",
+   "json": {
+    "slot": 3050677856,
+    "name": "--音Züüé-a a"
+   }
+  },
+  {
+   "name": "random-reply-178",
+   "message": "ListReply",
+   "input_hex": "0a1908ffffffff0f120f2de282ace99fb3612d61c3a9e99fb318010a16088080011210c3a9e282ac5ac3bce282ace99fb3c3a91001",
+   "expect": "ok",
+   "output_hex": "0a1908ffffffff0f120f2de282ace99fb3612d61c3a9e99fb318010a16088080011210c3a9e282ac5ac3bce282ace99fb3c3a91001",
+   "json": {
+    "items": [
+     {
+      "slot": 4294967295,
+      "name": "-€音a-aé音",
+      "current": true
+     },
+     {
+      "slot": 16384,
+      "name": "é€Zü€音é"
+     }
+    ],
+    "next": 1
+   }
+  },
+  {
+   "name": "random-coverage-179",
+   "message": "Coverage",
+   "input_hex": "08071080ffffffffffffffff011a089dde02bb487890bc220e808080018001ffffffff0f0080012a1508ac021210e99fb3c3a9c3bc2de282ace99fb3305a38b18e9c9605",
+   "expect": "ok",
+   "output_hex": "08071080ffffffffffffffff011a089dde02bb487890bc220e808080018001ffffffff0f0080012a1508ac021210e99fb3c3a9c3bc2de282ace99fb3305a38b18e9c9605",
+   "json": {
+    "mode": 7,
+    "offset": -128,
+    "blob": "nd4Cu0h4kLw=",
+    "levels": [
+     2097152,
+     128,
+     4294967295,
+     0,
+     128
+    ],
+    "project": {
+     "slot": 300,
+     "name": "音éü-€音0Z"
+    },
+    "count": 1388775217
+   }
+  },
+  {
+   "name": "random-request-180",
+   "message": "ListRequest",
+   "input_hex": "0801",
+   "expect": "ok",
+   "output_hex": "0801",
+   "json": {
+    "cursor": 1
+   }
+  },
+  {
+   "name": "random-project-181",
+   "message": "Project",
+   "input_hex": "08ffffffff0f12102d5ac3bc5a5a2d2d612de99fb361c3a91801",
+   "expect": "ok",
+   "output_hex": "08ffffffff0f12102d5ac3bc5a5a2d2d612de99fb361c3a91801",
+   "json": {
+    "slot": 4294967295,
+    "name": "-ZüZZ--a-音aé",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-182",
+   "message": "ListReply",
+   "input_hex": "0a1a08ae83aef00912105a3020c3bcc3a95a20e282ac61c3bc5a18010a16087f121020613020303020e282ace282ace99fb318010a0a120861615a6130202d2d0a19088080800112106130c3bce282ac5ae282ac3030615a2018010a14087f121030e282ace282ac5a203020e282ac305a0a16080112106161c3bcc3a9c3a9e282ac5ae282ac2018010a1412102d2d61c3a9c3a9c3a9e282ace99fb32d18010a0808800112012d18010a17088080808001120f2dc3bcc3bc2030e282ac612d5ac3bc1001",
+   "expect": "ok",
+   "output_hex": "0a1a08ae83aef00912105a3020c3bcc3a95a20e282ac61c3bc5a18010a16087f121020613020303020e282ace282ace99fb318010a0a120861615a6130202d2d0a19088080800112106130c3bce282ac5ae282ac3030615a2018010a14087f121030e282ace282ac5a203020e282ac305a0a16080112106161c3bcc3a9c3a9e282ac5ae282ac2018010a1412102d2d61c3a9c3a9c3a9e282ace99fb32d18010a0808800112012d18010a17088080808001120f2dc3bcc3bc2030e282ac612d5ac3bc1001",
+   "json": {
+    "items": [
+     {
+      "slot": 2651554222,
+      "name": "Z0 üéZ €aüZ",
+      "current": true
+     },
+     {
+      "slot": 127,
+      "name": " a0 00 €€音",
+      "current": true
+     },
+     {
+      "name": "aaZa0 --"
+     },
+     {
+      "slot": 2097152,
+      "name": "a0ü€Z€00aZ ",
+      "current": true
+     },
+     {
+      "slot": 127,
+      "name": "0€€Z 0 €0Z"
+     },
+     {
+      "slot": 1,
+      "name": "aaüéé€Z€ ",
+      "current": true
+     },
+     {
+      "name": "--aééé€音-",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "-",
+      "current": true
+     },
+     {
+      "slot": 268435456,
+      "name": "-üü 0€a-Zü"
+     }
+    ],
+    "next": 1
+   }
+  },
+  {
+   "name": "random-coverage-183",
+   "message": "Coverage",
+   "input_hex": "1a01ce2216ffffffff0f8001bba9cebf01808080800101be93c177300138014203e282ac4a04c3a92d5a",
+   "expect": "ok",
+   "output_hex": "1a01ce2216ffffffff0f8001bba9cebf01808080800101be93c177300138014203e282ac4a04c3a92d5a",
+   "json": {
+    "blob": "zg==",
+    "levels": [
+     4294967295,
+     128,
+     401839291,
+     268435456,
+     1,
+     250628542
+    ],
+    "flag": true,
+    "count": 1,
+    "label": "€",
+    "tags": [
+     "é-Z"
+    ]
+   }
+  },
+  {
+   "name": "random-request-184",
+   "message": "ListRequest",
+   "input_hex": "08ffffffff0f",
+   "expect": "ok",
+   "output_hex": "08ffffffff0f",
+   "json": {
+    "cursor": 4294967295
+   }
+  },
+  {
+   "name": "random-project-185",
+   "message": "Project",
+   "input_hex": "0880011210e282acc3a930c3a93030e99fb3c3bc5a1801",
+   "expect": "ok",
+   "output_hex": "0880011210e282acc3a930c3a93030e99fb3c3bc5a1801",
+   "json": {
+    "slot": 128,
+    "name": "€é0é00音üZ",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-186",
+   "message": "ListReply",
+   "input_hex": "0a150880808001120c303030e99fb3c3a95ae99fb318010a1708800112102de282ace282acc3bcc3a961e99fb32018010a091205202020615a18010a1308ffffffff0f120b2020c3bce282ac20e282ac0a0d087f12092de282ac5a61e282ac0a150880808001120ec3a96120615a2d202dc3a9c3bc61",
+   "expect": "ok",
+   "output_hex": "0a150880808001120c303030e99fb3c3a95ae99fb318010a1708800112102de282ace282acc3bcc3a961e99fb32018010a091205202020615a18010a1308ffffffff0f120b2020c3bce282ac20e282ac0a0d087f12092de282ac5a61e282ac0a150880808001120ec3a96120615a2d202dc3a9c3bc61",
+   "json": {
+    "items": [
+     {
+      "slot": 2097152,
+      "name": "000音éZ音",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "-€€üéa音 ",
+      "current": true
+     },
+     {
+      "name": "   aZ",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "  ü€ €"
+     },
+     {
+      "slot": 127,
+      "name": "-€Za€"
+     },
+     {
+      "slot": 2097152,
+      "name": "éa aZ- -éüa"
+     }
+    ]
+   }
+  },
+  {
+   "name": "random-coverage-187",
+   "message": "Coverage",
+   "input_hex": "08021080808080f8ffffffff011a084e18e34dccc673c12a0908ac0212042d5ac3bc38cedaa4b509420520c3bc5a2d4a04205ac3bc4a00",
+   "expect": "ok",
+   "output_hex": "08021080808080f8ffffffff011a084e18e34dccc673c12a0908ac0212042d5ac3bc38cedaa4b509420520c3bc5a2d4a04205ac3bc4a00",
+   "json": {
+    "mode": "MODE_HARD",
+    "offset": -2147483648,
+    "blob": "ThjjTczGc8E=",
+    "project": {
+     "slot": 300,
+     "name": "-Zü"
+    },
+    "count": 2527669582,
+    "label": " üZ-",
+    "tags": [
+     " Zü",
+     ""
+    ]
+   }
+  },
+  {
+   "name": "random-request-188",
+   "message": "ListRequest",
+   "input_hex": "08ac02",
+   "expect": "ok",
+   "output_hex": "08ac02",
+   "json": {
+    "cursor": 300
+   }
+  },
+  {
+   "name": "random-project-189",
+   "message": "Project",
+   "input_hex": "0880011210e282ac3061e99fb3e99fb3e282acc3a91801",
+   "expect": "ok",
+   "output_hex": "0880011210e282ac3061e99fb3e99fb3e282acc3a91801",
+   "json": {
+    "slot": 128,
+    "name": "€0a音音€é",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-190",
+   "message": "ListReply",
+   "input_hex": "0a1408808001120ee99fb36120c3a9c3a95a30e99fb3",
+   "expect": "ok",
+   "output_hex": "0a1408808001120ee99fb36120c3a9c3a95a30e99fb3",
+   "json": {
+    "items": [
+     {
+      "slot": 16384,
+      "name": "音a ééZ0音"
+     }
+    ]
+   }
+  },
+  {
+   "name": "random-coverage-191",
+   "message": "Coverage",
+   "input_hex": "08011a06e8a6abd66f89220e808080018080808001ac028080012a0b08800112062d305ae99fb338014204c3a95a2d4a0261614a025a614a0161",
+   "expect": "ok",
+   "output_hex": "08011a06e8a6abd66f89220e808080018080808001ac028080012a0b08800112062d305ae99fb338014204c3a95a2d4a0261614a025a614a0161",
+   "json": {
+    "mode": "MODE_SOFT",
+    "blob": "6Kar1m+J",
+    "levels": [
+     2097152,
+     268435456,
+     300,
+     16384
+    ],
+    "project": {
+     "slot": 128,
+     "name": "-0Z音"
+    },
+    "count": 1,
+    "label": "éZ-",
+    "tags": [
+     "aa",
+     "Za",
+     "a"
+    ]
+   }
+  },
+  {
+   "name": "random-request-192",
+   "message": "ListRequest",
+   "input_hex": "08fcafc9a10d",
+   "expect": "ok",
+   "output_hex": "08fcafc9a10d",
+   "json": {
+    "cursor": 3560069116
+   }
+  },
+  {
+   "name": "random-project-193",
+   "message": "Project",
+   "input_hex": "08808080800112045a30612d1801",
+   "expect": "ok",
+   "output_hex": "08808080800112045a30612d1801",
+   "json": {
+    "slot": 268435456,
+    "name": "Z0a-",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-194",
+   "message": "ListReply",
+   "input_hex": "0a11120de99fb3c3bce99fb3c3a9e99fb318010a0a080112045a30c3bc18010a0b08ffffffff0f12015a18010a15088001120ec3bcc3a9c3a9c3bc2dc3bcc3bc2d18010a1608011210e282acc3bce282acc3a9c3a95a2d2d5a18010a14080112103061e282ac2d2d2d3030c3bce282ac2d0a180880800112102061e282ac2dc3a9e282ac20e282ac2d18010a1008ac02120930c3bc5a205a615a5a18010a1108ac02120ce99fb3e282acc3bc2dc3bc5a108080808001",
+   "expect": "ok",
+   "output_hex": "0a11120de99fb3c3bce99fb3c3a9e99fb318010a0a080112045a30c3bc18010a0b08ffffffff0f12015a18010a15088001120ec3bcc3a9c3a9c3bc2dc3bcc3bc2d18010a1608011210e282acc3bce282acc3a9c3a95a2d2d5a18010a14080112103061e282ac2d2d2d3030c3bce282ac2d0a180880800112102061e282ac2dc3a9e282ac20e282ac2d18010a1008ac02120930c3bc5a205a615a5a18010a1108ac02120ce99fb3e282acc3bc2dc3bc5a108080808001",
+   "json": {
+    "items": [
+     {
+      "name": "音ü音é音",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "Z0ü",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "Z",
+      "current": true
+     },
+     {
+      "slot": 128,
+      "name": "üééü-üü-",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "€ü€ééZ--Z",
+      "current": true
+     },
+     {
+      "slot": 1,
+      "name": "0a€---00ü€-"
+     },
+     {
+      "slot": 16384,
+      "name": " a€-é€ €-",
+      "current": true
+     },
+     {
+      "slot": 300,
+      "name": "0üZ ZaZZ",
+      "current": true
+     },
+     {
+      "slot": 300,
+      "name": "音€ü-üZ"
+     }
+    ],
+    "next": 268435456
+   }
+  },
+  {
+   "name": "random-coverage-195",
+   "message": "Coverage",
+   "input_hex": "08011080808080f8ffffffff011a060218291d7ae62212ffffffff0f8080018080018080800180010038ffffffff0f4202302d4a04c3bcc3bc4a03c3a9614a04c3bc5a5a",
+   "expect": "ok",
+   "output_hex": "08011080808080f8ffffffff011a060218291d7ae62212ffffffff0f8080018080018080800180010038ffffffff0f4202302d4a04c3bcc3bc4a03c3a9614a04c3bc5a5a",
+   "json": {
+    "mode": "MODE_SOFT",
+    "offset": -2147483648,
+    "blob": "AhgpHXrm",
+    "levels": [
+     4294967295,
+     16384,
+     16384,
+     2097152,
+     128,
+     0
+    ],
+    "count": 4294967295,
+    "label": "0-",
+    "tags": [
+     "üü",
+     "éa",
+     "üZZ"
+    ]
+   }
+  },
+  {
+   "name": "random-request-196",
+   "message": "ListRequest",
+   "input_hex": "088001",
+   "expect": "ok",
+   "output_hex": "088001",
+   "json": {
+    "cursor": 128
+   }
+  },
+  {
+   "name": "random-project-197",
+   "message": "Project",
+   "input_hex": "0880808080011210c3a9c3a9c3bcc3bcc3bcc3a9c3bc5a201801",
+   "expect": "ok",
+   "output_hex": "0880808080011210c3a9c3a9c3bcc3bcc3bcc3a9c3bc5a201801",
+   "json": {
+    "slot": 268435456,
+    "name": "ééüüüéüZ ",
+    "current": true
+   }
+  },
+  {
+   "name": "random-reply-198",
+   "message": "ListReply",
+   "input_hex": "0a11088dc2aed60a1209e99fb330e99fb35a2d0a14121030306161e282ac6161c3a95ae282ac6118010a0f08ffffffff0f1207e282ace282ac300a0c08808080800112025a2018010a091207e99fb3e282ac2d0a1708ac021210c3a961e99fb3c3a95ae99fb330e282ac18010a0808ffffffff0f18011080808001",
+   "expect": "ok",
+   "output_hex": "0a11088dc2aed60a1209e99fb330e99fb35a2d0a14121030306161e282ac6161c3a95ae282ac6118010a0f08ffffffff0f1207e282ace282ac300a0c08808080800112025a2018010a091207e99fb3e282ac2d0a1708ac021210c3a961e99fb3c3a95ae99fb330e282ac18010a0808ffffffff0f18011080808001",
+   "json": {
+    "items": [
+     {
+      "slot": 2865471757,
+      "name": "音0音Z-"
+     },
+     {
+      "name": "00aa€aaéZ€a",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "name": "€€0"
+     },
+     {
+      "slot": 268435456,
+      "name": "Z ",
+      "current": true
+     },
+     {
+      "name": "音€-"
+     },
+     {
+      "slot": 300,
+      "name": "éa音éZ音0€",
+      "current": true
+     },
+     {
+      "slot": 4294967295,
+      "current": true
+     }
+    ],
+    "next": 2097152
+   }
+  },
+  {
+   "name": "random-coverage-199",
+   "message": "Coverage",
+   "input_hex": "0807107f1a04f3b7c4b522037fac022a12121030e99fb3e282ac5ac3bce282ac20612d300138d3a1cbeb0d4a02c3bc4a03e99fb3",
+   "expect": "ok",
+   "output_hex": "0807107f1a04f3b7c4b522037fac022a12121030e99fb3e282ac5ac3bce282ac20612d300138d3a1cbeb0d4a02c3bc4a03e99fb3",
+   "json": {
+    "mode": 7,
+    "offset": 127,
+    "blob": "87fEtQ==",
+    "levels": [
+     127,
+     300
+    ],
+    "project": {
+     "name": "0音€Zü€ a-"
+    },
+    "flag": true,
+    "count": 3715289299,
+    "tags": [
+     "ü",
+     "音"
+    ]
+   }
+  },
+  {
+   "name": "request-truncated-varint",
+   "message": "ListRequest",
+   "input_hex": "0880",
+   "expect": "refuse"
+  },
+  {
+   "name": "request-wrong-wire-type",
+   "message": "ListRequest",
+   "input_hex": "0a0100",
+   "expect": "refuse"
+  },
+  {
+   "name": "request-field-zero",
+   "message": "ListRequest",
+   "input_hex": "0001",
+   "expect": "refuse"
+  },
+  {
+   "name": "request-group",
+   "message": "ListRequest",
+   "input_hex": "08017b",
+   "expect": "refuse"
+  },
+  {
+   "name": "request-varint-11-bytes",
+   "message": "ListRequest",
+   "input_hex": "088080808080808080808000",
+   "expect": "refuse"
+  },
+  {
+   "name": "request-unknown-length-past-end",
+   "message": "ListRequest",
+   "input_hex": "720561",
+   "expect": "refuse"
+  },
+  {
+   "name": "request-unknown-fixed32-truncated",
+   "message": "ListRequest",
+   "input_hex": "6d010203",
+   "expect": "refuse"
+  },
+  {
+   "name": "project-name-17",
+   "message": "Project",
+   "input_hex": "12116161616161616161616161616161616161",
+   "expect": "refuse"
+  },
+  {
+   "name": "project-name-truncated",
+   "message": "Project",
+   "input_hex": "120461",
+   "expect": "refuse"
+  },
+  {
+   "name": "reply-17-items",
+   "message": "ListReply",
+   "input_hex": "0a000a000a000a000a000a000a000a000a000a000a000a000a000a000a000a000a00",
+   "expect": "refuse"
+  },
+  {
+   "name": "reply-truncated-item",
+   "message": "ListReply",
+   "input_hex": "0a050801",
+   "expect": "refuse"
+  },
+  {
+   "name": "reply-item-truncated-name",
+   "message": "ListReply",
+   "input_hex": "0a03120561",
+   "expect": "refuse"
+  },
+  {
+   "name": "coverage-label-6",
+   "message": "Coverage",
+   "input_hex": "4206616161616161",
+   "expect": "refuse"
+  },
+  {
+   "name": "coverage-blob-9",
+   "message": "Coverage",
+   "input_hex": "1a09000000000000000000",
+   "expect": "refuse"
+  },
+  {
+   "name": "coverage-levels-7-packed",
+   "message": "Coverage",
+   "input_hex": "220701010101010101",
+   "expect": "refuse"
+  },
+  {
+   "name": "coverage-levels-7-unpacked",
+   "message": "Coverage",
+   "input_hex": "2001200120012001200120012001",
+   "expect": "refuse"
+  },
+  {
+   "name": "coverage-levels-packed-truncated",
+   "message": "Coverage",
+   "input_hex": "22020180",
+   "expect": "refuse"
+  },
+  {
+   "name": "coverage-tag-5",
+   "message": "Coverage",
+   "input_hex": "4a056161616161",
+   "expect": "refuse"
+  },
+  {
+   "name": "coverage-4-tags",
+   "message": "Coverage",
+   "input_hex": "4a01614a01614a01614a0161",
+   "expect": "refuse"
+  }
+ ]
+}

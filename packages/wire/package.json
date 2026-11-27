@@ -1,0 +1,22 @@
+{
+  "name": "@digi/wire",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "2.17.0",
+    "@types/node": "22.15.0",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.17.0"
+  }
+}

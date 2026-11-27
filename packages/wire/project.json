@@ -1,0 +1,35 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "wire",
+  "implicitDependencies": ["patchkit"],
+  "targets": {
+    "test-host": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "hostTests",
+        "{workspaceRoot}/vitest.host/wire.json",
+        "{workspaceRoot}/tests/fixtures/wire/**/*",
+        "{workspaceRoot}/sdk/proto/**/*",
+        "{workspaceRoot}/sdk/include/dk/wire.h",
+        "{workspaceRoot}/runtime/core/vectors/wire-vectors.json",
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
+      ],
+      "dependsOn": ["patchkit:cli"],
+      "outputs": [],
+      "options": {
+        "forwardAllArgs": false,
+        "command": "pnpm exec vitest run --config vitest.host.config.ts --project wire",
+        "cwd": "."
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": { "command": "pnpm exec tsc -p tsconfig.json", "cwd": "packages/wire" }
+    }
+  }
+}

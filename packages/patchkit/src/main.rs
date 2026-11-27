@@ -950,6 +950,8 @@ plan.json {}",
         "addr" => patchkit::addrmap::run(rest)?,
         "budget" => patchkit::budget_cli::run(rest)?,
         #[cfg(not(target_arch = "wasm32"))]
+        "wire" => patchkit::wire_cli::run(rest)?,
+        #[cfg(not(target_arch = "wasm32"))]
         "size" => patchkit::size_cli::run(&a.root, rest)?,
         #[cfg(not(target_arch = "wasm32"))]
         "uses" => patchkit::uses::run(&a.root, rest)?,
