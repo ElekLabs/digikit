@@ -6,6 +6,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/* the edge-value table of mode 3, negative direction (7 longs, 28 bytes): DT2 0x402227b8, DN2 0x4020b7dc. core/lfo-table copies it with the added waves appended. */
+extern const uint8_t dk_fw_lfo_edge_mode3_neg __asm__("cf.lfo.data.edge_mode3_neg");
+/* the edge-value table of mode 3, positive direction (7 longs, 28 bytes): DT2 0x4022279c, DN2 0x4020b7c0. core/lfo-table copies it with the added waves appended. */
+extern const uint8_t dk_fw_lfo_edge_mode3_pos __asm__("cf.lfo.data.edge_mode3_pos");
+/* the edge-value table of mode 4 (7 longs, 28 bytes): DT2 0x40222780, DN2 0x4020b7a4. core/lfo-table copies it with the added waves appended. */
+extern const uint8_t dk_fw_lfo_edge_mode4 __asm__("cf.lfo.data.edge_mode4");
+/* the wave function table (7 longs, 28 bytes): DT2 0x402227d4, DN2 0x4020b7f8; slot 6 (RAND) is 0, the first word of the slew table that follows it. core/lfo-table copies it with the added waves appended. */
+extern const uint8_t dk_fw_lfo_wave_fn_table __asm__("cf.lfo.data.wave_fn_table");
 /* The descriptor row (60 bytes) of the WAVE parameter of LFO 1 (code 79): mirror index 5, range 0..0x600, default 0x100, slot 0xae. */
 extern const uint8_t dk_fw_lfo_wave_row_1 __asm__("cf.lfo.data.wave_row.1");
 /* The descriptor row of the WAVE parameter of LFO 2 (code 89): mirror index 0xd, range 0..0x600, default 0, slot 0xb6. */

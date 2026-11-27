@@ -6,12 +6,12 @@ import { loadPanelProject, savePanelProject } from '@digi/regression/runtime/pro
 import { captureRemoteOled } from '@digi/regression/runtime/remote.ts';
 import { servicePath } from '@digi/regression/runtime/service-files.ts';
 import { bootWith, pinFrame, shapeWords, SHAPE_A, SHAPE_B, storePath } from './lfo-cards.ts';
-import { BAD, evalSine, evalSqr, evalTable, evalTri, fitShape, FIRST_SHAPE, KNOB_WORD, LfoRig, OK, RAMP_SAMPLES, WAVE } from './lfo-rig.ts';
+import { BAD, evalSine, evalSqr, evalTable, evalTri, fitShape, FIRST_SHAPE, KNOB_WORD, LfoRig, RAMP_SAMPLES, SINE_OK, WAVE } from './lfo-rig.ts';
 
 /**
  * E6 on the device: a project that holds a shape number, loaded where the shape or the service is missing (docs/plans/extension-model.md E6, item 4 of "What" and the tests
- * list). Rule 7: the extended wave value is stored in the sound; every stock reader clamps it, so the sound loads, shows ERR and plays as RAND, with no fault, and the
- * value survives save and load. With the service loaded and the shape's module absent, the tick plays TRI and the page shows "----".
+ * list). Rule 7: the extended wave value is stored in the sound; every stock reader clamps it, so the sound loads, shows ERR and plays the stock sine (the wave table is in the image), with no fault, and the
+ * value survives save and load. With the service loaded and the shape's module absent, the tick plays the stock sine and the page shows "----".
  * The project is made on the panel (the same save and load as the project round trip), with the LFO running at a speed the fit can follow, so the fit reads the
  * loaded project's own LFO. Safe mode loads no module and no service: it is the same code path as the case "no lfo.dks" and is not run separately (safe-mode.device.test.ts
  * proves that a boot in safe mode loads nothing). No SHARC (the zero-DSP session paces the vector 191 tick). The LFO output is read from the live array (`LIVE` in lfo-rig.ts).
@@ -33,7 +33,7 @@ cardRigs(
       return hash;
     };
 
-    test('no lfo.dks: a project with a shape number loads without a fault, plays as RAND, shows ERR and keeps the value through a save and a load', async () => {
+    test('no lfo.dks: a project with a shape number loads without a fault, plays the stock sine, shows ERR and keeps the value through a save and a load', async () => {
       const rt = await bootWith(h, 'project', [SHAPE_A]);
       const rig = new LfoRig(rt);
       const dest = await rig.run();
@@ -55,15 +55,13 @@ cardRigs(
       console.info(`destination before the save ${dest}, after the load ${dest2}`);
       expect(await rig2.word(KNOB_WORD.WAVE), 'the loader keeps the wave number: nothing clamps it').toBe(FIRST_SHAPE << 8);
       const samples = await rig2.sample(dest2, READS, GAP_MS);
-      const note = `TRI ${fitShape(samples, evalTri).err.toFixed(3)}, SQR ${fitShape(samples, evalSqr).err.toFixed(3)}, SINE ${fitShape(samples, evalSine).err.toFixed(3)}`;
-      for (const [name, shape] of [
-        ['TRI', evalTri],
-        ['SQR', evalSqr],
-        ['the RAMP table', (p: number) => evalTable(RAMP_SAMPLES, p)],
-      ] as const)
-        expect(fitShape(samples, shape).err, `the stock tick plays RAND, not ${name} (${note})`).toBeGreaterThan(BAD);
-      // the LFO is not stopped: the destination moves
-      expect(new Set(samples.map((s) => s.v)).size, 'RAND moves the destination').toBeGreaterThan(1);
+      const sine = fitShape(samples, evalSine);
+      const note = `SINE ${sine.err.toFixed(4)}, TRI ${fitShape(samples, evalTri).err.toFixed(4)}, SQR ${fitShape(samples, evalSqr).err.toFixed(4)}, the RAMP table ${fitShape(samples, (p) => evalTable(RAMP_SAMPLES, p)).err.toFixed(4)}`;
+      console.info(`no lfo.dks, wave 7 fit: ${note}`);
+      // the image holds the wave table (core/lfo-table): an empty added wave plays the stock sine without the service too, not RAND
+      expect(sine.err, `the stock tick plays the sine (${note})`).toBeLessThan(SINE_OK);
+      expect(fitShape(samples, evalSqr).err, `not SQR (${note})`).toBeGreaterThan(BAD);
+      expect(fitShape(samples, (p) => evalTable(RAMP_SAMPLES, p)).err, `not the table of the shape that is gone (${note})`).toBeGreaterThan(BAD);
       const err = await modPage(rig2, dest2, 'err-before');
       console.info(`ERR page screen: ${await captureRemoteOled(rt2.session, 'lfo-err-page')}`);
 
@@ -77,7 +75,7 @@ cardRigs(
       await rt2.session.expectNoFault('project with a shape number, no lfo.dks');
     }, 900_000);
 
-    test('lfo.dks loaded, the shape missing: the tick plays TRI and the name shows ----', async () => {
+    test('lfo.dks loaded, the shape missing: the tick plays the stock sine and the name shows ----', async () => {
       const rt = await bootWith(h, 'two', [SHAPE_A, SHAPE_B]);
       const numbers = (await shapeWords(h, rt)).map((w) => w & 0xff);
       expect(numbers.slice(0, 2), 'RAMP gets 7 and STEP gets 8').toEqual([FIRST_SHAPE, FIRST_SHAPE + 1]);
@@ -99,13 +97,17 @@ cardRigs(
       console.info(`destination before the save ${dest}, after the load ${dest2}`);
       expect(await rig2.word(KNOB_WORD.WAVE), 'the project holds wave 7').toBe(FIRST_SHAPE << 8);
       const samples = await rig2.sample(dest2, READS, GAP_MS);
+      const sine = fitShape(samples, evalSine);
       const tri = fitShape(samples, evalTri);
       const table = fitShape(samples, (p) => evalTable(RAMP_SAMPLES, p));
-      expect(tri.err, `a number with no loaded shape plays TRI (TRI ${tri.err.toFixed(3)}, table ${table.err.toFixed(3)})`).toBeLessThan(OK);
+      const note = `SINE ${sine.err.toFixed(4)}, TRI ${tri.err.toFixed(4)}, table ${table.err.toFixed(4)}`;
+      console.info(`empty wave 7 fit: ${note}`);
+      expect(sine.err, `a number with no loaded shape plays the stock sine (${note})`).toBeLessThan(SINE_OK);
+      expect(tri.err, `and not TRI (${note})`).toBeGreaterThan(SINE_OK);
       expect(table.err, 'and not the table of the shape that is gone').toBeGreaterThan(BAD);
 
       // the page: the one thing only the screen shows. A CC does not redraw the WAVE label, so the gap page is captured after real knob turns from the loaded neighbour. Right after a WAVE
-      // edit the header and the cell label show the value name ("----" for a gap), otherwise the label reads WAVE (stock); the graph is the TRI tile, as the tick plays TRI.
+      // edit the header and the cell label show the value name ("----" for a gap), otherwise the label reads WAVE (stock); the graph is the SIN tile, as the tick plays the stock sine.
       await rig2.setWave(FIRST_SHAPE + 1);
       const step = await modPage(rig2, dest2, 'step');
       await rig2.setWave(WAVE.RAND);

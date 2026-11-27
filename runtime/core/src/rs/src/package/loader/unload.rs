@@ -14,6 +14,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         self.installer.restore_gated(&self.p, rec as u8, &parks.gate(self.live()).in_op(self.op())).is_ok()
     }
 
+    /// The task (its place in the port file's list) that the last ColdFire restore answered `E_BUSY` for, as the gate found it under its mask; `None` otherwise.
+    pub(crate) fn waiting_task(&self) -> Option<u32> {
+        self.installer.waited()
+    }
+
     /// The DSP part of `uninstall`: the DSP slots zero. False when the DSP does not take the clear.
     pub(super) unsafe fn uninstall_dsp(&mut self, rec: usize) -> bool {
         let area = if dsp::have_link() { dsp::area_base() } else { 0 };

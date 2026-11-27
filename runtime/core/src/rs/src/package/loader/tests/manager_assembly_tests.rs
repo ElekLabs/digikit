@@ -23,7 +23,7 @@ fn ping_counters() -> (u32, u32) {
     (word(0), word(1))
 }
 
-fn id(n: usize) -> PackageId {
+pub(super) fn id(n: usize) -> PackageId {
     PackageId(n as u8)
 }
 
@@ -419,7 +419,7 @@ fn the_live_jobs_steps_unload_a_module_and_load_it_again_and_another_with_the_se
 
 
 /// The packed `local-ping` service with the constant of its one export changed (`moveq #42,d0` is `moveq #43,d0`): the second version of the file, sealed again.
-fn local_ping_v2(dev: Dev) -> Vec<u8> {
+pub(super) fn local_ping_v2(dev: Dev) -> Vec<u8> {
     let mut f = packed(dev, "local-ping", "dks", "test/local-ping");
     let at = f.windows(4).position(|w| w == [0x70, 0x2a, 0x4e, 0x75]).expect("local_ping_value is moveq #42,d0; rts");
     f[at + 1] = 0x2b;

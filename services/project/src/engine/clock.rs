@@ -86,6 +86,11 @@ impl BusyClock {
         self.deferred
     }
 
+    /// The deferred flag of a copy this one replaces.
+    pub(super) fn restore_deferred(&mut self, deferred: bool) {
+        self.deferred = deferred;
+    }
+
     /// A write succeeded: the store is no longer deferred.
     pub fn clear_deferred(&mut self) {
         self.deferred = false;

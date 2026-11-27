@@ -9,7 +9,7 @@ import { derivedModule } from '@digi/regression/runtime/service-files.ts';
 import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
 import { loadCode, stateName } from '@digi/regression/runtime/load-states.ts';
 import { LOADED } from '@digi/regression/runtime/synth.ts';
-import { bootEntries, COUPLED_ROOTS, SYMBOLS, type Entry } from '../capacity/capacity-helpers.ts';
+import { bootEntries, COUPLED_LFO_ROOTS, SYMBOLS, type Entry } from '../capacity/capacity-helpers.ts';
 import { edits, patched, unhashed } from './dkm-patch.ts';
 
 /**
@@ -86,7 +86,7 @@ function expectLoaded(seen: Seen, i: number) {
   expect(moduleStateText(seen.loads[i]!), 'a loaded module has no refusal text').toBeUndefined();
 }
 
-cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_ROOTS, symbols: SYMBOLS }, (rig) => {
+cardRigs('refusal fixtures and module states', { dsp: 'cold', roots: COUPLED_LFO_ROOTS, symbols: SYMBOLS }, (rig) => {
   const fixture = () => fs.readFileSync(moduleArtifact(rig.device, GOOD));
   const entryOf = (name: string, f: Buffer, want: Entry['want']): Entry => {
     const dir = path.join(rig.artifacts, 'refusal');

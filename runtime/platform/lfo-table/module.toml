@@ -1,0 +1,143 @@
+[module]
+id = "core/lfo-table"
+version = "0.1.0"
+name = "LFO wave table"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "The LFO waves beyond the seven stock ones of the devices with the stock LFO tick: the wave function table and the three edge-value tables of the LFO tick, copied with room for the added waves, one stub per wave that reads its 32 cells, and lfo_table_set and lfo_table_clear (lfo_table_info) that the lfo service calls from the UI task"
+requires = []
+conflicts = []
+
+ports = ["dt2-1.17", "dn2-1.12"]
+
+# The LFO tick (vector 191) and its second reader (the engine task) clamp the wave byte to 0 .. 6 and index four 7-entry tables with it: the wave function table (a function
+# per wave: the value, signed Q31, from the phase at 4(SP)) and the edge-value tables of the modes 3 and 4. This module takes the tables into the expansion with N cells appended
+# (N = [limits] lfo_waves of the device file, 8: the waves 7 .. 14), points the eight `lea` operands of each device at the copies and raises the compare of the clamp to 6 + N
+# (the store of the clamp stays 6: a wave above 6 + N plays RAND as stock). Nothing in the image points into a service file: the tick and the reader run no code that a file loads.
+# An added wave is empty or set. Empty (the state at every boot): its function entry is the stock sine and its edge values are 0, so it plays sine. Set (`lfo_table_set`): its entry is
+# the stub of the wave, which reads the 32 cells of the wave (`lfo_wave_cells`, private to this module). The stub is bit-equal to `interp_cells` of services/lfo (src/cf/lfo-wave.inc).
+# The edge cells (modes 3 and 4 hold the value after the end of a one-shot cycle) stay 0, as the stock sine's: a held value is 0.
+# `lfo_table_set` and `lfo_table_clear` run in the UI task under the interrupt mask; the data table `lfo_table_info` ('LFOT', version 1, first wave, N, samples, set, clear; src/cf/lfo-table.h)
+# is exported to the image's info table, where the lfo service file finds it by the hash of its name (`CoreApi::info`).
+# The sites are declared in ports/fw/lfo.toml (users = core/lfo-table): the checks that the clamps, their register liveness and the eight references are all there are, are in docs/findings/149-lfo-waveforms.md.
+
+# N, from the device file (`patchkit gen`).
+[[gen]]
+kind = "gas"
+path = "build/gen/device-{dev}.inc"
+uses = ["LFO_WAVES"]
+
+# One row per added wave in every table: the registry is the count (`lfo_waves.count` = N) and the appended cell of each section.
+[[registry]]
+name = "lfo_waves"
+first = "7"
+max = 64
+region = "cf.expansion"
+
+[[registry.field]]
+name = "cell"
+kind = "u32"
+default = 0
+
+[[entry]]
+registry = "lfo_waves"
+id = "w"
+count = "lfo_waves"
+devices = ["dt2", "dn2"]
+
+# the edge-value table of mode 4: the 7 stock entries, then N copies of the sine's (slot 1)
+[[section]]
+name = "lfo_edge4"
+region = "cf.expansion"
+from = { anchor = "cf.lfo.data.edge_mode4", len = 28 }
+append = { registry = "lfo_waves", row = ["image.u32(cf.lfo.data.edge_mode4 + 4)"] }
+
+[[op]]
+op = "write"
+anchors = "cf.lfo.site.edge_mode4.ref.*"
+offset = 2
+value = "lfo_edge4 + (image.u32(this + 2) - cf.lfo.data.edge_mode4)"
+width = 4
+
+# the edge-value table of mode 3, positive direction: the 7 stock entries, then N copies of the sine's (slot 1)
+[[section]]
+name = "lfo_edge3p"
+region = "cf.expansion"
+from = { anchor = "cf.lfo.data.edge_mode3_pos", len = 28 }
+append = { registry = "lfo_waves", row = ["image.u32(cf.lfo.data.edge_mode3_pos + 4)"] }
+
+[[op]]
+op = "write"
+anchors = "cf.lfo.site.edge_mode3_pos.ref.*"
+offset = 2
+value = "lfo_edge3p + (image.u32(this + 2) - cf.lfo.data.edge_mode3_pos)"
+width = 4
+
+# the edge-value table of mode 3, negative direction: the 7 stock entries, then N copies of the sine's (slot 1)
+[[section]]
+name = "lfo_edge3n"
+region = "cf.expansion"
+from = { anchor = "cf.lfo.data.edge_mode3_neg", len = 28 }
+append = { registry = "lfo_waves", row = ["image.u32(cf.lfo.data.edge_mode3_neg + 4)"] }
+
+[[op]]
+op = "write"
+anchors = "cf.lfo.site.edge_mode3_neg.ref.*"
+offset = 2
+value = "lfo_edge3n + (image.u32(this + 2) - cf.lfo.data.edge_mode3_neg)"
+width = 4
+
+# the wave function table: the 7 stock entries, then N copies of the sine's (slot 1) (an empty wave plays sine)
+[[section]]
+name = "lfo_fn"
+region = "cf.expansion"
+from = { anchor = "cf.lfo.data.wave_fn_table", len = 28 }
+append = { registry = "lfo_waves", row = ["image.u32(cf.lfo.data.wave_fn_table + 4)"] }
+
+[[op]]
+op = "write"
+anchors = "cf.lfo.site.wave_fn_table.ref.*"
+offset = 2
+value = "lfo_fn + (image.u32(this + 2) - cf.lfo.data.wave_fn_table)"
+width = 4
+
+# the clamp: `moveq 6,Dn; cmp.l D3,Dn` takes the highest kept wave from the immediate of the moveq (byte +1); the store of the clamp (`moveq 6,D3`) is not changed
+[[op]]
+op = "write"
+anchor = "cf.lfo.site.tick.clamp"
+offset = 1
+value = "image.u8(this + 1) + lfo_waves.count"
+width = 1
+
+[[op]]
+op = "write"
+anchor = "cf.lfo.site.read.clamp"
+offset = 1
+value = "image.u8(this + 1) + lfo_waves.count"
+width = 1
+
+[[object]]
+path = "build/lfo-table-dt2.dko.json"
+sources = ["src/cf/lfo-table.c", "src/cf/lfo-wave-dt2.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[object.externs]
+lfo_fn_table = "lfo_fn"
+
+[[object]]
+path = "build/lfo-table-dn2.dko.json"
+sources = ["src/cf/lfo-table.c", "src/cf/lfo-wave-dn2.s"]
+place = "cf.expansion"
+devices = ["dn2"]
+
+[object.externs]
+lfo_fn_table = "lfo_fn"
+
+# The calls and the shape of the added waves, for the lfo service (CoreApi::info "lfo_table_info").
+[[info]]
+name = "lfo_table_info"
+symbol = "lfo_table_info"

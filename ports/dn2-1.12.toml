@@ -259,6 +259,50 @@ mark = "V"
 rule = "fw/input:cf_func"
 
 [[anchor]]
+name = "cf.lfo.data.edge_mode3_neg"
+cpu = "cf"
+kind = "data"
+addr = 0x4020b7dc
+src = 0x40137bee
+len = 28
+sha256 = "02ea3093d44e59140378b16bccb58590bbd5931c31e9e8e643f47e929832ec5d"
+mark = "V"
+rule = "fw/lfo:cf_ptr"
+
+[[anchor]]
+name = "cf.lfo.data.edge_mode3_pos"
+cpu = "cf"
+kind = "data"
+addr = 0x4020b7c0
+src = 0x40137bf8
+len = 28
+sha256 = "3addfb141cd7c9c4c6543a82191a3707ac29c7a041217782e61d4d91c691aee8"
+mark = "V"
+rule = "fw/lfo:cf_ptr"
+
+[[anchor]]
+name = "cf.lfo.data.edge_mode4"
+cpu = "cf"
+kind = "data"
+addr = 0x4020b7a4
+src = 0x40137bc4
+len = 28
+sha256 = "7af48b17226465d56ddec574f5e31aee97575345db042b114d5741c5041fc3fe"
+mark = "V"
+rule = "fw/lfo:cf_ptr"
+
+[[anchor]]
+name = "cf.lfo.data.wave_fn_table"
+cpu = "cf"
+kind = "data"
+addr = 0x4020b7f8
+src = 0x40137cdc
+len = 28
+sha256 = "d074fd57139dacc466f15280e80f719651f124c6fc7b6d3d05ea36193351eb13"
+mark = "V"
+rule = "fw/lfo:cf_ptr"
+
+[[anchor]]
 name = "cf.lfo.data.wave_row.1"
 cpu = "cf"
 kind = "data"
@@ -289,6 +333,66 @@ mark = "D"
 rule = "fw/lfo:cf_words"
 
 [[anchor]]
+name = "cf.lfo.site.edge_mode3_neg.ref.1"
+cpu = "cf"
+kind = "code"
+addr = 0x40137bec
+len = 6
+sha256 = "f3ee7bca23cce55ec59a78a7290c1cd870f7e34c9954c4349e18afaec15a671a"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.edge_mode3_neg.ref.2"
+cpu = "cf"
+kind = "code"
+addr = 0x401377e8
+len = 6
+sha256 = "a9b7f2ab177cb322df763c1eb5d8dc158ff68cd2f3038ad4334347a55ad581a5"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.edge_mode3_pos.ref.1"
+cpu = "cf"
+kind = "code"
+addr = 0x40137bf6
+len = 6
+sha256 = "cd7bd4ecef3d9fd792cab01320b3476ec3ef0d340819c7054661ea75bed953ab"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.edge_mode3_pos.ref.2"
+cpu = "cf"
+kind = "code"
+addr = 0x401377f4
+len = 6
+sha256 = "cd7bd4ecef3d9fd792cab01320b3476ec3ef0d340819c7054661ea75bed953ab"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.edge_mode4.ref.1"
+cpu = "cf"
+kind = "code"
+addr = 0x40137bc2
+len = 6
+sha256 = "2d543afb232e0c8c4eebe838a528f1aab18aaebef63b9bc5d8218c87ecdd3741"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.edge_mode4.ref.2"
+cpu = "cf"
+kind = "code"
+addr = 0x401377be
+len = 6
+sha256 = "2d543afb232e0c8c4eebe838a528f1aab18aaebef63b9bc5d8218c87ecdd3741"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
 name = "cf.lfo.site.graph_vec"
 cpu = "cf"
 kind = "code"
@@ -299,123 +403,43 @@ mark = "D"
 rule = "fw/lfo:cf_func"
 
 [[anchor]]
-name = "cf.lfo.site.read_call"
+name = "cf.lfo.site.read.clamp"
 cpu = "cf"
 kind = "code"
-addr = 0x401378c4
-len = 6
-sha256 = "c0a706b60f9c27e1f571890d9d77c8f42996f8322e72546a961d07b7cbf026c1"
-mark = "D"
-rule = "fw/lfo:cf_func"
-
-[[anchor]]
-name = "cf.lfo.site.read_done"
-cpu = "cf"
-kind = "code"
-addr = 0x40137962
+addr = 0x40137788
 len = 2
-sha256 = "ee17b0047b7589b9069938d8417376f794a6d345a5f001b3b6fd12eea53343b6"
-mark = "D"
+sha256 = "4cd53691e3aeeb340b82a72a9a6a63018ab03ed3c8bd0a6effc95a6a1d4a7d20"
+mark = "V"
 rule = "fw/lfo:cf_func"
 
 [[anchor]]
-name = "cf.lfo.site.read_rand"
+name = "cf.lfo.site.tick.clamp"
 cpu = "cf"
 kind = "code"
-addr = 0x401378fa
+addr = 0x40137b60
 len = 2
-sha256 = "24cc057006592d73549d88226a92fd10eda8dd626a46eb45597f31698e2a134e"
-mark = "D"
+sha256 = "c210719b43c1aeb43033a95a7868462566e9db8b117acfa325c761eb8685a2ff"
+mark = "V"
 rule = "fw/lfo:cf_func"
 
 [[anchor]]
-name = "cf.lfo.site.read_slew"
+name = "cf.lfo.site.wave_fn_table.ref.1"
 cpu = "cf"
 kind = "code"
-addr = 0x40137932
+addr = 0x40137cda
 len = 6
-sha256 = "c70bafcd9b83f19c3409f27d62a31aeb06ecbb344f945a3ac0c65426415afa6c"
-mark = "D"
+sha256 = "0088f28e0e2f2dc87f4e3fcbe3e5e213980c406c54646d4a74e94fc6a832cb21"
+mark = "V"
 rule = "fw/lfo:cf_func"
 
 [[anchor]]
-name = "cf.lfo.site.read_start"
+name = "cf.lfo.site.wave_fn_table.ref.2"
 cpu = "cf"
 kind = "code"
-addr = 0x40137836
+addr = 0x401378ce
 len = 6
-sha256 = "eca5788a5083a2d542dff91101cc2e2db9c148be4a0f54cad50b3a85327c7fce"
-mark = "D"
-rule = "fw/lfo:cf_func"
-
-[[anchor]]
-name = "cf.lfo.site.read_start_rand"
-cpu = "cf"
-kind = "code"
-addr = 0x40137852
-len = 2
-sha256 = "43a286effac35df5d4864a650a8e64ba60367543d984a7b95f9ae0a8b702d4d8"
-mark = "D"
-rule = "fw/lfo:cf_func"
-
-[[anchor]]
-name = "cf.lfo.site.tick_call"
-cpu = "cf"
-kind = "code"
-addr = 0x40137cc6
-len = 6
-sha256 = "653daeac4978c36383c5317679688c03595f9e70f5903919e134d26f5e0f78fd"
-mark = "D"
-rule = "fw/lfo:cf_func"
-
-[[anchor]]
-name = "cf.lfo.site.tick_done"
-cpu = "cf"
-kind = "code"
-addr = 0x40137d52
-len = 2
-sha256 = "ee17b0047b7589b9069938d8417376f794a6d345a5f001b3b6fd12eea53343b6"
-mark = "D"
-rule = "fw/lfo:cf_func"
-
-[[anchor]]
-name = "cf.lfo.site.tick_rand"
-cpu = "cf"
-kind = "code"
-addr = 0x40137cec
-len = 2
-sha256 = "f10722a69c629e0108621db21b31d91e24c5c202778f92d81bf84fc1821a6844"
-mark = "D"
-rule = "fw/lfo:cf_func"
-
-[[anchor]]
-name = "cf.lfo.site.tick_slew"
-cpu = "cf"
-kind = "code"
-addr = 0x40137d1e
-len = 6
-sha256 = "29a0aa82f7f8ea15a76d1c9106f0afd9bac10d4bcc598c0a60745be19d749bab"
-mark = "D"
-rule = "fw/lfo:cf_func"
-
-[[anchor]]
-name = "cf.lfo.site.tick_start"
-cpu = "cf"
-kind = "code"
-addr = 0x40137c40
-len = 6
-sha256 = "6ec1bf39f9f594432cfb13123de7a8956716f655210eee41d3b0b06a758cfa47"
-mark = "D"
-rule = "fw/lfo:cf_func"
-
-[[anchor]]
-name = "cf.lfo.site.tick_start_rand"
-cpu = "cf"
-kind = "code"
-addr = 0x40137c5c
-len = 2
-sha256 = "43a286effac35df5d4864a650a8e64ba60367543d984a7b95f9ae0a8b702d4d8"
-mark = "D"
+sha256 = "d9344ba5f56832f1934053727acad0d7ea663eb20e130b4661550318db893c66"
+mark = "V"
 rule = "fw/lfo:cf_func"
 
 [[anchor]]
@@ -4498,60 +4522,6 @@ kind = "tail"
 check = "9998677613c912ec"
 
 [[hook]]
-name = "cf.lfo.hook.read_call"
-site = "cf.lfo.site.read_call"
-mode = "replace"
-clobbers = ["d0", "d2", "ccr"]
-len = 6
-kind = "raw"
-check = "c0a706b60f9c27e1"
-
-[[hook]]
-name = "cf.lfo.hook.read_slew"
-site = "cf.lfo.site.read_slew"
-mode = "replace"
-clobbers = ["d2", "ccr"]
-len = 6
-kind = "raw"
-check = "c70bafcd9b83f19c"
-
-[[hook]]
-name = "cf.lfo.hook.read_start"
-site = "cf.lfo.site.read_start"
-mode = "replace"
-clobbers = ["d2", "ccr"]
-len = 6
-kind = "raw"
-check = "eca5788a5083a2d5"
-
-[[hook]]
-name = "cf.lfo.hook.tick_call"
-site = "cf.lfo.site.tick_call"
-mode = "replace"
-clobbers = ["d0", "d1", "d2", "ccr"]
-len = 6
-kind = "raw"
-check = "653daeac4978c363"
-
-[[hook]]
-name = "cf.lfo.hook.tick_slew"
-site = "cf.lfo.site.tick_slew"
-mode = "replace"
-clobbers = ["d1", "ccr"]
-len = 6
-kind = "raw"
-check = "29a0aa82f7f8ea15"
-
-[[hook]]
-name = "cf.lfo.hook.tick_start"
-site = "cf.lfo.site.tick_start"
-mode = "replace"
-clobbers = ["d2", "ccr"]
-len = 6
-kind = "raw"
-check = "6ec1bf39f9f59443"
-
-[[hook]]
 name = "cf.lfo.hook.wave_name"
 site = "cf.lfo.site.wave_name"
 mode = "replace"
@@ -4716,6 +4686,7 @@ mode = "before"
 name = "cf.menu.hook.settings_dtor"
 site = "cf.menu.fn.settings_dtor"
 mode = "before"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.menu.hook.settings_list.tail"

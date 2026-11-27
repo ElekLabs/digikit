@@ -1,3 +1,5 @@
+use super::pending_watch::PendingWatch;
+use super::session::Handle;
 use super::codes::code_of;
 use super::reload_state::ReloadState;
 use super::RtTrace;
@@ -6,13 +8,14 @@ use crate::package::admission::Admission;
 use crate::package::dsp;
 use crate::package::handlers::ServiceTable;
 use crate::package::loader::{Images, Loader, PhaseKind, Registry};
+use crate::package::loader::QUIET_OP;
 use core::mem::MaybeUninit;
 use core::ptr::addr_of_mut;
 use dkrt_abi::package::PackageId;
 use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::MAX_MODULES;
-use dkrt_lifecycle::{LifecycleError, PackageManager, Refusal, Report, Traced};
+use dkrt_lifecycle::{LifecycleError, PackageManager, Phase, Refusal, Report, Step, Trace, Traced};
 use dkrt_sdk::sel::Record;
 use dkrt_sdk::*;
 
@@ -41,6 +44,8 @@ pub struct Rt<P: PackagePlatform, M: Images, R: Registry> {
     /// Where the reload of a service stands (`Rt::reload_closure`): whether the live job must ask again (`dsp_step` then leaves the manager's pending take-down to it) and whether a
     /// member went down.
     pub(super) reload: ReloadState,
+    /// What the log last said about the pending take-down that `dsp_step` retries every pass.
+    watch: PendingWatch,
 }
 
 /// A DSP part's take-down that waits for a busy restore (`Rt::take_down_dsp`): the record, its boot index, the failure code, the passes spent, and whether the load in flight
@@ -83,6 +88,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         addr_of_mut!((*out).up).write(false);
         addr_of_mut!((*out).dsp_down).write(DspDown::NONE);
         addr_of_mut!((*out).reload).write(ReloadState::Idle);
+        addr_of_mut!((*out).watch).write(PendingWatch::new());
     }
 
     /// The lifecycle over `loader`, by value (host tests; nothing is started yet, so it may move until `boot`).
@@ -531,6 +537,32 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         }
     }
 
+    /// One retry of the pending take-down that logs nothing itself (the seams and the gate see `QUIET_OP`): a note says when the wait starts or changes and when it ends.
+    unsafe fn retry_quietly(&mut self, m: &mut Manager<P, M, R>) -> Result<Report, LifecycleError> {
+        self.watch.follow(m.restore_pending());
+        let Some(package) = m.restore_pending() else {
+            return m.retry_pending();
+        };
+        let l = self.loader();
+        let name = Trace::name_of(&RtTrace::new(Handle(&mut self.session as *mut _)), package);
+        let op = l.op();
+        l.enter_op(QUIET_OP);
+        let r = m.retry_pending();
+        l.enter_op(op);
+        let (status, task) = match &r {
+            Ok(_) => (OK, None),
+            Err(LifecycleError::Busy { .. }) => (E_BUSY, l.waiting_task()),
+            Err(e) => (code_of(e), None),
+        };
+        if let Some(note) = self.watch.observe(package, status, task) {
+            if super::trace_on() {
+                let step = if note.waiting() { Step::ParkWait } else { Step::Restore };
+                super::trace_emit(op, Phase::Note, step, package, name, note.status, note.task);
+            }
+        }
+        r
+    }
+
     /// The modules `report` took down are marked taken down (`E_MISSING`) in the boot record; whether every one's memory is back.
     unsafe fn settle_down(&mut self, id: PackageId, report: &Report) -> bool {
         let mut reclaimed = true;
@@ -684,8 +716,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     pub unsafe fn dsp_step(&mut self, l: ServiceTable) {
         self.step_attaches();
         if let Some(m) = self.mgr() {
+            // a take-down that another path ended leaves no stale wait behind
+            self.watch.follow(m.restore_pending());
             if m.restore_pending().is_some() && !self.reload.is_waiting() {
-                let r = m.retry_pending();
+                let r = self.retry_quietly(m);
                 if self.dsp_down.live {
                     let mut w = self.dsp_down;
                     match r {

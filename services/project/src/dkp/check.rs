@@ -18,11 +18,28 @@ pub fn check(b: &[u8], device: u16) -> Result<Head, Ignore> {
     if h.device != device {
         return Err(Ignore::Device);
     }
-    if h.slot > 127 || h.name_len > 16 {
+    if !head_ok(&h) {
         return Err(Ignore::Format);
     }
     sections_ok(b, used)?;
     Ok(h)
+}
+
+/// The header's own bounds: the slot and the name length.
+pub fn head_ok(h: &Head) -> bool {
+    h.slot <= 127 && h.name_len <= 16
+}
+
+/// Is `b` (the live image, which is not sealed) an image of the codec whose sections pass the checks of a file? The crc32 and the device are not checked: a put does not keep the
+/// crc32 and the carried head has been checked on its own.
+pub fn image_ok(b: &[u8]) -> bool {
+    if b.len() < HEADER || get32(b, 0) != MAGIC || get16(b, 4) != VERSION as u32 {
+        return false;
+    }
+    let Some((_, used)) = FMT.peek(b) else {
+        return false;
+    };
+    head_ok(&head_of(b)) && sections_ok(b, used).is_ok()
 }
 
 pub(super) fn sections_ok(b: &[u8], used: usize) -> Result<(), Ignore> {

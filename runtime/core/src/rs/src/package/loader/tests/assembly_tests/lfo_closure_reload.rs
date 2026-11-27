@@ -3,8 +3,7 @@
 //! ended) is reproduced or ruled out here: every lifecycle step of the shape module must begin and end in the boot and again in the reload, the job must end `OK` within a bound of
 //! polls (`reload_job` fails the test, it does not hang it), the shape's key number must be unchanged and the service must be up again.
 //!
-//! The device refuses this reload (`E_BOOT_ONLY`: the lfo hooks sit at interrupt sites, `provider_reload::interrupt_entered`); the test switches that one rule off with the loader's
-//! test field `irq_guard_off` and leaves the rule's own source alone.
+//! The lfo service has no hook at an interrupt site, so the reload passes the `CTX_IRQ` rule (`provider_reload::interrupt_entered`) as it is.
 use super::*;
 use crate::dlog::{self, Ev};
 use crate::package::lifecycle::{stem_hash, Rt};
@@ -70,7 +69,6 @@ fn the_closure_reload_of_the_lfo_service_brings_the_shape_module_up_again_throug
             assert_eq!(n, 1, "{}: the shape module has one wave key", dev.name);
             let wave = keys[0];
 
-            l.irq_guard_off = true;
             let path = b"services/lfo.dks\0";
             let mut job = Job::new();
             let mut ops = super::super::host_ops::HostOps { l: &mut l, rt: &mut rt };

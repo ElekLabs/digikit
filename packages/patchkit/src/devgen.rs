@@ -221,6 +221,9 @@ struct Limits {
     send_rows: u64,
     param_rows: u64,
     page_rows: u64,
+    /// Added LFO wave numbers (`core/lfo-table`); absent: 0 (a device whose LFO has no table to extend).
+    #[serde(default)]
+    lfo_waves: u64,
 }
 #[derive(Deserialize)]
 struct Dev {
@@ -518,6 +521,7 @@ fn rows_facts(short: &str, rows: Option<RowsDoc>, l: &Limits) -> Result<RowsF> {
             "send_rows" => l.send_rows,
             "param_rows" => l.param_rows,
             "page_rows" => l.page_rows,
+            "lfo_waves" => l.lfo_waves,
             _ => {
                 return Err(err!(
                     "{short}: [rows] names {key:?}, which is no key of [limits]"
@@ -561,6 +565,7 @@ struct LimitsF {
     send_rows: u64,
     param_rows: u64,
     page_rows: u64,
+    lfo_waves: u64,
 }
 #[derive(Debug)]
 struct BoardF {
@@ -763,6 +768,7 @@ impl Facts {
                             send_rows: l.send_rows,
                             param_rows: l.param_rows,
                             page_rows: l.page_rows,
+                            lfo_waves: l.lfo_waves,
                         },
                         adapter,
                         sample_pool,
@@ -1867,6 +1873,11 @@ fn constants(lib: &Library, dev: &str, e: &Entry) -> Result<Vec<C>> {
             "LIMIT_SEND_ROWS",
             e.limits.send_rows,
             "[limits] send_rows (parameter rows reserved for the cells of the send page)",
+        ),
+        c(
+            "LFO_WAVES",
+            e.limits.lfo_waves,
+            "[limits] lfo_waves (wave numbers core/lfo-table adds to the LFO WAVE parameter: 7 .. 6 + lfo_waves; 0 when the device has none)",
         ),
         c(
             "LIMIT_STAGE_BYTES",

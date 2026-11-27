@@ -9,10 +9,10 @@ use core::ffi::c_void;
 use dkrt_abi::dsp::{DspSec, Job};
 use dkrt_abi::provider::{
     Describe, DescribeV1, DspPart, DspV1, LifecycleV1, PartRef, Payloads, PayloadsV1, Provider,
-    ProviderHandle, ProviderRow, Query, QueryV1, Records, RecordsV1, Status, TickV1, Ticker,
-    DESCRIBE_NEWEST, DSP_NEWEST, LIFECYCLE_NEWEST, PART_DESCRIBE, PART_DSP, PART_LIFECYCLE,
-    PART_PAYLOADS, PART_QUERY, PART_RECORDS, PART_TICK, PAYLOADS_NEWEST, QUERY_NEWEST,
-    RECORDS_NEWEST, TICK_NEWEST,
+    ProviderHandle, ProviderRow, Query, QueryV1, Records, RecordsV1, State, StateV1, Status,
+    TickV1, Ticker, DESCRIBE_NEWEST, DSP_NEWEST, LIFECYCLE_NEWEST, PART_DESCRIBE, PART_DSP,
+    PART_LIFECYCLE, PART_PAYLOADS, PART_QUERY, PART_RECORDS, PART_STATE, PART_TICK,
+    PAYLOADS_NEWEST, QUERY_NEWEST, RECORDS_NEWEST, STATE_NEWEST, TICK_NEWEST,
 };
 use dkrt_abi::service::{
     ApplyCtx, CheckCtx, Claim, Declare, ModuleCommitCtx, Problem, RowWrite, SettleCtx, TableFault,
@@ -136,6 +136,19 @@ impl<P: Provider<FakeCore> + 'static> RowBuilder<P> {
         self
     }
 
+    /// Adopt the state part.
+    pub fn state(mut self) -> Self
+    where
+        P: State<FakeCore>,
+    {
+        self.parts.push(PartRef::new(
+            PART_STATE,
+            STATE_NEWEST,
+            leak(StateV1::of::<P, FakeCore>()),
+        ));
+        self
+    }
+
     /// Start the owner object over `core` (`Provider::start_in`, in its box) and resolve the row for it, as the runtime does after `dk_provider_declare_row`.
     pub fn start(self, core: &FakeCore) -> Result<Started, Status> {
         // started where it lives (`start_in`, as the file's `init` does): a service whose rows point into its own state must not be moved after `start`
@@ -152,6 +165,7 @@ impl<P: Provider<FakeCore> + 'static> RowBuilder<P> {
         match handle {
             Ok(handle) => Ok(Started {
                 handle,
+                instance,
                 validate: self.validate,
                 stop: self.stop,
             }),
@@ -167,6 +181,7 @@ impl<P: Provider<FakeCore> + 'static> RowBuilder<P> {
 /// A started owner object and its resolved row.
 pub struct Started {
     handle: ProviderHandle,
+    instance: *mut c_void,
     validate: Validate,
     stop: unsafe fn(*mut c_void, &FakeCore),
 }
@@ -177,11 +192,87 @@ pub trait Recipe {
     /// The name of the service.
     const NAME: &'static str;
     fn parts(b: RowBuilder<Self::P>) -> RowBuilder<Self::P>;
+
+    /// Why `import(None)` does not give the state of a fresh copy, when the service decides otherwise (it then starts from what a run-time start cannot know).
+    const NONE_STARTS_DIFFERENTLY: Option<&'static str> = None;
+
+    /// Change the state the service carries over a reload, on the old copy before it exports: `true` when it did. A service that adopts the state part gives it, so a state
+    /// that two fresh copies share cannot let a no-op `import` pass the round trip.
+    fn change_state(_: &mut Self::P) -> bool {
+        false
+    }
 }
 
 /// The cases of the contract for the provider `R` describes, on the profile of `f`.
 pub fn provider_contract<R: Recipe>(f: &Fixture) {
-    run::<Provided<R>>(f)
+    run::<Provided<R>>(f);
+    state_round_trip::<R>();
+}
+
+/// The state part of a service that adopts it (nothing to check otherwise): what one copy exports another takes and exports again as it was, the bytes fit the room
+/// `export_max` asked for, and `import(None)` gives the start state of a fresh copy. The runtime's own checks (name, version range) are the loader's and sit in its tests.
+fn state_round_trip<R: Recipe>() {
+    let core = FakeCore::new();
+    let start = |core: &FakeCore| {
+        R::parts(RowBuilder::<R::P>::new(R::NAME))
+            .start(core)
+            .unwrap_or_else(|e| panic!("{}: start refused with {e}", R::NAME))
+    };
+    let (old, new) = (start(&core), start(&core));
+    let Some((version, from)) = old.handle.state_versions() else {
+        return;
+    };
+    assert!(
+        from <= version,
+        "{}: the range of the state part is empty",
+        R::NAME
+    );
+    let c = cptr(&core);
+    let export = |s: &Started| unsafe {
+        let mut out = std::vec![0u8; s.handle.state_export_max(c)];
+        let n = s.handle.state_export(c, &mut out);
+        out.truncate(n);
+        out
+    };
+    let fresh = export(&new);
+    let changed = R::change_state(unsafe { &mut *(old.instance as *mut R::P) });
+    let bytes = export(&old);
+    if changed {
+        assert_ne!(
+            bytes,
+            fresh,
+            "{}: `change_state` did not change what the part exports",
+            R::NAME
+        );
+    }
+    // a copy that took the old copy's bytes exports them again
+    assert_eq!(
+        unsafe { new.handle.state_import(c, Some((version, &bytes))) },
+        dkrt_sdk::OK,
+        "{}",
+        R::NAME
+    );
+    assert_eq!(
+        export(&new),
+        bytes,
+        "{}: import then export is the same bytes",
+        R::NAME
+    );
+    // no bytes: the start state of a fresh copy
+    assert_eq!(
+        unsafe { new.handle.state_import(c, None) },
+        dkrt_sdk::OK,
+        "{}",
+        R::NAME
+    );
+    if R::NONE_STARTS_DIFFERENTLY.is_none() {
+        assert_eq!(
+            export(&new),
+            fresh,
+            "{}: import(None) is the fresh state",
+            R::NAME
+        );
+    }
 }
 
 /// A provider as the subject of a suite case: `Lifecycle::<Provided<R>>`.

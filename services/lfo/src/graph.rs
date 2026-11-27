@@ -13,7 +13,7 @@
 //! The row of a sample `v` (Q31) is `7 - round(7 v)` (round half up): 0 for +1, 7 (the middle row) for 0, 14 for -1. A unipolar shape has rows 0 to 7 (and 7 to 14 mirrored), as the stock EXPO and RAMP.
 //!
 use crate::records::{MAX_SHAPES, RANGE, SAMPLES};
-use crate::shapes::{highest, interp};
+use crate::shapes::interp;
 use core::ptr::{addr_of_mut, read_volatile, write_volatile};
 use dkrt_svc_bitmap as bitmap;
 use dkrt_svc_bitmap::{Graph, NONE};
@@ -129,11 +129,11 @@ pub unsafe fn retract(i: usize) {
     bitmap::retract(at(i));
 }
 
-/// The result of [`lookup`] for a gap number: the hook sets the stock table offset of the TRI tile vector (0), since the tick plays TRI for a number with no shape. Not a valid address.
-pub const STOCK_TRI: *const u8 = 1 as *const u8;
+/// The result of [`lookup`] for a number with no shape: the hook sets the stock table offset of the SIN tile vector (12), since the LFO plays the stock sine for a wave that is empty. Not a valid address.
+pub const STOCK_SIN: *const u8 = 1 as *const u8;
 
 /// What the hook at the vector pick of the cell calls (UI task): the pointer to the vector header of the graph for wave `wave` (the cell's unclamped wave argument), with the
-/// unipolar byte stored at `flag`; [`STOCK_TRI`] when `wave` is a gap (no module keeps it, and it is at or below the highest kept number); null otherwise (the hook then leaves the stock vector).
+/// unipolar byte stored at `flag`; [`STOCK_SIN`] when `wave` is one of the added waves and no module keeps it (the LFO plays the stock sine for it); null otherwise (the hook then leaves the stock vector).
 ///
 /// `vtable` is the vtable word of the stock tile vector the hook read (the first word of its first `Bitmap`): it is copied into the four elements whenever it differs from what they hold. Only this
 /// function writes it and only the UI task calls it, so no reader sees a half-written word. A `vtable` of 0 gives null.
@@ -150,11 +150,7 @@ pub unsafe fn lookup(wave: u32, vtable: u32, flag: *mut u8) -> *const u8 {
         return core::ptr::null();
     }
     if read_volatile(bitmap::valid_word(g)) == 0 {
-        return if wave <= highest() {
-            STOCK_TRI
-        } else {
-            core::ptr::null()
-        };
+        return STOCK_SIN;
     }
     let mut k = 0;
     while k < 4 {

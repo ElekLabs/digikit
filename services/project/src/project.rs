@@ -3,11 +3,12 @@
 //! ends it in `fini`. The hooks and exports of the file reach it through the cell; nothing else holds the state.
 //!
 //! The crate stays neutral: the SDK calls are behind [`Host`], which the file implements (`dks/src/glue/host.rs`) and a host test implements over fakes.
-use crate::engine::{Env, Pending, ProjectService, StoreJob};
+use crate::engine::{Env, Pending, ProjectService, StoreJob, CARRY_MAX, CARRY_VERSION};
 use core::mem::MaybeUninit;
 use dkrt_abi::core_api::CoreApi;
-use dkrt_abi::provider::{Provider, Status};
+use dkrt_abi::provider::{Provider, State, Status};
 use dkrt_abi::service::SettingsOverlay;
+use dkrt_sdk::E_BUSY;
 
 /// What the owner needs from the service file besides the engine: the engine's environment (`Env`, in the UI task), the handles it opens at the start and the table of the
 /// settings overlay. The write job's file client is not here: the I/O task reads it from the file's own statics.
@@ -22,6 +23,12 @@ pub unsafe trait Host: Env {
 
     /// A UI pass begins (the clock when the image has no block counter).
     fn begin_pass(&mut self);
+
+    /// The hooks' record of the file (a static: the hooks write it from other tasks). The state a reload carries includes it.
+    fn hook_record(&self) -> &'static Pending;
+
+    /// The write job's cell of the file (a static: the I/O task works on it). The service may not be taken down while it holds a job.
+    fn job(&self) -> &'static StoreJob;
 
     /// The table that the runtime's settings overlay forwards to (`dkc_settings_overlay_set`).
     fn overlay() -> *const SettingsOverlay;
@@ -92,9 +99,41 @@ impl<C: CoreApi, H: Host> Provider<C> for Project<H> {
         Ok(())
     }
 
+    /// Not while a stage runs, a store job is posted or the hooks' work waits in the queue: the runtime asks again until the tick has finished it.
+    fn can_stop(&self, _core: &C) -> Result<(), Status> {
+        if self.engine.can_carry(self.host.job()) {
+            Ok(())
+        } else {
+            Err(E_BUSY)
+        }
+    }
+
     /// The file's `fini`: the runtime holds no table of this file after it.
     fn stop(&mut self, core: &C) {
         // SAFETY: null takes the table away.
         unsafe { core.settings_overlay_set(core::ptr::null()) };
+    }
+}
+
+/// The state of a reload of the file: the engine's (`ProjectService::export_state`) and the hooks' record, which is outside the engine and final when the runtime exports (the old
+/// copy's hooks are restored by then).
+impl<C: CoreApi, H: Host> State<C> for Project<H> {
+    const VERSION: u16 = CARRY_VERSION;
+    const ACCEPTS_FROM: u16 = CARRY_VERSION;
+
+    fn export_max(&self, _: &C) -> usize {
+        CARRY_MAX
+    }
+
+    fn export(&mut self, _: &C, out: &mut [u8]) -> usize {
+        self.engine
+            .export_state(self.host.now_ms(), self.host.hook_record(), out)
+    }
+
+    /// Takes the carried bytes; `None` (or bytes of another layout that the runtime let through) starts named and unbound: module writes go to the settings record only.
+    fn import(&mut self, _: &C, from: Option<&[u8]>) -> Result<(), Status> {
+        let hooks = self.host.hook_record();
+        self.engine.import_state(&mut self.host, hooks, from);
+        Ok(())
     }
 }

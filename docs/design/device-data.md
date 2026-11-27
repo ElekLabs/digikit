@@ -141,6 +141,7 @@ The runtime object is built once and used on every device, so it has no device v
 cannot differ). The sizes of the runtime's static arrays (`ARENA_BYTES`, `STAGE_BYTES`, `MACHINE_ROWS` and the selection's `SEL_MAX`) are constants of
 `abi.toml`; `gen` checks that the device files' `[limits]` agree with them, and the runtime checks at start that the device's machine type count fits
 (`dev::valid`). The parameter rows of the image are device data too: the file's `[rows]` and `[[rows.block]]` (below) reserve them from `[limits]`, and `patchkit gen` writes `rows_info` and the cap words from them (`ROWS_*` in `core/rows` `build/gen/device-<dev>.inc`).
+`[limits] lfo_waves` (absent: 0) is the number of LFO wave numbers added after the stock ones (WAVE 7 to 6 + N); `core/lfo-table` reads it as the gas constant `LFO_WAVES` and as the count of its `lfo_waves` registry, and the lfo service's persisted setting holds that many shapes.
 
 `[rows]` (only a device with a parameter table has it; the Syntakt has none and gets no `ROWS_*` constants):
 

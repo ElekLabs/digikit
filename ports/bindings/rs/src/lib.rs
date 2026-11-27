@@ -71,6 +71,30 @@ pub mod input {
 
 pub mod lfo {
     unsafe extern "C" {
+        /// the edge-value table of mode 3, negative direction (7 longs, 28 bytes): DT2 0x402227b8, DN2 0x4020b7dc. core/lfo-table copies it with the added waves appended.
+        #[link_name = "cf.lfo.data.edge_mode3_neg"]
+        pub static EDGE_MODE3_NEG: u8;
+    }
+
+    unsafe extern "C" {
+        /// the edge-value table of mode 3, positive direction (7 longs, 28 bytes): DT2 0x4022279c, DN2 0x4020b7c0. core/lfo-table copies it with the added waves appended.
+        #[link_name = "cf.lfo.data.edge_mode3_pos"]
+        pub static EDGE_MODE3_POS: u8;
+    }
+
+    unsafe extern "C" {
+        /// the edge-value table of mode 4 (7 longs, 28 bytes): DT2 0x40222780, DN2 0x4020b7a4. core/lfo-table copies it with the added waves appended.
+        #[link_name = "cf.lfo.data.edge_mode4"]
+        pub static EDGE_MODE4: u8;
+    }
+
+    unsafe extern "C" {
+        /// the wave function table (7 longs, 28 bytes): DT2 0x402227d4, DN2 0x4020b7f8; slot 6 (RAND) is 0, the first word of the slew table that follows it. core/lfo-table copies it with the added waves appended.
+        #[link_name = "cf.lfo.data.wave_fn_table"]
+        pub static WAVE_FN_TABLE: u8;
+    }
+
+    unsafe extern "C" {
         /// The descriptor row (60 bytes) of the WAVE parameter of LFO 1 (code 79): mirror index 5, range 0..0x600, default 0x100, slot 0xae.
         #[link_name = "cf.lfo.data.wave_row.1"]
         pub static WAVE_ROW_1: u8;

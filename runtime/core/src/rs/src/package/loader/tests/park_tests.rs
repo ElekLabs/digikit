@@ -136,8 +136,8 @@ fn the_facts_come_from_the_port_file_a_task_the_firmware_lacks_is_left_out_and_a
     };
     let all = facts(&task_names()).unwrap();
     assert_eq!(all.len(), 2);
-    assert!(all.contains(&install::Park { tcb: TCB_BG, wait: CELL, indirect: true, off: 0x18 }));
-    assert!(all.contains(&install::Park { tcb: TCB_CONSOLE, wait: QUEUE, indirect: false, off: 0xc }));
+    assert!(all.contains(&install::Park { tcb: TCB_BG, wait: CELL, indirect: true, off: 0x18, made: 0 }));
+    assert!(all.contains(&install::Park { tcb: TCB_CONSOLE, wait: QUEUE, indirect: false, off: 0xc, made: 0x14 }));
     // a firmware without the console task: only the BgWorker is waited for
     let mut v = task_names();
     for n in v.iter_mut().filter(|n| n.hash == name_hash_bytes(park::TASK_NAMES[2]) || n.hash == name_hash_bytes(park::TASK_NAMES[3])) {

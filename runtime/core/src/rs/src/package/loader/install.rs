@@ -11,6 +11,7 @@
 use dkrt_abi::link::Sequence;
 use dkrt_abi::package_platform::PackagePlatform;
 use dkneeds::keys::CTX_TASK;
+use super::op_clock::QUIET_OP;
 use dkrt_sdk::*;
 
 /// What one installer backend installs for one record and takes down again. The ColdFire backend ([`Installer`]) writes `jmp.l` over hook sites and fills slot words in
@@ -65,13 +66,16 @@ pub struct CfItems<'a> {
 /// A task of a priority below the UI task's that can be inside a `task` hook (the BgWorker, the console task) and the place of the word that says whether it waits: the task is
 /// parked iff the waiter word of its top-level wait object holds its own TCB (the kernel's pend stores the TCB there before it blocks and the post clears it, so a task that is
 /// running or was just woken reads "not parked"). The waiter word is at `*wait + off` when `indirect` (the wait object hangs off a cell: the BgWorker singleton), else at
-/// `wait + off`; a cell that holds 0 is a task without its object yet, which reads "not parked".
+/// `wait + off`; a cell that holds 0 is a task without its object yet, which reads "not parked". `made` (0: none) is the offset from `wait` of a word that is 0 until the task's
+/// wait object is built: a task whose object was never built does not exist (the firmware creates the console task only on a unit with its serial-console flag), so it cannot be
+/// inside a hook and reads "parked".
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Park {
     pub tcb: u32,
     pub wait: u32,
     pub indirect: bool,
     pub off: u32,
+    pub made: u32,
 }
 
 /// Most tasks the installer waits for.
@@ -103,34 +107,38 @@ impl<'a> Gate<'a> {
 }
 
 impl Gate<'_> {
+    /// The first task of the gate that is not parked (its place in the port file's list); `None` when all are parked, the gate is not live or its tasks are unknown.
+    pub unsafe fn waiting<P: PackagePlatform>(&self, p: &P) -> Option<usize> {
+        if !self.live {
+            return None;
+        }
+        self.parks?.iter().position(|k| !parked(p, k))
+    }
+
     /// `Ok` when every task is parked (or the gate is not live). Call it under the mask.
     unsafe fn clear<P: PackagePlatform>(&self, p: &P) -> Result<(), i32> {
         if !self.live {
             return Ok(());
         }
-        let Some(parks) = self.parks else {
+        if self.parks.is_none() {
             return Err(E_IMPORT);
-        };
-        let mut i = 0;
-        while i < parks.len() {
-            if !parked(p, &parks[i]) {
-                // the task that is not parked (its place in the port file's list) is the event's detail
-                if crate::package::lifecycle::trace_on() {
-                    crate::package::lifecycle::trace_emit(
-                        self.op,
-                        dkrt_lifecycle::Phase::Note,
-                        dkrt_lifecycle::Step::ParkWait,
-                        crate::package::lifecycle::TRACE_NO_PACKAGE,
-                        0,
-                        E_BUSY,
-                        i as u32,
-                    );
-                }
-                return Err(E_BUSY);
-            }
-            i += 1;
         }
-        Ok(())
+        let Some(i) = self.waiting(p) else {
+            return Ok(());
+        };
+        // the task that is not parked is the event's detail; a quiet retry logs nothing (its owner notes a change)
+        if self.op != QUIET_OP && crate::package::lifecycle::trace_on() {
+            crate::package::lifecycle::trace_emit(
+                self.op,
+                dkrt_lifecycle::Phase::Note,
+                dkrt_lifecycle::Step::ParkWait,
+                crate::package::lifecycle::TRACE_NO_PACKAGE,
+                0,
+                E_BUSY,
+                i as u32,
+            );
+        }
+        Err(E_BUSY)
     }
 }
 
@@ -157,9 +165,13 @@ unsafe fn parked<P: PackagePlatform>(p: &P, k: &Park) -> bool {
     let mut at = k.wait;
     if k.indirect {
         at = word(p, at);
+        // a zero cell: the singleton is built on first use and does not exist yet, so no task is inside a hook (under the mask nothing builds it)
         if at == 0 {
-            return false;
+            return true;
         }
+    }
+    if k.made != 0 && word(p, at.wrapping_add(k.made)) == 0 {
+        return true;
     }
     word(p, at.wrapping_add(k.off)) == k.tcb
 }
@@ -213,11 +225,18 @@ pub struct Installer {
     ns: usize,
     /// True in safe mode: `install` does nothing. (Stored inverted: the zero fill of the static keeps the whole loader out of `.data`.)
     disarmed: bool,
+    /// The task (its place in the port file's list) that the last restore answered `E_BUSY` for, read under the same mask as the answer; `None` after any other result.
+    waited: Option<u32>,
 }
 
 impl Installer {
     pub const fn new() -> Installer {
-        Installer { sites: [EMPTY_SITE; SITES_MAX], n: 0, patches: [EMPTY_PATCH; PATCHES_MAX], np: 0, slot_words: [(0, 0); SLOT_WORDS_MAX], ns: 0, disarmed: false }
+        Installer { sites: [EMPTY_SITE; SITES_MAX], n: 0, patches: [EMPTY_PATCH; PATCHES_MAX], np: 0, slot_words: [(0, 0); SLOT_WORDS_MAX], ns: 0, disarmed: false, waited: None }
+    }
+
+    /// The task that the last restore waited for when it answered `E_BUSY` (the one the gate found unparked under its mask); `None` otherwise.
+    pub fn waited(&self) -> Option<u32> {
+        self.waited
     }
 
     pub fn set_armed(&mut self, armed: bool) {
@@ -542,6 +561,7 @@ impl Installer {
     /// [`Installer::restore`] with a [`Gate`]: at run time a record with a `task` site is restored only while the tasks of the gate are parked (checked under the mask), else
     /// `E_BUSY` and nothing changed (the caller asks again on a later pass); a record with `ui` and `irq` sites only never waits.
     pub unsafe fn restore_gated<P: PackagePlatform>(&mut self, p: &P, rec: u8, gate: &Gate<'_>) -> Result<(), i32> {
+        self.waited = None;
         // a record that installed nothing (a file that failed before its install) costs no platform call
         if !self.sites[..self.n].iter().any(|s| s.rec == rec) && !self.patches[..self.np].iter().any(|s| s.rec == rec) && !self.slot_words[..self.ns].iter().any(|s| s.0 == rec) {
             return Ok(());
@@ -549,6 +569,7 @@ impl Installer {
         let sr = p.irq_mask();
         if self.sites[..self.n].iter().any(|s| s.rec == rec && s.ctx == CTX_TASK) || self.patches[..self.np].iter().any(|s| s.rec == rec && s.ctx == CTX_TASK) {
             if let Err(e) = gate.clear(p) {
+                self.waited = gate.waiting(p).map(|i| i as u32);
                 p.irq_restore(sr);
                 return Err(e);
             }
