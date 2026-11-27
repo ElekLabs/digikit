@@ -65,13 +65,16 @@ pub struct CfItems<'a> {
 /// A task of a priority below the UI task's that can be inside a `task` hook (the BgWorker, the console task) and the place of the word that says whether it waits: the task is
 /// parked iff the waiter word of its top-level wait object holds its own TCB (the kernel's pend stores the TCB there before it blocks and the post clears it, so a task that is
 /// running or was just woken reads "not parked"). The waiter word is at `*wait + off` when `indirect` (the wait object hangs off a cell: the BgWorker singleton), else at
-/// `wait + off`; a cell that holds 0 is a task without its object yet, which reads "not parked".
+/// `wait + off`; a cell that holds 0 is a task without its object yet, which reads "not parked". `made` (0: none) is the offset from `wait` of a word that is 0 until the task's
+/// wait object is built: a task whose object was never built does not exist (the firmware creates the console task only on a unit with its serial-console flag), so it cannot be
+/// inside a hook and reads "parked".
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Park {
     pub tcb: u32,
     pub wait: u32,
     pub indirect: bool,
     pub off: u32,
+    pub made: u32,
 }
 
 /// Most tasks the installer waits for.
@@ -160,6 +163,9 @@ unsafe fn parked<P: PackagePlatform>(p: &P, k: &Park) -> bool {
         if at == 0 {
             return false;
         }
+    }
+    if k.made != 0 && word(p, at.wrapping_add(k.made)) == 0 {
+        return true;
     }
     word(p, at.wrapping_add(k.off)) == k.tcb
 }
