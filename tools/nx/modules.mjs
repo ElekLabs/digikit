@@ -152,7 +152,13 @@ export const createNodesV2 = [
       // The merge gate's static checks run `lint`: it carries the generated-file check of a module with a Workbench declaration.
       if (existsSync(join(ctx.workspaceRoot, root, 'workbench.toml'))) {
         targets['workbench-ts-check'] = workbenchTsCheckTarget(root);
-        targets.lint = { executor: 'nx:noop', cache: false, dependsOn: ['workbench-ts-check'] };
+        // Nx lets the project's own `lint` replace a target of this plugin, so such a lint must list the check itself.
+        const own = projectFiles.find(([f]) => dirname(f) === root)?.[1].targets?.lint;
+        if (!own) targets.lint = { executor: 'nx:noop', cache: false, dependsOn: ['workbench-ts-check'] };
+        else if (!own.dependsOn?.includes('workbench-ts-check'))
+          throw new Error(
+            `${root}/project.json: its lint target must list workbench-ts-check in dependsOn (the module has a workbench.toml)`,
+          );
       }
       const aliasesTarget = packAliasesTarget(ctx.workspaceRoot, byId, recs);
       if (aliasesTarget) targets['pack-aliases'] = aliasesTarget;

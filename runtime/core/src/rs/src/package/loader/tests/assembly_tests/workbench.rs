@@ -166,7 +166,7 @@ fn the_packed_typed_settings_accept_a_valid_write_refuse_an_invalid_one_and_flag
     for dev in DEVICES {
         let _guard = clean();
         unsafe {
-            // An open settings store without the stand-in module that `setup` puts in record 0: the fixture loads there.
+            // The settings client of a record is its index plus one. An open settings store without the stand-in module that `setup` puts in record 0: the fixture loads there.
             crate::settings::tests::setup(false);
             crate::settings::tests::teardown();
             let (mut loader, instance) = load_settings_a(dev);
@@ -179,7 +179,10 @@ fn the_packed_typed_settings_accept_a_valid_write_refuse_an_invalid_one_and_flag
             assert_eq!(ui_request(instance, 3, PUT, GAIN, put.1, &101i32.to_be_bytes(), 0).0, E_SET_VALUE, "{}: gain 101", dev.name);
             assert_eq!(ui_request(instance, 4, PUT, MODE, 0, &[3], 0).0, E_SET_VALUE, "{}: mode 3", dev.name);
             // the store takes any bytes: a stored index outside the choices reads as invalid
-            assert_eq!(crate::package::entry::module_put(1, b"mode\0".as_ptr(), [7u8].as_ptr(), 1), OK);
+            let rec = (0..dkrt_abi::MAX_MODULES)
+                .find(|&rec| crate::package::module_ui::instance(rec).to_be_bytes() == instance)
+                .expect("the record of the loaded fixture");
+            assert_eq!(crate::package::entry::module_put(rec as u32 + 1, b"mode\0".as_ptr(), [7u8].as_ptr(), 1), OK);
             assert_eq!(ui_request(instance, 5, GET, MODE, 0, b"", 0).0, E_SET_VALUE, "{}: stored mode 7", dev.name);
             assert_eq!(loader.unload_body(0), OK, "{}: unload settings-a", dev.name);
         }

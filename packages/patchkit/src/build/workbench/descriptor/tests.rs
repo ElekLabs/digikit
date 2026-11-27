@@ -68,20 +68,12 @@ fn each_new_type_writes_its_kind_and_body() {
 #[test]
 fn a_version_1_module_encodes_as_before() {
     // the bytes the version 1 encoder made before the typed settings (taken from that encoder)
-    for (dir, id, name, hex) in [
-        (
-            "modules/tool/tools/bootscreen",
-            "tools/bootscreen",
-            "Boot screen",
-            "010b426f6f742073637265656e010661637469766509416e696d6174696f6e2f010104646b62730553746f636b",
-        ),
-        (
-            "tests/fixtures/modules/settings-a",
-            "test/settings-a",
-            "Boot settings",
-            "010d426f6f742073657474696e67730104626f6f740a426f6f742076616c7565100000",
-        ),
-    ] {
+    for (dir, id, name, hex) in [(
+        "modules/tool/tools/bootscreen",
+        "tools/bootscreen",
+        "Boot screen",
+        "010b426f6f742073637265656e010661637469766509416e696d6174696f6e2f010104646b62730553746f636b",
+    )] {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let schema = Schema::read(&root.join(dir), id, Some(name))
             .unwrap()

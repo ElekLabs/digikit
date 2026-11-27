@@ -26,4 +26,13 @@ pub(super) fn runtime_floor(
 ) -> crate::error::Result<u32> {
     Ok(schema::Schema::read(moddir, id, name)?.map_or(0, |schema| schema.runtime_floor()))
 }
+
+/// The descriptor bytes of the `workbench.toml` in `moddir` (`None` when there is none).
+pub(super) fn descriptor(
+    moddir: &std::path::Path,
+    id: &str,
+    name: Option<&str>,
+) -> crate::error::Result<Option<Vec<u8>>> {
+    Ok(schema::Schema::read(moddir, id, name)?.map(|schema| schema.descriptor().to_vec()))
+}
 pub use ts_file::TsFile;

@@ -275,7 +275,17 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
         let devs = crate::devdata::all()
             .iter()
             .filter(|d| m.manifest.module.builds_for(&d.short));
-        crate::protect::check(id, dko, &crate::protect::windows_of(devs))?;
+        let descriptor = if m.dir.as_os_str().is_empty() {
+            None
+        } else {
+            crate::build::workbench_descriptor(&m.dir)?
+        };
+        crate::protect::check(
+            id,
+            dko,
+            &crate::protect::windows_of(devs),
+            descriptor.as_deref(),
+        )?;
     }
     // a module without a directory (built from parts) has no `workbench.toml`
     let runtime_floor = if m.dir.as_os_str().is_empty() {

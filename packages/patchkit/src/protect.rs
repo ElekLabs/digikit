@@ -167,8 +167,9 @@ fn hit<'a>(ws: impl IntoIterator<Item = &'a Window<'a>>, v: u64) -> Option<&'a W
 /// The section of the generated `dk_workbench_descriptor` array (`workbench_descriptor.h`, one section per data object).
 const WORKBENCH_DESCRIPTOR_SECTION: &str = ".rodata.dk_workbench_descriptor";
 
-/// Refuse `obj` (module `id`) if it holds an address of a protected window.
-pub fn check(id: &str, obj: &Dko, ws: &[Window<'_>]) -> Result<()> {
+/// Refuse `obj` (module `id`) if it holds an address of a protected window. `descriptor` is the Workbench descriptor patchkit generated
+/// for the module (`None` without `workbench.toml`): only a data section of that name with exactly those bytes is skipped.
+pub fn check(id: &str, obj: &Dko, ws: &[Window<'_>], descriptor: Option<&[u8]>) -> Result<()> {
     if obj.arch != "cf" || ws.is_empty() {
         return Ok(());
     }
@@ -214,9 +215,10 @@ pub fn check(id: &str, obj: &Dko, ws: &[Window<'_>]) -> Result<()> {
             refuse(format!("section {} at offset {off:#x}", s.name), v, w)
         };
         if s.kind != "text" {
-            // The Workbench descriptor is a byte string (lengths, bounds, labels) that no code takes as an address: its words are
-            // not data words, and a bound such as 0x10000000 would read as the flash window.
-            if s.name == WORKBENCH_DESCRIPTOR_SECTION {
+            // The generated Workbench descriptor is a byte string (lengths, bounds, labels) that no code takes as an address: its
+            // words are not data words, and a bound such as 0x10000000 would read as the flash window. A section of that name with
+            // other bytes is the author's data and is scanned.
+            if s.name == WORKBENCH_DESCRIPTOR_SECTION && descriptor == Some(b.as_slice()) {
                 continue;
             }
             for off in (0..b.len().saturating_sub(3)).step_by(4) {
@@ -288,7 +290,7 @@ mod tests {
     fn a_literal_in_a_window_is_refused_after_an_opcode_with_a_long_operand() {
         // move.l #0xFC05C034,A0 = 207C FC05 C034, behind one other word
         let o = obj(&[0x4e, 0x71, 0x20, 0x7c, 0xfc, 0x05, 0xc0, 0x34, 0x4e, 0x75]);
-        let e = check("x/m", &o, &ws()).unwrap_err().to_string();
+        let e = check("x/m", &o, &ws(), None).unwrap_err().to_string();
         assert!(
             e.contains("0xfc05c034") && e.contains("0xfc05c000") && e.contains("finding"),
             "{e}"
@@ -305,28 +307,55 @@ mod tests {
             symbol: "buf".into(),
             addend: 0xFC05_C010,
         });
-        assert!(check("x/m", &o, &ws()).is_err());
+        assert!(check("x/m", &o, &ws(), None).is_err());
+    }
+
+    const FLASH: [Window<'static>; 1] = [Window {
+        device: "dev",
+        lo: 0x1000_0000,
+        hi: 0x1002_0000,
+    }];
+
+    /// An object whose descriptor-named section holds `bytes`.
+    fn with_descriptor_section(bytes: &[u8]) -> Dko {
+        let mut o = obj(&[0x4e, 0x75]);
+        o.sections.push(DkoSection {
+            name: WORKBENCH_DESCRIPTOR_SECTION.into(),
+            kind: "data".into(),
+            align: 1,
+            size: bytes.len() as u32,
+            hex: hex(bytes),
+        });
+        o
+    }
+
+    // a bound of the generated descriptor that reads as a flash-window word
+    const GENERATED: [u8; 8] = [0x10, 0, 0, 0x04, 0, 0, 0, 0];
+
+    #[test]
+    fn the_generated_workbench_descriptor_is_not_scanned() {
+        let o = with_descriptor_section(&GENERATED);
+        check("x/m", &o, &FLASH, Some(&GENERATED)).unwrap();
     }
 
     #[test]
-    fn the_workbench_descriptor_bytes_are_not_data_words_but_other_data_is() {
-        let bytes = [0x10, 0, 0, 0x04, 0, 0, 0, 0];
-        let window = vec![Window {
-            device: "dev",
-            lo: 0x1000_0000,
-            hi: 0x1002_0000,
-        }];
-        let mut o = obj(&[0x4e, 0x75]);
-        o.sections.push(DkoSection {
-            name: ".rodata.dk_workbench_descriptor".into(),
-            kind: "data".into(),
-            align: 1,
-            size: 8,
-            hex: hex(&bytes),
-        });
-        check("x/m", &o, &window).unwrap();
-        o.sections[1].name = ".rodata.table".into();
-        assert!(check("x/m", &o, &window).is_err());
+    fn a_section_named_like_the_descriptor_is_scanned_without_a_generated_descriptor() {
+        let o = with_descriptor_section(&GENERATED);
+        assert!(check("x/m", &o, &FLASH, None).is_err());
+        let hostile = [0x10, 0x00, 0x00, 0x34];
+        let o = with_descriptor_section(&hostile);
+        assert!(check("x/m", &o, &FLASH, Some(&GENERATED)).is_err());
+    }
+
+    #[test]
+    fn a_section_named_like_the_descriptor_with_other_bytes_of_the_same_length_is_scanned() {
+        let other = [0x10, 0, 0, 0x08, 0, 0, 0, 0];
+        assert_eq!(other.len(), GENERATED.len());
+        let o = with_descriptor_section(&other);
+        assert!(check("x/m", &o, &FLASH, Some(&GENERATED)).is_err());
+        let benign = [0x20, 0, 0, 0x08, 0, 0, 0, 0];
+        let o = with_descriptor_section(&benign);
+        check("x/m", &o, &FLASH, Some(&GENERATED)).unwrap();
     }
 
     #[test]
@@ -339,7 +368,7 @@ mod tests {
             symbol: "dk_log".into(),
             addend: 8,
         });
-        check("x/m", &o, &ws()).unwrap();
+        check("x/m", &o, &ws(), None).unwrap();
     }
 
     #[test]
@@ -351,13 +380,13 @@ mod tests {
             lo: 0x8c00_0000,
             hi: 0x8c01_0000,
         }];
-        check("x/m", &o, &w).unwrap();
+        check("x/m", &o, &w, None).unwrap();
     }
 
     #[test]
     fn a_window_at_zero_is_not_checked_against_literals_or_addends() {
         let o = obj(&[0, 0, 0x10, 0, 0, 0, 0, 0]);
-        check("x/m", &o, &ws()).unwrap();
+        check("x/m", &o, &ws(), None).unwrap();
         let mut o = obj(&[0, 0, 0, 0]);
         o.relocs.push(DkoReloc {
             section: ".text".into(),
@@ -366,7 +395,7 @@ mod tests {
             symbol: ".sec..text".into(),
             addend: 0x1000,
         });
-        check("x/m", &o, &ws()).unwrap();
+        check("x/m", &o, &ws(), None).unwrap();
     }
 
     fn abs_sym(o: &mut Dko, name: &str, value: u64, addend: i64) {
@@ -390,25 +419,25 @@ mod tests {
         // the low window [0, 0x20000) and the high window
         let mut o = obj(&[0, 0, 0, 0]);
         abs_sym(&mut o, "cs1", 0x1_0000, 0x10);
-        let e = check("x/m", &o, &ws()).unwrap_err().to_string();
+        let e = check("x/m", &o, &ws(), None).unwrap_err().to_string();
         assert!(
             e.contains("absolute symbol") && e.contains("0x00010010") && e.contains(".text+0x0"),
             "{e}"
         );
         let mut o = obj(&[0, 0, 0, 0]);
         abs_sym(&mut o, "nor", 0xFC05_C000, 0x34);
-        assert!(check("x/m", &o, &ws()).is_err());
+        assert!(check("x/m", &o, &ws(), None).is_err());
     }
 
     #[test]
     fn an_absolute_symbol_outside_the_windows_and_an_import_pass() {
         let mut o = obj(&[0, 0, 0, 0]);
         abs_sym(&mut o, "ram", 0x4000_0000, 8);
-        check("x/m", &o, &ws()).unwrap();
+        check("x/m", &o, &ws(), None).unwrap();
         // an import has value 0 and a small addend: not an address
         let mut o = obj(&[0, 0, 0, 0]);
         abs_sym(&mut o, "dk_log", 0, 8);
-        check("x/m", &o, &ws()).unwrap();
+        check("x/m", &o, &ws(), None).unwrap();
     }
 
     fn code(ops: &[&[u8]]) -> Vec<u8> {
@@ -424,7 +453,9 @@ mod tests {
     const RAM: [u8; 4] = [0x40, 0x00, 0x10, 0x00];
 
     fn refused(text: &[u8]) -> Option<String> {
-        check("x/m", &obj(text), &ws()).err().map(|e| e.to_string())
+        check("x/m", &obj(text), &ws(), None)
+            .err()
+            .map(|e| e.to_string())
     }
 
     #[test]
