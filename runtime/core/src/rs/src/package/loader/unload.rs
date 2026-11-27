@@ -14,10 +14,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         self.installer.restore_gated(&self.p, rec as u8, &parks.gate(self.live()).in_op(self.op())).is_ok()
     }
 
-    /// The task (its place in the port file's list) that a restore would wait for now; `None` when every task is parked. Nothing is logged.
-    pub(crate) unsafe fn waiting_task(&self) -> Option<u32> {
-        let parks = self.task_parks();
-        parks.gate(self.live()).waiting(&self.p).map(|i| i as u32)
+    /// The task (its place in the port file's list) that the last ColdFire restore answered `E_BUSY` for, as the gate found it under its mask; `None` otherwise.
+    pub(crate) fn waiting_task(&self) -> Option<u32> {
+        self.installer.waited()
     }
 
     /// The DSP part of `uninstall`: the DSP slots zero. False when the DSP does not take the clear.

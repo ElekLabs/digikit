@@ -39,6 +39,13 @@ impl PendingWatch {
         Some(now)
     }
 
+    /// The take-down the manager has pending now (`None` when none): a wait noted for another package, or for none, is over, whoever ended it. The next wait is noted anew.
+    pub(super) fn follow(&mut self, pending: Option<PackageId>) {
+        if self.seen.is_some_and(|n| Some(n.package) != pending) {
+            self.seen = None;
+        }
+    }
+
     /// The take-down that is being waited for, as noted last; `None` when none waits.
     pub(super) fn waiting_for(&self) -> Option<PackageId> {
         self.seen.map(|n| n.package)
@@ -75,5 +82,21 @@ mod tests {
         assert_eq!(w.observe(p, E_BUSY, Some(1)).map(|n| n.task), Some(1));
         assert!(w.observe(p, -5, None).is_some_and(|n| !n.waiting() && n.status == -5));
         assert_eq!(w.waiting_for(), None);
+    }
+
+    #[test]
+    fn a_wait_ended_by_another_path_is_forgotten() {
+        let mut w = PendingWatch::new();
+        let p = PackageId(9);
+        assert!(w.observe(p, E_BUSY, Some(1)).is_some());
+        w.follow(Some(p));
+        assert_eq!(w.waiting_for(), Some(p), "still pending: kept");
+        assert!(w.observe(p, E_BUSY, Some(1)).is_none());
+        // another path finished the take-down
+        w.follow(None);
+        assert_eq!(w.waiting_for(), None);
+        assert!(w.observe(p, E_BUSY, Some(1)).is_some(), "a new wait is noted again");
+        w.follow(Some(PackageId(3)));
+        assert_eq!(w.waiting_for(), None, "another package pends: the old wait is gone");
     }
 }

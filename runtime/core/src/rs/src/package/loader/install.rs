@@ -225,11 +225,18 @@ pub struct Installer {
     ns: usize,
     /// True in safe mode: `install` does nothing. (Stored inverted: the zero fill of the static keeps the whole loader out of `.data`.)
     disarmed: bool,
+    /// The task (its place in the port file's list) that the last restore answered `E_BUSY` for, read under the same mask as the answer; `None` after any other result.
+    waited: Option<u32>,
 }
 
 impl Installer {
     pub const fn new() -> Installer {
-        Installer { sites: [EMPTY_SITE; SITES_MAX], n: 0, patches: [EMPTY_PATCH; PATCHES_MAX], np: 0, slot_words: [(0, 0); SLOT_WORDS_MAX], ns: 0, disarmed: false }
+        Installer { sites: [EMPTY_SITE; SITES_MAX], n: 0, patches: [EMPTY_PATCH; PATCHES_MAX], np: 0, slot_words: [(0, 0); SLOT_WORDS_MAX], ns: 0, disarmed: false, waited: None }
+    }
+
+    /// The task that the last restore waited for when it answered `E_BUSY` (the one the gate found unparked under its mask); `None` otherwise.
+    pub fn waited(&self) -> Option<u32> {
+        self.waited
     }
 
     pub fn set_armed(&mut self, armed: bool) {
@@ -554,6 +561,7 @@ impl Installer {
     /// [`Installer::restore`] with a [`Gate`]: at run time a record with a `task` site is restored only while the tasks of the gate are parked (checked under the mask), else
     /// `E_BUSY` and nothing changed (the caller asks again on a later pass); a record with `ui` and `irq` sites only never waits.
     pub unsafe fn restore_gated<P: PackagePlatform>(&mut self, p: &P, rec: u8, gate: &Gate<'_>) -> Result<(), i32> {
+        self.waited = None;
         // a record that installed nothing (a file that failed before its install) costs no platform call
         if !self.sites[..self.n].iter().any(|s| s.rec == rec) && !self.patches[..self.np].iter().any(|s| s.rec == rec) && !self.slot_words[..self.ns].iter().any(|s| s.0 == rec) {
             return Ok(());
@@ -561,6 +569,7 @@ impl Installer {
         let sr = p.irq_mask();
         if self.sites[..self.n].iter().any(|s| s.rec == rec && s.ctx == CTX_TASK) || self.patches[..self.np].iter().any(|s| s.rec == rec && s.ctx == CTX_TASK) {
             if let Err(e) = gate.clear(p) {
+                self.waited = gate.waiting(p).map(|i| i as u32);
                 p.irq_restore(sr);
                 return Err(e);
             }

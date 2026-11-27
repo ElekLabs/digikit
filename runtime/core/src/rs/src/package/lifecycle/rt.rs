@@ -438,6 +438,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
 
     /// One retry of the pending take-down that logs nothing itself (the seams and the gate see `QUIET_OP`): a note says when the wait starts or changes and when it ends.
     unsafe fn retry_quietly(&mut self, m: &mut Manager<P, M, R>) -> Result<Report, LifecycleError> {
+        self.watch.follow(m.restore_pending());
         let Some(package) = m.restore_pending() else {
             return m.retry_pending();
         };
@@ -524,6 +525,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// timeout `dsp_down` is cleared while the manager keeps its pending take-down and retries it silently (acceptable: the retained state ends the session).
     pub unsafe fn dsp_step(&mut self, l: ServiceTable) {
         if let Some(m) = self.mgr() {
+            // a take-down that another path ended leaves no stale wait behind
+            self.watch.follow(m.restore_pending());
             if m.restore_pending().is_some() && !self.reload.is_waiting() {
                 let r = self.retry_quietly(m);
                 if self.dsp_down.live {

@@ -196,3 +196,22 @@ fn a_bgworker_that_does_not_exist_yet_does_not_hold_a_task_site() {
     let mut ins = Installer::new();
     assert_eq!(install(&mut ins, &f, CTX_TASK, &live(&p)), Err(E_BUSY));
 }
+
+#[test]
+fn a_busy_restore_names_the_task_it_found_unparked() {
+    let p = parks();
+    let f = fake();
+    let mut ins = Installer::new();
+    install(&mut ins, &f, CTX_TASK, &live(&p)).unwrap();
+    assert_eq!(ins.waited(), None);
+    put(&f, OBJECT + 0x18, 0);
+    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(E_BUSY));
+    assert_eq!(ins.waited(), Some(1), "the second task, not task 0");
+    put(&f, QUEUE + 0xc, 0);
+    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(E_BUSY));
+    assert_eq!(ins.waited(), Some(0));
+    put(&f, QUEUE + 0xc, TCB_A);
+    put(&f, OBJECT + 0x18, TCB_B);
+    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Ok(()));
+    assert_eq!(ins.waited(), None, "a finished restore keeps no task");
+}
