@@ -13,6 +13,9 @@ pub struct TsFile {
 impl TsFile {
     /// The file for the module in `moddir`; `None` when it has no `workbench.toml`.
     pub(crate) fn read(moddir: &Path, id: &str, name: Option<&str>) -> Result<Option<TsFile>> {
+        if !moddir.join("workbench.toml").exists() {
+            return Ok(None);
+        }
         let Some(schema) = Schema::read(moddir, id, name)? else {
             return Ok(None);
         };

@@ -15,7 +15,7 @@ const SCHEMA: &[u8] = b"\x02\x0dBoot settings\x04\x04boot\x0aBoot value\x10\x00\
 const GAIN: u8 = 1;
 const MODE: u8 = 3;
 
-fn descriptor_offset(file: &[u8]) -> usize {
+fn descriptor_offset(file: &[u8], descriptor: &[u8]) -> usize {
     let image_off = be(file, dkneeds::H_IMAGE_OFF) as usize;
     let image_size = be(file, dkneeds::H_IMAGE_SIZE) as usize;
     let image = &file[image_off..image_off + image_size];
@@ -23,9 +23,9 @@ fn descriptor_offset(file: &[u8]) -> usize {
     // The pack has no symbol for the generated static array. Locate the
     // fixture's expected descriptor in the packed image.
     let mut offsets = image
-        .windows(SCHEMA.len())
+        .windows(descriptor.len())
         .enumerate()
-        .filter_map(|(at, bytes)| (bytes == SCHEMA).then_some(at));
+        .filter_map(|(at, bytes)| (bytes == descriptor).then_some(at));
     let offset = offsets
         .next()
         .expect("packed settings-a Workbench descriptor");
@@ -34,9 +34,9 @@ fn descriptor_offset(file: &[u8]) -> usize {
 }
 
 /// The query table the packed settings-a holds (`dk_workbench_queries`; the entry layout is `WIRE_ENTRY_SIZE` and `WIRE_METHOD_OFFSET` of the runtime's query table), by its place in the address map.
-fn packed_queries(dev: Dev, file: &[u8]) -> Builder {
-    let map: serde_json::Value = serde_json::from_slice(&read(&repo().join(format!("dist/modules/{}/settings-a.addrmap.json", dev.name)), "pnpm nx:pilot run test/settings-a:pack")).unwrap();
-    let table = map["entries"].as_array().unwrap().iter().find(|e| e["name"] == "dk_workbench_queries").expect("settings-a declares queries");
+fn packed_queries(dev: Dev, file: &[u8], leaf: &str) -> Builder {
+    let map: serde_json::Value = serde_json::from_slice(&read(&repo().join(format!("dist/modules/{}/{leaf}.addrmap.json", dev.name)), "pnpm nx:pilot run the module's pack")).unwrap();
+    let table = map["entries"].as_array().unwrap().iter().find(|e| e["name"] == "dk_workbench_queries").expect("the module declares queries");
     let (addr, size) = (table["addr"].as_u64().unwrap() as usize, table["size"].as_u64().unwrap() as usize);
     let base = be(file, dkneeds::H_IMAGE_OFF) as usize + addr;
     let count = size / WIRE_ENTRY_SIZE;
@@ -51,14 +51,14 @@ fn packed_queries(dev: Dev, file: &[u8]) -> Builder {
 /// Load the packed settings-a on `dev` over `FakePlatform`, replaying the descriptor registration of its init; returns the loader and the MODULES instance word.
 unsafe fn load_settings_a(dev: Dev) -> (Loader<FakePlatform, Card, DeviceRegistry>, [u8; 4]) {
     let file = packed(dev, "settings-a", "dkm", "test/settings-a");
-    let offset = descriptor_offset(&file);
+    let offset = descriptor_offset(&file, SCHEMA);
     let path = String::from_utf8(PATH[..PATH.len() - 1].to_vec()).unwrap();
     let mut card = Card::new(std::vec![(path, file)], dev.profile.id);
     card.init_calls.push(Builder::Workbench {
         offset,
         len: SCHEMA.len(),
     });
-    card.init_calls.push(packed_queries(dev, &packed(dev, "settings-a", "dkm", "test/settings-a")));
+    card.init_calls.push(packed_queries(dev, &packed(dev, "settings-a", "dkm", "test/settings-a"), "settings-a"));
     let mut loader = Loader::new(
         FakePlatform::new(dev.profile),
         card,
@@ -90,7 +90,7 @@ unsafe fn load_settings_a(dev: Dev) -> (Loader<FakePlatform, Card, DeviceRegistr
 fn loaded_settings_fixture_publishes_its_packed_workbench_descriptor() {
     for dev in DEVICES {
         let file = packed(dev, "settings-a", "dkm", "test/settings-a");
-        let offset = descriptor_offset(&file);
+        let offset = descriptor_offset(&file, SCHEMA);
         let path = String::from_utf8(PATH[..PATH.len() - 1].to_vec()).unwrap();
         let mut card = Card::new(std::vec![(path, file)], dev.profile.id);
         card.init_calls.push(Builder::Workbench {
@@ -237,7 +237,7 @@ fn the_packed_settings_fixture_registers_its_query_table_in_init() {
             crate::settings::tests::setup(false);
             crate::settings::tests::teardown();
             let file = packed(dev, "settings-a", "dkm", "test/settings-a");
-            let Builder::Queries { count, methods } = packed_queries(dev, &file) else { unreachable!() };
+            let Builder::Queries { count, methods } = packed_queries(dev, &file, "settings-a") else { unreachable!() };
             assert_eq!((count, methods[0]), (1, 1), "{}: the packed table is the one method BootAtInit", dev.name);
             // the load fails when init's registration is refused, so loading is the proof that the table was accepted (the call itself runs ColdFire code: device-only)
             let (mut loader, instance) = load_settings_a(dev);
@@ -246,5 +246,30 @@ fn the_packed_settings_fixture_registers_its_query_table_in_init() {
             assert_eq!(query_call(instance, 2, 2).0, dkrt_sdk::proto::E_MODULE_UI_METHOD, "{}: no method 2", dev.name);
             assert_eq!(loader.unload_body(0), OK, "{}: unload settings-a", dev.name);
         }
+    }
+}
+
+// V1, name "Project manager", no settings.
+const MANAGER_DESCRIPTOR: &[u8] = b"\x01\x0fProject manager\x00";
+
+const PROJECT_MANAGER: Fixture = Fixture { leaf: "project-manager", nx: "digikit/project-manager" };
+
+#[test]
+fn the_packed_project_manager_registers_a_descriptor_without_settings_and_two_queries() {
+    let _g = clean();
+    for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
+        let image = Image::read(*dev, "emulator");
+        let file = packed(*dev, PROJECT_MANAGER.leaf, "dkm", PROJECT_MANAGER.nx);
+        let offset = descriptor_offset(&file, MANAGER_DESCRIPTOR);
+        let Builder::Queries { count, methods } = packed_queries(*dev, &file, PROJECT_MANAGER.leaf) else { unreachable!() };
+        assert_eq!((count, methods[0], methods[1]), (2, 1, 2), "{}: List and Get", dev.name);
+        unsafe {
+            let (mut l, plan) = planned(*dev, &image, &[], &[&PROJECT_MANAGER], &SERVICES);
+            // init's own calls are the ones listed here: the host runs no module code. The load fails when the runtime refuses either registration.
+            l.m.init_calls = std::vec![Builder::Workbench { offset, len: MANAGER_DESCRIPTOR.len() }, Builder::Queries { count, methods }];
+            let run = boot_run(&mut l, &plan, &[&PROJECT_MANAGER], false);
+            assert_eq!(run.verdict(0), Verdict::Accepted, "{}: {:?}", dev.name, run.refusal(0));
+        }
+        let _ = clean_state();
     }
 }

@@ -51,7 +51,9 @@ fn invalid_declarations_are_refused() {
         setting("boot", "type = \"text\"\nmax_bytes = 32")
     );
     assert!(parse(&duplicate).unwrap_err().0.contains("duplicate"));
-    assert!(parse("[workbench]\nversion = 1").is_err());
+    let none = parse("[workbench]\nversion = 1").unwrap();
+    assert_eq!(none.descriptor(), [1, 4, b'T', b'e', b's', b't', 0]);
+    assert_eq!(none.runtime_floor(), 0);
     assert!(Schema::parse(DECLARATION, "test/module", &"é".repeat(128)).is_err());
     assert!(Schema::parse(DECLARATION, "test/module", "").is_err());
     assert!(Schema::parse(DECLARATION, &"m".repeat(KEY_MAX_FOR_TEST), "Test").is_err());
@@ -184,4 +186,35 @@ fn a_module_without_workbench_toml_has_no_schema() {
         error.0.contains("workbench.toml") && error.0.contains("version"),
         "{error}"
     );
+}
+
+#[test]
+fn a_module_with_queries_and_no_workbench_toml_registers_zero_settings() {
+    use crate::build::toolchain::TempDir;
+    let dir = TempDir::new("pk-schema-queries-").unwrap();
+    assert!(
+        Schema::read(dir.path(), "test/m", Some("Tool"))
+            .unwrap()
+            .is_none()
+    );
+    std::fs::create_dir(dir.path().join("workbench")).unwrap();
+    std::fs::write(dir.path().join("workbench/m.proto"), "").unwrap();
+    let schema = Schema::read(dir.path(), "test/m", Some("Tool"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(schema.descriptor(), [1, 4, b'T', b'o', b'o', b'l', 0]);
+    assert!(
+        Schema::read(dir.path(), "test/m", None).is_err(),
+        "the name is required"
+    );
+    // With a workbench.toml that has no settings the result is the same.
+    std::fs::write(
+        dir.path().join("workbench.toml"),
+        "[workbench]\nversion = 1\n",
+    )
+    .unwrap();
+    let schema = Schema::read(dir.path(), "test/m", Some("Tool"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(schema.descriptor().len(), 7);
 }

@@ -1489,8 +1489,8 @@ fn a_project_user_loads_with_the_project_service_file_and_takes_its_hooks() {
             .count();
         assert_eq!(keys.count(tag::HOOKS), 5, "{}", dev.name);
         assert_eq!(present, 5, "{}: every hook has a site", dev.name);
-        // the two functions the service gives modules
-        assert_eq!(keys.count(tag::EXPORTS), 2, "{}", dev.name);
+        // the functions the service gives modules: current, status, list, get
+        assert_eq!(keys.count(tag::EXPORTS), 4, "{}", dev.name);
     }
 }
 

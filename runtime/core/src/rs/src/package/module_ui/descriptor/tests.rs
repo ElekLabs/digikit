@@ -82,6 +82,15 @@ fn the_shared_vectors_parse_and_decide_stored_values() {
 }
 
 #[test]
+fn a_descriptor_without_settings_parses_and_has_no_field() {
+    let parsed = parse(&[1, 1, b'N', 0]).unwrap();
+    assert_eq!(parsed.count(), 0);
+    assert!(parsed.field(0).is_none());
+    assert!(parsed.key_index(b"k").is_none());
+    assert!(parse(&[1, 0, 0]).is_none(), "the name is required");
+}
+
+#[test]
 fn the_first_byte_is_the_version_that_holds_every_kind() {
     let body = [1, 0];
     assert!(parse(&one(2, 3, 1, &body[..1])).is_some());

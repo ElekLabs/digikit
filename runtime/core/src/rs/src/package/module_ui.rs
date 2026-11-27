@@ -271,7 +271,7 @@ impl Registry {
     }
 
     fn publish(&mut self, rec: usize) {
-        if self.modules[rec].descriptor.count() == 0 {
+        if !self.modules[rec].descriptor.is_registered() {
             return;
         }
         let instance = self.next();
@@ -322,11 +322,11 @@ impl Registry {
         result
     }
 
-    /// Keep the module's own query table (no copy). Registered once, after the settings descriptor: the instance exists only for a
-    /// module with settings.
+    /// Keep the module's own query table (no copy). Registered once, after the module's descriptor: the instance exists only for a
+    /// module that registered one.
     fn set_queries(&mut self, rec: usize, table: *const u8, count: u32) -> i32 {
         let slot = &mut self.modules[rec];
-        if slot.descriptor.count() == 0 || !slot.queries.is_empty() {
+        if !slot.descriptor.is_registered() || !slot.queries.is_empty() {
             return E_STATE;
         }
         match unsafe { QueryTable::parse(table, count) } {
@@ -377,7 +377,7 @@ pub(crate) unsafe extern "C" fn dk_workbench_register(
     };
     locked(|registry| {
         let slot = &mut registry.modules[rec];
-        if slot.descriptor.count() != 0 {
+        if slot.descriptor.is_registered() {
             return E_STATE;
         }
         slot.descriptor = descriptor;

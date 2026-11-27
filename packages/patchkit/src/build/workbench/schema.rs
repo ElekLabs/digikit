@@ -11,6 +11,15 @@ use std::path::Path;
 /// The most settings a descriptor holds: its count takes one byte.
 const MAX_SETTINGS: usize = 255;
 
+/// Does `moddir/workbench` hold a `.proto` file?
+fn declares_queries(moddir: &Path) -> bool {
+    std::fs::read_dir(moddir.join("workbench")).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|e| e.path().extension().is_some_and(|x| x == "proto"))
+    })
+}
+
 #[derive(Debug)]
 pub(super) struct Schema {
     module: String,
@@ -33,8 +42,8 @@ impl Schema {
                 "module name must be 1 to {MAX_STRING_BYTES} UTF-8 bytes"
             ));
         }
-        if !(1..=MAX_SETTINGS).contains(&doc.setting.len()) {
-            return Err(err!("expected 1 to {MAX_SETTINGS} public settings"));
+        if doc.setting.len() > MAX_SETTINGS {
+            return Err(err!("expected 0 to {MAX_SETTINGS} public settings"));
         }
         let mut ids = HashSet::new();
         let mut symbols = HashSet::new();
@@ -73,12 +82,18 @@ impl Schema {
         Ok(schema)
     }
 
-    /// The schema of the `workbench.toml` in `moddir`; `None` when the module has none. Errors name the file.
+    /// The schema of the `workbench.toml` in `moddir`. A module with a `workbench/*.proto` and no `workbench.toml` has no settings: its
+    /// descriptor holds count 0. `None` when the module has neither. Errors name the file.
     pub(super) fn read(moddir: &Path, module: &str, name: Option<&str>) -> Result<Option<Schema>> {
         let path = moddir.join("workbench.toml");
         let source = match std::fs::read_to_string(&path) {
             Ok(source) => source,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                if !declares_queries(moddir) {
+                    return Ok(None);
+                }
+                String::from("[workbench]\nversion = 1\n")
+            }
             Err(e) => return Err(err!("{}: {e}", path.display())),
         };
         let name = name.ok_or_else(|| {

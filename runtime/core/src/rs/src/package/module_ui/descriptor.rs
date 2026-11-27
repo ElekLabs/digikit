@@ -87,7 +87,7 @@ impl Descriptor {
             return None;
         }
         let count = cursor.byte()? as usize;
-        if count == 0 || count > FIELDS_MAX {
+        if count > FIELDS_MAX {
             return None;
         }
         let mut fields = [Field::NONE; FIELDS_MAX];
@@ -130,6 +130,11 @@ impl Descriptor {
 
     pub(super) fn bytes(&self) -> &[u8] {
         &self.bytes[..self.len as usize]
+    }
+
+    /// Did the module register a descriptor? A parsed one is never empty; a descriptor with no settings is registered.
+    pub(super) fn is_registered(&self) -> bool {
+        self.len != 0
     }
 
     pub(super) fn count(&self) -> usize {
