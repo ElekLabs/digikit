@@ -8,6 +8,7 @@ import { firmwarePort } from './firmware-mock';
 import { emulator } from './tauri-mock';
 import { createPreviewSymbols } from './symbols-mock';
 import { createDesktopApps } from '../src/desktop-app';
+import { previewHome } from './preview-home';
 import { createTauriHost } from '../src/host/tauri-host';
 import type { WorkbenchEnvironment } from '../src/workbench-environment';
 import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
@@ -68,8 +69,16 @@ export function createWorkbenchEnvironment(): WorkbenchEnvironment {
     apps: query.has('defmods') ? { ...apps, firmware: previewFirmware(apps) } : apps,
     options: {
       browserPreview: true,
-      moduleChannels: createPreviewChannels(previewSettingsSchemas(), ({ module, current }) =>
-        bindModuleFiles(module.name, apps.app.target.bindSession(), current),
+      moduleChannels: createPreviewChannels(
+        previewSettingsSchemas(),
+        ({ module, current }) => bindModuleFiles(module.name, apps.app.target.bindSession(), current),
+        undefined,
+        async (files) => {
+          const w = window as unknown as { __savedFiles?: { folder: string; names: string[] }[] };
+          const folder = `${previewHome}/Downloads`;
+          (w.__savedFiles ??= []).push({ folder, names: files.map((f) => f.name) });
+          return { saved: files.length, cancelled: false, where: folder };
+        },
       ),
       modulePageLoaders: previewPageLoaders,
       initialPage:

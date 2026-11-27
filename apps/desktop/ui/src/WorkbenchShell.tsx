@@ -135,7 +135,7 @@ export default function WorkbenchShell(
   const filePages = moduleFilePages(app);
   const runtimePage = runtimeModulePages(
     app,
-    props.moduleChannels ?? createDeviceChannelFactory(app),
+    props.moduleChannels ?? createDeviceChannelFactory(app, (files) => props.host.fs.saveFiles(files)),
     createModulePageRegistry(props.modulePageLoaders ?? modulePageLoaders),
     (id, schema, definition, channel) => moduleFilePage(app, id, { schema, channel, definition }),
   );
