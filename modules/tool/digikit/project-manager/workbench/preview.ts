@@ -20,7 +20,7 @@ interface FakeProject {
 const CURRENT = 1;
 
 const projects: FakeProject[] = [
-  { slot: 0, name: 'INTRO', hasData: true, stamp: 0x6a1f02c3, counter: 6, modules: [{ id: 'digikit/shot', hash: 0x1c2d3e4f, settings: 2, loaded: true }] },
+  { slot: 0, name: 'INTRO', hasData: true, stamp: 0x6a1f02c3, counter: 6, modules: [{ id: 'test/dyn-demo', hash: 0x1c2d3e4f, settings: 2, loaded: true }] },
   {
     slot: 1,
     name: 'DUB SKETCH',
@@ -28,8 +28,8 @@ const projects: FakeProject[] = [
     stamp: 0x6a1f9b10,
     counter: 14,
     modules: [
-      { id: 'digikit/pluck', hash: 0x0badf00d, settings: 3, loaded: true },
-      { id: 'digikit/shot', hash: 0x1c2d3e4f, settings: 0, loaded: false },
+      { id: 'test/sine', hash: 0x0badf00d, settings: 3, loaded: true },
+      { id: 'test/dyn-demo', hash: 0x1c2d3e4f, settings: 0, loaded: false },
     ],
   },
   { slot: 4, name: 'LIVE SET 2', hasData: false },

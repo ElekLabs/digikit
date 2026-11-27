@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { createComponent } from 'solid-js';
 import { render } from 'solid-js/web';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -7,9 +8,9 @@ import {
   memoryQueryService,
   type MemoryQueryService,
 } from '@digi/module-ui';
-import page from '../../../../modules/tool/digikit/project-manager/workbench/index';
-import { schema } from '../../../../modules/tool/digikit/project-manager/workbench/preview';
-import { ProjectManager } from '../../../../modules/tool/digikit/project-manager/workbench/gen/project_manager_pb.js';
+import page from '../workbench/index';
+import { schema } from '../workbench/preview';
+import { ProjectManager } from '../workbench/gen/project_manager_pb.js';
 
 type Handlers = Parameters<typeof memoryQueryService<typeof ProjectManager>>[1];
 
@@ -18,7 +19,7 @@ function open(handlers: Handlers | MemoryQueryService) {
   const { channel } = createMemoryModuleChannel(schema, { service });
   const host = document.createElement('div');
   document.body.append(host);
-  const dispose = render(() => <page.Page client={createModuleClient(channel)} />, host);
+  const dispose = render(() => createComponent(page.Page, { client: createModuleClient(channel) }), host);
   const rows = () => [...host.querySelectorAll<HTMLButtonElement>('.pm-project')];
   const select = (text: string) =>
     rows()
@@ -36,8 +37,8 @@ const summary = {
   stamp: 0x6a1f02c3,
   counter: 14,
   modules: [
-    { id: 'digikit/pluck', hash: 1, settings: 3, loaded: true },
-    { id: 'digikit/shot', hash: 2, settings: 1, loaded: false },
+    { id: 'test/sine', hash: 1, settings: 3, loaded: true },
+    { id: 'test/dyn-demo', hash: 2, settings: 1, loaded: false },
   ],
 };
 
@@ -105,7 +106,7 @@ describe('the Project Manager page', () => {
     expect(details).toContain('LIVE');
     expect(details).toContain('14');
     expect(details).toContain('6A1F02C3');
-    expect(details).toContain('digikit/pluck');
+    expect(details).toContain('test/sine');
     expect(details).toContain('3 settings');
     expect(details).toContain('1 setting');
     expect(details).toContain('not loaded');

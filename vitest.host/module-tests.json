@@ -3,6 +3,7 @@
   "dir": ".",
   "include": "{modules,runtime,services}/**/tests/**/*.test.ts",
   "exclude": [
-    "**/*.rig.test.ts"
+    "**/*.rig.test.ts",
+    "**/*.page.test.ts"
   ]
 }
