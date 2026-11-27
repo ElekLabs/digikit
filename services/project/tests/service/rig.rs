@@ -6,7 +6,7 @@ use dkrt_svc_project::engine::*;
 pub(crate) struct Rig {
     pub(crate) p: Box<ProjectService>,
     pub(crate) job: Box<StoreJob>,
-    pub(crate) pend: Pending,
+    pub(crate) pend: HookRecord,
     pub(crate) f: Fake,
 }
 
@@ -24,7 +24,7 @@ impl Rig {
         Rig {
             p: Box::new(ProjectService::new()),
             job: Box::new(StoreJob::new()),
-            pend: Pending::new(),
+            pend: HookRecord::default(),
             f,
         }
     }
@@ -37,19 +37,29 @@ impl Rig {
             },
         );
     }
+    /// Change the hooks' record as a hook would.
+    fn edit(&mut self, change: impl FnOnce(&mut Pending)) {
+        let mut record = self.pend.read(&self.f);
+        change(&mut record);
+        self.pend.put_back(&self.f, &record);
+    }
     pub(crate) fn hook_slot(&mut self, s: u32) {
-        self.pend.slot_val = s;
-        self.pend.slot_flag = 1;
+        self.edit(|p| {
+            p.slot_val = s;
+            p.slot_flag = 1;
+        });
     }
     pub(crate) fn hook_save(&mut self, s: u32) {
-        self.pend.save_slot = s;
-        self.pend.save_flag = 1;
+        self.edit(|p| {
+            p.save_slot = s;
+            p.save_flag = 1;
+        });
     }
     pub(crate) fn hook_clear(&mut self, s: u32) {
-        self.pend.clear[(s / 8) as usize] |= 1 << (s % 8);
+        self.edit(|p| p.clear[(s / 8) as usize] |= 1 << (s % 8));
     }
     pub(crate) fn hook_paste(&mut self, s: u32) {
-        self.pend.paste[(s / 8) as usize] |= 1 << (s % 8);
+        self.edit(|p| p.paste[(s / 8) as usize] |= 1 << (s % 8));
     }
     /// One UI pass, then the I/O task runs the job that was posted.
     pub(crate) fn pass(&mut self) {

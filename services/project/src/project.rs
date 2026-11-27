@@ -3,7 +3,7 @@
 //! ends it in `fini`. The hooks and exports of the file reach it through the cell; nothing else holds the state.
 //!
 //! The crate stays neutral: the SDK calls are behind [`Host`], which the file implements (`dks/src/glue/host.rs`) and a host test implements over fakes.
-use crate::engine::{Env, Pending, ProjectService, StoreJob, CARRY_MAX, CARRY_VERSION};
+use crate::engine::{Env, HookRecord, ProjectService, StoreJob, CARRY_MAX, CARRY_VERSION};
 use core::mem::MaybeUninit;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::{Provider, State, Status};
@@ -25,7 +25,7 @@ pub unsafe trait Host: Env {
     fn begin_pass(&mut self);
 
     /// The hooks' record of the file (a static: the hooks write it from other tasks). The state a reload carries includes it.
-    fn hook_record(&self) -> &'static Pending;
+    fn hook_record(&self) -> &'static HookRecord;
 
     /// The write job's cell of the file (a static: the I/O task works on it). The service may not be taken down while it holds a job.
     fn job(&self) -> &'static StoreJob;
@@ -53,7 +53,7 @@ impl<H: Host> Project<H> {
 
     /// The tick of the file (the UI task, once per pass): what the hooks recorded, the work in progress, the next piece. `job` is the write job's cell, a static of the file: the I/O
     /// task works on it while this call holds the owner, so it is not a field of it (`StoreJob`).
-    pub fn tick(&mut self, pending: &Pending, job: &StoreJob) {
+    pub fn tick(&mut self, pending: &HookRecord, job: &StoreJob) {
         self.host.begin_pass();
         self.engine.tick(&mut self.host, pending, job);
     }
@@ -127,7 +127,7 @@ impl<C: CoreApi, H: Host> State<C> for Project<H> {
 
     fn export(&mut self, _: &C, out: &mut [u8]) -> usize {
         self.engine
-            .export_state(self.host.now_ms(), self.host.hook_record(), out)
+            .export_state(&self.host, self.host.now_ms(), self.host.hook_record(), out)
     }
 
     /// Takes the carried bytes; `None` (or bytes of another layout that the runtime let through) starts named and unbound: module writes go to the settings record only.

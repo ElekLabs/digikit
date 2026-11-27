@@ -1,6 +1,6 @@
 //! The state and the work of the `project` service (docs/design/digikit-project.md sections 2 to 6): what the tick does after a hook, and the write job.
 //!
-//! The five hooks of the stock project paths (`hooks.s` of the service file) only record into [`Pending`]. [`ProjectService::tick`] runs once per UI pass: it takes what the hooks
+//! The five hooks of the stock project paths (`hooks.s` of the service file) only record into [`HookRecord`]. [`ProjectService::tick`] runs once per UI pass: it takes what the hooks
 //! recorded, finishes a job that ended and advances the stage. Each part owns its state and does its own work:
 //!
 //! - [`BoundProject`] (`bound.rs`): the current project, its live image, its file; it binds, unbinds, freezes and marks itself written.
@@ -39,7 +39,7 @@ pub use carry::{EXPORT_MAX as CARRY_MAX, VERSION as CARRY_VERSION};
 pub use clock::{is_busy, BusyClock, BusyVerdict, DEFER_MS, RETRY_MS};
 pub use env::{stable_record, Env, Files, ListPoll, ListRow, SlotRecord};
 pub use job::StoreJob;
-pub use pending::{take_hook_records, HookRecords, Pending};
+pub use pending::{HookRecord, HookRecords, Pending};
 pub use plan::Plan;
 pub use queue::{Work, WorkQueue, REC_WAIT_MS};
 pub use restore::{
@@ -154,8 +154,8 @@ impl ProjectService {
     // ---- the tick --------------------------------------------------------------------------------------------------------------------
 
     /// One UI pass: take the hooks' record, finish a job that ended, then advance the stage. Never blocks: a listing is polled, a write is a job.
-    pub fn tick<E: Env + ?Sized>(&mut self, env: &mut E, pending: &Pending, job: &StoreJob) {
-        let records = take_hook_records(env, pending);
+    pub fn tick<E: Env + ?Sized>(&mut self, env: &mut E, pending: &HookRecord, job: &StoreJob) {
+        let records = pending.take(env);
         if let Some(slot) = self.bound.start_slot(env, records.slot_set) {
             self.queue.add_load(slot);
         }
