@@ -571,6 +571,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         self.ops.current()
     }
 
+    /// Does the running operation log nothing (a quiet retry of a pending take-down)?
+    pub(crate) fn quiet(&self) -> bool {
+        self.ops.is_quiet()
+    }
+
     /// Set the loader's phase for the duration of a bring-up that the package manager drives: the services read it (`resident_query` is for after the boot).
     pub(crate) fn set_phase(&mut self, phase: PhaseKind) {
         self.phase = match phase {

@@ -4,6 +4,9 @@
 //! leaves it at its end; the events of the manager's seams and of the installer's gate read the number from the loader they work on, so two operations never share a number
 //! and no event reads another operation's.
 
+/// The number a retry of a pending take-down runs as: its seams and its gate log nothing (the retry owner logs a note when the wait changes). No numbered operation has it.
+pub(crate) const QUIET_OP: u32 = u32::MAX;
+
 /// The operations of one loader: how many were numbered, and the one running (0: none).
 pub(crate) struct OpClock {
     last: u32,
@@ -18,6 +21,9 @@ impl OpClock {
     /// Number a new operation. It does not run until it enters.
     pub(crate) fn next(&mut self) -> u32 {
         self.last = self.last.wrapping_add(1).max(1);
+        if self.last == QUIET_OP {
+            self.last = 1;
+        }
         self.last
     }
 
@@ -34,6 +40,11 @@ impl OpClock {
     /// The number of the running operation (0: none).
     pub(crate) fn current(&self) -> u32 {
         self.current
+    }
+
+    /// Does the running operation log nothing (a quiet retry)?
+    pub(crate) fn is_quiet(&self) -> bool {
+        self.current == QUIET_OP
     }
 }
 
@@ -57,5 +68,19 @@ mod tests {
         assert_eq!(c.current(), 0);
         // a number is never 0, and a later operation never reuses a live one
         assert_ne!(c.next(), 0);
+    }
+
+    #[test]
+    fn the_quiet_number_is_entered_and_left_and_never_numbered() {
+        let mut c = OpClock::new();
+        let job = c.next();
+        c.enter(job);
+        assert!(!c.is_quiet());
+        c.enter(QUIET_OP);
+        assert!(c.is_quiet());
+        c.enter(job);
+        assert!(!c.is_quiet());
+        c.last = QUIET_OP - 1;
+        assert_ne!(c.next(), QUIET_OP);
     }
 }

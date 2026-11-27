@@ -11,6 +11,7 @@
 use dkrt_abi::link::Sequence;
 use dkrt_abi::package_platform::PackagePlatform;
 use dkneeds::keys::CTX_TASK;
+use super::op_clock::QUIET_OP;
 use dkrt_sdk::*;
 
 /// What one installer backend installs for one record and takes down again. The ColdFire backend ([`Installer`]) writes `jmp.l` over hook sites and fills slot words in
@@ -106,34 +107,38 @@ impl<'a> Gate<'a> {
 }
 
 impl Gate<'_> {
+    /// The first task of the gate that is not parked (its place in the port file's list); `None` when all are parked, the gate is not live or its tasks are unknown.
+    pub unsafe fn waiting<P: PackagePlatform>(&self, p: &P) -> Option<usize> {
+        if !self.live {
+            return None;
+        }
+        self.parks?.iter().position(|k| !parked(p, k))
+    }
+
     /// `Ok` when every task is parked (or the gate is not live). Call it under the mask.
     unsafe fn clear<P: PackagePlatform>(&self, p: &P) -> Result<(), i32> {
         if !self.live {
             return Ok(());
         }
-        let Some(parks) = self.parks else {
+        if self.parks.is_none() {
             return Err(E_IMPORT);
-        };
-        let mut i = 0;
-        while i < parks.len() {
-            if !parked(p, &parks[i]) {
-                // the task that is not parked (its place in the port file's list) is the event's detail
-                if crate::package::lifecycle::trace_on() {
-                    crate::package::lifecycle::trace_emit(
-                        self.op,
-                        dkrt_lifecycle::Phase::Note,
-                        dkrt_lifecycle::Step::ParkWait,
-                        crate::package::lifecycle::TRACE_NO_PACKAGE,
-                        0,
-                        E_BUSY,
-                        i as u32,
-                    );
-                }
-                return Err(E_BUSY);
-            }
-            i += 1;
         }
-        Ok(())
+        let Some(i) = self.waiting(p) else {
+            return Ok(());
+        };
+        // the task that is not parked is the event's detail; a quiet retry logs nothing (its owner notes a change)
+        if self.op != QUIET_OP && crate::package::lifecycle::trace_on() {
+            crate::package::lifecycle::trace_emit(
+                self.op,
+                dkrt_lifecycle::Phase::Note,
+                dkrt_lifecycle::Step::ParkWait,
+                crate::package::lifecycle::TRACE_NO_PACKAGE,
+                0,
+                E_BUSY,
+                i as u32,
+            );
+        }
+        Err(E_BUSY)
     }
 }
 
@@ -160,12 +165,12 @@ unsafe fn parked<P: PackagePlatform>(p: &P, k: &Park) -> bool {
     let mut at = k.wait;
     if k.indirect {
         at = word(p, at);
+        // a zero cell: the singleton is built on first use and does not exist yet, so no task is inside a hook (under the mask nothing builds it)
         if at == 0 {
             return true;
         }
     }
     if k.made != 0 && word(p, at.wrapping_add(k.made)) == 0 {
-        // a zero cell: the singleton is built on first use and does not exist yet, so no task is inside a hook (under the mask nothing builds it)
         return true;
     }
     word(p, at.wrapping_add(k.off)) == k.tcb
