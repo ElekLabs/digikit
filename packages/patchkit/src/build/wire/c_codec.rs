@@ -117,7 +117,10 @@ impl<'a> CCodec<'a> {
                     format!("{} {n}[{max}];\n    uint32_t {n}_count;", s.c_type())
                 }
                 (Kind::String(max), None) => {
-                    format!("char {n}[{}];\n    uint32_t {n}_len;", max.saturating_add(1))
+                    format!(
+                        "char {n}[{}];\n    uint32_t {n}_len;",
+                        max.saturating_add(1)
+                    )
                 }
                 (Kind::Bytes(max), None) => format!("uint8_t {n}[{max}];\n    uint32_t {n}_len;"),
                 (Kind::String(max), Some(count)) => format!(
