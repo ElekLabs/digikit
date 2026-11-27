@@ -20,7 +20,7 @@ vi.mock('vitest', async (original) => ({
 }));
 vi.mock('@digi/test-support', async (original) => ({ ...(await original<object>()), Session: { start: fake.start } }));
 import { flushFileTemps } from '../file-temp.ts';
-import { withReusablePatchedSession } from '../support.ts';
+import { withReusablePatchedSession } from '../reusable-session.ts';
 
 async function fixture(
   options: {

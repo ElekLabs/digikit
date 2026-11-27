@@ -1,8 +1,9 @@
 import { expect } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
+import type { PatchedSession } from '@digi/regression/test-runtime.ts';
 import { waitFrames } from '@digi/regression/runtime/debug-kit.ts';
-import { installWithDebug } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { installWithDebug } from '@digi/regression/runtime/debug-install.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 
 /** Spans: reset and start, a short wait, then the table has the debug module's own tick row (calls > 0, max <= sum) at the span clock rate (132 MHz, the bus).
  * After stop the counts stay the same. */

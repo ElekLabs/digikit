@@ -11,7 +11,7 @@ import { pokeWord } from '@digi/regression/runtime/guest-mailbox.ts';
 import { word } from '@digi/regression/runtime/guest-access.ts';
 import { patchkit } from '@digi/regression/runtime/patchkit.ts';
 import { planSymbol, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
-import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 
 /**
  * The eMMC write guard (docs/plans/card-write-guard.md, core/card-guard) in the emulator, on the Syntakt `emulator` set (the one set of this device that the

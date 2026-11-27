@@ -1,7 +1,7 @@
 import { asciiOf, be32, type DkLogEvent, type DkSession } from '@digi/dk-session';
 import { CMD, LOG_KIND } from '@digi/dk-session/gen_proto';
 import { emulatorClock, waitClock, type Session } from '@digi/test-support';
-import type { PatchedSession } from '../support.ts';
+import type { PatchedSession } from '../test-runtime.ts';
 import { rpc, word } from './guest-access.ts';
 import { withPausedFxProtocol } from './fx-session.ts';
 

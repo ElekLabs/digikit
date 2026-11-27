@@ -2,17 +2,19 @@ import path from 'node:path';
 import { pollUntil, waitClock } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { cardRig, RT, CARD_SYMBOLS } from '@digi/regression/runtime/card-rig.ts';
+import { cardRig } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
-import { moduleStorePath } from '@digi/regression/runtime/install.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
 import { captureNote } from '@digi/regression/runtime/note-capture.ts';
 import { frames } from '@digi/regression/runtime/dsp-state.ts';
 import { readFloatWav } from '@digi/regression/runtime/pcm-files.ts';
 import { word } from '@digi/regression/runtime/guest-access.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { buildPanelProject, dynType, loadPanelProject, savePanelProject, trackType } from '@digi/regression/runtime/project-kit.ts';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 
 /**
  * The project round trip of a reloaded machine (docs/plans/extension-model.md E5b item 6), Digitakt II: a project that uses `test/sine` on track 1 (two parameter values, a trig with a

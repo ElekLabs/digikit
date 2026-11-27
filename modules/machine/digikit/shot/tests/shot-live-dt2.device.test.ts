@@ -5,8 +5,9 @@ import { openSamples } from '@digi/dk-session/samples';
 import { repoRoot } from '@digi/test-support';
 import { expect } from 'vitest';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
-import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { installWithDebug } from '@digi/regression/runtime/debug-install.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { AUDIBLE, RATE, captureNote, onset, selectDynamicMachine, tone, trackApi, until, wav } from './shot-support.ts';
 
 // DT2 1.17: unload and load of a module that uses the sample pool (docs/plans/extension-model.md E5c, the sample-pool case of the live proof). `digikit/shot` needs two services

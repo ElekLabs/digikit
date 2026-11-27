@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { button, emulatorClock, pollUntil, scheduledTurns, waitClock, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { PatchedSession, TestRuntime } from '@digi/regression/support.ts';
+import type { PatchedSession, TestRuntime } from '@digi/regression/test-runtime.ts';
 import { record } from '@digi/regression/runtime/artifacts.ts';
 import { memory } from '@digi/regression/runtime/memory.ts';
 import { panelKeys } from '@digi/regression/runtime/flows/panel-keys.ts';

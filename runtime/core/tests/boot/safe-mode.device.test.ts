@@ -3,7 +3,9 @@ import { button, emulatorClock, waitClock, type Device } from '@digi/test-suppor
 import { expect, test } from 'vitest';
 import { bootInfo, bootInfoLoaded, CMD as MAILBOX, postRaw } from '@digi/regression/runtime/guest-mailbox.ts';
 import { currentRecord, encodeRecord } from '@digi/regression/runtime/card-record.ts';
-import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { settleHang } from '@digi/regression/runtime/debug-kit.ts';
 import { rpc } from '@digi/regression/runtime/guest-access.ts';
 import { drainInputs } from '@digi/regression/runtime/fx-session.ts';

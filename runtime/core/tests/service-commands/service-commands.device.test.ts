@@ -1,8 +1,10 @@
 import { hasCap } from '@digi/dk-session';
 import { expect } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
-import { installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import type { PatchedSession } from '@digi/regression/test-runtime.ts';
+import { installModule } from '@digi/regression/runtime/module-install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 
 /** What only the USB transport of the firmware shows of runtime commands: a module's registered command answers over the real SysEx path with bodies of 0 to 250 bytes
  * and an oversized request is E_MSG. Registration refusals, the handler's own status and the unregistered-command reply are host tests (`module_cmds.rs`

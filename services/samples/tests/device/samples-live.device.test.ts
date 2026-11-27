@@ -8,11 +8,12 @@ import { Sample, prepareUpload } from '@digi/dk-session/dksample';
 import { openSamples } from '@digi/dk-session/samples';
 import { expectRemoveTree, expectSkipOnUpload } from './samples-tree.ts';
 import { RpcFiles, putVerified, verifyWritten } from '@digi/dk-session/rpcfiles';
-import type { PatchedSession } from '@digi/regression/support.ts';
+import type { PatchedSession } from '@digi/regression/test-runtime.ts';
 import { liveArtifacts, liveCheck as check } from '@digi/regression/runtime/artifacts.ts';
 import { sampleWav } from '@digi/regression/runtime/fixtures.ts';
 import { liveProtocol } from '@digi/regression/runtime/protocol.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { cardAfter } from '@digi/regression/runtime/write-safety.ts';
 import { overlayArgs, plusdriveBinary } from '@digi/regression/runtime/card-store.ts';
 

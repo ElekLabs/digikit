@@ -1,11 +1,13 @@
 import { emulatorRead, panelInput, pollUntil, readTopMenuItems, readViewStack, viewStackFacts, type Device } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
-import { CARD_SYMBOLS, cardRigs, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { type CardRig } from '@digi/regression/runtime/card-rig-api.ts';
 import { ringWatch } from '@digi/regression/runtime/runtime-menu.ts';
-import { moduleStorePath } from '@digi/regression/runtime/install.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
 import { decodeSettings, settingsMap, settingsRecord } from '@digi/regression/runtime/project-kit.ts';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 
 /**
  * The track manager on the device (docs/plans/track-manager.md, phase 4). The module `digikit/track-manager` needs `core/ui` and the `shortcuts` service (its imports say so).

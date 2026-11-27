@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { golden } from '@digi/test-support';
-import { armFreeRegionGuard, expectNoGuardHits, withSession } from '../support.ts';
+import { armFreeRegionGuard, expectNoGuardHits } from '../free-region-guard.ts';
+import { withSession } from '../session-handle.ts';
 
 const GOLDENS = path.join(import.meta.dirname, '..', 'goldens', 'dt2-1.17.json');
 const PAGES = ['SRC', 'FLTR', 'AMP', 'FX', 'MOD'];

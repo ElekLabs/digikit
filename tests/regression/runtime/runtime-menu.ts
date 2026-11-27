@@ -10,7 +10,7 @@ import {
 } from '@digi/dk-session';
 import { LOAD_STATUS, LOG_KIND } from '@digi/dk-session/gen_proto';
 import { emulatorClock, pollUntil, waitClock, type Session } from '@digi/test-support';
-import type { PatchedSession } from '../support.ts';
+import type { PatchedSession } from '../test-runtime.ts';
 import { record } from './artifacts.ts';
 import { packageSymbol, planSymbol, type RuntimePlan } from './runtime-plan.ts';
 

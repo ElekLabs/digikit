@@ -1,5 +1,5 @@
 import { encoder, type Session } from '@digi/test-support';
-import type { TestRuntime } from '../support.ts';
+import type { TestRuntime } from '../test-runtime.ts';
 import { REDRAW, SETTLE, type Rt } from './panel-waits.ts';
 import { bounded, word } from './guest-access.ts';
 import { captureNote } from './note-capture.ts';

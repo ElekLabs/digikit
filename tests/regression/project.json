@@ -12,7 +12,14 @@
   ],
   "namedInputs": {
     "production": [
-      "{projectRoot}/support.ts",
+      "{projectRoot}/aggregate-error.ts",
+      "{projectRoot}/free-region-guard.ts",
+      "{projectRoot}/patched-session.ts",
+      "{projectRoot}/reusable-session.ts",
+      "{projectRoot}/runtime-boot.ts",
+      "{projectRoot}/session-handle.ts",
+      "{projectRoot}/test-runtime.ts",
+      "{projectRoot}/wait-api.ts",
       "{projectRoot}/timing.ts",
       "{projectRoot}/watchdog.ts",
       "{projectRoot}/vitest.config.ts",

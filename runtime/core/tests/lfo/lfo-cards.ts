@@ -4,10 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect } from 'vitest';
 import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
-import { moduleStorePath } from '@digi/regression/runtime/install.ts';
-import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
+import type { CardRig } from '@digi/regression/runtime/card-rig-api.ts';
 import { decodeSettings, settingsMap, settingsRecord } from '@digi/regression/runtime/project-kit.ts';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 
 /** Pinned frames of the MOD page (`golden` of test-support; written with UPDATE_GOLDENS=1 after the captured picture was looked at). */
 export const GOLDENS = fileURLToPath(new URL('./goldens.json', import.meta.url));

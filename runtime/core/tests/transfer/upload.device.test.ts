@@ -18,7 +18,7 @@ import { blob, sha, statusOf } from '@digi/regression/runtime/upload-bytes.ts';
 import { currentRecord } from '@digi/regression/runtime/card-record.ts';
 import { listing, type Files } from '@digi/regression/runtime/card-store.ts';
 import { pokeWord } from '@digi/regression/runtime/guest-mailbox.ts';
-import type { CardRig } from '@digi/regression/runtime/card-rig.ts';
+import type { CardRig } from '@digi/regression/runtime/card-rig-api.ts';
 import { options } from '@digi/regression/runtime/devices.ts';
 import { word } from '@digi/regression/runtime/guest-access.ts';
 import { REDRAW } from '@digi/regression/runtime/panel-waits.ts';
