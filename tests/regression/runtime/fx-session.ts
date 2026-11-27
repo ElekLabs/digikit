@@ -5,7 +5,14 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { expect } from 'vitest';
 import { DkSession, EmuUsbTransport } from '@digi/dk-session';
-import { PROGRESS_HANG_S, repoRoot, withinRuntimeDeadline, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
+import {
+  PROGRESS_HANG_S,
+  repoRoot,
+  withinRuntimeDeadline,
+  type Device,
+  type RuntimeBaseline,
+  type Session,
+} from '@digi/test-support';
 import { aggregate } from '../aggregate-error.ts';
 import { withReusablePatchedSession } from '../reusable-session.ts';
 import { type PatchedSession } from '../test-runtime.ts';

@@ -24,7 +24,7 @@ test('an operation longer than the hang bound ends when it ends: wall time guard
 
 test('a control call that never answers fails after one hang bound', async () => {
   const never = () => new Promise<never>(() => {});
-  await expect(
-    withPausedFxProtocol(runtimeOf(never), (dk) => dk.reloadState(), { hangMs: 50 }),
-  ).rejects.toBeInstanceOf(RuntimeDeadlineError);
+  await expect(withPausedFxProtocol(runtimeOf(never), (dk) => dk.reloadState(), { hangMs: 50 })).rejects.toBeInstanceOf(
+    RuntimeDeadlineError,
+  );
 });
