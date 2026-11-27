@@ -48,7 +48,6 @@
       "inputs": [
         "jsToolchain",
         "{projectRoot}/**/*",
-        "!{projectRoot}/glyphs/**/*",
         "dspTestTooling",
         "{workspaceRoot}/packages/sharc-rig-kit/package.json",
         "{workspaceRoot}/vitest.host.config.ts",

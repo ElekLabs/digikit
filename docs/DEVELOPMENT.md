@@ -431,7 +431,7 @@ which linked worktrees' Cargo output can be discarded without removing the workt
 
 ## Glyphs
 
-A glyph is a 1-bit pixel icon or animated value glyph kept as a source file under `sdk/glyphs/<set>/`. `mise run glyphs -- check` validates a set, `-- sheet` writes a contact sheet PNG and `-- dev` opens a live preview that reloads when a glyph file changes. Details and the file kinds: [packages/dkglyph/README.md](../packages/dkglyph/README.md).
+A glyph is a 1-bit pixel icon or animated value glyph kept as a source file under `sdk/glyphs/<set>/`. `mise run glyphs -- check` validates a set, `-- sheet` writes a contact sheet PNG and `-- dev` opens a live preview that reloads when a glyph file changes. Details and the file kinds: [packages/dkglyph/README.md](../packages/dkglyph/README.md). The agent skill `.agents/skills/digikit-glyphs/SKILL.md` has the drawing rules and the loop.
 
 ## Fast iteration: runtime, UI and modules
 
