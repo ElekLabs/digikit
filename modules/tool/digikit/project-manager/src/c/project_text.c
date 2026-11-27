@@ -26,8 +26,8 @@ void project_text_title(char out[PROJECT_LINE_MAX], uint32_t slot,
     uint32_t at = 3;
     if (len)
         out[at++] = ' ';
-    for (uint32_t i = 0; i < len; i++)
-        out[at++] = (char)name[i];
+    for (uint32_t i = 0; i < len; i++) /* the font has printable ASCII only */
+        out[at++] = (name[i] >= 0x20 && name[i] <= 0x7e) ? (char)name[i] : '?';
     out[at] = 0;
 }
 

@@ -37,6 +37,8 @@ static void title_names(void)
     assert(strcmp(t, "003") == 0);
     title_of(2, "A\0Z", 3, t); /* the name ends at the first zero */
     assert(strcmp(t, "003 A") == 0);
+    title_of(2, "A\x80Z\x1f", 4, t); /* a byte the font may not have shows as '?' */
+    assert(strcmp(t, "003 A?Z?") == 0);
     uint8_t full[PROJECT_NAME_BYTES];
     memset(full, 'Q', sizeof full); /* a field with no zero: all 16 bytes, then the terminator */
     project_text_title(t, 0, full);
