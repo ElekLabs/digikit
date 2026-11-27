@@ -748,6 +748,89 @@ const SCENES = [
       await p.tick('^Install (pluck|analog)');
     },
   },
+  // the live actions of the On device pane (Reload, Unload, Load), the service popover and the warnings; `card=` and `live=` set the fake card
+  {
+    name: 'transfer-live',
+    q: 'mode=modules',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.until("document.querySelector('.transfer-page .live-act')", 'No live action on the device rows');
+    },
+  },
+  {
+    name: 'transfer-live-ticked',
+    q: 'mode=modules',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.tick('^Install (pluck|analog)');
+      await p.until("document.querySelector('.transfer-page .storage-bar')", 'No storage bar');
+    },
+  },
+  {
+    name: 'transfer-live-samples',
+    q: 'mode=samples',
+    size: WIDE,
+    steps: async (p) => {
+      await p.until("document.querySelector('.transfer-page .storage-bar')", 'No storage bar');
+    },
+  },
+  {
+    name: 'transfer-live-samples-ticked',
+    q: 'mode=samples',
+    size: WIDE,
+    steps: async (p) => {
+      await p.until("document.querySelector('.transfer-page .storage-bar')", 'No storage bar');
+      await p.tick('^Upload (pad_warm_swell|loop_dub_chords_90)');
+    },
+  },
+  {
+    name: 'transfer-live-popover',
+    q: 'mode=modules',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      const badge = 'li:has(input[aria-label="Delete shot"]) .dep-badge';
+      await p.until(`document.querySelector(${JSON.stringify(badge)})`, 'Missing shot dependencies');
+      await p.eval(`document.querySelector(${JSON.stringify(badge)}).click()`);
+      await p.until("document.querySelector('.transfer-dependency-tooltip .dep-act')", 'The popover has no Reload');
+    },
+  },
+  {
+    name: 'transfer-live-incomplete',
+    q: 'mode=modules&card=incomplete',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.until(
+        "document.querySelector('.transfer-page .unused-services, .transfer-page .rtag.warn')",
+        'No warning',
+      );
+    },
+  },
+  {
+    name: 'transfer-live-orphan',
+    q: 'mode=modules&card=orphan',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.until("document.querySelector('.transfer-page .unused-services')", 'No unused-services warning');
+    },
+  },
+  {
+    name: 'transfer-live-refused',
+    q: 'mode=modules&live=refuse',
+    size: WIDE,
+    steps: async (p) => {
+      await modulesReady(p);
+      await p.until("document.querySelector('.transfer-page .live-act')", 'No live action');
+      await p.eval(
+        "[...document.querySelectorAll('.transfer-page .live-act')].find((b) => b.textContent === 'Reload').click()",
+      );
+      await p.until("document.querySelector('.transfer-page .live-result.refused')", 'No refused result on the row');
+    },
+  },
   {
     name: 'modules-fit-load',
     q: 'mode=modules',

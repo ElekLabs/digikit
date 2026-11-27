@@ -14,7 +14,15 @@ import type { SampleDeviceContext, SampleDeviceSession } from './device-session'
 
 export type SamplePageState = Pick<
   TransferApp['state'],
-  'activeMode' | 'setDeviceInfo' | 'sampleLink' | 'setSampleLink' | 'busy' | 'setError' | 'stopWasAsked' | 'jobProgress'
+  | 'activeMode'
+  | 'setDeviceInfo'
+  | 'setSampleUsage'
+  | 'sampleLink'
+  | 'setSampleLink'
+  | 'busy'
+  | 'setError'
+  | 'stopWasAsked'
+  | 'jobProgress'
 >;
 
 function createPresentation() {
@@ -126,7 +134,7 @@ export function createSamplesDestination(
       const path = folder();
       const showing = () => current() && generation === readGeneration && state().activeMode() === 'samples';
       try {
-        const { name, runtime, hasRuntime, samples, apply, backend } = await session.open('read');
+        const { name, runtime, hasRuntime, samples, apply, backend, usage } = await session.open('read');
         if (!showing()) return;
         const canMkdir = await backend.canMkdir();
         if (!showing()) return;
@@ -139,6 +147,9 @@ export function createSamplesDestination(
         } catch {
           // The listing can still be used when the target does not report free space.
         }
+        // a card that cannot be listed leaves the storage bar out
+        const bar = await usage?.().catch(() => undefined);
+        if (showing()) state().setSampleUsage(bar);
         if (showing()) state().setDeviceInfo({ name, runtime, hasRuntime, samples, canMkdir, free, apply });
       } catch (e) {
         if (showing()) throw e;

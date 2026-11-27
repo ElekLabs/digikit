@@ -21,6 +21,7 @@ import {
   deleteFiles,
   install,
   libraryModule,
+  liveModules,
   listModuleFiles,
   mergeView,
   moduleFilePath,
@@ -32,6 +33,7 @@ import {
   refreshServices,
   type InstallDeps,
   type LibraryModule,
+  type LiveOp,
   type TransferEvent,
   type TransferView,
 } from '../modules/dktransfer';
@@ -321,6 +323,13 @@ export function createTransferBackend({
     async removeModuleFile(moduleId: string, name: string): Promise<void> {
       const s = await asked(running);
       await asked(() => removeModuleFile(s, moduleId, name));
+    },
+    /** LOAD, UNLOAD or RELOAD the module (or service) files at `paths` without a boot: `liveModules`, the function `wb transfer load|unload|reload` calls. A refusal or a failure is in the result, not thrown. */
+    async live(op: LiveOp, paths: string[], onEvent: (e: TransferEvent) => void = () => {}) {
+      const selected = target();
+      await asked(async () => checkRuntime(selected));
+      const s = await asked(running);
+      return asked(() => liveModules(s, op, paths, onEvent));
     },
     /** RESTART the emulated device, wait for the boot and report what loaded. */
     async restart(onEvent: (e: TransferEvent) => void): Promise<void> {

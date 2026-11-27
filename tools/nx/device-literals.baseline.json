@@ -61,7 +61,7 @@
   "apps/web/tests/site-policy.test.ts": 9,
   "apps/web/tests/support/fakedrive.ts": 1,
   "apps/web/tests/support/patchkit-env.ts": 6,
-  "apps/web/tests/transfer.wasm.test.ts": 2,
+  "apps/web/tests/transfer.wasm.test.ts": 1,
   "apps/web/tests/web-firmware-env.test.ts": 5,
   "apps/web/tests/web-library.test.ts": 15,
   "apps/web/tests/webmidi.test.ts": 3,

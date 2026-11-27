@@ -1,12 +1,4 @@
 /* The Files page (FilesPage.tsx): the usage bar, the tree and the info pane. It reuses the Transfer page tokens and row styles. */
-.files-page {
-  --fp-modules: var(--meter-machine);
-  --fp-services: var(--file-services);
-  --fp-data: var(--file-data);
-  --fp-samples: var(--ok);
-  --fp-other: var(--ink-3);
-  --fp-free: var(--tp-track);
-}
 .files-page .facts {
   margin: 0;
   display: flex;
@@ -15,64 +7,6 @@
   gap: 6px;
   font-size: 12px;
   color: var(--ink-3);
-}
-.files-page .usagebox {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.files-page .usage {
-  display: flex;
-  height: 14px;
-  overflow: hidden;
-  border: 1px solid var(--tp-border);
-  border-radius: 3px;
-}
-.files-page .seg {
-  flex: 0 1 auto;
-  min-width: 2px;
-}
-.files-page .seg-modules {
-  background: var(--fp-modules);
-}
-.files-page .seg-services {
-  background: var(--fp-services);
-}
-.files-page .seg-data {
-  background: var(--fp-data);
-}
-.files-page .seg-samples {
-  background: var(--fp-samples);
-}
-.files-page .seg-other {
-  background: var(--fp-other);
-}
-.files-page .seg-free {
-  background: var(--fp-free);
-}
-.files-page .seg-overhead {
-  background: repeating-linear-gradient(135deg, var(--line-2) 0 4px, var(--tp-track) 4px 8px);
-}
-.files-page .legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 16px;
-  font-size: 11.5px;
-  color: var(--ink-2);
-}
-.files-page .legend li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.files-page .legend .sw {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
 }
 .files-page .body {
   flex: 1;

@@ -1,4 +1,4 @@
-import { failureModule, hasCap, identifyDevice, type DkSession, type LoadFailure } from '@digi/dk-session';
+import { failureModule, hasCap, identifyDevice, storeFree, type DkSession, type LoadFailure } from '@digi/dk-session';
 import { Sample, converterOf } from '@digi/dk-session/dksample';
 import {
   openSamples,
@@ -11,6 +11,7 @@ import { chooseBulk, type BulkChoice } from '@digi/dk-session/bulk-select';
 import type { BulkLink } from '@digi/dk-session/bulk';
 import { registry } from '@digi/workbench-core/data/device-profiles.ts';
 import type { ConnectionApp } from '@digi/workbench-core/transfer/connection-state.ts';
+import { usageOf, type StoreUsage } from '@digi/workbench-core/target-ops/store.ts';
 import type { TransferBulk } from '@digi/workbench-core/transfer/env.ts';
 import type { LinkState } from '@digi/workbench-core/transfer/link-core.ts';
 import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
@@ -24,6 +25,8 @@ export interface OpenedSamples {
   apply: 'live' | 'restart';
   backend: SamplesBackend;
   link: 'bulk' | 'sysex';
+  /** The store by kind and its free space, for the storage bar (read on the session of this listing). */
+  usage?(): Promise<StoreUsage | undefined>;
 }
 
 interface SessionCache {
@@ -298,6 +301,13 @@ export function createSampleDeviceSessions({ sampleWasm, connection, bulk, write
           },
         }),
         link: cache.bulk ? 'bulk' : 'sysex',
+        usage: async () => {
+          // a stock device has no runtime to ask: no bar
+          if (!hasRuntime) return undefined;
+          const info = await request(() => s.info())();
+          const cap = hasCap(info, 'CAPACITY') ? await request(() => s.capacity())() : null;
+          return usageOf(await request(() => s.list())(), storeFree(info, cap));
+        },
       };
       cache.opened = opened;
       setLink(linkOf(cache, opened.link));

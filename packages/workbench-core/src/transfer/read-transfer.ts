@@ -1,6 +1,7 @@
 import { batch } from 'solid-js';
 import { isDeviceId, runtimeDeviceIds } from '../data/device-profiles';
 import type { TransferApp } from './app';
+import { reconcileLiveResults } from './live-ops';
 import { rowKey, storageLine, type TransferView } from './transfer-core';
 
 /** Tick the modules named in the page URL (`?add=`) once the list has them; a row's id is the full module id (`<author>/<name>`). */
@@ -35,6 +36,8 @@ export async function readTransfer(app: TransferApp): Promise<void> {
   const showCard = (view: TransferView) => {
     batch(() => {
       setLastView(view);
+      // a result that the refreshed card contradicts (the module changed by itself, the file is gone) is not shown any more
+      app.state.setLiveResults((old) => reconcileLiveResults(old, view));
       setBrowsing(false);
       applyPendingAdd(app, view);
     });

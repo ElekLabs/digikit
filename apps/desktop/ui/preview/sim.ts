@@ -32,6 +32,10 @@ export interface SimState {
   skip: string;
   /** The link of the samples: none (no pill), bulk, sysex, wrongmode (SysEx, device in USB AUDIO/MIDI), fallback (bulk until the second file, then SysEx), reason (SysEx with the reason of the bulk choice). */
   link: 'none' | 'bulk' | 'sysex' | 'wrongmode' | 'fallback' | 'reason';
+  /** The card in Modules mode: '' (the demo card), orphan (a service file no module needs), incomplete (a module whose service is missing and a file that cannot be read). */
+  card: '' | 'orphan' | 'incomplete';
+  /** What a live change (Load, Unload, Reload) ends with: ok, refuse (the runtime refuses it: E_BUSY) or fail (the old module was torn down and the new one did not load). */
+  live: 'ok' | 'refuse' | 'fail';
 }
 
 export const PARAMS = [
@@ -45,6 +49,8 @@ export const PARAMS = [
   'putfail',
   'skip',
   'link',
+  'card',
+  'live',
 ] as const;
 
 const query = new URLSearchParams(location.search);
@@ -59,6 +65,8 @@ export const sim: SimState = {
   putfail: query.get('putfail') === '1',
   skip: query.get('skip') ?? '',
   link: (query.get('link') as SimState['link']) ?? 'none',
+  card: (query.get('card') as SimState['card']) ?? '',
+  live: (query.get('live') as SimState['live']) ?? 'ok',
 };
 
 export const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
