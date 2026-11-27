@@ -1,8 +1,9 @@
-// The desktop's save of module-page files: the system folder dialog once, then one native write of the packed list into that folder.
+// The desktop's save of module-page files: one native command opens the system folder dialog and writes the packed list into the folder the
+// user picks; the webview never names a folder.
 import { checkSaveFiles, type SaveFile, type SaveResult } from '@digi/module-ui';
 
 /**
- * The list as one raw body for `files_save_to_folder`: per file a 4-byte big-endian name length, the UTF-8 name, a 4-byte big-endian size and the
+ * The list as one raw body for `files_save_with_dialog`: per file a 4-byte big-endian name length, the UTF-8 name, a 4-byte big-endian size and the
  * bytes. The Rust side refuses a name that is not a plain file name before it writes the first file.
  */
 export function packFiles(files: SaveFile[]): Uint8Array {
@@ -23,18 +24,14 @@ export function packFiles(files: SaveFile[]): Uint8Array {
 }
 
 export interface SaveFilesDeps {
-  /** The system's folder dialog; null when the user cancels. */
-  pickFolder(): Promise<string | null>;
-  /** Writes the packed list into the folder; the number of files written. */
-  write(folder: string, packed: Uint8Array): Promise<number>;
+  /** `files_save_with_dialog`: opens the folder dialog, writes the packed list into the folder picked and returns the result (cancelled: nothing written). */
+  saveWithDialog(packed: Uint8Array): Promise<SaveResult>;
 }
 
-/** One folder dialog, then every file written into the folder; a file of the same name is overwritten. Cancelling writes nothing. */
+/** Checks the list (names and limits, as the native side does again), then one native call; a file of the same name is overwritten. */
 export function createSaveFiles(deps: SaveFilesDeps): (files: SaveFile[]) => Promise<SaveResult> {
   return async (files) => {
     checkSaveFiles(files);
-    const folder = await deps.pickFolder();
-    if (folder === null) return { saved: 0, cancelled: true };
-    return { saved: await deps.write(folder, packFiles(files)), cancelled: false, where: folder };
+    return deps.saveWithDialog(packFiles(files));
   };
 }

@@ -751,7 +751,7 @@ fn main() {
             symbols::catalog::symbols_open_review,
             symbols::catalog::symbols_catalog_frame,
             log_save::log_save,
-            files_save::files_save_to_folder,
+            files_save::files_save_with_dialog,
             library::lib_scan,
             library::lib_build,
             library::lib_read,

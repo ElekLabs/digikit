@@ -8,7 +8,13 @@ export interface SaveDirectory {
   getFileHandle(
     name: string,
     options: { create: true },
-  ): Promise<{ createWritable(): Promise<{ write(data: Uint8Array): Promise<void>; close(): Promise<void> }> }>;
+  ): Promise<{
+    createWritable(): Promise<{
+      write(data: Uint8Array): Promise<void>;
+      close(): Promise<void>;
+      abort(): Promise<void>;
+    }>;
+  }>;
 }
 
 export interface BrowserSaveDeps {
@@ -18,9 +24,25 @@ export interface BrowserSaveDeps {
   download(name: string, bytes: Uint8Array): void;
 }
 
+/** A write into the folder failed after `saved` files were complete; `cause` is the failure. */
+export class PartialSaveError extends Error {
+  constructor(
+    readonly saved: number,
+    readonly total: number,
+    override readonly cause: unknown,
+  ) {
+    super(`Saved ${saved} of ${total} files, then failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = 'PartialSaveError';
+  }
+}
+
+/** How long a download's object URL stays valid: long enough for the browser to start reading it. */
+export const DOWNLOAD_URL_LIFETIME_MS = 60_000;
+
 /**
  * Writes into the chosen folder, replacing a file of the same name (the user chose the folder just before). Without a picker the browser downloads
- * each file, so `where` is the browser's download place and is not named.
+ * each file, so `where` is the browser's download place and is not named. A failed write aborts that file's writable (no half file is kept) and
+ * throws `PartialSaveError` with the number of files written before it.
  */
 export function createBrowserSaveFiles(deps: BrowserSaveDeps): (files: SaveFile[]) => Promise<SaveResult> {
   return async (files) => {
@@ -36,10 +58,19 @@ export function createBrowserSaveFiles(deps: BrowserSaveDeps): (files: SaveFile[
       if (e instanceof Error && e.name === 'AbortError') return { saved: 0, cancelled: true };
       throw e;
     }
+    let saved = 0;
     for (const { name, bytes } of files) {
-      const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
-      await writable.write(bytes);
-      await writable.close();
+      let writable:
+        Awaited<ReturnType<Awaited<ReturnType<SaveDirectory['getFileHandle']>>['createWritable']>> | undefined;
+      try {
+        writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
+        await writable.write(bytes);
+        await writable.close();
+      } catch (e) {
+        await writable?.abort().catch(() => {});
+        throw new PartialSaveError(saved, files.length, e);
+      }
+      saved += 1;
     }
     return { saved: files.length, cancelled: false, where: dir.name };
   };
@@ -56,7 +87,7 @@ export function browserSaveDeps(win: Window & typeof globalThis): BrowserSaveDep
       a.href = url;
       a.download = name;
       a.click();
-      win.setTimeout(() => win.URL.revokeObjectURL(url), 0);
+      win.setTimeout(() => win.URL.revokeObjectURL(url), DOWNLOAD_URL_LIFETIME_MS);
     },
   };
 }

@@ -2,6 +2,7 @@
 // small arguments in headers, as the Rust commands take them (`tauri::ipc::Request`); the names and arguments follow the Rust signatures.
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import type { SaveResult } from '@digi/module-ui';
 import { createSaveFiles } from './save-files';
 import { createFirmwareSymbols } from '../firmware-symbols';
 import { localStorageKeyValue } from '@digi/workbench-core/storage.ts';
@@ -76,10 +77,7 @@ export function createTauriHost(): Host {
       saveLog: (bytes, name, kind = 'log') =>
         invoke('log_save', bytes, { headers: { 'x-name': encodeURIComponent(name), 'x-kind': kind } }),
       saveFiles: createSaveFiles({
-        pickFolder: () =>
-          invoke<string | null>('local_pick_folder', { start: null, title: 'Save the files in this folder' }),
-        write: (folder, packed) =>
-          invoke<number>('files_save_to_folder', packed, { headers: { 'x-folder': encodeURIComponent(folder) } }),
+        saveWithDialog: (packed) => invoke<SaveResult>('files_save_with_dialog', packed),
       }),
     },
     library: {
