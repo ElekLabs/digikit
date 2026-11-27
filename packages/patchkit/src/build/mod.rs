@@ -27,6 +27,7 @@ pub mod show;
 pub mod test_source;
 pub mod toolchain;
 mod workbench;
+pub use workbench::TsFile;
 
 use crate::dko::Dko;
 use crate::error::*;
@@ -185,6 +186,12 @@ impl ModuleToml {
 fn manifest(moddir: &Path) -> Result<ModuleToml> {
     let p = moddir.join("module.toml");
     ModuleToml::parse(&toolchain::read_text(&p)?).map_err(|e| err!("{}: {e}", p.display()))
+}
+
+/// The generated TypeScript settings file of the module in `moddir`; `None` when it has no `workbench.toml`.
+pub fn workbench_ts(moddir: &Path) -> Result<Option<TsFile>> {
+    let manifest = manifest(moddir)?;
+    TsFile::read(moddir, manifest.id(), manifest.module.name.as_deref())
 }
 
 /// The object cache of a repository: `out/cache/dko`.

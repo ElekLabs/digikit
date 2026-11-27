@@ -574,6 +574,22 @@ Read the stored bytes with `dk_settings_get` using the declared `id`.
 Patchkit provides the generated header during `module:build` and on demand during `module:pack`. An exported module carries `workbench.toml`
 and regenerates the header on build.
 
+Typed settings (patchkit generates them; the runtime and Workbench side of version 2 descriptors follows in a later step):
+
+| `type` | Fields | Stored value |
+| --- | --- | --- |
+| `integer` | `min`, `max` (greater than `min`), `step` (default 1, divides `max - min`), `decimals` (0 to 4, display only), `unit` (0 to 8 printable ASCII bytes), `default` (in range, on a step) | i32, 4 bytes big-endian |
+| `boolean` | `default` | one byte, 0 or 1 |
+| `choice` | `choices` (1 to 32 labels of 1 to 24 UTF-8 bytes, unique), `default` (a label) | one byte, the index |
+
+`max_bytes` belongs to `text` and `file-name` only. A descriptor with a typed setting starts with byte 2. For each setting the generated
+`<workbench_descriptor.h>` defines `WB_SETTING_<ID>_KEY` (`<ID>` is the id in upper case, `-` as `_`; the id must then be a C identifier).
+An `integer` also gets `_MIN`, `_MAX`, `_STEP` and `_DEFAULT` and `wb_setting_<id>_get(dk_settings *)`, which returns the default when the value is
+missing or invalid, and `wb_setting_<id>_put(dk_settings *, v)`, which returns `DK_E_SET_VALUE` for an invalid `v`. A `boolean` has the same
+functions with `int`. A `choice` defines `WB_SETTING_<ID>_<LABEL>` constants (label in upper case, other characters as `_`), `_COUNT`, `_DEFAULT` and `uint8_t` accessors.
+`patchkit workbench-ts MODDIR --write` writes `MODDIR/workbench/gen/settings.ts` (the schema and the `Settings` type for the module's page);
+`--check` exits 1 and prints the path when the file is missing or differs.
+
 ### 5.9 Module files and `dk_intro_take`
 
 A module's own files live under `data/<module id>/` in the store, not next to the `.dkm`: the `modules/` list holds at most 32 entries. `dk_data_path` (`<dk/platform/data.h>`)

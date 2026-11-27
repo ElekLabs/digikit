@@ -1,0 +1,217 @@
+{
+ "about": "Test vectors of the Workbench settings descriptor (docs/plans/workbench-module-ui.md, 'Typed public settings'): patchkit's encoder (packages/patchkit/src/build/workbench), the runtime parser and the TypeScript decoder must agree. descriptors: workbench.toml text for the module `module` shown as `module_name`, and the binary descriptor patchkit makes from it as hex (byte 0 is 1 for text and file-name only, else 2). values: a stored value of one setting as hex and whether every reader accepts it (integer: 4 bytes i32 big-endian inside min..max on a step; boolean: one byte 0 or 1; choice: one byte below the label count; text: at most max_bytes bytes of UTF-8). rule says which rule the case tests.",
+ "descriptors": [
+  {
+   "name": "v1_text_and_file_name",
+   "module": "test/v1",
+   "module_name": "Version one",
+   "toml": "[workbench]\nversion = 1\n\n[[setting]]\nid = \"boot\"\nlabel = \"Boot value\"\ntype = \"text\"\nmax_bytes = 16\n\n[[setting]]\nid = \"active\"\nlabel = \"Animation\"\ntype = \"file-name\"\nextension = \"dkbs\"\nreset_label = \"Stock\"\nmax_bytes = 47\napply = \"next-restart\"\n",
+   "bytes_hex": "010b56657273696f6e206f6e650204626f6f740a426f6f742076616c75651000000661637469766509416e696d6174696f6e2f010104646b62730553746f636b"
+  },
+  {
+   "name": "v2_all_kinds",
+   "module": "test/typed",
+   "module_name": "Typed",
+   "toml": "[workbench]\nversion = 1\n\n[[setting]]\nid = \"gain\"\nlabel = \"Gain\"\ntype = \"integer\"\nmin = -10\nmax = 10\nstep = 2\ndecimals = 1\nunit = \"dB\"\ndefault = 0\n\n[[setting]]\nid = \"flag\"\nlabel = \"Flag\"\ntype = \"boolean\"\ndefault = true\napply = \"next-restart\"\n\n[[setting]]\nid = \"mode\"\nlabel = \"Mode\"\ntype = \"choice\"\nchoices = [\"Off\", \"Soft\", \"Hard\"]\ndefault = \"Soft\"\n\n[[setting]]\nid = \"name\"\nlabel = \"Name\"\ntype = \"text\"\nmax_bytes = 8\n",
+   "bytes_hex": "0205547970656404046761696e044761696e040200fffffff60000000a00000002010000000002644204666c616704466c616701030101046d6f6465044d6f64650104000301034f666604536f66740448617264046e616d65044e616d65080000"
+  },
+  {
+   "name": "v2_integer_extremes",
+   "module": "test/extremes",
+   "module_name": "Extremes",
+   "toml": "[workbench]\nversion = 1\n\n[[setting]]\nid = \"wide\"\nlabel = \"Wide\"\ntype = \"integer\"\nmin = -2147483648\nmax = 2147483647\ndefault = 0\n",
+   "bytes_hex": "020845787472656d65730104776964650457696465040200800000007fffffff00000001000000000000"
+  }
+ ],
+ "values": [
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "gain",
+   "value_hex": "00000000",
+   "valid": true,
+   "rule": "integer: inside the range, on a step"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "gain",
+   "value_hex": "fffffff6",
+   "valid": true,
+   "rule": "integer: the minimum"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "gain",
+   "value_hex": "0000000a",
+   "valid": true,
+   "rule": "integer: the maximum"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "gain",
+   "value_hex": "fffffff4",
+   "valid": false,
+   "rule": "integer: below the minimum"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "gain",
+   "value_hex": "0000000c",
+   "valid": false,
+   "rule": "integer: above the maximum"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "gain",
+   "value_hex": "00000001",
+   "valid": false,
+   "rule": "integer: off the step"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "gain",
+   "value_hex": "fffffff7",
+   "valid": false,
+   "rule": "integer: off the step from the minimum"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "gain",
+   "value_hex": "0000",
+   "valid": false,
+   "rule": "integer: 2 bytes instead of 4"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "gain",
+   "value_hex": "000000000000",
+   "valid": false,
+   "rule": "integer: 6 bytes instead of 4"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "gain",
+   "value_hex": "",
+   "valid": false,
+   "rule": "integer: empty"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "flag",
+   "value_hex": "00",
+   "valid": true,
+   "rule": "boolean: 0"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "flag",
+   "value_hex": "01",
+   "valid": true,
+   "rule": "boolean: 1"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "flag",
+   "value_hex": "02",
+   "valid": false,
+   "rule": "boolean: 2"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "flag",
+   "value_hex": "0001",
+   "valid": false,
+   "rule": "boolean: 2 bytes"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "mode",
+   "value_hex": "00",
+   "valid": true,
+   "rule": "choice: the first index"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "mode",
+   "value_hex": "02",
+   "valid": true,
+   "rule": "choice: the last index"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "mode",
+   "value_hex": "03",
+   "valid": false,
+   "rule": "choice: index equal to the count"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "mode",
+   "value_hex": "ff",
+   "valid": false,
+   "rule": "choice: index far above the count"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "mode",
+   "value_hex": "0001",
+   "valid": false,
+   "rule": "choice: 2 bytes"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "mode",
+   "value_hex": "",
+   "valid": false,
+   "rule": "choice: empty"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "name",
+   "value_hex": "616263",
+   "valid": true,
+   "rule": "text: within max_bytes"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "name",
+   "value_hex": "6162636465666768",
+   "valid": true,
+   "rule": "text: exactly max_bytes"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "name",
+   "value_hex": "616263646566676869",
+   "valid": false,
+   "rule": "text: longer than max_bytes"
+  },
+  {
+   "descriptor": "v2_all_kinds",
+   "setting": "name",
+   "value_hex": "ff",
+   "valid": false,
+   "rule": "text: not UTF-8"
+  },
+  {
+   "descriptor": "v2_integer_extremes",
+   "setting": "wide",
+   "value_hex": "80000000",
+   "valid": true,
+   "rule": "integer: i32 minimum"
+  },
+  {
+   "descriptor": "v2_integer_extremes",
+   "setting": "wide",
+   "value_hex": "7fffffff",
+   "valid": true,
+   "rule": "integer: i32 maximum"
+  },
+  {
+   "descriptor": "v2_integer_extremes",
+   "setting": "wide",
+   "value_hex": "7fffffff00",
+   "valid": false,
+   "rule": "integer: 5 bytes"
+  }
+ ]
+}
