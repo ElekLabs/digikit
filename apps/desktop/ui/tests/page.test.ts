@@ -39,19 +39,23 @@ it('shows the card modules while reading service details, even when the provisio
     sessions: createFakeSessions(() => ({
       info: async () => {
         infoRequests++;
-        return { port: targetDevice, runtime: 4, free_bytes: 1024, caps: (1 << CAP.FOLDERS) | (1 << CAP.MODULES) };
+        return {
+          port: targetDevice,
+          runtime: 4,
+          free_bytes: 1024,
+          caps: (1 << CAP.FOLDERS) | (1 << CAP.MODULES) | (1 << CAP.CAPACITY),
+        };
       },
       rpc: async () => new Uint8Array(),
-      list: async (prefix: string) => {
-        if (prefix === 'modules/') return [{ path: 'modules/example.dkm', size: 10, hash: '' }];
-        if (prefix === 'services/') {
-          showedModulesBeforeServices =
-            !app.state.browsing() &&
-            app.state.lastView()?.card_only[0]?.path === 'modules/example.dkm' &&
-            app.inventory.modules()[0]?.name === 'example';
-        }
-        return [];
+      // CAPACITY is the first request of the service-detail read, after the card modules are listed
+      capacity: async () => {
+        showedModulesBeforeServices =
+          !app.state.browsing() &&
+          app.state.lastView()?.card_only[0]?.path === 'modules/example.dkm' &&
+          app.inventory.modules()[0]?.name === 'example';
+        return null;
       },
+      list: async () => [{ path: 'modules/example.dkm', size: 10, hash: '' }],
       modules: async () => [{ name: 'example' }],
     })),
     env: {

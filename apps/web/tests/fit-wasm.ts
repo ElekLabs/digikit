@@ -1,5 +1,5 @@
 // The fit rule of the tests: the Rust rule in apps/web/public/patchkit.wasm (`mise run wasm:patchkit`). A suite that checks code which asks the
-// rule (mergeView, tickedFit) calls `await useFitWasm()` once at the top.
+// rule (mergeView) calls `await useFitWasm()` once at the top.
 import { existsSync, readFileSync } from 'node:fs';
 import { DkNeeds } from '@digi/workbench-core/modules/dkneeds.ts';
 import { setFitReader } from '@digi/workbench-core/modules/fit.ts';

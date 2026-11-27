@@ -21,6 +21,8 @@ import {
 } from '@digi/dk-session';
 import { LOAD_STATUS, STATUS } from '@digi/dk-session/gen_proto';
 import { systemPackageReads } from '../runtime/system-package.ts';
+import type { StoreUsage } from '../target-ops/store.ts';
+import { usageOf } from '../target-ops/store.ts';
 import { fitsNow, keyWarnings, type Caps, type Needs } from './fit.ts';
 import {
   PORT_NAME,
@@ -92,6 +94,8 @@ export interface TransferView {
   coreOnly?: boolean;
   modules: TransferRow[];
   card_only: TransferRow[];
+  /** The store by kind (modules, services, data, samples, other) with its free space: the storage bar of the page. Absent when the card could not be listed. */
+  usage?: StoreUsage;
   /** Keep service files selectable when incomplete card reads prevent automatic service cleanup. */
   incomplete_card_needs?: boolean;
   /** The service refusals of the library modules (also on their rows); set only when the view was built with `InstallDeps`. */
@@ -510,8 +514,9 @@ export function requireRuntime(info: DkInfoFull): void {
 /** The store folder of the modules; a store of version 3 also has `samples/` (and the Samples mode lists that one). */
 export const MODULES_FOLDER = 'modules/';
 
-/** The module files of the store (the entries under `modules/`): by prefix when the runtime has FOLDERS, else all entries, filtered here. */
-export async function listModules(s: DkSession, info: DkInfoFull): Promise<DkEntry[]> {
+/** The module files of the store (the entries under `modules/`): by prefix when the runtime has FOLDERS, else all entries, filtered here; `all` is a listing the caller already has (one LIST per read). */
+export async function listModules(s: DkSession, info: DkInfoFull, all?: DkEntry[]): Promise<DkEntry[]> {
+  if (all) return all.filter((e) => e.path.startsWith(MODULES_FOLDER));
   if (hasCap(info, 'FOLDERS')) return s.list(MODULES_FOLDER);
   return (await s.list()).filter((e) => e.path.startsWith(MODULES_FOLDER));
 }
@@ -640,8 +645,9 @@ export const SERVICE_EXT = '.dks';
 /** The store path of a service: `services/<stem>.dks`. */
 export const servicePath = (stem: string): string => `${SERVICES_FOLDER}${stem}${SERVICE_EXT}`;
 
-/** The service files of the store (the entries under `services/`): by prefix when the runtime has FOLDERS, else all entries, filtered here. */
-export async function listServices(s: DkSession, info: DkInfoFull): Promise<DkEntry[]> {
+/** The service files of the store (the entries under `services/`): by prefix when the runtime has FOLDERS, else all entries, filtered here; `all` is a listing the caller already has (one LIST per read). */
+export async function listServices(s: DkSession, info: DkInfoFull, all?: DkEntry[]): Promise<DkEntry[]> {
+  if (all) return all.filter((e) => e.path.startsWith(SERVICES_FOLDER));
   if (hasCap(info, 'FOLDERS')) return s.list(SERVICES_FOLDER);
   return (await s.list()).filter((e) => e.path.startsWith(SERVICES_FOLDER));
 }
@@ -653,8 +659,9 @@ export const PORT_EXT = '.dkport';
 /** The store path of a port file: `ports/<stem>.dkport` (`<stem>` is `<device>-<version>`). */
 export const portPath = (stem: string): string => `${PORTS_FOLDER}${stem}${PORT_EXT}`;
 
-/** The port files of the store (the entries under `ports/`): by prefix when the runtime has FOLDERS, else all entries, filtered here. */
-export async function listPorts(s: DkSession, info: DkInfoFull): Promise<DkEntry[]> {
+/** The port files of the store (the entries under `ports/`): by prefix when the runtime has FOLDERS, else all entries, filtered here; `all` is a listing the caller already has (one LIST per read). */
+export async function listPorts(s: DkSession, info: DkInfoFull, all?: DkEntry[]): Promise<DkEntry[]> {
+  if (all) return all.filter((e) => e.path.startsWith(PORTS_FOLDER));
   if (hasCap(info, 'FOLDERS')) return s.list(PORTS_FOLDER);
   return (await s.list()).filter((e) => e.path.startsWith(PORTS_FOLDER));
 }
@@ -683,7 +690,7 @@ export function moduleFilePath(moduleId: string, name: string): string {
   return `${moduleFilesFolder(moduleId)}${name}`;
 }
 
-/** The files of a module under `data/<module id>/`: by prefix when the runtime has FOLDERS, else all entries, filtered here. */
+/** The files of a module under `data/<module id>/`: by prefix when the runtime has FOLDERS, else all entries, filtered here; `all` is a listing the caller already has (one LIST per read). */
 export async function listModuleFiles(s: DkSession, moduleId: string): Promise<DkEntry[]> {
   const folder = moduleFilesFolder(moduleId);
   const info = await s.info();
@@ -809,7 +816,9 @@ export async function buildView(
 ): Promise<TransferView> {
   const info = options.info ?? (await s.info());
   requireRuntime(info);
-  const modules = await listModules(s, info);
+  // one LIST of the whole store per read: the folders and the usage are cut from it
+  const everything = await s.list();
+  const modules = await listModules(s, info, everything);
   const pkg = systemPackageReads(info);
   const readLoaded = options.readLoaded ?? readLoadedModules;
   let loaded = (await readLoaded(s, info, pkg)).map((m) => m.name);
@@ -822,7 +831,7 @@ export async function buildView(
     ...(pkg.coreOnly ? { coreOnly: true } : {}),
     ...mergeView(library, modules, loaded, null, {}),
   });
-  const card = [...modules, ...(await listServices(s, info)), ...(await listPorts(s, info))];
+  const card = [...modules, ...(await listServices(s, info, everything)), ...(await listPorts(s, info, everything))];
   const capacity = await pkg.command('CAPACITY', () => s.capacity());
   const states = (await pkg.command('LOADS', () => s.loadStates())) ?? [];
   const cap = pkg.coreOnly ? null : (capacity ?? null);
@@ -877,11 +886,13 @@ export async function buildView(
     const row = merged.modules.find((m) => m.id === r.module);
     if (row) row.service_refusal = r;
   }
+  const usage = usageOf(everything, storeFree(info, cap));
   return {
     ...identity,
     loaded,
     free_bytes: storeFree(info, cap).free,
     capacity: cap,
+    usage,
     ...(pkg.coreOnly ? { coreOnly: true } : {}),
     ...merged,
     ...(incompleteCardNeeds ? { incomplete_card_needs: true } : {}),
