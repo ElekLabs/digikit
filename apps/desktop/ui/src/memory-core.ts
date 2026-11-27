@@ -62,15 +62,17 @@ interface Spec {
 /**
  * The resources the device limits, in the order of the panel. A resource whose limit is 0 or that CAPACITY lacks has no bar (the Digitakt II has
  * no page rows). The arena figure is the module's own block: the block of its relocated DSP image is freed once the transfer to the DSP ends.
- * The voice rows, the selection paths, the effect slots and the staging buffer are not shown (nothing a user can act on).
+ * The rows are those of the DIGIKIT menu's MEMORY page (DSP, CPU, MODS, MACH, VOICE, PARAM, PAGE) with longer names. The selection paths, the effect
+ * slots and the staging buffer are not shown there either (nothing a user can act on).
  */
 export const SPECS: Spec[] = [
   { resource: 'DSP_AREA', label: 'DSP memory', bytes: true, take: (n) => n.DSP_AREA ?? 0 },
   { resource: 'ARENA', label: 'CPU memory', bytes: true, take: (n) => n.ARENA ?? 0 },
   { resource: 'MACHINE_ROWS', label: 'Machines', bytes: false, take: (n) => n.MACHINE_ROWS ?? 0 },
+  { resource: 'VOICE_ROWS', label: 'Voices', bytes: false, take: (n) => n.VOICE_ROWS ?? 0 },
   { resource: 'PARAM_ROWS', label: 'Parameters', bytes: false, take: (n) => n.PARAM_ROWS ?? 0 },
   { resource: 'PAGE_ROWS', label: 'Pages', bytes: false, take: (n) => n.PAGE_ROWS ?? 0 },
-  { resource: 'MODULES', label: 'Modules', bytes: false, take: () => 1 },
+  { resource: 'MODULES', label: 'Loaded modules', bytes: false, take: () => 1 },
 ];
 
 const KINDS: Record<KnownModule['group'], SegmentKind> = {

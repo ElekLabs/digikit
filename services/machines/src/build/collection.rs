@@ -4,7 +4,7 @@ use dkrt_svc_rows::builder::{fail, find, put_text, room, Gate};
 
 /// The most machines, pages and records (machines, pages, parameters and click actions together) of one module.
 pub const MAX_M: usize = limits::MACHINE_ROWS;
-pub const MAX_PG: usize = 16;
+pub const MAX_PG: usize = limits::MACHINE_PAGES;
 pub const MAX_PA: usize = dkneeds::MAX_RECORDS as usize;
 pub(super) const TEXT: usize = 24;
 pub(super) const KNOBS: usize = limits::PAGE_KNOBS;

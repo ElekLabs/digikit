@@ -413,3 +413,53 @@ fn the_table_floor_has_the_major_and_minor_of_the_runtime_version() {
     let e = sdkgen::fx(&bumped).err().expect("a stale floor is refused");
     assert!(e.to_string().contains("another MAJOR.MINOR"), "{e}");
 }
+
+#[test]
+fn the_array_sizes_of_the_services_and_hosts_come_from_the_limits() {
+    // One number per limit: a changed `[limits.max]` value reaches the services (`gen_sdk.rs`), the hosts (`gen_proto.ts`, `gen_limits.rs`) and the C header.
+    let text = std::fs::read_to_string(root().join(sdkgen::SOURCE)).unwrap();
+    let max = sdkgen::limits_max();
+    let changed = text
+        .replacen(
+            &format!("machine_types = {}", max.machine_types),
+            "machine_types = 33",
+            1,
+        )
+        .replacen(
+            &format!("shortcut_bindings = {}", max.shortcut_bindings),
+            "shortcut_bindings = 17",
+            1,
+        )
+        .replacen(
+            &format!("machine_pages = {}", max.machine_pages),
+            "machine_pages = 15",
+            1,
+        );
+    assert_ne!(changed, text);
+    let out = sdkgen::render(&changed).unwrap();
+    let get = |path: &str| {
+        &out.iter()
+            .find(|(p, _)| p.ends_with(path))
+            .unwrap_or_else(|| panic!("no output {path}"))
+            .1
+    };
+    let sdk = get("gen_sdk.rs");
+    assert!(sdk.contains("MACHINE_TYPES: usize = 33;"));
+    assert!(sdk.contains("SHORTCUT_BINDINGS: usize = 17;"));
+    assert!(sdk.contains("MACHINE_PAGES: usize = 15;"));
+    assert!(get("gen_proto.ts").contains("MAX_MACHINE_TYPES = 33;"));
+    assert!(get("gen_limits.rs").contains("MAX_SHORTCUT_BINDINGS: u32 = 17;"));
+    assert!(get("limits.h").contains("DK_MAX_MACHINE_PAGES 15"));
+    // the selection size is the record count
+    let selection = text.replacen(
+        &format!("modules = {}", max.modules),
+        &format!("modules = {}", max.modules - 1),
+        1,
+    );
+    let out = sdkgen::render(&selection).unwrap();
+    let ts = out
+        .iter()
+        .find(|(p, _)| p.ends_with("gen_proto.ts"))
+        .unwrap();
+    assert!(ts.1.contains(&format!("MAX_SELECTION = {};", max.modules - 1)));
+}

@@ -32,7 +32,7 @@ const LEGEND = [
 ] as const;
 
 // The rows of a reading (memory-core.ts), shown greyed and empty while the emulator has no runtime.
-const SKELETON_ROWS = ['DSP memory', 'CPU memory', 'Machines', 'Parameters', 'Pages', 'Modules'];
+const SKELETON_ROWS = ['DSP memory', 'CPU memory', 'Machines', 'Voices', 'Parameters', 'Pages', 'Loaded modules'];
 
 export default function MemoryPanel(props: {
   visible: boolean;

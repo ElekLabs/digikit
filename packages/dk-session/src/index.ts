@@ -1,6 +1,7 @@
 export * from './dkupload-core.ts';
 export {
   H_ROLE,
+  MAX_SELECTION,
   PROVIDER_MAX,
   RECORD_KIND,
   RESOURCE,

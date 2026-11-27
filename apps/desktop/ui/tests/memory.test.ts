@@ -51,15 +51,14 @@ test('one bar per resource the device limits, in the panel order, under the user
   const bars = buildBars(dn2, loaded, library);
   assert.deepEqual(
     bars.map((b) => b.label),
-    ['DSP memory', 'CPU memory', 'Machines', 'Parameters', 'Pages', 'Modules'],
+    ['DSP memory', 'CPU memory', 'Machines', 'Voices', 'Parameters', 'Pages', 'Loaded modules'],
   );
-  // the voice rows, the selection paths and the staging buffer are not shown
-  assert.equal(by(bars, 'VOICE_ROWS'), undefined);
+  // the rows of the DIGIKIT menu's MEMORY page; the selection paths and the staging buffer are not shown
   assert.equal(by(bars, 'SELECTION'), undefined);
   assert.equal(by(bars, 'STAGE'), undefined);
   assert.deepEqual(
     SPECS.map((s) => s.bytes),
-    [true, true, false, false, false, false],
+    [true, true, false, false, false, false, false],
   );
   for (const b of bars) assert.doesNotMatch(b.label, /arena|area/i);
 });
@@ -68,14 +67,14 @@ test('a resource the device does not have is hidden: the Digitakt II has no page
   const dt2 = { ...dn2, PAGE_ROWS: c(0, 0) };
   const labels = buildBars(dt2, loaded, library).map((b) => b.label);
   assert.ok(!labels.includes('Pages'));
-  assert.equal(labels.length, 5);
+  assert.equal(labels.length, 6);
   // a capacity without the kind (an older runtime) has no bar either
   const older = { ...dn2 };
   delete older.PAGE_ROWS;
   delete older.MACHINE_ROWS;
   assert.deepEqual(
     buildBars(older, loaded, library).map((b) => b.resource),
-    ['DSP_AREA', 'ARENA', 'PARAM_ROWS', 'MODULES'],
+    ['DSP_AREA', 'ARENA', 'VOICE_ROWS', 'PARAM_ROWS', 'MODULES'],
   );
 });
 
