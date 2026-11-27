@@ -153,6 +153,7 @@ impl<P: Provider<FakeCore> + 'static> RowBuilder<P> {
         match handle {
             Ok(handle) => Ok(Started {
                 handle,
+                instance,
                 validate: self.validate,
                 stop: self.stop,
             }),
@@ -168,6 +169,7 @@ impl<P: Provider<FakeCore> + 'static> RowBuilder<P> {
 /// A started owner object and its resolved row.
 pub struct Started {
     handle: ProviderHandle,
+    instance: *mut c_void,
     validate: Validate,
     stop: unsafe fn(*mut c_void, &FakeCore),
 }
@@ -178,6 +180,15 @@ pub trait Recipe {
     /// The name of the service.
     const NAME: &'static str;
     fn parts(b: RowBuilder<Self::P>) -> RowBuilder<Self::P>;
+
+    /// Why `import(None)` does not give the state of a fresh copy, when the service decides otherwise (it then starts from what a run-time start cannot know).
+    const NONE_STARTS_DIFFERENTLY: Option<&'static str> = None;
+
+    /// Change the state the service carries over a reload, on the old copy before it exports: `true` when it did. A service that adopts the state part gives it, so a state
+    /// that two fresh copies share cannot let a no-op `import` pass the round trip.
+    fn change_state(_: &mut Self::P) -> bool {
+        false
+    }
 }
 
 /// The cases of the contract for the provider `R` describes, on the profile of `f`.
@@ -212,8 +223,17 @@ fn state_round_trip<R: Recipe>() {
         out
     };
     let fresh = export(&new);
-    // a copy that took the old copy's bytes exports them again
+    let changed = R::change_state(unsafe { &mut *(old.instance as *mut R::P) });
     let bytes = export(&old);
+    if changed {
+        assert_ne!(
+            bytes,
+            fresh,
+            "{}: `change_state` did not change what the part exports",
+            R::NAME
+        );
+    }
+    // a copy that took the old copy's bytes exports them again
     assert_eq!(
         unsafe { new.handle.state_import(c, Some((version, &bytes))) },
         dkrt_sdk::OK,
@@ -233,12 +253,14 @@ fn state_round_trip<R: Recipe>() {
         "{}",
         R::NAME
     );
-    assert_eq!(
-        export(&new),
-        fresh,
-        "{}: import(None) is the fresh state",
-        R::NAME
-    );
+    if R::NONE_STARTS_DIFFERENTLY.is_none() {
+        assert_eq!(
+            export(&new),
+            fresh,
+            "{}: import(None) is the fresh state",
+            R::NAME
+        );
+    }
 }
 
 /// A provider as the subject of a suite case: `Lifecycle::<Provided<R>>`.

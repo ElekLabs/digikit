@@ -2,6 +2,7 @@
 //! profile, and what only this fixture shows, through the part tables of its row as the runtime calls them: the counters of attach and detach per consumer, the tick, the
 //! query and the stop.
 use dkrt_abi::keys::KeysCopy;
+use dkrt_abi::provider::{Consumer, ConsumerId, Provider};
 use dkrt_abi::profiles::ALL;
 use dkrt_fixture_local_ping::{LocalPing, COUNTERS_LEN, OP_COUNT, OP_COUNTERS, STATE_VERSION};
 use dkrt_sdk::{E_NOT_FOUND, E_TOO_BIG};
@@ -16,6 +17,12 @@ impl Recipe for PingRecipe {
     const NAME: &'static str = "local-ping";
     fn parts(b: RowBuilder<LocalPing>) -> RowBuilder<LocalPing> {
         b.tick().query().state()
+    }
+    fn change_state(p: &mut LocalPing) -> bool {
+        // a consumer attaches: the count is the state the part carries
+        // SAFETY: a null section is a module with no records
+        let consumer = unsafe { Consumer::of_section(ConsumerId::new(1), core::ptr::null(), 0) };
+        <LocalPing as Provider<FakeCore>>::attach(p, &FakeCore::new(), &consumer).is_ok()
     }
 }
 
