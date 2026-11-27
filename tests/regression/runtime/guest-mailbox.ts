@@ -107,6 +107,14 @@ export async function bootInfo(session: Session, plan: RuntimePlan) {
   };
 }
 
+/** The offset of `DkrtBootInfo.reloads` (asserted by `dkrt.h`): the count of live jobs that finished since the boot. */
+const BI_RELOADS_AT = 252;
+
+/** `DkrtBootInfo.reloads`: moves when a live job finished. */
+export async function bootReloads(session: Session, plan: RuntimePlan): Promise<number> {
+  return word(session, planSymbol(plan, 'DKRT_BOOT') + BI_RELOADS_AT);
+}
+
 /** The offset of `DkrtBootInfo.states` (after the 10 words before `results`, the results, core_cause, stable and `needs`; asserted by `abi.toml`'s layout check). */
 const BI_STATES_AT = 176;
 

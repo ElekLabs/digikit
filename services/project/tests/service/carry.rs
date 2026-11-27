@@ -9,7 +9,7 @@ const DROPPED: u32 = Ignore::CarryDropped as u32;
 
 fn export(r: &Rig) -> Vec<u8> {
     let mut out = vec![0u8; CARRY_MAX];
-    let n = r.p.export_state(r.f.now, &r.pend, &mut out);
+    let n = r.p.export_state(&r.f, r.f.now, &r.pend, &mut out);
     out.truncate(n);
     out
 }
@@ -141,7 +141,7 @@ fn the_wait_of_the_restore_counts_from_the_new_copys_clock() {
     }
     let bytes = export(&r);
     r.f.playing = false;
-    r.pend = Pending::new();
+    r.pend.put_back(&r.f, &Pending::new());
     let mut p = Box::new(new_copy(&mut r, 3, Some(&bytes)));
     let asked = r.f.live_loads.len();
     for _ in 0..6 {

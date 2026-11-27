@@ -6,7 +6,7 @@ use super::sdk_imports as sys;
 use crate::hooks::DKRT_PROJECT_PENDING;
 use dkrt_abi::provider::Status;
 use dkrt_abi::service::SettingsOverlay;
-use dkrt_svc_project::engine::{Pending, StoreJob};
+use dkrt_svc_project::engine::{HookRecord, StoreJob};
 use dkrt_svc_project::project::{Host, Project};
 
 /// The owner object of the service file: the engine over this file's host state. The file's cell holds the one instance (`DK_SVC_OWNER`).
@@ -60,9 +60,8 @@ unsafe impl Host for DkHost {
         self.passes = self.passes.wrapping_add(1);
     }
 
-    fn hook_record(&self) -> &'static Pending {
-        // SAFETY: the hooks' record is a static of this file; it is plain words that the hooks write (see `Pending`).
-        unsafe { &*core::ptr::addr_of!(DKRT_PROJECT_PENDING) }
+    fn hook_record(&self) -> &'static HookRecord {
+        &DKRT_PROJECT_PENDING
     }
 
     fn job(&self) -> &'static StoreJob {

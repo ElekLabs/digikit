@@ -4,8 +4,8 @@ use core::cell::Cell;
 use dkrt_abi::provider::Status;
 use dkrt_abi::service::{SettingsOverlay, SETTINGS_OVERLAY_VERSION};
 use dkrt_svc_project::engine::{
-    Env, Files, ListPoll, ListRow, LiveJob, LoadedModule, ModuleId, ModulePath, ModuleWarning,
-    Pending, SlotRecord, StoreJob,
+    Env, Files, HookRecord, ListPoll, ListRow, LiveJob, LoadedModule, ModuleId, ModulePath,
+    ModuleWarning, SlotRecord, StoreJob,
 };
 use dkrt_svc_project::project::Host;
 
@@ -13,7 +13,7 @@ std::thread_local! {
     /// The next `open` fails with this status (a test sets it before `start`).
     pub static OPEN_FAILS: Cell<Status> = const { Cell::new(0) };
     /// The hooks' record and the write job's cell of this test thread (a static of the file in the service).
-    pub static HOOKS: &'static Pending = Box::leak(Box::new(Pending::new()));
+    pub static HOOKS: &'static HookRecord = Box::leak(Box::new(HookRecord::default()));
     pub static JOB: &'static StoreJob = Box::leak(Box::new(StoreJob::new()));
     /// What `post` answers: a negative status is a full job table.
     pub static POST_STATUS: Cell<i32> = const { Cell::new(0) };
@@ -128,7 +128,7 @@ unsafe impl Host for TestHost {
         }
     }
     fn begin_pass(&mut self) {}
-    fn hook_record(&self) -> &'static Pending {
+    fn hook_record(&self) -> &'static HookRecord {
         HOOKS.with(|h| *h)
     }
     fn job(&self) -> &'static StoreJob {

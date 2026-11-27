@@ -4,7 +4,7 @@ use core::mem::MaybeUninit;
 use dkrt_abi::provider::{Provider, State};
 use dkrt_sdk::proto::E_SET_OFF;
 use dkrt_sdk::E_BUSY;
-use dkrt_svc_project::engine::{JobSpec, Pending, CARRY_MAX, CARRY_VERSION, ST_DIRTY};
+use dkrt_svc_project::engine::{HookRecord, JobSpec, Pending, CARRY_MAX, CARRY_VERSION, ST_DIRTY};
 use dkrt_svc_project::project::{Host, Project};
 use dkrt_test_support::FakeCore;
 
@@ -23,15 +23,15 @@ fn start(core: &FakeCore) -> Box<MaybeUninit<Owner>> {
 fn edited(p: &mut Owner) {
     let job = p.host().job();
     p.tick(
-        &Pending {
+        &HookRecord::new(Pending {
             slot_val: 3,
             slot_flag: 1,
             ..Pending::new()
-        },
+        }),
         job,
     );
     for _ in 0..4 {
-        p.tick(&Pending::new(), job);
+        p.tick(&HookRecord::default(), job);
     }
     assert_eq!(p.engine().slot(), 3);
     assert_eq!(p.scope_put(b"test/ca", b"k", b"unsaved"), 0);
@@ -97,7 +97,7 @@ fn the_hooks_record_is_carried_with_the_state() {
     // the new copy's record is empty until the import puts the old one in
     hooks.put_back(&TestHost, &Pending::new());
     State::import(new, &core, Some(&bytes)).unwrap();
-    let got = new.host().hook_record();
+    let got = new.host().hook_record().read(&TestHost);
     assert_eq!((got.save_slot, got.save_flag), (3, 1));
     assert_eq!(got.clear, [1; 16]);
     assert_eq!(got.slot_flag, 0);
@@ -123,7 +123,7 @@ fn nothing_or_bytes_of_no_layout_of_ours_start_named_and_unbound() {
         );
         // named: no bind from the firmware's slot byte
         let job = p.host().job();
-        p.tick(&Pending::new(), job);
+        p.tick(&HookRecord::default(), job);
         assert_eq!(p.engine().slot(), -1);
     }
 }
@@ -138,16 +138,16 @@ fn can_stop_is_busy_while_a_stage_runs_or_a_job_is_posted() {
     // the setter named a project: the next pass lists its files
     let job = p.host().job();
     p.tick(
-        &Pending {
+        &HookRecord::new(Pending {
             slot_val: 3,
             slot_flag: 1,
             ..Pending::new()
-        },
+        }),
         job,
     );
     assert_eq!(Provider::can_stop(p, &core), Err(E_BUSY));
     for _ in 0..8 {
-        p.tick(&Pending::new(), job);
+        p.tick(&HookRecord::default(), job);
     }
     assert_eq!(Provider::can_stop(p, &core), Ok(()), "the work ended");
     POST_STATUS.with(|s| s.set(0));

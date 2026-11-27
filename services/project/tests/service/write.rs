@@ -210,8 +210,9 @@ fn the_hooks_record_is_taken_with_interrupts_masked_and_cleared() {
     r.hook_slot(4);
     r.pass();
     assert_eq!(r.f.irq.get(), 0, "masks are balanced");
-    assert_eq!(r.pend.slot_flag, 0);
-    assert_eq!(r.pend.clear, [0; 16]);
+    let left = r.pend.read(&r.f);
+    assert_eq!(left.slot_flag, 0);
+    assert_eq!(left.clear, [0; 16]);
 }
 
 #[test]
