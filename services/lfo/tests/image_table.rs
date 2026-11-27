@@ -29,6 +29,7 @@ fn the_words_of_a_table_this_service_knows_bind_and_any_other_refuses() {
 
 #[test]
 fn an_image_without_the_table_refuses_and_one_with_it_holds_its_waves() {
+    host::uninstall();
     let mut core = FakeCore::new();
     // SAFETY: as above
     let mut t: ImageTable = unsafe { core::mem::zeroed() };
@@ -44,7 +45,7 @@ fn an_image_without_the_table_refuses_and_one_with_it_holds_its_waves() {
 
 #[test]
 fn the_calls_reach_the_image_for_a_wave_of_its_range_only() {
-    let _image = host::install();
+    host::install();
     let mut core = FakeCore::new();
     core.set_lfo_table(7, 4, 0x1000, 0x1010);
     let mut t = bound(&core);

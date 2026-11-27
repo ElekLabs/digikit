@@ -188,21 +188,14 @@ pub mod host {
         STAND.with(|s| f(&mut s.borrow_mut()))
     }
 
-    /// The image has the table (7 .. 14, two entries that are never called) while the guard lives: the next `open` binds it. Without a guard the image has none. Dropping the
-    /// guard empties the stand-in again, so a test thread that is reused starts clean.
-    #[must_use]
-    pub fn install() -> Installed {
+    /// The image has the table (7 .. 14, two entries that are never called): the next `open` binds it. Without this call the image has none.
+    pub fn install() {
         with(|s| s.installed = true);
-        Installed
     }
 
-    /// The stand-in image's table is there while this lives.
-    pub struct Installed;
-
-    impl Drop for Installed {
-        fn drop(&mut self) {
-            with(|s| *s = Stand::default());
-        }
+    /// The image has no table again.
+    pub fn uninstall() {
+        with(|s| s.installed = false);
     }
 
     pub(super) fn words() -> Option<[u32; super::WORDS]> {
