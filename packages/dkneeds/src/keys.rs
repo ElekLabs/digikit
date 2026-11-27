@@ -36,6 +36,9 @@
 //!   number of fixups that follow: reserved, 0), 8 bytes: the first 8 bytes of the SHA-256 of the displaced bytes. Sorted by hash.
 //! - `CALLBACK_ORDER` (8, version 2): the service name hash from `PROVIDES` and its unsigned callback order. A service file may have one item.
 //! - `SERVICE_IMPORTS` (8, versions 1 and 2): ColdFire import name hash and the service name hash that must own it.
+//! - `PAYLOADS` (16, version 2 and 3): u32 service name hash (the owner, a hard need of the module), u16 local kind, u16 reserved (0), u32 offset in the file, u32 bytes. A
+//!   body the file carries for a service to install (`Payloads` part): the core checks the bounds and the owner, never reads the body. The writer uses at least version 2 for a table with
+//!   any (so a reader of version 1 only never sees the tag).
 //!
 //! The packer always writes a table (a module that needs and keeps nothing has the 8-byte head). A file with no table or another magic is the
 //! format of runtime 0.7: the loader refuses it with `E_CONTRACT`.
@@ -74,11 +77,16 @@ pub mod tag {
     pub const SITES: u16 = 13;
     pub const CALLBACK_ORDER: u16 = 14;
     pub const SERVICE_IMPORTS: u16 = 15;
+    pub const PAYLOADS: u16 = 16;
 }
 
 /// Bytes of one `FWNAMES` item and of one `SITES` item.
 pub const NAME_BYTES: usize = 12;
 pub const SITE_BYTES: usize = 20;
+/// Bytes of one `PAYLOADS` item.
+pub const PAYLOAD_BYTES: usize = 16;
+/// Most `PAYLOADS` items of one file (the loader refuses more with `E_FORMAT`).
+pub const MAX_PAYLOADS: usize = 8;
 /// The low 24 bits of a `HOOKS` entry of a service file are the image offset of the entry; the top byte is the device mask the packer wrote: bit `id - 1` is the device
 /// whose runtime id (`[digikit] id` of its device file) is `id`, no bit is every device. One hook name may have an entry for each of disjoint devices (the port file of a
 /// device gives the site); the loader takes the items for its own device ([`hook_for_device`]) and drops the mask.
@@ -159,6 +167,8 @@ pub fn item_bytes_v(t: u16, version: u16) -> Option<usize> {
         Some(NAME_BYTES)
     } else if t == tag::SITES {
         Some(SITE_BYTES)
+    } else if t == tag::PAYLOADS {
+        Some(PAYLOAD_BYTES)
     } else if t == tag::KEYS || t == tag::BIND {
         None
     } else {
@@ -176,6 +186,7 @@ pub(crate) fn valid_tag(version: u16, tag: u16, count: usize) -> bool {
     (tag::NEEDS..=top).contains(&tag)
         || (version == 2 && tag == tag::CALLBACK_ORDER && count == 1)
         || (version <= 2 && tag == tag::SERVICE_IMPORTS)
+        || (version >= 2 && tag == tag::PAYLOADS)
 }
 
 /// The 32-bit name hash of a service or an export (FNV-1a), the identity in `NEEDS` and `EXPORTS`.
@@ -307,6 +318,16 @@ pub struct SiteRec {
     pub check: [u8; 8],
 }
 
+/// One `PAYLOADS` item: a body in the file that the service `service` (name hash) installs for the module, as its local kind `kind`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Payload {
+    pub service: u32,
+    pub kind: u16,
+    /// The body's offset in the file and its length.
+    pub offset: u32,
+    pub bytes: u32,
+}
+
 /// What the packer writes: every list may be empty.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Table<'a> {
@@ -331,10 +352,12 @@ pub struct Table<'a> {
     /// The service identity and the order of its runtime callbacks.
     pub callback_order: Option<Pair>,
     pub service_imports: &'a [Pair],
+    /// The bodies the file carries for services. A table with any is written as version 2 at least.
+    pub payloads: &'a [Payload],
 }
 
 impl Table<'_> {
-    /// The version `write_table` writes: 3 if the table has `FWNAMES` or `SITES` items, else 2 if it has `PROVIDES`, `BIND` or `FW` items, else 1.
+    /// The version `write_table` writes: 3 if the table has `FWNAMES` or `SITES` items, else 2 if it has `PROVIDES`, `BIND`, `FW` or `PAYLOADS` items, else 1.
     pub fn version(&self) -> u16 {
         if !self.names.is_empty() || !self.sites.is_empty() {
             3
@@ -342,6 +365,7 @@ impl Table<'_> {
             && self.bind.is_empty()
             && self.fw.is_empty()
             && self.callback_order.is_none()
+            && self.payloads.is_empty()
         {
             1
         } else {
@@ -350,7 +374,7 @@ impl Table<'_> {
     }
 
     /// (tag, items, payload bytes) of each entry, in tag order.
-    fn entries(&self) -> [(u16, usize, usize); 15] {
+    fn entries(&self) -> [(u16, usize, usize); 16] {
         let kb: usize = self.keys.iter().map(|g| 8 + 4 * g.keys.len()).sum();
         let bb: usize = self
             .bind
@@ -389,6 +413,11 @@ impl Table<'_> {
                 tag::SERVICE_IMPORTS,
                 self.service_imports.len(),
                 8 * self.service_imports.len(),
+            ),
+            (
+                tag::PAYLOADS,
+                self.payloads.len(),
+                PAYLOAD_BYTES * self.payloads.len(),
             ),
         ]
     }
@@ -510,6 +539,15 @@ pub fn write_table(t: &Table, out: &mut [u8]) -> Result<usize, KeysError> {
                 out[at + 4..at + 12].copy_from_slice(&x.check);
                 at += 12;
             }
+        } else if tg == tag::PAYLOADS {
+            for x in t.payloads {
+                put32(out, &mut at, x.service);
+                out[at..at + 2].copy_from_slice(&x.kind.to_be_bytes());
+                // the reserved half word stays 0
+                at += 4;
+                put32(out, &mut at, x.offset);
+                put32(out, &mut at, x.bytes);
+            }
         } else {
             let list = if tg == tag::HOOKS {
                 t.hooks
@@ -532,6 +570,35 @@ pub fn write_table(t: &Table, out: &mut [u8]) -> Result<usize, KeysError> {
     }
     debug_assert_eq!(at, size);
     Ok(size)
+}
+
+/// Sets the offsets of the `PAYLOADS` items of the table `bytes` that `write_table` wrote (the packer knows them only after the file's layout, which the table's size
+/// decides; an item's size does not depend on its offset). `offsets[i]` is the offset of item `i`. `Size` when the table has other items than `offsets`.
+pub fn set_payload_offsets(bytes: &mut [u8], offsets: &[u32]) -> Result<(), KeysError> {
+    Keys::parse(bytes)?;
+    let n = u16_at(bytes, 6) as usize;
+    let mut at = HEAD;
+    for _ in 0..n {
+        let tg = u16_at(bytes, at);
+        let count = u16_at(bytes, at + 2) as usize;
+        let len = u32_at(bytes, at + 4) as usize;
+        if tg == tag::PAYLOADS {
+            if count != offsets.len() {
+                return Err(KeysError::Size);
+            }
+            for (i, off) in offsets.iter().enumerate() {
+                let item = at + ENTRY_HEAD + PAYLOAD_BYTES * i + 8;
+                bytes[item..item + 4].copy_from_slice(&off.to_be_bytes());
+            }
+            return Ok(());
+        }
+        at += ENTRY_HEAD + len;
+    }
+    if offsets.is_empty() {
+        Ok(())
+    } else {
+        Err(KeysError::Size)
+    }
 }
 
 fn u16_at(b: &[u8], at: usize) -> u16 {
@@ -599,6 +666,16 @@ impl<'a> Keys<'a> {
                 Some(w) => {
                     if count.checked_mul(w) != Some(len) {
                         return Err(KeysError::Size);
+                    }
+                    // a payload item's reserved half word is 0 (a later version may give it a meaning)
+                    if tg == tag::PAYLOADS {
+                        let mut g = 0;
+                        while g < len {
+                            if u16_at(body, g + 6) != 0 {
+                                return Err(KeysError::Count);
+                            }
+                            g += PAYLOAD_BYTES;
+                        }
                     }
                 }
                 None if tg == tag::BIND => {
@@ -933,6 +1010,35 @@ impl<'a> Keys<'a> {
         self.pairs(tag::PROVIDES).map(|p| (p.a, p.b))
     }
 
+    /// How many `PAYLOADS` items the table has.
+    pub fn payload_count(&self) -> usize {
+        self.count(tag::PAYLOADS)
+    }
+
+    /// `PAYLOADS` item `i`; `None` outside the entry. (A plain index read: the runtime calls it.)
+    pub fn payload(&self, i: usize) -> Option<Payload> {
+        let (n, b) = entry(self.bytes, tag::PAYLOADS)?;
+        if i >= n {
+            return None;
+        }
+        let c: &[u8; PAYLOAD_BYTES] = b
+            .get(PAYLOAD_BYTES * i..PAYLOAD_BYTES * (i + 1))?
+            .try_into()
+            .ok()?;
+        Some(Payload {
+            service: u32::from_be_bytes([c[0], c[1], c[2], c[3]]),
+            kind: u16::from_be_bytes([c[4], c[5]]),
+            offset: u32::from_be_bytes([c[8], c[9], c[10], c[11]]),
+            bytes: u32::from_be_bytes([c[12], c[13], c[14], c[15]]),
+        })
+    }
+
+    /// The `PAYLOADS` items, in table order.
+    pub fn payloads(&self) -> impl Iterator<Item = Payload> + 'a {
+        let me = *self;
+        (0..self.payload_count()).filter_map(move |i| me.payload(i))
+    }
+
     /// How many `BIND` items the table has.
     pub fn bind_count(&self) -> usize {
         self.count(tag::BIND)
@@ -1207,6 +1313,97 @@ mod tests {
         write_table(&t, &mut out).unwrap();
         let k = Keys::parse(&out).unwrap();
         assert!(k.hooks().eq(hooks.iter().copied()));
+    }
+
+    fn payload_table(payloads: &[Payload]) -> Vec<u8> {
+        let t = Table {
+            payloads,
+            ..Table::default()
+        };
+        let mut out = vec![0u8; table_size(&t)];
+        write_table(&t, &mut out).unwrap();
+        out
+    }
+
+    #[test]
+    fn payload_items_round_trip_and_force_version_two() {
+        let items = [
+            Payload {
+                service: name_hash("machines"),
+                kind: 3,
+                offset: 0x400,
+                bytes: 96,
+            },
+            Payload {
+                service: name_hash("fx"),
+                kind: 1,
+                offset: 0x460,
+                bytes: 8,
+            },
+        ];
+        let out = payload_table(&items);
+        let k = Keys::parse(&out).unwrap();
+        assert_eq!(k.version(), 2);
+        assert_eq!(k.payload_count(), 2);
+        assert!(k.payloads().eq(items.iter().copied()));
+        assert_eq!(k.payload(2), None);
+        // a table with none has no entry
+        let none = payload_table(&[]);
+        assert_eq!(Keys::parse(&none).unwrap().payload_count(), 0);
+        assert_eq!(Keys::parse(&none).unwrap().version(), 1);
+    }
+
+    #[test]
+    fn a_payload_entry_is_refused_in_a_version_1_table_and_with_a_reserved_bit() {
+        let items = [Payload {
+            service: 7,
+            kind: 1,
+            offset: 8,
+            bytes: 4,
+        }];
+        let mut out = payload_table(&items);
+        // the version byte pair is at +4: a version 1 table has no tag 16
+        out[5] = 1;
+        assert_eq!(Keys::parse(&out).err(), Some(KeysError::Tag));
+        out[5] = 2;
+        assert!(Keys::parse(&out).is_ok());
+        // the reserved half word of the item (+6 in the item, the item starts after the head and the entry head)
+        out[HEAD + ENTRY_HEAD + 7] = 1;
+        assert_eq!(Keys::parse(&out).err(), Some(KeysError::Count));
+    }
+
+    #[test]
+    fn the_packer_sets_the_offsets_after_the_layout() {
+        let items = [
+            Payload {
+                service: 7,
+                kind: 1,
+                offset: 0,
+                bytes: 4,
+            },
+            Payload {
+                service: 7,
+                kind: 2,
+                offset: 0,
+                bytes: 12,
+            },
+        ];
+        let mut out = payload_table(&items);
+        set_payload_offsets(&mut out, &[0x100, 0x120]).unwrap();
+        assert_eq!(
+            Keys::parse(&out)
+                .unwrap()
+                .payloads()
+                .map(|p| (p.offset, p.bytes))
+                .collect::<Vec<_>>(),
+            [(0x100, 4), (0x120, 12)]
+        );
+        // a wrong count is refused and changes nothing
+        assert_eq!(set_payload_offsets(&mut out, &[1]), Err(KeysError::Size));
+        assert_eq!(Keys::parse(&out).unwrap().payload(0).unwrap().offset, 0x100);
+        let mut empty = payload_table(&[]);
+        assert_eq!(set_payload_offsets(&mut empty, &[]), Ok(()));
+        assert_eq!(set_payload_offsets(&mut empty, &[1]), Err(KeysError::Size));
     }
 
     fn table_with(groups: &[(u32, &[u32])]) -> Vec<u8> {

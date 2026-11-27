@@ -517,6 +517,7 @@ pub fn pack(data: &PortData) -> Result<Vec<u8>> {
         .map(|x| usize::from(x.len) + 6)
         .sum();
     emit(&EmitParts {
+        payloads: &[],
         name: PORT_SERVICE,
         version: PORT_VERSION,
         role: ROLE_PORT,

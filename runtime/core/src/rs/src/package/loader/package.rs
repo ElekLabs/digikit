@@ -142,6 +142,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if r != OK {
             return Err(r);
         }
+        // the services that own the file's payloads are up (the manager brings them up first): each adopts the part and takes its body, before anything is taken
+        let r = self.check_payload_owners(&f.c, rec as u8 + 1, true);
+        if r != OK {
+            return Err(r);
+        }
         let name = f.c.f.add(H_NAME);
         let claimed = self.claim_record(slot, name)?;
         debug_assert!(claimed == rec);

@@ -300,6 +300,7 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models, decl: Option<&Dko>) -> Res
         }
     };
     let opts = Options {
+        payloads: vec![],
         name: spec.name.clone(),
         version: 0x00_01_00,
         trace: false,

@@ -170,6 +170,7 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
         stereo: false,
         gate: false,
         service: crate::module::service_of(m)?,
+        payloads: m.payloads.clone(),
     };
     // a DSP fill is built from the DSP object of this device and is left out of the file of the others; a ColdFire fill keeps its device mask
     if let Some(dev) = &o.device {

@@ -255,6 +255,6 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
                 return r;
             }
         }
-        OK
+        self.check_payloads(c)
     }
 }
