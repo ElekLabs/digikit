@@ -1,0 +1,5 @@
+{
+  "name": "nx-host",
+  "dir": "tools",
+  "include": "nx/tests/*.test.ts"
+}

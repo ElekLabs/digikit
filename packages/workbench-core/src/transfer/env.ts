@@ -98,6 +98,8 @@ export interface SamplesSlot {
   readLocal(): Promise<void>;
   /** The bar along the bottom for a running or finished upload. */
   bar(busy: string): { info: BarInfo; running: boolean } | undefined;
+  /** The bytes of the picked sample files, for the storage bar's preview (0 when nothing is picked). */
+  pendingBytes?(): number;
   /** One line per file of the last upload run, for the Log. */
   lines?(): string[];
   /** The light poll of the chosen folder: true when its listing changed (and the pane reads again). */

@@ -7135,3 +7135,21 @@ So the core runs at 264 MHz, 5.6 % above the data sheet's 250 MHz. The eSDHC clo
 **DTCN2.** Stock writes DTMR2 = `0x0007`: RST = 1, CLK = 11, PS = 0. CLK = 11 selects the DT2IN pin (falling edge). So
 DMA timer 2 counts an external signal, and the bus clock cannot model it.
 
+## Register behavior in the Rust runtime **[D]**
+
+[Issue #46](https://github.com/ElekLabs/digikit/issues/46) listed registers that the Python emulator treated as plain RAM.
+This table records what the Rust runtime does instead. It is a source reading, first made on 2026-11-12 and updated against
+`a250099db`. It does not show what the firmware relies on. The [runtime setup](../../packages/emulator/boot/src/runtime.rs#L771)
+uses `TimerPolicy::Oracle`, `CompletionPolicy::Oracle`, PIT channels 3, 2 and 0, and DTIM channels 3 and 1.
+
+| Register | Behavior in the Rust runtime | Source |
+| --- | --- | --- |
+| INTC0–2 INTFRCH/L (`+0x10`, `+0x14`) | Forced interrupt delivery is on by default. It considers sources 1–63 of each controller if the ICR level (its low three bits) is nonzero and the IMR bit is clear. On DT2 and DN2, vector 191 is excluded from this path and reserved for the SSI model when enabled. On the ColdFire peer path, guest-forced vector 191 is enabled when the peer starts. Guest reads of IPR do not reflect forced bits. | [INTC](../../packages/emulator/periph/src/intc.rs#L266), [timer delivery](../../packages/emulator/machine/src/time.rs#L173), [peer start](../../packages/emulator/boot/src/runtime.rs#L1320) |
+| SIMR/CIMR (`+0x1C`, `+0x1D`) and IMRH/L (`+0x08`, `+0x0C`) | The runtime starts with IMRH/L clear and uses them to gate interrupt delivery. Direct writes change the masks. SIMR/CIMR writes do not, because their mask actions only run under `TimerPolicy::Device`. | [Runtime setup](../../packages/emulator/boot/src/runtime.rs#L777), [timer writes](../../packages/emulator/machine/src/time.rs#L430) |
+| DTIM1 (`0xFC074000`) | The runtime models DTIM1 and DTIM3. The separate headless `boot` diagnostic enables DTIM1 and services timer IRQs with `--diagnostic-services`. | [Runtime setup](../../packages/emulator/boot/src/runtime.rs#L777), [boot setup](../../packages/emulator/boot/src/main.rs#L473), [diagnostic IRQ service](../../packages/emulator/boot/src/main.rs#L895) |
+| eDMA CERQ (`0xFC044019`) | Forwarded to the SSI model when present, where it clears the selected RX/TX enable or both enables. It does not disarm eSDHC channel 59 under `CompletionPolicy::Oracle`. UART35 TX, MIDI TX and the DSPI2 channels do not act on it. | [SPI link](../../packages/emulator/periph/src/spilink.rs#L261), [SSI](../../packages/emulator/periph/src/ssi.rs#L397), [eSDHC DMA](../../packages/emulator/machine/src/board.rs#L1720) |
+| DSPI2 MCR (`0xEC038000`) | Register writes are stored, but HALT, CLR_TXF and CLR_RXF have no modeled effects. eDMA SERQ/CINT drives the link. | [SPI link](../../packages/emulator/periph/src/spilink.rs#L261) |
+| EPORT0 (`0xFC090000`) | No full register model. Unclaimed MMIO falls back to zero-initialized RAM. The DSPI1 peer generates IRQ1 without consulting EPORT registers, but the mailbox IRQ4 path checks EPIER bit 4 before delivery. | [Runtime bus](../../packages/emulator/boot/src/runtime.rs#L855), [MMIO fallback](../../packages/emulator/boot/src/common.rs#L648), [DSPI1 IRQ](../../packages/emulator/boot/src/runtime.rs#L494), [mailbox IRQ](../../packages/emulator/boot/src/peer_service.rs#L53) |
+
+**[O]** Whether firmware depends on the unmodeled SIMR/CIMR writes, DSPI2 HALT or FIFO clear, or EPORT0 behavior. This needs
+firmware evidence. See [finding 19](19-sequencer-and-leds.md) for the history of the forced-interrupt default.

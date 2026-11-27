@@ -7,6 +7,8 @@ import { addJob, removeJob, updateJob } from '../jobs/jobs-core';
 import { remembered, type KeyValue } from '../storage';
 import type { TransferEnv } from './env';
 import type { LinkState } from './link-core';
+import type { LiveResult } from './live-ops';
+import type { StoreUsage } from '../target-ops/store';
 import { parseMode, type Mode, type Progress, type TransferView, type Verified } from './transfer-core';
 
 export interface DeviceInfo {
@@ -36,6 +38,8 @@ export function createTransferState({
   jobs: JobsApp;
 }) {
   const [lastView, setLastView] = createSignal<TransferView>();
+  /** The store usage read in the Samples mode (the Modules mode has it in its view). */
+  const [sampleUsage, setSampleUsage] = createSignal<StoreUsage | undefined>();
   // Retain the local scan across disconnects, including when Transfer is unmounted.
   let libraryView: TransferView | undefined;
   const rememberLibrary = (view: TransferView) => {
@@ -47,6 +51,8 @@ export function createTransferState({
     setBrowsing(true);
     setDeviceInfo(undefined);
     setVerified({});
+    setLiveResults({});
+    setSampleUsage(undefined);
     setDelTicks(new Set<string>());
   };
   /** The library modules ticked for install. */
@@ -54,6 +60,8 @@ export function createTransferState({
   /** The store paths ticked in the On device pane (for Delete). */
   const [delTicks, setDelTicks] = createSignal<Set<string>>(new Set());
   const [verified, setVerified] = createSignal<Verified>({});
+  /** The last live change (Load, Unload, Reload) per store path, shown on the row until the next change or target. */
+  const [liveResults, setLiveResults] = createSignal<Record<string, LiveResult>>({});
   const [progress, setProgress] = createSignal<Progress>();
   const [showTests, setShowTests] = createSignal(false);
   const [log, setLog] = createSignal<string[]>([]);
@@ -159,6 +167,8 @@ export function createTransferState({
     rememberLibrary,
     forgetDevice,
     lastView,
+    sampleUsage,
+    setSampleUsage,
     setLastView,
     ticks,
     setTicks,
@@ -166,6 +176,8 @@ export function createTransferState({
     setDelTicks,
     verified,
     setVerified,
+    liveResults,
+    setLiveResults,
     progress,
     setProgress,
     showTests,

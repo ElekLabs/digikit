@@ -6,12 +6,14 @@
 
 import { fmtVersion } from '@digi/dk-session';
 import { formatBytes } from '../modules/backend.ts';
-import { fit, fitsSet, type Needs } from '../modules/fit.ts';
-import type { CardServiceRef, Group, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
+import { fitsNow, type Caps } from '../modules/fit.ts';
+import type { CardServiceRef, TransferEvent, TransferRow, TransferView } from '../modules/dktransfer.ts';
+import type { Group } from '../modules/module-path.ts';
 import { PROVIDER_MAX } from '../modules/services.ts';
 import type { ServiceRef, ServiceRefusal } from '../modules/services.ts';
+import { GROUPS, groupRows, isSystemRow, portLine, unusedServices, type RowGroup } from './pane-groups.ts';
 export type { Group, TransferEvent, TransferRow, TransferView };
-export const GROUPS: Group[] = ['Machines', 'Effects', 'LFO shapes', 'Tools'];
+export { GROUPS };
 
 // ---- the mode of the page ---------------------------------------------------------------------------------------------------------
 
@@ -37,7 +39,9 @@ export function freeLine(free: number | undefined): string {
 export function storageLine(view: TransferView): string {
   const rows = onDevice(view);
   const bytes = rows.reduce((n, r) => n + r.file_size, 0);
-  return `Modules: ${rows.length} file${rows.length === 1 ? '' : 's'}, ${formatBytes(bytes)} · ${freeText(view.free_bytes)} free`;
+  const files = `Modules: ${rows.length} file${rows.length === 1 ? '' : 's'}, ${formatBytes(bytes)}`;
+  // the storage bar shows the free space when the view has the usage
+  return view.usage ? files : `${files} · ${freeText(view.free_bytes)} free`;
 }
 
 /** The key of a row in the tick set. */
@@ -49,12 +53,14 @@ export function onDevice(view: TransferView): TransferRow[] {
   return [...mine, ...view.card_only].sort((a, b) => a.path.localeCompare(b.path));
 }
 
-/** The "Available" list: the library modules in the three groups (test modules behind the toggle). */
-export function available(view: TransferView, showTests: boolean): { group: Group; rows: TransferRow[] }[] {
-  return GROUPS.map((group) => ({
-    group,
-    rows: view.modules.filter((r) => r.group === group && (showTests || !r.test)),
-  }));
+/** The "On your computer" list: the library modules in their groups (test modules behind the toggle). */
+export function available(view: TransferView, showTests: boolean): RowGroup[] {
+  return groupRows(view.modules.filter((r) => showTests || !r.test));
+}
+
+/** The "On device" list in the same groups as `available`, plus "Not in library"; a group without rows is left out. */
+export function deviceGroups(view: TransferView, p: Progress | undefined, installing = false): RowGroup[] {
+  return groupRows(onDeviceWithPending(view, p, installing), { notInLibrary: true }).filter((g) => g.rows.length);
 }
 
 /** Dependency refusals to show alongside the visible library rows. */
@@ -86,16 +92,26 @@ function tickedServices(view: TransferView, ticks: Set<string>): ServiceRef[] {
   return out;
 }
 
-/** The capacity needs of the ticked modules' services, each service once (a service without needs adds nothing). */
-function serviceNeeds(view: TransferView, ticks: Set<string>): Needs[] {
-  return tickedServices(view, ticks).flatMap((sv) => (sv.needs ? [sv.needs] : []));
-}
-
 /** The services to upload for the ticked modules, each once, dependencies first; a service that is on the device with the same hash is left out. */
 export function installServices(view: TransferView, ticks: Set<string>): { id: string; path: string; bytes: number }[] {
   return tickedServices(view, ticks)
     .filter((sv) => sv.state !== 'on device')
     .map((sv) => ({ id: sv.stem, path: `services/${sv.stem}.dks`, bytes: sv.size }));
+}
+
+/** The bytes an install of the ticked modules puts on the card: the files that are not on the card as they are, and the services that are not there. */
+export function installBytes(view: TransferView, ticks: Set<string>): number {
+  const mods = view.modules
+    .filter((r) => r.id && ticks.has(rowKey(r)) && r.on_card !== 'yes')
+    .reduce((a, r) => a + r.file_size, 0);
+  return view.coreOnly ? 0 : mods + installServices(view, ticks).reduce((a, s) => a + s.bytes, 0);
+}
+
+const kib = (bytes: number): string => `${Math.ceil(bytes / 1024)} KiB`;
+
+/** The refusal of an install or upload that the card cannot hold (`needed` against `free`), or null when it fits. */
+export function spaceError(needed: number, free: number): string | null {
+  return needed > free ? `The card is too full: needs ${kib(needed)}, ${kib(free)} free.` : null;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -258,19 +274,18 @@ export interface RowTag {
   text: string;
   title?: string;
   tone: 'ok' | 'warn' | 'dim';
+  /** A long text that wraps in the row instead of being cut (the capacity hint). */
+  wrap?: boolean;
 }
 
-/** The tags of a library module in the "On your computer" list: a test module, what the device holds of it, and a module that does not fit the
- * device (from the needs inferred from its contents, next to the modules loaded now; the tooltip says what is short). Fitting is the usual
- * state and says nothing; the line above the list says how the ticked ones fit together. */
+/** The tags of a library module in the "On your computer" list: a test module and what the device holds of it. Installing is limited by the
+ * card's storage only (the storage bar, `spaceError`); the runtime's capacity is a question of loading, shown on the device rows (`capacityTag`). */
 export function localTags(r: TransferRow): RowTag[] {
   const out: RowTag[] = [];
   if (r.test) out.push({ text: 'test', tone: 'dim' });
   if (r.on_card === 'yes') out.push({ text: 'on device', tone: 'ok' });
   else if (r.on_card === 'other version')
     out.push({ text: 'differs', title: 'A different build is on the device; Install replaces it', tone: 'warn' });
-  const w = warningText(r);
-  if (w) out.push({ text: "won't fit", title: w, tone: 'warn' });
   const sr = r.service_refusal;
   if (sr)
     out.push({
@@ -284,6 +299,22 @@ export function localTags(r: TransferRow): RowTag[] {
       tone: 'warn',
     });
   return out;
+}
+
+/**
+ * The hint on a device row that is on the card and not loaded: which runtime resource is short now (`DSP memory 146 KiB short`, `machine rows 1 short`),
+ * from the needs of its contents and the CAPACITY next to the modules loaded now. Only a hint: the runtime's refusal at Load is authoritative.
+ */
+export function capacityTag(r: TransferRow, cap?: Caps | null): RowTag | undefined {
+  if (!cap || !r.id || r.loaded || r.on_card === 'no' || !r.needs) return undefined;
+  const short = fitsNow(r.needs, cap);
+  if (!short) return undefined;
+  return {
+    text: short.describe_by,
+    title: `Load is likely refused: ${short.describe}. The runtime decides when you Load.`,
+    tone: 'warn',
+    wrap: true,
+  };
 }
 
 /** The dependency badge of either copy, with one tooltip line per hard service need. */
@@ -306,65 +337,20 @@ export function dependencyBadge(
   };
 }
 
-/**
- * The line for the ticked modules: do they fit the device together? The next boot loads the selection into an empty runtime, so the ticked modules
- * are taken in list order out of the device's limits (the sum rule: it does not model fragmentation, so it is conservative) and what is on the
- * device now is not counted. null when nothing is ticked or the device gave no CAPACITY.
- */
-export function tickedFit(view: TransferView, ticks: Set<string>): { text: string; tone: 'ok' | 'warn' } | null {
-  const rows = view.modules.filter((r) => r.id && ticks.has(rowKey(r)) && r.needs && !r.service_refusal);
-  if (!rows.length || !view.capacity) return null;
-  const nServices = tickedServices(view, ticks).length;
-  if (nServices > PROVIDER_MAX)
-    return { text: `The selection needs more than ${PROVIDER_MAX} services.`, tone: 'warn' };
-  const short = fitsSet([...rows.map((r) => r.needs!), ...serviceNeeds(view, ticks)], view.capacity, true);
-  if (!short) {
-    const withServices = nServices
-      ? rows.length === 1
-        ? ` and its ${plural(nServices, 'service', 'services')}`
-        : ` and their ${plural(nServices, 'service', 'services')}`
-      : '';
-    return {
-      text:
-        rows.length === 1
-          ? `The ticked module${withServices} ${nServices ? 'fit' : 'fits'} the device.`
-          : `The ${rows.length} ticked modules${withServices} fit the device together.`,
-      tone: 'ok',
-    };
-  }
-  // an index past the modules is one of their services (counted after the modules)
-  if (short.index >= rows.length)
-    return {
-      text: `The services of the ticked modules do not fit the device with them: ${short.describe}`,
-      tone: 'warn',
-    };
-  const row = rows[short.index] as (typeof rows)[number];
-  const name = row.label ?? row.name;
-  return {
-    text:
-      short.index === 0
-        ? `${name} does not fit the device: ${short.describe}`
-        : `${name} does not fit with the ticked modules before it: ${short.describe}`,
-    tone: 'warn',
-  };
-}
-
-/** The load of the device after the next boot with the ticked modules (`DSP 52% CPU 1%`, the fit rule's load line), or null when nothing is
- * ticked, the device gave no CAPACITY or the ticked modules do not fit together (tickedFit says which). */
-export function tickedLoad(view: TransferView, ticks: Set<string>): string | null {
-  const rows = view.modules.filter((r) => r.id && ticks.has(rowKey(r)) && r.needs && !r.service_refusal);
-  if (!rows.length || !view.capacity || tickedServices(view, ticks).length > PROVIDER_MAX) return null;
-  const answer = fit({
-    caps: view.capacity,
-    needs: [...rows.map((r) => r.needs!), ...serviceNeeds(view, ticks)],
-    empty: true,
-  });
-  return answer.set || !answer.line ? null : answer.line;
+/** The lines of a dependency popover, one per service, with the service file's path when it is on the card (the popover offers its Reload). */
+export function dependencyItems(
+  services: readonly (ServiceRef | CardServiceRef)[] | undefined,
+): { line: string; path?: string }[] {
+  const lines = dependencyBadge(services)?.lines ?? [];
+  return (services ?? []).map((sv, i) => ({
+    line: lines[i] as string,
+    ...(sv.state === 'on device' && 'path' in sv && sv.path ? { path: sv.path } : {}),
+  }));
 }
 
 /** The tags of a file of the "On device" list: a loaded module says so first, a selected one that failed to load says why (`not_loaded`); a file the library does not have, and one that differs from
  * the library's build. A file that matches the library has no tag (that is the usual state), and one that is only going there has none yet. */
-export function deviceTags(r: TransferRow): RowTag[] {
+export function deviceTags(r: TransferRow, cap?: Caps | null): RowTag[] {
   const out: RowTag[] = [];
   if (r.loaded) out.push({ text: 'loaded', title: 'Loaded by the device until the next restart', tone: 'ok' });
   if (r.not_loaded)
@@ -373,17 +359,18 @@ export function deviceTags(r: TransferRow): RowTag[] {
       title: r.not_loaded,
       tone: 'warn',
     });
+  for (const sv of r.card_services ?? [])
+    if (sv.state === 'not on device')
+      out.push({
+        text: `needs ${sv.label.replace(/ service$/, '')}`,
+        title: `${sv.label} is not on the card, so this module cannot load; install a module that carries it`,
+        tone: 'warn',
+      });
   if (r.for_firmware)
     out.push({
       text: `for firmware ${r.for_firmware}`,
       title:
         'A port file of another firmware version: it stays on the card and serves no module while the device runs another firmware',
-      tone: 'dim',
-    });
-  else if (r.needed_by?.length)
-    out.push({
-      text: `needed by ${r.needed_by.join(', ')}`,
-      title: 'A module on the card needs this service; delete that module first',
       tone: 'dim',
     });
   else if (!r.id)
@@ -394,6 +381,8 @@ export function deviceTags(r: TransferRow): RowTag[] {
     });
   else if (r.on_card === 'other version')
     out.push({ text: 'differs', title: 'Differs from the build in your library', tone: 'warn' });
+  const capacity = capacityTag(r, cap);
+  if (capacity) out.push(capacity);
   return out;
 }
 
@@ -601,11 +590,9 @@ export function rowStatus(p: Progress | undefined, verified: Verified, path: str
   return v ? { kind: v } : undefined;
 }
 
-/** Attached services are represented by their module's badge and stay in the card inventory. */
+/** System files are no rows: a module's badge lists the services, and the header counts the unused ones (`unusedServices`) and shows the port file (`portLine`). They stay in the card inventory. */
 function visibleDeviceRows(view: TransferView, rows = onDevice(view)): TransferRow[] {
-  if (view.incomplete_card_needs) return rows;
-  const attached = new Set(rows.flatMap((r) => (r.card_services ?? []).map((service) => service.path)));
-  return rows.filter((r) => !attached.has(r.path));
+  return rows.filter((r) => !isSystemRow(r));
 }
 
 /** The destination rows, with pending installs added so their progress stays visible.
@@ -616,8 +603,8 @@ export function onDeviceWithPending(view: TransferView, p: Progress | undefined,
   const have = new Set(rows.map((r) => r.path));
   const onCard = new Set(inventory.map((r) => r.path));
   for (const m of p?.modules ?? []) {
-    if (!m.path || have.has(m.path) || (onCard.has(m.path) && !installing)) continue;
-    const repo = m.kind === 'service' ? undefined : view.modules.find((r) => r.id === m.id);
+    if (!m.path || have.has(m.path) || m.kind === 'service' || (onCard.has(m.path) && !installing)) continue;
+    const repo = view.modules.find((r) => r.id === m.id);
     rows.push({
       ...(repo ?? { group: 'Tools', test: false, name: m.id, version: null }),
       id: m.id,
@@ -641,9 +628,12 @@ export function applyVerified(v: Verified, e: TransferEvent): Verified {
 
 /** The store paths ticked in the On device pane, in list order (ticks of rows that are gone are dropped). */
 export function deletePaths(view: TransferView, ticked: Set<string>): string[] {
-  return visibleDeviceRows(view)
-    .filter((r) => ticked.has(r.path))
-    .map((r) => r.path);
+  const rows = visibleDeviceRows(view).filter((r) => ticked.has(r.path));
+  return [
+    ...rows.map((r) => r.path),
+    ...unusedServices(view).paths.filter((p) => ticked.has(p)),
+    ...(portLine(view)?.stale ?? []).filter((p) => ticked.has(p)),
+  ];
 }
 
 /** A button label with the count in parentheses: "Upload (3)"; no count when nothing is ticked. */

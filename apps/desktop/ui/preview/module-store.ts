@@ -129,7 +129,12 @@ async function seedStore(library: PreviewLibrary, profile: DeviceProfile, pages:
     // Seed the real providers alongside the two demo modules, so Transfer and Files see the same card.
     if (outdated || installed) {
       const providers = [servicePath('machines')];
-      if (installed) providers.push(servicePath('samples'));
+      if (installed && sim.card !== 'incomplete') providers.push(servicePath('samples'));
+      if (sim.card === 'orphan') {
+        // a service file of the library that no module on the card needs
+        const spare = (await library.library.scan(device)).find((f) => /\/(lfo|fx|project)\.dks$/.test(f.path));
+        if (spare) providers.push(servicePath(spare.path.slice(spare.path.lastIndexOf('/') + 1, -'.dks'.length)));
+      }
       const firmware = profile.firmware.at(-1);
       if (firmware) providers.push(portPath(`${device}-${firmware.version}`));
       for (const path of providers) {
@@ -200,6 +205,19 @@ export function createPreviewStores(library: PreviewLibrary, pages: PreviewModul
       return { size: bytes.length, bytes: bytes.slice(offset, offset + Math.min(length, READ_MAX)) };
     };
 
+    /** A live change of the preview card: the runtime's answer is set by `sim.live`; a change that works moves the module in or out of the loaded list. */
+    const live = async (op: 'load' | 'unload' | 'reload', path: string) => {
+      await wait(150, pending.signal);
+      if (sim.live === 'refuse') return { result: -12, unloaded: false };
+      if (sim.live === 'fail') return { result: -8, unloaded: op === 'reload' };
+      const card = await store();
+      const name = headerInfo(card.files.get(path) ?? new Uint8Array())?.name;
+      if (name && op === 'unload') card.boot.modules = card.boot.modules.filter((m) => m.name !== name);
+      if (name && op === 'load' && !card.boot.modules.some((m) => m.name === name))
+        card.boot.modules.push(...bootModules(card.files, new Map([[path, undefined]])).modules);
+      return { result: 0, unloaded: false };
+    };
+
     return {
       cancelPending() {
         pending.abort();
@@ -253,8 +271,13 @@ export function createPreviewStores(library: PreviewLibrary, pages: PreviewModul
       },
       read,
       async header(path) {
+        if (sim.card === 'incomplete' && path === 'modules/tool/old-experiment.dkm')
+          throw new DkError({ error: 'The card could not read this header.', kind: 'device' });
         return (await read(path, 0, HEADER_BYTES)).bytes;
       },
+      reloadAndWait: (path) => live('reload', path),
+      loadAndWait: (path) => live('load', path),
+      unloadAndWait: (path) => live('unload', path),
       async verify(path) {
         await wait(100, pending.signal);
         return fileHashHex(await getFile(path));

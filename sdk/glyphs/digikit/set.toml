@@ -1,0 +1,20 @@
+name = "digikit"
+title = "digikit glyphs"
+description = "Icons and value glyphs for digikit screens"
+
+# Placeholder size classes, to be replaced by measured values.
+[sizes]
+inline = [7, 5]
+digit = [3, 5]
+icon = [9, 9]
+knob = [17, 17]
+panel = [51, 17]
+
+# Empty outer ring (px) an invertible glyph keeps. icon and inline use the full cell: the context gives the
+# inverted border (11 px selection bar around a 9 px icon, bar padding around 5 px text).
+[margins]
+knob = 1
+icon = 0
+inline = 0
+digit = 0
+panel = 1

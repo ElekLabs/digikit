@@ -45,17 +45,25 @@
       "{projectRoot}/**/*",
       "jsToolchain",
       "{workspaceRoot}/vitest.host.config.ts",
-      "{workspaceRoot}/vitest.host.projects.json",
       "{workspaceRoot}/tsconfig*.json",
       {
         "externalDependencies": ["vitest"]
       }
     ],
     "jsToolchain": [
-      "{workspaceRoot}/package.json",
-      "{workspaceRoot}/pnpm-lock.yaml",
       "{workspaceRoot}/pnpm-workspace.yaml",
       "{workspaceRoot}/nx.json",
+      {
+        "externalDependencies": [
+          "vitest",
+          "typescript",
+          "vite",
+          "@types/node",
+          "smol-toml",
+          "@napi-rs/canvas",
+          "solid-js"
+        ]
+      },
       {
         "runtime": "node -p 'JSON.stringify({versions:process.versions,platform:process.platform,arch:process.arch})'"
       },
@@ -79,6 +87,12 @@
       },
       {
         "env": "LC_ALL"
+      }
+    ],
+    "jsLintTooling": [
+      "{workspaceRoot}/package.json",
+      {
+        "externalDependencies": ["oxlint", "eslint-plugin-solid", "prettier", "prettier-plugin-astro"]
       }
     ],
     "production": [

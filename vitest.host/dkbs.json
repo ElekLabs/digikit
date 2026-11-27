@@ -1,0 +1,5 @@
+{
+  "name": "dkbs",
+  "dir": "packages/dkbs",
+  "include": "tests/*.test.ts"
+}

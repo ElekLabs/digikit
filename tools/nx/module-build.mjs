@@ -77,8 +77,9 @@ export const buildObjectsTarget = (workspaceRoot, byId, m, root, objects, coreBu
     'patchkit:cli',
     ...(m.requires ?? []).filter((id) => coreBuilds.has(id)).map((id) => `${id}:build-objects`),
   ],
-  // `patchkit build` also rewrites the system package object ([system_package]): a task that reads it names it through this target.
-  outputs: [...objects, ...[byId.get(m.id)?.doc.system_package].filter(Boolean)]
+  // `patchkit build` also rewrites the system package object ([system_package]) and the object the package links in
+  // ([package_part], the DIGIKIT menu): a task that reads one names it through this target.
+  outputs: [...objects, ...[byId.get(m.id)?.doc.system_package, byId.get(m.id)?.doc.package_part].filter(Boolean)]
     .filter((o) => o.sources?.length)
     .map((o) => `{workspaceRoot}/${root}/${o.path}`),
   options: {

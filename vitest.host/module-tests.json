@@ -1,0 +1,8 @@
+{
+  "name": "module-tests",
+  "dir": ".",
+  "include": "{modules,runtime,services}/**/tests/**/*.test.ts",
+  "exclude": [
+    "**/*.rig.test.ts"
+  ]
+}

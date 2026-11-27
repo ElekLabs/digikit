@@ -25,8 +25,7 @@
         "{workspaceRoot}/runtime/core/tests/storage/contract.toml",
         "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/module.toml",
         "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/src/**/*",
-        { "dependentTasksOutputFiles": "dist/modules/*/{dyn-fx-gain,sine,svc-test,svc-test-user}.*", "transitive": false }
-      ],
+        { "dependentTasksOutputFiles": "dist/modules/*/{dyn-fx-gain,sine,svc-test,svc-test-user}.*", "transitive": false }, { "externalDependencies": ["smol-toml"] }],
       "dependsOn": ["test/dyn-fx-gain:pack", "test/sine:pack", "test/svc-test:pack", "test/svc-test-user:pack"],
       "outputs": [],
       "options": {
@@ -40,10 +39,10 @@
       "description": "The system package artifact: dist/syspkg/runtime/system.dksp, the card file digikit/system.dksp (`patchkit syspkg build` of the committed [system_package] object build/package.dko.json and the DIGIKIT menu's [package_part] object: header, image, bss size, relocations). A stale object is the failure of patchkit:objects-check.",
       "inputs": [
         { "dependentTasksOutputFiles": "runtime/core/build/package.dko.json", "transitive": false },
-        "{workspaceRoot}/runtime/apps/digikit-menu/build/digikit-menu.dko.json",
-        { "dependentTasksOutputFiles": "dist/patchkit/patchkit" }
+        { "dependentTasksOutputFiles": "runtime/apps/digikit-menu/build/digikit-menu.dko.json", "transitive": false },
+        { "dependentTasksOutputFiles": "dist/patchkit/patchkit" }, { "externalDependencies": [] }
       ],
-      "dependsOn": ["patchkit:cli", "build-objects"],
+      "dependsOn": ["patchkit:cli", "build-objects", "core/digikit-menu:build-objects"],
       "outputs": ["{workspaceRoot}/dist/syspkg/runtime"],
       "options": {
         "command": "dist/patchkit/patchkit --root . syspkg build runtime/core/build/package.dko.json --part runtime/apps/digikit-menu/build/digikit-menu.dko.json --out dist/syspkg/runtime/system.dksp",
@@ -80,8 +79,7 @@
         { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/bytes/images/*/*.info", "transitive": false },
         "{workspaceRoot}/firmware/Digitakt_II_OS1.17.syx",
-        "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx"
-      ],
+        "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx", { "externalDependencies": ["smol-toml"] }],
       "dependsOn": [
         "test/sine:pack",
         "test/dyn-dn2:pack",

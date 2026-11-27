@@ -8,6 +8,7 @@
 import { Match, Show, Switch, batch, createEffect, createMemo, createSignal, on, onMount, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import Segmented from '../components/Segmented';
+import UsageBar, { type UsagePart } from '../components/UsageBar';
 import AutoRefresh from './AutoRefresh';
 import ConnectionBadge from './ConnectionBadge';
 import CopyErrorButton from '../components/CopyErrorButton';
@@ -15,7 +16,9 @@ import { useTransferApp } from '../../src/transfer/app-context';
 import ModulesMode from './ModulesMode';
 import SourcePanel from './SourcePanel';
 import TransferBar from './TransferBar';
-import { MODES, modulesBar, parseMode } from '../../src/transfer/transfer-core';
+import { MODES, installBytes, modulesBar, parseMode } from '../../src/transfer/transfer-core';
+import { storageBar } from '../../src/transfer/storage-bar';
+import { formatBytes } from '../../src/modules/backend';
 import { cancellable, cancelJob, runTransfer } from '../../src/transfer/run-transfer';
 import { writing, type PageCtx } from './TransferParts';
 import './transfer-page.css';
@@ -33,15 +36,18 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
     error,
     halted,
     jobProgress,
+    lastView,
     log,
     noRuntime,
     progress,
     readingAfterJob,
+    sampleUsage,
     setDelTicks,
     setDeviceInfo,
     setError,
     setHalted,
     setMode,
+    ticks,
   } = app.state;
   const [reload, setReload] = createSignal(0);
 
@@ -130,6 +136,21 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
     },
   );
   const samples = () => env.extras?.samples;
+  // the storage bar: the kind of the mode against the others and the free space, with what the ticked items add
+  const storage = createMemo(() => {
+    const v = lastView();
+    const usage = activeMode() === 'modules' ? v?.usage : sampleUsage();
+    if (!usage) return undefined;
+    const added = activeMode() === 'modules' && v ? installBytes(v, ticks()) : (samples()?.pendingBytes?.() ?? 0);
+    const b = storageBar(usage, activeMode(), added);
+    const parts: UsagePart[] = b.segments.map((x) => ({
+      key: x.key,
+      bytes: x.bytes,
+      title: `${x.label} ${formatBytes(x.bytes)}`,
+      legend: `${x.label} ${formatBytes(x.bytes)}`,
+    }));
+    return { b, parts };
+  });
   // the status bar shows the same fraction and line
   createEffect(() => {
     const b = bar();
@@ -180,6 +201,17 @@ export default function TransferPage(props: { onFlash?: () => void }): JSX.Eleme
               </button>
             </Show>
           </p>
+        )}
+      </Show>
+
+      <Show when={storage()}>
+        {(st) => (
+          <div class="storage-bar" classList={{ over: st().b.overflow > 0 }}>
+            <UsageBar parts={st().parts} base={st().b.base} label={st().b.text} over={st().b.overflow > 0} />
+            <p class="storage-text" role="status">
+              {st().b.text}
+            </p>
+          </div>
         )}
       </Show>
 
