@@ -383,6 +383,9 @@ importers:
 
   packages/module-ui:
     dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.17.0
+        version: 2.17.0
       solid-js:
         specifier: 1.9.15
         version: 1.9.15

@@ -10,3 +10,6 @@ export * from './module-client.ts';
 export * from './memory-settings-store.ts';
 export * from './memory-module-channel.ts';
 export * from './module-page.ts';
+export * from './query-result.ts';
+export * from './query-service-client.ts';
+export * from './memory-query-service.ts';
