@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { encode, decode, type Frame } from '@digi/dkbs';
-import { type CardRig, type CardSpec } from '@digi/regression/runtime/card-rig.ts';
+import { type CardRig } from '@digi/regression/runtime/card-rig-api.ts';
+import { type CardSpec } from '@digi/regression/runtime/card-spec.ts';
 import { introFramebuffer } from '@digi/regression/runtime/intro-frame.ts';
 import { encodeSettings } from '@digi/regression/runtime/project-kit.ts';
 import { rootsOf } from '@digi/regression/runtime/image-roots.ts';

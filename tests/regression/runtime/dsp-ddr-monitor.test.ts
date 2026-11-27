@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot, resolveInputs } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
-import { withSession } from '../support.ts';
+import { withSession } from '../session-handle.ts';
 import { expectPollEmulated } from './waits.ts';
 
 const binary = process.env.DIGI_DDR_MONITOR_EMUD;

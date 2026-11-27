@@ -4,6 +4,7 @@ use super::Env;
 /// The hooks' record (`repr(C)`, written by `hooks.s`): the slot the setter was called with and whether it was, the slot of a successful real save and whether there was one, and one
 /// bit for each slot cleared or pasted over (byte `slot / 8`, bit `slot % 8`). A flag is written after its slot. The tick takes the record with interrupts masked and zeroes it.
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct Pending {
     pub slot_val: u32,
     pub slot_flag: u32,
@@ -23,6 +24,24 @@ impl Pending {
             clear: [0; 16],
             paste: [0; 16],
         }
+    }
+}
+
+impl Pending {
+    /// Put `from` into this record (UI task, interrupts masked: a hook may write it): the record of a copy of the service that was taken down. Each flag is written after its slot.
+    pub fn put_back<E: Env + ?Sized>(&self, env: &E, from: &Pending) {
+        let sr = env.irq_mask();
+        // SAFETY: as in `take_hook_records`: plain words that a hook writes from another task, written here with interrupts masked.
+        unsafe {
+            let hooks = self as *const Pending as *mut Pending;
+            core::ptr::write_volatile(&mut (*hooks).slot_val, from.slot_val);
+            core::ptr::write_volatile(&mut (*hooks).slot_flag, from.slot_flag);
+            core::ptr::write_volatile(&mut (*hooks).save_slot, from.save_slot);
+            core::ptr::write_volatile(&mut (*hooks).save_flag, from.save_flag);
+            core::ptr::write_volatile(&mut (*hooks).clear, from.clear);
+            core::ptr::write_volatile(&mut (*hooks).paste, from.paste);
+        }
+        env.irq_restore(sr);
     }
 }
 

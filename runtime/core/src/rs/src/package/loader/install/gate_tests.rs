@@ -17,7 +17,7 @@ const CELL: u32 = 0x44f3_7090;
 const OBJECT: u32 = 0x4500_0000;
 
 fn parks() -> [Park; 2] {
-    [Park { tcb: TCB_A, wait: QUEUE, indirect: false, off: 0xc }, Park { tcb: TCB_B, wait: CELL, indirect: true, off: 0x18 }]
+    [Park { tcb: TCB_A, wait: QUEUE, indirect: false, off: 0xc, made: 0x14 }, Park { tcb: TCB_B, wait: CELL, indirect: true, off: 0x18, made: 0 }]
 }
 
 fn put(f: &FakePlatform, addr: u32, v: u32) {
@@ -29,6 +29,7 @@ fn fake() -> FakePlatform {
     let f = FakePlatform::new(profiles::ALL[0]);
     f.put_code(SITE, &STOCK);
     put(&f, QUEUE + 0xc, TCB_A);
+    put(&f, QUEUE + 0x14, 0x4000_0000);
     put(&f, CELL, OBJECT);
     put(&f, OBJECT + 0x18, TCB_B);
     f
@@ -83,14 +84,11 @@ fn a_task_site_is_refused_with_busy_while_a_task_runs_and_nothing_changes() {
 }
 
 #[test]
-fn a_wait_word_that_holds_another_task_or_a_missing_object_is_not_parked() {
+fn a_wait_word_that_holds_another_task_is_not_parked() {
     let p = parks();
     let f = fake();
     put(&f, QUEUE + 0xc, 0x1234_5678);
     assert_eq!(install(&mut Installer::new(), &f, CTX_TASK, &live(&p)), Err(E_BUSY), "another task waits there");
-    let f = fake();
-    put(&f, CELL, 0);
-    assert_eq!(install(&mut Installer::new(), &f, CTX_TASK, &live(&p)), Err(E_BUSY), "the BgWorker object does not exist yet");
 }
 
 #[test]
@@ -166,4 +164,54 @@ fn a_port_file_without_the_task_facts_refuses_a_task_site_at_run_time() {
     assert_eq!(bytes(&f), STOCK.to_vec());
     // a device with no such task has an empty list: nothing to wait for
     assert_eq!(install(&mut ins, &f, CTX_TASK, &live(&[])), Ok(()));
+}
+
+#[test]
+fn a_task_that_was_never_created_does_not_hold_a_task_site() {
+    // the console task exists only on a unit with its serial-console flag: its queue was never built (the word at `made` is 0), so it is parked whatever the waiter word says
+    let p = parks();
+    let f = fake();
+    put(&f, QUEUE + 0xc, 0);
+    put(&f, QUEUE + 0x14, 0);
+    let mut ins = Installer::new();
+    assert_eq!(install(&mut ins, &f, CTX_TASK, &live(&p)), Ok(()));
+    // a built queue whose task runs still waits
+    let f = fake();
+    put(&f, QUEUE + 0xc, 0);
+    let mut ins = Installer::new();
+    assert_eq!(install(&mut ins, &f, CTX_TASK, &live(&p)), Err(E_BUSY));
+}
+
+#[test]
+fn a_bgworker_that_does_not_exist_yet_does_not_hold_a_task_site() {
+    // the singleton is built on first use: its cell stays 0 until then, and nothing can be inside a hook of a task that does not exist
+    let p = parks();
+    let f = fake();
+    put(&f, CELL, 0);
+    let mut ins = Installer::new();
+    assert_eq!(install(&mut ins, &f, CTX_TASK, &live(&p)), Ok(()));
+    // the object exists and its task runs: it still waits
+    let f = fake();
+    put(&f, OBJECT + 0x18, 0);
+    let mut ins = Installer::new();
+    assert_eq!(install(&mut ins, &f, CTX_TASK, &live(&p)), Err(E_BUSY));
+}
+
+#[test]
+fn a_busy_restore_names_the_task_it_found_unparked() {
+    let p = parks();
+    let f = fake();
+    let mut ins = Installer::new();
+    install(&mut ins, &f, CTX_TASK, &live(&p)).unwrap();
+    assert_eq!(ins.waited(), None);
+    put(&f, OBJECT + 0x18, 0);
+    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(E_BUSY));
+    assert_eq!(ins.waited(), Some(1), "the second task, not task 0");
+    put(&f, QUEUE + 0xc, 0);
+    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(E_BUSY));
+    assert_eq!(ins.waited(), Some(0));
+    put(&f, QUEUE + 0xc, TCB_A);
+    put(&f, OBJECT + 0x18, TCB_B);
+    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Ok(()));
+    assert_eq!(ins.waited(), None, "a finished restore keeps no task");
 }

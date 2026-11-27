@@ -14,14 +14,16 @@ struct Task {
     wait: &'static [u8],
     indirect: bool,
     off: u32,
+    made: u32,
 }
 
 /// The tasks that reach a `task` hook (finding u0-entry-contexts, section 3).
 const TASKS: [Task; 2] = [
     // the BgWorker: the cell holds the object, the job semaphore is at object + 0x14, its waiter word 4 after
-    Task { tcb: b"cf.rtos.value.bgworker.tcb", wait: b"cf.rtos.value.bgworker.cell", indirect: true, off: 0x18 },
-    // the console task: the queue it pops, whose semaphore (queue + 8) has its waiter at queue + 0xc
-    Task { tcb: b"cf.rtos.value.console.tcb", wait: b"cf.rtos.value.console.queue", indirect: false, off: 0xc },
+    Task { tcb: b"cf.rtos.value.bgworker.tcb", wait: b"cf.rtos.value.bgworker.cell", indirect: true, off: 0x18, made: 0 },
+    // the console task: the queue it pops, whose semaphore (queue + 8) has its waiter at queue + 0xc. The firmware creates the task (and builds the queue: the buffer pointer at
+    // queue + 0x14) only on a unit with its serial-console flag, so on other units the queue stays zero and no task exists
+    Task { tcb: b"cf.rtos.value.console.tcb", wait: b"cf.rtos.value.console.queue", indirect: false, off: 0xc, made: 0x14 },
 ];
 
 /// The names of the port file that the facts read (for the fixtures of the tests).
@@ -40,7 +42,7 @@ impl TaskParks {
     /// Read the facts from the port file `keys` (`None`: no port file). A name the firmware lacks (`FLAG_ABSENT`: a device without that task) leaves the task out; a name the
     /// port file does not list makes the facts unknown.
     pub(super) fn read(keys: Option<&Keys>) -> TaskParks {
-        let mut out = TaskParks { items: [Park { tcb: 0, wait: 0, indirect: false, off: 0 }; PARKS_MAX], n: 0, known: false };
+        let mut out = TaskParks { items: [Park { tcb: 0, wait: 0, indirect: false, off: 0, made: 0 }; PARKS_MAX], n: 0, known: false };
         let Some(keys) = keys else {
             return out;
         };
@@ -54,7 +56,7 @@ impl TaskParks {
             if tcb.flags & FLAG_ABSENT != 0 || wait.flags & FLAG_ABSENT != 0 {
                 continue;
             }
-            out.items[out.n] = Park { tcb: tcb.addr, wait: wait.addr, indirect: t.indirect, off: t.off };
+            out.items[out.n] = Park { tcb: tcb.addr, wait: wait.addr, indirect: t.indirect, off: t.off, made: t.made };
             out.n += 1;
         }
         out.known = true;
@@ -80,5 +82,8 @@ pub(super) fn park_all(p: &crate::fake_platform::FakePlatform, parks: &TaskParks
             at = object;
         }
         put(at + k.off, k.tcb);
+        if k.made != 0 {
+            put(at + k.made, 0x4000_0000);
+        }
     }
 }

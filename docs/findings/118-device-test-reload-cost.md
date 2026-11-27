@@ -10,7 +10,7 @@ Input: the 170 task outputs of the full gate of 2026-11-09 (PR 275 lane, coupled
 below was computed once from those outputs (a throwaway script over the `runtime-phase` records, finding 69; no tool is kept). Durations are inclusive.
 
 A reload now also writes `reload.firmware-load` (the `firmware.load` call alone; fields `startUsed`, `cacheHit`, `cacheDir`, `card`) and
-`reload.other` as child records of `session.baseline-reload` (`tests/regression/support.ts`, `Session.lastReload`). The 2026-11-09 outputs predate
+`reload.other` as child records of `session.baseline-reload` (`tests/regression/wait-api.ts` and `reusable-session.ts`, `Session.lastReload`). The 2026-11-09 outputs predate
 them: there a reload below 5 s counts as a hit (the durations are bimodal).
 
 ## Result of the gate outputs [D]

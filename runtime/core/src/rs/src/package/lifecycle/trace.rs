@@ -75,7 +75,8 @@ impl<P: PackagePlatform, M: Images, R: Registry> Clone for RtTrace<P, M, R> {
 
 impl<P: PackagePlatform, M: Images, R: Registry> Trace for RtTrace<P, M, R> {
     fn on(&self) -> bool {
-        on()
+        // a quiet retry of a pending take-down logs nothing (its owner notes a change)
+        on() && unsafe { !self.0.get().1.quiet() }
     }
 
     type Name = u32;

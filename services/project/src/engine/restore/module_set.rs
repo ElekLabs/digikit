@@ -3,6 +3,8 @@ use crate::engine::restore::*;
 use crate::engine::Env;
 use dkrt_sdk::SEL_MAX;
 
+mod carry;
+
 /// The most modules of a list: the runtime's module limit.
 pub const MODULES_MAX: usize = SEL_MAX;
 

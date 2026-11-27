@@ -19,14 +19,21 @@ use host::TestHost;
 
 type Owner = Project<TestHost>;
 
-/// The owner with no part but the lifecycle: the service has no record kind, no DSP, no query.
+/// The owner with the lifecycle and the state part: the service has no record kind, no DSP, no query.
 struct ProjectRecipe;
 
 impl Recipe for ProjectRecipe {
     type P = Owner;
     const NAME: &'static str = "project";
+    const NONE_STARTS_DIFFERENTLY: Option<&'static str> = Some(
+        "import(None) starts named and unbound: a fresh start at run time would bind the firmware's slot byte, which is right only at boot",
+    );
     fn parts(b: RowBuilder<Owner>) -> RowBuilder<Owner> {
-        b
+        b.state()
+    }
+    fn change_state(p: &mut Owner) -> bool {
+        current(p);
+        p.scope_put(b"test/ca", b"k", b"unsaved") == 0
     }
 }
 

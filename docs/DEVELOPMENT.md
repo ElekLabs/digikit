@@ -429,6 +429,7 @@ On runtime 0.11.4 with the matching Boot screen module, **Animation** lets you s
 
 Use [Retiring idle lane builds](TESTING.md#retiring-idle-lane-builds) to see
 which linked worktrees' Cargo output can be discarded without removing the worktrees.
+Use [Removing finished lanes](TESTING.md#removing-finished-lanes) (`tools/devtools/lane.sh --prune --dry-run`) to delete lanes that are merged, clean, idle and unused.
 
 ## Glyphs
 

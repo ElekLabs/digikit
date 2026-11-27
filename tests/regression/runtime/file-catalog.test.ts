@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { RpcFiles } from '@digi/dk-session/rpcfiles';
 import { repoRoot, resolveInputs } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
-import { withSession } from '../support.ts';
+import { withSession } from '../session-handle.ts';
 import { liveProtocol } from './protocol.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { optInPatchkit } from './patchkit.ts';

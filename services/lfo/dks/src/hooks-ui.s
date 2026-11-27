@@ -1,4 +1,4 @@
-| lfo.dks, the hooks of the UI task (both devices, the same code): the name of a shape on the MOD page, and the tile vector of its graph.
+| lfo.dks, the hooks of the UI task (both devices, the same code): the name of a shape on the MOD page, and the tile vector of its graph. The LFO tick runs no code of this file: the waves are data of `core/lfo-table`.
 | They are `.dks` hooks (`HOOKS` of the service, listed in the port file of the firmware it runs on), not interrupt slots: the UI task runs them, one at a time. Each runs in place of the first
 | 6 bytes of a stock function and leaves by `jmp` to `lfo_x_*`, the end of its site (`[object.externs]` of module.toml, the hooks of ports/fw/lfo.toml). With no shape loaded, the stock code
 | runs unchanged. Register facts (docs/findings/149-lfo-waveforms.md, "The panel hooks", from `tools/coldfire/liveness.py` on the stock bytes): at the entry of each function the displaced
@@ -83,17 +83,17 @@ lfo_ui_graph:
     lea     12(%sp),%sp
     tst.l   %d0
     beq.b   9f
-    cmpi.l  #1,%d0                      | the sentinel of a gap number (`STOCK_TRI`, not an address)
+    cmpi.l  #1,%d0                      | the sentinel of an added wave with no shape (`STOCK_SIN`, not an address)
     beq.b   8f
     move.l  %d0,%d6
     movem.l (%sp),%d0/%d1/%a0/%a1
     lea     16(%sp),%sp
     move.w  #0,%ccr
     jmp     lfo_x_graph
-| A gap number draws the stock TRI tile because the tick plays TRI: D6 = 0, the tail adds TABLE (the TRI vector). The stock flag byte set for the clamped wave stays right (TRI and RND are both bipolar).
+| A wave with no shape draws the stock SIN tile because the LFO plays the stock sine for it (`core/lfo-table`): D6 = 12 (the second vector), the tail adds TABLE (the SIN vector). The stock flag byte set for the clamped wave stays right (SIN and RND are both bipolar).
 8:  movem.l (%sp),%d0/%d1/%a0/%a1
     lea     16(%sp),%sp
-    moveq   #0,%d6
+    moveq   #12,%d6
     jmp     lfo_t_graph
 9:  movem.l (%sp),%d0/%d1/%a0/%a1
     lea     16(%sp),%sp

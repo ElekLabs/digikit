@@ -1,7 +1,6 @@
 //! The checks of a service reload before anything changes (`Loader::provider_check`, `Loader::provider_prepare`): the new file of a loaded service is held to what its consumers
 //! already rely on, because the closure reload takes the consumers down first and a refusal after that leaves them down.
 use super::*;
-use super::live::imports_name;
 use core::mem::MaybeUninit;
 use dkrt_lifecycle::{LiveSet, PackageGraph};
 
@@ -60,7 +59,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     }
 
     /// The rules the new file `file` of service record `rec` (provider `j`) meets: the same name; no DSP part (`E_BOOT_ONLY`: the closure reload has no DSP step); every key and every export of the old table still there (a consumer's file
-    /// imports them by name); no import of the settings overlay (a service that keeps per-project state belongs to the boot's set, `E_BOOT_ONLY`); and every live package's needs
+    /// imports them by name); and every live package's needs
     /// still met by the providers with the new table in place (`E_MISSING`, `E_CONTRACT`: a consumer that needs an older major than the file offers). The span of the file's
     /// header table.
     pub(super) unsafe fn provider_rules(&self, j: usize, rec: usize, file: &[u8]) -> Result<(usize, usize), i32> {
@@ -91,9 +90,6 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
         if dropped {
             return Err(E_RELOAD_KEYS);
         }
-        if imports_name(file, b"dkc_settings_overlay_set") {
-            return Err(E_BOOT_ONLY);
-        }
         if self.interrupt_entered(&old) || self.interrupt_entered(&new) {
             return Err(E_BOOT_ONLY);
         }
@@ -107,10 +103,6 @@ impl<P: PackagePlatform, M: Images, R: Registry> Loader<P, M, R> {
     /// task can be parked out of it, so the closure reload cannot take it down safely (`E_BOOT_ONLY`: a restart reloads the service). A hook the port file does not list is no
     /// interrupt entry here (the load refuses it elsewhere).
     unsafe fn interrupt_entered(&self, keys: &Keys) -> bool {
-        #[cfg(test)]
-        if self.irq_guard_off {
-            return false;
-        }
         let Some((port, ..)) = self.port_keys() else {
             return false;
         };

@@ -4,24 +4,21 @@ use dkrt_abi::provider::Provider;
 use dkrt_svc_lfo::lfo::Lfo;
 use dkrt_test_support::FakeCore;
 
-#[test]
-fn the_initial_state_is_all_zero_bytes() {
-    let new = Lfo::new();
-    // SAFETY: plain integers and arrays of them
-    let bytes = unsafe {
-        core::slice::from_raw_parts(&new as *const Lfo as *const u8, core::mem::size_of::<Lfo>())
-    };
-    assert!(bytes.iter().all(|b| *b == 0));
-}
+#[path = "support/fake_wave_table.rs"]
+mod fake_wave_table;
+use fake_wave_table::FakeWaveTable;
+
+type Owner = Lfo<FakeWaveTable>;
 
 #[test]
 fn start_in_over_a_dirty_slot_gives_the_initial_state() {
     let core = FakeCore::new();
-    let mut slot = MaybeUninit::<Lfo>::uninit();
+    let mut slot = MaybeUninit::<Owner>::uninit();
     // SAFETY: filling the slot's bytes with a pattern; `Lfo` is valid for any bytes
     unsafe { slot.as_mut_ptr().write_bytes(0xa5, 1) };
-    <Lfo as Provider<FakeCore>>::start_in(&core, &mut slot).unwrap();
+    <Owner as Provider<FakeCore>>::start_in(&core, &mut slot).unwrap();
     // SAFETY: `start_in` wrote the state
     let lfo = unsafe { slot.assume_init() };
     assert_eq!(lfo.number_of(0, 0x00a1_0100), 0);
+    assert_eq!(lfo.table().calls(), []);
 }

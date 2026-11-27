@@ -76,14 +76,14 @@ fn a_service_check_refuses_a_dropped_export_another_name_a_new_major_a_damaged_f
 }
 
 #[test]
-fn a_service_check_refuses_a_file_that_imports_the_settings_overlay_registration() {
+fn a_service_check_takes_a_file_that_imports_the_settings_overlay_registration() {
     let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
     unsafe {
         let (mut l, _rt) = up();
         let plain = svc_with(&[("dk_svctest_ping", 8)], 0x000802);
         let f = service_file_of(module_file_with(&[], &[b"dkc_settings_overlay_set"]), &Table { provides: &[Pair { a: name_hash(SVC), b: 0x000802 }], exports: &[Pair { a: name_hash("dk_svctest_ping"), b: 8 }], ..Default::default() }, 0);
         assert_eq!(l.provider_rules(0, SVC_REC, &plain).map(|_| ()), Ok(()));
-        assert_eq!(l.provider_rules(0, SVC_REC, &f).map(|_| ()), Err(E_BOOT_ONLY), "a service with per-project state belongs to the boot's set");
+        assert_eq!(l.provider_rules(0, SVC_REC, &f).map(|_| ()), Ok(()), "a reload carries its per-project state (State part); only a first bring-up is refused (live.rs)");
     }
 }
 

@@ -73,7 +73,7 @@
           "core/services/lfo"
         ],
         "plusdrive": true,
-        "firmwareOnly": "the LFO output through the vector 191 tick keeps running after the refused reload of the service (nothing is taken down); the refusal itself is a host test"
+        "firmwareOnly": "the shape table is republished under the interrupt mask and the vector 191 tick plays it again after the reload of the lfo service; the order of the steps and the refusals are host tests"
       }
     ]
   }

@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { pollUntil } from '@digi/test-support';
-import { CARD_SYMBOLS, cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { sendCc } from '@digi/regression/runtime/midi.ts';
 import { bootWith, shapeWords, SHAPE_A } from './lfo-cards.ts';
 import {
@@ -94,6 +95,7 @@ cardRigs(
       const sqr = fitShape(samples, evalSqr);
       const sine = fitShape(samples, evalSine);
       const note = describeFit('fit error', { shape: shape, TRI: tri, SQR: sqr, SINE: sine });
+      console.info(`shape output ${h.device}: ${note}`);
       expect(shape.err, `the output follows the RAMP table (${note}; tolerance ${OK}: the reads are 12 ms apart and jitter by the 0.67 ms tick; samples ${describeSamples(samples)})`).toBeLessThan(OK);
       expect(tri.err, `the output is not TRI (${note})`).toBeGreaterThan(BAD);
       expect(sqr.err, `the output is not SQR (${note})`).toBeGreaterThan(BAD);

@@ -1,7 +1,8 @@
 import { expectNoRefusedCalls } from '@digi/regression/runtime/service-symbols.ts';
 import { pollUntil } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
+import { cardRig } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
 import { pickSine, REDRAW, stableFrameHash, type Rt } from '@digi/regression/runtime/panel-waits.ts';
 import { word } from '@digi/regression/runtime/guest-access.ts';

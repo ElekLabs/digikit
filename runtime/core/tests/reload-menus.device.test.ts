@@ -1,10 +1,11 @@
 import { expect } from 'vitest';
 import type { Device } from '@digi/test-support';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE } from '@digi/regression/runtime/debug-module.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
-import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { planSymbol, prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { word } from '@digi/regression/runtime/guest-access.ts';
 import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
