@@ -19,6 +19,7 @@
 //! Slots: 0 to 127 are projects; the live mirror 0x80 and -1 mean "no current project". The file of a slot is `projects/<number>-<name>.dkp`, the number being slot + 1 ([`crate::name`]).
 mod bound;
 mod buffer;
+mod carry;
 mod clock;
 mod env;
 mod job;
@@ -34,6 +35,7 @@ pub use bound::{
     Applied, BoundProject, BoundView, Effect, Slot, SourceFile, LIVE_MIRROR, LOAD_RETRY_MS,
 };
 pub use buffer::FileBuffer;
+pub use carry::{EXPORT_MAX as CARRY_MAX, VERSION as CARRY_VERSION};
 pub use clock::{is_busy, BusyClock, BusyVerdict, DEFER_MS, RETRY_MS};
 pub use env::{stable_record, Env, Files, ListPoll, ListRow, SlotRecord};
 pub use job::StoreJob;
@@ -121,6 +123,11 @@ impl ProjectService {
             } else {
                 0
             })
+    }
+
+    /// The number of images installed so far.
+    pub fn epoch(&self) -> u32 {
+        self.bound.epoch()
     }
 
     /// The name of the current project (16 bytes as read), `E_NOT_FOUND` without one.

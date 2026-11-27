@@ -15,6 +15,9 @@ impl SlotSet {
     pub const fn new() -> SlotSet {
         SlotSet([0; 16])
     }
+    fn is_empty(&self) -> bool {
+        self.0 == [0; 16]
+    }
     fn merge(&mut self, bits: &[u8; 16]) {
         let mut at = 0;
         while at < 16 {
@@ -95,6 +98,15 @@ impl WorkQueue {
             pasted: SlotSet::new(),
             save_wait: None,
         }
+    }
+
+    /// Does nothing wait to start (and no save waits for the firmware's record)?
+    pub fn is_empty(&self) -> bool {
+        self.load.is_none()
+            && self.save.is_none()
+            && self.cleared.is_empty()
+            && self.pasted.is_empty()
+            && self.save_wait.is_none()
     }
 
     /// Queue what the hooks recorded. A later setter call or save replaces an earlier one that was not started.

@@ -1,10 +1,12 @@
 //! `DkHost`: the host state of the owner (`dkrt_svc_project::project::Host`): the handles `open` makes, the pass count and the listing in progress. It is a field of the owner
 //! in the file's cell, not a static. All-zero bytes are its initial state.
-use super::files::set_client;
+use super::files::{set_client, DK_JOB};
 use super::scope::SCOPE;
 use super::sdk_imports as sys;
+use crate::hooks::DKRT_PROJECT_PENDING;
 use dkrt_abi::provider::Status;
 use dkrt_abi::service::SettingsOverlay;
+use dkrt_svc_project::engine::{Pending, StoreJob};
 use dkrt_svc_project::project::{Host, Project};
 
 /// The owner object of the service file: the engine over this file's host state. The file's cell holds the one instance (`DK_SVC_OWNER`).
@@ -56,6 +58,15 @@ unsafe impl Host for DkHost {
 
     fn begin_pass(&mut self) {
         self.passes = self.passes.wrapping_add(1);
+    }
+
+    fn hook_record(&self) -> &'static Pending {
+        // SAFETY: the hooks' record is a static of this file; it is plain words that the hooks write (see `Pending`).
+        unsafe { &*core::ptr::addr_of!(DKRT_PROJECT_PENDING) }
+    }
+
+    fn job(&self) -> &'static StoreJob {
+        &DK_JOB
     }
 
     fn overlay() -> *const SettingsOverlay {

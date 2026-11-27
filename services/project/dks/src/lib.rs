@@ -14,7 +14,7 @@ dkrt_svc_rt::service!(
     Owner,
     "project",
     &[],
-    parts = [],
+    parts = [State],
     hooks = [
         ("cf.project.hook.slot_set", hooks::project_hook_slot),
         ("cf.project.hook.save_exit", hooks::project_hook_save),

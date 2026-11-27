@@ -126,3 +126,31 @@ fn a_carry_that_finds_no_room_refuses_the_reload_and_changes_nothing() {
         clean_state();
     }
 }
+
+/// The project service file of the card.
+const PROJECT: Fixture = Fixture { leaf: "project", nx: "core/services/project" };
+
+/// The project file keeps per-project state and registers the settings overlay: the check of its closure reload was refused (`E_BOOT_ONLY`) until it had the state part. Now the
+/// check takes the packed file as it is. (The take-down itself waits for the BgWorker to park at the file's five hook sites, with device addresses of the port file: the manager's
+/// units and `park_tests` show that gate. The host runs the fixture provider's row for this file, so what the project carries is the unit tests of `services/project`; a first
+/// bring-up of the file in the middle of a project is still refused, `live.rs`.)
+#[test]
+fn the_check_of_a_reload_of_the_packed_project_file_is_no_longer_refused_for_the_settings_overlay() {
+    let _g = clean();
+    for dev in DEVICES.iter().copied().filter(Dev::has_firmware) {
+        let image = Image::read(dev, "emulator");
+        unsafe {
+            let (l, _plan) = planned(dev, &image, &[], &[&PROJECT_USER], &[PROJECT]);
+            let mut case = Box::new(Case { l, rt: core::mem::zeroed(), path: Vec::new(), dev: dev.name });
+            core::ptr::write(&mut case.rt, Rt::new(&mut case.l as *mut _));
+            let rec = boot_record(&[PROJECT_USER.leaf]);
+            case.rt.boot_with(&rec, &capacity(&case.l.p));
+            assert!(case.rt.manager().unwrap().live().contains(id(MAX_MODULES)), "{}: the project file is up", dev.name);
+            case.path = std::format!("services/{}.dks\0", PROJECT.leaf).into_bytes();
+            let r = case.l.provider_check(MAX_MODULES, case.path.as_ptr());
+            assert_ne!(r, dkrt_sdk::E_BOOT_ONLY, "{}", dev.name);
+            assert_eq!(r, dkrt_sdk::OK, "{}", dev.name);
+        }
+        clean_state();
+    }
+}
