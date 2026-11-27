@@ -280,16 +280,20 @@ struct ProtoLimits {
     peek_max: u32,
     max_request_wire: u32,
     max_reply_wire: u32,
+    query_request_max: u32,
+    query_reply_max: u32,
 }
 impl ProtoLimits {
     /// (generated name, value) in file order.
-    fn all(&self) -> [(&'static str, u32); 5] {
+    fn all(&self) -> [(&'static str, u32); 7] {
         [
             ("MAX_CHUNK", self.max_chunk),
             ("READ_MAX", self.read_max),
             ("PEEK_MAX", self.peek_max),
             ("MAX_REQUEST_WIRE", self.max_request_wire),
             ("MAX_REPLY_WIRE", self.max_reply_wire),
+            ("QUERY_REQUEST_MAX", self.query_request_max),
+            ("QUERY_REPLY_MAX", self.query_reply_max),
         ]
     }
 }
@@ -846,6 +850,8 @@ struct Runtime {
     resident_query: String,
     /// The runtime version that first accepts a version 2 Workbench settings descriptor.
     workbench_typed: String,
+    /// The runtime version that first accepts Workbench query tables and the MODULE_UI call verb.
+    workbench_queries: String,
 }
 /// The runtime version of a parsed file as (major, minor, patch).
 fn runtime_parts(sdk: &Sdk) -> Result<(u8, u8, u8)> {
@@ -908,6 +914,12 @@ pub fn resident_query_runtime() -> u32 {
 pub fn workbench_typed_runtime() -> u32 {
     parse_runtime(&sdk_embedded().runtime.workbench_typed)
         .expect("sdk/sdk.toml [runtime] workbench_typed")
+}
+
+/// Minimum runtime for a module that declares Workbench queries.
+pub fn workbench_queries_runtime() -> u32 {
+    parse_runtime(&sdk_embedded().runtime.workbench_queries)
+        .expect("sdk/sdk.toml [runtime] workbench_queries")
 }
 
 pub fn embedded_runtime() -> u32 {
@@ -1069,6 +1081,12 @@ fn parse(text: &str) -> Result<Sdk> {
     if typed < query || typed > version {
         return Err(err!(
             "{SOURCE}: [runtime] workbench_typed must be between resident_query and version"
+        ));
+    }
+    let queries = parse_runtime(&sdk.runtime.workbench_queries)?;
+    if queries < typed || queries > version {
+        return Err(err!(
+            "{SOURCE}: [runtime] workbench_queries must be between workbench_typed and version"
         ));
     }
     for (i, (n, k)) in sdk.records.kinds.iter().enumerate() {

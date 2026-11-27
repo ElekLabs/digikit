@@ -6,11 +6,13 @@ import {
   type ModuleFileClient,
   type RawSetting,
 } from '@digi/module-ui';
+import { QUERY_REPLY_MAX, QUERY_REQUEST_MAX } from '@digi/dk-session';
 import { createDeviceModuleChannel } from '@digi/workbench-core/module-ui/device-module-channel.ts';
 import type {
   ModuleChannelFactory,
   ModuleChannelRequest,
 } from '@digi/workbench-core/module-ui/module-channel-factory.ts';
+import { previewQueryServices, type PreviewQueryFactory } from './module-query-services';
 
 /**
  * The channels of the simulated targets. Settings are a memory channel of the module's generated schema: one store per target and module,
@@ -21,6 +23,8 @@ export function createPreviewChannels(
   schemas: Map<string, DescribedSchema>,
   /** The files of a module on the simulated card, bound to the instance's lifetime. */
   filesOf: (request: ModuleChannelRequest) => ModuleFileClient,
+  /** The TypeScript handlers of a module's queries, by module id; the device limits of a request and a reply apply to them. */
+  queryServices: Map<string, PreviewQueryFactory> = previewQueryServices(),
 ): ModuleChannelFactory {
   const stores = new Map<string, MemorySettingsStore>();
   return (request) => {
@@ -34,7 +38,17 @@ export function createPreviewChannels(
       stores.set(key, store);
     }
     const files = filesOf(request);
-    const memory = createMemoryModuleChannel(schema, { store, current }).channel;
+    const loaded = (id: string) => {
+      const read = store.read(id);
+      return read.ok ? read.value : undefined;
+    };
+    const service = queryServices.get(module.name)?.(loaded);
+    const memory = createMemoryModuleChannel(schema, {
+      store,
+      current,
+      service,
+      queryLimits: { request: QUERY_REQUEST_MAX, reply: QUERY_REPLY_MAX },
+    }).channel;
     return createDeviceModuleChannel({
       settings: {
         ...memory,
@@ -49,6 +63,7 @@ export function createPreviewChannels(
           return memory.putSetting(id, bytes, revision);
         },
       },
+      queries: memory,
       files,
     });
   };

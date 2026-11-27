@@ -1,6 +1,10 @@
 import type { DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
-import { decodeDescriptor, settingValueCodec } from '@digi/module-ui';
+import { createModuleClient, decodeDescriptor, settingValueCodec, type ModuleFileClient } from '@digi/module-ui';
+import { createDeviceModuleChannel } from '../../../../packages/workbench-core/src/module-ui/device-module-channel.ts';
+import { deviceQueryChannel } from '../../../../packages/workbench-core/src/module-ui/device-queries.ts';
+import { deviceSettingsChannel } from '../../../../packages/workbench-core/src/module-ui/device-settings.ts';
+import { SettingsA } from '../../../../tests/fixtures/modules/settings-a/workbench/gen/settings_a_pb.js';
 import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
 import { statusOf } from '@digi/regression/runtime/upload-bytes.ts';
 import type { TestRuntime } from '@digi/regression/test-runtime.ts';
@@ -30,6 +34,10 @@ const PUT = 1;
 const GET = 2;
 const REMOVE = 3;
 const DELAY_MS = 2000; // the runtime writes the record this long after the last change
+const unused = async (): Promise<never> => {
+  throw new Error('this test uses no module files');
+};
+const noFiles: ModuleFileClient = { list: unused, read: unused, send: unused, remove: unused };
 const text = (s: string) => Buffer.from(s);
 const hex = (s: string) => text(s).toString('hex');
 
@@ -87,6 +95,35 @@ for (const device of DEVICES) {
       expect(again.initRc, 'init read 3 bytes').toBe(3);
       expect(again.init.subarray(0, 3), 'the value of the earlier boot').toEqual(text('xyz'));
       expect(await record(reboot), 'the record is as it was').toEqual({ [`${A}/boot`]: hex('xyz') });
+      kit.allowStoreWrites(await kit.storeWrites());
+    });
+
+    /** BootAtInit of settings-a through the module UI session: the handler runs on the UI task in the module's own code. */
+    const bootAtInit = (rt: TestRuntime) =>
+      kit.usb(rt, async (dk) => {
+        const mod = (await dk.modules()).find((m) => m.name === A);
+        const channel = createDeviceModuleChannel({
+          settings: deviceSettingsChannel(A),
+          queries: deviceQueryChannel(async () => dk.moduleQueries(mod!.index, mod!.uiInstance!, () => true)),
+          files: noFiles,
+        });
+        return createModuleClient(channel).service(SettingsA).bootAtInit({});
+      });
+
+    test('the BootAtInit query answers the boot value init read: unset on the first boot, the saved value after a restart', async () => {
+      const rt = await kit.load('boot-query', spec);
+      expect((await bootInfo(rt.session, kit.plan)).results, 'both modules load').toEqual([0, 0]);
+      expect(await bootAtInit(rt), 'nothing was saved when init read it').toMatchObject({
+        ok: true,
+        value: { present: false, value: '' },
+      });
+      expect((await call(rt, A, PUT, 'boot', text('xyz'))).rc, 'put').toBe(0);
+      await rt.ui.wait({ ms: DELAY_MS + 500, why: SETTLE });
+      const reboot = await kit.restart(rt);
+      expect(await bootAtInit(reboot), 'init of the new boot read the saved value').toMatchObject({
+        ok: true,
+        value: { present: true, value: 'xyz' },
+      });
       kit.allowStoreWrites(await kit.storeWrites());
     });
 

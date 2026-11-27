@@ -9,6 +9,7 @@ table = "0.13.0"    # the least version a packed `.dkm` needs: `patchkit pack` w
 service_registration = "0.12.1" # minimum runtime for callback ordering and service-local APIs
 resident_query = "0.12.2" # minimum runtime for the optional resident query facet
 workbench_typed = "0.13.4" # minimum runtime for a version 2 Workbench settings descriptor (integer, boolean and choice settings)
+workbench_queries = "0.13.5" # minimum runtime for a module that declares Workbench queries (dk_workbench_register_queries and the MODULE_UI call verb)
 version = "0.13.5"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
@@ -32,7 +33,7 @@ order = [
 ]
 
 [handle]
-types = ["dk_module_ctx", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_ui_view", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event", "dk_shortcut_def"]
+types = ["dk_module_ctx", "dk_workbench_query", "dk_settings", "dk_files", "dk_sample_pool", "dk_ui", "dk_ui_menu", "dk_ui_view", "dk_input", "dk_usb_bulk", "dk_dsp_link", "dk_sdhc_large", "dk_machine", "dk_fx", "dk_page", "dk_param", "dk_page_frame", "dk_page_event", "dk_shortcut_def"]
 services = ["runtime", "samples", "machines", "fx", "project", "ui", "input", "usb_bulk", "dsp_link", "sdhc_large", "shortcuts"]
 contexts = ["init", "ui", "io-step", "any", "isr"]
 
@@ -501,6 +502,14 @@ since = "0.11.4"
 context = "init"
 sig = "i32 (dk_module_ctx *ctx, const u8 *descriptor, u32 size)"
 doc = "Register this content module's Workbench settings descriptor during init, once per load. The runtime copies the descriptor (up to 512 bytes; version 1 holds text and file-name settings, version 2 also integer, boolean and choice settings and needs runtime 0.13.4); see the Workbench settings schema in the module authoring guide. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad descriptor, or DK_E_STATE if already registered. Workbench may read settings while a settings overlay is installed; use the device menu to edit them in that case."
+
+[[import]]
+name = "dk_workbench_register_queries"
+service = "runtime"
+since = "0.13.5"
+context = "init"
+sig = "i32 (dk_module_ctx *ctx, const dk_workbench_query *table, u32 count)"
+doc = "Register this content module's Workbench query table during init, once per load, after `dk_workbench_register`. The runtime keeps the pointer (the table must stay valid while the module is loaded; it is not copied): `count` entries (1 to 16) of `dk_workbench_query` (<dk/query.h>: `{ call; u8 method; u8 reserved[3]; }`, 8 bytes, 2-byte aligned), `method` strictly increasing from 1. `call` runs on the UI task with `*out_len` set to the room in `out` and returns 0 with `*out_len` the reply length, or an error code the Workbench receives as refused. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad table, or DK_E_STATE if queries are registered already or no settings descriptor is."
 
 [[import]]
 name = "dk_settings_open"
@@ -1935,9 +1944,11 @@ read_max = 768      # bytes of one READ (and SETTINGS) reply
 peek_max = 512      # bytes of one PEEK reply
 max_request_wire = 40960  # the largest request on the wire, SysEx-encoded (40 KiB)
 max_reply_wire = 1024     # the largest reply on the wire, SysEx-encoded
+query_request_max = 149   # a module query: the request bytes after the call envelope (verb, record, instance, request id, method: 11 bytes of the 160-byte command body)
+query_reply_max = 870     # a module query: the reply bytes after the poll header ([state u8][runtime status i32][handler result i32]: 9 bytes of the 879-byte reply body)
 
 [protocol.commands] # command numbers; never reuse or renumber (additive only)
-MODULE_UI = 0x00    # describe or queue and poll an operation on the enrolled module named by slot and instance
+MODULE_UI = 0x00    # describe, queue and poll an operation, or call a query, on the enrolled module named by slot and instance. Call (verb 5): `[rec][instance u32][request id u32][method u8][request]`, at most `query_request_max` request bytes; one call is in flight for the whole device, a second call from any module answers E_BUSY until the first one's reply was polled or 2 s passed. Poll of a call (verb 4, `[rec][instance u32][request id u32]`): `[state u8]` 1 while queued or running, else `[0][runtime status i32][handler result i32][reply bytes]`, at most `query_reply_max` reply bytes; the runtime status is 0 when the handler ran (E_MODULE_UI_METHOD, E_MODULE_UI_TOO_BIG or E_NOT_FOUND when it did not) and the handler's own return value is only in the handler field; the poll releases the reply
 INFO = 0x01
 LIST = 0x02
 MODULES = 0x03      # the loaded modules with their ranges, types and faults
@@ -2045,6 +2056,8 @@ E_AGAIN = { code = -72, text = "usb_bulk_send: the engine refused and nothing is
 
 E_MODULE_UI_CONFLICT = { code = -88, text = "the module setting revision changed" }
 E_MODULE_UI_SCOPE = { code = -89, text = "project settings are active; change this setting on the device" }
+E_MODULE_UI_METHOD = { code = -90, text = "the module has no query with this method number" }
+E_MODULE_UI_TOO_BIG = { code = -91, text = "the query reply does not fit the reply budget" }
 
 [protocol.caps]     # INFO capability bits (bit numbers of the `caps` word)
 LOG = 0
@@ -2070,6 +2083,7 @@ LIVE = 19           # the LOAD and UNLOAD commands (a content module is loaded o
 
 MODULE_UI = 20      # loaded modules may expose public Workbench settings by instance
 MODULE_SECTIONS = 21 # a MODULES record ends with `u8 n_sections` and the sections of the services (runtime 0.13.0); a host that does not see this bit refuses the reply as an older layout
+MODULE_QUERIES = 22 # the MODULE_UI call verb: a loaded module answers read-only queries from its page (runtime 0.13.5)
 
 [capacity.kinds]   # the `kind` byte of a CAPACITY entry (u8 kind, u32 limit, u32 used, u32 largest); additive: a number is never reused.
                    # `fit = true`: a resource a fit looks at, with its `label` for a person (CAP_FIT in the generated code; a fit kind needs a label, a kind may have one without `fit`); every kind is in CAP_KINDS

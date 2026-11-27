@@ -26,6 +26,7 @@ pub mod sharc_obj;
 pub mod show;
 pub mod test_source;
 pub mod toolchain;
+pub mod wire;
 mod workbench;
 pub use workbench::TsFile;
 #[cfg(test)]
@@ -155,8 +156,31 @@ impl ModuleToml {
         toml::from_str(text).map_err(|e| err!("module.toml: {e}"))
     }
 
-    fn workbench_header(&self, moddir: &Path) -> Result<Option<workbench::Header>> {
-        workbench::Header::read(moddir, self.id(), self.module.name.as_deref())
+    fn workbench_header(&self, root: &Path, moddir: &Path) -> Result<Option<workbench::Header>> {
+        workbench::Header::read(root, moddir, self.id(), self.module.name.as_deref())
+    }
+
+    /// The object that takes the generated query source: the first ColdFire object with a C source (two would define it twice).
+    fn query_object(&self) -> Option<&ObjectToml> {
+        self.built().find(|o| {
+            kind_of(&o.sources) == Kind::Cf && o.sources.iter().any(|s| s.ends_with(".c"))
+        })
+    }
+
+    /// The source paths of `o`: its own, and the generated query source when `o` takes it.
+    fn source_paths(
+        &self,
+        moddir: &Path,
+        o: &ObjectToml,
+        header: Option<&workbench::Header>,
+    ) -> Vec<PathBuf> {
+        let mut paths: Vec<PathBuf> = o.sources.iter().map(|s| moddir.join(s)).collect();
+        if let Some(generated) = header.and_then(workbench::Header::queries_source)
+            && self.query_object().is_some_and(|q| q.path == o.path)
+        {
+            paths.push(generated.to_path_buf());
+        }
+        paths
     }
 
     pub fn id(&self) -> &str {
@@ -336,11 +360,12 @@ fn source_hash(
     env: &Env,
     moddir: &Path,
     o: &ObjectToml,
-    sdk: bool,
+    m: &ModuleToml,
     header: Option<&workbench::Header>,
 ) -> Result<String> {
+    let sdk = m.is_content();
     let sources = &o.sources;
-    let paths: Vec<PathBuf> = sources.iter().map(|s| moddir.join(s)).collect();
+    let paths = m.source_paths(moddir, o, header);
     match kind_of(sources) {
         Kind::Sharc => {
             let text = sharc::source_text(&env.root, moddir, &paths, &env.defines)?;
@@ -387,11 +412,11 @@ fn object_unchanged(out: &Path, hash: &str, content: bool) -> bool {
 pub fn module_status(root: &Path, moddir: &Path) -> Result<Vec<(String, bool)>> {
     let env = Env::new(root);
     let m = manifest(moddir)?;
-    let header = m.workbench_header(moddir)?;
+    let header = m.workbench_header(&env.root, moddir)?;
     m.built()
         .filter(|o| !o.sources.is_empty())
         .map(|o| {
-            let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
+            let hash = source_hash(&env, moddir, o, &m, header.as_ref())?;
             let file = object_file_at(&env, moddir, &m, o, &hash);
             Ok((
                 o.path.clone(),
@@ -405,11 +430,11 @@ pub fn module_status(root: &Path, moddir: &Path) -> Result<Vec<(String, bool)>> 
 pub fn object_files(root: &Path, moddir: &Path) -> Result<Vec<(String, PathBuf)>> {
     let env = Env::new(root);
     let m = manifest(moddir)?;
-    let header = m.workbench_header(moddir)?;
+    let header = m.workbench_header(&env.root, moddir)?;
     m.built()
         .filter(|o| !o.sources.is_empty())
         .map(|o| {
-            let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
+            let hash = source_hash(&env, moddir, o, &m, header.as_ref())?;
             Ok((o.path.clone(), object_file_at(&env, moddir, &m, o, &hash)))
         })
         .collect()
@@ -447,7 +472,7 @@ fn build_object(
     header: Option<&workbench::Header>,
 ) -> Result<Dko> {
     let sdk = m.is_content();
-    let paths: Vec<PathBuf> = o.sources.iter().map(|s| moddir.join(s)).collect();
+    let paths = m.source_paths(moddir, o, header);
     match kind_of(&o.sources) {
         Kind::Sharc => {
             let text = sharc::source_text(&env.root, moddir, &paths, defines)?;
@@ -536,8 +561,8 @@ pub fn load_object(env: &Env, moddir: &Path, m: &ModuleToml, rel: &str) -> Resul
         .built()
         .find(|o| o.path == rel)
         .ok_or_else(|| err!("{rel}: not an object of the module"))?;
-    let header = m.workbench_header(moddir)?;
-    let want = source_hash(env, moddir, o, m.is_content(), header.as_ref())
+    let header = m.workbench_header(&env.root, moddir)?;
+    let want = source_hash(env, moddir, o, m, header.as_ref())
         .map_err(|e| err!("{}: {rel}: cannot hash the sources: {e}", moddir.display()))?;
     let file = object_file_at(env, moddir, m, o, &want);
     if stored_current(&file, &want)
@@ -574,10 +599,10 @@ pub fn build_module(moddir: &Path, opts: &BuildOptions) -> Result<BuildReport> {
     }
     let env = Env::new(&opts.root);
     let m = manifest(moddir)?;
-    let header = m.workbench_header(moddir)?;
+    let header = m.workbench_header(&env.root, moddir)?;
     let mut report = BuildReport::default();
     for o in m.built().filter(|o| !o.sources.is_empty()) {
-        let hash = source_hash(&env, moddir, o, m.is_content(), header.as_ref())?;
+        let hash = source_hash(&env, moddir, o, &m, header.as_ref())?;
         let stored = |h: &str| object_file_at(&env, moddir, &m, o, h);
         if !opts.check
             && opts.defines.is_empty()

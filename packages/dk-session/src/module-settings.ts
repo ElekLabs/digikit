@@ -1,5 +1,5 @@
 // A public settings endpoint belongs to one loaded module instance on one session.
-import { CMD } from './gen_proto.ts';
+import { moduleUiRequester } from './module-ui-request.ts';
 import { be32, deviceError, DkError, statusName, u32, type DkSession } from './dkupload-core.ts';
 import { poll } from './waits.ts';
 
@@ -24,17 +24,8 @@ export function wireModuleSettings(
   instance: number,
   current: () => boolean,
 ): ModuleSettingsEndpoint {
-  const check = () => {
-    if (!current()) throw new Error('The module page has closed.');
-  };
-  async function request(verb: number, suffix: Uint8Array = new Uint8Array()) {
-    check();
-    const body = Uint8Array.of(verb, slot, ...be32(instance), ...suffix);
-    const reply = await session.request(CMD.MODULE_UI, body);
-    check();
-    if (reply.status) throw deviceError('Module settings', reply.status);
-    return reply.body;
-  }
+  const send = moduleUiRequester(session, slot, instance, current);
+  const request = (verb: number, suffix?: Uint8Array) => send(verb, suffix);
   let turn = Promise.resolve();
   async function exchange(verb: number, field: number, revision: number, payload: Uint8Array) {
     const ticket = be32(crypto.getRandomValues(new Uint32Array(1))[0]! || 1);

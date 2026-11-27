@@ -46,6 +46,9 @@ rustc-demangle = "0.1"
 dkrt-sdk = { path = "../../runtime/core/sdk" }
 # The fit rule (the code the DIGIKIT menu runs); no_std, builds for every target.
 dkrt-fit = { path = "../../runtime/core/fit" }
+# Module query schemas (`.proto`): parsed in pure Rust (no protoc) by `build::wire`; builds for wasm32.
+protox = "0.10.0"
+prost-reflect = "0.16.5"
 
 # `patchkit store dump` reads card images, `patchkit flash` sends to a MIDI port: the binary only (not wasm32).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

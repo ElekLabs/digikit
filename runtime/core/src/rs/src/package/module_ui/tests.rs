@@ -438,5 +438,5 @@ fn a_stored_file_name_is_checked_on_read_against_the_declared_extension() {
 fn typed_kinds_do_not_grow_the_registry() {
     // Static RAM: bounds are read from the stored descriptor bytes, a field keeps offsets only. Unchanged by the typed kinds.
     assert_eq!(core::mem::size_of::<Descriptor>(), 1092);
-    assert_eq!(core::mem::size_of::<Registry>(), 16656);
+    assert_eq!(core::mem::size_of::<Registry>(), 17840);
 }

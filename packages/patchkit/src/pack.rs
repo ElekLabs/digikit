@@ -145,6 +145,20 @@ pub fn firmware_imports(
     Ok(out)
 }
 
+/// The runtime that Workbench queries need: a module with a `workbench/*.proto` declares queries.
+fn queries_floor(dir: &std::path::Path) -> u32 {
+    let declares = std::fs::read_dir(dir.join("workbench")).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|e| e.path().extension().is_some_and(|x| x == "proto"))
+    });
+    if declares {
+        crate::sdkgen::workbench_queries_runtime()
+    } else {
+        0
+    }
+}
+
 /// Packs the objects of module `id` as they are in memory in `lib`.
 pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
     let m = lib
@@ -292,7 +306,7 @@ pub fn pack_module(lib: &Library, id: &str, o: &PackOptions) -> Result<Packed> {
     let runtime_floor = if m.dir.as_os_str().is_empty() {
         0
     } else {
-        crate::build::workbench_runtime_floor(&m.dir)?
+        crate::build::workbench_runtime_floor(&m.dir)?.max(queries_floor(&m.dir))
     };
     let bytes = crate::dkm::pack_keys_with_declared(
         service_obj.as_ref().or(cf.first().map(|c| c.0)),

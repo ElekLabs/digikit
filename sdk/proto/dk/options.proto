@@ -1,0 +1,14 @@
+// Field options of module query schemas (docs/plans/workbench-module-ui.md "Queries"). patchkit refuses a string or bytes field
+// without max_len and a repeated field without max_count: the generated C codec has fixed buffers.
+syntax = "proto3";
+
+package dk;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions {
+  // Longest string or bytes value in bytes (a string has a terminating zero in the C struct besides).
+  uint32 max_len = 51001;
+  // Most elements of a repeated field.
+  uint32 max_count = 51002;
+}

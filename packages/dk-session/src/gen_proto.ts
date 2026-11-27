@@ -6,6 +6,8 @@ export const READ_MAX = 768;
 export const PEEK_MAX = 512;
 export const MAX_REQUEST_WIRE = 40960;
 export const MAX_REPLY_WIRE = 1024;
+export const QUERY_REQUEST_MAX = 149;
+export const QUERY_REPLY_MAX = 870;
 
 /** The `.dkm` loader's format limits (`[limits.format]`). */
 export const DKM_HEADER = 160;
@@ -133,6 +135,8 @@ export const STATUS: [number, string, string][] = [
   [-72, 'E_AGAIN', 'usb_bulk_send: the engine refused and nothing is in flight; wait for the wake, retry'],
   [-88, 'E_MODULE_UI_CONFLICT', 'the module setting revision changed'],
   [-89, 'E_MODULE_UI_SCOPE', 'project settings are active; change this setting on the device'],
+  [-90, 'E_MODULE_UI_METHOD', 'the module has no query with this method number'],
+  [-91, 'E_MODULE_UI_TOO_BIG', 'the query reply does not fit the reply budget'],
 ];
 
 /** [code, name, text] */
@@ -259,6 +263,7 @@ export const CAP = {
   LIVE: 19,
   MODULE_UI: 20,
   MODULE_SECTIONS: 21,
+  MODULE_QUERIES: 22,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */

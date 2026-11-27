@@ -8,6 +8,7 @@
 
 /* Opaque handles ([handle] types): the runtime or the provider module gives one out in `init`. */
 typedef struct dk_module_ctx dk_module_ctx;
+typedef struct dk_workbench_query dk_workbench_query;
 typedef struct dk_settings dk_settings;
 typedef struct dk_files dk_files;
 typedef struct dk_sample_pool dk_sample_pool;
@@ -91,6 +92,9 @@ uint32_t dk_module_ctx_runtime_version(dk_module_ctx *ctx);
 
 /* Register this content module's Workbench settings descriptor during init, once per load. The runtime copies the descriptor (up to 512 bytes; version 1 holds text and file-name settings, version 2 also integer, boolean and choice settings and needs runtime 0.13.4); see the Workbench settings schema in the module authoring guide. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad descriptor, or DK_E_STATE if already registered. Workbench may read settings while a settings overlay is installed; use the device menu to edit them in that case. Context: init. Since runtime 0.11.4. */
 int32_t dk_workbench_register(dk_module_ctx *ctx, const uint8_t *descriptor, uint32_t size);
+
+/* Register this content module's Workbench query table during init, once per load, after `dk_workbench_register`. The runtime keeps the pointer (the table must stay valid while the module is loaded; it is not copied): `count` entries (1 to 16) of `dk_workbench_query` (<dk/query.h>: `{ call; u8 method; u8 reserved[3]; }`, 8 bytes, 2-byte aligned), `method` strictly increasing from 1. `call` runs on the UI task with `*out_len` set to the room in `out` and returns 0 with `*out_len` the reply length, or an error code the Workbench receives as refused. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad table, or DK_E_STATE if queries are registered already or no settings descriptor is. Context: init. Since runtime 0.13.5. */
+int32_t dk_workbench_register_queries(dk_module_ctx *ctx, const dk_workbench_query *table, uint32_t count);
 
 /* Open this module's settings: `*out` is the handle (the same one every time), the result 0. A negative result outside init (DK_E_NOT_FOUND) or for a bad context (DK_E_CONTRACT); `*out` is untouched then. Context: init. Since runtime 0.7.0. */
 int32_t dk_settings_open(dk_module_ctx *ctx, dk_settings **out);

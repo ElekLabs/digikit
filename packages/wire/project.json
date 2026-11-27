@@ -1,0 +1,12 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "wire",
+  "implicitDependencies": ["patchkit"],
+  "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": { "command": "pnpm exec tsc -p tsconfig.json", "cwd": "packages/wire" }
+    }
+  }
+}

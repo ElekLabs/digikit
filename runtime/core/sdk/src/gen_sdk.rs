@@ -283,6 +283,8 @@ pub mod proto {
     pub const PEEK_MAX: usize = 512;
     pub const MAX_REQUEST_WIRE: usize = 40960;
     pub const MAX_REPLY_WIRE: usize = 1024;
+    pub const QUERY_REQUEST_MAX: usize = 149;
+    pub const QUERY_REPLY_MAX: usize = 870;
     pub const CMD_MODULE_UI: u8 = 0x00;
     pub const CMD_INFO: u8 = 0x01;
     pub const CMD_LIST: u8 = 0x02;
@@ -344,6 +346,8 @@ pub mod proto {
     pub const E_AGAIN: i32 = -72;
     pub const E_MODULE_UI_CONFLICT: i32 = -88;
     pub const E_MODULE_UI_SCOPE: i32 = -89;
+    pub const E_MODULE_UI_METHOD: i32 = -90;
+    pub const E_MODULE_UI_TOO_BIG: i32 = -91;
     pub const CAP_LOG: u32 = 1 << 0;
     pub const CAP_PEEK: u32 = 1 << 1;
     pub const CAP_LOGCFG: u32 = 1 << 2;
@@ -366,6 +370,7 @@ pub mod proto {
     pub const CAP_LIVE: u32 = 1 << 19;
     pub const CAP_MODULE_UI: u32 = 1 << 20;
     pub const CAP_MODULE_SECTIONS: u32 = 1 << 21;
+    pub const CAP_MODULE_QUERIES: u32 = 1 << 22;
     pub const CAPK_MODULES: u8 = 1;
     pub const CAPK_SELECTION: u8 = 2;
     pub const CAPK_ARENA: u8 = 3;
@@ -622,7 +627,7 @@ pub mod api {
     pub type UiTickFn = unsafe extern "C" fn(arg: *mut u8);
 
     /// The names a module may import, in the order of the runtime's table (`[[import]]`).
-    pub const IMPORT_NAMES: [&str; 138] = [
+    pub const IMPORT_NAMES: [&str; 139] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -654,6 +659,7 @@ pub mod api {
         "dk_module_ctx_device",
         "dk_module_ctx_runtime_version",
         "dk_workbench_register",
+        "dk_workbench_register_queries",
         "dk_settings_open",
         "dk_settings_get",
         "dk_settings_put",
@@ -764,7 +770,7 @@ pub mod api {
     ];
 
     /// The names the runtime's own table holds (`IMPORTS`), in order: the imports without `requires`, and not provided by a service file.
-    pub const BUILTIN_NAMES: [&str; 67] = [
+    pub const BUILTIN_NAMES: [&str; 68] = [
         "memcpy",
         "memset",
         "memcmp",
@@ -786,6 +792,7 @@ pub mod api {
         "dk_module_ctx_device",
         "dk_module_ctx_runtime_version",
         "dk_workbench_register",
+        "dk_workbench_register_queries",
         "dk_settings_open",
         "dk_settings_get",
         "dk_settings_put",
@@ -928,6 +935,9 @@ pub mod api {
 
     /// `dk_workbench_register`: Register this content module's Workbench settings descriptor during init, once per load. The runtime copies the descriptor (up to 512 bytes; version 1 holds text and file-name settings, version 2 also integer, boolean and choice settings and needs runtime 0.13.4); see the Workbench settings schema in the module authoring guide. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad descriptor, or DK_E_STATE if already registered. Workbench may read settings while a settings overlay is installed; use the device menu to edit them in that case.
     pub type DkWorkbenchRegisterFn = unsafe extern "C" fn(ctx: *mut u8, descriptor: *const u8, size: u32) -> i32;
+
+    /// `dk_workbench_register_queries`: Register this content module's Workbench query table during init, once per load, after `dk_workbench_register`. The runtime keeps the pointer (the table must stay valid while the module is loaded; it is not copied): `count` entries (1 to 16) of `dk_workbench_query` (<dk/query.h>: `{ call; u8 method; u8 reserved[3]; }`, 8 bytes, 2-byte aligned), `method` strictly increasing from 1. `call` runs on the UI task with `*out_len` set to the room in `out` and returns 0 with `*out_len` the reply length, or an error code the Workbench receives as refused. Returns 0, DK_E_CONTEXT for the wrong owner or phase, DK_E_FORMAT for a bad table, or DK_E_STATE if queries are registered already or no settings descriptor is.
+    pub type DkWorkbenchRegisterQueriesFn = unsafe extern "C" fn(ctx: *mut u8, table: *const u8, count: u32) -> i32;
 
     /// `dk_settings_open`: Open this module's settings: `*out` is the handle (the same one every time), the result 0. A negative result outside init (DK_E_NOT_FOUND) or for a bad context (DK_E_CONTRACT); `*out` is untouched then.
     pub type DkSettingsOpenFn = unsafe extern "C" fn(ctx: *mut u8, out: *mut *mut u8) -> i32;

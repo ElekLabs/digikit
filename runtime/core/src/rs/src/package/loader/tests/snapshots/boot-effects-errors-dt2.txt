@@ -35,7 +35,7 @@ init and fini calls
   fini 8
 events
   kind 2 flags 0x0004 args [2, ffffffff, 0, 0, 100000]
-  kind 1 flags 0x0004 args [d04, 1, 0, 1, 0]
+  kind 1 flags 0x0004 args [d05, 1, 0, 1, 0]
   kind 4 flags 0x0004 args [1, 0, 0, 3, 0]
   kind 44 flags 0x0004 args [fffffffe, 0, 0, 0, 7be412a6]
   kind 44 flags 0x0004 args [fffffffe, 0, 0, 0, 5768d068]
@@ -139,7 +139,7 @@ card writes
 card state 1 claims 0 writes 4 refused 0
 init and fini calls
 events
-  kind 1 flags 0x0004 args [d04, 1, 0, 3, 0]
+  kind 1 flags 0x0004 args [d05, 1, 0, 3, 0]
   kind 4 flags 0x0004 args [3, 0, 0, 3, 1]
   kind 3 flags 0x0001 args [3, 0, 3, 0, 0]
 installed sites 0
@@ -155,7 +155,7 @@ card writes
 card state 1 claims 0 writes 6 refused 0
 init and fini calls
 events
-  kind 1 flags 0x0004 args [d04, 1, 0, 5, 2]
+  kind 1 flags 0x0004 args [d05, 1, 0, 5, 2]
   kind 4 flags 0x0004 args [5, 0, 2, 3, 0]
   kind 3 flags 0x0001 args [1, 2, 5, 0, 0]
 installed sites 0

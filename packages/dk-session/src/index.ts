@@ -2,6 +2,8 @@ export * from './dkupload-core.ts';
 export {
   H_ROLE,
   PROVIDER_MAX,
+  QUERY_REPLY_MAX,
+  QUERY_REQUEST_MAX,
   RECORD_KIND,
   RESOURCE,
   RUNTIME_SERVICE_NAMES,
@@ -42,3 +44,4 @@ export * from './bulk-select.ts';
 export * from './identify.ts';
 export * from './midi-out.ts';
 export * from './module-settings.ts';
+export * from './module-queries.ts';

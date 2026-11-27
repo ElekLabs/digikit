@@ -1,5 +1,7 @@
 // A ModuleChannel on plain memory for preview and tests. `createModuleClient` over it shares `ModuleSettings` (validation, scaling, labels,
 // revisions) with the device adapter; the channel holds a values map and a revision per setting, and the module's files.
+import type { MemoryQueryService } from './memory-query-service.ts';
+import type { QueryError, QueryResult } from './query-result.ts';
 import type { ModuleChannel, ModuleChannelEvent, RawSetting } from './module-channel.ts';
 import { settingError, type SettingError } from './setting-error.ts';
 import { settingValueCodec } from './setting-value-codec.ts';
@@ -25,12 +27,18 @@ export interface MemoryOptions {
   behavior?: (call: MemoryCall) => SettingError | void | Promise<SettingError | void>;
   /** The module's data directory. */
   files?: Map<string, Uint8Array>;
+  /** The module's query service (`memoryQueryService(desc, handlers)`). Without one every query is an unknown method. */
+  service?: MemoryQueryService;
+  /** The device's byte limits of a request and a reply (the desktop preview passes the generated ones). A larger one answers `too-big`, as the device does. Without it nothing is limited. */
+  queryLimits?: { request: number; reply: number };
 }
 
 /** What a test may look at beside the channel. A page never gets it. */
 export interface MemoryInspect {
   readonly store: MemorySettingsStore;
   readonly files: Map<string, Uint8Array>;
+  /** Makes the next query fail with `busy` or `timeout` without reaching the handler. */
+  failNextQuery(kind: 'busy' | 'timeout'): void;
 }
 
 const gone = () => settingError('unavailable', 'The module page has closed.');
@@ -62,6 +70,7 @@ export function createMemoryModuleChannel(
     const refused = await admit(call);
     if (refused) throw new Error(refused.message);
   }
+  let forced: QueryError | undefined;
   const described: DescribedSchema = {
     ...structuredClone(schema),
     name: options.name ?? schema.name ?? schema.module ?? 'Module',
@@ -91,10 +100,32 @@ export function createMemoryModuleChannel(
       await open({ method: 'files', id: name });
       data.delete(name);
     },
+    async callQuery(method, request): Promise<QueryResult> {
+      if (!current()) return { ok: false, error: { kind: 'unavailable' } };
+      if (forced) {
+        const error = forced;
+        forced = undefined;
+        return { ok: false, error };
+      }
+      const limits = options.queryLimits;
+      if (limits && request.length > limits.request) return { ok: false, error: { kind: 'too-big' } };
+      const result = (await options.service?.call(method, request)) ?? { ok: false, error: { kind: 'unknown-method' } };
+      if (limits && result.ok && result.reply.length > limits.reply) return { ok: false, error: { kind: 'too-big' } };
+      return structuredClone(result) as QueryResult;
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => void listeners.delete(listener);
     },
   };
-  return { channel, inspect: { store, files: data } };
+  return {
+    channel,
+    inspect: {
+      store,
+      files: data,
+      failNextQuery(kind) {
+        forced = { kind };
+      },
+    },
+  };
 }
