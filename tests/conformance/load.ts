@@ -1,11 +1,12 @@
 import path from 'node:path';
 import { repoRoot, type Device } from '@digi/test-support';
 import { test } from 'vitest';
-import { expectRuntimeBoot, startPatchedSession } from '@digi/regression/support.ts';
+import { expectRuntimeBoot } from '@digi/regression/runtime-boot.ts';
+import { startPatchedSession } from '@digi/regression/patched-session.ts';
 import { timePhase, timingContext } from '@digi/regression/timing.ts';
 import { FIRMWARE, selectDevices } from '@digi/regression/runtime/devices.ts';
 import { liveOptions } from '@digi/regression/runtime/live-options.ts';
-import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
 
 import { loadRuntimeModules, scanRuntimeModules as scanManifests, supportsDevice, type RuntimeModule } from './manifests.ts';
 

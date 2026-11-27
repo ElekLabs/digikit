@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { HOST_COUNT, HOST_DIR_MAGIC, HOST_DIR_READY, HOST_ID, type DkSession } from '@digi/dk-session';
 import { emulatorClock, type Session } from '@digi/test-support';
-import { withWaitApi, type PatchedSession } from '../support.ts';
+import { withWaitApi } from '../wait-api.ts';
+import { type PatchedSession } from '../test-runtime.ts';
 
 const fake = vi.hoisted(() => ({
   exec: vi.fn(),

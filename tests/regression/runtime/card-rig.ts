@@ -4,20 +4,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { DkSession, EmuUsbTransport, frame, parseReply } from '@digi/dk-session';
-import { RpcError, type InitialButton } from '@digi/control-client';
+import { RpcError } from '@digi/control-client';
 import { resolveInputs, type Device, type RuntimeBaseline, type Session } from '@digi/test-support';
 import { describe, expect } from 'vitest';
-import {
-  expectNoGuardHits,
-  withReusablePatchedSession,
-  type PatchedSession,
-  type RuntimeCase,
-  type TestRuntime,
-  withWaitApi,
-} from '../support.ts';
+import { expectNoGuardHits } from '../free-region-guard.ts';
+import { withReusablePatchedSession } from '../reusable-session.ts';
+import type { RuntimeCase } from '../test-runtime.ts';
+import { withWaitApi } from '../wait-api.ts';
 import { bootInfo, bootInfoLoaded, pokeKnob } from './guest-mailbox.ts';
-import { buildCard, cardView, storeList, type CardOptions } from './card-store.ts';
-import { selRecords, type SelRecord } from './card-record.ts';
+import { buildCard, cardView, storeList } from './card-store.ts';
+import { selRecords } from './card-record.ts';
+import type { CardRig, CardRigOptions } from './card-rig-api.ts';
+import type { CardSpec } from './card-spec.ts';
 import { cachedCard, cachedCardId, cardSpecKey, fileSha } from './card-cache.ts';
 import { uploadStore } from './device-data.ts';
 import { bounded, rpc } from './guest-access.ts';
@@ -27,17 +25,15 @@ import { drainInputs, withPausedFxProtocol } from './fx-session.ts';
 import { emulatorDk, pollEmulated } from './waits.ts';
 import { record } from './artifacts.ts';
 import { FIRMWARE, FULL_TIER, claimRunDir, selectDevices, skipEmptyHalf } from './devices.ts';
-import { moduleArtifact, moduleStorePath } from './install.ts';
+import { moduleArtifact, moduleStorePath } from './module-artifact.ts';
 import { neededServices, portFile, requireCoupledForServices, servicePath } from './service-files.ts';
 import { expectRuntimeUi } from './ready.ts';
-import { RING_SYMBOLS } from './runtime-menu.ts';
 import {
   planSymbol,
   prepareRuntimePlanListedOffline,
   prepareRuntimePlanOffline,
   validateRuntimePlan,
   type PreparedRuntimePlan,
-  type RuntimePlan,
 } from './runtime-plan.ts';
 import {
   cardAfter,
@@ -50,7 +46,6 @@ import {
   runtimeWatchEnv,
   withoutOwn,
 } from './write-safety.ts';
-import { rootsOf } from './image-roots.ts';
 import { systemPackageSectors } from './system-package.ts';
 
 /**
@@ -60,131 +55,8 @@ import { systemPackageSectors } from './system-package.ts';
  * the flush check and the card writes of every case are checked (Python `common_checks`, or `common_checks_upload` with `uploads`).
  */
 
-/** The runtime image of the Python scenarios (`B.RT`). */
-export const RT = rootsOf('rt');
-/** Runtime variables the card scenarios read or poke (`DKRT_BOOT` and the host directory `DKRT_HOST_DIR`, which holds the addresses of the package's statics, are always planned). */
-export const CARD_SYMBOLS = ['DKRT_CARD', 'DKRT_CRASH', 'DKRT_MAILBOX', 'DKRT_STATE', ...RING_SYMBOLS];
 /** The test knob `DKRT_STORE_CAP` keeps every sector from here to header B out of the allocations (a DN2 store of 20 GiB then fits INFO's 32 bits). */
 export const CAP_SECTORS = 0x40000;
-
-/** A card: `modules` are module ids (stored as modules/<last>.dkm) or `{ name, file }` store entries; the rest are the `buildCard` options. */
-export type CardSpec = Omit<CardOptions, 'dir' | 'modules'> & { modules?: (string | { name: string; file: string })[] };
-
-export interface CardRigOptions {
-  devices?: readonly Device[];
-  /** Full tier only. */
-  full?: boolean;
-  /** Skip with this reason (the Python scenario still covers it); see the scenario-migration handover. */
-  skip?: Partial<Record<Device, string>>;
-  /** Module roots of the runtime image (`patchkit apply --modules`); omit for the emulator patch set. */
-  roots?: string[];
-  /** The image has no runtime (a patched-in module only): no `DKRT_BOOT`, no runtime readiness; the case is ready 300 emulated ms after the stock firmware's ready point. */
-  plain?: boolean;
-  /** Plan symbols besides `DKRT_BOOT` and `DKRT_HOST_DIR`. */
-  symbols?: string[];
-  /** Daemon environment besides the write watch; it overrides the watch's variables. A function gets the prepared runtime plan when the daemon starts. */
-  env?: Record<string, string> | ((prepared: PreparedRuntimePlan) => Record<string, string>);
-  /** ColdFire-only daemon ('zero', the default via `resolveDsp`; 'cold': also without a snapshot) or with the SHARC ('sharc'). */
-  dsp?: 'zero' | 'sharc' | 'cold';
-  /** Configure coupled audio without loading stock firmware before the first explicit baseline. */
-  startEmpty?: boolean;
-  /** The first card: a function that gives its spec (default a blank store card) or `small`, a blank 1 MiB file (a test sets `DIGI_CARD_IDENTITY=small`). */
-  initial?: 'small' | ((rig: { mod: (id: string, as?: string) => { name: string; file: string } }) => CardSpec);
-  /** Seed every card with the stock firmware's project (Python `Env.card`). */
-  project?: boolean;
-  /** Uploads and project writes are part of the scenario: the card writes may be the store range and the firmware project sectors only (`common_checks_upload`). */
-  uploads?: boolean;
-  /** Store sectors besides the two selection sectors that the test writes on purpose (Python `store_extra`). */
-  storeExtra?: number[];
-  /** Use the MainPanel baseline, accepting missing filesystem verification but rejecting explicit failure; this does not stop stock verification/loading. */
-  relaxFs?: boolean;
-  /** Boot paused at the ready point and settle by stepping (Python `settle_ms` of 300 ms and `wait_dsp`), so a test that times events in DSP frames starts from the same frame in every run. */
-  hold?: boolean;
-  /** A CPU exception is part of the scenario: faults of the session are not an error. */
-  faults?: boolean;
-  /** Deliver genuine guest CPU exceptions during the initial baseline as well as later boots. */
-  deliverExceptions?: boolean;
-  /** Queue ordered panel transitions before every cold boot in this baseline, including boot-time resets. */
-  initialButtons?: readonly InitialButton[];
-  /** Stall threshold of the daemon in emulated ms (default 1000): for a scenario whose single guest request blocks the main loop longer. */
-  stallMs?: number;
-  /** More checks after the daemon has closed. */
-  onClose?: (rig: CardRig, report: ReturnType<typeof runtimeSafety>) => void;
-}
-
-export interface CardRig {
-  readonly device: Device;
-  readonly plan: RuntimePlan;
-  /** The artifact directory of the daemon. */
-  readonly artifacts: string;
-  /** The case of the card booted last. */
-  readonly runtime: RuntimeCase;
-  readonly session: Session;
-  /** The image file of the card booted last. */
-  readonly cardImage: string;
-  /** The module store in absolute card sectors. */
-  readonly store: ReturnType<typeof uploadStore>;
-  /** The exported overlay of every finished case. */
-  readonly overlays: readonly string[];
-  /** The protocol session of the last `pausedBoot`. */
-  readonly dk: DkSession;
-  /** A module for a card: store path `modules/<kind>/<as>.dkm` (default `modules/<kind>/<author>-<name>.dkm`, `moduleStorePath`) and its prepared .dkm. */
-  mod(id: string, as?: string): { name: string; file: string };
-  /** A file below `cfg/` for a card (the fault and crash modules read their delay from it). */
-  cfg(name: string, bytes: Uint8Array): { name: string; file: string };
-  /** A card in a fresh directory of the run directory (plusdrive build + the records of `spec`). */
-  card(spec?: CardSpec): Promise<string>;
-  /** Boot the runtime on this card image in the same daemon; the previous case's evidence is collected first. */
-  boot(cardImage: string, o?: { deliverExceptions?: boolean }): Promise<RuntimeCase>;
-  /** `boot` of a card built from `spec`, then `settle`. */
-  load(tag: string, spec: CardSpec): Promise<RuntimeCase>;
-  /** The first case (the `initial` card), settled. */
-  first(): Promise<RuntimeCase>;
-  /** Wait for the runtime's UI and pause (the test steps time itself). */
-  settle(
-    runtime: TestRuntime & { epoch?: number },
-    afterEpoch?: number,
-    options?: { emulatedMs?: number },
-  ): Promise<TestRuntime>;
-  /** Poll until the UI loop was reached (and the boot is safe mode when `safe`); returns the boot's fields. */
-  ready(safe?: boolean): Promise<Awaited<ReturnType<typeof bootInfo>>>;
-  /** A protocol restart (the card and its guest writes stay); returns the runtime of the new boot, settled. `coreOnly`: the new boot never reaches the runtime UI, so it is not settled on it: the call returns once the new boot is installed (a new epoch), and `ready(true)` proves its boot info. */
-  restart(runtime: PatchedSession, o?: { coreOnly?: boolean }): Promise<TestRuntime>;
-  /** Run protocol calls on the paused daemon (the transport steps the emulator). */
-  usb<T>(runtime: PatchedSession, run: (dk: DkSession) => Promise<T>): Promise<T>;
-  /** The card the guest left: `base` (default the card booted last) with the overlay of its writes laid over a copy (Python `card_after`). */
-  after(tag?: string, base?: string): Promise<string>;
-  /** The two selection record copies as the card holds them now. */
-  records(): Promise<(SelRecord | null)[]>;
-  /** The sectors of the store that the guest has written, sorted. */
-  storeWrites(): Promise<number[]>;
-  /** All sectors the guest has written in this boot. */
-  writes(tag: string): Promise<Set<number>>;
-  /** Allow store sectors in the lifetime check (a test that writes them on purpose). */
-  allowStoreWrites(sectors: Iterable<number>): void;
-  /** Step until the guest soft-resets and the cold boot is ready (Python `Rig.wait_reset`). `steps`: the bound, in steps of 400k instructions (about 4.5 DSP blocks each). */
-  waitReset(steps?: number): Promise<void>;
-
-  // ---- paused protocol sessions (the upload tests) ----
-  /** Cold boot on a card of its own that shares the image of `card`, wait for the main UI, pause and settle 300 ms; returns a protocol session that steps the emulator while it waits for a reply. */
-  pausedBoot(card: string): Promise<DkSession>;
-  /** The files of the store as the plusdrive reader reads them from the card after the guest's writes. */
-  view(tag: string): ReturnType<typeof cardView>;
-  /** `plusdrive store ls` of the card after the guest's writes. */
-  ls(tag: string): ReturnType<typeof storeList>;
-  /** Take a store of more than 4 GiB down to `CAP_SECTORS` on this boot (DKRT_STORE_CAP). */
-  applyCap(): Promise<void>;
-  /** INFO's free bytes of a card with no store: used 1, room for a one-entry table (cut by the cap). */
-  freeFresh(): number;
-  /** INFO's free bytes of a card whose store holds the system package only: `freeFresh` less the package's sectors and the table sector beside it. */
-  freeWithPackage(): number;
-  /** One request and its reply, whatever the status. `version` sends the request raw with that protocol version byte. */
-  request(cmd: number, body?: Uint8Array, version?: number): Promise<{ status: number; body: Uint8Array }>;
-  /** The status of one request. */
-  status(cmd: number, body?: Uint8Array, version?: number): Promise<number>;
-  /** One request that must be answered with status 0. */
-  send(cmd: number, body?: Uint8Array): Promise<void>;
-}
 
 const WAIT_RESET_STEP_INSNS = 400_000;
 const WAIT_RESET_STEPS = 200;

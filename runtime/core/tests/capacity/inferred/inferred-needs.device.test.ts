@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { expect, test } from 'vitest';
 import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { needsOf, recordBytesOf } from '@digi/regression/runtime/dkm.ts';
-import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
 import { neededServices, portFile } from '@digi/regression/runtime/service-files.ts';
 import { entry, nameHash } from '../../refusal/dkm-patch.ts';
 import { block, geometryOf, LOADED } from '@digi/regression/runtime/synth.ts';

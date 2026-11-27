@@ -1,8 +1,10 @@
 import { RANGES } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
-import { installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import type { PatchedSession } from '@digi/regression/test-runtime.ts';
+import { installModule } from '@digi/regression/runtime/module-install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { emulatorClock, waitClock } from '@digi/test-support';
 import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 

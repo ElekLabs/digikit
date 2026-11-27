@@ -1,6 +1,7 @@
 import { withViewObserver } from '@digi/dk-session';
-import { installWithDebug } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { installWithDebug } from '@digi/regression/runtime/debug-install.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { emulatorRead, readViewStack, viewStackFacts } from '@digi/test-support';
 import { expect } from 'vitest';
 

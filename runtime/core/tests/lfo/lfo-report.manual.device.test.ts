@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot, type Device } from '@digi/test-support';
-import { CARD_SYMBOLS, cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { expect, test } from 'vitest';
 import { moduleManifests, resolveModule } from '@digi/regression/runtime/memaudit-kit.ts';
 import { bootWith, shapeWords } from './lfo-cards.ts';

@@ -1,36 +1,15 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import type { DkSession } from '@digi/dk-session';
 import { poll, RuntimeEvents } from '@digi/dk-session';
-import { moduleStorePathOf, repoRoot, type Device, type Session } from '@digi/test-support';
+import { moduleStorePathOf, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
-import { type PatchedSession } from '../support.ts';
 import { timePhase } from '../timing.ts';
+import { DEBUG_MODULE } from './debug-module.ts';
+import { moduleArtifact } from './module-artifact.ts';
 import { neededServices, portFile, requireCoupledForServices, servicePath } from './service-files.ts';
 
 /** Emulated milliseconds the boot-time loads of the installed modules may take after the boot is seen. */
 const MODULES_LOADED_EMULATED_MS = 30_000;
-
-/** Prepared separately with patchkit pack; acceptance never builds a toolchain, module or daemon. A service (`role = "service"`) is a `.dks`, any other module a `.dkm`. */
-export function moduleArtifact(device: Device, id: string): string {
-  const directory = process.env.DIGI_RUNTIME_MODULES ?? path.join(repoRoot(), 'dist/modules');
-  const leaf = path.join(directory, device, id.split('/').at(-1)!);
-  // a service (role 1) packs to a .dks, every other module to a .dkm
-  const artifact = fs.existsSync(`${leaf}.dkm`) || !fs.existsSync(`${leaf}.dks`) ? `${leaf}.dkm` : `${leaf}.dks`;
-  if (!fs.existsSync(artifact)) throw new Error(`missing ${artifact}: run nx run ${id}:pack`);
-  return artifact;
-}
-
-/**
- * The store path of a prepared module: `modules/<kind>/<author>-<name>.dkm`, the one rule of Transfer (`modulePath`), the kind from the records of the packed file. `as` is the file name
- * a test chooses (`modules/<kind>/<as>.dkm`).
- */
-export function moduleStorePath(device: Device, id: string, as?: string): string {
-  return moduleStorePathOf(id, fs.readFileSync(moduleArtifact(device, id)), as);
-}
-
-/** The debug module: the log (LOG, PEEK, LOGCFG) exists only while it is loaded, so a test that reads the log selects it next to the module it tests. */
-export const DEBUG_MODULE = 'digikit/debug';
 
 /**
  * Native USB upload of prepared modules, one selection with all of them (in this order), one restart, then wait for their registration.
@@ -114,14 +93,4 @@ export function installModule(
   options?: { device?: Device; session?: Pick<Session, 'status' | 'client'> },
 ): Promise<void> {
   return installModules(dk, [{ id, artifact }], options);
-}
-
-/** The debug module and the modules `ids`, in one selection and one restart. */
-export function installWithDebug({ session, dk }: PatchedSession, ...ids: string[]): Promise<void> {
-  const device = session.options.device;
-  return installModules(
-    dk,
-    [...new Set([DEBUG_MODULE, ...ids])].map((id) => ({ id, artifact: moduleArtifact(device, id) })),
-    { device, session },
-  );
 }

@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { button } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import { withWaitApi, type PatchedSession } from '@digi/regression/support.ts';
+import { withWaitApi } from '@digi/regression/wait-api.ts';
+import { type PatchedSession } from '@digi/regression/test-runtime.ts';
 import { addedFactorOf, pcmStats } from '@digi/regression/runtime/pcm-files.ts';
 import { bounded, rpc } from '@digi/regression/runtime/guest-access.ts';
 import { captureNote, pausedTrigger } from '@digi/regression/runtime/note-capture.ts';

@@ -5,12 +5,14 @@ import path from 'node:path';
 import { record } from '@digi/regression/runtime/artifacts.ts';
 import { shot } from '@digi/regression/runtime/fx-session.ts';
 import { portFile } from '@digi/regression/runtime/device-data.ts';
-import { installModule, moduleArtifact } from '@digi/regression/runtime/install.ts';
+import { installModule } from '@digi/regression/runtime/module-install.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
 import { memory } from '@digi/regression/runtime/memory.ts';
 import { panelKeys } from '@digi/regression/runtime/flows/panel-keys.ts';
 import { expectNoRefusedCalls } from '@digi/regression/runtime/service-symbols.ts';
 import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 
 /** `DK_PARAM_E_STATE` (sdk/include/dk/platform/param.h). */
 const DK_PARAM_E_STATE = -0x10001;

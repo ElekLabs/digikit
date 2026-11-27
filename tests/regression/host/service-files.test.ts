@@ -20,7 +20,7 @@ vi.mock('@digi/test-support', async (original) => ({
   ...(await original<object>()),
   repoRoot: () => dir,
 }));
-import { installModules } from '../runtime/install.ts';
+import { installModules } from '../runtime/module-install.ts';
 import { derivedModule, neededServices, portFile, rawModule } from '../runtime/service-files.ts';
 import { bindServiceSymbols, serviceMapEntries } from '../runtime/service-symbols.ts';
 

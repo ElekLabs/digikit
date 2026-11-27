@@ -1,7 +1,8 @@
 import { expect, test } from 'vitest';
 import { HostDirectoryError } from '@digi/dk-session';
 import { emulatorRead, readTopMenuItems, readViewStack, viewStackFacts, type Device } from '@digi/test-support';
-import { cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { word } from '@digi/regression/runtime/guest-access.ts';
 import type { Rt } from '@digi/regression/runtime/panel-waits.ts';
 import { openDigikitMenu } from '@digi/regression/runtime/flows/menu.ts';

@@ -1,7 +1,9 @@
 import { expect, test } from 'vitest';
 import { bootInfo, bootInfoLoaded, CMD as MAILBOX, pokeWord, setSelection } from '@digi/regression/runtime/guest-mailbox.ts';
 import { currentRecord } from '@digi/regression/runtime/card-record.ts';
-import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { FULL_TIER } from '@digi/regression/runtime/devices.ts';
 import { pollUntil } from '@digi/test-support';
 import { dynType, voiceRows } from '@digi/regression/runtime/project-kit.ts';

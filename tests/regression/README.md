@@ -25,7 +25,7 @@ every shipped module live in `tests/conformance/`; its load cells (`load-dt2.dev
 module and checks persistence, contract, registration and faults. `DIGI_CONFORMANCE_MODULES` (comma-separated
 module ids) limits it; unset runs all.
 
-Shared helpers: `support.ts`, `timing.ts`, `runtime/devices.ts`, `runtime/ready.ts`, `runtime/waits.ts`, `runtime/install.ts`,
+Shared helpers: `session-handle.ts`, `patched-session.ts`, `reusable-session.ts`, `wait-api.ts`, `test-runtime.ts`, `runtime-boot.ts`, `free-region-guard.ts`, `aggregate-error.ts`, `timing.ts`, `runtime/devices.ts`, `runtime/ready.ts`, `runtime/waits.ts`, `runtime/module-artifact.ts`, `runtime/module-install.ts`, `runtime/debug-install.ts`,
 `runtime/artifacts.ts`, `runtime/protocol.ts`, `runtime/fixtures.ts`, `runtime/remote.ts`, `runtime/runtime-plan.ts`,
 `runtime/runtime-menu.ts`, `runtime/transfer-cli.ts`, `runtime/probe-kit.ts`. Module tests import them as
 `@digi/regression/<path>` (for example `@digi/regression/runtime/ready.ts`).
@@ -53,7 +53,7 @@ Running `pnpm --filter @digi/regression test:*` or Vitest directly builds nothin
   must match the stock SHA-256 and `intc_force:false` in the ready directory's `SOURCE.json`.
 - Module artifacts: `dist/modules/<device>/<leaf>.dkm` (override the root with
   `DIGI_RUNTIME_MODULES`). Runtime cases need `input-probe`, `remote`, `svc-echo` and `debug` (the log: every cell that reads it
-  selects `digikit/debug` first, `installWithDebug` in `runtime/install.ts`); the load cells need every run-time module. The gate packs them itself. By hand:
+  selects `digikit/debug` first, `installWithDebug` in `runtime/debug-install.ts`); the load cells need every run-time module. The gate packs them itself. By hand:
   `pnpm nx:pilot run digikit/pluck:pack` (artifacts in `dist/modules/<dev>/<leaf>.dkm`).
 - DT2 card samples at `out/runs/patchkit/samples` (`tools.emulator.card_check.make_samples`).
 - Sample cases also need `apps/web/public/dksample.wasm`. The Nx target `dksample:wasm` builds it for records with
@@ -95,7 +95,7 @@ prepared artifacts, the plusdrive builder and the native patchkit CLI used by st
 runs the SHARC probe modules and compares RECIPS, RSQRTS and the dsp-facts values with the device measurements
 in `tests/fixtures/sharc/`.
 
-Helpers in `runtime/devices.ts`, `live-options.ts`, `ready.ts`, `waits.ts`, `install.ts`, `artifacts.ts`, `protocol.ts`:
+Helpers in `runtime/devices.ts`, `live-options.ts`, `ready.ts`, `waits.ts`, `module-artifact.ts`, `module-install.ts`, `artifacts.ts`, `protocol.ts`:
 
 - `runtimeTests(name, body, opts)`: one test per device, after `expectRuntimeBoot`.
 - `liveOptions(device, extra)`: daemon binary, firmware version and the cached card of `live-card.ts` for `withPatchedSession` (`blankCard: true` leaves the card to the daemon).
@@ -105,7 +105,7 @@ Helpers in `runtime/devices.ts`, `live-options.ts`, `ready.ts`, `waits.ts`, `ins
 - `record`: a log line in the run artifacts.
 - `liveArtifacts`: the run artifact directory.
 
-Helpers in `support.ts`:
+Helpers in the session files (`session-handle.ts`, `patched-session.ts`, `runtime-boot.ts`, `free-region-guard.ts`):
 
 - `withSession`: one stock daemon per file, restarted before each test.
 - `withPatchedSession`, `startPatchedSession`: coupled daemon with `firmware.load {runtime:true,

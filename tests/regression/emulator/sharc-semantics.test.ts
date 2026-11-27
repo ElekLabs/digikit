@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { PatchedSession } from '../support.ts';
-import { runtimeTests } from '../runtime/ready.ts';
+import type { PatchedSession } from '../test-runtime.ts';
+import { runtimeTests } from '../runtime/runtime-tests.ts';
 import { CMD_RESET, CMD_STATUS, installProbe, PROBE, readRing, status } from '../runtime/probe-kit.ts';
 import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 

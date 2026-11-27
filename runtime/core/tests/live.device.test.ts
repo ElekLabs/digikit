@@ -2,15 +2,16 @@ import path from 'node:path';
 import { waitClock } from '@digi/test-support';
 import { expect } from 'vitest';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
 import { captureNote } from '@digi/regression/runtime/note-capture.ts';
 import { frames } from '@digi/regression/runtime/dsp-state.ts';
 import { pickSine } from '@digi/regression/runtime/panel-waits.ts';
 import { readFloatWav } from '@digi/regression/runtime/pcm-files.ts';
-import { DEBUG_MODULE, moduleStorePath } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE } from '@digi/regression/runtime/debug-module.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
-import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { cliInstall, transferCommand } from '@digi/regression/runtime/transfer-cli.ts';
 
 /**

@@ -1,5 +1,6 @@
 import zlib from 'node:zlib';
-import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
+import { cardRig } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { cardStore, deviceProfile } from '@digi/regression/runtime/device-data.ts';
 import { FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import type { Device } from '@digi/test-support';

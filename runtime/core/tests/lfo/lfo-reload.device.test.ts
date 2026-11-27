@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { CARD_SYMBOLS, cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { bootWith, shapeWords, SHAPE_A } from './lfo-cards.ts';
 import { describeSamples, evalTable, fitShape, FIRST_SHAPE, KNOB_WORD, LfoRig, OK, RAMP_SAMPLES } from './lfo-rig.ts';

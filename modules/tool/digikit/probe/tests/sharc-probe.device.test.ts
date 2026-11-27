@@ -1,6 +1,6 @@
 import { expect } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
-import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import type { PatchedSession } from '@digi/regression/test-runtime.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { CMD_RESET, CMD_STATUS, installProbe, PROBE, readRing, status } from '@digi/regression/runtime/probe-kit.ts';
 import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 

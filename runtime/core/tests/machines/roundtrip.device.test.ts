@@ -2,11 +2,12 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { Device } from '@digi/test-support';
 import { bootInfo, E_LOADING } from '@digi/regression/runtime/guest-mailbox.ts';
-import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
+import { cardRig } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { pickSine, REDRAW, SETTLE, type Rt } from '@digi/regression/runtime/panel-waits.ts';
 import { rpc } from '@digi/regression/runtime/guest-access.ts';
 import { FIRMWARE, FULL_TIER, describeOn } from '@digi/regression/runtime/devices.ts';
-import { moduleStorePath } from '@digi/regression/runtime/install.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
 import {
   diffSlot,
   dynType,

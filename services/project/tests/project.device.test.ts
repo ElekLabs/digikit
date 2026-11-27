@@ -1,7 +1,10 @@
 import { expect, test } from 'vitest';
 import { pollUntil } from '@digi/test-support';
 import { currentRecord } from '@digi/regression/runtime/card-record.ts';
-import { CARD_SYMBOLS, cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
+import { type CardRig } from '@digi/regression/runtime/card-rig-api.ts';
 import {
   clearProject,
   copyPasteProject,
@@ -23,7 +26,7 @@ import { word } from '@digi/regression/runtime/guest-access.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { liveArtifacts } from '@digi/regression/runtime/artifacts.ts';
 import { shot } from '@digi/regression/runtime/fx-session.ts';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 
 /**
  * The `project` service on a card (docs/design/digikit-project.md): the file of a project follows the stock project menus. `test/project-user` keeps one setting that the test

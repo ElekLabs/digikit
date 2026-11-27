@@ -5,7 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { button, encoder, repoRoot, resolveInputs } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
-import { withSession } from '../support.ts';
+import { withSession } from '../session-handle.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 import { optInPatchkit } from './patchkit.ts';
 

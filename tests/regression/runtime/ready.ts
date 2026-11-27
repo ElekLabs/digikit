@@ -1,45 +1,9 @@
-import type { Device, Session, SessionOptions } from '@digi/test-support';
-import { describe, expect, test } from 'vitest';
-import { expectRuntimeBoot, withPatchedSession, type TestRuntime } from '../support.ts';
+import type { Session } from '@digi/test-support';
+import { expect } from 'vitest';
 import { timePhase, timingContext } from '../timing.ts';
 import { liveArtifacts, record } from './artifacts.ts';
-import { FIRMWARE, FULL_TIER, selectDevices, skipEmptyHalf } from './devices.ts';
-import { liveOptions } from './live-options.ts';
 import { planSymbol, prepareRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 import { pollEmulated } from './waits.ts';
-
-/** One test per device, each on its own fresh runtime daemon that has passed `expectRuntimeBoot`. */
-export function runtimeTests(
-  name: string,
-  body: (runtime: TestRuntime) => Promise<void>,
-  opts: {
-    patchSet?: string;
-    dsp?: SessionOptions['dsp'];
-    mirror?: boolean;
-    /** Leave the card to the daemon (the stock initialisation of a blank card), instead of the cached card of `liveCard`. */
-    blankCard?: boolean;
-    /** The stable period of the card in DSP blocks (default `LIVE_STABLE_BLOCKS`; 0 is the runtime's 30 s). */
-    stableBlocks?: number;
-    devices?: readonly Device[];
-    full?: boolean;
-    skip?: string;
-  } = {},
-): void {
-  const selected = selectDevices(opts.devices);
-  skipEmptyHalf(selected, name);
-  for (const device of selected) {
-    describe.skipIf((opts.full === true && !FULL_TIER) || opts.skip !== undefined)(
-      `${device.toUpperCase()} ${FIRMWARE[device]}`,
-      () => {
-        const handle = withPatchedSession({ ...liveOptions(device, opts), dsp: opts.dsp }, name);
-        test(name, async () => {
-          await expectRuntimeBoot(handle.runtime);
-          await timePhase('scenario.body', () => body(handle.runtime), timingContext(handle.runtime.session));
-        });
-      },
-    );
-  }
-}
 
 /** Wait for the runtime's normal UI hook on a fresh free-running daemon, before the first install. */
 export async function expectRuntimeReady(session: Session): Promise<void> {

@@ -1,6 +1,7 @@
 import { button } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import { CARD_SYMBOLS, cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
 import { introNow, safeFrame } from '@digi/regression/runtime/intro-frame.ts';
 import { bootScreenCard, IB, lastFrame, SAFE_KEY } from './introblank-support.ts';
 

@@ -1,6 +1,8 @@
 import { be32 } from '@digi/dk-session';
 import { expect, test } from 'vitest';
-import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 
 /** tools/bootscreen, fault in the intro callback (see bootscreen.device.test.ts). */
 
