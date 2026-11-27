@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { repoRoot, resolveInputs, withinRuntimeDeadline } from '@digi/test-support';
 import { expect, test } from 'vitest';
 import { describeOn } from '@digi/regression/runtime/devices.ts';
-import { withSession } from '@digi/regression/support.ts';
+import { withSession } from '@digi/regression/session-handle.ts';
 import type { RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { optInPatchkit } from '@digi/regression/runtime/patchkit.ts';
 import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';

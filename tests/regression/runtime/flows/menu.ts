@@ -1,7 +1,7 @@
 import { fmtVersion } from '@digi/dk-session';
 import { pollUntil } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { TestRuntime } from '../../support.ts';
+import type { TestRuntime } from '../../test-runtime.ts';
 import { record } from '../artifacts.ts';
 import { packageSymbol, type RuntimePlan } from '../runtime-plan.ts';
 import { aboutIsComplete, readAboutRows } from '../runtime-menu.ts';

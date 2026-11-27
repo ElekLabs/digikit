@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 import { rpc } from '@digi/regression/runtime/guest-access.ts';
 import { rows } from '@digi/regression/runtime/dsp-state.ts';
 import { REDRAW } from '@digi/regression/runtime/panel-waits.ts';

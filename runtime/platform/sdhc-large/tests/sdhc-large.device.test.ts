@@ -4,7 +4,8 @@ import { chooseBulk, EmuBulkLink, fileHash, type DkSession } from '@digi/dk-sess
 import { repoRoot } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import { overlayArgs, plusdriveBinary } from '@digi/regression/runtime/card-store.ts';
-import { cardRig, RT } from '@digi/regression/runtime/card-rig.ts';
+import { cardRig } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { DEVICES, FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { planSymbol } from '@digi/regression/runtime/runtime-plan.ts';
 import { word } from '@digi/regression/runtime/guest-access.ts';

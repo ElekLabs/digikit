@@ -1,9 +1,11 @@
 import path from 'node:path';
 import { repoRoot } from '@digi/test-support';
 import { expect, test } from 'vitest';
-import type { PatchedSession } from '@digi/regression/support.ts';
-import { CARD_SYMBOLS, cardRigs, RT } from '@digi/regression/runtime/card-rig.ts';
-import { moduleArtifact } from '@digi/regression/runtime/install.ts';
+import type { PatchedSession } from '@digi/regression/test-runtime.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
 import { FIRMWARE } from '@digi/regression/runtime/devices.ts';
 import { servicePath } from '@digi/regression/runtime/service-files.ts';
 import { refusedCalls, serviceSymbol } from '@digi/regression/runtime/service-symbols.ts';

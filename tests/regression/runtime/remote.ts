@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DkSession } from '@digi/dk-session';
 import { emulatorClock, pollUntil, type Clock, type Session } from '@digi/test-support';
-import { aggregate, type PatchedSession } from '../support.ts';
+import { aggregate } from '../aggregate-error.ts';
+import { type PatchedSession } from '../test-runtime.ts';
 import { liveArtifacts, record } from './artifacts.ts';
-import { installModule, moduleArtifact } from './install.ts';
+import { installModule } from './module-install.ts';
+import { moduleArtifact } from './module-artifact.ts';
 import { expectRuntimeUi } from './ready.ts';
 import { prepareRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 

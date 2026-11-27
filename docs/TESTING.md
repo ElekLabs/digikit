@@ -1583,7 +1583,7 @@ Memory panel.
 
 - `rt.listen()` and `events.until(kind, match, { withinMs })` read the runtime log; the log commands exist only while `digikit/debug` is loaded (`installWithDebug`).
 - `ringWatch` (`tests/regression/runtime/runtime-menu.ts`) reads the runtime's small ring (32 events) straight from guest memory, so it works without the debug module, for
-  example in a card rig whose runtime has none (`CARD_SYMBOLS` of `card-rig.ts` carries the symbols). `next(kind, match, { withinMs })` waits in emulated time; poll every
+  example in a card rig whose runtime has none (`CARD_SYMBOLS` of `card-symbols.ts` carries the symbols). `next(kind, match, { withinMs })` waits in emulated time; poll every
   100 ms, as the ring is short. Events a test must see are logged with `DK_LOG_F_KEEP`, which the ring keeps.
   Use `rt.listen()` when the debug module is loaded anyway, `ringWatch` otherwise.
 - `viewStackFacts(device)` and `readViewStack(read, facts)` (`packages/test-support`, `boot-window.ts`) give the firmware's view stack from guest memory, the top view first (object, class

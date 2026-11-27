@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { decode, encode, type Frame } from '@digi/dkbs';
 import { expect } from 'vitest';
-import type { CardRig, CardSpec } from '@digi/regression/runtime/card-rig.ts';
+import type { CardRig } from '@digi/regression/runtime/card-rig-api.ts';
+import type { CardSpec } from '@digi/regression/runtime/card-spec.ts';
 import { encodeSettings } from '@digi/regression/runtime/project-kit.ts';
 
 /** Shared by the bootscreen device tests (one file per group: bootscreen, bootscreen-safe, bootscreen-fault). */

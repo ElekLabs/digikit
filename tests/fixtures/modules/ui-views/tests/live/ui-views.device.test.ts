@@ -1,10 +1,12 @@
 import { RANGES } from '@digi/dk-session/gen_proto';
 import { emulatorRead, readTopMenuItems, readViewStack, viewStackFacts, type Device } from '@digi/test-support';
 import { expect } from 'vitest';
-import type { TestRuntime } from '@digi/regression/support.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 import { REDRAW } from '@digi/regression/runtime/panel-waits.ts';
-import { installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { installWithDebug } from '@digi/regression/runtime/debug-install.ts';
+import { moduleStorePath } from '@digi/regression/runtime/module-artifact.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 
 /**

@@ -1,5 +1,5 @@
 import { pollUntil } from '@digi/test-support';
-import type { TestRuntime } from '../support.ts';
+import type { TestRuntime } from '../test-runtime.ts';
 
 /** What the panel helpers need of a runtime: the session, the wait API's `ui` and its clock. */
 export type Rt = Pick<TestRuntime, 'session' | 'ui' | 'clock'>;

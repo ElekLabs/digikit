@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot, type Device } from '@digi/test-support';
 import { fxExpectationsWith, GAIN_PAGE_DEFAULTS, type FxExpectations } from './dkm-parse.ts';
-import { moduleArtifact } from './install.ts';
+import { moduleArtifact } from './module-artifact.ts';
 
 /**
  * The `patchkit needs` verdict of a committed pack, read from dist/bytes/pack-verdicts.json (written by `nx run patchkit:pack-verdicts`

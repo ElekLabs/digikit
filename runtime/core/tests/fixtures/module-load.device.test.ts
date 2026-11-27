@@ -1,7 +1,7 @@
 import { expectModuleLoad } from '../../../../tests/conformance/assert-load.ts';
 import type { RuntimeModule } from '../../../../tests/conformance/manifests.ts';
-import { moduleArtifact } from '@digi/regression/runtime/install.ts';
-import { runtimeTests } from '@digi/regression/runtime/ready.ts';
+import { moduleArtifact } from '@digi/regression/runtime/module-artifact.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 
 // Representative SDK artifacts keep the runtime loader boundary independent of shipped modules.
 // Service registration is covered by core/runtime-service-tests with its zero-DSP fixture.

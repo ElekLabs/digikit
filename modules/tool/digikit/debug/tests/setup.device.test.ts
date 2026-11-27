@@ -1,9 +1,10 @@
 import { SetupRefused, trackSetup, type RuntimeEvents } from '@digi/dk-session';
 import { SERVICE_CMD } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
-import type { TestRuntime } from '@digi/regression/support.ts';
-import { installWithDebug } from '@digi/regression/runtime/install.ts';
-import { expectRuntimeReady, runtimeTests } from '@digi/regression/runtime/ready.ts';
+import type { TestRuntime } from '@digi/regression/test-runtime.ts';
+import { installWithDebug } from '@digi/regression/runtime/debug-install.ts';
+import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
+import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 
 /**
  * The debug module's SETUP command (calibration setup) on the firmware: a track's machine type and filter type are set through the firmware's own kit commit in the UI

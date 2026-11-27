@@ -2,7 +2,10 @@ import { be32, hasCap } from '@digi/dk-session';
 import { expect, test } from 'vitest';
 import { bootInfo, cardInfo, crashInfo } from '@digi/regression/runtime/guest-mailbox.ts';
 import { currentRecord } from '@digi/regression/runtime/card-record.ts';
-import { CARD_SYMBOLS, cardRigs, RT, type CardRig } from '@digi/regression/runtime/card-rig.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
+import { type CardRig } from '@digi/regression/runtime/card-rig-api.ts';
 import { crashRecord, pausedProtocol } from '@digi/regression/runtime/debug-kit.ts';
 import { rpc } from '@digi/regression/runtime/guest-access.ts';
 
