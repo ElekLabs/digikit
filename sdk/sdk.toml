@@ -2136,6 +2136,9 @@ param_rows = 16     # parameter rows core/rows reserves (tied to its manifest by
 page_rows = 8       # page rows core/rows reserves (Digitone II)
 machine_rows = 8    # run-time machine types core/rows reserves (tied to its manifest by packages/patchkit/tests/devdata.rs)
 stage_bytes = 131072  # the runtime's staging buffer: the largest .dkm file (patchkit refuses a larger one)
+machine_types = 64  # machine types the machines service lists (the stock types and the registry's rows): MAX_MACHINE_TYPES; an array size, no device limit
+machine_pages = 16  # pages one module declares for its machines: MAX_MACHINE_PAGES; an array size, no device limit
+shortcut_bindings = 16  # key bindings of all modules together in the shortcuts service: MAX_SHORTCUT_BINDINGS; an array size, no device limit
 
 [limits.format]     # format limits of the `.dkm` loader (packages/dkneeds, runtime/core/src/rs/src/loader.rs, dsp.rs, arena.rs); generated into every language
                     # (`patchkit gen`: dkneeds::NAME, dkproto.py, gen_proto.ts). Also generated, from other keys: MAX_VOICES ([limits.max] machine_rows) and MAX_FX ([limits.max] fx_slots).

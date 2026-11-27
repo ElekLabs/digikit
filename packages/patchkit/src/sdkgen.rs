@@ -453,6 +453,13 @@ fn format_limits(sdk: &Sdk) -> Vec<(&'static str, u32)> {
         ("DSP_SLOT_WORDS", sdk.dsp.slots.words),
         ("MAX_VOICES", sdk.limits.max.machine_rows as u32),
         ("MAX_FX", sdk.limits.max.fx_slots as u32),
+        ("MAX_SELECTION", sdk.limits.max.modules as u32),
+        ("MAX_MACHINE_TYPES", sdk.limits.max.machine_types as u32),
+        ("MAX_MACHINE_PAGES", sdk.limits.max.machine_pages as u32),
+        (
+            "MAX_SHORTCUT_BINDINGS",
+            sdk.limits.max.shortcut_bindings as u32,
+        ),
     ]
 }
 
@@ -678,6 +685,9 @@ pub struct LimitsMax {
     pub page_rows: u64,
     pub machine_rows: u64,
     pub stage_bytes: u64,
+    pub machine_types: u64,
+    pub machine_pages: u64,
+    pub shortcut_bindings: u64,
 }
 
 /// The value of the `[limits.max]` key `key`.
@@ -692,6 +702,9 @@ fn limits_max_value(m: &LimitsMax, key: &str) -> Option<u64> {
         "page_rows" => m.page_rows,
         "machine_rows" => m.machine_rows,
         "stage_bytes" => m.stage_bytes,
+        "machine_types" => m.machine_types,
+        "machine_pages" => m.machine_pages,
+        "shortcut_bindings" => m.shortcut_bindings,
         _ => return None,
     })
 }
@@ -1344,6 +1357,21 @@ fn rust(sdk: &Sdk) -> String {
     let m = &sdk.limits.max;
     let _ = writeln!(s, "    pub const SEL_MAX: usize = {};", m.modules);
     let _ = writeln!(s, "    pub const MAP_N: usize = {};", m.map_entries);
+    let _ = writeln!(
+        s,
+        "    pub const MACHINE_TYPES: usize = {};",
+        m.machine_types
+    );
+    let _ = writeln!(
+        s,
+        "    pub const MACHINE_PAGES: usize = {};",
+        m.machine_pages
+    );
+    let _ = writeln!(
+        s,
+        "    pub const SHORTCUT_BINDINGS: usize = {};",
+        m.shortcut_bindings
+    );
     let _ = writeln!(s, "    pub const MACHINE_ROWS: usize = {};", m.machine_rows);
     let _ = writeln!(s, "    pub const PARAM_ROWS: usize = {};", m.param_rows);
     let _ = writeln!(s, "    pub const PAGE_ROWS: usize = {};", m.page_rows);

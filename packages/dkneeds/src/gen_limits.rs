@@ -23,6 +23,10 @@ pub const INFO_MAX: u32 = 64;
 pub const DSP_SLOT_WORDS: u32 = 16;
 pub const MAX_VOICES: u32 = 8;
 pub const MAX_FX: u32 = 4;
+pub const MAX_SELECTION: u32 = 8;
+pub const MAX_MACHINE_TYPES: u32 = 64;
+pub const MAX_MACHINE_PAGES: u32 = 16;
+pub const MAX_SHORTCUT_BINDINGS: u32 = 16;
 
 /// Magic of a `.dkm`, "DKMF" (0x444b4d46).
 pub const MAGIC: u32 = 1145785670;

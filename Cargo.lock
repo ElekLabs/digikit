@@ -3582,6 +3582,7 @@ name = "plusdrive-format"
 version = "0.1.0"
 dependencies = [
  "device-profile",
+ "dkneeds",
  "dksample",
  "dt2-firmware-loader",
  "emmc-card",
