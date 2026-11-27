@@ -13,9 +13,6 @@ summary = "Fixture for a service that takes payloads: the Payloads part, with an
 requires = []
 conflicts = []
 
-[targets]
-"dt2-1.17" = "experimental"
-"dn2-1.12" = "experimental"
 
 [[export]]
 name = "dk_service_query_v1"

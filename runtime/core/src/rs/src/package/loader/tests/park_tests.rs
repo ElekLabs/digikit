@@ -69,7 +69,7 @@ fn at_run_time_a_task_hook_goes_in_only_while_the_tasks_wait_and_comes_out_the_s
         assert_ne!(site(&l), STOCK.to_vec());
         // down: the BgWorker runs a job again, the entry stays and the answer is busy; the retry after it parked takes it out
         put(&l, OBJECT + 0x18, 0);
-        assert_eq!(installers.restore(svc), Err(InstallError::Backend(E_BUSY)));
+        assert_eq!(installers.restore(svc), Err(InstallError::Busy { task: Some(0) }));
         assert_ne!(site(&l), STOCK.to_vec(), "the hook is still in");
         put(&l, OBJECT + 0x18, TCB_BG);
         installers.restore(svc).unwrap();

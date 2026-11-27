@@ -5,7 +5,12 @@
   "metadata": {
     "runtimeAcceptance": [
       {
-        "files": ["tests/usb-fast.device.test.ts"],
+        "files": [
+          "tests/usb-fast.device.test.ts",
+          "tests/usb-fast-power-cut.device.test.ts",
+          "tests/usb-fast-mode.device.test.ts",
+          "tests/usb-fast-bench.device.test.ts"
+        ],
         "modules": ["digikit/usb-fast"],
         "plusdrive": true,
         "sources": [

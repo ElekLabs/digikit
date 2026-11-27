@@ -1,4 +1,4 @@
-use super::{Cpu, Entry};
+use super::{Cpu, Entry, InstallError};
 use crate::PackageId;
 use dkrt_abi::provider::Status;
 
@@ -15,6 +15,6 @@ pub trait Installer {
     /// Install the entries of `entries` that belong to [`cpu`](Self::cpu) for `owner`, or none: on an error nothing of this call stays installed.
     fn install(&mut self, owner: PackageId, entries: &[Entry]) -> Result<(), Status>;
 
-    /// Undo everything `owner` installed. `E_BUSY` means "not now, retry next pass"; the entries stay.
-    fn restore(&mut self, owner: PackageId) -> Result<(), Status>;
+    /// Undo everything `owner` installed. [`InstallError::Busy`] means "not now, retry next pass"; the entries stay. Any other refusal is a [`InstallError::Backend`] status.
+    fn restore(&mut self, owner: PackageId) -> Result<(), InstallError>;
 }

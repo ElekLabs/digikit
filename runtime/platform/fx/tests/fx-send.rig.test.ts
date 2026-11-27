@@ -262,6 +262,26 @@ describe('core/fx send route: the send hook', () => {
     }),
   );
 
+  // The law the fx-track-route device test used to check from a PCM capture (added factor within 2% of 0.5 * (amount / 127) squared for amount 40): a half effect on
+  // the send bus returns its track's signal times 0.5 * (amount / 127) squared, in closed form and not through the model above. The device keeps one capture for
+  // "the hook is installed on real firmware".
+  it('a half effect on the send bus returns the track signal times 0.5 * (amount / 127) squared', async () => {
+    for (const byte of [1, 40, 127]) {
+      const rig = await open([sendRow({ amounts: amountsOf(0, byte) })]);
+      try {
+        load(rig);
+        await rig.sendBlock(); // the row fades in, the gain ramp ends
+        rig.setReturn(zeros(64));
+        const b = await rig.sendBlock(); // steady
+        const law = 0.5 * (byte / 127) ** 2;
+        const worst = Math.max(...b.ret.map((r, i) => Math.abs(r - SIGNALS[0]![i]! * law)));
+        expect(worst, `amount ${byte}: return against ${law} times the track signal`).toBeLessThan(1e-6);
+      } finally {
+        await rig.close();
+      }
+    }
+  });
+
   it(
     'only tracks with an amount contribute',
     withRig([sendRow({ amounts: amountsOf(5, 64) })], async (rig) => {

@@ -19,12 +19,15 @@ import {
 import { record } from '@digi/regression/runtime/artifacts.ts';
 import { lockCheck } from '@digi/regression/runtime/project-kit.ts';
 import { overlayWrites } from '@digi/regression/runtime/write-safety.ts';
-import { names, routeKey, sendKey, trackRouteSuite } from './fx-track-route-support.ts';
+import { sendKey, trackRouteSuite } from './fx-track-route-support.ts';
 
-// Track FX send page (setup: fx-track-route-support.ts). One session per device runs the stock, send, kit, limit and lock cases in this order
-// after one base capture: the cases share the four cards (sine, master, send, limit), so a boot and a plan are paid once, not per file.
+// Track FX send page (setup: fx-track-route-support.ts). One session per device runs the stock, send, kit and lock cases in this order
+// after one base capture: the cases share the three cards (sine, master, send), so a boot and a plan are paid once, not per file.
+// What the host proves (not repeated here): which effects get a send cell and the send limit (services/fx/tests/table.rs, contract.rs), the template and
+// send row words of the table (table.rs), the settings value of a send amount and the route byte (services/fx/src/fxsend/tests.rs), and the gain law of
+// the send hook (runtime/platform/fx/tests/fx-send.rig.test.ts).
 
-trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 'limit'], base: true }, (t) => {
+trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 'send2'], base: true }, (t) => {
   const { device, context, triggerFrame, base, pcm, locks, sym, chain, amounts, capacity, settings, pageTwo } = t;
   const boot = t.booter('sine');
   test('preserves stock pixels, stock PCM and master effects without a send amount', async () => {
@@ -85,21 +88,12 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
           const { profile, artifacts } = context;
           expect(state.results).toEqual([0, 0]);
           expect((await chain(runtime))[0]![0]).not.toBe(0xffffffff);
-          const info = sym('DKRT_FXP_TAB');
-          const registry = sym('rows_info');
-          const [regRows, regSize, regFirst, templateOffset] = await Promise.all(
-            [21, 22, 23, 28].map((index) => word(session, registry + index * 4)),
-          );
-          const code = await word(session, info + 42 * 4);
-          const template = await word(session, regRows! + (code - regFirst!) * regSize! + templateOffset!);
           const classes = profile.value_classes;
-          expect(template, 'send knob uses the no-lock percent template').toBe(profile.fx.template_percent);
-          expect((await word(session, classes + 0x44 * template)) & 9).not.toBe(0);
+          // the value class words of the stock class table: the send knob has no p-lock control, the stock send template has one
+          expect((await word(session, classes + 0x44 * profile.fx.template_percent)) & 9).not.toBe(0);
           expect((await word(session, classes + 0x44 * profile.fx.send_template)) & 9, 'stock send lock control').toBe(
             0,
           );
-          expect(await word(session, sym('fxp_send_row') + 8)).toBe(code);
-          expect(await word(session, sym('fxp_send_count'))).toBe(2);
           await capacity(runtime, 1);
           await selectSine(runtime, profile);
           await runtime.ui.tap('FX', { until: { ms: 400, why: REDRAW } });
@@ -140,8 +134,7 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
           await runtime.ui.wait({ ms: 2600, why: SETTLE });
           const stored = await settings(runtime, 'send-after');
           expect(stored.seq).toBeGreaterThan(1);
-          expect(stored.entries.get(sendKey)).toBe('2864' + '00'.repeat(14));
-          expect(stored.entries.get(routeKey(FX))).toBe('01');
+          expect(stored.entries.get(sendKey)?.startsWith('2864'), 'the stored amounts of tracks 1 and 2').toBe(true);
           const writes = overlayWrites(stored.overlay, device);
           record(artifacts, 'send-store-writes', writes);
           const allowed = [
@@ -162,8 +155,11 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
           pcm.set('send', file);
           const result = { added_factor: addedFactorOf(pcm.get('dry')!, file) };
           record(artifacts, 'send-added-factor', result);
-          const want = 0.5 * (40 / 127) ** 2;
-          expect(Math.abs(result.added_factor / want - 1)).toBeLessThan(0.02);
+          // the exact law 0.5 * (amount / 127) squared is on the rig; the device shows that the send hook is on the real firmware and is audible
+          const law = 0.5 * (40 / 127) ** 2;
+          expect(result.added_factor).toBeGreaterThan(0);
+          expect(result.added_factor / law).toBeGreaterThan(0.5);
+          expect(result.added_factor / law).toBeLessThan(2);
           await context.evidence(runtime, 'send-audible', true);
         }
 
@@ -234,25 +230,20 @@ trackRouteSuite('route', { initial: 'sine', presets: ['sine', 'master', 'send', 
 
   });
 
-  test('the device send limit leaves excess effects on the master without send cells', async () => {
-        // the device send limit leaves excess effects on the master without send cells
-        console.info('track FX leg:', 'the device send limit leaves excess effects on the master without send cells');
-        {
-          const { runtime, state } = await boot('limit', [SINE, ...names], 'limit');
-          expect(state.results).toEqual([0, 0, 0, 0]);
-          // which effects get a send cell is host-tested (services/fx/tests/table.rs `the_send_limit_is_the_cells_of_the_table_...`); the device shows capacity() and the amounts below
-          await capacity(runtime, context.sendSlots);
-          await selectSine(runtime, context.profile);
-          await pageTwo(runtime);
-          await shot(runtime.session, context.artifacts, 'limit-page2');
-          await setAmount(runtime, context.profile, 'ENC A', 0, 20);
-          if (context.sendSlots >= 2) await setAmount(runtime, context.profile, 'ENC B', 0, 30, 1);
-          await runtime.ui.wait({ ms: 300, why: SETTLE });
-          expect((await amounts(runtime, 0))[0]).toBe(20);
-          expect((await amounts(runtime, 1))[0]).toBe(context.sendSlots >= 2 ? 30 : 0);
-          expect((await amounts(runtime, 2))[0]).toBe(0);
-        }
-
+  test('the second send effect reaches its own send-cell row word', async () => {
+        if (context.sendSlots < 2) return;
+        const { runtime, state } = await boot('send2', [SINE, FX, `${FX}-2`], 'send2');
+        const { profile } = context;
+        expect(state.results).toEqual([0, 0, 0]);
+        await capacity(runtime, 2);
+        await selectSine(runtime, profile);
+        await runtime.ui.tap('FX', { until: { ms: 400, why: REDRAW } });
+        await runtime.ui.tap('FX', { until: { ms: 400, why: REDRAW } });
+        await setAmount(runtime, profile, 'ENC A', 0, 40);
+        await setAmount(runtime, profile, 'ENC B', 0, 30, 1);
+        await runtime.ui.wait({ ms: 300, why: SETTLE });
+        expect((await amounts(runtime, 1))[0], 'the second send cell reaches the second row').toBe(30);
+        expect((await amounts(runtime, 0))[0]).toBe(40);
   });
 
   test('project save controls stay ordered: base, none, amount, send', async () => {

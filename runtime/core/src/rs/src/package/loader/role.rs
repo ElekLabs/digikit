@@ -542,7 +542,7 @@ unsafe fn service_activate<P: PackagePlatform, M: Images, R: Registry>(l: &mut L
         return e;
     }
     let parks = l.task_parks();
-    let cf = CfItems { hooks: &it.hooks[..it.nh], patches: &it.patches[..it.np], image_base: base, image_size, slots: &it.slots[..it.ns], gate: parks.gate(l.live()).in_op(l.op()) };
+    let cf = CfItems { hooks: &it.hooks[..it.nh], patches: &it.patches[..it.np], image_base: base, image_size, slots: &it.slots[..it.ns], gate: parks.gate(l.live()).in_op(l.logging_op()) };
     match Backend::install(&mut l.installer, &l.p, rec as u8, &cf) {
         Ok(()) => {
             l.provs[index_of(rec)].query_v1 = query_v1;

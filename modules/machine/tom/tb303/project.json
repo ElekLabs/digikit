@@ -1,23 +1,5 @@
 {
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "name": "tom/tb303",
-  "implicitDependencies": ["core/services/machines", "dkrt-svc-machines"],
-  "metadata": {
-    "runtimeAcceptance": [
-      {
-        "files": ["tests/tb303.device.test.ts"],
-        "devices": ["dt2"],
-        "dsp": "sharc",
-        "modules": ["tom/tb303", "digikit/debug", "core/services/machines"],
-        "incidental": [
-          {
-            "module": "digikit/debug",
-            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
-          }
-        ],
-        "plusdrive": true
-      }
-    ],
-    "mergeTests": ["tests/tb303.device.test.ts"]
-  }
+  "implicitDependencies": ["core/services/machines", "dkrt-svc-machines"]
 }

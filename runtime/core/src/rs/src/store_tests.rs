@@ -970,21 +970,39 @@ fn a_torn_header_b_with_a_blank_header_a_is_no_store_until_clear_makes_one() {
 
 // ---- power cuts -----------------------------------------------------------------------------------------------------------------------
 
-/// A cut or a torn sector at each card write of one upload leaves the old table or the new one, files that read back with their hashes, and a store that
-/// takes the next write.
-fn cut_sweep(tear: bool) {
+/// A write under test in a power-cut sweep: `prep` leaves the store as it is before the operation (after `keep/a`), `run` is the operation (the first status that is
+/// not OK).
+struct CutOp<'a> {
+    prep: &'a dyn Fn(),
+    run: &'a dyn Fn() -> i32,
+}
+
+/// A cut or a torn sector at each card write of one operation leaves the old table or the new one (all of its files or none), files that read back with their hashes,
+/// the space of the files that did not make it free once the next write is in (the used count equals that of the old or the new table with the same next write: the header of
+/// a cut write may still hold its reservation until then), and a store that takes the next write.
+fn cut_sweep_of(tear: bool, op: CutOp) {
     let _f = Fixture::new();
-    let (a, b, c) = (pattern(3000, 3), pattern(5000, 5), pattern(700, 9));
-    assert_eq!(upload("keep/a", &a), OK);
+    let c = pattern(700, 9);
+    assert_eq!(upload("keep/a", &pattern(3000, 3)), OK);
+    (op.prep)();
     let before = held();
     let snapshot = card(|c| c.sectors.clone());
-    // how many card writes one upload of b takes
+    // how many card writes the operation takes
     unsafe { write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_WRITES), 0) };
-    assert_eq!(upload("keep/b", &b), OK);
+    assert_eq!((op.run)(), OK);
     let n = unsafe { read_volatile(addr_of!(sw::DKRT_UPLOAD_WRITES)) };
     let after = held();
+    let done = card(|c| c.sectors.clone());
     assert!(n >= 3, "data, table and headers: {n}");
     assert_ne!(before, after);
+    // the used count of each of the two tables after the same next write
+    let used_with_next = |sectors: &_| {
+        card(|c| c.sectors = Clone::clone(sectors));
+        crate::store::test_forget_checked();
+        assert_eq!(upload("keep/c", &c), OK);
+        unsafe { crate::store::seen() }.expect("a store with figures").0
+    };
+    let (used_before, used_after) = (used_with_next(&snapshot), used_with_next(&done));
     for k in 1..=n {
         card(|c| c.sectors = snapshot.clone());
         crate::store::test_forget_checked();
@@ -996,30 +1014,106 @@ fn cut_sweep(tear: bool) {
                 write_volatile(addr_of_mut!(sw::DKRT_UPLOAD_CUT), k);
             }
         }
-        let r = upload("keep/b", &b);
+        let r = (op.run)();
         unsafe { rest() };
         let now = held();
         assert!(now == before || now == after, "{} at write {k} of {n}: {now:?}", if tear { "tear" } else { "cut" });
         if r == OK {
-            assert_eq!(now, after, "an upload that said ok is there (write {k})");
+            assert_eq!(now, after, "an operation that said ok is there (write {k})");
         }
         for (path, (_, sha)) in &now {
             assert_eq!(verify_cmd(path, None), (OK, *sha), "{path} after the cut at write {k}");
         }
         assert_eq!(upload("keep/c", &c), OK, "the store takes a write after the cut at {k}");
+        let used = unsafe { crate::store::seen() }.expect("a store with figures").0;
+        assert_eq!(used, if now == before { used_before } else { used_after }, "the space of the files that did not make it is free after the next write (write {k})");
         let h = held();
         assert!(h.contains_key("keep/a") && h.contains_key("keep/c"));
     }
 }
 
+/// One SysEx upload of `keep/b`.
+fn upload_op(tear: bool) {
+    let b = pattern(5000, 5);
+    cut_sweep_of(tear, CutOp { prep: &|| {}, run: &|| upload("keep/b", &b) });
+}
+
+/// One SDK write of a new file: create, write, close.
+fn sdk_write_op(tear: bool) {
+    let b = pattern(5000, 5);
+    cut_sweep_of(tear, CutOp { prep: &|| {}, run: &|| sdk_put(STORE, "keep/b", &b, 0) });
+}
+
+/// One SDK write that replaces a file: the old file or the new one, never neither.
+fn sdk_replace_op(tear: bool) {
+    let (old, new) = (pattern(2000, 11), pattern(5000, 5));
+    cut_sweep_of(
+        tear,
+        CutOp {
+            prep: &|| assert_eq!(sdk_put(STORE, "keep/b", &old, 0), OK),
+            run: &|| sdk_put(STORE, "keep/b", &new, sf::FILE_REPLACE),
+        },
+    );
+}
+
+/// Three deferred files and one commit: all three files are in the table or none.
+fn sdk_batch_op(tear: bool) {
+    let files = [("keep/b1", pattern(1500, 7)), ("keep/b2", pattern(700, 3)), ("keep/b3", pattern(3000, 5))];
+    cut_sweep_of(
+        tear,
+        CutOp {
+            prep: &|| {},
+            run: &|| {
+                for (path, bytes) in &files {
+                    let r = sdk_put(STORE, path, bytes, sf::FILE_DEFER);
+                    if r != OK {
+                        return r;
+                    }
+                }
+                in_step(|| unsafe { sf::sdk_commit() })
+            },
+        },
+    );
+}
+
 #[test]
 fn a_write_cut_at_any_card_write_leaves_the_old_table_or_the_new_one() {
-    cut_sweep(false);
+    upload_op(false);
 }
 
 #[test]
 fn a_sector_torn_at_any_card_write_leaves_the_old_table_or_the_new_one() {
-    cut_sweep(true);
+    upload_op(true);
+}
+
+#[test]
+fn an_sdk_write_cut_at_any_card_write_leaves_the_old_table_or_the_new_one() {
+    sdk_write_op(false);
+}
+
+#[test]
+fn an_sdk_write_with_a_sector_torn_at_any_card_write_leaves_the_old_table_or_the_new_one() {
+    sdk_write_op(true);
+}
+
+#[test]
+fn an_sdk_replace_cut_at_any_card_write_leaves_the_old_file_or_the_new_one() {
+    sdk_replace_op(false);
+}
+
+#[test]
+fn an_sdk_replace_with_a_sector_torn_at_any_card_write_leaves_the_old_file_or_the_new_one() {
+    sdk_replace_op(true);
+}
+
+#[test]
+fn a_batch_commit_cut_at_any_card_write_leaves_all_of_its_files_or_none() {
+    sdk_batch_op(false);
+}
+
+#[test]
+fn a_batch_commit_with_a_sector_torn_at_any_card_write_leaves_all_of_its_files_or_none() {
+    sdk_batch_op(true);
 }
 
 // ---- the Storage contract table against the real store -----------------------------------------------------------------------------------

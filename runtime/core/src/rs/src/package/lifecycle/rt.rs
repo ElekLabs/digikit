@@ -8,7 +8,6 @@ use crate::package::admission::Admission;
 use crate::package::dsp;
 use crate::package::handlers::ServiceTable;
 use crate::package::loader::{Images, Loader, PhaseKind, Registry};
-use crate::package::loader::QUIET_OP;
 use core::mem::MaybeUninit;
 use core::ptr::addr_of_mut;
 use dkrt_abi::package::PackageId;
@@ -537,21 +536,20 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         }
     }
 
-    /// One retry of the pending take-down that logs nothing itself (the seams and the gate see `QUIET_OP`): a note says when the wait starts or changes and when it ends.
+    /// One retry of the pending take-down that logs nothing itself (the loader runs it as a quiet operation: the seams and the gate log nothing): a note says when the wait starts or changes and when it ends.
     unsafe fn retry_quietly(&mut self, m: &mut Manager<P, M, R>) -> Result<Report, LifecycleError> {
-        self.watch.follow(m.restore_pending());
         let Some(package) = m.restore_pending() else {
             return m.retry_pending();
         };
         let l = self.loader();
         let name = Trace::name_of(&RtTrace::new(Handle(&mut self.session as *mut _)), package);
         let op = l.op();
-        l.enter_op(QUIET_OP);
+        l.enter_quiet();
         let r = m.retry_pending();
-        l.enter_op(op);
+        l.leave_quiet();
         let (status, task) = match &r {
             Ok(_) => (OK, None),
-            Err(LifecycleError::Busy { .. }) => (E_BUSY, l.waiting_task()),
+            Err(LifecycleError::Busy { task, .. }) => (E_BUSY, *task),
             Err(e) => (code_of(e), None),
         };
         if let Some(note) = self.watch.observe(package, status, task) {

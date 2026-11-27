@@ -19,7 +19,9 @@
       },
       {
         "files": [
-          "file-write-cut.device.test.ts"
+          "file-write-cut-write.device.test.ts",
+          "file-write-cut-replace.device.test.ts",
+          "file-write-cut-batch.device.test.ts"
         ],
         "modules": [
           "test/file-write"
