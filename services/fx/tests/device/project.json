@@ -98,7 +98,7 @@
         ]
       },
       {
-        "firmwareOnly": "send cells of the Sound array, track DSP amounts and project saves written into firmware memory, and the stock FX pixels and PCM (the host cannot reach those raw addresses; route flags and the send limit are host-tested: services/fx/tests/builder.rs, table.rs)",
+        "firmwareOnly": "send cells of the Sound array, track DSP amounts and project saves written into firmware memory, and the stock FX pixels and PCM (the host cannot reach those raw addresses; route flags, the send limit and the saved send value are host-tested: services/fx/tests/builder.rs, table.rs, src/fxsend/tests.rs; the gain law is on the rig)",
         "files": [
           "fx-track-route.device.test.ts"
         ],
@@ -109,10 +109,6 @@
           "core/services/fx",
           "core/services/machines"
         ],
-        "aliases": {
-          "test/dyn-fx-gain-both-2": "test/dyn-fx-gain-both",
-          "test/dyn-fx-gain-both-3": "test/dyn-fx-gain-both"
-        },
         "sources": [
           "tools/patchkit/hook_ab.py"
         ],
