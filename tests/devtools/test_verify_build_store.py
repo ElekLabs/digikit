@@ -135,3 +135,25 @@ def test_referenced_keys_reads_daemons_json_of_each_worktree(tmp_path: Path) -> 
     without.mkdir()
     keys = verify_build.referenced_keys(device_dir, [with_file, broken, without])
     assert keys == {"kA"}
+
+
+def test_pgo_check_rejects_plain_override_of_profiled_manifest(tmp_path, monkeypatch):
+    import json
+
+    pgo = verify_build.pk_emud_pgo
+    monkeypatch.setattr(pgo, "generated_core", lambda device: tmp_path)
+    monkeypatch.setattr(
+        pgo.native_pgo, "profile_for_tests", lambda *args: ("test.profdata", "ok", "")
+    )
+    library = tmp_path / "pgo.dylib"
+    monkeypatch.setattr(
+        verify_build.core_store, "restored_library", lambda *a, **kw: library
+    )
+    monkeypatch.setattr(verify_build, "ROOT", tmp_path)
+    var = "DIGI_SHARC_CORE_LIB_DN2"
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "daemons.json").write_text(json.dumps({var: str(library)}))
+    monkeypatch.delenv(var, raising=False)
+    assert verify_build.check_pgo(["dn2"]) == 0
+    monkeypatch.setenv(var, str(tmp_path / "plain.dylib"))
+    assert verify_build.check_pgo(["dn2"]) == 1

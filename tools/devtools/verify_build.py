@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -232,9 +233,51 @@ def build_cores(
     return 0
 
 
+def check_pgo(devices: list[str]) -> int:
+    """Check the actual library selected by a device test before it queues."""
+    for device in devices:
+        pgo = pk_emud_pgo.native_pgo
+        profile, state, detail = pgo.profile_for_tests(
+            device, pk_emud_pgo.generated_core(device)
+        )
+        if not profile:
+            print(
+                f"{device}: PGO profile unavailable ({state}). "
+                + (
+                    detail
+                    or f"Check DIGI_EMU_PGO and host support. Train with: {pgo.train_hint(device)}"
+                ),
+                file=sys.stderr,
+            )
+            return 1
+        var = CORE_LIB_VAR.format(device.upper())
+        selected = os.environ.get(var)
+        if not selected:
+            manifest = ROOT / "dist" / "daemons.json"
+            try:
+                selected = json.loads(manifest.read_text()).get(var)
+            except (OSError, ValueError) as exc:
+                print(f"{device}: cannot read {manifest}: {exc}", file=sys.stderr)
+                return 1
+        expected = core_store.restored_library(device, profdata=Path(profile))
+        if (
+            not selected
+            or expected is None
+            or Path(selected).resolve() != expected.resolve()
+        ):
+            print(
+                f"{device}: {var} selects {selected or 'no library'}; expected the "
+                f"PGO core for this checkout and profile. Check overrides and refresh "
+                f"dist/daemons.json with the digi-control:daemons target.",
+                file=sys.stderr,
+            )
+            return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    ap.add_argument("what", choices=["daemons", "cores"])
+    ap.add_argument("what", choices=["daemons", "cores", "check-pgo"])
     ap.add_argument(
         "--device", default="dt2,dn2", help="comma-separated (default: dt2,dn2)"
     )
@@ -255,6 +298,8 @@ def main(argv: list[str] | None = None) -> int:
     unknown = sorted(set(devices) - set(pk_emud_pgo.FIRMWARE))
     if unknown:
         ap.error(f"unknown devices: {', '.join(unknown)}")
+    if args.what == "check-pgo":
+        return check_pgo(devices)
     try:
         env, test_keys = build_daemons(devices)
     except pk_harness.HarnessError as exc:
