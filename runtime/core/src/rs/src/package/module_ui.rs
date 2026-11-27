@@ -13,6 +13,8 @@ use self::descriptor::{Descriptor, DESCRIPTOR_MAX, FIELDS_MAX};
 use self::job::Job;
 use self::kind::{Kind, TEXT_MAX};
 use self::query_table::QueryTable;
+#[cfg(test)]
+pub(crate) use self::query_table::{QUERIES_MAX, WIRE_ENTRY_SIZE, WIRE_METHOD_OFFSET};
 use super::loader::records;
 use super::resident::{dlog, platform, settings, store, transport};
 use super::{entry, files, module_cmds, settings_overlay};

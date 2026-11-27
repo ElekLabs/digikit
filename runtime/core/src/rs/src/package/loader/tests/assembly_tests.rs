@@ -407,7 +407,7 @@ pub(super) enum Builder {
     Fx(u32),
     Workbench { offset: usize, len: usize },
     /// `dk_workbench_register_queries` with a table of `count` entries whose method numbers are `methods`, read from the packed table. The host cannot run ColdFire code, so each entry gets a host stand-in function.
-    Queries { count: u32, methods: [u8; 4] },
+    Queries { count: u32, methods: [u8; crate::package::module_ui::QUERIES_MAX] },
 }
 
 impl Card {

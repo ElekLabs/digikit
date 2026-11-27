@@ -1,6 +1,9 @@
-import type { DkSession, ModuleQueryEndpoint } from '@digi/dk-session';
+import type { DkSession } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
-import { createModuleClient, decodeDescriptor, settingValueCodec, type ModuleChannel } from '@digi/module-ui';
+import { createModuleClient, decodeDescriptor, settingValueCodec, type ModuleFileClient } from '@digi/module-ui';
+import { createDeviceModuleChannel } from '../../../../packages/workbench-core/src/module-ui/device-module-channel.ts';
+import { deviceQueryChannel } from '../../../../packages/workbench-core/src/module-ui/device-queries.ts';
+import { deviceSettingsChannel } from '../../../../packages/workbench-core/src/module-ui/device-settings.ts';
 import { SettingsA } from '../../../../tests/fixtures/modules/settings-a/workbench/gen/settings_a_pb.js';
 import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
 import { statusOf } from '@digi/regression/runtime/upload-bytes.ts';
@@ -31,6 +34,10 @@ const PUT = 1;
 const GET = 2;
 const REMOVE = 3;
 const DELAY_MS = 2000; // the runtime writes the record this long after the last change
+const unused = async (): Promise<never> => {
+  throw new Error('this test uses no module files');
+};
+const noFiles: ModuleFileClient = { list: unused, read: unused, send: unused, remove: unused };
 const text = (s: string) => Buffer.from(s);
 const hex = (s: string) => text(s).toString('hex');
 
@@ -95,15 +102,11 @@ for (const device of DEVICES) {
     const bootAtInit = (rt: TestRuntime) =>
       kit.usb(rt, async (dk) => {
         const mod = (await dk.modules()).find((m) => m.name === A);
-        const endpoint: ModuleQueryEndpoint = dk.moduleQueries(mod!.index, mod!.uiInstance!, () => true);
-        const channel = {
-          async callQuery(method: number, request: Uint8Array) {
-            const raw = await endpoint.call(method, request);
-            return raw.runtimeStatus === 0 && raw.handlerResult === 0
-              ? { ok: true as const, reply: raw.reply }
-              : { ok: false as const, error: { kind: 'unavailable' as const } };
-          },
-        } as ModuleChannel;
+        const channel = createDeviceModuleChannel({
+          settings: deviceSettingsChannel(A),
+          queries: deviceQueryChannel(async () => dk.moduleQueries(mod!.index, mod!.uiInstance!, () => true)),
+          files: noFiles,
+        });
         return createModuleClient(channel).service(SettingsA).bootAtInit({});
       });
 

@@ -28,10 +28,17 @@ int32_t settings_a_boot_at_init(dk_module_ctx *ctx, const settings_a_BootAtInitR
     (void)ctx;
     (void)request;
     reply->present = init_rc >= 0;
-    if (init_rc > 0 && (uint32_t)init_rc <= VAL) {
-        for (int32_t i = 0; i < init_rc; ++i)
+    reply->value_len = 0;
+    if (init_rc > 0) {
+        /* A value longer than the reply field is cut to its first bytes. */
+        uint32_t n = (uint32_t)init_rc;
+        if (n > sizeof reply->value)
+            n = sizeof reply->value;
+        if (n > sizeof init_val)
+            n = sizeof init_val;
+        for (uint32_t i = 0; i < n; ++i)
             reply->value[i] = (char)init_val[i];
-        reply->value_len = (uint32_t)init_rc;
+        reply->value_len = n;
     }
     return 0;
 }

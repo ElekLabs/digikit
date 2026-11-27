@@ -1,3 +1,4 @@
+import { PollTimeout } from '@digi/dk-session';
 import type { Session } from '@digi/test-support';
 import { expect } from 'vitest';
 import { timePhase, timingContext } from '../timing.ts';
@@ -76,7 +77,7 @@ export async function expectRuntimeUi(
       );
     } catch (error) {
       // Only the emulated-time bound is an expiry; a watchdog close or a stuck clock is recorded as it is.
-      if (error instanceof Error && error.message.includes('not seen within')) expired = true;
+      if (error instanceof PollTimeout) expired = true;
       else stopped = error instanceof Error ? error.message : String(error);
       throw error;
     }

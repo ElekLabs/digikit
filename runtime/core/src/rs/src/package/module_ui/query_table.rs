@@ -5,7 +5,12 @@ use core::mem::size_of;
 use core::ptr::read_unaligned;
 
 /// At most this many methods per module.
-pub(super) const QUERIES_MAX: usize = 16;
+pub(crate) const QUERIES_MAX: usize = 16;
+
+/// The entry as a module's code holds it (ColdFire, 32-bit pointers): its size and the place of the method number. A host cannot read the packed
+/// bytes through `Query` (its pointer is wider there), so the assembly tests read them by these numbers; the assert ties them to `Query`.
+pub(crate) const WIRE_ENTRY_SIZE: usize = 8;
+pub(crate) const WIRE_METHOD_OFFSET: usize = 4;
 
 /// The module's function for one method. `out_len` holds the room in `out` when the call starts and the reply length when it returns 0.
 pub(super) type CallFn = unsafe extern "C" fn(*mut u8, *const u8, u32, *mut u8, *mut u32) -> i32;
@@ -21,7 +26,7 @@ pub(super) struct Query {
 }
 
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(size_of::<Query>() == 8);
+const _: () = assert!(size_of::<Query>() == WIRE_ENTRY_SIZE && core::mem::offset_of!(Query, method) == WIRE_METHOD_OFFSET);
 
 #[derive(Clone, Copy)]
 pub(super) struct QueryTable {

@@ -2,6 +2,7 @@ use super::*;
 use crate::transport::{DKRT_UPLOAD_LAST, RBODY};
 use core::ptr::{addr_of, null_mut, read_volatile};
 use core::slice;
+use crate::package::module_ui::{QUERIES_MAX, WIRE_ENTRY_SIZE, WIRE_METHOD_OFFSET};
 use dkrt_sdk::proto::{CMD_MODULES, CMD_MODULE_UI, E_SET_VALUE};
 
 // The MODULE_UI verbs (the registry keeps them private).
@@ -32,17 +33,19 @@ fn descriptor_offset(file: &[u8]) -> usize {
     image_off + offset
 }
 
-/// The query table the packed settings-a holds (`dk_workbench_queries`, 8 bytes per entry, the method number in the fifth byte), by its place in the address map.
+/// The query table the packed settings-a holds (`dk_workbench_queries`; the entry layout is `WIRE_ENTRY_SIZE` and `WIRE_METHOD_OFFSET` of the runtime's query table), by its place in the address map.
 fn packed_queries(dev: Dev, file: &[u8]) -> Builder {
     let map: serde_json::Value = serde_json::from_slice(&read(&repo().join(format!("dist/modules/{}/settings-a.addrmap.json", dev.name)), "pnpm nx:pilot run test/settings-a:pack")).unwrap();
     let table = map["entries"].as_array().unwrap().iter().find(|e| e["name"] == "dk_workbench_queries").expect("settings-a declares queries");
     let (addr, size) = (table["addr"].as_u64().unwrap() as usize, table["size"].as_u64().unwrap() as usize);
     let base = be(file, dkneeds::H_IMAGE_OFF) as usize + addr;
-    let mut methods = [0u8; 4];
-    for i in 0..size / 8 {
-        methods[i] = file[base + 8 * i + 4];
+    let count = size / WIRE_ENTRY_SIZE;
+    assert!(count <= QUERIES_MAX, "the packed table is longer than the runtime accepts");
+    let mut methods = [0u8; QUERIES_MAX];
+    for i in 0..count {
+        methods[i] = file[base + WIRE_ENTRY_SIZE * i + WIRE_METHOD_OFFSET];
     }
-    Builder::Queries { count: (size / 8) as u32, methods }
+    Builder::Queries { count: count as u32, methods }
 }
 
 /// Load the packed settings-a on `dev` over `FakePlatform`, replaying the descriptor registration of its init; returns the loader and the MODULES instance word.
