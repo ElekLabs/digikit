@@ -10,8 +10,10 @@ import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
 import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { readCrashSeen, RING_SYMBOLS } from '@digi/regression/runtime/runtime-menu.ts';
 import { prepareRuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
+import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 import { expectNoDebugModule, waitForSafeMode, waitForSafeUi } from './fault-trace-support.ts';
 
+const SOURCE_SHIFT = 8;
 /** The watch declares a stop after 4500 blocks (3 s) without a heartbeat; the daemon emulates the DSP far slower than 1500 blocks a second. */
 const BLOCKS_PAST_THE_LIMIT = 9000;
 
@@ -72,6 +74,34 @@ async function expectFxHang(runtime: TestRuntime): Promise<void> {
   await session.expectNoFault('fx hang');
 }
 
+/** A send effect that faults in every block: FX_FAULT and FX_DISABLED, tagged with the module's source, and no stop. */
+async function expectFxFaultEvents(runtime: PatchedSession): Promise<void> {
+  const { session, dk } = runtime;
+  await expectRuntimeReady(session);
+  await installWithDebug(runtime, 'test/dyn-fx-nan');
+  await pollEmulated(session, async () => (await dk.readLog(true)).some((e) => e.kind === LOG_KIND.FX_DISABLED), Boolean, {
+    emulatedMs: 180_000,
+    intervalMs: 2000,
+    message: 'the guard switched the row off',
+  });
+  const log = await dk.readLog();
+  const faults = log.filter((e) => e.kind === LOG_KIND.FX_FAULT);
+  const disabled = log.filter((e) => e.kind === LOG_KIND.FX_DISABLED);
+  expect(faults.length).toBeGreaterThanOrEqual(1);
+  expect(disabled).toHaveLength(1);
+  for (const e of [...faults, ...disabled]) {
+    expect(e.flags & 1, 'an error event').toBe(1);
+    expect((e.flags >> SOURCE_SHIFT) & 0xff, 'the source is the module that owns the row').toBeGreaterThan(0);
+    expect(e.args[0], 'the first free effect row').toBe(0);
+  }
+  expect(faults[faults.length - 1]!.args[1], 'faults counted').toBeGreaterThanOrEqual(8);
+  const names = (await dk.modules()).map((m) => m.name);
+  expect(names).toContain('test/dyn-fx-nan');
+  expect((await dk.info()).safe_mode, 'a faulting effect is no stop').toBe(false);
+  expect(log.some((e) => e.kind === LOG_KIND.DSP_STOPPED && (e.flags & 1) !== 0)).toBe(false);
+  await session.expectNoFault('fx fault events');
+}
+
 /** An ordinary effect runs for longer than the stall limit: no stop is declared and the device does not reset. */
 async function expectNoFalseStop(runtime: PatchedSession): Promise<void> {
   const { session, dk } = runtime;
@@ -122,6 +152,7 @@ async function expectRuntimePanic(runtime: TestRuntime): Promise<void> {
 
 runtimeTests('an effect that stops the DSP gives safe mode and names the module, site and step', expectFxHang, { dsp: 'sharc',
 });
+runtimeTests('effect faults are logged with the module as source', expectFxFaultEvents, { dsp: 'sharc' });
 runtimeTests('a normal effect is no stop', expectNoFalseStop, { dsp: 'sharc' });
 runtimeTests('a panic of the runtime gives safe mode and names the runtime', expectRuntimePanic, {
   dsp: 'sharc',
