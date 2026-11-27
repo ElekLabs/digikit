@@ -29,6 +29,8 @@ export interface MemoryOptions {
   files?: Map<string, Uint8Array>;
   /** The module's query service (`memoryQueryService(desc, handlers)`). Without one every query is an unknown method. */
   service?: MemoryQueryService;
+  /** The device's byte limits of a request and a reply (the desktop preview passes the generated ones). A larger one answers `too-big`, as the device does. Without it nothing is limited. */
+  queryLimits?: { request: number; reply: number };
 }
 
 /** What a test may look at beside the channel. A page never gets it. */
@@ -105,7 +107,10 @@ export function createMemoryModuleChannel(
         forced = undefined;
         return { ok: false, error };
       }
+      const limits = options.queryLimits;
+      if (limits && request.length > limits.request) return { ok: false, error: { kind: 'too-big' } };
       const result = (await options.service?.call(method, request)) ?? { ok: false, error: { kind: 'unknown-method' } };
+      if (limits && result.ok && result.reply.length > limits.reply) return { ok: false, error: { kind: 'too-big' } };
       return structuredClone(result) as QueryResult;
     },
     subscribe(listener) {

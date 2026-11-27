@@ -502,9 +502,15 @@ importers:
 
   tests/fixtures/modules/settings-a/workbench:
     dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.17.0
+        version: 2.17.0
       '@digi/module-ui':
         specifier: workspace:*
         version: link:../../../../../packages/module-ui
+      '@digi/wire':
+        specifier: workspace:*
+        version: link:../../../../../packages/wire
       solid-js:
         specifier: 1.9.15
         version: 1.9.15

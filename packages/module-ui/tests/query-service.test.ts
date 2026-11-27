@@ -58,6 +58,30 @@ describe('client.service over the memory channel', () => {
       error: { kind: 'format' },
     });
   });
+  it('answers a handler that throws anything else as refused -1, not a rejected call', async () => {
+    const made = createMemoryModuleChannel(schema, {
+      service: memoryQueryService(ProjectManager, {
+        list: () => {
+          throw new TypeError('bug');
+        },
+      }),
+    });
+    expect(await createModuleClient(made.channel).service(ProjectManager).list({})).toEqual({
+      ok: false,
+      error: { kind: 'refused', code: -1 },
+    });
+  });
+  it('answers too-big for a request or reply over the limits it was given', async () => {
+    const limits = { request: 3, reply: 20 };
+    const service = memoryQueryService(ProjectManager, {
+      list: (request) => ({ items: [{ slot: 1, name: 'x'.repeat(request.cursor) }] }),
+    });
+    const { channel } = createMemoryModuleChannel(schema, { service, queryLimits: limits });
+    const client = createModuleClient(channel).service(ProjectManager);
+    expect(await client.list({ cursor: 2 })).toMatchObject({ ok: true });
+    expect(await client.list({ cursor: 30 })).toEqual({ ok: false, error: { kind: 'too-big' } });
+    expect(await channel.callQuery(1, new Uint8Array(4))).toEqual({ ok: false, error: { kind: 'too-big' } });
+  });
   it('reports a request that does not decode as format', async () => {
     expect(await open().channel.callQuery(1, Uint8Array.of(0x08, 0x80))).toEqual({
       ok: false,

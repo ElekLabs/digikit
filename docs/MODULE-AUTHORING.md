@@ -621,7 +621,7 @@ reply structs together at most 1024 bytes (they are on the stack). Patchkit name
 `max_len` or `max_count`.
 
 The device runs one query at a time for all modules: a call answers busy while another call is queued, running or its reply
-unread (an unread reply is dropped after 2 s), and the client asks again.
+unread (an unread reply is dropped after 2 s), and the client asks again. After a `timeout` a retry may get `busy` for up to about 2 s.
 
 Methods are only appended: the method number a call carries is the method's position in the `service`. `patchkit workbench-ts MODDIR --write`
 writes `workbench/gen/<name>_pb.js`, `<name>_pb.d.ts` (protobuf-es; needs `node`; no `protoc`) and `<name>.methods` (the names in order)

@@ -11,7 +11,10 @@ import { ModuleSettings, type TypedSettings } from './typed-settings.ts';
  */
 export interface ModuleClient {
   settings<S extends SettingsSchema>(schema: S): TypedSettings<SettingsOf<S>>;
-  /** One async function per method of the module's protobuf-es service; results are `{ ok, value }` or `{ ok: false, error }`. */
+  /**
+   * One async function per method of the module's protobuf-es service; results are `{ ok, value }` or `{ ok: false, error }`. After a `timeout`
+   * the device may still hold the call: a retry can answer `busy` for up to about 2 s, then works.
+   */
   service<D extends DescService>(desc: D): ServiceClient<D>;
   readonly files: ModuleFileClient;
 }

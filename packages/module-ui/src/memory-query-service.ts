@@ -9,7 +9,7 @@ import {
 } from '@bufbuild/protobuf';
 import { QueryRefusal, type QueryResult } from './query-result.ts';
 
-/** TypeScript handlers for the methods of a service, typed from its descriptor. A handler may throw `QueryRefusal`. */
+/** TypeScript handlers for the methods of a service, typed from its descriptor. A handler may throw `QueryRefusal` to refuse with its own code; any other throw answers `{ kind: 'refused', code: -1 }` (the device's generic handler failure), never a rejected promise. */
 export type ServiceHandlers<D extends DescService> = {
   [K in keyof D['method']]: D['method'][K] extends DescMethodUnary<infer I, infer O>
     ? (request: MessageShape<I>) => MessageInitShape<O> | Promise<MessageInitShape<O>>
@@ -38,8 +38,7 @@ export function memoryQueryService<D extends DescService>(desc: D, handlers: Ser
         const reply = await handler(request);
         return { ok: true, reply: toBinary(method.output, create(method.output, reply as never)) };
       } catch (error) {
-        if (error instanceof QueryRefusal) return { ok: false, error: { kind: 'refused', code: error.code } };
-        throw error;
+        return { ok: false, error: { kind: 'refused', code: error instanceof QueryRefusal ? error.code : -1 } };
       }
     },
   };

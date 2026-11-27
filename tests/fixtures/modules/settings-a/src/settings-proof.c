@@ -8,6 +8,7 @@
 #include <dk/platform/settings.h>
 #ifndef PROOF_VIA_JOB
 #include "workbench_descriptor.h"
+#include "workbench_queries.h"
 #endif
 #ifndef PROOF_CMD
 #define PROOF_CMD 0x38 /* request; PROOF_CMD + 1 reads the result */
@@ -20,6 +21,21 @@ static uint8_t init_val[VAL], val[VAL], req_val[VAL];
 static char req_key[KEYS];
 static uint8_t op, vlen;
 static volatile uint32_t pending;
+#ifndef PROOF_VIA_JOB
+/* The query BootAtInit (workbench/settings_a.proto): the boot value init read, whether it was set. */
+int32_t settings_a_boot_at_init(dk_module_ctx *ctx, const settings_a_BootAtInitRequest *request, settings_a_BootAtInitReply *reply)
+{
+    (void)ctx;
+    (void)request;
+    reply->present = init_rc >= 0;
+    if (init_rc > 0 && (uint32_t)init_rc <= VAL) {
+        for (int32_t i = 0; i < init_rc; ++i)
+            reply->value[i] = (char)init_val[i];
+        reply->value_len = (uint32_t)init_rc;
+    }
+    return 0;
+}
+#endif
 #ifdef PROOF_VIA_JOB
 static int32_t job_step(void *arg);
 static void job_done(void *arg, int32_t status);
@@ -109,6 +125,9 @@ static int32_t init(dk_module_ctx *ctx)
         return r;
 #ifndef PROOF_VIA_JOB
     r = dk_workbench_register(ctx, dk_workbench_descriptor, sizeof dk_workbench_descriptor);
+    if (r != DK_OK)
+        return r;
+    r = dk_workbench_register_queries(ctx, dk_workbench_queries, DK_WORKBENCH_QUERY_COUNT);
     if (r != DK_OK)
         return r;
 #endif

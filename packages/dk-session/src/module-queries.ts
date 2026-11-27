@@ -3,7 +3,7 @@
 import { QUERY_REPLY_MAX, QUERY_REQUEST_MAX } from './gen_proto.ts';
 import { be32, DkError, type DkSession } from './dkupload-core.ts';
 import { moduleUiRequester } from './module-ui-request.ts';
-import { poll } from './waits.ts';
+import { poll, PollTimeout } from './waits.ts';
 
 /** The raw answer of one query: the runtime's status (0 when the handler ran), the handler's own result and its reply bytes. */
 export interface RawQueryReply {
@@ -48,7 +48,7 @@ export function wireModuleQueries(
           { withinMs: CALL_WITHIN_MS, intervalMs: 30, message: 'Waiting for a module query' },
         );
       } catch (e) {
-        if (e instanceof Error && !(e instanceof DkError) && /not seen within/.test(e.message))
+        if (e instanceof PollTimeout)
           throw new DkError({ error: e.message, kind: 'timeout' });
         throw e;
       }

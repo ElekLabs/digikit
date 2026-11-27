@@ -60,6 +60,22 @@ test('a call that never finishes times out in clock time', async () => {
   });
 });
 
+test('an ordinary failure whose text looks like a deadline stays a failure, not a timeout', async () => {
+  const { session } = scripted([new Uint8Array()]);
+  const failing: typeof session = {
+    ...session,
+    request: async (cmd, body) => {
+      if (body![0] === 4) throw new Error('x: not seen within 5 ms of emulated time');
+      return session.request(cmd, body);
+    },
+  };
+  const error = await wireModuleQueries(failing, 0, 1, () => true)
+    .call(1, new Uint8Array())
+    .catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(Error);
+  expect(error).not.toMatchObject({ kind: 'timeout' });
+});
+
 test('a reply that is too short is a format error', async () => {
   const { session } = scripted([new Uint8Array(), Uint8Array.of(0, 0, 0)]);
   await expect(wireModuleQueries(session, 0, 1, () => true).call(1, new Uint8Array())).rejects.toMatchObject({

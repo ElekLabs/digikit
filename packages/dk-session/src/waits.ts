@@ -64,6 +64,14 @@ export function stuckGuard(what: string, hangMs: number, clock: Clock): (now: nu
   };
 }
 
+/** The deadline of a `poll` passed: the wait's own error, so a caller tells it from a failed read without matching text. */
+export class PollTimeout extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PollTimeout';
+  }
+}
+
 export interface PollOptions {
   withinMs: number;
   message: string | (() => string);
@@ -114,7 +122,7 @@ export async function poll<T>(
     lastMs = clockMs;
     onWait?.({ kind: 'state', what, clockMs: elapsed, wallMs: Date.now() - wallStart, ok: false });
     if (elapsed >= withinMs) {
-      throw new Error(
+      throw new PollTimeout(
         `${typeof message === 'function' ? message() : message}: not seen within ${withinMs} ms of emulated time (last: ${failure ? String(failure) : JSON.stringify(value)})`,
       );
     }

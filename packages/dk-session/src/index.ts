@@ -2,6 +2,8 @@ export * from './dkupload-core.ts';
 export {
   H_ROLE,
   PROVIDER_MAX,
+  QUERY_REPLY_MAX,
+  QUERY_REQUEST_MAX,
   RECORD_KIND,
   RESOURCE,
   RUNTIME_SERVICE_NAMES,
