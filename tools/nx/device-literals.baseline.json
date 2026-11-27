@@ -502,6 +502,7 @@
   "runtime/platform/introblank/module.toml": 4,
   "runtime/platform/introblank/src/introblank.c": 2,
   "runtime/platform/introblank/tests/introblank.device.test.ts": 4,
+  "runtime/platform/lfo-table/module.toml": 4,
   "runtime/platform/peer-image/README.md": 5,
   "runtime/platform/peer-image/module.toml": 4,
   "runtime/platform/peer-image/src/cf/hook.s": 1,

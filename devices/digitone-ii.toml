@@ -208,6 +208,7 @@ send_slots = 1 # effects that run on a send bus (core/fx send route, the send pa
 send_rows = 2  # parameter rows core/rows reserves for the send page's cells (the two devices share the count, so the parameter table has one layout); at least send_slots
 param_rows = 16
 page_rows = 8
+lfo_waves = 8  # wave numbers core/lfo-table adds to the LFO WAVE parameter (7 .. 14); the lfo.shapes setting holds this many
 
 # The reservation of the parameter table (runtime/platform/rows): the image makes room, the loaded services fill their blocks. The platform knows
 # the blocks by number only: `owner` is the number a service finds its block by, the rows are `per` times the `[limits]` key `limit`, `template` the

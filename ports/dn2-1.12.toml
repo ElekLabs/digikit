@@ -259,6 +259,50 @@ mark = "V"
 rule = "fw/input:cf_func"
 
 [[anchor]]
+name = "cf.lfo.data.edge_mode3_neg"
+cpu = "cf"
+kind = "data"
+addr = 0x4020b7dc
+src = 0x40137bee
+len = 28
+sha256 = "02ea3093d44e59140378b16bccb58590bbd5931c31e9e8e643f47e929832ec5d"
+mark = "V"
+rule = "fw/lfo:cf_ptr"
+
+[[anchor]]
+name = "cf.lfo.data.edge_mode3_pos"
+cpu = "cf"
+kind = "data"
+addr = 0x4020b7c0
+src = 0x40137bf8
+len = 28
+sha256 = "3addfb141cd7c9c4c6543a82191a3707ac29c7a041217782e61d4d91c691aee8"
+mark = "V"
+rule = "fw/lfo:cf_ptr"
+
+[[anchor]]
+name = "cf.lfo.data.edge_mode4"
+cpu = "cf"
+kind = "data"
+addr = 0x4020b7a4
+src = 0x40137bc4
+len = 28
+sha256 = "7af48b17226465d56ddec574f5e31aee97575345db042b114d5741c5041fc3fe"
+mark = "V"
+rule = "fw/lfo:cf_ptr"
+
+[[anchor]]
+name = "cf.lfo.data.wave_fn_table"
+cpu = "cf"
+kind = "data"
+addr = 0x4020b7f8
+src = 0x40137cdc
+len = 28
+sha256 = "d074fd57139dacc466f15280e80f719651f124c6fc7b6d3d05ea36193351eb13"
+mark = "V"
+rule = "fw/lfo:cf_ptr"
+
+[[anchor]]
 name = "cf.lfo.data.wave_row.1"
 cpu = "cf"
 kind = "data"
@@ -289,6 +333,66 @@ mark = "D"
 rule = "fw/lfo:cf_words"
 
 [[anchor]]
+name = "cf.lfo.site.edge_mode3_neg.ref.1"
+cpu = "cf"
+kind = "code"
+addr = 0x40137bec
+len = 6
+sha256 = "f3ee7bca23cce55ec59a78a7290c1cd870f7e34c9954c4349e18afaec15a671a"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.edge_mode3_neg.ref.2"
+cpu = "cf"
+kind = "code"
+addr = 0x401377e8
+len = 6
+sha256 = "a9b7f2ab177cb322df763c1eb5d8dc158ff68cd2f3038ad4334347a55ad581a5"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.edge_mode3_pos.ref.1"
+cpu = "cf"
+kind = "code"
+addr = 0x40137bf6
+len = 6
+sha256 = "cd7bd4ecef3d9fd792cab01320b3476ec3ef0d340819c7054661ea75bed953ab"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.edge_mode3_pos.ref.2"
+cpu = "cf"
+kind = "code"
+addr = 0x401377f4
+len = 6
+sha256 = "cd7bd4ecef3d9fd792cab01320b3476ec3ef0d340819c7054661ea75bed953ab"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.edge_mode4.ref.1"
+cpu = "cf"
+kind = "code"
+addr = 0x40137bc2
+len = 6
+sha256 = "2d543afb232e0c8c4eebe838a528f1aab18aaebef63b9bc5d8218c87ecdd3741"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.edge_mode4.ref.2"
+cpu = "cf"
+kind = "code"
+addr = 0x401377be
+len = 6
+sha256 = "2d543afb232e0c8c4eebe838a528f1aab18aaebef63b9bc5d8218c87ecdd3741"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
 name = "cf.lfo.site.graph_vec"
 cpu = "cf"
 kind = "code"
@@ -296,6 +400,16 @@ addr = 0x4010e1b0
 len = 6
 sha256 = "9998677613c912ec697ec816e42073c55398d1b8ce7d29f529281287355078bc"
 mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.read.clamp"
+cpu = "cf"
+kind = "code"
+addr = 0x40137788
+len = 2
+sha256 = "4cd53691e3aeeb340b82a72a9a6a63018ab03ed3c8bd0a6effc95a6a1d4a7d20"
+mark = "V"
 rule = "fw/lfo:cf_func"
 
 [[anchor]]
@@ -359,6 +473,16 @@ mark = "D"
 rule = "fw/lfo:cf_func"
 
 [[anchor]]
+name = "cf.lfo.site.tick.clamp"
+cpu = "cf"
+kind = "code"
+addr = 0x40137b60
+len = 2
+sha256 = "c210719b43c1aeb43033a95a7868462566e9db8b117acfa325c761eb8685a2ff"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
 name = "cf.lfo.site.tick_call"
 cpu = "cf"
 kind = "code"
@@ -416,6 +540,26 @@ addr = 0x40137c5c
 len = 2
 sha256 = "43a286effac35df5d4864a650a8e64ba60367543d984a7b95f9ae0a8b702d4d8"
 mark = "D"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.wave_fn_table.ref.1"
+cpu = "cf"
+kind = "code"
+addr = 0x40137cda
+len = 6
+sha256 = "0088f28e0e2f2dc87f4e3fcbe3e5e213980c406c54646d4a74e94fc6a832cb21"
+mark = "V"
+rule = "fw/lfo:cf_func"
+
+[[anchor]]
+name = "cf.lfo.site.wave_fn_table.ref.2"
+cpu = "cf"
+kind = "code"
+addr = 0x401378ce
+len = 6
+sha256 = "d9344ba5f56832f1934053727acad0d7ea663eb20e130b4661550318db893c66"
+mark = "V"
 rule = "fw/lfo:cf_func"
 
 [[anchor]]
@@ -4716,6 +4860,7 @@ mode = "before"
 name = "cf.menu.hook.settings_dtor"
 site = "cf.menu.fn.settings_dtor"
 mode = "before"
+clobbers = ["ccr"]
 
 [[hook]]
 name = "cf.menu.hook.settings_list.tail"

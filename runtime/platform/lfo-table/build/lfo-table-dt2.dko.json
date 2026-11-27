@@ -1,0 +1,337 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 256,
+   "offset": 58,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 512,
+   "offset": 68,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 768,
+   "offset": 78,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1024,
+   "offset": 88,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1280,
+   "offset": 98,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1536,
+   "offset": 108,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 1792,
+   "offset": 118,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 46,
+   "offset": 0,
+   "section": ".rodata",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 56,
+   "offset": 4,
+   "section": ".rodata",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 66,
+   "offset": 8,
+   "section": ".rodata",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 76,
+   "offset": 12,
+   "section": ".rodata",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 86,
+   "offset": 16,
+   "section": ".rodata",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 96,
+   "offset": 20,
+   "section": ".rodata",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 106,
+   "offset": 24,
+   "section": ".rodata",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 116,
+   "offset": 28,
+   "section": ".rodata",
+   "symbol": ".sec..text",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 52,
+   "section": ".rodata",
+   "symbol": "lfo_table_set",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 56,
+   "section": ".rodata",
+   "symbol": "lfo_table_clear",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 2,
+   "section": ".text.lfo_table_set",
+   "symbol": "lfo_table_info",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 40,
+   "section": ".text.lfo_table_set",
+   "symbol": "lfo_table_info",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 48,
+   "section": ".text.lfo_table_set",
+   "symbol": "lfo_irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 62,
+   "section": ".text.lfo_table_set",
+   "symbol": "lfo_wave_cells",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 112,
+   "section": ".text.lfo_table_set",
+   "symbol": "lfo_wave_fn",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 126,
+   "section": ".text.lfo_table_set",
+   "symbol": "lfo_fn_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 138,
+   "section": ".text.lfo_table_set",
+   "symbol": "lfo_irq_restore",
+   "type": "cf.32"
+  },
+  {
+   "addend": 8,
+   "offset": 8,
+   "section": ".text.lfo_table_clear",
+   "symbol": "lfo_table_info",
+   "type": "cf.32"
+  },
+  {
+   "addend": 12,
+   "offset": 22,
+   "section": ".text.lfo_table_clear",
+   "symbol": "lfo_table_info",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 30,
+   "section": ".text.lfo_table_clear",
+   "symbol": "lfo_irq_mask",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 36,
+   "section": ".text.lfo_table_clear",
+   "symbol": "lfo_fn_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 4,
+   "offset": 42,
+   "section": ".text.lfo_table_clear",
+   "symbol": "lfo_fn_table",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 58,
+   "section": ".text.lfo_table_clear",
+   "symbol": "lfo_irq_restore",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "202f00042200e089e089e0890281000000f8d1c1e088e888028000007fff222800044c001800d2812010d0814e7541f9000000006000ffca41f9000000006000ffc041f9000000006000ffb641f9000000006000ffac41f9000000006000ffa241f9000000006000ff9841f9000000006000ff8e41f9000000006000ff8440c046fc27004e75202f000446c04e75",
+   "kind": "text",
+   "name": ".text",
+   "size": 142
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000000000000000000000000000000000000000000000000000004c464f54000000010000000700000008000000200000000000000000",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 60
+  },
+  {
+   "align": 4,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss",
+   "size": 2048
+  },
+  {
+   "align": 2,
+   "hex": "2039000000004feffff048d7041cb0af0014630c70ff4cd7041c4fef00104e75242f00149480b4b90000000064e64eb9000000002202e18920414281d1fc00000000246f0018508877721a0052812243761fc68128094844424477723a002144fff896892143fffc7620b68166d443f90000000043f12c00246f001441f9000000002191ac002f004eb900000000588f42806082",
+   "kind": "text",
+   "name": ".text.lfo_table_set",
+   "size": 148
+  },
+  {
+   "align": 2,
+   "hex": "2f02242f0008203900000000b480652e22029280b2b90000000064224eb90000000041f90000000043f90000000021912c002f400008241f4ef900000000241f4e75",
+   "kind": "text",
+   "name": ".text.lfo_table_clear",
+   "size": 66
+  }
+ ],
+ "source_sha256": "f3e156606fcd63337b0c8db87c1a98f1ea5c7296d9c093fb863670268ed3fe76",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss",
+   "section": ".bss",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": ".sec..text",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lfo_fn_table",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lfo_irq_mask",
+   "section": ".text",
+   "value": 126
+  },
+  {
+   "global": true,
+   "name": "lfo_irq_restore",
+   "section": ".text",
+   "value": 134
+  },
+  {
+   "global": true,
+   "name": "lfo_table_clear",
+   "section": ".text.lfo_table_clear",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lfo_table_info",
+   "section": ".rodata",
+   "value": 32
+  },
+  {
+   "global": true,
+   "name": "lfo_table_set",
+   "section": ".text.lfo_table_set",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lfo_wave_cells",
+   "section": ".bss",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "lfo_wave_eval",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "lfo_wave_fn",
+   "section": ".rodata",
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "102",
+  "isa_check": "780817f912d9a6c3e95fbe3431196dc57740dae158a80998bba6e0e08f19a8b4",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

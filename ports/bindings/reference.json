@@ -1254,6 +1254,202 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4020b324",
+            "len": 28
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4020b7dc",
+            "len": 28
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x402227b8",
+            "len": 28
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_lfo_edge_mode3_neg",
+        "rust": "dkfw::lfo::EDGE_MODE3_NEG"
+      },
+      "cpu": "cf",
+      "doc": "the edge-value table of mode 3, negative direction (7 longs, 28 bytes): DT2 0x402227b8, DN2 0x4020b7dc. core/lfo-table copies it with the added waves appended.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "data",
+      "mark": "V",
+      "name": "cf.lfo.data.edge_mode3_neg",
+      "rule": {
+        "dn2": {
+          "kind": "cf_ptr",
+          "len": 28,
+          "offset": 488
+        },
+        "dt2": {
+          "kind": "cf_ptr",
+          "len": 28,
+          "offset": 272
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4020b308",
+            "len": 28
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4020b7c0",
+            "len": 28
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4022279c",
+            "len": 28
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_lfo_edge_mode3_pos",
+        "rust": "dkfw::lfo::EDGE_MODE3_POS"
+      },
+      "cpu": "cf",
+      "doc": "the edge-value table of mode 3, positive direction (7 longs, 28 bytes): DT2 0x4022279c, DN2 0x4020b7c0. core/lfo-table copies it with the added waves appended.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "data",
+      "mark": "V",
+      "name": "cf.lfo.data.edge_mode3_pos",
+      "rule": {
+        "dn2": {
+          "kind": "cf_ptr",
+          "len": 28,
+          "offset": 498
+        },
+        "dt2": {
+          "kind": "cf_ptr",
+          "len": 28,
+          "offset": 282
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4020b2ec",
+            "len": 28
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4020b7a4",
+            "len": 28
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40222780",
+            "len": 28
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_lfo_edge_mode4",
+        "rust": "dkfw::lfo::EDGE_MODE4"
+      },
+      "cpu": "cf",
+      "doc": "the edge-value table of mode 4 (7 longs, 28 bytes): DT2 0x40222780, DN2 0x4020b7a4. core/lfo-table copies it with the added waves appended.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "data",
+      "mark": "V",
+      "name": "cf.lfo.data.edge_mode4",
+      "rule": {
+        "dn2": {
+          "kind": "cf_ptr",
+          "len": 28,
+          "offset": 446
+        },
+        "dt2": {
+          "kind": "cf_ptr",
+          "len": 28,
+          "offset": 234
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x4020b340",
+            "len": 28
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x4020b7f8",
+            "len": 28
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x402227d4",
+            "len": 28
+          }
+        ]
+      },
+      "bindings": {
+        "c": "dk_fw_lfo_wave_fn_table",
+        "rust": "dkfw::lfo::WAVE_FN_TABLE"
+      },
+      "cpu": "cf",
+      "doc": "the wave function table (7 longs, 28 bytes): DT2 0x402227d4, DN2 0x4020b7f8; slot 6 (RAND) is 0, the first word of the slew table that follows it. core/lfo-table copies it with the added waves appended.",
+      "file": "devices/fw/lfo.toml",
+      "kind": "data",
+      "mark": "V",
+      "name": "cf.lfo.data.wave_fn_table",
+      "rule": {
+        "dn2": {
+          "kind": "cf_ptr",
+          "len": 28,
+          "offset": 726
+        },
+        "dt2": {
+          "kind": "cf_ptr",
+          "len": 28,
+          "offset": 508
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x401f9218",
             "len": 60
           }
@@ -2080,6 +2276,276 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x4013790c",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137bec",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013972c",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The `lea (ABS).l,An` of the LFO tick that points at the edge-value table of mode 3, negative direction (7 longs) (the operand is at +2).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.lfo.site.edge_mode3_neg.ref.1",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 486
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 270
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137508",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401377e8",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40139400",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The `lea (ABS).l,An` of the second reader that points at the edge-value table of mode 3, negative direction (7 longs) (the operand is at +2).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.lfo.site.edge_mode3_neg.ref.2",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 300
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 300
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137916",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137bf6",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40139736",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The `lea (ABS).l,An` of the LFO tick that points at the edge-value table of mode 3, positive direction (7 longs) (the operand is at +2).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.lfo.site.edge_mode3_pos.ref.1",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 496
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 280
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x40137514",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401377f4",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x4013940c",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The `lea (ABS).l,An` of the second reader that points at the edge-value table of mode 3, positive direction (7 longs) (the operand is at +2).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.lfo.site.edge_mode3_pos.ref.2",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 312
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 312
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401378e2",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137bc2",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40139706",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The `lea (ABS).l,An` of the LFO tick that points at the edge-value table of mode 4 (7 longs) (the operand is at +2).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.lfo.site.edge_mode4.ref.1",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 444
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 232
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401374de",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401377be",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401393d6",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The `lea (ABS).l,An` of the second reader that points at the edge-value table of mode 4 (7 longs) (the operand is at +2).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.lfo.site.edge_mode4.ref.2",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 258
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 258
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x4010ded0",
             "len": 6
           }
@@ -2118,6 +2584,51 @@
       "subsystem": "lfo",
       "users": [
         "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401374a8",
+            "len": 2
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137788",
+            "len": 2
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401393a0",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x401393a0 and DN2 0x40137788: the clamp of the wave byte in the second reader: `moveq 6,D6; cmp.l D3,D6; bge; moveq 6,D3` (D6 is rewritten right after).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.lfo.site.read.clamp",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 204
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 204
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
       ],
       "was": []
     },
@@ -2395,6 +2906,51 @@
       "at": {
         "dn2-1.11": [
           {
+            "addr": "0x40137880",
+            "len": 2
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137b60",
+            "len": 2
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401396a2",
+            "len": 2
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "DT2 0x401396a2 and DN2 0x40137b60: the clamp of the wave byte of the LFO tick: `moveq 6,D7; cmp.l D3,D7; bge; moveq 6,D3` (the immediate of the first moveq, byte +1, is the highest kept wave; D7 is rewritten right after).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.lfo.site.tick.clamp",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 346
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 2,
+          "offset": 132
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
             "addr": "0x401379e6",
             "len": 6
           }
@@ -2658,6 +3214,96 @@
       "subsystem": "lfo",
       "users": [
         "core/services/lfo"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401379fa",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x40137cda",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x40139818",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The `lea (ABS).l,An` of the LFO tick that points at the wave function table (7 function addresses, indexed by the clamped wave) (the operand is at +2).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.lfo.site.wave_fn_table.ref.1",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 724
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 506
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
+      ],
+      "was": []
+    },
+    {
+      "at": {
+        "dn2-1.11": [
+          {
+            "addr": "0x401375ee",
+            "len": 6
+          }
+        ],
+        "dn2-1.12": [
+          {
+            "addr": "0x401378ce",
+            "len": 6
+          }
+        ],
+        "dt2-1.17": [
+          {
+            "addr": "0x401394e6",
+            "len": 6
+          }
+        ]
+      },
+      "cpu": "cf",
+      "doc": "The `lea (ABS).l,An` of the second reader that points at the wave function table (7 function addresses, indexed by the clamped wave) (the operand is at +2).",
+      "file": "devices/fw/lfo.toml",
+      "kind": "site",
+      "mark": "V",
+      "name": "cf.lfo.site.wave_fn_table.ref.2",
+      "rule": {
+        "dn2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 530
+        },
+        "dt2": {
+          "kind": "cf_func",
+          "len": 6,
+          "offset": 530
+        }
+      },
+      "subsystem": "lfo",
+      "users": [
+        "core/lfo-table"
       ],
       "was": []
     },
@@ -26261,7 +26907,7 @@
       "name": "input"
     },
     {
-      "count": 33,
+      "count": 47,
       "cpu": "cf",
       "file": "devices/fw/lfo.toml",
       "meaning": "the LFO tick, its wave function table and the wave parameter readers",
