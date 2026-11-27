@@ -19,9 +19,16 @@ const proto = 'project_manager.proto';
 const dir = mkdtempSync(join(tmpdir(), 'wire-gen-'));
 const setFile = join(dir, 'set.bin');
 execFileSync(patchkit, [
-  'wire', 'descriptor', '--proto', proto,
-  '--include', join(root, 'tests/fixtures/wire'), '--include', join(root, 'sdk/proto'),
-  '--out', setFile,
+  'wire',
+  'descriptor',
+  '--proto',
+  proto,
+  '--include',
+  join(root, 'tests/fixtures/wire'),
+  '--include',
+  join(root, 'sdk/proto'),
+  '--out',
+  setFile,
 ]);
 const set = fromBinary(FileDescriptorSetSchema, readFileSync(setFile));
 const request = create(CodeGeneratorRequestSchema, {

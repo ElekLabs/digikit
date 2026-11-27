@@ -1,1 +1,1 @@
-export * from "./vectors.ts";
+export * from './vectors.ts';

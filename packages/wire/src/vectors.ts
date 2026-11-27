@@ -1,13 +1,7 @@
 // The shared vectors of the query codec: protobuf-es makes the bytes, the generated C codec must decode and re-encode them
 // (packages/patchkit/tests/wire_roundtrip.rs) and protobuf-es must decode what the C codec encodes (tests/codec.test.ts).
 import { create, toBinary, toJson, type DescMessage, type MessageInitShape } from '@bufbuild/protobuf';
-import {
-  CoverageSchema,
-  ListReplySchema,
-  ListRequestSchema,
-  ProjectSchema,
-  Mode,
-} from './gen/project_manager_pb.js';
+import { CoverageSchema, ListReplySchema, ListRequestSchema, ProjectSchema, Mode } from './gen/project_manager_pb.js';
 
 export type Case = {
   name: string;
@@ -107,7 +101,11 @@ function randomCases(count: number): Case[] {
   return out;
 }
 
-const full = Array.from({ length: 16 }, (_, slot) => ({ slot, name: `project ${slot}`.padEnd(16, 'x'), current: slot === 3 }));
+const full = Array.from({ length: 16 }, (_, slot) => ({
+  slot,
+  name: `project ${slot}`.padEnd(16, 'x'),
+  current: slot === 3,
+}));
 
 export function cases(): Case[] {
   return [
@@ -116,7 +114,12 @@ export function cases(): Case[] {
     ok('request-max', 'ListRequest', { cursor: 0xffffffff }),
     ok('request-overlong-varint', 'ListRequest', { cursor: 1 }, '088100'),
     ok('request-last-duplicate-wins', 'ListRequest', { cursor: 9 }, '08010809'),
-    ok('request-skips-unknown', 'ListRequest', { cursor: 5 }, '7801' + '08' + '05' + '7203616263' + '6d01020304' + '61' + '0102030405060708'),
+    ok(
+      'request-skips-unknown',
+      'ListRequest',
+      { cursor: 5 },
+      '7801' + '08' + '05' + '7203616263' + '6d01020304' + '61' + '0102030405060708',
+    ),
     ok('project-typical', 'Project', { slot: 3, name: 'Demo', current: true }),
     ok('project-name-16', 'Project', { slot: 1, name: '0123456789abcdef' }),
     ok('project-all-default', 'Project', {}),

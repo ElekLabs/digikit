@@ -23,20 +23,47 @@ const cases: Case[] = JSON.parse(readFileSync(join(root, 'runtime/core/vectors/w
 let results: string[];
 
 beforeAll(() => {
-  const patchkit = [process.env.PATCHKIT, join(root, 'dist/patchkit/patchkit'), join(root, 'target/debug/patchkit')].find(
-    (p) => p && existsSync(p),
-  );
+  const patchkit = [
+    process.env.PATCHKIT,
+    join(root, 'dist/patchkit/patchkit'),
+    join(root, 'target/debug/patchkit'),
+  ].find((p) => p && existsSync(p));
   if (!patchkit) throw new Error('patchkit is not built: pnpm nx:pilot run patchkit:cli');
   const dir = mkdtempSync(join(tmpdir(), 'wire-codec-'));
   const wire = join(root, 'tests/fixtures/wire');
   execFileSync(patchkit, [
-    'wire', 'c', '--proto', 'project_manager.proto', '--prefix', 'pm',
-    '--include', wire, '--include', join(root, 'sdk/proto'), '--out', join(dir, 'pm.h'),
+    'wire',
+    'c',
+    '--proto',
+    'project_manager.proto',
+    '--prefix',
+    'pm',
+    '--include',
+    wire,
+    '--include',
+    join(root, 'sdk/proto'),
+    '--out',
+    join(dir, 'pm.h'),
   ]);
   const exe = join(dir, 'harness');
-  execFileSync('cc', ['-std=c11', '-Wall', '-Wextra', '-Werror', '-I', dir, '-I', join(root, 'sdk/include'), '-o', exe, join(wire, 'harness.c')]);
+  execFileSync('cc', [
+    '-std=c11',
+    '-Wall',
+    '-Wextra',
+    '-Werror',
+    '-I',
+    dir,
+    '-I',
+    join(root, 'sdk/include'),
+    '-o',
+    exe,
+    join(wire, 'harness.c'),
+  ]);
   const input = cases.map((c) => `${c.message} ${c.input_hex}\n`).join('');
-  results = execFileSync(exe, { input, maxBuffer: 1 << 26 }).toString().split('\n').slice(0, -1);
+  results = execFileSync(exe, { input, maxBuffer: 1 << 26 })
+    .toString()
+    .split('\n')
+    .slice(0, -1);
 });
 
 describe('query codec, C against protobuf-es', () => {

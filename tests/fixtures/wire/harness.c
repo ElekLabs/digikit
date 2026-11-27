@@ -20,19 +20,19 @@ static int unhex(const char *s, uint8_t *out, uint32_t cap, uint32_t *n)
     return 0;
 }
 
-#define CASE(T)                                                                                   \
-    if (!strcmp(name, #T)) {                                                                      \
-        static pm_##T msg;                                                                        \
-        if (pm_##T##_decode(in, n, &msg) < 0)                                                     \
-            return puts("REFUSE");                                                                \
-        dk_wire_writer w;                                                                         \
-        dk_wire_writer_init(&w, out, sizeof out);                                                 \
-        pm_##T##_encode(&w, &msg);                                                                \
-        if (w.err || (uint32_t)(w.p - out) > pm_##T##_MAX_SIZE)                                   \
-            return puts("ENCODE-ERROR");                                                          \
-        for (uint8_t *p = out; p < w.p; p++)                                                      \
-            printf("%02x", *p);                                                                   \
-        return puts("");                                                                          \
+#define CASE(T)                                                                                    \
+    if (!strcmp(name, #T)) {                                                                       \
+        static pm_##T msg;                                                                         \
+        if (pm_##T##_decode(in, n, &msg) < 0)                                                      \
+            return puts("REFUSE");                                                                 \
+        dk_wire_writer w;                                                                          \
+        dk_wire_writer_init(&w, out, sizeof out);                                                  \
+        pm_##T##_encode(&w, &msg);                                                                 \
+        if (w.err || (uint32_t)(w.p - out) > pm_##T##_MAX_SIZE)                                    \
+            return puts("ENCODE-ERROR");                                                           \
+        for (uint8_t *p = out; p < w.p; p++)                                                       \
+            printf("%02x", *p);                                                                    \
+        return puts("");                                                                           \
     }
 
 static int run(const char *name, const uint8_t *in, uint32_t n)
