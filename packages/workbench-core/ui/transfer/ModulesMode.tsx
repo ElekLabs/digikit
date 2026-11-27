@@ -21,12 +21,13 @@ import {
   type ChipStatus,
   type PageCtx,
 } from './TransferParts';
+import { pageOpenActions, type ModulePageLinks } from '../../src/module-ui/page-open-action';
 import { LIVE_LABEL, liveActions, liveResult, serviceAction, type LiveOp } from '../../src/transfer/live-ops';
 import { portLine, unusedServices, unusedServicesText } from '../../src/transfer/pane-groups';
 import { activateSystemPackage } from '../../src/runtime/activate-system-package';
 import { noteActivity } from '../../src/transfer/activity';
 import ModuleFilesArea from './ModuleFilesArea';
-import type { ModuleFileClient } from '../../src/module-ui/module-files';
+import type { ModuleFileClient } from '@digi/module-ui';
 import { useTransferApp } from '../../src/transfer/app-context';
 import { createPaneSelect } from '../../src/transfer/pane-select';
 import SplitPane from './SplitPane';
@@ -60,8 +61,12 @@ import {
 import './target-select.css';
 import { deviceNameOf, deviceNamesText } from '../../src/data/device-profiles';
 
-/** `onFlash`: starts the one-click Flash flow (the host page gives it; without it the refusal box has no Flash button). */
-export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void }): JSX.Element {
+/** `onFlash`: starts the one-click Flash flow (the host page gives it; without it the refusal box has no Flash button). `pages`: the sidebar pages of loaded modules (a loaded row with a page gets Open). */
+export default function ModulesMode(props: {
+  ctx: PageCtx;
+  onFlash?: () => void;
+  pages?: ModulePageLinks;
+}): JSX.Element {
   const { busy, run, setError } = props.ctx;
   const app = useTransferApp();
   const { env } = app;
@@ -636,7 +641,10 @@ export default function ModulesMode(props: { ctx: PageCtx; onFlash?: () => void 
                             tags={deviceTags(r, lastView()?.capacity)}
                             dependencies={cardDependencies(r)}
                             live={{
-                              actions: liveActions(r).map((op) => rowActions(op, r.path)),
+                              actions: [
+                                ...liveActions(r).map((op) => rowActions(op, r.path)),
+                                ...pageOpenActions(r, props.pages),
+                              ],
                               result: liveResults()[r.path],
                             }}
                             version={r.version ?? ''}

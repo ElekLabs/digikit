@@ -7,7 +7,7 @@ import type { ModuleFilesSpec } from '../../src/transfer/env';
 import { createPaneSelect } from '../../src/transfer/pane-select';
 import SplitPane from './SplitPane';
 import { countLabel } from '../../src/transfer/transfer-core';
-import type { ModuleFileClient } from '../../src/module-ui/module-files';
+import type { ModuleFileClient } from '@digi/module-ui';
 
 const SENT_NOTE = "Choose it in the device's module settings; it applies on next restart.";
 

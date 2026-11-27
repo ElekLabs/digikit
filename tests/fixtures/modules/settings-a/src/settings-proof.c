@@ -2,6 +2,7 @@
    request and `tick` runs it in the UI task (the settings API is not for the MIDI task, where service commands run).
    test/settings-b builds this file with another command number and PROOF_VIA_JOB, so two module names use the same key. */
 #include <dk/core/bytes.h>
+#include <dk/core/log.h>
 #include <dk/core/module.h>
 #include <dk/platform/host.h>
 #include <dk/platform/settings.h>
@@ -110,6 +111,9 @@ static int32_t init(dk_module_ctx *ctx)
     r = dk_workbench_register(ctx, dk_workbench_descriptor, sizeof dk_workbench_descriptor);
     if (r != DK_OK)
         return r;
+#endif
+#ifndef PROOF_VIA_JOB
+    dk_log(DK_LOG_INFO, "settings-gain", (uint32_t)wb_setting_gain_get(settings));
 #endif
     init_rc = dk_settings_get(settings, "boot", init_val, VAL);
     return dk_host_register(PROOF_CMD, 2, command);

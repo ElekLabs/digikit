@@ -17,6 +17,7 @@
     "@digi/control-client": "workspace:*",
     "@digi/test-support": "workspace:*",
     "@digi/dk-session": "workspace:*",
+    "@digi/module-ui": "workspace:*",
     "@digi/sharc-rig-kit": "workspace:*"
   },
   "devDependencies": {

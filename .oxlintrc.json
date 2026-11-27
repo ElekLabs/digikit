@@ -166,6 +166,22 @@
       }
     },
     {
+      "files": ["modules/**/workbench/**/*.{ts,tsx}", "tests/fixtures/modules/**/workbench/**/*.{ts,tsx}"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**", "!@digi/module-ui", "!solid-js", "!solid-js/**", "!./**", "./**/../**"],
+                "message": "A module page imports only @digi/module-ui, solid-js and files inside its own workbench folder (./ paths, never ../)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "files": ["**/*.tsx"],
       "rules": {
         "eslint/no-unassigned-vars": "off"
