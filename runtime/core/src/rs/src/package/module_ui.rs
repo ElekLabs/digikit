@@ -462,7 +462,8 @@ pub(crate) unsafe fn tick() {
 
 /// Run the next queued query: the module's function runs unlocked on the UI task with the module as the source of what it logs.
 unsafe fn tick_call() {
-    let Some(job) = locked(|registry| registry.start_call(|rec| module_cmds::is_draining(rec))) else {
+    let Some(job) = locked(|registry| registry.start_call(|rec| module_cmds::is_draining(rec)))
+    else {
         return;
     };
     let rec = job.rec();
