@@ -115,3 +115,5 @@ export async function expectBoot(
 
 /** Core adapters needed by loaded modules that import from them or take rows. */
 export const COUPLED_ROOTS = rootsOf('coupled');
+/** The same with the image's table of added LFO waves (core/lfo-table): the lfo service refuses to start (`E_NO_REGISTRY`) on an image without it, and a shape module is then refused with `E_MISSING`. */
+export const COUPLED_LFO_ROOTS = rootsOf('coupled-lfo');
