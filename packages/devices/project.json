@@ -5,7 +5,7 @@
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": ["hostTests", "{workspaceRoot}/devices/*.toml"],
+      "inputs": ["hostTests", "{workspaceRoot}/vitest.host/devices.json", "{workspaceRoot}/devices/*.toml"],
       "outputs": [],
       "options": {
         "forwardAllArgs": false,

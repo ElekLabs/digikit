@@ -1,0 +1,5 @@
+{
+  "name": "regression-host",
+  "dir": "tests/regression",
+  "include": "host/**/*.test.ts"
+}

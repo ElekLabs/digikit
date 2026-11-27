@@ -5,7 +5,12 @@
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": ["hostTests", "{workspaceRoot}/sdk/sdk.toml", "{workspaceRoot}/tests/fixtures/ping-vectors.json"],
+      "inputs": [
+        "hostTests",
+        "{workspaceRoot}/vitest.host/dk-session.json",
+        "{workspaceRoot}/sdk/sdk.toml",
+        "{workspaceRoot}/tests/fixtures/ping-vectors.json"
+      ],
       "outputs": [],
       "options": {
         "forwardAllArgs": false,

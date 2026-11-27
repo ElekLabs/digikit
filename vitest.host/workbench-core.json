@@ -1,0 +1,8 @@
+{
+  "name": "workbench-core",
+  "dir": "packages/workbench-core",
+  "include": "tests/*.test.ts",
+  "conditions": [
+    "browser"
+  ]
+}

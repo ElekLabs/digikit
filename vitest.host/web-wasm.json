@@ -1,0 +1,6 @@
+{
+  "name": "web-wasm",
+  "dir": "apps/web",
+  "include": "tests/*.wasm.test.ts",
+  "testTimeout": 120000
+}

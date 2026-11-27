@@ -155,7 +155,7 @@ export const createNodesV2 = [
         targets['test-host'] = {
           executor: 'nx:run-commands',
           cache: false,
-          inputs: ['hostTests'],
+          inputs: ['hostTests', '{workspaceRoot}/vitest.host/module-tests.json'],
           outputs: [],
           options: {
             command: `pnpm exec vitest run --config vitest.host.config.ts --project module-tests ${root}/`,
@@ -194,7 +194,10 @@ export const createNodesV2 = [
             ? {
                 executor: 'nx:noop',
                 cache: false,
-                inputs: packSourceInputs(ctx.workspaceRoot, byId, manifestClosure(byId, [m.id]), { privateOnly: true }),
+                inputs: [
+                  ...packSourceInputs(ctx.workspaceRoot, byId, manifestClosure(byId, [m.id]), { privateOnly: true }),
+                  { externalDependencies: [] }, // runs nothing: no npm package is an input
+                ],
                 dependsOn: [{ target: 'test-conformance-all', params: 'forward' }],
               }
             : conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs);

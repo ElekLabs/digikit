@@ -1,0 +1,5 @@
+{
+  "name": "dkglyph",
+  "dir": "packages/dkglyph",
+  "include": "tests/*.test.ts"
+}
