@@ -200,6 +200,14 @@ export function dmaHoles(plan: RuntimePlan): [number, number][] {
   hole('DKRT_AUX_TASK', 4208); // the helper task's stack, TCB and semaphores (the kernel writes them)
   hole('DKRT_STORE_PEEK', 512);
   hole('DKRT_STORE_FP', 512);
+  // The store listing's catalog reads (`storage_adapter.rs`: the Files calls of a service that lists the store) land by DMA in two private statics. They are
+  // not exported, so the plan names them by their mangled path.
+  const listing = (leaf: string, size: number) => {
+    const key = Object.keys(plan.symbols).find((k) => k.startsWith('core/runtime@') && new RegExp(`storage_adapter\\d+${leaf}$`).test(k));
+    if (key !== undefined) holes.push([plan.symbols[key], size]);
+  };
+  listing('FP', 512);
+  listing('SCRATCH', 4096);
   const pdw = ownedSymbol(plan, 'core/plusdrive-write', 'DKPW_DMA'); // the +Drive adapter's buffers that the firmware's file code writes
   if (pdw !== undefined) holes.push([pdw, 640]);
   // The header sector of the settings record is a hole only together with the record.
