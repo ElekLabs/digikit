@@ -1,6 +1,7 @@
-import type { DkSession } from '@digi/dk-session';
+import type { DkSession, ModuleQueryEndpoint } from '@digi/dk-session';
 import { describe, expect, test } from 'vitest';
-import { decodeDescriptor, settingValueCodec } from '@digi/module-ui';
+import { createModuleClient, decodeDescriptor, settingValueCodec, type ModuleChannel } from '@digi/module-ui';
+import { SettingsA } from '../../../../tests/fixtures/modules/settings-a/workbench/gen/settings_a_pb.js';
 import { bootInfo } from '@digi/regression/runtime/guest-mailbox.ts';
 import { statusOf } from '@digi/regression/runtime/upload-bytes.ts';
 import type { TestRuntime } from '@digi/regression/test-runtime.ts';
@@ -87,6 +88,39 @@ for (const device of DEVICES) {
       expect(again.initRc, 'init read 3 bytes').toBe(3);
       expect(again.init.subarray(0, 3), 'the value of the earlier boot').toEqual(text('xyz'));
       expect(await record(reboot), 'the record is as it was').toEqual({ [`${A}/boot`]: hex('xyz') });
+      kit.allowStoreWrites(await kit.storeWrites());
+    });
+
+    /** BootAtInit of settings-a through the module UI session: the handler runs on the UI task in the module's own code. */
+    const bootAtInit = (rt: TestRuntime) =>
+      kit.usb(rt, async (dk) => {
+        const mod = (await dk.modules()).find((m) => m.name === A);
+        const endpoint: ModuleQueryEndpoint = dk.moduleQueries(mod!.index, mod!.uiInstance!, () => true);
+        const channel = {
+          async callQuery(method: number, request: Uint8Array) {
+            const raw = await endpoint.call(method, request);
+            return raw.runtimeStatus === 0 && raw.handlerResult === 0
+              ? { ok: true as const, reply: raw.reply }
+              : { ok: false as const, error: { kind: 'unavailable' as const } };
+          },
+        } as ModuleChannel;
+        return createModuleClient(channel).service(SettingsA).bootAtInit({});
+      });
+
+    test('the BootAtInit query answers the boot value init read: unset on the first boot, the saved value after a restart', async () => {
+      const rt = await kit.load('boot-query', spec);
+      expect((await bootInfo(rt.session, kit.plan)).results, 'both modules load').toEqual([0, 0]);
+      expect(await bootAtInit(rt), 'nothing was saved when init read it').toMatchObject({
+        ok: true,
+        value: { present: false, value: '' },
+      });
+      expect((await call(rt, A, PUT, 'boot', text('xyz'))).rc, 'put').toBe(0);
+      await rt.ui.wait({ ms: DELAY_MS + 500, why: SETTLE });
+      const reboot = await kit.restart(rt);
+      expect(await bootAtInit(reboot), 'init of the new boot read the saved value').toMatchObject({
+        ok: true,
+        value: { present: true, value: 'xyz' },
+      });
       kit.allowStoreWrites(await kit.storeWrites());
     });
 

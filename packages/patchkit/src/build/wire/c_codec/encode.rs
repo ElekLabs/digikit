@@ -31,6 +31,9 @@ impl CCodec<'_> {
         for f in &fields {
             self.write_field(&mut body, f);
         }
+        if fields.is_empty() {
+            body.push_str("    (void)w;\n    (void)m;\n");
+        }
         writeln!(
             self.out,
             "DK_WIRE_FN void {ty}_encode(dk_wire_writer *w, const {ty} *m)\n{{\n{body}}}\n"
@@ -44,6 +47,9 @@ impl CCodec<'_> {
         let mut body = String::new();
         for f in &fields {
             self.size_field(&mut body, f);
+        }
+        if fields.is_empty() {
+            body.push_str("    (void)m;\n");
         }
         writeln!(self.out, "DK_WIRE_FN uint32_t {ty}_size(const {ty} *m)\n{{\n    uint32_t n = 0;\n{body}    return n;\n}}\n").unwrap();
     }

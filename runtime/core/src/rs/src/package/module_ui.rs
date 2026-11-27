@@ -397,6 +397,18 @@ pub(crate) unsafe extern "C" fn dk_workbench_register_queries(
     locked(|registry| registry.set_queries(rec, table, count))
 }
 
+/// A query table for host tests that stands in for the one a module hands over: one entry per method number, each answering one byte 0xAB.
+#[cfg(test)]
+pub(crate) fn stand_in_queries(methods: &[u8]) -> *const u8 {
+    unsafe extern "C" fn answer(_: *mut u8, _: *const u8, _: u32, out: *mut u8, out_len: *mut u32) -> i32 {
+        *out = 0xAB;
+        *out_len = 1;
+        0
+    }
+    let table: Vec<query_table::Query> = methods.iter().map(|&m| query_table::Query::new(m, answer)).collect();
+    Vec::leak(table).as_ptr() as *const u8
+}
+
 pub(crate) unsafe fn publish(rec: usize) {
     locked(|registry| registry.publish(rec))
 }

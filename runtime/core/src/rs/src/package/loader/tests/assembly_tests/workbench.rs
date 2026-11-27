@@ -32,6 +32,19 @@ fn descriptor_offset(file: &[u8]) -> usize {
     image_off + offset
 }
 
+/// The query table the packed settings-a holds (`dk_workbench_queries`, 8 bytes per entry, the method number in the fifth byte), by its place in the address map.
+fn packed_queries(dev: Dev, file: &[u8]) -> Builder {
+    let map: serde_json::Value = serde_json::from_slice(&read(&repo().join(format!("dist/modules/{}/settings-a.addrmap.json", dev.name)), "pnpm nx:pilot run test/settings-a:pack")).unwrap();
+    let table = map["entries"].as_array().unwrap().iter().find(|e| e["name"] == "dk_workbench_queries").expect("settings-a declares queries");
+    let (addr, size) = (table["addr"].as_u64().unwrap() as usize, table["size"].as_u64().unwrap() as usize);
+    let base = be(file, dkneeds::H_IMAGE_OFF) as usize + addr;
+    let mut methods = [0u8; 4];
+    for i in 0..size / 8 {
+        methods[i] = file[base + 8 * i + 4];
+    }
+    Builder::Queries { count: (size / 8) as u32, methods }
+}
+
 /// Load the packed settings-a on `dev` over `FakePlatform`, replaying the descriptor registration of its init; returns the loader and the MODULES instance word.
 unsafe fn load_settings_a(dev: Dev) -> (Loader<FakePlatform, Card, DeviceRegistry>, [u8; 4]) {
     let file = packed(dev, "settings-a", "dkm", "test/settings-a");
@@ -42,6 +55,7 @@ unsafe fn load_settings_a(dev: Dev) -> (Loader<FakePlatform, Card, DeviceRegistr
         offset,
         len: SCHEMA.len(),
     });
+    card.init_calls.push(packed_queries(dev, &packed(dev, "settings-a", "dkm", "test/settings-a")));
     let mut loader = Loader::new(
         FakePlatform::new(dev.profile),
         card,
@@ -184,6 +198,49 @@ fn the_packed_typed_settings_accept_a_valid_write_refuse_an_invalid_one_and_flag
                 .expect("the record of the loaded fixture");
             assert_eq!(crate::package::entry::module_put(rec as u32 + 1, b"mode\0".as_ptr(), [7u8].as_ptr(), 1), OK);
             assert_eq!(ui_request(instance, 5, GET, MODE, 0, b"", 0).0, E_SET_VALUE, "{}: stored mode 7", dev.name);
+            assert_eq!(loader.unload_body(0), OK, "{}: unload settings-a", dev.name);
+        }
+    }
+}
+
+/// One query call for the loaded fixture and its poll after the UI pass: (runtime status, handler result, reply bytes).
+unsafe fn query_call(instance: [u8; 4], ticket: u32, method: u8) -> (i32, i32, Vec<u8>) {
+    let mut call = std::vec![5u8, 0];
+    call.extend_from_slice(&instance);
+    call.extend_from_slice(&ticket.to_be_bytes());
+    call.push(method);
+    crate::hooks::command_run(CMD_MODULE_UI, 10, null_mut(), call.as_ptr(), call.len());
+    let status = read_volatile(addr_of!(DKRT_UPLOAD_LAST));
+    if status != OK {
+        return (status, 0, Vec::new());
+    }
+    crate::package::module_ui::tick();
+    let mut poll = std::vec![4u8, 0];
+    poll.extend_from_slice(&instance);
+    poll.extend_from_slice(&ticket.to_be_bytes());
+    crate::hooks::command_run(CMD_MODULE_UI, 11, null_mut(), poll.as_ptr(), poll.len());
+    assert_eq!(read_volatile(addr_of!(DKRT_UPLOAD_LAST)), OK);
+    let body = (addr_of!(RBODY) as *const u8).add(1);
+    let head = slice::from_raw_parts(body, 10);
+    assert_eq!(head[0], 0, "the call is done");
+    (i32::from_be_bytes(head[1..5].try_into().unwrap()), i32::from_be_bytes(head[5..9].try_into().unwrap()), std::vec![head[9]])
+}
+
+#[test]
+fn the_packed_settings_fixture_registers_its_query_table_in_init() {
+    for dev in DEVICES {
+        let _guard = clean();
+        unsafe {
+            crate::settings::tests::setup(false);
+            crate::settings::tests::teardown();
+            let file = packed(dev, "settings-a", "dkm", "test/settings-a");
+            let Builder::Queries { count, methods } = packed_queries(dev, &file) else { unreachable!() };
+            assert_eq!((count, methods[0]), (1, 1), "{}: the packed table is the one method BootAtInit", dev.name);
+            // the load fails when init's registration is refused, so loading is the proof that the table was accepted (the call itself runs ColdFire code: device-only)
+            let (mut loader, instance) = load_settings_a(dev);
+            let (runtime, handler, reply) = query_call(instance, 1, 1);
+            assert_eq!((runtime, handler, reply), (OK, 0, std::vec![0xAB]), "{}: method 1 reaches the registered table", dev.name);
+            assert_eq!(query_call(instance, 2, 2).0, dkrt_sdk::proto::E_MODULE_UI_METHOD, "{}: no method 2", dev.name);
             assert_eq!(loader.unload_body(0), OK, "{}: unload settings-a", dev.name);
         }
     }

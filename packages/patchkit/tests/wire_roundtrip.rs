@@ -101,3 +101,32 @@ fn run_harness(exe: &std::path::Path, lines: &[String]) -> Vec<String> {
         .map(str::to_string)
         .collect()
 }
+
+#[test]
+fn the_generated_code_of_an_empty_message_compiles_without_warnings() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("e.proto"),
+        "syntax = \"proto3\";\npackage e;\nimport \"dk/options.proto\";\nservice S { rpc Ping(Empty) returns (Empty); }\nmessage Empty {}\n",
+    )
+    .unwrap();
+    let schema = Schema::read(&[dir.path(), &root().join("sdk/proto")], "e.proto").unwrap();
+    let generated = CCodec::render(&schema, "e", "e.h");
+    std::fs::write(dir.path().join("e.h"), generated.header).unwrap();
+    std::fs::write(dir.path().join("e.c"), generated.source).unwrap();
+    let build = Command::new("cc")
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-c", "-I"])
+        .arg(dir.path())
+        .arg("-I")
+        .arg(root().join("sdk/include"))
+        .arg("-o")
+        .arg(dir.path().join("e.o"))
+        .arg(dir.path().join("e.c"))
+        .output()
+        .expect("this test needs a host C compiler named cc on PATH");
+    assert!(
+        build.status.success(),
+        "{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+}

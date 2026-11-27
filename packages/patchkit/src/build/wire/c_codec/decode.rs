@@ -43,6 +43,9 @@ impl CCodec<'_> {
             "DK_WIRE_NO_TABLES DK_WIRE_FN int32_t {ty}_decode(const uint8_t *buf, uint32_t n, {ty} *out)\n{{"
         )
         .unwrap();
+        if fields.is_empty() {
+            writeln!(o, "    (void)out;").unwrap();
+        }
         writeln!(o, "    dk_wire_reader r;\n    uint32_t f, t;").unwrap();
         if holds_len {
             writeln!(o, "    const uint8_t *s;\n    uint32_t len;").unwrap();
