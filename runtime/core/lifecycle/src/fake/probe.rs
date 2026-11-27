@@ -22,6 +22,10 @@ pub enum Call {
     Detach(PackageId),
     Restore(PackageId),
     Stop(PackageId),
+    /// `ProviderHost::export_state`.
+    ExportState(PackageId),
+    /// `ProviderHost::import_state`.
+    ImportState(PackageId),
     StartDsp(PackageId),
     Unbind(PackageId),
     Free(PackageId),

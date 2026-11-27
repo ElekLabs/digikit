@@ -49,8 +49,9 @@
         "{projectRoot}/tsconfig.json",
         "{projectRoot}/site.config.mjs",
         "jsToolchain",
+        { "externalDependencies": ["astro", "@astrojs/solid-js"] },
         "{workspaceRoot}/vitest.host.config.ts",
-        "{workspaceRoot}/vitest.host.projects.json",
+        "{workspaceRoot}/vitest.host/web-transfer.json",
         "{workspaceRoot}/tsconfig*.json",
         {
           "externalDependencies": ["vitest"]
@@ -99,7 +100,7 @@
         },
         "jsToolchain",
         "{workspaceRoot}/vitest.host.config.ts",
-        "{workspaceRoot}/vitest.host.projects.json"
+        "{workspaceRoot}/vitest.host/web-wasm.json"
       ]
     }
   }

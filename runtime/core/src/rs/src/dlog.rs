@@ -163,6 +163,9 @@ fn keeps(kind: u16, flags: u16) -> bool {
     if flags & logk::F_ERROR != 0 {
         return kind != logk::CRASH_REG && kind != logk::CRASH_STACK && kind != logk::CRASH_TAIL && kind != logk::DSP_DIAG;
     }
+    if kind == logk::LIFECYCLE {
+        return false; // a stream for a sink; it would push the boot's events out of the ring
+    }
     if crate::boot::info().ui_reached == 0 {
         return true;
     }

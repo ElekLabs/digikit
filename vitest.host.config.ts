@@ -1,10 +1,26 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import solid from 'vite-plugin-solid';
 import { configDefaults, defineConfig } from 'vitest/config';
 // The Nx test-host targets read this file; host tests are device-free.
-import projects from './vitest.host.projects.json' with { type: 'json' };
 
 const root = fileURLToPath(new URL('.', import.meta.url));
+
+// One file per Vitest project in vitest.host/NAME.json. A project's Nx target lists its own file as an input,
+// so adding a project changes only that project's key; this file is an input of every host test.
+const projects: {
+  name: string;
+  dir: string;
+  include: string;
+  exclude?: string[];
+  conditions?: string[];
+  alias?: Record<string, string>;
+  testTimeout?: number;
+}[] = readdirSync(join(root, 'vitest.host'))
+  .filter((f) => f.endsWith('.json'))
+  .sort()
+  .map((f) => JSON.parse(readFileSync(join(root, 'vitest.host', f), 'utf8')));
 
 export default defineConfig({
   root,
@@ -28,6 +44,7 @@ export default defineConfig({
         resolve: {
           alias: {
             '@digi/dkbs': fileURLToPath(new URL('packages/dkbs/src/index.ts', import.meta.url)),
+            '@digi/dkglyph': fileURLToPath(new URL('packages/dkglyph/src/index.ts', import.meta.url)),
             '@digi/sharc-rig-kit/suite': fileURLToPath(new URL('packages/sharc-rig-kit/src/suite.ts', import.meta.url)),
             '@digi/sharc-rig-kit': fileURLToPath(new URL('packages/sharc-rig-kit/src/index.ts', import.meta.url)),
             // the aliases of the project's tsconfig (paths), relative to the repository root

@@ -122,6 +122,24 @@ pub trait Describe<C: CoreApi>: Sized {
     fn describe(_core: &C, _who: ConsumerId, _out: &mut WordSink) {}
 }
 
+/// The state a service carries over a reload of itself: the runtime calls `export` on the old copy after its entries are restored and before `stop`, and `import` on the
+/// new copy after `start`, before its entries are installed. The bytes live in the runtime in between and never reach the card.
+///
+/// A handoff needs `ACCEPTS_FROM <= old VERSION <= VERSION`; else, or when nothing was exported, the new copy gets `import(None)` and decides what to start with. `import` changes
+/// fields in place (never replaces `*self`), gets no `Outside` token, and an `Err` fails the start.
+pub trait State<C: CoreApi>: Sized {
+    /// The layout of the bytes this copy exports.
+    const VERSION: u16;
+    /// The oldest `VERSION` that `import` takes.
+    const ACCEPTS_FROM: u16;
+    /// The most bytes `export` writes (the runtime reserves this much).
+    fn export_max(&self, core: &C) -> usize;
+    /// Write the state into `out` (at least `export_max` long): the count written.
+    fn export(&mut self, core: &C, out: &mut [u8]) -> usize;
+    /// Take the old copy's bytes, or `None` when there are none to take.
+    fn import(&mut self, core: &C, from: Option<&[u8]>) -> Result<(), Status>;
+}
+
 /// The events a service takes while one of its own calls is running (the part `Reentry` of `service!`; it has no table in the row).
 ///
 /// A callback of the service (a pool event, a hook) may fire inside a call the object made (`tick`, `release`, ...). The owner (`Owner` of `dkrt-svc-rt`) is busy then

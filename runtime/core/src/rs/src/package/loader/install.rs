@@ -85,11 +85,21 @@ pub const PARKS_MAX: usize = 4;
 pub struct Gate<'a> {
     pub live: bool,
     pub parks: Option<&'a [Park]>,
+    /// The operation whose events a wait adds (`Loader::op`): 0 for none.
+    pub op: u32,
 }
 
 impl Gate<'static> {
     /// The boot (and a test that has no task): no waiting.
-    pub const BOOT: Gate<'static> = Gate { live: false, parks: Some(&[]) };
+    pub const BOOT: Gate<'static> = Gate { live: false, parks: Some(&[]), op: 0 };
+}
+
+impl<'a> Gate<'a> {
+    /// The gate whose wait events belong to operation `op`.
+    pub fn in_op(mut self, op: u32) -> Gate<'a> {
+        self.op = op;
+        self
+    }
 }
 
 impl Gate<'_> {
@@ -104,6 +114,18 @@ impl Gate<'_> {
         let mut i = 0;
         while i < parks.len() {
             if !parked(p, &parks[i]) {
+                // the task that is not parked (its place in the port file's list) is the event's detail
+                if crate::package::lifecycle::trace_on() {
+                    crate::package::lifecycle::trace_emit(
+                        self.op,
+                        dkrt_lifecycle::Phase::Note,
+                        dkrt_lifecycle::Step::ParkWait,
+                        crate::package::lifecycle::TRACE_NO_PACKAGE,
+                        0,
+                        E_BUSY,
+                        i as u32,
+                    );
+                }
                 return Err(E_BUSY);
             }
             i += 1;
