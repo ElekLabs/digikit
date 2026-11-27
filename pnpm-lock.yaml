@@ -199,6 +199,9 @@ importers:
       '@digi/dk-session':
         specifier: workspace:*
         version: link:../../packages/dk-session
+      '@digi/module-ui':
+        specifier: workspace:*
+        version: link:../../packages/module-ui
       '@digi/workbench-core':
         specifier: workspace:*
         version: link:../../packages/workbench-core
@@ -350,6 +353,21 @@ importers:
         specifier: 5.1.0
         version: 5.1.0(@types/node@22.15.0)(vite@8.3.1(@types/node@22.15.0)(esbuild@0.28.2)(yaml@2.9.1))
 
+  packages/module-ui:
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.0
+        version: 22.15.0
+      smol-toml:
+        specifier: 1.9.0
+        version: 1.9.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 5.1.0
+        version: 5.1.0(@types/node@22.15.0)(vite@8.3.1(@types/node@22.15.0)(esbuild@0.28.2)(yaml@2.9.1))
+
   packages/sharc-rig-kit:
     dependencies:
       smol-toml:
@@ -408,6 +426,9 @@ importers:
       '@digi/dkbs':
         specifier: workspace:*
         version: link:../dkbs
+      '@digi/module-ui':
+        specifier: workspace:*
+        version: link:../module-ui
       smol-toml:
         specifier: 1.9.0
         version: 1.9.0
@@ -427,6 +448,9 @@ importers:
 
   tests/fixtures/modules/settings-a/workbench:
     dependencies:
+      '@digi/module-ui':
+        specifier: workspace:*
+        version: link:../../../../../packages/module-ui
       '@digi/workbench-core':
         specifier: workspace:*
         version: link:../../../../../packages/workbench-core

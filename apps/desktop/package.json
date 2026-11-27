@@ -28,6 +28,7 @@
     "solid-js": "1.9.15",
     "@digi/dk-session": "workspace:*",
     "@digi/devices": "workspace:*",
+    "@digi/module-ui": "workspace:*",
     "@digi/workbench-core": "workspace:*"
   },
   "type": "module"

@@ -1,11 +1,13 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import type { ModulePage, SettingsClient, SettingValue } from '../../src/module-ui/module-page';
-import { checkText, type TextSetting } from '../../src/module-ui/descriptor';
+import type { DynamicSettings, TextSetting } from '@digi/module-ui';
+import type { ModulePage } from '../../src/module-ui/module-page';
 import './module-page.css';
 
-function TextField(props: { field: TextSetting; settings: SettingsClient }) {
-  const [saved, setSaved] = createSignal<SettingValue>();
+type Saved = { value: string | null; unset: boolean };
+
+function TextField(props: { field: TextSetting; settings: DynamicSettings }) {
+  const [saved, setSaved] = createSignal<Saved>();
   const [draft, setDraft] = createSignal('');
   const [edited, setEdited] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
@@ -15,18 +17,20 @@ function TextField(props: { field: TextSetting; settings: SettingsClient }) {
     setError('');
     try {
       const key = props.field.id;
-      if (action === 'save') checkText(props.field, draft());
       const next =
         action === 'read'
           ? await props.settings.get(key)
           : action === 'save'
-            ? await props.settings.put(key, draft(), saved()!.revision)
-            : await props.settings.reset(key, saved()!.revision);
-      setSaved(next);
-      setDraft(next.value ?? '');
+            ? await props.settings.put(key, draft())
+            : await props.settings.reset(key);
+      if (!next.ok) {
+        setError(next.error.message);
+        return;
+      }
+      const value = next.value as string | null;
+      setSaved({ value, unset: next.unset });
+      setDraft(value ?? '');
       setEdited(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -40,7 +44,7 @@ function TextField(props: { field: TextSetting; settings: SettingsClient }) {
         <input
           type="text"
           value={draft()}
-          placeholder={saved()?.value === undefined ? 'Unset' : undefined}
+          placeholder={saved()?.unset ? 'Unset' : undefined}
           disabled={!saved() || busy()}
           onInput={(e) => {
             setEdited(true);
@@ -55,7 +59,7 @@ function TextField(props: { field: TextSetting; settings: SettingsClient }) {
       >
         Save
       </button>
-      <button class="btn" disabled={busy() || saved()?.value === undefined} onClick={() => void update('reset')}>
+      <button class="btn" disabled={busy() || !saved() || saved()!.unset} onClick={() => void update('reset')}>
         Reset
       </button>
       <Show when={error()}>
@@ -74,15 +78,15 @@ export default function ModulePageView(props: { page: ModulePage; current: () =>
     mounted = false;
   });
   const client = props.page.open(() => mounted && props.current());
+  const fields = () =>
+    props.page.descriptor.schema.settings.filter((setting): setting is TextSetting => setting.kind === 'text');
   return (
     <main class="module-page">
       <h2>{props.page.descriptor.name}</h2>
-      <Show when={props.page.descriptor.settings.length > 0 && client.settings}>
+      <Show when={fields().length > 0 && client.settings}>
         {(settings) => (
           <section class="module-settings" aria-label="Settings">
-            <For each={props.page.descriptor.settings}>
-              {(field) => <TextField field={field} settings={settings()} />}
-            </For>
+            <For each={fields()}>{(field) => <TextField field={field} settings={settings()} />}</For>
           </section>
         )}
       </Show>

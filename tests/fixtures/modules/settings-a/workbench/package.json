@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@digi/module-ui": "workspace:*",
     "@digi/workbench-core": "workspace:*",
     "solid-js": "1.9.15"
   }

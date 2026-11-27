@@ -26,7 +26,7 @@ import { portLine, unusedServices, unusedServicesText } from '../../src/transfer
 import { activateSystemPackage } from '../../src/runtime/activate-system-package';
 import { noteActivity } from '../../src/transfer/activity';
 import ModuleFilesArea from './ModuleFilesArea';
-import type { ModuleFileClient } from '../../src/module-ui/module-files';
+import type { ModuleFileClient } from '@digi/module-ui';
 import { useTransferApp } from '../../src/transfer/app-context';
 import { createPaneSelect } from '../../src/transfer/pane-select';
 import SplitPane from './SplitPane';

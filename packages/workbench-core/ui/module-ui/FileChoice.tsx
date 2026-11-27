@@ -1,21 +1,26 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal } from 'solid-js';
-import type { PublicField } from '@digi/dk-session';
-import type { SettingsClient } from '../../src/module-ui/module-page';
+import type { DynamicSettings, FileNameSetting } from '@digi/module-ui';
 import { moduleFilePath } from '../../src/modules/dktransfer';
 import { errorLine } from '../../src/modules/backend';
 import type { PageCtx } from '../transfer/TransferParts';
 
+type Saved = { value: string | null; revision: number };
+
 export default function FileChoice(props: {
   ctx: PageCtx;
   id: string;
-  field: Extract<PublicField, { kind: 'file-name' }>;
-  settings: SettingsClient;
+  field: FileNameSetting;
+  settings: DynamicSettings;
   files: () => { name: string; size: number }[];
   refresh: () => unknown;
 }) {
   const [saved, { mutate, refetch }] = createResource(
     () => [props.field.id, props.refresh()] as const,
-    ([key]) => props.settings.get(key),
+    async ([key]) => {
+      const read = await props.settings.get(key);
+      if (!read.ok) throw new Error(read.error.message);
+      return read as Saved;
+    },
   );
   const [choice, setChoice] = createSignal('');
   const [notice, setNotice] = createSignal('');
@@ -52,14 +57,14 @@ export default function FileChoice(props: {
   const dirty = () => choice() !== (snapshot()?.value ?? '');
   const save = () =>
     props.ctx.run('Saving', async () => {
-      const old = snapshot();
-      if (!old) return;
+      if (!snapshot()) return;
       setNotice('');
       const selected = choice();
       const next = selected
-        ? await props.settings.put(props.field.id, selected, old.revision)
-        : await props.settings.reset(props.field.id, old.revision);
-      mutate(next);
+        ? await props.settings.put(props.field.id, selected)
+        : await props.settings.reset(props.field.id);
+      if (!next.ok) throw new Error(next.error.message);
+      mutate(next as Saved);
       setNotice(props.field.apply === 'next-restart' ? 'Saved. Applies on next restart.' : 'Saved.');
     });
 

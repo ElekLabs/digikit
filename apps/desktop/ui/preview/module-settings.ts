@@ -1,6 +1,12 @@
 import { parse } from 'smol-toml';
-import type { DkModule, ModuleSettingsEndpoint, PublicField, PublicModuleSettings } from '@digi/dk-session';
-import { createMemorySettings } from '@digi/workbench-core/module-ui/memory-client.ts';
+import type { DkModule, ModuleSettingsEndpoint, RawSettingValue } from '@digi/dk-session';
+import {
+  encodeDescriptor,
+  MemorySettingsStore,
+  type DescribedSchema,
+  type SettingError,
+  type SettingsSchema,
+} from '@digi/module-ui';
 import { moduleFilePath } from '@digi/workbench-core/modules/dktransfer.ts';
 
 const manifests = import.meta.glob<string>('../../../../modules/*/*/*/module.toml', {
@@ -8,46 +14,38 @@ const manifests = import.meta.glob<string>('../../../../modules/*/*/*/module.tom
   import: 'default',
   query: '?raw',
 });
-const declarations = import.meta.glob<string>('../../../../modules/*/*/*/workbench.toml', {
+// The settings each module declares in workbench.toml, as patchkit generated them.
+const generated = import.meta.glob<{ schema: SettingsSchema }>('../../../../modules/*/*/*/workbench/gen/settings.ts', {
   eager: true,
-  import: 'default',
-  query: '?raw',
 });
 
 export function previewSettingsSchemas() {
-  const schemas = new Map<string, PublicModuleSettings>();
-  for (const [path, text] of Object.entries(declarations)) {
-    const manifest = manifests[path.replace(/workbench\.toml$/, 'module.toml')];
+  const schemas = new Map<string, DescribedSchema>();
+  for (const [path, { schema }] of Object.entries(generated)) {
+    const manifest = manifests[path.replace(/workbench\/gen\/settings\.ts$/, 'module.toml')];
     if (!manifest) continue;
     const { module } = parse(manifest) as { module: { id: string; name: string } };
-    const { setting } = parse(text) as {
-      setting?: Array<{
-        id: string;
-        label: string;
-        type: PublicField['kind'];
-        extension?: string;
-        reset_label?: string;
-        apply?: PublicField['apply'];
-        max_bytes: number;
-      }>;
-    };
-    const settings = (setting ?? []).map(
-      ({ id, label, apply = 'immediate', max_bytes: maxBytes, type, extension, reset_label }): PublicField =>
-        type === 'file-name'
-          ? { id, label, apply, maxBytes, kind: type, extension: extension!, resetLabel: reset_label ?? 'None' }
-          : { id, label, apply, maxBytes, kind: 'text' },
-    );
-    schemas.set(module.id, { name: module.name, settings });
+    schemas.set(module.id, { ...schema, name: module.name });
   }
   return schemas;
 }
 
+function raw(result: ReturnType<MemorySettingsStore['read']>): RawSettingValue {
+  if (!result.ok) throw refusal(result.error);
+  return { value: result.value, revision: result.revision };
+}
+
+function refusal(error: SettingError) {
+  const status = { conflict: 'E_MODULE_UI_CONFLICT', 'overlay-scope': 'E_MODULE_UI_SCOPE' } as Record<string, string>;
+  return Object.assign(new Error(error.message), { kind: 'device', status: status[error.code] });
+}
+
 export function createPreviewSettings(
-  schemas: Map<string, PublicModuleSettings>,
+  schemas: Map<string, DescribedSchema>,
   store: () => Promise<{
     files: Map<string, Uint8Array>;
     boot: { modules: DkModule[] };
-    settings: Map<string, ReturnType<typeof createMemorySettings>>;
+    settings: Map<string, MemorySettingsStore>;
   }>,
   slot: number,
   instance: number,
@@ -60,38 +58,38 @@ export function createPreviewSettings(
     if (!current() || !loaded || !schema) throw new Error('The module page has closed.');
     let values = card.settings.get(loaded.name);
     if (!values) {
-      values = createMemorySettings();
+      values = new MemorySettingsStore(schema);
       card.settings.set(loaded.name, values);
     }
     return { card, schema, values, id: loaded.name };
   }
-  const field = (schema: PublicModuleSettings, index: number) => {
+  const field = (schema: DescribedSchema, index: number) => {
     const match = schema.settings[index];
     if (!match) throw new Error('Unknown public setting.');
     return match;
   };
   return {
     async describe() {
-      return (await binding()).schema;
+      const { schema } = await binding();
+      return encodeDescriptor(schema.name, schema);
     },
     async get(index) {
       const { schema, values } = await binding();
-      return values.get(field(schema, index).id);
+      return raw(values.read(field(schema, index).id));
     },
     async put(index, value, revision) {
       const { card, schema, values, id } = await binding();
       const setting = field(schema, index);
-      if (new TextEncoder().encode(value).length > setting.maxBytes) throw new Error('Setting value is too long.');
-      if (
-        setting.kind === 'file-name' &&
-        (!value.toLowerCase().endsWith(`.${setting.extension}`) || !card.files.get(moduleFilePath(id, value))?.length)
-      )
-        throw new Error('The selected file is missing.');
-      return values.change(setting.id, value, revision);
+      if (setting.kind === 'file-name') {
+        const name = new TextDecoder().decode(value);
+        if (!name.toLowerCase().endsWith(`.${setting.extension}`) || !card.files.get(moduleFilePath(id, name))?.length)
+          throw new Error('The selected file is missing.');
+      }
+      return raw(values.change(setting.id, value, revision));
     },
     async reset(index, revision) {
       const { schema, values } = await binding();
-      return values.change(field(schema, index).id, undefined, revision);
+      return raw(values.change(field(schema, index).id, undefined, revision));
     },
   };
 }

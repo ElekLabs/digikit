@@ -1,8 +1,9 @@
-import type { ModuleSettingsEndpoint, PublicField, PublicModuleSettings } from '@digi/dk-session';
+import type { ModuleSettingsEndpoint } from '@digi/dk-session';
+import type { DescribedSchema, DynamicSettings, FileNameSetting, ModuleFileClient } from '@digi/module-ui';
 import { For, Show, createSignal } from 'solid-js';
-import { bindModuleFiles, type ModuleFileClient } from '@digi/workbench-core/module-ui/module-files.ts';
-import { publicSettingsClient } from '@digi/workbench-core/module-ui/public-settings.ts';
-import type { ModulePage, SettingsClient } from '@digi/workbench-core/module-ui/module-page.ts';
+import { deviceSettings } from '@digi/workbench-core/module-ui/device-settings.ts';
+import { bindModuleFiles } from '@digi/workbench-core/module-ui/module-files.ts';
+import type { ModulePage } from '@digi/workbench-core/module-ui/module-page.ts';
 import { errorLine } from '@digi/workbench-core/modules/backend.ts';
 import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
 import type { ModuleFilesSpec } from '@digi/workbench-core/transfer/env.ts';
@@ -18,8 +19,8 @@ function FilePanel(props: {
   app: TransferApp;
   files: ModuleFileClient;
   current: () => boolean;
-  settings?: SettingsClient;
-  choices: Extract<PublicField, { kind: 'file-name' }>[];
+  settings?: DynamicSettings;
+  choices: FileNameSetting[];
 }) {
   const [busy, setBusy] = createSignal('');
   const [error, setError] = createSignal('');
@@ -84,10 +85,10 @@ function FilePanel(props: {
 export function moduleFilePage(
   app: TransferApp,
   id: string,
-  schema?: PublicModuleSettings,
+  schema?: DescribedSchema,
   openSettings?: (current: () => boolean) => ModuleSettingsEndpoint,
 ): ModulePage {
-  const choices = (schema?.settings ?? []).filter((field) => field.kind === 'file-name');
+  const choices = (schema?.settings ?? []).filter((field): field is FileNameSetting => field.kind === 'file-name');
   const spec = Object.hasOwn(MODULE_FILES, id)
     ? MODULE_FILES[id]
     : choices.length
@@ -102,12 +103,11 @@ export function moduleFilePage(
     descriptor: {
       id,
       name: schema?.name ?? spec?.name ?? id,
-      settings: (schema?.settings ?? []).filter((field) => field.kind === 'text'),
-      operations: [],
+      schema: schema ?? { version: 1, settings: [] },
     },
     open(current) {
       const binding = app.target.bindSession();
-      const settings = schema && openSettings ? publicSettingsClient(schema, openSettings(current)) : undefined;
+      const settings = schema && openSettings ? deviceSettings(schema, openSettings(current)) : undefined;
       const files = bindModuleFiles(id, binding, current);
       return {
         settings,
