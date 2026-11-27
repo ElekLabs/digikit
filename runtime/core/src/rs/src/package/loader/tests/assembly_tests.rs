@@ -30,6 +30,7 @@ use std::vec::Vec;
 
 mod lfo_closure_reload;
 mod lifecycle_events;
+mod payloads;
 mod settings_page;
 mod workbench;
 
@@ -559,6 +560,13 @@ impl Images for Card {
             let row = if self.wrong_name { other_name_ping_row() } else if self.newer_parts { newer_ping_row() } else { dkrt_fixture_local_ping::dk_svc_row() };
             return crate::package::collect::dk_provider_declare_row(ctx, row, instance);
         }
+        if stem == "local-payload" {
+            // the payload fixture, as local-ping: its own row (with the payloads part) over an instance that `dk_svc_start` makes
+            dkrt_fixture_local_payload::dk_svc_stop();
+            let instance = dkrt_fixture_local_payload::dk_svc_start().expect("the instance of local-payload starts");
+            self.provider_recs.push(rec);
+            return crate::package::collect::dk_provider_declare_row(ctx, dkrt_fixture_local_payload::dk_svc_row(), instance);
+        }
         let name: &'static str = Box::leak(stem.into_boxed_str());
         let kinds: &'static [(u32, u32)] = Box::leak(kinds.into_boxed_slice());
         if self.real_rows && name == "fx" {
@@ -586,6 +594,7 @@ impl Images for Card {
         if let Some(at) = self.provider_recs.iter().position(|r| *r == rec) {
             self.provider_recs.remove(at);
             dkrt_fixture_local_ping::dk_svc_stop();
+            dkrt_fixture_local_payload::dk_svc_stop();
             crate::package::handlers::dks_decls::fx_stop();
             crate::package::handlers::dks_decls::machines_stop();
         }
@@ -612,6 +621,7 @@ pub(super) fn clean() -> Clean {
         CALLED_NEED = [0; NEEDS_LEN];
         // a case that ended early left the instance of the provider fixture started
         dkrt_fixture_local_ping::dk_svc_stop();
+        dkrt_fixture_local_payload::dk_svc_stop();
         crate::package::handlers::dks_decls::fx_stop();
         crate::package::handlers::dks_decls::machines_stop();
         // the link script is a static: a test with no DSP part never calls `script_link`, and would see the strict tick drop of the initial value or the state of
@@ -652,6 +662,9 @@ pub(super) const LOCAL_PATCH_USER: Fixture = Fixture { leaf: "local-patch-user",
 pub(super) const SVC_TEST: Fixture = Fixture { leaf: "svc-test", nx: "test/svc-test" };
 pub(super) const LOCAL_PING: Fixture = Fixture { leaf: "local-ping", nx: "test/local-ping" };
 pub(super) const LOCAL_PING_USER: Fixture = Fixture { leaf: "local-ping-user", nx: "test/local-ping-user" };
+/// The service that takes payloads (the payloads part) and the module that carries two for it.
+pub(super) const LOCAL_PAYLOAD: Fixture = Fixture { leaf: "local-payload", nx: "test/local-payload" };
+pub(super) const LOCAL_PAYLOAD_USER: Fixture = Fixture { leaf: "local-payload-user", nx: "test/local-payload-user" };
 pub(super) const LOCAL_PING_USER_B: Fixture = Fixture { leaf: "local-ping-user-b", nx: "test/local-ping-user-b" };
 /// A module that binds a key combination with `dk_shortcut_add`: a user of the shortcuts service file, no DSP section.
 pub(super) const SHORTCUT_DEMO: Fixture = Fixture { leaf: "shortcut-demo", nx: "test/shortcut-demo" };

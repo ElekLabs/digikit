@@ -54,7 +54,7 @@ file; the loaded image starts at a 16-byte aligned file offset.
 The four entry points are the fields of the constant `dk_module` of the module (`dk_module_def`, `sdk/include/dk/core/module.h`); the packer finds the symbol, follows the relocation of each field to a function of the image and writes the offsets above. The runtime calls `init(ctx)`, `fini(ctx)`, `tick(ctx)` and `menu(ctx, menu)` with a `dk_module_ctx *` (docs/plans/sdk.md section 5). Until 0.5 the header had a slot table at 0x88 and a header size of 0xa0, 0xa4 or 0xa8; runtime 0.6.0 reads only the layout above.
 
 After the header, in this order, each table where its offset says: imports, relocations, the header table,
-the DSP section (16-byte aligned), padding to 16, then the image. 
+the DSP section (16-byte aligned), padding to 16, then the image, then the payload bodies (each at a multiple of 4).
 
 - **Imports**: `import_count` entries of 32 bytes, a NUL-padded name. Every undefined symbol of the object that a relocation
   names. The names the runtime provides: the `dk_*` imports of `sdk/sdk.toml` (`<dk/gen/imports.h>`), and `memcpy`, `memset`, `memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3` for the compiler. A name the runtime does not have makes the load fail with `E_IMPORT` before anything is written.
@@ -68,6 +68,11 @@ the DSP section (16-byte aligned), padding to 16, then the image.
   In a service's `EXPORTS` entry, bit 31 of the image offset marks an owner-bound export. Bit 30 together with bit 31 identifies the reserved `dk_service_query_v1` entry. The latter stays outside card import resolution, and the packer records runtime 0.11.2 as a hard minimum. Legacy bound exports have bit 30 clear.
 - **Image**: the linked bytes at base 0; every word named by a relocation holds `S + A` (symbol offset plus addend) for kind 0 and
   `A` for kind 1.
+- **Payloads** (the header table's `PAYLOADS` entry, tag 16, table version 2 or 3; 16 bytes an item: `u32` service name hash, `u16` local kind, `u16` 0, `u32` offset, `u32` bytes; at most 8): bodies the file carries for a service, which
+  installs them for the module (the provider part `Payloads`, `runtime/core/abi/src/provider/parts.rs`: `check` before anything is placed and in a reload's check, `install` in the attach walk, `retire` in the detach walk;
+  an `install` that answers `Pending` is called again on later UI passes by `PackageManager::step`, with no body: the body is the staged file's bytes, so the service copies it during the first call). A module.toml names one with
+  `[[object]] path = "<hex file>" payload = "<service>.<kind>"` (no `place`); the packer lays the bodies behind the image and makes the service a hard need. The loader checks that each body is inside the file, that the owner is a
+  hard need, and at the place step that the owner is loaded, adopts the part and takes the body (`E_MISSING` for the last two without the part); it never reads a body and keeps no table of kinds.
 
 The module defines the constant `dk_module` (`const dk_module_def dk_module = {.init = ..., .fini = ..., .tick = ..., .menu = ...}`), every field optional; an object without it, or one that still exports `dkm_init`, `dkm_fini`, `dkm_menu` or `dkm_slot_<n>`, is refused by the packer. `init` runs once after the copy, relocation and cache flush; if it returns
 non-zero the load is undone (`E_INIT`; `E_IMPORT` when it returns `DK_E_MISSING` because a provider module the module needs is not in the image). `tick` runs once per pass of the UI task after `init` succeeded.

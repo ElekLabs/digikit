@@ -17,11 +17,12 @@ use dkrt_sdk::OK;
 /// - `activate` (`Loader::package_activate`) runs after the entries are installed: a service publishes its exports and resident query entry, and the package is live
 ///   (tick, listing client, intro). `deactivate` undoes it before the entries are restored.
 /// - `attach` applies the records of the consumer module, once, over the rows of the services it needs (`Loader::package_attach`): every row's `attach` in the order of the table,
-///   then each record in file order to the row that owns its kind (`Records::apply`), so rows the services share are numbered in the order of the file. The
-///   module's `start` only keeps its section. A module's needs cover the services that own its record kinds (patchkit packs a hard need for each loaded owner of a kind of its
+///   then each record in file order to the row that owns its kind (`Records::apply`), so rows the services share are numbered in the order of the file; then the payloads of its
+///   header table go to the services that own them (`Loader::package_attach_walk`), and the answer is `Pending` while a service takes one over more than one UI pass (the
+///   manager calls `attach` again, `PackageManager::step`). The module's `start` only keeps its section. A module's needs cover the services that own its record kinds (patchkit packs a hard need for each loaded owner of a kind of its
 ///   `KEYS`). The services' `module_commit` (the records' check, measure and write) still runs for every row in `start`.
 /// - `start_dsp` hands the DSP part of an active package to the DSP loader (`Loader::package_start_dsp`); it comes over the UI passes (`Rt::dsp_step`).
-/// - `detach` is `Provider::detach` of the same rows for the consumer's owner id, the last row first: the services free what they hold for it. The consumer's `stop` repeats it for
+/// - `detach` first has the owners of the consumer's payloads give them back (`Payloads::retire`, `Pending` while one is not done), then is `Provider::detach` of the same rows for the consumer's owner id, the last row first: the services free what they hold for it. The consumer's `stop` repeats it for
 ///   every row; it is idempotent.
 /// - `can_stop` of a module asks every row `Provider::can_stop` (a routed effect refuses): the manager asks every package it would take down. `can_stop` names no
 ///   consumer. `can_stop` of a service asks its own row only.
@@ -78,16 +79,15 @@ impl<P: PackagePlatform, M: Images, R: Registry> ProviderHost for RtHost<P, M, R
     fn attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<Step, Status> {
         unsafe {
             let (s, l) = self.0.get();
-            let r = l.package_attach(consumer, services).map(|()| Step::Done);
+            let r = l.package_attach_walk(consumer, services, &s.flight, &mut s.payloads);
             s.track(consumer, r)
         }
     }
 
     fn detach(&mut self, consumer: PackageId, services: &[PackageId]) -> Step {
         unsafe {
-            let (_, l) = self.0.get();
-            l.package_detach(consumer, services);
-            Step::Done
+            let (s, l) = self.0.get();
+            l.package_detach_walk(consumer, services, &mut s.payloads)
         }
     }
 

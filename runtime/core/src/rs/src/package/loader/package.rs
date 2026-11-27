@@ -24,6 +24,14 @@ pub(crate) struct Flight {
 }
 
 impl Flight {
+    /// The `bytes` bytes at `offset` of the staged file of the package just brought up: `None` outside the file or before a place. Valid until the next `stage`.
+    pub(crate) unsafe fn staged_bytes(&self, offset: u32, bytes: u32) -> Option<&[u8]> {
+        if self.c.f.is_null() || !in_file(offset, bytes, self.c.size) {
+            return None;
+        }
+        Some(core::slice::from_raw_parts(self.c.f.add(offset as usize), bytes as usize))
+    }
+
     /// Where the image of the package went and how many bytes it holds with its bss (device address and size; both 0 before a place): the detail of the place end event.
     pub(crate) fn placed_span(&self) -> (u32, u32) {
         (self.placed.place.base, self.placed.place.image_size + self.placed.place.bss)
