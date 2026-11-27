@@ -492,6 +492,9 @@ importers:
       '@digi/dk-session':
         specifier: workspace:*
         version: link:../../packages/dk-session
+      '@digi/module-ui':
+        specifier: workspace:*
+        version: link:../../packages/module-ui
       '@digi/sharc-rig-kit':
         specifier: workspace:*
         version: link:../../packages/sharc-rig-kit
