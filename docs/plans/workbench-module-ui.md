@@ -21,8 +21,8 @@ firmware           module -> service -> runtime
 ```
 
 - `@digi/module-ui` is the TypeScript contract of a module page, as the C SDK is the contract of module code. A page cannot reach Tauri, dk-session or workbench-core internals. oxlint enforces the import rule.
-- `ModuleChannel` is the boundary: the only interface that crosses to a sandboxed page. Every request is async and takes and returns structured-clone data; progress and other notifications are `ModuleChannelEvent` messages through `subscribe`. The same page then runs compiled into the app or inside a sandboxed iframe (section "Distribution"). The real channel is workbench-core over dk-session; the memory channel serves preview and tests.
-- `ModuleClient` (`createModuleClient(channel)`) is a page-side helper: typed settings (validation, scaling, revisions) and the files helper with its `progress` callback. It never crosses the boundary.
+- `ModuleChannel` is the boundary: the only interface that crosses to a sandboxed page. Every request is async and takes and returns structured-clone data; `callQuery(method, request)` carries one encoded query and returns a `QueryResult` (reply bytes or a `QueryError`: `busy`, `refused` with the handler's code, `unavailable`, `too-big`, `format`, `unknown-method`, `timeout`); progress and other notifications are `ModuleChannelEvent` messages through `subscribe`. The same page then runs compiled into the app or inside a sandboxed iframe (section "Distribution"). The real channel is workbench-core over dk-session; the memory channel serves preview and tests.
+- `ModuleClient` (`createModuleClient(channel)`) is a page-side helper: typed settings (validation, scaling, revisions), the files helper with its `progress` callback and `service(desc)`, one async function per method of a protobuf-es service over `callQuery`. It never crosses the boundary.
 - A page reaches device data only through its module: settings, the module's own files and the module's operations. A service's files and formats stay private to the service; the module asks the service through its SDK exports.
 
 ## Discovery
@@ -179,7 +179,7 @@ A loaded module can answer typed, read-only queries from its page: live state, l
 `tests/fixtures/modules/settings-a/` stays the authoring example. Phase 1 adds one setting of each new type to it, or a second fixture if a distinct module identity is needed for a version 2 descriptor.
 
 - The preview seeds the sample as installed and loaded on the default simulated card, routes its instance to the memory client and uses the real sidebar discovery, generated form and page. One settings store per simulated target, kept for the target's life (device settings persist across module reloads); a fresh client and channel on each page open; channels are released on unload, disconnect or target change. The preview never inserts a menu item by hand.
-- `createMemoryModuleChannel(schema, options)` lives in `@digi/module-ui`: a `ModuleChannel` with values, a revision and files (module-owned query handlers come in phase 2), with no Tauri, MIDI, filesystem or firmware dependency. It shares the pure validation code with the real client.
+- `createMemoryModuleChannel(schema, options)` lives in `@digi/module-ui`: a `ModuleChannel` with values, a revision and files and one query service (`memoryQueryService(desc, handlers)`; a handler throws `QueryRefusal(code)` to refuse; `inspect.failNextQuery` forces `busy` or `timeout`), with no Tauri, MIDI, filesystem or firmware dependency. It shares the pure validation code with the real client.
 
 | Test owner | Observable behaviour |
 | --- | --- |
