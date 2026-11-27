@@ -101,7 +101,7 @@
         "runtime/core/src/rs/src/{boot_env,stage1,safe_mode,tick}/**",
         "runtime/core/src/rs/src/package/{boot_idx,boot_steps}.rs",
         "runtime/core/lifecycle/**",
-        "runtime/core/src/cf/{dn2,dt2,st}/device.s",
+        "runtime/core/src/cf/*/device.s",
         "runtime/core/src/cf/tramp.s"
       ],
       "tests": [
@@ -116,7 +116,7 @@
         "runtime/core/src/rs/src/{store_cmds,settings,sdk_files}.rs",
         "runtime/core/src/rs/src/resident/{card,store,store_writer,sdk_files,settings}.rs",
         "runtime/core/src/rs/src/package/resident/{card,store,store_writer,sdk_files,settings}.rs",
-        "runtime/core/src/cf/{dn2,dt2}/storage.s"
+        "runtime/core/src/cf/*/storage.s"
       ],
       "tests": [
         "core/runtime-storage-tests:*",

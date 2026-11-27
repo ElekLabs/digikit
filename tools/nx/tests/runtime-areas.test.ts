@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { DEVICES } from '../device-owners.mjs';
 import { areaSelection, checkComplete, classify, loadAreas } from '../runtime-areas.mjs';
 
 const areas = loadAreas();
@@ -20,7 +21,7 @@ const projects = (() => {
   return [...files].map(([name, fs]) => ({
     name,
     root: name,
-    targets: [...fs].map((f) => `test-device--${f.replace(/\.device\.test\.ts$/, '')}--dt2`),
+    targets: [...fs].map((f) => `test-device--${f.replace(/\.device\.test\.ts$/, '')}--${DEVICES[0]}`),
     metadata: { runtimeAcceptance: [{ files: [...fs] }] },
   }));
 })();
