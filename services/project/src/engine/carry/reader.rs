@@ -38,6 +38,12 @@ impl<'a> CarryIn<'a> {
         }
     }
 
+    /// A deadline written by `CarryOut::deadline`, rebased on `now`; `None` for a time left of more than `DEADLINE_MAX_MS`.
+    pub(in crate::engine) fn deadline(&mut self, now: u32) -> Option<u32> {
+        let left = self.u32()?;
+        (left <= super::DEADLINE_MAX_MS).then(|| now.wrapping_add(left))
+    }
+
     pub(in crate::engine) fn flag(&mut self) -> Option<bool> {
         match self.u8()? {
             0 => Some(false),

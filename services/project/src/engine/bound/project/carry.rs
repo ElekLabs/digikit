@@ -7,7 +7,7 @@ impl BoundProject {
     /// The most bytes `export` writes.
     pub(in crate::engine) const EXPORT_MAX: usize = dkp::AREA + 160;
 
-    pub(in crate::engine) fn export(&self, out: &mut CarryOut) {
+    pub(in crate::engine) fn export(&self, now: u32, out: &mut CarryOut) {
         let (tag, slot, retry_at) = match self.binding {
             Binding::None => (0, 0, 0),
             Binding::Bound(slot) => (1, slot, 0),
@@ -15,7 +15,7 @@ impl BoundProject {
         };
         out.u8(tag);
         out.u32(slot);
-        out.u32(retry_at);
+        out.deadline(now, if tag == 2 { retry_at } else { now });
         out.opt_u32(self.live_stamp);
         out.u8(self.file.is_some() as u8);
         let file = self.file.unwrap_or(SourceFile {
@@ -50,10 +50,19 @@ impl BoundProject {
     }
 
     /// Take the fields written by `export`; `None` when the bytes are not a state of this layout (a field may be half taken then: the caller starts unbound).
-    pub(in crate::engine) fn import(&mut self, from: &mut CarryIn) -> Option<()> {
+    /// Every field is checked with the rules of a file (`dkp::head_ok`, `dkp::image_ok`, the store path and the device); `now` rebases the carried deadline.
+    pub(in crate::engine) fn import(
+        &mut self,
+        now: u32,
+        device: u16,
+        from: &mut CarryIn,
+    ) -> Option<()> {
         let tag = from.u8()?;
         let slot = from.u32()?;
-        let retry_at = from.u32()?;
+        let retry_at = from.deadline(now)?;
+        if slot > 127 && tag != 0 {
+            return None;
+        }
         self.binding = match tag {
             0 => Binding::None,
             1 => Binding::Bound(slot),
@@ -73,13 +82,17 @@ impl BoundProject {
         };
         let n = from.u8()? as usize;
         let b: [u8; PATH_MAX] = from.bytes(PATH_MAX)?.try_into().ok()?;
-        if n > PATH_MAX {
-            return None;
-        }
-        self.file = has_file.then_some(SourceFile {
-            head,
-            path: Path { b, n },
-        });
+        self.file = if has_file {
+            if head.device != device || !dkp::head_ok(&head) {
+                return None;
+            }
+            Some(SourceFile {
+                head,
+                path: Path::from_store_bytes(b.get(..n)?)?,
+            })
+        } else {
+            None
+        };
         self.dirty = from.flag()?;
         self.generation = from.u32()?;
         self.ignored = from.flag()?;
@@ -91,7 +104,8 @@ impl BoundProject {
         };
         self.epoch = from.u32()?;
         self.live.0.copy_from_slice(from.bytes(dkp::AREA)?);
-        Some(())
+        let empty = self.live.0.iter().all(|&b| b == 0);
+        (empty || dkp::image_ok(&self.live.0)).then_some(())
     }
 
     /// No project is current and the start is named: module writes go to the settings record until the setter names a project. The image is empty.

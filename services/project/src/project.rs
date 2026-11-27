@@ -126,13 +126,14 @@ impl<C: CoreApi, H: Host> State<C> for Project<H> {
     }
 
     fn export(&mut self, _: &C, out: &mut [u8]) -> usize {
-        self.engine.export_state(self.host.hook_record(), out)
+        self.engine
+            .export_state(self.host.now_ms(), self.host.hook_record(), out)
     }
 
     /// Takes the carried bytes; `None` (or bytes of another layout that the runtime let through) starts named and unbound: module writes go to the settings record only.
     fn import(&mut self, _: &C, from: Option<&[u8]>) -> Result<(), Status> {
-        self.engine
-            .import_state(&self.host, self.host.hook_record(), from);
+        let hooks = self.host.hook_record();
+        self.engine.import_state(&mut self.host, hooks, from);
         Ok(())
     }
 }

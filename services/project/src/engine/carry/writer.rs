@@ -42,6 +42,12 @@ impl<'a> CarryOut<'a> {
         self.u32(v.unwrap_or(0));
     }
 
+    /// A deadline of a clock that restarts in the new copy: the ms left from `now` (0 when due, at most `DEADLINE_MAX_MS`), see `CarryIn::deadline`.
+    pub(in crate::engine) fn deadline(&mut self, now: u32, at: u32) {
+        let left = at.wrapping_sub(now) as i32;
+        self.u32(left.clamp(0, super::DEADLINE_MAX_MS as i32) as u32);
+    }
+
     /// The bytes written; 0 when some write did not fit (the importer then starts fresh).
     pub(in crate::engine) fn finish(self) -> usize {
         if self.fits {

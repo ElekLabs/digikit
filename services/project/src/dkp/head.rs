@@ -31,6 +31,8 @@ pub enum Ignore {
     SaveSkipped = 6,
     /// Not a file's reason: a stock save was dropped because the firmware's listing had no record of the slot within `REC_WAIT_MS`.
     SaveNoRecord = 7,
+    /// Not a file's reason: the state of the old copy did not survive a reload of the service file (the bytes did not parse or hold a value the file checks refuse), so the project is unbound.
+    CarryDropped = 8,
 }
 
 /// The header of `b` as it stands (no checks; `b` holds at least `HEADER` bytes).

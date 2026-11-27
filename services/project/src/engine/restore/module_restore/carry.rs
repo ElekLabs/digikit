@@ -7,7 +7,7 @@ impl ModuleRestore {
     pub(in crate::engine) const EXPORT_MAX: usize =
         ModuleSet::EXPORT_MAX + 1 + 1 + 4 + 1 + MODULE_PATH_MAX + 1 + 4 + 4;
 
-    pub(in crate::engine) fn export(&self, out: &mut CarryOut) {
+    pub(in crate::engine) fn export(&self, now: u32, out: &mut CarryOut) {
         self.pending.export(out);
         out.u8(self.at as u8);
         match self.step {
@@ -16,10 +16,13 @@ impl ModuleRestore {
             Step::Running => out.u8(2),
             Step::Waiting { .. } => out.u8(3),
         }
-        out.u32(match self.step {
-            Step::Waiting { until } => until,
-            _ => 0,
-        });
+        out.deadline(
+            now,
+            match self.step {
+                Step::Waiting { until } => until,
+                _ => now,
+            },
+        );
         out.u8(self.file.as_bytes().len() as u8);
         out.bytes(self.file.as_bytes());
         out.u8(self.card_tries);
@@ -27,11 +30,11 @@ impl ModuleRestore {
         out.u32(self.slot);
     }
 
-    pub(in crate::engine) fn import(&mut self, from: &mut CarryIn) -> Option<()> {
+    pub(in crate::engine) fn import(&mut self, now: u32, from: &mut CarryIn) -> Option<()> {
         let pending = ModuleSet::import(from)?;
         let at = from.u8()? as usize;
         let tag = from.u8()?;
-        let until = from.u32()?;
+        let until = from.deadline(now)?;
         let len = from.u8()? as usize;
         let file = ModulePath::new(from.bytes(len)?)?;
         let card_tries = from.u8()?;
