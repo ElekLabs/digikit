@@ -144,6 +144,7 @@ static u8 rep_n[REPQ];
 /* rep_head, rep_count and the slots are shared by the job (I/O task) and the MIDI task (the 'R' drain): every change is made with the interrupt mask on. */
 static volatile u32 rep_head, rep_count;
 
+#ifdef __m68k__
 static inline u32 sr_mask(void)
 {
     u32 old;
@@ -155,6 +156,18 @@ static inline void sr_restore(u32 old)
 {
     __asm__ volatile("move.w %0,%%sr" : : "d"(old) : "memory", "cc");
 }
+#else
+/* the host test (tests/uf-host.c) has one task: no interrupt mask */
+static inline u32 sr_mask(void)
+{
+    return 0;
+}
+
+static inline void sr_restore(u32 old)
+{
+    (void)old;
+}
+#endif
 
 /* the port is USB AUDIO/MIDI with only the bulk OUT endpoint: replies are not sent, the host takes them with `0x37 'R'` */
 static int out_only(void)
@@ -258,8 +271,9 @@ void uf_log(const char *tag, u32 value)
 
 static void copy(u8 *d, const u8 *s, u32 n)
 {
-    if (n >= 32 &&
-        (((u32)d | (u32)s) & 15u) == 0) { /* movem.l: bursts from the uncached receive buffers */
+#ifdef __m68k__
+    if (n >= 32 && (((uintptr_t)d | (uintptr_t)s) & 15u) ==
+                       0) { /* movem.l: bursts from the uncached receive buffers */
         for (u32 k = n >> 5; k; k--) {
             __asm__ volatile("movem.l (%1),%%d0-%%d3\n\t"
                              "movem.l 16(%1),%%d4-%%d7\n\t"
@@ -273,8 +287,9 @@ static void copy(u8 *d, const u8 *s, u32 n)
         }
         n &= 31u;
     }
-    if (n >= 16 && (((u32)d ^ (u32)s) & 3u) == 0) {
-        while ((u32)d & 3u) {
+#endif
+    if (n >= 16 && (((uintptr_t)d ^ (uintptr_t)s) & 3u) == 0) {
+        while ((uintptr_t)d & 3u) {
             *d++ = *s++;
             n--;
         }
@@ -315,7 +330,7 @@ static u8 *acc_try(u32 n)
         p = dk_fw_alloc(n);
         acc_fw = p != 0;
         if (p &&
-            ((u32)p & 15u) !=
+            ((uintptr_t)p & 15u) !=
                 0) { /* the firmware allocator promises no alignment: ask for room to round up */
             dk_fw_free(p);
             p = dk_fw_alloc(n + 16u);
@@ -381,7 +396,7 @@ static void acc_open(u32 size)
         }
     }
     if (acc_raw) {
-        acc_buf = (u8 *)(((u32)acc_raw + 15u) & ~15u);
+        acc_buf = (u8 *)(((uintptr_t)acc_raw + 15u) & ~(uintptr_t)15u);
         acc_cap = want;
         /* a file larger than half of the 1 MiB reservation: two halves of 512 KiB, so that the next frames are copied while the first half is written (the
          * 256 KiB tier keeps its one buffer: a 128 KiB write is slower per byte) */
@@ -1452,7 +1467,7 @@ static i32 init(dk_module_ctx *ctx)
         return rc;
     if (dk_sdhc_large_open(ctx, &sl) != DK_OK)
         sl = 0; /* no core/sdhc-large: the call stub returns 0 and the switch reads off */
-    frame = (u8 *)(((u32)frame_raw + 15u) & ~15u);
+    frame = (u8 *)(((uintptr_t)frame_raw + 15u) & ~(uintptr_t)15u);
     job_id = dk_io_post(step, finished, 0);
     if (job_id <= 0)
         return job_id ? job_id : -1;

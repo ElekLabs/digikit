@@ -497,6 +497,140 @@ fn a_loaded_effect_page_row_holds_its_codes_and_the_parameter_records_of_its_kno
     );
 }
 
+/// The id of a device with a DSP (the facts of the test device are the same for all).
+fn any_dsp_device() -> u32 {
+    ALL.iter()
+        .find(|p| p.dyn_types > 0)
+        .expect("a device with a DSP")
+        .id
+}
+
+/// `tests/fixtures/modules/dyn-fx-gain-bipolar/src/module.c`: one signed knob, BIAS from -64 to +63, with the default `def`.
+fn signed_knob(i: &mut Init, def: f32) {
+    const DK_BIPOLAR: u32 = 2;
+    unsafe {
+        let fx = build::add_fx(i.core, i.ctx(), 0, c(b"Test Gain Bipolar\0"), c(b"GBP\0"));
+        let p = build::fx_add_page(i.core, fx, c(b"Test Gain Bipolar\0"), c(b"GBP\0"));
+        build::page_add_fx_param(
+            i.core,
+            p,
+            c(b"Bias\0"),
+            c(b"BIAS\0"),
+            DK_BIPOLAR,
+            -64.0,
+            63.0,
+            def,
+        );
+    }
+}
+fn dyn_fx_gain_bipolar(i: &mut Init) {
+    signed_knob(i, 0.0);
+}
+fn signed_knob_at_the_bottom(i: &mut Init) {
+    signed_knob(i, -64.0);
+}
+fn signed_knob_at_the_top(i: &mut Init) {
+    signed_knob(i, 63.0);
+}
+
+/// A signed knob (display kind bipolar, -64 .. +63) lowers to the raw range 0 .. 0x7f00 of the kit's array with its default in the middle: the declared default 0 is raw
+/// 0x4000, the ends -64 and +63 are 0 and 0x7f00. The float range of the knob (minimum and span) is what the page hands the DSP as the float word. MIX starts at the
+/// declared wet default (127 * 256 = 0x7f00). Host successor of the raw `0x4000` default read by the `fx-bipolar` device test.
+#[test]
+fn a_signed_knob_lowers_to_the_range_0_to_7f00_with_its_default_in_the_middle() {
+    let _g = locked();
+    let f = fixture(any_dsp_device());
+    for (init, def_raw) in [
+        (dyn_fx_gain_bipolar as fn(&mut Init), 0x4000),
+        (signed_knob_at_the_bottom, 0),
+        (signed_knob_at_the_top, 0x7f00),
+    ] {
+        let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
+        let m = module(0, keys_a, init, 1);
+        assert_eq!(l.load(0, &m), dkrt_sdk::OK);
+        let rows = addr_of!(fxpage::DKRT_FXP_ROWS) as u32;
+        let first = 40; // the effect knob block of `image`
+        let code = |at: u32| unsafe { FwMem::rd(&l.core, rows + 8 + 4 * at) };
+        assert_eq!(
+            [code(0), code(8)],
+            [first, first + 7],
+            "BIAS at knob A, MIX at LEVEL"
+        );
+        let record = |code: u32| -> Vec<u32> {
+            let mirror = unsafe { FwMem::rd(&l.core, 0x10000 + 0x40 * code + 4) };
+            let reg = 0x20000 + 0x20 * code + 8;
+            let mut v = vec![mirror];
+            v.extend((1..4).map(|i| unsafe { FwMem::rd(&l.core, reg + 4 * i + 4) }));
+            v
+        };
+        assert_eq!(
+            record(first),
+            [0, 0, 0x7f00, def_raw],
+            "BIAS mirror, raw range, default"
+        );
+        assert_eq!(record(first + 7), [7, 0, 0x7f00, 0x7f00], "MIX starts wet");
+        // SAFETY: the owner's state is a static of this binary; the guard above serialises the tests
+        let st = unsafe { &*addr_of!(fxpage::DKRT_FXP) };
+        assert_eq!(st.min[0][0], (-64.0f32).to_bits(), "float minimum of BIAS");
+        assert_eq!(st.span[0][0], 127.0f32.to_bits(), "float span of BIAS");
+        assert_eq!(st.def[0][0], def_raw as i32);
+        l.unload(0);
+    }
+}
+
+/// The kit hooks seed a kit that holds no values of an effect from `DKRT_FXP_DEFS`, and match the stored effect ids with `DKRT_FXP_IDS`; both tables follow the chain order of
+/// the rows, so after a reorder (the module that loaded second is now first) the ids and the defaults of the rows are swapped together. Host successor of the `swap` restart
+/// of the `fx-kit-persist` device test.
+#[test]
+fn the_defaults_table_holds_the_defaults_of_each_row_in_chain_order_and_follows_a_reorder() {
+    let _g = locked();
+    let f = fixture(any_dsp_device());
+    let l = Lifecycle::<Provided<FxRecipe>>::new(&f);
+    let ids = || -> Vec<i32> {
+        let at = addr_of!(fxpage::DKRT_FXP_IDS) as u32;
+        (0..3).map(|i| unsafe { l.core.rd16(at + 2 * i) }).collect()
+    };
+    let defs = || -> Vec<i32> {
+        let at = addr_of!(fxpage::DKRT_FXP_DEFS) as u32;
+        (0..24)
+            .map(|i| unsafe { l.core.rd16(at + 2 * i) })
+            .collect()
+    };
+    // module A: GAIN 0.5 (0x3200), MIX default 127 (0x7f00); module B: GAIN 0.25 (0x1900), MIX 64 (0x4000); the other words hold no knob
+    let row = |gain, mix| [gain, 0, 0, 0, 0, 0, 0, mix];
+    let a = row(0x3200, 0x7f00);
+    let b = row(0x1900, 0x4000);
+    let table = |first: [i32; 8], second: [i32; 8]| {
+        let mut t = first.to_vec();
+        t.extend(second);
+        t.extend([0; 8]);
+        t
+    };
+    let near = |got: Vec<i32>, want: Vec<i32>| {
+        assert_eq!(got.len(), want.len());
+        for (i, (g, w)) in got.iter().zip(&want).enumerate() {
+            assert!((g - w).abs() <= 1, "word {i}: {g:#x} against {w:#x}");
+        }
+    };
+    assert_eq!(l.load(0, &f.a), dkrt_sdk::OK);
+    assert_eq!(l.load(1, &f.b), dkrt_sdk::OK);
+    assert_eq!(
+        ids(),
+        [ID_A as i32, ID_B as i32, 0],
+        "A then B, no third row"
+    );
+    near(defs(), table(a, b));
+    l.unload(1);
+    l.unload(0);
+    assert_eq!(ids(), [0, 0, 0]);
+    assert_eq!(l.load(0, &f.b), dkrt_sdk::OK);
+    assert_eq!(l.load(1, &f.a), dkrt_sdk::OK);
+    assert_eq!(ids(), [ID_B as i32, ID_A as i32, 0], "B then A");
+    near(defs(), table(b, a));
+    l.unload(1);
+    l.unload(0);
+}
+
 /// Three effects that may run on the send bus and default to it, one page each.
 fn send_effects(i: &mut Init) {
     unsafe {

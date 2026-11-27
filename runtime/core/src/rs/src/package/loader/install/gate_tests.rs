@@ -40,7 +40,7 @@ fn hook(ctx: u8) -> HookItem {
 }
 
 fn live<'a>(parks: &'a [Park]) -> Gate<'a> {
-    Gate { live: true, parks: Some(parks), op: 0 }
+    Gate { live: true, parks: Some(parks), op: Some(0) }
 }
 
 fn bytes(f: &FakePlatform) -> Vec<u8> {
@@ -115,7 +115,7 @@ fn the_boot_never_waits() {
     let p = parks();
     let mut ins = Installer::new();
     // no task has run at the boot: the words are 0 and the gate is not live
-    assert_eq!(install(&mut ins, &f, CTX_TASK, &Gate { live: false, parks: Some(&p), op: 0 }), Ok(()));
+    assert_eq!(install(&mut ins, &f, CTX_TASK, &Gate { live: false, parks: Some(&p), op: Some(0) }), Ok(()));
     assert_eq!(bytes(&f), JMP.to_vec());
     assert_eq!(unsafe { ins.restore_gated(&f, 1, &Gate::BOOT) }, Ok(()));
     assert_eq!(bytes(&f), STOCK.to_vec());
@@ -133,7 +133,7 @@ fn a_task_site_is_restored_only_while_the_tasks_are_parked() {
     install(&mut ins, &f, CTX_TASK, &live(&p)).unwrap();
     put(&f, OBJECT + 0x18, 0);
     f.calls.borrow_mut().clear();
-    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(E_BUSY));
+    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(Refusal::Busy { task: 1 }));
     assert_eq!((bytes(&f), ins.count(), f.depth.get()), (JMP.to_vec(), 1, 0), "the hook is still in and still owned");
     assert_eq!(*f.calls.borrow(), [Call::Mask, Call::Restore]);
     // the BgWorker parks: the retry takes the site down
@@ -159,7 +159,7 @@ fn a_patch_of_task_context_waits_too() {
 fn a_port_file_without_the_task_facts_refuses_a_task_site_at_run_time() {
     let f = fake();
     let mut ins = Installer::new();
-    let g = Gate { live: true, parks: None, op: 0 };
+    let g = Gate { live: true, parks: None, op: Some(0) };
     assert_eq!(install(&mut ins, &f, CTX_TASK, &g), Err(E_IMPORT));
     assert_eq!(bytes(&f), STOCK.to_vec());
     // a device with no such task has an empty list: nothing to wait for
@@ -203,15 +203,64 @@ fn a_busy_restore_names_the_task_it_found_unparked() {
     let f = fake();
     let mut ins = Installer::new();
     install(&mut ins, &f, CTX_TASK, &live(&p)).unwrap();
-    assert_eq!(ins.waited(), None);
     put(&f, OBJECT + 0x18, 0);
-    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(E_BUSY));
-    assert_eq!(ins.waited(), Some(1), "the second task, not task 0");
+    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(Refusal::Busy { task: 1 }), "the second task, not task 0");
     put(&f, QUEUE + 0xc, 0);
-    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(E_BUSY));
-    assert_eq!(ins.waited(), Some(0));
+    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(Refusal::Busy { task: 0 }));
     put(&f, QUEUE + 0xc, TCB_A);
     put(&f, OBJECT + 0x18, TCB_B);
     assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Ok(()));
-    assert_eq!(ins.waited(), None, "a finished restore keeps no task");
+}
+
+#[test]
+fn a_busy_restore_evaluates_the_gate_once() {
+    let p = parks();
+    let f = fake();
+    let mut ins = Installer::new();
+    install(&mut ins, &f, CTX_TASK, &live(&p)).unwrap();
+    put(&f, OBJECT + 0x18, 0);
+    f.code_reads.set(0);
+    assert_eq!(unsafe { ins.restore_gated(&f, 1, &live(&p)) }, Err(Refusal::Busy { task: 1 }));
+    // the console-like task reads two words, the BgWorker-like one two: one pass over both, no second look to name the task
+    assert_eq!(f.code_reads.get(), 4);
+}
+
+mod quiet {
+    use super::*;
+    use crate::dlog::{self, Ev};
+    use dkrt_lifecycle::Step;
+    use dkrt_sdk::logk;
+
+    static mut SEEN: Vec<Ev> = Vec::new();
+
+    unsafe extern "C" fn keep(e: *const Ev) {
+        if (*e).kind == logk::LIFECYCLE {
+            (*core::ptr::addr_of_mut!(SEEN)).push(*e);
+        }
+    }
+
+    /// The park-wait events (`(operation, task)`) that a refused restore of a record with a `task` site logs under `op`.
+    fn park_waits(op: Option<u32>) -> Vec<(u32, u32)> {
+        let _g = crate::test_lock::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (p, f, mut ins) = (parks(), fake(), Installer::new());
+        install(&mut ins, &f, CTX_TASK, &live(&p)).unwrap();
+        put(&f, OBJECT + 0x18, 0);
+        unsafe {
+            (*core::ptr::addr_of_mut!(SEEN)).clear();
+            dlog::dk_debug_log_sink_set(keep as *const () as usize as *mut u8, core::ptr::null_mut());
+            assert_eq!(ins.restore_gated(&f, 1, &live(&p).in_op(op)), Err(Refusal::Busy { task: 1 }));
+            dlog::test_reset_sinks();
+            (*core::ptr::addr_of!(SEEN)).iter().filter(|e| e.a[2] >> 8 & 0xff == Step::ParkWait as u32).map(|e| (e.a[0], e.a[4])).collect()
+        }
+    }
+
+    #[test]
+    fn a_numbered_operation_logs_the_park_wait_with_the_task() {
+        assert_eq!(park_waits(Some(7)), [(7, 1)]);
+    }
+
+    #[test]
+    fn a_quiet_operation_logs_nothing_from_the_gate() {
+        assert_eq!(park_waits(None), []);
+    }
 }

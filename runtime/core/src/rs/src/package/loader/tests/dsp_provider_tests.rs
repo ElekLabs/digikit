@@ -173,7 +173,7 @@ fn slots_that_were_sent_are_cleared_before_the_code_goes_and_a_clear_that_fails_
         script.set(false);
         crate::package::files::ready(rec);
         let busy = rt.manager().unwrap().unload(service);
-        assert!(matches!(busy, Err(dkrt_lifecycle::LifecycleError::Busy { package }) if package == service), "{busy:?}");
+        assert!(matches!(busy, Err(dkrt_lifecycle::LifecycleError::Busy { package, .. }) if package == service), "{busy:?}");
         assert_eq!(rt.manager().unwrap().restore_pending(), Some(service));
         assert_eq!(crate::package::files::ready_state(rec), 2, "the file client is not retired");
         assert_eq!(records::module(rec).used, 1, "the record and its memory are kept");

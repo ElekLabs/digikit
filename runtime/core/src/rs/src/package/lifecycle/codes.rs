@@ -92,6 +92,6 @@ mod tests {
         assert_eq!(code_of(&LifecycleError::Install { package: P, error: InstallError::Backend(E_IMPORT) }), E_IMPORT);
         assert_eq!(code_of(&LifecycleError::Install { package: P, error: InstallError::TableFull }), E_PLAN_FIT);
         assert_eq!(code_of(&LifecycleError::CannotStop { package: P, status: E_RELOAD_ROUTED }), E_RELOAD_ROUTED);
-        assert_eq!(code_of(&LifecycleError::Busy { package: P }), E_BUSY);
+        assert_eq!(code_of(&LifecycleError::Busy { package: P, task: None }), E_BUSY);
     }
 }

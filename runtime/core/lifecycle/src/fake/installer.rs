@@ -1,7 +1,6 @@
 use super::{Call, Probe};
 use crate::install::{Entry, InstallError};
 use crate::{PackageId, PackageInstaller};
-use dkrt_sdk::E_BUSY;
 
 pub struct FakeInstaller {
     probe: Probe,
@@ -23,7 +22,7 @@ impl PackageInstaller for FakeInstaller {
     fn restore(&mut self, owner: PackageId) -> Result<(), InstallError> {
         let faulted = self.probe.record(Call::Restore(owner));
         if self.probe.take_busy(owner) {
-            return Err(InstallError::Backend(E_BUSY));
+            return Err(InstallError::Busy { task: None });
         }
         faulted.map_err(InstallError::Backend)
     }

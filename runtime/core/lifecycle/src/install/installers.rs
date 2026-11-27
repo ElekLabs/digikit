@@ -102,7 +102,7 @@ impl<CF: Installer, DSP: Installer> Installers<CF, DSP> {
     }
 
     /// Undo everything `owner` installed, asking only the backends that received its entries. An owner with nothing installed (or unknown) is a
-    /// no-op `Ok`. Both backends are asked even when the first answers `E_BUSY`; the first error is the answer (`Backend`) and the owner stays as it
+    /// no-op `Ok`. Both backends are asked even when the first answers `Busy`; the first error is the answer and the owner stays as it
     /// is until both say `Ok`.
     pub fn restore(&mut self, owner: PackageId) -> Result<(), InstallError> {
         let Some(slot) = self.owners.get_mut(owner.0 as usize) else {
@@ -122,7 +122,7 @@ impl<CF: Installer, DSP: Installer> Installers<CF, DSP> {
         if done.is_ok() {
             *slot = ABSENT;
         }
-        done.map_err(InstallError::Backend)
+        done
     }
 }
 
