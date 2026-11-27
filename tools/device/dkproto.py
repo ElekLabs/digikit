@@ -167,6 +167,8 @@ STATUS: dict[int, tuple[str, str]] = {
         "E_MODULE_UI_SCOPE",
         "project settings are active; change this setting on the device",
     ),
+    -90: ("E_MODULE_UI_METHOD", "the module has no query with this method number"),
+    -91: ("E_MODULE_UI_TOO_BIG", "the query reply does not fit the reply budget"),
 }
 
 LOAD_STATUS: dict[int, tuple[str, str]] = {
@@ -312,6 +314,7 @@ CAP: dict[str, int] = {
     "LIVE": 19,
     "MODULE_UI": 20,
     "MODULE_SECTIONS": 21,
+    "MODULE_QUERIES": 22,
 }
 
 RANGES: dict[str, tuple[int, int]] = {

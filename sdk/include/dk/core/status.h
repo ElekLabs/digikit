@@ -89,5 +89,7 @@
 #define DK_E_AGAIN (-72) /* usb_bulk_send: the engine refused and nothing is in flight; wait for the wake, retry */
 #define DK_E_MODULE_UI_CONFLICT (-88) /* the module setting revision changed */
 #define DK_E_MODULE_UI_SCOPE (-89) /* project settings are active; change this setting on the device */
+#define DK_E_MODULE_UI_METHOD (-90) /* the module has no query with this method number */
+#define DK_E_MODULE_UI_TOO_BIG (-91) /* the query reply does not fit the reply budget */
 
 #endif /* DK_CORE_STATUS_H */

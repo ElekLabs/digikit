@@ -117,6 +117,7 @@ import_table! {
     ("dk_module_ctx_device", own entry::dk_module_ctx_device),
     ("dk_module_ctx_runtime_version", own entry::dk_module_ctx_runtime_version),
     ("dk_workbench_register", own super::module_ui::dk_workbench_register),
+    ("dk_workbench_register_queries", own super::module_ui::dk_workbench_register_queries),
     ("dk_settings_open", own entry::dk_settings_open),
     ("dk_settings_get", own entry::dk_settings_get),
     ("dk_settings_put", own entry::dk_settings_put),
@@ -175,6 +176,7 @@ const _: dkrt_sdk::api::DkModuleCtxDeviceFn = entry::dk_module_ctx_device;
 const _: dkrt_sdk::api::DkModuleCtxRuntimeVersionFn = entry::dk_module_ctx_runtime_version;
 const _: dkrt_sdk::api::DkSettingsOpenFn = entry::dk_settings_open;
 const _: dkrt_sdk::api::DkWorkbenchRegisterFn = super::module_ui::dk_workbench_register;
+const _: dkrt_sdk::api::DkWorkbenchRegisterQueriesFn = super::module_ui::dk_workbench_register_queries;
 const _: dkrt_sdk::api::DkSettingsGetFn = entry::dk_settings_get;
 const _: dkrt_sdk::api::DkSettingsPutFn = entry::dk_settings_put;
 const _: dkrt_sdk::api::DkSettingsRemoveFn = entry::dk_settings_remove;
