@@ -141,7 +141,7 @@
   "modules/tool/digikit/usb-fast/README.md": 8,
   "modules/tool/digikit/usb-fast/module.toml": 3,
   "modules/tool/digikit/usb-fast/src/c/uf-bench.c": 3,
-  "modules/tool/digikit/usb-fast/tests/usb-fast.device.test.ts": 101,
+  "modules/tool/digikit/usb-fast/tests/usb-fast.device.test.ts": 51,
   "modules/tool/tools/bootscreen/README.md": 2,
   "modules/tool/tools/bootscreen/module.toml": 2,
   "packages/devices/src/parse.ts": 1,
