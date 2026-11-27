@@ -233,3 +233,37 @@ fn a_caller_can_give_up_a_pending_attach() {
     assert_eq!(r.refused()[0].package, id(2));
     assert!(!pm.live().contains(id(2)));
 }
+
+#[test]
+fn an_attach_that_fails_while_another_take_down_is_pending_is_not_attached_again() {
+    let (mut pm, probe) = world(&[reference(), user(2), user(3)]);
+    probe.pending_attach(id(3), 1);
+    pm.load(id(3)).unwrap();
+    pm.load(id(2)).unwrap();
+    // package 2's take-down waits at its detach
+    probe.pending_detach(id(2), 1);
+    pm.unload(id(2)).ok();
+    probe.clear();
+    probe.fail(Attach(id(3)), E_INIT);
+    let r = pm.step();
+    assert!(
+        r.refused().is_empty(),
+        "the failed attach waits for the take-down"
+    );
+    assert_eq!(pm.state_of(id(3)), Some(State::Attaching));
+    let attaches = |probe: &crate::fake::Probe| {
+        probe
+            .calls()
+            .iter()
+            .filter(|c| **c == Attach(id(3)))
+            .count()
+    };
+    assert_eq!(attaches(&probe), 1);
+    // the other take-down ends; package 3 is taken down without a second attach call
+    pm.retry_pending().unwrap();
+    let r = pm.step();
+    assert_eq!(attaches(&probe), 1, "{:?}", probe.calls());
+    assert_eq!(r.refused().len(), 1);
+    assert_eq!(r.refused()[0].package, id(3));
+    assert!(pm.state_of(id(3)).is_none());
+}

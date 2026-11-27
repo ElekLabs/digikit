@@ -2,6 +2,7 @@
 
 use crate::state::State;
 use crate::steps::{sort, Steps};
+use crate::LifecycleError;
 use crate::{PackageId, MAX_PACKAGES};
 
 #[derive(Clone, Copy)]
@@ -12,6 +13,8 @@ struct Slot {
     attached: bool,
     /// The passes an `Attaching` package has waited for its attach to end.
     waited: u32,
+    /// Why the attach failed (the package stays in `Attaching` until its take-down runs; no attach call is made for it any more).
+    failed: Option<LifecycleError>,
 }
 
 /// The progress of every package that is not absent: placed, being brought up or down, active or waiting for a restore.
@@ -59,6 +62,7 @@ impl Progress {
                         state,
                         attached: false,
                         waited: 0,
+                        failed: None,
                     });
                 }
             }
@@ -94,12 +98,41 @@ impl Progress {
             .slots
             .iter()
             .flatten()
-            .filter(|s| s.state == State::Attaching)
+            .filter(|s| s.state == State::Attaching && s.failed.is_none())
         {
             out.push(s.package);
         }
         sort(&mut out);
         out
+    }
+
+    /// Records that the attach of `p` failed for `reason`: `attaching` leaves it out from now on.
+    pub(super) fn set_attach_failed(&mut self, p: PackageId, reason: LifecycleError) {
+        if let Some(i) = self.find(p) {
+            self.slots[i].as_mut().unwrap().failed = Some(reason);
+        }
+    }
+
+    /// The packages whose attach failed and whose take-down has not run yet, ascending by id.
+    pub(super) fn attach_failed(&self) -> Steps {
+        let mut out = Steps::new();
+        for s in self
+            .slots
+            .iter()
+            .flatten()
+            .filter(|s| s.state == State::Attaching && s.failed.is_some())
+        {
+            out.push(s.package);
+        }
+        sort(&mut out);
+        out
+    }
+
+    /// Why the attach of `p` failed, if it did.
+    pub(super) fn attach_failure(&self, p: PackageId) -> Option<LifecycleError> {
+        self.find(p)
+            .and_then(|i| self.slots[i])
+            .and_then(|s| s.failed)
     }
 
     /// Counts one more pass of `p` waiting for its attach and gives the count; 0 for an absent package.

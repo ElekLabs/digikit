@@ -21,11 +21,17 @@ where
     ///   (the report's `attaching`), and a refusal, or more passes pending than the manager's `attach_limit`, takes its closure down here (the report's `refused` has the
     ///   package and why, its `taken_down` the packages that went).
     ///
-    /// A failed attach waits for a take-down that is pending already (one at a time): the package stays in `Attaching` and the next pass tries again.
+    /// A failed attach waits for a take-down that is pending already (one at a time): the package stays in `Attaching` as a failed attach (it is not attached again) and the next pass takes it down.
     pub fn step(&mut self) -> Report {
         let mut report = Report::default();
         if self.pending_take_down.is_some_and(|w| w.by_manager) {
             self.go_on_with_take_down(&mut report);
+        }
+        // an attach that failed while another take-down was pending waits for it: no attach call is made again, only the take-down is
+        for p in self.progress.attach_failed() {
+            if let Some(reason) = self.progress.attach_failure(p) {
+                self.fail_attach(p, reason, &mut report);
+            }
         }
         for p in self.progress.attaching() {
             let services = self.attach_order(p);
@@ -78,9 +84,10 @@ where
     }
 
     /// The attach of `p` failed: it loses its pin, its closure goes down (consumers first, no service) and the report says why. A take-down already waiting keeps its place:
-    /// `p` stays `Attaching` for the next pass.
+    /// `p` stays `Attaching`, marked failed, for the next pass.
     fn fail_attach(&mut self, p: PackageId, reason: LifecycleError, report: &mut Report) {
         if self.pending_take_down.is_some() {
+            self.progress.set_attach_failed(p, reason);
             report.attaching.push(p);
             return;
         }

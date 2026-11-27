@@ -38,7 +38,7 @@
 //! - `SERVICE_IMPORTS` (8, versions 1 and 2): ColdFire import name hash and the service name hash that must own it.
 //! - `PAYLOADS` (16, version 2 and 3): u32 service name hash (the owner, a hard need of the module), u16 local kind, u16 reserved (0), u32 offset in the file, u32 bytes. A
 //!   body the file carries for a service to install (`Payloads` part): the core checks the bounds and the owner, never reads the body. The writer uses at least version 2 for a table with
-//!   any (so a reader of version 1 only never sees the tag).
+//!   any (so a reader of version 1 only never sees the tag). A reader that does not know the tag refuses the file (`valid_tag`); the runtime minor bump for payloads lands with the first payload module (B3).
 //!
 //! The packer always writes a table (a module that needs and keeps nothing has the 8-byte head). A file with no table or another magic is the
 //! format of runtime 0.7: the loader refuses it with `E_CONTRACT`.

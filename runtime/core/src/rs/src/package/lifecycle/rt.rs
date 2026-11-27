@@ -1,19 +1,19 @@
-use super::reload_state::ReloadState;
-use super::{RtHost, RtInstallers, RtLinker, RtManifest, RtPlacer, Session};
 use super::codes::code_of;
+use super::reload_state::ReloadState;
+use super::RtTrace;
+use super::{RtHost, RtInstallers, RtLinker, RtManifest, RtPlacer, Session};
+use crate::package::admission::Admission;
 use crate::package::dsp;
 use crate::package::handlers::ServiceTable;
 use crate::package::loader::{Images, Loader, PhaseKind, Registry};
-use crate::package::admission::Admission;
-use dkrt_abi::package::PackageId;
-use dkrt_abi::plan::{Reason, Verdict};
-use dkrt_abi::package_platform::PackagePlatform;
-use dkrt_abi::MAX_MODULES;
-use super::RtTrace;
-use dkrt_lifecycle::{LifecycleError, PackageManager, Refusal, Report, Traced};
-use dkrt_sdk::sel::Record;
 use core::mem::MaybeUninit;
 use core::ptr::addr_of_mut;
+use dkrt_abi::package::PackageId;
+use dkrt_abi::package_platform::PackagePlatform;
+use dkrt_abi::plan::{Reason, Verdict};
+use dkrt_abi::MAX_MODULES;
+use dkrt_lifecycle::{LifecycleError, PackageManager, Refusal, Report, Traced};
+use dkrt_sdk::sel::Record;
 use dkrt_sdk::*;
 
 /// The UI passes (`PackageManager::step`) an attach may stay pending before its package is taken down: 6000 passes, a minute or more, since a payload that takes over a DSP range
@@ -56,7 +56,14 @@ struct DspDown {
 }
 
 impl DspDown {
-    const NONE: Self = Self { live: false, in_flight: false, rec: 0, idx: 0, code: 0, tries: 0 };
+    const NONE: Self = Self {
+        live: false,
+        in_flight: false,
+        rec: 0,
+        idx: 0,
+        code: 0,
+        tries: 0,
+    };
 }
 
 /// How a take-down of a DSP part ended: `Done` with whether every record's memory is back, or `Busy` (the manager keeps the rest pending; `Rt::dsp_step` finishes it).
@@ -93,14 +100,26 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     ///
     /// # Safety
     /// The loader outlives `self`, its tables do not change under the manifest's views except through `Rt`, and the paths stay valid while their module is up.
-    pub unsafe fn init(&mut self, paths: &[Option<*const u8>; MAX_MODULES], modules: usize) -> Result<(), LifecycleError> {
+    pub unsafe fn init(
+        &mut self,
+        paths: &[Option<*const u8>; MAX_MODULES],
+        modules: usize,
+    ) -> Result<(), LifecycleError> {
         for (k, p) in paths.iter().enumerate() {
             self.session.modules[k] = p.unwrap_or(core::ptr::null());
         }
         let manifest = RtManifest::of(&mut self.session, modules);
         let (placer, linker, installers, host) = super::traced_seams(&mut self.session);
         self.up = false;
-        PackageManager::init(self.manager.as_mut_ptr(), manifest, placer, linker, installers, host, ATTACH_PASSES)?;
+        PackageManager::init(
+            self.manager.as_mut_ptr(),
+            manifest,
+            placer,
+            linker,
+            installers,
+            host,
+            ATTACH_PASSES,
+        )?;
         self.up = true;
         Ok(())
     }
@@ -136,7 +155,12 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// As for `init`; the boot hook's task, once per boot, after `read_tables` and `loader::find_providers`.
     #[inline(never)]
     pub unsafe fn boot(&mut self, rec: &Record) {
-        let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+        let mut caps = [DkrtCap {
+            kind: 0,
+            limit: 0,
+            used: 0,
+            largest: 0,
+        }; CAP_MAX];
         let n = crate::package::loader::boot_caps(&mut caps);
         self.boot_with(rec, &caps[..n]);
     }
@@ -170,7 +194,10 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         // loader's own code and logged, as the boot always did
         for j in 0..l.provider_count() {
             let id = PackageId((MAX_MODULES + j) as u8);
-            if !l.package_table(id).is_some_and(|t| dkneeds::keys::Keys::parse(t).is_ok()) {
+            if !l
+                .package_table(id)
+                .is_some_and(|t| dkneeds::keys::Keys::parse(t).is_ok())
+            {
                 roots[n] = id;
                 n += 1;
             }
@@ -214,12 +241,18 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
 
     /// The name hash of the service package `service` provides (0 when it provides none).
     unsafe fn provided_name(&self, service: PackageId) -> u32 {
-        self.mgr().and_then(|m| m.graph().node(service).and_then(|n| n.provides())).map_or(0, |a| a.name())
+        self.mgr()
+            .and_then(|m| m.graph().node(service).and_then(|n| n.provides()))
+            .map_or(0, |a| a.name())
     }
 
     /// The verdict the module states show for the package `id` the manager refused for `why`.
     unsafe fn verdict_of(&mut self, id: PackageId, why: &LifecycleError) -> Verdict {
-        let service = if let LifecycleError::NeedRefused { service, .. } = *why { service } else { id };
+        let service = if let LifecycleError::NeedRefused { service, .. } = *why {
+            service
+        } else {
+            id
+        };
         verdict_of(why, self.session.reason(id), self.provided_name(service))
     }
 
@@ -234,13 +267,29 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         };
         let up = |id: PackageId| report.brought_up().as_slice().contains(&id);
         // a package whose DSP part or attach is not over is LOADING: the end of either is reported later (`dsp_step`)
-        let dsp_part = |id: PackageId| report.dsp_pending().as_slice().contains(&id) || report.attaching().as_slice().contains(&id);
-        let refusal = |id: PackageId| report.refused().iter().find(|r| r.package == id).map(|r| r.reason);
+        let dsp_part = |id: PackageId| {
+            report.dsp_pending().as_slice().contains(&id)
+                || report.attaching().as_slice().contains(&id)
+        };
+        let refusal = |id: PackageId| {
+            report
+                .refused()
+                .iter()
+                .find(|r| r.package == id)
+                .map(|r| r.reason)
+        };
         let l = self.loader();
         // the providers: log only, in the order the manager tried them (a provider nothing needed was never tried)
-        let tried = report.brought_up().as_slice().iter().copied().chain(report.refused().iter().map(|r| r.package));
+        let tried = report
+            .brought_up()
+            .as_slice()
+            .iter()
+            .copied()
+            .chain(report.refused().iter().map(|r| r.package));
         for id in tried {
-            let Some(j) = (id.0 as usize).checked_sub(MAX_MODULES) else { continue };
+            let Some(j) = (id.0 as usize).checked_sub(MAX_MODULES) else {
+                continue;
+            };
             let res = if let Some(why) = refusal(id) {
                 code_of(&why)
             } else if dsp_part(id) {
@@ -262,7 +311,14 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                 // refused because a need failed: the line names that need (the root cause), not the service's own hash
                 (self.provided_name(service), 0)
             } else {
-                (l.provided_hash(j), if ok { crate::package::loader::records::module(id.0 as usize).base } else { 0 })
+                (
+                    l.provided_hash(j),
+                    if ok {
+                        crate::package::loader::records::module(id.0 as usize).base
+                    } else {
+                        0
+                    },
+                )
             };
             crate::package::resident::boot::report_provider(l.provider_file(j), res, hash, base);
         }
@@ -296,8 +352,18 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                 crate::package::resident::boot::states().finished(k, res);
                 res
             };
-            let missing = if res == E_IMPORT { self.session.outcome[k].missing } else { [0u8; NEEDS_LEN] };
-            crate::package::resident::boot::report_module(k, rec.paths[k].as_ptr(), res, &missing, &l.captured_name(k));
+            let missing = if res == E_IMPORT {
+                self.session.outcome[k].missing
+            } else {
+                [0u8; NEEDS_LEN]
+            };
+            crate::package::resident::boot::report_module(
+                k,
+                rec.paths[k].as_ptr(),
+                res,
+                &missing,
+                &l.captured_name(k),
+            );
         }
     }
 
@@ -320,7 +386,12 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             return E_NOT_FOUND;
         };
         if m.live().contains(id) {
-            if !self.session.loader.as_mut().is_some_and(|l| l.package_retire_ready(id)) {
+            if !self
+                .session
+                .loader
+                .as_mut()
+                .is_some_and(|l| l.package_retire_ready(id))
+            {
                 return E_BUSY;
             }
             match m.take_down_closure(id) {
@@ -343,8 +414,17 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// Load the file at `path` into selection index `k` as module record `k` (`Loader::live_prepare`, then `PackageManager::load`). `OK`, `LOADING` (the DSP part follows), or the
     /// refusal in the loader's codes.
     pub unsafe fn live_load(&mut self, k: usize, path: *const u8) -> i32 {
-        let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
-        let n = crate::package::loader::live_capacity(&mut caps, (0, 0), crate::package::loader::dkrt_capacity_into);
+        let mut caps = [DkrtCap {
+            kind: 0,
+            limit: 0,
+            used: 0,
+            largest: 0,
+        }; CAP_MAX];
+        let n = crate::package::loader::live_capacity(
+            &mut caps,
+            (0, 0),
+            crate::package::loader::dkrt_capacity_into,
+        );
         self.live_load_with(k, path, &caps[..n])
     }
 
@@ -364,13 +444,27 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
 
     /// Load the new file of a reload into record `rec`, which `unload` took down (`Loader::reload_prepare`, then `PackageManager::load`).
     pub unsafe fn reload_load(&mut self, rec: usize, path: *const u8) -> i32 {
-        let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
-        let n = crate::package::loader::live_capacity(&mut caps, (0, 0), crate::package::loader::dkrt_capacity_into);
+        let mut caps = [DkrtCap {
+            kind: 0,
+            limit: 0,
+            used: 0,
+            largest: 0,
+        }; CAP_MAX];
+        let n = crate::package::loader::live_capacity(
+            &mut caps,
+            (0, 0),
+            crate::package::loader::dkrt_capacity_into,
+        );
         self.reload_load_with(rec, path, &caps[..n])
     }
 
     /// `reload_load` against the live capacity `caps` (the old module's own blocks are given back already: it was taken down before).
-    pub unsafe fn reload_load_with(&mut self, rec: usize, path: *const u8, caps: &[DkrtCap]) -> i32 {
+    pub unsafe fn reload_load_with(
+        &mut self,
+        rec: usize,
+        path: *const u8,
+        caps: &[DkrtCap],
+    ) -> i32 {
         let r = self.loader().reload_prepare(rec, path);
         if r != OK {
             return r;
@@ -402,7 +496,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         l.set_phase(PhaseKind::Closed);
         match out {
             Ok(report) => {
-                if report.dsp_pending().as_slice().contains(&id) || report.attaching().as_slice().contains(&id) {
+                if report.dsp_pending().as_slice().contains(&id)
+                    || report.attaching().as_slice().contains(&id)
+                {
                     LOADING
                 } else {
                     OK
@@ -441,7 +537,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         for &d in report.taken_down().as_slice() {
             reclaimed &= !self.session.retained(d);
             if d != id && (d.0 as usize) < MAX_MODULES {
-                let k = self.session.loader.as_ref().map_or(u8::MAX, |l| l.sel_index(d.0 as usize));
+                let k = self
+                    .session
+                    .loader
+                    .as_ref()
+                    .map_or(u8::MAX, |l| l.sel_index(d.0 as usize));
                 if k != u8::MAX {
                     crate::package::resident::boot::report_taken_down(k as u32, E_MISSING);
                 }
@@ -469,7 +569,12 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                 crate::package::resident::boot::report_dsp(idx, code);
             } else if let Some(j) = (r.package.0 as usize).checked_sub(MAX_MODULES) {
                 let l = self.loader();
-                crate::package::resident::boot::report_provider(l.provider_file(j), code, l.provided_hash(j), 0);
+                crate::package::resident::boot::report_provider(
+                    l.provider_file(j),
+                    code,
+                    l.provided_hash(j),
+                    0,
+                );
             }
         }
     }
@@ -479,13 +584,24 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         if (p.0 as usize) >= MAX_MODULES {
             return None;
         }
-        let k = self.session.loader.as_ref().map_or(u8::MAX, |l| l.sel_index(p.0 as usize));
+        let k = self
+            .session
+            .loader
+            .as_ref()
+            .map_or(u8::MAX, |l| l.sel_index(p.0 as usize));
         (k != u8::MAX).then_some(k as u32)
     }
 
     /// The take-down of a DSP part waits for a busy restore: remember it, the DSP load stays pending.
     fn wait_down(&mut self, rec: usize, idx: u32, code: i32, in_flight: bool) {
-        self.dsp_down = DspDown { live: true, in_flight, rec, idx, code, tries: 0 };
+        self.dsp_down = DspDown {
+            live: true,
+            in_flight,
+            rec,
+            idx,
+            code,
+            tries: 0,
+        };
     }
 
     /// The end of a DSP part's take-down: the boot record gets the code and the DSP loader goes on (or stays retained when memory is not back).
@@ -514,20 +630,46 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             }
             true
         } else if dsp::dequeue(rec) {
-            let idx = self.session.loader.as_ref().map_or(u8::MAX, |l| l.sel_index(rec)) as u32;
+            let idx = self
+                .session
+                .loader
+                .as_ref()
+                .map_or(u8::MAX, |l| l.sel_index(rec)) as u32;
             match self.take_down_dsp(rec) {
-                Down::Done(reclaimed) => self.end_down(DspDown { live: true, in_flight: false, rec, idx, code, tries: 0 }, reclaimed),
+                Down::Done(reclaimed) => self.end_down(
+                    DspDown {
+                        live: true,
+                        in_flight: false,
+                        rec,
+                        idx,
+                        code,
+                        tries: 0,
+                    },
+                    reclaimed,
+                ),
                 Down::Busy => self.wait_down(rec, idx, code, false),
             }
             true
-        } else if let Some(m) = self.mgr().filter(|m| m.state_of(PackageId(rec as u8)) == Some(dkrt_lifecycle::State::Attaching)) {
+        } else if let Some(m) = self
+            .mgr()
+            .filter(|m| m.state_of(PackageId(rec as u8)) == Some(dkrt_lifecycle::State::Attaching))
+        {
             // not a DSP load: an attach that stays pending (a payload) is given up the same way
             let id = PackageId(rec as u8);
-            if let Ok(report) = m.cancel_attach(id, LifecycleError::Failed { package: id, entering: dkrt_lifecycle::State::Active, status: code }) {
-                self.settle_down(id, &report);
-                if let Some(idx) = self.boot_index(id) {
-                    crate::package::resident::boot::report_dsp(idx, code);
-                }
+            // a take-down already pending (or any refusal) leaves the attach as it was: the cancel is not done, the caller asks again
+            let Ok(report) = m.cancel_attach(
+                id,
+                LifecycleError::Failed {
+                    package: id,
+                    entering: dkrt_lifecycle::State::Active,
+                    status: code,
+                },
+            ) else {
+                return false;
+            };
+            self.settle_down(id, &report);
+            if let Some(idx) = self.boot_index(id) {
+                crate::package::resident::boot::report_dsp(idx, code);
             }
             true
         } else {
@@ -676,11 +818,39 @@ mod tests {
     fn the_graphs_refusals_are_the_planners_verdicts() {
         let p = PackageId(1);
         let graph = |r| verdict_of(&LifecycleError::Graph(r), None, 0);
-        assert_eq!(graph(Refusal::Unmet { package: p, service: 7 }), Verdict::Refused(Reason::NeedMissing(7)));
-        assert_eq!(graph(Refusal::Incompatible { package: p, service: 7 }), Verdict::Refused(Reason::NeedVersion));
-        assert_eq!(graph(Refusal::Cycle { package: p }), Verdict::Refused(Reason::NeedMissing(0)));
+        assert_eq!(
+            graph(Refusal::Unmet {
+                package: p,
+                service: 7
+            }),
+            Verdict::Refused(Reason::NeedMissing(7))
+        );
+        assert_eq!(
+            graph(Refusal::Incompatible {
+                package: p,
+                service: 7
+            }),
+            Verdict::Refused(Reason::NeedVersion)
+        );
+        assert_eq!(
+            graph(Refusal::Cycle { package: p }),
+            Verdict::Refused(Reason::NeedMissing(0))
+        );
         // a second provider of one service: the planner's `DuplicateOwner` with the service's hash
-        assert_eq!(graph(Refusal::DuplicateService { package: p, service: 7 }), Verdict::Refused(Reason::DuplicateOwner(7)));
-        assert_eq!(graph(Refusal::DuplicateService { package: p, service: 7 }).result(), E_PLAN_OWNER);
+        assert_eq!(
+            graph(Refusal::DuplicateService {
+                package: p,
+                service: 7
+            }),
+            Verdict::Refused(Reason::DuplicateOwner(7))
+        );
+        assert_eq!(
+            graph(Refusal::DuplicateService {
+                package: p,
+                service: 7
+            })
+            .result(),
+            E_PLAN_OWNER
+        );
     }
 }

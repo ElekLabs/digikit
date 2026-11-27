@@ -17,9 +17,27 @@ fn payload_file(needs: &[Need], items: &[Payload], blob: &[u8]) -> Vec<u8> {
     let mut v = module_file();
     v.truncate(v.len() - 8);
     let at = v.len();
-    let size = dkneeds::keys::table_size(&Table { needs, payloads: items, ..Default::default() });
-    let items: Vec<Payload> = items.iter().map(|p| Payload { offset: if p.offset >= ABSOLUTE { p.offset } else { p.offset + (at + size) as u32 }, ..*p }).collect();
-    let t = Table { needs, payloads: &items, ..Default::default() };
+    let size = dkneeds::keys::table_size(&Table {
+        needs,
+        payloads: items,
+        ..Default::default()
+    });
+    let items: Vec<Payload> = items
+        .iter()
+        .map(|p| Payload {
+            offset: if p.offset >= ABSOLUTE {
+                p.offset
+            } else {
+                p.offset.wrapping_add((at + size) as u32)
+            },
+            ..*p
+        })
+        .collect();
+    let t = Table {
+        needs,
+        payloads: &items,
+        ..Default::default()
+    };
     v.resize(at + size, 0);
     write_table(&t, &mut v[at..]).unwrap();
     put(&mut v, dkneeds::H_REG_SIZE, size as u32);
@@ -29,11 +47,20 @@ fn payload_file(needs: &[Need], items: &[Payload], blob: &[u8]) -> Vec<u8> {
 }
 
 fn owner_need(hard: bool) -> Need {
-    Need { service: name_hash(OWNER), min_version: 0, hard }
+    Need {
+        service: name_hash(OWNER),
+        min_version: 0,
+        hard,
+    }
 }
 
 fn item(kind: u16, offset: u32, bytes: u32) -> Payload {
-    Payload { service: name_hash(OWNER), kind, offset, bytes }
+    Payload {
+        service: name_hash(OWNER),
+        kind,
+        offset,
+        bytes,
+    }
 }
 
 /// Check the file as a load does (`check_file`): the status.
@@ -50,23 +77,93 @@ fn the_bounds_the_count_and_the_owner_as_a_hard_need_are_checked_with_the_file()
     unsafe {
         let blob = [1u8, 2, 3, 4, 5, 6, 7, 8];
         // a body inside the file, its owner a hard need: accepted
-        assert_eq!(checked(payload_file(&[owner_need(true)], &[item(1, 0, 4), item(2, 4, 4)], &blob)).0, OK);
+        assert_eq!(
+            checked(payload_file(
+                &[owner_need(true)],
+                &[item(1, 0, 4), item(2, 4, 4)],
+                &blob
+            ))
+            .0,
+            OK
+        );
         // a body that ends at the end of the file is inside, one byte more is not; an offset past the end, or one that wraps, is not
-        assert_eq!(checked(payload_file(&[owner_need(true)], &[item(1, 4, 4)], &blob)).0, OK);
-        assert_eq!(checked(payload_file(&[owner_need(true)], &[item(1, 4, 5)], &blob)).0, E_FORMAT);
-        assert_eq!(checked(payload_file(&[owner_need(true)], &[item(1, 9, 0)], &blob)).0, E_FORMAT);
-        assert_eq!(checked(payload_file(&[owner_need(true)], &[item(1, 0, u32::MAX)], &blob)).0, E_FORMAT);
-        assert_eq!(checked(payload_file(&[owner_need(true)], &[item(1, u32::MAX - 2, 8)], &blob)).0, E_FORMAT);
+        assert_eq!(
+            checked(payload_file(&[owner_need(true)], &[item(1, 4, 4)], &blob)).0,
+            OK
+        );
+        assert_eq!(
+            checked(payload_file(&[owner_need(true)], &[item(1, 4, 5)], &blob)).0,
+            E_FORMAT
+        );
+        assert_eq!(
+            checked(payload_file(&[owner_need(true)], &[item(1, 9, 0)], &blob)).0,
+            E_FORMAT
+        );
+        assert_eq!(
+            checked(payload_file(
+                &[owner_need(true)],
+                &[item(1, 0, u32::MAX)],
+                &blob
+            ))
+            .0,
+            E_FORMAT
+        );
+        assert_eq!(
+            checked(payload_file(
+                &[owner_need(true)],
+                &[item(1, u32::MAX - 2, 8)],
+                &blob
+            ))
+            .0,
+            E_FORMAT
+        );
         // more than the format allows
-        let many: Vec<Payload> = (0..=dkneeds::keys::MAX_PAYLOADS as u16).map(|k| item(k, 0, 1)).collect();
-        assert_eq!(checked(payload_file(&[owner_need(true)], &many, &blob)).0, E_FORMAT);
-        let most: Vec<Payload> = (0..dkneeds::keys::MAX_PAYLOADS as u16).map(|k| item(k, 0, 1)).collect();
-        assert_eq!(checked(payload_file(&[owner_need(true)], &most, &blob)).0, OK);
+        let many: Vec<Payload> = (0..=dkneeds::keys::MAX_PAYLOADS as u16)
+            .map(|k| item(k, k as u32, 1))
+            .collect();
+        assert_eq!(
+            checked(payload_file(&[owner_need(true)], &many, &blob)).0,
+            E_FORMAT
+        );
+        let most: Vec<Payload> = (0..dkneeds::keys::MAX_PAYLOADS as u16)
+            .map(|k| item(k, k as u32, 1))
+            .collect();
+        assert_eq!(
+            checked(payload_file(&[owner_need(true)], &most, &blob)).0,
+            OK
+        );
         // the owner is a need, but a soft one, or no need at all: the file cannot rely on it
-        assert_eq!(checked(payload_file(&[owner_need(false)], &[item(1, 0, 4)], &blob)).0, E_MISSING);
-        assert_eq!(checked(payload_file(&[], &[item(1, 0, 4)], &blob)).0, E_MISSING);
+        assert_eq!(
+            checked(payload_file(&[owner_need(false)], &[item(1, 0, 4)], &blob)).0,
+            E_MISSING
+        );
+        assert_eq!(
+            checked(payload_file(&[], &[item(1, 0, 4)], &blob)).0,
+            E_MISSING
+        );
         // a file with no payload is as it was
         assert_eq!(checked(payload_file(&[], &[], &[])).0, OK);
+    }
+}
+
+#[test]
+fn bodies_that_overlap_each_other_the_table_or_the_image_are_refused() {
+    let _g = LOCK.lock_with_package().unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        let blob = [0u8; 8];
+        let base =
+            (payload_file(&[owner_need(true)], &[item(1, 0, 4)], &blob).len() - blob.len()) as u32;
+        let ok = |items: &[Payload]| checked(payload_file(&[owner_need(true)], items, &blob)).0;
+        // touching bodies are apart; an empty body overlaps nothing
+        assert_eq!(ok(&[item(1, 0, 4), item(2, 4, 4), item(3, 2, 0)]), OK);
+        assert_eq!(ok(&[item(1, 0, 4), item(2, 3, 4)]), E_FORMAT);
+        assert_eq!(ok(&[item(1, 0, 8), item(2, 7, 1)]), E_FORMAT);
+        // a body that reaches back into the header table, or into the image
+        assert_eq!(ok(&[item(1, 0u32.wrapping_sub(4), 4)]), E_FORMAT);
+        assert_eq!(
+            ok(&[item(1, (IMAGE_OFF as u32 + 16).wrapping_sub(base), 4)]),
+            E_FORMAT
+        );
     }
 }
 
@@ -84,7 +181,10 @@ impl<C: CoreApi> Provider<C> for Owner {
 
 impl<C: CoreApi> Payloads<C> for Owner {
     fn check(&mut self, _: &C, kind: u16, body: &[u8], consumer: ConsumerId) -> Result<(), i32> {
-        LAST.store(kind as u32 | (body.len() as u32) << 16 | (consumer.get() as u32) << 24, Ordering::SeqCst);
+        LAST.store(
+            kind as u32 | (body.len() as u32) << 16 | (consumer.get() as u32) << 24,
+            Ordering::SeqCst,
+        );
         if kind == 9 {
             Err(-77)
         } else {
@@ -103,7 +203,18 @@ impl<C: CoreApi> Payloads<C> for Owner {
 unsafe fn load_owner(with_part: bool) {
     let f = Fixture::of::<Owner>(OWNER);
     let f = if with_part { f.payloads::<Owner>() } else { f };
-    assert_eq!(provider_rows::add(MAX_MODULES + 5, crate::package::provider_rows::RowSource { row: f.row(), instance: instance(), extent: 0..usize::MAX }, None), OK);
+    assert_eq!(
+        provider_rows::add(
+            MAX_MODULES + 5,
+            crate::package::provider_rows::RowSource {
+                row: f.row(),
+                instance: instance(),
+                extent: 0..usize::MAX
+            },
+            None
+        ),
+        OK
+    );
 }
 
 #[test]
