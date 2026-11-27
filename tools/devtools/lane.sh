@@ -4,11 +4,18 @@
 # cold builds).
 #
 #   tools/devtools/lane.sh NAME [BASE]     # prints the lane's path
+#   tools/devtools/lane.sh --prune [--days N] [--dry-run] [--only NAME]...
+#                                          # removes finished lanes (lane-prune.sh)
 #
 # The lane lives at ../lanes/NAME next to the main tree, on branch lane/NAME.
 # On reuse it is reset to BASE (default: the main tree's current branch) when it
 # has no uncommitted changes and no commits that BASE lacks.
 set -euo pipefail
+
+if [[ ${1:-} == --prune ]]; then
+  shift
+  exec "$(dirname "${BASH_SOURCE[0]}")/lane-prune.sh" "$@"
+fi
 
 name=${1:?usage: tools/devtools/lane.sh NAME [BASE]}
 # Read the whole listing (see tools/devtools/worktree-setup.sh about SIGPIPE).

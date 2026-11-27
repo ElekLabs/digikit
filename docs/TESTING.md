@@ -632,6 +632,39 @@ in place. The next local build may be cold on a shared-artifact miss. APFS
 snapshots and clones can make the gain in free disk space smaller than the
 reported output size.
 
+### Removing finished lanes
+
+`tools/devtools/lane.sh --prune [--days N] [--dry-run] [--only NAME]...` removes
+lanes that are finished and lists every other lane with the reason it was kept.
+`--only NAME` (repeatable) limits the run to these lanes. A lane goes only when
+all five rules hold:
+
+1. It is a worktree directly under the lanes directory (next to the main tree);
+   the main worktree, `.claude/worktrees/*` and `/private/tmp/*` are never touched.
+2. It is clean: `git status --porcelain` is empty (no untracked files that are not ignored).
+3. It is merged: after `git fetch origin main`, its HEAD is an ancestor of `origin/main`.
+4. It is idle for at least N days (default 7): the newest mtime of the worktree
+   gitdir's `index`, `HEAD` and `logs/HEAD` and of the lane directory itself.
+5. It is not in use: no process has the lane in its command line or working
+   directory. An Nx daemon of the lane does not count; it is stopped first
+   (`node_modules/.bin/nx daemon --stop`) and the check runs again.
+
+Removal runs `git worktree remove` (never `--force`), `git branch -d` on the
+lane branch (kept with a note when git refuses) and `git worktree prune`. Remote
+branches stay. Run `--dry-run` first; it changes nothing:
+
+```text
+$ tools/devtools/lane.sh --prune --dry-run
+kept bootscreen-transfer: not merged into origin/main
+kept cap-fix: idle 1d, under 7d
+kept deps: uncommitted or untracked files
+...
+would remove 0, kept 40
+```
+
+A real run prints `removed NAME (branch B, idle Nd)` per lane. A pruned lane
+costs a cold build (about 25 minutes) when its name is used again.
+
 ### Remote cache
 
 All worktrees of a clone share one Cacheiro server on `127.0.0.1:47311`. Its state is in
