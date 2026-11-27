@@ -109,12 +109,17 @@ cardRigs(
       const modulesBefore = await modules(rt);
       const reloadsBefore = await reloadsAt(rt);
       const since = await log.mark();
-      const end = await run.usb(rt, (dk) => dk.reloadAndWait(SERVICE)).catch(async (e: Error) => {
+      // `run.usb` bounds one operation by wall time: queue the job, then poll its state on the emulated clock, one request each (`reloadAndWait` inside one operation outlasts the bound)
+      await run.usb(rt, (dk) => dk.reload(SERVICE));
+      const end = await pollUntil(rt.clock, () => run.usb(rt, (dk) => dk.reloadState()), (v) => v.phase === 2, {
+        withinMs: WITHIN_MS,
+        message: 'the reload of the project service ended',
+      }).catch(async (e: Error) => {
         await log.pump();
         const steps = log.all('LIFECYCLE', () => true, since).slice(0, 40).map((x) => JSON.stringify(x.fields));
         throw new Error(`${e.message}; first lifecycle events: ${steps.join(' ')}`);
       });
-      expect(end, 'the reload of the project service ran to its end').toEqual({ result: 0, unloaded: true });
+      expect({ result: end.result, unloaded: end.unloaded }, 'the reload of the project service ran to its end').toEqual({ result: 0, unloaded: true });
       expect(await reloadsAt(rt), 'the job counter moved').toBeGreaterThan(reloadsBefore);
 
       // the module came back with the project's live image: the unsaved value, bound and dirty
