@@ -1,6 +1,6 @@
 import type { PreviewModulePages } from './module-pages';
 import { createPreviewSettings, previewSettingsSchemas } from './module-settings';
-import type { createMemorySettings } from '@digi/workbench-core/module-ui/memory-client.ts';
+import type { MemorySettingsStore } from '@digi/module-ui';
 // The simulated card behind a preview target's DkSession. Its bytes survive a MIDI reopen and are shared by Transfer and Files.
 import {
   DkError,
@@ -148,7 +148,7 @@ async function seedStore(library: PreviewLibrary, profile: DeviceProfile, pages:
     pages.seed(files, selected);
   }
   const abi = await serviceAbi(library, device);
-  const settings = new Map<string, ReturnType<typeof createMemorySettings>>();
+  const settings = new Map<string, MemorySettingsStore>();
   return { files, selected, abi, settings, boot: bootModules(files, selected) };
 }
 

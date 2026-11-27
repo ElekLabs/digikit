@@ -92,6 +92,15 @@ step = 2
 default = 4
 
 [[setting]]
+id = "wide"
+label = "Wide"
+type = "integer"
+min = -2147483648
+max = 2147483647
+step = 1
+default = 0
+
+[[setting]]
 id = "mix-on"
 label = "Mix on"
 type = "boolean"
@@ -159,6 +168,20 @@ int main(void) {
     CHECK(wb_setting_gain_put(s, 12) == DK_E_SET_VALUE);
     CHECK(wb_setting_gain_put(s, -12) == DK_E_SET_VALUE);
     CHECK(wb_setting_gain_get(s) == -2);
+    /* integer at the bounds of int32_t */
+    memset(&store, 0, sizeof store);
+    CHECK(WB_SETTING_WIDE_MIN == INT32_MIN && WB_SETTING_WIDE_MAX == INT32_MAX);
+    CHECK(wb_setting_wide_get(s) == 0);
+    set(WB_SETTING_WIDE_KEY, "\x80\x00\x00\x00", 4);
+    CHECK(wb_setting_wide_get(s) == INT32_MIN);
+    set(WB_SETTING_WIDE_KEY, "\x7f\xff\xff\xff", 4);
+    CHECK(wb_setting_wide_get(s) == INT32_MAX);
+    CHECK(wb_setting_wide_valid(INT32_MIN) && wb_setting_wide_valid(INT32_MAX) && wb_setting_wide_valid(-1));
+    CHECK(wb_setting_wide_put(s, INT32_MIN) == 0 && wb_setting_wide_get(s) == INT32_MIN);
+    CHECK(memcmp(store.value, "\x80\x00\x00\x00", 4) == 0 && store.len == 4);
+    CHECK(wb_setting_wide_put(s, INT32_MAX) == 0 && wb_setting_wide_get(s) == INT32_MAX);
+    CHECK(memcmp(store.value, "\x7f\xff\xff\xff", 4) == 0);
+    CHECK(wb_setting_wide_put(s, -1) == 0 && wb_setting_wide_get(s) == -1);
     /* boolean */
     memset(&store, 0, sizeof store);
     CHECK(wb_setting_mix_on_get(s) == 1);
@@ -187,11 +210,11 @@ int main(void) {
 
 #[test]
 fn the_generated_header_compiles_and_its_accessors_follow_the_rules() {
-    let Ok(cc) = std::process::Command::new("cc").arg("--version").output() else {
-        eprintln!("SKIP: no host C compiler");
-        return;
-    };
-    assert!(cc.status.success());
+    let cc = std::process::Command::new("cc")
+        .arg("--version")
+        .output()
+        .expect("this test needs a host C compiler named cc on PATH (macOS and Linux CI have one)");
+    assert!(cc.status.success(), "cc --version failed");
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let dir = module_dir("pk-workbench-cc-", TYPED, PROGRAM);
     let header = Header::read(dir.path(), "test/typed", Some("Typed"))

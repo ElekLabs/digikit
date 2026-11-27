@@ -68,15 +68,15 @@ fn an_integer_rule_has_a_refusal_for_each_edge() {
         ),
         (
             "type = \"integer\"\nmin = 0\nmax = 100\ndefault = 101",
-            "outside min and max",
+            "outside min and max or not on a step",
         ),
         (
             "type = \"integer\"\nmin = 0\nmax = 100\ndefault = -1",
-            "outside min and max",
+            "outside min and max or not on a step",
         ),
         (
             "type = \"integer\"\nmin = 0\nmax = 100\ndefault = 4294967296",
-            "outside min and max",
+            "outside min and max or not on a step",
         ),
         (
             "type = \"integer\"\nmin = 0\nmax = 100\nstep = 0\ndefault = 0",
@@ -88,7 +88,7 @@ fn an_integer_rule_has_a_refusal_for_each_edge() {
         ),
         (
             "type = \"integer\"\nmin = 0\nmax = 100\nstep = 5\ndefault = 3",
-            "not on a step",
+            "outside min and max or not on a step",
         ),
         (
             "type = \"integer\"\nmin = 0\nmax = 100\ndecimals = 5\ndefault = 0",

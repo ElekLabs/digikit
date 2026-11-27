@@ -100,8 +100,17 @@ fn a_boolean_and_a_choice_have_accessors_and_names() {
 }
 
 #[test]
-fn a_label_cannot_end_a_comment_in_the_header() {
-    let source = DECLARATION.replace("Animation", "A */ int x; /*");
+fn no_free_text_reaches_a_c_comment() {
+    // accept: a label with comment marks is a valid label and leaves no trace of itself in the header
+    let source = DECLARATION.replace("Animation", "A /* b */ c");
     let header = render(&source);
-    assert!(!header.contains("A */ int x"));
+    assert!(!header.contains("A /*") && !header.contains("b */"));
+    // only the generated-by line is a comment
+    assert_eq!(header.matches("/*").count(), 1, "{header}");
+    assert_eq!(header.matches("*/").count(), 1, "{header}");
+    // refuse: the same text in a choice label sanitises to a name, never to a comment
+    let source = TYPED.replace("Hard", "Hard /* x");
+    let header = render(&source);
+    assert_eq!(header.matches("/*").count(), 1, "{header}");
+    assert!(header.contains("WB_SETTING_MODE_HARD_X = 2,"), "{header}");
 }

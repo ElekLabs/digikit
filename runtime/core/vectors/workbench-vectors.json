@@ -6,21 +6,105 @@
    "module": "test/v1",
    "module_name": "Version one",
    "toml": "[workbench]\nversion = 1\n\n[[setting]]\nid = \"boot\"\nlabel = \"Boot value\"\ntype = \"text\"\nmax_bytes = 16\n\n[[setting]]\nid = \"active\"\nlabel = \"Animation\"\ntype = \"file-name\"\nextension = \"dkbs\"\nreset_label = \"Stock\"\nmax_bytes = 47\napply = \"next-restart\"\n",
-   "bytes_hex": "010b56657273696f6e206f6e650204626f6f740a426f6f742076616c75651000000661637469766509416e696d6174696f6e2f010104646b62730553746f636b"
+   "bytes_hex": "010b56657273696f6e206f6e650204626f6f740a426f6f742076616c75651000000661637469766509416e696d6174696f6e2f010104646b62730553746f636b",
+   "expected_schema": {
+    "module": "test/v1",
+    "settings": [
+     {
+      "apply": "immediate",
+      "id": "boot",
+      "kind": "text",
+      "label": "Boot value",
+      "maxBytes": 16
+     },
+     {
+      "apply": "next-restart",
+      "extension": "dkbs",
+      "id": "active",
+      "kind": "file-name",
+      "label": "Animation",
+      "maxBytes": 47,
+      "resetLabel": "Stock"
+     }
+    ],
+    "version": 1
+   }
   },
   {
    "name": "v2_all_kinds",
    "module": "test/typed",
    "module_name": "Typed",
    "toml": "[workbench]\nversion = 1\n\n[[setting]]\nid = \"gain\"\nlabel = \"Gain\"\ntype = \"integer\"\nmin = -10\nmax = 10\nstep = 2\ndecimals = 1\nunit = \"dB\"\ndefault = 0\n\n[[setting]]\nid = \"flag\"\nlabel = \"Flag\"\ntype = \"boolean\"\ndefault = true\napply = \"next-restart\"\n\n[[setting]]\nid = \"mode\"\nlabel = \"Mode\"\ntype = \"choice\"\nchoices = [\"Off\", \"Soft\", \"Hard\"]\ndefault = \"Soft\"\n\n[[setting]]\nid = \"name\"\nlabel = \"Name\"\ntype = \"text\"\nmax_bytes = 8\n",
-   "bytes_hex": "0205547970656404046761696e044761696e040200fffffff60000000a00000002010000000002644204666c616704466c616701030101046d6f6465044d6f64650104000301034f666604536f66740448617264046e616d65044e616d65080000"
+   "bytes_hex": "0205547970656404046761696e044761696e040200fffffff60000000a00000002010000000002644204666c616704466c616701030101046d6f6465044d6f64650104000301034f666604536f66740448617264046e616d65044e616d65080000",
+   "expected_schema": {
+    "module": "test/typed",
+    "settings": [
+     {
+      "apply": "immediate",
+      "decimals": 1,
+      "default": 0,
+      "id": "gain",
+      "kind": "integer",
+      "label": "Gain",
+      "max": 10,
+      "min": -10,
+      "step": 2,
+      "unit": "dB"
+     },
+     {
+      "apply": "next-restart",
+      "default": true,
+      "id": "flag",
+      "kind": "boolean",
+      "label": "Flag"
+     },
+     {
+      "apply": "immediate",
+      "choices": [
+       "Off",
+       "Soft",
+       "Hard"
+      ],
+      "default": "Soft",
+      "id": "mode",
+      "kind": "choice",
+      "label": "Mode"
+     },
+     {
+      "apply": "immediate",
+      "id": "name",
+      "kind": "text",
+      "label": "Name",
+      "maxBytes": 8
+     }
+    ],
+    "version": 2
+   }
   },
   {
    "name": "v2_integer_extremes",
    "module": "test/extremes",
    "module_name": "Extremes",
    "toml": "[workbench]\nversion = 1\n\n[[setting]]\nid = \"wide\"\nlabel = \"Wide\"\ntype = \"integer\"\nmin = -2147483648\nmax = 2147483647\ndefault = 0\n",
-   "bytes_hex": "020845787472656d65730104776964650457696465040200800000007fffffff00000001000000000000"
+   "bytes_hex": "020845787472656d65730104776964650457696465040200800000007fffffff00000001000000000000",
+   "expected_schema": {
+    "module": "test/extremes",
+    "settings": [
+     {
+      "apply": "immediate",
+      "decimals": 0,
+      "default": 0,
+      "id": "wide",
+      "kind": "integer",
+      "label": "Wide",
+      "max": 2147483647,
+      "min": -2147483648,
+      "step": 1,
+      "unit": ""
+     }
+    ],
+    "version": 2
+   }
   }
  ],
  "values": [

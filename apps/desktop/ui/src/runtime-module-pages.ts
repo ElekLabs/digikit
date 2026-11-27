@@ -1,5 +1,7 @@
 import { createEffect, createSignal, onCleanup } from 'solid-js';
-import type { DkModule, ModuleSettingsEndpoint, PublicModuleSettings } from '@digi/dk-session';
+import type { DkModule, ModuleSettingsEndpoint } from '@digi/dk-session';
+import type { DescribedSchema } from '@digi/module-ui';
+import { describeDeviceSettings } from '@digi/workbench-core/module-ui/device-settings.ts';
 import type { ModulePage } from '@digi/workbench-core/module-ui/module-page.ts';
 import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
 
@@ -9,7 +11,7 @@ export function runtimeModulePages(
   app: TransferApp,
   pageFor: (
     id: string,
-    schema: PublicModuleSettings,
+    schema: DescribedSchema,
     open: (mounted: () => boolean) => ModuleSettingsEndpoint,
   ) => ModulePage,
 ) {
@@ -43,7 +45,7 @@ export function runtimeModulePages(
         .session()
         .then(async (session) => {
           if (!current()) return;
-          const schema = await session.moduleSettings(index, instance, current).describe();
+          const schema = await describeDeviceSettings(session.moduleSettings(index, instance, current));
           if (!current()) return;
           entry.page = pageFor(name, schema, (mounted) =>
             session.moduleSettings(index, instance, () => current() && mounted()),

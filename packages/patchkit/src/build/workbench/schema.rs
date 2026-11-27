@@ -2,10 +2,14 @@
 //! of them reads TOML.
 
 use super::declaration::Declaration;
-use super::setting::{Setting, TEXT_MAX_BYTES};
+use super::descriptor::MAX_STRING_BYTES;
+use super::setting::Setting;
 use crate::error::*;
 use std::collections::HashSet;
 use std::path::Path;
+
+/// The most settings a descriptor holds: its count takes one byte.
+const MAX_SETTINGS: usize = 255;
 
 #[derive(Debug)]
 pub(super) struct Schema {
@@ -24,11 +28,13 @@ impl Schema {
         if doc.workbench.version != 1 {
             return Err(err!("unsupported Workbench descriptor version"));
         }
-        if !(1..=TEXT_MAX_BYTES).contains(&name.len()) {
-            return Err(err!("module name must be 1 to 255 UTF-8 bytes"));
+        if !(1..=MAX_STRING_BYTES).contains(&name.len()) {
+            return Err(err!(
+                "module name must be 1 to {MAX_STRING_BYTES} UTF-8 bytes"
+            ));
         }
-        if !(1..=255).contains(&doc.setting.len()) {
-            return Err(err!("expected 1 to 255 public settings"));
+        if !(1..=MAX_SETTINGS).contains(&doc.setting.len()) {
+            return Err(err!("expected 1 to {MAX_SETTINGS} public settings"));
         }
         let mut ids = HashSet::new();
         let mut symbols = HashSet::new();

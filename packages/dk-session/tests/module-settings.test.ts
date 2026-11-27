@@ -45,7 +45,7 @@ function scripted(replies: Uint8Array[]) {
   return { session, requests };
 }
 
-test('the same endpoint describes file choices and text and saves and resets a file choice', async () => {
+test('the endpoint returns the raw descriptor and moves value bytes for a put and a reset', async () => {
   const accepted = new Uint8Array();
   const { session, requests } = scripted([
     schema,
@@ -60,26 +60,15 @@ test('the same endpoint describes file choices and text and saves and resets a f
     done(3),
   ]);
   const endpoint = wireModuleSettings(session, 3, 0x1234, () => true);
-  expect(await endpoint.describe()).toEqual({
-    name: 'Animations',
-    settings: [
-      {
-        id: 'active',
-        label: 'Animation',
-        maxBytes: 47,
-        kind: 'file-name',
-        extension: 'dkbs',
-        resetLabel: 'Stock',
-        apply: 'next-restart',
-      },
-      { id: 'caption', label: 'Caption', maxBytes: 24, kind: 'text', apply: 'immediate' },
-    ],
-  });
+  expect(await endpoint.describe()).toEqual(schema);
   const old = await endpoint.get(0);
   expect(old.value).toBeUndefined();
-  const selected = await endpoint.put(0, 'intro.dkbs', old.revision);
-  expect(selected.value).toBe('intro.dkbs');
-  await expect(endpoint.reset(0, old.revision)).rejects.toThrow(/changed/);
+  const selected = await endpoint.put(0, utf8('intro.dkbs'), old.revision);
+  expect(selected.value).toEqual(utf8('intro.dkbs'));
+  await expect(endpoint.reset(0, old.revision)).rejects.toMatchObject({
+    status: 'E_MODULE_UI_CONFLICT',
+    message: expect.stringMatching(/changed/),
+  });
   expect((await endpoint.reset(0, selected.revision)).value).toBeUndefined();
   const submit = requests.find((request) => request[0] === 2)!;
   expect(Array.from(submit.slice(0, 6))).toEqual([2, 3, 0, 0, 0x12, 0x34]);
@@ -96,4 +85,13 @@ test('a delayed result cannot resolve after the page or target closes', async ()
     return { cmd, status: 0, seq: 0, body: schema };
   };
   await expect(wireModuleSettings(session, 0, 7, () => active).describe()).rejects.toThrow(/closed/);
+});
+
+test('a binary value that is not UTF-8 passes through unchanged', async () => {
+  const bytes = Uint8Array.of(0xff, 0xff, 0xff, 0xf6);
+  const reply = Uint8Array.of(0, ...be32(0), ...be32(5), 1, ...bytes);
+  const { session, requests } = scripted([new Uint8Array(), reply]);
+  const put = await wireModuleSettings(session, 0, 7, () => true).put(1, bytes, 4);
+  expect(put).toEqual({ revision: 5, value: bytes });
+  expect(Array.from(requests[0]!.slice(10))).toEqual([1, 0, 0, 0, 4, ...bytes]);
 });

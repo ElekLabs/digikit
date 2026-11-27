@@ -1,4 +1,5 @@
 import type { DkSession } from '@digi/dk-session';
+import type { ModuleFileClient } from '@digi/module-ui';
 import {
   listModuleFiles,
   moduleFilePath,
@@ -7,13 +8,6 @@ import {
   readStoreFile,
   removeModuleFile,
 } from '../modules/dktransfer.ts';
-
-export interface ModuleFileClient {
-  list(): Promise<{ name: string; size: number }[]>;
-  read(name: string): Promise<Uint8Array>;
-  send(name: string, bytes: Uint8Array, progress: (sent: number, total: number) => void): Promise<void>;
-  remove(name: string): Promise<void>;
-}
 
 export function bindModuleFiles(
   id: string,

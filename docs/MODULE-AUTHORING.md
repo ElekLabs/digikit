@@ -587,6 +587,7 @@ Typed settings (patchkit generates them; the runtime and Workbench side of versi
 An `integer` also gets `_MIN`, `_MAX`, `_STEP` and `_DEFAULT` and `wb_setting_<id>_get(dk_settings *)`, which returns the default when the value is
 missing or invalid, and `wb_setting_<id>_put(dk_settings *, v)`, which returns `DK_E_SET_VALUE` for an invalid `v`. A `boolean` has the same
 functions with `int`. A `choice` defines `WB_SETTING_<ID>_<LABEL>` constants (label in upper case, other characters as `_`), `_COUNT`, `_DEFAULT` and `uint8_t` accessors.
+Choice labels must turn into distinct, non-empty C names (only letters and digits count; runs of other characters become one `_`); patchkit refuses a label with no letter or digit and two labels or settings that share a C name. Ids must be C identifiers (letters, digits, `-` and `_`, not starting with a digit). The generated header includes `dk/gen/imports.h` and `dk/core/status.h`, so do not include them again for it; it writes no label text into comments.
 `patchkit workbench-ts MODDIR --write` writes `MODDIR/workbench/gen/settings.ts` (the schema and the `Settings` type for the module's page);
 `--check` exits 1 and prints the path when the file is missing or differs.
 
