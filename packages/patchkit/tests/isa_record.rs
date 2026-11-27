@@ -17,6 +17,7 @@ fn opts() -> dkm::Options {
         stereo: false,
         gate: false,
         service: None,
+        payloads: vec![],
     }
 }
 

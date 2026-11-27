@@ -10,6 +10,7 @@ pub struct Report {
     pub(super) refused: RefusedList,
     pub(super) pending: Option<PackageId>,
     pub(super) dsp_pending: Steps,
+    pub(super) attaching: Steps,
 }
 
 impl Report {
@@ -32,6 +33,12 @@ impl Report {
     /// [`PackageManager::take_down_closure`](super::PackageManager::take_down_closure).
     pub fn dsp_pending(&self) -> &Steps {
         &self.dsp_pending
+    }
+
+    /// The packages whose attach is not over (a service answered `Pending`): they are live, in `Attaching`, and [`PackageManager::step`](super::PackageManager::step) goes on
+    /// with them. In a [`step`](super::PackageManager::step) report: those still waiting after this pass.
+    pub fn attaching(&self) -> &Steps {
+        &self.attaching
     }
 
     /// The package whose restore was busy when the operation ended: a take-down waits ([`PackageManager::retry_pending`](super::PackageManager::retry_pending))

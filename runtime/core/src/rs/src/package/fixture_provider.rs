@@ -4,8 +4,8 @@
 use crate::package::core_api::{RealCore, REAL_CORE};
 use crate::package::provider_rows::RowSource;
 use dkrt_abi::provider::{
-    name_hash, Describe, DescribeV1, DspPart, DspV1, LifecycleV1, PartRef, Provider, ProviderHandle, ProviderRow, Records, RecordsV1, TickV1, Ticker, DESCRIBE_NEWEST, DSP_NEWEST,
-    LIFECYCLE_NEWEST, PART_DESCRIBE, PART_DSP, PART_LIFECYCLE, PART_RECORDS, PART_TICK, RECORDS_NEWEST, TICK_NEWEST,
+    name_hash, Describe, DescribeV1, DspPart, DspV1, LifecycleV1, PartRef, Payloads, PayloadsV1, Provider, ProviderHandle, ProviderRow, Records, RecordsV1, TickV1, Ticker, DESCRIBE_NEWEST,
+    DSP_NEWEST, LIFECYCLE_NEWEST, PART_DESCRIBE, PART_DSP, PART_LIFECYCLE, PART_PAYLOADS, PART_RECORDS, PART_TICK, PAYLOADS_NEWEST, RECORDS_NEWEST, TICK_NEWEST,
 };
 use std::boxed::Box;
 use std::vec::Vec;
@@ -33,6 +33,12 @@ impl Fixture {
     pub(crate) fn dsp<P: Provider<RealCore> + DspPart<RealCore>>(mut self) -> Fixture {
         let t: &'static DspV1 = Box::leak(Box::new(DspV1::of::<P, RealCore>()));
         self.parts.push(PartRef::new(PART_DSP, DSP_NEWEST, t as *const _ as *const ()));
+        self
+    }
+
+    pub(crate) fn payloads<P: Provider<RealCore> + Payloads<RealCore>>(mut self) -> Fixture {
+        let t: &'static PayloadsV1 = Box::leak(Box::new(PayloadsV1::of::<P, RealCore>()));
+        self.parts.push(PartRef::new(PART_PAYLOADS, PAYLOADS_NEWEST, t as *const _ as *const ()));
         self
     }
 

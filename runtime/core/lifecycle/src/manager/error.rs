@@ -44,8 +44,10 @@ pub enum LifecycleError {
     },
     /// A service said it cannot stop now; nothing was touched.
     CannotStop { package: PackageId, status: Status },
-    /// The restore of the entries answered `E_BUSY`: the package stays in `RestorePending`; finish with `retry_pending`.
+    /// The restore of the entries answered `E_BUSY` (the package stays in `RestorePending`), or the detach answered pending (it stays in `Detaching`); finish with `retry_pending`.
     Busy { package: PackageId },
+    /// The attach of the package stayed pending for more passes than the manager allows; its closure was taken down.
+    AttachTimeout { package: PackageId },
     /// The restore failed for another reason; the package stays in `RestorePending`; finish with `retry_pending`.
     RestoreFailed {
         package: PackageId,

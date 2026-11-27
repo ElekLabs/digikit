@@ -1,0 +1,29 @@
+[module]
+id = "test/local-payload-user"
+version = "0.1.0"
+name = "Local payload client"
+category = "test"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Fixture: a module that carries two payloads for the local-payload service (a slow kind that answers Pending three times, and a fast one)"
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+[[object]]
+path = "build/local-payload-user.dko.json"
+sources = ["src/c/user.c"]
+place = "cf.expansion"
+
+# the first byte of the slow body is the number of Pending answers, the second the number of Pending answers of the retire
+[[object]]
+path = "src/slow.hex"
+payload = "local-payload.1"
+
+[[object]]
+path = "src/fast.hex"
+payload = "local-payload.2"

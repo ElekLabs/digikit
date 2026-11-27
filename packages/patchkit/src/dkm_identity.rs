@@ -83,6 +83,7 @@ mod tests {
     /// A packed file of the stub module, with the header table `reg` (empty: the head only).
     fn file(reg: &[u8], dsp: &[u8]) -> Vec<u8> {
         let o = crate::dkm::Options {
+            payloads: vec![],
             name: "test/x".into(),
             version: 0x010203,
             trace: false,

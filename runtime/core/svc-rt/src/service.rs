@@ -17,7 +17,7 @@ macro_rules! hook_device {
 
 /// The glue of a service file: `service!(Shortcuts, "shortcuts", &KINDS_SHORTCUTS, parts = [Records, Tick], hooks = [...], fills = [...], exports = ..., tick = f)` for an owner object
 /// `Shortcuts: Provider<ImportCore>` that also implements the traits of the parts it names. `parts` lists the optional parts the object adopts (`Records`, `Dsp`, `Tick`, `Query`,
-/// `Describe`, `State`; the lifecycle part is always there; `Reentry` has no table: it gives the owner an event queue, see `Reentry`). `kinds` (`&'static [(u32, u32)]`, as `dkrt_sdk::records::KINDS_*`)
+/// `Describe`, `State`, `Payloads`; the lifecycle part is always there; `Reentry` has no table: it gives the owner an event queue, see `Reentry`). `kinds` (`&'static [(u32, u32)]`, as `dkrt_sdk::records::KINDS_*`)
 /// need the `Records` part. The macro emits the part tables, the row, the cell `DK_SVC_OWNER` (`Owner<Shortcuts>`: `init` makes the instance with `Provider::start_in` before the declarations,
 /// `fini` stops it), the module record `dk_module`, the data word `dk_svc_abi` and (on the ColdFire) the panic handler; `Query` also declares the resident query entry and points it at the part.
 ///
@@ -253,9 +253,20 @@ macro_rules! service {
         static DK_SVC_DESCRIBE: $crate::dkrt_abi::provider::DescribeV1 =
             $crate::dkrt_abi::provider::DescribeV1::of_in::<$svc, $crate::ImportCore, DkSvcEnter>();
     };
+    (@part_table Payloads, $svc:ty, $kinds:expr) => {
+        static DK_SVC_PAYLOADS: $crate::dkrt_abi::provider::PayloadsV1 =
+            $crate::dkrt_abi::provider::PayloadsV1::of_in::<$svc, $crate::ImportCore, DkSvcEnter>();
+    };
     (@part_table State, $svc:ty, $kinds:expr) => {
         static DK_SVC_STATE: $crate::dkrt_abi::provider::StateV1 =
             $crate::dkrt_abi::provider::StateV1::of_in::<$svc, $crate::ImportCore, DkSvcEnter>();
+    };
+    (@part_ref Payloads) => {
+        $crate::dkrt_abi::provider::PartRef::new(
+            $crate::dkrt_abi::provider::PART_PAYLOADS,
+            $crate::dkrt_abi::provider::PAYLOADS_NEWEST,
+            &DK_SVC_PAYLOADS as *const _ as *const (),
+        )
     };
     (@part_ref Records) => {
         $crate::dkrt_abi::provider::PartRef::new(

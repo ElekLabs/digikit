@@ -31,6 +31,7 @@ where
             todo: order,
             rebuild: order,
             down: Steps::new(),
+            by_manager: false,
         });
         self.run_pending_take_down()
     }

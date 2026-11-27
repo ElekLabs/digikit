@@ -15,4 +15,6 @@ pub(super) struct PendingTakeDown {
     pub(super) todo: Steps,
     pub(super) rebuild: Steps,
     pub(super) down: Steps,
+    /// The manager started it (a failed or timed-out attach): nobody else knows it waits, so [`PackageManager::step`](super::PackageManager::step) goes on with it.
+    pub(super) by_manager: bool,
 }

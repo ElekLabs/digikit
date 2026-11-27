@@ -5,7 +5,7 @@ use crate::seams::{Linker, Manifest, PackageInstaller, Placer, ProviderHost};
 use crate::state::State;
 use crate::steps::{sort, Steps};
 use crate::{install::InstallError, PackageId};
-use dkrt_abi::provider::Status;
+use dkrt_abi::provider::{Status, Step as Attach};
 
 fn failed(package: PackageId, entering: State, status: Status) -> LifecycleError {
     LifecycleError::Failed {
@@ -169,6 +169,9 @@ where
                 Ok(()) => {
                     report.brought_up.push(p);
                     started.push(p);
+                    if self.progress.state(p) == Some(State::Attaching) {
+                        report.attaching.push(p);
+                    }
                     // the DSP part starts as soon as the package is up and before the next one is placed (the DSP loader holds one reservation at a time); it comes
                     // over UI passes, so this returns at once and never blocks a boot
                     if self.host.start_dsp(p) {
@@ -197,7 +200,11 @@ where
         }
         if request.pin {
             for &r in request.roots {
-                if self.progress.state(r) == Some(State::Active) {
+                // a root whose attach is pending is pinned too: it is up when the attach ends, and its failure takes the pin off
+                if matches!(
+                    self.progress.state(r),
+                    Some(State::Active | State::Attaching)
+                ) {
                     self.graph.set_pinned(r, true);
                 }
             }
@@ -225,6 +232,7 @@ where
             todo,
             rebuild: Steps::new(),
             down: Steps::new(),
+            by_manager: false,
         });
         if waiting.is_none() {
             // a busy restore keeps the rest for `retry_pending`
@@ -292,12 +300,21 @@ where
             .map_err(|s| failed(p, State::Activated, s))?;
         self.progress.set(p, State::Activated);
 
-        // one call: the host walks the records over all the services (an error leaves nothing attached)
-        self.host
+        // one call: the host walks the records over all the services (an error leaves nothing attached); the first call of a pending walk is this one, the staged file is
+        // valid for it, and `step` makes the others
+        let step = self
+            .host
             .attach(p, services.as_slice())
             .map_err(|status| failed(p, State::Active, status))?;
         self.progress.set_attached(p, true);
-        self.progress.set(p, State::Active);
+        self.progress.set(
+            p,
+            if step == Attach::Pending {
+                State::Attaching
+            } else {
+                State::Active
+            },
+        );
         self.live.insert(p);
         Ok(())
     }

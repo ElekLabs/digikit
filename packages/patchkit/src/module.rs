@@ -978,8 +978,14 @@ pub struct SystemPackageRef {
 #[derive(Clone, Debug, Deserialize)]
 pub struct ObjectRef {
     pub path: String,
-    /// Port region the object is placed in: `dsp.l2`, `cf.expansion`, `cf.flash_cave`.
+    /// Port region the object is placed in: `dsp.l2`, `cf.expansion`, `cf.flash_cave`. Empty for a payload (`payload`), which is placed in nothing.
+    #[serde(default)]
     pub place: String,
+    /// `"<service>.<kind>"`: the file at `path` is not an object but a body that the service `<service>` installs for the module as its local kind `<kind>` (a decimal u16;
+    /// the `Payloads` part). Its text is the body in hex (whitespace allowed). The packer writes it behind the image and a `PAYLOADS` item in the header table, and the owner
+    /// becomes a hard need.
+    #[serde(default)]
+    pub payload: Option<String>,
     /// Restrict to these devices (`dt2`, `dn2`); empty = all.
     #[serde(default)]
     pub devices: Vec<String>,
@@ -1116,10 +1122,48 @@ pub struct Claim {
     pub devices: Vec<String>,
 }
 
+/// A body a module carries for a service (`[[object]] payload = "<service>.<kind>"`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PayloadBody {
+    pub service: String,
+    pub kind: u16,
+    pub body: Vec<u8>,
+}
+
+/// The service and the local kind of a payload name `<service>.<kind>`: the service is a name of `local_service_name`, the kind a decimal u16.
+pub fn parse_payload_name(name: &str) -> Result<(String, u16)> {
+    let (service, kind) = name
+        .rsplit_once('.')
+        .ok_or_else(|| err!("payload {name:?}: write \"<service>.<kind>\""))?;
+    let kind: u16 = kind.parse().map_err(|_| {
+        err!("payload {name:?}: the kind {kind:?} is not a decimal number below 65536")
+    })?;
+    if !local_service_name(service) {
+        return Err(err!("payload {name:?}: {service:?} is not a service name"));
+    }
+    Ok((service.to_string(), kind))
+}
+
+/// The bytes of a payload file: hex digits, whitespace allowed.
+fn payload_bytes(path: &str, text: &str) -> Result<Vec<u8>> {
+    let digits: Vec<u8> = text.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
+    if digits.len() % 2 != 0 || !digits.iter().all(u8::is_ascii_hexdigit) {
+        return Err(err!(
+            "{path}: a payload file is an even number of hex digits"
+        ));
+    }
+    Ok(digits
+        .chunks(2)
+        .map(|p| u8::from_str_radix(std::str::from_utf8(p).unwrap_or("0"), 16).unwrap_or(0))
+        .collect())
+}
+
 #[derive(Clone, Debug)]
 pub struct Module {
     pub manifest: Manifest,
     pub objects: Vec<Dko>,
+    /// The bodies of the `[[object]]` entries with `payload` (those entries are not in `manifest.object`), in manifest order.
+    pub payloads: Vec<PayloadBody>,
     /// parsed `index_table` files, by registry name
     pub alloc: BTreeMap<String, AllocTable>,
     /// sha256 of the manifest text and the object texts, in order (for the plan)
@@ -1155,7 +1199,52 @@ impl Module {
         manifest.validate_header()?;
         manifest.expand_reservations()?;
         let mut objects = vec![];
+        let mut payloads = vec![];
         let mut all = manifest_text.to_string();
+        // a payload is no object: it has no `place` and is read as a body, and `manifest.object` keeps only the objects (the code that pairs them with `objects` relies on it)
+        let (bodies, objs): (Vec<ObjectRef>, Vec<ObjectRef>) = std::mem::take(&mut manifest.object)
+            .into_iter()
+            .partition(|o| o.payload.is_some());
+        manifest.object = objs;
+        for o in &manifest.object {
+            if o.place.is_empty() {
+                return Err(err!(
+                    "{}: [[object]] {:?} needs `place` (or `payload`)",
+                    manifest.module.id,
+                    o.path
+                ));
+            }
+        }
+        for o in &bodies {
+            let (service, kind) = parse_payload_name(o.payload.as_deref().unwrap_or_default())?;
+            if !o.place.is_empty() {
+                return Err(err!(
+                    "{}: the payload {:?} has no `place`",
+                    manifest.module.id,
+                    o.path
+                ));
+            }
+            if payloads
+                .iter()
+                .any(|p: &PayloadBody| p.service == service && p.kind == kind)
+            {
+                return Err(err!(
+                    "{}: two payloads for {service}.{kind}",
+                    manifest.module.id
+                ));
+            }
+            let t = match read(&o.path) {
+                Ok(t) => t,
+                Err(_) if lenient => continue,
+                Err(e) => return Err(e),
+            };
+            all.push_str(&t);
+            payloads.push(PayloadBody {
+                service,
+                kind,
+                body: payload_bytes(&o.path, &t)?,
+            });
+        }
         for o in &manifest.object {
             let t = match read(&o.path) {
                 Ok(t) => t,
@@ -1178,6 +1267,7 @@ impl Module {
         Ok(Module {
             manifest,
             objects,
+            payloads,
             alloc,
             digest: sha256_hex(all.as_bytes()),
             dir: Default::default(),
@@ -1470,6 +1560,7 @@ impl Library {
             headers.extend_unique(vec![Module {
                 manifest,
                 objects: vec![],
+                payloads: vec![],
                 alloc: BTreeMap::new(),
                 digest: String::new(),
                 dir: path.parent().unwrap().to_path_buf(),
@@ -1739,6 +1830,75 @@ mod manifest_tests {
             toml::from_str(&format!("{head}[[export]]\nname = \"ledger_op\"\n{extra}"))?;
         m.validate_header()?;
         Ok(m)
+    }
+
+    /// A module from its manifest text and the files it reads (`(path, text)`).
+    fn module_of(extra: &str, files: &[(&str, &str)]) -> Result<Module> {
+        let read = |p: &str| -> Result<String> {
+            files
+                .iter()
+                .find(|(n, _)| *n == p)
+                .map(|(_, t)| t.to_string())
+                .ok_or_else(|| err!("{p}: no such file"))
+        };
+        Module::from_parts_lenient(&format!("{HEAD}{extra}"), &read)
+    }
+
+    #[test]
+    fn a_payload_is_a_body_of_hex_for_a_service_and_a_kind_and_no_object() {
+        let m = module_of(
+            "[[object]]\npath = \"build/a.bin\"\npayload = \"local-ping.7\"\n",
+            &[("build/a.bin", "01 02\n0aff")],
+        )
+        .unwrap();
+        assert!(m.manifest.object.is_empty() && m.objects.is_empty());
+        assert_eq!(
+            m.payloads,
+            [PayloadBody {
+                service: "local-ping".into(),
+                kind: 7,
+                body: vec![1, 2, 0x0a, 0xff]
+            }]
+        );
+    }
+
+    #[test]
+    fn a_payload_name_a_body_and_an_object_without_place_are_checked() {
+        let one = |payload: &str, body: &str| {
+            module_of(
+                &format!("[[object]]\npath = \"b\"\npayload = \"{payload}\"\n"),
+                &[("b", body)],
+            )
+            .map(|_| ())
+            .unwrap_err()
+            .to_string()
+        };
+        assert!(one("local-ping", "00").contains("<service>.<kind>"));
+        assert!(one("local-ping.x", "00").contains("decimal"));
+        assert!(one("local-ping.70000", "00").contains("decimal"));
+        assert!(one("Bad Name.1", "00").contains("not a service name"));
+        assert!(one("local-ping.1", "0").contains("hex digits"));
+        assert!(one("local-ping.1", "zz").contains("hex digits"));
+        // an object has a place
+        let e = module_of("[[object]]\npath = \"b\"\n", &[("b", "{}")])
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("needs `place`"), "{e}");
+        // a payload has none, and one name is one body
+        let e = module_of(
+            "[[object]]\npath = \"b\"\nplace = \"cf.expansion\"\npayload = \"a.1\"\n",
+            &[("b", "00")],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(e.contains("no `place`"), "{e}");
+        let e = module_of(
+            "[[object]]\npath = \"b\"\npayload = \"a.1\"\n[[object]]\npath = \"c\"\npayload = \"a.1\"\n",
+            &[("b", "00"), ("c", "00")],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(e.contains("two payloads"), "{e}");
     }
 
     #[test]

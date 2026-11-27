@@ -11,7 +11,7 @@ use crate::package::loader::{records, Images, PhaseKind, Registry, TABLE_MAX};
 use dkrt_abi::package::PackageId;
 use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::{MAX_MODULES, REC_MAX};
-use dkrt_lifecycle::{LifecycleError, Report};
+use dkrt_lifecycle::{LifecycleError, Report, State};
 use dkrt_sdk::*;
 
 impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
@@ -97,6 +97,17 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         any
     }
 
+    /// Does a member of the closure of record `rec` still attach (a service answered `Pending` to a payload)? The reload is not over then: the job asks again, and `dsp_step`
+    /// steps the manager (`PackageManager::step`).
+    unsafe fn closure_attaching(&self, rec: usize) -> bool {
+        let Some(m) = self.mgr() else {
+            return false;
+        };
+        let mut members = [0usize; REC_MAX];
+        let n = self.closure(rec, &mut members);
+        members[..n].iter().any(|&r| m.state_of(PackageId(r as u8)) == Some(State::Attaching))
+    }
+
     /// A reload of service record `rec` cannot go on: every member gets its tick back (`Loader::reload_abort`). False when the reload went on (a member is down, or a restore of the
     /// closure waits: it is left to `dsp_step`).
     pub unsafe fn closure_abort(&mut self, rec: usize) -> bool {
@@ -149,9 +160,14 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
                 let out = m.retry_pending();
                 return self.reload_end(out, rec, &[]);
             }
-            // the manager is done: the old copies' memory may still be held (a file or I/O step in flight)
-            if self.closure_retained(rec) {
+            // the manager is done: the old copies' memory may still be held (a file or I/O step in flight), or a member still attaches its payloads
+            let held = self.closure_retained(rec);
+            if held || self.closure_attaching(rec) {
                 return E_BUSY;
+            }
+            if !m.live().contains(id) {
+                // an attach was refused or did not end, and the manager took the closure down: the reload did not end well
+                return self.reload_end(Err(LifecycleError::NotLive { package: id }), rec, &[]);
             }
             return self.reload_end(Ok(Report::default()), rec, &[]);
         }
@@ -211,8 +227,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             Err(e) => Err(e),
         };
         let down = members.iter().any(|&r| !m.live().contains(PackageId(r as u8))) || m.restore_pending().is_some();
-        if out.is_ok() && !down && self.closure_retained(rec) {
-            // up again, but an old copy's memory is not back yet: the job asks again
+        let held = out.is_ok() && !down && self.closure_retained(rec);
+        if held || (out.is_ok() && !down && self.closure_attaching(rec)) {
+            // up again, but an old copy's memory is not back yet, or a member still attaches its payloads: the job asks again
             self.reload.wait_retained(&mut self.session.carried, l);
             return E_BUSY;
         }

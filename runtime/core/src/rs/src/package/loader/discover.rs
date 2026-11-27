@@ -454,7 +454,7 @@ mod tests {
     use std::vec::Vec;
 
     const KEEP: Table<'static> =
-        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[], callback_order: None, service_imports: &[] };
+        Table { needs: &[], uses: &[], keys: &[], kinds: &[], slots: &[], hooks: &[], exports: &[], resources: &[], provides: &[], bind: &[], fw: &[], names: &[], sites: &[], callback_order: None, service_imports: &[], payloads: &[] };
 
     /// A role `role` file with `table` as it is.
     fn raw_file(role: u32, table: &[u8]) -> Vec<u8> {

@@ -1,5 +1,5 @@
 use crate::{LiveSet, PackageGraph, PackageId, Phase, ProviderHost, Step, Trace, Traced};
-use dkrt_abi::provider::{Declarations, Status};
+use dkrt_abi::provider::{Declarations, Status, Step as Pace};
 
 fn of(r: &Result<(), Status>) -> i32 {
     r.err().unwrap_or(0)
@@ -27,16 +27,24 @@ impl<S: ProviderHost, T: Trace> ProviderHost for Traced<S, T> {
         self.inner.attach_rank(service)
     }
 
-    fn attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<(), Status> {
-        self.run(Step::Attach, consumer, |s| s.attach(consumer, services), of)
+    fn attach(&mut self, consumer: PackageId, services: &[PackageId]) -> Result<Pace, Status> {
+        self.run(
+            Step::Attach,
+            consumer,
+            |s| s.attach(consumer, services),
+            |r| match r {
+                Ok(step) => step.code(),
+                Err(status) => *status,
+            },
+        )
     }
 
-    fn detach(&mut self, consumer: PackageId, services: &[PackageId]) {
+    fn detach(&mut self, consumer: PackageId, services: &[PackageId]) -> Pace {
         self.run(
             Step::Detach,
             consumer,
             |s| s.detach(consumer, services),
-            |_| 0,
+            |step| step.code(),
         )
     }
 
