@@ -19,7 +19,7 @@ use crate::{SECTOR, crc32};
 
 pub const SELECTION_MAGIC: u32 = 0x444b_534c;
 pub const SELECTION_VERSION: u32 = 1;
-pub const SELECTION_MAX: usize = 8;
+pub const SELECTION_MAX: usize = dkneeds::MAX_SELECTION as usize;
 pub const SELECTION_PATH_BYTES: usize = 56;
 /// The file name in `digikit/`.
 pub const SELECTION_FILE: &str = "selection.txt";

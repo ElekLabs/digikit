@@ -4,7 +4,6 @@ import { expect, test } from 'vitest';
 import { bootInfo, bootInfoLoaded } from '@digi/regression/runtime/guest-mailbox.ts';
 import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
 import { cardRigs } from '@digi/regression/runtime/card-rig.ts';
-import { RT } from '@digi/regression/runtime/runtime-roots.ts';
 import { type CardRig } from '@digi/regression/runtime/card-rig-api.ts';
 import { capture } from '@digi/regression/runtime/note-capture.ts';
 import { peak, readFloatWav } from '@digi/regression/runtime/pcm-files.ts';
@@ -14,9 +13,9 @@ import { bootScreenCard, IB, lastFrame } from './introblank-support.ts';
 
 /**
  * core/introblank: the stock intro draws black (the adapter's scene table replaces the stock one at the intro setup) until a boot screen module or the
- * safe-mode screen takes over; when nothing takes over, the runtime ends the intro after the module load. The tests run the same cards on an image without
- * the adapter (the stock intro) and with it. The framebuffer is read at the ready point: the intro's last frame.
- * This file: the stock reference and the adapter (the adapter tests compare with the reference, so they stay together). REC held is in introblank-rec.
+ * safe-mode screen takes over; when nothing takes over, the runtime ends the intro after the module load. The tests run on an image with
+ * the adapter. The framebuffer is read at the ready point: the intro's last frame. The stock intro's length is a constant (STOCK_TICKS, the five stock
+ * scene tables), so no run on the stock image is needed as a reference. REC held is in tools/bootscreen bootscreen-safe (the same boot, the safe-mode frame).
  */
 
 /** The stock intro's length in ticks (the five stock scene tables and the adapter's table). */
@@ -37,12 +36,12 @@ async function uiReached(h: CardRig) {
 }
 
 /** A note of the sine machine reaches the PCM tap: the DSP runs and the machine list is complete. */
-async function playsANote(h: CardRig, black: boolean) {
+async function playsANote(h: CardRig) {
   const sine = h.mod('test/sine', 'sine');
   await h.load('note', { modules: [sine], selection: [sine.name] });
   const info = await bootInfoLoaded(h.session, h.plan);
   expect(info).toMatchObject({ safe: 0, loaded: 1, uiReached: 1 });
-  if (black) expect((await introNow(h.session)).equals(BLACK), 'black: the adapter ended the intro').toBe(true);
+  expect((await introNow(h.session)).equals(BLACK), 'black: the adapter ended the intro').toBe(true);
   const status = await h.session.status();
   expect(status.dsp).toBe('sharc');
   expect(status.audio?.halted ?? false).toBeFalsy();
@@ -55,42 +54,21 @@ async function playsANote(h: CardRig, black: boolean) {
     best = peak(readFloatWav(wav));
     if (best > 0.01) break;
   }
-  console.log(`INTROBLANK ${h.device} ${black ? 'adapter' : 'stock'} note peak=${best} tries=${tries}`);
+  console.log(`INTROBLANK ${h.device} adapter note peak=${best} tries=${tries}`);
   expect(best, 'the machine makes sound').toBeGreaterThan(0.01);
 }
 
-/** The stock image's numbers per device, for the image with the adapter to beat. */
-const stock = new Map<Device, { blocks: number; ticks: number }>();
-
-cardRigs('introblank: the stock image (reference)', { dsp: 'sharc', relaxFs: true, roots: RT, symbols: CARD_SYMBOLS }, (h) => {
-  test(
-    'no boot screen: the stock intro plays to the end before the UI',
-    async () => {
-      await h.load('stock', { modules: [], selection: [] });
-      const ui = await uiReached(h);
-      console.log(`INTROBLANK ${h.device} stock blocks=${ui.blocks} insns=${ui.insns} ticks=${ui.ticks}`);
-      expect(ui.ticks, 'the stock intro ran its whole length').toBeGreaterThanOrEqual(STOCK_TICKS);
-      stock.set(h.device, ui);
-    },
-  );
-
-  test('control: a note plays on the stock image', () => playsANote(h, false));
-});
-
 cardRigs('introblank', { dsp: 'sharc', relaxFs: true, roots: IB, symbols: CARD_SYMBOLS }, (h) => {
   test(
-    'no boot screen: the intro is black and the UI comes sooner than on the stock image',
+    'no boot screen: the intro is black and ends before the stock length',
     async () => {
       await h.load('black', { modules: [], selection: [] });
       const info = await bootInfo(h.session, h.plan);
       expect(info).toMatchObject({ safe: 0, uiReached: 1 });
       const ui = await uiReached(h);
-      const ref = stock.get(h.device);
       console.log(`INTROBLANK ${h.device} adapter blocks=${ui.blocks} insns=${ui.insns} ticks=${ui.ticks}`);
       expect((await introNow(h.session)).equals(BLACK), 'the intro framebuffer is all black').toBe(true);
       expect(ui.ticks, 'the intro ended early').toBeLessThan(STOCK_TICKS);
-      expect(ref, 'the stock reference ran first').toBeDefined();
-      expect(ref!.blocks - ui.blocks, 'at least 2 s of emulated time sooner').toBeGreaterThan(2 * 1500);
     },
   );
 
@@ -106,6 +84,6 @@ cardRigs('introblank', { dsp: 'sharc', relaxFs: true, roots: IB, symbols: CARD_S
 
   test(
     'after the early end the boot is complete: a note plays and the DSP runs',
-    () => playsANote(h, true),
+    () => playsANote(h),
   );
 });

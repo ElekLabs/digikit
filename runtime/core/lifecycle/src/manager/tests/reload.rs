@@ -81,7 +81,10 @@ fn a_busy_restore_stops_the_reload_and_a_retry_completes_it() {
     probe.busy_restore(id(2), 1);
     assert_eq!(
         err(pm.reload(id(1))),
-        LifecycleError::Busy { package: id(2) }
+        LifecycleError::Busy {
+            package: id(2),
+            task: None
+        }
     );
     assert_eq!(live(&pm, &[1, 2]), [1, 2], "nothing came back or went on");
     assert!(matches!(

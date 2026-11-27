@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { waitClock } from '@digi/test-support';
-import { expect } from 'vitest';
+import { pollUntil, waitClock } from '@digi/test-support';
+import { expect, test } from 'vitest';
 import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import type { TestRuntime } from '@digi/regression/test-runtime.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
@@ -16,6 +16,11 @@ import { loadCode } from '@digi/regression/runtime/load-states.ts';
 import { packModuleVariant, SINE_OCTAVE_UP } from '@digi/regression/runtime/module-variant.ts';
 import { sendCc, sendNote, sendNoteOff } from '@digi/regression/runtime/midi.ts';
 import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
+import { cardRig } from '@digi/regression/runtime/card-rig.ts';
+import { RT } from '@digi/regression/runtime/runtime-roots.ts';
+import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
+import { FIRMWARE, describeOn } from '@digi/regression/runtime/devices.ts';
+import { buildPanelProject, dynType, loadPanelProject, savePanelProject, trackType } from '@digi/regression/runtime/project-kit.ts';
 import { planSymbol, prepareRuntimePlan, type RuntimePlan } from '@digi/regression/runtime/runtime-plan.ts';
 import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
 
@@ -35,6 +40,9 @@ import { cliInstall } from '@digi/regression/runtime/transfer-cli.ts';
  *   The machine type keeps its number and its voice row.
  * - (c) the reload is refused while the transport plays (`E_RELOAD_PLAYING`, the old module is live and the counter did not move) and goes through after STOP. This is the one
  *   proof that the firmware's transport state reaches the refusal; the order and wording of the refusals are unit tests.
+ * - project (DT2): a project that uses `test/sine` on track 1 (two parameter values, a trig with a p-lock and a sound lock, built on the panel) is saved, the machine is reloaded, the
+ *   project is loaded: track 1 holds the machine type again and a note plays the same sound (pitch within 1%, peak within 5%). The stock project loader that resolves the type is the
+ *   firmware's; the type number the reload keeps is (b) above.
  * - the pitch soak (docs/plans/extension-model.md E5b item 8): two builds of `test/sine` with the same module id and keys that differ in one constant (`packModuleVariant`: the DSP
  *   phase increment, one octave), put on the card alternately and reloaded with a note held, 5 cycles in the gate and 20 in the full tier (`DIGIKIT_TIER=full`). Each cycle: the
  *   pitch of a new note after the swap is that of the build just loaded (220 Hz or 440 Hz, within 2%), so a reload that kept the old DSP image would fail it; the machine type, its
@@ -301,3 +309,72 @@ async function expectReloadPitchSoak(rt: TestRuntime): Promise<void> {
 
 runtimeTests('RELOAD swaps a code-only module and a machine without a boot, and refuses while the transport plays', expectReloadLive, { dsp: 'sharc' });
 runtimeTests('RELOAD between two builds of a machine that differ in one constant plays the pitch of the build just loaded, cycle after cycle', expectReloadPitchSoak, { dsp: 'sharc' });
+
+const PROJECT_BLOCKS = 4000;
+/** The project case is DT2 only (`trackType` reads a Digitakt II track object); the file's other tests run on both devices. */
+const PROJECT_DEVICE = 'dt2';
+
+describeOn(PROJECT_DEVICE, `DT2 ${FIRMWARE.dt2} reload: a project that uses the reloaded machine`, () => {
+  const run = cardRig('dt2', 'reload-project', {
+    dsp: 'sharc',
+    roots: RT,
+    symbols: CARD_SYMBOLS,
+    initial: () => ({}),
+    project: true,
+    uploads: true,
+    relaxFs: true,
+  });
+
+  /** A note held 600 emulated ms with the PCM captured: the pitch (left channel) and the peak over blocks 250 .. 700 after the trigger. */
+  async function noteOf(rt: TestRuntime, artifacts: string, tag: string): Promise<{ hz: number; peak: number }> {
+    const file = path.join(artifacts, `${tag}.wav`);
+    const trigger = (await frames(rt.session)) + 300;
+    await captureNote(rt.session, {
+      file,
+      trigger,
+      tag,
+      length: PROJECT_BLOCKS,
+      noPress: true,
+      during: async () => {
+        await sendNote(rt, MIDI_CHANNEL, NOTE, 100);
+        await waitClock(rt.clock, 600);
+        await sendNoteOff(rt, MIDI_CHANNEL, NOTE);
+      },
+    });
+    const pcm = readFloatWav(file);
+    const perBlock = pcm.length / PROJECT_BLOCKS;
+    const from = Math.floor(250 * perBlock) & ~1;
+    const to = Math.floor(700 * perBlock);
+    return { hz: leftHz(pcm, from, to), peak: peakOf(pcm, from, to) };
+  }
+
+  test('save a project with the machine, reload the machine, load the project: the same sound', async () => {
+    const path0 = moduleStorePath('dt2', 'test/sine');
+    const rt = await run.load('project', { modules: ['test/sine'], selection: [path0] });
+    const artifacts = liveArtifacts(rt.session, 'reload-project');
+    const type = await dynType(rt.session, run.plan, 'test/sine', 'sine');
+    await buildPanelProject(rt, [{ track: 1, type, hint: 7 }]);
+    expect(await trackType(rt.session, 1), 'track 1 holds the machine').toBe(type);
+    await savePanelProject(rt);
+    // the capture holds the machine alone: AMP HOLD is NOTE, the stock FX sends are 0
+    await sendCc(rt, MIDI_CHANNEL, AMP_CC.dt2.hold, 127);
+    await sendCc(rt, MIDI_CHANNEL, AMP_CC.dt2.decay, 64);
+    for (const cc of SEND_CC.dt2) await sendCc(rt, MIDI_CHANNEL, cc, 0);
+    const before = await noteOf(rt, artifacts, 'before');
+    expect(before.peak, `the machine is audible (peak ${before.peak.toFixed(4)})`).toBeGreaterThan(0.01);
+
+    // DkrtBootInfo.reloads (offset 252) moves when a live job finished; it tells this job's end from the state an earlier job left
+    const reloads = planSymbol(run.plan, 'DKRT_BOOT') + 252;
+    const reloads0 = await word(rt.session, reloads);
+    await run.usb(rt, (dk) => dk.reload(path0));
+    const end = await pollUntil(rt.clock, async () => ({ st: await run.usb(rt, (dk) => dk.reloadState()), n: await word(rt.session, reloads) }), (v) => v.st.phase === 2 && v.n > reloads0, { withinMs: 20_000, message: 'the reload of the machine finished' });
+    expect({ result: end.st.result, unloaded: end.st.unloaded }, 'the reload of the machine').toEqual({ result: 0, unloaded: true });
+    await loadPanelProject(rt);
+    expect(await trackType(rt.session, 1), 'after the project load track 1 holds the type of the reloaded machine').toBe(type);
+    const after = await noteOf(rt, artifacts, 'after');
+    record(artifacts, 'project-roundtrip', { before, after });
+    expect(Math.abs(after.hz / before.hz - 1), `the pitch after the reload and the project load (${after.hz.toFixed(2)} Hz) is the pitch before (${before.hz.toFixed(2)} Hz)`).toBeLessThan(0.01);
+    expect(Math.abs(after.peak / before.peak - 1), `the level after (${after.peak.toFixed(4)}) is the level before (${before.peak.toFixed(4)})`).toBeLessThan(0.05);
+    await rt.session.expectNoFault('project round trip of a reloaded machine');
+  }, 900_000);
+});

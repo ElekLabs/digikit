@@ -39,6 +39,8 @@ pub struct FakePlatform {
     pub guard_stats: Cell<[u32; 6]>,
     pub writes: RefCell<Vec<(u32, u32)>>,
     pub reads: RefCell<Vec<(u32, u32)>>,
+    /// How many times code memory was read (`read_code` calls).
+    pub code_reads: Cell<u32>,
     /// Sectors whose read or write fails (-1).
     pub bad_read: RefCell<Vec<u32>>,
     pub bad_write: RefCell<Vec<u32>>,
@@ -110,6 +112,7 @@ impl FakePlatform {
             guard_stats: Cell::new([0; 6]),
             writes: RefCell::new(Vec::new()),
             reads: RefCell::new(Vec::new()),
+            code_reads: Cell::new(0),
             bad_read: RefCell::new(Vec::new()),
             bad_write: RefCell::new(Vec::new()),
             clock: Cell::new(Some(0)),
@@ -198,6 +201,7 @@ impl Platform for FakePlatform {
         self.calls.borrow_mut().push(Call::Flush { addr: start, len });
     }
     unsafe fn read_code(&self, addr: u32, out: &mut [u8]) {
+        self.code_reads.set(self.code_reads.get() + 1);
         let m = self.code.borrow();
         for (i, b) in out.iter_mut().enumerate() {
             *b = m.get(&(addr + i as u32)).copied().unwrap_or(0);

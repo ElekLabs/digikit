@@ -5,8 +5,8 @@ use core::ffi::c_void;
 /// A module's callback: `on` and `off` of a shortcut get the `arg` the module gave. Module code, called with the table's owner as the running source later on.
 pub type Callback = unsafe extern "C" fn(*mut c_void);
 
-/// Bindings the table holds, all modules together.
-pub const MAX_BINDINGS: usize = 16;
+/// Bindings the table holds, all modules together (`[limits.max] shortcut_bindings` of sdk/sdk.toml).
+pub const MAX_BINDINGS: usize = dkrt_sdk::limits::SHORTCUT_BINDINGS;
 /// Bytes of an id (with the NUL) and of a label.
 pub const ID_BYTES: usize = 16;
 pub const LABEL_BYTES: usize = 24;

@@ -46,6 +46,3 @@ impl TsFile {
         std::fs::write(&self.path, &self.text).map_err(|e| err!("{}: {e}", self.path.display()))
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -7,7 +7,6 @@ use crate::state::State;
 use crate::steps::Steps;
 use crate::PackageId;
 use dkrt_abi::provider::Step;
-use dkrt_sdk::E_BUSY;
 
 impl<M, P, L, I, H> PackageManager<M, P, L, I, H>
 where
@@ -144,7 +143,10 @@ where
             if self.host.detach(p, services.as_slice()) == Step::Pending {
                 // a service is not done giving back (a payload retire): the package stays attached and counted live, and a retry asks again
                 self.progress.set(p, State::Detaching);
-                return Err(LifecycleError::Busy { package: p });
+                return Err(LifecycleError::Busy {
+                    package: p,
+                    task: None,
+                });
             }
         }
         self.progress.set_attached(p, false);
@@ -158,9 +160,10 @@ where
         if state >= State::Installed {
             if let Err(error) = self.installer.restore(p) {
                 self.progress.set(p, State::RestorePending);
-                return Err(match error {
-                    InstallError::Backend(E_BUSY) => LifecycleError::Busy { package: p },
-                    error => LifecycleError::RestoreFailed { package: p, error },
+                return Err(if let InstallError::Busy { task } = error {
+                    LifecycleError::Busy { package: p, task }
+                } else {
+                    LifecycleError::RestoreFailed { package: p, error }
                 });
             }
         }

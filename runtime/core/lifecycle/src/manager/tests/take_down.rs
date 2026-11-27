@@ -116,7 +116,10 @@ fn a_busy_restore_keeps_the_package_pending_and_a_retry_finishes_it() {
     probe.busy_restore(id(2), 1);
     assert_eq!(
         err(pm.unload(id(2))),
-        LifecycleError::Busy { package: id(2) }
+        LifecycleError::Busy {
+            package: id(2),
+            task: None
+        }
     );
     assert_eq!(pm.state_of(id(2)), Some(State::RestorePending));
     assert_eq!(pm.restore_pending(), Some(id(2)));
@@ -201,7 +204,10 @@ fn retry_pending_finishes_a_busy_restore_of_the_first_orphan() {
     probe.busy_restore(id(2), 1);
     assert_eq!(
         err(pm.unload(id(1))),
-        LifecycleError::Busy { package: id(2) }
+        LifecycleError::Busy {
+            package: id(2),
+            task: None
+        }
     );
     assert_eq!(taken(&pm.retry_pending().unwrap()), ids(&[2, 3, 1]));
     assert!(pm.live().is_empty());
@@ -216,7 +222,10 @@ fn retry_pending_finishes_a_busy_restore_of_the_second_orphan() {
     probe.busy_restore(id(3), 1);
     assert_eq!(
         err(pm.unload(id(1))),
-        LifecycleError::Busy { package: id(3) }
+        LifecycleError::Busy {
+            package: id(3),
+            task: None
+        }
     );
     assert_eq!(live(&pm, &[1, 2, 3]), [1, 3]);
     // the other operations still wait, whatever package they name
@@ -237,7 +246,10 @@ fn retry_pending_can_be_busy_again_and_then_succeeds() {
     assert!(matches!(err(pm.unload(id(1))), LifecycleError::Busy { .. }));
     assert_eq!(
         err(pm.retry_pending()),
-        LifecycleError::Busy { package: id(3) }
+        LifecycleError::Busy {
+            package: id(3),
+            task: None
+        }
     );
     assert_eq!(pm.restore_pending(), Some(id(3)));
     assert_eq!(taken(&pm.retry_pending().unwrap()), ids(&[2, 3, 1]));

@@ -10,9 +10,6 @@ summary = "Fixture: a module that carries two payloads for the local-payload ser
 requires = []
 conflicts = []
 
-[targets]
-"dt2-1.17" = "experimental"
-"dn2-1.12" = "experimental"
 
 [[object]]
 path = "build/local-payload-user.dko.json"

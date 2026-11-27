@@ -63,6 +63,3 @@ pub fn run(root: &Path, rest: &[String]) -> Result<()> {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests;

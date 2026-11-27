@@ -18,17 +18,17 @@ import type { Device } from '@digi/test-support';
 // and ready snapshot and boots on its own; the image without the fx service closes before the regular image starts, and only artifacts cross that
 // boundary. A file that compares pixels or PCM with the stock image (`base: true`) captures them first in this helper's base test.
 
-export const names = [FX, `${FX}-2`, `${FX}-3`];
 export const routeKey = (name: string) => `fx/route/${name}`;
 export const sendKey = `fx/send/${FX}`;
 const sineCard = { selection: ['modules/m0.dkm'] };
 const masterCard = { selection: ['modules/m0.dkm', 'modules/m1.dkm'] };
 const sendCard = { ...masterCard, settings: [[routeKey(FX), '01']] as [string, string][] };
-const limitCard = {
-  selection: ['modules/m0.dkm', 'modules/m1.dkm', 'modules/m2.dkm', 'modules/m3.dkm'],
-  settings: names.map((name): [string, string] => [routeKey(name), '01']),
+// two send effects: the second one takes the second send cell of the table
+const send2Card = {
+  selection: ['modules/m0.dkm', 'modules/m1.dkm', 'modules/m2.dkm'],
+  settings: [routeKey(FX), routeKey(`${FX}-2`)].map((key): [string, string] => [key, '01']),
 };
-const CARDS = { sine: sineCard, master: masterCard, send: sendCard, limit: limitCard };
+const CARDS = { sine: sineCard, master: masterCard, send: sendCard, send2: send2Card };
 type Preset = keyof typeof CARDS;
 
 interface StoreDump {

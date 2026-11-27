@@ -3,6 +3,8 @@
 // wait until the runtime answers, upload and verify each ticked module, then select the modules that are not loaded yet (what the runtime loaded
 // before stays selected) and restart once. A failure names the module; the firmware flash itself is not undone.
 
+import { MAX_SELECTION } from '@digi/dk-session';
+
 /** What the list shows of a default module. */
 export interface DefaultModuleEntry {
   /** The module id: `digikit/remote`. */
@@ -79,9 +81,6 @@ export interface DefaultProgress {
   total: number;
 }
 
-/** The selection holds at most this many paths (SELECT). */
-export const SELECTION_MAX = 8;
-
 /** The user's cancel; `isCancelled` (modules/backend.ts) knows the kind. */
 const cancelled = (): Error => Object.assign(new Error('cancelled'), { kind: 'cancelled' });
 
@@ -122,10 +121,10 @@ export async function installDefaults(
     return lines;
   }
   const paths = [...new Set([...loaded, ...ids].map((id) => ops.pathOf(id)).filter((p): p is string => !!p))];
-  if (paths.length > SELECTION_MAX)
+  if (paths.length > MAX_SELECTION)
     throw new DefaultModuleError(
       missing[0]!,
-      `the selection would hold ${paths.length} modules, the limit is ${SELECTION_MAX}`,
+      `the selection would hold ${paths.length} modules, the limit is ${MAX_SELECTION}`,
     );
   progress({ text: `Enabling ${missing.join(', ')}: restarting the runtime`, done: ids.length + 1, total });
   await wrap(missing[0]!, ops.select(paths));

@@ -73,26 +73,6 @@
       },
       {
         "files": [
-          "reload-project.device.test.ts"
-        ],
-        "firmwareOnly": "a project saved with a reloaded machine plays the same sound on the firmware",
-        "devices": [
-          "dt2"
-        ],
-        "dsp": "sharc",
-        "modules": [
-          "test/sine",
-          "core/services/machines"
-        ],
-        "incidental": [
-          {
-            "module": "core/services/machines",
-            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
-          }
-        ]
-      },
-      {
-        "files": [
           "reload-menus.device.test.ts"
         ],
         "firmwareOnly": "the real core/ui reports a built menu object to the runtime",

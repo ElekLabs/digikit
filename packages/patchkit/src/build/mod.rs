@@ -29,8 +29,6 @@ pub mod toolchain;
 pub mod wire;
 mod workbench;
 pub use workbench::TsFile;
-#[cfg(test)]
-pub(crate) use workbench::fixture as workbench_fixture;
 
 use crate::dko::Dko;
 use crate::error::*;

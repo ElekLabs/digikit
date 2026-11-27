@@ -46,7 +46,7 @@
   min-width: 0;
   background: transparent;
 }
-/* A count with few slots (Machines, Parameters, Pages, Modules): one cell per slot, lit like the device's trig keys. */
+/* A count with few slots (Machines, Voices, Parameters, Pages, Loaded modules): one cell per slot, lit like the device's trig keys. */
 .memory-panel .cells {
   display: flex;
   gap: 3px;

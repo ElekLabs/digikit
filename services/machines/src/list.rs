@@ -9,8 +9,8 @@ use core::ptr::{addr_of, addr_of_mut};
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::mem::FwMem;
 
-/// The most machine types the list holds: the registry's `max` of 32 and the stock types.
-pub const MAX_TYPES: usize = 64;
+/// The most machine types the list holds: the registry's rows and the stock types (`[limits.max] machine_types` of sdk/sdk.toml).
+pub const MAX_TYPES: usize = dkrt_sdk::limits::MACHINE_TYPES;
 /// A row whose position is this one is a gap row: not listed.
 pub const GAP: u32 = 0xffff_ffff;
 

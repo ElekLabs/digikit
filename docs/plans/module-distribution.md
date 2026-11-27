@@ -8,14 +8,14 @@ How modules, services and their Workbench pages reach users. Agreed 2026-11-28. 
 - A module never carries a service. Its NEEDS table names each service by id and version; Transfer resolves the needs to the shared `.dks` files (`serviceRefs`, `packages/workbench-core/src/modules/dktransfer.ts`). One service file serves every module that needs it.
 - `.dkmod` stays the redistributable source package and a Workbench feature: Workbench imports a `.dkmod` and builds it with the native toolchain. A service gets its own `.dkmod` (`type = "service"`), never inside a module's.
 - A module page is built at publish time and never sent to the device. The site stores an installed page bundle in IndexedDB (`BlobStore`) keyed by module id, version and hash, and runs it in a sandboxed iframe that reaches the module through `ModuleChannel` over `postMessage`.
-- Firmware patching still links objects in the browser, because the user's firmware image cannot be published patched. Those objects become a deploy-built asset (the `bundle.json` that `patchkit.wasm` reads) instead of committed files.
+- Firmware patching links the committed runtime objects in the browser (`patchkit.wasm`), because the user's firmware image cannot be published patched.
 - Compiling C in the browser (gcc `cc1` and `as` as WebAssembly, [finding 74](../findings/74-gcc-wasm-spike.md)) is deferred until users bring their own source packages to the site.
 
 ## Work items
 
 1. Generated-object merges (done with this plan): `.gitattributes` gives committed core objects the merge driver `generated-object`; `objects-check` forces the rebuild.
-2. Stop committing core objects. First audit every reader of `{runtime,services}/**/build/*.dko.json` (patchkit tests, `objects-check`, device test keys and image hashes, Python tools, the desktop app from a checkout). Then build them in the Pages deploy into `bundle.json`, and locally through Nx and the shared cache. Payoff: no generated-file merges or rebuild commits in runtime PRs. Audit about half a day, change about 1 to 2 days.
-3. Service source packages: `.dkmod` with `type = "service"`, export and import in patchkit (Rust, so Workbench and the CLI share it), import in Workbench. About 1 day, with or after item 2.
+2. Deferred: keep committing core objects. The runtime and service objects are Rust built with `rustc_codegen_gcc` (`pk_toolchains codegen-gcc`), so a checkout or browser that does not change runtime Rust patches without that toolchain. About 30 readers name the committed paths (patchkit syspkg and size, the site's `bundle.json`, device test keys through `dist/bytes/core-objects.sha256`, `objects-check`, tests and Python tools), and the keys would depend on byte-identical builds across machines, which is unproven. Item 1 already removes the merge conflicts. First step if revisited: build the runtime objects on two lanes and compare bytes.
+3. Service source packages: `.dkmod` with `type = "service"`, export and import in patchkit (Rust, so Workbench and the CLI share it), import in Workbench. About 1 day.
 4. Page bundles on the site: publish one bundle per module page beside its `.dkm`, store on install, sandboxed iframe with the `ModuleChannel` bridge, the site's Modules sidebar. About 1 to 2 days, after the Project Manager page exists.
 
 ## Open

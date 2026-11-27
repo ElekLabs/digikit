@@ -1,10 +1,10 @@
 use super::session::Handle;
+use crate::package::loader::install::Refusal;
 use crate::package::loader::{Images, Registry};
 use dkrt_abi::package::PackageId;
 use dkrt_abi::package_platform::PackagePlatform;
 use dkrt_abi::provider::Status;
-use dkrt_lifecycle::{Cpu, Entry, Installer, Installers};
-use dkrt_sdk::E_BUSY;
+use dkrt_lifecycle::{Cpu, Entry, InstallError, Installer, Installers};
 
 /// The ColdFire backend of the entries: the loader's hook installer (`loader/install.rs`) behind the `Installer` interface (`Loader::package_install`). A hook entry is a
 /// `jmp.l` over the site (the length and the check value of the stock bytes are the port file's, found by the site's address); a slot entry fills a pointer word of the
@@ -30,14 +30,11 @@ impl<P: PackagePlatform, M: Images, R: Registry> Installer for RtColdFire<P, M, 
     }
 
     /// `E_BUSY` while a task below the UI task could be inside a site of the package: the entries stay and the manager retries (`retry_pending`, once per UI pass).
-    fn restore(&mut self, owner: PackageId) -> Result<(), Status> {
+    fn restore(&mut self, owner: PackageId) -> Result<(), InstallError> {
         unsafe {
             let (_, l) = self.0.get();
-            if l.package_restore(owner) {
-                Ok(())
-            } else {
-                Err(E_BUSY)
-            }
+            // no task facts for a gated restore is answered busy as before: the manager keeps asking
+            l.package_restore(owner).map_err(|r| InstallError::Busy { task: if let Refusal::Busy { task } = r { Some(task as u32) } else { None } })
         }
     }
 }
@@ -65,13 +62,13 @@ impl<P: PackagePlatform, M: Images, R: Registry> Installer for RtSharc<P, M, R> 
         }
     }
 
-    fn restore(&mut self, owner: PackageId) -> Result<(), Status> {
+    fn restore(&mut self, owner: PackageId) -> Result<(), InstallError> {
         unsafe {
             let (_, l) = self.0.get();
             if l.package_restore_dsp(owner) {
                 Ok(())
             } else {
-                Err(E_BUSY)
+                Err(InstallError::Busy { task: None })
             }
         }
     }

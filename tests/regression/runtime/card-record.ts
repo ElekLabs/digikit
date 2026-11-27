@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import zlib from 'node:zlib';
+import { MAX_SELECTION } from '@digi/dk-session';
 import { type Device, type Session } from '@digi/test-support';
 import { cardStore } from './device-data.ts';
 import { rpc } from './guest-access.ts';
@@ -12,7 +13,7 @@ import { layOver } from './write-safety.ts';
 
 export const SECTOR = 512;
 const SEL_MAGIC = 0x444b534c;
-export const SEL_MAX = 8;
+export const SEL_MAX = MAX_SELECTION;
 const SEL_PATH = 56;
 
 // ---- the selection record (one 512-byte copy) --------------------------------------------------------------------------------------

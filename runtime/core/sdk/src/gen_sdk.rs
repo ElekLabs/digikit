@@ -89,6 +89,9 @@ pub mod logk {
 pub mod limits {
     pub const SEL_MAX: usize = 8;
     pub const MAP_N: usize = 8;
+    pub const MACHINE_TYPES: usize = 64;
+    pub const MACHINE_PAGES: usize = 16;
+    pub const SHORTCUT_BINDINGS: usize = 16;
     pub const MACHINE_ROWS: usize = 8;
     pub const PARAM_ROWS: usize = 16;
     pub const PAGE_ROWS: usize = 8;

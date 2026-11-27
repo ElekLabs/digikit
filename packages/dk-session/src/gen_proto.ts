@@ -33,6 +33,10 @@ export const INFO_MAX = 64;
 export const DSP_SLOT_WORDS = 16;
 export const MAX_VOICES = 8;
 export const MAX_FX = 4;
+export const MAX_SELECTION = 8;
+export const MAX_MACHINE_TYPES = 64;
+export const MAX_MACHINE_PAGES = 16;
+export const MAX_SHORTCUT_BINDINGS = 16;
 export const H_ROLE = 56;
 
 /** The services the runtime image provides itself: the names of `[handle] services` that no `.dks` provider supplies (a `[[service]]` without `rust` and with no static row). A module's NEEDS may name them; every other name needs a `.dks`. */

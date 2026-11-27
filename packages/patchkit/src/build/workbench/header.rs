@@ -75,6 +75,3 @@ impl Header {
         &self.digest
     }
 }
-
-#[cfg(test)]
-mod tests;

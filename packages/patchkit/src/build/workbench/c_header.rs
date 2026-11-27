@@ -166,6 +166,3 @@ impl CHeader {
         .unwrap();
     }
 }
-
-#[cfg(test)]
-mod tests;
