@@ -213,6 +213,15 @@ fn a_busy_restore_in_a_reload_exports_once_after_the_retry() {
     assert!(before(&calls, ExportState(id(2)), Stop(id(2))));
 }
 
+/// The copy of `p` that failed to take its state is stopped, then freed, after the import (the old copy's own stop and free came before it).
+fn assert_unwound_after_import(calls: &[Call], p: PackageId) {
+    let at = calls.iter().position(|c| *c == ImportState(p)).expect("an import");
+    let after = &calls[at..];
+    let stop = after.iter().position(|c| *c == Stop(p)).expect("a stop after the failed import");
+    let free = after.iter().position(|c| *c == Free(p)).expect("a free after the failed import");
+    assert!(stop < free, "{calls:?}");
+}
+
 #[test]
 fn a_failed_import_fails_the_start_and_leaves_the_rest_down() {
     let (mut pm, probe) = world(&[reference(), user(2), user(3)]);
@@ -231,4 +240,25 @@ fn a_failed_import_fails_the_start_and_leaves_the_rest_down() {
     );
     assert!(!probe.calls().contains(&Install(id(2))));
     assert_eq!(pm.restore_pending(), None);
+    let calls = probe.calls();
+    assert_unwound_after_import(&calls, id(1));
+}
+
+#[test]
+fn a_busy_import_is_not_retried_it_is_a_clean_failure() {
+    // a copy that has just started has nothing in flight, so busy is not a wait the manager can offer: the start fails like any other, the closure goes down whole
+    let (mut pm, probe) = world(&[reference(), user(2)]);
+    pm.boot(&[id(1), id(2)]).unwrap();
+    probe.clear();
+    probe.fail(ImportState(id(1)), dkrt_sdk::E_BUSY);
+    assert!(matches!(
+        err(pm.reload(id(1))),
+        LifecycleError::Failed { package, status, .. }
+            if package == id(1) && status == dkrt_sdk::E_BUSY
+    ));
+    let calls = probe.calls();
+    assert_eq!(calls.iter().filter(|c| **c == ImportState(id(1))).count(), 1, "asked once");
+    assert_unwound_after_import(&calls, id(1));
+    assert_eq!(live(&pm, &[1, 2]), []);
+    assert_eq!(pm.restore_pending(), None, "nothing waits: the unwind is whole");
 }

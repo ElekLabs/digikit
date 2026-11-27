@@ -43,7 +43,7 @@ pub trait ProviderHost {
     fn export_state(&mut self, _package: PackageId) {}
 
     /// `package` has started and its declarations match, before its entries are installed: the host hands it the state `export_state` took aside, or none (a new
-    /// start, or bytes it cannot take). An error fails the start like a failed `start`: the closure goes down and nothing is public. The default does nothing.
+    /// start, or bytes it cannot take). An error fails the start like a failed `start`: the closure goes down and nothing is public, and the copy is stopped and freed. `E_BUSY` is not retried: a copy that has just started has no work in flight, so a busy answer is a failure like any other. The default does nothing.
     fn import_state(&mut self, _package: PackageId) -> Result<(), Status> {
         Ok(())
     }
