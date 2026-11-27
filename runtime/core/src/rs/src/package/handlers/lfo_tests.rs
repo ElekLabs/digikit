@@ -11,8 +11,8 @@ use crate::package::provider_rows::{self, RowSource};
 use dkrt_abi::plan::{Reason, Verdict};
 use dkrt_abi::provider::Provider;
 use dkrt_abi::service::{RecordSink, SettleCtx};
-use dkrt_svc_lfo::lfo::Lfo;
-use dkrt_svc_lfo_dks::{dk_svc_row, dk_svc_start, dk_svc_stop, DK_SVC_OWNER};
+use dkrt_svc_lfo_dks::image_table::host;
+use dkrt_svc_lfo_dks::{dk_svc_row, dk_svc_start, dk_svc_stop, Owner, DK_SVC_OWNER};
 use dkrt_sdk::proto::*;
 use dkrt_sdk::records::{KIND_LFO_SHAPE, KINDS_LFO, LEN_LFO_SHAPE};
 use dkrt_sdk::*;
@@ -58,6 +58,9 @@ const FILE_REC: usize = 0;
 
 impl Loaded {
     pub(crate) fn new() -> Loaded {
+        // the host image has the table of added waves, empty
+        host::install();
+        host::reset();
         let instance = dk_svc_start().expect("the owner starts");
         let row = RowSource { row: dk_svc_row(), instance, extent: 0..usize::MAX };
         assert_eq!(unsafe { provider_rows::add(FILE_REC, row, None) }, OK);
@@ -85,7 +88,7 @@ fn settle(keys: &[u32]) {
 
 /// The wave number the owner gave the key `key` of the module at selection index `at`.
 fn number_of(at: u32, key: u32) -> u32 {
-    DK_SVC_OWNER.with(|l: &mut Lfo| l.number_of(at, key)).expect("the owner is started")
+    DK_SVC_OWNER.with(|l: &mut Owner| l.number_of(at, key)).expect("the owner is started")
 }
 
 fn clear() {
