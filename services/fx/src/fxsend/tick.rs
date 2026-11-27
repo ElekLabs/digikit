@@ -17,7 +17,7 @@ pub(super) fn words_of(amt: &[u8; TRACKS]) -> [u32; 4] {
     out
 }
 
-unsafe fn put_amounts<C: CoreApi>(core: &C, k: usize) {
+pub(super) unsafe fn put_amounts<C: CoreApi>(core: &C, k: usize) {
     let s = ss();
     let mut key = [0u8; KEY_MAX];
     let kn = key_of(&mut key, b"fx/send/", &s.id[k], s.idlen[k] as usize);

@@ -37,7 +37,7 @@
         "core/runtime-tests:*",
         "core/runtime-provider-tests:service-reload.device.test.ts",
         "core/runtime-provider-tests:owner-step.device.test.ts",
-        "core/runtime-lfo-tests:lfo-reload.device.test.ts",
+        "core/runtime-lfo-tests:lfo-shape-output.device.test.ts",
         "core/services/project-tests:project-reload.device.test.ts"
       ]
     },

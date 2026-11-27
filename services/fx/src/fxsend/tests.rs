@@ -232,3 +232,38 @@ fn reset_forgets_the_published_effect_words() {
     assert_eq!(words(&core), 0, "reset forgot the published table");
     crate::fxpage::set_page_owner_for_test(0, 0);
 }
+
+/// The saved send value is the 16 amount bytes (track 1 first) under `fx/send/<id>`; the route is one byte under `fx/route/<id>` (1 send, 0 master). The device test
+/// `fx-track-route` used to read both from the card after two turns of the knob (amounts 40 and 100).
+#[test]
+fn the_saved_send_value_is_the_packed_amounts_and_the_route_is_one_byte() {
+    use dkrt_test_support::FakeCore;
+    let _g = crate::test_lock::hold();
+    let core = FakeCore::new();
+    unsafe {
+        let s = ss();
+        s.id[1][..4].copy_from_slice(b"mod1");
+        s.idlen[1] = 4;
+        s.amt[1] = [0; TRACKS];
+        s.amt[1][0] = 40;
+        s.amt[1][1] = 100;
+        put_amounts(&core, 1);
+        save_route(&core, 1, Route::Send);
+        let put = |key: &[u8]| {
+            core.settings
+                .borrow()
+                .iter()
+                .rev()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.clone())
+        };
+        let mut want = std::vec![40u8, 100];
+        want.resize(TRACKS, 0);
+        assert_eq!(put(b"fx/send/mod1"), Some(want));
+        assert_eq!(put(b"fx/route/mod1"), Some(std::vec![1]));
+        save_route(&core, 1, Route::Master);
+        assert_eq!(put(b"fx/route/mod1"), Some(std::vec![0]));
+        s.amt[1] = [0; TRACKS];
+        crate::fxsend::reset_published();
+    }
+}

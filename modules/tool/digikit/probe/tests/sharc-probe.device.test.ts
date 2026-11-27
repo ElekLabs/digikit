@@ -4,7 +4,8 @@ import { runtimeTests } from '@digi/regression/runtime/runtime-tests.ts';
 import { CMD_RESET, CMD_STATUS, installProbe, PROBE, readRing, status } from '@digi/regression/runtime/probe-kit.ts';
 import { expectPollEmulated } from '@digi/regression/runtime/waits.ts';
 
-/** A run is 1674 frames and takes about 33 s of emulated time; the test checks this many frames from the start of the capture, not a whole run. */
+/** Full tier: this file measures the probe transport and the step beacon; it is not a gate fact (the rig and the debug observers use the probe).
+ * A run is 1674 frames and takes about 33 s of emulated time; the test checks this many frames from the start of the capture, not a whole run. */
 const FRAMES = 60;
 
 async function expectProbeTransport(patched: PatchedSession): Promise<void> {
@@ -25,8 +26,7 @@ async function expectProbeTransport(patched: PatchedSession): Promise<void> {
   await session.expectNoFault('probe transport');
 }
 
-runtimeTests('the SHARC probe sends framed words that the collector receives without errors', expectProbeTransport, { dsp: 'sharc',
-});
+runtimeTests('the SHARC probe sends framed words that the collector receives without errors', expectProbeTransport, { dsp: 'sharc', full: true });
 
 /** The words the beacon stores for its call number n (the counter after the increment): the counter, the two initialised words and the descriptor magic, each held for two calls. */
 const BEACON_K1 = 0x5a5a1234;
@@ -73,4 +73,4 @@ async function expectBeaconWords(patched: PatchedSession): Promise<void> {
   await session.expectNoFault('step beacon');
 }
 
-runtimeTests('the step beacon words reach the collector in every block', expectBeaconWords, { dsp: 'sharc' });
+runtimeTests('the step beacon words reach the collector in every block', expectBeaconWords, { dsp: 'sharc', full: true });

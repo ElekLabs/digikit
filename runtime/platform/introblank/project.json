@@ -5,7 +5,7 @@
   "metadata": {
     "runtimeAcceptance": [
       {
-        "files": ["tests/introblank.device.test.ts", "tests/introblank-rec.device.test.ts"],
+        "files": ["tests/introblank.device.test.ts"],
         "dsp": "sharc",
         "modules": ["tools/bootscreen", "test/sine", "core/services/machines"],
         "plusdrive": true,

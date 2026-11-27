@@ -35,7 +35,6 @@ const CAP_RS = 'runtime/core/sdk/src/capacity/tests.rs';
 const STORE_RS = 'runtime/core/sdk/src/store/tests.rs';
 const CLEANUP = 'runtime/core/src/rs/src/package/cleanup_tests.rs';
 const CONTRACT = 'runtime/core/src/rs/src/contract_tests.rs';
-const LFO_DEVICE = 'runtime/core/tests/lfo/lfo.device.test.ts';
 const SAMPLES_RS = 'runtime/core/sdk/src/sample_tracks/tests.rs';
 
 const RELOAD_TESTS = 'runtime/core/src/rs/src/package/reload/tests';
@@ -83,7 +82,7 @@ export const ROWS: Record<string, Row> = {
   E_PLAN_OWNER: { fail: prov('two providers of one hook site are E_PLAN_OWNER'), pass: prov('a provider installs its hook and the consumer calls it') },
   E_PLAN_KEY: { fail: { file: MANAGER, test: 'of_two_lfo_shapes_with_one_key_the_first_loads_and_the_second_is_refused_by_the_boot' }, pass: loads },
   E_PLAN_FIT: { fail: { file: ASSEMBLY, test: 'a_boot_leaves_the_kind_and_the_full_resource_in_the_detail_words_of_a_refusal' }, pass: loads },
-  E_DECL_KIND: { fail: { file: LFO_DEVICE, test: 'a kind table' }, pass: { file: LFO_DEVICE, test: 'a fixture loads and unloads' } },
+  E_DECL_KIND: { fail: { file: COLLECT, test: 'what_init_declared_must_be_what_the_header_table_carries' }, pass: loads },
   E_HOOK_STOCK: { fail: prov('a port file whose check value differs is E_HOOK_STOCK and the service that needs it and its dependent are refused'), pass: prov('a provider installs its hook and the consumer calls it') },
   E_NO_DSP: { kind: 'host', reason: 'needs an image without the DSP loader', covered: [{ file: CLEANUP, test: 'E_NO_DSP' }] },
   E_DSP_FORMAT: { kind: 'host', reason: 'a malformed DSP section', covered: [{ file: CONTRACT, test: 'E_DSP_FORMAT' }] },
@@ -111,7 +110,7 @@ export const ROWS: Record<string, Row> = {
   E_CONTRACT: { fail: { file: IMAGE_RS, test: 'a_need_of_another_major_or_minor_or_a_higher_patch_is_refused' }, pass: loads },
   E_TABLE: { kind: 'open', reason: 'the runtime tables fail their check: needs a corrupted table' },
   E_MISSING: { fail: { file: ASSEMBLY, test: 'a_card_without_the_service_file_refuses_its_user_naming_the_service' }, pass: loads },
-  E_SVC_ABI: { fail: { file: LFO_DEVICE, test: 'another ABI' }, pass: { file: LFO_DEVICE, test: 'a fixture loads and unloads' } },
+  E_SVC_ABI: { fail: { file: ASSEMBLY, test: 'an_lfo_service_file_of_another_abi_is_refused_before_anything_is_written' }, pass: loads },
   E_RELOAD_PLAYING: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it; `reload.device.test.ts` drives it on both devices (the transport plays)', covered: [{ file: RELOAD_REFUSALS, test: 'playing_paused_mixed_or_unreadable' }] },
   E_RELOAD_MENUS: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_REFUSALS, test: 'the_refusals_come_in_the_documented_order' }] },
   E_RELOAD_ROUTED: { kind: 'host', reason: 'a live command (reload, load or unload), not a module file, causes it', covered: [{ file: RELOAD_UNLOAD, test: 'an_unload_that_is_refused_changes_nothing_and_one_of_a_module_that_is_gone_is_not_found' }] },

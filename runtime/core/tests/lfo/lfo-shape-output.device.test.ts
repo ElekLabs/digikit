@@ -31,11 +31,14 @@ import {
  * No SHARC: the LFO tick is a ColdFire interrupt (vector 191) that the zero-DSP session paces itself (`enable_zero_dsp_timing`: the SSI0 request chain at 96 kHz forces the
  * vector from the DMA 50 completion), so it runs at 1500 Hz. The image is the emulator patch set; the lfo service installs its hooks when it loads.
  *
- * Four cases, one boot of the runtime each:
+ * Six cases, one boot of the runtime each:
  * - stock: no lfo service runs: waves 0 to 5 are the stock shapes (item 7);
  * - table: with `lfo.dks` and the RAMP shape loaded, WAVE reaches 7 and the output follows the shape's table, not TRI (item 1);
+ * - capacity: loading the shape adds one MODULES record and arena and no load failure; unselecting it and restarting restores MODULES and CAPACITY;
  * - start phase: on a note in MODE TRG the shape starts at the phase of SPH (item 4); each note takes a voice slot (with voice rotation the next slot, with one voice per track slot 0), whose phase is checked exactly;
- * - number kept: a restart with the same module keeps the wave number in `lfo.shapes` and the output follows the table again (item 5).
+ * - number kept: a restart with the same module keeps the wave number in `lfo.shapes` and the output follows the table again (item 5);
+ * - reload: `RELOAD services/lfo.dks` answers 0, the shape table is republished and the output follows it again (the order of the steps and the refusals are host tests).
+ * The refusals are assembly tests.
  */
 const READS = 100;
 const GAP_MS = 12;
@@ -86,6 +89,8 @@ cardRigs(
       const rt = await bootWith(h, 'shape', [SHAPE_A]);
       const [first] = await shapeWords(h, rt);
       expect(first! & 0xff, 'the first shape gets the first number above RAND').toBe(FIRST_SHAPE);
+      // the hooks installed into the real image and the fixture owns no machine type
+      expect((await h.usb(rt, (dk) => dk.modules())).map((m) => [m.name, m.types]), 'MODULES lists the shape and it owns no machine type').toEqual([[SHAPE_A, []]]);
       const rig = new LfoRig(rt);
       const dest = await rig.run();
       await rig.setWave(FIRST_SHAPE);
@@ -111,6 +116,24 @@ cardRigs(
         message: 'CC 106 = 7 stores WAVE 0x0700 with a shape loaded',
       });
       await rt.session.expectNoFault('shape output');
+    }, 900_000);
+
+    test('capacity: the shape takes one MODULES record and arena, nothing is refused, and unloading it restores MODULES and CAPACITY', async () => {
+      const before = await h.usb(await h.first(), async (dk) => ({ modules: await dk.modules(), cap: await dk.capacity() }));
+      const rt = await bootWith(h, 'capacity', [SHAPE_A]);
+      const loaded = await h.usb(rt, async (dk) => ({ cap: await dk.capacity(), failures: await dk.loadFailures() }));
+      expect(loaded.cap.MODULES!.used, 'one module record').toBe(before.cap.MODULES!.used + 1);
+      expect(loaded.cap.ARENA!.used, 'the module and its record block take arena').toBeGreaterThan(before.cap.ARENA!.used);
+      expect(loaded.failures, 'nothing was refused').toEqual([]);
+      // unload: no selection, a restart: MODULES and CAPACITY are what they were before the first load
+      await h.usb(rt, (dk) => dk.select([]));
+      const rt2 = await h.restart(rt);
+      const after = await h.usb(rt2, async (dk) => ({ modules: await dk.modules(), cap: await dk.capacity() }));
+      expect(after.modules.map((m) => m.name), 'MODULES as before').toEqual(before.modules.map((m) => m.name));
+      for (const kind of ['MODULES', 'SELECTION', 'ARENA'] as const) {
+        expect(after.cap[kind]!.used, `${kind} is as before`).toBe(before.cap[kind]!.used);
+      }
+      await rt2.session.expectNoFault('lfo shape capacity');
     }, 900_000);
 
     test('start phase: on a trigger the shape starts at the phase of SPH', async () => {
@@ -165,6 +188,23 @@ cardRigs(
       const shape = fitShape(samples, (p) => evalTable(RAMP_SAMPLES, p));
       expect(shape.err, `the shape answers to its number after the restart (fit ${shape.err.toFixed(3)}; samples ${describeSamples(samples)})`).toBeLessThan(OK);
       await rt2.session.expectNoFault('wave number kept');
+    }, 900_000);
+
+    test('reload: RELOAD services/lfo.dks answers OK and the output follows the shape table again', async () => {
+      const rt = await bootWith(h, 'reload', [SHAPE_A]);
+      const before = await shapeWords(h, rt);
+      const rig = new LfoRig(rt);
+      const dest = await rig.run();
+      await rig.setWave(FIRST_SHAPE);
+      const waveBefore = await rig.word(KNOB_WORD.WAVE);
+      const end = await h.usb(rt, (dk) => dk.reloadAndWait('services/lfo.dks'));
+      expect(end.result, 'the reload of the lfo service answers OK').toBe(0);
+      expect(await rig.word(KNOB_WORD.WAVE), 'the WAVE knob word is unchanged').toBe(waveBefore);
+      const samples = await rig.sample(dest, READS, GAP_MS);
+      const shape = fitShape(samples, (p) => evalTable(RAMP_SAMPLES, p));
+      expect(shape.err, `after: the output follows the RAMP table (fit ${shape.err.toFixed(3)}; samples ${describeSamples(samples)})`).toBeLessThan(OK);
+      expect(await shapeWords(h, rt), 'the sticky map holds the same wave numbers').toEqual(before);
+      await rt.session.expectNoFault('lfo reload');
     }, 900_000);
   },
 );

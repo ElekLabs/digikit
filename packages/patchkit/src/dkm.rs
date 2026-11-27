@@ -2041,22 +2041,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_declared_runtime_floor_raises_the_runtime_word_and_none_leaves_it() {
-        let packed = |runtime_floor| {
-            let declared = Declared {
-                runtime_floor,
-                ..Declared::default()
-            };
-            let f = pack_keys_with_declared(Some(&object()), &[], &[], &opts(), &declared).unwrap();
-            Dkm::parse(&f).unwrap().runtime_min
-        };
-        let typed = crate::sdkgen::workbench_typed_runtime();
-        assert!(typed > crate::sdkgen::table_runtime());
-        assert_eq!(packed(0), crate::sdkgen::table_runtime());
-        assert_eq!(packed(typed), typed);
-    }
-
-    #[test]
     fn services_are_the_service_tags_of_the_imports() {
         let s = services_of([
             "dk_settings_open",

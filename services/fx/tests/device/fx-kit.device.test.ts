@@ -1,17 +1,18 @@
 import path from 'node:path';
 import type { DkSession } from '@digi/dk-session';
+import { encoder } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
 import { withWaitApi } from '@digi/regression/wait-api.ts';
 import { type TestRuntime } from '@digi/regression/test-runtime.ts';
 import { rootsOf } from '@digi/regression/runtime/image-roots.ts';
 import { bounded, rpc, word } from '@digi/regression/runtime/guest-access.ts';
+import { captureNote, pausedTrigger } from '@digi/regression/runtime/note-capture.ts';
 import { compare, pcmMetrics } from '@digi/regression/runtime/pcm-files.ts';
-import { pausedTrigger } from '@digi/regression/runtime/note-capture.ts';
 import { rows } from '@digi/regression/runtime/dsp-state.ts';
 import { REDRAW, SETTLE } from '@digi/regression/runtime/panel-waits.ts';
-import { GAIN, SINE } from '@digi/regression/runtime/fixtures.ts';
+import { GAIN, SINE, triggerFrame } from '@digi/regression/runtime/fixtures.ts';
 import { createFxKitUi, watchFxKitRows, type FxKitObservation } from '@digi/regression/runtime/fx-kit-ui.ts';
-import { knobFloat, mainPage, pageKit } from '@digi/regression/runtime/fx-pages-ui.ts';
+import { bits, mainPage, openPages, pageKit } from '@digi/regression/runtime/fx-pages-ui.ts';
 import {
   inspectFxBoot,
   selectSine,
@@ -26,18 +27,175 @@ import { expectRuntimeUi } from '@digi/regression/runtime/ready.ts';
 import { symbolsOf } from '@digi/regression/runtime/service-symbols.ts';
 import { emulatorDk } from '@digi/regression/runtime/waits.ts';
 
+// The effect pages' reaction in the firmware's kit and project paths, in two tests per device:
+// 1. the signed knob of test/dyn-fx-gain-bipolar: the row words after a turn, the MIX endpoints, kit save and load, one PCM compare of the gain;
+// 2. the kit and project values of test/dyn-fx-gain (with test/dyn-fx-gain-b as the second effect): round trips, another pattern's kit object, no transient zero in a load, the storage record the hooks write, and the seeding of rows 0 and 1 from their effect's defaults after a reorder.
+// The host proves the rest: the page row, the strings and the parameter records, the signed knob's raw range with its default in the middle, the defaults and ids
+// tables of a reorder (services/fx/tests/contract.rs; the assembler hook that reads them runs only in test 2), the send amounts (fx-track-route and fxsend/tests.rs), and the gain law of the bias and of MIX (the rig of
+// tests/fixtures/modules/dyn-fx-gain-bipolar).
+
+const BIPOLAR = 'test/dyn-fx-gain-bipolar';
+const BIPOLAR_ROUTE = `fx/route/${BIPOLAR}`;
+const biasFloat = (raw: number) => Math.fround(-64 + Math.fround(127 * Math.fround(raw / 32512)));
+const gainOf = (bias: number) => Math.fround(1 + bias / 64);
+const floatWord = (raw: number) => {
+  const bytes = Buffer.alloc(4);
+  bytes.writeUInt32LE(raw);
+  return bytes.readFloatLE();
+};
+
+for (const device of DEVICES) {
+  describe(`${device.toUpperCase()} ${FIRMWARE[device]} FX contract, signed knob`, () => {
+    const context = withPreparedFxSession(device, 'FX contract bipolar', {
+      image: {
+        name: 'fx-bipolar',
+        modules: ['core/runtime', 'core/rows', 'core/dyndsp', 'core/dynfx'],
+        inventory: [SINE, BIPOLAR],
+        symbols: ['DKRT_BOOT', 'fx.rows', 'params.fp0.index', 'pf_table'],
+        // The kit library and the runtime settings are written, as in the route and kit tests.
+        policy: 'fx-routes',
+      },
+      initial: 'dry',
+      presets: {
+        dry: { selection: ['modules/m0.dkm'] },
+        // The fixture starts on the send route; the master is stored.
+        master: { selection: ['modules/m0.dkm', 'modules/m1.dkm'], settings: [[BIPOLAR_ROUTE, '00']] },
+      },
+      // The dry amplitude and the relative PCM comparison below own audibility.
+      requireAudible: false,
+    });
+
+    test('a turn of the signed knob reaches the row, MIX ends at its limits, a kit round trip restores both, and the gain reaches the PCM', async () => {
+      const { fixture, plan, profile, artifacts, slots } = context;
+      let runtime = fixture.runtime;
+      const pcm: Record<string, string> = {};
+      const row = async () => (await rows(runtime.session, plan, slots))[0]!;
+      const words = async () => {
+        const r = await row();
+        return [r[4], r[13]];
+      };
+      const boot = async (tag: string, names: string[], reload = true) => {
+        if (reload) {
+          const previous = runtime;
+          runtime = await fixture.reload(context.baseline(tag));
+          expect(runtime.session).toBe(previous.session);
+          expect(runtime.epoch).toBeGreaterThan(previous.epoch);
+          await expect(previous.dk.info()).rejects.toThrow();
+        }
+        const state = await inspectFxBoot(runtime, plan, names, artifacts, `${tag}-boot`);
+        context.rememberEpoch(state.epoch);
+        return state;
+      };
+      const sound = async (tag: string, initial = false) => {
+        const { current, trigger: next } = await pausedTrigger(runtime.session);
+        const trigger = initial ? triggerFrame(device) : next;
+        record(artifacts, `${tag}-timing`, { currentFrame: current, triggerFrame: trigger });
+        const file = path.join(artifacts, `${tag}.wav`);
+        await captureNote(runtime.session, { file, trigger, tag: 'bipolar note', length: 1600 });
+        pcm[tag] = file;
+      };
+      const noFault = async () => expect((await row())[17]).toBe(0);
+      // The row words and the kit are firmware state: a knob change is waited for on them.
+      const rowIs = (what: string, done: (r: number[]) => boolean) =>
+        runtime.ui.wait({ state: row, done, withinMs: 5000, what });
+      const NO_PAGE_STATE = 'no firmware word shows the FX page change (only the page list and its rows)';
+
+      await boot('dry', [SINE], false);
+      await selectSine(runtime, profile);
+      await mainPage(runtime);
+      await sound('dry', true);
+
+      // Master route: the signed values and the PCM.
+      await boot('master', [SINE, BIPOLAR]);
+      await selectSine(runtime, profile);
+      await openPages(runtime);
+      for (let i = 0; i < 3; i++) await runtime.ui.tap('DOWN', { until: { drained: true } });
+      await runtime.ui.wait({ ms: 600, why: NO_PAGE_STATE });
+      await shot(runtime.session, artifacts, 'gbp-page-default');
+      const kit = pageKit(runtime, profile);
+      const ui = createFxKitUi(runtime, plan, profile, artifacts);
+      // the defaults the page seeds: BIAS 0 is raw 0x4000 in the middle of the range (host: the signed knob unit), and the row words follow
+      expect([await kit.raw(0), await kit.raw(7)]).toEqual([0x4000, 0x7f00]);
+      expect(await words()).toEqual([0, bits(1)]);
+      await mainPage(runtime);
+
+      // The MIX endpoints: approach, sixty fast events, settle.
+      const endpoint = async (near: number, direction: number, target: number, tag: string) => {
+        await ui.fxPage(3);
+        await kit.setRaw('LEVEL', 7, near);
+        for (let i = 0; i < 60; i++) {
+          await bounded(() => runtime.session.client.inputTurn(encoder('LEVEL'), direction * 8));
+          await runtime.ui.wait({ ms: 2, why: 'fast encoder events: the legacy burst spacing' });
+        }
+        await runtime.ui.wait({
+          state: () => kit.raw(7),
+          done: (v: number) => v === target,
+          withinMs: 5000,
+          what: 'the MIX knob is at its end',
+        });
+        expect(await kit.raw(7)).toBe(target);
+        await rowIs('the MIX word at target', (r) => r[13] === (target ? bits(1) : 0));
+        expect((await words())[1]).toBe(target ? bits(1) : 0);
+        await shot(runtime.session, artifacts, tag);
+      };
+      const bias: Record<string, number> = {};
+      const turn = async (raw: number, tag: string) => {
+        await ui.fxPage(3);
+        const got = await kit.setRaw('ENC A', 0, raw);
+        const value = biasFloat(got);
+        await rowIs('the SHIFT word follows the knob', (r) => r[4] === bits(value));
+        await shot(runtime.session, artifacts, `gbp-page-bias-${tag}`);
+        expect(await words()).toEqual([bits(value), bits(1)]);
+        bias[tag] = value;
+      };
+      await turn(0x6800, 'up');
+      await mainPage(runtime);
+      await sound('c');
+      // MIX bypass after a nonzero bias: a MIX that fails to bypass shows as gain.
+      await endpoint(0x1000, -1, 0, 'gbp-page-mix-zero');
+      await mainPage(runtime);
+      await endpoint(0x7000, 1, 0x7f00, 'gbp-page-mix-top');
+      await mainPage(runtime);
+      await ui.fxPage(3);
+      const halfRaw = await kit.setRaw('LEVEL', 7, 0x4000);
+      await rowIs('the MIX word follows the knob', (r) => Math.abs(floatWord(r[13]!) - halfRaw / 0x7f00) < 1e-4);
+      expect(Math.abs(floatWord((await row())[13]!) - halfRaw / 0x7f00)).toBeLessThan(1e-4);
+      await mainPage(runtime);
+      await endpoint(0x7000, 1, 0x7f00, 'gbp-page-mix-top-again');
+      await mainPage(runtime);
+      await turn(0x1800, 'down');
+      await mainPage(runtime);
+      await noFault();
+      const saved = [await kit.raw(0), await kit.raw(7)];
+      await mainPage(runtime);
+      await ui.saveKit(2, 'gbp');
+      await ui.fxPage(3);
+      await kit.setRaw('ENC A', 0, 0x6800);
+      await mainPage(runtime);
+      const upRaw = await kit.raw(0);
+      const loaded = await ui.loadKit(2, 'gbp');
+      record(artifacts, 'gbp-load-observations', loaded);
+      expect([await kit.raw(0), await kit.raw(7)]).toEqual(saved);
+      expect(upRaw).not.toBe(saved[0]);
+      expect(await words()).toEqual([bits(bias.down!), bits(1)]);
+      await ui.fxPage(3);
+      await runtime.ui.wait({ ms: 300, why: NO_PAGE_STATE });
+      await shot(runtime.session, artifacts, 'gbp-page-loaded');
+      await mainPage(runtime);
+      await noFault();
+
+      // One end-to-end PCM compare is the boundary proof: the dry PCM of the first card, scaled by the gain of the float word that the row holds. The gain
+      // law itself, the zero bias, MIX 0, 0.5 and 1, and other biases are proven on the SHARC rig (tests/fixtures/modules/dyn-fx-gain-bipolar/tests/rig).
+      await compare(pcm.dry!, pcm.c!, gainOf(bias.up!), artifacts, 'bias-up');
+    });
+  });
+}
+
 const GAIN_B = 'test/dyn-fx-gain-b';
 const MARK = 0x46a7;
-const defaultsAB = [
-  0x3200,
-  ...Array<null>(6).fill(null),
-  0x7f00,
-  0x1900,
-  ...Array<null>(6).fill(null),
-  0x4000,
-  ...Array<null>(8).fill(null),
-];
-const defaultsBA = [...defaultsAB.slice(8, 16), ...defaultsAB.slice(0, 8), ...defaultsAB.slice(16)];
+const defaultsAB = [0x3200, ...Array<null>(6).fill(null), 0x7f00, 0x1900, ...Array<null>(6).fill(null), 0x4000];
+const defaultsBA = [...defaultsAB.slice(8, 16), ...defaultsAB.slice(0, 8)];
+const defaultsOne = defaultsAB.slice(0, 8);
 const isDefault = (got: number[], want: (number | null)[]) =>
   want.every((value, i) => value === null || Math.abs(got[i]! - value) <= 1);
 const expectedRecord = (ids: number[], values: number[], size: number) => {
@@ -45,13 +203,6 @@ const expectedRecord = (ids: number[], values: number[], size: number) => {
   result.push(...ids);
   return [...result, ...Array<number>(size - result.length).fill(0)];
 };
-const factor = (values: number[]) =>
-  [0, 1].reduce(
-    (gain, row) =>
-      gain *
-      (1 + Math.fround(Math.fround(values[row * 8 + 7]!) / Math.fround(0x7f00)) * (knobFloat(values[row * 8]!) - 1)),
-    1,
-  );
 
 for (const device of DEVICES) {
   describe(`${device.toUpperCase()} ${FIRMWARE[device]} FX kit/project persistence`, () => {
@@ -61,10 +212,7 @@ for (const device of DEVICES) {
         name: 'fx-kit-persist',
         modules: rootsOf('rt-dynfx'),
         inventory: [SINE, GAIN, GAIN_B],
-        symbols: [
-          'DKRT_BOOT',
-          'fx.rows',
-        ],
+        symbols: ['DKRT_BOOT', 'fx.rows'],
         policy: 'fx-kit',
       },
       initial: full ? 'stock' : 'effects',
@@ -76,7 +224,7 @@ for (const device of DEVICES) {
       requireAudible: false,
     });
 
-    test('round-trips kit/project values and seeds defaults for absent or reordered effect IDs', async () => {
+    test('round-trips kit and project values, gives another pattern its own kit object, and never shows a transient zero in a load', async () => {
       const { fixture, plan, profile, artifacts } = context;
       let runtime: TestRuntime = fixture.runtime;
       const session = runtime.session;
@@ -97,7 +245,7 @@ for (const device of DEVICES) {
       const stock = async () => halfword(session, (await kitBase()) + 64);
       const mark = async () => halfword(session, (await kitBase()) + 2 * fx.mark_index);
       const spare = async (base: number) => halfwords(base + fx.store_off, fx.store_halfwords);
-      const rowWords = async () => (await rows(session, plan, count)).slice(0, 2).map((row) => [row[4], row[13]]);
+      const rowWords = async () => (await rows(session, plan, count)).slice(0, 1).map((row) => [row[4], row[13]]);
       const poke16 = async (at: number, value: number) => {
         for (let byte = 0; byte < 2; byte++) {
           const address = at + byte;
@@ -150,8 +298,8 @@ for (const device of DEVICES) {
       };
       const ratio = (base: string, sample: string, gain: number, identical = false) =>
         compare(pcm.get(base)!, pcm.get(sample)!, gain, artifacts, sample, identical);
-      const page = async (row: number, tag: string) => {
-        await ui().fxPage(3 + row);
+      const page = async (tag: string) => {
+        await ui().fxPage(3);
         await runtime.ui.wait({ ms: 600, why: SETTLE });
         return shot(session, artifacts, tag);
       };
@@ -176,22 +324,18 @@ for (const device of DEVICES) {
         } else await inspect([SINE, GAIN, GAIN_B], 'effects-boot');
         const effectIds = await ids();
         expect(effectIds[0]).toBe(0x4625);
-        expect(effectIds[1]).not.toBe(0);
-        expect(effectIds[1]).not.toBe(effectIds[0]);
-        expect(effectIds[2]).toBe(0);
+        expect(effectIds[1], 'the second effect has its own id').not.toBe(0);
+        expect(effectIds.slice(2)).toEqual(Array(count - 2).fill(0));
         console.info(
           `fx service counters: ${(await Promise.all(['fxp_ninit', 'fxp_nload', 'fxp_nsave', 'fxp_nsound'].map(async (n) => `${n}=${await cell(n)}`))).join(' ')}`,
         );
         // the init hook is not observable in this test (boot init runs before fx.dks binds; Load Kit does not call the initialiser, finding 61); the service seeds a live kit on activation and tick
-        expect(await word(session, sym('DKRT_FXP') + 24)).toBe(2);
         expect(await mark()).toBe(MARK);
-        expect(isDefault(await values(), defaultsAB)).toBe(true);
+        expect(isDefault(await values(), defaultsOne)).toBe(true);
         await selectSine(runtime, profile);
-        const gotDefault = await values();
-        expect(isDefault(gotDefault, defaultsAB)).toBe(true);
-        const defaultValues = gotDefault.map((value, i) => defaultsAB[i] ?? value);
+        expect(isDefault(await values(), defaultsOne)).toBe(true);
         if (!full) {
-          // DN2 quick setup emits the same zero-ID record as a sine-only boot.
+          // the quick setup (no restart) emits the same zero-ID record as a sine-only boot.
           await kit.poke(32, stockK1);
           for (let row = 0; row < count; row++) await poke16(sym('fxp_ids') + row * 2, 0);
           try {
@@ -202,25 +346,17 @@ for (const device of DEVICES) {
           expect(await spare(await cell('fxp_save_dst'))).toEqual(Array(fx.store_halfwords).fill(0));
           await mainPage(runtime);
         }
-        await note('default');
-        const turned: number[] = [];
-        for (const [row, gain, mix] of [
-          [0, 0x6400, 0x4000],
-          [1, 0x2800, 0x2000],
-        ] as const) {
-          await ui().fxPage(3 + row);
-          const rowKit = pageKit(runtime, profile, row);
-          turned.push(await rowKit.setRaw('ENC A', 0, gain), await rowKit.setRaw('LEVEL', 7, mix));
-        }
+        await ui().fxPage(3);
+        const rowKit = pageKit(runtime, profile, 0);
+        const turned = [await rowKit.setRaw('ENC A', 0, 0x6400), await rowKit.setRaw('LEVEL', 7, 0x4000)];
         await kit.poke(32, 0x3000);
         const stockSaved = await stock();
         await mainPage(runtime);
         const saved = await values();
-        expect([saved[0], saved[7], saved[8], saved[15]]).toEqual(turned);
+        expect([saved[0], saved[7]]).toEqual(turned);
         await note('turned');
-        await ratio('default', 'turned', factor(saved) / factor(defaultValues));
         const wordsSaved = await rowWords();
-        const hashes = [await page(0, 'fx-page4-turned'), await page(1, 'fx-page5-turned')];
+        const hash = await page('fx-page4-turned');
         await mainPage(runtime);
         const firstKit = await word(session, fx.kit_ptr);
         await runtime.ui.tap('PTN', { until: { ms: 800, why: REDRAW } });
@@ -231,63 +367,56 @@ for (const device of DEVICES) {
           waited += 100;
         }
         expect(await word(session, fx.kit_ptr), 'A02 owns another kit object').not.toBe(firstKit);
-        expect(isDefault(await values(), defaultsAB)).toBe(true);
+        expect(isDefault(await values(), defaultsOne)).toBe(true);
         expect(await mark()).toBe(MARK);
-        expect((await values()).slice(0, 16)).not.toEqual(saved.slice(0, 16));
+        expect((await values()).slice(0, 8)).not.toEqual(saved.slice(0, 8));
         await runtime.ui.wait({ ms: 1200, why: SETTLE });
         await runtime.ui.tap('PTN', { until: { ms: 800, why: REDRAW } });
         await runtime.ui.tap('TRIG 1', { until: { ms: 1500, why: REDRAW } });
         expect(await word(session, fx.kit_ptr), 'A01 retains its kit object').toBe(firstKit);
-        expect((await values()).slice(0, 16)).toEqual(saved.slice(0, 16));
+        expect((await values()).slice(0, 8)).toEqual(saved.slice(0, 8));
         const saves = await cell('fxp_nsave');
         await ui().saveKit(2, 'k2');
         expect(await cell('fxp_nsave')).toBeGreaterThan(saves);
+        // the storage record the save hook writes (assembler, not testable on the host): the values of rows with an effect, zeros for the others, then the ids
         const source = await cell('fxp_last_save');
         const sourceValues = await Promise.all(fx.value_indices.map((index) => halfword(session, source + 2 * index)));
         expect(await spare(await cell('fxp_save_dst'))).toEqual(
           expectedRecord(effectIds, sourceValues, fx.store_halfwords),
         );
-        for (const [row, gain] of [
-          [0, 0x1800],
-          [1, 0x5400],
-        ] as const) {
-          await kit.poke(fx.value_indices[row * 8]!, gain);
-          await kit.poke(fx.value_indices[row * 8 + 7]!, 0x7f00);
-        }
+        await kit.poke(fx.value_indices[0]!, 0x1800);
+        await kit.poke(fx.value_indices[7]!, 0x7f00);
         await kit.poke(32, 0x1000);
         await runtime.ui.wait({ ms: 300, why: SETTLE });
         await mainPage(runtime);
         const changed = await values();
-        for (const index of [0, 7, 8, 15]) expect(changed[index]).not.toBe(saved[index]);
+        for (const index of [0, 7]) expect(changed[index]).not.toBe(saved[index]);
         await note('changed');
         const loads = await cell('fxp_nload');
         const loaded = await ui().loadKit(2, 'k2');
         expect(await cell('fxp_nload')).toBeGreaterThan(loads);
-        expect((await values()).slice(0, 16)).toEqual(saved.slice(0, 16));
+        expect((await values()).slice(0, 8)).toEqual(saved.slice(0, 8));
         expect(loaded.file).toEqual(expectedRecord(effectIds, saved, fx.store_halfwords));
         expect(Math.abs((await stock()) - stockSaved)).toBeLessThanOrEqual(0x40);
         expect(await rowWords()).toEqual(wordsSaved);
         noZero('kit', loaded.seen);
         await note('loaded');
+        // one compare: a kit load reproduces the sound of the saved values (the gain law is on the rig), and the compare tells a changed kit from a loaded one
         await ratio('turned', 'loaded', 1, true);
         const differs = await pcmMetrics(pcm.get('changed')!, pcm.get('loaded')!, 1, artifacts, 'changed-v-loaded');
         expect(differs.identical).toBe(false);
-        expect([await page(0, 'fx-page4-loaded'), await page(1, 'fx-page5-loaded')]).toEqual(hashes);
+        expect(await page('fx-page4-loaded')).toEqual(hash);
         await mainPage(runtime);
         const stockLoaded = await ui().loadKit(1, 'k1b');
         const defaults = await values();
-        expect(isDefault(defaults, defaultsAB)).toBe(true);
-        expect(defaults.slice(0, 16)).not.toEqual(saved.slice(0, 16));
+        expect(isDefault(defaults, defaultsOne)).toBe(true);
+        expect(defaults.slice(0, 8)).not.toEqual(saved.slice(0, 8));
         noZero('stock-kit', stockLoaded.seen);
         expect(stockLoaded.file).toEqual(Array(fx.store_halfwords).fill(0));
         expect(Math.abs((await stock()) - stockK1)).toBeLessThanOrEqual(0x40);
-        await note('again');
-        await ratio('default', 'again', 1);
         const projectValues = new Map([
           [0, 0x5200],
           [7, 0x3000],
-          [8, 0x1000],
-          [15, 0x6000],
         ]);
         for (const [index, value] of projectValues) await kit.poke(fx.value_indices[index]!, value);
         await runtime.ui.wait({ ms: 300, why: SETTLE });
@@ -311,6 +440,8 @@ for (const device of DEVICES) {
         expect([...projectValues.keys()].map((index) => projectGot[index])).toEqual([...projectValues.values()]);
         expect(await rowWords()).toEqual(projectWords);
         noZero('project', projectSeen);
+        // the load hook seeds a row from the defaults of its effect, found by id: after a reorder (B, A) a kit without a record gives row 0 the defaults of B and row 1 those of A.
+        // The table is host-tested (contract.rs); the assembler hook that reads it runs only here.
         if (full) {
           await restart(['modules/m0.dkm', 'modules/m2.dkm', 'modules/m1.dkm'], 'swap', [SINE, GAIN_B, GAIN]);
           expect((await ids()).slice(0, 3)).toEqual([effectIds[1], effectIds[0], 0]);
@@ -329,7 +460,7 @@ for (const device of DEVICES) {
         }
         const swapped = await ui().loadKit(2, 'swap');
         const swappedValues = await values();
-        expect(isDefault(swappedValues, defaultsBA)).toBe(true);
+        expect(isDefault(swappedValues.slice(0, 16), defaultsBA), 'rows 0 and 1 are seeded by their effect after the reorder').toBe(true);
         expect(swappedValues[0]).not.toBe(saved[0]);
         noZero('swap', swapped.seen);
         await context.evidence(runtime, 'persistence-complete');

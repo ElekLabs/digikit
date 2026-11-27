@@ -9,23 +9,6 @@
     "runtimeAcceptance": [
       {
         "files": [
-          "lfo.device.test.ts"
-        ],
-        "modules": [
-          "digikit/debug",
-          "test/lfo-shape",
-          "core/services/lfo"
-        ],
-        "incidental": [
-          {
-            "module": "digikit/debug",
-            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
-          }
-        ],
-        "firmwareOnly": "hooks install into the real image and a shape fixture loads and unloads with the firmware running; refusals and stock-byte restore are assembly tests"
-      },
-      {
-        "files": [
           "lfo-shape-output.device.test.ts"
         ],
         "modules": [
@@ -33,7 +16,7 @@
           "core/services/lfo"
         ],
         "plusdrive": true,
-        "firmwareOnly": "the LFO output through the vector 191 tick with stock waves and a shape table; the shape numbering and routing decision are unit tests (services/lfo route.rs)"
+        "firmwareOnly": "the LFO output through the vector 191 tick with stock waves and a shape table, the hook install, the reload of the lfo service (the shape table is republished under the interrupt mask); the shape numbering and routing decision are unit tests (services/lfo route.rs), refusals are assembly tests"
       },
       {
         "files": [
@@ -63,17 +46,6 @@
           "runtime/core/tests/lfo/goldens.json"
         ],
         "plusdrive": true
-      },
-      {
-        "files": [
-          "lfo-reload.device.test.ts"
-        ],
-        "modules": [
-          "test/lfo-shape",
-          "core/services/lfo"
-        ],
-        "plusdrive": true,
-        "firmwareOnly": "the shape table is republished under the interrupt mask and the vector 191 tick plays it again after the reload of the lfo service; the order of the steps and the refusals are host tests"
       }
     ]
   }
