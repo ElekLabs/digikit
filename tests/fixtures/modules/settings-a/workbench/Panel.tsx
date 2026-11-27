@@ -7,7 +7,7 @@ export default function Panel(props: ModulePageProps) {
   const boot = createResource(() => props.client.settings(schema).get('boot'))[0];
   return (
     <>
-      <Show when={boot()?.ok && boot()}>{(read) => <p>Boot value now: {String(read().ok && read().value)}</p>}</Show>
+      <Show when={boot()?.ok && boot()}>{(read) => <p>Boot value now: {read().ok && read().unset ? 'not set' : String(read().ok && read().value)}</p>}</Show>
       <p>Changes to Boot value take effect the next time the module starts.</p>
     </>
   );

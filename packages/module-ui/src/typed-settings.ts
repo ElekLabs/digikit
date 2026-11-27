@@ -77,8 +77,7 @@ export class ModuleSettings<S extends SettingsSchema> implements TypedSettings<S
     }
     this.#seen.set(id, raw.revision);
     if (raw.value === undefined) {
-      const value = setting.kind === 'text' || setting.kind === 'file-name' ? null : setting.default;
-      return { ok: true, value: value as never, revision: raw.revision, unset: true };
+      return { ok: true, value: settingValueCodec.unsetValue(setting) as never, revision: raw.revision, unset: true };
     }
     try {
       return {

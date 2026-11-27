@@ -121,4 +121,20 @@ function refusal(setting: Setting): string {
   }
 }
 
-export const settingValueCodec = { accepts, encode, decode, refusal };
+/**
+ * The display value of a setting that holds nothing: its default (an integer default is stored, so it is divided by 10^decimals like a
+ * stored value; boolean and choice defaults are display values already). Text and file names have none: null.
+ */
+function unsetValue(setting: Setting): AnySettingValue {
+  switch (setting.kind) {
+    case 'text':
+    case 'file-name':
+      return null;
+    case 'integer':
+      return setting.default / scale(setting);
+    default:
+      return setting.default;
+  }
+}
+
+export const settingValueCodec = { accepts, encode, decode, refusal, unsetValue };

@@ -19,7 +19,7 @@ const schema = {
       step: 1,
       decimals: 2,
       unit: 'dB',
-      default: 0.5,
+      default: 50,
     },
     { id: 'on', label: 'On', kind: 'boolean', apply: 'immediate', default: true },
     {

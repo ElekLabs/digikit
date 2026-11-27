@@ -18,4 +18,12 @@ describe('the settings-a fixture page', () => {
     expect(host.textContent).toContain('take effect the next time the module starts');
     dispose();
   });
+
+  it('shows not set while the boot value is unset', async () => {
+    const { channel } = createMemoryModuleChannel(schema);
+    const host = document.createElement('div');
+    const dispose = render(() => <page.Page client={createModuleClient(channel)} />, host);
+    await vi.waitFor(() => expect(host.textContent).toContain('Boot value now: not set'));
+    dispose();
+  });
 });

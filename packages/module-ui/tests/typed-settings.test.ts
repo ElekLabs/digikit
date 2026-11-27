@@ -49,6 +49,18 @@ describe('TypedSettings', () => {
     expect(await s.get('name')).toMatchObject({ value: null, unset: true });
   });
 
+  it('shows the default of an unset integer as a display value, once', async () => {
+    const withDecimals = (decimals: number) => {
+      const sc = {
+        ...schema,
+        settings: [{ ...schema.settings[0], min: 0, max: 100, step: 1, decimals, default: 50 }],
+      } as const as SettingsSchema;
+      return createModuleClient(createMemoryModuleChannel(sc).channel).settings(sc);
+    };
+    expect(await withDecimals(2).get('gain')).toMatchObject({ value: 0.5, unset: true });
+    expect(await withDecimals(0).get('gain')).toMatchObject({ value: 50, unset: true });
+  });
+
   it('puts and reads back display values and bumps the revision', async () => {
     const s = open();
     await s.get('gain');

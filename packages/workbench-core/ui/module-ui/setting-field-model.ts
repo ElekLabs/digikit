@@ -1,9 +1,9 @@
 import { createSignal } from 'solid-js';
-import type { AnySettingValue, DynamicSettings, Setting } from '@digi/module-ui';
+import { settingValueCodec, type AnySettingValue, type DynamicSettings, type Setting } from '@digi/module-ui';
 
 /** The value a setting shows while nothing valid is stored: its default (text and file names show empty). */
 export const defaultValue = (setting: Setting): Exclude<AnySettingValue, null> =>
-  setting.kind === 'text' || setting.kind === 'file-name' ? '' : setting.default;
+  settingValueCodec.unsetValue(setting) ?? '';
 
 export interface FieldSaved {
   /** The stored display value; null for text that is unset. A refused stored value reads as unset. */
