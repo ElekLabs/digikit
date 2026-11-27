@@ -1,12 +1,7 @@
 import { parse } from 'smol-toml';
-import type { DkModule, ModuleSettingsEndpoint, RawSettingValue } from '@digi/dk-session';
-import {
-  encodeDescriptor,
-  MemorySettingsStore,
-  type DescribedSchema,
-  type SettingError,
-  type SettingsSchema,
-} from '@digi/module-ui';
+import { DkError, type DkModule, type RawSettingValue } from '@digi/dk-session';
+import { MemorySettingsStore, type DescribedSchema, type SettingError, type SettingsSchema } from '@digi/module-ui';
+import type { SettingsEndpoint } from '@digi/workbench-core/module-ui/device-settings.ts';
 import { moduleFilePath } from '@digi/workbench-core/modules/dktransfer.ts';
 
 const manifests = import.meta.glob<string>('../../../../modules/*/*/*/module.toml', {
@@ -31,13 +26,20 @@ export function previewSettingsSchemas() {
 }
 
 function raw(result: ReturnType<MemorySettingsStore['read']>): RawSettingValue {
-  if (!result.ok) throw refusal(result.error);
+  if (!result.ok) throw previewRefusal(result.error);
   return { value: result.value, revision: result.revision };
 }
 
-function refusal(error: SettingError) {
-  const status = { conflict: 'E_MODULE_UI_CONFLICT', 'overlay-scope': 'E_MODULE_UI_SCOPE' } as Record<string, string>;
-  return Object.assign(new Error(error.message), { kind: 'device', status: status[error.code] });
+/** The error the device sends for a refused setting request: the same `DkError` the session throws, so the real adapter maps it. */
+export function previewRefusal(error: SettingError): Error {
+  const status: Partial<Record<SettingError['code'], string>> = {
+    conflict: 'E_MODULE_UI_CONFLICT',
+    'overlay-scope': 'E_MODULE_UI_SCOPE',
+    invalid: 'E_SET_VALUE',
+    busy: 'E_AGAIN',
+  };
+  const named = status[error.code];
+  return named ? new DkError({ error: error.message, kind: 'device', status: named }) : new Error(error.message);
 }
 
 export function createPreviewSettings(
@@ -50,7 +52,7 @@ export function createPreviewSettings(
   slot: number,
   instance: number,
   current: () => boolean,
-): ModuleSettingsEndpoint {
+): SettingsEndpoint {
   async function binding() {
     const card = await store();
     const loaded = card.boot.modules.find((module) => module.index === slot && module.uiInstance === instance);
@@ -69,9 +71,10 @@ export function createPreviewSettings(
     return match;
   };
   return {
-    async describe() {
-      const { schema } = await binding();
-      return encodeDescriptor(schema.name, schema);
+    // The simulated device holds its generated schema; a real one reports a descriptor (see `describeDeviceSettings`).
+    describeSchema: async () => (await binding()).schema,
+    describe: async () => {
+      throw new Error('The preview reports its schema directly.');
     },
     async get(index) {
       const { schema, values } = await binding();

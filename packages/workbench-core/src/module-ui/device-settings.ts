@@ -1,19 +1,20 @@
-// The adapter between a session's raw settings endpoint and the typed settings of @digi/module-ui. dk-session moves bytes, module-ui owns the
-// descriptor and value rules; the pairing lives here.
+// The settings half of the device's ModuleChannel: a session's raw settings endpoint as RawSetting requests. dk-session moves bytes, module-ui
+// owns the descriptor and value rules; the pairing lives here.
 import { DkError, type ModuleSettingsEndpoint, type RawSettingValue } from '@digi/dk-session';
 import {
   decodeDescriptor,
-  ModuleSettings,
   settingError,
   type DescribedSchema,
-  type DynamicSettings,
+  type ModuleChannel,
   type RawSetting,
   type SettingError,
-  type SettingsTransport,
 } from '@digi/module-ui';
 
-export async function describeDeviceSettings(endpoint: ModuleSettingsEndpoint): Promise<DescribedSchema> {
-  return decodeDescriptor(await endpoint.describe());
+/** A session's settings endpoint. A simulated device (the preview) may give its schema directly instead of a descriptor. */
+export type SettingsEndpoint = ModuleSettingsEndpoint & { describeSchema?(): Promise<DescribedSchema> };
+
+export async function describeDeviceSettings(endpoint: SettingsEndpoint): Promise<DescribedSchema> {
+  return endpoint.describeSchema ? endpoint.describeSchema() : decodeDescriptor(await endpoint.describe());
 }
 
 /** The typed error of a failed exchange. A status the device sends for a setting maps to its code; anything else means the module is out of reach. */
@@ -35,7 +36,9 @@ export function settingErrorOf(e: unknown): SettingError {
   }
 }
 
-function transport(schema: DescribedSchema, endpoint: ModuleSettingsEndpoint): SettingsTransport {
+type SettingRequests = Pick<ModuleChannel, 'getSetting' | 'putSetting' | 'resetSetting'>;
+
+export function deviceSettingRequests(schema: DescribedSchema, endpoint: ModuleSettingsEndpoint): SettingRequests {
   const field = (id: string) => schema.settings.findIndex((s) => s.id === id);
   async function run(id: string, call: (field: number) => Promise<RawSettingValue>): Promise<RawSetting> {
     const index = field(id);
@@ -48,12 +51,8 @@ function transport(schema: DescribedSchema, endpoint: ModuleSettingsEndpoint): S
     }
   }
   return {
-    get: (id) => run(id, (f) => endpoint.get(f)),
-    put: (id, value, revision) => run(id, (f) => endpoint.put(f, value, revision)),
-    reset: (id, revision) => run(id, (f) => endpoint.reset(f, revision)),
+    getSetting: (id) => run(id, (f) => endpoint.get(f)),
+    putSetting: (id, value, revision) => run(id, (f) => endpoint.put(f, value, revision)),
+    resetSetting: (id, revision) => run(id, (f) => endpoint.reset(f, revision)),
   };
-}
-
-export function deviceSettings(schema: DescribedSchema, endpoint: ModuleSettingsEndpoint): DynamicSettings {
-  return new ModuleSettings(schema, transport(schema, endpoint));
 }

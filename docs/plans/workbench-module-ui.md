@@ -21,7 +21,8 @@ firmware           module -> service -> runtime
 ```
 
 - `@digi/module-ui` is the TypeScript contract of a module page, as the C SDK is the contract of module code. A page cannot reach Tauri, dk-session or workbench-core internals. oxlint enforces the import rule.
-- `ModuleClient` is message-based: every call is async and takes and returns plain data (structured-clone types). The same page then runs compiled into the app or inside a sandboxed iframe (section "Distribution").
+- `ModuleChannel` is the boundary: the only interface that crosses to a sandboxed page. Every request is async and takes and returns structured-clone data; progress and other notifications are `ModuleChannelEvent` messages through `subscribe`. The same page then runs compiled into the app or inside a sandboxed iframe (section "Distribution"). The real channel is workbench-core over dk-session; the memory channel serves preview and tests.
+- `ModuleClient` (`createModuleClient(channel)`) is a page-side helper: typed settings (validation, scaling, revisions) and the files helper with its `progress` callback. It never crosses the boundary.
 - A page reaches device data only through its module: settings, the module's own files and the module's operations. A service's files and formats stay private to the service; the module asks the service through its SDK exports.
 
 ## Discovery
@@ -38,7 +39,7 @@ The author declares settings in `workbench.toml` beside `module.toml`. Patchkit 
 2. a C header with keys, bounds and typed inline getters over `dk_settings_get`,
 3. a TypeScript file with the settings type and schema for the page.
 
-The TOML reader in `packages/workbench-core/src/module-ui/descriptor.ts` is deleted. The TS decoder of the binary descriptor stays, because a device reports descriptors. It is checked against shared vectors with the patchkit encoder and the runtime parser.
+The TOML reader in `packages/workbench-core/src/module-ui/descriptor.ts` is deleted. The TS decoder of the binary descriptor stays, because a device reports descriptors. It is checked against `expected_schema` in the shared vectors (`runtime/core/vectors/workbench-vectors.json`), which patchkit writes from the same declaration as the bytes (`UPDATE_VECTORS=1`); the patchkit encoder and the runtime parser check the bytes against the same file.
 
 | Type | Workbench control | Stored value | Schema fields |
 | --- | --- | --- | --- |
@@ -170,7 +171,7 @@ A loaded module can expose named, typed operations beside its settings. The modu
 `tests/fixtures/modules/settings-a/` stays the authoring example. Phase 1 adds one setting of each new type to it, or a second fixture if a distinct module identity is needed for a version 2 descriptor.
 
 - The preview seeds the sample as installed and loaded on the default simulated card, routes its instance to the memory client and uses the real sidebar discovery, generated form and page. One settings map per simulated target; a fresh client on reload; released on unload or disconnect. The preview never inserts a menu item by hand.
-- `createMemoryModuleClient(schema, handlers)` lives in `@digi/module-ui` test support: values, a revision and module-owned operation handlers, with no Tauri, MIDI, filesystem or firmware dependency. It shares the pure validation code with the real client.
+- `createMemoryModuleChannel(schema, options)` lives in `@digi/module-ui`: a `ModuleChannel` with values, a revision and files (module-owned operation handlers come in phase 2), with no Tauri, MIDI, filesystem or firmware dependency. It shares the pure validation code with the real client.
 
 | Test owner | Observable behaviour |
 | --- | --- |

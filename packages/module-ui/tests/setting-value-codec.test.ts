@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidSettingValue, settingValueCodec as codec, type Setting } from '../src/index.ts';
-import { bytesOf, declaredSchema, vectors } from './vectors.ts';
+import { bytesOf, describedSchema, vectors } from './vectors.ts';
 
 describe('settingValueCodec.accepts against the shared vectors', () => {
   for (const c of vectors.values) {
     it(`${c.descriptor} ${c.setting} ${c.value_hex || '(empty)'}: ${c.rule}`, () => {
-      const schema = declaredSchema(vectors.descriptors.find((d) => d.name === c.descriptor)!);
+      const schema = describedSchema(vectors.descriptors.find((d) => d.name === c.descriptor)!);
       const setting = schema.settings.find((s) => s.id === c.setting)!;
       expect(codec.accepts(setting, bytesOf(c.value_hex))).toBe(c.valid);
     });

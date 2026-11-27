@@ -1,7 +1,13 @@
 import type { ModuleSettingsEndpoint } from '@digi/dk-session';
-import type { DescribedSchema, DynamicSettings, FileNameSetting, ModuleFileClient } from '@digi/module-ui';
+import {
+  createModuleClient,
+  type DescribedSchema,
+  type DynamicSettings,
+  type FileNameSetting,
+  type ModuleFileClient,
+} from '@digi/module-ui';
 import { For, Show, createSignal } from 'solid-js';
-import { deviceSettings } from '@digi/workbench-core/module-ui/device-settings.ts';
+import { createDeviceModuleChannel } from '@digi/workbench-core/module-ui/device-module-channel.ts';
 import { bindModuleFiles } from '@digi/workbench-core/module-ui/module-files.ts';
 import type { ModulePage } from '@digi/workbench-core/module-ui/module-page.ts';
 import { errorLine } from '@digi/workbench-core/modules/backend.ts';
@@ -107,8 +113,15 @@ export function moduleFilePage(
     },
     open(current) {
       const binding = app.target.bindSession();
-      const settings = schema && openSettings ? deviceSettings(schema, openSettings(current)) : undefined;
-      const files = bindModuleFiles(id, binding, current);
+      const client = createModuleClient(
+        createDeviceModuleChannel({
+          schema: schema ?? { name: id, version: 1, settings: [] },
+          endpoint: schema && openSettings ? openSettings(current) : undefined,
+          files: bindModuleFiles(id, binding, current),
+        }),
+      );
+      const settings: DynamicSettings | undefined = schema && openSettings ? client.settings(schema) : undefined;
+      const { files } = client;
       return {
         settings,
         Panel: spec

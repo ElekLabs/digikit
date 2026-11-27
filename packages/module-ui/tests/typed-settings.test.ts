@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
-  createMemoryModuleClient,
+  createMemoryModuleChannel,
+  createModuleClient,
   type ModuleClient,
   type SettingResult,
   type SettingsOf,
@@ -20,7 +21,7 @@ describe('SettingsOf infers the value types of a generated schema', () => {
     expectTypeOf<keyof V>().toEqualTypeOf<'gain' | 'flag' | 'mode' | 'name' | 'anim'>();
   });
   it('types the calls of a client from the schema', async () => {
-    const client: ModuleClient = createMemoryModuleClient(schema);
+    const client: ModuleClient = createModuleClient(createMemoryModuleChannel(schema).channel);
     const s = client.settings(schema);
     expectTypeOf(s).toEqualTypeOf<TypedSettings<SettingsOf<typeof schema>>>();
     expectTypeOf(s.get('mode')).toEqualTypeOf<Promise<SettingResult<'Off' | 'Soft' | 'Hard'>>>();
@@ -38,7 +39,7 @@ describe('SettingsOf infers the value types of a generated schema', () => {
 });
 
 describe('TypedSettings', () => {
-  const open = () => createMemoryModuleClient(schema).settings(schema);
+  const open = () => createModuleClient(createMemoryModuleChannel(schema).channel).settings(schema);
 
   it('reads the default of an unset setting and null for unset text', async () => {
     const s = open();
@@ -58,7 +59,9 @@ describe('TypedSettings', () => {
 
   it('refuses an invalid value without reaching the device and keeps the stored value', async () => {
     const calls: string[] = [];
-    const s = createMemoryModuleClient(schema, { behavior: (c) => void calls.push(c.method) }).settings(schema);
+    const s = createModuleClient(
+      createMemoryModuleChannel(schema, { behavior: (c) => void calls.push(c.method) }).channel,
+    ).settings(schema);
     await s.get('gain');
     const bad = await s.put('gain', 0.5); // off the step of 0.2
     expect(bad).toMatchObject({ ok: false, error: { code: 'invalid' } });
@@ -67,11 +70,12 @@ describe('TypedSettings', () => {
     expect(await s.get('gain')).toMatchObject({ value: 0, unset: true });
   });
 
-  it('refuses a write before any read and after another writer changed the setting', async () => {
-    const client = createMemoryModuleClient(schema);
+  it('refuses a write before any read (not-read) and after another writer changed the setting', async () => {
+    const client = createModuleClient(createMemoryModuleChannel(schema).channel);
     const a = client.settings(schema);
     const b = client.settings(schema);
-    expect(await a.put('name', 'x')).toMatchObject({ error: { code: 'conflict' } });
+    expect(await a.put('name', 'x')).toMatchObject({ error: { code: 'not-read' } });
+    expect(await a.reset('name')).toMatchObject({ error: { code: 'not-read' } });
     await a.get('name');
     await b.get('name');
     expect(await b.put('name', 'b')).toMatchObject({ ok: true, revision: 1 });

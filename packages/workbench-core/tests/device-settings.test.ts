@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { DkError, type ModuleSettingsEndpoint } from '@digi/dk-session';
-import { encodeDescriptor, type DescribedSchema } from '@digi/module-ui';
-import { describeDeviceSettings, deviceSettings, settingErrorOf } from '../src/module-ui/device-settings.ts';
+import { createModuleClient, type DescribedSchema } from '@digi/module-ui';
+import { createDeviceModuleChannel } from '../src/module-ui/device-module-channel.ts';
+import { describeDeviceSettings, settingErrorOf } from '../src/module-ui/device-settings.ts';
+
+// The descriptor the device reports for `schema` (the shape is checked against patchkit's bytes by the shared vectors).
+const descriptor = Uint8Array.from(
+  '0205547970656402046761696e044761696e040200000000000000006400000001020000000000046e616d65044e616d65080000'.match(
+    /../g,
+  )!,
+  (h) => parseInt(h, 16),
+);
 
 const schema: DescribedSchema = {
   name: 'Typed',
@@ -23,10 +32,19 @@ const schema: DescribedSchema = {
   ],
 };
 
+const files = {
+  list: async () => [],
+  read: async () => new Uint8Array(),
+  send: async () => {},
+  remove: async () => {},
+};
+const deviceSettings = (s: DescribedSchema, endpoint: ModuleSettingsEndpoint) =>
+  createModuleClient(createDeviceModuleChannel({ schema: s, endpoint, files })).settings(s);
+
 function endpoint(over: Partial<ModuleSettingsEndpoint> = {}) {
   const sent: { field: number; value?: Uint8Array; revision: number }[] = [];
   const point: ModuleSettingsEndpoint = {
-    describe: async () => encodeDescriptor(schema.name, schema),
+    describe: async () => descriptor,
     get: async () => ({ value: Uint8Array.of(0, 0, 0, 25), revision: 3 }),
     put: async (field, value, revision) => (sent.push({ field, value, revision }), { value, revision: revision + 1 }),
     reset: async (field, revision) => (sent.push({ field, revision }), { revision: revision + 1 }),
@@ -89,5 +107,22 @@ describe('deviceSettings', () => {
       endpoint({ get: async () => ({ value: Uint8Array.of(0, 0, 1, 0), revision: 1 }) }).point,
     );
     expect(await bad.get('gain')).toMatchObject({ ok: false, error: { code: 'unavailable' } });
+  });
+});
+
+describe('createDeviceModuleChannel', () => {
+  it('sends the progress of a file as events of its job and answers settings without an endpoint as unavailable', async () => {
+    const sent = {
+      ...files,
+      send: async (_name: string, _bytes: Uint8Array, progress: (sent: number, total: number) => void) =>
+        progress(1, 2),
+    };
+    const channel = createDeviceModuleChannel({ schema, files: sent });
+    const events: unknown[] = [];
+    channel.subscribe((e) => events.push(e));
+    await channel.sendFile(4, 'a.dkbs', Uint8Array.of(1, 2));
+    expect(events).toEqual([{ kind: 'file-progress', job: 4, done: 1, total: 2 }]);
+    expect(await channel.getSetting('gain')).toMatchObject({ ok: false, error: { code: 'unavailable' } });
+    expect(await channel.describeSettings()).toBe(schema);
   });
 });

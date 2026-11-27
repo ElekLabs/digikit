@@ -1,4 +1,4 @@
-import { createMemoryModuleClient, MemorySettingsStore, settingValueCodec, type SettingsSchema } from '@digi/module-ui';
+import { createMemoryModuleChannel, createModuleClient, MemorySettingsStore, settingValueCodec, type SettingsSchema } from '@digi/module-ui';
 import type { PageDescriptor } from '@digi/workbench-core/module-ui/module-page.ts';
 import { schema } from './gen/settings';
 import manifest from '../module.toml?raw';
@@ -21,7 +21,7 @@ export function createSettingsSample() {
       const snapshot = stored.ok && stored.value ? settingValueCodec.decode(schema.settings[0], stored.value) : undefined;
       return (current: () => boolean) => {
         const live = () => current() && generation === instance;
-        const client = createMemoryModuleClient(schema, { store, current: live });
+        const client = createModuleClient(createMemoryModuleChannel(schema, { store, current: live }).channel);
         return {
           settings: client.settings(schema as SettingsSchema),
           async readAtInit() {

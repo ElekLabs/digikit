@@ -3,6 +3,8 @@ export type SettingErrorCode =
   | 'conflict'
   /** Project settings are active: the setting changes on the device. */
   | 'overlay-scope'
+  /** `put` or `reset` without a revision for a setting this object never read. */
+  | 'not-read'
   /** The value breaks the setting's rule. */
   | 'invalid'
   /** The device has no room for the request now. */
