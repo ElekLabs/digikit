@@ -1,4 +1,12 @@
-// Tune: semitone ticks with a taller centre tick, a pointer that moves along them.
+// Tune: the knob ring and pointer with semitone-style detent ticks one pixel in from the ring (every second
+// pointer step, 13 in all) and a 3 px tick at 12 o'clock for 0.
+const START = 135;
+const SWEEP = 270;
+const at = (r, deg) => {
+  const a = (deg * Math.PI) / 180;
+  return [8 + r * Math.cos(a), 8 + r * Math.sin(a)];
+};
+
 /** @type {import('../../../../packages/dkglyph/src/glyph.ts').ValueGlyphDef} */
 export default {
   title: 'Tune',
@@ -8,12 +16,13 @@ export default {
   tags: ['control', 'value'],
   invertible: false,
   draw(p, v) {
-    for (let x = 2; x <= 14; x += 2) p.line(x, 12, x, 14);
-    p.line(8, 10, 8, 15);
-    const cx = 8 + Math.round(v * 6);
-    p.line(cx - 2, 2, cx + 2, 2);
-    p.line(cx - 1, 3, cx + 1, 3);
-    p.px(cx, 4);
-    p.line(cx, 5, cx, 10);
+    p.circle(8, 8, 8);
+    for (let i = 0; i <= 12; i++) {
+      const deg = START + (SWEEP * i) / 12;
+      if (i === 6) p.line(8, 2, 8, 4);
+      else p.px(...at(5.6, deg));
+    }
+    const a = ((START + (SWEEP * (v + 1)) / 2) * Math.PI) / 180;
+    p.line(8, 8, 8 + 7 * Math.cos(a), 8 + 7 * Math.sin(a));
   },
 };

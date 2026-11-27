@@ -129,15 +129,25 @@ function renderStates(def: StatesGlyphDef, w: number, h: number): RenderedGlyph 
   });
   const transitions: RenderedTransition[] = [];
   const tr = def.transition;
-  if (tr)
-    for (let from = 0; from < frames.length; from += 1)
-      for (let to = 0; to < frames.length; to += 1) {
-        if (from === to) continue;
-        const list: Raster[] = [];
-        for (let k = 1; k <= tr.frames; k += 1)
-          list.push(drawOne(w, h, (p) => tr.draw(p, from, to, k / (tr.frames + 1))));
-        transitions.push({ from, to, frames: list });
+  if (tr) {
+    const wanted: [number, number][] = [];
+    if (tr.pairs) {
+      for (const [a, b] of tr.pairs) {
+        const from = def.states.indexOf(a);
+        const to = def.states.indexOf(b);
+        if (from < 0 || to < 0) problems.push(`transition pair [${a}, ${b}] names an unknown state`);
+        else if (from !== to) wanted.push([from, to]);
       }
+    } else
+      for (let from = 0; from < frames.length; from += 1)
+        for (let to = 0; to < frames.length; to += 1) if (from !== to) wanted.push([from, to]);
+    for (const [from, to] of wanted) {
+      const list: Raster[] = [];
+      for (let k = 1; k <= tr.frames; k += 1)
+        list.push(drawOne(w, h, (p) => tr.draw(p, from, to, k / (tr.frames + 1))));
+      transitions.push({ from, to, frames: list });
+    }
+  }
   const clipped = sum(frames) + transitions.reduce((n, t) => n + sum(t.frames), 0);
   return { kind: 'states', w, h, frames, states: [...def.states], transitions, clipped, problems };
 }

@@ -15,7 +15,12 @@ export interface CheckReport {
   missingV1: string[];
 }
 
-function glyphMessages(g: LoadedGlyph, errors: Message[], warnings: Message[]): void {
+function glyphMessages(
+  g: LoadedGlyph,
+  margins: Readonly<Record<string, number>>,
+  errors: Message[],
+  warnings: Message[],
+): void {
   const err = (text: string) => errors.push({ id: g.id, text });
   if (g.error || !g.rendered || !g.def) {
     err(`${g.error?.message ?? 'did not load'}${g.error ? ` (${g.error.where})` : ''}`);
@@ -28,16 +33,18 @@ function glyphMessages(g: LoadedGlyph, errors: Message[], warnings: Message[]): 
     err(`a value glyph needs at least 2 frames, has ${r.declaredFrames}`);
   const all = [...r.frames, ...(r.transitions ?? []).flatMap((t) => t.frames)];
   if (all.some((f) => f.count() === 0)) err('a frame is empty');
-  if (g.def.invertible !== false && all.some((f) => touchesMargin(f)))
+  const margin = typeof g.def.size === 'string' ? (margins[g.def.size] ?? 1) : 1;
+  if (g.def.invertible !== false && margin > 0 && all.some((f) => touchesMargin(f, margin)))
     warnings.push({
       id: g.id,
-      text: 'invertible glyph touches its 1-pixel outer margin, so the selection bar leaves no border',
+      text: `invertible glyph touches its ${margin}-pixel outer margin, so the selection bar leaves no border`,
     });
 }
 
-function touchesMargin(f: Raster): boolean {
-  for (let x = 0; x < f.w; x += 1) if (f.get(x, 0) || f.get(x, f.h - 1)) return true;
-  for (let y = 0; y < f.h; y += 1) if (f.get(0, y) || f.get(f.w - 1, y)) return true;
+function touchesMargin(f: Raster, m: number): boolean {
+  for (let y = 0; y < f.h; y += 1)
+    for (let x = 0; x < f.w; x += 1)
+      if ((x < m || y < m || x >= f.w - m || y >= f.h - m) && f.get(x, y)) return true;
   return false;
 }
 
@@ -48,7 +55,7 @@ export function checkSet(set: LoadedSet): CheckReport {
   for (const g of set.glyphs) {
     if (seen.has(g.id)) errors.push({ id: g.id, text: 'duplicate glyph id' });
     seen.add(g.id);
-    glyphMessages(g, errors, warnings);
+    glyphMessages(g, set.margins, errors, warnings);
   }
   const listed = new Set<string>();
   for (const c of set.catalogue) {

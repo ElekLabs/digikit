@@ -1,9 +1,19 @@
-// Module load state: an empty dotted slot (unloaded) fills up into a solid module (loaded).
-const box = (p, on = 1) => {
-  p.line(2, 1, 6, 1, on);
-  p.line(2, 7, 6, 7, on);
-  p.line(1, 2, 1, 6, on);
-  p.line(7, 2, 7, 6, on);
+// Module load state: an outline module tile (unloaded) fills from the centre into a solid tile (loaded).
+const TILE = ['.##...##.', '#########', '#########', '#########', '#########', '#########', '#########', '#########', '.#######.'];
+const on = (x, y) => TILE[y]?.[x] === '#';
+// depth: distance to the outside by 4-neighbours; 1 on the rim
+const depth = (x, y) => {
+  if (!on(x, y)) return 0;
+  let d = 1;
+  while ([[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => on(x + dx * d, y + dy * d))) d++;
+  return d;
+};
+const paint = (p, min) => {
+  for (let y = 0; y < 9; y++)
+    for (let x = 0; x < 9; x++) {
+      const d = depth(x, y);
+      if (d === 1 || (d > 0 && d >= min)) p.px(x, y);
+    }
 };
 
 /** @type {import('../../../../packages/dkglyph/src/glyph.ts').StatesGlyphDef} */
@@ -13,27 +23,17 @@ export default {
   states: ['unloaded', 'loaded'],
   tags: ['system'],
   draw(p, i) {
-    if (i === 1) {
-      p.rect(1, 2, 7, 5);
-      p.rect(2, 1, 5, 7);
-      return;
-    }
-    // dotted outline
-    for (let x = 2; x <= 6; x += 2) {
-      p.px(x, 1);
-      p.px(x, 7);
-    }
-    for (let y = 2; y <= 6; y += 2) {
-      p.px(1, y);
-      p.px(7, y);
-    }
+    paint(p, i === 1 ? 1 : 99);
   },
   transition: {
-    frames: 3,
+    frames: 2,
+    pairs: [
+      ['unloaded', 'loaded'],
+      ['loaded', 'unloaded'],
+    ],
     draw(p, from, to, t) {
-      const k = Math.round((from === 0 ? t : 1 - t) * 4); // 1..3: solid outline, then fill rising
-      box(p);
-      if (k >= 2) p.rect(2, 7 - (k - 1) * 2 + 1, 5, (k - 1) * 2 - 1 > 0 ? 6 - (7 - (k - 1) * 2) : 0);
+      const k = to === 1 ? t : 1 - t;
+      paint(p, k < 0.5 ? 4 : 3);
     },
   },
 };

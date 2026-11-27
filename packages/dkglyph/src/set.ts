@@ -33,6 +33,8 @@ export interface LoadedSet {
   title: string;
   description: string;
   sizes: SizeClasses;
+  /** empty outer ring in px per size class; a missing class keeps 1 */
+  margins: Readonly<Record<string, number>>;
   catalogue: CatalogueEntry[];
   glyphs: LoadedGlyph[];
 }
@@ -91,6 +93,9 @@ export async function loadSet(dir: string): Promise<LoadedSet> {
   const sizes: Record<string, readonly [number, number]> = {};
   for (const [k, v] of Object.entries((meta.sizes as Record<string, unknown>) ?? {}))
     if (Array.isArray(v) && v.length === 2) sizes[k] = [Number(v[0]), Number(v[1])];
+  const margins: Record<string, number> = {};
+  for (const [k, v] of Object.entries((meta.margins as Record<string, unknown>) ?? {}))
+    if (Number.isInteger(Number(v)) && Number(v) >= 0) margins[k] = Number(v);
   const cat = readToml(path.join(abs, 'catalogue.toml'));
   const catalogue = ((cat.glyph as Array<Record<string, unknown>>) ?? []).map((g) => ({
     id: String(g.id),
@@ -106,6 +111,7 @@ export async function loadSet(dir: string): Promise<LoadedSet> {
     title: String(meta.title ?? meta.name ?? path.basename(abs)),
     description: String(meta.description ?? ''),
     sizes,
+    margins,
     catalogue,
     glyphs,
   };

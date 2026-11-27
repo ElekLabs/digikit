@@ -98,6 +98,26 @@ describe('renderGlyph', () => {
       [1, 0, 2],
     ]);
   });
+
+  it('builds transitions only for the listed pairs', () => {
+    const r = renderGlyph({
+      size: [4, 4],
+      states: ['a', 'b', 'c'],
+      draw: (p, i) => p.px(i, 0),
+      transition: {
+        frames: 2,
+        pairs: [
+          ['a', 'b'],
+          ['b', 'a'],
+        ],
+        draw: (p, from, to, t) => p.px(Math.round(from + (to - from) * t), 1),
+      },
+    });
+    expect(r.transitions?.map((t) => [t.from, t.to])).toEqual([
+      [0, 1],
+      [1, 0],
+    ]);
+  });
 });
 
 describe('set loading and check', () => {

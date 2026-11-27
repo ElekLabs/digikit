@@ -1,14 +1,14 @@
-// Spinner: eight dots on a ring, a four-dot comet runs clockwise. Frame i lights dots i to i-3;
-// the last frame flows into the first, so a looping player shows no jump.
+// Spinner: eight dots on a ring; a three-dot head (2 px dots) runs clockwise over 1 px dots.
+// The last frame flows into the first, so a looping player shows no jump.
 const DOTS = [
-  [4, 1],
-  [6, 2],
-  [7, 4],
-  [6, 6],
-  [4, 7],
-  [2, 6],
-  [1, 4],
-  [2, 2],
+  [4, 0, 0, 1],
+  [7, 1, -1, 1],
+  [8, 4, -1, 0],
+  [7, 7, -1, -1],
+  [4, 8, 0, -1],
+  [1, 7, 1, -1],
+  [0, 4, 1, 0],
+  [1, 1, 1, 1],
 ];
 const N = DOTS.length;
 
@@ -21,9 +21,13 @@ export default {
   tags: ['system', 'loop'],
   draw(p, v) {
     const i = Math.round(v * (N - 1));
-    for (let k = 0; k < 4; k++) {
-      const [x, y] = DOTS[(i - k + N) % N];
+    DOTS.forEach(([x, y]) => p.px(x, y));
+    for (let k = 0; k < 3; k++) {
+      const [x, y, dx, dy] = DOTS[(i - k + N) % N];
       p.px(x, y);
+      p.px(x + dx, y);
+      p.px(x, y + dy);
+      p.px(x + dx, y + dy);
     }
   },
 };

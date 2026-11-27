@@ -1,17 +1,18 @@
-// Padlock: locked = filled body with keyhole and closed shackle; unlocked = outline body, right leg of the shackle open.
-const shackle = (p, leg) => {
-  p.line(3, 1, 5, 1);
-  p.line(2, 2, 2, 3);
-  if (leg >= 1) p.px(6, 2);
-  if (leg >= 2) p.px(6, 3);
-};
+// Padlock: locked = solid body with keyhole and closed shackle; unlocked = outline body, right leg of the shackle lifted.
+const put = (p, rows) => rows.forEach((r, y) => [...r].forEach((c, x) => c === "#" && p.px(x, y)));
+const SHACKLE = [
+  ['...###...', '..#...#..', '..#......', '..#......'],
+  ['...###...', '..#...#..', '..#...#..', '..#......'],
+  ['...###...', '..#...#..', '..#...#..', '..#...#..'],
+];
 const body = (p, filled) => {
   if (filled) {
-    p.rect(1, 4, 7, 4);
+    p.rect(0, 4, 9, 5);
     p.px(4, 5, 0);
     p.px(4, 6, 0);
-  } else p.frame(1, 4, 7, 4);
+  } else p.frame(0, 4, 9, 5);
 };
+const shackle = (p, leg) => put(p, SHACKLE[leg]);
 
 /** @type {import('../../../../packages/dkglyph/src/glyph.ts').StatesGlyphDef} */
 export default {
@@ -25,10 +26,13 @@ export default {
   },
   transition: {
     frames: 2,
+    pairs: [
+      ['unlocked', 'locked'],
+      ['locked', 'unlocked'],
+    ],
     draw(p, from, to, t) {
       const closing = to === 1;
-      const leg = closing ? (t < 0.5 ? 0 : 1) : t < 0.5 ? 1 : 0;
-      shackle(p, leg);
+      shackle(p, closing ? (t < 0.5 ? 1 : 2) : t < 0.5 ? 1 : 0);
       body(p, t >= 0.5 ? to === 1 : from === 1);
     },
   },

@@ -26,6 +26,8 @@ export interface ValueGlyphDef extends GlyphCommon {
 
 export interface TransitionDef {
   frames: number;
+  /** State names (from, to) that get transition frames; all ordered pairs when unset. */
+  pairs?: [string, string][];
   /** t is in (0,1) and runs from state `from` to state `to`. */
   draw: (p: Raster, from: number, to: number, t: number) => void;
 }

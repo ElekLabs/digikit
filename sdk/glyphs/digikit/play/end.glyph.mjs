@@ -1,17 +1,16 @@
-/** @type {import('../../../../packages/dkglyph/src/glyph.ts').StaticGlyphDef} */
 export default {
-  title: 'Sample end',
+  title: 'End marker',
   size: 'icon',
   tags: ['play'],
   pixels: `
-.........
-.......#.
-.....#.#.
-....##.#.
-...###.#.
-....##.#.
-.....#.#.
-.......#.
-.........
+.########
+#########
+..#######
+#########
+.########
+........#
+........#
+........#
+........#
 `,
 };

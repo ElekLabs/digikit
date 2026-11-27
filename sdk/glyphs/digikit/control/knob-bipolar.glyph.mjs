@@ -12,7 +12,7 @@ export default {
   invertible: false,
   draw(p, v) {
     p.circle(8, 8, 8);
-    for (const y of [1, 4]) p.px(8, y);
+    for (const y of [1, 3]) p.px(8, y);
     const a = ((START + SWEEP * (v + 1) / 2) * Math.PI) / 180;
     p.line(8, 8, 8 + 7 * Math.cos(a), 8 + 7 * Math.sin(a));
     p.line(0, 15, 2, 15);

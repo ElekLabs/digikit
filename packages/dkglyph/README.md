@@ -16,7 +16,7 @@ sdk/glyphs/digikit/
 
 Every `**/*.glyph.mjs` is a glyph. Its id is the path without the suffix (`control/knob`) and its group is the first path segment. A file exports a definition as `default`; `glyph()` from `@digi/dkglyph` only types it. `draw` functions get a `Raster` (`px line rect frame circle arc poly plot invert flipX flipY blit`). Angles in `arc` start at the right and grow clockwise on the screen. One broken file shows as an error and never stops the rest of the set.
 
-Size is `[w, h]` or the name of a class in `set.toml`. Common optional fields: `title`, `tags`, `invertible` (default true: the glyph is meant to be shown inverted on a selection bar).
+Size is `[w, h]` or the name of a class in `set.toml`. `[margins]` in `set.toml` gives the empty outer ring in px per class (missing class: 1) that `check` expects of an invertible glyph. Common optional fields: `title`, `tags`, `invertible` (default true: the glyph is meant to be shown inverted on a selection bar).
 
 ### Static
 
@@ -44,9 +44,11 @@ export default {
   size: [13, 7],
   states: ['off', 'on'],
   draw(p, i) { /* state i */ },            // or pixels: ['...', '...'] per state
-  transition: { frames: 3, draw(p, from, to, t) { /* t in (0,1) */ } },
+  transition: { frames: 3, pairs: [['off', 'on'], ['on', 'off']], draw(p, from, to, t) { /* t in (0,1) */ } },
 };
 ```
+
+`pairs` (state names, from to) limits the transition frames to those pairs; without it every ordered pair is built. An unknown state name in `pairs` is an error in `check`.
 
 ## Commands
 
