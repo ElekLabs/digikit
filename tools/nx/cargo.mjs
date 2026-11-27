@@ -40,6 +40,8 @@ const CLI = {
 // `^default` would add those, so the inputs name the closure of the other two kinds.
 // Cargo runs no npm package: without an `externalDependencies` entry Nx hashes every external dependency, and any npm bump re-keys the target.
 const NO_NPM = { externalDependencies: [] };
+// A target that runs tools/nx/rust-env.mjs also hashes smol-toml, which that script imports.
+const RUST_ENV_NPM = { externalDependencies: ['smol-toml'] };
 const BUILT_KINDS = ['dependencies', 'build-dependencies'];
 const builtInputs = (workspaceRoot, crateRoot, inputs) => [
   ...(inputs ?? ['default', '^default']).map((i) =>
@@ -259,7 +261,7 @@ const GATE = {
       parallelism: true,
       description:
         'Builds digi-emud without a SHARC core (the daemon of the devices with `[capabilities] dsp = "none"`, which boot cold) into dist/bin/digi-emud-nodsp: the binary the daemons target builds for them.',
-      inputs: ['default', '^default', NO_NPM, ...DAEMON_NODSP_EXTRA],
+      inputs: ['default', '^default', RUST_ENV_NPM, ...DAEMON_NODSP_EXTRA],
       // the binary and its hash: the key of the device tests of the no-DSP halves (device-test-keys.mjs, instead of daemon-test-<device>.key)
       outputs: ['{workspaceRoot}/dist/bin/digi-emud-nodsp', '{workspaceRoot}/dist/bytes/daemon-nodsp.sha256'],
       options: {
@@ -413,7 +415,7 @@ export const standaloneRustTests = (workspaceRoot, root) => {
 };
 
 const rustInputs = (workspaceRoot) => {
-  const inputs = ['default', '^production', '{workspaceRoot}/Cargo.toml', '{workspaceRoot}/Cargo.lock', NO_NPM];
+  const inputs = ['default', '^production', '{workspaceRoot}/Cargo.toml', '{workspaceRoot}/Cargo.lock', RUST_ENV_NPM];
   if (existsSync(join(workspaceRoot, 'rust-toolchain.toml'))) inputs.push('{workspaceRoot}/rust-toolchain.toml');
   return inputs;
 };

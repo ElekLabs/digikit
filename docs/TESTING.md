@@ -1268,7 +1268,7 @@ graph (checked with `show target inputs @digi/web:test-wasm --json` and `@digi/w
 `@astrojs/solid-js`, `solid-js` are in the `external` list); an app target without `^` lists the app's own packages itself (web
 `test-host` names `astro` and `@astrojs/solid-js`; desktop names them once as the project's named input `desktopPackages`).
 A cached target that runs no npm package (Cargo, patchkit, gate scripts) sets `{ "externalDependencies": [] }`: without any
-`externalDependencies` entry Nx hashes every external dependency, and any npm bump re-keys it. `jsLintTooling` (`package.json` for the
+`externalDependencies` entry Nx hashes every external dependency, and any npm bump re-keys it. A wrapper script counts: a target that runs `tools/nx/rust-env.mjs` lists `smol-toml`, which that script imports. `jsLintTooling` (`package.json` for the
 `lint` and `fmt:check` scripts, oxlint, prettier and their plugins) is an input of the `lint` and `fmt-check` targets only. A
 package that a target executes and that is in none of these lists must be added to the target's inputs as
 `{ "externalDependencies": [...] }`; `pnpm nx:pilot show target inputs PROJECT:TARGET --json` lists the `external` packages that a target hashes.

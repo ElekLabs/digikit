@@ -25,7 +25,7 @@
         "{workspaceRoot}/runtime/core/tests/storage/contract.toml",
         "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/module.toml",
         "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/src/**/*",
-        { "dependentTasksOutputFiles": "dist/modules/*/{dyn-fx-gain,sine,svc-test,svc-test-user}.*", "transitive": false }, { "externalDependencies": [] }],
+        { "dependentTasksOutputFiles": "dist/modules/*/{dyn-fx-gain,sine,svc-test,svc-test-user}.*", "transitive": false }, { "externalDependencies": ["smol-toml"] }],
       "dependsOn": ["test/dyn-fx-gain:pack", "test/sine:pack", "test/svc-test:pack", "test/svc-test-user:pack"],
       "outputs": [],
       "options": {
@@ -78,7 +78,7 @@
         { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/bytes/images/*/*.info", "transitive": false },
         "{workspaceRoot}/firmware/Digitakt_II_OS1.17.syx",
-        "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx", { "externalDependencies": [] }],
+        "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx", { "externalDependencies": ["smol-toml"] }],
       "dependsOn": [
         "test/sine:pack",
         "test/dyn-dn2:pack",
