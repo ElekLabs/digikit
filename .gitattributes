@@ -13,3 +13,9 @@
 pnpm-lock.yaml linguist-generated
 Cargo.lock linguist-generated
 uv.lock linguist-generated
+
+# Committed core objects (patchkit build output). A merge keeps one side without a text conflict; objects-check
+# compares each object's source hash and fails until `patchkit --root . build --tree runtime|services` rebuilds it.
+# The driver lives in git config: tools/devtools/worktree-setup.sh sets it (docs/TESTING.md, objects-check).
+runtime/**/build/*.dko.json linguist-generated -diff merge=generated-object
+services/**/build/*.dko.json linguist-generated -diff merge=generated-object
