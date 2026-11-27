@@ -969,7 +969,7 @@ pub const PAGES: [&str; 187] = [
     "RM p.97 Table 3-4, RM p.113",
     "RM p.97 Table 3-4, RM p.113",
     "RM p.97 Table 3-4, RM p.113",
-    "CFPRM p.92",
+    "CFPRM p.92 (encoding); CFPRM3 p.4-25 (destination modes)",
     "CFPRM p.84",
     "CFPRM p.86",
     "CFPRM p.89",
@@ -977,7 +977,7 @@ pub const PAGES: [&str; 187] = [
     "CFPRM p.83-84",
     "CFPRM p.85-86",
     "CFPRM p.88-89",
-    "CFPRM p.112-113 (source/destination combinations p.113)",
+    "CFPRM p.112-113; CFPRM3 p.4-48 (source/destination combinations)",
     "CFPRM p.114",
     "CFPRM p.127",
     "CFPRM p.245",
@@ -3166,7 +3166,7 @@ fn f_ff1(c: &mut Cur) -> Option<Insn> {
     Some(i)
 }
 
-/// btst_r (isa_a, CFPRM p.92)
+/// btst_r (isa_a, CFPRM p.92 (encoding); CFPRM3 p.4-25 (destination modes))
 #[allow(unused_variables, unused_mut, non_snake_case, clippy::identity_op)]
 fn f_btst_r(c: &mut Cur) -> Option<Insn> {
     let w0 = c.w[0] as u32;
@@ -3182,6 +3182,9 @@ fn f_btst_r(c: &mut Cur) -> Option<Insn> {
     };
     let m0 = ea_mode(f_m, f_r)?;
     if (1u16 << m0 as u16) & 0xffd == 0 {
+        return None;
+    }
+    if (1u16 << m0 as u16) & 0x800 != 0 {
         return None;
     }
     let mut i = Insn::new(Form::BtstR, size);
@@ -3382,7 +3385,7 @@ fn f_bset_i(c: &mut Cur) -> Option<Insn> {
     Some(i)
 }
 
-/// move (isa_a, CFPRM p.112-113 (source/destination combinations p.113))
+/// move (isa_a, CFPRM p.112-113; CFPRM3 p.4-48 (source/destination combinations))
 #[allow(unused_variables, unused_mut, non_snake_case, clippy::identity_op)]
 fn f_move(c: &mut Cur) -> Option<Insn> {
     let w0 = c.w[0] as u32;
@@ -3411,7 +3414,13 @@ fn f_move(c: &mut Cur) -> Option<Insn> {
     if (1u16 << m0 as u16) & 0x220 != 0 && (1u16 << m1 as u16) & 0x1c0 != 0 {
         return None;
     }
-    if (1u16 << m0 as u16) & 0xdc0 != 0 && (1u16 << m1 as u16) & 0x1c0 != 0 {
+    if (1u16 << m0 as u16) & 0x5c0 != 0 && (1u16 << m1 as u16) & 0x1e0 != 0 {
+        return None;
+    }
+    if (1u16 << m0 as u16) & 0x800 != 0 && (1u16 << m1 as u16) & 0x1c0 != 0 {
+        return None;
+    }
+    if (1u16 << m0 as u16) & 0x800 != 0 && (1u16 << m1 as u16) & 0x020 != 0 && (size == Size::L) {
         return None;
     }
     let mut i = Insn::new(Form::Move, size);

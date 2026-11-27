@@ -1,0 +1,8 @@
+{
+  "name": "web-transfer",
+  "dir": "apps/web",
+  "include": "tests/*.test.ts",
+  "exclude": [
+    "tests/*.wasm.test.ts"
+  ]
+}

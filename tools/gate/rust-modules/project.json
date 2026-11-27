@@ -18,8 +18,7 @@
         "{workspaceRoot}/ports/*.toml",
         "{workspaceRoot}/ports/fw/**/*",
         "{workspaceRoot}/sdk/sdk.toml",
-        "{workspaceRoot}/tools/patchkit/toolchain/**/*"
-      ],
+        "{workspaceRoot}/tools/patchkit/toolchain/**/*", { "externalDependencies": ["smol-toml"] }],
       "options": {
         "command": "node tools/nx/rust-env.mjs -- cargo nextest run -p patchkit --features record-rules -p elektron-native-boot --release --locked --offline",
         "cwd": "."

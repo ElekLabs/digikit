@@ -25,8 +25,7 @@
         "{workspaceRoot}/runtime/core/tests/storage/contract.toml",
         "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/module.toml",
         "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/src/**/*",
-        { "dependentTasksOutputFiles": "dist/modules/*/{dyn-fx-gain,sine,svc-test,svc-test-user}.*", "transitive": false }
-      ],
+        { "dependentTasksOutputFiles": "dist/modules/*/{dyn-fx-gain,sine,svc-test,svc-test-user}.*", "transitive": false }, { "externalDependencies": ["smol-toml"] }],
       "dependsOn": ["test/dyn-fx-gain:pack", "test/sine:pack", "test/svc-test:pack", "test/svc-test-user:pack"],
       "outputs": [],
       "options": {
@@ -41,7 +40,7 @@
       "inputs": [
         { "dependentTasksOutputFiles": "runtime/core/build/package.dko.json", "transitive": false },
         { "dependentTasksOutputFiles": "runtime/apps/digikit-menu/build/digikit-menu.dko.json", "transitive": false },
-        { "dependentTasksOutputFiles": "dist/patchkit/patchkit" }
+        { "dependentTasksOutputFiles": "dist/patchkit/patchkit" }, { "externalDependencies": [] }
       ],
       "dependsOn": ["patchkit:cli", "build-objects", "core/digikit-menu:build-objects"],
       "outputs": ["{workspaceRoot}/dist/syspkg/runtime"],
@@ -80,8 +79,7 @@
         { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/bytes/images/*/*.info", "transitive": false },
         "{workspaceRoot}/firmware/Digitakt_II_OS1.17.syx",
-        "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx"
-      ],
+        "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx", { "externalDependencies": ["smol-toml"] }],
       "dependsOn": [
         "test/sine:pack",
         "test/dyn-dn2:pack",

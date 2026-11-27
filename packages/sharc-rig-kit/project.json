@@ -6,7 +6,7 @@
     "test-host": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": ["hostTests", "!{projectRoot}/conformance/**/*"],
+      "inputs": ["hostTests", "{workspaceRoot}/vitest.host/sharc-rig-kit.json", "!{projectRoot}/conformance/**/*"],
       "outputs": [],
       "options": {
         "forwardAllArgs": false,
