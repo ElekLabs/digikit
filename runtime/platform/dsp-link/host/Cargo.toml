@@ -1,0 +1,24 @@
+[package]
+name = "dkrt-dsp-host"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The ColdFire side of the DSP hosts (VoiceHost now): a package part of system.dksp"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+dkrt-sdk = { path = "../../../core/sdk" }
+dkrt-abi = { path = "../../../core/abi" }
+dkneeds = { path = "../../../../packages/dkneeds" }
+
+# This crate sits inside the repository's cargo workspace tree but is built on its own (`patchkit build`).
+[workspace]
+
+[profile.release]
+opt-level = "s"
+panic = "abort"
+lto = false
+codegen-units = 1
+debug = false

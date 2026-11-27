@@ -80,3 +80,9 @@ the device runs. Nothing changes for the player. It ran on a Digitakt II (OS 1.1
 Design, measurements and open points: [docs/findings/31-dsp-link.md](../../../docs/findings/31-dsp-link.md) and, for the windows and
 the wider chunk header, [docs/findings/32-runtime-dsp-machines.md](../../../docs/findings/32-runtime-dsp-machines.md). Proof:
 `uv run python -m tools.patchkit.pk_dsplink proof --device dt2|dn2`; tests: `tests/test_dsplink.py`.
+
+## The host part (`host/`)
+
+`host/` is a Rust crate, the ColdFire side of the DSP hosts (VoiceHost first). It is not in the image: `patchkit syspkg build --part` links it into `system.dksp` as a package part (`[package_part]` of `module.toml`; `core/runtime:package` passes it). The package finds a part through its directory `DKPKG_PARTS`: `patchkit` writes the address of the part's `DKPART_TABLE` (`dkrt_abi::part`: name hash, `start`, `step`, `stop`) into the next free slot, so the core names no part. The package calls `start` at attach and `step` once per DSP pass.
+
+The image holds the `voice_host` `[[info]]` table (`dsp_voice_host`, 13 words, `<dk/host/voice_host.h>`): magic 0 until the host serves. The crate owns `Area` (first fit), `Relocation` and `Transfer` (behind the `LinkQueue` seam) as owner types; `core/runtime`'s `package/dsp` still has its own copies until the host takes over. Host tests: `cd runtime/platform/dsp-link/host && cargo test`. The built artifact's directory and slot are checked by `core/runtime:test-assembly`.

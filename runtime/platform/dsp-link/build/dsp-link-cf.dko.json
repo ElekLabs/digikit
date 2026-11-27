@@ -834,6 +834,13 @@
    "align": 2,
    "hex": "",
    "kind": "bss",
+   "name": ".bss.dsp_voice_host",
+   "size": 52
+  },
+  {
+   "align": 2,
+   "hex": "",
+   "kind": "bss",
    "name": ".bss.dl_stats_cb",
    "size": 4
   },
@@ -852,7 +859,7 @@
    "size": 80
   }
  ],
- "source_sha256": "b75e4dd5c059d78f04b3fc3d5db55bea312d3a3517938507d472d10e991629a7",
+ "source_sha256": "eb2c6aad654634a4849a5c871b9e0ac01375bfed38a30ddd431c1bf52a3cc2f9",
  "symbols": [
   {
    "global": false,
@@ -999,6 +1006,12 @@
    "value": 0
   },
   {
+   "global": true,
+   "name": "dsp_voice_host",
+   "section": ".bss.dsp_voice_host",
+   "value": 0
+  },
+  {
    "global": false,
    "name": "put_word",
    "section": ".text.put_word",
@@ -1016,7 +1029,7 @@
   "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
   "gcc": "m68k-elf-gcc (GCC) 16.2.0",
   "instructions_redecoded": "568",
-  "isa_check": "00af07950a7a54a53a784bb2bf7ecbfce221e62c6bfc0ec6213623e16d4e3d69",
+  "isa_check": "d216f7ecab67e30a3a61b71b00f5d51487ea535df150623a8706a3e11e6e6866",
   "ld": "GNU ld (GNU Binutils) 2.47.20260726"
  }
 }

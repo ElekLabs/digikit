@@ -204,6 +204,19 @@ pub fn name_hash_bytes(s: &[u8]) -> u32 {
     h
 }
 
+/// [`name_hash`] as a `const fn`, for a name that a static holds (a part's table). The same hash; a test checks the two agree.
+pub const fn name_hash_const(s: &str) -> u32 {
+    let b = s.as_bytes();
+    let mut h: u32 = 0x811c_9dc5;
+    let mut i = 0;
+    while i < b.len() {
+        h ^= b[i] as u32;
+        h = h.wrapping_mul(0x0100_0193);
+        i += 1;
+    }
+    h
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeysError {
     /// The size does not match the entries, or the buffer is too small.
@@ -1258,6 +1271,13 @@ pub fn keys_size(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_const_name_hash_is_the_name_hash() {
+        for n in ["", "voice_host", "dsp-host", "machines"] {
+            assert_eq!(super::name_hash_const(n), super::name_hash(n), "{n}");
+        }
+    }
+
     extern crate std;
     use super::*;
     use crate::{KIND_EFFECT, KIND_MACHINE, RES_DSP_COST_FX, RES_DSP_COST_VOICE, RES_MACHINE_ROWS};

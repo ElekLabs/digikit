@@ -457,3 +457,103 @@ mod menu_part {
         assert!(e.contains("defined by the package and by the part"), "{e}");
     }
 }
+
+/// The DSP host (a Rust crate, `runtime/platform/dsp-link/host`) as a part: the package finds a part through its directory `DKPKG_PARTS`, so a part names nothing of the package and the
+/// package names nothing of a part. The committed objects of the package and of the host, linked by `syspkg build --part`.
+mod directory_of_parts {
+    use patchkit::dko::Dko;
+    use patchkit::link::link;
+    use patchkit::syspkg::{body, with_part};
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
+
+    fn read(rel: &str) -> Dko {
+        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(rel);
+        Dko::parse(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display())))
+            .unwrap()
+    }
+
+    fn package() -> Dko {
+        read("runtime/core/build/package.dko.json")
+    }
+
+    fn menu() -> Dko {
+        read("runtime/apps/digikit-menu/build/digikit-menu.dko.json")
+    }
+
+    fn host() -> Dko {
+        read("runtime/platform/dsp-link/build/dsp-link-host.dko.json")
+    }
+
+    /// The word at `at` of the linked image.
+    fn word(image: &[u8], at: u64) -> u32 {
+        let at = at as usize;
+        u32::from_be_bytes([image[at], image[at + 1], image[at + 2], image[at + 3]])
+    }
+
+    #[test]
+    fn a_part_with_a_table_gets_the_next_slot_of_the_directory_and_the_package_links_with_it() {
+        let both = with_part(&with_part(&package(), &menu()).unwrap(), &host()).unwrap();
+        body(&both).expect("the package with both parts has no symbol left to resolve");
+        let at = link(&both, 0, &BTreeMap::new()).unwrap();
+        let dir = at.symbols["DKPKG_PARTS"];
+        assert_eq!(
+            word(&at.image, dir),
+            0x444b_5053,
+            "the directory starts with its magic"
+        );
+        assert_eq!(
+            word(&at.image, dir + 4),
+            at.symbols["DKPART_TABLE.0"] as u32,
+            "the first slot holds the part's table"
+        );
+        assert_eq!(word(&at.image, dir + 8), 0, "the second slot is free");
+        assert_eq!(
+            word(&at.image, at.symbols["DKPART_TABLE.0"]),
+            0x444b_5054,
+            "the table starts with its magic"
+        );
+    }
+
+    #[test]
+    fn a_part_without_a_table_takes_no_slot() {
+        let with_menu = with_part(&package(), &menu()).unwrap();
+        assert!(
+            with_menu
+                .symbols
+                .iter()
+                .all(|s| !s.name.starts_with("DKPART_TABLE"))
+        );
+        let at = link(&with_menu, 0, &BTreeMap::new());
+        // the menu alone leaves the package with every symbol resolved; its directory stays empty
+        let at = at.unwrap();
+        assert_eq!(word(&at.image, at.symbols["DKPKG_PARTS"] + 4), 0);
+    }
+
+    #[test]
+    fn two_parts_take_two_slots_and_a_fifth_is_refused() {
+        let mut o = with_part(&package(), &menu()).unwrap();
+        for _ in 0..4 {
+            o = with_part(&o, &host()).unwrap();
+        }
+        let at = link(&o, 0, &BTreeMap::new()).unwrap();
+        let dir = at.symbols["DKPKG_PARTS"];
+        let slots: Vec<u32> = (0..4).map(|i| word(&at.image, dir + 4 + 4 * i)).collect();
+        let mut distinct = slots.clone();
+        distinct.sort();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 4, "four tables in four slots: {slots:x?}");
+        let e = with_part(&o, &host()).unwrap_err().to_string();
+        assert!(e.contains("takes 4 parts"), "{e}");
+    }
+
+    #[test]
+    fn a_part_with_a_table_needs_the_package_to_have_the_directory() {
+        let mut p = package();
+        p.symbols.retain(|s| s.name != "DKPKG_PARTS");
+        let e = with_part(&p, &host()).unwrap_err().to_string();
+        assert!(e.contains("has no DKPKG_PARTS"), "{e}");
+    }
+}

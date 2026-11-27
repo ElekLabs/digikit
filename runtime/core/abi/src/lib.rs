@@ -41,6 +41,7 @@ pub mod mem;
 pub mod module;
 pub mod package;
 pub mod package_platform;
+pub mod part;
 pub mod plan;
 pub mod platform;
 pub mod profiles;

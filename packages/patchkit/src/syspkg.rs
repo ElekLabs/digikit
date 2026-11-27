@@ -18,6 +18,8 @@ use std::path::Path;
 use std::path::PathBuf;
 
 mod install_plan;
+mod part_private;
+mod part_slot;
 pub use install_plan::{InstallAction, InstallRefusal, install_plan};
 
 /// The entry function the package exports.
@@ -148,6 +150,18 @@ pub fn with_part(obj: &Dko, part: &Dko) -> Result<Dko> {
         ));
     }
     let mut out = obj.clone();
+    // a part that has a table (`dkrt_abi::part`) takes the next slot of the package's directory; its table symbol gets a name of its own
+    let renamed;
+    let part = match part_slot::claim(&mut out, part)? {
+        Some(p) => {
+            renamed = p;
+            &renamed
+        }
+        None => part,
+    };
+    // a section of the part that only the part uses (the compiler's unnamed constants, `.rodata.global.N`) may share its name with one of the package: it gets a name of its own
+    let renamed_private = part_private::rename(obj, part);
+    let part = &renamed_private;
     let have: std::collections::BTreeSet<&str> =
         obj.sections.iter().map(|s| s.name.as_str()).collect();
     if let Some(s) = part

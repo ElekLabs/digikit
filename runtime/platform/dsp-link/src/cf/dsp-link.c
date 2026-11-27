@@ -368,6 +368,10 @@ void dl_tick(int len, const u16 *src, int reclen, const volatile u16 *rec)
     }
 }
 
+/* The VoiceHost v1 table (<dk/host/voice_host.h>, 13 words on the ColdFire), the image's `[[info]]` entry `voice_host`. It is zero (magic 0) until the DSP host part of system.dksp (host/, a package
+   part) serves: a consumer that looks earlier finds no host. The part owns its words. */
+u32 dsp_voice_host[13];
+
 /* ---- the service imports of <dk/gen/imports.h> (docs/plans/sdk.md section 5.1) ---- */
 
 static int dl_token; /* the dk_dsp_link handle: only a token */

@@ -50,6 +50,8 @@ pub(crate) unsafe fn attach(table: &'static ResidentTable) -> Result<&'static Pa
     resident::install(table)?;
     // the core's directory of the package statics that host tools read: the package has no symbol in the image
     crate::package::host_dir::publish_all();
+    // the parts that `patchkit syspkg build --part` linked in start now
+    crate::package::parts::Parts::linked().start();
     Ok(&HOOKS)
 }
 
@@ -84,6 +86,7 @@ unsafe extern "C" fn tick(phase: u32) {
     } else if phase == tick_phase::POLL_DSP {
         link::pump();
         lifecycle::dsp_step();
+        super::parts::Parts::linked().step();
     } else if phase == tick_phase::FILES {
         files::tick();
     } else if phase == tick_phase::MODULES {

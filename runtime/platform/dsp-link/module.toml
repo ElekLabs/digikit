@@ -79,6 +79,18 @@ op = "hook"
 hook = "dsp.link.hook.block_tail"
 to = "_dl_hook"
 
+# The VoiceHost v1 table (<dk/host/voice_host.h>): magic 0 until the DSP host part serves (`[package_part]` below). The machines service finds it with `CoreApi::info`.
+[[info]]
+name = "voice_host"
+symbol = "dsp_voice_host"
+devices = ["dt2", "dn2"]
+
+# The ColdFire side of the DSP hosts, a Rust crate linked into system.dksp as a package part (`patchkit syspkg build --part`): the package finds it through the directory `DKPKG_PARTS`, never by a
+# symbol of the part (`dkrt_abi::part`, `package/parts.rs` of core/runtime). Its calls of the package (`dkpkg_part_panic`) are symbols the package defines.
+[package_part]
+path = "build/dsp-link-host.dko.json"
+sources = ["host/Cargo.toml"]
+
 [[claim]]
 resource = "dsp.link.site.block_tail"
 

@@ -68,6 +68,32 @@ fn the_built_package_artifact_has_its_entry_and_links_only_through_the_table() {
     }
 }
 
+/// A part that `patchkit syspkg build --part` linked in (the DSP host of `core/dsp-link`) is found at boot through the package's directory of parts, not by a symbol: after the artifact is
+/// relocated to a base, the directory holds one table pointer for it, and the table is the part's (magic, name hash, three entries inside the image).
+#[test]
+fn the_built_package_artifact_holds_its_dsp_host_part_in_the_directory_of_parts() {
+    use dkrt_abi::part::{MAX_PARTS, PARTS_MAGIC, TABLE_MAGIC};
+    let f = artifact();
+    let body = &f[HEADER_BYTES..];
+    let h = BodyHeader::decode(body).expect("the body decodes");
+    let mut image = body[dkrt_sdk::syspkg::body::HEADER_BYTES..][..h.image as usize].to_vec();
+    const BASE: u32 = 0x4000_0000;
+    relocate(&mut image, h.reloc_table(body), BASE).expect("the relocations fit");
+    let word = |at: usize| u32::from_be_bytes([image[at], image[at + 1], image[at + 2], image[at + 3]]);
+    // the directory is the one place in the image's data that starts with its magic (the ColdFire aligns a u32 to 2 bytes)
+    let dirs: Vec<usize> = (0..image.len() - 4).step_by(2).filter(|&at| word(at) == PARTS_MAGIC).collect();
+    assert_eq!(dirs.len(), 1, "one directory of parts in the package");
+    let slots: Vec<u32> = (0..MAX_PARTS).map(|i| word(dirs[0] + 4 + 4 * i)).collect();
+    assert_eq!(slots.iter().filter(|&&s| s != 0).count(), 1, "one part is linked: {slots:x?}");
+    let table = (slots[0] - BASE) as usize;
+    assert!(table + 20 <= image.len(), "the table lies in the image");
+    assert_eq!(word(table), TABLE_MAGIC);
+    assert_eq!(word(table + 4), dkneeds::keys::name_hash("dsp-host"));
+    for entry in [word(table + 8), word(table + 12), word(table + 16)] {
+        assert!(entry >= BASE && entry - BASE < h.image, "start, step and stop are code of the image");
+    }
+}
+
 // ---- the package placer: the real artifact in the package block -------------------------------------------------------------------
 
 mod package_block {
