@@ -2,7 +2,7 @@
 // The rule is data, config/test-source-patterns.json, and this file is its one TS reader: it derives the Nx globs and the name
 // test, and it owns the cfg(test) guard. The other readers are tools/devtools/emud_key.py and
 // packages/patchkit/src/build/test_source.rs. The `production` input of nx.json is static JSON and is checked against `testSourceGlobs`
-// by tools/nx/tests/test-source.test.ts.
+// by tools/nx/check-keys.mjs (the `device-keys` target).
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';

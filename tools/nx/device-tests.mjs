@@ -206,7 +206,7 @@ const unionDevices = (lists) => KNOWN_DEVICES.filter((d) => lists.some((list) =>
 
 // The devices a device test file runs on (docs/TESTING.md "Nx gate"): the `devices` of the runtimeAcceptance records that
 // list the file, else `projectDevices` (the pack devices of a module project), else both. A file that the records do not list
-// runs on `projectDevices` or both. tools/nx/tests/device-pins.test.ts checks the declarations against the test sources.
+// runs on `projectDevices` or both.
 export const fileDevices = (file, recs, projectDevices) => {
   const own = recs.filter((rec) => rec.files?.includes(file));
   const declared = own.filter((rec) => rec.devices !== undefined);
