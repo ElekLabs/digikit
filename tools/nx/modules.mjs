@@ -174,7 +174,11 @@ export const createNodesV2 = [
         targets['test-host'] = {
           executor: 'nx:run-commands',
           cache: false,
-          inputs: ['hostTests', '{workspaceRoot}/vitest.host/module-tests.json', '{workspaceRoot}/vitest.host/module-pages.json'],
+          inputs: [
+            'hostTests',
+            '{workspaceRoot}/vitest.host/module-tests.json',
+            '{workspaceRoot}/vitest.host/module-pages.json',
+          ],
           outputs: [],
           options: {
             command: `pnpm exec vitest run --config vitest.host.config.ts --project module-tests --project module-pages ${root}/`,
