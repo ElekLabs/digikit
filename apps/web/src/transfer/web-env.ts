@@ -12,8 +12,11 @@ import { createTransferApp, type TransferApp } from '@digi/workbench-core/transf
 import type { TransferEnv } from '@digi/workbench-core/transfer/env.ts';
 import { createSessionHub } from '@digi/workbench-core/transfer/session-core.ts';
 import type { Target } from '@digi/workbench-core/transfer/target.ts';
-import { fetchWasmSource } from '@digi/workbench-core/wasm-source.ts';
+import { fetchWasmSource, type WasmSource } from '@digi/workbench-core/wasm-source.ts';
+import { senderKit } from '@digi/workbench-core/patch/sender-kit.ts';
+import type { PatchKitLike } from '@digi/workbench-core/patch/patchkit-core.ts';
 import { MODULE_FILES } from '@digi/workbench-core/transfer/module-files.generated.ts';
+import { readWebSystemPackage } from '../system-package';
 import { createWebLibrary } from './web-library';
 import {
   WebMidiTransport,
@@ -57,7 +60,16 @@ export function firstTarget(ports: string[], current: Target): Target {
  * The site's Transfer environment. `app` is the app that will own it (the environment's ports and transports call its target and connection);
  * it is a function because the app is built from the environment.
  */
-export function createWebEnv(app: () => TransferApp): { env: TransferEnv; usablePorts: () => Promise<string[]> } {
+export function createWebEnv(
+  app: () => TransferApp,
+  {
+    wasm = fetchWasmSource(BASE),
+    createKit,
+  }: {
+    wasm?: WasmSource;
+    createKit?: (bytes: ArrayBuffer, bundle: string) => Promise<PatchKitLike>;
+  } = {},
+): { env: TransferEnv; usablePorts: () => Promise<string[]> } {
   let accessPromise: Promise<MidiAccessLike> | undefined;
   /** The Web MIDI access, asked for once; a failure is asked again at the next call. */
   function access(): Promise<MidiAccessLike> {
@@ -68,7 +80,7 @@ export function createWebEnv(app: () => TransferApp): { env: TransferEnv; usable
     return accessPromise;
   }
 
-  const wasm = fetchWasmSource(BASE);
+  const kit = senderKit(wasm, createKit);
 
   const { library, source } = createWebLibrary({
     bytes: async (path) => new Uint8Array(await (await fetchOk(`${BASE}modules/${path}`)).arrayBuffer()),
@@ -82,6 +94,7 @@ export function createWebEnv(app: () => TransferApp): { env: TransferEnv; usable
     wasm,
     deviceName: async (device) => deviceNameOf(device),
     libraryDevices: [...siteDevices()],
+    extras: { systemPackage: () => readWebSystemPackage(wasm, kit) },
     // only where the browser has WebUSB; devices the user already allowed are used, `requestAccess` (from a click) asks for another
     ...(webUsbAvailable() ? { bulk: { ...webUsbOpener(), requestAccess: () => WebUsbBulkLink.requestAccess() } } : {}),
     targets: {

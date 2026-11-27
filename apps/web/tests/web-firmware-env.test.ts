@@ -99,3 +99,37 @@ test('the site environments pass the site list: Firmware devices and Transfer li
   const { env } = createWebEnv(() => ({}) as never);
   assert.deepEqual(env.libraryDevices, [...siteDevices()]);
 });
+
+test('fresh flashing and Transfer recovery both provide the matching system package and Rust planner', async () => {
+  const { createWebEnv } = await import('../src/transfer/web-env.ts');
+  const bytes = new Uint8Array([0, 0, 13, 3, 0x44, 0x4b, 0x53, 0x50, 1]);
+  const wasm = memoryWasmSource({ 'modules/system-package.bin': bytes, 'patchkit.wasm': new Uint8Array([1]) });
+  const seen: unknown[] = [];
+  const createKit = async () =>
+    ({
+      systemPackagePlan: (input: unknown) => {
+        seen.push(input);
+        return ['retry', 'restart', 'confirm_support'];
+      },
+    }) as unknown as PatchKitLike;
+  const fw = createWebFirmwareEnv({ workers: createFakeWorkers(), wasm, createKit });
+  const { env: transfer } = createWebEnv(() => ({}) as never, { wasm, createKit });
+  for (const provider of [fw.systemPackage, transfer.extras?.systemPackage]) {
+    assert.equal(typeof provider, 'function', 'both entry points must offer package installation');
+    const pkg = await provider!();
+    assert.equal(pkg.runtime, 0x000d03);
+    assert.deepEqual(pkg.bytes, bytes.subarray(4));
+    const input = { repair: true, moduleSupport: false, verifiedPackageOnCard: true };
+    assert.deepEqual(await pkg.plan(input), ['retry', 'restart', 'confirm_support']);
+    assert.deepEqual(seen.at(-1), input);
+  }
+});
+
+test('the site refuses a missing or truncated system package before flashing', async () => {
+  for (const file of [undefined, new Uint8Array([0, 0, 13, 3])]) {
+    const wasm = memoryWasmSource(file ? { 'modules/system-package.bin': file } : {});
+    const fw = createWebFirmwareEnv({ workers: createFakeWorkers(), wasm });
+    assert.equal(typeof fw.systemPackage, 'function');
+    await assert.rejects(fw.systemPackage!(), /system.package/);
+  }
+});

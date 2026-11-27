@@ -180,6 +180,30 @@ function sourceFiles(dir) {
 
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 
+/** Source-authored system package and matching runtime version (the desktop host's four-byte prefix). */
+export function shipSystemPackage(out, root = repoRoot) {
+  const version = parse(readFileSync(join(root, 'sdk/sdk.toml'), 'utf8')).runtime.version;
+  if (typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version))
+    throw new Error('sdk/sdk.toml: runtime version must be major.minor.patch');
+  const parts = version.split('.').map(Number);
+  if (parts.some((n) => n > 255)) throw new Error('sdk/sdk.toml: runtime version parts must fit in a byte');
+  const file = join(root, 'out/cache/site-pack/system.dksp');
+  patchkit(
+    [
+      'syspkg',
+      'build',
+      join(root, 'runtime/core/build/package.dko.json'),
+      '--part',
+      join(root, 'runtime/apps/digikit-menu/build/digikit-menu.dko.json'),
+      '--out',
+      file,
+    ],
+    { root },
+  );
+  mkdirSync(out, { recursive: true });
+  writeFileSync(join(out, 'system-package.bin'), Buffer.concat([Buffer.from([0, ...parts]), readFileSync(file)]));
+}
+
 /** `patchkit pack-all` of the ids for one device: `{id: bytes}` of the packed ones; throws when any fails. */
 function packAll(root, ids, device, to) {
   mkdirSync(to, { recursive: true });
@@ -371,6 +395,7 @@ if (
     : buildModuleData(repoRoot, SITE_DEVICES);
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'bundle.json'), JSON.stringify(bundle));
+  if (!preview) shipSystemPackage(out);
   const devices = loadDevices();
   // The desktop installs these after a boot, including tools excluded from the public site.
   const defaults = preview ? new Set(deviceIds.flatMap((id) => devices.get(id).defaultModules)) : undefined;

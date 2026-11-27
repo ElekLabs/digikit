@@ -12,6 +12,7 @@ import { browserWorkers } from '../browser-workers';
 import type { WorkerFactory, WorkerPort } from '@digi/workbench-core/workers.ts';
 import { createFirmwareApp, type FirmwareApp } from '@digi/workbench-core/firmware/app.ts';
 import type { FirmwareEnv } from '@digi/workbench-core/firmware/env.ts';
+import { readWebSystemPackage } from '../system-package';
 import './firmware-site.css';
 
 const BASE = import.meta.env.BASE_URL.replace(/\/?$/, '/');
@@ -75,6 +76,7 @@ export function createWebFirmwareEnv({
   const webFirmwareEnv: FirmwareEnv = {
     offersPatched: (d) => siteOffers(d),
     devices: siteDevices(),
+    systemPackage: () => readWebSystemPackage(wasm, kit),
     async prepare(stock, restore, set = '') {
       const w = await patchWorker();
       const id = nextId++;
