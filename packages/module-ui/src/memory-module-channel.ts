@@ -62,7 +62,10 @@ export function createMemoryModuleChannel(
     const refused = await admit(call);
     if (refused) throw new Error(refused.message);
   }
-  const described: DescribedSchema = { ...structuredClone(schema), name: options.name ?? schema.name ?? schema.module ?? 'Module' };
+  const described: DescribedSchema = {
+    ...structuredClone(schema),
+    name: options.name ?? schema.name ?? schema.module ?? 'Module',
+  };
   const channel: ModuleChannel = {
     describeSettings: async () => structuredClone(described),
     getSetting: (id) => guarded({ method: 'get', id }, () => store.read(id)),
