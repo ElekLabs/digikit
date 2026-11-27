@@ -299,3 +299,87 @@ fn workbench_file_edits_require_an_ascii_leaf_in_the_modules_own_data_directory(
         settings::tests::teardown();
     }
 }
+
+#[test]
+fn typed_writes_are_checked_with_the_shared_vectors() {
+    let _guard = crate::test_lock::LOCK
+        .lock_with_package()
+        .unwrap_or_else(|e| e.into_inner());
+    let descriptors = vectors::descriptors();
+    let mut out = [0; DESCRIPTOR_MAX];
+    for value in vectors::values() {
+        let vector = descriptors
+            .iter()
+            .find(|d| d.name == value.descriptor)
+            .unwrap();
+        let mut reg = Registry::EMPTY;
+        reg.modules[0].descriptor =
+            Descriptor::parse(vector.module.as_bytes(), &vector.bytes).unwrap();
+        reg.publish(0);
+        let instance = reg.modules[0].instance;
+        let index = reg.modules[0]
+            .descriptor
+            .key_index(value.setting.as_bytes())
+            .unwrap();
+        let put = request(PUT, instance, 1, index as u8, 1, &value.bytes);
+        let expected = if value.valid { Ok(0) } else { Err(E_SET_VALUE) };
+        assert_eq!(reg.handle(&put, &mut out), expected, "{}", value.rule);
+    }
+}
+
+#[test]
+fn a_binary_value_is_stored_and_read_back_without_a_text_check() {
+    // an integer `k` of 0 to 240, step 1, default 0
+    let integer =
+        vectors::hex("0204546f6f6c01016b044761696e04020000000000000000f000000001000000000000");
+    let integer = integer.as_slice();
+    // 233 ends in 0xe9, which is not UTF-8 text
+    let _guard = crate::test_lock::LOCK
+        .lock_with_package()
+        .unwrap_or_else(|e| e.into_inner());
+    unsafe {
+        use crate::{dlog, settings};
+        settings::tests::setup(false);
+        let ctx = entry::bind(0) as *mut u8;
+        files::init_begin(0);
+        let prev = dlog::enter_module(0, dlog::PHASE_INIT);
+        assert_eq!(
+            dk_workbench_register(ctx, integer.as_ptr(), integer.len() as u32),
+            OK
+        );
+        dlog::leave_module(prev);
+        files::ready(0);
+        publish(0);
+        let instance = instance(0);
+
+        let (status, rev, value) = perform(instance, 1, GET, 0, b"");
+        assert_eq!((status, value), (OK, None));
+        let (status, rev, value) = perform(instance, 2, PUT, rev, &[0, 0, 0, 0xe9]);
+        assert_eq!((status, value), (OK, Some(std::vec![0, 0, 0, 0xe9])));
+        let mut out = [0; DESCRIPTOR_MAX];
+        for bad in [
+            &[0, 0, 0, 0xf1][..],
+            &[0, 0, 1, 0],
+            &[0xe9],
+            &[0x80, 0, 0, 0],
+        ] {
+            let put = request(PUT, instance, 3, 0, rev, bad);
+            assert_eq!(
+                locked(|r| r.handle(&put, &mut out)),
+                Err(E_SET_VALUE),
+                "{bad:?}"
+            );
+        }
+
+        files::retire(0);
+        entry::unbind(0);
+        settings::tests::teardown();
+    }
+}
+
+#[test]
+fn typed_kinds_do_not_grow_the_registry() {
+    // Static RAM: bounds are read from the stored descriptor bytes, a field keeps offsets only. Unchanged by the typed kinds.
+    assert_eq!(core::mem::size_of::<Descriptor>(), 1092);
+    assert_eq!(core::mem::size_of::<Registry>(), 16656);
+}

@@ -1,11 +1,12 @@
 //! The Workbench settings registered by loaded content modules. MIDI submits bounded work and reads completions.
 //! Only the UI task accesses the real module settings. The shared queue is touched with interrupts masked.
 
+mod cursor;
 mod descriptor;
+mod kind;
 
-use self::descriptor::{
-    file_name_ok, Descriptor, DESCRIPTOR_MAX, EXTENSION_MAX, FIELDS_MAX, TEXT_MAX,
-};
+use self::descriptor::{Descriptor, DESCRIPTOR_MAX, FIELDS_MAX};
+use self::kind::{Kind, TEXT_MAX};
 use super::loader::records;
 use super::resident::{platform, settings, store, transport};
 use super::{entry, files, module_cmds, settings_overlay};
@@ -153,14 +154,8 @@ impl Enrollment {
         }
         let field = self.descriptor.field(request.index).ok_or(E_SET_KEY)?;
         let value = request.value();
-        if request.verb == PUT {
-            let extension = field.extension(self.descriptor.bytes());
-            if value.len() > field.max as usize
-                || core::str::from_utf8(value).is_err()
-                || (!extension.is_empty() && !file_name_ok(value, extension))
-            {
-                return Err(E_SET_VALUE);
-            }
+        if request.verb == PUT && !field.accepts(self.descriptor.bytes(), value) {
+            return Err(E_SET_VALUE);
         }
         self.pending = request;
         Ok(0)
@@ -369,7 +364,7 @@ pub(crate) unsafe fn command(seq: u32, _buf: *mut u8, body: *const u8, len: usiz
     }
 }
 
-unsafe fn read_setting(rec: usize, key: &[u8], cap: u8, revision: u32) -> Outcome {
+unsafe fn read_setting(rec: usize, key: &[u8], cap: u8, kind: Kind, revision: u32) -> Outcome {
     let mut outcome = Outcome {
         revision,
         ..Outcome::EMPTY
@@ -385,12 +380,12 @@ unsafe fn read_setting(rec: usize, key: &[u8], cap: u8, revision: u32) -> Outcom
     }
     if n < 0 {
         outcome.result = n;
-    } else if let Some(text) = outcome
+    } else if let Some(stored) = outcome
         .value
         .get(..n as usize)
-        .filter(|text| core::str::from_utf8(text).is_ok())
+        .filter(|stored| !kind.is_text() || core::str::from_utf8(stored).is_ok())
     {
-        outcome.len = text.len() as u8;
+        outcome.len = stored.len() as u8;
         outcome.present = true;
     } else {
         outcome.result = E_SET_VALUE;
@@ -414,30 +409,19 @@ pub(crate) unsafe fn tick() {
         let raw_key = field.key(bytes);
         let mut key = [0; KEY_MAX + 1];
         key[..raw_key.len()].copy_from_slice(raw_key);
-        let raw_extension = field.extension(bytes);
-        let mut extension = [0; EXTENSION_MAX];
-        extension[..raw_extension.len()].copy_from_slice(raw_extension);
         Some((
             rec,
             request,
             key,
             field.max,
+            field.kind(),
             slot.revision(request.index),
-            extension,
-            raw_extension.len(),
         ))
     });
-    let Some((rec, request, key, cap, revision, extension, extension_len)) = job else {
+    let Some((rec, request, key, cap, kind, revision)) = job else {
         return;
     };
-    let outcome = apply(
-        rec,
-        request,
-        &key,
-        cap,
-        revision,
-        &extension[..extension_len],
-    );
+    let outcome = apply(rec, request, &key, cap, kind, revision);
     locked(|registry| registry.modules[rec].complete(outcome));
 }
 
@@ -472,10 +456,10 @@ unsafe fn apply(
     request: Request,
     key: &[u8],
     cap: u8,
+    kind: Kind,
     revision: u32,
-    extension: &[u8],
 ) -> Outcome {
-    let mut before = read_setting(rec, key, cap, revision);
+    let mut before = read_setting(rec, key, cap, kind, revision);
     if request.verb == GET {
         return before;
     }
@@ -492,7 +476,7 @@ unsafe fn apply(
     }
     let client = rec as u32 + 1;
     let result = if request.verb == PUT {
-        if !extension.is_empty() {
+        if kind == Kind::FileName {
             if let Err(status) = check_file(rec, request.value()) {
                 before.result = status;
                 return before;
@@ -518,8 +502,10 @@ unsafe fn apply(
         return before;
     }
     let revision = locked(|registry| registry.modules[rec].revision(request.index));
-    read_setting(rec, key, cap, revision)
+    read_setting(rec, key, cap, kind, revision)
 }
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod vectors;
