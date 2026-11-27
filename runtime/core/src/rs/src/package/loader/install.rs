@@ -161,10 +161,11 @@ unsafe fn parked<P: PackagePlatform>(p: &P, k: &Park) -> bool {
     if k.indirect {
         at = word(p, at);
         if at == 0 {
-            return false;
+            return true;
         }
     }
     if k.made != 0 && word(p, at.wrapping_add(k.made)) == 0 {
+        // a zero cell: the singleton is built on first use and does not exist yet, so no task is inside a hook (under the mask nothing builds it)
         return true;
     }
     word(p, at.wrapping_add(k.off)) == k.tcb

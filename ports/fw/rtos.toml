@@ -155,7 +155,7 @@ port_file = true
 codegen = false
 mark = "D"
 users = ["core/runtime"]
-doc = "The cell that holds the BgWorker singleton (DT2 1.17 0x44f37090, DN2 1.12 0x44648930; the `tst.l` of the task entry, which creates the object when the cell is 0 and then runs the job loop on the object). The job loop pends on the semaphore at object + 0x14, so its waiter word is at *cell + 0x18: it is an indirection, the cell is 0 until the object exists."
+doc = "The cell that holds the BgWorker singleton (DT2 1.17 0x44f37090, DN2 1.12 0x44648930; the `tst.l` of the task entry, which creates the object when the cell is 0 and then runs the job loop on the object). The job loop pends on the semaphore at object + 0x14, so its waiter word is at *cell + 0x18: it is an indirection, the cell is 0 until the object exists, and a zero cell counts as parked (no object, no task inside a hook)."
 
 [[value]]
 name = "cf.rtos.value.console.tcb"
@@ -179,7 +179,7 @@ port_file = true
 codegen = false
 mark = "D"
 users = ["core/runtime"]
-doc = "The queue the console task pops its command lines from (DT2 1.17 0x403a0eac, DN2 1.12 0x4038be9c; the literal of the queue init in its creation function). The pop pends on the queue's semaphore at queue + 8, so the waiter word is at queue + 0xc (the queue layout is the kernel's, the same on both images). The firmware builds the queue and creates the task only on a unit whose flag word (DN2 1.12 0x40287a60 bit 0x20) has the serial console on: elsewhere the queue stays zero (the buffer pointer at queue + 0x14 is the first word `queue_init` sets), no task exists and the installer counts it as parked. [D]: DN2 emulator memory read, console create path read from the image."
+doc = "The queue the console task pops its command lines from (DT2 1.17 0x403a0eac, DN2 1.12 0x4038be9c; the literal of the queue init in its creation function). The pop pends on the queue's semaphore at queue + 8, so the waiter word is at queue + 0xc (the queue layout is the kernel's, the same on both images). The firmware builds the queue and creates the task only on a unit whose flag word (DN2 1.12 0x40287a60 bit 0x20, tested at the creation function; DT2 1.17 0x4029eef0, tested at 0x400ccde0) has the serial console on: elsewhere the queue stays zero (the buffer pointer at queue + 0x14 is the first word `queue_init` sets), no task exists and the installer counts it as parked. [D]: DN2 emulator memory read, console create path read from the image."
 
 [[value]]
 name = "cf.rtos.value.reset.clear_helper"
