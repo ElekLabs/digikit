@@ -1,5 +1,5 @@
 /* Pure functions of the chooser and the on-device sample picker: row sort order and the text of pool rows (text and paths: core/text.h, core/path.h). No API calls and no statics, so the
-   host tests run them as they are (modules/core/adapters/ui/host/tests/picker.rs). Text buffers are always NUL-terminated. */
+   host tests run them as they are (runtime/platform/ui/host/tests/picker.rs). Text buffers are always NUL-terminated. */
 #ifndef DK_CHOOSER_LOGIC_H
 #define DK_CHOOSER_LOGIC_H
 #include <stdint.h>

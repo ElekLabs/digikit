@@ -9,7 +9,7 @@
 
 use crate::rt::{Int, V};
 use crate::sha256::Sha256;
-use crate::{Engine, canon, trap_name};
+use crate::{Engine, GenCore, canon};
 
 struct Rd<'a> {
     b: &'a [u8],
@@ -116,7 +116,10 @@ pub fn run_call_with(
     if done >= max as u64 {
         return Err("max-steps".into());
     }
-    let t = e.last_trap.map(trap_name).unwrap_or_default();
+    let t = e
+        .last_trap
+        .map(|t| e.s.core.trap_name(t))
+        .unwrap_or_default();
     if t.contains(CALL_END)
         && (t.starts_with("sharc_core.forms_flow._type_9b_abs:")
             || t.starts_with("sharc_core.forms_flow._type_9a_abs:"))
@@ -142,8 +145,8 @@ pub fn reload(e: &mut Engine, p: &Pack) -> Result<(), String> {
 }
 
 /// An engine over the pack's image, at its start state.
-pub fn load(p: &Pack) -> Result<Engine, String> {
-    let mut e = Engine::from_image(p.image).map_err(|c| format!("image blob ({c})"))?;
+pub fn load(p: &Pack, core: &'static GenCore) -> Result<Engine, String> {
+    let mut e = Engine::from_image(p.image, core).map_err(|c| format!("image blob ({c})"))?;
     reload(&mut e, p)?;
     Ok(e)
 }

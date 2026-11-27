@@ -1,13 +1,13 @@
 // The emulator of the desktop app behind `EmulatorRuntime` (packages/workbench-core/src/runtime/runtime.ts): the controller's session, the pump that steps it and
-// the inputs, all through the Host. The browser app has its own, `browserRuntime`, over workers; Console.tsx picks the one of its app.
+// the inputs, all through the Host. The browser app has its own, `browserRuntime`, over workers; The desktop emulator session owns the native runtime.
 import type { CardStatus } from '@digi/workbench-core/runtime/cards.ts';
 import type { ReloadReport } from '@digi/workbench-core/runtime/reload.ts';
-import type { ControllerJob } from '@digi/workbench-core/jobs/jobs-core.ts';
 import type {
   EmulatorRuntime,
+  FirmwareInfo,
   NativeAudioStatus,
   RuntimeDiagnostics,
-  RuntimeHealth,
+  ControllerStatus,
   RuntimePatch,
   RuntimeSnapshot,
   RuntimeUpdate,
@@ -20,8 +20,9 @@ import type { Host } from '@digi/workbench-core/host/host.ts';
  * commands in the app and a FakeHost in a test. Resolves with undefined when the page is not inside the app (a plain browser).
  */
 export async function createNativeRuntime(
-  host: Host,
+  host: Pick<Host, 'emu' | 'rpc'>,
   onUpdate: (update: RuntimeUpdate) => void,
+  startupSignal?: AbortSignal,
 ): Promise<EmulatorRuntime | undefined> {
   if (!host.emu.inApp()) return undefined;
   const metrics = hostMetrics('native_ipc');
@@ -36,6 +37,7 @@ export async function createNativeRuntime(
     timer: ReturnType<typeof setTimeout> | undefined,
     input = Promise.resolve(),
     lifecycle = Promise.resolve();
+  let stopping: { token: number; work: Promise<void> } | undefined;
   const clearPump = () => {
     paused = true;
     epoch += 1;
@@ -160,18 +162,40 @@ export async function createNativeRuntime(
       throw error;
     });
   };
+  const stop = () => {
+    if (stopping?.token === generation) return stopping.work;
+    const token = ++generation;
+    clearPump();
+    loaded = false;
+    activeSession = undefined;
+    accepted = undefined;
+    // A pending load can install the firmware after an early stop. Wait for the lifecycle queue before stopping the controller.
+    const work = lifecycle
+      .catch(() => {})
+      .then(() => host.emu.stop(token))
+      .catch((error) => {
+        if (!disposed && stopping?.token === token) stopping = undefined;
+        throw error;
+      });
+    lifecycle = work;
+    stopping = { token, work };
+    return work;
+  };
   try {
     metrics.reset();
     const startup = await host.emu.startup<RuntimeSnapshot>();
-    metrics.loaded();
     generation = 1;
-    activeSession = 1;
-    loaded = true;
-    accepted = { session: 1, snapshot: startup, paused: false };
-    onUpdate({ type: 'snapshot', snapshot: startup });
-    start(1);
+    if (!startupSignal?.aborted) {
+      metrics.loaded();
+      activeSession = 1;
+      loaded = true;
+      accepted = { session: 1, snapshot: startup, paused: false };
+      onUpdate({ type: 'snapshot', snapshot: startup });
+      if (!startupSignal?.aborted) start(1);
+    }
   } catch (error) {
-    if (!String(error).includes('No startup firmware selected')) onUpdate({ type: 'error', error: String(error) });
+    if (!startupSignal?.aborted && !String(error).includes('No startup firmware selected'))
+      onUpdate({ type: 'error', error: String(error) });
   }
   return {
     saveDiagnostics: (name: string, json: string) => host.emu.saveDiagnostics(name, json),
@@ -209,23 +233,51 @@ export async function createNativeRuntime(
     load: (bytes, name, options) =>
       newSession(async (token) => {
         const syx = await host.emu.stageSyx(bytes, name);
-        await call('firmware.load', { syx, replace: true, runtime: !!options?.runtime }, token);
+        await call(
+          'firmware.load',
+          {
+            syx,
+            replace: true,
+            runtime: !!options?.runtime,
+            ...(options?.dsp === undefined ? {} : { dsp: options.dsp }),
+          },
+          token,
+        );
       }),
     loadPath: (syx, options) =>
       newSession(async (token) => {
         await call(
           'firmware.load',
-          { syx, replace: true, runtime: !!options?.runtime, ...(options?.card ? { card: options.card } : {}) },
+          {
+            syx,
+            replace: true,
+            runtime: !!options?.runtime,
+            ...(options?.card ? { card: options.card } : {}),
+            ...(options?.dsp === undefined ? {} : { dsp: options.dsp }),
+            ...(options?.sourceSha256 ? { source_sha256: options.sourceSha256 } : {}),
+            ...(options?.imageSha256 ? { image_sha256: options.imageSha256 } : {}),
+          },
           token,
         );
       }),
     async firmwareInfo() {
-      const status = await call<{ firmware: { runtime?: RuntimePatch | null } | null }>('status');
-      return { runtime: status.firmware?.runtime ?? null };
+      const status = await call<{
+        firmware: { runtime?: RuntimePatch | null } | null;
+        dsp_enabled?: boolean;
+        dsp_flag?: boolean | null;
+      }>('status');
+      const info: FirmwareInfo = { runtime: status.firmware?.runtime ?? null };
+      if (status.dsp_enabled !== undefined) info.dsp = { enabled: status.dsp_enabled, flag: status.dsp_flag ?? null };
+      return info;
     },
     async controllerStatus() {
-      const status = await call<{ heartbeat?: RuntimeHealth; job?: ControllerJob | null }>('status');
-      return { heartbeat: status.heartbeat, job: status.job ?? null };
+      const run = epoch;
+      const status = await call<ControllerStatus>('status');
+      return {
+        heartbeat: status.heartbeat,
+        job: status.job ?? null,
+        load: loaded && !paused && run === epoch ? status.load : null,
+      };
     },
     cancelJob: async () => {
       await call('job.cancel');
@@ -281,22 +333,11 @@ export async function createNativeRuntime(
         if (!disposed && token === generation && activeSession === session) onUpdate({ type: 'snapshot', snapshot });
       });
     },
-    async stop() {
-      const token = ++generation;
-      clearPump();
-      loaded = false;
-      activeSession = undefined;
-      accepted = undefined;
-      await (lifecycle = lifecycle.catch(() => {}).then(() => host.emu.stop(token)));
-    },
+    stop,
     dispose() {
+      if (disposed) return;
       disposed = true;
-      const token = ++generation;
-      clearPump();
-      loaded = false;
-      activeSession = undefined;
-      accepted = undefined;
-      void host.emu.stop(token);
+      void stop().catch(() => {});
     },
   };
 }

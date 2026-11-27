@@ -24,11 +24,11 @@
 //!            voice states to reserve behind the image and bss), 56 u32 parameter-word latch mask (contract 1.3), 60 reserved 0. The packer writes version 3 only when a voice has a
 //!            note_on entry or a state; otherwise version 2 (the runtime parses all three; v1 and v2 voices have note_on 0 and no state)
 //! fx     : version 4: 64 bytes each: 0 u32 process (image byte offset of the process routine), 4 u32 desc (image byte offset of its `dk_fx_desc`),
-//!            8 u32 state_bytes (from the desc: reserved behind the image, bss and voice states), 12 u32 n_params (from the desc), 16 u32 flags (the routes, below; 0 = master only),
+//!            8 u32 state_bytes (from the desc: reserved behind the image, bss and voice states), 12 u32 n_params (from the desc), 16 u32 flags (the routes, below; 0 is the legacy master-only value; the packer writes the placeholder pair MASTER|SEND, `FXF_SEND`, which the runtime overrides at commit),
 //!            20..51 8 x u32 the words p0 .. p7 of the effect's row (the DSP reads them as they are), 52..63 reserved 0. A version 4 section has voices of 64
 //!            bytes (as version 3); the packer writes it only when the module has an effect
 //!            flags: bit 0 `FXF_SEND` the effect may run on a send bus, bit 1 `FXF_NOMASTER` it may not run on the master chain, bit 2 `FXF_DEFAULT_SEND` its default
-//!            route is the send bus (the settings key `fx/route/<module id>` decides when it is there). 0, what every record before the routes has: master only.
+//!            route is the send bus (the settings key `fx/route/<module id>` decides when it is there). 0 is the legacy master-only value that every record before the routes has. The packer writes a valid placeholder pair (MASTER|SEND, flag `FXF_SEND`); the runtime replaces it at commit with the declared routes (master only when none are declared).
 //!            Allowed combinations: 0; 1; 1 | 4; 1 | 2 | 4 (send only)
 //! image  : the linked bytes at the nominal base `L2_BYTE_BASE`; every relocated field holds `S + A` at that base
 //! ```
@@ -62,32 +62,64 @@ pub const SAMPLE_POOL_RECORD_BYTES: u32 =
 pub const SAMPLE_POOL_CONTROL_BYTES: u32 =
     (dkrt_sdk::sample_pool::ENTRIES * dkrt_sdk::sample_pool::CTL_WORDS * 4) as u32;
 /// `dk_machine_desc` (SDK contract): magic "DKMA" and the contract number the packer accepts, and its size in u32 words.
-pub const DESC_MAGIC: u32 = 0x444b_4d41;
-pub const DESC_CONTRACT: u32 = 1;
+pub const DESC_MAGIC: u32 = dkneeds::machine::DK_MAGIC;
+pub const DESC_CONTRACT: u32 = dkneeds::machine::DK_MACHINE_V1;
 /// Bit 8 of the desc's contract word: a stereo machine (contract 1.2, `DK_MACHINE_STEREO`). The low byte is the major number.
-pub const DESC_STEREO: u32 = 0x100;
+pub const DESC_STEREO: u32 = dkneeds::machine::DK_MACHINE_STEREO;
 /// Bit 9 of the desc's contract word: a machine that reads `gate` in `dk_voice_in` (contract 1.6, `DK_MACHINE_GATE`).
-pub const DESC_GATE: u32 = 0x200;
-pub const DESC_WORDS: usize = 8;
+pub const DESC_GATE: u32 = dkneeds::machine::DK_MACHINE_GATE;
+pub const DESC_WORDS: usize = dkneeds::machine::DK_DESC_WORDS as usize;
 /// The routes of an effect (the manifest's `route` and `routes`): the master chain and a send bus. `Effect::routes` is a mask of them.
-pub const ROUTE_MASTER: u32 = 1;
-pub const ROUTE_SEND: u32 = 2;
-/// Bits of the effect record's flags word (offset 16); 0 = master only, the default route master (a record of the version before the routes).
-pub const FXF_SEND: u32 = 1;
-pub const FXF_NOMASTER: u32 = 2;
-pub const FXF_DEFAULT_SEND: u32 = 4;
+pub const ROUTE_MASTER: u32 = dkneeds::page::DK_ROUTE_MASTER;
+pub const ROUTE_SEND: u32 = dkneeds::page::DK_ROUTE_SEND;
+/// Bits of the effect record's flags word (offset 16); 0 is the legacy master-only value (default route master, a record of the version before the routes). The packer writes the placeholder pair MASTER|SEND (`FXF_SEND`); the runtime overrides it at commit with the declared routes (master only when none are declared).
+pub const FXF_SEND: u32 = dkneeds::FXF_SEND;
+pub const FXF_NOMASTER: u32 = dkneeds::FXF_NOMASTER;
+pub const FXF_DEFAULT_SEND: u32 = dkneeds::FXF_DEFAULT_SEND;
 /// Effects a module may carry (`DK_FX_MAX` of <dk/fx/fx.h>).
 pub const MAX_FX: usize = dkneeds::MAX_FX as usize;
 /// `dk_fx_desc` (<dk/fx/fx.h>): magic "DKFX", the contract number the packer accepts, its size in u32 words and the most parameter words.
-pub const FX_DESC_MAGIC: u32 = 0x444b_4658;
-pub const FX_DESC_CONTRACT: u32 = 1;
-pub const FX_DESC_WORDS: usize = 6;
-pub const FX_MAX_PARAMS: u32 = 8;
+pub const FX_DESC_MAGIC: u32 = dkneeds::fx::DK_FX_MAGIC;
+pub const FX_DESC_CONTRACT: u32 = dkneeds::fx::DK_FX_V1;
+pub const FX_DESC_WORDS: usize = dkneeds::fx::DK_FX_DESC_WORDS as usize;
+pub const FX_MAX_PARAMS: u32 = dkneeds::fx::DK_FX_MAX_PARAMS;
 pub const MAX_RELOCS: usize = dkneeds::MAX_RELOCS as usize;
 pub const MAX_IMPORTS: usize = dkneeds::MAX_IMPORTS as usize;
 pub const MAX_VOICES: usize = dkneeds::MAX_VOICES as usize;
 /// Placement granule of the runtime's area allocator (bytes).
 pub const GRANULE: u32 = dkneeds::GRANULE;
+
+// Offsets in the DSP section: `[format]` of sdk/sdk.toml, through `dkneeds`.
+const RELOC_OFFSET: usize = dkneeds::RELOC_OFFSET as usize;
+const RELOC_WORD: usize = dkneeds::RELOC_WORD as usize;
+const H_IMAGE_SIZE: usize = dkneeds::DSP_H_IMAGE_SIZE as usize;
+const H_BSS: usize = dkneeds::DSP_H_BSS as usize;
+const H_ALIGN: usize = dkneeds::DSP_H_ALIGN as usize;
+const H_IMAGE_OFF: usize = dkneeds::DSP_H_IMAGE_OFF as usize;
+const H_RELOC_OFF: usize = dkneeds::DSP_H_RELOC_OFF as usize;
+const H_RELOC_N: usize = dkneeds::DSP_H_RELOC_N as usize;
+const H_IMPORT_OFF: usize = dkneeds::DSP_H_IMPORT_OFF as usize;
+const H_IMPORT_N: usize = dkneeds::DSP_H_IMPORT_N as usize;
+const H_VOICE_OFF: usize = dkneeds::DSP_H_VOICE_OFF as usize;
+const H_VOICE_N: usize = dkneeds::DSP_H_VOICE_N as usize;
+const H_FX_OFF: usize = dkneeds::DSP_H_FX_OFF as usize;
+const H_FX_N: usize = dkneeds::DSP_H_FX_N as usize;
+const H_BANK_OFF: usize = dkneeds::DSP_H_BANK_OFF as usize;
+const VOICE_TYPE: usize = dkneeds::VOICE_TYPE as usize;
+const VOICE_ENTRY: usize = dkneeds::VOICE_ENTRY as usize;
+const VOICE_V2_RANGES: usize = dkneeds::VOICE_V2_RANGES as usize;
+const VOICE_NOTE_ON: usize = dkneeds::VOICE_NOTE_ON as usize;
+const VOICE_STATE_BYTES: usize = dkneeds::VOICE_STATE_BYTES as usize;
+const VOICE_CLEAR_BYTES: usize = dkneeds::VOICE_CLEAR_BYTES as usize;
+const VOICE_V3_RANGES: usize = dkneeds::VOICE_V3_RANGES as usize;
+const VOICE_VOICES: usize = dkneeds::VOICE_VOICES as usize;
+const VOICE_LATCH: usize = dkneeds::VOICE_LATCH as usize;
+const FX_PROCESS: usize = dkneeds::FX_PROCESS as usize;
+const FX_DESC: usize = dkneeds::FX_DESC as usize;
+const FX_STATE: usize = dkneeds::FX_STATE as usize;
+const FX_NPARAMS: usize = dkneeds::FX_NPARAMS as usize;
+const FX_FLAGS: usize = dkneeds::FX_FLAGS as usize;
+const FX_PARAMS: usize = dkneeds::FX_PARAMS as usize;
 
 pub const KIND_ABS24: u32 = 0;
 pub const KIND_ABS32: u32 = 1;
@@ -321,21 +353,16 @@ pub fn pack_with_samples(
     pack_with_gate(obj, device, voices, fxs, tracks).map(|(bytes, _)| bytes)
 }
 
-/// [`pack_with_samples`], and whether a voice desc carries `DESC_GATE` (the file then declares machine contract 1.6).
-pub fn pack_with_gate(
-    obj: &Dko,
-    device: u32,
-    voices: &[VoiceSpec],
-    fxs: &[FxSpec],
-    tracks: Option<&crate::typed::SampleTracksDef>,
-) -> Result<(Vec<u8>, bool)> {
-    let mut gate = false;
-    if obj.arch != "sharc" {
-        return Err(err!(
-            "a DSP section holds a SHARC+ object; the object is {}",
-            obj.arch
-        ));
-    }
+/// What the packer knows of a DSP object before it writes the section: the kind of each section, the defined symbols (kind and global flag), the imports (the undefined
+/// symbols of its relocations, sorted) and the object linked at the nominal base with every import at 0.
+struct Analysis<'a> {
+    kind_of: BTreeMap<&'a str, &'a str>,
+    defined: BTreeMap<&'a str, (&'a str, bool)>,
+    imports: Vec<&'a str>,
+    linked: link::Linked,
+}
+
+fn analyse(obj: &Dko) -> Result<Analysis<'_>> {
     let kind_of: BTreeMap<&str, &str> = obj
         .sections
         .iter()
@@ -370,6 +397,52 @@ pub fn pack_with_gate(
     }
     let externs: BTreeMap<String, u64> = imports.iter().map(|n| (n.to_string(), 0)).collect();
     let linked = link::link(obj, L2_BYTE_BASE as u64, &externs)?;
+    Ok(Analysis {
+        kind_of,
+        defined,
+        imports,
+        linked,
+    })
+}
+
+/// The byte offsets in the DSP image of global text symbols of `obj` (what a service's DSP slot fills carry: the loader adds the placement).
+pub fn text_entries(obj: &Dko, names: &[&str]) -> Result<Vec<u32>> {
+    let Analysis {
+        defined, linked, ..
+    } = analyse(obj)?;
+    names
+        .iter()
+        .map(|name| match defined.get(name) {
+            Some(("text", true)) => Ok(((linked.symbols[*name] - L2_SW_BASE as u64) * 2) as u32),
+            Some(_) => Err(err!(
+                "DSP entry {name}: not a global text symbol of the DSP object"
+            )),
+            None => Err(err!("DSP entry {name}: the DSP object does not define it")),
+        })
+        .collect()
+}
+
+/// [`pack_with_samples`], and whether a voice desc carries `DESC_GATE` (the file then declares machine contract 1.6).
+pub fn pack_with_gate(
+    obj: &Dko,
+    device: u32,
+    voices: &[VoiceSpec],
+    fxs: &[FxSpec],
+    tracks: Option<&crate::typed::SampleTracksDef>,
+) -> Result<(Vec<u8>, bool)> {
+    let mut gate = false;
+    if obj.arch != "sharc" {
+        return Err(err!(
+            "a DSP section holds a SHARC+ object; the object is {}",
+            obj.arch
+        ));
+    }
+    let Analysis {
+        kind_of,
+        defined,
+        imports,
+        linked,
+    } = analyse(obj)?;
     let image = linked.image.clone();
     if image.is_empty() || image.len() % 4 != 0 {
         return Err(err!("the DSP image is {} bytes", image.len()));
@@ -685,19 +758,19 @@ impl DspSection {
             },
         );
         put(&mut f, 8, self.device);
-        put(&mut f, 0x0c, self.image.len() as u32);
-        put(&mut f, 0x10, self.bss);
-        put(&mut f, 0x14, self.align);
-        put(&mut f, 0x18, image_off as u32);
-        put(&mut f, 0x1c, reloc_off as u32);
-        put(&mut f, 0x20, self.relocs.len() as u32);
-        put(&mut f, 0x24, import_off as u32);
-        put(&mut f, 0x28, self.imports.len() as u32);
-        put(&mut f, 0x2c, voice_off as u32);
-        put(&mut f, 0x30, self.voices.len() as u32);
+        put(&mut f, H_IMAGE_SIZE, self.image.len() as u32);
+        put(&mut f, H_BSS, self.bss);
+        put(&mut f, H_ALIGN, self.align);
+        put(&mut f, H_IMAGE_OFF, image_off as u32);
+        put(&mut f, H_RELOC_OFF, reloc_off as u32);
+        put(&mut f, H_RELOC_N, self.relocs.len() as u32);
+        put(&mut f, H_IMPORT_OFF, import_off as u32);
+        put(&mut f, H_IMPORT_N, self.imports.len() as u32);
+        put(&mut f, H_VOICE_OFF, voice_off as u32);
+        put(&mut f, H_VOICE_N, self.voices.len() as u32);
         if v4 {
-            put(&mut f, 0x34, fx_off as u32);
-            put(&mut f, 0x38, self.fxs.len() as u32);
+            put(&mut f, H_FX_OFF, fx_off as u32);
+            put(&mut f, H_FX_N, self.fxs.len() as u32);
         }
         let record = self.sample_tracks.as_ref().map(|t| {
             [
@@ -712,7 +785,7 @@ impl DspSection {
             ]
         });
         if let Some(words) = record {
-            put(&mut f, 0x3c, bank_off as u32);
+            put(&mut f, H_BANK_OFF, bank_off as u32);
             for (i, w) in words.iter().enumerate() {
                 f[bank_off + i * 4..bank_off + i * 4 + 4].copy_from_slice(&w.to_le_bytes());
             }
@@ -723,41 +796,45 @@ impl DspSection {
         }
         for (i, r) in self.relocs.iter().enumerate() {
             let at = reloc_off + i * RELOC_LEN;
-            put(&mut f, at, r.offset);
-            put(&mut f, at + 4, r.kind << 28 | r.class << 24 | r.import);
+            put(&mut f, at + RELOC_OFFSET, r.offset);
+            put(
+                &mut f,
+                at + RELOC_WORD,
+                r.kind << 28 | r.class << 24 | r.import,
+            );
         }
         for (i, v) in self.voices.iter().enumerate() {
             let at = voice_off + i * vlen;
-            put(&mut f, at, v.type_no);
-            put(&mut f, at + 4, v.entry);
+            put(&mut f, at + VOICE_TYPE, v.type_no);
+            put(&mut f, at + VOICE_ENTRY, v.entry);
             if v3 {
-                put(&mut f, at + 8, v.note_on);
-                put(&mut f, at + 12, v.state_bytes);
-                put(&mut f, at + 16, v.clear_bytes);
+                put(&mut f, at + VOICE_NOTE_ON, v.note_on);
+                put(&mut f, at + VOICE_STATE_BYTES, v.state_bytes);
+                put(&mut f, at + VOICE_CLEAR_BYTES, v.clear_bytes);
                 for (k, w) in v.ranges.iter().enumerate() {
-                    put(&mut f, at + 20 + 4 * k, *w);
+                    put(&mut f, at + VOICE_V3_RANGES + 4 * k, *w);
                 }
-                put(&mut f, at + 52, v.voices);
-                put(&mut f, at + 56, v.latched);
+                put(&mut f, at + VOICE_VOICES, v.voices);
+                put(&mut f, at + VOICE_LATCH, v.latched);
             } else {
                 for (k, w) in v.ranges.iter().enumerate() {
-                    put(&mut f, at + 8 + 4 * k, *w);
+                    put(&mut f, at + VOICE_V2_RANGES + 4 * k, *w);
                 }
             }
         }
         for (i, e) in self.fxs.iter().enumerate() {
             let at = fx_off + i * FX_LEN;
-            put(&mut f, at, e.process);
-            put(&mut f, at + 4, e.desc);
-            put(&mut f, at + 8, e.state_bytes);
-            put(&mut f, at + 12, e.n_params);
+            put(&mut f, at + FX_PROCESS, e.process);
+            put(&mut f, at + FX_DESC, e.desc);
+            put(&mut f, at + FX_STATE, e.state_bytes);
+            put(&mut f, at + FX_NPARAMS, e.n_params);
             put(
                 &mut f,
-                at + 16,
+                at + FX_FLAGS,
                 Effect::flags_of(e.routes, e.route).expect("routes checked by pack"),
             );
             for (k, w) in e.defaults.iter().enumerate() {
-                put(&mut f, at + 20 + 4 * k, *w);
+                put(&mut f, at + FX_PARAMS + 4 * k, *w);
             }
         }
         f[image_off..].copy_from_slice(&self.image);
@@ -838,9 +915,9 @@ impl DspSection {
                     ranges: match version {
                         VERSION_1 => [0; 8],
                         VERSION_3 | VERSION_4 | VERSION_5 => {
-                            std::array::from_fn(|k| get(vo, at + 20 + 4 * k))
+                            std::array::from_fn(|k| get(vo, at + VOICE_V3_RANGES + 4 * k))
                         }
-                        _ => std::array::from_fn(|k| get(vo, at + 8 + 4 * k)),
+                        _ => std::array::from_fn(|k| get(vo, at + VOICE_V2_RANGES + 4 * k)),
                     },
                 }
             })
@@ -860,13 +937,13 @@ impl DspSection {
         let fxs = (0..nfx)
             .map(|i| {
                 let at = i * FX_LEN;
-                let (routes, route) = Effect::routes_of(get(fo, at + 16))?;
+                let (routes, route) = Effect::routes_of(get(fo, at + FX_FLAGS))?;
                 Ok(Effect {
-                    process: get(fo, at),
-                    desc: get(fo, at + 4),
-                    state_bytes: get(fo, at + 8),
-                    n_params: get(fo, at + 12),
-                    defaults: std::array::from_fn(|k| get(fo, at + 20 + 4 * k)),
+                    process: get(fo, at + FX_PROCESS),
+                    desc: get(fo, at + FX_DESC),
+                    state_bytes: get(fo, at + FX_STATE),
+                    n_params: get(fo, at + FX_NPARAMS),
+                    defaults: std::array::from_fn(|k| get(fo, at + FX_PARAMS + 4 * k)),
                     routes,
                     route,
                 })
@@ -883,19 +960,19 @@ impl DspSection {
             return Err(err!("DSP effect record outside the image or malformed"));
         }
         let sample_tracks = if version == VERSION_5 {
-            let off = get(f, 0x3c);
+            let off = get(f, H_BANK_OFF);
             let mut ranges = vec![
                 (0u64, HEADER as u64),
                 (
-                    u64::from(get(f, 0x18)),
-                    u64::from(get(f, 0x18)) + image_size as u64,
+                    u64::from(get(f, H_IMAGE_OFF)),
+                    u64::from(get(f, H_IMAGE_OFF)) + image_size as u64,
                 ),
                 (u64::from(off), u64::from(off) + SAMPLE_RECORD_LEN as u64),
             ];
             for (start, len) in [
-                (get(f, 0x24), nimp * IMPORT_LEN),
-                (get(f, 0x1c), nrel * RELOC_LEN),
-                (get(f, 0x2c), nvoice * vlen),
+                (get(f, H_IMPORT_OFF), nimp * IMPORT_LEN),
+                (get(f, H_RELOC_OFF), nrel * RELOC_LEN),
+                (get(f, H_VOICE_OFF), nvoice * vlen),
                 (fx_off, nfx * FX_LEN),
             ] {
                 if len != 0 {
@@ -906,16 +983,16 @@ impl DspSection {
                 }
             }
             ranges.sort_unstable();
-            if get(f, 0x10) % 4 != 0 || ranges.windows(2).any(|w| w[0].1 > w[1].0) {
+            if get(f, H_BSS) % 4 != 0 || ranges.windows(2).any(|w| w[0].1 > w[1].0) {
                 return Err(err!(
                     "sample track section has overlapping ranges or unaligned BSS"
                 ));
             }
             let table_end = [
                 HEADER as u64,
-                u64::from(get(f, 0x24)) + (nimp * IMPORT_LEN) as u64,
-                u64::from(get(f, 0x1c)) + (nrel * RELOC_LEN) as u64,
-                u64::from(get(f, 0x2c)) + (nvoice * vlen) as u64,
+                u64::from(get(f, H_IMPORT_OFF)) + (nimp * IMPORT_LEN) as u64,
+                u64::from(get(f, H_RELOC_OFF)) + (nrel * RELOC_LEN) as u64,
+                u64::from(get(f, H_VOICE_OFF)) + (nvoice * vlen) as u64,
                 u64::from(fx_off) + (nfx * FX_LEN) as u64,
             ]
             .into_iter()
@@ -923,7 +1000,7 @@ impl DspSection {
             .unwrap();
             if off % 4 != 0
                 || u64::from(off) < table_end
-                || u64::from(off) + SAMPLE_RECORD_LEN as u64 > u64::from(get(f, 0x18))
+                || u64::from(off) + SAMPLE_RECORD_LEN as u64 > u64::from(get(f, H_IMAGE_OFF))
             {
                 return Err(err!("sample track record overlaps header, tables or image"));
             }
@@ -946,7 +1023,7 @@ impl DspSection {
             sample_tracks,
             device: get(f, 8),
             image,
-            bss: get(f, 0x10),
+            bss: get(f, H_BSS),
             align,
             imports,
             relocs,
@@ -1092,7 +1169,7 @@ mod tests {
         let (o, t) = tracks_object();
         let bytes = pack_with_samples(&o, 1, &[], &[], Some(&t)).unwrap();
         assert_eq!(get(&bytes, 4), VERSION_5);
-        let at = get(&bytes, 0x3c) as usize;
+        let at = get(&bytes, H_BANK_OFF) as usize;
         assert_eq!(&bytes[at..at + 8], &[2, 0, 0, 0, 7, 0, 0, 0]);
         let d = DspSection::parse(&bytes).unwrap();
         let tr = d.sample_tracks.as_ref().unwrap();
@@ -1100,7 +1177,7 @@ mod tests {
         assert_eq!(d.encode(), bytes);
         let old = pack(&o, 1, &[], &[]).unwrap();
         assert_eq!(get(&old, 4), VERSION);
-        assert_eq!(get(&old, 0x3c), 0);
+        assert_eq!(get(&old, H_BANK_OFF), 0);
         assert!(DspSection::parse(&old).unwrap().sample_tracks.is_none());
     }
 
@@ -1134,15 +1211,15 @@ mod tests {
         assert!(pack_with_samples(&bad, 1, &[], &[], Some(&t)).is_err());
         // the parser refuses reserved words, a relocation inside a block and a wrong kind
         let good = pack_with_samples(&o, 1, &[], &[], Some(&t)).unwrap();
-        let at = get(&good, 0x3c) as usize;
+        let at = get(&good, H_BANK_OFF) as usize;
         for (word, value) in [(0, 3u32), (2, 2), (3, u32::MAX - 3), (4, 1), (7, 1)] {
             let mut bad = good.clone();
             bad[at + word * 4..at + word * 4 + 4].copy_from_slice(&value.to_le_bytes());
             assert!(DspSection::parse(&bad).is_err(), "word {word}: {value}");
         }
-        for off in [0, HEADER as u32 + 1, get(&good, 0x18), u32::MAX - 3] {
+        for off in [0, HEADER as u32 + 1, get(&good, H_IMAGE_OFF), u32::MAX - 3] {
             let mut bad = good.clone();
-            put(&mut bad, 0x3c, off);
+            put(&mut bad, H_BANK_OFF, off);
             assert!(DspSection::parse(&bad).is_err());
         }
         let mut d = DspSection::parse(&good).unwrap();
@@ -1340,7 +1417,7 @@ mod tests {
             f.route = route;
             let b = pack(&o, 1, &[], &[f]).unwrap();
             let d = DspSection::parse(&b).unwrap();
-            let at = get(&b, 0x34) as usize + 16;
+            let at = get(&b, H_FX_OFF) as usize + FX_FLAGS;
             assert_eq!((d.fxs[0].routes, d.fxs[0].route), (routes, route));
             get(&b, at)
         };
@@ -1368,7 +1445,7 @@ mod tests {
         assert!(e(4, ROUTE_MASTER).contains("a mask"));
         // the parser (the runtime's check) refuses a bit it does not know and a default outside the allowed routes
         let good = pack(&o, 1, &[], &[fx_spec(vec![])]).unwrap();
-        let at = get(&good, 0x34) as usize + 16;
+        let at = get(&good, H_FX_OFF) as usize + FX_FLAGS;
         for (word, ok) in [
             (0, true),
             (FXF_SEND, true),
@@ -1443,10 +1520,10 @@ mod tests {
         // a malformed section is refused by the parser
         let good = pack(&o, 1, &[], &[fx_spec(vec![])]).unwrap();
         let mut bad = good.clone();
-        put(&mut bad, 0x38, 9);
+        put(&mut bad, H_FX_N, 9);
         assert!(DspSection::parse(&bad).is_err());
         let mut bad = good.clone();
-        put(&mut bad, 0x34, 0x7fff_fff0);
+        put(&mut bad, H_FX_OFF, 0x7fff_fff0);
         assert!(DspSection::parse(&bad).is_err());
     }
 

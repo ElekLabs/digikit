@@ -1,24 +1,29 @@
 import fs from 'node:fs';
 import zlib from 'node:zlib';
-import { deviceError, type DkSession } from '@digi/dk-session';
+import { deviceError, LogCursor, runtimeEvent, type Clock, type DkSession, type RuntimeEvent } from '@digi/dk-session';
 import { CMD, READ_MAX } from '@digi/dk-session/gen_proto';
-import { button, encoder, type Device, type Session } from '@digi/test-support';
+import { button, encoder, pollUntil, type Device, type Session } from '@digi/test-support';
 import { expect } from 'vitest';
-import { postRaw, readSectors } from './card-kit.ts';
-import { advance, bounded, dspBytes, pickSine, word } from './fx-live.ts';
-import { tap } from './fx-session.ts';
+import { postRaw } from './guest-mailbox.ts';
+import { readSectors } from './card-record.ts';
+import { cardStore, TRACK_OBJ_WORD } from './device-data.ts';
+import { REDRAW, SETTLE, pickSine, type Rt } from './panel-waits.ts';
+import { bounded, word } from './guest-access.ts';
+import { dspBytes } from './dsp-state.ts';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
+import { serviceSymbol } from './service-symbols.ts';
 import { overlayRecords } from './write-safety.ts';
 
 /**
  * Helpers of the settings, roundtrip and equiv device tests (ports of 6a5bb1ed:tools/patchkit/pk_digikit_settings.py, pk_digikit_project.py and pk_digikit_scen.py):
  * the settings record codec and mailbox, the project slot and the machine tables. The card fixture is card-rig.ts.
- * Candidates for card-kit.ts: `settingsRecord`, `settingsMailbox`.
+ * Candidates for guest-mailbox.ts: `settingsRecord`, `settingsMailbox`.
  */
 
-// ---- the settings record (port of tools/device/dksettings.py; vectors in modules/core/runtime/vectors/settings-vectors.json) -------------------------
+// ---- the settings record (port of tools/device/dksettings.py; vectors in runtime/core/vectors/settings-vectors.json) -------------------------
 
 const HEADER = 18;
+const SECTOR = 512;
 /** One settings copy: 16 sectors (sdk/sdk.toml [settings]). */
 export const SETTINGS_AREA = 16 * 512;
 export const SETTINGS_KEY_MAX = 47;
@@ -92,6 +97,56 @@ export function encodeSettings(seq: number, entries: SettingsEntry[]): Buffer {
   return Buffer.concat([head, crc, body]);
 }
 
+/** What `seedSettingsCard` wrote: where, how many bytes, and the entries. */
+export interface SeededSettings {
+  card: string;
+  sector: number;
+  bytes: number;
+  seq: number;
+  entries: number;
+}
+
+/**
+ * Seed settings copy A of an existing, caller-owned card whose two settings copies are empty (port of `seed_card` of efcc91f7e:tools/patchkit/pk_digikit_fxroutes.py). `entries` are the
+ * key and the hex value of each setting, in the order the runtime keeps them. The result is a function of the device, the entries and the card's bytes only, so a card cache key
+ * of those (`cardKey`) names it.
+ */
+export function seedSettingsCard(
+  card: string,
+  device: Device,
+  entries: [key: string, valueHex: string][],
+): SeededSettings {
+  const pairs: SettingsEntry[] = entries.map(([key, valueHex]) => {
+    if (!/^[\x21-\x7e]+$/.test(key) || !/^([0-9a-fA-F]{2})*$/.test(valueHex))
+      throw new Error('entry needs an ASCII key and hexadecimal value');
+    const value = Buffer.from(valueHex, 'hex');
+    if (key.length > SETTINGS_KEY_MAX || value.length > SETTINGS_VALUE_MAX)
+      throw new Error('entry exceeds settings key or value limits');
+    return [key, value];
+  });
+  const record = encodeSettings(1, pairs);
+  const reason = settingsWhy(record);
+  if (reason !== 'ok') throw new Error(`invalid settings record: ${reason}`);
+  const padded = Buffer.concat([record, Buffer.alloc((((record.length + 511) >> 9) << 9) - record.length)]);
+  const store = cardStore(device);
+  const area = store.setCopySectors * SECTOR;
+  if (padded.length > area) throw new Error("settings record exceeds the device's copy area");
+  const fd = fs.openSync(card, 'r+');
+  try {
+    if (fs.fstatSync(fd).size < (store.setB + store.setCopySectors) * SECTOR)
+      throw new Error('card is too small for the device settings copies');
+    for (const sector of [store.setA, store.setB]) {
+      const copy = Buffer.alloc(area);
+      fs.readSync(fd, copy, 0, area, sector * SECTOR);
+      if (copy.some((b) => b !== 0)) throw new Error('card settings copies must be empty before seeding');
+    }
+    fs.writeSync(fd, padded, 0, padded.length, store.setA * SECTOR);
+  } finally {
+    fs.closeSync(fd);
+  }
+  return { card, sector: store.setA, bytes: padded.length, seq: 1, entries: pairs.length };
+}
+
 export const settingsMap = (rec: SettingsRecord | null) =>
   Object.fromEntries((rec?.entries ?? []).map(([k, v]) => [k, v.toString('hex')]));
 
@@ -150,9 +205,9 @@ export const sectorOf = (card: string, sector: number) => readSectors(card, sect
 // ---- the panel ---------------------------------------------------------------------------------------------------------------------
 
 /** Turn an encoder (Python `do_turn` + `run_ms`). */
-export async function panelTurn(session: Session, enc: string, by: number, ms: number) {
-  await bounded(() => session.client.inputTurn(encoder(enc), by));
-  await advance(session, 10 + ms);
+export async function panelTurn(rt: Rt, enc: string, by: number, ms: number) {
+  await bounded(() => rt.session.client.inputTurn(encoder(enc), by));
+  await rt.ui.wait({ ms: 10 + ms, why: SETTLE });
 }
 
 /** Hold or release a key (Python `emu.button`). */
@@ -168,9 +223,9 @@ export function machineHash(module: string, machine: string): number {
   return h & 0xffffff;
 }
 
-/** The type number the runtime assigned to `<module>:<machine>` in this boot (`DKRT_ASSIGN`: 3 header words, 8 map words, then 64 module indices, 64 keys, 64 types). */
+/** The type number the machines service assigned to `<module>:<machine>` in this boot (`DKRT_ASSIGN` of `machines.dks`: 3 header words, 8 map words, then 64 module indices, 64 keys, 64 types). */
 export async function dynType(session: Session, plan: RuntimePlan, module: string, machine: string): Promise<number> {
-  const base = planSymbol(plan, 'DKRT_ASSIGN');
+  const base = await serviceSymbol({ session }, plan, 'machines', 'DKRT_ASSIGN');
   const count = await word(session, base + 4);
   const want = machineHash(module, machine);
   for (let i = 0; i < count; i++) {
@@ -191,12 +246,13 @@ export interface PanelMachine {
 }
 
 /** Choose the machine of list position `hint` on the selected track until the track holds `type` (the DT2 list position shifts by one with the stock machines). */
-export async function selectDt2(session: Session, track: number, type: number, hint: number): Promise<void> {
+export async function selectDt2(rt: Rt, track: number, type: number, hint: number): Promise<void> {
+  const { session } = rt;
   const seen: [number, number][] = [];
   // The first SRC list after a project save may not take (the keys go to the save's leftovers), so the hint is tried up to four times;
   // every try starts from the top of the list (12 UP presses), so it does not depend on the machine the track holds.
   for (const downs of [hint, hint, hint, hint, hint + 1, hint - 1]) {
-    await pickSine(session, downs, 12);
+    await pickSine(rt, downs, 12);
     seen.push([downs, await trackType(session, track)]);
     if (seen.at(-1)![1] === type) return;
   }
@@ -204,10 +260,11 @@ export async function selectDt2(session: Session, track: number, type: number, h
 }
 
 /** Put the machine of type `type` on `track` from the list cursor where it stands (no UP presses, so the setup stays short): the position `hint` and its neighbours are tried until the track holds `type` (Python `select_type`). */
-export async function selectType(session: Session, track: number, type: number, hint: number): Promise<number> {
+export async function selectType(rt: Rt, track: number, type: number, hint: number): Promise<number> {
+  const { session } = rt;
   const seen: [number, number][] = [];
   for (const downs of [hint, hint + 1, hint - 1, hint + 2, hint + 3]) {
-    await pickSine(session, downs);
+    await pickSine(rt, downs);
     seen.push([downs, await trackType(session, track)]);
     if (seen.at(-1)![1] === type) return downs;
   }
@@ -216,64 +273,415 @@ export async function selectType(session: Session, track: number, type: number, 
 
 /** The panel script that makes a project: the machines on their tracks with two parameter values, then on track 1 a note trig with a p-lock and a sound lock. */
 export async function buildPanelProject(
-  session: Session,
+  rt: Rt,
   machines: PanelMachine[],
   { lockTurn = 11, soundLockTurn = 2 } = {},
 ): Promise<void> {
+  const { session } = rt;
   const dt2 = session.options.device === 'dt2';
   for (const m of machines) {
-    if (m.track !== 1) await tap(session, `TRIG ${m.track}`, 300, 'TRK');
-    if (dt2) await selectDt2(session, m.track, m.type, m.hint);
-    else await pickSine(session, m.hint);
-    await tap(session, dt2 ? 'SRC' : 'SYN', 300);
+    if (m.track !== 1) await rt.ui.tap(`TRIG ${m.track}`, { until: { ms: 300, why: REDRAW }, held: 'TRK' });
+    if (dt2) await selectDt2(rt, m.track, m.type, m.hint);
+    else await pickSine(rt, m.hint);
+    await rt.ui.tap(dt2 ? 'SRC' : 'SYN', { until: { ms: 300, why: REDRAW } });
     for (const [enc, by] of [
       ['ENC A', 9],
       ['ENC B', -7],
     ] as const)
-      await panelTurn(session, enc, by, 100);
+      await panelTurn(rt, enc, by, 100);
   }
-  if (machines.some((m) => m.track !== 1)) await tap(session, 'TRIG 1', 300, 'TRK');
+  if (machines.some((m) => m.track !== 1)) await rt.ui.tap('TRIG 1', { until: { ms: 300, why: REDRAW }, held: 'TRK' });
   // a trig, a p-lock and a sound lock on it: GRID RECORDING, tap the trig, hold it and turn knobs
-  await tap(session, 'RECORD', 200);
-  await tap(session, 'TRIG 1', 200);
+  await rt.ui.tap('RECORD', { until: { ms: 200, why: REDRAW } });
+  await rt.ui.tap('TRIG 1', { until: { ms: 200, why: REDRAW } });
   await panelKey(session, 'TRIG 1', true);
-  await advance(session, 100);
-  await panelTurn(session, 'ENC C', lockTurn, 100);
-  await panelTurn(session, 'LEVEL', soundLockTurn, 300);
+  await rt.ui.wait({ ms: 100, why: SETTLE });
+  await panelTurn(rt, 'ENC C', lockTurn, 100);
+  await panelTurn(rt, 'LEVEL', soundLockTurn, 300);
   await panelKey(session, 'TRIG 1', false);
-  await advance(session, 300);
-  await tap(session, 'RECORD', 200);
+  await rt.ui.wait({ ms: 300, why: SETTLE });
+  await rt.ui.tap('RECORD', { until: { ms: 200, why: REDRAW } });
 }
 
-/** Save the project to slot 001 through FUNC+SETTINGS. */
-export async function savePanelProject(session: Session): Promise<void> {
-  await tap(session, 'SETTINGS', 300, 'FUNC');
-  await tap(session, 'YES', 500); // slot 001
-  if (session.options.device === 'dn2') await tap(session, 'YES', 0); // the name: save
-  await advance(session, 3500);
+// ---- the runtime log, for waits on the project service ---------------------------------------------------------------------------------
+
+/** Protocol calls on the paused emulator (`CardRig.usb` of a runtime). */
+export type ProtocolRun = <T>(run: (dk: DkSession) => Promise<T>) => Promise<T>;
+
+/**
+ * The events of the runtime log kept in a list, so a test can look at an event after a wait for another one (`RuntimeEvents.until` drops what it passes). `since` of every call is a
+ * `mark()` taken before the action. Module messages (`dk_log` of a module, MOD_LOG) arrive only for a module whose log level is raised: `watch` names those modules (by id) and
+ * `raise()` sets them again after a load, which gives the module a new record.
+ */
+export class ProjectLog {
+  private readonly cursor: LogCursor;
+  private readonly list: RuntimeEvent[] = [];
+  private readonly usb: ProtocolRun;
+  private readonly clock: Clock;
+  private readonly watch: string[];
+
+  private constructor(usb: ProtocolRun, clock: Clock, watch: string[]) {
+    this.usb = usb;
+    this.clock = clock;
+    this.watch = watch;
+    this.cursor = new LogCursor({ logPage: (from, quick) => usb((dk) => dk.logPage(from, quick)) });
+  }
+
+  /** The log from the newest event on. */
+  static async open(usb: ProtocolRun, clock: Clock, watch: string[] = []): Promise<ProjectLog> {
+    const log = new ProjectLog(usb, clock, watch);
+    await log.cursor.fromNewest();
+    await log.raise();
+    return log;
+  }
+
+  /** The log of a boot that just started: from its first event. */
+  static async openBoot(usb: ProtocolRun, clock: Clock, watch: string[] = []): Promise<ProjectLog> {
+    const log = new ProjectLog(usb, clock, watch);
+    log.cursor.fromBoot();
+    await log.raise();
+    return log;
+  }
+
+  /** The log level of the watched modules that are loaded goes to DEBUG (3); the other levels stay. */
+  async raise(): Promise<void> {
+    if (!this.watch.length) return;
+    await this.usb(async (dk) => {
+      const config = await dk.logConfig();
+      const levels = [...config.modules];
+      for (const m of await dk.modules())
+        if (this.watch.includes(m.name) && m.index < levels.length) levels[m.index] = 3;
+      await dk.setLogConfig(config.level, levels);
+    });
+  }
+
+  /** Read what is new; true when the cursor saw a new boot (the list then holds only the new boot's events). */
+  async pump(): Promise<boolean> {
+    const r = await this.cursor.read();
+    if (r.lost > 0) throw new Error(`the runtime log lost ${r.lost} events before they were read`);
+    if (r.newBoot) this.list.length = 0;
+    this.list.push(...r.events.map(runtimeEvent));
+    return r.newBoot;
+  }
+
+  /** The place in the list to pass as `since`: after everything read so far. */
+  async mark(): Promise<number> {
+    await this.pump();
+    return this.list.length;
+  }
+
+  /** The events of `kind` (all that match) from `since` on, as read so far (call `pump` or a wait first). */
+  all(kind: string, match: (e: RuntimeEvent) => boolean = () => true, since = 0): RuntimeEvent[] {
+    return this.list.slice(since).filter((e) => e.kind === kind && match(e));
+  }
+
+  /** `MOD_LOG` lines of a module message (`dk_log` text) from `since` on: the `value` of each. */
+  messages(msg: string, since = 0): number[] {
+    return this.all('MOD_LOG', (e) => e.fields.msg === msg, since).map((e) => Number(e.fields.value) >>> 0);
+  }
+
+  /** The first event of `kind` that matches, from `since` on; waits in emulated time. */
+  async until(
+    kind: string,
+    match: (e: RuntimeEvent) => boolean,
+    { since = 0, withinMs = 30_000, what = kind }: { since?: number; withinMs?: number; what?: string } = {},
+  ): Promise<RuntimeEvent> {
+    const found = await pollUntil(
+      this.clock,
+      async () => {
+        await this.pump();
+        return this.all(kind, match, since)[0];
+      },
+      (e) => e !== undefined,
+      { withinMs, message: () => `the event ${what} (seen from ${since}: ${this.summary(since)})`, intervalMs: 50 },
+    );
+    return found!;
+  }
+
+  /** A short account of the events read from `since` on: the count of each kind, then the last few events. */
+  summary(since = 0): string {
+    const tail = this.list.slice(since);
+    const counts = new Map<string, number>();
+    for (const e of tail) counts.set(e.kind, (counts.get(e.kind) ?? 0) + 1);
+    const last = tail
+      .filter((e) => e.kind.startsWith('PROJECT_'))
+      .concat(tail.slice(-3))
+      .map((e) => `${e.kind} ${JSON.stringify(e.fields)}`);
+    return `${tail.length} events [${[...counts].map(([k, n]) => `${k} x${n}`).join(', ')}]; last: ${last.join(' | ') || 'none'}`;
+  }
+
+  /** The events seen so far from `since` on, one per line (for a failure message). */
+  seen(since = 0): string {
+    return this.list
+      .slice(since)
+      .map((e) => `#${e.seq} ${e.kind} ${JSON.stringify(e.fields)}`)
+      .join('\n');
+  }
 }
 
-/** Load slot 001 through SETTINGS; with `health` (default) check the session has no fault afterwards. */
-export async function loadPanelProject(session: Session, { health = true } = {}): Promise<void> {
-  await tap(session, 'SETTINGS', 300);
-  for (let i = 0; i < 3; i++) await tap(session, 'YES', 500);
-  await tap(session, 'YES', 0);
-  await advance(session, 6000);
+/** `PROJECT_SAVED`, `PROJECT_LOADED` of `slot`. */
+export const forSlot = (slot: number) => (e: RuntimeEvent) => Number(e.args[0]) === slot;
+
+/** The FNV-1a (32 bits) of a module id, the `id_hash` of PROJECT_MODULE (`name_hash` of the SDK). */
+export function idHash(id: string): number {
+  let h = 0x811c9dc5;
+  for (const b of Buffer.from(id)) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+  return h;
+}
+
+/** The paths of the store below `projects/` (the files of the slots and `projects/archive/`). */
+export const projectPaths = async (usb: ProtocolRun): Promise<string[]> =>
+  (await usb((dk) => dk.list('projects/'))).map((e) => e.path);
+
+/** The store path of the file of the firmware `slot` (0 to 127) among `paths`, or undefined. The file number is the menu number, slot + 1, as 3 digits: `projects/<number>-<name>.dkp`. */
+export const slotFile = (paths: string[], slot: number): string | undefined =>
+  paths.find((p) => p.startsWith(`projects/${String(slot + 1).padStart(3, '0')}-`) && p.endsWith('.dkp'));
+
+/** A whole store file, read in pieces of `READ_MAX`. */
+export async function readStoreFile(dk: Pick<DkSession, 'read'>, path: string): Promise<Buffer> {
+  let out = Buffer.alloc(0);
+  for (;;) {
+    const r = await dk.read(path, out.length, READ_MAX);
+    out = Buffer.concat([out, r.bytes]);
+    if (out.length >= r.size || r.bytes.length === 0) return out.subarray(0, r.size);
+  }
+}
+
+/** The fields of the header of a `.dkp` (docs/design/digikit-project.md section 4) and its sections (offset 42 to `used`). */
+export function dkpOf(file: Buffer) {
+  const used = file.readUInt32BE(34);
+  const nameLen = file[9]!;
+  return {
+    slot: file[8]!,
+    name: file.subarray(10, 10 + nameLen).toString('latin1'),
+    stamp: file.readUInt32BE(26),
+    counter: file.readUInt32BE(30),
+    used,
+    sections: file.subarray(42, used),
+  };
+}
+
+/** A module's live job that ends: UNLOAD of `modulePath`, then wait (emulated time) until the job counter `DKRT_BOOT + 252` moved and the job is done. The job needs the DSP, and the paused protocol's short steps do not reach its end (as in the reload round-trip test). */
+export async function unloadLive(rt: Rt, usb: ProtocolRun, plan: RuntimePlan, modulePath: string): Promise<void> {
+  const reloads = planSymbol(plan, 'DKRT_BOOT') + 252;
+  const before = await word(rt.session, reloads);
+  await usb((dk) => dk.unload(modulePath));
+  const end = await pollUntil(
+    rt.clock,
+    async () => ({ st: await usb((dk) => dk.reloadState()), n: await word(rt.session, reloads) }),
+    (v) => v.st.phase === 2 && v.n > before,
+    { withinMs: 20_000, message: `the unload of ${modulePath} finished` },
+  );
+  expect({ result: end.st.result, unloaded: end.st.unloaded }, `the unload of ${modulePath}`).toEqual({
+    result: 0,
+    unloaded: true,
+  });
+}
+
+// ---- the project menus of the panel ------------------------------------------------------------------------------------------------------
+
+/**
+ * Options of the project flows. `events`: with the project service loaded, the flow waits on its event (PROJECT_SAVED, PROJECT_LOADED) instead of a fixed time. `from`: the slot of the
+ * current project (default 0): SAVE PROJECT AS and LOAD PROJECT open with the cursor on it (on the first slot when there is none); MANAGE PROJECTS always opens on the first slot. Slots are the
+ * firmware's numbers (0 to 127, the events' slot): the list shows slot 0 as 001.
+ */
+export interface ProjectFlow {
+  events?: ProjectLog;
+  from?: number;
+}
+
+/** The stock save and load dialogs stay up a moment after the service's event (it is logged at the end of the firmware's work, before the dialog closes): emulated ms to let them close before the next key. */
+const DIALOG_MS = 2000;
+
+/** Move the list cursor from slot `from` to slot `to` with UP and DOWN (the lists do not wrap). */
+async function slotCursor(rt: Rt, from: number, to: number): Promise<void> {
+  for (let i = 0; i < Math.abs(to - from); i++) {
+    await rt.ui.tap(to > from ? 'DOWN' : 'UP', { until: { drained: true } });
+    await rt.ui.wait({ ms: 80, why: REDRAW });
+  }
+}
+
+/**
+ * SETTINGS, PROJECT, then item `item` of it (0 LOAD PROJECT, 1 SAVE PROJECT AS, 2 MANAGE PROJECTS) opened. The PROJECT menu keeps its cursor between visits and does not wrap, so
+ * two UP presses first put it on LOAD PROJECT.
+ */
+async function openProjectItem(rt: Rt, item: number): Promise<void> {
+  await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW } });
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } }); // PROJECT
+  for (let i = 0; i < 2; i++) await rt.ui.tap('UP', { until: { ms: 200, why: REDRAW } });
+  for (let i = 0; i < item; i++) await rt.ui.tap('DOWN', { until: { ms: 200, why: REDRAW } });
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } });
+}
+
+/**
+ * Leave a project list for the main screen: NO five times. Three reach the main screen from a list (list, PROJECT, SETTINGS); a message still shown after a paste takes one more;
+ * a NO on the main screen does nothing, so the extra presses are safe.
+ */
+async function leaveMenus(rt: Rt): Promise<void> {
+  for (let i = 0; i < 5; i++) await rt.ui.tap('NO', { until: { ms: 300, why: REDRAW } });
+}
+
+/**
+ * In MANAGE PROJECTS (which always opens on the first slot, whatever the current project): open the command panel of `slot` (RIGHT) and take command `index` (0 CLEAR, 1 DELETE,
+ * 2 RENAME, 3 LOAD FROM, 4 SAVE TO, 5 TOGGLE lock, 6 PURGE ALL). The panel stays open after a command; `closeManage` closes it (LEFT) and leaves the menus.
+ */
+async function manage(rt: Rt, slot: number, index: number): Promise<void> {
+  await openProjectItem(rt, 2);
+  await slotCursor(rt, 0, slot);
+  await rt.ui.tap('RIGHT', { until: { ms: 500, why: REDRAW } });
+  for (let i = 0; i < index; i++) await rt.ui.tap('DOWN', { until: { ms: 200, why: REDRAW } });
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } });
+}
+
+async function closeManage(rt: Rt): Promise<void> {
+  await rt.ui.tap('LEFT', { until: { ms: 300, why: REDRAW } });
+  await leaveMenus(rt);
+}
+
+/**
+ * Save the current project through FUNC+SETTINGS. A project that has no slot yet gets the slot list (cursor on 001), YES opens the name editor and YES saves; a project with a slot
+ * gets "SAVE ALL PATTERNS AND PROJ SETTINGS? Y/N", YES saves and the second YES lands on the main screen, where it does nothing. `from` is the slot the save goes to (default 0).
+ * With `events` the end is PROJECT_SAVED of that slot (the event is returned); without, a fixed wait.
+ */
+export async function savePanelProject(
+  rt: Rt,
+  { events, from = 0 }: ProjectFlow = {},
+): Promise<RuntimeEvent | undefined> {
+  const since = await events?.mark();
+  await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW }, held: 'FUNC' });
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } }); // the slot (opens the name editor), or the confirmation (saves)
+  await rt.ui.tap('YES', { until: { drained: true } }); // the name editor: save; or nothing on the main screen
+  if (events) {
+    const saved = await events.until('PROJECT_SAVED', forSlot(from), { since, what: `PROJECT_SAVED slot ${from}` });
+    await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE });
+    return saved;
+  }
+  // No state shows the end of the write: the card overlay of a repeated save may be byte-equal, and the firmware has no save-done word. Measure before shortening.
+  await rt.ui.wait({ ms: 3500, why: SETTLE });
+  return undefined;
+}
+
+/** Load slot 001 through SETTINGS; with `health` (default) check the session has no fault afterwards. With `events` the end is PROJECT_LOADED of slot 1. */
+export async function loadPanelProject(
+  rt: Rt,
+  { health = true, events }: { health?: boolean } & ProjectFlow = {},
+): Promise<RuntimeEvent | undefined> {
+  const { session } = rt;
+  const since = await events?.mark();
+  await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW } });
+  for (let i = 0; i < 3; i++) await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } });
+  await rt.ui.tap('YES', { until: { drained: true } });
+  // No firmware word or runtime event marks the end of `loadProjectFromMmc` (only the popup text); callers read the loaded state afterwards. Measure before shortening.
+  let loaded: RuntimeEvent | undefined;
+  if (events) {
+    loaded = await events.until('PROJECT_LOADED', forSlot(1), { since, what: 'PROJECT_LOADED slot 1' });
+    await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE });
+  } else await rt.ui.wait({ ms: 6000, why: SETTLE });
   if (health) await bounded(() => session.expectNoFault('project loaded'));
+  return loaded;
+}
+
+// The flows below follow the stock menus as seen on screen (the same on both devices): SETTINGS > PROJECT holds LOAD PROJECT, SAVE PROJECT AS, MANAGE
+// PROJECTS. SAVE PROJECT AS and MANAGE PROJECTS list all 128 slots; LOAD PROJECT lists the saved projects only, then CREATE NEW. A slot number is the firmware's (0 to 127),
+// as in the log events; the list shows slot 0 as 001.
+
+/**
+ * SAVE PROJECT AS slot `slot`: the slot, YES (the name editor with the project's name), YES. With `events` the end is PROJECT_SAVED of the slot. The flow ends on the main screen
+ * after the save returns to it.
+ */
+export async function saveProjectAs(
+  rt: Rt,
+  slot: number,
+  { events, from = 0 }: ProjectFlow = {},
+): Promise<RuntimeEvent | undefined> {
+  const since = await events?.mark();
+  await openProjectItem(rt, 1);
+  await slotCursor(rt, from, slot);
+  await rt.ui.tap('YES', { until: { ms: 500, why: REDRAW } }); // the slot: opens the name editor
+  await rt.ui.tap('YES', { until: { drained: true } }); // the name editor: save (the save returns to the PROJECT menu)
+  let saved: RuntimeEvent | undefined;
+  if (events) {
+    saved = await events.until('PROJECT_SAVED', forSlot(slot), { since, what: `PROJECT_SAVED slot ${slot}` });
+    await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE });
+  } else await rt.ui.wait({ ms: 3500, why: SETTLE });
+  await leaveMenus(rt);
+  return saved;
+}
+
+/**
+ * LOAD PROJECT slot `slot`. The list holds the saved projects in slot order (`saved`), the cursor starts on the current one (`from`), and YES loads at once (no confirmation when
+ * nothing is unsaved). With `events` the end is PROJECT_LOADED of the slot.
+ */
+export async function loadProject(
+  rt: Rt,
+  slot: number,
+  { events, from = 0, saved }: ProjectFlow & { saved: readonly number[] },
+): Promise<RuntimeEvent | undefined> {
+  const rows = [...saved].sort((a, b) => a - b);
+  const at = rows.indexOf(from);
+  const to = rows.indexOf(slot);
+  if (at < 0 || to < 0)
+    throw new Error(`loadProject: slots ${from} and ${slot} must be in the saved list ${rows.join(',')}`);
+  const since = await events?.mark();
+  await openProjectItem(rt, 0);
+  await slotCursor(rt, at, to);
+  await rt.ui.tap('YES', { until: { drained: true } }); // the project: loads
+  let loaded: RuntimeEvent | undefined;
+  if (events) {
+    loaded = await events.until('PROJECT_LOADED', forSlot(slot), { since, what: `PROJECT_LOADED slot ${slot}` });
+    await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE });
+  } else await rt.ui.wait({ ms: 6000, why: SETTLE });
+  await leaveMenus(rt);
+  return loaded;
+}
+
+/**
+ * RENAME of the project in slot `slot`: MANAGE PROJECTS, the slot, RIGHT, RENAME, the PROJECT NAME editor, SETTINGS for a random name, YES. The test reads the new name from the
+ * firmware or the store after the next save (the store follows the save, not the rename).
+ */
+export async function renameProject(rt: Rt, slot: number): Promise<void> {
+  await manage(rt, slot, 2);
+  await rt.ui.tap('SETTINGS', { until: { ms: 300, why: REDRAW } }); // a random name
+  await rt.ui.tap('YES', { until: { drained: true } });
+  await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE }); // the rename writes the slot header
+  await closeManage(rt);
+}
+
+/**
+ * COPY of slot `source` and PASTE to slot `to` in MANAGE PROJECTS: FUNC+RECORD on the source ("COPY PROJECT"), FUNC+STOP on the destination, YES to "Replace ... CONFIRM Y/N".
+ */
+export async function copyPasteProject(rt: Rt, source: number, to: number): Promise<void> {
+  await openProjectItem(rt, 2);
+  await slotCursor(rt, 0, source);
+  await rt.ui.tap('RECORD', { until: { ms: 500, why: REDRAW }, held: 'FUNC' });
+  await slotCursor(rt, source, to);
+  await rt.ui.tap('STOP', { until: { ms: 500, why: REDRAW }, held: 'FUNC' });
+  await rt.ui.tap('YES', { until: { drained: true } }); // Replace ... CONFIRM Y/N
+  await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE }); // the paste runs with a progress dialog that takes the keys
+  await leaveMenus(rt);
+}
+
+/** CLEAR of slot `slot`: MANAGE PROJECTS, the slot, RIGHT, CLEAR, YES to "CLEAR '<name>'? Y/N". */
+export async function clearProject(rt: Rt, slot: number): Promise<void> {
+  await manage(rt, slot, 0);
+  await rt.ui.tap('YES', { until: { drained: true } }); // the confirmation
+  await rt.ui.wait({ ms: DIALOG_MS, why: SETTLE }); // the clear writes the card with a progress dialog
+  await closeManage(rt);
 }
 
 /** Choose each of the first `positions` entries of the machine list on the selected track and turn the encoders of its page. */
-export async function sweepMachineList(session: Session, positions: number): Promise<void> {
+export async function sweepMachineList(rt: Rt, positions: number): Promise<void> {
+  const { session } = rt;
   const key = session.options.device === 'dt2' ? 'SRC' : 'SYN';
   for (let k = 0; k < positions; k++) {
-    await pickSine(session, k, positions + 2);
-    await tap(session, key, 200);
+    await pickSine(rt, k, positions + 2);
+    await rt.ui.tap(key, { until: { ms: 200, why: REDRAW } });
     for (const [enc, by] of [
       ['ENC A', 5],
       ['ENC B', -3],
       ['ENC C', 4],
     ] as const)
-      await panelTurn(session, enc, by, 80);
+      await panelTurn(rt, enc, by, 80);
   }
 }
 
@@ -281,15 +689,13 @@ export async function sweepMachineList(session: Session, positions: number): Pro
 
 export const SLOT0 = 0x58000;
 const SLOT_SECTORS = 0x8000;
-const SECTOR = 512;
 /** soundStorage_v3: magic, version 3. */
 const SOUND_HEAD = Buffer.from('beefbace00000003', 'hex');
 /** The one word of the slot that the first save of a project sets differently from every later save (finding 39): offset 0x18, 4 bytes. */
 export const STAMP: [number, number][] = [[0x18, 4]];
 /** The machine type byte of a sound record (DT2 0xd2, DN2 0xf4). */
 export const typeAt = (device: Device) => (device === 'dt2' ? 0xd2 : 0xf4);
-/** Word of DT2 track 1 whose third byte is the machine type; the tracks lie 0x450 apart (finding 02). */
-export const TRACK_OBJ_WORD = 0x4265338c;
+export { TRACK_OBJ_WORD };
 
 /** The project-slot sectors of an overlay file, with the bytes the guest wrote laid over zeros. */
 export function slotSectors(overlayFile: string): Map<number, Buffer> {
@@ -303,8 +709,9 @@ export function slotSectors(overlayFile: string): Map<number, Buffer> {
   return out;
 }
 
-export const slotImage = (card: string, touched: Iterable<number>) =>
-  new Map([...touched].sort((a, b) => a - b).map((s) => [s, readSectors(card, s, 1)] as const));
+/** The sectors `touched` of the card, with the optional `overlay` blob (a session's writes) laid over it. */
+export const slotImage = (card: string, touched: Iterable<number>, overlay?: Buffer) =>
+  new Map([...touched].sort((a, b) => a - b).map((s) => [s, readSectors(card, s, 1, overlay)] as const));
 
 /** (byte offset of the record, machine type) for each sound record in the written sectors (runs of adjacent sectors are joined). */
 export function soundRecords(blob: Map<number, Buffer>, at: number): [number, number][] {
@@ -377,6 +784,25 @@ export function pattern0Changes(
       if (x[i] !== y[i]) out.push([sec * SECTOR - SLOT0 * SECTOR + i - 0x200, x[i]!, y[i]!]);
   }
   return out.filter((o) => o[0] < n);
+}
+
+/** The overlay files of the four turns of the track SEND lock leg (`lockCheck`). */
+export type LockOverlays = Record<'base' | 'none' | 'amount' | 'send', string>;
+
+/**
+ * The project-byte oracles of the track SEND lock turns (port of `lock_check` of efcc91f7e:tools/patchkit/pk_digikit_fxroute.py): the project-slot sectors the four overlays touch, each read
+ * from `card` with its overlay laid over it, then how many bytes of pattern 0 the trig and the held send turn changed and where the amount turn differs from the send turn.
+ */
+export function lockCheck(device: Device, card: string, overlays: LockOverlays) {
+  const blobs = Object.fromEntries(Object.entries(overlays).map(([name, file]) => [name, fs.readFileSync(file)]));
+  const touched = new Set<number>();
+  for (const file of Object.values(overlays)) for (const sector of slotSectors(file).keys()) touched.add(sector);
+  const image = (name: keyof LockOverlays) => slotImage(card, touched, blobs[name]);
+  return {
+    trig_changed_bytes: pattern0Changes(image('base'), image('none')).length,
+    send_changed_bytes: pattern0Changes(image('none'), image('send')).length,
+    amount_diff: diffSlot(image('send'), image('amount'), device, STAMP),
+  };
 }
 
 /** The machine type byte of a DT2 track's sound. */
@@ -490,6 +916,9 @@ export function diffTables(a: Tables, b: Tables): string[] {
     out.push(`pages: ${JSON.stringify(sorted(a))} != ${JSON.stringify(sorted(b))}`);
   return out;
 }
+
+/** The type word of a free voice row of the DSP registry. */
+export const FREE_TYPE = 0xffff_ffff;
 
 /** The (type, pc) words of the eight voice rows of the DSP registry; a row is 24 words, `first` comes from the dyndsp info (word 6). */
 export async function voiceRows(session: Session, plan: RuntimePlan): Promise<[number, number][]> {

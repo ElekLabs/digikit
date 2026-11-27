@@ -1,0 +1,13 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "digikit/track-manager",
+  "implicitDependencies": ["core/services/shortcuts", "dkrt-svc-shortcuts"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/track-manager.device.test.ts"],
+        "modules": ["core/services/shortcuts"]
+      }
+    ]
+  }
+}

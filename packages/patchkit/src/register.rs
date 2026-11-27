@@ -1,6 +1,6 @@
 //! The `register` section of a `.dkm`: typed machine and parameter records for the digikit runtime's registry
 //! (docs/design/digikit-registry.md). The packer lowers a dynamic module's typed sections (`typed.rs`) for one device into
-//! these records; the runtime (`modules/core/runtime/src/rs/src/registry.rs`) validates them before it writes any row.
+//! these records; the runtime (`runtime/core/src/rs/src/package/registry.rs`) validates them before it writes any row.
 //!
 //! All integers are big endian. Layout:
 //!
@@ -89,6 +89,12 @@ pub fn machine_key(module: &str, machine: &str) -> u32 {
     machine_hash(module, machine) << 8
 }
 
+/// The key of a record of a generic kind (an LFO shape): the same derivation as a machine key, from `<module id>:<record id>` (`[[record]] id` of `module.toml`).
+/// `patchkit gen` writes it as `DK_KEY_<ID>` and the packer puts it in the keys table.
+pub fn record_key(module: &str, record: &str) -> u32 {
+    machine_key(module, record)
+}
+
 /// A type field as `dkm-info` prints it: a machine key as `h<hash>` (six hex digits), a plain type number (hash 0) as decimal.
 pub fn fmt_type(t: u32) -> String {
     match t >> 8 {
@@ -100,7 +106,7 @@ pub fn fmt_type(t: u32) -> String {
 /// The id digikit gives a device (`[digikit] id` of the device file).
 pub fn device_id(dev: &str) -> Result<u32> {
     crate::devdata::by_short(dev)
-        .map(|d| d.digikit_id)
+        .and_then(|d| d.digikit_id)
         .ok_or_else(|| err!("no run-time registry for device {dev:?}"))
 }
 
@@ -262,7 +268,7 @@ pub fn effect_page(module: &str, fx: usize, d: &crate::typed::FxDef) -> Result<O
 }
 
 /// The routes of effect `d` as (mask of `dkmdsp::ROUTE_*`, default route). `route` is `"master"` (the default when left out) or `"send"`. `routes` lists the routes the user may
-/// choose in DIGIKIT > FX ROUTES; left out it is `["master"]`, and `["send", "master"]` when `route = "send"` (so a send effect falls back to the master when the send slots
+/// choose in SETTINGS > FX ROUTING; left out it is `["master"]`, and `["send", "master"]` when `route = "send"` (so a send effect falls back to the master when the send slots
 /// are taken, and a master effect is a master effect). A send-only effect says `routes = ["send"]`. Refused: a name that is not `master` or `send`, an empty `routes`, a route twice,
 /// and a `route` that `routes` does not list.
 pub fn fx_routes(module: &str, d: &crate::typed::FxDef) -> Result<(u32, u32)> {
@@ -301,10 +307,10 @@ pub fn fx_routes(module: &str, d: &crate::typed::FxDef) -> Result<(u32, u32)> {
             d.route.as_deref().unwrap_or("master")
         ));
     }
-    // the send knob and the FX ROUTES row are labelled with the page's tab: an effect without a page is an insert
+    // the send knob and the FX ROUTING row are labelled with the page's tab: an effect without a page is an insert
     if d.tab.is_none() && routes != ROUTE_MASTER {
         return Err(err!(
-            "{who}: a send route needs a `tab` (the label of the effect's page, which also labels its send knob and its FX ROUTES row)"
+            "{who}: a send route needs a `tab` (the label of the effect's page, which also labels its send knob and its FX ROUTING row)"
         ));
     }
     Ok((routes, route))
@@ -927,6 +933,10 @@ impl Register {
                         knobs,
                     })
                 }
+                // a record of a generic kind (an LFO shape): another service owns it and `patchkit records --check` judges it; no field of the register is read from it
+                _ if dkneeds::KINDS
+                    .iter()
+                    .any(|k| k.0 == kind && k.1 as usize == len) => {}
                 _ => return Err(err!("register section: record kind {kind} length {len}")),
             }
             at += len;

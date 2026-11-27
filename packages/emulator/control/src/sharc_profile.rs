@@ -22,6 +22,18 @@ pub struct SharcCounts {
     pub regions: Vec<(u32, u64, u64)>,
     /// `(pc, interpreted instructions)`.
     pub hist: Vec<(u32, u64)>,
+    /// The engine's own tier counters since the DSP worker started (not since the profile started).
+    pub engine: EngineTiers,
+}
+
+/// What the engine ran in each tier since the DSP worker started: tells a zero in `counted` from a DSP that ran nothing.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct EngineTiers {
+    pub fast: u64,
+    pub block: u64,
+    pub interpreted: u64,
+    pub idle_skipped: u64,
+    pub traps: u64,
 }
 
 pub fn profile_json(c: &SharcCounts) -> Value {
@@ -51,6 +63,13 @@ pub fn profile_json(c: &SharcCounts) -> Value {
         "icount": c.icount,
         "idle_skipped": c.idle_skipped,
         "counted": {"fast": fast, "block": block, "interpreted": interpreted},
+        "engine_tiers": {
+            "fast": c.engine.fast,
+            "block": c.engine.block,
+            "interpreted": c.engine.interpreted,
+            "idle_skipped": c.engine.idle_skipped,
+            "traps": c.engine.traps,
+        },
         "raw": raw,
     })
 }
@@ -67,6 +86,13 @@ mod tests {
             idle_skipped: 400,
             regions: vec![(0x100, 50, 0), (0x200, 0, 30), (0x300, 0, 0)],
             hist: vec![(0x100, 5), (0x180, 2)],
+            engine: EngineTiers {
+                fast: 60,
+                block: 40,
+                interpreted: 9,
+                idle_skipped: 400,
+                traps: 1,
+            },
         };
         let v = profile_json(&c);
         assert_eq!(v["clock"]["unit"], "insn");
@@ -74,6 +100,8 @@ mod tests {
         assert_eq!(v["counted"]["fast"], 50);
         assert_eq!(v["counted"]["block"], 30);
         assert_eq!(v["counted"]["interpreted"], 7);
+        assert_eq!(v["engine_tiers"]["fast"], 60);
+        assert_eq!(v["engine_tiers"]["traps"], 1);
         let raw: Vec<(u64, u64)> = v["raw"]
             .as_array()
             .unwrap()

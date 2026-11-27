@@ -50,14 +50,14 @@ The runtime refuses a module that does not fit, with its own code (docs/findings
 | | Digitakt II | Digitone II | Refusal |
 | --- | --- | --- | --- |
 | modules at once (selection) | 8 | 8 | SELECT of a ninth: `E_SEL_COUNT` |
-| module file | 64 KiB | 64 KiB | `E_TOO_BIG` |
+| module file | 128 KiB | 128 KiB | `E_TOO_BIG` |
 | ColdFire memory (image + bss, all modules) | 512 KiB | 512 KiB | `E_NOMEM` |
 | DSP area (all modules; 64-byte granules, 60 bytes unusable) | 512 KiB | 320 KiB | `E_DSP_NOSPACE` |
 | machine types, voice rows | 8 | 8 | a ninth machine `E_TYPE_RANGE`, a ninth voice `E_DSP_ROWS` |
 | parameter rows | 16 | 16 | `E_PARAM_FULL` |
 | page rows | none | 8 | `E_PAGE_FULL` |
 | run-time effects (`fx_slots`) | 3 | 3 | a fourth: refused by the fit rule before the load, `E_DSP_ROWS` at boot |
-| send effects (`send_slots`, of those) | 2 | 1 | the effect stays an insert; FX ROUTES does not offer send |
+| send effects (`send_slots`, of those) | 2 | 1 | the effect stays an insert; FX ROUTING does not offer send |
 | effects in the chain (patched in) | 4 | 4 | patchkit refuses at build time |
 
 `bss` is not stored in the file: a large work buffer costs arena or DSP area, not file size. Size per-voice state for the lowest musical note, not for the arithmetic limit.
@@ -68,7 +68,7 @@ What is used and what is left: `mise run dk:store -- --emu info` (or `--port NAM
 ## Effects
 
 An effect works on the master block (or a send bus) and is the same routine on both devices. The run-time effect rows come from `core/dynfx`;
-the pages from `core/fxpages`, which the Digitone II image needs in its module list (`device` patch set).
+the pages are the fx service's (`services/fx`; the image reserves their parameter rows in `core/rows`).
 
 | | Digitakt II | Digitone II |
 | --- | --- | --- |

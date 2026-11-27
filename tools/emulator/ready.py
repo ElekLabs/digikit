@@ -16,7 +16,7 @@ Steps (each skipped when its output exists and --force is not given):
                                port 0 fed by the ColdFire's sample loads); saves
                                both at ready
 
-The DSP files live in --out (the default comes from tools/emulator/ready_inputs.json,
+The DSP files live in --out (the default is `[acceptance] ready_dir` of the device file,
 git-ignored). With --card-image the CF snapshot depends on the card (its
 sample list is in the restored RAM), so it goes to <out>/by-card/<sha12>/
 next to links to the shared DSP files; the last line printed is
@@ -66,8 +66,8 @@ def build_examples(gen: pathlib.Path | None = None) -> pathlib.Path:
     for example in ("dsp_cold", "sharc_live"):
         cmd = [
             "rustup", "run", digi_env.TOOLCHAIN, "cargo", "build", "--release",
-            "--manifest-path", "packages/emulator/boot/Cargo.toml",
-            "--features", "sharc", "--example", example,
+            "--manifest-path", "packages/emulator/sharc-peer/Cargo.toml",
+            "--features", "host", "--example", example,
             "--target-dir", str(target),
         ]  # fmt: skip
         with benchlock.hold("shared", f"ready build {example}"):

@@ -1,0 +1,154 @@
+# SETTINGS > DIGIKIT: the entry is the ninth row of SETTINGS and opens the menu (ABOUT, HEALTH, MEMORY, MODULES); MODULES opens the list (the
+# harness card is fresh and has no store header, an empty store: NO MODULES ON CARD); ABOUT shows the runtime; MEMORY shows the capacity; NO leaves. The entry, the menu and the MEMORY page are pinned as frames
+# (hashes in tests/patchkit/smoke/goldens.json): the pages have no glyphs, and MEMORY (a text page) has no highlighted row. ABOUT is checked by the rows the menu keeps in
+# DK_ABOUT, MEMORY also by those in DK_MEM, MODULES by the store state of its list (1 = a store, here with no rows). A key on a text page must not fault, and one DOWN must not change
+# the frame (the cursor moves, unseen).
+[test]
+name = "menu"
+devices = ["dt2", "dn2"]
+quick = true
+
+[[step]]
+tap = "NO"
+[[step]]
+wait_ms = 300
+[[step]]
+tap = "SETTINGS"
+[[step]]
+wait_ms = 400
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+expect_frame = "settings_digikit"
+[[step]]
+tap = "YES"
+[[step]]
+wait_ms = 500
+[[step]]
+expect_frame = "digikit"
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "YES"
+[[step]]
+wait_ms = 800
+[[step]]
+expect_text = {rows = "MENU_LOAD", count = "MENU_LOAD_N", stride = 24, has = ["NO MODULES ON CARD"]}
+[[step]]
+tap = "NO"
+[[step]]
+wait_ms = 400
+[[step]]
+tap = "UP"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "UP"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "UP"
+[[step]]
+wait_ms = 150
+[[step]]
+tap = "YES"
+[[step]]
+wait_ms = 600
+[[step]]
+expect_text = {rows = "MENU_ABOUT", count = "MENU_ABOUT_N", stride = 24, has = ["RUNTIME {runtime}", "BOOT: 0 OF 0 OK"]}
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 300
+[[step]]
+tap = "UP"
+[[step]]
+wait_ms = 300
+[[step]]
+expect_no_fault = true
+[[step]]
+tap = "NO"
+[[step]]
+wait_ms = 400
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 300
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 300
+[[step]]
+tap = "YES"
+[[step]]
+wait_ms = 600
+[[step]]
+expect_text = {rows = "MENU_MEM", count = "MENU_MEM_N", stride = 24, has = ["MODS  .......... 0/8"]}
+[[step]]
+expect_frame = "digikit_memory"
+[[step]]
+tap = "DOWN"
+[[step]]
+wait_ms = 300
+[[step]]
+expect_frame = "digikit_memory"
+[[step]]
+tap = "UP"
+[[step]]
+wait_ms = 300
+[[step]]
+expect_no_fault = true
+[[step]]
+tap = "NO"
+[[step]]
+wait_ms = 400
+[[step]]
+tap = "NO"
+[[step]]
+wait_ms = 400
+[[step]]
+tap = "NO"
+[[step]]
+wait_ms = 400
+[[step]]
+expect_no_fault = true

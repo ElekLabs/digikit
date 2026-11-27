@@ -76,7 +76,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 
 from tools import python_env  # noqa: E402
 from tools.control.digi_client import Emu, EmuError, oled_png  # noqa: E402
-from tools.devtools import benchlock  # noqa: E402
+from tools.devtools import benchlock, core_store  # noqa: E402
 from tools.emulator import digi_env  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 
@@ -364,11 +364,14 @@ class Cell:
             env["SHARC_PROFILE_PREFIX"] = self.profile_prefix
         regions = digi_env.fast_regions_for(ROOT / self.spec["syx"])
         roots = digi_env.blocktrans_roots_for(ROOT / self.spec["syx"])
-        base_env = {}
+        # The core of a device reads the lists with its suffix (`digi_env.SLOT_SUFFIX`), and its library comes from the store.
+        device = digi_env.device_for_syx(ROOT / self.spec["syx"]) or "dn2"
+        suffix = digi_env.SLOT_SUFFIX[device]
+        base_env = dict(core_store.library_env([device]))
         if regions:
-            base_env["SHARC_FAST_REGIONS"] = regions
+            base_env["SHARC_FAST_REGIONS" + suffix] = regions
         if roots:
-            base_env["SHARC_BLOCKTRANS"] = roots
+            base_env["SHARC_BLOCKTRANS" + suffix] = roots
         for key in [k for k in os.environ if k.startswith("SHARC_")]:
             self.res.setdefault("ignored_env", []).append(key)
         clean = {k: v for k, v in os.environ.items() if not k.startswith("SHARC_")}

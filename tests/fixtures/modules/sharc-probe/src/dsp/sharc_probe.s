@@ -2,7 +2,7 @@
 //
 // The audio passes unchanged (the block is copied). Each block the routine stores ONE 32-bit word in `DM(_dk_step)`, diagnostic word 25 of the DSP reply
 // (`core/dsp-link`), which the ColdFire reads: the block tail copies it into that block's record, so every word arrives once, at 1500 words a second
-// (modules/core/adapters/dsp-link/README.md). The words form frames: a header (0xB0, payload word count 12, frame number), 12 payload words (4 records of 3
+// (runtime/platform/dsp-link/README.md). The words form frames: a header (0xB0, payload word count 12, frame number), 12 payload words (4 records of 3
 // words) and a checksum. The format is in tools/device/dkprobe_seq.py. A frame is built in one block, then its 14 words go out one per block.
 //
 // A run is PR_NRECORDS records: record 0 (run counter, items, checksum of the input table), record 1 (MODE1, ASTAT, STKY as found), one record per item

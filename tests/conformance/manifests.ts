@@ -70,10 +70,13 @@ export function scanRuntimeModules(root: string): RuntimeModule[] {
   for (const kind of fs.readdirSync(root).sort()) {
     const kindDir = path.join(root, kind);
     if (!fs.statSync(kindDir).isDirectory()) continue;
-    for (const name of fs.readdirSync(kindDir).sort()) {
-      const manifest = path.join(kindDir, name, 'module.toml');
-      if (!fs.existsSync(manifest)) continue;
-      const module = readModule(manifest);
+    const manifests = fs.globSync('*/*/module.toml', { cwd: kindDir }).sort((a, b) => {
+      const leafA = path.basename(path.dirname(a));
+      const leafB = path.basename(path.dirname(b));
+      return leafA === leafB ? a.localeCompare(b) : leafA < leafB ? -1 : 1;
+    });
+    for (const manifest of manifests) {
+      const module = readModule(path.join(kindDir, manifest));
       if (module) found.push(module);
     }
   }
@@ -95,8 +98,8 @@ export function loadRuntimeModules(
   if (selection.manifest !== undefined) {
     const manifest = path.resolve(root, selection.manifest);
     const relative = path.relative(fs.realpathSync(root), fs.realpathSync(manifest));
-    if (!/^modules[/\\][^/\\]+[/\\][^/\\]+[/\\]module\.toml$/.test(relative)) {
-      throw new Error('DIGI_CONFORMANCE_MANIFEST: expected a repository-contained modules/<kind>/<name>/module.toml');
+    if (!/^modules[/\\][^/\\]+[/\\][^/\\]+[/\\][^/\\]+[/\\]module\.toml$/.test(relative)) {
+      throw new Error('DIGI_CONFORMANCE_MANIFEST: expected a repository-contained modules/<kind>/<author>/<name>/module.toml');
     }
     const module = readModule(manifest, true);
     if (!module) throw new Error(`DIGI_CONFORMANCE_MANIFEST: not a run-time module: ${selection.manifest}`);

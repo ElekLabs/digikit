@@ -42,6 +42,7 @@ import time
 import zlib
 
 from tools.control.digi_client import Emu
+from tools.firmware import device as device_files
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 YES, NO, DOWN = 10, 12, 14
@@ -343,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    p.add_argument("device", choices=["dt2", "dn2"])
+    p.add_argument("device", choices=device_files.shorts())
     p.add_argument(
         "--binary", required=True, help="digi-emud binary (an immutable copy)"
     )

@@ -1,18 +1,12 @@
+import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 // The fake world of the UI preview: a device (modules and a samples tree), a samples folder on the computer, and how fast and how well the
 // device answers. The state can be set from the address (`?dev=empty&folder=files&speed=1.5`, see PARAMS) and while the page runs
 // (`window.__sim.set({ dev: 'noreply' })`), so a screenshot script (tools/devtools/ui_shots.mjs) reaches each state without clicking.
+import { previewHome } from './preview-home';
 import type { SampleEntry } from '@digi/dk-session/samples';
-import { DkNeeds } from '@digi/workbench-core/modules/dkneeds.ts';
-import { setFitReader, type Caps, type Needs } from '@digi/workbench-core/modules/fit.ts';
-import wasmUrl from '../../../web/public/patchkit.wasm?url';
-import { fitWarnings } from '@digi/workbench-core/modules/dktransfer.ts';
 import { noteActivity } from '@digi/workbench-core/transfer/activity.ts';
 import type { TransferApp } from '@digi/workbench-core/transfer/app.ts';
-import type { LocalEntry } from '../src/samples-core';
-import type { TransferRow, TransferView } from '@digi/workbench-core/transfer/transfer-core.ts';
-
-// the rows' fit verdicts come from the Rust rule in patchkit.wasm, as in the app
-setFitReader(await DkNeeds.create(await (await fetch(wasmUrl)).arrayBuffer()));
+import type { LocalEntry } from '@digi/workbench-core/transfer/samples-core.ts';
 
 /** The app the preview mocks talk to (main.tsx sets it right after building it): their connection indicator, job and page state are the app's. */
 export const simApp: { app?: TransferApp } = {};
@@ -36,8 +30,12 @@ export interface SimState {
   putfail: boolean;
   /** Names (comma separated) of files that the fake device holds already with the same bytes: an upload skips them (skip=kick,snare). */
   skip: string;
-  /** The link of the samples: none (no pill), bulk, sysex, wrongmode (SysEx, device in USB AUDIO/MIDI), fallback (bulk until the second file, then SysEx). */
-  link: 'none' | 'bulk' | 'sysex' | 'wrongmode' | 'fallback';
+  /** The link of the samples: none (no pill), bulk, sysex, wrongmode (SysEx, device in USB AUDIO/MIDI), fallback (bulk until the second file, then SysEx), reason (SysEx with the reason of the bulk choice). */
+  link: 'none' | 'bulk' | 'sysex' | 'wrongmode' | 'fallback' | 'reason';
+  /** The card in Modules mode: '' (the demo card), orphan (a service file no module needs), incomplete (a module whose service is missing and a file that cannot be read). */
+  card: '' | 'orphan' | 'incomplete';
+  /** What a live change (Load, Unload, Reload) ends with: ok, refuse (the runtime refuses it: E_BUSY) or fail (the old module was torn down and the new one did not load). */
+  live: 'ok' | 'refuse' | 'fail';
 }
 
 export const PARAMS = [
@@ -51,6 +49,8 @@ export const PARAMS = [
   'putfail',
   'skip',
   'link',
+  'card',
+  'live',
 ] as const;
 
 const query = new URLSearchParams(location.search);
@@ -65,16 +65,18 @@ export const sim: SimState = {
   putfail: query.get('putfail') === '1',
   skip: query.get('skip') ?? '',
   link: (query.get('link') as SimState['link']) ?? 'none',
+  card: (query.get('card') as SimState['card']) ?? '',
+  live: (query.get('live') as SimState['live']) ?? 'ok',
 };
 
 export const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** What a read of the device costs and whether it works: the states of the wait notice and the error line. */
-export async function deviceRead(): Promise<void> {
+export async function deviceRead(session: TargetBinding['session']): Promise<void> {
   switch (sim.dev) {
     case 'noreply': {
       // a real session over the mocked emulator capture, which never answers: the request waits, Cancel works, a timeout follows
-      await (await simApp.app!.target.session()).info();
+      await (await session()).info();
       return;
     }
     case 'error':
@@ -91,247 +93,12 @@ export async function deviceRead(): Promise<void> {
   }
 }
 
-// ---- modules ----------------------------------------------------------------------------------------------------------------------
-
-interface LibModule {
-  id: string;
-  label: string;
-  group: TransferRow['group'];
-  version: string;
-  size: number;
-  test?: boolean;
-  /** What a load of the module takes (a machine with DSP code: arena, DSP area, rows). */
-  needs: Needs;
-}
 const KiB = 1024;
 const MiB = 1024 * KiB;
-/** Needs of a machine (`dsp` bytes of DSP area; 0: a module with no DSP code) or a tool. */
-const need = (size: number, dsp = 0, rows = dsp ? 1 : 0): Needs => ({
-  file_size: size,
-  ARENA: 4096,
-  ARENA_XFER: dsp ? 2048 : 0,
-  DSP_AREA: dsp,
-  DSP_ALIGN: dsp ? 8 : 0,
-  MACHINE_ROWS: rows,
-  VOICE_ROWS: rows,
-  PARAM_ROWS: rows * 4,
-});
-/** `?lib=site`: the modules of the site's index (apps/web/public/modules/index.json, made by gen-modules.mjs), if the file exists.
- *  From the index: id, name, version, kind, and the dt2 file size. Invented: `needs` (a rough size from the file size, a DSP area for
- *  machines only) and `test` (never). */
-const siteIndex = import.meta.glob('../../../web/public/modules/index.json', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
-const GROUP_OF_KIND: Record<string, TransferRow['group']> = { machines: 'Machines', fx: 'Effects', tools: 'Tools' };
-function siteLibrary(): LibModule[] | undefined {
-  const raw = Object.values(siteIndex)[0];
-  if (query.get('lib') !== 'site' || !raw) return undefined;
-  const entries = (
-    JSON.parse(raw) as {
-      modules?: {
-        id: string;
-        name: string;
-        kind: string;
-        version: string;
-        devices: Record<string, { size: number }>;
-      }[];
-    }
-  ).modules;
-  if (!Array.isArray(entries)) return undefined;
-  const list = entries
-    .filter((e) => e.devices?.dt2 && GROUP_OF_KIND[e.kind])
-    .map((e) => {
-      const size = e.devices.dt2.size;
-      return {
-        id: e.id,
-        label: e.name,
-        group: GROUP_OF_KIND[e.kind],
-        version: e.version,
-        size,
-        needs: need(size, e.kind === 'machines' ? 128 * KiB : 0),
-      };
-    });
-  return list.length ? list : undefined;
-}
-const SITE = siteLibrary();
-export const LIBRARY: LibModule[] = SITE ?? [
-  {
-    id: 'sine',
-    label: 'Sine',
-    group: 'Machines',
-    version: '0.3.1',
-    size: 18 * KiB,
-    needs: need(18 * KiB, 200 * KiB),
-  },
-  {
-    id: 'pluck',
-    label: 'Pluck',
-    group: 'Machines',
-    version: '0.2.0',
-    size: 42 * KiB,
-    needs: need(42 * KiB, 259 * KiB),
-  },
-  {
-    id: 'wavetable',
-    label: 'Wavetable Voyager with a rather long display name',
-    group: 'Machines',
-    version: '1.0.0',
-    size: 60 * KiB,
-    needs: need(60 * KiB, 420 * KiB),
-  },
-  {
-    id: 'fm4',
-    label: 'FM 4-op',
-    group: 'Machines',
-    version: '0.9.2',
-    size: 61 * KiB,
-    needs: need(61 * KiB, 600 * KiB),
-  },
-  { id: 'chorus', label: 'Chorus', group: 'Effects', version: '0.4.0', size: 26 * KiB, needs: need(26 * KiB) },
-  {
-    id: 'tools/bootscreen',
-    label: 'Boot screens',
-    group: 'Tools',
-    version: '0.1.0',
-    size: 3 * KiB,
-    needs: need(3 * KiB),
-  },
-  { id: 'tuner', label: 'Tuner', group: 'Tools', version: '0.1.0', size: 9 * KiB, needs: need(9 * KiB) },
-  { id: 'remote', label: 'Remote control', group: 'Tools', version: '0.1.0', size: 1032, needs: need(1032) },
-  {
-    id: 'test-noise',
-    label: 'Noise test',
-    group: 'Machines',
-    version: '0.0.1',
-    size: 7 * KiB,
-    test: true,
-    needs: need(7 * KiB, 100 * KiB),
-  },
-];
-const pathOf = (id: string) => `modules/${id}.dkm`;
-
-interface DevFile {
-  path: string;
-  size: number;
-  /** The same bytes as the library's build. */
-  same: boolean;
-  loaded: boolean;
-}
-const device = new Map<string, DevFile>();
-function resetDevice(): void {
-  device.clear();
-  if (sim.dev === 'empty') return;
-  if (SITE) {
-    // the first and third machine are on the card, the first one is loaded
-    const machines = SITE.filter((m) => m.group === 'Machines');
-    [machines[0], machines[2]].forEach((m, i) => {
-      if (m) device.set(pathOf(m.id), { path: pathOf(m.id), size: m.size, same: true, loaded: i === 0 });
-    });
-    return;
-  }
-  device.set(pathOf('sine'), { path: pathOf('sine'), size: 18 * KiB, same: true, loaded: true });
-  device.set(pathOf('pluck'), { path: pathOf('pluck'), size: 40 * KiB, same: false, loaded: false });
-  device.set(pathOf('chorus'), { path: pathOf('chorus'), size: 26 * KiB, same: true, loaded: false });
-  device.set('modules/old-experiment.dkm', {
-    path: 'modules/old-experiment.dkm',
-    size: 5 * KiB,
-    same: false,
-    loaded: false,
-  });
-}
-resetDevice();
-
-/** CAPACITY of a Digitakt II with the loaded files' modules in it. */
-function capacity(): Caps {
-  const used = { ARENA: 0, DSP_AREA: 0, MACHINE_ROWS: 0, VOICE_ROWS: 0, PARAM_ROWS: 0, n: 0 };
-  for (const f of device.values()) {
-    const m = f.loaded ? LIBRARY.find((l) => pathOf(l.id) === f.path) : undefined;
-    if (!m) continue;
-    used.n++;
-    used.ARENA += (m.needs.ARENA ?? 0) + (m.needs.ARENA_XFER ?? 0);
-    used.DSP_AREA += m.needs.DSP_AREA ?? 0;
-    used.MACHINE_ROWS += m.needs.MACHINE_ROWS ?? 0;
-    used.VOICE_ROWS += m.needs.VOICE_ROWS ?? 0;
-    used.PARAM_ROWS += m.needs.PARAM_ROWS ?? 0;
-  }
-  const c = (limit: number, u: number, largest = limit - u) => ({ limit, used: u, largest });
-  return {
-    MODULES: c(8, used.n, 0),
-    SELECTION: c(8, used.n, 0),
-    ARENA: c(524288, used.ARENA, 524272 - used.ARENA),
-    STAGE: c(65536, 0, 65536),
-    DSP_AREA: c(524288, used.DSP_AREA, 524284 - used.DSP_AREA),
-    MACHINE_ROWS: c(8, used.MACHINE_ROWS, 0),
-    VOICE_ROWS: c(8, used.VOICE_ROWS, 0),
-    PARAM_ROWS: c(16, used.PARAM_ROWS, 0),
-    PAGE_ROWS: c(0, 0, 0),
-    FX_SLOTS: c(0, 0, 0),
-    DSP_COST: c(92796, 0, 0),
-    DSP_VOICES: c(16, 0, 0),
-  };
-}
-
-/** The merged list the Transfer page shows (`TransferView`), from the library and the device's files. */
-export function view(): TransferView {
-  const cap = capacity();
-  if (sim.dev === 'empty' && device.size === 0) {
-    // nothing stored yet, but the library is there
-  }
-  const modules: TransferRow[] = LIBRARY.map((m) => {
-    const f = device.get(pathOf(m.id));
-    const row = {
-      id: m.id,
-      path: pathOf(m.id),
-      name: m.id,
-      label: m.label,
-      group: m.group,
-      test: !!m.test,
-      version: m.version,
-      file_size: m.size,
-      arena: m.needs.ARENA,
-      dsp: m.needs.DSP_AREA,
-      needs: m.needs,
-      on_card: f ? (f.same ? 'yes' : 'other version') : 'no',
-      loaded: !!f?.loaded,
-    } as TransferRow;
-    row.warnings = fitWarnings(row as { loaded: boolean; needs?: Needs }, cap);
-    row.fits = row.warnings.length === 0;
-    return row;
-  });
-  const known = new Set(LIBRARY.map((m) => pathOf(m.id)));
-  const card_only: TransferRow[] = [...device.values()]
-    .filter((f) => !known.has(f.path))
-    .map((f) => ({
-      id: null,
-      path: f.path,
-      name: f.path.split('/').pop() as string,
-      group: 'Tools',
-      test: false,
-      version: null,
-      file_size: f.size,
-      on_card: 'yes',
-      loaded: f.loaded,
-    }));
-  return {
-    device: 'dt2',
-    runtime: '0.9.4',
-    free_bytes: 3.2 * 2 ** 30 - [...device.values()].reduce((a, f) => a + f.size, 0),
-    loaded: [...device.values()].filter((f) => f.loaded).map((f) => f.path),
-    capacity: cap,
-    modules,
-    card_only,
-  };
-}
-
-export const deviceFiles = device;
-export const libraryById = (id: string) => LIBRARY.find((m) => m.id === id);
-export { pathOf };
 
 // ---- samples ----------------------------------------------------------------------------------------------------------------------
 
-export const SAMPLES_ROOT = '/Users/em/Music/Samples';
+export const SAMPLES_ROOT = `${previewHome}/Music/Samples`;
 const WAVS = [
   ['kick_808_long_tail', 2.4],
   ['kick_punchy', 1.1],
@@ -440,6 +207,8 @@ function resetTree(): void {
 resetTree();
 export const sampleTree = tree;
 
+export let deviceRevision = 0;
+
 // ---- control from outside -----------------------------------------------------------------------------------------------------------
 
 /** What `window.__sim` offers a script. */
@@ -447,10 +216,23 @@ export const control = {
   sim,
   /** Change the state; `dev` and `folder` reset what they stand for. */
   set(next: Partial<SimState>): void {
+    const wasOffline = sim.dev === 'noreply';
     Object.assign(sim, next);
     if (next.dev) {
-      resetDevice();
+      deviceRevision++;
       resetTree();
+      const app = simApp.app;
+      if (next.dev === 'noreply')
+        app?.connection.noteConnection({ type: 'lost', reason: 'Simulated device disconnected.' });
+      else if (wasOffline && app && !app.target.libraryOnly()) {
+        const binding = app.target.bindSession();
+        void binding
+          .session()
+          .then((session) =>
+            app.connection.noteReply(session, () => !app.target.switching() && app.target.target() === binding.target),
+          )
+          .catch(() => {});
+      }
     }
   },
   /** A file appears in the samples folder (the folder poll or the focus read must show it). */

@@ -112,7 +112,13 @@ def prepare() -> tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
         # tests/regression/scenarios/dt2-fx.test.ts are tied to the ready state it boots to
         card = pathlib.Path(pinned).resolve()
     else:
-        card = ne.plusdrive_card(samples, syx, digi_env.rust_env(dict(os.environ)))
+        # The stock-image fx scenarios place panel inputs at fixed instruction slots after ready, and their
+        # expected values were recorded with the firmware's boot filesystem check running (since #611 the
+        # default card skips it, which shifts the encoder acceleration readbacks). The device suite reduction
+        # milestone replaces this with a scenario wait on firmware state (C').
+        card = ne.plusdrive_card(
+            samples, syx, digi_env.rust_env(dict(os.environ)), boot_fs_check=True
+        )
     ready = subprocess.run(
         [sys.executable, "-m", "tools.emulator.ready", "dt2", "--syx", str(syx),
          "--card-image", str(card)],
@@ -161,7 +167,16 @@ def main(argv: list[str] | None = None) -> int:
         not a.rebuild, "dt2", ready_dir / "digi-audio-dn2-image.bin", pgo=True
     )
     wav = a.wav or work / "trig.wav"
-    env = coupled.run_env({}) if a.fast else {**os.environ, "SHARC_FAST_REGIONS": ""}
+    if a.fast:
+        env = coupled.run_env({}, syx=syx)
+    else:
+        from tools.devtools import core_store
+
+        env = {
+            **os.environ,
+            "SHARC_FAST_REGIONS_2": "",  # the DT2 core reads the `_2` lists
+            **core_store.library_env(["dt2"]),
+        }
     env.update(kv.partition("=")[::2] for kv in a.env)
     subprocess.run(
         [

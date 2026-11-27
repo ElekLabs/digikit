@@ -17,7 +17,13 @@ export function introFramebuffer(native: Uint8Array): Buffer {
 
 /** The safe-mode frame of a reason as the host test of `safe_screen.rs` checks it in (`core/runtime/tests/fixtures/safe-<name>.bin`), in framebuffer layout. */
 export function safeFrame(name: 'key' | 'counter'): Buffer {
-  const file = new URL(`../../../modules/core/runtime/tests/fixtures/safe-${name}.bin`, import.meta.url);
+  const file = new URL(`../../../runtime/core/tests/fixtures/safe-${name}.bin`, import.meta.url);
+  return introFramebuffer(fs.readFileSync(file));
+}
+
+/** The core-only frame of a cause as the same host test checks it in (`core-<name>.bin`), in framebuffer layout. */
+export function coreFrame(name: 'crashes' | 'missing'): Buffer {
+  const file = new URL(`../../../runtime/core/tests/fixtures/core-${name}.bin`, import.meta.url);
   return introFramebuffer(fs.readFileSync(file));
 }
 

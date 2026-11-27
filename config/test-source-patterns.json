@@ -1,0 +1,5 @@
+{
+  "_comment": "The one definition of a unit-test source: a file that holds tests, not the product, so an edit of it selects no device or conformance test and leaves the source hash of every .dko.json object alone. Readers: tools/nx/test-source.mjs (test:subset, the Nx globs of the daemon build and of subjectInputs, the key of patchkit-test-<device>.key and the cfg(test) guard), tools/devtools/emud_key.py (daemon test key) and packages/patchkit/src/build/test_source.rs (source_sha256). The static `production` input of nx.json is checked against it by tools/nx/tests/test-source.test.ts. `dirs`: a directory of this name, at any depth, holds test sources of any language. `rust_files`: file name patterns for .rs files, with at most one `*`: `#[cfg(test)]` modules that a release build does not compile.",
+  "dirs": ["tests"],
+  "rust_files": ["tests.rs", "tests_*.rs", "*_tests.rs", "fake_*.rs"]
+}

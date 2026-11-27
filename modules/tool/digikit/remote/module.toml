@@ -1,0 +1,28 @@
+[module]
+id = "digikit/remote"
+version = "0.1.0"
+name = "Remote control"
+category = "tools"
+type = "service"
+author = "digikit"
+status = "experimental"
+site = false
+summary = "Presses keys and turns encoders from a computer over USB MIDI."
+# the workbench's Remote page, dk-session and the SDK speak its protocol
+host = true
+ports = ["dt2-1.17", "dn2-1.12", "st-1.42"]
+requires = ["core/input"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+"st-1.42" = "experimental" # run once on a unit: installed from the Transfer page, selected in MODULES, applied, restarted; the keys work (finding 154)
+
+# A run-time module (`.dkm`, `patchkit pack digikit/remote --device dt2`): its `init` registers the remote range of sdk/sdk.toml with `dk_host_register`
+# and calls core/input's `dk_input_key` and `dk_input_turn`. It is on exactly when it is loaded. Its `menu` function gives the SETTINGS...
+# page of DIGIKIT > MODULES: the keys it holds, the last command and RELEASE ALL KEYS; the `dk_ui_*` calls are imports that bind to stubs when core/ui is not in the image.
+[[object]]
+path = "build/remote.dko.json"
+sources = ["src/c/remote.c"]
+place = "cf.expansion"

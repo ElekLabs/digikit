@@ -1,7 +1,5 @@
-// The Firmware page, shared by the desktop workbench and the site (the app gives its parts in env.ts): six steps from the stock file to the
-// device running the new image. Step by step, nothing is sent until the checks have passed, the device is the image's model, and the user
-// has said that the device shows WAITING FOR SYSEX. The rules are in firmware-core.ts, the run in firmware-flow.ts, the state in
-// firmware-state.ts. The MIDI port, the connection indicator and the target selector are the Transfer pane's.
+// The Firmware page, shared by the desktop Workbench and the site. The rules are in firmware-core.ts, the run in firmware-flow.ts, and
+// the state in firmware-state.ts. Transfer supplies the MIDI port, hardware connection indicator, and target selector.
 import {
   For,
   Match,
@@ -23,8 +21,9 @@ import { useFirmwareApp } from '../../src/transfer/app-context';
 import DefaultModules from './DefaultModules';
 import { CUSTOM_BOOT_SCREEN_HELP } from '../../src/firmware/default-modules-core';
 import { createEffectOn } from '../../src/firmware/on-change';
+import { newestReleasesText, runtimeDeviceIds } from '../../src/data/device-profiles';
 import {
-  DEVICE_NAMES,
+  deviceNameOf,
   PREPARE_STEPS,
   isDeviceId,
   type DeviceId,
@@ -49,6 +48,12 @@ const SEND_OPTIONS = [
   { id: 'patch', label: 'Patch and flash' },
   { id: 'restore', label: 'Restore stock', title: 'Send the stock file itself, to take digikit off the device' },
 ] as const;
+
+const EMULATOR_STAGES = {
+  leaving: 'Writing the image to the emulator’s flash…',
+  returning: 'Waiting for the emulator to restart and verifying the firmware…',
+  asking: 'The emulator booted the flashed firmware.',
+};
 
 /**
  * One step of the page. A done step that has a `summary` folds to its header with that one line (the steps before the current one stay out of
@@ -115,6 +120,7 @@ export default function FirmwarePage(): JSX.Element {
     chooseFile,
     device,
     downloadImage,
+    fileDevice,
     forgetDevice,
     notice,
     prepared,
@@ -160,7 +166,14 @@ export default function FirmwarePage(): JSX.Element {
     void read();
   });
 
-  const inputs = () => ({ prepare: prepared(), device: device(), ack: ack(), run: run(), route: route() });
+  const emulator = () => target().kind === 'emulator' && !!fw.env.emulatorFlash;
+  const flashRoute = () => (emulator() ? 'rpc' : route());
+  /** The chosen file's device has no boot screen image to add. */
+  const noBootImage = () => {
+    const d = fileDevice();
+    return d !== undefined && !d.patchSets['device-introblank'];
+  };
+  const inputs = () => ({ prepare: prepared(), device: device(), ack: ack(), run: run(), route: flashRoute() });
   const marks = () => stepMarks(inputs());
   const flash = () => canFlash(inputs());
   const ready = () => {
@@ -173,7 +186,9 @@ export default function FirmwarePage(): JSX.Element {
     const d = device();
     if (d.kind === 'none') return d.why;
     if (d.kind === 'lost')
-      return `${d.reason.replace(/\.?$/, '.')} Check the USB cable. The device must be on, and its USB mode must be MIDI.`;
+      return emulator()
+        ? d.reason
+        : `${d.reason.replace(/\.?$/, '.')} Check the USB cable. The device must be on, and its USB mode must be MIDI.`;
     return undefined;
   };
   const working = () => {
@@ -192,6 +207,10 @@ export default function FirmwarePage(): JSX.Element {
     const r = run();
     return r.phase === 'rebooting' ? r : undefined;
   };
+  const setup = () => {
+    const r = rebooting();
+    return r?.stage === 'asking' ? r.setup : undefined;
+  };
   const stopped = () => {
     const r = run();
     return r.phase === 'stopped' ? r : undefined;
@@ -205,7 +224,9 @@ export default function FirmwarePage(): JSX.Element {
     const d = device();
     const id = d.kind === 'connected' ? d.d.model : undefined;
     const p = ready()?.p.device;
-    return DEVICE_NAMES[id ?? (isDeviceId(p ?? '') ? (p as DeviceId) : 'dt2')];
+    return deviceNameOf(
+      id ?? (isDeviceId(p ?? '') ? (p as DeviceId) : ((fw.env.devices ?? runtimeDeviceIds)[0] ?? '')),
+    );
   };
   const shortName = (d: string) => d.toUpperCase();
   /** The device id the default modules are for: the image's device, else the connected one. */
@@ -226,14 +247,24 @@ export default function FirmwarePage(): JSX.Element {
           disabled={running(run())}
         />
         <span class="dim">
-          {restore()
-            ? 'Send the stock file itself, to take digikit off the device.'
-            : 'Patch the stock firmware and flash it over MIDI.'}
+          <Show
+            when={emulator()}
+            fallback={
+              restore()
+                ? 'Send the stock file itself, to take digikit off the device.'
+                : 'Patch the stock firmware and flash it over MIDI.'
+            }
+          >
+            {restore()
+              ? 'Reinstall the stock firmware in the emulator.'
+              : 'Patch the stock firmware and flash the emulator.'}
+          </Show>
         </span>
       </header>
       <AutoRefresh
         busy={() => (running(run()) ? 'Flashing' : '')}
         read={() => void read()}
+        readOnPoll={emulator}
         rescanPorts={() => {
           batch(() => {
             setReload((n) => n + 1);
@@ -287,8 +318,8 @@ export default function FirmwarePage(): JSX.Element {
               <Switch>
                 <Match when={prepared().kind === 'none'}>
                   <span class="dim">
-                    No file yet. Choose the stock .syx of your device (Digitakt II OS 1.17 or Digitone II OS 1.12). It
-                    is not uploaded.
+                    No file yet. Choose the stock .syx of your device ({newestReleasesText(fw.env.devices)}). It is not
+                    uploaded.
                   </span>
                 </Match>
                 <Match when={working()}>
@@ -336,8 +367,9 @@ export default function FirmwarePage(): JSX.Element {
           <label class="tick">
             <input
               type="checkbox"
-              checked={customBootScreen()}
-              disabled={running(run()) || restore()}
+              checked={customBootScreen() && !noBootImage()}
+              disabled={running(run()) || restore() || noBootImage()}
+              title={noBootImage() ? 'This device has no boot screen image.' : undefined}
               onChange={(e) => setCustomBoot(e.currentTarget.checked)}
             />
             <span>
@@ -397,7 +429,7 @@ export default function FirmwarePage(): JSX.Element {
                 <p class="dim">
                   {r().p.restore ? 'Stock image' : `Patched image with digikit runtime ${r().p.runtime}`} ·{' '}
                   {groups(r().p.image.length)} bytes
-                  {route() === 'menu' &&
+                  {flashRoute() === 'menu' &&
                     ` · ${groups(r().p.ends.length)} messages · about ${sendSeconds(r().p)} s to send`}
                 </p>
                 <Show when={notice()}>
@@ -413,17 +445,25 @@ export default function FirmwarePage(): JSX.Element {
         {/* 3 */}
         <Step
           n={3}
-          title="Device"
+          title={emulator() ? 'Target' : 'Device'}
           mark={marks()[2]!}
           summary={match().state === 'match' ? match().text : undefined}
           aside={fw.transfer.env.targets.inHeader ? undefined : <TargetSelect reload={reload} />}
         >
           <div class="devrow">
-            <ConnectionBadge />
+            <Show when={emulator()} fallback={<ConnectionBadge />}>
+              <span role="status">
+                {device().kind === 'connected'
+                  ? `${deviceName()} emulator`
+                  : device().kind === 'checking'
+                    ? 'Checking the emulator…'
+                    : 'Emulator'}
+              </span>
+            </Show>
             <Show when={match().state === 'match'}>
               <span class="okt">{match().text} ✓</span>
             </Show>
-            <Show when={match().state === 'mismatch' || match().state === 'unknown'}>
+            <Show when={match().text && (match().state === 'mismatch' || match().state === 'unknown')}>
               <span class="bad" role="alert">
                 {match().text}
               </span>
@@ -438,42 +478,52 @@ export default function FirmwarePage(): JSX.Element {
         {/* 4 */}
         <Step
           n={4}
-          title="Prepare the device"
+          title={emulator() ? 'Prepare the emulator' : 'Prepare the device'}
           mark={marks()[3]!}
           hold={run().phase === 'idle'}
-          summary={route() === 'rpc' ? 'Power adapter in, USB cable stays in' : 'The device shows WAITING FOR SYSEX'}
+          summary={
+            emulator()
+              ? 'Workbench handles the restart'
+              : route() === 'rpc'
+                ? 'Power adapter in, USB cable stays in'
+                : 'The device shows WAITING FOR SYSEX'
+          }
         >
-          <Show
-            when={route() === 'rpc'}
-            fallback={
-              <>
-                <ol class="plain">
-                  <For each={PREPARE_STEPS}>{(s) => <li>{s}</li>}</For>
-                </ol>
-                <RecoveryNote />
-                <label class="tick">
-                  <input
-                    type="checkbox"
-                    checked={ack()}
-                    disabled={running(run())}
-                    onChange={(e) => setAck(e.currentTarget.checked)}
-                  />
-                  <span>The device shows WAITING FOR SYSEX</span>
-                </label>
-                <button type="button" class="linkbtn" disabled={running(run())} onClick={() => setRoute('rpc')}>
-                  Send directly instead (no menu on the device)
-                </button>
-              </>
-            }
-          >
-            <ol class="plain">
-              <For each={PREPARE_STEPS_RPC}>{(s) => <li>{s}</li>}</For>
-            </ol>
-            <RecoveryNote />
-            <button type="button" class="linkbtn" disabled={running(run())} onClick={() => setRoute('menu')}>
-              Use the OS UPGRADE menu instead
-            </button>
-          </Show>
+          <Switch>
+            <Match when={emulator()}>
+              <p class="dim">
+                Boot the emulator from your stock file and let it run. Workbench sends the update and restarts the
+                emulator automatically.
+              </p>
+            </Match>
+            <Match when={route() === 'rpc'}>
+              <ol class="plain">
+                <For each={PREPARE_STEPS_RPC}>{(s) => <li>{s}</li>}</For>
+              </ol>
+              <RecoveryNote />
+              <button type="button" class="linkbtn" disabled={running(run())} onClick={() => setRoute('menu')}>
+                Use the OS UPGRADE menu instead
+              </button>
+            </Match>
+            <Match when={true}>
+              <ol class="plain">
+                <For each={PREPARE_STEPS}>{(s) => <li>{s}</li>}</For>
+              </ol>
+              <RecoveryNote />
+              <label class="tick">
+                <input
+                  type="checkbox"
+                  checked={ack()}
+                  disabled={running(run())}
+                  onChange={(e) => setAck(e.currentTarget.checked)}
+                />
+                <span>The device shows WAITING FOR SYSEX</span>
+              </label>
+              <button type="button" class="linkbtn" disabled={running(run())} onClick={() => setRoute('rpc')}>
+                Send directly instead (no menu on the device)
+              </button>
+            </Match>
+          </Switch>
         </Step>
 
         {/* 5 */}
@@ -492,7 +542,11 @@ export default function FirmwarePage(): JSX.Element {
                     <i style={{ width: `${progressView(s()).fraction * 100}%` }} />
                   </div>
                   <span class="ptext" classList={{ okt: s().flashing }}>
-                    {progressView(s()).text}
+                    {emulator() && s().flashing
+                      ? EMULATOR_STAGES.leaving
+                      : emulator() && s().checking
+                        ? 'The emulator is checking the image…'
+                        : progressView(s()).text}
                   </span>
                   <Show when={!s().flashing}>
                     <button type="button" class="act" onClick={cancelFlash}>
@@ -504,15 +558,17 @@ export default function FirmwarePage(): JSX.Element {
             </Match>
             <Match when={rebooting()}>
               {(s) => (
-                <div class="flashing">
-                  <div class="progress full" role="progressbar">
-                    <i style={{ width: '100%' }} />
+                <Show when={!emulator()} fallback={<p role="status">{EMULATOR_STAGES[s().stage]}</p>}>
+                  <div class="flashing">
+                    <div class="progress full" role="progressbar">
+                      <i style={{ width: '100%' }} />
+                    </div>
+                    <span class="ptext">{rebootText(s())}</span>
+                    <button type="button" class="act" onClick={cancelFlash}>
+                      Stop waiting
+                    </button>
                   </div>
-                  <span class="ptext">{rebootText(s())}</span>
-                  <button type="button" class="act" onClick={cancelFlash}>
-                    Stop waiting
-                  </button>
-                </div>
+                </Show>
               )}
             </Match>
             <Match when={finished()}>
@@ -525,16 +581,24 @@ export default function FirmwarePage(): JSX.Element {
             <Match when={true}>
               <div class="flashrow">
                 <button type="button" class="act primary" disabled={!flash().ok} onClick={() => void startFlash()}>
-                  {restore() ? 'Restore stock' : 'Flash'}
+                  {emulator()
+                    ? restore()
+                      ? 'Restore stock on emulator'
+                      : 'Flash emulator'
+                    : restore()
+                      ? 'Restore stock'
+                      : 'Flash'}
                 </button>
                 <Show when={!flash().ok}>
                   <span class="dim">{flash().reason}</span>
                 </Show>
                 <Show when={flash().ok && ready()}>
                   <span class="dim">
-                    {route() === 'rpc'
-                      ? `Sends ${fmtMB(ready()!.p.image.length)} to your ${deviceName()}; the device checks it, then flashes and restarts.`
-                      : `Sends ${groups(ready()!.p.ends.length)} messages, about ${sendSeconds(ready()!.p)} s. The device then writes its flash and restarts.`}
+                    {emulator()
+                      ? `Sends ${fmtMB(ready()!.p.image.length)} to the ${deviceName()} emulator, then verifies the image after it restarts.`
+                      : route() === 'rpc'
+                        ? `Sends ${fmtMB(ready()!.p.image.length)} to your ${deviceName()}; the device checks it, then flashes and restarts.`
+                        : `Sends ${groups(ready()!.p.ends.length)} messages, about ${sendSeconds(ready()!.p)} s. The device then writes its flash and restarts.`}
                   </span>
                 </Show>
               </div>
@@ -575,7 +639,17 @@ export default function FirmwarePage(): JSX.Element {
                 </>
               )}
             </Match>
-            <Match when={route() === 'rpc' && rebooting()}>
+            <Match when={emulator() && setup()}>
+              {(s) => (
+                <>
+                  <p class="okt">Firmware verified. Workbench is finishing emulator setup.</p>
+                  <Show when={postRun().kind === 'working'} fallback={<SetupProgress progress={s()} />}>
+                    <PostRunView />
+                  </Show>
+                </>
+              )}
+            </Match>
+            <Match when={!emulator() && route() === 'rpc' && rebooting()}>
               {(s) => (
                 <>
                   <p class="dim">{rebootText(s())}</p>
@@ -586,12 +660,36 @@ export default function FirmwarePage(): JSX.Element {
               )}
             </Match>
             <Match when={true}>
-              <p class="dim">After the restart the page asks the device which image it runs.</p>
+              <p class="dim">
+                {emulator()
+                  ? 'Workbench shows the running firmware here after verification.'
+                  : 'After the restart the page asks the device which image it runs.'}
+              </p>
             </Match>
           </Switch>
         </Step>
       </div>
     </section>
+  );
+}
+
+function SetupProgress(props: { progress: { fraction?: number; text: string } }): JSX.Element {
+  const percent = () => (props.progress.fraction ?? 0) * 100;
+  return (
+    <div class="flashing" role="status">
+      <Show when={props.progress.fraction !== undefined}>
+        <div
+          class="progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(percent())}
+        >
+          <i style={{ width: `${percent()}%` }} />
+        </div>
+      </Show>
+      <span class="ptext">{props.progress.text}</span>
+    </div>
   );
 }
 
@@ -601,20 +699,7 @@ function PostRunView(): JSX.Element {
   return (
     <Switch>
       <Match when={postRun().kind === 'working' && (postRun() as { text: string; done: number; total: number })}>
-        {(r) => (
-          <div class="flashing">
-            <div
-              class="progress"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round((r().done / r().total) * 100)}
-            >
-              <i style={{ width: `${(r().done / r().total) * 100}%` }} />
-            </div>
-            <span class="ptext">{r().text}</span>
-          </div>
-        )}
+        {(r) => <SetupProgress progress={{ text: r().text, fraction: r().done / r().total }} />}
       </Match>
       <Match when={postRun().kind === 'done' && (postRun() as { lines: string[] })}>
         {(r) => (

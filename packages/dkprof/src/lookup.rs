@@ -59,11 +59,14 @@ pub fn addr_lookup(req: &LookupReq) -> Result<Value, String> {
         }
     }
     let r = Resolver::new(&req.maps, &loads)?;
-    let results: Vec<Value> = req
-        .addrs
+    Ok(lookup_addrs(&r, &req.addrs, req.ret))
+}
+
+pub(crate) fn lookup_addrs(r: &Resolver, addrs: &[Addr], ret: bool) -> Value {
+    let results: Vec<Value> = addrs
         .iter()
         .map(|a| {
-            let hit = if req.ret {
+            let hit = if ret {
                 r.lookup_return(a.cpu, a.addr)
             } else {
                 r.lookup(a.cpu, a.addr)
@@ -80,7 +83,7 @@ pub fn addr_lookup(req: &LookupReq) -> Result<Value, String> {
             })
         })
         .collect();
-    Ok(json!({"unloaded": r.unloaded, "results": results}))
+    json!({"unloaded": r.unloaded, "results": results})
 }
 
 /// The text view of an `addr_lookup` answer: `0xADDR name+0xOFF` per line (`?` when unnamed).
@@ -131,6 +134,7 @@ mod tests {
                     l2_byte_base: 0x2000_0000,
                     l2_sw_base: 0xb8_0000,
                     dsp: false,
+                    providers: 0,
                 }),
                 ..Key::default()
             },

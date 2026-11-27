@@ -251,6 +251,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "audio-codec-algorithms"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1254ebf6529f3763c491acfb5ab6e960809e3c75a38584cc664f8c5667fb7107"
+
+[[package]]
+name = "audioadapter"
+version = "5.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1292ef9edf681b7426ed089004b021a42896492f58bd0c909ad44e5faec9ac4"
+
+[[package]]
+name = "audioadapter-buffers"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46289a81a3bfa26d0f8b2415f8ca9decde9a66308a150568af5c102381b3c8ce"
+dependencies = [
+ "audioadapter",
+ "audioadapter-sample",
+ "num-traits",
+]
+
+[[package]]
+name = "audioadapter-sample"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5258faecf4edbe35ec483bda9b1f7438e6b391891819269c6b5461aeaa0e8d7d"
+dependencies = [
+ "audio-codec-algorithms",
+ "num-traits",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1048,6 +1081,7 @@ dependencies = [
  "plusdrive-format",
  "serde_json",
  "sha2",
+ "sharc-peer",
 ]
 
 [[package]]
@@ -1057,27 +1091,48 @@ dependencies = [
  "device-profile",
  "elektron-native-boot",
  "emmc-card",
+ "serde",
  "serde_json",
  "sha2",
- "sharc-fast-cl",
- "sharc-fast-cl-2",
  "sharc-native",
- "sharc-native-2",
+ "sharc-peer",
+]
+
+[[package]]
+name = "digi-wasm-core"
+version = "0.1.0"
+dependencies = [
+ "elektron-native-boot",
+ "periph",
+ "serde_json",
+ "sharc-fast-wasm",
+ "sharc-gen",
+ "sharc-native",
+ "sharc-peer",
 ]
 
 [[package]]
 name = "digiemu-desktop"
 version = "0.1.0"
 dependencies = [
+ "block2",
+ "cpal",
  "device-profile",
  "digi-control",
  "digi-coupled",
+ "dkaddrmap",
+ "dkaudio",
  "dkbulk",
  "dkmidi",
  "elektron-native-boot",
  "emmc-card",
+ "fixed-resample",
+ "libc",
  "midir",
+ "objc2",
+ "objc2-foundation",
  "patchkit",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -1085,6 +1140,9 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+ "windows",
 ]
 
 [[package]]
@@ -1135,6 +1193,15 @@ dependencies = [
 name = "dkaddrmap"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "dkaudio"
+version = "0.1.0"
+dependencies = [
+ "cpal",
  "serde",
  "serde_json",
 ]
@@ -1191,8 +1258,128 @@ dependencies = [
 ]
 
 [[package]]
+name = "dkrt-lifecycle"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-fit",
+ "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-link"
+version = "0.1.0"
+dependencies = [
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
 name = "dkrt-sdk"
 version = "0.1.0"
+
+[[package]]
+name = "dkrt-svc-bitmap"
+version = "0.1.0"
+
+[[package]]
+name = "dkrt-svc-fx"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+ "dkrt-svc-rows",
+ "dkrt-svc-rt",
+ "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-svc-lfo"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+ "dkrt-svc-bitmap",
+ "dkrt-svc-rows",
+ "dkrt-svc-rt",
+ "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-svc-machines"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+ "dkrt-svc-machines",
+ "dkrt-svc-rows",
+ "dkrt-svc-rt",
+ "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-svc-project"
+version = "0.1.0"
+dependencies = [
+ "dkrt-abi",
+ "dkrt-sdk",
+ "dkrt-svc-rt",
+ "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-svc-rows"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+ "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-svc-rt"
+version = "0.1.0"
+dependencies = [
+ "dkrt-abi",
+ "dkrt-sdk",
+]
+
+[[package]]
+name = "dkrt-svc-samples"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+ "dkrt-svc-rt",
+ "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-svc-shortcuts"
+version = "0.1.0"
+dependencies = [
+ "dkneeds",
+ "dkrt-abi",
+ "dkrt-sdk",
+ "dkrt-svc-rows",
+ "dkrt-svc-rt",
+ "dkrt-test-support",
+]
+
+[[package]]
+name = "dkrt-test-support"
+version = "0.1.0"
+dependencies = [
+ "dkrt-abi",
+ "dkrt-link",
+ "dkrt-sdk",
+]
 
 [[package]]
 name = "dksample"
@@ -1202,6 +1389,7 @@ version = "0.1.0"
 name = "dksharc"
 version = "0.1.0"
 dependencies = [
+ "dkneeds",
  "serde",
  "serde_json",
  "sha2",
@@ -1264,7 +1452,7 @@ checksum = "fac5fca71e65e94cc718a6e2af65d6e0f9c6027751c2aa562fbb5087fda639bc"
 dependencies = [
  "bit-set",
  "cssparser",
- "foldhash",
+ "foldhash 0.2.0",
  "html5ever",
  "precomputed-hash",
  "selectors",
@@ -1312,6 +1500,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
+name = "dynlib"
+version = "0.0.1"
+
+[[package]]
 name = "elektron-native-boot"
 version = "0.1.0"
 dependencies = [
@@ -1327,9 +1519,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "sharc-fast-wasm",
- "sharc-native",
- "sharc-native-2",
 ]
 
 [[package]]
@@ -1434,6 +1623,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "fallible-iterator"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
+
+[[package]]
+name = "fallible-streaming-iterator"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1465,6 +1666,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 
 [[package]]
+name = "fixed-resample"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d1870ecdc0221202c6fb0c8205a6a38878231f13fc9d389c1d9f2b9d2906bd3"
+dependencies = [
+ "audioadapter",
+ "audioadapter-buffers",
+ "ringbuf",
+ "rubato",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1480,6 +1693,12 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
+name = "foldhash"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "foldhash"
@@ -1907,6 +2126,15 @@ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hashbrown"
+version = "0.15.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
+dependencies = [
+ "foldhash 0.1.5",
+]
+
+[[package]]
+name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
@@ -1917,7 +2145,16 @@ version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
- "foldhash",
+ "foldhash 0.2.0",
+]
+
+[[package]]
+name = "hashlink"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
+dependencies = [
+ "hashbrown 0.15.5",
 ]
 
 [[package]]
@@ -2545,6 +2782,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "libsqlite3-sys"
+version = "0.35.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "133c182a6a2c87864fe97778797e46c7e999672690dc9fa3ee8e241aa4a9c13f"
+dependencies = [
+ "cc",
+ "pkg-config",
+ "vcpkg",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2561,6 +2809,7 @@ name = "live-audio"
 version = "0.0.1"
 dependencies = [
  "cpal",
+ "dynlib",
 ]
 
 [[package]]
@@ -2779,6 +3028,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "num-integer"
+version = "0.1.47"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ce2d95d4b3734dc35aa2f45e1aa22cd416814592a4f9d9205e11affd5b8e10b"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -3186,8 +3444,13 @@ dependencies = [
  "dkaddrmap",
  "dkneeds",
  "dkprof",
+ "dkrt-abi",
  "dkrt-fit",
  "dkrt-sdk",
+ "dkrt-svc-fx",
+ "dkrt-svc-lfo",
+ "dkrt-svc-machines",
+ "dkrt-svc-shortcuts",
  "dksharc",
  "dkupload",
  "dt2-firmware-loader",
@@ -3196,6 +3459,7 @@ dependencies = [
  "midir",
  "object",
  "plusdrive-format",
+ "proc-macro2",
  "regex-lite",
  "rustc-demangle",
  "selas",
@@ -3205,6 +3469,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "sharc-rt",
+ "tempfile",
  "toml 0.9.12+spec-1.1.0",
 ]
 
@@ -3666,6 +3931,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "ringbuf"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b58b631e416dd7d84549d7e6a50f767e111f9b03e30d04f40072f6618f386aaf"
+dependencies = [
+ "crossbeam-utils",
+ "portable-atomic",
+ "portable-atomic-util",
+]
+
+[[package]]
+name = "rubato"
+version = "5.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b4da228e06632d025557f798114057cf27a4c6a71d40024c84d6db82fa5ef4a"
+dependencies = [
+ "audioadapter",
+ "audioadapter-buffers",
+ "num-integer",
+ "num-traits",
+ "visibility",
+ "windowfunctions",
+]
+
+[[package]]
+name = "rusqlite"
+version = "0.37.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "165ca6e57b20e1351573e3729b958bc62f0e48025386970b6e4d29e7a7e71f3f"
+dependencies = [
+ "bitflags 2.13.2",
+ "fallible-iterator",
+ "fallible-streaming-iterator",
+ "hashlink",
+ "libsqlite3-sys",
+ "smallvec",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3774,7 +4078,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 [[package]]
 name = "selas"
 version = "0.1.0"
-source = "git+https://github.com/ElekLabs/selache?rev=02d6d785b8e3a125ab237a00bb89503aff835f5d#02d6d785b8e3a125ab237a00bb89503aff835f5d"
+source = "git+https://github.com/ElekLabs/selache?rev=967c1d1e4d02e41f483181964f0ba333558a1fa7#967c1d1e4d02e41f483181964f0ba333558a1fa7"
 dependencies = [
  "selelf",
  "selinstr",
@@ -3802,12 +4106,12 @@ dependencies = [
 [[package]]
 name = "selelf"
 version = "0.1.0"
-source = "git+https://github.com/ElekLabs/selache?rev=02d6d785b8e3a125ab237a00bb89503aff835f5d#02d6d785b8e3a125ab237a00bb89503aff835f5d"
+source = "git+https://github.com/ElekLabs/selache?rev=967c1d1e4d02e41f483181964f0ba333558a1fa7#967c1d1e4d02e41f483181964f0ba333558a1fa7"
 
 [[package]]
 name = "selinstr"
 version = "0.1.0"
-source = "git+https://github.com/ElekLabs/selache?rev=02d6d785b8e3a125ab237a00bb89503aff835f5d#02d6d785b8e3a125ab237a00bb89503aff835f5d"
+source = "git+https://github.com/ElekLabs/selache?rev=967c1d1e4d02e41f483181964f0ba333558a1fa7#967c1d1e4d02e41f483181964f0ba333558a1fa7"
 
 [[package]]
 name = "semver"
@@ -3990,6 +4294,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sharc-core-lib"
+version = "0.0.1"
+dependencies = [
+ "sharc-gen",
+ "sharc-rt",
+]
+
+[[package]]
 name = "sharc-fast-cl"
 version = "0.0.1"
 dependencies = [
@@ -3998,19 +4310,8 @@ dependencies = [
  "cranelift-jit",
  "cranelift-module",
  "cranelift-native",
+ "sharc-gen",
  "sharc-native",
-]
-
-[[package]]
-name = "sharc-fast-cl-2"
-version = "0.0.1"
-dependencies = [
- "cranelift-codegen",
- "cranelift-frontend",
- "cranelift-jit",
- "cranelift-module",
- "cranelift-native",
- "sharc-native-2",
 ]
 
 [[package]]
@@ -4030,16 +4331,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "sharc-gen-2"
-version = "0.0.1"
-dependencies = [
- "sharc-rt",
-]
-
-[[package]]
 name = "sharc-native"
 version = "0.0.1"
 dependencies = [
+ "dynlib",
  "sharc-fast-cl",
  "sharc-gen",
  "sharc-rt",
@@ -4047,12 +4342,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "sharc-native-2"
+name = "sharc-peer"
+version = "0.1.0"
+dependencies = [
+ "device-profile",
+ "elektron-native-boot",
+ "emmc-card",
+ "periph",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sharc-fast-cl",
+ "sharc-gen",
+ "sharc-native",
+]
+
+[[package]]
+name = "sharc-rig"
 version = "0.0.1"
 dependencies = [
- "sharc-gen-2",
- "sharc-rt",
- "sharc-stats",
+ "sharc-gen",
+ "sharc-native",
 ]
 
 [[package]]
@@ -5083,6 +5393,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "vcpkg"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+
+[[package]]
 name = "version-compare"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5093,6 +5409,17 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "visibility"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d674d135b4a8c1d7e813e2f8d1c9a58308aee4a680323066025e53132218bd91"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "vswhom"
@@ -5414,6 +5741,15 @@ dependencies = [
  "raw-window-handle",
  "windows-sys 0.61.2",
  "windows-version",
+]
+
+[[package]]
+name = "windowfunctions"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90628d739333b7c5d2ee0b70210b97b8cddc38440c682c96fd9e2c24c2db5f3a"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

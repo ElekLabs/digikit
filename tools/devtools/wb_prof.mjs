@@ -3,10 +3,14 @@
 //
 //     wb [--format json|text] addrmap lookup ADDR... [--map F]... [--image X.syx] [--loads F | --snapshot F] [--load ID=BASE] [--dsp-base ID=PC] [--cpu cf|sharc] [--ret]
 //     wb [--format json|text] module analyse MODULE.dkm DSP.dko.json
-//     wb [--format json|text] profile report FILE [--top N] [--map F]... [--image X.syx] [--loads F] [--analyse ID=MODULE.dkm:DSP.dko.json]...
+//     wb [--format json|text] profile report FILE [--run-id ID] [--top N] [--map F]... [--image X.syx] [--loads F] [--analyse ID=MODULE.dkm:DSP.dko.json]...
+//     wb profile calibrate fit --device D.json... --model E.json... --out cal.json [--block-cycles N] [--model-id ID]   (device and model captures of the same cases: docs/INSTRUMENTATION.md "Calibration")
+//     wb [--format json|text] profile calibrate report cal.json [--model-profile FILE]    (--calibration FILE on `profile report` adds the estimate to a model profile's DSP rows)
+//     wb profile calibrate run --profile NAME|FILE [--out DIR]   (the capture runner: tools/devtools/wb_calibrate.mjs, docs/INSTRUMENTATION.md "Calibration runs")
 //     wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot] [--cpu cf|sharc]
+//     wb [--port SUB] [--bin PATH] profile spans [--start|--stop|--reset] [--out FILE]   (a device command, run from wb.mjs: profSpans; --start resets the counters, then starts)
 //
-// `record` reads `cf.profile` before and after N seconds and keeps the difference; `--since-boot` keeps the cumulative counters (the state of a paused emulator).
+// `record` starts `cf.profile`, waits N seconds and reads the counters; `--since-boot` skips the start and the wait and reads the counters since an earlier `cf.profile {enable: true}` (the state of a paused emulator).
 // `--cpu sharc` records `sharc.profile` (the daemon needs the `sharc-profile` cargo feature): it starts the DSP counting, waits N seconds and reads it;
 // `--since-boot` skips the start and the wait and reads what the counting has gathered since a `sharc.profile {enable: true}` (a paused emulator).
 // `--analyse ID=MODULE.dkm:DSP.dko.json` adds the static analysis of a module's DSP code to `report`: SHARC counters are also added per loop.
@@ -18,12 +22,39 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DkProf } from '../../packages/dk-session/src/dkprof.ts';
+import {
+  readProfileHotspots,
+  resolveProfileHotspots,
+  verifiedProfileMaps,
+} from '../../packages/workbench-core/src/profile/hotspots.ts';
+import { SPAN_PHASES } from '../../packages/dk-session/src/gen_proto.ts';
+import { expandCaptures, observedDispatch } from '../../packages/workbench-core/src/profile/calibration-view.ts';
+import { formatSpanShare, readSpanSummary } from '../../packages/workbench-core/src/profile/span-summary.ts';
+import { readTrace } from '../../packages/workbench-core/src/profile/trace.ts';
+import {
+  buildProfile,
+  cfPart,
+  runId,
+  sharcPart,
+  spansPart,
+} from '../../packages/workbench-core/src/profile/profile-artifact.ts';
 
 function readJson(file) {
   try {
     return JSON.parse(readFileSync(file, 'utf8'));
   } catch (e) {
     console.error(`wb: ${file}: ${e.message}`);
+    process.exit(1);
+  }
+}
+
+/** A fit input file: one dk.profile/1, or the captures of a dk.calcaptures/1 file (the pane's "Save run"). */
+function readCaptures(file, side) {
+  try {
+    return expandCaptures(readJson(file), side, file);
+  } catch (e) {
+    // the message names the file already (expandCaptures)
+    console.error(`wb: ${e.message}`);
     process.exit(1);
   }
 }
@@ -37,7 +68,26 @@ export async function loadProf(root, fail) {
 function mapsOf(opts) {
   const files = [...(opts.map ?? [])];
   if (opts.image) files.push(opts.image.replace(/\.syx$/, '') + '.addrmap.json');
-  return files.map((f) => readJson(f));
+  return files.map((f) => {
+    const map = readJson(f);
+    const review = map.review;
+    delete map.review;
+    if (
+      typeof review?.file === 'string' &&
+      path.basename(review.file) === review.file &&
+      /\.html?$/i.test(review.file) &&
+      Array.isArray(review.entries) &&
+      typeof review.html_sha256 === 'string'
+    ) {
+      const html = path.resolve(path.dirname(f), review.file);
+      try {
+        if (sha256(html) === review.html_sha256) map.review = { ...review, path: html };
+      } catch {
+        // An absent or unreadable catalog still leaves valid function names.
+      }
+    }
+    return map;
+  });
 }
 
 function parseAddr(text, defaultCpu, fail) {
@@ -89,36 +139,175 @@ export async function profCommand({ cmd, sub, rest, opts, root, fail }) {
     return 0;
   }
   if (cmd === 'profile' && sub === 'report') {
-    if (rest.length !== 1) fail('profile report FILE [--top N]');
-    const req = { profile: readJson(rest[0]), maps: mapsOf(opts), format };
-    if (opts.top !== undefined) req.top = Number(opts.top);
-    if (opts.loads) req.loads = readJson(opts.loads);
-    for (const spec of opts.analyse ?? []) {
-      const at = spec.indexOf('=');
-      const [dkm, dko] = (at < 0 ? '' : spec.slice(at + 1)).split(':');
-      if (at < 0 || !dkm || !dko) fail('--analyse ID=MODULE.dkm:DSP.dko.json');
-      (req.analyses ??= {})[spec.slice(0, at)] = prof.moduleAnalyse(
-        Uint8Array.from(readFileSync(dkm)),
-        Uint8Array.from(readFileSync(dko)),
-      );
-    }
-    show(prof.profileReport(req), format);
+    if (rest.length !== 1) fail('profile report FILE [--run-id ID] [--top N]');
+    const doc = readJson(rest[0]);
+    const bundle = doc?.schema === 'dk.calcaptures/1';
+    const captures = expandCaptures(doc, undefined, rest[0]);
+    if (!captures.length) fail('capture set has no runs');
+    const selected = opts['run-id'];
+    const profiles = selected === undefined ? captures : captures.filter((capture) => capture?.run?.id === selected);
+    if (!profiles.length) fail(`no capture with run ID ${selected}`);
+    if (selected !== undefined && profiles.length > 1) fail(`capture has multiple runs with ID ${selected}`);
+    if (profiles.length > 1 && (opts.calibration || opts.loads || opts.analyse?.length))
+      fail('--calibration, --loads and --analyse require --run-id when reporting on a capture set');
+    const reports = profiles.map((profile) => reportProfile(prof, opts, format, profile, fail));
+    if (format === 'json' && bundle && selected === undefined) console.log(JSON.stringify({ captures: reports }));
+    else for (const report of reports) show(report, format);
     return 0;
   }
+  if (cmd === 'profile' && sub === 'calibrate') return calibrate({ prof, rest, opts, format, fail });
   if (cmd === 'profile' && sub === 'record') return record({ opts, root, fail });
-  fail('usage: wb addrmap lookup | module analyse | profile report | profile record (see tools/devtools/wb_prof.mjs)');
+  fail(
+    'usage: wb addrmap lookup | module analyse | profile report | profile record | profile spans (see tools/devtools/wb_prof.mjs)',
+  );
+}
+
+function reportProfile(prof, opts, format, profile, fail) {
+  const top = opts.top === undefined ? undefined : Number(opts.top);
+  const evidence = readProfileHotspots(profile, top);
+  const maps = mapsOf(opts);
+  const verified = new Set(verifiedProfileMaps(evidence, maps));
+  // Existing aggregate reports can use an explicit module map for captures that predate pack hashes.
+  // Navigable hotspot evidence below always requires a matching pack hash.
+  const reportMaps = evidence.sha256
+    ? maps.filter((map) => verified.has(map) || (map.kind === 'module' && !evidence.moduleHashes.length))
+    : [...verified, ...maps];
+  const req = { profile, maps: reportMaps, format, analyses: evidence.rig?.analyses };
+  if (top !== undefined) req.top = top;
+  if (opts.loads) req.loads = readJson(opts.loads);
+  if (opts.analyse?.length) req.analyses = { ...req.analyses };
+  for (const spec of opts.analyse ?? []) {
+    const at = spec.indexOf('=');
+    const [dkm, dko] = (at < 0 ? '' : spec.slice(at + 1)).split(':');
+    if (at < 0 || !dkm || !dko) fail('--analyse ID=MODULE.dkm:DSP.dko.json');
+    (req.analyses ??= {})[spec.slice(0, at)] = prof.moduleAnalyse(
+      Uint8Array.from(readFileSync(dkm)),
+      Uint8Array.from(readFileSync(dko)),
+    );
+  }
+  const rep = prof.profileReport(req);
+  const hotspots =
+    format === 'json'
+      ? resolveProfileHotspots(
+          {
+            ...evidence,
+            loads: req.loads ? { modules: [...(evidence.loads?.modules ?? []), ...req.loads.modules] } : evidence.loads,
+          },
+          maps,
+          prof,
+        )
+      : undefined;
+  if (hotspots) rep.hotspots = hotspots;
+  const dispatch = observedDispatch(profile);
+  if (format === 'json' && dispatch.length) rep.dispatch = dispatch;
+  const spans = readSpanSummary(profile);
+  const trace = readTrace(profile)?.trace;
+  if (format === 'json') {
+    if (spans) rep.spans = spans;
+    if (trace)
+      rep.trace = { hz: trace.hz, events: trace.events.length, dropped: trace.dropped, markers: trace.markers };
+  } else {
+    for (const row of dispatch) {
+      const label = [row.module, row.route, 'row ' + row.row].filter(Boolean).join(' · ');
+      rep.text += `${label}    ${row.calls} calls    max ${row.max_block} ${row.unit ?? 'units'}/block\n`;
+    }
+    if (spans) {
+      rep.text += 'Main CPU spans (recorded window)\n';
+      const us = (n) => (n === undefined ? '—' : n.toFixed(2) + ' µs');
+      for (const row of spans.rows) {
+        rep.text += `  ${row.name}    ${row.calls ?? '—'} calls    total ${us(row.totalUs)}    max ${us(row.maxUs)}    ${formatSpanShare(row.share)}\n`;
+      }
+    }
+    if (trace) rep.text += `Main CPU trace: ${trace.events.length} retained events, ${trace.dropped} dropped\n`;
+  }
+  if (opts.calibration) {
+    const cal = readJson(opts.calibration);
+    const est = prof.calibrateReport({ calibration: cal, profile: req.profile, estimate_only: true, format });
+    if (format === 'json') rep.estimate = est.estimate;
+    else rep.text += est.text;
+  }
+  return rep;
+}
+
+const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+
+/** `profile calibrate fit | report`: the fit of device against model profiles, in Rust (dkprof::calibrate), and its views. */
+function calibrate({ prof, rest, opts, format, fail }) {
+  const [what, ...args] = rest;
+  if (what === 'fit') {
+    const dev = opts['device-files'] ?? [];
+    const mdl = opts.model ?? [];
+    if (args.length || dev.length === 0 || mdl.length === 0 || !opts.out)
+      fail(
+        'profile calibrate fit --device D.json... --model E.json... --out cal.json [--block-cycles N] [--model-id ID]',
+      );
+    const req = {
+      device: dev.flatMap((f) => readCaptures(f, 'dev')),
+      model: mdl.flatMap((f) => readCaptures(f, 'emu')),
+      sources: [
+        ...dev.map((f) => ({ role: 'device', file: path.basename(f), sha256: sha256(f) })),
+        ...mdl.map((f) => ({ role: 'model', file: path.basename(f), sha256: sha256(f) })),
+      ],
+    };
+    if (opts['block-cycles'] !== undefined) req.block_cycles = Number(opts['block-cycles']);
+    if (opts['model-id'] !== undefined) req.model_id = opts['model-id'];
+    let cal;
+    try {
+      cal = prof.calibrateFit(req);
+    } catch (e) {
+      fail(e.message, 1);
+    }
+    writeFileSync(opts.out, `${JSON.stringify(cal, null, 2)}\n`);
+    if (format === 'json') console.log(JSON.stringify(cal));
+    else process.stdout.write(prof.calibrateReport({ calibration: cal, format: 'text' }).text);
+    // json mode: stdout is only the JSON
+    (format === 'json' ? console.error : console.log)(
+      `${opts.out}: ${cal.dsp?.pairs.length ?? 0} DSP pairs, ${cal.cf?.pairs.length ?? 0} ColdFire pairs, ${cal.refused.length} refused`,
+    );
+    return 0;
+  }
+  if (what === 'report') {
+    if (args.length !== 1) fail('profile calibrate report cal.json [--model-profile FILE]');
+    const req = { calibration: readJson(args[0]), format };
+    if (opts['model-profile']) req.profile = readJson(opts['model-profile']);
+    show(prof.calibrateReport(req), format);
+    return 0;
+  }
+  return fail('usage: wb profile calibrate fit | report | run');
+}
+
+/** `profile spans`: the runtime span counters of a device (dk-session `profileAll`) as a dk.profile/1 with `spans`, and a table. */
+export async function profSpans({ opts, session, fail }) {
+  // --start resets the counters first, so a run starts from zero.
+  if (opts.op === 'start') await session.profileState('reset');
+  if (opts.op) await session.profileState(opts.op);
+  const all = await session.profileAll();
+  const modules = await session.modules();
+  const hz = all.hz;
+  const nameOf = (s) => {
+    if (s.kind === 'module') return modules.find((m) => m.index === s.index)?.name ?? `module ${s.index}`;
+    if (s.kind === 'phase') return SPAN_PHASES[s.index] ?? `phase ${s.index}`;
+    return `poll ${s.index}`;
+  };
+  const part = spansPart(all, nameOf);
+  const spans = part.spans;
+  if (spans.length > 0 && !(hz > 0)) fail('the device reported spans without a clock rate', 1);
+  const profile = buildProfile({ run: { id: runId('dev', new Date()), target: 'unknown' }, spans: part });
+  if (opts.out) writeFileSync(opts.out, `${JSON.stringify(profile)}\n`);
+  console.log(`${all.running ? 'running' : 'stopped'}, ${hz} Hz`);
+  console.log('name\tcalls\ttotal ms\tmean us\tmax us');
+  for (const s of spans) {
+    const us = (t) => (t * 1e6) / hz;
+    const mean = s.calls > 0 ? us(s.sum_ticks) / s.calls : 0;
+    console.log(
+      `${s.name}\t${s.calls}\t${(us(s.sum_ticks) / 1000).toFixed(3)}\t${mean.toFixed(1)}\t${us(s.max_ticks).toFixed(1)}`,
+    );
+  }
+  if (opts.out) console.log(`${opts.out}: ${spans.length} spans`);
+  return 0;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const PATHS = ['ram_clear', 'run_fast', 'step_once', 'idle_skip'];
-
-/** Rows `[hex pc, weight]` of two reports as counters of the difference. Rows that fell out of the top-N of the later report are lost. */
-function deltaRows(before, after, series) {
-  const base = new Map((before ?? []).map(([pc, w]) => [pc, w]));
-  return (after ?? [])
-    .map(([pc, w]) => ({ cpu: 'cf', addr: Number(pc), count: w - (base.get(pc) ?? 0), series }))
-    .filter((r) => r.count > 0);
-}
 
 /** The load table of the running image: the symbols the ship map names, read from guest memory and decoded by dkprof. */
 async function readLoads(prof, client, ship, plan) {
@@ -140,7 +329,7 @@ async function readLoads(prof, client, ship, plan) {
 
 /** The identity of the run: id, target and, with `--image`, the hashes and the load table read from the running emulator. */
 async function runInfo({ opts, root, fail }, client) {
-  const run = { id: `emu-${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)}`, target: 'unknown' };
+  const run = { id: runId('emu', new Date()), target: 'unknown' };
   try {
     run.source_revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
   } catch {
@@ -184,35 +373,7 @@ async function recordSharc(ctx) {
     }
     const a = await client.call('sharc.profile');
     const run = await runInfo(ctx, client);
-    const profile = {
-      schema: 'dk.profile/1',
-      run,
-      clock: a.clock,
-      raw: a.raw,
-      metrics: [
-        { name: 'sharc.blocks', value: a.blocks, unit: 'blocks' },
-        { name: 'sharc.insn.executed', value: a.icount, unit: 'insn' },
-        { name: 'sharc.insn.idle_skipped', value: a.idle_skipped, unit: 'insn' },
-        { name: 'sharc.insn.counted.fast', value: a.counted.fast, unit: 'insn' },
-        { name: 'sharc.insn.counted.block', value: a.counted.block, unit: 'insn' },
-        { name: 'sharc.insn.counted.interpreted', value: a.counted.interpreted, unit: 'insn' },
-        {
-          name: 'sharc.coverage',
-          unit: 'ratio',
-          na_reason:
-            'sharc.insn.executed and the per-PC counts do not reconcile in the DN2 proof run (open, profiling plan P4)',
-        },
-      ],
-      markers: [{ name: 'record.start', at: 0 }],
-      loss: [],
-      overhead: [
-        {
-          name: 'sharc-profile.feature',
-          unit: 'ratio',
-          na_reason: 'not measured: needs a paired run without the feature',
-        },
-      ],
-    };
+    const profile = buildProfile({ run, sharc: sharcPart(a) });
     writeFileSync(opts.out, `${JSON.stringify(profile)}\n`);
     console.log(`${opts.out}: ${a.raw.length} counters over ${a.blocks} DSP blocks`);
   } finally {
@@ -231,57 +392,20 @@ async function record(ctx) {
     fail('profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR] [--since-boot] [--cpu cf|sharc]');
   const client = await connectDaemon(ctx);
   try {
-    const before = opts['since-boot'] ? { paths: [] } : await client.call('cf.profile');
-    await sleep(seconds * 1000);
-    const after = await client.call('cf.profile');
-    const raw = [
-      ...deltaRows(before.pc_samples, after.pc_samples, 'pc'),
-      ...deltaRows(before.idle_pc, after.idle_pc, 'idle_pc'),
-      ...deltaRows(before.exit_pcs, after.exit_pcs, 'exit_pc'),
-    ];
-    const run = await runInfo(ctx, client);
-    const metrics = [];
-    for (const p of PATHS) {
-      const a = after.paths.find((x) => x.path === p) ?? {};
-      const b = before.paths.find((x) => x.path === p) ?? {};
-      metrics.push(
-        { name: `path.${p}.instructions`, value: (a.instructions ?? 0) - (b.instructions ?? 0), unit: 'insn' },
-        { name: `path.${p}.calls`, value: (a.calls ?? 0) - (b.calls ?? 0), unit: 'calls' },
-        { name: `path.${p}.host_ns`, value: (a.host_ns ?? 0) - (b.host_ns ?? 0), unit: 'ns' },
-      );
+    if (!opts['since-boot']) {
+      await client.call('cf.profile', { enable: true });
+      await sleep(seconds * 1000);
     }
-    metrics.push({
+    const after = await client.call('cf.profile');
+    const run = await runInfo(ctx, client);
+    const part = cfPart(undefined, after);
+    part.metrics.push({
       name: 'sharc.pc',
       unit: 'insn',
       na_reason: 'not recorded here: wb profile record --cpu sharc records the DSP counts (sharc.profile)',
     });
-    const profile = {
-      schema: 'dk.profile/1',
-      run,
-      clock: {
-        source: 'emu.cf.insn',
-        unit: 'insn',
-        sampling:
-          'pc: every 64 insns in run_fast, every insn in step_once; idle_pc: weighted by insns skipped; exit_pc: run_fast exits (a count of exits, not insns)',
-      },
-      raw,
-      metrics,
-      markers: [{ name: 'record.start', at: 0 }],
-      loss: [
-        {
-          series: 'all',
-          reason:
-            'cf.profile keeps the 400 heaviest rows of its cumulative tables; rows that fell out of the later report are lost from the difference',
-        },
-      ],
-      overhead: [
-        {
-          name: 'cf-profile.feature',
-          unit: 'ratio',
-          na_reason: 'not measured: needs a paired run without the feature',
-        },
-      ],
-    };
+    const profile = buildProfile({ run, cf: part });
+    const raw = profile.raw;
     writeFileSync(opts.out, `${JSON.stringify(profile)}\n`);
     console.log(`${opts.out}: ${raw.length} counters over ${seconds} s`);
   } finally {

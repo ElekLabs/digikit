@@ -18,7 +18,7 @@
 //   [I6 - 2] .. [I6 - 1 - N]   N save slots of the routine (DK_SAVE slot numbers 2 .. N + 1)
 //   I7 = I6 - 2 on entry, I6 - 2 - N after DK_ENTER(N); DK_LEAVE's RFRAME sets I7 = I6 and I6 = [I6].
 //
-// Caller must assume clobbered: R0, R1, R2, R4, R8, R12, I4, I12, MR, ASTAT, the loop counter, and the stack below I7.
+// Caller must assume clobbered: R0, R1, R2, R4, R8, R12, I4, I12, M4, MR, ASTAT, the loop counter, and the stack below I7.
 // Preserved by a routine (callee-saved): R3, R5-R7, R9-R11, R13-R15, I0-I3, I5, M1-M3, B3, and everything the module
 // register contract keeps (see sdk/dsp/REGISTERS.md). A routine saves what it uses of these (DK_SAVE) and restores
 // it before DK_LEAVE. A routine may keep R12 unchanged, but a caller must not rely on it.

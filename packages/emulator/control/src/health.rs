@@ -8,10 +8,6 @@
 //! boot. Events are emitted once per episode (a stall ends when the
 //! heartbeat advances again, which emits `stall.end`).
 
-/// Emulated ColdFire instructions per millisecond (132,000 unless `DIGI_CF_IPS` is set).
-pub fn instr_per_ms() -> u64 {
-    elektron_native_boot::clock::cf_ips() / 1000
-}
 /// Default stall threshold in emulated milliseconds.
 pub const DEFAULT_STALL_MS: u64 = 1000;
 
@@ -19,6 +15,8 @@ pub const DEFAULT_STALL_MS: u64 = 1000;
 pub struct Observation {
     /// Controller clock: ColdFire instructions since the session began.
     pub elapsed: u64,
+    /// Emulated ColdFire instructions per millisecond of the observed runtime (its rate over 1000).
+    pub instr_per_ms: u64,
     pub hits: u64,
     /// The firmware reached its main panel (the heartbeat is meaningful).
     pub main_ui: bool,
@@ -128,7 +126,7 @@ impl Health {
             // Not expected to beat: keep the anchor current.
             self.last_advance = obs.elapsed;
         } else if self.stall_ms > 0 && !self.stalled {
-            let ms = (obs.elapsed - self.last_advance) / instr_per_ms();
+            let ms = (obs.elapsed - self.last_advance) / obs.instr_per_ms.max(1);
             if ms >= self.stall_ms {
                 self.stalled = true;
                 self.stall_count += 1;
@@ -146,9 +144,12 @@ impl Health {
 mod tests {
     use super::*;
 
+    const INSTR_PER_MS: u64 = 132_000;
+
     fn obs(elapsed_ms: u64, hits: u64) -> Observation {
         Observation {
-            elapsed: elapsed_ms * instr_per_ms(),
+            elapsed: elapsed_ms * INSTR_PER_MS,
+            instr_per_ms: INSTR_PER_MS,
             hits,
             main_ui: true,
             cpu_running: true,
@@ -196,13 +197,13 @@ mod tests {
         let mut o = obs(0, 0);
         o.main_ui = false;
         assert!(h.observe(1, &o).is_empty());
-        o.elapsed = 10_000 * instr_per_ms();
+        o.elapsed = 10_000 * INSTR_PER_MS;
         assert!(h.observe(1, &o).is_empty(), "booting");
         // reaching the main panel starts the clock then
         o.main_ui = true;
         assert!(h.observe(1, &o).is_empty());
         o.cpu_running = false;
-        o.elapsed = 20_000 * instr_per_ms();
+        o.elapsed = 20_000 * INSTR_PER_MS;
         assert!(h.observe(1, &o).is_empty(), "STOP waits for an interrupt");
         let mut off = Health::new(0);
         assert!(off.observe(1, &obs(0, 1)).is_empty());

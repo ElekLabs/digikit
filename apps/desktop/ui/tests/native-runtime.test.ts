@@ -50,11 +50,16 @@ test('inside the app a startup firmware shows its snapshot at once, and the app 
 });
 
 test('a load stages the file, loads it through the controller with the session token, and shows the new snapshot', async () => {
+  let markStopped!: () => void;
+  const stopped = new Promise<void>((resolve) => {
+    markStopped = resolve;
+  });
   const host = createFakeHost({
     'emu.startup': snapshot(1),
     'emu.stageSyx': '/tmp/staged.syx',
     'rpc.call': () => ({}),
     'emu.step': snapshot(3),
+    'emu.stop': markStopped,
   });
   const updates: RuntimeUpdate[] = [];
   const runtime = (await createNativeRuntime(host, (u) => updates.push(u)))!;
@@ -65,8 +70,53 @@ test('a load stages the file, loads it through the controller with the session t
   const [load] = host.argsOf('rpc.call');
   assert.deepEqual(load, ['firmware.load', { syx: '/tmp/staged.syx', replace: true, runtime: true }, 2]);
   runtime.dispose();
+  await stopped;
   assert.equal(host.commands().at(-1), 'emu.stop');
 });
+
+test.each([false, true])(
+  'disposal stops only after a pending firmware load settles (stop first: %s)',
+  async (stopFirst) => {
+    vi.useFakeTimers();
+    try {
+      let completeLoad!: () => void;
+      const load = new Promise<void>((resolve) => {
+        completeLoad = resolve;
+      });
+      const host = createFakeHost({
+        'emu.startup': snapshot(1),
+        'rpc.call': () => load,
+        'emu.step': snapshot(2),
+      });
+      const updates: RuntimeUpdate[] = [];
+      const runtime = (await createNativeRuntime(host, (update) => updates.push(update)))!;
+      const loading = runtime.loadPath!('/tmp/firmware.syx');
+      await vi.advanceTimersByTimeAsync(0);
+      assert.equal(host.argsOf('rpc.call').length, 1);
+
+      const firstStop = stopFirst ? runtime.stop() : undefined;
+      runtime.dispose();
+      runtime.dispose();
+      const finalStop = runtime.stop();
+      await vi.advanceTimersByTimeAsync(0);
+      assert.equal(
+        host.argsOf('emu.stop').length,
+        0,
+        'stop must wait for the controller to finish installing the firmware',
+      );
+
+      completeLoad();
+      await Promise.all([loading, firstStop, finalStop]);
+      await vi.advanceTimersByTimeAsync(0);
+      assert.equal(host.argsOf('emu.stop').length, 1);
+      assert.deepEqual(updates, [{ type: 'snapshot', snapshot: snapshot(1) }]);
+      assert.equal(host.argsOf('emu.step').length, 0);
+      assert.equal(vi.getTimerCount(), 0);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
 
 test('a refusal with a code becomes an error with the code as data', async () => {
   const host = createFakeHost({
@@ -103,6 +153,28 @@ test('native audio health uses its lightweight endpoint and preserves the CF set
     assert.deepEqual(host.argsOf('emu.audioStatus'), [[1]]);
     runtime.dispose();
   } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('controller utilization includes CF without audio and drops cached values on pause or guest fault', async () => {
+  vi.useFakeTimers();
+  const load = { window_s: 1, cf: { real_pct: 31, real_high_pct: 35, model_pct: 28 }, dsp: null };
+  const host = createFakeHost({
+    'emu.startup': snapshot(1),
+    'emu.step': status({ error: 'guest fault' }),
+    'rpc.call': () => ({ load }),
+  });
+  const runtime = (await createNativeRuntime(host, () => {}))!;
+  try {
+    assert.deepEqual((await runtime.controllerStatus!()).load, load);
+    runtime.pause();
+    assert.equal((await runtime.controllerStatus!()).load, null);
+    runtime.resume();
+    await vi.advanceTimersByTimeAsync(0);
+    assert.equal((await runtime.controllerStatus!()).load, null);
+  } finally {
+    runtime.dispose();
     vi.useRealTimers();
   }
 });

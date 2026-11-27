@@ -1,3 +1,4 @@
+import { emulatorClock, moduleStorePathOf, waitClock, type Device } from '@digi/test-support';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileHashHex, type DkLogEvent } from '@digi/dk-session';
@@ -5,12 +6,18 @@ import { LOG_KIND } from '@digi/dk-session/gen_proto';
 import { expect } from 'vitest';
 import type { PatchedSession } from '@digi/regression/support.ts';
 import { liveArtifacts, record } from '@digi/regression/runtime/artifacts.ts';
-import { DEBUG_MODULE, installWithDebug } from '@digi/regression/runtime/install.ts';
+import { DEBUG_MODULE, installWithDebug, moduleStorePath } from '@digi/regression/runtime/install.ts';
 import { expectRuntimeReady } from '@digi/regression/runtime/ready.ts';
-import { pollEmulated, waitEmulated } from '@digi/regression/runtime/waits.ts';
+import { neededServices, portFile, servicePath } from '@digi/regression/runtime/service-files.ts';
+import { SYSTEM_PACKAGE_STORE_PATH, systemPackageFile } from '@digi/regression/runtime/system-package.ts';
+import { pollEmulated } from '@digi/regression/runtime/waits.ts';
 import type { RuntimeModule } from './manifests.ts';
 
-/** Real USB upload, persisted bytes, selected reboot, registration and fault acceptance.
+/** What only the firmware and the card show of a module load: the module's bytes on the real card after the reboot, the DSP loader's completion on the SHARC, the machine's
+ * voice row and type, guard counters, the firmware UI reached and no failure event in the log.
+ * Owned below the device: the loader's version and runtime-needs fields and the MODULES reply (`assembly_tests.rs`,
+ * `the_modules_reply_carries_the_version_and_the_needed_runtime_of_each_loaded_file`), the epoch change of a restart (`waitForRestart` in `installWithDebug` fails without one)
+ * and the upload protocol (host tests of dkupload). The card's file set after the reboot stays here: it is a fact of the real card.
  * DSP allocation/registration does not establish rendered audio correctness. */
 export async function expectModuleLoad(
   runtime: PatchedSession,
@@ -19,34 +26,35 @@ export async function expectModuleLoad(
 ): Promise<void> {
   const { session, dk } = runtime;
   const bytes = fs.readFileSync(artifact);
-  const storePath = `modules/${module.id.split('/')[1]}.dkm`;
+  const storePath = moduleStorePathOf(module.id, bytes);
   // The debug module is loaded next to every module (the cell reads its LOG); for the debug module itself, once.
   const names = [...new Set([DEBUG_MODULE, module.id])];
-  const paths = [...new Set(['modules/debug.dkm', storePath])].sort();
-  const hash = fileHashHex(bytes);
+  const device = session.options.device as Device;
+  // the service files the module needs (services/<name>.dks) go on the card with it, and a service brings the port file of the device's firmware
+  const services = neededServices([artifact]).map((s) => servicePath(s.service));
+  // every test card holds the system package
+  const paths = [
+    ...new Set([SYSTEM_PACKAGE_STORE_PATH, moduleStorePath(device, DEBUG_MODULE), storePath, ...services, ...(services.length ? [portFile(device).name] : [])]),
+  ].sort();
   const artifacts = path.join(liveArtifacts(session, 'module-load'), module.id.split('/')[1]!);
   fs.mkdirSync(artifacts, { recursive: true });
 
   await expectRuntimeReady(session);
-  expect(await dk.list(), 'fresh daemon has an empty store').toEqual([]);
-  expect(await dk.modules(), 'fresh runtime has no uploaded modules').toEqual([]);
-  const epoch = (await session.status()).epoch;
-  if (typeof epoch !== 'number') throw new Error('daemon status must report a numeric epoch');
   // the debug module is selected first: the log (LOG) exists only while it is loaded, and this cell reads it
   await installWithDebug(runtime, module.id);
   expect(
     (await dk.modules()).map((entry) => entry.name),
     'only the uploaded module and the debug module are registered',
   ).toEqual(names);
-  expect((await session.status()).epoch, 'protocol restart boots another epoch').toBeGreaterThan(epoch);
   const entries = await dk.list();
   record(artifacts, 'store', entries);
-  expect(entries.find((entry) => entry.path === storePath)).toEqual({
-    path: storePath,
-    size: bytes.length,
-    hash,
+  expect(entries.map((entry) => entry.path).sort(), 'the card holds the system package, the module files and the service files they need after the reboot, no strays').toEqual(paths);
+  const packageBytes = fs.readFileSync(systemPackageFile());
+  expect(entries.find((entry) => entry.path === SYSTEM_PACKAGE_STORE_PATH), 'the system package is whole').toEqual({
+    path: SYSTEM_PACKAGE_STORE_PATH,
+    size: packageBytes.length,
+    hash: fileHashHex(packageBytes),
   });
-  expect(entries.map((entry) => entry.path).sort(), 'the store holds the two module files (any order)').toEqual(paths);
   expect(await dk.verifyFile(storePath, bytes), 'module bytes survive reboot').toBe(true);
 
   try {
@@ -75,8 +83,6 @@ export async function expectModuleLoad(
       ).toEqual([0]);
     }
     const loaded = (await dk.modules()).find((entry) => entry.name === module.id)!;
-    expect(loaded.version, 'loader reports the prepared module version').toBe(bytes.readUInt32BE(0x34));
-    expect(loaded.needs, 'loader reports the runtime version the prepared module needs').toBe(bytes.readUInt32BE(0x30) & 0x7fffffff);
     if (module.dsp) {
       expect(loaded.dsp_len, 'module DSP image was allocated').toBeGreaterThan(0);
       if (module.type === 'machine') {
@@ -90,7 +96,7 @@ export async function expectModuleLoad(
     // CF-only registration is already complete; UI and fault acceptance below still apply.
     if (module.dsp) {
       expect((await session.status()).dsp, 'DSP conformance remains coupled').toBe('sharc');
-      await waitEmulated(session, 2000);
+      await waitClock(emulatorClock(session), 2000); // DSP registrations run on the coupled DSP: no observable end
     } else {
       const status = await session.status();
       expect(status.dsp, 'CF-only conformance retains the zero SSI peer').toBe('zero');

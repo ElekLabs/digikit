@@ -1,0 +1,49 @@
+[module]
+id = "digikit/pluck"
+version = "0.1.0"
+name = "PLUCK"
+category = "machines"
+type = "machine"
+author = "digikit"
+status = "experimental"
+summary = "A plucked-string synth machine with decay, pick position, brightness and colour, loaded at run time."
+dynamic = true
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# A machine loaded at run time (docs/findings/32-runtime-dsp-machines.md). `patchkit pack digikit/pluck --device dt2 -o ...dkm` links the DSP
+# object into the `.dkm` DSP section; the machine is declared by builder calls in init (src/module.c). The digikit runtime sends the code
+# to the DSP and publishes the voice row (type 18 on the Digitakt II, 17 on the Digitone II) and the machine row.
+[[machine]]
+id = "pluck"
+dsp = "pk"
+
+[[object]]
+path = "build/pluck-cf.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"
+
+# tests/rig/equiv-note.toml pins the two-note DSP output on the rig for each device.
+[[object]]
+path = "build/pluck-dsp.dko.json"
+sources = ["src/dsp/pluck.s"]
+place = "dsp.l2"
+
+[uses.dt2]
+machine_rows = 1
+param_rows = 4
+page_rows = 0
+record_bytes = 444
+dsp_cost_voice = 1932
+
+[uses.dn2]
+machine_rows = 1
+param_rows = 4
+page_rows = 1
+record_bytes = 540
+dsp_cost_voice = 2084

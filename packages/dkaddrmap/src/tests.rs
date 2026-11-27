@@ -224,7 +224,7 @@ fn module_dsp_entries_are_rebased_by_the_dsp_base() {
             fini: None,
         }],
     };
-    let r = Resolver::new(&[map.clone()], &load(Some(0xb8_1000))).unwrap();
+    let r = Resolver::new(std::slice::from_ref(&map), &load(Some(0xb8_1000))).unwrap();
     let hit = r.lookup(Cpu::Sharc, 0xb8_1014).unwrap();
     assert_eq!((hit.name.as_str(), hit.offset), ("demo_render", 4));
     assert_eq!(hit.module.as_deref(), Some("test/demo"));
@@ -260,6 +260,7 @@ fn synthetic() -> (snapshot::Loader, snapshot::Snapshot) {
         l2_byte_base: 0x2000_0000,
         l2_sw_base: 0xb8_0000,
         dsp: true,
+        providers: 0,
     };
     let record = |used: u32, name: &str, base: u32, size: u32, fini: u32| {
         let mut n = name.as_bytes().to_vec();
@@ -297,6 +298,7 @@ fn a_snapshot_decodes_to_loads_with_and_without_dsp_code() {
         lens,
         [
             ("DKRT_STATE", 40 + 3 * 52),
+            ("DKRT_HOST_DIR", host_dir::BYTES),
             ("DKRT_DSP", 52 + 24),
             ("dyndsp_info", 16)
         ],
@@ -333,4 +335,195 @@ fn a_snapshot_without_the_dsp_loader_gives_no_dsp_bases() {
     assert!(
         snapshot::parse_hex("0aff").unwrap() == [10, 255] && snapshot::parse_hex("0a f").is_err()
     );
+}
+
+#[test]
+fn a_provider_record_decodes_to_a_load_and_an_old_loader_header_still_parses() {
+    let (mut loader, mut snap) = synthetic();
+    loader.providers = 2;
+    let mut name = b"core/services/fx".to_vec();
+    name.resize(32, 0);
+    let mut recs = words(&[1]);
+    recs.extend(name);
+    recs.extend(words(&[0x0001_0000, 0x4760_0000, 0x1200, 0]));
+    recs.extend(words(&[0; 13]));
+    snap.insert("DKRT_PROVIDERS".into(), recs);
+    let reads: Vec<_> = loader.reads().iter().map(|r| (r.symbol, r.len)).collect();
+    assert_eq!(reads.last(), Some(&("DKRT_PROVIDERS", 2 * 52)));
+    assert!(
+        loader
+            .reads()
+            .last()
+            .is_some_and(|r| r.host_id == Some(gen_host_dir::HOST_PROVIDERS))
+    );
+    let t = snapshot::decode_loads(&loader, &snap).unwrap();
+    assert_eq!(t.modules.len(), 3, "two modules and the provider");
+    let fx = &t.modules[2];
+    assert_eq!(
+        (fx.id.as_str(), fx.base, fx.size, fx.dsp_base),
+        ("core/services/fx", 0x4760_0000, 0x1200, None)
+    );
+    let old: snapshot::Loader =
+        serde_json::from_str(r#"{"modules":3,"l2_byte_base":1,"l2_sw_base":2}"#).unwrap();
+    assert_eq!((old.providers, old.dsp), (0, false));
+    assert_eq!(old.reads().len(), 1);
+}
+
+/// A device's memory as a byte image at a base, and the directory a booted core would hold in it.
+struct FakeMemory {
+    base: u64,
+    bytes: Vec<u8>,
+}
+
+impl FakeMemory {
+    fn peek(&self, at: u64, len: u64) -> Result<Vec<u8>, String> {
+        let from = at.checked_sub(self.base).ok_or("below the image")? as usize;
+        self.bytes
+            .get(from..from + len as usize)
+            .map(<[u8]>::to_vec)
+            .ok_or_else(|| format!("peek {at:#x}+{len}: outside the image"))
+    }
+    fn put(&mut self, at: u64, data: &[u8]) {
+        let from = (at - self.base) as usize;
+        self.bytes[from..from + data.len()].copy_from_slice(data);
+    }
+}
+
+/// The synthetic snapshot laid out in a fake memory: the resident symbols at fixed addresses, the package statics elsewhere, the directory pointing at them (or empty).
+fn memory_with(
+    package_loaded: bool,
+) -> (
+    snapshot::Loader,
+    std::collections::BTreeMap<String, u64>,
+    FakeMemory,
+) {
+    memory_with_ready(package_loaded, package_loaded)
+}
+
+/// `memory_with`, with the ready word of the directory chosen apart from the entries: the core marks it ready last.
+fn memory_with_ready(
+    package_loaded: bool,
+    ready: bool,
+) -> (
+    snapshot::Loader,
+    std::collections::BTreeMap<String, u64>,
+    FakeMemory,
+) {
+    let (mut loader, snap) = synthetic();
+    loader.providers = 1;
+    let mut mem = FakeMemory {
+        base: 0x4000_0000,
+        bytes: vec![0; 0x2000],
+    };
+    let (state, dir_at, info) = (0x4000_0000u64, 0x4000_0400u64, 0x4000_0500u64);
+    let (dsp_at, prov_at) = (0x4000_1000u64, 0x4000_1400u64);
+    mem.put(state, &snap["DKRT_STATE"]);
+    mem.put(info, &snap["dyndsp_info"]);
+    let mut directory = words(&[
+        gen_host_dir::HOST_DIR_MAGIC,
+        gen_host_dir::HOST_COUNT as u32,
+        if ready {
+            gen_host_dir::HOST_DIR_READY
+        } else {
+            0
+        },
+    ]);
+    directory.extend(words(&[0; gen_host_dir::HOST_COUNT]));
+    if package_loaded {
+        mem.put(dsp_at, &snap["DKRT_DSP"]);
+        let mut at = |id: u32, addr: u64| {
+            let o = 12 + 4 * id as usize;
+            directory[o..o + 4].copy_from_slice(&(addr as u32).to_be_bytes());
+        };
+        at(gen_host_dir::HOST_DSP, dsp_at);
+        at(gen_host_dir::HOST_PROVIDERS, prov_at);
+    }
+    mem.put(dir_at, &directory);
+    let symbols = [
+        ("DKRT_STATE", state),
+        ("DKRT_HOST_DIR", dir_at),
+        ("dyndsp_info", info),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v))
+    .collect();
+    (loader, symbols, mem)
+}
+
+#[test]
+fn a_package_static_is_read_where_the_directory_says_it_is() {
+    let (loader, symbols, mem) = memory_with(true);
+    let snap = loader
+        .collect(&symbols, |at, len| mem.peek(at, len))
+        .unwrap();
+    let (_, want) = synthetic();
+    assert_eq!(
+        snap["DKRT_DSP"], want["DKRT_DSP"],
+        "the DSP table comes from the address of its id, not from a symbol"
+    );
+    let t = snapshot::decode_loads(&loader, &snap).unwrap();
+    assert_eq!(t.modules[0].dsp_base, Some(0xb8_0000 + 0x8200));
+}
+
+#[test]
+fn an_empty_entry_says_no_package_is_loaded() {
+    let (loader, symbols, mem) = memory_with(false);
+    let err = loader
+        .collect(&symbols, |at, len| mem.peek(at, len))
+        .unwrap_err();
+    assert!(
+        err.contains("no package loaded") && err.contains("DKRT_DSP"),
+        "{err}"
+    );
+}
+
+/// The core clears the directory, fills its own entries and the package fills its own; only then does it mark the directory ready. A tool that reads in between (the entries
+/// are there, the ready word is not) finds no package.
+#[test]
+fn a_directory_that_is_not_ready_says_no_package_even_with_entries_filled() {
+    let (loader, symbols, mem) = memory_with_ready(true, false);
+    let err = loader
+        .collect(&symbols, |at, len| mem.peek(at, len))
+        .unwrap_err();
+    assert!(
+        err.contains("no package loaded") && err.contains("still starting"),
+        "{err}"
+    );
+    let (loader, symbols, mem) = memory_with_ready(true, true);
+    assert!(
+        loader
+            .collect(&symbols, |at, len| mem.peek(at, len))
+            .is_ok()
+    );
+}
+
+#[test]
+fn the_directory_reader_tells_empty_old_and_foreign_bytes_apart() {
+    let mut d = words(&[
+        gen_host_dir::HOST_DIR_MAGIC,
+        1,
+        gen_host_dir::HOST_DIR_READY,
+    ]);
+    d.extend(words(
+        &[0x4000_2000, 0, 0, 0][..gen_host_dir::HOST_COUNT.min(4)],
+    ));
+    let dir = host_dir::HostDir::parse(&d).unwrap();
+    assert_eq!(dir.address(gen_host_dir::HOST_DSP), Ok(0x4000_2000));
+    // a core whose count is 1 has no later id
+    assert!(matches!(
+        dir.address(gen_host_dir::HOST_PROVIDERS),
+        Err(host_dir::Error::UnknownId(_))
+    ));
+    assert_eq!(
+        dir.address(gen_host_dir::HOST_COUNT as u32),
+        Err(host_dir::Error::BadId(gen_host_dir::HOST_COUNT as u32))
+    );
+    assert!(matches!(
+        host_dir::HostDir::parse(&words(&[1, 2])),
+        Err(host_dir::Error::NotADirectory)
+    ));
+    assert!(matches!(
+        host_dir::HostDir::parse(&[0; 4]),
+        Err(host_dir::Error::NotADirectory)
+    ));
 }

@@ -1,13 +1,13 @@
 // The Default modules drop-down: the run-time modules that are installed and enabled together with the firmware (the desktop app: `[digikit]
 // default_modules` of the device file). The same control stands in the Firmware pane and next to the emulator's firmware file. The user can
 // untick an entry; the choice is kept per device (default-modules-state.ts). Renders nothing where the app gives no default modules (the site).
-import { For, Show, createSignal, onCleanup, createEffect, type JSX } from 'solid-js';
+import { For, Show, createMemo, createSignal, onCleanup, createEffect, type JSX } from 'solid-js';
 import { defaultsLabel } from '../../src/firmware/default-modules-core';
 import { useFirmwareApp } from '../../src/transfer/app-context';
 import './default-modules.css';
 
 export interface DefaultModulesProps {
-  /** The device id (`dt2`, `dn2`) the list is for; undefined until it is known. */
+  /** The device id the list is for; undefined until it is known. */
   device: string | undefined;
   /** Why the control is off (shown as its title), or empty. */
   off?: string;
@@ -22,8 +22,16 @@ export default function DefaultModules(props: DefaultModulesProps): JSX.Element 
   const [left, setLeft] = createSignal(false);
   let root: HTMLSpanElement | undefined;
   let pop: HTMLDivElement | undefined;
-  const entries = () => (props.device ? entriesFor(props.device) : []);
-  const ticked = () => (props.device ? tickedFor(props.device).length : 0);
+  // The rows depend only on the device id: a parent that re-sends the same id must not rebuild them (a click would land on a removed row).
+  const dev = createMemo(() => props.device);
+  const entries = createMemo(() => {
+    const d = dev();
+    return d ? entriesFor(d) : [];
+  });
+  const ticked = () => {
+    const d = dev();
+    return d ? tickedFor(d).length : 0;
+  };
   const off = () => props.off || (props.device ? '' : 'Choose the firmware file first: the list is the device’s');
   // The list opens to the left of the button, or to its right when that would leave the window.
   createEffect(() => {
@@ -63,7 +71,7 @@ export default function DefaultModules(props: DefaultModulesProps): JSX.Element 
         >
           {defaultsLabel(ticked())} <span aria-hidden="true">▾</span>
         </button>
-        <Show when={open() && props.device}>
+        <Show when={open() && dev()}>
           {(device) => (
             <div class="defmods-pop" ref={pop} classList={{ left: left() }} role="dialog" aria-label="Default modules">
               <For each={entries()} fallback={<p class="defmods-note">This device has no default modules.</p>}>

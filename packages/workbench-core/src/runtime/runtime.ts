@@ -160,8 +160,12 @@ export interface CoupledStats {
 /** Native desktop only: `runtime` patches the digikit runtime into a stock image (the controller's `firmware.load {runtime}`). */
 export interface LoadOptions {
   runtime?: boolean;
+  /** Native desktop only: false boots without the DSP (ColdFire only; a peer CPU is replaced by the mailbox responder). Default: the controller's choice. */
+  dsp?: boolean;
   /** Native desktop only: the card image of this load (`--card-image`). */
   card?: string;
+  sourceSha256?: string;
+  imageSha256?: string;
 }
 /** The controller's report of the runtime patch of the running image: `patched` with the set and whether the image came from the
  * cache, or `patched: false` for an image that already had a patch record. `null`: stock, no runtime requested. */
@@ -175,8 +179,16 @@ export interface RuntimePatch {
 }
 export interface FirmwareInfo {
   runtime: RuntimePatch | null;
+  /** The DSP choice of the running image (`status.dsp_enabled`) and the launcher's flag (`status.dsp_flag`), when it gave one. */
+  dsp?: { enabled: boolean; flag: boolean | null };
 }
 /** The controller's heartbeat (`status.heartbeat`): whether the guest's main loop has stopped, and the stall threshold in emulated ms. */
+export interface ControllerStatus {
+  heartbeat?: RuntimeHealth;
+  job?: ControllerJob | null;
+  load?: NativeAudioStatus['load'];
+}
+
 export interface RuntimeHealth {
   stalled: boolean;
   stall_ms: number;
@@ -201,7 +213,7 @@ export interface EmulatorRuntime {
   /** Native desktop only: what the running image got from the digikit runtime patch (`status.firmware.runtime`). */
   firmwareInfo?(): Promise<FirmwareInfo | undefined>;
   /** Native desktop only: the controller's heartbeat and running job (one `status` call). */
-  controllerStatus?(): Promise<{ heartbeat?: RuntimeHealth; job?: ControllerJob | null }>;
+  controllerStatus?(): Promise<ControllerStatus>;
   /** Native desktop only: cancel the controller's long job (`job.cancel`); the cancelled call fails with error 10. */
   cancelJob?(): Promise<void>;
   /** The emulator's own reset of the running firmware (the browser worker boots the file again). Not the device RESTART command. */

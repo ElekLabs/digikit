@@ -4,8 +4,7 @@ A run-time effect (`docs/design/digikit-dkm.md`, finding 55) can have a page of 
 and no effect-specific code. This finding records the firmware facts the page machinery rests on (DT2 1.17; the hooks also resolve by hash on 1.16), how the values travel,
 and what was measured. Marks: **[D]** measured or read once by the author (no second agent has checked the image bytes yet, so nothing here is **[V]**), **[O]** open.
 Pieces: `modules/core/adapters/fxpages` (patch time), `modules/core/runtime/src/rs/src/fxpage.rs` (run time), `[fx]` in `devices/digitakt-ii.toml`, the EFFECT record
-(`packages/patchkit/src/register.rs`), the scenarios `REF:tests/digikit/scenarios/fx-pages-dt2.toml` (`tools/patchkit/pk_digikit_fxpage.py`) and `REF:tests/digikit/scenarios/fx-persist-dt2.toml`
-(`REF:tools/patchkit/pk_digikit_fxpersist.py`, persistence, step 3).
+(`packages/patchkit/src/register.rs`), the device tests `REF:modules/core/adapters/fxpages/tests/fx-pages.device.test.ts` (PCM compare through `compare` in `REF:tests/regression/runtime/fx-live.ts`, which runs `tools/patchkit/hook_ab.py compare` and reads its `ok` verdict) and `REF:modules/core/adapters/fxpages/tests/fx-kit-persist.device.test.ts` (persistence, step 3).
 
 ## The page machinery **[D]**
 
@@ -187,4 +186,4 @@ accepts any alignment in DDR. The scenario's helpers (`u16`, `put16`) do the sam
 ## The send page (FX routing step 3) **[D]**
 
 `core/fxpages` also has the send page of the track FX key (finding 64): page number `page_first + fx_slots` (36 on the Digitakt II) in `fxp_acc`, a hook on the FX key's list (`cf.fxpages.keylist`: the same builder `FUN_40066584`, `+0x6c0`), a hook on the sound loader's exit (`cf.fxpages.sound`)
-and two more parameter rows (`params.fs0`, `fs1`). `fxpages_info` is version 2 (words 39 to 48). The F4 pages above are unchanged: with no send effect the FX key and the F4 view are the stock ones and the PCM is the same bit for bit.
+and two more parameter rows (`params.fs0`, `fs1`). `fxpages_info` is version 4 (the send words are 39 to 48; no firmware address in it). The F4 pages above are unchanged: with no send effect the FX key and the F4 view are the stock ones and the PCM is the same bit for bit.

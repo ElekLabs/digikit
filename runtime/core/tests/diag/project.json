@@ -1,0 +1,138 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-diag-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime",
+    "digikit/debug"
+  ],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "fault-trace.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "digikit/debug",
+          "test/dyn-fx-gain-send",
+          "test/dyn-fx-hang",
+          "test/dyn-fx-nan",
+          "core/services/machines",
+          "core/services/fx"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          },
+          {
+            "module": "core/services/fx",
+            "reason": "loaded as the effects host the fixtures need; the fx service is not exercised here"
+          }
+        ]
+      },
+      {
+        "files": [
+          "fault-trace-dt2.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "digikit/debug",
+          "test/dyn-crash",
+          "test/dyn-dsp-hang",
+          "core/services/machines",
+          "core/services/fx"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          },
+          {
+            "module": "core/services/fx",
+            "reason": "loaded as the effects host the fixtures need; the fx service is not exercised here"
+          }
+        ]
+      },
+      {
+        "files": [
+          "crash-capture.device.test.ts"
+        ],
+        "devices": [
+          "dt2"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "digikit/debug",
+          "test/dyn-crash"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "debug-guard.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "digikit/debug",
+          "test/dyn-guard-nan",
+          "test/sine",
+          "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "log-names.device.test.ts"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/dyn-demo"
+        ],
+        "dkprofWasm": true
+      },
+      {
+        "files": [
+          "addrmap.device.test.ts"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/dyn-demo"
+        ]
+      },
+      {
+        "files": [
+          "memaudit.device.test.ts"
+        ],
+        "dsp": "sharc",
+        "modules": [
+          "test/c-demo",
+          "test/dyn-demo",
+          "test/dyn-demo-stray",
+          "test/dyn-dn2",
+          "test/sine",
+          "core/services/machines"
+        ],
+        "incidental": [
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          }
+        ],
+        "plusdrive": true
+      }
+    ]
+  }
+}

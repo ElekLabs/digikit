@@ -1,0 +1,118 @@
+# filter: the filter type in the DSP: the converter, the coefficient dispatch and the process dispatch
+# Names follow <cpu>.<subsystem>.<kind>.<name>; was = former names, for reading older docs, never resolved (docs/design/firmware-decls.md).
+# Facts: docs/findings/148-filter-machines.md (DSP link section). Consumers: core/services/machines and core/dsp-voice (plan E7).
+# Offsets count 16-bit parcels from the function start, as in voice.toml. Each dispatch is a bound literal, a table literal and an indirect jump
+# through I12 (the decoder prints that jump as PM(I4, M5)). A hook replaces one 48-bit instruction; the 32-bit bound loads are values only.
+# DN2 overlap check against dsp.voice (filter_case1/2/3 calls, resets): none of these offsets lies in a claimed range. The nearest claims in the
+# dispatch function are 0x2d4 (after coef_lookup 0x2b0) and 0x6ae (after proc_range 0x693 and the process jump 0x6a4); see the commit message.
+
+# ---- converter: the filter type of the frame selects a word S (S3 on DT2, S0 on DN2) from a 32-word table in the DSP's RAM ----
+
+[[value]]
+name = "dsp.filter.value.convert_table"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_literal", reloc_hash = "d2c02a587786f9ee328897985095c271ff1c5b65f289224e435968ea4b5d3f00", offset = 0x1f6 }
+rule.dn2 = { kind = "sharc_literal", reloc_hash = "4cc8a46bca990a7bd883d1784307a9cd72aa828a1ae846977e337fbc5c54c010", offset = 0x525 }
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "The literal base of the filter converter's table (DT2 `I4 = 0x2567a0`, 32 words up to 0x2567bf; DN2 `I5 = 0x25d728`); word t is the S value of filter type t."
+
+[[site]]
+name = "dsp.filter.site.convert"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_func", reloc_hash = "d2c02a587786f9ee328897985095c271ff1c5b65f289224e435968ea4b5d3f00", offset = 0x1f9, len = 6 }
+rule.dn2 = { kind = "sharc_func", reloc_hash = "4cc8a46bca990a7bd883d1784307a9cd72aa828a1ae846977e337fbc5c54c010", offset = 0x531, len = 6 }
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "The converter's table load: DT2 0x1c26e2 in FUN_1c24e9 `F10 = float_by(F10, F11); S3 = DM(I4, M0)`, DN2 0x1c2c43 in FUN_1c2712 `F8 = float(F8); S0 = DM(I5, M0)`. M0 is the filter type, the load reads DM(base + type). One 48-bit instruction with a compute half the hook must run."
+
+[[hook]]
+name = "dsp.filter.hook.convert"
+site = "dsp.filter.site.convert"
+cpu = "sharc"
+mode = "replace"
+devices = ["dt2", "dn2"]
+regs = { in = ["i4", "i5", "m0", "r8", "r10", "r11"], clobbers = ["r8", "r10", "astat"] }   # inputs and outputs of the displaced instruction on either device, except its load target S3 (DT2) / S0 (DN2): the secondary file has no register names in the generator; other free registers need a liveness pass [O]
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "Replaces the converter's table load; a type outside the stock table reads its S value from the service's table. The stub runs the displaced compute half (DT2 F10 with F11, DN2 F8) and the load itself."
+
+# ---- coefficient dispatch: per voice and block, an indirect jump to the stage that computes the filter coefficients ----
+
+[[value]]
+name = "dsp.filter.value.coef_bound"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_literal", reloc_hash = "47f65f5034040ec69829448cd833243cef4ad84cecabddae61f8849d3f70f7be", offset = 0x294 }
+rule.dn2 = { kind = "sharc_literal", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x28e }
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "The unsigned bound of the coefficient dispatch (DT2 `R5 = 0x7` at 0x1c66be, DN2 `R13 = 0x7` at 0x1c917f): `compu` of the type against it, then `JUMP IF GE` to the default (DT2 0x1c69ed, DN2 0x1c927e). Seven table entries; 7 and above skip the stage."
+
+[[value]]
+name = "dsp.filter.value.coef_table"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_literal", reloc_hash = "47f65f5034040ec69829448cd833243cef4ad84cecabddae61f8849d3f70f7be", offset = 0x2a2 }
+rule.dn2 = { kind = "sharc_literal", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x297 }
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "The literal base of the coefficient table of seven stage addresses (DT2 `I4 = 0x8055c858` at 0x1c66cc, DN2 `I4 = 0x8052dba4` at 0x1c9188); the process table follows it 0x1c bytes later, so a type of 7 or more must not read past the end."
+
+[[site]]
+name = "dsp.filter.site.coef_lookup"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_func", reloc_hash = "47f65f5034040ec69829448cd833243cef4ad84cecabddae61f8849d3f70f7be", offset = 0x2b6, len = 6 }
+rule.dn2 = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x2b0, len = 6 }
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "The stage address load of the coefficient dispatch: DT2 0x1c66e0 in FUN_1c642a, DN2 0x1c91a1 in FUN_1c8ef1, `R12 = sub(R12, R12); I12 = DM(I4, M4)` with M4 the type. The indirect jump through I12 follows (DT2 0x1c66ec, DN2 0x1c91ad) after I4 is reloaded (I9 on DT2, I10 on DN2)."
+
+[[hook]]
+name = "dsp.filter.hook.coef_lookup"
+site = "dsp.filter.site.coef_lookup"
+cpu = "sharc"
+mode = "replace"
+devices = ["dt2", "dn2"]
+regs = { in = ["i4", "m4", "i6", "i9", "i10"], clobbers = ["r12", "i12", "i4", "astat"] }   # I4 is reloaded two instructions on (DT2 1c66e3, DN2 1c91ab); R12 is zeroed by the displaced compute half
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "Replaces the stage address load: a type in the service's range gets the address of its coefficient stub in I12, any other runs the displaced instruction. The bound value must be raised first, or the jump to the default skips the site."
+
+# ---- process dispatch: per voice and block, an indirect jump to the stage that filters the 32-sample block ----
+
+[[value]]
+name = "dsp.filter.value.proc_bound"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_literal", reloc_hash = "47f65f5034040ec69829448cd833243cef4ad84cecabddae61f8849d3f70f7be", offset = 0x7e3 }
+rule.dn2 = { kind = "sharc_literal", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x68d }
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "The unsigned bound of the process dispatch (DT2 `R1 = 0x7` at 0x1c6c0d, DN2 `R1 = 7` at 0x1c957e): `compu` of the type (R2) against it, then `JUMP IF GE` to the default (DT2 0x1c6eb7, DN2 0x1c98b9)."
+
+[[value]]
+name = "dsp.filter.value.proc_table"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_literal", reloc_hash = "47f65f5034040ec69829448cd833243cef4ad84cecabddae61f8849d3f70f7be", offset = 0x7ec }
+rule.dn2 = { kind = "sharc_literal", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x696 }
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "The literal base of the process table of seven stage addresses (DT2 `I4 = 0x8055c874` at 0x1c6c16, DN2 `I4 = 0x8052dbc0` at 0x1c9587), followed by `I12 = DM(I4, M4)` and, after I4 is reloaded from I9, the indirect jump (DT2 0x1c6c25, DN2 0x1c9595)."
+
+[[site]]
+name = "dsp.filter.site.proc_range"
+cpu = "sharc"
+rule.dt2 = { kind = "sharc_func", reloc_hash = "47f65f5034040ec69829448cd833243cef4ad84cecabddae61f8849d3f70f7be", offset = 0x7e9, len = 6 }
+rule.dn2 = { kind = "sharc_func", reloc_hash = "09fe195e8b260c0e03e917b6430ae3f7ccc952741729580632f7b97e3bc007cc", offset = 0x693, len = 6 }
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "The range check of the process dispatch: DT2 0x1c6c13 in FUN_1c642a, DN2 0x1c9584 in FUN_1c8ef1, a non-delayed `JUMP IF GE` on the flags of the `compu` before it. The stage address load that follows is a 32-bit instruction, too short to hold a hook."
+
+[[hook]]
+name = "dsp.filter.hook.proc_range"
+site = "dsp.filter.site.proc_range"
+cpu = "sharc"
+mode = "replace"
+devices = ["dt2", "dn2"]
+regs = { in = ["astat", "m4", "r2", "i3", "i5", "i6-i7", "i9", "i15"], clobbers = [] }   # the compare flags are the input; the displaced jump writes nothing; DT2 reads I3 later, DN2 I5 (union)
+mark = "D"
+users = ["core/services/machines", "core/dsp-voice"]
+doc = "Replaces the range check: a type in the service's range runs its process stub on the block and returns to the stage after the dispatch; any other runs the displaced jump."

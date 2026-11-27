@@ -129,7 +129,7 @@ A module reaches the device through named imports, grouped by service in `sdk.to
   `dk_sample_pool_open`, `dk_ui_open`, `dk_input_open`, `dk_usb_bulk_open`, `dk_dsp_link_open`, `dk_sdhc_large_open`.
 - When an optional provider is not loaded, its imports bind to stubs: `_open` returns `DK_E_MISSING`, the other functions return the same
   code or do nothing. The module decides whether it can run without the service. When `init` returns DK_E_MISSING, the load fails with E_IMPORT and the loader records the provider of the last `_open` stub that answered DK_E_MISSING during `init` as the module's need (DIGIKIT shows it in `DkrtBootInfo.needs`, as for an unresolved import); a module that tolerates the missing service and returns DK_OK records nothing.
-- Records of a generic kind: `dk_record_add(ctx, kind, bytes, len)` (runtime 0.8.0, `<dk/gen/imports.h>`, kinds in `<dk/gen/records.h>`) emits a record of a kind that a service owns and `[records.kinds]` marks `generic`; the module lists its key in `module.toml` (`[[record]] kind = "lfo_shape", key = 7`). The typed kinds (machine, page, parameter, effect) stay builder calls. A service module declares its kinds, slots, hooks, exports and resources with `dk_service_declare_kind`, `_slot`, `_hook`, `_export` and `_resource`; the commit compares them with the header table and refuses a difference with `DK_E_DECL_KIND`.
+- Records of a generic kind: `dk_record_add(ctx, kind, bytes, len)` (runtime 0.8.0, `<dk/gen/imports.h>`, kinds in `<dk/gen/records.h>`) emits a record of a kind that a service owns and `[records.kinds]` marks `generic`; the module lists the record in `module.toml` (`[[record]] kind = "lfo_shape", id = "ramp"`); its key derives from the module id and the id, and `patchkit gen` writes it as `DK_KEY_RAMP`. The typed kinds (machine, page, parameter, effect) stay builder calls. A service module declares its kinds, slots, hooks, exports and resources with `dk_service_declare_kind`, `_slot`, `_hook`, `_export` and `_resource`; the commit compares them with the header table and refuses a difference with `DK_E_DECL_KIND`.
 - Sink channels: `dk_sink_set(channel, sink)` (runtime 0.7.1, `<dk/core/sink.h>`) sets the sink of the `log` or `span` channel for the calling module; one owner per channel
   (`DK_E_BUSY` for a second), cleared after the owner's `fini` (runtime-and-services 5.11). A new import is a PATCH: the runtime went from 0.7.0 to 0.7.1 and the import has `since = "0.7.1"`.
 - Each import has `service`, `since`, `context` and `sig` in `sdk.toml`:
@@ -145,7 +145,7 @@ context  = "init"             # init, ui, io-step, any, isr
 since    = "0.7.0"          # the runtime version that added the import
 ```
 
-- The packer writes the runtime version a module needs, the newest `since` among the imports it links, and at least the version that introduced the header table (`[runtime] table`, 0.8.0), into the header word at 0x30 (bit 31 is the trace flag), and derives the services it
+- The packer writes the runtime version a module needs, the newest `since` among the imports it links, and at least `[runtime] table` (the current MINOR, 0.9.0), into the header word at 0x30 (bit 31 is the trace flag), and derives the services it
   needs from their `service` tags. `uses_api`, `api->size` and `DK_API_HAS` are gone. The runtime loads the module only when that version has its own major and minor and at most its own patch (0.x semver: a minor may break, a patch only adds); otherwise the load fails with `E_CONTRACT`. The bytes 0x38 to 0x3f of the header are reserved zero.
 - `service` uses the names of runtime-and-services: `runtime`, `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`, `sdhc_large`. Today
   every `runtime`, `samples` and `machines` import resolves to code in the runtime image. When runtime-and-services moves `samples`,
@@ -399,7 +399,7 @@ The `.dkm` header stays 0xa0 bytes. The pair at 0x90 and 0x94 is `table_off` and
 The runtime collects the builder calls during `init`, in the module's arena share, bounded by `MAX_RECORDS` (32) and by the size of the `Collect` block, `collect_bytes` (7206 in `sdk.toml` `[limits.format]`, asserted at compile time in `collect.rs`). A shot-like
 machine needs about 10 records, the other modules 3 to 7. The collection is refused with `E_DECL_ID` (-27: an index outside the keys table), `E_DECL_USES` (-28: more rows than `[uses]` says) or `E_DECL_FULL` (-74: more calls than the limits allow). When `init` returns `DK_OK`:
 
-1. Check the collection (device limits, `[uses]`, the keys in the header, FX ids of modules already loaded: a duplicate is `E_FX_ID_DUP`), lower it to records and check the records with the `registry::check` rules.
+1. Check the collection (device limits, `[uses]`, the keys in the header; a repeated key or effect id is refused by the planner before the load: `E_PLAN_KEY`), lower it to records and check the records with the `registry::check` rules.
 2. Fill each voice row's 8 ranges and its latched mask from the collected params. The ranges are the knob params' min and max, a clamp
    guard the DSP voice code reads.
 3. Apply the records (`registry::apply`). FX pages need their FX row, which reserve already claimed.
@@ -413,7 +413,7 @@ Facts behind this (reviews of 2026-11-12):
 - Type numbers need every selected module's machine keys up front only for the eviction rule (`sticky.rs:173`). Static machine ids in
   the header keep `assign.rs` unchanged.
 - FX ids are a 16-bit hash (`register.rs`); a clash (about 1 in 65535 per
-  pair) makes one effect load the other's saved kit values. Machines have a sticky map for clashes; FX get a refusal (`E_FX_ID_DUP`).
+  pair) makes one effect load the other's saved kit values. The boot plan refuses a repeated key of any kind (`E_PLAN_KEY`).
 - The runtime's firmware views are built after the boot hook, so rows written at commit land before the firmware reads them.
 
 ### 6.4 Users of declaration content off the device
@@ -486,10 +486,9 @@ These come from the profiling work and land after the steps in section 12 that t
 - **`DK_SPAN` (S5a, defined; producers are P8a).** `DK_SPAN_BEGIN(owner)` and `DK_SPAN_END(owner)` in `<dk/core/trace.h>` (ColdFire C) and
   `DK_SPAN_BEGIN(SKIP, RA, RB)` and `DK_SPAN_END(SKIP, ROW, RA, RB, RC)` in `dsp/contract/dk_trace.inc` (SHARC+). They are always compiled in: they test
   the sink's pointer (C) or the stats window's pointer slot `_dk_stats_ptr` (SHARC+), and only when it is set read the cycle counter and report
-  `(owner, cycles)` to the `span` sink (C: `dk_span_emit`, runtime-and-services 5.11) or to the stub's `_dk_span_add` (SHARC+). With no sink the cost is one
+  `(owner, cycles)` to the `span` sink (C: `dk_span_emit`, runtime-and-services 5.11) or to the image's `_dk_span_add` (SHARC+). With no sink the cost is one
   load, one test and one branch for each macro, and the arguments are not evaluated; the SHARC+ counter read (`EMUCLK`, which takes the emulator out of the
-  fast tiers, `UNSAFE_READ_NAMES` in `tools/sharc_dev/sharc_rsgen.py`) runs only while a window is registered. Only service dispatchers and the image
-  stub use them; `mise run check:layers` (rule spans) refuses them in content modules and apps. Checked by reading the disassembly of a test use (ColdFire
+  fast tiers, `UNSAFE_READ_NAMES` in `tools/sharc_dev/sharc_rsgen.py`) runs only while a window is registered. Only service dispatchers use them; `mise run check:layers` (rule spans) refuses them in content modules and apps. Checked by reading the disassembly of a test use (ColdFire
   `tstl`/`bnes` on the sink word before any call; SHARC+ load, `PASS`, `IF EQ JUMP` before the `EMUCLK` read). The no-sink cost of the real dispatchers (a paired
   A/B of instruction counts within 0.02 percent) is measured with the first producer (P8a).
   The **stats window** is words in DSP data memory: a header of 4 words (magic `DKSW` 0x444b5357, version 1, rows 16, blocks measured since the window was
@@ -503,7 +502,7 @@ These come from the profiling work and land after the steps in section 12 that t
 - A repository `.clang-format` and a format check target for C. `clang-tidy` later.
 - Names: functions `dk_<area>_<verb>`, types `dk_<thing>`, constants `DK_<AREA>_<NAME>`. No version suffixes (`_v1`, `_V2`); versions
   live in `sdk.toml`: one runtime version, and `since` of each import.
-- Naming (agreed 2026-11-12):
+- Naming:
 
 | Rule | Form | Examples |
 | --- | --- | --- |
@@ -526,6 +525,16 @@ These come from the profiling work and land after the steps in section 12 that t
   such as `DK_PARAM_IS_ERROR` become `static inline` functions.
 - `layercheck` rules: the include direction between layers; imports declared only in `platform/`; modules include only public headers;
   no relative SDK paths.
+- Names beyond the SDK contract ([taxonomy](../design/taxonomy.md) "Naming rules" has the full list). The SDK forms above stay as they are; the other layers add:
+  - Runtime core: C API `dkrt_<noun>_<verb>`, statics `DKRT_<NAME>`, crates `dkrt-<part>`.
+  - Service: crate `dkrt-svc-<x>`, file `<x>.dks`, id `core/services/<x>`. Exports for the core only are `dk_<x>_<what>` with `internal = true`.
+  - Image module: id `core/<name>`, symbols with the module's short prefix, slots `<service>_<site>`.
+  - Port: anchors `cf.<area>.<class>.<name>`; imports `dk_fw_`, `dk_exit_`, `dk_ret_`, `dk_stock_`, `dk_tail_`; routines `port_<service>_<hook>`; callbacks into a service `dk_<service>_<verb>` in a declared group.
+  - A name shows the layer that owns the thing. Never use a bare kind, key, slot, image, port, project or service where two meanings are possible (say record kind, module kind, settings key, pointer slot, card image, MIDI port, Nx project).
+  - A record kind is singular snake case, unique, with one owner service and a constant `KIND_<NAME>`.
+  - Settings keys and `.dkp` sections start with the owner: `<service>/...` or `<author>/<name>/...`. An author may not be a service name, `core` or `test`.
+  - A module id is `<author>/<name>`; the repo folder, the `dist` file and the card path are the id plus a prefix. Module kind names are the template names (`category` has the same value; `type` goes).
+  - Extensions: `.dkm` role 0, `.dks` role 1, `.dkport` role 2, `.dkp` project file.
 - The README says, for each layer, what belongs there. A new SDK feature goes in the layer and folder its concept names.
 
 ## 11. Tests and Nx

@@ -28,8 +28,8 @@ fn main() {
             !is_free
         })
         .collect();
-    let startup: StartupArgs = cli::parse_values(args, cfg!(feature = "coupled-audio"))
-        .unwrap_or_else(|error| {
+    let startup: StartupArgs =
+        cli::parse_values(args, cfg!(feature = "sharc")).unwrap_or_else(|error| {
             eprintln!("{error}");
             std::process::exit(2)
         });
@@ -39,6 +39,7 @@ fn main() {
         .unwrap_or_else(|| PathBuf::from("out/native/run"));
     let mut config = Config::new(startup.audio.clone());
     config.audio_alt = startup.audio_alt.clone();
+    config.dsp = startup.dsp;
     config.mode = if free { Mode::Free } else { Mode::Paused };
     config.run_dir = run_dir.clone();
     config.mirror_dir = startup.mirror_dir.clone();

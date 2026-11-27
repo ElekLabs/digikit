@@ -7,9 +7,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 from tools.patchkit import pk_sharc  # noqa: E402
 
-CORE = (
-    ROOT / "modules" / "core" / "adapters" / "dsp-voice" / "src" / "dsp" / "dsp-voice.s"
-)
+CORE = ROOT / "runtime" / "platform" / "dsp-voice" / "src" / "dsp" / "dsp-voice.s"
+DISPATCH = (
+    ROOT / "services" / "machines" / "dks" / "dsp" / "dispatch-dt2.s"
+)  # the code behind the stubs of CORE: the machines service carries it
 # a sine routine of the raw (no contract) form
 SINE = ROOT / "tests" / "support" / "raw_sine.s"
 CORE_BASE, SINE_BASE = 0xB90000, 0xB92000
@@ -36,6 +37,13 @@ STEP_WORD = (
 MASK = (
     DIAG + 0x11C
 )  # `_dv_mask`: the registered types, rebuilt by voice 0 from the table
+SV_M13, SV_M13U, SV_I12U = (
+    DIAG + 0x130,
+    DIAG + 0x134,
+    DIAG + 0x138,
+)  # the registers the stubs pin (dk_stub.inc)
+SLOTS = DIAG + 0x780  # `_dl_slots`: the 16 slot words of core/dsp-link
+SLOT_WORDS = 16
 GUARD = DIAG + 0x200  # the guard's scalars and arrays (_dv_g, 128 bytes)
 RELEASE = (
     DIAG + 0x800
@@ -81,6 +89,10 @@ def core_externs() -> dict[str, int]:
         "_dv_sv3": SV3,
         "_dv_sv5": SV5,
         "_dv_bcw": BCW,
+        "_dv_sv_m13": SV_M13,
+        "_dv_sv_m13u": SV_M13U,
+        "_dv_sv_i12u": SV_I12U,
+        "_dl_slots": SLOTS,
         "_dv_rec": REC_PTRS,
         "_dv_mask": MASK,
         "_dv_g": GUARD,
@@ -156,18 +168,30 @@ class Rig:
         self.ctx_rng = random.Random(seed)
         self.last_ctx: dict[str, int] = {}
         # `defines`: the build options of the wrapper (`#ifdef`, tools/patchkit/pk_sharc.py), e.g. DV_BISECT_C2
-        self.core = pk_sharc.assemble(
-            pk_sharc.expand_includes(
-                pk_sharc.apply_conditionals(CORE.read_text(), defines),
-                [*pk_sharc.sharc_include_dirs(CORE.parents[2]), CORE.parent],
+        dirs = [*pk_sharc.sharc_include_dirs(CORE.parents[2]), CORE.parent]
+
+        def obj(path: Path) -> pk_sharc.SharcObject:
+            return pk_sharc.assemble(
+                pk_sharc.expand_includes(
+                    pk_sharc.apply_conditionals(path.read_text(), defines), dirs
+                )
             )
-        )
+
+        self.core = obj(CORE)  # the stubs
+        self.dispatch = obj(
+            DISPATCH
+        )  # follows the stubs, rounded up to 0x100 short words
+        dispatch_base = CORE_BASE + ((len(self.core.section) // 2 + 0xFF) & ~0xFF)
         self.sine = pk_sharc.assemble(SINE.read_text())
         self.sine_linked = None
-        ext_core = core_externs()
-        # the sine links against the core's symbols; the core against the table address
-        core_syms = pk_sharc.link(self.core, CORE_BASE, ext_core).symbols
+        own = {n: CORE_BASE + off for n, (off, _g) in self.core.symbols.items()}
+        own.update(
+            {n: dispatch_base + off for n, (off, _g) in self.dispatch.symbols.items()}
+        )
+        ext_core = {**core_externs(), **own}
         self.core_linked = pk_sharc.link(self.core, CORE_BASE, ext_core)
+        self.dispatch_linked = pk_sharc.link(self.dispatch, dispatch_base, ext_core)
+        core_syms = own
         ext_sine = {
             "_dv_exp2": core_syms["_dv_exp2"],
             "_dv_frame_hw": core_syms["_dv_frame_hw"],
@@ -177,6 +201,7 @@ class Rig:
         self.render_pc = self.sine_linked.symbols["_sv_render"]
         self.entry = "_dv_entry"
         self.dm: dict[int, int] = {}
+        self.core_syms = core_syms
         self.reset()
 
     def reset(self) -> None:
@@ -195,6 +220,12 @@ class Rig:
             )
         for k in range(32 * REC // 4):
             self.dm[nw(RECORDS) + k] = 0
+        for k in range(SLOT_WORDS):
+            self.dm[nw(SLOTS) + k] = 0
+        self.set_slot(
+            0, self.core_syms["_dv_run"]
+        )  # what the machines service installs
+        self.set_slot(1, self.core_syms["_dv_unpack_run"])
         self.dm[nw(TABLE)] = TYPE
         self.dm[nw(TABLE) + 1] = self.render_pc
         for k in range(3):
@@ -213,6 +244,10 @@ class Rig:
             self.dm[nw(ADAPTER["_dv_slots"]) + k] = (
                 w  # the Digitakt II's knob positions of the parameters (ADM_PARAM_SLOT*)
             )
+
+    def set_slot(self, index: int, pc: int) -> None:
+        """Slot `index` of core/dsp-link's slot block (0: the stub takes the stock path)."""
+        self.dm[nw(SLOTS) + index] = pc
 
     def table_mask(self) -> int:
         """The mask voice 0 builds from the rows now in the table (type t sets bit t, 31 or more bit 31; free rows 0xffffffff and the
@@ -314,7 +349,7 @@ class Rig:
             dm_words=dict(self.dm),
             reads=reads,
             return_sw=RETURN_SW,
-            others=(self.sine_linked,),
+            others=(self.dispatch_linked, self.sine_linked),
             read_regs=(
                 "I6",
                 "I7",
@@ -350,7 +385,7 @@ def unpack(rig: "Rig", track: int, mask: int | None = None) -> dict:
         dm_words=dict(rig.dm),
         reads={"lev": (lev, 1)},
         return_sw=RETURN_SW,
-        others=(rig.sine_linked,),
+        others=(rig.dispatch_linked, rig.sine_linked),
         extra_breaks=(UNPACK_BP,),
     )
 

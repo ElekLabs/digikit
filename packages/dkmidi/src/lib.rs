@@ -16,6 +16,8 @@ use midir::{Ignore, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnec
 #[derive(Default)]
 pub struct Sysex {
     open: Vec<u8>,
+    /// `feed_out` only: the channel message being collected.
+    short: Vec<u8>,
 }
 
 impl Sysex {
@@ -38,6 +40,50 @@ impl Sysex {
                 self.open.clear();
             }
             // real-time bytes (0xF8 and up) may sit anywhere: ignored
+        }
+        done
+    }
+}
+
+impl Sysex {
+    /// The bytes the host writes to `open --raw`: SysEx messages as `feed` takes them, and whole channel messages (status 0x80 to 0xEF with
+    /// its data bytes, no running status) and MIDI start, continue and stop (0xFA to 0xFC), each returned as one message so one send never
+    /// mixes two. Other bytes outside a SysEx message are dropped.
+    pub fn feed_out(&mut self, bytes: &[u8]) -> Vec<Vec<u8>> {
+        let mut done = Vec::new();
+        for &b in bytes {
+            if b == 0xF0 {
+                self.short.clear();
+                self.open.clear();
+                self.open.push(b);
+            } else if !self.open.is_empty() {
+                if b == 0xF7 {
+                    self.open.push(b);
+                    done.push(std::mem::take(&mut self.open));
+                } else if b < 0x80 {
+                    self.open.push(b);
+                } else if b < 0xF8 {
+                    self.open.clear();
+                }
+            } else if (0xFA..=0xFC).contains(&b) {
+                done.push(vec![b]);
+            } else if (0x80..0xF0).contains(&b) {
+                self.short.clear();
+                self.short.push(b);
+            } else if b < 0x80 && !self.short.is_empty() {
+                self.short.push(b);
+                // program change and channel pressure take one data byte, the others two
+                let want = if matches!(self.short[0] & 0xF0, 0xC0 | 0xD0) {
+                    2
+                } else {
+                    3
+                };
+                if self.short.len() == want {
+                    done.push(std::mem::take(&mut self.short));
+                }
+            } else if (0xF1..0xF8).contains(&b) {
+                self.short.clear();
+            }
         }
         done
     }
@@ -165,6 +211,30 @@ pub fn open(client: &str, name: &str) -> Result<Open, String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn feed_out_returns_whole_channel_messages_and_sysex_apart() {
+        let mut s = Sysex::default();
+        assert_eq!(
+            s.feed_out(&[
+                0x90, 60, 100, 0xF0, 1, 0xF7, 0xB0, 99, 1, 0xC1, 5, 0xFA, 0xFC
+            ]),
+            vec![
+                vec![0x90, 60, 100],
+                vec![0xF0, 1, 0xF7],
+                vec![0xB0, 99, 1],
+                vec![0xC1, 5],
+                vec![0xFA],
+                vec![0xFC]
+            ]
+        );
+        // pieces of one message arrive in separate reads; a note never enters a SysEx message that is still open
+        assert!(s.feed_out(&[0xF0, 7]).is_empty());
+        assert_eq!(s.feed_out(&[0xF7, 0x80, 60]), vec![vec![0xF0, 7, 0xF7]]);
+        assert_eq!(s.feed_out(&[0]), vec![vec![0x80, 60, 0]]);
+        // feed (the default) still drops them
+        assert!(Sysex::default().feed(&[0x90, 60, 100]).is_empty());
+    }
+
     use super::*;
 
     #[test]

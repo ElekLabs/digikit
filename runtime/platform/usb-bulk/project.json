@@ -1,0 +1,20 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/usb-bulk",
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/usb-bulk.device.test.ts"],
+        "dsp": "sharc",
+        "modules": ["test/usb-echo", "digikit/debug"],
+        "plusdrive": true,
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ]
+      }
+    ]
+  }
+}

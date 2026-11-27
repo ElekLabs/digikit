@@ -84,7 +84,7 @@ CRUMB_STAGES = {
     21: "D_AFTER_L4_L5_STORES",
     22: "D_AFTER_MODE1_READ",
 }
-# The 32 words of dl_diag (modules/core/adapters/dsp-link/README.md), in order.
+# The 32 words of dl_diag (runtime/platform/dsp-link/README.md), in order.
 DIAG_NAMES = (
     "magic_count",
     "link_beat",
@@ -155,7 +155,7 @@ def crumb_text(w: int) -> str:
 
 
 # kind -> (name, argument names): `KINDS` and `GUARD_KINDS` come from sdk/sdk.toml (`dklog_kinds.py`). The argument words are as
-# `modules/core/runtime/src/rs/src` writes them; docs/findings/46-digikit-debug.md.
+# `runtime/core/src/rs/src` writes them; docs/findings/46-digikit-debug.md.
 K = {name: kid for kid, (name, _) in KINDS.items()}
 CARD_STATES = {
     0: "unknown",
@@ -171,6 +171,7 @@ REFUSAL = {
     2: "card read-only",
     3: "claim failed",
     4: "card too small",
+    5: "card driver not ready",
 }
 REGS = [f"d{i}" for i in range(8)] + [f"a{i}" for i in range(8)]
 VECTORS = {

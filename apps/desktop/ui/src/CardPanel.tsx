@@ -1,41 +1,30 @@
-// The Card panel of the Emulator page: the host folder of the loaded device's card (`plus_drive/<device>/` or the folder the user chose for
-// the device). The module store is mirrored to it (kept up to date by the emulator itself about 2 s after the guest's last card write;
-// one way, card to folder) and the card of a load is built from it. It shows the device and the folder, the module files with their
-// sizes, the time of the last sync, "Choose folder...", "Use default", "Show in Finder" and "Sync now". A device whose card is built
-// from the folder (the Digitakt II) takes a new folder at the next load: the panel says so and offers "Reload now". The emulator does the
-// work and keeps the choice per device (`card.folder`, `card.folder_set`, `card.sync` through `emu_call`); this panel only asks.
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
-import { errorLine, formatBytes } from '@digi/workbench-core/modules/backend.ts';
+// The card-folder strip of the Files page (emulator only): the host folder of the loaded device's card (`plus_drive/<device>/` or the folder
+// the user chose for the device). The module store is mirrored to it (kept up to date by the emulator itself about 2 s after the guest's last
+// card write; one way, card to folder) and the card of a load is built from it. It shows the device and the folder, the time of the last
+// sync, "Choose folder...", "Use default", "Show in Finder", "Sync now" and "Reset card changes". A device whose card is built
+// from the folder (the Digitakt II) takes a new folder at the next load: the strip says so and offers "Reload now". The emulator does the
+// work and keeps the choice per device (`card.folder`, `card.folder_set`, `card.sync` through `emu_call`); this strip only asks.
+import { Show, createEffect, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
+import { errorLine } from '@digi/workbench-core/modules/backend.ts';
 import { panels } from '@digi/workbench-core/data/faceplates.ts';
-import {
-  canUseDefault,
-  fileGroups,
-  fileRows,
-  folderNotice,
-  nameInGroup,
-  shortFolder,
-  statusText,
-  type CardFolder,
-} from './card-core';
+import { canUseDefault, folderNotice, shortFolder, statusText, type CardFolder } from './card-core';
 import { cardApi } from './card-api';
 import { cardRefresh } from './card-state';
 import { cardEntry, failureEntry, overlayResetEntry } from './log-core';
-import { logInput } from './log-state';
+import type { LogWriter } from './log-state';
 import type { Host } from '@digi/workbench-core/host/host.ts';
 import './card-panel.css';
 
 const POLL_MS = 2000;
 /** The device's name as the faceplate gives it. */
 const deviceName = (id: string | undefined) =>
-  id && id in panels ? panels[id as keyof typeof panels].name : (id ?? '').toUpperCase();
+  id && Object.hasOwn(panels, id) ? panels[id as keyof typeof panels].name : (id ?? '').toUpperCase();
 
 /** `reload`: start the loaded firmware again (the Restart button's path), which builds the card from the folder in use. */
 export default function CardPanel(props: {
   host: Host;
-  visible: boolean;
+  logWriter: Pick<LogWriter, 'logInput'>;
   reload?: () => Promise<void>;
-  /** Set when the panel is a tab of the column (SidePanels.tsx): the tabpanel's id and the id of its tab. */
-  tabpanel?: { id: string; labelledBy: string };
 }): JSX.Element {
   const api = cardApi(props.host);
   const [card, setCard] = createSignal<CardFolder>();
@@ -58,16 +47,13 @@ export default function CardPanel(props: {
     }
     setNow(Date.now());
   };
-  // Only a change of whether the panel is on screen and open counts, not each change of what `visible` reads (the Console's `status` changes
-  // once per display frame): a memo passes on a change of its value only.
-  const active = createMemo(() => props.visible);
-  // read when the panel is shown and opened, when a Transfer job ended, and on a light poll while it is visible
+  // read when the strip is mounted, when a Transfer job ended, and on a light poll while it is mounted
   createEffect(() => {
     cardRefresh();
-    if (active()) untrack(() => void refresh());
+    untrack(() => void refresh());
   });
   const timer = window.setInterval(() => {
-    if (active() && !busy()) void refresh();
+    if (!busy()) void refresh();
   }, POLL_MS);
   onCleanup(() => window.clearInterval(timer));
 
@@ -77,10 +63,10 @@ export default function CardPanel(props: {
       const next = await api.sync();
       setCard(next);
       setError('');
-      logInput(cardEntry('synced', next));
+      props.logWriter.logInput(cardEntry('synced', next));
     } catch (e) {
       setError(errorLine(e));
-      logInput(failureEntry('card', 'sync', errorLine(e)));
+      props.logWriter.logInput(failureEntry('card', 'sync', errorLine(e)));
     } finally {
       setBusy(false);
       setNow(Date.now());
@@ -93,12 +79,12 @@ export default function CardPanel(props: {
       const next = await run();
       if (next) {
         setCard(next);
-        logInput(cardEntry(what, next));
+        props.logWriter.logInput(cardEntry(what, next));
       }
       setError('');
     } catch (e) {
       setError(errorLine(e));
-      logInput(failureEntry('card', what, errorLine(e)));
+      props.logWriter.logInput(failureEntry('card', what, errorLine(e)));
     } finally {
       setBusy(false);
       setNow(Date.now());
@@ -120,13 +106,13 @@ export default function CardPanel(props: {
     setBusy(true);
     try {
       const r = await api.resetOverlay();
-      logInput(overlayResetEntry(r));
+      props.logWriter.logInput(overlayResetEntry(r));
       if (r.set_aside) await props.reload?.();
       setCard(await api.folder());
       setError('');
     } catch (e) {
       setError(errorLine(e));
-      logInput(failureEntry('card', 'reset card changes', errorLine(e)));
+      props.logWriter.logInput(failureEntry('card', 'reset card changes', errorLine(e)));
     } finally {
       setBusy(false);
       setNow(Date.now());
@@ -141,21 +127,17 @@ export default function CardPanel(props: {
   };
 
   return (
-    <aside
-      class="card-panel"
-      id={props.tabpanel?.id}
-      role={props.tabpanel ? 'tabpanel' : undefined}
-      aria-labelledby={props.tabpanel?.labelledBy}
-      aria-label={props.tabpanel ? undefined : 'Card'}
-      hidden={!props.visible}
-    >
-      <div class="card-body">
+    <section class="card-mirror" aria-label="Emulator card folder">
+      <div class="where">
         <Show when={card()?.device}>
-          <h3 class="device">{deviceName(card()!.device)}</h3>
+          <strong class="device">{deviceName(card()!.device)}</strong>
         </Show>
-        <p class="folder" title={card()?.folder ?? ''}>
+        <span class="folder" title={card()?.folder ?? ''}>
           {card()?.folder ? shortFolder(card()!.folder) : 'No folder'}
-        </p>
+        </span>
+      </div>
+      <p class="hint">The emulator copies its card store to this folder about 2 s after each write.</p>
+      <div class="body">
         <div class="acts">
           <button type="button" class="act small" disabled={!card()?.device || busy()} onClick={() => void choose()}>
             Choose folder…
@@ -195,33 +177,6 @@ export default function CardPanel(props: {
             </Show>
           </div>
         </Show>
-        <Show
-          when={card() && fileRows(card()!).length}
-          fallback={<p class="empty">{card()?.continuous ? 'No files in the folder.' : ''}</p>}
-        >
-          <For each={fileGroups(card()!)}>
-            {(g) => (
-              <div class="group">
-                <Show when={g.folder}>
-                  <h4 title={`${g.files.length} file${g.files.length === 1 ? '' : 's'}`}>
-                    <span>{g.folder}/</span>
-                    <span class="size">{formatBytes(g.bytes)}</span>
-                  </h4>
-                </Show>
-                <ul class="files">
-                  <For each={g.files}>
-                    {(f) => (
-                      <li title={`${f.path}\nhash ${f.hash}`}>
-                        <span class="name">{nameInGroup(f.path, g.folder)}</span>
-                        <span class="size">{formatBytes(f.bytes)}</span>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-              </div>
-            )}
-          </For>
-        </Show>
         <Show when={card()}>
           <p class="status" classList={{ bad: !!card()?.error }}>
             {statusText(card()!, now())}
@@ -233,6 +188,6 @@ export default function CardPanel(props: {
           </p>
         </Show>
       </div>
-    </aside>
+    </section>
   );
 }

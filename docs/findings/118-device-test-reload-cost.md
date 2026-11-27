@@ -39,8 +39,8 @@ reloads of a file equals its number of distinct cards per device, not its number
 
 ## Explanation
 
-**Snapshot key.** `card_snapshot_key` and `card_identity` (`packages/emulator/control/src/controller.rs`) hash the card path, size, mtime and the sha256
-of `overlay.bin`; the coupled key `patched_pair_key` adds the MAIN digest, DSP image, cold state and button state. The snapshot is the file
+**Snapshot key.** `card_snapshot_key` and `card_identity` (`packages/emulator/control/src/controller.rs`) hash the card's content id (the text of `card.key`
+next to the image, written by `cachedCard`), its size and the sha256 of `overlay.bin`; a card without `card.key` falls back to path and mtime. The coupled key `patched_pair_key` adds the MAIN digest, DSP image, cold state and button state. The snapshot is the file
 `<run dir>/patched/<key>` (`controller.rs`, `join("patched")`). A card that the guest wrote to, or one in a new directory, has another key: that is the reason for
 the content-named cards in `tests/regression/runtime/card-cache.ts`. `cardRig`, `fx-session` and `fx-live` use them, so the key is stable between runs.
 No key is computed wrongly: a miss on a card never seen in that run dir is correct.
@@ -67,15 +67,18 @@ reload time. The cold run before it was not recorded (Nx hides task output witho
 ## Fix: one shared snapshot store [D]
 
 Replaced the snapshot directory of each run dir (`<run dir>/patched`, 8 newest entries per dir) with one store per daemon build and device,
-`dist/session-cache/<key12>/snapshots/<device>`. Entries keep their content key (`card_snapshot_key`, `patched_pair_key`), which does not hold the run dir.
+`<git dir>/snap-cache/<daemon key>/<device>`, shared by all worktrees. Entries keep their content key (`card_snapshot_key`, `patched_pair_key`), which holds neither the run dir nor a card path.
 - Daemon: `DIGI_SNAPSHOT_DIR` sets the snapshot root (`Actor::snapshot_root`, `controller.rs`); without it the root stays `<run_dir>/patched` (desktop app, other
-  users of the daemon). The ColdFire-only load now also reports `cache_dir`. Entries were already written as `.part` then renamed. This changes the daemon build
+  users of the daemon). The ColdFire-only load now also reports `cache_dir`. ColdFire-only entries are written as `.part` then renamed. A coupled pair is
+  booted into a `.tmp-*` dir of the store and published with one directory rename (`publish_pair`); the first writer wins. This changes the daemon build
   key: the first run after the change is cold.
-- Harness: `claimDir` gives each claim the store (`RunDirClaim.snapshotDir`, passed as `Session` option `snapshotDir`) and prunes it to 6 GiB, oldest
-  first (`pruneSnapshots`; a hit touches its entry). `PATCHED_KEEP` and the per-dir pruning are gone.
-- Failure rule: a session remembers the entries that its cold boots wrote (`Session.writtenSnapshots`); when the file fails, `releaseClaim` removes them, as
-  `claimDir` renames a failed run dir. A concurrent file could restore such an entry before the failure shows; the same exposure existed inside one run dir.
-- Entries are 66 to 74 MB (zero DSP); 6 GiB holds about 80 per device.
+- Harness: `claimDir` gives each claim the store (`RunDirClaim.snapshotDir`, from `snapshotStore` in `devices.ts`, passed as `Session` option `snapshotDir`) and prunes
+  the whole `snap-cache` to 20 GiB (`SNAPSHOT_CAP_GIB_DEFAULT` in `packages/test-support/src/emulator-config.ts`, env `DIGI_SNAP_CAP_GIB`), oldest first
+  (`pruneSnapshotRoot`; a hit touches its entry; an entry used in the last 2 hours stays; at most every 10 minutes). `PATCHED_KEEP` and the per-dir pruning are gone.
+- Card content id: `cachedCard` writes `card.key` (the card's key) next to `card.img`; the daemon keys on it, not on the path or mtime.
+- Failure rule: a session remembers the entries that its cold boots wrote (`Session.writtenSnapshots`); when the file fails, `releaseClaim` removes them
+  (`removeEntry`: rename aside, then delete), as `claimDir` renames a failed run dir. A concurrent file, in any worktree, could restore such an entry before the failure shows.
+- Entries are 66 to 74 MB (zero DSP); 20 GiB holds about 270 per device.
 
 Proof on the lane (zero DSP, one emulator run at a time; the first run is cold because the daemon key changed):
 
@@ -91,4 +94,4 @@ than the gate's because the machine was less loaded.
 
 Not changed: a first run of a cold gate still boots every distinct card once, and a core change that changes the MAIN digest still starts cold. What the store
 removes is the repeat of a boot per run dir, per rerun and per equal card in another file. Fewer distinct cards and a warm-up task (earlier options 2 and 3)
-remain open. **[O]** The 6 GiB cap and the failure rule were not exercised against a gate-size load.
+remain open. **[O]** The cap and the failure rule were not exercised against a gate-size load.

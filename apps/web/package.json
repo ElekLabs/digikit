@@ -22,11 +22,13 @@
     "smol-toml": "1.9.0",
     "solid-js": "1.9.15",
     "@digi/dk-session": "workspace:*",
+    "@digi/devices": "workspace:*",
     "@digi/workbench-core": "workspace:*",
     "@digi/dkbs": "workspace:*"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
+    "@digi/test-support": "workspace:*",
     "typescript": "5.9.3"
   }
 }

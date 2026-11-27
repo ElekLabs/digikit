@@ -7,11 +7,12 @@ import { repoRoot, resolveInputs, stepWithProgress, type Device, type Session } 
 import { parse } from 'smol-toml';
 import { describe, expect, test } from 'vitest';
 import { CMD as GCMD } from '../../../packages/dk-session/src/gen_proto.ts';
-import { listing, plusdriveBinary, storeList, type Files, type Listing } from './card-kit.ts';
+import { listing, plusdriveBinary, storeList, type Files, type Listing } from './card-store.ts';
 import { cardRig, type CardRig } from './card-rig.ts';
-import { rpc } from './fx-live.ts';
+import { rpc } from './guest-access.ts';
 import { FIRMWARE, FULL_TIER, selectDevices, skipEmptyHalf } from './devices.ts';
 import { overlayRecords } from './write-safety.ts';
+import { SYSTEM_PACKAGE_STORE_PATH } from './system-package.ts';
 
 /**
  * Helpers of the module-upload device tests (tools/patchkit/pk_digikit_upload.py): the upload protocol bodies, the device's LIST against the card as the
@@ -173,8 +174,10 @@ export function uploadTests(
 
 // ---- the +Drive round trip ----------------------------------------------------------------------------------------------------------
 
-/** `plusdrive export` of the card with the guest's writes writes the store's files to `digikit/` of a folder; `plusdrive build` of that folder gives a card whose store holds the same files. */
-export async function roundtrip(rig: CardRig, files: Files): Promise<void> {
+/** `plusdrive export` of the card with the guest's writes writes the store's changed files to `digikit/` of a folder; `plusdrive build` of that folder gives a card whose store holds the same files. */
+export async function roundtrip(rig: CardRig, all: Files): Promise<void> {
+  // the export writes the files the guest changed: the system package of the seeded card stays where it is
+  const files = Object.fromEntries(Object.entries(all).filter(([p]) => p !== SYSTEM_PACKAGE_STORE_PATH));
   const overlay = path.join(rig.artifacts, 'roundtrip.overlay.bin');
   await rpc(rig.session, 'card.overlay', { path: overlay });
   const top = path.join(rig.artifacts, 'roundtrip');

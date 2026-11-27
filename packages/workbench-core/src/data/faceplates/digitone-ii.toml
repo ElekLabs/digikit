@@ -22,6 +22,9 @@ wordmark = [37.3, 67.6]
 x = [186.0, 192.0, 197.9, 203.9]
 y = [96.0, 101.9]
 r = 1.5
+# Single LEDs outside the grid, for example one under a key (none on this device):
+# extra = [{ x = 100.0, y = 50.0, r = 1.2, idx = 42, color = "#ff8040" }]
+# idx is the panel LED index (unset = never lit); r and color default to the grid's.
 
 [controls]
 screws = [
@@ -32,7 +35,8 @@ screws = [
   { x = 116.3, y = 170.4 },
   { x = 205.1, y = 171.0 },
 ]
-# style: jack (connector labels), label, sub (accent), dim, icon
+# style: jack (connector labels), label, sub (grey), dim, icon (the headphones glyph), updown (a label with a small up/down
+# glyph before it), split (the part before the first "/" in the silk colour, the rest in the accent colour)
 texts = [
   { text = "headphones", x = 15.2, y = 3.5, style = "icon" },
   { text = "L ···· Out ···· R", x = 34.1, y = 3.5, style = "jack" },
@@ -47,6 +51,7 @@ texts = [
   { text = ":······", x = 43.7, y = 146.5, style = "dim" },
   { text = "······:", x = 156.6, y = 146.5, style = "dim" },
 ]
+# A knob's sub is grey; sub_style = "accent" draws it in the accent colour.
 # encoder: rotation code; push: its push-switch button code. No encoder
 # means a local-only knob (the volume pot is not on the panel link).
 knobs = [
@@ -61,8 +66,9 @@ knobs = [
   { encoder = 7, push = 47, x = 171.9, y = 57.5, r = 6.5, marker = "none", label = "G", label_y = 67.4 },
   { encoder = 8, push = 48, x = 198.6, y = 57.5, r = 6.5, marker = "none", label = "H", label_y = 67.4 },
 ]
-# sub is the second-function label under the key, in the accent colour
-# (text up to a "/" in plain); sub_style = "plain" prints it all plain.
+# sub is the second-function label under the key, always in the accent colour (sub_style is read but not used).
+# icon: perform, settings, samples, tempo, keyboard, record, play, stop, up, down, left, right, unison, arp, noteedit, plus,
+# minus, headphones, sound (three dots), routing (the letters FX).
 keys = [
   { code = 1, x = 117.9, y = 79.4, w = 11.0, h = 10.7, legend = "TRIG", sub = "Quantize", sub_y = 87.4 },
   { code = 2, x = 133.9, y = 79.4, w = 11.0, h = 10.7, legend = "SYN", sub = "Machine", sub_y = 87.4 },

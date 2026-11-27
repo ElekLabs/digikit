@@ -3,8 +3,8 @@
 
     uv run python -m tools.patchkit.pk_modcheck NAME [--device dt2|dn2] [--trace]      (mise run module:check NAME)
 
-NAME is a module id (`<author/name>`) or its last part (`<name>`). An effect module runs tests/modules/test_fx_conformance.py. A machine module (tools/patchkit/pk_conform.py) runs the conformance
-suite, tests/modules/test_machine_conformance.py, for its devices (docs/TESTING.md "Machine conformance"). The same process includes the module's own tests: `modules/<group>/<name>/tests/**/test_*.py` and its scenarios in `tests/scenarios/*.toml` (only those run, at every tier). One pytest process runs those Python tests. Module-owned Nx `test-device-all` targets (full inputs) then run their declared TypeScript device acceptance; any failing stage stops the check before size/fit.
+NAME is a module id (`<author/name>`) or its last part (`<name>`), or `service/<name>` for a service crate of the runtime (`services/<name>`: the structure check, `patchkit service-check`, then the crate's `rust-tests`). A machine or effect module runs the conformance suite on the SHARC-only rig
+(packages/sharc-rig-kit, docs/TESTING.md "The Vitest kit"), for its devices, then `patchkit uses set` writes its measured DSP cost. Then one pytest process runs the module's own tests: `modules/<group>/<name>/tests/**/test_*.py` and its scenarios in `tests/scenarios/*.toml` (only those run, at every tier). Module-owned Nx `test-device-all` targets (full inputs) then run their declared TypeScript device acceptance; any failing stage stops the check before size/fit.
 Own tests may build or launch an emulator. A service/raw module with no Python tests has its objects checked against their sources, then runs its owned device target if present. Size and fit follow only after both stages pass. This command does not prove every module loads in patched firmware.
 """
 
@@ -25,10 +25,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 from tools import python_env  # noqa: E402
 from tools.patchkit import modroots, pk_conform  # noqa: E402
-
-CONFORMANCE = "tests/modules/test_machine_conformance.py"
-FX_CONFORMANCE = "tests/modules/test_fx_conformance.py"
-
 
 USES_KEYS = ("machine_rows", "param_rows", "page_rows", "record_bytes")
 
@@ -114,14 +110,26 @@ def _daemon(device: str) -> str:
 
 
 def commit_stage(mid: str, devices: list[str]) -> bool:
-    """For a module with `[[machine]]` or `[[fx]]`: load it on the emulated device, read the rows it committed (tools/devtools/commit_records.ts, decoded by
-    `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from them (docs/plans/sdk.md 6.1 and 6.4). The
-    conformance suite that runs next reads that gallery.json. A tool or a service has no rows to commit and is left alone: returns False."""
+    """For a module with `[[machine]]`, `[[fx]]` or a `[[record]]` (an LFO shape): load it on the emulated device, read the records it committed
+    (tools/devtools/commit_records.ts, decoded and judged by `patchkit records`), write `[uses.<device>]` into its module.toml and `build/gen/gallery.json` from
+    them (docs/plans/sdk.md 6.1 and 6.4). The conformance suite that runs next reads that gallery.json. The records must pass the rule of the service that owns
+    their kind (`patchkit records --check`, `Records::validate`): a problem stops the check. A tool or a service has no rows to commit and is left alone:
+    returns False."""
     moddir = modroots.module_dir(mid)
     manifest_path = moddir / "module.toml"
     original = manifest_path.read_text(encoding="utf-8")
-    if "[[machine]]" not in original and "[[fx]]" not in original:
-        return False  # declares nothing through builder calls: no rows to measure
+    if (
+        "[[machine]]" not in original
+        and "[[fx]]" not in original
+        and "[[record]]" not in original
+    ):
+        return False  # declares nothing through builder calls or records: no rows to measure
+    subprocess.run(
+        ["pnpm", "nx:pilot", "run", "core/runtime:package"],
+        cwd=ROOT,
+        env=python_env(),
+        check=True,
+    )
     # The measuring build takes the device limits as its `[uses]`: the loader refuses a module whose tables are absent, zero or lower than what its
     # init declares, so a new or changed module could not be measured with its own numbers. The measured rows replace them below.
     write_uses(manifest_path, {d: seed_uses(d) for d in devices})
@@ -134,6 +142,19 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
         manifest_path.write_text(original, encoding="utf-8")
         return False
     kept = tomllib.loads(original).get("uses", {})
+    refused = {
+        dev: d["records"].get("problems", [])
+        for dev, d in per.items()
+        if d["records"].get("problems")
+    }
+    if refused:
+        manifest_path.write_text(original, encoding="utf-8")
+        for dev, problems in sorted(refused.items()):
+            for line in problems:
+                print(f"{mid}: {dev}: {line}", file=sys.stderr)
+        raise SystemExit(
+            f"{mid}: the records it commits are refused by the service that owns them (the rule the runtime runs at load)"
+        )
     write_uses(
         manifest_path,
         {
@@ -145,49 +166,100 @@ def commit_stage(mid: str, devices: list[str]) -> bool:
     return _write_measured(mid, moddir, per, original)
 
 
-CONFORMANCE_REPORTS = ROOT / "out" / "runs" / "conformance"
+# Reports live in this worktree's dist/ (out/ is shared by every worktree: a report of another lane's run must never reach `write_costs_rust`).
+RIG_REPORTS = (
+    ROOT / "dist" / "conformance-rig"
+)  # the SHARC-only rig writes here (packages/sharc-rig-kit/src/report.ts)
 
 
 def measured_costs(
-    mid: str, devices: list[str], since: float
+    mid: str, devices: list[str], since: float, reports: Path = RIG_REPORTS
 ) -> dict[str, dict[str, int]]:
-    """The DSP cost of module MID per device from the reports of the conformance run that started at `since` (tests/modules/test_machine_conformance.py and
-    test_fx_conformance.py write them): the worst steady block over every case. A machine's cost is per voice; an effect's is the whole process call (the effect and
-    core/fx around it, which every slot takes), measured once for both devices. A report older than the run, or none, leaves that cost out."""
+    """The DSP cost of module MID per device from the reports of the conformance run that started at `since` (the kit writes them, `RIG_REPORTS`): the worst steady block over every case. A machine's cost is per voice; an effect's is the whole process call (the effect and
+    core/fx around it, which every slot takes), measured once for both devices. A report older than the run, or none, leaves that cost out; a report of another worktree is an error."""
     out: dict[str, dict[str, int]] = {}
 
     def worst(path: Path) -> int | None:
         if not path.is_file() or path.stat().st_mtime < since:
             return None
-        cases = json.loads(path.read_text(encoding="utf-8")).get("cases") or []
+        report = json.loads(path.read_text(encoding="utf-8"))
+        owner = report.get("worktree")
+        if owner != str(ROOT.resolve()):
+            raise RuntimeError(
+                f"{path} was written by the worktree {owner!r}, not by this one ({ROOT}): "
+                "refusing to write its DSP cost into a module.toml; run the conformance suite here"
+            )
+        cases = report.get("cases") or []
         return max((int(c["steady"]) for c in cases), default=None)
 
     stem = mid.replace("/", "__")
     if pk_conform.is_machine_module(mid):
         for dev in devices:
-            cost = worst(CONFORMANCE_REPORTS / f"{stem}@{dev}.json")
+            cost = worst(reports / f"{stem}@{dev}.json")
             if cost:
                 out.setdefault(dev, {})[COST_VOICE] = cost
     if pk_conform.is_fx_module(mid):
-        cost = worst(CONFORMANCE_REPORTS / f"{stem}@fx.json")
+        cost = worst(reports / f"{stem}@fx.json")
         if cost:
             for dev in devices:
                 out.setdefault(dev, {})[COST_FX] = cost
     return out
 
 
-def write_costs(
+def rig_conformance(mid: str, env: dict[str, str]) -> int:
+    """The conformance suites on the SHARC-only rig (packages/sharc-rig-kit): builds the rig, then runs the Vitest project with the selection in ENV.
+    The kit writes the reports to dist/conformance-rig (`RIG_REPORTS`), which `write_costs_rust` reads."""
+    from tools.patchkit import patchkit
+
+    r = subprocess.run(
+        ["pnpm", "nx:pilot", "run", "sharc-rig:build"],
+        cwd=ROOT,
+        env=python_env(dict(os.environ)),
+    )
+    if r.returncode:
+        return r.returncode
+    kit_env = {
+        **os.environ,
+        **env,
+        "DIGI_PATCHKIT": str(patchkit.binary()),
+        "DIGI_CONFORM_REPORTS": str(RIG_REPORTS),
+    }
+    return subprocess.run(
+        [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--config",
+            "vitest.host.config.ts",
+            "--project",
+            "sharc-rig-conformance",
+        ],
+        cwd=ROOT,
+        env=python_env(kit_env),
+    ).returncode
+
+
+def write_costs_rust(
     mid: str, devices: list[str], since: float
 ) -> dict[str, dict[str, int]]:
-    """Write the measured DSP cost of MID into `[uses.<device>]` of its module.toml (the lock-file step after the conformance run: the next `pack` puts it into the header)."""
+    """`write_costs` through `patchkit uses set` (packages/patchkit/src/uses.rs): the same lines change as with `write_uses`."""
+    from tools.patchkit import patchkit
+
     costs = measured_costs(mid, devices, since)
-    if costs:
-        write_uses(modroots.module_dir(mid) / "module.toml", costs)
-        for dev, c in sorted(costs.items()):
-            print(
-                f"{mid}: {dev} DSP cost {', '.join(f'{k} {v}' for k, v in c.items())} instructions per block",
-                flush=True,
+    for dev, c in sorted(costs.items()):
+        flags = [x for k, v in c.items() for x in (f"--{k.replace('_', '-')}", str(v))]
+        r = patchkit.run(
+            ["uses", "set", "--id", mid, "--device", dev, *flags], capture=True
+        )
+        if r.returncode:
+            raise RuntimeError(
+                f"patchkit uses set {mid} {dev} failed: {(r.stderr or '').strip()}"
             )
+        print(
+            f"{mid}: {dev} DSP cost {', '.join(f'{k} {v}' for k, v in c.items())} instructions per block",
+            flush=True,
+        )
     return costs
 
 
@@ -228,9 +300,25 @@ def _measure(mid: str, devices: list[str]) -> dict[str, dict]:
                     f"packing digikit/debug for {dev} failed:\n{(d.stderr or '').strip()}"
                 )
             per[dev] = pk_committed.committed(
-                mid, dev, out, str(patchkit.binary()), _daemon(dev), debug_dkm=dbg
+                mid,
+                dev,
+                out,
+                str(patchkit.binary()),
+                _daemon(dev),
+                debug_dkm=dbg,
+                services=_card_services(dev, Path(tmp), [out, dbg]),
             )
     return per
+
+
+def _card_services(dev: str, tmp: Path, files: list[Path]) -> list[Path]:
+    """The card files the packed FILES need: the services as packed and the port file of the stock firmware (`patchkit services`; module:check needs no Nx output)."""
+    from tools.patchkit import pk_services
+
+    return [
+        Path(s["file"])
+        for s in pk_services.card_services(dev, tmp / "services" / dev, files)
+    ]
 
 
 def _write_measured(
@@ -295,16 +383,14 @@ def _scenario_tests(kinds: set[str]) -> list[str]:
 
 
 def plan(mid: str, device: str | None) -> tuple[list[str], dict[str, str]]:
-    """(pytest paths, extra environment) for module MID."""
+    """(pytest paths, extra environment) for module MID. The conformance suite runs on the rig (`rig_conformance`), not as a pytest path; the environment selects it."""
     paths: list[str] = []
     env: dict[str, str] = {}
     if pk_conform.is_machine_module(mid):
-        paths.append(CONFORMANCE)
         env["DIGI_CONFORM_MODULES"] = mid
         if device:
             env["DIGI_CONFORM_DEVICE"] = device
     if pk_conform.is_fx_module(mid):
-        paths.append(FX_CONFORMANCE)
         env["DIGI_CONFORM_MODULES"] = mid
     paths += own_tests(mid)
     # the module's own scenarios (tests/scenarios/*.toml): the digikit test files of their kinds, limited to them, all tiers
@@ -521,6 +607,26 @@ def size_lines(mid: str, devices: list[str], trace: bool = False) -> list[str]:
     return lines
 
 
+def service_check(name: str) -> int:
+    """A service crate: the structure check (layout, one exported entry, declarations equal to sdk.toml), then its own host tests."""
+    from tools.patchkit import patchkit
+
+    crate = ROOT / "services" / name
+    if not (crate / "Cargo.toml").is_file():
+        print(
+            f"service/{name}: no such service crate ({crate.relative_to(ROOT)})",
+            file=sys.stderr,
+        )
+        return 1
+    r = patchkit.run(["service-check", str(crate)])
+    if r.returncode:
+        return r.returncode
+    return subprocess.run(
+        ["pnpm", "nx:pilot", "run", f"dkrt-svc-{name.replace('_', '-')}:rust-tests"],
+        cwd=ROOT,
+    ).returncode
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     ap.add_argument("name")
@@ -531,20 +637,50 @@ def main() -> int:
         help="pack the size lines with DK_TRACE defined (patchkit pack --trace); the conformance and own tests run the module as stored",
     )
     a = ap.parse_args()
+    if a.name.startswith("service/"):
+        return service_check(a.name.split("/", 1)[1])
     mid = resolve(a.name)
     commit_stage(mid, [a.device] if a.device else list(pk_conform.DEVICES))
     paths, env = plan(mid, a.device)
     targets = own_device_targets(mid)
+    machine, effect = pk_conform.is_machine_module(mid), pk_conform.is_fx_module(mid)
     kind = (
         "machine module"
-        if CONFORMANCE in paths
+        if machine
         else "effect module"
-        if FX_CONFORMANCE in paths
+        if effect
         else "module (no machine or effect DSP: no conformance suite)"
     )
-    print(f"{mid}: {kind}; pytest {' '.join(paths) or '(nothing to run)'}", flush=True)
+    on_rig = machine or effect
+    print(
+        f"{mid}: {kind}; conformance on {'the SHARC-only rig' if on_rig else 'nothing'}; pytest {' '.join(paths) or '(nothing to run)'}",
+        flush=True,
+    )
     devices = [a.device] if a.device else list(pk_conform.DEVICES)
-    if not paths:
+    if on_rig:
+        started = time.time()
+        rc = rig_conformance(mid, env)
+        if rc:
+            return rc
+        if paths:
+            rc = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "-q",
+                    "-p",
+                    "no:cacheprovider",
+                    "-rf",
+                    *paths,
+                ],
+                cwd=ROOT,
+                env=python_env({**os.environ, **env}),
+            ).returncode
+            if rc:
+                return rc
+        write_costs_rust(mid, devices, started)
+    elif not paths:
         from tools.patchkit import patchkit
 
         try:
@@ -553,7 +689,6 @@ def main() -> int:
             print(f"{mid}: {e}", file=sys.stderr)
             return 1
     else:
-        started = time.time()
         cmd = [
             sys.executable,
             "-m",
@@ -569,7 +704,6 @@ def main() -> int:
         ).returncode
         if rc:
             return rc
-        write_costs(mid, devices, started)
     if targets:
         rc = run_device_targets(mid, targets, a.device)
         if rc:

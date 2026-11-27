@@ -1,0 +1,73 @@
+schema = "dk.calprofile/1"
+name = "kernels"
+# One case per kernel of the test module test/cal-kernels (machines alu, dm, mem, branch, mix, in that order), each with only that module loaded.
+# The machine holds one note on track 1 (a voice that never ends: one call per block). A module-free `rest` case follows each kernel case:
+# the restart that unloads the module ends the voice, which would otherwise play on while the next kernel runs.
+description = "The stock case, then five test kernels (alu, dm, mem, branch, mix). Each is loaded alone and plays one note on track 1, about 20,000 instructions per block. Gives a device/emulator factor per kind of instruction."
+warmup_s = 2
+capture_s = 5
+repeats = 3
+modules = ["test/cal-kernels"]
+teardown = { steps = "release-notes", args = { tracks = "1" } }
+
+[[case]]
+id = "stock"
+steps = "hold-note"
+args = { tracks = "1" }
+
+# The kernels never end a voice: one press per case, and a module-free case after each kernel case (the restart ends the voice).
+
+[[case]]
+id = "alu"
+modules = ["test/cal-kernels"]
+steps = "play-module-machine"
+args = { machine = "test/cal-kernels#1" }
+teardown = { steps = "reset-machine" }
+
+[[case]]
+id = "rest-1"
+steps = "hold-note"
+args = { tracks = "1" }
+
+[[case]]
+id = "dm"
+modules = ["test/cal-kernels"]
+steps = "play-module-machine"
+args = { machine = "test/cal-kernels#2" }
+teardown = { steps = "reset-machine" }
+
+[[case]]
+id = "rest-2"
+steps = "hold-note"
+args = { tracks = "1" }
+
+[[case]]
+id = "mem"
+modules = ["test/cal-kernels"]
+steps = "play-module-machine"
+args = { machine = "test/cal-kernels#3" }
+teardown = { steps = "reset-machine" }
+
+[[case]]
+id = "rest-3"
+steps = "hold-note"
+args = { tracks = "1" }
+
+[[case]]
+id = "branch"
+modules = ["test/cal-kernels"]
+steps = "play-module-machine"
+args = { machine = "test/cal-kernels#4" }
+teardown = { steps = "reset-machine" }
+
+[[case]]
+id = "rest-4"
+steps = "hold-note"
+args = { tracks = "1" }
+
+[[case]]
+id = "mix"
+modules = ["test/cal-kernels"]
+steps = "play-module-machine"
+args = { machine = "test/cal-kernels#5" }
+teardown = { steps = "reset-machine" }

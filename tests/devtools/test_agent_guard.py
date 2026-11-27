@@ -20,6 +20,12 @@ BLOCKED = [
     "uv run pytest tests/patchkit",
     "mise run test:full",
     "tail -f out/runs/x.log",
+    "cat .nx/cache/terminalOutputs/123456",
+    "less out/runs/gate/2026-11-20/run.log",
+    "cd lane && cat /work/out/runs/nx/a.log",
+    "head -n 500 out/runs/nx/a.log",
+    "tail -n +1 out/runs/nx/a.log",
+    "tail -1000 .nx/cache/terminalOutputs/9",
 ]
 
 ALLOWED = [
@@ -29,6 +35,15 @@ ALLOWED = [
     'git commit -m "the hook blocks --tier full, test:full and sleep 300"',
     "echo 'tail -f x'",
     'git commit -m "a \\"quoted\\" sleep 120"',
+    "tail -n 50 out/runs/nx/a.log",
+    "head -n 200 .nx/cache/terminalOutputs/9",
+    "tail out/runs/nx/a.log",
+    "cat out/runs/nx/a.log | head -n 40",
+    "cat out/runs/nx/a.log | grep -n error",
+    "node tools/nx/failures.mjs out/runs/nx/a.log",
+    "cat docs/TESTING.md",
+    "cat out/runs/dev/summary.json",
+    "echo 'cat out/runs/nx/a.log'",
 ]
 
 

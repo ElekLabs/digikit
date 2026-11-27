@@ -55,14 +55,14 @@ test('an already aborted receive asks nothing of the host', async () => {
   const host = createFakeHost();
   const abort = new AbortController();
   abort.abort();
-  assert.equal(await new MidiPortTransport(host.ports.midi).recv(100, abort.signal), null);
+  assert.equal(await new MidiPortTransport(host.ports.midi, 'Port A').recv(100, abort.signal), null);
   assert.deepEqual(host.calls, []);
 });
 
 test('a MIDI transport sends and receives through the open port', async () => {
   const host = createFakeHost({ 'ports.midi.recv': new Uint8Array([0xf0, 0xf7]).buffer });
   await host.ports.midi.open('Elektron Digitakt II');
-  const transport = new MidiPortTransport(host.ports.midi);
+  const transport = new MidiPortTransport(host.ports.midi, 'Port A');
   await transport.send(frame(0xf0, 1, 0xf7));
   assert.deepEqual(await transport.recv(100), new Uint8Array([0xf0, 0xf7]));
   await host.ports.midi.close();

@@ -1,0 +1,103 @@
+[module]
+id = "core/ui"
+version = "0.1.0"
+name = "UI"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "The UI adapter behind <dk/platform/ui.h>: menus, text pages, lists with a side panel, rows, confirm and choice dialogs and toasts, on the firmware's own views"
+requires = ["core/runtime"]
+conflicts = []
+ports = ["dt2-1.17", "dn2-1.12", "st-1.42"]
+# The anchors of module screens (views, text input): a port without them (st-1.42) still takes core/ui, and a module's view or text input is refused there.
+optional_anchors = ["cf.text.fn.width", "cf.view.fn.view_ctor", "cf.window.fn.name_ctor", "cf.window.site.name_cb_vptr_lit", "cf.text.data.font_large", "cf.menu.fn.settings_list_rebuild", "cf.menu.data.settings_vtable", "cf.menu.fn.settings_dtor", "cf.menu.hook.settings_dtor"]
+# The key ids of the firmware's key events (build/gen/ui-<dev>.inc): a device without the table would give zeros.
+needs_device = ["input.keys"]
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+"st-1.42" = "experimental"
+
+# One C source for both devices: every firmware call is a generated anchor (ports/bindings/include/dk_fw_*.h), so the object has no
+# externs table for C. The assembly shim maps its own symbol below. The dk_ui_* functions are plain global symbols that other
+# modules which require core/ui import by name. The module's one firmware hook is the end of the SETTINGS item list rebuild: it calls the runtime's dkrt_ui_settings_rows, which asks the system package for its rows (the `ui.settings_rows` hook).
+[[object]]
+path = "build/ui.dko.json"
+sources = ["src/ui.c", "src/settings_rows.c", "src/dialog_slot.c", "src/view_pool.c", "src/panel_keys.c", "src/key_map.c", "src/key_defer.c", "src/canvas_map.c", "src/text_input.c", "src/shim.s"]
+place = "cf.expansion"
+
+[object.externs]
+_dk_tail = "hook.cf.menu.site.settings_list.tail.tail"
+_dk_dtor_tail = "hook.cf.menu.fn.settings_dtor.tail"
+
+# Hook before the last step of the rebuild (the selection restore); the displaced instructions run in the tail.
+[[op]]
+op = "hook"
+hook = "cf.menu.hook.settings_list.tail"
+to = "dk_hook"
+
+[[claim]]
+resource = "cf.menu.site.settings_list.tail"
+
+# Optional (a port without the destructor anchor skips the op and the tail link is 0; the vtable check is then the only guard). The destructor of the SETTINGS menu: core/ui forgets the menu pointer it kept for the list rebuild (ui_settings_menu_gone).
+[[op]]
+op = "hook"
+hook = "cf.menu.hook.settings_dtor"
+to = "dk_dtor_hook"
+
+[[claim]]
+resource = "cf.menu.fn.settings_dtor"
+
+# The view capture (both devices): the hook remembers the view the firmware builds its item list for, and `machine_view` names the word that holds it. A loaded service can build the view's list again after a reload.
+[[object]]
+path = "build/view-capture.dko.json"
+sources = ["src/view-capture.s"]
+place = "cf.expansion"
+devices = ["dt2", "dn2"]
+
+[object.externs]
+_ui_view_next = "hook.cf.machine.fn.view.build.tail"
+_ui_view_build = "cf.machine.fn.view.build"
+
+[[op]]
+op = "hook"
+hook = "cf.machine.hook.view.build"
+to = "ui_machine_view_hook"
+devices = ["dt2", "dn2"]
+
+[[claim]]
+resource = "cf.machine.fn.view.build"
+devices = ["dt2", "dn2"]
+
+[[info]]
+name = "machine_view"
+symbol = "ui_machine_view_info"
+devices = ["dt2", "dn2"]
+
+# The key ids of the firmware's key events differ per device (the Syntakt's decoder table is not the identity): the device file's [input.keys] (YES, LEVEL_PUSH, NO, RIGHT) and [input.key_flags],
+# generated into build/gen/ui-<dev>.inc and put in a small per-device object that ui.c reads (`dk_ui_view_keys`).
+[[gen]]
+kind = "gas"
+path = "build/gen/ui-{dev}.inc"
+uses = ["UI_KEY_*", "KEY_FLAG_PRESS", "KEY_FLAG_RELEASE"]
+
+[[object]]
+path = "build/keys-dt2.dko.json"
+sources = ["src/keys/dt2.s"]
+place = "cf.expansion"
+devices = ["dt2"]
+
+[[object]]
+path = "build/keys-dn2.dko.json"
+sources = ["src/keys/dn2.s"]
+place = "cf.expansion"
+devices = ["dn2"]
+
+[[object]]
+path = "build/keys-st.dko.json"
+sources = ["src/keys/st.s"]
+place = "cf.expansion"
+devices = ["st"]

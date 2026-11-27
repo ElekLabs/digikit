@@ -10,7 +10,7 @@ Two measurements on the image the workbench boots (the `emulator` patch set of d
    The cold boot runs on a worker thread of the daemon and cannot be polled.
 2. A stepped power-on boot of the same image (a daemon started on the patched .syx, paused, with the card of 1): `run_until` in
    STEP_MS slices of emulated time and a peek of the marker word after each, until the runtime wrote it (its first code ran), then on
-   to the ready state. The marker is `DKRT_BOOT.magic`, which `dkrt_boot` (modules/core/runtime/src/rs/src/boot.rs) sets right after
+   to the ready state. The marker is `DKRT_BOOT.magic`, which `dkrt_boot` (runtime/core/src/rs/src/boot.rs) sets right after
    `init_once`, before anything else it does; `dkrt_boot` is called by `dkrt_boot_hook` at the entry of the firmware's main-OS task.
    This boot has no DSP attached, so its wall time is the ColdFire share only; the instruction counts are comparable.
 """

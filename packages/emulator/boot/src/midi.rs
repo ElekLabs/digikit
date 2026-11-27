@@ -15,6 +15,8 @@ use std::collections::VecDeque;
 
 use serde::Serialize;
 
+use crate::common::{data_mask, unique};
+
 /// eDMA channel 36 transfer control descriptor.
 pub(crate) const TCD36_BASE: u32 = 0xfc04_5480;
 pub(crate) const TCD36_DADDR: u32 = TCD36_BASE + 0x10;
@@ -33,6 +35,10 @@ pub const QUEUE_MAX: usize = 1 << 20;
 #[derive(Default)]
 pub(crate) struct UsbPort {
     pub enabled: bool,
+    /// `DIGI_USB_TRACE`: log every hand-over to the callback and every call of the transmit function (instruction count, length, hash, caller) to stderr.
+    pub trace: bool,
+    /// `DIGI_USB_TRACE_PCS`: more addresses whose execution the trace logs (instruction count, SP, the stack top, d0, a0).
+    pub trace_pcs: Vec<u32>,
     pub rx_cb: u32,
     pub tx_fn: u32,
     /// An `rte` the callback returns to (resolved from the MIDI receive ISR).
@@ -60,6 +66,17 @@ pub(crate) struct UsbPort {
     pub bulk_out_zlps: u64,
     /// The controller's system error: set when a dTD made the DMA fault; no USB traffic after it, as on hardware, where only a module reset recovers.
     pub sys_error: Option<String>,
+    /// `usb.ctrl`: the guest's EP0 send function, watched for the answer to a control request. 0: not armed.
+    pub ctrl_send: u32,
+    /// The (length, bytes) of each entry to `ctrl_send` since the last `usb.ctrl`.
+    pub ctrl_sent: Vec<(u32, Vec<u8>)>,
+}
+
+/// FNV-1a over `bytes`: the payload id in the USB trace lines (`DIGI_USB_TRACE`).
+pub(crate) fn trace_hash(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| {
+        (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3)
+    })
 }
 
 /// One delivery to the guest at interrupt level, in order (`midi.usb.in` and `usb.bulk.in` share the queue, the period and the interrupt).
@@ -84,19 +101,21 @@ impl UsbItem {
     }
 }
 
-/// The firmware's USB queue function (`FUN_40005a86`: queue index, dTD), the same code at the same address on DT2 1.16, 1.17 and DN2 1.11, 1.12.
-pub(crate) const QUEUE_TD_ENTRY: u32 = 0x4000_5a86;
+/// The firmware's USB queue function (queue index, dTD; `FUN_40005a86` on DT2 1.17), found by its prologue.
 const QUEUE_TD_SIG: [u8; 8] = [0x4f, 0xef, 0xff, 0xec, 0x20, 0x2f, 0x00, 0x18];
 /// The queue heads sit in the controller's SRAM at this base: the head of EP2 OUT's list of dTDs is a pointer at +0x30 of its queue head, its tail at +0x34.
 pub(crate) const QH_BASE: u32 = 0x8000_0000;
 pub(crate) const QH_EP2_OUT: u32 = QH_BASE + 0x100;
 pub(crate) const QH_EP2_IN: u32 = QH_BASE + 0x140;
 
-/// True when the image has the firmware's USB queue function at its address.
-pub(crate) fn resolve_queue_td(main: &[u8], load: u32) -> bool {
-    main.get((QUEUE_TD_ENTRY - load) as usize..)
-        .and_then(|m| m.get(..QUEUE_TD_SIG.len()))
-        .is_some_and(|m| m == QUEUE_TD_SIG)
+/// The address of the firmware's USB queue function in the image, when its prologue is unique.
+pub(crate) fn resolve_queue_td(main: &[u8]) -> Option<u32> {
+    unique_at(main, &QUEUE_TD_SIG)
+}
+
+/// The address of the only place in `main` where `sig` matches, with absolute addresses inside MAIN masked out.
+fn unique_at(main: &[u8], sig: &[u8]) -> Option<u32> {
+    unique(main, sig, &data_mask(sig, None)).ok()
 }
 
 pub(crate) struct UsbCall {
@@ -108,20 +127,21 @@ pub(crate) struct UsbCall {
     pub saved: [u32; 4],
 }
 
-/// The registration function of the USB callbacks (`FUN_4000434a`, the same address on DT2 1.16, 1.17 and DN2 1.11, 1.12) stores its two arguments
-/// in two .bss globals: `lea (4,sp),a0; move.l (a0),slot0.l; lea (8,sp),a0; move.l (a0),slot1.l; ...`. The slot addresses differ per image.
-const USB_REG_ENTRY: u32 = 0x4000_434a;
+/// The registration function of the USB callbacks (`resolve_usb_reg`: `FUN_4000434a` on DT2 and DN2, `FUN_40004636` on Syntakt 1.42) stores its two
+/// arguments in two .bss globals: `lea (4,sp),a0; move.l (a0),slot0.l; lea (8,sp),a0; move.l (a0),slot1.l; ...`. The slot addresses differ per image.
 const USB_REG_STORE0: [u8; 6] = [0x41, 0xef, 0x00, 0x04, 0x23, 0xd0];
 const USB_REG_STORE1: [u8; 6] = [0x41, 0xef, 0x00, 0x08, 0x23, 0xd0];
 
-/// The addresses of the registration function's two slots, read from its code; `None` when the code is not the known shape.
+/// The addresses of the registration function's two slots, read from its code; `None` when the function is not found or its code is not the known shape.
+/// The entry is found per image by its signature (`resolve_usb_reg`), like every other boot address of this crate.
 pub(crate) fn resolve_usb_slots(main: &[u8], load: u32) -> Option<(u32, u32)> {
+    let entry = resolve_usb_reg(main)?;
     let at = |addr: u32, n: usize| main.get(addr.checked_sub(load)? as usize..)?.get(..n);
-    if at(USB_REG_ENTRY, 6)? != USB_REG_STORE0 || at(USB_REG_ENTRY + 10, 6)? != USB_REG_STORE1 {
+    if at(entry, 6)? != USB_REG_STORE0 || at(entry + 10, 6)? != USB_REG_STORE1 {
         return None;
     }
-    let slot0 = u32::from_be_bytes(at(USB_REG_ENTRY + 6, 4)?.try_into().ok()?);
-    let slot1 = u32::from_be_bytes(at(USB_REG_ENTRY + 16, 4)?.try_into().ok()?);
+    let slot0 = u32::from_be_bytes(at(entry + 6, 4)?.try_into().ok()?);
+    let slot1 = u32::from_be_bytes(at(entry + 16, 4)?.try_into().ok()?);
     Some((slot0, slot1))
 }
 
@@ -145,27 +165,41 @@ pub const USB_CHUNK: usize = 64;
 /// One USB full-speed frame: 1 ms.
 pub const USB_PERIOD: u64 = 132_000;
 
+/// The USB registration function: prologue and the first operands it uses, unique on every MAIN image of the registry.
+const REG_SIG: [u8; 32] = [
+    0x41, 0xef, 0x00, 0x04, 0x23, 0xd0, 0x40, 0x96, 0x59, 0xd0, 0x41, 0xef, 0x00, 0x08, 0x23, 0xd0,
+    0x40, 0x96, 0x59, 0xd4, 0x20, 0x3c, 0x47, 0xdb, 0x40, 0x6c, 0x2f, 0x40, 0x00, 0x04, 0x4e, 0xf9,
+];
+/// The USB transmit function's prologue (unique on the same images).
+const TX_SIG: [u8; 16] = [
+    0x4f, 0xef, 0xff, 0xe4, 0x72, 0x01, 0x48, 0xd7, 0x0c, 0x7c, 0x20, 0x2f, 0x00, 0x20, 0x22, 0x6f,
+];
+
+/// The address of the USB transmit function.
+pub(crate) fn resolve_usb_tx(main: &[u8]) -> Option<u32> {
+    unique_at(main, &TX_SIG)
+}
+
+/// The address of the USB registration function.
+pub(crate) fn resolve_usb_reg(main: &[u8]) -> Option<u32> {
+    unique_at(main, &REG_SIG)
+}
+
 /// The USB receive callback and transmit function of a MAIN image: the callback is the first argument of the call to
-/// the registration function at 0x4000434a, the transmit function a fixed prologue at 0x40004734 (DT2 1.16, 1.17,
-/// DN2 1.11, 1.12).
-pub(crate) fn resolve_usb(main: &[u8], load: u32) -> Option<(u32, u32)> {
-    const REG: [u8; 6] = [0x4e, 0xb9, 0x40, 0x00, 0x43, 0x4a];
-    const TX_SIG: [u8; 16] = [
-        0x4f, 0xef, 0xff, 0xe4, 0x72, 0x01, 0x48, 0xd7, 0x0c, 0x7c, 0x20, 0x2f, 0x00, 0x20, 0x22,
-        0x6f,
-    ];
-    let at = |addr: u32, n: usize| main.get(addr.checked_sub(load)? as usize..)?.get(..n);
-    if at(0x4000_4734, TX_SIG.len())? != TX_SIG {
-        return None;
-    }
-    let call = main.windows(REG.len()).position(|w| w == REG)?;
+/// the registration function, the transmit function is found by its prologue. Both are found by unique signatures.
+pub(crate) fn resolve_usb(main: &[u8]) -> Option<(u32, u32)> {
+    let tx = resolve_usb_tx(main)?;
+    let reg = resolve_usb_reg(main)?;
+    let mut call = vec![0x4e, 0xb9];
+    call.extend_from_slice(&reg.to_be_bytes());
+    let call = main.windows(call.len()).position(|w| w == call)?;
     // pea.l cb2; pea.l cb1; jsr reg
     let pre = main.get(call.checked_sub(12)?..call)?;
     if pre[0..2] != [0x48, 0x79] || pre[6..8] != [0x48, 0x79] {
         return None;
     }
     let cb1 = u32::from_be_bytes(pre[8..12].try_into().ok()?);
-    Some((cb1, 0x4000_4734))
+    Some((cb1, tx))
 }
 
 #[derive(Default)]
@@ -258,10 +292,10 @@ mod tests {
         let mut main = vec![0u8; 0x8000];
         // transmit function prologue at 0x40004734
         let tx = (0x4000_4734 - LOAD) as usize;
-        main[tx..tx + 16].copy_from_slice(&[
-            0x4f, 0xef, 0xff, 0xe4, 0x72, 0x01, 0x48, 0xd7, 0x0c, 0x7c, 0x20, 0x2f, 0x00, 0x20,
-            0x22, 0x6f,
-        ]);
+        main[tx..tx + 16].copy_from_slice(&TX_SIG);
+        // the registration function at 0x4000434a
+        let reg = (0x4000_434a - LOAD) as usize;
+        main[reg..reg + REG_SIG.len()].copy_from_slice(&REG_SIG);
         // pea cb2; pea cb1; jsr 0x4000434a
         let call = [
             0x48, 0x79, 0x40, 0x11, 0xd9, 0xa0, 0x48, 0x79, 0x40, 0x11, 0xd7, 0x6c, 0x4e, 0xb9,
@@ -273,10 +307,7 @@ mod tests {
 
     #[test]
     fn usb_callback_is_the_first_argument_of_the_registration_call() {
-        assert_eq!(
-            resolve_usb(&image(), LOAD),
-            Some((0x4011_d76c, 0x4000_4734))
-        );
+        assert_eq!(resolve_usb(&image()), Some((0x4011_d76c, 0x4000_4734)));
     }
 
     #[test]
@@ -324,12 +355,7 @@ mod tests {
     #[test]
     fn usb_slots_are_read_from_the_registration_code() {
         let mut main = image();
-        let at = (USB_REG_ENTRY - LOAD) as usize;
-        let code = [
-            0x41, 0xef, 0x00, 0x04, 0x23, 0xd0, 0x40, 0x96, 0x59, 0xd0, 0x41, 0xef, 0x00, 0x08,
-            0x23, 0xd0, 0x40, 0x96, 0x59, 0xd4,
-        ];
-        main[at..at + code.len()].copy_from_slice(&code);
+        let at = (0x4000_434a - LOAD) as usize;
         assert_eq!(
             resolve_usb_slots(&main, LOAD),
             Some((0x4096_59d0, 0x4096_59d4))
@@ -359,11 +385,11 @@ mod tests {
     fn usb_resolution_refuses_an_unknown_image() {
         let mut main = image();
         main[(0x4000_4734 - LOAD) as usize] = 0;
-        assert_eq!(resolve_usb(&main, LOAD), None);
+        assert_eq!(resolve_usb(&main), None);
         let mut main = image();
         main[0x100] = 0;
-        assert_eq!(resolve_usb(&main, LOAD), None);
-        assert_eq!(resolve_usb(&[0; 16], LOAD), None);
+        assert_eq!(resolve_usb(&main), None);
+        assert_eq!(resolve_usb(&[0; 16]), None);
     }
 
     #[test]

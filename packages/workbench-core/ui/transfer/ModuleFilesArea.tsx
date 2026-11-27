@@ -1,8 +1,5 @@
-// Transfer page, Modules mode: the files a module owns (`data/<module id>/`, the module's `[files]` table in module.toml). Shown under the module
-// lists for the module whose row was clicked, when it has such a table. On your computer: files chosen or dropped, filtered by the table's `ext`, each checked
-// by the preview of the table (a bad file shows its error and cannot be sent). On device: the files of the module's folder, with delete.
-// Send is one click: it also sends the module when its .dkm is not on the device. Activating a file stays on the device.
-import { For, Show, createEffect, createSignal, on, type JSX } from 'solid-js';
+// File selection, transfer and preview for one module data directory.
+import { For, Show, createEffect, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import ModuleFilePreview, { previewError } from '../components/ModuleFilePreview';
 import { errorLine, formatBytes } from '../../src/modules/backend';
 import { ListRow, LocalPane, DevicePane, createConfirm, DeleteButton, writing, type PageCtx } from './TransferParts';
@@ -10,7 +7,7 @@ import type { ModuleFilesSpec } from '../../src/transfer/env';
 import { createPaneSelect } from '../../src/transfer/pane-select';
 import SplitPane from './SplitPane';
 import { countLabel } from '../../src/transfer/transfer-core';
-import { useTransferApp } from '../../src/transfer/app-context';
+import type { ModuleFileClient } from '../../src/module-ui/module-files';
 
 const SENT_NOTE = "Choose it in the device's module settings; it applies on next restart.";
 
@@ -20,10 +17,16 @@ interface Local {
   error: string | undefined;
 }
 
-export default function ModuleFilesArea(props: { ctx: PageCtx; id: string; spec: ModuleFilesSpec }): JSX.Element {
+export default function ModuleFilesArea(props: {
+  ctx: PageCtx;
+  id: string;
+  spec: ModuleFilesSpec;
+  files: ModuleFileClient;
+  refresh: () => unknown;
+  prepareSend?: () => Promise<void>;
+  settings?: (files: () => { name: string; size: number }[]) => JSX.Element;
+}): JSX.Element {
   const { busy, run, setError } = props.ctx;
-  const { lastView } = useTransferApp().state;
-  const transferBackend = useTransferApp().backend;
   let input: HTMLInputElement | undefined;
   const [local, setLocal] = createSignal<Local[]>([]);
   const [device, setDevice] = createSignal<{ name: string; size: number }[]>([]);
@@ -39,44 +42,29 @@ export default function ModuleFilesArea(props: { ctx: PageCtx; id: string; spec:
   const accept = props.spec.ext.map((e) => `.${e}`).join(',');
   const wanted = (name: string) => props.spec.ext.some((e) => name.toLowerCase().endsWith(`.${e.toLowerCase()}`));
 
-  // the device's list is read again whenever the page read (the view changes) and for another module
+  let mounted = true;
+  onCleanup(() => {
+    mounted = false;
+  });
   createEffect(
-    on(
-      () => [props.id, lastView()] as const,
-      async ([id, view]) => {
-        const mine = ++listSeq;
-        if (!view) {
-          setDevice([]);
-          return;
-        }
-        try {
-          const files = await transferBackend.listModuleFiles(id);
-          if (mine === listSeq) setDevice(files);
-        } catch (e) {
-          if (mine !== listSeq) return;
-          setDevice([]);
-          setError(errorLine(e));
-        }
-      },
-    ),
-  );
-  // another module: what was chosen for the old one is not kept
-  createEffect(
-    on(
-      () => props.id,
-      () => {
-        readSeq += 1;
-        setLocal([]);
-        setLsel(new Set<string>());
+    on(props.refresh, async () => {
+      const mine = ++listSeq;
+      try {
+        const files = await props.files.list();
+        if (!mounted || mine !== listSeq) return;
+        setDevice(files);
+        setDsel((selected) => new Set(files.filter((file) => selected.has(file.name)).map((file) => file.name)));
+      } catch (e) {
+        if (!mounted || mine !== listSeq) return;
+        setDevice([]);
         setDsel(new Set<string>());
-        setShown(undefined);
-        setNote('');
-      },
-      { defer: true },
-    ),
+        setError(errorLine(e));
+      }
+    }),
   );
 
   const addFiles = async (files: File[]) => {
+    if (busy()) return;
     const picked = files.filter((f) => wanted(f.name));
     if (!picked.length) {
       setError(`Only ${props.spec.ext.map((e) => `.${e}`).join(', ')} files can be added.`);
@@ -88,6 +76,7 @@ export default function ModuleFilesArea(props: { ctx: PageCtx; id: string; spec:
         return { name: f.name, bytes, error: previewError(props.spec.preview, bytes) };
       }),
     );
+    if (!mounted) return;
     setLocal((cur) => [...cur.filter((c) => !added.some((a) => a.name === c.name)), ...added]);
     setShown({ name: added[0]!.name, bytes: added[0]!.bytes });
     setNote('');
@@ -98,12 +87,10 @@ export default function ModuleFilesArea(props: { ctx: PageCtx; id: string; spec:
   const send = () =>
     run('Sending', async () => {
       const files = ticked();
-      const row = lastView()?.modules.find((r) => r.id === props.id);
-      // the module goes first when its .dkm is not on the device
-      if (row && row.on_card === 'no') await transferBackend.install([props.id], () => {});
+      await props.prepareSend?.();
       for (const f of files) {
         setNote(`Sending ${f.name}…`);
-        await transferBackend.putModuleFile(props.id, f.name, f.bytes, (sent, total) =>
+        await props.files.send(f.name, f.bytes, (sent, total) =>
           setNote(`Sending ${f.name}… ${Math.round((100 * sent) / total)}%`),
         );
       }
@@ -112,18 +99,18 @@ export default function ModuleFilesArea(props: { ctx: PageCtx; id: string; spec:
     });
   const removeSelected = () =>
     run('Deleting', async () => {
-      for (const name of dsel()) await transferBackend.removeModuleFile(props.id, name);
+      for (const name of dsel()) await props.files.remove(name);
       setDsel(new Set<string>());
       setShown(undefined);
     });
   const showDevice = (name: string) => {
     const mine = ++readSeq;
-    void transferBackend.readModuleFile(props.id, name).then(
+    void props.files.read(name).then(
       (bytes) => {
-        if (mine === readSeq) setShown({ name, bytes });
+        if (mounted && mine === readSeq) setShown({ name, bytes });
       },
       (e) => {
-        if (mine === readSeq) setError(errorLine(e));
+        if (mounted && mine === readSeq) setError(errorLine(e));
       },
     );
   };
@@ -146,6 +133,7 @@ export default function ModuleFilesArea(props: { ctx: PageCtx; id: string; spec:
 
   return (
     <div class="group">
+      {props.settings?.(device)}
       <h4>{props.spec.label}</h4>
       <SplitPane id="transfer-files">
         <LocalPane
@@ -174,11 +162,7 @@ export default function ModuleFilesArea(props: { ctx: PageCtx; id: string; spec:
                 type="button"
                 class="act primary"
                 disabled={!!busy() || !canSend()}
-                title={
-                  canSend()
-                    ? 'Send the ticked files to the device (and the module, when it is not there)'
-                    : 'Tick a valid file to send'
-                }
+                title={canSend() ? 'Send the ticked files to the device' : 'Tick a valid file to send'}
                 onClick={() => void send()}
               >
                 {busy() === 'Sending' ? 'Sending…' : countLabel('Send', ticked().length)}

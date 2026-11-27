@@ -1,0 +1,47 @@
+# draw: pixels, rectangles, bitmaps, the screen
+# Names follow <cpu>.<subsystem>.<kind>.<name>; was = former names, for reading older docs, never resolved (docs/design/firmware-decls.md).
+
+[[fn]]
+name = "cf.draw.fn.blit"
+cpu = "cf"
+sig = "void (u8 *dst, u8 *src, i32 x, i32 y, u8 centre)"
+rule = { kind = "cf_func", hash = "39e620510e0096949807c746a770f520", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/ui", "core/services/machines"]
+doc = "Copies a 1 bpp Bitmap `src` onto `dst` at x, y, clipped; when `centre` is not 0, x, y is the centre of `src`. Bitmap: +4 width, +8 height, +0xc 32-bit row bands, +0x10 pixel pointer, +0x14 mask pointer."
+
+[[fn]]
+name = "cf.draw.fn.fill_rect"
+cpu = "cf"
+sig = "void (u8 *bitmap, i32 x0, i32 y0, i32 x1, i32 y1, i32 color)"
+rule = { kind = "cf_func", hash = "c613cb2d63aff4380cffc91378aa5dec", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/ui", "core/services/machines"]
+doc = "Fills the rectangle x0, y0 to x1, y1 (inclusive, corners in any order, clipped) in a Bitmap with `color`; the screen Bitmap is 0x80 x 0x40, 1 bpp."
+
+[[fn]]
+name = "cf.draw.fn.invert_rect"
+cpu = "cf"
+sig = "void (u8 *bitmap, i32 x0, i32 y0, i32 x1, i32 y1, i32 color)"
+rule = { kind = "cf_func", hash = "abea7d065ed73174f17c19340c5de6db", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/ui"]
+doc = "Orders the corners, then calls rect and fill_rect on the same box. The roles of `color` in the second call are not fully read; the stock menu uses it for the selection bar."
+
+[[fn]]
+name = "cf.draw.fn.rect"
+cpu = "cf"
+sig = "void (u8 *bitmap, i32 x0, i32 y0, i32 x1, i32 y1, i32 color)"
+rule = { kind = "cf_func", hash = "ec03b7d7b6562ffc5f8354c4034e2069", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/ui"]
+doc = "Draws the outline of the rectangle x0, y0 to x1, y1 (four lines) in a Bitmap."
+
+[[fn]]
+name = "cf.draw.fn.bitmap_clear"
+cpu = "cf"
+sig = "void (u8 *bitmap, u32 value, u32 flags)"
+rule = { kind = "cf_func", hash = "108b2004526e43ceb003bce2a1a03984", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/introblank"]
+doc = "Clears the 32-bit row bands of a Bitmap to `value` (0: black); the intro's frame callbacks of the stock scene tables call it as (bitmap, 0, 1) before they draw."

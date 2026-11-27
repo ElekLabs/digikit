@@ -1,7 +1,7 @@
 """Panel key scripts and probe runs for the arena-safety proofs (finding 25).
 
 A `Script` is a timeline of panel taps, encoder turns, MIDI/USB input and frame dumps, in instructions after the
-firmware is ready. `args()` turns it into `regions_probe` arguments (packages/emulator/boot/examples/regions_probe.rs).
+firmware is ready. `args()` turns it into `regions_probe` arguments (packages/emulator/sharc-peer/examples/regions_probe.rs).
 `SCRIPTS` names the reusable ones; `tools/coldfire/regions.py scenario_args` falls back to them.
 """
 
@@ -245,8 +245,8 @@ def pattern_temp() -> Script:
     return s.chord(FUNC, YES, gap=20_000_000).frame("pattern_saved")
 
 
-# --- SETTINGS > DIGIKIT (modules/core/apps/digikit-menu, finding 28) ---------------------------------------------------
-# Only meaningful on an image patched with core/digikit-menu: DIGIKIT is the 9th SETTINGS entry (8 DOWN from PROJECT;
+# --- SETTINGS > DIGIKIT (runtime/apps/digikit-menu, finding 28) ---------------------------------------------------
+# Only meaningful on a boot with the system package (the menu): DIGIKIT is the 9th SETTINGS entry (8 DOWN from PROJECT;
 # DN2 and DT2 alike while OUTBOX 8 is hidden).
 
 

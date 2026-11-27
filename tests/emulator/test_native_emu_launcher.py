@@ -10,6 +10,7 @@ from support.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 from tools.emulator import digi_env  # noqa: E402
+from tools.firmware import device as device_data  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -25,25 +26,22 @@ def fresh_gen(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def known_device(monkeypatch):
+    """The fake firmware files of these tests belong to a device with a DSP; a test of another device sets its own."""
+    short = [d.short for d in device_data.load_all() if d.has_dsp()][-1]
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda _path: short)
+
+
+@pytest.fixture(autouse=True)
 def no_plus_drive_folder(monkeypatch, tmp_path_factory):
     """The repository's plus_drive/ never reaches these tests."""
     monkeypatch.setenv("DIGI_PLUS_DRIVE", str(tmp_path_factory.mktemp("no-plus-drive")))
 
 
 @pytest.fixture(autouse=True)
-def _restore_sharc_gen_dir(monkeypatch):
-    """native_emu sets SHARC_GEN_DIR with os.environ.setdefault; record it so
-    monkeypatch restores it after each test."""
-    monkeypatch.setenv("SHARC_GEN_DIR", "x")
-    monkeypatch.delenv("SHARC_GEN_DIR")
-
-
-@pytest.fixture(autouse=True)
 def _isolate_second_core(monkeypatch):
-    """Single-core tests must not discover local cores or inherit a dual build."""
+    """One-device tests must not discover local cores or a second engine."""
     monkeypatch.setenv("DIGI_EMU_SECOND_CORE", "0")
-    monkeypatch.setenv("SHARC_GEN_DIR_2", "x")
-    monkeypatch.delenv("SHARC_GEN_DIR_2")
 
 
 def launcher():
@@ -99,15 +97,6 @@ def _build_run_setup(monkeypatch):
     return scope, calls
 
 
-def dt2_syx(monkeypatch, tmp_path):
-    syx = tmp_path / "dt2.syx"
-    syx.write_bytes(b"dt2")
-    monkeypatch.setattr(
-        digi_env, "device_for_syx", lambda p: "dt2" if p == syx else None
-    )
-    return syx
-
-
 def _dual_launch(monkeypatch, tmp_path, first):
     scope, calls = _build_run_setup(monkeypatch)
     inputs, cores = {}, {}
@@ -128,6 +117,10 @@ def _dual_launch(monkeypatch, tmp_path, first):
         cores[device] = directory / "generated"
         cores[device].mkdir()
     monkeypatch.delenv("DIGI_EMU_SECOND_CORE")
+    from tools.devtools import core_store
+
+    # the core store needs git and cargo: the libraries are tested apart
+    monkeypatch.setattr(core_store, "library_env", lambda *a, **k: {})
     monkeypatch.setattr(
         digi_env, "firmware", lambda environ=None: inputs[first]["firmware"]
     )
@@ -138,8 +131,6 @@ def _dual_launch(monkeypatch, tmp_path, first):
     monkeypatch.setattr(
         digi_env, "gen_for_image", lambda image: cores[Path(image).parent.name]
     )
-    glob = scope["main"].__globals__
-    monkeypatch.setitem(glob, "pgo_trained_core", lambda device: None)
     # Track all variables the launcher can set so no test leaks fast settings.
     for suffix in ("", "_2"):
         for name in (
@@ -187,9 +178,9 @@ def test_desktop_defaults_to_both_devices_with_per_core_fast_settings(
         str(inputs[other][label])
         for label in ("DSP image", "DSP state", "CF snapshot", "firmware")
     ]
-    # Slot order is fixed: slot 1 is the DN2 core, slot 2 the DT2 core, whichever firmware launches.
-    assert os.environ["SHARC_GEN_DIR"] == str(cores["dn2"])
-    assert os.environ["SHARC_GEN_DIR_2"] == str(cores["dt2"])
+    # The launch names no generated core for the host: it holds none.
+    assert "SHARC_GEN_DIR" not in os.environ
+    # Each core reads the lists with the suffix of its device, whichever firmware launches.
     for suffix, device in (("", "dn2"), ("_2", "dt2")):
         for name, value in (
             ("SHARC_FAST_REGIONS", "regions"),
@@ -199,45 +190,73 @@ def test_desktop_defaults_to_both_devices_with_per_core_fast_settings(
             assert os.environ[name + suffix] == f"{device}-{value}"
 
 
-def _dt2_launch(monkeypatch, tmp_path, manifest_core):
-    """A DT2 launch with ready inputs, a registered core and a PGO manifest."""
-    from tools.emulator import native_pgo
+@pytest.mark.parametrize("first", ["dn2", "dt2"])
+@pytest.mark.parametrize("also", [True, False])
+def test_a_coupled_launch_gets_the_libraries_of_both_devices(
+    monkeypatch, tmp_path, first, also
+):
+    from tools.devtools import core_store
 
-    syx = dt2_syx(monkeypatch, tmp_path)
-    ready = tmp_path / "ready-dt2"
-    ready.mkdir()
-    for name in [
-        "digi-audio-dn2-image.bin",
-        "digi-audio-m5.snap.dsp",
-        "digi-audio-m5.snap",
-    ]:
-        (ready / name).touch()
-    registered = tmp_path / "registered"
-    registered.mkdir()
-    monkeypatch.setitem(digi_env.READY_DIRS, "dt2", ready)
-    monkeypatch.setattr(digi_env, "gen_for_image", lambda _image: registered)
+    scope, _calls, inputs, cores = _dual_launch(monkeypatch, tmp_path, first)
+    other = "dt2" if first == "dn2" else "dn2"
+    asked = {}
     monkeypatch.setattr(
-        native_pgo,
-        "read_manifest",
-        lambda device="dn2": {"generated_dir": str(manifest_core)},
+        core_store,
+        "library_env",
+        lambda devices, *a, **k: (
+            asked.update(devices)
+            or {f"DIGI_SHARC_CORE_LIB_{next(iter(devices)).upper()}": "y"}
+        ),
     )
-    # default_audio_args exports SHARC_GEN_DIR: have monkeypatch undo it.
-    monkeypatch.setenv("SHARC_GEN_DIR", "x")
-    monkeypatch.delenv("SHARC_GEN_DIR")
-    return syx, registered
+    args = [
+        str(inputs[first]["firmware"]),
+        "--auto-coupled",
+        "--dsp-image",
+        str(inputs[first]["DSP image"]),
+    ]
+    if also:
+        args += [
+            "--also-coupled",
+            *(
+                str(inputs[other][label])
+                for label in ("DSP image", "DSP state", "CF snapshot", "firmware")
+            ),
+        ]
+    env = scope["core_library_env"](args)
+    assert sorted(env) == ["DIGI_SHARC_CORE_LIB_DN2", "DIGI_SHARC_CORE_LIB_DT2"]
+    # the core of each device, from its own registered image
+    assert asked == {first: cores[first], other: cores[other]}
+    assert scope["core_library_env"](["--cf-only"]) == {}
 
 
-def test_dt2_default_core_skips_a_stale_trained_core(monkeypatch, tmp_path):
-    trained = tmp_path / "trained"
-    trained.mkdir()
-    syx, registered = _dt2_launch(monkeypatch, tmp_path, trained)
-    # Only the registered core carries the current fingerprint.
-    (registered / digi_env.CORE_FINGERPRINT_FILE).write_text(
-        digi_env.core_fingerprint()
+def test_a_missing_library_of_one_device_does_not_stop_the_launch(
+    monkeypatch, tmp_path, capsys
+):
+    from tools.devtools import core_store
+
+    scope, _calls, inputs, _cores = _dual_launch(monkeypatch, tmp_path, "dn2")
+
+    def library_env(devices, *a, **k):
+        (device,) = devices
+        if device == "dt2":
+            raise core_store.CoreStoreError("no gen")
+        return {"DIGI_SHARC_CORE_LIB_DN2": "y"}
+
+    monkeypatch.setattr(core_store, "library_env", library_env)
+    args = [str(inputs["dn2"]["firmware"]), "--auto-coupled"]
+    assert scope["core_library_env"](args) == {"DIGI_SHARC_CORE_LIB_DN2": "y"}
+    err = capsys.readouterr().err
+    assert (
+        "DT2 core library unavailable" in err
+        and "verify_build cores --device dt2" in err
     )
-    monkeypatch.delenv("DIGI_ALLOW_STALE_GEN")
-    launcher()["default_audio_args"]([str(syx)])
-    assert os.environ["SHARC_GEN_DIR"] == str(registered)
+    monkeypatch.setattr(
+        core_store,
+        "library_env",
+        lambda *a, **k: (_ for _ in ()).throw(core_store.CoreStoreError("no gen")),
+    )
+    with pytest.raises(SystemExit):
+        scope["core_library_env"](args)
 
 
 # plus_drive/<device>/ is the +Drive input.
@@ -257,7 +276,7 @@ def test_card_cache_key_follows_every_file(monkeypatch, tmp_path):
     target = tmp_path / "target"
     (target / "release").mkdir(parents=True)
     (target / "release" / "plusdrive").write_bytes(b"binary")
-    monkeypatch.setitem(glob, "target_dir_for", lambda gen: str(target))
+    monkeypatch.setitem(glob, "target_dir_for", lambda gen=None: str(target))
     monkeypatch.setitem(glob, "ROOT", tmp_path / "repo")
     syx = tmp_path / "fw.syx"
     syx.write_bytes(b"fw")
@@ -286,3 +305,93 @@ def test_card_cache_key_follows_every_file(monkeypatch, tmp_path):
     assert card(folder, syx, {}, "dn2").name == "dn2.img"
     with pytest.raises(SystemExit):
         card(tmp_path / "missing", syx, {}, "dt2")
+
+
+# --- a device without DSP, runtime or card ---------------------------------------------------------------------------------
+
+
+def _no_dsp_device(monkeypatch, tmp_path):
+    """The short id of an identity-only device file (no DSP, no `[digikit]`, no card), in a devices folder of its own."""
+    folder = tmp_path / "devices"
+    folder.mkdir()
+    (folder / "identity-only.toml").write_text(
+        '[device]\nname = "Identity Only"\nshort = "idonly"\n\n[capabilities]\ndsp = "none"\ncard = "none"\n'
+    )
+    monkeypatch.setenv("DT2_DEVICES", str(folder))
+    device = device_data.by_short("idonly")
+    assert not device.has_dsp() and not device.runtime_target and not device.has_card()
+    return device.short
+
+
+def _launch_setup(monkeypatch, tmp_path, device):
+    """main() with the device lookup stubbed and no card ever built; returns the launcher, the commands it ran and a firmware file."""
+    scope, calls = _build_run_setup(monkeypatch)
+    syx = tmp_path / "known.syx"
+    syx.write_bytes(b"x")
+    monkeypatch.setattr(digi_env, "device_for_syx", lambda path: device)
+    monkeypatch.setattr(digi_env, "patch_base", lambda path: None)
+    monkeypatch.setitem(
+        scope["main"].__globals__,
+        "plusdrive_card",
+        lambda *a, **k: pytest.fail("no card is built for this device"),
+    )
+    return scope, calls, syx
+
+
+def test_a_device_without_a_card_refuses_a_card_folder(monkeypatch, tmp_path):
+    scope, calls, syx = _launch_setup(
+        monkeypatch, tmp_path, _no_dsp_device(monkeypatch, tmp_path)
+    )
+    with pytest.raises(SystemExit, match="no card"):
+        scope["main"]([str(syx), "--plus-drive", str(tmp_path)])
+
+
+def test_a_device_that_is_not_a_runtime_target_refuses_runtime(monkeypatch, tmp_path):
+    scope, calls, syx = _launch_setup(
+        monkeypatch, tmp_path, _no_dsp_device(monkeypatch, tmp_path)
+    )
+    with pytest.raises(SystemExit, match="not a digikit runtime target"):
+        scope["main"]([str(syx), "--runtime"])
+
+
+def test_workbench_opens_with_a_missing_default_firmware(monkeypatch, tmp_path):
+    scope, calls, _ = _launch_setup(monkeypatch, tmp_path, None)
+    missing = tmp_path / "missing.syx"
+    monkeypatch.setenv("DIGI_EMU_SYX", str(missing))
+    scope["main"]([])
+    assert Path(calls[-1][0]).name == "digiemu-desktop"
+    assert str(missing) not in calls[-1]
+    with pytest.raises(SystemExit, match="cannot tell which device"):
+        scope["main"](["--daemon"])
+
+
+def test_an_unknown_firmware_is_an_error_not_a_default_device(monkeypatch, tmp_path):
+    scope, calls, syx = _launch_setup(monkeypatch, tmp_path, None)
+    with pytest.raises(SystemExit, match="cannot tell which device"):
+        scope["main"]([str(syx)])
+    assert calls == []
+
+
+def test_a_patched_build_keeps_the_audio_state_of_the_firmware_the_snapshot_was_taken_from(
+    tmp_path,
+):
+    """The ready snapshot is valid for one firmware: a patched build (another hash) must not become the audio profile, or the daemon refuses the snapshot."""
+    import hashlib
+    import json
+
+    scope = launcher()
+    stock = tmp_path / "stock.syx"
+    stock.write_bytes(b"stock")
+    patched = tmp_path / "patched.syx"
+    patched.write_bytes(b"patched")
+    snapshot = tmp_path / "digi-audio-m5.snap"
+    paths = {"CF snapshot": snapshot}
+    check = scope["ready_is_of_another_firmware"]
+    assert check(paths, patched) is False, (
+        "a directory that records nothing is not known to differ"
+    )
+    (tmp_path / "SOURCE.json").write_text(
+        json.dumps({"syx_sha256": hashlib.sha256(b"stock").hexdigest()})
+    )
+    assert check(paths, stock) is False
+    assert check(paths, patched) is True

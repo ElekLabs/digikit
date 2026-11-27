@@ -57,6 +57,9 @@ DEFAULT_SYX = config.stock("Digitone_II_OS1.12.syx")
 # Environment the runner reads; cleared first so a run depends on its config only.
 CLEARED_ENV = (
     "SHARC_FAST_REGIONS",
+    "SHARC_FAST_REGIONS_2",
+    "SHARC_BLOCKTRANS_2",
+    "SHARC_FAST_FALLBACK_REGIONS_2",
     "SHARC_FAST_AUTO",
     "SHARC_FAST_LOG",
     "SHARC_FAST_HIST",
@@ -115,7 +118,8 @@ def config_env(
         env["SHARC_FAST_REGIONS"] = fast
     if config.auto:
         env["SHARC_FAST_AUTO"] = config.auto
-    return env
+    # The core of a device reads the lists with its device's suffix (DT2 `_2`).
+    return digi_env.slot_env(digi_env.device_for_syx(syx) or "dn2", env)
 
 
 def target_dir(config: Config, pgo: str | None) -> pathlib.Path:
@@ -142,7 +146,7 @@ def build_command(
         "-p",
         "digi-coupled",
         "--features",
-        "coupled-audio,region-profile" if profile_regions else "coupled-audio",
+        "sharc,play,region-profile" if profile_regions else "sharc,play",
         "--bin",
         "coupled-run",
         *(["--target", TRIPLE] if pgo else []),

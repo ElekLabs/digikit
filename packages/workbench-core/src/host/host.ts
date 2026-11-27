@@ -3,6 +3,8 @@
 // apps/desktop/src-tauri/src/main.rs (`generate_handler!`) and its command modules. The shapes here follow the Rust signatures and
 // carry no UI types, so the folder can move into a shared package (the browser app would implement the same interface).
 
+import type { SystemPackage } from '../runtime/activate-system-package';
+
 /** The emulator control RPC (`emu_call`): one protocol method of the controller (docs/CONTROL.md). */
 export interface EmuRpc {
   /** `session`: the session token of the webview; the controller refuses the call when it is no longer the current one (`firmware.load` and `restart` start the session they carry). */
@@ -31,6 +33,8 @@ export interface EmuSource {
   name: string;
   bytes: number;
   modified_ms: number;
+  /** The device short id by the file's content (`setSource` only; null: not a known image). */
+  device?: string | null;
 }
 
 /** What `emu_launch` says about the launch of the app. */
@@ -55,8 +59,8 @@ export interface FsHost {
   list(root: string, rel: string): Promise<LocalListing[]>;
   /** The bytes of a file below `root`; `head`: only the first bytes. */
   read(root: string, rel: string, head: number | null): Promise<ArrayBuffer>;
-  /** The system's save dialog for a log text; the path, or null when the user cancels. */
-  saveLog(bytes: Uint8Array, name: string): Promise<string | null>;
+  /** The system's save dialog for a log text; the path, or null when the user cancels. `kind` 'file' saves any file (no type filter), used by the Files page. */
+  saveLog(bytes: Uint8Array, name: string, kind?: 'log' | 'profile' | 'file'): Promise<string | null>;
 }
 
 /** The address map of one built module (docs/ADDRMAP.md): the JSON text `lib_build` wrote beside its `.dkm`. */
@@ -81,15 +85,13 @@ export interface LibMaps {
   modules: LibMap[];
 }
 
-/** The library folder of built modules and the device profiles. */
+/** The library folder of built modules. */
 export interface LibraryHost {
   build(device: string): Promise<LibBuildReport>;
   scan(device: string): Promise<{ path: string; size: number }[]>;
   read(device: string, path: string): Promise<ArrayBuffer>;
   /** The address maps of the device: the ship maps of the images `firmware.prepare` made, and the maps of its built modules (`build` writes them; a module built before has none). */
   readMaps(device: string): Promise<LibMaps>;
-  /** What the device profile says about the device with this id (`dt2`): its name and the backend of its samples. */
-  deviceStorage(device: string): Promise<{ name: string; samples: string }>;
 }
 
 /** The MIDI port the app opens through its Rust side (midir). One port at a time. */
@@ -117,7 +119,23 @@ export interface BulkHost {
   closeOutOnly(): Promise<void>;
 }
 
+/** A host stereo capture endpoint. The opaque ID identifies the device even when display names coincide. */
+export interface AudioInput {
+  id: string;
+  name: string;
+}
+
+/** The native monitor routes one stereo input to the current system output. */
+export interface RemoteAudioHost {
+  inputs(): Promise<AudioInput[]>;
+  start(input: string): Promise<string>;
+  stop(): Promise<void>;
+  /** A running stream's failure, if any. */
+  status(): Promise<string | null>;
+}
+
 export interface PortsHost {
+  audio?: RemoteAudioHost;
   midi: MidiHost;
   bulk: BulkHost;
 }
@@ -128,6 +146,9 @@ export interface FirmwareHost {
   prepare(stock: Uint8Array, options: { restore: boolean; set: string }): Promise<ArrayBuffer>;
   /** The system's save dialog for an image; the path, or null when the user cancels. */
   save(bytes: Uint8Array, name: string): Promise<string | null>;
+  /** The built system package, prefixed by the packed runtime version (4 bytes, big endian). */
+  systemPackage?(): Promise<ArrayBuffer>;
+  systemPackagePlan?: SystemPackage['plan'];
   patchkitWasm(): Promise<ArrayBuffer>;
   /** `dkprof.wasm`: address lookup and load table decoding (the Log pane's names). */
   dkprofWasm(): Promise<ArrayBuffer>;
@@ -172,7 +193,69 @@ export interface ShellHost {
   openCardFolder(): Promise<void>;
 }
 
+/** A consecutive window of stereo source samples, before monitor resampling. */
+export interface AnalyzerPcm {
+  /** Changes when the source stream restarts, including a change of USB input. */
+  generation: number;
+  rate: number;
+  left: number[];
+  right: number[];
+}
+
+export interface AnalyzerHost {
+  open(source: 'emulator' | 'remote'): Promise<number>;
+  read(id: number): Promise<AnalyzerPcm | null>;
+  close(id: number): Promise<void>;
+}
+
+export type SymbolKind = 'cf' | 'sharc' | 'map';
+export type ProfileSymbolKind = 'cf' | 'sharc' | 'catalog';
+export interface SymbolImage {
+  device: string;
+  firmware: string;
+  sha256: string;
+}
+export interface SymbolReview {
+  cpu: 'cf' | 'sharc';
+  path: string;
+  url?: string;
+  entries: number[];
+}
+export interface SymbolImageMap extends SymbolImage {
+  json: string;
+  review?: SymbolReview;
+}
+export interface SymbolRelease extends SymbolImage {
+  defaults: Record<ProfileSymbolKind, string>;
+}
+export interface FirmwareProfile extends SymbolImage {
+  sources: Record<ProfileSymbolKind, { path: string; override: boolean; error?: string }>;
+  review?: SymbolReview;
+}
+export interface SymbolSource {
+  kind: SymbolKind;
+  path: string;
+  images: SymbolImage[];
+  error?: string;
+}
+export interface SymbolsHost {
+  list(): Promise<SymbolSource[]>;
+  choose(kind: SymbolKind): Promise<void>;
+  remove(path: string): Promise<void>;
+  refresh(): Promise<void>;
+  maps(stockSha256: string): Promise<Record<string, unknown>[]>;
+  profiles?(): Promise<FirmwareProfile[]>;
+  chooseProfile?(sha256: string, kind: ProfileSymbolKind): Promise<void>;
+  resetProfile?(sha256: string, kind: ProfileSymbolKind): Promise<void>;
+  catalogFrame?(path: string, sha256: string, entry?: number): Promise<string>;
+  openReview?(path: string, sha256: string, entry?: number): Promise<void>;
+  revision(): number;
+}
+
 export interface Host {
+  sessions?: import('./session.ts').SessionHost;
+  symbols?: SymbolsHost;
+  analyzer?: AnalyzerHost;
   fs: FsHost;
   library: LibraryHost;
   ports: PortsHost;

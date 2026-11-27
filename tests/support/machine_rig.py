@@ -5,7 +5,7 @@
     rig.set_note(60, vel=100); rig.trigger()
     b = rig.block()                                 # b.samples (32 floats), b.instructions, b.returned, b.context_bad
 
-The rig is plain Python (no numpy, no pytest): it also runs under PyPy (tests/modules/test_machine_conformance.py).
+The rig is plain Python (no numpy, no pytest): it also runs under PyPy (the adapter tests).
 The rig reads the module's manifest (tools/patchkit/pk_conform.py): DSP sources of the device, entry symbol, machine type and
 parameters with their frame slots. It assembles the wrapper and the module, places the data symbols of both (`.PKDATA`, `.PKBSS`,
 `.VAR`) in free L2, and keeps the core's memory from block to block (tools/patchkit/pk_sharc.py CallSession), so a delay line or a
@@ -30,10 +30,14 @@ import support.dsp_voice_rig as dv
 from tools.patchkit import pk_conform, pk_sharc
 
 ROOT = pk_conform.ROOT
-_DSP = ROOT / "modules/core/adapters/dsp-voice/src/dsp"
+_DSP = ROOT / "runtime/platform/dsp-voice/src/dsp"
 WRAPPER = {  # the adapter's sources of a device, assembled as separate objects that see each other's data symbols
-    "dt2": (_DSP / "dsp-voice.s",),
-    "dn2": (_DSP / "dsp-voice-dn2.s", _DSP / "dsp-voice-dn2-stereo.s"),
+    "dt2": (_DSP / "dsp-voice.s", dv.DISPATCH),
+    "dn2": (
+        _DSP / "dsp-voice-dn2.s",
+        _DSP / "dsp-voice-dn2-stereo.s",
+        ROOT / "services/machines/dks/dsp/dispatch-dn2.s",
+    ),
 }
 CODE_BASE = 0xB90000
 CODE_END = dv.STOCK_BP  # code must end below the stand-ins at STOCK_BP / RETURN_SW
@@ -141,6 +145,9 @@ def _externs_fixed(device: str, spec: pk_conform.MachineSpec) -> dict[str, int]:
         "_fw_unpack": dv.UNPACK_BP,
         "_dv_table": dv.TABLE,
     }
+    fixed["_dl_slots"] = (
+        dv.SLOTS
+    )  # the slot block of core/dsp-link, read by the stubs of core/dsp-voice
     if device == "dn2":
         fixed.update(
             {n: dv.STOCK_BP + 0x10 + 4 * i for i, n in enumerate(STEREO_STANDINS)}
@@ -161,6 +168,11 @@ def build(module: str, device: str) -> _Built:
 _BUILT: dict[tuple[object, ...], _Built] = {}
 
 
+def _module_dir(source: Path) -> Path:
+    """The module around a source file: the nearest folder with a module.toml."""
+    return next(p for p in source.parents if (p / "module.toml").is_file())
+
+
 def build_spec(sp: pk_conform.MachineSpec) -> _Built:
     """`build` for a spec the caller made (a fixture source of a module: `dataclasses.replace(spec, sources=..., entry=..., note_on=..., desc=...)`)."""
     key = (sp.module, sp.device, sp.sources, sp.entry, sp.note_on, sp.desc, sp.params)
@@ -172,7 +184,7 @@ def build_spec(sp: pk_conform.MachineSpec) -> _Built:
 def _build(sp: pk_conform.MachineSpec) -> _Built:
     module, device = sp.module, sp.device
     nwrap = len(WRAPPER[device])
-    objs = [_assemble(w, w.parents[2]) for w in WRAPPER[device]]
+    objs = [_assemble(w, _module_dir(w)) for w in WRAPPER[device]]
     objs += [_assemble(Path(s), sp.moddir) for s in sp.sources]
     # data symbols: one 4-byte aligned run per section, in L2 above the stand-ins
     addr = DATA_BASE
@@ -294,6 +306,12 @@ class MachineRig:
                 poke(nw(dv.TABLE) + k, 0)
             poke(nw(dv.TABLE), self.spec.machine_type)
             poke(nw(dv.TABLE) + 1, b.symbols[self.spec.entry])
+            # what the machines service installs: the stubs jump to the dispatch entries through the slots
+            for k in range(dv.SLOT_WORDS):
+                poke(nw(dv.SLOTS) + k, 0)
+            poke(nw(dv.SLOTS), b.symbols["_dv_run"])
+            if self.device == "dt2":
+                poke(nw(dv.SLOTS) + 1, b.symbols["_dv_unpack_run"])
             for p in self.spec.params:  # words 2 to 9: the declared range of knob j (min | max << 16; none for a stock knob)
                 if not p.stock and 0 <= p.lo <= p.hi <= 0xFFFF:
                     poke(nw(dv.TABLE) + 2 + p.knob, p.lo | p.hi << 16)

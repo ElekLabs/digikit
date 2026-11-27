@@ -8,7 +8,9 @@ import {
   type SessionOptions,
   type PreparedRuntimeImage,
 } from '@digi/test-support';
+import { HOST_DIR_SYMBOL, readHostAddress, type HostName } from '@digi/dk-session';
 import { rootSets } from './image-roots.ts';
+import { word } from './guest-access.ts';
 import { patchkitCovered } from './patchkit-exec.ts';
 
 export interface RuntimePlan {
@@ -28,6 +30,15 @@ export interface RuntimePlan {
   output: { syx_sha256: string } | null;
 }
 
+const shipMaps = new WeakMap<RuntimePlan, string>();
+/** Remember the address map of the image of `plan` (`<plan>.addrmap.json`, written beside the plan by `patchkit apply --addrmap`): every plan this file prepares has it, so the
+ * symbols of a loaded service file (`serviceSymbol`) resolve for it. */
+export function rememberShipMap(plan: RuntimePlan, planFile: string): void {
+  shipMaps.set(plan, planFile.replace(/\.plan\.json$/, '.addrmap.json'));
+}
+/** The address map of the image of `plan`, when it was prepared by `rememberShipMap`'s caller. */
+export const shipMapOf = (plan: RuntimePlan): string | undefined => shipMaps.get(plan);
+
 /** Same exact-one-address semantics as pk_harness.plan_symbol, including Rust statics. */
 export function planSymbol(plan: RuntimePlan, name: string): number {
   const addresses = new Set(
@@ -37,6 +48,20 @@ export function planSymbol(plan: RuntimePlan, name: string): number {
   );
   if (addresses.size !== 1) throw new Error(`symbol ${name}: ${addresses.size} addresses in the plan`);
   return [...addresses][0]!;
+}
+
+/**
+ * The address of a static of the system package (`DKRT_PROVIDERS` is `PROVIDERS`). The package is a card file placed at a different address each boot, so the plan has no
+ * symbol for it: the resident core's host directory (`DKRT_HOST_DIR`, a plan symbol) holds it, and the package fills it at its entry. Throws "no package loaded" for an empty
+ * entry (a core-only boot, or no package file). Read it after the boot; a reload that restarts the runtime places the package again.
+ */
+export async function packageSymbol(session: Session, plan: RuntimePlan, name: HostName): Promise<number> {
+  const peek = async (addr: number, len: number) => {
+    const bytes = Buffer.alloc(Math.ceil(len / 4) * 4);
+    for (let i = 0; i < bytes.length; i += 4) bytes.writeUInt32BE(await word(session, addr + i), i);
+    return bytes.subarray(0, len);
+  };
+  return readHostAddress(peek, planSymbol(plan, HOST_DIR_SYMBOL), name);
 }
 
 export function validateRuntimePlan(
@@ -186,6 +211,8 @@ export async function prepareOfflineWith(
       '--firmware',
       resolveInputs(device, firmware).syx,
       ...(selection ? ['--modules', selection.modules.join(',')] : ['--set', options.runtime?.patchSet ?? 'emulator']),
+      // the image is booted in the emulator, not flashed
+      '--no-flash-cap',
       '-o',
       syx,
       '--plan',
@@ -197,6 +224,7 @@ export async function prepareOfflineWith(
   );
   fs.writeFileSync(path.join(artifacts, 'patch.log'), `${patch.stdout}\n${patch.stderr}`);
   const plan: RuntimePlan = JSON.parse(fs.readFileSync(planFile, 'utf8'));
+  rememberShipMap(plan, planFile);
   for (const symbol of symbols) planSymbol(plan, symbol);
   if (selection) {
     const moduleIds = plan.modules.map((module) => module.split('@', 1)[0]!);

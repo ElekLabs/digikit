@@ -55,7 +55,7 @@ describe.skipIf(!enabled)('DT2 1.17 private UI-task file catalogue', () => {
     try {
       const checked = await exec(
         patchkit!,
-        ['--root', root, 'build', 'modules/core/adapters/file-catalog-proof', 'modules/core/expansion', '--check'],
+        ['--root', root, 'build', 'tests/fixtures/modules/file-catalog-proof', 'runtime/platform/expansion', '--check'],
         { timeout: 30000 },
       );
       fs.writeFileSync(path.join(runDir, 'object-check.log'), checked.stdout + checked.stderr);

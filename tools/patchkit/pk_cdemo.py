@@ -91,7 +91,7 @@ def proof(image: str, keep: Path | None = None) -> dict:
         if w["kind"] == "place" and "cf.expansion" in w["what"]
     )
     watch = pk_dkrt.watch_ranges(rt, region_lo, 0x47FE0000 - 0x10000)
-    allow = list(rt["code"]) + [(arena, arena + ARENA_BYTES)]
+    allow = list(rt["code"]) + [rt["package"], (arena, arena + ARENA_BYTES)]
     env = {
         "DIGI_FLUSH_CHECK": "1",
         "DIGI_WRITE_WATCH": ",".join(f"{a:x}-{b:x}" for a, b in watch),

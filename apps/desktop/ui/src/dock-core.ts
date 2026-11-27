@@ -1,4 +1,4 @@
-// The pure part of the bottom dock (the Log panel in Console.tsx): its height in px, kept between a minimum and a maximum that leaves room
+// The pure part of the bottom dock (WorkbenchDrawer.tsx): its height in px, kept between a minimum and a maximum that leaves room
 // for the page above it. Host tests: apps/desktop/ui/tests/dock.test.ts.
 
 export const DOCK_MIN_PX = 120;

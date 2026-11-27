@@ -1,4 +1,4 @@
-//! Run-time modules: `dynamic = true` modules, the `.dkm` register records, the reserved rows of `core/dynreg`
+//! Run-time modules: `dynamic = true` modules, the `.dkm` register records, the reserved rows of `core/rows`
 //! (docs/design/digikit-registry.md). The image tests are skipped when the stock images are absent.
 
 use patchkit::apply;
@@ -29,7 +29,7 @@ fn a_dynamic_module_is_not_lowered_and_not_patched() {
         m.manifest.entry.is_empty(),
         "no registry rows are made for a run-time module"
     );
-    let reg = Registry::from_dir(&root().join("devices/ports")).unwrap();
+    let reg = Registry::from_dir(&root().join("ports")).unwrap();
     for file in ["Digitakt_II_OS1.17.syx"] {
         let Ok(raw) = std::fs::read(root().join("firmware").join(file)) else {
             continue;
@@ -44,7 +44,7 @@ fn a_dynamic_module_is_not_lowered_and_not_patched() {
 #[test]
 fn the_run_time_type_range_is_checked() {
     let ok =
-        "[dt2]\nlast = 23\ndynamic_first = 16\n[dt2.alloc]\n\"a:x\" = 7\n\"core/dynreg:d\" = 16\n";
+        "[dt2]\nlast = 23\ndynamic_first = 16\n[dt2.alloc]\n\"a:x\" = 7\n\"core/rows:d\" = 16\n";
     assert!(AllocTable::parse(ok).is_ok());
     let static_in_range = ok.replace("\"a:x\" = 7", "\"a:x\" = 18");
     assert!(
@@ -61,11 +61,11 @@ fn the_run_time_type_range_is_checked() {
 /// The framework reserves 8 machine types (16 .. 23) and 16 parameter codes, with the runtime's table of addresses; the
 /// runtime alone still patches (its link to the table is optional).
 #[test]
-fn dynreg_reserves_rows_and_the_runtime_links_optionally() {
+fn core_rows_reserves_rows_and_the_runtime_links_optionally() {
     let Some(lib) = library() else {
         return;
     };
-    let reg = Registry::from_dir(&root().join("devices/ports")).unwrap();
+    let reg = Registry::from_dir(&root().join("ports")).unwrap();
     let mut ran = 0;
     for file in ["Digitakt_II_OS1.17.syx"] {
         let Ok(raw) = std::fs::read(root().join("firmware").join(file)) else {
@@ -76,7 +76,7 @@ fn dynreg_reserves_rows_and_the_runtime_links_optionally() {
                 .unwrap()
                 .0
         };
-        let out = apply::apply(&raw, &reg, &lib, &want(&["core/runtime", "core/dynreg"])).unwrap();
+        let out = apply::apply(&raw, &reg, &lib, &want(&["core/runtime", "core/rows"])).unwrap();
         let plan = serde_json::to_value(&out.plan).unwrap();
         let sym = |n: &str| -> u64 {
             plan["symbols"]
@@ -93,7 +93,7 @@ fn dynreg_reserves_rows_and_the_runtime_links_optionally() {
         assert_eq!(sym("machines.dyn23.index"), 23);
         assert_eq!(sym("machines.count"), 17, "types 7 .. 23");
         assert_eq!(sym("params.dp15.index"), sym("params.dp0.index") + 15);
-        assert!(sym("dynreg_info") > 0x4000_0000);
+        assert!(sym("rows_info") > 0x4000_0000);
         // the runtime alone: the optional link resolves to 0, nothing else changes
         let alone = apply::apply(&raw, &reg, &lib, &want(&["core/runtime"])).unwrap();
         let alone_plan = serde_json::to_value(&alone.plan).unwrap();
@@ -102,9 +102,10 @@ fn dynreg_reserves_rows_and_the_runtime_links_optionally() {
                 .as_object()
                 .unwrap()
                 .keys()
-                .all(|k| !k.contains("dynreg"))
+                // (look for the module's table)
+                .all(|k| k.split(':').nth(1) != Some("rows_info"))
         );
         ran += 1;
     }
-    eprintln!("dynreg: {ran} images");
+    eprintln!("core/rows: {ran} images");
 }

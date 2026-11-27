@@ -1,0 +1,110 @@
+{
+ "arch": "cf",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 0,
+   "offset": 38,
+   "section": ".text",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 28,
+   "section": ".text",
+   "symbol": "_ui_view_next",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 0,
+   "section": ".rodata",
+   "symbol": ".sec..bss",
+   "type": "cf.32"
+  },
+  {
+   "addend": 0,
+   "offset": 4,
+   "section": ".rodata",
+   "symbol": "_ui_view_build",
+   "type": "cf.32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 4,
+   "hex": "4feffff048d703032f2f00144eba0012588f4cd703034fef00104ef900000000202f000423c0000000004e75",
+   "kind": "text",
+   "name": ".text",
+   "size": 44
+  },
+  {
+   "align": 16,
+   "hex": "",
+   "kind": "bss",
+   "name": ".bss",
+   "size": 16
+  },
+  {
+   "align": 4,
+   "hex": "0000000000000000",
+   "kind": "data",
+   "name": ".rodata",
+   "size": 8
+  }
+ ],
+ "source_sha256": "83c2faeba8b8a3356eedfc86158af4901232dab8cafd9338b41d8953b83871b3",
+ "symbols": [
+  {
+   "global": false,
+   "name": ".sec..bss",
+   "section": ".bss",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_ui_view_build",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_ui_view_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_machine_view",
+   "section": ".bss",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_machine_view_hook",
+   "section": ".text",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "ui_machine_view_info",
+   "section": ".rodata",
+   "value": 0
+  },
+  {
+   "global": false,
+   "name": "ui_machine_view_store",
+   "section": ".text",
+   "value": 32
+  }
+ ],
+ "toolchain": {
+  "as": "GNU assembler (GNU Binutils) 2.47.20260726",
+  "cflags": "-mcpu=54418 -std=c11 -Os -ffreestanding -fno-builtin -nostdlib -fno-pic -fno-pie -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fno-unwind-tables -fno-stack-protector -Wall -Wextra -Werror",
+  "gcc": "m68k-elf-gcc (GCC) 16.2.0",
+  "instructions_redecoded": "11",
+  "isa_check": "3e786fa6990dd3e25bce11c88f4450f857e9ec38f38cf85a449bdaf3e0abeb70",
+  "ld": "GNU ld (GNU Binutils) 2.47.20260726"
+ }
+}

@@ -1,0 +1,516 @@
+{
+ "arch": "sharc",
+ "format": 1,
+ "relocs": [
+  {
+   "addend": 4,
+   "offset": 0,
+   "section": "seg_pmco",
+   "symbol": "_dl_slots",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 4,
+   "section": "seg_pmco",
+   "symbol": "_fw_unpack",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 7,
+   "section": "seg_pmco",
+   "symbol": "_dv_sv_m13u",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 10,
+   "section": "seg_pmco",
+   "symbol": "_dv_sv_i12u",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 22,
+   "section": "seg_pmco",
+   "symbol": "_dv_slot",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 25,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 29,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 4,
+   "offset": 34,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 8,
+   "offset": 39,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 12,
+   "offset": 44,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 16,
+   "offset": 49,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 20,
+   "offset": 54,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 24,
+   "offset": 59,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 28,
+   "offset": 64,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 32,
+   "offset": 69,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 36,
+   "offset": 74,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 40,
+   "offset": 79,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 44,
+   "offset": 84,
+   "section": "seg_pmco",
+   "symbol": "_dv_diag",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 87,
+   "section": "seg_pmco",
+   "symbol": "_dl_slots",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 91,
+   "section": "seg_pmco",
+   "symbol": "_dv_idle",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 94,
+   "section": "seg_pmco",
+   "symbol": "_dv_sv_m13",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 106,
+   "section": "seg_pmco",
+   "symbol": "_fw_render_next",
+   "type": "sharc.abs24"
+  },
+  {
+   "addend": 0,
+   "offset": 159,
+   "section": "seg_pmco",
+   "symbol": "_fw_frame",
+   "type": "sharc.abs32"
+  },
+  {
+   "addend": 0,
+   "offset": 187,
+   "section": "seg_pmco",
+   "symbol": "_fw_frame",
+   "type": "sharc.abs32"
+  }
+ ],
+ "sections": [
+  {
+   "align": 8,
+   "hex": "00100000000000c20006000000002d11000000001c1100000000ad0f00003e703f0e3f083f28800f20000ec320060000000001100000000011c50111000000007e72bf800111000000007f72bf000111000000007f72bf80011100000000fe72bf80011100000000ff72bf00011100000000ff72bf800111000000007f71bf000111000000007f71bf800111000000007f74bf800111000000007f73bf800111000000003f77bf0001110000000000100000000000c20006000000002d1100000000ad0f00003e703f0e3f083f288715ffffe6ff3e0600000000010f8042000001c88c0100d121ca02c9020ff63a421920cf030f133cf44723c820cf030f643d27aa23c820cf030f753ed4ea23c820cf030f313f7b7223c820cf030f7f3fffff23c8830fc0ff800131118b0121d0be0a810ffe01840101013e0200001101020f00000000800121113e703f8a089880003e02100020403e0200002204800f000420cda4011200be0a810ffe01840101013e0200001101020f00000000800121113e703f8a089880003e02100020403e0200002204800f000420cda40112003e0200000010810ff0ffa0010140be0a",
+   "kind": "text",
+   "name": "seg_pmco",
+   "size": 430
+  },
+  {
+   "align": 8,
+   "hex": "010000000200000004000000050000000600000007000000ff000000ff000000",
+   "kind": "data",
+   "name": "seg_dmda",
+   "size": 32
+  },
+  {
+   "align": 4,
+   "hex": "00000000",
+   "kind": "data",
+   "name": "pkdata__dv_sv_l4",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "00000000",
+   "kind": "data",
+   "name": "pkdata__dv_sv_m13",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "00000000",
+   "kind": "data",
+   "name": "pkdata__dv_sv_m13u",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "00000000",
+   "kind": "data",
+   "name": "pkdata__dv_sv_i12u",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "00000000",
+   "kind": "data",
+   "name": "pkdata__dv_mask",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "00000000",
+   "kind": "data",
+   "name": "pkdata__dv_sv3",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "00000000",
+   "kind": "data",
+   "name": "pkdata__dv_sv5",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "00000000",
+   "kind": "data",
+   "name": "pkdata__dv_bcw",
+   "size": 4
+  },
+  {
+   "align": 4,
+   "hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_g",
+   "size": 128
+  },
+  {
+   "align": 4,
+   "hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_diag",
+   "size": 128
+  },
+  {
+   "align": 4,
+   "hex": "000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_rec",
+   "size": 12
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_in",
+   "size": 28
+  },
+  {
+   "align": 4,
+   "hex": "0000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_params",
+   "size": 32
+  },
+  {
+   "align": 4,
+   "hex": "0000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_call_params",
+   "size": 32
+  },
+  {
+   "align": 4,
+   "hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_trig_params",
+   "size": 512
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_blk",
+   "size": 64
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_gate",
+   "size": 64
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_c",
+   "size": 64
+  },
+  {
+   "align": 4,
+   "hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "kind": "data",
+   "name": "pkdata__dv_st",
+   "size": 64
+  }
+ ],
+ "source_sha256": "7b8ca1f63ff99f4c030d25b472657e92d5c376c2e668f1ac5101a39ac3e409fa",
+ "symbols": [
+  {
+   "global": true,
+   "name": "_dv_entry",
+   "section": "seg_pmco",
+   "value": 19
+  },
+  {
+   "global": true,
+   "name": "_dv_exp2",
+   "section": "seg_pmco",
+   "value": 109
+  },
+  {
+   "global": true,
+   "name": "_dv_frame_hw",
+   "section": "seg_pmco",
+   "value": 152
+  },
+  {
+   "global": true,
+   "name": "_dv_frame_sw",
+   "section": "seg_pmco",
+   "value": 180
+  },
+  {
+   "global": true,
+   "name": "_dv_idle",
+   "section": "seg_pmco",
+   "value": 103
+  },
+  {
+   "global": false,
+   "name": "_dv_slot",
+   "section": "seg_pmco",
+   "value": 87
+  },
+  {
+   "global": true,
+   "name": "_dv_unpack",
+   "section": "seg_pmco",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_bcw",
+   "section": "pkdata__dv_bcw",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_blk",
+   "section": "pkdata__dv_blk",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_c",
+   "section": "pkdata__dv_c",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_call_params",
+   "section": "pkdata__dv_call_params",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_diag",
+   "section": "pkdata__dv_diag",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_g",
+   "section": "pkdata__dv_g",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_gate",
+   "section": "pkdata__dv_gate",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_in",
+   "section": "pkdata__dv_in",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_mask",
+   "section": "pkdata__dv_mask",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_params",
+   "section": "pkdata__dv_params",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_rec",
+   "section": "pkdata__dv_rec",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_slots",
+   "section": "seg_dmda",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_st",
+   "section": "pkdata__dv_st",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_sv3",
+   "section": "pkdata__dv_sv3",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_sv5",
+   "section": "pkdata__dv_sv5",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_sv_i12u",
+   "section": "pkdata__dv_sv_i12u",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_sv_l4",
+   "section": "pkdata__dv_sv_l4",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_sv_m13",
+   "section": "pkdata__dv_sv_m13",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_sv_m13u",
+   "section": "pkdata__dv_sv_m13u",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dv_trig_params",
+   "section": "pkdata__dv_trig_params",
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_dl_slots",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_fw_frame",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_fw_render_next",
+   "section": null,
+   "value": 0
+  },
+  {
+   "global": true,
+   "name": "_fw_unpack",
+   "section": null,
+   "value": 0
+  }
+ ],
+ "toolchain": {
+  "instructions_redecoded": "99",
+  "selache_rev": "967c1d1e4d02e41f483181964f0ba333558a1fa7"
+ }
+}

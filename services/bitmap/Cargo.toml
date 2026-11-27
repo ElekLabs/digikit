@@ -1,0 +1,9 @@
+[package]
+name = "dkrt-svc-bitmap"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "What a service shares to show its own picture in a firmware tile cell: the firmware Bitmap objects, the vector header over them and the publish handshake (no service names another)"
+
+[lib]
+path = "src/lib.rs"

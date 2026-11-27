@@ -38,8 +38,10 @@ tools/sharc_dev/sharcspec/ghidra/SHARC_VISA/
 
 # Local +Drive sample input (see docs/SAMPLES.md); never committed
 samples/
-# the runtime's samples service is code
-!modules/core/runtime/src/rs/src/services/samples/
+# the samples service crate is code
+!services/samples/
+!services/samples/src/samples/
+!apps/desktop/ui/src/samples/
 # Local folder of user sample audio; never committed
 sample-test/
 plus_drive/
@@ -87,4 +89,4 @@ apps/web/public/modules/
 .pi/
 
 # cargo build output of the runtime crate (built in place by module:build)
-modules/core/runtime/src/rs/target/
+runtime/core/src/rs/target/

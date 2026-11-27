@@ -1,6 +1,7 @@
 import type { Session } from '@digi/test-support';
-import { word } from './fx-live.ts';
+import { word } from './guest-access.ts';
 import { patchkit } from './patchkit.ts';
+import { HOST_DIR_SYMBOL, hostAddress } from '@digi/dk-session';
 import { planSymbol, type RuntimePlan } from './runtime-plan.ts';
 
 export interface ModuleLoad {
@@ -21,12 +22,16 @@ export async function readLoadTable(session: Session, plan: RuntimePlan, shipMap
   const reads = JSON.parse((await patchkit(['addr', '--map', shipMap, '--format', 'reads'])).stdout) as {
     symbol: string;
     len: number;
+    /** A static of the system package: its address is this id's entry in the host directory, which an earlier read gave. */
+    host_id?: number;
   }[];
   const snapshot: string[] = [];
-  for (const { symbol, len } of reads) {
-    const at = planSymbol(plan, symbol);
+  let directory = new Uint8Array();
+  for (const { symbol, len, host_id } of reads) {
+    const at = host_id === undefined ? planSymbol(plan, symbol) : hostAddress(directory, host_id);
     const bytes = Buffer.alloc(Math.ceil(len / 4) * 4);
     for (let i = 0; i < bytes.length; i += 4) bytes.writeUInt32BE(await word(session, at + i), i);
+    if (symbol === HOST_DIR_SYMBOL) directory = bytes;
     snapshot.push('--snapshot', `${symbol}=${bytes.subarray(0, len).toString('hex')}`);
   }
   const { stdout } = await patchkit(['addr', '--map', shipMap, ...snapshot, '--format', 'loads']);

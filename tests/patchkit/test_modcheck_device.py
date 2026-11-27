@@ -42,16 +42,16 @@ def test_nested_test_only_project_owns_module_device_acceptance(monkeypatch):
     from tools.devtools import nx_graph
 
     nested = {
-        "root": "modules/tools/example/tests",
+        "root": "modules/tool/owned/example/tests",
         "tags": ["test-only"],
         "metadata": {"runtimeAcceptance": [{"files": ["acceptance.device.test.ts"]}]},
         "targets": {"test-device": {}},
     }
     nodes = {
-        "owned/module": {"data": {"root": "modules/tools/example", "targets": {}}},
+        "owned/module": {"data": {"root": "modules/tool/owned/example", "targets": {}}},
         "owned/acceptance": {"data": nested},
         "unrelated/acceptance": {
-            "data": {**nested, "root": "modules/tools/another/tests"}
+            "data": {**nested, "root": "modules/tool/owned/another/tests"}
         },
     }
     monkeypatch.setattr(nx_graph, "nx_graph", lambda: {"nodes": nodes})
@@ -76,7 +76,7 @@ def test_multiple_device_acceptance_owners_are_discovered_in_stable_order(
     from tools.devtools import nx_graph
 
     nested = {
-        "root": "modules/tools/example/tests",
+        "root": "modules/tool/owned/example/tests",
         "tags": ["test-only"],
         "metadata": {"runtimeAcceptance": [{"files": ["acceptance.device.test.ts"]}]},
         "targets": {"test-device": {}},
@@ -84,7 +84,7 @@ def test_multiple_device_acceptance_owners_are_discovered_in_stable_order(
     nodes = {
         "owned/module": {
             "data": {
-                "root": "modules/tools/example",
+                "root": "modules/tool/owned/example",
                 "targets": {"test-device": {}} if root_has_target else {},
             }
         },
@@ -92,7 +92,7 @@ def test_multiple_device_acceptance_owners_are_discovered_in_stable_order(
     }
     if not root_has_target:
         nodes["owned/second-acceptance"] = {
-            "data": {**nested, "root": "modules/tools/example/other-tests"}
+            "data": {**nested, "root": "modules/tool/owned/example/other-tests"}
         }
     monkeypatch.setattr(nx_graph, "nx_graph", lambda: {"nodes": nodes})
     expected = [
@@ -107,12 +107,12 @@ def test_duplicate_device_acceptance_roots_fail_clearly(monkeypatch):
     from tools.devtools import nx_graph
 
     nested = {
-        "root": "modules/tools/example/tests",
+        "root": "modules/tool/owned/example/tests",
         "tags": ["test-only"],
         "targets": {"test-device": {}},
     }
     nodes = {
-        "owned/module": {"data": {"root": "modules/tools/example", "targets": {}}},
+        "owned/module": {"data": {"root": "modules/tool/owned/example", "targets": {}}},
         "owned/first": {"data": nested},
         "owned/second": {"data": nested},
     }

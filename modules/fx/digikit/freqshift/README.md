@@ -1,0 +1,67 @@
+# Frequency shifter
+
+**Category:** fx  **Devices:** Digitakt II 1.17, Digitone II 1.12  **Status:** experimental (emulator only)  **Kind:** run-time module (`.dkm`)
+
+Moves every frequency of the master output up or down by the same number of Hz. This is a frequency shift, not a pitch shift: a note
+with overtones at 100, 200 and 300 Hz that is shifted by +50 Hz has them at 150, 250 and 350 Hz, so a small shift makes a sound
+slightly out of tune and inharmonic, and a large shift turns it into a metallic, bell-like or robotic sound. A shift of a few Hz mixed
+with the dry sound is a slow phaser-like beating. The effect is a single-sideband modulator: the input is split into two signals 90 degrees apart (a pair of
+allpass filters), which are modulated by a sine and a cosine of the shift frequency and added. The image on the other side of the input frequency is
+at least 40 dB down (46 dB from 30 Hz to 18 kHz).
+
+The effect has a page of its own in the FX view (FUNC + FX, then UP or DOWN after CHO): tab **FSH**, title **Freq Shifter**.
+
+- **SHIFT** (first knob, shown from -64 to +63, 0 in the middle): the shift. 0 is no shift (the sound passes through the allpass pair, magnitude flat). Positive values move the frequencies up,
+  negative values down. One step near 0 is about 0.1 Hz, and the steps grow exponentially to about +-2 kHz at the ends. The knob is a sweep: turning it ramps
+  the shift inside each block of 32 samples and never jumps the phase, so there are no clicks.
+- **SPREAD** (second knob, shown from 0 to 127): adds up to 8 Hz to the left shift and subtracts the same amount from the right. Near the ends of SHIFT the
+  offset narrows so neither channel exceeds the original range. At 0, the side phase settles back to the shared oscillator. The default is 0 in a fresh
+  kit. If a kit saved with the one-knob prototype opens with nonzero SPREAD, turn it to 0 for the original sound.
+- **DRIFT** (third knob) moves the centre shift up and down by up to 4 Hz with a slow triangle. Start with a low depth on a sustained synth or send return.
+  At 0 the centre goes back to SHIFT and the modulation phase parks. If a kit from before Drift opens with nonzero DRIFT, turn it to 0 for the previous sound.
+- **RATE** (fourth knob) runs from a 32-second cycle at the left to an 8-second cycle at the right, with a 16-second default. Changing it changes the speed
+  without restarting the sweep. It has no audible effect when DRIFT is 0.
+- **FDBK** (fifth knob) feeds the filtered shifted signal back after a fixed **55 ms**, so each repeat is shifted again. At zero, the previous
+  FREQ SHIFT sound is unchanged. For a short tail try **76** (loop gain about **0.48**). **124** (about **0.78**) gives a stronger tail.
+  The experimental range stops at a loop gain of **0.8** and defaults to off. Turning FDBK off ramps down over a block and discards the stored tail.
+- **MIX** (the framework's level knob). It starts at **127**. On the send route (the default on the Digitakt II) MIX is the level of the return: 127 adds the full shifted sound of the sends, 0 adds nothing.
+  As a master insert (FX ROUTING, below) MIX is the blend of the dry and the shifted sound: 127 is only the shifted sound (fully shifted), 0 only the dry sound (bit for bit). MIX is one value for both routes: after moving the
+  effect to the master, turn MIX down to hear some dry sound with the shifted one.
+
+| SHIFT | shift | | SHIFT | shift |
+| ---: | ---: | --- | ---: | ---: |
+| 0 | 0 Hz | | +40 | +96.8 Hz |
+| +1 | +0.085 Hz | | +48 | +266 Hz |
+| +4 | +0.41 Hz | | +56 | +731 Hz |
+| +8 | +1.10 Hz | | +63 | +1,767 Hz |
+| +16 | +4.10 Hz | | -64 | -2,005 Hz |
+| +24 | +12.3 Hz | | -40 | -96.8 Hz |
+| +32 | +34.9 Hz | | -1 | -0.085 Hz |
+
+The formula is in the cookbook (docs/findings/54-module-cookbook.md): `f = sign(v) 0.63 (2^(|v| / 5.5) - 1)` Hz.
+
+Route: the effect starts as a **send** effect (`route = "send"`, `routes = ["send", "master"]`): the FX key gets a second page with one knob **FSH** for the current track (while it turns the title says
+`FSH Send=40`), and the shifter gets the sum of the tracks' sends (amount squared, like the stock sends), so one track can be shifted while the others stay dry. A track with amount 0 is not shifted. SETTINGS > FX ROUTING
+moves the effect to the master (after a restart), where it shifts the whole mix. A send is limited by the device's send cells (two on the Digitakt II, one on the Digitone II); an effect past the limit runs on the master. See
+`docs/findings/62-fx-send-route.md`, `64-fx-send-page.md`, `65-fx-routes.md`, `66-freqshift-send.md`, `67-fx-routes-dn2.md`.
+
+Things to know:
+
+- On the master route the input is the whole master mix (after the master mix and before the output), so every track and the send effects are shifted together. A long reverb tail that is shifted keeps moving. On the send route the input is the sum of the sends only.
+- Frequencies above 18 kHz and below 30 Hz are shifted with less image rejection (the image is still 5 dB down at 5 Hz); a DC offset becomes a tone at the shift frequency.
+- A shift upward moves high frequencies past 24 kHz, where they fold back down (aliasing): a high-pitched sound shifted up by 2 kHz gets a faint reflection.
+- The feedback filter rolls off around 65 Hz and 6.2 kHz. Its loop is separate from MIX and uses the wet signal before the adapter mixes it back.
+  A hot source can overshoot unity. On a send, keep headroom with the track sends and use MIX to set the audible return.
+- In the scripted send scenes, the send adapter and effect together take about 5,400–5,700 rig instructions per steady 32-sample block with Spread and
+  Drift off, and about 6,500–6,800 at 4 Hz Spread per side. In the paired texture takes, Drift added 39 instructions per steady block. These are rig instruction
+  counts, not hardware cycle measurements.
+- On the Underpass replay the send path's worst steady block was 7,517 instructions on DT2 and 7,782 on DN2 with Feedback on, about 1,012 more
+  than Feedback off. The descriptor reserves 22,356 bytes of state per effect, including the stereo ring. The adapter clears this on activation,
+  so the first block costs more than the steady path.
+
+A run-time module: it is not patched into the firmware. The digikit runtime loads the `.dkm` from the card and sends the DSP code to the DSP. Pack it with
+`mise run module:pack -- digikit/freqshift --device dt2` (or `dn2`) and upload `out/patch/freqshift-dt2.dkm`, or load it with `mise run dk:run -- digikit/freqshift --emu`. The image needs the digikit runtime with
+`core/dynfx` and the fx service `core/services/fx` (the `emulator` and `device` patch sets of both devices have them).
+
+Source and reference: `src/dsp/freqshift.s`, the float32 model `tests/freqshift_ref.py` (defines the arithmetic; `mise` is not needed to run it), the sound checks `tests/rig/freqshift.toml`, the model test
+`tests/test_freqshift_ref.py` and the rig cases. The adapter legs (pages, knob, routes, MIX bypass) are proved by `core/fx` `fx-bipolar.device.test.ts`. `mise run module:check digikit/freqshift` runs the conformance, the rig checks and the reference tests. A demo render for listening: `tests/freqshift_demo.py`.

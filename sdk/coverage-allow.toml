@@ -1,0 +1,42 @@
+# Imports of sdk.toml that no packed module links, on purpose. `patchkit coverage --sdk sdk/sdk.toml --allow sdk/coverage-allow.toml` fails
+# for an `[[import]]` that is neither linked by a packed module nor listed here, and for an entry here that a module links or that is not in sdk.toml
+# (docs/TESTING.md, SDK-surface coverage). Every entry needs a reason.
+
+# Removed imports, kept so that the import table does not change.
+[[allow]]
+name = "dk_usb_bulk_takeover"
+reason = "removed: always returns DK_USB_BULK_E_STATE, kept for the import table"
+
+[[allow]]
+name = "dk_usb_bulk_giveback"
+reason = "removed: always returns DK_USB_BULK_E_STATE, kept for the import table"
+
+# The compiler builds every C module with the ColdFire libgcc linked in (packages/patchkit/src/build/cf.rs), so these 64-bit helpers are local code of the module,
+# never an import. test/c-demo covers the arithmetic; the runtime table keeps the names for objects built without libgcc.
+[[allow]]
+name = "__muldi3"
+reason = "linked from libgcc into the module, not imported (test/c-demo multiplies 64-bit values)"
+
+[[allow]]
+name = "__udivdi3"
+reason = "linked from libgcc into the module, not imported (test/c-demo divides 64-bit values)"
+
+[[allow]]
+name = "__umoddi3"
+reason = "linked from libgcc into the module, not imported (test/c-demo takes 64-bit remainders)"
+
+# Services declare what they provide with dk_service_declare_*; the packed services link kind, slot, hook and export. No manifest field writes a RESOURCES
+# header entry yet, so a packed module that calls resource is refused with E_DECL_KIND.
+# runtime/core/src/rs/src/collect/tests.rs covers the declare check.
+[[allow]]
+name = "dk_service_declare_resource"
+reason = "needs a RESOURCES header entry that the packer cannot write from a manifest yet; covered by the runtime's collect tests"
+
+# Provided by a service file for the runtime's own handlers (sdk.toml `internal = true`): the runtime calls them by name, no module imports them.
+[[allow]]
+name = "dk_machines_guard_state"
+reason = "provided by machines.dks, called by the runtime's MODULES reply (handlers.rs); no module imports it"
+
+[[allow]]
+name = "dk_machines_owned_ids"
+reason = "provided by machines.dks, called by the runtime's MODULES reply (handlers.rs); no module imports it"

@@ -231,7 +231,7 @@ fn bad_hooks_are_errors() {
 #[test]
 fn sharc_entries_make_no_output() {
     let t = "[[fn]]\nname = \"dsp.fx.fn.send\"\ncpu = \"sharc\"\nrule = { kind = \"sharc_func\" }\nsig = \"void ()\"\ndoc = \"Sends.\"\n";
-    let files = render(&[("devices/fw/dsp/fx.toml", t)]).expect("renders");
+    let files = render(&[("ports/fw/dsp/fx.toml", t)]).expect("renders");
     assert_eq!(files.len(), 1);
     assert_eq!(files[0].0, RUST_OUT);
     assert!(!files[0].1.contains("pub mod"));
@@ -254,7 +254,7 @@ fn port(device: &str, version: &str, sha: char, anchors: &[(&str, u64)]) -> Stri
 
 fn reference_of(decls: &str, ports: &[String]) -> Value {
     let reg = Registry::from_texts(ports.iter().map(|s| s.as_str())).expect("ports");
-    let text = reference(&[("devices/fw/view.toml", decls)], SUBSYSTEMS, &reg).expect("reference");
+    let text = reference(&[("ports/fw/view.toml", decls)], SUBSYSTEMS, &reg).expect("reference");
     assert!(text.ends_with('\n'));
     serde_json::from_str(&text).expect("json")
 }
@@ -372,4 +372,38 @@ fn reference_leaves_out_a_port_without_the_anchor() {
     let at = &entry(&v, "cf.view.fn.push")["at"];
     assert!(at.get("dt2-1.17").is_some());
     assert!(at.get("dn2-1.12").is_none());
+}
+
+/// A patch site is a raw hook with `patch = N`: plain bytes of 1, 2 or 4 that a service replaces, so no handler, tail, stock path or exit goes with it.
+#[test]
+fn a_patch_site_is_a_raw_replace_hook_of_one_two_or_four_bytes() {
+    let regs = "{ in = [], clobbers = [] }";
+    for n in [1, 2, 4] {
+        let t = hook_text(
+            "cf.view.site.loop",
+            "replace",
+            regs,
+            &format!("patch = {n}\n"),
+        );
+        assert!(render(&[("t.toml", t.as_str())]).is_ok(), "patch = {n}");
+    }
+    for n in [0, 3, 8] {
+        let e = hook_error(
+            "cf.view.site.loop",
+            "replace",
+            regs,
+            &format!("patch = {n}\n"),
+        );
+        assert!(e.contains("1, 2 or 4 bytes"), "patch = {n}: {e}");
+    }
+    for (what, extra) in [
+        ("tail", "patch = 2\ntail = true\n"),
+        ("stock", "patch = 2\nstock = true\n"),
+        ("exits", "patch = 2\nexits = [\"cf.view.site.loop\"]\n"),
+    ] {
+        let e = hook_error("cf.view.site.loop", "replace", regs, extra);
+        assert!(e.contains("`patch = N` is only for"), "{what}: {e}");
+    }
+    let e = hook_error("cf.view.site.loop", "before", regs, "patch = 2\n");
+    assert!(e.contains("`patch = N` is only for"), "mode before: {e}");
 }

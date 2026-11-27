@@ -1,6 +1,6 @@
 # The `.dkm` module file
 
-Status: built, 2026-10-16 (packer `packages/patchkit/src/dkm.rs`, loader `modules/core/runtime/src/rs/src/loader.rs`). Plan:
+Status: built, 2026-10-16 (packer `packages/patchkit/src/dkm.rs`, loader `runtime/core/src/rs/src/loader/`). Plan:
 `docs/plans/digikit-runtime.md` (Module file, Load sequence). Runtime: `docs/design/digikit-runtime.md`. Store the file lives in:
 `docs/design/digikit-store.md`.
 
@@ -19,7 +19,7 @@ deterministic: the same object gives the same bytes.
 
 ## Format
 
-All integers are big endian. The file is at most 64 KiB in v0 (the runtime's staging buffer). Offsets are from the start of the
+All integers are big endian. The file is at most 128 KiB in v0 (the runtime's staging buffer). Offsets are from the start of the
 file; the loaded image starts at a 16-byte aligned file offset.
 
 | Offset | Size | Field |
@@ -31,7 +31,8 @@ file; the loaded image starts at a 16-byte aligned file offset.
 | 0x10 | 32 | sha256 of the whole file with these 32 bytes read as zeros |
 | 0x30 | 4 | `runtime`: the runtime version the module needs, packed `major << 16 \| minor << 8 \| patch`: the newest `since` of the imports it links (0 when it links none). The loader refuses (`E_CONTRACT`) a module whose version has another major or minor than the runtime's (`dkrt_sdk::RUNTIME_VERSION`) or a higher patch (0.x semver). Bit 31 is the **trace flag**: the module was packed with `patchkit pack --trace` (built with `DK_TRACE`); the loader ignores it, the DIGIKIT menu shows `TRACE` for the module (`dkrt_module_header` `flags`), `dkm-info` prints it. A version never reaches bit 31 |
 | 0x34 | 4 | module version, `major << 16 \| minor << 8 \| patch` |
-| 0x38 | 8 | reserved, zero (earlier formats had the (major, minor) pairs of the api, machine, fx and service contracts here; the one version is at 0x30) |
+| 0x38 | 4 | `role`: 0 a module (`.dkm`), 1 a service (`.dks`); another word is `E_FORMAT` (earlier formats had the (major, minor) pairs of the api, machine, fx and service contracts here; the one version is at 0x30) |
+| 0x3c | 4 | `H_SVC_ABI`: the ABI fingerprint of a service file, the value of its data symbol `dk_svc_abi` (`dkrt_abi::service::SVC_ABI`, emitted by `dkrt-svc-rt`'s `service!`); 0 for a module and for a file that uses neither interface B nor C. A word that is not 0 and differs from the runtime's (INFO bytes 41 to 44, capability `SVC_ABI`) is `E_SVC_ABI` |
 | 0x40 | 32 | name, NUL padded |
 | 0x60 | 4 | `image_off` (multiple of 16) |
 | 0x64 | 4 | `image_size`: text and data, as the patch-time linker lays them out at base 0 |
@@ -64,6 +65,7 @@ the DSP section (16-byte aligned), padding to 16, then the image.
   references between the module's own sections are resolved by the packer (the base cancels), and a PC-relative reference to an
   import is refused by the packer (the distance to the firmware would depend on where the module is loaded).
 - **Header table** (`table_off`, layout in `sdk/sdk.toml` `[limits.format]` and `packages/dkneeds/src/keys.rs`): magic `DKTB`, a version, then tagged entries: NEEDS (services and versions), USES (`(resource id, count)`: the `[uses]` lines of `module.toml` for this device and `record_bytes`), KEYS (`(kind, n, keys)`), and the entries of a service module (KINDS, SLOTS, HOOKS, EXPORTS, RESOURCES). The machine and effect keys are hashes the packer computes from the packed name and the id (`register.rs`: `machine_key`, `effect_id`). The machine, parameter, page and effect records are not in the file: `init` declares them and the runtime builds them at commit (`docs/design/digikit-registry.md`).
+  In a service's `EXPORTS` entry, bit 31 of the image offset marks an owner-bound export. Bit 30 together with bit 31 identifies the reserved `dk_service_query_v1` entry. The latter stays outside card import resolution, and the packer records runtime 0.11.2 as a hard minimum. Legacy bound exports have bit 30 clear.
 - **Image**: the linked bytes at base 0; every word named by a relocation holds `S + A` (symbol offset plus addend) for kind 0 and
   `A` for kind 1.
 
@@ -100,13 +102,15 @@ It does not read the image, the tables' entries, the records' bodies or the DSP 
 
 Names that are capacity kinds (`[capacity.kinds]` of `sdk/sdk.toml`) are in the unit of that kind's CAPACITY entry, so "fits" is need <= limit - used, with the largest free block for the arena and the DSP area.
 
-Who calls it: the DIGIKIT menu (`modules/core/apps/digikit-menu`, on the card's files, once per open of the menu); patchkit (`patchkit needs [--json] FILE.dkm...`, and a `needs` line of `dkm-info`);
+Who calls it: the DIGIKIT menu (`runtime/apps/digikit-menu`, on the card's files, once per open of the menu); patchkit (`patchkit needs [--json] FILE.dkm...`, and a `needs` line of `dkm-info`);
 `patchkit.wasm` (`pk_needs`, read by the Transfer page through `apps/web/src/modules/dkneeds.ts`); the Python tools through the command line (`tools/device/dkneeds.py`: `dk run`, `module:check`, `dktransfer`). The arithmetic exists once.
 
-The rule that compares the needs with a device is `fits_now` (docs/plans/what-fits.md; `dkrt_fit` in `modules/core/runtime/fit`, vectors in `modules/core/runtime/vectors/fit-vectors.json`; the compare and the needs are each written once, in Rust: the web app calls the compare through `pk_fit` and the tools through `patchkit fit --json -`): the staging buffer holds the file, a module record and a selection path are free,
+The rule that compares the needs with a device is `fits_now` (docs/plans/what-fits.md; `dkrt_fit` in `runtime/core/fit`, vectors in `runtime/core/vectors/fit-vectors.json`; the compare and the needs are each written once, in Rust: the web app calls the compare through `pk_fit` and the tools through `patchkit fit --json -`): the staging buffer holds the file, a module record and a selection path are free,
 the DSP range (with up to `DSP_ALIGN - 8` bytes for alignment) is at most the largest free range, the arena holds the module's block and the block of its DSP image together (each block at most the largest free block), and every row count is at most
 limit - used. A kind that a device's CAPACITY lacks is not judged.
-The `inferred needs` tests of `modules/core/runtime/tests/capacity/inferred/inferred-needs.device.test.ts` (full tier) load a set of run-time modules and fixtures alone, coupled, and compare
+
+The key rules (`Keys::first_repeat`, `first_shared_key`, `first_missing_key`: the planner's and the reload's) are asked by the Transfer page before an upload through `pk_keys_check` of `patchkit.wasm` (`keyWarnings` in `packages/workbench-core/src/modules/fit.ts`): a key the file has twice, a key of another module that is on the card, a key of the version on the card that the new file lacks. They show as `keys` events of the install, which only warn: the device refuses the module itself.
+The `inferred needs` tests of `runtime/core/tests/capacity/inferred/inferred-needs.device.test.ts` (full tier) load a set of run-time modules and fixtures alone, coupled, and compare
 CAPACITY and MODULES with `needs_of` of the file (rows of a DSP module come in after the DSP acknowledges). The Rust tests of `dkneeds` cover the arithmetic and malformed files (truncated sections, absurd counts, every cut of a file).
 
 ## DSP section
@@ -161,7 +165,7 @@ All integers are big endian. Offsets are from the start of the section.
   image (a record that says more state than the descriptor, or another parameter count, is `E_DSP_FORMAT`).
   **Flags (the routes, FX routing step 4).** bit 0 `FXF_SEND` (1): the effect may run on a send bus; bit 1 `FXF_NOMASTER` (2): it may not run on the master chain; bit 2 `FXF_DEFAULT_SEND` (4): its
   default route is the send bus. The master is always allowed unless bit 1 says not, so the word 0 that every record made before the routes has means "master only, default master": an old `.dkm` loads unchanged, and a module that leaves the
-  fields out packs to the same bytes as before. The commit writes the flags from `dk_fx_routes(fx, allowed, default)` in `init`: no call gives 0 (master only); `(MASTER|SEND, MASTER)` gives 1 (both, default master); `(MASTER|SEND, SEND)` gives 5 (both, default send); `(SEND, SEND)` gives 7 (send only). Other combinations (a default that is not allowed) are refused at commit, and the loader refuses a record with other flag bits (`E_DSP_FORMAT`). The runtime uses the default when the settings
+  fields out packs to the same bytes as before. The packer writes a valid placeholder pair (MASTER|SEND, flag `FXF_SEND`, 1); the runtime overrides it at commit with the flags from `dk_fx_routes(fx, allowed, default)` in `init`: no call gives 0 (master only, the legacy value); `(MASTER|SEND, MASTER)` gives 1 (both, default master); `(MASTER|SEND, SEND)` gives 5 (both, default send); `(SEND, SEND)` gives 7 (send only). Other combinations (a default that is not allowed) are refused at commit, and the loader refuses a record with other flag bits (`E_DSP_FORMAT`). The runtime uses the default when the settings
   have no `fx/route/<module id>` and when the stored route is not allowed; a runtime older than the flags ignores them (the effect runs on the master).
 - **Image**: the linked bytes at the nominal base; every relocated field holds `S + A`. The sections are text, data, bss in that order,
   so a `.PKBSS` buffer (pluck's 256 KiB delay lines) follows the sent bytes in the reserved range.
@@ -206,7 +210,7 @@ implementation of it. The runtime's loader is checked in the emulator (`tools/pa
 
 ## Open
 
-- Streaming load for files over 64 KiB; compression.
+- Streaming load for files over 128 KiB; compression.
 - Signing: the sha256 is an integrity check, not authentication (the store is on the user's own card).
 - Pages and `own_dsp` machine records (Digitone II, lane B).
 - The selector word of a run-time type (finding 32, open).

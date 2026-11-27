@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import hashlib
 import json
 import math
@@ -22,6 +23,8 @@ from pathlib import Path
 from tools import python_env
 from tools.devtools import (
     benchlock,
+    core_choice,
+    core_store,
     coupled_ab,
     portable_flock,
     render_cache,
@@ -89,8 +92,47 @@ def overlay(*layers: dict) -> dict[str, str]:
     return result
 
 
+# The devices of the cells and instruments of the run (`activate`): only their libraries are provided.
+ACTIVE: set[str] = set(DEVICES)
+
+
+def activate(config: dict) -> None:
+    """Provide core libraries only for the devices CONFIG runs (its cells and instruments)."""
+    ACTIVE.clear()
+    ACTIVE.update(c["device"] for c in config.get("cells", []))
+    ACTIVE.update(config.get("instruments", list(DEVICES)))
+
+
+@functools.cache
+def core_libraries(devices: tuple[str, ...]) -> dict[str, str]:
+    """`DIGI_SHARC_CORE_LIB_<DEV>` of DEVICES: a variable set in the environment wins, else the core store's library (a
+    miss builds it). A host holds no DSP core (a static binary ignores them)."""
+    try:
+        return {
+            core_store.CORE_LIB_VAR.format(d.upper()): core_choice.core_path(
+                d, os.environ
+            )
+            for d in devices
+        }
+    except core_store.CoreStoreError as exc:
+        raise Invalid(str(exc)) from exc
+
+
+def base_env() -> dict[str, str]:
+    """The environment of a build: the process's without the emulation knobs."""
+    return python_env({k: v for k, v in os.environ.items() if not knob(k)})
+
+
 def child_env(env: dict[str, str]) -> dict[str, str]:
-    return python_env({**{k: v for k, v in os.environ.items() if not knob(k)}, **env})
+    """The environment of a run: no knobs of the process, the libraries of the active devices, then ENV (the cell's and
+    the label's own variables win, `DIGI_SHARC_CORE_LIB_<DEV>` included)."""
+    return python_env(
+        {
+            **{k: v for k, v in os.environ.items() if not knob(k)},
+            **core_libraries(tuple(sorted(ACTIVE))),
+            **env,
+        }
+    )
 
 
 @contextlib.contextmanager
@@ -118,7 +160,7 @@ def tree_hashes(folder: Path) -> dict[str, str]:
 def tool_hashes() -> dict[str, str]:
     # Includes transitive Python helpers and module inputs used by the pluck render.
     paths = [p for p in (ROOT / "tools").rglob("*.py")]
-    paths.extend((ROOT / "devices" / "ports").rglob("*.toml"))
+    paths.extend((ROOT / "ports").rglob("*.toml"))
     for base in (
         "modules",
         "sdk",
@@ -197,9 +239,8 @@ def freeze(folder: Path, imported: Path | None) -> None:
                     item["coupled"] = str(
                         stablebin.stable_copy(coupled.build(device), target)
                     )
-                # Explicit core avoids native_emu's ambient/default core selection.
-                gen = coupled.generated(device)
-                target = Path(native_emu.target_dir_for(gen))
+                # The daemon holds no generated core: the no-core target dir.
+                target = Path(native_emu.target_dir_for())
                 command = native_emu.daemon_command(
                     ["--coupled", str(item["profile_firmware"])]
                 )
@@ -211,9 +252,7 @@ def freeze(folder: Path, imported: Path | None) -> None:
                     subprocess.run(
                         native_emu.build_command(command),
                         cwd=ROOT,
-                        env=digi_env.rust_env(
-                            {**child_env({}), "SHARC_GEN_DIR": str(gen)}
-                        ),
+                        env=digi_env.rust_env(base_env()),
                         check=True,
                     )
                     item["daemon"] = str(
@@ -497,6 +536,7 @@ def validate_steps(state: dict, folder: Path) -> None:
 def status(folder: Path) -> dict:
     state = read(folder / "checkpoint.json")
     identity = state["identity"]
+    activate(identity["config"])
     if (
         digest(file(identity["config_path"])) != identity["config_sha"]
         or tool_hashes() != identity["tools"]
@@ -518,10 +558,24 @@ def status(folder: Path) -> dict:
     return summary(state)
 
 
+def with_label_env(config: dict, label_env: dict[str, dict[str, str]] | None) -> dict:
+    """CONFIG with the `--env LABEL:NAME=VALUE` settings added to its per-label `variants` (so they are part of the identity)."""
+    config = json.loads(json.dumps(config))
+    for label, env in (label_env or {}).items():
+        if env:
+            config.setdefault("variants", {}).setdefault(label, {}).update(env)
+    return config
+
+
 def current_identity(
-    config_path: Path, baseline_path: Path, candidate_path: Path, partial: bool
+    config_path: Path,
+    baseline_path: Path,
+    candidate_path: Path,
+    partial: bool,
+    label_env: dict[str, dict[str, str]] | None = None,
 ) -> dict:
-    config = read(config_path)
+    config = with_label_env(read(config_path), label_env)
+    activate(config)
     artifacts = {"A": frozen(baseline_path), "B": frozen(candidate_path)}
     prepared = preflight(config, artifacts["A"], artifacts["B"], partial)
     for folder in (baseline_path, candidate_path):
@@ -539,15 +593,39 @@ def current_identity(
     }
 
 
+def core_lines(config: dict, envs: dict[str, dict[str, str]]) -> list[str]:
+    """One line per cell: the core library each label runs (`both labels use core <key>` when they are the same)."""
+    lines = []
+    for cell in config["cells"]:
+        try:
+            line = core_choice.announce(
+                cell["device"],
+                {
+                    label: child_env(envs[f"{cell['id']}/{label}"])
+                    for label in ("A", "B")
+                },
+                {},
+            )
+        except core_store.CoreStoreError as exc:
+            raise Invalid(str(exc)) from exc
+        lines.append(f"{cell['id']}: {line}")
+    return lines
+
+
 def run(
     config_path: Path,
     baseline_path: Path,
     candidate_path: Path,
     folder: Path,
     partial: bool,
+    label_env: dict[str, dict[str, str]] | None = None,
 ) -> dict:
-    identity = current_identity(config_path, baseline_path, candidate_path, partial)
+    identity = current_identity(
+        config_path, baseline_path, candidate_path, partial, label_env
+    )
     config, artifacts = identity["config"], identity["frozen"]
+    for line in core_lines(config, identity["preflight"]["env"]):
+        print(line, flush=True)
     with writer(folder):
         checkpoint = folder / "checkpoint.json"
         if checkpoint.exists():
@@ -645,7 +723,9 @@ def run(
             state["failure_stage"] = "completion/identity"
             write(checkpoint, state)
             if (
-                current_identity(config_path, baseline_path, candidate_path, partial)
+                current_identity(
+                    config_path, baseline_path, candidate_path, partial, label_env
+                )
                 != identity
             ):
                 raise Invalid(
@@ -676,6 +756,14 @@ def main() -> int:
     runner.add_argument("--candidate", required=True, type=Path)
     runner.add_argument("--out", required=True, type=Path)
     runner.add_argument("--allow-partial", action="store_true")
+    runner.add_argument(
+        "--env",
+        action="append",
+        default=[],
+        metavar="LABEL:NAME=VALUE",
+        help="one more environment variable for the runs of label A or B, "
+        "for example `--env B:DIGI_SHARC_CORE_LIB_DN2=PATH` (part of the resume identity)",
+    )
     status_parser = commands.add_parser("status")
     status_parser.add_argument("folder", type=Path)
     args = parser.parse_args()
@@ -683,6 +771,7 @@ def main() -> int:
         if args.command == "freeze":
             freeze(args.out.resolve(), args.import_manifest)
         elif args.command == "run":
+            _, label_env = core_choice.parse_label_env(args.env, ("A", "B"))
             print(
                 json.dumps(
                     run(
@@ -691,6 +780,7 @@ def main() -> int:
                         args.candidate,
                         args.out.resolve(),
                         args.allow_partial,
+                        label_env,
                     ),
                     indent=2,
                 )

@@ -8,10 +8,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire, isBuiltin } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// TypeScript is a dependency of tests/regression in the real checkout; a workspaceRoot that is a fixture has no node_modules.
+const regressionRequire = createRequire(fileURLToPath(new URL('../../tests/regression/package.json', import.meta.url)));
 
 export const testImportInputs = (workspaceRoot) => {
   const config = join(workspaceRoot, 'tests/regression/tsconfig.json');
-  const ts = createRequire(join(workspaceRoot, 'tests/regression/package.json'))('typescript');
+  const ts = regressionRequire('typescript');
   const parsed = ts.getParsedCommandLineOfConfigFile(
     config,
     {},
@@ -27,6 +31,12 @@ export const testImportInputs = (workspaceRoot) => {
     throw new Error(ts.formatDiagnosticsWithColorAndContext(errors, ts.createCompilerHost(parsed.options)));
   const options = parsed.options;
   const cache = new Map();
+  // Each file is read once per instance (one createNodes call).
+  const texts = new Map();
+  const text = (file) => {
+    if (!texts.has(file)) texts.set(file, readFileSync(file, 'utf8'));
+    return texts.get(file);
+  };
   const local = (file) => {
     const path = relative(workspaceRoot, file);
     return !isAbsolute(path) && !path.startsWith('../') && !path.split('/').includes('node_modules');
@@ -37,7 +47,7 @@ export const testImportInputs = (workspaceRoot) => {
     const result = [];
     cache.set(file, result);
     if (!existsSync(file)) return result;
-    const source = readFileSync(file, 'utf8');
+    const source = text(file);
     const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
     // Names each specifier asks for: a Set, or null when the whole file is used (sticky).
     const wanted = new Map();
@@ -105,7 +115,11 @@ export const testImportInputs = (workspaceRoot) => {
     }
     return result;
   };
-  const parse = (file) => ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+  const parses = new Map();
+  const parse = (file) => {
+    if (!parses.has(file)) parses.set(file, ts.createSourceFile(file, text(file), ts.ScriptTarget.Latest, true));
+    return parses.get(file);
+  };
   const resolveLocal = (specifier, file) => {
     const resolved = ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule?.resolvedFileName;
     return resolved && local(resolved) ? resolved : null;
@@ -177,7 +191,10 @@ export const testImportInputs = (workspaceRoot) => {
     exportsCache.set(file, result);
     return result;
   };
+  const closures = new Map();
   return (files) => {
+    const key = files.join('\n');
+    if (closures.has(key)) return [...closures.get(key)];
     // file -> 'all' or the Set of names reached so far
     const reached = new Map();
     const visit = (file, names) => {
@@ -226,6 +243,12 @@ export const testImportInputs = (workspaceRoot) => {
       }
     };
     for (const file of files) visit(resolve(workspaceRoot, file), null);
-    return [...reached.keys()].map((file) => `{workspaceRoot}/${relative(workspaceRoot, file)}`).sort();
+    const sorted = [...reached.keys()].map((file) => `{workspaceRoot}/${relative(workspaceRoot, file)}`).sort();
+    closures.set(key, sorted);
+    return [...sorted];
   };
 };
+
+// The import closure of one file as repository-relative paths (the file included), from the function `testImportInputs` returns.
+// The one walker: device-test cache keys and `test:subset --base` read the same closure.
+export const closureFiles = (importInputs, file) => importInputs([file]).map((p) => p.replace('{workspaceRoot}/', ''));

@@ -56,7 +56,7 @@ export default defineConfig({
           name: 'runtime',
           include: [
             'emulator/**/*.test.ts',
-            '../../modules/**/tests/**/*.device.test.ts',
+            '../../{modules,runtime,services}/**/tests/**/*.device.test.ts',
             '../fixtures/modules/**/tests/**/*.device.test.ts',
           ],
           // Hang detection is the no-progress watchdog (DIGI_NO_PROGRESS_MS, default 120 s). These limits are

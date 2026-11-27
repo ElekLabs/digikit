@@ -1,15 +1,20 @@
 """Row selection of tools/firmware/catalog_page.py, on synthetic inputs."""
 
 import csv
+import hashlib
 import json
+import sqlite3
 import subprocess
+import tomllib
 import unittest
 from pathlib import Path
 from urllib.parse import unquote
 
 import pytest
 
-from tools.firmware import catalog_page
+from tools.coldfire import fw
+from tools.firmware import artifacts, catalog, catalog_page
+from tools.sharc_dev import sharc_catalog
 
 
 def row(addr: int, score: float, anchors: str = "") -> dict[str, str]:
@@ -103,8 +108,20 @@ def inventory():
     return rows, groups, glabels, labels
 
 
-def payload(full=True):
+def payload(full=True, cpu="cf"):
     rows, groups, glabels, labels = inventory()
+    if cpu == "sharc":
+        for record in rows:
+            record.update(
+                role="master/fx",
+                anchors="dsp.master.fn.q31_converter",
+                hints="DO1",
+                callers="2",
+                callees="3",
+                loops="1",
+                do="1",
+                prof_insns="80",
+            )
     return catalog_page.build_payload(
         "dt2-1.17",
         "dn2-1.12",
@@ -116,6 +133,60 @@ def payload(full=True):
         10,
         1,
         full,
+        cpu=cpu,
+    )
+
+
+@pytest.mark.parametrize("stamped", [False, True])
+def test_group_labels_follow_members_when_groups_are_renumbered(tmp_path, stamped):
+    src = tmp_path / "review-labels.jsonl"
+    exact: dict[str, object] = {"group": 1, "label": "Exact"}
+    changed: dict[str, object] = {"group": 2, "label": "Old membership"}
+    if stamped:
+        exact["members"] = ["0x10", "0x20"]
+        changed["members"] = ["0x30", "0x50"]
+    src.write_text(
+        "\n".join(
+            json.dumps(record)
+            for record in (exact, changed, {"addr": "0x30", "role": "Address label"})
+        )
+    )
+    rows = [
+        {"group": "2", "addr": "0x10"},
+        {"group": "2", "addr": "0x20"},
+        {"group": "1", "addr": "0x30"},
+        {"group": "1", "addr": "0x40"},
+    ]
+    previous = [
+        {"group": "1", "addr": "0x10"},
+        {"group": "1", "addr": "0x20"},
+        {"group": "2", "addr": "0x30"},
+        {"group": "2", "addr": "0x50"},
+    ]
+    groups, functions = catalog_page.read_labels(
+        [str(src)],
+        rows,
+        None if stamped else previous,
+    )
+    assert {gid: labels[0]["label"] for gid, labels in groups.items()} == {2: "Exact"}
+    assert functions[0x30][0]["role"] == "Address label"
+
+
+def test_titles_show_observed_roles_and_class_names():
+    group = {
+        "id": "9",
+        "size": "6",
+        "top_classes": "voice:6",
+        "top_strings": "unclassified/mixed | envelope or gain",
+        "top_tags": "",
+    }
+    title, source = catalog_page.suggest_group_title(group, "sharc", [])
+    assert title == "Voice · Envelope or gain"
+    assert source == "Dominant DSP role and common decoder hint"
+    group["top_classes"] = "ListView:4,KitManager:2"
+    assert catalog_page.suggest_group_title(group, "cf", []) == (
+        "ListView · KitManager",
+        "Common classes",
     )
 
 
@@ -149,7 +220,8 @@ def test_custom_output_tsv_links_to_actual_html(tmp_path, monkeypatch):
     rows, groups, _, _ = inventory()
     atlas = tmp_path / "atlas"
     atlas.mkdir()
-    monkeypatch.setattr(catalog_page.fw, "ATLAS_DIR", str(atlas))
+    monkeypatch.setattr(catalog_page, "ATLAS_DIR", str(atlas))
+    monkeypatch.setattr(artifacts, "OUTPUT_ROOT", tmp_path)
     for suffix, records in (("-catalog.tsv", rows), ("-catalog-groups.tsv", groups)):
         with (atlas / ("dt2-1.17" + suffix)).open("w", newline="") as f:
             writer = csv.DictWriter(f, list(records[0]), delimiter="\t")
@@ -165,6 +237,216 @@ def test_custom_output_tsv_links_to_actual_html(tmp_path, monkeypatch):
         assert output.parent / unquote(filename) == output
         assert (output.parent / unquote(filename)).is_file()
         assert address == record["addr"]
+
+
+def test_sharc_review_reads_the_canonical_database(tmp_path, monkeypatch):
+    atlas = tmp_path / "atlas"
+    monkeypatch.setattr(catalog_page, "ATLAS_DIR", str(atlas))
+    monkeypatch.setattr(artifacts, "OUTPUT_ROOT", tmp_path)
+    image, other = next(iter(catalog_page.OTHER_IMAGE.items()))
+    for current, addr, pair in ((image, 0x10, 0x40), (other, 0x40, 0x10)):
+        path = artifacts.FirmwareArtifacts(current, "sharc").database
+        path.parent.mkdir(parents=True)
+        rows = [
+            dict.fromkeys(column for column, _ in sharc_catalog.CATALOG_COLUMNS)
+            for _ in range(2)
+        ]
+        for index, entry in enumerate(rows):
+            entry.update(
+                addr=addr + index,
+                name="recovered_function",
+                score=9,
+                size=12,
+                group=1,
+                anchor_grade=1,
+                tags="master_path",
+            )
+        rows[0].update(
+            pair_addr=pair, role="master/fx", anchors="dsp.master.fn.q31_converter"
+        )
+        with sqlite3.connect(path) as db:
+            port_file = Path(catalog_page.ROOT) / "ports" / f"{current}.toml"
+            dsp_hash = tomllib.loads(port_file.read_text())["port"]["dsp_sha256"]
+            db.execute("CREATE TABLE meta (image TEXT, key TEXT, value TEXT)")
+            db.executemany(
+                "INSERT INTO meta VALUES (?,?,?)",
+                [
+                    (current, "image", current),
+                    (current, "cpu", "sharc"),
+                    (current, "image_sha256", dsp_hash),
+                ],
+            )
+            db.execute(
+                "CREATE TABLE functions (image TEXT, entry_sw INTEGER, end_sw INTEGER, name TEXT, label TEXT)"
+            )
+            db.executemany(
+                "INSERT INTO functions VALUES (?,?,?,?,?)",
+                [
+                    (current, addr, addr + 1, "recovered_function", ""),
+                    (current, addr + 1, addr + 2, "helper", ""),
+                ],
+            )
+            catalog._write_table(db, "catalog", sharc_catalog.CATALOG_COLUMNS, rows)
+            catalog._write_table(
+                db,
+                "catalog_groups",
+                catalog.GROUP_COLUMNS,
+                catalog.catalog_group_rows(rows, "role", "label"),
+            )
+            db.execute(
+                "CREATE TABLE edges (image TEXT, from_function INTEGER, to_function INTEGER, kind TEXT)"
+            )
+            db.executemany(
+                "INSERT INTO edges VALUES (?,?,?,?)",
+                [
+                    (current, addr, addr + 1, "call"),
+                    (current, addr + 1, addr, "jump"),
+                ],
+            )
+    for release in (image, other):
+        assert fw.main(["review", "-i", release, "--core", "dsp"]) == 0
+    current = artifacts.FirmwareArtifacts(image, "sharc")
+    target = artifacts.FirmwareArtifacts(other, "sharc")
+    output = current.review
+    encoded_page = output.read_bytes()
+    assert b'<meta charset="utf-8"' in encoded_page[:1024]
+    page = encoded_page.decode("utf-8")
+    assert "SHARC ·" in page
+    data = json.loads(page.split("const DATA = ", 1)[1].split(";\n", 1)[0])
+    assert data["cpu"] == "sharc" and data["full_inventory"]
+    assert data["address_map_url"] == "review.addrmap.json"
+    symbol_map = json.loads(output.with_suffix(".addrmap.json").read_text())
+    assert symbol_map["review"] == {
+        "cpu": "sharc",
+        "file": output.name,
+        "html_sha256": hashlib.sha256(encoded_page).hexdigest(),
+        "entries": [0x10, 0x11],
+    }
+    assert symbol_map["entries"][0] == {
+        "cpu": "sharc",
+        "addr": 0x10,
+        "size": 1,
+        "name": "recovered_function",
+        "layer": "fw",
+    }
+    assert data["rows"][0]["pair_url"] == f"../../{other}/dsp/review.html#r-0x40"
+    assert data["rows"][0]["nb"] == [["0x11", "recovered_function", True, 2]]
+    exported = catalog_page.read_tsv(str(current.review_tsv))
+    assert len(exported) == 2
+    for link_field, page_path in (
+        ("review_link", output),
+        ("pair_review_link", target.review),
+    ):
+        href, _ = exported[0][link_field].split("#r-")
+        assert (current.review_tsv.parent / unquote(href)).resolve() == page_path
+        assert page_path.is_file()
+    with sqlite3.connect(current.database) as db:
+        db.execute("UPDATE meta SET value='unknown' WHERE key='image_sha256'")
+    assert fw.main(["review", "-i", image, "--core", "dsp"]) == 1
+    assert output.read_bytes() == encoded_page
+
+
+@pytest.mark.parametrize("with_peer", [False, True])
+def test_review_json_obeys_recorded_catalog_pairing(
+    tmp_path, monkeypatch, capsys, with_peer
+):
+    monkeypatch.setattr(artifacts, "OUTPUT_ROOT", tmp_path)
+    image, other = next(iter(catalog_page.OTHER_IMAGE.items()))
+    current = artifacts.FirmwareArtifacts(image, "sharc")
+    peer = artifacts.FirmwareArtifacts(other, "sharc")
+    # Both databases exist even for a standalone export.
+    for target, address, counterpart in [(current, 0x10, 0x40), (peer, 0x40, 0x10)]:
+        target.database.parent.mkdir(parents=True)
+        rows, _, _, _ = inventory()
+        row_data = (
+            dict.fromkeys(column for column, _ in sharc_catalog.CATALOG_COLUMNS)
+            | rows[0]
+            | {
+                "addr": address,
+                "pair_addr": counterpart if with_peer else None,
+            }
+        )
+        with sqlite3.connect(target.database) as db:
+            catalog._write_table(
+                db, "catalog", sharc_catalog.CATALOG_COLUMNS, [row_data]
+            )
+            db.execute(
+                "CREATE TABLE function_index_meta (key TEXT PRIMARY KEY, value TEXT)"
+            )
+            db.execute(
+                "INSERT INTO function_index_meta VALUES ('pair_image', ?)",
+                ((other if target == current else image) if with_peer else "",),
+            )
+            db.execute(
+                "CREATE TABLE edges (image TEXT, from_function INTEGER, to_function INTEGER, kind TEXT)"
+            )
+            db.execute(
+                "CREATE TABLE catalog_groups (size INTEGER, id INTEGER, best INTEGER)"
+            )
+
+    assert fw.main(["review", "-i", image, "--core", "dsp", "--format", "json"]) == 0
+    (record,) = json.loads(capsys.readouterr().out)["reviews"]
+    assert record["release"] == image
+    assert record["cpu"] == "sharc" and record["core"] == "dsp"
+    assert record["peer"] == (other if with_peer else None)
+    assert Path(record["database"]) == current.database
+    assert Path(record["html"]) == current.review and current.review.is_file()
+    exported = catalog_page.read_tsv(record["tsv"])
+    assert exported[0]["review_link"] == "../review.html#r-0x10"
+    assert bool(exported[0]["pair_review_link"]) == with_peer
+
+
+def test_syx_review_rejects_unregistered_firmware(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(artifacts, "OUTPUT_ROOT", tmp_path / "out")
+    stock = tmp_path / "Digitakt_II_OS1.17.syx"
+    stock.write_bytes(b"unregistered")
+    assert fw.main(["review", "--syx", str(stock), "--core", "dsp"]) == 1
+    result = capsys.readouterr()
+    assert "No device file matches" in result.err
+    assert not result.out and not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("target", ["source", "peer_tsv"])
+def test_syx_review_checks_output_collisions_before_build(
+    tmp_path, monkeypatch, capsys, target
+):
+    from tools.firmware import review_source
+
+    monkeypatch.setattr(review_source, "ROOT", str(tmp_path))
+    monkeypatch.setattr(artifacts, "OUTPUT_ROOT", tmp_path / "out")
+    image, other = next(iter(catalog_page.OTHER_IMAGE.items()))
+    primary = tmp_path / "primary"
+    secondary = tmp_path / "other"
+    primary.write_bytes(b"primary input")
+    secondary.write_bytes(b"peer input")
+    monkeypatch.setattr(
+        review_source,
+        "sharc_image",
+        lambda path, _cpu: image if path == primary else other,
+    )
+    output = (
+        primary
+        if target == "source"
+        else artifacts.FirmwareArtifacts(other, "sharc").review_tsv
+    )
+
+    assert (
+        fw.main(
+            [
+                "review",
+                "--syx",
+                str(primary),
+                "--other-syx",
+                str(secondary),
+                "--out",
+                str(output),
+            ]
+        )
+        == 1
+    )
+    assert "overlaps" in capsys.readouterr().err
+    assert primary.read_bytes() == b"primary input"
+    assert not (tmp_path / "out").exists()
 
 
 def test_pair_outside_inventory_retains_evidence_without_dead_link(tmp_path):
@@ -199,10 +481,12 @@ def test_render_escapes_html_without_changing_payload():
     )
 
 
-@pytest.mark.parametrize("full", [False, True])
-def test_page_deep_links_local_triage_and_export(tmp_path, full):
+@pytest.mark.parametrize(
+    ("full", "cpu"), [(False, "cf"), (True, "cf"), (True, "sharc")]
+)
+def test_page_deep_links_local_triage_and_export(tmp_path, full, cpu):
     template = Path(catalog_page.TEMPLATE).read_text()
-    page = catalog_page.render(template, payload(full), "Review")
+    page = catalog_page.render(template, payload(full, cpu), "Review")
     script = page.split("<script>", 1)[1].split("</script>", 1)[0]
     path = tmp_path / "page.js"
     path.write_text(script)
@@ -214,6 +498,8 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const source = fs.readFileSync(process.argv[1], 'utf8');
+const dsp = process.argv[2] === 'sharc';
+const review = 'dt2-1.17' + (dsp ? '-dsp' : '');
 class Element {
   constructor(tag) { this.tag = tag; this.nodeType = 1; this.children = []; this.events = {}; this.value = ''; this.classList = {add(){}, remove(){}}; }
   setAttribute(k,v) { this[k] = v; }
@@ -224,12 +510,12 @@ class Element {
   click() {}
 }
 const storage = new Map();
-storage.set('digikit-catalog-decisions-dt2-1.17', JSON.stringify({
-  'dt2-1.17-0x20': {image:'dt2-1.17',addr:'0x20',status:'later',anchor:'cf.hidden',note:'outside current selection'},
+storage.set('digikit-catalog-decisions-' + review, JSON.stringify({
+  [review + '-0x20']: {image:'dt2-1.17', ...(dsp ? {cpu:'sharc'} : {}), addr:'0x20',status:'later',anchor:'cf.hidden',note:'outside current selection'},
 }));
 let exported;
 function boot(claude) {
-  const ids = ['q','f-lab','f-open','f-grade','f-rel','groups','detail','progress','foot','banner','export','import','storage-mode','find-bitmaps','find-params'];
+  const ids = ['q','f-lab','f-open','f-grade','f-rel','groups','detail','progress','foot','banner','export','import','storage-mode','cf-discovery','find-bitmaps','find-params'];
   const roots = Object.fromEntries(ids.map(id => [id,new Element('root')]));
   roots['f-lab'].checked = true;
   roots.import.disabled = true;
@@ -252,8 +538,24 @@ function boot(claude) {
   assert.equal(vm.runInContext('state.canWrite && state.local',context),true);
   const article = roots.detail.children[1].children[0];
   function all(node) { return [node,...node.children.flatMap(all)]; }
-  assert(all(article).some(n=>n.href==='dn2-1.12-review.html#r-0x40'));
+  assert(all(article).some(n=>n.href==='dn2-1.12' + (dsp ? '-dsp' : '') + '-review.html#r-0x40'));
+  if (dsp) {
+    assert.equal(roots['cf-discovery'].hidden,true);
+    assert(all(article).some(n=>n.textContent?.includes('24 instructions')));
+    assert(all(article).some(n=>n.textContent?.includes('80 executed instructions')));
+    roots.q.value = 'q31 converter';
+    roots.q.events.input();
+    assert.equal(roots.detail.children[1].children.length,1);
+    roots.q.value = '';
+    roots.q.events.input();
+  }
   assert(all(article).some(n=>n.href==='#r-0x30'));
+  assert(all(roots.detail).some(n=>n.textContent==='Ungrouped functions'));
+  roots.q.value = 'views';
+  roots.q.events.input();
+  assert.equal(vm.runInContext('state.group',context),1);
+  roots.q.value = '';
+  roots.q.events.input();
   vm.runInContext("$('f-rel').value='UI'; jump('0x30')",context);
   assert.equal(vm.runInContext('state.group',context),-1);
   assert.equal(roots['f-rel'].value,'');
@@ -270,6 +572,7 @@ function boot(claude) {
   decision.status='later';
   await roots.import.events.change({target:{files:[{text:async()=>JSON.stringify(decision)}],value:''}});
   assert.equal(vm.runInContext("statusOf('0x30')",context),'later');
+  if (dsp) { assert.equal(decision.cpu,'sharc'); return; }
   let written;
   const db = {
     collection:()=>({limit:()=>({onSnapshot:fn=>fn({docs:[]})})}),
@@ -288,7 +591,10 @@ function boot(claude) {
 })().catch(e=>{console.error(e);process.exitCode=1;});
 """
     subprocess.run(
-        ["node", "-e", harness, str(path)], check=True, capture_output=True, text=True
+        ["node", "-e", harness, str(path), cpu],
+        check=True,
+        capture_output=True,
+        text=True,
     )
 
 

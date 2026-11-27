@@ -6,7 +6,7 @@
 //!
 //! A run-time effect (`FxDef`) is a `DK_FX` record in C (sdk/include/dk/fx/fx.h), read by `desc`.
 //!
-//! `lower` turns them, per device, into the `[[entry]]` rows the frameworks (`core/machines`, `core/params`,
+//! `lower` turns them, per device, into the `[[entry]]` rows the frameworks (`core/rows`, `core/rows`,
 //! `core/dsp-voice`) take. What a knob means on a device is device data: `[modules.knobs]` and `[modules.frame]` in
 //! `devices/<device>.toml` ([`DeviceModel`]). Nothing here names a device. The same resolved view feeds the
 //! generator (`modgen.rs`: gallery JSON).
@@ -302,7 +302,7 @@ pub struct VoiceDef {
 
 /// A run-time effect (a `DK_FX` record, DSP section version 4 of a `.dkm`; docs/design/digikit-dkm.md): `process` is the global text symbol of its process routine
 /// (<dk/fx/fx.h>), `desc` the data symbol of its `dk_fx_desc` (n_params and state_bytes come from it), `defaults` the words p0 ... of its row (at most
-/// `n_params`, the words the DSP reads as they are; none: all 0). Only the packer reads it: a patched-in effect is an `[[entry]]` row of the registry `fx`.
+/// `n_params`, the words the DSP reads as they are; none: all 0). Only the packer reads it.
 ///
 /// An effect with a `tab` has a page of its own in the FX view (docs/design/digikit-registry.md "Effect pages"): `tab` is the label of the page's tab
 /// (1 to 3 characters), `title` the page title (up to 23), `mix` the default of the MIX knob on the level slot (0 to 127; the adapter blends dry and wet, the
@@ -330,7 +330,7 @@ pub struct FxDef {
     /// Where the effect runs when the settings do not say otherwise: `"master"` (the default) or `"send"` (a send bus: one amount for each track).
     #[serde(default)]
     pub route: Option<String>,
-    /// The routes the user may choose in DIGIKIT > FX ROUTES, a non-empty list of `"master"` and `"send"`. Left out: `["master"]`, or `["send", "master"]`
+    /// The routes the user may choose in SETTINGS > FX ROUTING, a non-empty list of `"master"` and `"send"`. Left out: `["master"]`, or `["send", "master"]`
     /// when `route = "send"` (see `register::fx_routes`).
     #[serde(default)]
     pub routes: Option<Vec<String>>,

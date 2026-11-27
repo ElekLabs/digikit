@@ -4,18 +4,18 @@ A module without `dynamic = true` is linked into a stock firmware image by patch
 firmware code (master-bus effects, ColdFire UI changes). Content machines are run-time modules (for example `digikit/pluck`); no patched-in content machine exists any more, and the declaration macros (`DK_MACHINE`, `DK_PARAM`, `DK_PAGE`) are gone.
 The browser patch page lists patched-in modules only; a `.dkm` goes to the device through `/upload`.
 
-- **Look up declared anchors** in `modules/core/fw/reference.json` or with `mise run fw:reference`.
-- **Anchors, not addresses.** Every firmware site is a named anchor resolved by a rule declared in `devices/fw/` (masked signature, `cfmatch`
-  offset, or SHARC `reloc_hash` plus offset) into `devices/ports/<dev>-<ver>.toml` by `mise run patch:port`. A rule that matches nothing or
+- **Look up declared anchors** in `ports/bindings/reference.json` or with `mise run fw:reference`.
+- **Anchors, not addresses.** Every firmware site is a named anchor resolved by a rule declared in `ports/fw/` (masked signature, `cfmatch`
+  offset, or SHARC `reloc_hash` plus offset) into `ports/<dev>-<ver>.toml` by `mise run patch:port`. A rule that matches nothing or
   twice is an error: fix the rule, never type an address.
 - **Claims.** `[[claim]] resource = "..."` declares a scarce resource (for example `dsp.fx.hook`); two modules claiming one conflict.
 - **Ops.** `write` (`expect_sha256` of the bytes replaced, never the bytes),
-  `hook` (names a hook declared in `devices/fw/`; the declaration gives site, mode and registers). `[[section]]` copies a stock table from the user's image at patch time.
+  `hook` (names a hook declared in `ports/fw/`; the declaration gives site, mode and registers). `[[section]]` copies a stock table from the user's image at patch time.
 - Never patch sections 2, 4 or 8 (patchkit refuses). Always patch from the stock image.
 
 | step | command |
 | --- | --- |
-| new | Copy an existing patched-in module (`modules/core/adapters/fx`). `module:new` makes run-time content modules only. |
+| new | Copy an existing patched-in module (`runtime/platform/fx`). `module:new` makes run-time content modules only. |
 | toolchains | `mise run patch:toolchains` once |
 | patch | `mise run patch -- --firmware firmware/Digitakt_II_OS1.17.syx --modules fx/NAME -o out/patch/x.syx` |
 | explain | `mise run patch:explain -- --firmware ... --modules ...` |

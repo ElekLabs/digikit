@@ -1,9 +1,7 @@
-import fs from 'node:fs';
 import { expect } from 'vitest';
 import type { PatchedSession } from '../support.ts';
-import { moduleArtifact } from './install.ts';
+import { installModules, moduleArtifact } from './install.ts';
 import { expectRuntimeReady } from './ready.ts';
-import { waitForBootEmulated, expectPollEmulated } from './waits.ts';
 
 /** The probe transport (with remote also selected): the SHARC probe effect sends one framed word per block through the module step word, and the ColdFire collector keeps it. */
 export const PROBE = 'test/sharc-probe';
@@ -34,25 +32,15 @@ export function status(body: Uint8Array): Record<string, number> {
   return Object.fromEntries(keys.map((key, i) => [key, view.getUint32(4 * i)]));
 }
 
+/** Remote, the effect and the collector through the shared install, which also puts the services they need (`fx.dks` for the effect) on the card. */
 export async function installProbe({ session, dk }: PatchedSession, effect: string): Promise<void> {
   session.requireDsp('installProbe (a SHARC probe module)');
   await expectRuntimeReady(session);
-  const paths: string[] = [];
-  for (const id of [REMOTE, effect, COLLECTOR]) {
-    const bytes = fs.readFileSync(moduleArtifact(session.options.device, id));
-    const path = `modules/${id.split('/').at(-1)}.dkm`;
-    await dk.put(path, bytes);
-    expect(await dk.verifyFile(path, bytes), `${id} reads back from the card`).toBe(true);
-    paths.push(path);
-  }
-  await dk.select(paths);
-  await dk.restart();
-  await waitForBootEmulated(dk);
-  await expectPollEmulated(
-    session,
-    async () => (await dk.modules()).map((m) => m.name),
-    (value) => expect(value).toEqual(expect.arrayContaining([REMOTE, effect, COLLECTOR])),
-    { emulatedMs: 30000, intervalMs: 500 },
+  const device = session.options.device;
+  await installModules(
+    dk,
+    [REMOTE, effect, COLLECTOR].map((id) => ({ id, artifact: moduleArtifact(device, id) })),
+    { device, session },
   );
 }
 

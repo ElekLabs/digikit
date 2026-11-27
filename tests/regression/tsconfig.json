@@ -31,6 +31,8 @@
     "scenarios",
     "../conformance",
     "../fixtures/modules/**/tests/**/*.device.test.ts",
-    "../../modules/**/tests/**/*.device.test.ts"
+    "../../modules/**/tests/**/*.device.test.ts",
+    "../../runtime/**/tests/**/*.device.test.ts",
+    "../../services/**/tests/**/*.device.test.ts"
   ]
 }

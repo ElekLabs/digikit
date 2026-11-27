@@ -86,11 +86,8 @@ async function main() {
     if (s.kind === 'device' && !fs.existsSync(abs(s.file)))
       fail(`${s.file} is missing; run with --device to capture it`);
   }
-  if (!fs.existsSync(abs('apps/web/public/modules/index.json'))) {
-    run('node', ['scripts/gen-modules.mjs'], abs('apps/web'));
-  }
-
   if (!(await answers())) {
+    run('mise', ['run', 'wb:preview-assets']);
     preview = spawn('pnpm', ['--filter', '@digi/desktop', 'exec', 'vite', '--config', 'ui/preview/vite.config.ts'], {
       cwd: root,
       stdio: 'ignore',

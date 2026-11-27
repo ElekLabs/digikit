@@ -1,7 +1,8 @@
 //! `dkbulk`: the USB bulk link of the digikit usb-fast module, for the command-line tools.
 //!
 //!     dkbulk list                          the devices that offer a bulk interface: ID (bus:address), name, interface number, `out-only` for an interface without IN endpoint
-//!     dkbulk open [--out-only] [ID]        bridge: whole request frames on stdin go to the device, every reply frame comes out on stdout
+//!     dkbulk descriptors [ID]              read-only check (macOS/Linux): read the device, configuration, BOS and MS OS 2.0 descriptors Windows needs for WinUSB and validate them; exit 0 all pass, 1 a check fails or no BOS, 2 no device or a transfer fails
+//!     dkbulk open [--out-only] [ID]       bridge: whole request frames on stdin go to the device, every reply frame comes out on stdout
 //!                                          (the TypeScript session code of tools/devtools/wb.mjs speaks the protocol over it);
 //!                                          --out-only: claim the OUT-only interface (USB AUDIO/MIDI), nothing comes out on stdout (the replies come over SysEx)
 //!     dkbulk echo [--id ID] [--sizes N,N,...]
@@ -57,14 +58,97 @@ fn main() {
                 bridge(id)
             }
         }
+        "descriptors" => descriptors(args.first().map(String::as_str)),
         "put" => put(args),
         "echo" => echo(args),
         "send" => send(args),
         _ => die(
             2,
-            "usage: dkbulk list | dkbulk open [--out-only] [ID] | dkbulk send [--id ID] [--interface N] [--ep ADDR] [--bytes N] |dkbulk echo [--id ID] [--sizes N,N,...] | dkbulk put [--id ID] [--root N] [--chunk N] [--trailer] [--replace] LOCAL REMOTE ...",
+            "usage: dkbulk list | dkbulk descriptors [ID] | dkbulk open [--out-only] [ID] | dkbulk send [--id ID] [--interface N] [--ep ADDR] [--bytes N] |dkbulk echo [--id ID] [--sizes N,N,...] | dkbulk put [--id ID] [--root N] [--chunk N] [--trailer] [--replace] LOCAL REMOTE ...",
         ),
     }
+}
+
+/// Read the descriptors Windows needs for WinUSB (device, configuration, BOS, MS OS 2.0 set), print them and the PASS/FAIL list.
+fn descriptors(id: Option<&str>) {
+    use dkbulk::msos::{self, Check};
+    let (device, name) = usb::open_device(id).unwrap_or_else(|e| die(2, &e));
+    let read = |vendor: bool, req: u8, value: u16, index: u16, len: usize| {
+        usb::control_in(&device, vendor, req, value, index, len as u16)
+    };
+    println!("device {name}");
+    let mut checks: Vec<Check> = Vec::new();
+
+    let dev = read(false, 6, 0x0100, 0, 18)
+        .unwrap_or_else(|e| die(2, &format!("device descriptor: {e}")));
+    println!("device descriptor: {}", msos::hex(&dev));
+    let bcd = msos::bcd_usb(&dev).unwrap_or_else(|| die(2, "device descriptor: too short"));
+    println!("  bcdUSB {bcd:#06x}");
+    checks.push(Check {
+        name: format!("bcdUSB {bcd:#06x} >= 0x0201"),
+        ok: bcd >= 0x0201,
+    });
+
+    let head = read(false, 6, 0x0200, 0, 9)
+        .unwrap_or_else(|e| die(2, &format!("configuration descriptor: {e}")));
+    let total = msos::config_total_length(&head)
+        .unwrap_or_else(|| die(2, "configuration descriptor: bad header"));
+    let cfg = read(false, 6, 0x0200, 0, total)
+        .unwrap_or_else(|e| die(2, &format!("configuration descriptor: {e}")));
+    println!("configuration descriptor: {}", msos::hex(&cfg));
+    let interface = msos::vendor_interface(&cfg);
+    match interface {
+        Some(n) => println!("  vendor-class (0xff) interface {n}"),
+        None => println!("  no vendor-class (0xff) interface"),
+    }
+    checks.push(Check {
+        name: "configuration has a vendor-class (0xff) interface".into(),
+        ok: interface.is_some(),
+    });
+
+    fn no_bos(why: String) -> ! {
+        println!("no BOS (firmware without MS OS 2.0 descriptors): {why}");
+        exit(1);
+    }
+    let bos_head = read(false, 6, 0x0F00, 0, 5).unwrap_or_else(|e| no_bos(e.to_string()));
+    let bos_total =
+        msos::bos_total_length(&bos_head).unwrap_or_else(|| no_bos("bad BOS header".into()));
+    let bos = read(false, 6, 0x0F00, 0, bos_total).unwrap_or_else(|e| no_bos(e.to_string()));
+    println!("BOS descriptor: {}", msos::hex(&bos));
+    let (bos_checks, info) = msos::check_bos(&bos);
+    checks.extend(bos_checks);
+
+    if let Some(b) = info {
+        println!(
+            "  MS OS 2.0 platform capability: dwWindowsVersion {:#010x}, set length {}, vendor code {:#04x}",
+            b.windows_version, b.set_len, b.vendor_code
+        );
+        let set = read(true, b.vendor_code, 0, 7, b.set_len as usize).unwrap_or_else(|e| {
+            die(
+                2,
+                &format!(
+                    "MS OS 2.0 descriptor set (vendor request {:#04x}): {e}",
+                    b.vendor_code
+                ),
+            )
+        });
+        println!(
+            "MS OS 2.0 descriptor set ({} bytes): {}",
+            set.len(),
+            msos::hex(&set)
+        );
+        msos::describe_set(&set)
+            .iter()
+            .for_each(|l| println!("  {l}"));
+        checks.extend(msos::check_set(&set, b.set_len, interface));
+    }
+
+    let mut failed = false;
+    for c in &checks {
+        failed |= !c.ok;
+        println!("{}  {}", if c.ok { "PASS" } else { "FAIL" }, c.name);
+    }
+    exit(i32::from(failed));
 }
 
 /// Write N bytes to a bulk OUT endpoint of one interface that has no IN endpoint (default: interface 5, EP 0x02, 1 MiB) and print bytes and MB/s.

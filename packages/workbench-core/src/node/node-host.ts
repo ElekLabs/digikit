@@ -4,14 +4,13 @@
 // the library, the emulator session of the app) fails with `NodeHostUnsupported`. `wb` (tools/devtools/wb.mjs) uses it, so a command line and the
 // workbench run the same code over the same interfaces.
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { connect, type Client } from '@digi/control-client';
 import { ProcessBulkLink } from '@digi/dk-session';
 import { ProcessTransport } from '@digi/dk-session/process-transport';
-import { parse } from 'smol-toml';
 import type {
   BulkHost,
   BulkListed,
@@ -45,6 +44,8 @@ export interface NodeHostOptions {
   dkbulkBin?: string;
   /** The control socket of a running emulator, for `rpc`. */
   socket?: string;
+  /** Where the library's `.dkm` files are (`<device>/**.dkm`); default `out/modules` of `root`. */
+  libraryDir?: string;
   /** Where `saveLog` and `firmware.save` write; without it they are unsupported (a command line has no save dialog). */
   outDir?: string;
 }
@@ -118,17 +119,17 @@ async function saveTo(outDir: string | undefined, command: string, bytes: Uint8A
   return file;
 }
 
-/** The module library `out/modules/<device>/` (`lib_scan`, `lib_read`) and the device profiles (`device_storage`). `build` needs the Rust packer: unsupported. */
-function nodeLibrary(root: string): LibraryHost {
+/** The module library `out/modules/<device>/` (`lib_scan`, `lib_read`). `build` needs the Rust packer: unsupported. */
+function nodeLibrary(root: string, libraryDir?: string): LibraryHost {
   const deviceDir = (device: string) => {
     if (!/^[a-z0-9]+$/.test(device)) throw new Error(`not a device id: ${JSON.stringify(device)}`);
-    return path.join(root, 'out/modules', device);
+    return path.join(libraryDir ?? path.join(root, 'out/modules'), device);
   };
-  const walk = (dir: string, base: string, out: { path: string; size: number }[]) => {
+  const walk = (dir: string, base: string, out: { path: string; size: number }[], ext = '.dkm') => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, e.name);
-      if (e.isDirectory()) walk(full, base, out);
-      else if (e.name.endsWith('.dkm'))
+      if (e.isDirectory()) walk(full, base, out, ext);
+      else if (e.name.endsWith(ext))
         out.push({ path: path.relative(base, full).split(path.sep).join('/'), size: statSync(full).size });
     }
   };
@@ -139,27 +140,29 @@ function nodeLibrary(root: string): LibraryHost {
       const dir = deviceDir(device);
       const out: { path: string; size: number }[] = [];
       if (existsSync(dir)) walk(dir, dir, out);
+      // the services are packed into dist/modules/<device>/ and the port files built into dist/ports/ (the desktop copies them into its library)
+      const services = path.join(root, 'dist/modules', device);
+      if (existsSync(services)) walk(services, services, out, '.dks');
+      const ports = path.join(root, 'dist/ports');
+      if (existsSync(ports))
+        for (const e of readdirSync(ports))
+          if (e.endsWith('.dkport') && e.startsWith(`${device}-`))
+            out.push({ path: e, size: statSync(path.join(ports, e)).size });
       return out.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     },
     async read(device, rel) {
       const dir = deviceDir(device);
-      if (rel.split('/').some((p) => p === '' || p === '.' || p === '..') || !rel.endsWith('.dkm'))
+      if (
+        rel.split('/').some((p) => p === '' || p === '.' || p === '..') ||
+        !(rel.endsWith('.dkm') || rel.endsWith('.dks') || rel.endsWith('.dkport'))
+      )
         throw new Error(`not a library file: ${JSON.stringify(rel)}`);
-      return toBuffer(await readFile(path.join(dir, rel)));
-    },
-    async deviceStorage(device) {
-      const dir = path.join(root, 'devices');
-      for (const file of readdirSync(dir).filter((f) => f.endsWith('.toml'))) {
-        const profile = parse(readFileSync(path.join(dir, file), 'utf8')) as {
-          device?: { name?: string; short?: string };
-          storage?: { samples?: string };
-        };
-        if (profile.device?.short !== device) continue;
-        const samples = profile.storage?.samples;
-        if (!samples) throw new Error(`the ${profile.device.name} profile has no [storage]`);
-        return { name: profile.device.name ?? device, samples };
-      }
-      throw new Error(`no device profile for ${JSON.stringify(device)}`);
+      const base = rel.endsWith('.dkport')
+        ? path.join(root, 'dist/ports')
+        : rel.endsWith('.dks')
+          ? path.join(root, 'dist/modules', device)
+          : dir;
+      return toBuffer(await readFile(path.join(base, rel)));
     },
   };
 }
@@ -355,7 +358,7 @@ export function createNodeHost(options: NodeHostOptions): Host & { close(): void
   const rpc = nodeRpc(options.socket);
   return {
     fs: nodeFs(options.outDir),
-    library: nodeLibrary(options.root),
+    library: nodeLibrary(options.root, options.libraryDir),
     ports: { midi: nodeMidi(options.dkmidiBin), bulk: nodeBulk(options.dkbulkBin) },
     firmware: nodeFirmware(options.root, options.outDir),
     emu: nodeEmu,

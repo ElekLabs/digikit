@@ -9,6 +9,7 @@ import {
   tickedIds,
   withTick,
   type DefaultModuleEntry,
+  type DefaultProgress,
   type Unticked,
 } from './default-modules-core';
 import { remembered, type KeyValue } from '../storage';
@@ -62,15 +63,21 @@ export function createDefaultModules(env: FirmwareEnv, storage: KeyValue) {
    * After a finished flash: install and enable the ticked default modules of the device on the flashed device. One run, no question: the flash
    * stays done when a module fails, and the failed module is named. Does nothing where the app has no default modules or nothing is ticked.
    */
-  async function installAfterFlash(device: string): Promise<void> {
+  async function installAfterFlash(
+    device: string,
+    where: 'device' | 'emulator' = 'device',
+    onProgress?: (p: DefaultProgress) => void,
+  ): Promise<void> {
     const ids = tickedFor(device);
     if (!env.defaultModules || ids.length === 0) return;
-    setPostRun({ kind: 'working', text: 'Starting the default modules', done: 0, total: ids.length + 2 });
+    const progress = (p: DefaultProgress) => {
+      setPostRun({ kind: 'working', ...p });
+      onProgress?.(p);
+    };
+    progress({ text: 'Starting the default modules', done: 0, total: ids.length + 2 });
     env.log({ level: 'info', text: `default modules for ${device}: ${ids.join(', ')}` });
     try {
-      const lines = await env.defaultModules.install('device', device, ids, (p) =>
-        setPostRun({ kind: 'working', ...p }),
-      );
+      const lines = await env.defaultModules.install(where, device, ids, progress);
       setPostRun({ kind: 'done', lines });
       env.log({ level: 'info', text: 'default modules installed', detail: lines.join('\n') });
     } catch (e) {

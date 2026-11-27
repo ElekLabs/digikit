@@ -2,7 +2,7 @@
 
 Status: built for Digitakt II 1.16 and 1.17 (2026-10-16) and Digitone II 1.11 and 1.12 (2026-10-17; pages, `own_dsp`, finding 33), ColdFire side only, emulator only. Plan: `docs/plans/digikit-runtime.md`
 (Phase 5, ColdFire side). **Since the Phase 6 archive commit the rows are filled by the boot-time load only**: the unload, the in-use refusal and the machine-view hook and rebuild described for hot reload below are archived (docs/plans/digikit-hot-reload.md, tag `digikit-hot-reload-v1`); the paragraphs that describe them are marked. Results and evidence: `docs/findings/30-runtime-machines.md` (Digitakt II) and `docs/findings/33-runtime-machines-dn2.md` (Digitone II, unload refusal). File: `docs/design/digikit-dkm.md`. Runtime:
-`docs/design/digikit-runtime.md`. Code: `modules/core/adapters/dynreg` (patch time), `modules/core/runtime/src/rs/src/registry.rs` and `params.rs` (run time),
+`docs/design/digikit-runtime.md`. Code: `runtime/platform/rows` (patch time), `runtime/core/src/rs/src/registry.rs` and `params.rs` (run time),
 `packages/patchkit/src/register.rs` (machine keys, effect ids).
 
 A module declares its machines, parameters and pages by builder calls in `init`; the module architecture is in `docs/MODULES.md`. The runtime lowers the calls to the records below (`collect.rs`, `lower`). `clone_of` is fixed by the device profile and not written by authors.
@@ -10,7 +10,7 @@ A module declares its machines, parameters and pages by builder calls in `init`;
 ## What it does
 
 A loaded module's `init` declares typed machine and parameter records (builder calls). At commit the runtime lowers them to the records below, checks them and writes them into rows that
-`core/dynreg` reserved at patch time, before the firmware builds its machine view; the machine is then in the SRC machine list and can be put on a track. (`registry::remove` still gives the rows back when the DSP part of a boot-time load fails.)
+`core/rows` reserved at patch time, before the firmware builds its machine view; the machine is then in the SRC machine list and can be put on a track. (`registry::remove` still gives the rows back when the DSP part of a boot-time load fails.)
 Nothing is patched at run time: no firmware code is written, only rows, tables and one pointer.
 
 ## Records
@@ -50,7 +50,7 @@ Built at run time in the module's arena block from the builder calls, not stored
   knob (0 to 127), `id` the effect's 16-bit ID (1 to 0xffff; the packer's `register::effect_id` of module id and effect id; the kit stores it with the values), `tab` the page's tab label (1 to 3 characters), `title` the page title (1 to 23), then 7 knob entries of which the first `n_knobs` are used: knob i is parameter word p_i
   of the effect's row, shown at `position` (0 to 7, distinct) with `display` 0 (0 .. 127) or 1 (-64 .. +63), `min`, `max` and `default` are IEEE single floats (`min < max`, the default
   inside), `name` the long name shown while the knob turns (1 to 23 characters), `short` the label under the knob (1 to 6). At most 4 per file, one for each effect; a file with one
-  needs `core/fxpages` (`E_NO_REGISTRY` otherwise). The runtime builds it from `dk_module_ctx_add_fx` and `dk_fx_add_page` (`docs/MODULE-AUTHORING.md`).
+  needs the effect pages of the fx service (`E_NO_REGISTRY` otherwise). The runtime builds it from `dk_module_ctx_add_fx` and `dk_fx_add_page` (`docs/MODULE-AUTHORING.md`).
 - Not carried yet: DSP code and voice records. The runtime refuses any record it does not know (`E_FORMAT`).
 
 ## Machine keys and sticky type numbers (D7)
@@ -62,16 +62,17 @@ reserved bytes of the selection record (`docs/design/digikit-store.md`): 8 entri
 1. the map has an entry for its hash and that type is not taken in this boot: use it (`MACHINE_TYPE_ASSIGNED`, sticky 1);
 2. else the lowest type in 16..23 that no map entry references and this boot has not given out; the entry is recorded (sticky 0);
 3. else drop the lowest-index entry whose hash is not a machine of this boot (`MACHINE_TYPE_EVICTED`, an error event, so it is kept), take its type, record the entry in its slot;
-4. two machines with the same key in one boot (a hash collision, or a file twice under two names): the second takes a fresh number that is not recorded.
+
+The keys of one boot are unique: the boot planner refuses a key that two modules provide (a hash collision, or a file twice under two names) or one module provides twice (`E_PLAN_KEY`), so the assignment has no rule for a repeat.
 
 The boot hook writes the record once after the loads (the boot counter's single-copy `update`, seq + 1) and only when the map changed; `SELECT` and the menu's save keep the map
 bytes. A card made by the store builder has a zero map, so a fresh card gets 16, 17, ... in load order. `DKRT_ASSIGN` (peekable) holds the boot's table; `dkupload modules`
 and the MODULES command show each module's assigned types. Scenario: `sticky-types`.
 
-## Reserved rows (patch time, `core/dynreg`)
+## Reserved rows (patch time, `core/rows`)
 
-`core/dynreg` requires `core/runtime`, `core/machines` and `core/params`. It adds ordinary registry entries (so nothing in the frameworks changes
-and an image without `core/dynreg` is byte-identical to before):
+`core/rows` requires `core/runtime`, `core/rows` and `core/rows`. It adds ordinary registry entries (so nothing in the frameworks changes
+and an image without `core/rows` is byte-identical to before):
 
 | What | How many | Where | Looks like |
 | --- | --- | --- | --- |
@@ -80,19 +81,18 @@ and an image without `core/dynreg` is byte-identical to before):
 | page rows (Digitone II) | 8: `pages.dpg0.index` ... `dpg7` | `pages.rows` (84 bytes each) | empty name and title, no knobs, level 10, and a `machine` no type has (0x7fffffff; not -1, which a track without a sound reads) |
 
 So the machine tables span types 7 to 23 (`machines.count` 17): `mf_names`, `mf_permit`, `mf_pertype`, the DSP selector block, the persistence bound
-(`8 + N`), the name, permission and per-type bounds. The run-time type numbers 16 to 23 are the range of `types.toml` (`dynamic_first = 16`; `core/dynreg:dyn16 ...
+(`8 + N`), the name, permission and per-type bounds. The run-time type numbers 16 to 23 are the range of `types.toml` (`dynamic_first = 16`; `core/rows:dyn16 ...
 dyn23` hold the reservation); a patched machine never takes one, and the runtime picks a number from the range for each run-time machine at load. Numbers 10 to 15 are plain gap rows.
 
-`core/dynreg` exports `dynreg_info`, a table of the addresses and layouts the registry needs (`dynreg.s`, 264 bytes since version 2): the machine rows and their
+`core/rows` exports `rows_info`, a table of the addresses and layouts the registry needs (`rows-info.inc`; the words keep the numbers of the former `dynreg_info`, and the parameter blocks and capacity words follow them): the machine rows and their
 field offsets, the name, permission and per-type tables, the parameter table and registry rows, the first reserved type and parameter code, how to
 build a parameter row (a spec of 15 words: copy template word n, or min, max, default, name, short, mirror index, kind word, 0x80 + slot), the knob
-count, and from byte 200 the page rows and their layout and the value of a free page row. Words 192, 196 and 244 to 256 (the view variable and builder, the three firmware functions of the unload refusal and the track count) are 0 since the archive commit; the offsets stay. The runtime links to it with `[object] optional = ["dynreg_info"]` (patchkit resolves an optional
-undefined symbol to 0 when no selected module defines it); without `core/dynreg` a file with `register` records is refused (`E_NO_REGISTRY`) and a
+count, and from byte 200 the page rows and their layout and the value of a free page row. Words 48, 49 and 61 to 64 (the view variable and builder, the firmware functions of the unload refusal and the track count) are not used; the offsets stay (the machine selection view is `machine_view` of `core/ui`). The services find the table with `CoreApi::info`; without `core/rows` a file with `register` records is refused (`E_NO_REGISTRY`) and a
 file without records loads as before. The runtime's code names no device: the layouts are data.
 
 ## What is derived state, and how it is kept right
 
-The machine framework builds tables lazily (`mf_ensure`: list order, rank pairs, std::string representations of the upper-cased names) and the firmware
+The machine framework built tables lazily (`mf_ensure`: list order, rank pairs, std::string representations of the upper-cased names; the machines service builds them now: `services/machines/src/list.rs`, `registry.rs`) and the firmware
 builds more from them. What was found, and what the registry does (evidence in finding 30):
 
 | State | Who reads it | What the registry does |
@@ -106,7 +106,7 @@ builds more from them. What was found, and what the registry does (evidence in f
 | page row (84 bytes) in `pages.rows` (Digitone II) | `mf_typemap0/1/2` (page count, descriptor, slot -> code), `mf_reader` (a machine with pages is its own type for every caller) | written from the PAGE record: name and title as std::string representations (not upper-cased, in the registry's state), nine codes, nine slots, `machine` last (the page belongs to the type from that store on) |
 | the DSP's type -> selector table (Digitakt II) | the DSP | not touched: it is part of the DSP image (reserved types select as type 0). Open |
 
-The defaults refresh and the other loops over parameter codes keep the stock count (core/params), so a new code does not enter them: the same as for
+The defaults refresh and the other loops over parameter codes keep the stock count (core/rows), so a new code does not enter them: the same as for
 a patched machine.
 
 ## Writing, publishing, and what must hold
@@ -130,12 +130,12 @@ machine list, the descriptor dispatch and the parameter accessors are the UI tas
 
 ## Effect pages (Digitakt II, F4 step 2)
 
-`core/fxpages` (patch time) and `fxpage.rs` (run time) give each run-time effect row of `core/dynfx` a page after CHO in the FX view; DEL, REV, CHO and then the pages of the loaded effects in
+`services/fx/src/fxpage/` and the page hooks of `fx.dks` give each run-time effect row of `core/dynfx` a page after CHO in the FX view; DEL, REV, CHO and then the pages of the loaded effects in
 effect-row order. Facts of the firmware and the measurements are in `docs/findings/61-fx-pages.md`; this is the design.
 
 - **Reserved resources** (patch time): one page row for each effect slot (page numbers `[fx] page_first` and up, answered by a hook in the page accessor), the list the FX view reads its pages from
-  (a hook in the view builder), the tab label and graph hooks, and 24 parameter rows (`params.fp0` ..): effect row k owns the rows `8k .. 8k + 7`, seven knobs and MIX. `fxpages_info` is the table
-  the runtime reads (rows, list, anchors of the stock list, the first parameter code, the kit pointer and array offset, the template codes and the value indices, all device-file facts: `[fx]`).
+  (a hook in the view builder), the tab label and graph hooks, and 24 parameter rows (`params.fp0` ..): effect row k owns the rows `8k .. 8k + 7`, seven knobs and MIX. The fx service's facts table
+  holds (rows, list, the first parameter code, the kit pointer and array offset, the template codes and the value indices, all device-file facts: `[fx]`).
 - **What an EFFECT record makes** (`fxpage::apply`, in `registry::apply` after the machines, when `dsp::reserve` has claimed the effect's chain row k): the parameter rows `8k + j` from the
   knobs (template by display: `template_percent` or `template_bipolar`, range 0 to 0x7f00, default `round((default - min) / (max - min) * 0x7f00)`, names; mirror index `value_indices[8k + j]`), MIX
   as row `8k + 7` (template `template_mix`, name "Mix", short "MIX", default `mix * 256`), the page row (tab, title, the knob codes at their positions, MIX on the level slot), then the page list and its
@@ -145,16 +145,16 @@ effect-row order. Facts of the firmware and the measurements are in `docs/findin
   from the initialiser hook (or the stored values from the loader hook); the runtime polls the array once per UI-loop pass and
   sends a changed value to the row in the DSP: knob j as the float `min + (max - min) * raw / 0x7f00` into p_j, MIX as `raw / 0x7f00` into the row's mix word, about 3 ms after a turn (one word per
   transfer, only when no module load is in progress). `core/fx` applies the mix as the dry/wet blend (finding 55): `master = dry + mix * (wet - dry)`; the effect writes only the wet signal.
-- **Persistence** (step 3, finding 61 "Persistence"): three hooks of `core/fxpages` on the firmware's kit initialiser, loader and saver of the effect value array. The saver writes the 24 values and one effect ID per row
+- **Persistence** (step 3, finding 61 "Persistence"): three hooks of `fx.dks` on the firmware's kit initialiser, loader and saver of the effect value array. The saver writes the 24 values and one effect ID per row
   into the 28 spare halfwords of the kit's storage record (`[fx] store_off`, `store_halfwords`: stock ignores them, so a kit with effects loads on stock firmware); the loader gives a row the stored values when the stored ID is
   the ID of the effect now in the row (`fxp_ids`, written by `fxpage::apply` from the record) and the record's defaults otherwise (`fxp_defs`); the initialiser (a new kit) gives the defaults. All three run
   inside the firmware's own call, so the poll never sees a zero. The tick no longer re-seeds a new kit object; it only treats a row of all-zero values as untouched.
 - **Limits.** 3 effects on the Digitakt II (`fx_slots`), each with up to 7 knobs and MIX; 1 to 3 characters in the tab, 23 in the title, 6 under a knob; no p-locks, no LFO or other modulation on the
-  knobs, no MIDI CC (the rows carry the template's kind and key words, so the firmware's modulation and CC maps would alias a stock parameter: not supported); the values are saved with the kit (above); a knob that is not listed has an empty cell. An image without `core/fxpages` refuses a module with an EFFECT record; a module without one loads on every image.
+  knobs, no MIDI CC (the rows carry the template's kind and key words, so the firmware's modulation and CC maps would alias a stock parameter: not supported); the values are saved with the kit (above); a knob that is not listed has an empty cell. An image without the effect pages (the fx service file) refuses a module with an EFFECT record; a module without one loads on every image.
 
 ## Digitone II
 
-Same rows and order, with differences that are data in `dynreg_info` or code in `core/machines` already:
+Same rows and order, with differences that are data in `rows_info` or code in `core/rows` already:
 
 - The machine's knobs are in its page rows (`pages`), read by the type maps; the machine row's `f0..f8` fields are not used for knobs (the PAGE record carries them).
 - No per-type byte table and no clone tests; the descriptor of a machine is its row; `own_dsp` is the row's `O_OWN`.
@@ -173,4 +173,4 @@ Same rows and order, with differences that are data in `dynreg_info` or code in 
 - The machine plays through the DSP as type 0 (SAMPLE) on the Digitakt II: the selector word of a reserved type is in the DSP image. Options: reserved rows with a fixed
   selector (a slice clone gets 5) refused for a clone of another type; or the Phase 5 SHARC side loads the selector words. A machine that is a
   data-only clone of SLICE is therefore not audio-complete yet. On the Digitone II an `own_dsp` machine renders silence until a DSP routine for its type is loaded (lane A).
-- `E_*` codes of the registry (-20 to -26) are in `dkrt-sdk` (`modules/core/runtime/sdk/src/lib.rs`); -30 to -39 belong to the DSP side. `result_text` has no text for them yet.
+- `E_*` codes of the registry (-20 to -26) are in `dkrt-sdk` (`runtime/core/sdk/src/lib.rs`); -30 to -39 belong to the DSP side. `result_text` has no text for them yet.

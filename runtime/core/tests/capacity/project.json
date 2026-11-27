@@ -1,0 +1,37 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-capacity-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": ["core/runtime-package", "dkrt-fit", "dkrt-sdk", "sdk", "core/services/machines", "core/services/fx", "dkrt-svc-machines", "dkrt-svc-fx"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "capacity.device.test.ts"
+        ],
+        "firmwareOnly": "the real memory map: every limit filled to its last unit and the staging buffer size",
+        "dsp": "sharc",
+        "modules": [
+          "test/dyn-fx-gain",
+          "core/services/fx"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "commit.device.test.ts"
+        ],
+        "firmwareOnly": "the MODULE_COMMIT event against the record block in firmware memory, and the knob ranges and the latch mask in the real DSP voice row",
+        "dsp": "sharc",
+        "modules": [
+          "test/commit-demo",
+          "core/services/machines",
+          "core/services/fx"
+        ],
+        "plusdrive": true
+      }
+    ]
+  }
+}

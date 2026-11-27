@@ -30,9 +30,8 @@
         "^production",
         "jsToolchain",
         "{workspaceRoot}/config/emulator.json",
-        "{workspaceRoot}/tools/emulator/ready_inputs.json",
-        "{workspaceRoot}/modules/**/module.toml",
-        "{workspaceRoot}/modules/**/gallery/icon.svg"
+        "{workspaceRoot}/{modules,runtime,services}/**/module.toml",
+        "{workspaceRoot}/{modules,runtime,services}/**/gallery/icon.svg"
       ],
       "outputs": ["{projectRoot}/.astro"],
       "description": "astro check; it writes .astro/*.d.ts before it checks (the audit lists them as generated)."
@@ -64,9 +63,9 @@
         "{workspaceRoot}/packages/dkbs/src/**/*",
         "{workspaceRoot}/packages/dkbs/package.json",
         "{workspaceRoot}/devices/*.toml",
-        "{workspaceRoot}/devices/ports/*",
-        "{workspaceRoot}/modules/**/module.toml",
-        "{workspaceRoot}/modules/**/gallery/icon.svg",
+        "{workspaceRoot}/ports/*.toml",
+        "{workspaceRoot}/{modules,runtime,services}/**/module.toml",
+        "{workspaceRoot}/{modules,runtime,services}/**/gallery/icon.svg",
         "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
         "{workspaceRoot}/config/emulator.json"
       ],
@@ -94,6 +93,10 @@
         "{projectRoot}/tsconfig.json",
         "{projectRoot}/site.config.mjs",
         "^production",
+        {
+          "dependentTasksOutputFiles": "apps/web/public/*.wasm",
+          "transitive": true
+        },
         "jsToolchain",
         "{workspaceRoot}/vitest.host.config.ts",
         "{workspaceRoot}/vitest.host.projects.json"

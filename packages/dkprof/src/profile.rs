@@ -23,6 +23,12 @@ pub struct Run {
     pub runtime_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub module_sha256: Vec<String>,
+    /// The calibration case this run measured (`shot-note60`, ...): a device run and its model run share it ([`crate::calibrate`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub case_id: Option<String>,
+    /// Hash of the input of the case (project, notes, sample), so two runs of one case id are known to have played the same thing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_revision: Option<String>,
     /// The emulator binary or device build that made the counters.
@@ -100,6 +106,43 @@ pub struct Loss {
     pub dropped: Option<u64>,
 }
 
+/// A runtime span: `calls` runs of one owner (a module, a phase or a poll) that took `sum_ticks` in all, the longest `max_ticks`.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Span {
+    /// The runtime owner id: a module record, `0x100 | phase`, `0x200 | poll`.
+    pub owner: u32,
+    /// `module`, `phase` or `poll`.
+    pub kind: String,
+    pub name: String,
+    pub calls: u64,
+    pub sum_ticks: u64,
+    pub max_ticks: u64,
+}
+
+/// One row of the DSP stats window (P8d): a DSP dispatch row (0 to 7 machines, 8 to 15 effects) with its counters in `Dsp::unit`.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct DspRow {
+    pub row: u32,
+    /// `machine` or `effect`.
+    pub kind: String,
+    pub calls: u64,
+    pub sum_cycles: u64,
+    pub max_call: u64,
+    pub max_block: u64,
+}
+
+/// The header of the DSP stats window: what the rows were counted over.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Dsp {
+    /// `cycles` on a device, `insn` (EMUCLK, instructions) on the emulator.
+    pub unit: String,
+    pub blocks: u64,
+    /// The largest block of the whole DSP (stock work included) in `unit`.
+    pub max_stock_block_delta: u64,
+    /// Blocks at or over the block period.
+    pub overruns: u64,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct Profile {
     pub schema: String,
@@ -115,6 +158,19 @@ pub struct Profile {
     /// What measuring cost, as metrics (a value or N/A with a reason).
     #[serde(default)]
     pub overhead: Vec<Metric>,
+    /// Runtime span counters (a producer on the device); ticks run at `span_clock_hz`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub spans: Vec<Span>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span_clock_hz: Option<u64>,
+    /// The ticks of the span clock the counters were gathered over (the window of the recording): `sum_ticks / span_elapsed_ticks` is the share of the CPU.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span_elapsed_ticks: Option<u64>,
+    /// The DSP stats window (a producer on the device or the emulator): one row per DSP dispatch row, and its header.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dsp_rows: Vec<DspRow>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dsp: Option<Dsp>,
 }
 
 impl Profile {
@@ -148,6 +204,54 @@ impl Profile {
                 }
             }
         }
+        if !self.spans.is_empty() && !matches!(self.span_clock_hz, Some(hz) if hz > 0) {
+            return Err("profile: spans need span_clock_hz greater than zero".into());
+        }
+        for s in &self.spans {
+            if !matches!(s.kind.as_str(), "module" | "phase" | "poll") {
+                return Err(format!(
+                    "profile: span {} has kind {:?}, expected module, phase or poll",
+                    s.name, s.kind
+                ));
+            }
+            if s.max_ticks > s.sum_ticks {
+                return Err(format!(
+                    "profile: span {} has max_ticks above sum_ticks",
+                    s.name
+                ));
+            }
+            if s.calls == 0 && s.sum_ticks != 0 {
+                return Err(format!("profile: span {} has ticks but no calls", s.name));
+            }
+        }
+        if !self.dsp_rows.is_empty() && self.dsp.is_none() {
+            return Err("profile: dsp_rows need the dsp header (unit, blocks)".into());
+        }
+        for r in &self.dsp_rows {
+            let want = match r.row {
+                0..=7 => "machine",
+                8..=15 => "effect",
+                _ => return Err(format!("profile: dsp row {} is past 15", r.row)),
+            };
+            if r.kind != want {
+                return Err(format!(
+                    "profile: dsp row {} has kind {:?}, expected {want}",
+                    r.row, r.kind
+                ));
+            }
+            if r.max_call > r.max_block || r.max_block > r.sum_cycles {
+                return Err(format!(
+                    "profile: dsp row {} needs max_call <= max_block <= sum_cycles",
+                    r.row
+                ));
+            }
+            if r.calls == 0 && r.sum_cycles != 0 {
+                return Err(format!(
+                    "profile: dsp row {} has cycles but no calls",
+                    r.row
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -155,5 +259,131 @@ impl Profile {
         let mut s = serde_json::to_string(self).expect("profile serialises");
         s.push('\n');
         s
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const OLD: &str = r#"{"schema":"dk.profile/1","run":{"id":"t","target":"dn2"},"clock":{"source":"s","unit":"insn","sampling":"x"},"raw":[],"metrics":[],"markers":[],"loss":[],"overhead":[]}"#;
+
+    fn span(kind: &str, calls: u64, sum: u64, max: u64) -> Span {
+        Span {
+            owner: 0x100,
+            kind: kind.into(),
+            name: "early".into(),
+            calls,
+            sum_ticks: sum,
+            max_ticks: max,
+        }
+    }
+
+    fn with(spans: Vec<Span>, hz: Option<u64>) -> Profile {
+        let mut p = Profile::parse(OLD).unwrap();
+        p.spans = spans;
+        p.span_clock_hz = hz;
+        p
+    }
+
+    #[test]
+    fn spans_round_trip() {
+        let mut p = with(vec![span("phase", 4, 100, 40)], Some(1_000_000));
+        p.span_elapsed_ticks = Some(5_000);
+        let back = Profile::parse(&p.to_json()).unwrap();
+        assert_eq!(back, p);
+    }
+
+    fn dsp_row(row: u32, kind: &str, calls: u64, sum: u64, call: u64, block: u64) -> DspRow {
+        DspRow {
+            row,
+            kind: kind.into(),
+            calls,
+            sum_cycles: sum,
+            max_call: call,
+            max_block: block,
+        }
+    }
+
+    fn with_dsp(rows: Vec<DspRow>, header: bool) -> Profile {
+        let mut p = Profile::parse(OLD).unwrap();
+        p.dsp_rows = rows;
+        if header {
+            p.dsp = Some(Dsp {
+                unit: "cycles".into(),
+                blocks: 1500,
+                max_stock_block_delta: 666_000,
+                overruns: 0,
+            });
+        }
+        p
+    }
+
+    #[test]
+    fn dsp_rows_round_trip_and_an_old_file_has_none() {
+        let p = with_dsp(vec![dsp_row(9, "effect", 4, 2u64 << 32, 900, 4000)], true);
+        assert_eq!(Profile::parse(&p.to_json()).unwrap(), p);
+        assert!(Profile::parse(OLD).unwrap().dsp_rows.is_empty());
+    }
+
+    #[test]
+    fn check_rejects_bad_dsp_rows() {
+        assert!(
+            with_dsp(vec![dsp_row(0, "machine", 1, 9, 3, 5)], true)
+                .check()
+                .is_ok()
+        );
+        assert!(
+            with_dsp(vec![dsp_row(0, "machine", 1, 9, 3, 5)], false)
+                .check()
+                .is_err()
+        );
+        assert!(
+            with_dsp(vec![dsp_row(16, "effect", 1, 9, 3, 5)], true)
+                .check()
+                .is_err()
+        );
+        assert!(
+            with_dsp(vec![dsp_row(3, "effect", 1, 9, 3, 5)], true)
+                .check()
+                .is_err()
+        );
+        assert!(
+            with_dsp(vec![dsp_row(8, "machine", 1, 9, 3, 5)], true)
+                .check()
+                .is_err()
+        );
+        assert!(
+            with_dsp(vec![dsp_row(0, "machine", 1, 9, 6, 5)], true)
+                .check()
+                .is_err()
+        );
+        assert!(
+            with_dsp(vec![dsp_row(0, "machine", 1, 4, 3, 5)], true)
+                .check()
+                .is_err()
+        );
+        assert!(
+            with_dsp(vec![dsp_row(0, "machine", 0, 4, 0, 0)], true)
+                .check()
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn old_file_without_spans_is_unchanged() {
+        let p = Profile::parse(OLD).unwrap();
+        assert!(p.spans.is_empty() && p.span_clock_hz.is_none());
+        assert_eq!(p.to_json().trim_end(), OLD);
+    }
+
+    #[test]
+    fn check_rejects_bad_spans() {
+        assert!(with(vec![span("bogus", 1, 2, 2)], Some(1)).check().is_err());
+        assert!(with(vec![span("poll", 1, 2, 2)], None).check().is_err());
+        assert!(with(vec![span("poll", 1, 2, 2)], Some(0)).check().is_err());
+        assert!(with(vec![span("poll", 2, 2, 3)], Some(1)).check().is_err());
+        assert!(with(vec![span("poll", 0, 2, 2)], Some(1)).check().is_err());
+        assert!(with(vec![span("poll", 0, 0, 0)], Some(1)).check().is_ok());
     }
 }

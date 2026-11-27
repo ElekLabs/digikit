@@ -26,6 +26,44 @@
         "cwd": "."
       }
     },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "jsToolchain",
+        "{projectRoot}/tests/dsp/**/*",
+        "{workspaceRoot}/tsconfig*.json",
+        { "input": "production", "projects": ["@digi/sharc-rig-kit"] }
+      ],
+      "outputs": [],
+      "options": {
+        "command": "pnpm --filter @digi/sharc-rig-kit exec tsc -p ../../sdk/tests/dsp/tsconfig.json",
+        "cwd": "."
+      }
+    },
+    "test-dsp": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": ["patchkit:cli", "sharc-rig:build"],
+      "inputs": [
+        "jsToolchain",
+        "{projectRoot}/**/*",
+        "dspTestTooling",
+        "{workspaceRoot}/packages/sharc-rig-kit/package.json",
+        "{workspaceRoot}/vitest.host.config.ts",
+        "{workspaceRoot}/vitest.host.projects.json",
+        "{workspaceRoot}/tools/patchkit/toolchain/pins.toml",
+        "{workspaceRoot}/tsconfig*.json",
+        { "externalDependencies": ["vitest"] },
+        { "dependentTasksOutputFiles": "**/*" }
+      ],
+      "outputs": [],
+      "options": {
+        "forwardAllArgs": false,
+        "command": "pnpm exec vitest run --config vitest.host.config.ts --project module-rig sdk/tests/dsp/",
+        "cwd": "."
+      }
+    },
     "check-generated": {
       "executor": "nx:run-commands",
       "cache": false,
@@ -51,11 +89,14 @@
         "{workspaceRoot}/sdk/include/dk/gen/**/*",
         "{workspaceRoot}/sdk/include/dk/core/status.h",
         "{workspaceRoot}/devices/**/*",
-        "{workspaceRoot}/modules/core/runtime/abi.toml",
-        "{workspaceRoot}/modules/core/runtime/include/dkrt.h",
-        "{workspaceRoot}/modules/core/runtime/sdk/src/gen_*.rs",
-        "{workspaceRoot}/modules/core/runtime/src/rs/src/gen_abi_check.rs",
-        "{workspaceRoot}/modules/core/fw/**/*",
+        "{workspaceRoot}/ports/*.toml",
+        "{workspaceRoot}/ports/fw/**/*",
+        "{workspaceRoot}/runtime/core/abi.toml",
+        "{workspaceRoot}/runtime/core/include/dkrt.h",
+        "{workspaceRoot}/runtime/core/sdk/src/gen_*.rs",
+        "{workspaceRoot}/runtime/core/src/rs/src/gen_abi_check.rs",
+        "{workspaceRoot}/services/*/dks/src/gen_exports.rs",
+        "{workspaceRoot}/ports/bindings/**/*",
         "{workspaceRoot}/tools/device/dklog_kinds.py",
         "{workspaceRoot}/tools/device/dkproto.py",
         "{workspaceRoot}/packages/dkneeds/src/gen_limits.rs",

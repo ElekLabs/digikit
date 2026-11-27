@@ -10,11 +10,11 @@ Related: `docs/plans/digikit-runtime.md` (Phase 11), `docs/design/digikit-dkm.md
 
 | Kind | Example | What it is | Loaded how |
 | --- | --- | --- | --- |
-| framework | `core/runtime`, `core/dynreg`, `core/dyndsp`, `core/dsp-link`, `core/dsp-voice`, `core/machines`, `core/params` | has firmware hooks, anchor rules, patch ops | patched into the image (`modules/core/*/module.toml`) |
+| framework | `core/runtime`, `core/rows`, `core/dyndsp`, `core/dsp-link`, `core/dsp-voice`, `core/rows`, `core/rows` | has firmware hooks, anchor rules, patch ops | patched into the image (`modules/core/*/module.toml`) |
 | content, patched in | `test/patched-pluck`, `test/xslice` | machine rows and a DSP routine, placed by patchkit | patched into the image |
 | content, run time | `digikit/pluck`, `test/dyn-xslice` | the same machine as a `.dkm` (`dynamic = true`) | `dkrt_load` at boot (`docs/design/digikit-runtime.md:161-183`) |
 | ColdFire tool | `test/c-demo`, `test/rust-demo` | the constant `dk_module` with `init`, `fini`, `tick`, `menu` (`docs/MODULES.md`) | `.dkm` |
-| fixture | `test/dyn-guard-nan`, `dyn-dsp-hang`, `dyn-fault`, `dyn-crash`, `twin-*`, `dn2-*` | framework tests, today beside real modules | both ways |
+| fixture | `test/dyn-guard-nan`, `dyn-dsp-hang`, `dyn-crash`, `twin-*`, `dn2-*` | framework tests, today beside real modules | both ways |
 
 `tests/fixtures/modules/` holds 23 directories; about 15 of them are fixtures, not modules (`ls tests/fixtures/modules`).
 
@@ -71,8 +71,8 @@ Both devices block: 32 samples per call, 1500 blocks per second (`devices/*.toml
 | Item | Where | Limit |
 | --- | --- | --- |
 | module records (name, base, size, slot mask, store path) | `State.modules`, `DKRT_PATHS` (`modules/core/runtime/src/rs/src/lib.rs:75-99`) | `MAX_MODULES = 8` (`lib.rs:39`) |
-| ColdFire arena | first fit, 16-byte blocks, `DKRT_ARENA` in bss (`arena.rs:1-22`) | `ARENA_BYTES` 512 KiB, `STAGE_BYTES` 64 KiB (`lib.rs:36-38`); the same on both devices |
-| run-time machine types | `core/dynreg` reserves rows 16-23 (`digikit-registry.md:42-50`) | 8 machine rows, 16 parameter rows, 8 page rows (DN2) (`:117-119`) |
+| ColdFire arena | first fit, 16-byte blocks, `DKRT_ARENA` in bss (`arena.rs:1-22`) | `ARENA_BYTES` 512 KiB, `STAGE_BYTES` 128 KiB (`lib.rs:36-38`); the same on both devices |
+| run-time machine types | `core/rows` reserves rows 16-23 (`digikit-registry.md:42-50`) | 8 machine rows, 16 parameter rows, 8 page rows (DN2) (`:117-119`) |
 | voice rows (DSP) | `voices.rows` of `core/dsp-voice`, 16 words each (`module.toml` of dsp-voice :63-136) | at most 16 registered types (:63-68); run-time types 16-23 (`dsp.rs:23`, `types.toml:20-22`) |
 | DSP placement | `DKRT_DSP.mod_off/mod_len`, first fit, 64-byte granules, aligned (`dsp.rs:27, 260-285, 474`) | `dsp_area_bytes`: DT2 524288, DN2 327680 (`digitakt-ii.toml:94`, `digitone-ii.toml:88`) |
 | slots | 8 function pointers; slot 0 per UI pass (`digikit-runtime.md:87-94`) | 8 |
@@ -89,6 +89,7 @@ The module table is three tables that agree by construction (module records, `DK
 | build | typed manifest: unknown fields, knob counts, device models | `typed.rs:26,49,65,178-236` (`deny_unknown_fields`) |
 | build / `module:check` | conformance on the concrete core: returns, context registers, finite, bound 8.0, budget `headroom/16`, retrigger, long notes | `pk_conform.py:1-24`, `machine_rig.py:1-20`, `docs/TESTING.md:140-167` |
 | pack | one ColdFire object, one DSP object per device; relocation kinds; no PC-relative import | `main.rs:370-482`, `digikit-dkm.md:57-62, 107-111` |
+| pack | a content module (not `core/*`) holds no 32-bit address inside a protected window of a device it is built for (flash controller, FPGA and peer buses, and on the Syntakt the firmware's NOR writer code): relocation addends, absolute symbols, data words and the 32-bit operands of instructions; a window below 0x10000 against absolute symbols only. A constant that equals an address by chance is refused too (the author changes the table layout; no override) | `protect.rs`, `[protect] windows` of the device files, [finding 141](findings/141-syntakt-analog-and-nor-paths.md) |
 | load | SHA-256, format, `runtime_min`, imports, slots, name, DSP section (device, bounds, imports, rows, types, space), registry records; nothing is written before the last check | `digikit-dkm.md:131-147` |
 | run time | knob words clamped to the declared range; output must be finite and below 8.0; 8 faults in 1500 blocks disable the type | `51-pluck-tune-guard.md:36-62`, DT2 only |
 
@@ -136,7 +137,7 @@ modules/
   core/<fw>/                 framework modules, as today (runtime, dynreg, dyndsp, dsp-link, machines, params, ...)
   core/adapter-machine/      the Machine adapter: src/dsp/dt2.s, src/dsp/dn2.s (from core/dsp-voice), generated profile constants
   digikit/pluck/            content: module.toml, src/dsp/pluck.s (one source), tests/, gallery/
-tests/fixtures/modules/      framework fixtures (dyn-guard-nan, dyn-dsp-hang, dyn-fault, dyn-crash, c-demo, ...), same layout, not selectable by name from `module:*`
+tests/fixtures/modules/      framework fixtures (dyn-guard-nan, dyn-dsp-hang, dyn-crash, c-demo, ...), same layout, not selectable by name from `module:*`
 devices/<dev>.toml           device profile; gains [adapter.*] and [limits] tables (sections 5, 6, 7)
 ```
 
@@ -232,7 +233,7 @@ Notes on the header:
 
 | Type | Shape of the contract | Open points |
 | --- | --- | --- |
-| FX (insert or send) | **Built (P3d-1a, `sdk/dk_fx.h`, patched-in only).** `process(state, in, params)`: `dk_fx_in` = `{in, out, block}`, the master block as 64 planar floats (32 left, then 32 right), `in` read only, `out` the adapter's scratch; `dk_fx_desc` = magic, contract, `n_params` (at most 8, 4 in the first rows), `state_bytes`, `max_cycles_block`, `max_call_depth`, `stack_bytes`. The adapter `core/fx` hooks a post-master function (finding 55), checks the output (finite, below 8.0), plays dry on a fault, crossfades one block when an effect switches, and switches an effect off after 8 faults in 1500 blocks. Run-time (`.dkm`) effects: built on the Digitakt II (F4 step 1, `[contract] fx = [1, 0]`, runtime 0.4.0: DSP section version 4, `core/dynfx`, 3 slots; finding 55). Effect pages and knobs: built on the Digitakt II (F4 step 2, runtime 0.5.0: `core/fxpages`, EFFECT record, MIX in the adapter; below). Knob values are saved with the kit (F4 step 3, Digitakt II). Insert or send (FX routing steps 1 to 4, Digitakt II; step 6: also the Digitone II, one send effect, finding 67): the manifest gives the default route and the allowed ones (`[[fx]] route`, `routes`), the user decides the route (a setting, DIGIKIT > FX ROUTES, effective after a restart) and the framework owns the send amounts (one knob per send effect on a second page of the FX key, one amount per track, kept in the settings store and the DSP row, never in a kit file); the effect's `process` is the same and never sees an amount (findings 62, 64 and 65). All of it also on the Digitone II 1.12 (F4 step 5: the same modules, device facts in `devices/digitone-ii.toml`; in the `device` patch set, not in `emulator`: the hook costs the emulator x2.4 DSP CPU there, finding 55). Not built: `tail_blocks` | send versus insert; latency declaration |
+| FX (insert or send) | **Built (P3d-1a, `sdk/dk_fx.h`, patched-in only).** `process(state, in, params)`: `dk_fx_in` = `{in, out, block}`, the master block as 64 planar floats (32 left, then 32 right), `in` read only, `out` the adapter's scratch; `dk_fx_desc` = magic, contract, `n_params` (at most 8, 4 in the first rows), `state_bytes`, `max_cycles_block`, `max_call_depth`, `stack_bytes`. The adapter `core/fx` hooks a post-master function (finding 55), checks the output (finite, below 8.0), plays dry on a fault, crossfades one block when an effect switches, and switches an effect off after 8 faults in 1500 blocks. Run-time (`.dkm`) effects: built on the Digitakt II (F4 step 1, `[contract] fx = [1, 0]`, runtime 0.4.0: DSP section version 4, `core/dynfx`, 3 slots; finding 55). Effect pages and knobs: built on the Digitakt II (F4 step 2, runtime 0.5.0: the fx service, EFFECT record, MIX in the adapter; below). Knob values are saved with the kit (F4 step 3, Digitakt II). Insert or send (FX routing steps 1 to 4, Digitakt II; step 6: also the Digitone II, one send effect, finding 67): the manifest gives the default route and the allowed ones (`[[fx]] route`, `routes`), the user decides the route (a setting, DIGIKIT > FX ROUTES, effective after a restart) and the framework owns the send amounts (one knob per send effect on a second page of the FX key, one amount per track, kept in the settings store and the DSP row, never in a kit file); the effect's `process` is the same and never sees an amount (findings 62, 64 and 65). All of it also on the Digitone II 1.12 (F4 step 5: the same modules, device facts in `devices/digitone-ii.toml`; in the `device` patch set, not in `emulator`: the hook costs the emulator x2.4 DSP CPU there, finding 55). Not built: `tail_blocks` | send versus insert; latency declaration |
 | UI page / key handler | needs slots 1-7 from the sequencer or key hooks | not designed; no firmware hook exists |
 | Sample / data | no code; a `.dkm` with a data section | store layout (`digikit-store.md`) |
 
@@ -468,7 +469,7 @@ Not in SDK v1. The aim is that v1 does not make it harder.
 | --- | --- |
 | built | load and unload while the firmware runs, run-time machines on both devices, DSP code with atomic voice rows, unload refusal while a track uses the type (emulator only) (`docs/plans/digikit-hot-reload.md:8-22`) |
 | commits | tag `digikit-hot-reload-v1` = `928dc1d3` (2026-10-17); switch to boot-time loading `e8b3a04f`; hot-only code removed by `a12048c4` "digikit runtime: archive hot reload" (2026-10-17); `git revert a12048c4` restores it (`digikit-hot-reload.md:3-5, 24`) |
-| what was removed | `dkrt_unload`, the in-use scan, the machine-view rebuild, the load queue, the run-time DSP load path, four `core/dynreg` anchors and the view hook (`:24-47`) |
+| what was removed | `dkrt_unload`, the in-use scan, the machine-view rebuild, the load queue, the run-time DSP load path, four `core/rows` anchors and the view hook (`:24-47`) |
 | why set aside | decision 9 (`plans/digikit-runtime.md:41-47`): a load under an open, playing project needs a transport guard, an in-use scan of the whole project, write ordering under concurrent readers and a soak; a restart removes the class. Em agreed; "may return later, first for code-only modules" |
 | still needed | the seven items of the 2026-10-17 risk review (`digikit-hot-reload.md:49-62`) |
 

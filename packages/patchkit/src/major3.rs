@@ -114,15 +114,16 @@ fn header_table(
                 r.kind
             ));
         }
+        let key = crate::register::record_key(id, &r.id);
         let keys = groups.entry(kind).or_default();
-        if keys.contains(&r.key) {
+        if keys.contains(&key) {
             return Err(err!(
-                "{id}: [[record]] kind {:?} key {} twice",
+                "{id}: [[record]] kind {:?} id {:?}: its key {key:#x} is already in the module (a hash collision)",
                 r.kind,
-                r.key
+                r.id
             ));
         }
-        keys.push(r.key);
+        keys.push(key);
     }
     let key_groups: Vec<dkneeds::keys::KeyGroup> = groups
         .iter()
@@ -364,12 +365,28 @@ mod tests {
 
     #[test]
     fn a_record_entry_puts_its_key_in_the_keys_entry_and_a_typed_or_unknown_kind_is_refused() {
-        let m = module("[[record]]\nkind = \"effect\"\nkey = 1\n");
+        let m = module("[[record]]\nkind = \"effect\"\nid = \"a\"\n");
         let e = sections(&m, "test/m", "dn2", None).unwrap_err().to_string();
         assert!(e.contains("not generic"), "{e}");
-        let m = module("[[record]]\nkind = \"nothing\"\nkey = 1\n");
+        let m = module("[[record]]\nkind = \"nothing\"\nid = \"a\"\n");
         let e = sections(&m, "test/m", "dn2", None).unwrap_err().to_string();
         assert!(e.contains("not in [records.kinds]"), "{e}");
+    }
+
+    #[test]
+    fn a_record_key_derives_from_the_module_id_and_the_local_id() {
+        let m = module("[[record]]\nkind = \"lfo_shape\"\nid = \"ramp\"\n");
+        let key = |name: &str| {
+            let s = sections(&m, name, "dn2", None).unwrap();
+            let k = dkneeds::keys::Keys::parse(&s.keys).unwrap();
+            k.keys_of(dkneeds::KIND_LFO_SHAPE).collect::<Vec<_>>()
+        };
+        // the module id (`test/m`) feeds the key, as in `module_ids.h`: the packed name does not
+        assert_eq!(
+            key("test/m"),
+            [crate::register::record_key("test/m", "ramp")]
+        );
+        assert_eq!(key("test/m-copy"), key("test/m"));
     }
 
     #[test]
@@ -433,6 +450,7 @@ mod tests {
             trace: false,
             stereo: s.stereo,
             gate: false,
+            service: None,
         };
         let f = crate::dkm::pack_keys(None, &s.keys, &s.dsp, &o).unwrap();
         // the bytes of the old contract pairs are reserved zero; the packer links no import here, so the file needs the version of the header table
@@ -443,7 +461,21 @@ mod tests {
         );
         let off = u32::from_be_bytes(f[0x90..0x94].try_into().unwrap()) as usize;
         let size = u32::from_be_bytes(f[0x94..0x98].try_into().unwrap()) as usize;
-        assert_eq!(&f[off..off + size], &s.keys[..]);
+        // the packer adds the needs of the file: a hard need on the machines service (a file, R12-6) for the machine and page records of KEYS; the rest is the table of `sections`
+        let packed = dkneeds::keys::Keys::parse(&f[off..off + size]).unwrap();
+        let built = dkneeds::keys::Keys::parse(&s.keys).unwrap();
+        assert!(
+            packed
+                .key_groups()
+                .map(|(k, v)| (k, v.collect::<Vec<_>>()))
+                .eq(built.key_groups().map(|(k, v)| (k, v.collect::<Vec<_>>())))
+        );
+        assert!(packed.uses().eq(built.uses()));
+        let mach = dkneeds::keys::name_hash("machines");
+        assert!(
+            packed.needs().any(|n| n.service == mach && n.hard),
+            "a hard need on the machines service"
+        );
         let n = crate::dkm::needs(&f).unwrap();
         assert_eq!((n.machine_rows, n.param_rows, n.page_rows), (1, 4, 1));
         assert_eq!(n.voice_rows, 1);

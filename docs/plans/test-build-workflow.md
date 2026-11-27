@@ -176,7 +176,7 @@ Moved to the [test speed plan](test-speed.md), step 3 (wait on events, not fixed
    deleted helper imports remain inputs; computed or unresolved ambiguous imports fail closed.
    Native Nx `--explain` reduces a `tests/regression/runtime/card-rig.ts` edit from 15 device and
    nine conformance targets to four device and zero conformance targets: `core/digikit-menu`,
-   `core/dynreg`, `core/runtime-settings-tests` and `core/runtime-tests`, each on `test-device`.
+   `core/rows`, `core/runtime-settings-tests` and `core/runtime-tests`, each on `test-device`.
    `IMAGE_BUILD` stays: selected patched-image tests still require fresh core objects. Build,
    pack and alias producers instead use production inputs, shared SDK/device/toolchain inputs
    and prerequisite outputs; their previous implicit dependency defaults propagated unrelated

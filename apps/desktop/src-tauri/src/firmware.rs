@@ -2,6 +2,7 @@
 //! browser build does it in patchkit.wasm) and the system's save dialog for the image. The MIDI side is `midi_port.rs`; the page paces the
 //! messages with the Rust sender through patchkit.wasm, like the site. `prepare` also keeps the ship map and the load-table symbol addresses of the
 //! image (`library::store_ship`), so the Log pane can name addresses of a device that runs it.
+use patchkit::syspkg::{self, InstallAction, InstallRefusal};
 use std::path::Path;
 
 /// The answer of `firmware_prepare`: the length of the summary JSON as 4 bytes big endian, the JSON (`Prepared::summary_json`), the image.
@@ -30,7 +31,12 @@ pub fn prepare(root: &Path, stock: &[u8], restore: bool, set: &str) -> Result<Ve
     {
         eprintln!("firmware_prepare: the address map was not kept: {e}");
     }
-    Ok(pack(&p.summary_json().to_string(), &p.image))
+    let mut summary = p.summary_json();
+    if p.ok() {
+        let container = patchkit::flash::container_of(&p.image).map_err(|e| e.0)?;
+        summary["container_sha256"] = patchkit::error::sha256_hex(&container).into();
+    }
+    Ok(pack(&summary.to_string(), &p.image))
 }
 
 pub(crate) fn body(request: &tauri::ipc::Request<'_>) -> Result<Vec<u8>, String> {
@@ -62,6 +68,38 @@ pub async fn firmware_prepare(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The checkout's built system package, prefixed by its packed runtime version (big endian).
+#[tauri::command]
+pub async fn system_package() -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let root = digi_control::runtime_patch::find_root(None)?;
+        let package = syspkg::build_from_repo(&root).map_err(|e| {
+            format!("Could not build the system package ({e}). Rebuild Workbench inputs.")
+        })?;
+        let mut response = Vec::with_capacity(4 + package.bytes().len());
+        response.extend_from_slice(&package.metadata().runtime_version().to_be_bytes());
+        response.extend_from_slice(package.bytes());
+        Ok(tauri::ipc::Response::new(response))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The package actions for the observed target and card state.
+#[tauri::command]
+pub fn system_package_plan(
+    repair: bool,
+    module_support: bool,
+    verified_package_on_card: bool,
+) -> Result<&'static [InstallAction], String> {
+    syspkg::install_plan(repair, module_support, verified_package_on_card).map_err(|refusal| match refusal {
+        InstallRefusal::AlreadyHealthy => refusal.to_string(),
+        InstallRefusal::RecoveryRequired => {
+            "The verified system package needs a retry. Choose Transfer → Modules → Install system package.".into()
+        }
+    })
 }
 
 /// The save dialog for the image in the raw body; `x-name` (percent-encoded) is the suggested file name. The path written, or `None` when the
@@ -140,7 +178,9 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("digikit-prepare-maps-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        for d in ["modules", "devices", "tests"] {
+        for d in [
+            "modules", "runtime", "services", "ports", "devices", "tests",
+        ] {
             std::os::unix::fs::symlink(repo.join(d), dir.join(d)).unwrap();
         }
         prepare(&dir, &stock, false, "device").unwrap();

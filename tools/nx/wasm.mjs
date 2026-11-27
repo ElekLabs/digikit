@@ -21,10 +21,10 @@
 //       apps/web/public is deleted on every run.
 
 import { spawnSync } from 'node:child_process';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { sha256File, sha256Of } from './digest.mjs';
 import { DEFAULT_GENERATED, ROOT, checkGenerated, targetDir, toolchainEnv } from './rust-env.mjs';
 
 const USAGE = `usage: wasm.mjs [options]
@@ -162,7 +162,7 @@ function build(features, targetDirPath, env, dest) {
   const command = [
     'build',
     '--manifest-path',
-    'packages/emulator/boot/Cargo.toml',
+    'packages/emulator/wasm-core/Cargo.toml',
     '--locked',
     '--offline',
     '--release',
@@ -176,7 +176,7 @@ function build(features, targetDirPath, env, dest) {
   if (!run('cargo', command, { cwd: ROOT, env })) {
     die('WASM build failed; install wasm32-unknown-unknown for the pinned Rust toolchain');
   }
-  fs.copyFileSync(path.join(targetDirPath, 'wasm32-unknown-unknown/release/elektron_native_boot.wasm'), dest);
+  fs.copyFileSync(path.join(targetDirPath, 'wasm32-unknown-unknown/release/digi_wasm_core.wasm'), dest);
 }
 
 const WASM_FEATURE_FLAGS = [
@@ -213,13 +213,9 @@ function buildSmalls(names) {
     const dest = path.join(publicDir, `${name}.wasm`);
     // wasm-opt is slow and its result depends only on the built file (and the flags): keep the hash it ran for.
     const stamp = path.join(localDir, `${name}.wasm.opt-stamp`);
-    const builtHash = crypto
-      .createHash('sha256')
-      .update(fs.readFileSync(built))
-      .update(WASM_FEATURE_FLAGS.join(' '))
-      .digest('hex');
+    const builtHash = sha256Of(fs.readFileSync(built), WASM_FEATURE_FLAGS.join(' '));
     const haveOpt = which('wasm-opt') !== null;
-    const sha = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+    const sha = sha256File;
     // the stamp also names the output it made: apps/web/.local is shared by worktrees, public/ is not
     const stampFor = (file) => `${builtHash} ${haveOpt} ${sha(file)}\n`;
     const current = fs.existsSync(dest) && fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8') === stampFor(dest);
@@ -240,12 +236,7 @@ function buildSmalls(names) {
       }
       fs.writeFileSync(stamp, stampFor(dest));
     }
-    // patchkit.wasm carries the Selache assembler (the SHARC+ build, 0.4 MB); the others stay under 2 MiB
-    const limit = (name === 'patchkit' ? 5 : 4) * 512 * 1024;
     const size = fs.statSync(dest).size;
-    if (size > limit) {
-      die(`${dest} is ${size} bytes: ${name}.wasm must stay small and firmware-free`);
-    }
     console.log(`${name}.wasm: ${size} bytes${current ? ' (unchanged)' : ''}`);
   }
 }

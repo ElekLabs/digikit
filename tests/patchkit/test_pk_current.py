@@ -23,4 +23,4 @@ def test_ports_are_current():
     ):
         got_name, text = port_resolve.resolve(fw)
         assert got_name == name
-        assert (ROOT / "devices" / "ports" / f"{name}.toml").read_text() == text
+        assert (ROOT / "ports" / f"{name}.toml").read_text() == text

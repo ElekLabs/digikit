@@ -7,10 +7,10 @@ use digi_control::{
     Command, Config, Handle, Mode, ScenarioSetup,
     cli::{self, StartupArgs},
     controller::spawn,
-    dispatch::Dispatcher,
     load_scenario,
 };
 use elektron_native_boot::Snapshot;
+mod analyzer;
 mod bulk_port;
 mod desktop_runtime;
 mod firmware;
@@ -18,6 +18,10 @@ mod library;
 mod local;
 mod log_save;
 mod midi_port;
+mod remote_audio;
+mod session;
+mod session_menu;
+mod symbols;
 use serde_json::Value;
 use std::sync::mpsc;
 use tauri::State;
@@ -29,7 +33,7 @@ struct Host {
     /// Where firmware files picked with Open... are put for `firmware.load` (`<run dir>/open`).
     open_dir: PathBuf,
     /// The firmware file the console shows, reloads and watches: the startup file, or the file set with `emu_set_source`
-    /// (Open, Load on start).
+    /// (Open, Auto-load firmware).
     source: std::sync::Mutex<Option<PathBuf>>,
     launch: Launch,
 }
@@ -48,7 +52,7 @@ struct Launch {
 }
 
 fn parse_args() -> Result<StartupArgs, String> {
-    cli::parse_values(std::env::args_os().skip(1), cfg!(feature = "coupled-audio"))
+    cli::parse_values(std::env::args_os().skip(1), cfg!(feature = "sharc"))
 }
 
 async fn send(
@@ -133,7 +137,7 @@ async fn emu_launch(host: State<'_, Host>) -> Result<Launch, String> {
     Ok(host.launch.clone())
 }
 
-/// Make PATH the console's firmware file (null: none); returns its info as `emu_source_info` does.
+/// Make PATH the console's firmware file (null: none); returns its info as `emu_source_info` does, plus `device`.
 #[tauri::command]
 async fn emu_set_source(
     host: State<'_, Host>,
@@ -146,9 +150,33 @@ async fn emu_set_source(
     let Some(path) = path else {
         return Ok(None);
     };
-    tauri::async_runtime::spawn_blocking(move || source_info(&path))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut info = source_info(&path)?;
+        // The device comes from the file's content; `emu_source_info` (polled every second) does not hash the file.
+        if let Some(Value::Object(map)) = info.as_mut() {
+            map.insert("device".into(), serde_json::json!(device_of_file(&path)));
+        }
+        Ok(info)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The device short id of a firmware file, by content (never by name): a stock image by its SHA-256 against the device files'
+/// firmware rows, a patched image by the device byte of its SysEx framing. None for anything else, or when the file cannot be read.
+fn device_of_file(path: &std::path::Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    let sha = digi_control::firmware::sha256_hex(&bytes);
+    let registry = device_profile::Registry::load().ok()?;
+    if let Ok((device, _)) = registry.identify(&sha) {
+        return Some(device.short.clone());
+    }
+    match bytes.get(..5)? {
+        [0xf0, 0x00, 0x20, 0x3c, id] => {
+            patchkit::devdata::by_syx_id(*id).map(|d| d.short.to_string())
+        }
+        _ => None,
+    }
 }
 
 /// The native file picker for a firmware file (.syx), opened in the folder of START when it exists; the path, or null when
@@ -515,7 +543,7 @@ fn load_startup(
 }
 
 fn main() {
-    #[cfg(feature = "coupled-audio")]
+    #[cfg(feature = "sharc")]
     if std::env::args_os()
         .nth(1)
         .is_some_and(|a| a == "--pgo-train")
@@ -541,7 +569,9 @@ fn main() {
         .run_dir
         .clone()
         .unwrap_or_else(|| PathBuf::from("out/native/run"));
+    let analyzer = analyzer::Analyzer::default();
     let mut config = Config::new(startup.audio.clone());
+    config.pcm_source = Some(analyzer.source(analyzer::Source::Emulator));
     config.audio_alt = startup.audio_alt.clone();
     config.mode = if startup.paused {
         Mode::Paused
@@ -573,6 +603,7 @@ fn main() {
     config.remember_card = startup.scenario.is_none();
     // A ColdFire-only runtime (a DT2 opened in a DN2-audio session) runs at the wall clock, not at the CPU's speed.
     config.pace_free = true;
+    config.dsp = startup.dsp;
     let run_dir_for_staging = run_dir.clone();
     config.on_quit = Some(Box::new(|| {
         // Let the socket thread write the reply first.
@@ -608,7 +639,7 @@ fn main() {
     // The control socket is on unless `--no-control` (design question 3).
     let _server = if startup.control != Some(false) {
         match digi_control::server::serve(
-            Dispatcher::new(handle.clone(), "digiemu-desktop"),
+            digi_control::dispatch::Dispatcher::new(handle.clone(), "digiemu-desktop"),
             digi_control::server::ServerOptions { run_dir },
             "digiemu-desktop",
         ) {
@@ -625,8 +656,6 @@ fn main() {
     } else {
         None
     };
-    #[cfg(not(unix))]
-    let _ = (&run_dir, Dispatcher::new);
     let exit_handle = handle.clone();
     let host = Host {
         handle,
@@ -646,11 +675,27 @@ fn main() {
         },
     };
     let app = tauri::Builder::default()
+        .menu(session_menu::build)
+        .on_menu_event(session_menu::dispatch)
+        .manage(symbols::catalog::CatalogFrame::default())
+        .register_uri_scheme_protocol(symbols::catalog::SCHEME, |context, request| {
+            use tauri::Manager;
+            context
+                .app_handle()
+                .state::<symbols::catalog::CatalogFrame>()
+                .response(request)
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(session::Mounts::default())
         .manage(host)
         .manage(midi_port::MidiPort::default())
         .manage(bulk_port::BulkPort::default())
+        .manage(
+            remote_audio::RemoteAudio::new(analyzer.source(analyzer::Source::Remote))
+                .expect("start remote audio worker"),
+        )
+        .manage(analyzer)
         // on the main thread, before any command: CoreMIDI refreshes the port list on the run loop of the thread of its first client
         .setup(|app| {
             use tauri::Manager;
@@ -667,8 +712,26 @@ fn main() {
             emu_launch,
             emu_set_source,
             emu_pick_syx,
+            session::session_pick,
+            session::session_open,
+            session::session_create,
+            session::session_mount,
+            session_menu::session_set_actions_enabled,
+            session::session_release,
+            session::session_save,
+            session::session_preserve,
+            session::session_attach,
+            session::session_read_capture,
+            session::session_open_attachment,
             emu_build_info,
             emu_audio_status,
+            remote_audio::remote_audio_inputs,
+            remote_audio::remote_audio_start,
+            remote_audio::remote_audio_stop,
+            remote_audio::remote_audio_status,
+            analyzer::analyzer_open,
+            analyzer::analyzer_read,
+            analyzer::analyzer_close,
             emu_startup,
             emu_step,
             emu_tap,
@@ -678,7 +741,14 @@ fn main() {
             emu_card_load,
             card_open_folder,
             firmware::firmware_prepare,
+            firmware::system_package,
+            firmware::system_package_plan,
             firmware::firmware_save,
+            symbols::symbols_pick,
+            symbols::symbols_read,
+            symbols::symbols_releases,
+            symbols::catalog::symbols_open_review,
+            symbols::catalog::symbols_catalog_frame,
             log_save::log_save,
             library::lib_scan,
             library::lib_build,
@@ -687,7 +757,6 @@ fn main() {
             library::sample_wasm,
             library::patchkit_wasm,
             library::dkprof_wasm,
-            library::device_storage,
             local::local_pick_folder,
             local::local_list,
             local::local_read,
@@ -711,8 +780,10 @@ fn main() {
         .expect("tauri build error");
     // The window closed: let the controller end the session (`quit`: the module store is mirrored once more and the card's changes
     // are exported to the +Drive folder) before the process goes. Without it the controller thread is cut off mid-export.
-    app.run(move |_app, event| {
+    app.run(move |app, event| {
         if let tauri::RunEvent::Exit = event {
+            use tauri::Manager;
+            app.state::<remote_audio::RemoteAudio>().shutdown();
             let _ = exit_handle.call("quit", serde_json::json!({}));
         }
     });
@@ -754,7 +825,7 @@ mod cli_tests {
     fn parse(args: &[&str]) -> Result<StartupArgs, String> {
         cli::parse_values(
             args.iter().map(std::ffi::OsString::from),
-            cfg!(feature = "coupled-audio"),
+            cfg!(feature = "sharc"),
         )
     }
 
@@ -881,7 +952,7 @@ mod cli_tests {
     }
 
     #[test]
-    fn audio_status_validates_session_and_reports_no_coupled_audio_as_null() {
+    fn audio_status_validates_session_and_reports_no_sharc_audio_as_null() {
         let (handle, controller) = spawn(Config::new(None));
         let sender = handle.sender().clone();
         let (missing_reply, missing_response) = mpsc::channel();
@@ -1011,6 +1082,10 @@ mod emu_call_tests {
         let (handle, _controller) = spawn(Config::new(None));
         // A method round trip: no firmware yet.
         assert!(call_method(&handle, "status", None, None).unwrap()["firmware"].is_null());
+        let profiling = call_method(&handle, "profile.capabilities", None, Some(0)).unwrap();
+        assert_eq!(profiling["dsp_active"], false);
+        assert!(profiling["dsp_pc"].is_boolean());
+        assert!(profiling["main_pc"].is_boolean());
         // The current session (0 before the first load) passes; another one is stale and nothing runs.
         assert!(call_method(&handle, "status", None, Some(0)).is_ok());
         assert_eq!(

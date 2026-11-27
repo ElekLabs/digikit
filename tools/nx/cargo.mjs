@@ -5,22 +5,30 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import { DependencyType } from '@nx/devkit';
-import { parse } from 'smol-toml';
+import { testSourceGlobs } from './test-source.mjs';
+import { read } from './toml.mjs';
 
 // The packs whose `needs` verdict tests read from dist/bytes/pack-verdicts.json (one list: tests/regression/runtime/needs-packs.json).
 const NEEDS_PACKS = JSON.parse(
   readFileSync(new URL('../../tests/regression/runtime/needs-packs.json', import.meta.url), 'utf8'),
 ).modules;
 
-const read = (root, toml) => parse(readFileSync(join(root, toml), 'utf8'));
 const KINDS = ['dependencies', 'dev-dependencies', 'build-dependencies'];
 
 // CLI builds into dist/ (gitignored). Copy then rename: a running process keeps the old file.
 const CLI = {
   patchkit: {
-    build: 'cargo build -p patchkit --release --offline --target-dir dist/cargo',
+    build: 'cargo build -p patchkit --features record-rules --release --offline --target-dir dist/cargo',
     bin: 'patchkit',
     dir: 'patchkit',
+    key: 'node tools/nx/patchkit-key.mjs', // dist/bytes/patchkit-test-<device>.key, the key of live device tests
+    // The test-source rule is compiled into patchkit (include_str!) and read by the key script.
+    inputs: [
+      'default',
+      '^default',
+      '{workspaceRoot}/config/test-source-patterns.json',
+      '{workspaceRoot}/tools/nx/test-source.mjs',
+    ],
   },
   'plusdrive-format': {
     build: 'cargo build -p plusdrive-format --bin plusdrive --release --locked --offline --target-dir dist/cargo',
@@ -28,15 +36,26 @@ const CLI = {
     dir: 'plusdrive',
   },
 };
-const cliTarget = ({ build, bin, dir }) => ({
+// The build of a CLI compiles the normal and build dependencies of its crates, never their dev-dependencies (test-support crates):
+// `^default` would add those, so the inputs name the closure of the other two kinds.
+const BUILT_KINDS = ['dependencies', 'build-dependencies'];
+const builtInputs = (workspaceRoot, crateRoot, inputs) =>
+  inputs?.map((i) =>
+    i === '^default'
+      ? { input: 'default', projects: pathDepNames(workspaceRoot, crateRoot, new Set(), BUILT_KINDS) }
+      : i,
+  );
+const cliTarget = ({ build, bin, dir, key, inputs }) => ({
   executor: 'nx:run-commands',
   cache: false,
+  ...(inputs && { inputs }),
   parallelism: true, // cargo locks dist/cargo itself and the install step is cp+mv, so it may run beside other tasks
-  outputs: [`{workspaceRoot}/dist/${dir}/${bin}`],
+  outputs: [`{workspaceRoot}/dist/${dir}/${bin}`, ...(key ? ['{workspaceRoot}/dist/bytes/patchkit-test-*.key'] : [])],
   options: {
     commands: [
       build,
       `mkdir -p dist/${dir} && cp dist/cargo/release/${bin} dist/${dir}/${bin}.tmp && mv -f dist/${dir}/${bin}.tmp dist/${dir}/${bin}`,
+      ...(key ? [key] : []),
     ],
     parallel: false,
     cwd: '.',
@@ -45,6 +64,26 @@ const cliTarget = ({ build, bin, dir }) => ({
 
 // Extra targets of named crates.
 const CRATE_TARGETS = {
+  'sharc-rig': {
+    build: {
+      executor: 'nx:run-commands',
+      cache: false, // cargo decides; the hash file it writes is the cache key of the tasks that run the rig
+      parallelism: true,
+      description:
+        'Builds the SHARC-only rig against the shared generated core into dist/bin/sharc-rig and writes dist/bytes/sharc-rig.sha256 (tools/nx/sharc-rig-bin.mjs).',
+      inputs: [
+        'default',
+        '^production',
+        '{workspaceRoot}/Cargo.toml',
+        '{workspaceRoot}/Cargo.lock',
+        '{workspaceRoot}/tools/nx/sharc-rig-bin.mjs',
+        '{workspaceRoot}/tools/nx/rust-env.mjs',
+        '{workspaceRoot}/out/native/shared-core/gen/CORE_FINGERPRINT',
+      ],
+      outputs: ['{workspaceRoot}/dist/bin/sharc-rig', '{workspaceRoot}/dist/bytes/sharc-rig.sha256'],
+      options: { command: 'node tools/nx/sharc-rig-bin.mjs', cwd: '.' },
+    },
+  },
   patchkit: {
     'device-bytes': {
       executor: 'nx:run-commands',
@@ -52,7 +91,13 @@ const CRATE_TARGETS = {
       parallelism: true,
       description:
         'Writes dist/bytes/core-objects.sha256: the hash of each committed core object without its source hash.',
-      inputs: ['{workspaceRoot}/tools/nx/device-bytes.mjs', { dependentTasksOutputFiles: '**/*', transitive: true }],
+      inputs: [
+        '{workspaceRoot}/tools/nx/device-bytes.mjs',
+        '{workspaceRoot}/tools/nx/tracked-objects.mjs',
+        '{workspaceRoot}/tools/nx/module-manifests.mjs',
+        '{workspaceRoot}/tools/nx/object-hash.mjs',
+        { dependentTasksOutputFiles: '**/*', transitive: true },
+      ],
       dependsOn: [{ target: 'build-objects', projects: ['tag:acceptance-image'] }],
       outputs: ['{workspaceRoot}/dist/bytes/core-objects.sha256'],
       options: { command: 'node tools/nx/device-bytes.mjs', cwd: '.' },
@@ -77,14 +122,20 @@ const CRATE_TARGETS = {
       cache: false, // a few seconds: the file it writes is part of the merge key of the device tasks
       parallelism: true,
       description:
-        'Writes dist/bytes/images.sha256: the hash of the image `patchkit apply` makes from each acceptance firmware with each patch set.',
+        'Writes dist/bytes/images.sha256 and dist/bytes/images-<device>.sha256: the hash of the image `patchkit apply` makes from each acceptance firmware with each patch set, in one file for all devices and one per device.',
       inputs: [
         '{workspaceRoot}/tools/nx/device-images.mjs',
+        '{workspaceRoot}/tools/nx/image-jobs.mjs',
+        '{workspaceRoot}/tools/nx/device-inputs.mjs',
         '{workspaceRoot}/tests/regression/runtime/image-roots.json',
         { dependentTasksOutputFiles: '**/*', transitive: true },
       ],
       dependsOn: ['cli', { target: 'build-objects', projects: ['tag:acceptance-image'] }],
-      outputs: ['{workspaceRoot}/dist/bytes/images.sha256', '{workspaceRoot}/dist/bytes/images'],
+      outputs: [
+        '{workspaceRoot}/dist/bytes/images.sha256',
+        '{workspaceRoot}/dist/bytes/images-*.sha256',
+        '{workspaceRoot}/dist/bytes/images',
+      ],
       options: { command: 'node tools/nx/device-images.mjs', cwd: '.' },
     },
   },
@@ -108,6 +159,62 @@ const CRATE_TARGETS = {
   },
 };
 
+// The sources the daemon is built from (SOURCE_GLOBS of tools/devtools/emud_key.py, without the Python tools that run the build).
+// The store keys the binary by content; these inputs make a source edit select the task, and so every task that consumes the binary.
+// This is the one hand list, for the `daemons` target, whose Python recipe (emud_key.py SOURCE_GLOBS) hashes the same files: change both
+// together. `daemon-nodsp` does not use it: it builds one crate, so its inputs are the crate graph (`default`, `^default`) plus the
+// extra files in DAEMON_NODSP_EXTRA, checked against the files cargo read (`node tools/nx/cargo-depfiles.mjs`).
+const DAEMON_BUILD_SOURCES = [
+  '{workspaceRoot}/Cargo.toml',
+  '{workspaceRoot}/Cargo.lock',
+  '{workspaceRoot}/rust-toolchain*',
+  '{workspaceRoot}/.cargo/**/*',
+  '{workspaceRoot}/packages/emulator/**/*',
+  // The emulator guide is developer documentation and is never read by the daemon build.
+  '!{workspaceRoot}/packages/emulator/README.md',
+  '{workspaceRoot}/packages/dkaddrmap/**/*',
+  '{workspaceRoot}/packages/dkprof/**/*',
+  '{workspaceRoot}/packages/dksharc/**/*',
+  '{workspaceRoot}/packages/dkneeds/**/*',
+  '{workspaceRoot}/packages/dksample/**/*',
+  '{workspaceRoot}/packages/dkupload/**/*',
+  '{workspaceRoot}/packages/patchkit/**/*',
+  '{workspaceRoot}/runtime/core/abi/{Cargo.toml,src/**/*}',
+  '{workspaceRoot}/runtime/core/fit/{Cargo.toml,build.rs,src/**/*}',
+  '{workspaceRoot}/runtime/core/sdk/{Cargo.toml,build.rs,src/**/*}',
+  // Test sources (config/test-source-patterns.json): `#[cfg(test)]` modules that the release build does not compile.
+  ...testSourceGlobs('{workspaceRoot}/{packages,modules,runtime,services,ports/bindings}', '.rs'),
+  '{workspaceRoot}/devices/**/*',
+  '{workspaceRoot}/ports/*.toml',
+  '{workspaceRoot}/ports/fw/**/*',
+  '{workspaceRoot}/tests/scenarios/*.json', // read by include_str! in the emulator crates
+  '{workspaceRoot}/sdk/sdk.toml',
+  '{workspaceRoot}/runtime/core/abi.toml',
+  '{workspaceRoot}/tools/patchkit/toolchain/**/*',
+  '{workspaceRoot}/tools/sharc_dev/sharc_core/seed_tables.py',
+  '{workspaceRoot}/config/test-source-patterns.json',
+];
+
+// Files outside the crates that the digi-emud build reads (include_str!, build scripts) and what runs it. The crate files come from the
+// project graph (path dependencies of digi-control).
+export const DAEMON_NODSP_EXTRA = [
+  '{workspaceRoot}/Cargo.toml',
+  '{workspaceRoot}/Cargo.lock',
+  '{workspaceRoot}/rust-toolchain*',
+  '{workspaceRoot}/.cargo/**/*',
+  '{workspaceRoot}/mise.toml',
+  '{workspaceRoot}/tools/nx/cargo.mjs',
+  '{workspaceRoot}/tools/nx/rust-env.mjs',
+  '{workspaceRoot}/devices/**/*',
+  '{workspaceRoot}/ports/*.toml',
+  '{workspaceRoot}/ports/fw/**/*',
+  '{workspaceRoot}/sdk/sdk.toml',
+  '{workspaceRoot}/runtime/core/abi.toml',
+  '{workspaceRoot}/config/test-source-patterns.json',
+  '{workspaceRoot}/tools/patchkit/toolchain/**/*',
+  '{workspaceRoot}/tests/scenarios/*.json', // read by include_str! in the emulator crates
+];
+
 // Gate helper targets. They build under dist/ or out/native; out/ is never an Nx output.
 const GATE = {
   'digi-control': {
@@ -115,31 +222,18 @@ const GATE = {
       executor: 'nx:run-commands',
       cache: false,
       parallelism: true, // no gate task is exclusive; an exclusive task scheduled mid-run makes Nx wait for every running task
-      outputs: ['{workspaceRoot}/dist/daemons.json', '{workspaceRoot}/dist/bytes/daemon-test.key'],
+      outputs: [
+        '{workspaceRoot}/dist/daemons.json',
+        '{workspaceRoot}/dist/bytes/daemon-test.key',
+        '{workspaceRoot}/dist/bytes/daemon-test-*.key',
+      ],
       inputs: [
-        // The sources the daemon is built from: SOURCE_GLOBS of tools/devtools/emud_key.py. The store keys the binary by
-        // content; these inputs make a source edit select this task, and so every task that consumes dist/daemons.json.
-        '{workspaceRoot}/Cargo.toml',
-        '{workspaceRoot}/Cargo.lock',
-        '{workspaceRoot}/rust-toolchain*',
-        '{workspaceRoot}/.cargo/**/*',
-        '{workspaceRoot}/packages/emulator/**/*',
-        '{workspaceRoot}/packages/dkaddrmap/**/*',
-        '{workspaceRoot}/packages/dksharc/**/*',
-        '{workspaceRoot}/packages/dkneeds/**/*',
-        '{workspaceRoot}/packages/dksample/**/*',
-        '{workspaceRoot}/packages/dkupload/**/*',
-        '{workspaceRoot}/packages/patchkit/**/*',
-        '{workspaceRoot}/modules/core/runtime/fit/{Cargo.toml,build.rs,src/**/*}',
-        '{workspaceRoot}/modules/core/runtime/sdk/{Cargo.toml,build.rs,src/**/*}',
-        '{workspaceRoot}/devices/**/*',
-        '{workspaceRoot}/tests/scenarios/dn2.json',
-        '{workspaceRoot}/sdk/sdk.toml',
-        '{workspaceRoot}/tools/patchkit/toolchain/**/*',
-        '{workspaceRoot}/tools/sharc_dev/sharc_core/seed_tables.py',
+        ...DAEMON_BUILD_SOURCES,
         '{workspaceRoot}/tools/devtools/emud_key.py',
         '{workspaceRoot}/tools/devtools/verify_build.py',
         '{workspaceRoot}/tools/devtools/stablebin.py',
+        '{workspaceRoot}/tools/devtools/store.py',
+        '{workspaceRoot}/tools/devtools/core_store.py',
         '{workspaceRoot}/tools/emulator/digi_env.py',
         '{workspaceRoot}/tools/emulator/native_pgo.py',
         '{workspaceRoot}/tools/emulator/native_target.py',
@@ -150,6 +244,26 @@ const GATE = {
         commands: [
           'mkdir -p dist',
           'CARGO_BUILD_JOBS=${DIGI_JOBS:-4} uv run python -m tools.devtools.verify_build daemons --env-out dist/daemons.json',
+        ],
+        parallel: false,
+        cwd: '.',
+      },
+    },
+    'daemon-nodsp': {
+      executor: 'nx:run-commands',
+      cache: true,
+      parallelism: true,
+      description:
+        'Builds digi-emud without a SHARC core (the daemon of the devices with `[capabilities] dsp = "none"`, which boot cold) into dist/bin/digi-emud-nodsp: the binary the daemons target builds for them.',
+      inputs: ['default', '^default', ...DAEMON_NODSP_EXTRA],
+      // the binary and its hash: the key of the device tests of the no-DSP halves (device-test-keys.mjs, instead of daemon-test-<device>.key)
+      outputs: ['{workspaceRoot}/dist/bin/digi-emud-nodsp', '{workspaceRoot}/dist/bytes/daemon-nodsp.sha256'],
+      options: {
+        commands: [
+          // the no-core target dir and the cf-profile variant of the daemon (every workbench daemon has the run-time ColdFire profile)
+          'CARGO_BUILD_JOBS=${DIGI_JOBS:-4} node tools/nx/rust-env.mjs --variant cfprof -- cargo build --release --locked --manifest-path packages/emulator/control/Cargo.toml --bin digi-emud --features cf-profile',
+          `mkdir -p dist/bin && node tools/nx/rust-env.mjs --variant cfprof -- sh -c 'cp "$CARGO_TARGET_DIR/release/digi-emud" dist/bin/digi-emud-nodsp.tmp && mv -f dist/bin/digi-emud-nodsp.tmp dist/bin/digi-emud-nodsp'`,
+          'mkdir -p dist/bytes && shasum -a 256 dist/bin/digi-emud-nodsp | cut -d" " -f1 > dist/bytes/daemon-nodsp.sha256',
         ],
         parallel: false,
         cwd: '.',
@@ -187,13 +301,14 @@ const GATE = {
 const NO_TESTS = new Set([
   'sharc-stats',
   'sharc-gen',
-  'sharc-gen-2',
-  'sharc-native-2',
   'dkfw',
+  'dkrt-test-support',
   'sharc-fast-cl',
-  'sharc-fast-cl-2',
   'bootstrap-emu',
   'digiemu-desktop',
+  'digi-wasm-core',
+  'dynlib',
+  'sharc-core-lib',
 ]);
 
 // Crates whose tests read no firmware, generated core or out/ data; their rust-tests are cached.
@@ -206,8 +321,9 @@ export const HERMETIC = {
   dkprof: [],
   dkneeds: [],
   dksharc: [],
-  'dkrt-sdk': ['{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json'],
-  'dkrt-fit': ['{workspaceRoot}/modules/core/runtime/vectors/fit-vectors.json'],
+  'dkrt-sdk': ['{workspaceRoot}/runtime/core/vectors/settings-vectors.json'],
+  'dkrt-fit': ['{workspaceRoot}/runtime/core/vectors/fit-vectors.json'],
+  'dkrt-lifecycle': [],
   'device-profile': ['{workspaceRoot}/devices/digitakt-ii.toml', '{workspaceRoot}/devices/digitone-ii.toml'],
   dkupload: [],
   dksample: [],
@@ -217,16 +333,28 @@ export const HERMETIC = {
   dkbulk: [],
 };
 
-// Crates that compile another crate's sources by path (sharc-2 builds packages/emulator/sharc/src);
-// those files are outside the project root.
-const SHARED_SOURCE = { 'sharc-native-2': ['{workspaceRoot}/packages/emulator/sharc/**/*'] };
+// The shared fixtures (`tests/fixtures/modules`) whose `init` the contract suite of a service crate mirrors with a call list (`tests/contract.rs`): a change of a
+// fixture selects the crate's tests, so the call list is read against it.
+const fixture = (name) => [
+  `{workspaceRoot}/tests/fixtures/modules/${name}/module.toml`,
+  `{workspaceRoot}/tests/fixtures/modules/${name}/src/**/*`,
+  `{workspaceRoot}/tests/fixtures/modules/${name}/build/gen/module_ids.h`,
+];
+const FIXTURE_SOURCE = {
+  'dkrt-svc-lfo': fixture('lfo-shape'),
+  'dkrt-svc-fx': [...fixture('dyn-fx-gain'), ...fixture('dyn-fx-gain-b')],
+  'dkrt-svc-machines': fixture('sine'),
+  'dkrt-svc-shortcuts': fixture('shortcut-demo'),
+};
 
 // Files outside the crate embedded by patchkit's source, unit tests and build.rs.
 const COMPILE_SOURCE = {
   patchkit: [
     '{workspaceRoot}/sdk/sdk.toml',
-    '{workspaceRoot}/modules/core/runtime/vectors/fit-vectors.json',
-    '{workspaceRoot}/modules/core/runtime/vectors/settings-vectors.json',
+    '{workspaceRoot}/runtime/core/abi.toml',
+    '{workspaceRoot}/runtime/core/vectors/fit-vectors.json',
+    '{workspaceRoot}/runtime/core/vectors/settings-vectors.json',
+    '{workspaceRoot}/tests/fixtures/ping-vectors.json', // flash_rpc.rs: `include_str!` in its unit test
     '{workspaceRoot}/devices/*.toml',
     '{workspaceRoot}/tools/patchkit/toolchain/pins.toml',
     '{workspaceRoot}/tools/patchkit/toolchain/m68k-cf-none-elf-a2.json',
@@ -235,9 +363,9 @@ const COMPILE_SOURCE = {
 };
 
 // Normalized repo-relative roots of the path dependencies of a crate (all dependency tables).
-export const pathDeps = (workspaceRoot, crateRoot) => {
+export const pathDeps = (workspaceRoot, crateRoot, kinds = KINDS) => {
   const t = read(workspaceRoot, join(crateRoot, 'Cargo.toml'));
-  const tables = [t, ...Object.values(t.target ?? {})].flatMap((s) => KINDS.map((k) => s[k] ?? {}));
+  const tables = [t, ...Object.values(t.target ?? {})].flatMap((s) => kinds.map((k) => s[k] ?? {}));
   const deps = tables.flatMap((tbl) =>
     Object.values(tbl)
       .filter((d) => d?.path)
@@ -246,13 +374,51 @@ export const pathDeps = (workspaceRoot, crateRoot) => {
   return [...new Set(deps)];
 };
 
+// Package names of the path dependencies of a crate, transitively (each is a project of this plugin).
+const pathDepNames = (workspaceRoot, crateRoot, seen = new Set(), kinds = KINDS) => {
+  for (const dep of pathDeps(workspaceRoot, crateRoot, kinds)) {
+    const { name } = read(workspaceRoot, join(dep, 'Cargo.toml')).package;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    pathDepNames(workspaceRoot, dep, seen, kinds);
+  }
+  return [...seen].sort();
+};
+
+// `rust-tests` of a standalone crate: a crate with its own `[workspace]` and Cargo.lock inside a module directory (the
+// service crates `services/*/dks`), so no member of the root workspace. modules.mjs gives it to every module
+// project whose root holds such a crate. Uncached like the non-hermetic members. The inputs are the project's own files
+// (crate, Cargo.lock, tests), the production files of the projects it depends on by path (listed,
+// transitively, from the Cargo.toml path dependencies) and the toolchain. A crate without tests passes (`--no-tests=pass`).
+export const standaloneRustTests = (workspaceRoot, root) => {
+  const manifest = join(root, 'Cargo.toml');
+  if (!existsSync(join(workspaceRoot, manifest)) || !read(workspaceRoot, manifest).workspace) return null;
+  return {
+    executor: 'nx:run-commands',
+    cache: false,
+    inputs: [
+      ...rustInputs(workspaceRoot),
+      { input: 'production', projects: pathDepNames(workspaceRoot, root) },
+      '{workspaceRoot}/tools/nx/rust-env.mjs',
+    ],
+    options: {
+      command: `node tools/nx/rust-env.mjs -- cargo nextest run --manifest-path ${manifest} --release --locked --offline --no-tests=pass`,
+      cwd: '.',
+    },
+  };
+};
+
+const rustInputs = (workspaceRoot) => {
+  const inputs = ['default', '^production', '{workspaceRoot}/Cargo.toml', '{workspaceRoot}/Cargo.lock'];
+  if (existsSync(join(workspaceRoot, 'rust-toolchain.toml'))) inputs.push('{workspaceRoot}/rust-toolchain.toml');
+  return inputs;
+};
+
 export const createNodesV2 = [
   'Cargo.toml',
   (files, _opts, ctx) =>
     files.map((f) => {
-      const inputs = ['default', '^production', '{workspaceRoot}/Cargo.toml', '{workspaceRoot}/Cargo.lock'];
-      if (existsSync(join(ctx.workspaceRoot, 'rust-toolchain.toml')))
-        inputs.push('{workspaceRoot}/rust-toolchain.toml');
+      const inputs = rustInputs(ctx.workspaceRoot);
       const rust = read(ctx.workspaceRoot, 'mise.toml').tools.rust;
       const hermeticInputs = [
         'default',
@@ -288,12 +454,13 @@ export const createNodesV2 = [
               inputs: [
                 ...inputs,
                 '{workspaceRoot}/tools/nx/rust-env.mjs',
-                ...(SHARED_SOURCE[name] ?? []),
                 ...(COMPILE_SOURCE[name] ?? []),
+                ...(FIXTURE_SOURCE[name] ?? []),
               ],
               options: {
-                command: `node tools/nx/rust-env.mjs${name === 'sharc-native' ? ' --gen' : ''} -- cargo nextest run -p ${name} --release --locked --offline`,
+                command: `node tools/nx/rust-env.mjs${name === 'sharc-native' || name === 'sharc-rig' ? ' --gen' : ''} -- cargo nextest run -p ${name}${name === 'patchkit' ? ' --features record-rules' : ''} --release --locked --offline`,
                 cwd: '.',
+                ...(name === 'patchkit' && { env: { DIGI_REQUIRE_TOOLCHAINS: '1' } }),
               },
             };
       const projects = {};
@@ -305,7 +472,9 @@ export const createNodesV2 = [
           tags: ['rust'],
           targets: {
             ...(!NO_TESTS.has(name) && { 'rust-tests': rustTests(name) }),
-            ...(CLI[name] && { cli: cliTarget(CLI[name]) }),
+            ...(CLI[name] && {
+              cli: cliTarget({ ...CLI[name], inputs: builtInputs(ctx.workspaceRoot, root, CLI[name].inputs) }),
+            }),
             ...CRATE_TARGETS[name],
             ...GATE[name],
           },

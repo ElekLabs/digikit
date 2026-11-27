@@ -1,0 +1,399 @@
+# page: parameter and FX pages
+# Names follow <cpu>.<subsystem>.<kind>.<name>; was = former names, for reading older docs, never resolved (docs/design/firmware-decls.md).
+
+[[data]]
+name = "cf.page.data.fx_key_list"
+was = ["cf.fxpages.keystock", "cf.page.data.keystock"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_ptr", hash = "7160f06f3d6124dc745cdb7c75628c47", offset = 0x6c2, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "8fb9057131b85c6b6ab80d28a4e37a8b", offset = 0x67c, len = 4 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "The pointer operand (4 bytes) of `move.l #list,D0` in the FX view builder: the rodata list {12} of the track FX key's one-page view. The fx service substitutes its own list."
+
+[[data]]
+name = "cf.page.data.fx_view_list"
+was = ["cf.fxpages.stock", "cf.page.data.stock"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_ptr", hash = "7160f06f3d6124dc745cdb7c75628c47", offset = 0x7fa, len = 12 }
+rule.dn2 = { kind = "cf_ptr", hash = "8fb9057131b85c6b6ab80d28a4e37a8b", offset = 0x7b4, len = 12 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "The stock list itself (rodata, three page numbers) and the stock count (the byte of `moveq 3,D1` at +1): the runtime copies them in front of its pages. The stock list (rodata 0x401e0448, pages 17, 18, 19) and the stock count."
+
+# The page descriptor accessor (FUN_400c898a on 1.17): `moveq 0x20,D1; move.l (4,SP),D0` (6 bytes), then the bound check, the row address and `rts`.
+# ---- Digitone II 1.12 (the same sites, found by their own hashes; the shapes are the Digitakt II's, finding 61 "The Digitone II") ----
+# The page accessor FUN_400c25d8: `moveq 0x24,D1; move.l 4(SP),D0` (the bound: pages 0 .. 36 are stock).
+[[fn]]
+name = "cf.page.fn.page_desc"
+was = ["cf.fxpages.acc", "cf.page.fn.acc"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "2f139e6b0d70fdc22d64ca72a71f88c9", offset = 0x0, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "78edf1e40ff808780fc20e11fa31d3b4", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "The page descriptor accessor `row = f(int page)`: entry `moveq N,D1; move.l 4(SP),D0` (6 bytes), then the bound check, the row address and rts. The fx service hooks it."
+
+# ---- the machine's SRC page (Digitakt II SourcePageView, Digitone II MultiSourcePageView): the encoder click ----
+[[fn]]
+name = "cf.page.fn.source_key"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "ad9ba58a44b65973c8df406df251a462", offset = 0x0, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "31077f691362b318983bb20482d9b46f", offset = 0x0, len = 8 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Key handler (vfunc_2) of the machine's parameter page: `SourcePageView::vfunc_2` on the Digitakt II, `MultiSourcePageView::vfunc_2` on the Digitone II. Stack: 4(sp) = the view, 8(sp) = the key event (code at +0xc, flags at +0x10: 0x01 press, 0x02 chord, 0x08 repeat, 0x10 release; encoder clicks are codes 0x29 to 0x30). Entry: `link.w A6,-0x34; movem.l ...` (DT2) or `lea -0x24(SP),SP; movem.l ...` (DN2), 8 bytes (the hook displaces both instructions)."
+
+[[fn]]
+name = "cf.page.fn.source_turn"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "640ca8f509ff9bcae3b20384529fec6f", offset = 0x0, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "bdaf946934665f13a8e4e649ae285624", offset = 0x0, len = 8 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Encoder turn handler (vfunc_17) of the machine's parameter page (`SourcePageView` on the Digitakt II, `MultiSourcePageView` on the Digitone II). Stack: 4(sp) = the view, 8(sp) = the event; the encoder is `event[3] - 1` (0 to 7). Entry: `link.w A6,-0x34; movem.l ...` (DT2) or `lea -0x30(SP),SP; movem.l ...` (DN2), 8 bytes (the hook displaces both instructions)."
+
+[[fn]]
+name = "cf.page.fn.view_track"
+cpu = "cf"
+sig = "u32 (const u8 *track_ref)"
+rule = { kind = "cf_func", hash = "cedb2a1ea2dbc72965b79e3f95f41157", ordinal = 1, offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime", "core/services/machines"]
+doc = "The track of a parameter page: called with the page's reference at view+0x74, it returns the track number (the stock code clamps it to 0 to 15 and uses it as the track index into the project's sound array, FUN_40035cca on the Digitakt II). Same function body on both devices (DT2 0x4004abb8, DN2 0x40046bfe)."
+
+[[site]]
+name = "cf.page.site.filter_graph_test"
+was = ["cf.fxpages.graph", "cf.page.site.graph"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "baec8deb33854d1a7ac48e9cef2774ea", offset = 0x134, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "134772a1ba6366ed7046889536674b96", offset = 0x134, len = 6 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "FxPageView::vfunc_4 (draw): `cmp.l D0,D5; beq.w <after the graph>` (6 bytes; D5 = 15, D0 = the page number) before the filter graph; the branch target is at +0x1c4. FxPageView::vfunc_4 (0x4006f5e4): `cmp.l D0,D5; beq.w <after the graph>` with D5 = 0x13; the branch target is at +0x1c4."
+
+# The initialiser of the kit's effect value array (FUN_400e5698(array): 0x92 bytes zeroed, then the default of each of the 71 parameter codes; called by the kit
+# initialiser FUN_400e5700 (new kit, Load Kit's fresh kit, project) and by the kit loader when the storage record is refused): its common exit, `movem.l (SP),{D2 A2 A3 A4 A5};
+# lea (0x20,SP),SP` (8 bytes; A2 = the array, 0 when the function was given none), then the `rts`. The hook gives each effect row its defaults.
+# The initialiser of the Fx array (FUN_400e7140: 0xce bytes zeroed, the default of each of the 101 codes): the common exit, `movem.l (SP),{D2 A2 A3 A4 A5}; lea (0x20,SP),SP`.
+[[site]]
+name = "cf.page.site.fx_array.init_exit"
+was = ["cf.fxpages.init", "cf.page.site.init"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "8d1db0c6e713e00d9191111226e258ae", offset = 0x5c, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "77836acd2395bf50b1af9bcd04bbbe1e", offset = 0x5c, len = 8 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "Common exit of the kit's effect value array initialiser, `movem.l (SP),{D2 A2-A5}; lea (0x20,SP),SP` (8 bytes; a2 = the array); the fx service gives each effect row its defaults here."
+
+# The loader of the kit's effect value array (FUN_400daf54(array, storage), called by the kit loader FUN_400db898 for Load Kit, a pattern's kit and a project load):
+# after its table loop, `move.l (0x98,A0),(0x8e,A1)` (6 bytes; A0 = the storage record, A1 = the array). The hook restores the effect values (persistence).
+# The loader of the Fx array (FUN_400dcef0): `move.l (0x98,A0),(0xca,A1)` after its table loop.
+[[site]]
+name = "cf.page.site.fx_array.load"
+was = ["cf.fxpages.load", "cf.page.site.load"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "5c9666e3948285d6d01efc932404808b", offset = 0x32, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "ae2cb9f9c5021edb353ca8bd68eb7375", offset = 0x32, len = 6 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "The loader of the kit's effect value array (FUN_400daf54(array, storage), called by the kit loader FUN_400db898 for Load Kit, a pattern's kit and a project load): after its table loop, `move.l (0x98,A0),(0x8e,A1)` (6 bytes; A0 = the storage record, A1 = the array)."
+
+# The saver (FUN_400daf98(storage, array), called by the kit saver FUN_400dbdca): after its table loop and the clear of the 4 bytes at +0x9c,
+# `move.l (0x8e,A3),(0x98,A2)` (6 bytes; A2 = the storage record, A3 = the array). The hook writes the effect values and IDs into the spare halfwords.
+# The saver (FUN_400dcf34): `move.l (0xca,A3),(0x98,A2)` after the clear of the 4 bytes at +0x9c.
+[[site]]
+name = "cf.page.site.fx_array.save"
+was = ["cf.fxpages.save", "cf.page.site.save"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "075bbe00a9e7ec3e8e70a78898611ee3", offset = 0x40, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "72cfca259b20ad2a989d78e670ada50a", offset = 0x40, len = 6 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "The saver (FUN_400daf98(storage, array), called by the kit saver FUN_400dbdca): after its table loop and the clear of the 4 bytes at +0x9c, `move.l (0x8e,A3),(0x98,A2)` (6 bytes; A2 = the storage record, A3 = the array)."
+
+# The track FX key's page list (FX routing, finding 64): the same builder FUN_40066584 builds the main screen view and, for the FX key, a one-page view from the rodata list {12}
+# (page 12: BR, OVER, SRR, SR.RT, DEL, REV, CHR, OD.RT): `move.l #list,D0` (6 bytes) with the count `moveq 1,D1` pushed before it; the stock list's address is the operand (+2).
+# The send page and the sound loader on the Digitone II (finding 67): the same sites as the Digitakt II's, found by their own hashes.
+# The FX view builder FUN_40060e72 (hash of the list rule) builds the track FX key's one-page view from the rodata list {16} (page 16: the track FX page): `move.l #list,D0` (6 bytes) at +0x67a,
+# the count `moveq 1,D1` pushed before it.
+[[site]]
+name = "cf.page.site.fx_key_list.load"
+was = ["cf.fxpages.keylist", "cf.page.site.keylist"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "7160f06f3d6124dc745cdb7c75628c47", offset = 0x6c0, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "8fb9057131b85c6b6ab80d28a4e37a8b", offset = 0x67a, len = 6 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "The track FX key's page list (FX routing, finding 64): the same builder FUN_40066584 builds the main screen view and, for the FX key, a one-page view from the rodata list {12} (page 12: BR, OVER, SRR, SR.RT, DEL, REV, CHR, OD.RT): `move.l #list,D0` (6 bytes) with the count `moveq 1,D1` pushed before it; the stock list's address is the operand (+2)."
+
+[[site]]
+name = "cf.page.site.fx_view_list.count"
+was = ["cf.fxpages.stock_n", "cf.page.site.stock_n"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "7160f06f3d6124dc745cdb7c75628c47", offset = 0x7ea, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "8fb9057131b85c6b6ab80d28a4e37a8b", offset = 0x7a4, len = 2 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "The `moveq N,D1` (2 bytes) in the FX view builder that pushes the stock page count, N in the byte at +1; the fx service reads it as the stock count."
+
+[[site]]
+name = "cf.page.site.fx_view_list.load"
+was = ["cf.fxpages.list", "cf.page.site.list"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "7160f06f3d6124dc745cdb7c75628c47", offset = 0x7f8, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "8fb9057131b85c6b6ab80d28a4e37a8b", offset = 0x7b2, len = 6 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "The FX view's builder (FUN_40066584, the constructor of the main screen view): `move.l #<list>,D0` (6 bytes) with the count `moveq 3,D1` pushed just before it. The FX view's builder (0x40060e72): `move.l #<list>,D0` with `moveq 3,D1` before it."
+
+# The end of the firmware's sound loader FUN_400db3b2 (A2 = the Sound object, A3 = the record, D0 = the result; it zeroes the object's 71 parameter halfwords first): the common exit,
+# `movem.l (SP),{D2 D3 D4 A2 A3 A4 A5 A6}; lea (0x20,SP),SP` (8 bytes), then the `rts`. The hook counts the load.
+# The end of the firmware's sound loader FUN_400dd34e (A2 = the Sound object, A3 = the record, D0 = the result; it zeroes the object's 101 parameter halfwords first): the common exit,
+[[site]]
+name = "cf.page.site.sound_load_exit"
+was = ["cf.fxpages.sound", "cf.page.site.sound"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "d5cd38f131d3119fd16d700d526b4fb9", offset = 0x450, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "f766c42c6be0674aadb1177f3f536367", offset = 0x3d8, len = 8 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "The end of the firmware's sound loader FUN_400db3b2 (A2 = the Sound object, A3 = the record, D0 = the result; it zeroes the object's 71 parameter halfwords first): the common exit, `movem.l (SP),{D2 D3 D4 A2 A3 A4 A5 A6}; lea (0x20,SP),SP` (8 bytes), then the `rts`."
+
+# FxPageView's tab label (FUN_40074d88): `move.b #0xd,D1b; cmp.l D0,D1` (6 bytes) of the third page test (DEL), the `bne.b` after it is the stock one. The
+# routine's common tail (`pea 2; pea 0x24; pea 7; ...; jsr` at +0x1e) draws the string on the stack; the end of the function is at +0x3c.
+# FUN_4006f4a8 (the tab label): the third page test (`move.b #0x11,D1b; cmp.l D0,D1`), the common tail at +0x1e.
+[[site]]
+name = "cf.page.site.tab_label_test"
+was = ["cf.fxpages.label", "cf.page.site.label"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "ac7642057ecf0a7193cfff5c94a8c9ad", offset = 0x40, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "42e5d8c79170ce23d2ad591391433214", offset = 0x40, len = 6 }
+mark = "D"
+users = ["core/services/fx"]
+doc = "FxPageView's tab label (FUN_40074d88): `move.b #0xd,D1b; cmp.l D0,D1` (6 bytes) of the third page test (DEL), the `bne.b` after it is the stock one."
+
+# Hook points. Contracts are read from the fx service stubs (mark D). All resume at the site end or another address in
+# the function, not at a tail.
+
+[[hook]]
+name = "cf.page.hook.page_desc"
+site = "cf.page.fn.page_desc"
+cpu = "cf"
+mode = "replace"
+stock = true
+regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # page at 4(sp); own pages rts, others re-enter at site+6
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "ui"
+users = ["core/services/fx"]
+doc = "Page descriptor accessor `row = f(int page)`, entry `moveq FX_PAGE_FIRST-1,D1; move.l 4(SP),D0` (6 bytes); the hook answers the run-time effect pages and the send page with its own rows."
+
+[[hook]]
+name = "cf.page.hook.tab_label_test"
+site = "cf.page.site.tab_label_test"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.page.site.tab_label_test + 0x1e"]
+regs = { in = ["d0"], clobbers = ["d0", "d1", "a0", "ccr"] }   # effect path pushes the row name and jumps to site+0x1e [O]
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "ui"
+users = ["core/services/fx"]
+doc = "FxPageView tab label, the third page test `move.b #n,D1b; cmp.l D0,D1` (6 bytes); the hook draws the name of an effect page's row through the label code's common tail."
+
+[[hook]]
+name = "cf.page.hook.filter_graph_test"
+site = "cf.page.site.filter_graph_test"
+cpu = "cf"
+mode = "replace"
+exits = ["cf.page.site.filter_graph_test + 0x1c4"]
+regs = { in = ["d0", "d5"], clobbers = ["ccr"] }   # exits: site+6 (draw the graph) or site+0x1c4 (the beq.w target)
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "ui"
+users = ["core/services/fx"]
+doc = "FxPageView::vfunc_4 draw `cmp.l D0,D5; beq.w <after the graph>` (6 bytes) before the filter graph; the hook skips the graph for the effect pages too."
+
+[[hook]]
+name = "cf.page.hook.fx_view_list.load"
+site = "cf.page.site.fx_view_list.load"
+cpu = "cf"
+mode = "replace"
+regs = { in = [], clobbers = ["d0", "ccr"] }   # rewrites the pushed page count at (sp)
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
+users = ["core/services/fx"]
+doc = "The FX view builder `move.l #<list>,D0` (6 bytes) with the count pushed just before it; the hook hands the builder the run-time page list and its count."
+
+[[hook]]
+name = "cf.page.hook.fx_array.load"
+site = "cf.page.site.fx_array.load"
+cpu = "cf"
+mode = "replace"
+regs = { in = ["a0", "a1"], clobbers = ["d0", "d1", "a0", "a2", "a3", "ccr"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "task"
+users = ["core/services/fx"]
+doc = "Loader of the kit's effect value array after its table loop, `move.l (0x98,A0),(FX_TAIL_OFF,A1)` (6 bytes; a0 = the storage record, a1 = the array); the hook restores the effect values."
+
+[[hook]]
+name = "cf.page.hook.fx_array.save"
+site = "cf.page.site.fx_array.save"
+cpu = "cf"
+mode = "replace"
+regs = { in = ["a2", "a3"], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
+users = ["core/services/fx"]
+doc = "Saver of the kit's effect value array after its table loop, `move.l (FX_TAIL_OFF,A3),(0x98,A2)` (6 bytes; a2 = the storage record, a3 = the array); the hook writes the effect values and IDs."
+
+[[hook]]
+name = "cf.page.hook.fx_array.init_exit"
+site = "cf.page.site.fx_array.init_exit"
+cpu = "cf"
+mode = "replace"
+regs = { in = ["a2"], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # the displaced movem/lea are repeated
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "task"
+users = ["core/services/fx"]
+doc = "Common exit of the effect value array initialiser `movem.l (SP),{D2 A2-A5}; lea (0x20,SP),SP` (8 bytes; a2 = the array or 0); the hook gives each effect row its defaults."
+
+[[hook]]
+name = "cf.page.hook.fx_key_list.load"
+site = "cf.page.site.fx_key_list.load"
+cpu = "cf"
+mode = "replace"
+regs = { in = [], clobbers = ["d0", "ccr"] }   # rewrites the pushed page count at (sp)
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "task"   # [O] not traced to one task: the safe class
+users = ["core/services/fx"]
+doc = "The track FX key's one-page view in the FX view builder, `move.l #list,D0` (6 bytes) with the count pushed before it; the hook adds the send page to the list."
+
+[[hook]]
+name = "cf.page.hook.sound_load_exit"
+site = "cf.page.site.sound_load_exit"
+cpu = "cf"
+mode = "replace"
+regs = { in = ["d0"], clobbers = ["ccr"] }   # the displaced movem/lea are repeated
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "task"
+users = ["core/services/fx"]
+doc = "Common exit of the sound loader `movem.l (SP),{D2-D4 A2-A6}; lea (0x20,SP),SP` (8 bytes; a2 = the Sound, d0 = the result); the hook counts the load."
+
+[[hook]]
+name = "cf.page.hook.source_key"
+site = "cf.page.fn.source_key"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # view at 4(sp), event at 8(sp); the stock handler always runs after the hook
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "ui"
+users = ["core/services/machines"]
+doc = "Entry of the machine page's key handler; the hook sees every key event of the page and never consumes one."
+
+[[hook]]
+name = "cf.page.hook.source_turn"
+site = "cf.page.fn.source_turn"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }   # view at 4(sp), event at 8(sp); the stock handler always runs after the hook
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "ui"
+users = ["core/services/machines"]
+doc = "Entry of the machine page's encoder turn handler; ordinary PARAM turns continue natively, while opt-in native-page LOCAL/unused turns return one to consume."
+
+# Opt-in native callback pages. Current-image reads; see native-page proof notes.
+[[fn]]
+name = "cf.page.fn.source_draw"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "cbe8bf9e6b77989b0032eba45c39a8f2", offset = 0, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "f17e974be13fbdb831879bfc866600c8", offset = 0, len = 8 }
+mark = "D"
+users = ["core/rows"]
+doc = "Native source-page draw entry, stack (view, Bitmap*). A callback page may draw and return before the displaced prologue; ordinary pages resume unchanged."
+
+[[fn]]
+name = "cf.page.fn.source_code"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "f5736035a2ca339c2b0b70fbd543c4b7", offset = 0, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "57a209993d906e049bd7d59e8e451b4f", offset = 0, len = 8 }
+mark = "D"
+users = ["core/rows"]
+doc = "Native source-page encoder-to-parameter-code entry (vtable slot 47), stack (view, encoder). Callback page PARAM bindings return an existing code; page zero and stock mappings resume unchanged."
+
+[[fn]]
+name = "cf.page.fn.native_sound_index"
+cpu = "cf"
+devices = ["dn2"]
+sig = "u32 (u8 *view)"
+rule = { kind = "cf_func", hash = "d6c23337018e02ad3e32faa951d0c43f", offset = 0, len = 4 }
+mark = "D"
+users = ["core/rows", "core/services/machines"]
+doc = "DN2 selected-sound/browser index of MultiSourcePageView (not page index); values below 0x80 select the browser sound instead of the current track sound."
+
+[[fn]]
+name = "cf.page.fn.native_track_sound"
+cpu = "cf"
+sig = "u8 *(u8 *sounds, u32 track)"
+rule.dt2 = { kind = "cf_func", hash = "9fbd7b798068d1cc0a201b9060ff7250", offset = 0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "9fbd7b798068d1cc0a201b9060ff7250", offset = 0, len = 4 }
+rule.st = { kind = "cf_func", hash = "ffaa5802006170b50fc2f03dad573fef", offset = 0x0, len = 4, mark = "O" }
+mark = "D"
+users = ["core/rows", "core/runtime", "core/services/machines"]
+doc = "`Sound *f(Kit *, int track)`: the Sound value object of a track (track clamped to 0..15; kit + 0x6c + 0x3c0 * track). DN2 uses it with the source view's sounds reference (view+0x78) in its draw and parameter mapper; core/runtime uses it with the active kit. Its vtable slot 0x28 returns the sound record, whose s16 parameter words start at +0x14. DT2 1.17 0x40035cca, DN2 1.12 0x40030e66."
+
+[[fn]]
+name = "cf.page.fn.native_library_sound"
+cpu = "cf"
+devices = ["dn2"]
+sig = "u8 *(u8 *sounds, u32 index)"
+rule = { kind = "cf_func", hash = "1b963943133becbdc8e558724bd1ccbb", offset = 0, len = 4 }
+mark = "D"
+users = ["core/rows", "core/services/machines"]
+doc = "DN2 browser-selected sound from view+0x68 and the selected-sound index, as used by its draw and parameter mapper."
+
+[[data]]
+name = "cf.page.data.native_font_operand"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "763528900f7319c8f10026dea9cf938c", offset = 0xdc, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "d9f47657c8c7d0976980dee490d55065", offset = 0xdc, len = 4 }
+mark = "D"
+users = ["core/rows", "core/services/machines"]
+doc = "Address operand of pea at ParameterPageView generic knob draw+0xda; the operand points to the live RAM font object. Hash the code operand, not mutable RAM. Used only through bounded canvas text."
+
+[[hook]]
+name = "cf.page.hook.source_draw"
+site = "cf.page.fn.source_draw"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "ui"
+users = ["core/services/machines"]
+doc = "Draw entry: opt-in page returns directly after bounded callback rendering; every other page resumes its prologue."
+
+[[hook]]
+name = "cf.page.hook.source_code"
+site = "cf.page.fn.source_code"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = [], clobbers = ["d0", "d1", "a0", "a1", "ccr"] }
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "ui"
+users = ["core/services/machines"]
+doc = "Encoder code entry: opt-in page returns its declarative code (zero for LOCAL/unused); other mappings resume unchanged."

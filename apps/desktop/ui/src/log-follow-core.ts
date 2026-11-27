@@ -15,10 +15,11 @@ import {
   type DkLogEvent,
   type Fault,
   type LogConfig,
+  LogCursor,
 } from '@digi/dk-session';
 import { CAP, LOG_KIND, LOG_LEVELS } from '@digi/dk-session/gen_proto';
 import type { LogInput, Origin } from './log-core.ts';
-import type { LogNames } from './log-names.ts';
+import type { LogNames } from '@digi/dk-session/log-names';
 import { hasLogcfg } from './log-level-core.ts';
 
 /** What the follower needs of a protocol session (a `DkSession` with `followSession`, or a fake). */
@@ -113,7 +114,8 @@ const hasRuntime = (caps: number | null): boolean => caps !== null && ((caps >>>
 export class LogFollower {
   /** Whether the follower waits for a firmware flash to end. */
   paused = false;
-  private next = 0;
+  private page: FollowSession | null = null;
+  private cursor = new LogCursor({ logPage: (from) => this.page!.logPage(from, true) });
   private seenNewest = 0;
   private names = new Map<number, string>();
   private boot: DkLogEvent[] = [];
@@ -163,6 +165,7 @@ export class LogFollower {
   /** The flash is over: the device restarts, so its first answers may take a while. */
   resume(): void {
     this.paused = false;
+    this.namesDue = true;
     this.started = false;
     this.lastAnswer = this.o.now();
   }
@@ -214,6 +217,7 @@ export class LogFollower {
     if (isCancelled(e)) return POLL_MS;
     if (this.o.present && !(await this.o.present().catch(() => true))) {
       this.started = false;
+      this.namesDue = true;
       this.lastAnswer = this.o.now();
       this.o.out.status('absent');
       return FROZEN_MS;
@@ -228,31 +232,23 @@ export class LogFollower {
 
   /** Read what the origin has from `next` on; the rules of `Follower.poll`. */
   private async poll(s: FollowSession): Promise<void> {
+    this.page = s;
+    // The cursor anchors on the last event it returned: it finds a restart (also when the new log is as long as the old position) and a gap.
+    const { events, newBoot, lost } = await this.cursor.read();
     const rows: LogInput[] = [];
-    try {
-      for (;;) {
-        const [oldest, newest, events] = await s.logPage(this.next, true);
-        if (newest && newest < this.seenNewest) {
-          this.o.out.push(rows.splice(0));
-          this.say(`the ${this.o.origin} restarted: the log starts again (was at ${this.seenNewest}, now ${newest})`);
-          this.next = 0;
-          this.seenNewest = 0;
-          this.boot = [];
-          this.faultDue = this.configDue = this.modulesDue = this.namesDue = true;
-          continue;
-        }
-        if (events.length === 0) break;
-        if (events.some((e) => NAMED_KINDS.has(e.kind))) await this.refreshNames(s);
-        if (events[0]!.seq > this.next && this.next)
-          rows.push(this.note(`${events[0]!.seq - this.next} events lost (the ring held from ${oldest})`));
-        for (const ev of events) this.take(ev, rows);
-        this.next = events[events.length - 1]!.seq + 1;
-        this.seenNewest = Math.max(this.seenNewest, newest);
-        if (this.next > newest) break;
-      }
-    } finally {
-      // rows read before an error are still shown, and not read again
-      if (rows.length) this.o.out.push(rows.splice(0));
+    if (newBoot) {
+      const now = events.at(-1)?.seq ?? 0;
+      this.say(`the ${this.o.origin} restarted: the log starts again (was at ${this.seenNewest}, now ${now})`);
+      this.seenNewest = 0;
+      this.boot = [];
+      this.faultDue = this.configDue = this.modulesDue = this.namesDue = true;
+    }
+    if (events.length > 0) {
+      if (events.some((e) => NAMED_KINDS.has(e.kind))) await this.refreshNames(s);
+      if (lost > 0) rows.push(this.note(`${lost} events lost (the ring held from ${events[0]!.seq})`));
+      for (const ev of events) this.take(ev, rows);
+      this.seenNewest = Math.max(this.seenNewest, events[events.length - 1]!.seq);
+      this.o.out.push(rows);
     }
     if (this.modulesDue) await this.readModules(s);
     if (this.configDue) await this.readConfig(s);
@@ -299,7 +295,7 @@ export class LogFollower {
   /** Read the maps and the load table when they are due. The read is made for a crash or a fault only: it asks the controller to patch the image once. */
   private async refreshNames(s: FollowSession): Promise<void> {
     const names = this.o.names;
-    if (!names || !this.namesDue) return;
+    if (!names || (!this.namesDue && !names.needsRefresh?.())) return;
     this.namesDue = false;
     let why: string | undefined;
     try {

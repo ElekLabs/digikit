@@ -1,0 +1,251 @@
+//! The DSP side's shared types and constants: the words of the info tables, the loader's state (`DspState`), the loader's pending load, the checked
+//! section (`Job`, `DspSec`). The core owns the object `DKRT_DSP`; a service reaches it through `CoreApi::dsp`. The voice rows and the effect rows are the services' own (`DKRT_VROWS`, `DKRT_FROWS`).
+use crate::REC_MAX;
+use dkneeds;
+use dkrt_sdk::*;
+
+pub const INFO_MAGIC: u32 = 0x4444_5350; // "DDSP"
+pub const STATE_MAGIC: u32 = 0x444b_4453; // "DKDS"
+/// Free voice rows core/dyndsp reserves: one per run-time machine type (a module's voice takes a row).
+pub const MAX_ROWS: usize = MACHINE_ROWS;
+pub const MAX_VOICES: usize = MAX_ROWS;
+pub const MAX_RELOCS: u32 = dkneeds::MAX_RELOCS;
+pub const MAX_IMPORTS: u32 = dkneeds::MAX_IMPORTS;
+pub const GRANULE: u32 = dkneeds::GRANULE;
+/// Words of a voice row of `core/dsp-voice`: 0 type, 1 pc, 2 to 9 the range of knob 0 to 7 (min | max << 16), 10 the type the guard disabled, then its counters,
+/// 16 note_on pc, 17 state base, 18 state stride, 19 clear bytes, 20 generation, 21 log level, 22 parameter latch mask, 23 the tracks whose state the adapter has zeroed since the load (bit t; the runtime writes 0).
+pub const ROW_WORDS: u32 = 24;
+
+/// The owner byte of a voice row that no module record owns: a MISSING placeholder (docs/plans/extension-model.md E5 item 7), a disabled row that keeps the machine
+/// type of an unloaded module silent until the module's new code publishes its own row. No record has it (records are `1..=MAX_MODULES`); the service that parked
+/// the row frees it.
+pub const PLACEHOLDER_OWNER: u8 = 0xfe;
+
+/// The pc word of a placeholder row: any non-zero value (a disabled row is never called).
+pub const PLACEHOLDER_PC: u32 = L2_SW_BASE;
+/// The layout of a DSP section (`[format]` of sdk/sdk.toml): magic, versions, header words, entry sizes and the fields of a voice and an effect record.
+pub use dkneeds::{
+    DSP_HEADER, DSP_H_ALIGN, DSP_H_BANK_OFF, DSP_H_BSS, DSP_H_DEVICE, DSP_H_FX_N, DSP_H_FX_OFF,
+    DSP_H_IMAGE_OFF, DSP_H_IMAGE_SIZE, DSP_H_IMPORT_N, DSP_H_IMPORT_OFF, DSP_H_MAGIC,
+    DSP_H_RELOC_N, DSP_H_RELOC_OFF, DSP_H_VERSION, DSP_H_VOICE_N, DSP_H_VOICE_OFF, DSP_IMPORT_ADDR,
+    DSP_IMPORT_LEN, DSP_MAGIC, DSP_V1, DSP_V2, DSP_V3, DSP_V4, DSP_V5, RELOC_LEN, RELOC_OFFSET,
+    RELOC_WORD, VOICE_CLEAR_BYTES, VOICE_ENTRY, VOICE_LATCH, VOICE_NOTE_ON, VOICE_STATE_BYTES,
+    VOICE_TYPE, VOICE_V2_RANGES, VOICE_V3_RANGES, VOICE_V3_RESERVED, VOICE_VOICES,
+};
+pub use dkneeds::{FX_DESC, FX_FLAGS, FX_NPARAMS, FX_PARAMS, FX_PROCESS, FX_STATE};
+/// Bytes of a voice entry in a DSP section: version 1 16 (type, entry), version 2 48 (type, entry, 8 ranges, 2 reserved),
+/// version 3 64 (type, render, note_on, state_bytes, clear_bytes, 8 ranges, voices, latch mask, reserved).
+pub use dkneeds::{VOICE_V1, VOICE_V2, VOICE_V3};
+/// Most voice states a module may reserve.
+pub const MAX_STATE_VOICES: u32 = dkneeds::MAX_STATE_VOICES;
+/// Steps to publish a row: 8 ranges, the pc, note_on, state base, stride, clear, the latch mask, the zeroed-tracks mask, the cleared disabled word, the type.
+pub const ROW_STEPS: u32 = 17;
+/// Effect rows: the most a chain takes (`DK_FX_MAX`), the bytes of an effect record in a DSP section of version 4, the words of a row of `core/fx`, the pc of
+/// a free row and the steps to publish a row: 8 parameter words, desc, state, mix, enabled, the 4 amount words and the route (finding 62), the pc.
+pub const MAX_FX: usize = dkneeds::MAX_FX as usize;
+pub use dkneeds::FX_LEN as FX_REC;
+pub const FX_ROW_WORDS: u32 = 24;
+pub const FX_FREE_PC: u32 = 0xffff_ffff;
+pub const FX_STEPS: u32 = 18;
+/// The words of an effect row (`core/fx` module.toml): pc, desc, state, enabled, p0 (to p7), and the adapter's was, dis, fault window start, count and total.
+pub const FXW_PC: u32 = 0;
+pub const FXW_DESC: u32 = 1;
+pub const FXW_STATE: u32 = 2;
+pub const FXW_ENABLED: u32 = 3;
+pub const FXW_P0: u32 = 4;
+pub const FXW_WAS: u32 = 12;
+/// The row's dry/wet blend (a float; 1.0 is the wet signal, 0 the dry one), owned by the adapter and set by the MIX knob of the effect's page.
+pub const FXW_MIX: u32 = 13;
+/// 1.0f: the mix of a row without a page.
+pub const MIX_ONE: u32 = 0x3f80_0000;
+pub const FXW_DIS: u32 = 14;
+pub const FXW_WSTART: u32 = 15;
+pub const FXW_WCOUNT: u32 = 16;
+/// The send route (finding 62): 0 master, 1 send bus; then the 16 amounts as 4 words, track t in word `FXW_AMT0 + t / 4`, byte `t % 4` (little endian).
+pub const FXW_ROUTE: u32 = 18;
+pub const FXW_AMT0: u32 = 19;
+pub const FX_STEP_ROUTE: u32 = 12;
+/// `dk_fx_desc` (<dk/fx/fx.h>): magic "DKFX", contract, and its size in bytes.
+pub use dkneeds::fx::{
+    DK_FX_DESC_BYTES as FX_DESC_BYTES, DK_FX_MAGIC as FX_DESC_MAGIC,
+    DK_FX_MAX_PARAMS as FX_MAX_PARAMS,
+};
+/// The windows of `core/dsp-link`.
+pub const WIN_VOICES: u32 = 1;
+pub const WIN_FX: u32 = 2;
+pub const FX_INFO_MAGIC: u32 = 0x4446_5849; // "DFXI"
+pub const L2_BYTE_BASE: u32 = 0x2000_0000;
+pub const L2_SW_BASE: u32 = 0x00B8_0000;
+// The run-time machine types (`dynamic_first ..= last` of modules/core/adapters/machines/types.toml) are the device profile's (`dyn_type_first`,
+// `dyn_types`); the tables have `MACHINE_ROWS` rows, and the device's count is that many or 0 (no DSP, no row is used).
+/// A free voice row's type: no machine type equals it.
+pub const FREE_TYPE: u32 = 0xffff_ffff;
+/// UI-loop passes a phase may last before the load is given up.
+pub const GUARD_TICKS: u32 = 6000;
+/// Polls a blocking one-word write may spin.
+pub const SPIN: u32 = 4_000_000;
+
+pub const PH_IDLE: u32 = 0;
+pub const PH_SEND: u32 = 1;
+pub const PH_ROWS: u32 = 2;
+pub const PH_QUARANTINE: u32 = 3;
+// Cleanup could not establish row invalidation/CF drain. Keep every allocation
+// and transfer source untouched until reboot; unlike PH_QUARANTINE, never poll.
+pub const PH_RETAINED: u32 = 4;
+
+// words of `dyndsp_info` (byte offset / 4)
+pub const I_MAGIC: usize = 0;
+pub const I_DEVICE: usize = 2;
+pub const I_AREA: usize = 3;
+pub const I_AREA_BYTES: usize = 4;
+pub const I_VROWS: usize = 5;
+pub const I_VFIRST: usize = 6;
+pub const I_VFREE: usize = 7;
+pub const I_NIMPORT: usize = 9;
+pub const I_IMPORTS: usize = 10;
+
+// words of `dynfx_info` (byte offset / 4)
+pub const F_MAGIC: usize = 0;
+pub const F_DEVICE: usize = 2;
+pub const F_ROWS: usize = 3;
+pub const F_FIRST: usize = 4;
+pub const F_FREE: usize = 5;
+pub const F_WORDS: usize = 7;
+
+/// The CF-side half of a load whose DSP part is under way: everything is in place except publishing (the machine row, `init`,
+/// the tick).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Pending {
+    pub rec: u32,
+    /// Copy of the `register` records (arena block), 0 if none.
+    pub reg: u32,
+    pub reg_size: u32,
+    /// Absolute address of `init`, 0 if none.
+    pub init: u32,
+    /// 1: the CF side went live at boot (machine rows, `init`, tick); only the DSP part is left, and a failure takes the module down.
+    pub early: u32,
+    /// The selection index of a module loaded by the boot hook (`u32::MAX`: none), for the boot report.
+    pub boot_idx: u32,
+    /// The image to send: byte address in the area, bytes, the arena block holding the relocated copy (set by `launch`).
+    pub send_base: u32,
+    pub send_len: u32,
+    pub send_buf: crate::dev_addr::DevAddr,
+}
+
+/// The DSP loader's state: one object a host can peek (`DKRT_DSP`). The voice rows are the machines service's (`DKRT_VROWS`), the effect rows the fx service's (`DKRT_FROWS`).
+#[repr(C)]
+pub struct DspState {
+    pub magic: u32,
+    pub phase: u32,
+    pub ticks: u32,
+    pub step: u32,
+    /// The link request of the loader in flight (the id of its `Ticket`; 0: none).
+    pub ticket: u32,
+    /// The steps of the row sequence that request carries.
+    pub row_steps: u32,
+    /// Byte address, bytes and arena block of the image `reserve` has prepared and `launch` has not taken yet.
+    pub send_base: u32,
+    pub send_len: u32,
+    pub send_buf: crate::dev_addr::DevAddr,
+    pub transfers: u32,
+    pub row_writes: u32,
+    pub failures: u32,
+    pub last_dl_err: u32,
+    /// Per module record: byte offset into the area and length of its range (len 0: none).
+    pub mod_off: [u32; REC_MAX],
+    pub mod_len: [u32; REC_MAX],
+    /// The load being sent, and the loads behind it (the boot hook publishes the CF side of every module at once).
+    pub pending: Pending,
+    pub waiting: [Pending; REC_MAX],
+    pub nwait: u32,
+    /// The slot writes of a provider file's DSP part sent so far (0: not started, 1: the sequence of its slots is in flight or done).
+    pub slot_run: u32,
+}
+
+/// What `check` found in a DSP section; pointers are into the staged file.
+#[repr(C)]
+pub struct Job {
+    pub image: *const u8,
+    pub image_size: u32,
+    pub bss: u32,
+    pub align: u32,
+    pub relocs: *const u8,
+    pub nreloc: u32,
+    pub imports: *const u8,
+    pub nimport: u32,
+    pub voices: *const u8,
+    pub nvoice: u32,
+    /// Bytes of a voice entry (`VOICE_V1`, `VOICE_V2` or `VOICE_V3`).
+    pub vstride: u32,
+    /// The effect records (version 4), `FX_REC` bytes each.
+    pub fxs: *const u8,
+    pub nfx: u32,
+    pub bank: *const u8,
+    /// Bytes of the state blocks of the entries the services own, behind the image and bss (each block rounded to 8): the services add them in `dsp_check_sections`.
+    pub state_bytes: u32,
+    /// How many entries of the section's voice and effect tables the services accepted (each adds the count it checked in `dsp_check_sections`): the core refuses a section
+    /// with entries that no loaded service owns.
+    pub accepted: u32,
+    pub import_vals: [u32; MAX_IMPORTS as usize],
+}
+
+impl Job {
+    pub const fn empty() -> Job {
+        Job {
+            image: core::ptr::null(),
+            image_size: 0,
+            bss: 0,
+            align: 0,
+            relocs: core::ptr::null(),
+            nreloc: 0,
+            imports: core::ptr::null(),
+            nimport: 0,
+            voices: core::ptr::null(),
+            nvoice: 0,
+            vstride: VOICE_V2,
+            fxs: core::ptr::null(),
+            nfx: 0,
+            bank: core::ptr::null(),
+            state_bytes: 0,
+            accepted: 0,
+            import_vals: [0; MAX_IMPORTS as usize],
+        }
+    }
+}
+
+/// The tables of a DSP section after the header checks (offsets are into the section `s`), for the services' checks of their entries.
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct DspSec {
+    pub s: *const u8,
+    pub version: u32,
+    /// Bytes of the section.
+    pub size: u32,
+    pub image_size: u32,
+    pub image_off: u32,
+    pub reloc_off: u32,
+    pub nreloc: u32,
+    pub import_off: u32,
+    pub nimport: u32,
+    pub voice_off: u32,
+    pub nvoice: u32,
+    pub fx_off: u32,
+    pub nfx: u32,
+    /// Bytes of a voice entry (`VOICE_V1`, `VOICE_V2` or `VOICE_V3`).
+    pub vstride: u32,
+    /// The track-table record's offset (version 5; 0 otherwise).
+    pub bank_off: u32,
+}
+
+pub unsafe fn in_sec(off: u32, len: u32, size: u32) -> bool {
+    off <= size && len <= size - off
+}
+
+/// The little-endian word at `p` (the DSP image's own byte order).
+pub unsafe fn rd32le(p: *const u8) -> u32 {
+    (*p as u32)
+        | ((*p.add(1) as u32) << 8)
+        | ((*p.add(2) as u32) << 16)
+        | ((*p.add(3) as u32) << 24)
+}

@@ -1,0 +1,82 @@
+# Size attribution for the items of runtime.dko.json: `patchkit owners` and `patchkit objdiff --owners` (docs/TESTING.md "Owner hashes"). It selects no build or test.
+#
+# A tag lists the module path prefixes of the Rust items it owns; the longest prefix at a `::` boundary wins. Every Rust item must
+# match one prefix, or `patchkit owners` fails and names the module paths that lack an owner. A C symbol (an exported `#[no_mangle]`
+# function) is shared; an anonymous constant (a string, a vtable, a table) belongs to the owner of the items that use it, or is shared.
+#
+# `S:` tags are services and are removed when the service becomes a `.dks` file (fx and machines are out); `C:` tags stay.
+# When unsure, put a path in `shared`.
+
+shared = [
+  "core",              # the standard library, and the primitive types
+  "compiler_builtins",
+  "__rustc",
+  "dkrt_abi",          # the platform, storage and service contracts
+  "dkrt_sdk",          # SDK types and the store, settings and sample logic that the core and the SDK share
+  "dkfw",
+  "dkneeds",
+  "dkrt::lib",
+  "dkrt::state",
+  "dkrt::api",
+  "dkrt::package::core_api",
+  "dkrt::package::entry",       # the `dk_*` SDK entry points that modules call
+  "dkrt::platform",
+  "dkrt::dev",         # the device object `dkrt_dev`: the reader behind RealPlatform
+  "dkrt::mailbox",
+  "dkrt::package::handlers",
+  "dkrt::resident_query",
+  "dkrt::resident",    # the resident table: the thunks the package calls
+  "dkrt::stage1",      # stage 1: loads the system package from the card, places it in the package block and starts it
+  "dkrt::boot_env",    # the boot's steps on the device: stage 1, the package start and the block given back
+  "dkrt::host_dir",    # the host directory `DKRT_HOST_DIR` (tools find the package statics through it)
+  "dkrt::package::resident", # the package's facade over it
+  "dkrt::package::boot_idx",
+  "dkrt::stock_kit",   # the stock kit layout of the device
+  "dkrt::hooks",       # the resident core's calls into the package, and the package's table of them
+  "dkrt::package::hooks",
+  "dkrt::menu_exports",
+  "dkrt::package::gen_services",
+  "dkrt::package::imports",
+  "dkrt::package::svc_imports", # the `dkc_*` shims of a service file: one function per CoreApi method
+  "dkrt::native",
+  "dkrt::arena",
+  "dkrt::hash32",
+  "dkrt::sha256",
+  "dkrt::worker",
+  "dkrt::speed",
+  "dkrt::debug_selected_params",
+  "dkrt::selected_track",
+]
+
+"S:lfo" = ["dkrt_svc_lfo"]
+
+"C:state" = ["dkrt::package::module_ui", "dkrt::settings", "dkrt::package::settings_overlay", "dkrt::selection"]
+"C:boot" = ["dkrt::boot", "dkrt::package::boot_steps", "dkrt::intro", "dkrt::safe_mode", "dkrt::safe_screen"]
+"C:loading" = [
+  "dkrt::package::loader",
+  "dkrt::image",     # the parse and checks of a `.dkm` image (stage 1 reads it too)
+  "dkrt::package::reload",   # the reload job, its refusals and the placeholder phase (docs/plans/extension-model.md E5)
+  "dkrt::package::settings_reload",
+  "dkrt::package::provider_rows",
+  "dkrt::package::admission", # owner, key and fit verdicts of a boot or a live load
+  "dkrt::package::lifecycle", # the runtime's seams of the package manager
+  "dkrt_lifecycle",  # package graph and package manager (runtime/core/lifecycle)
+  "dkrt::package::scan",
+  "dkrt::package::collect",
+  "dkrt::assign",
+  "dkrt::package::registry",
+  "dkrt::params",
+  "dkrt::package::invariants",
+  "dkrt_fit",
+  "dkrt_svc_rt",     # service runtime glue in every .dks: part loading, owner hooks (runtime/core/svc-rt)
+]
+"C:dsp" = ["dkrt::package::dsp", "dkrt::package::dsp_stats", "dkrt::package::link", "dkrt_link"]
+"C:storage" = [
+  "dkrt::storage",
+  "dkrt::package::files",
+  "dkrt::io",
+  "dkrt::aux",
+]
+"C:transport" = ["dkrt::transport", "dkrt::store_cmds", "dkrt::package::module_cmds", "dkrt::admin_cmds", "dkrt::package::live_cmds", "dkrt::package::commands"]
+"C:diagnostics" = ["dkrt::dlog", "dkrt::fault", "dkrt::report", "dkrt::watch", "dkrt::health", "dkrt::package::capacity"]
+"C:tick" = ["dkrt::tick"]

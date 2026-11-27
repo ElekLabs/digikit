@@ -48,7 +48,7 @@ Every reply body starts with `i8 status` (0 = ok). Codes, in the runtime's code 
 | -58 | E_READ | the firmware's block read failed |
 | -59 | E_NOFILE | DELETE of a path that is not in the store |
 | -60 | E_PROTO | unknown protocol version or command |
-| -61 | E_NOSTORE | the device has no `[card.store]` or the store header is unreadable (CLEAR still works) |
+| -61 | E_NOSTORE | the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then) |
 | -62 | E_INUSE | BEGIN, DELETE or CLEAR on a card whose store area is not ours and not blank: the runtime writes nothing there (see "Card safety") |
 | -63 | E_PEEK | PEEK of a range that the device file does not list, or a length of 0 or over 512 |
 | -65 | (free) | was `E_DISABLED`, the guard of the remote range while DIGIKIT > REMOTE was off; the switch and the guard are gone |
@@ -66,7 +66,7 @@ SELECT also answers the selection record's own codes (runtime codes -40 to -49):
 
 | cmd | name | request body | reply body after status |
 |---|---|---|---|
-| 0x01 | INFO | (none) | `u16 protocol 1, u16 RUNTIME_VERSION (4 since SELECT and RESTART, 5 since the DSP guard: voice rows of 16 words, DSP sections of version 2, 24 DSP diagnostic words, log events 27 and 28; the commands are unchanged), device id NUL ("dt2" or "dn2"), u32 free_bytes, u32 max_chunk 32768, u8 flags, u32 log_oldest, u32 log_newest` (flags: bit 0 safe mode, bit 1 upload open, bit 2 card read-only, bit 3 the debug module is loaded (a log sink is set), bit 4 a crash record was found at this boot; the runtime sends 0 and 0 for the two sequence numbers: the log is the debug module's, and its LOG reply has the oldest and newest sequence number; runtime 2 stops after the flags; later runtimes append `u32` the packed runtime version, `u32` the capability bits and, from runtime 0.5.2, `u8 image_id[8]`: the id of the flashed image that patchkit stamps into the runtime (definition: `docs/design/device-bridge.md` 3.3), all zero when the image carries none; a host reads each appended field only when the reply is long enough) |
+| 0x01 | INFO | (none) | `u16 protocol 1, u16 RUNTIME_VERSION (4 since SELECT and RESTART, 5 since the DSP guard: voice rows of 16 words, DSP sections of version 2, 24 DSP diagnostic words, log events 27 and 28; the commands are unchanged), device id NUL ("dt2", "dn2", "st"; the runtime writes it in a 4-byte field, so a name of fewer than 3 characters is followed by more NULs), u32 free_bytes, u32 max_chunk 32768, u8 flags, u32 log_oldest, u32 log_newest` (flags: bit 0 safe mode, bit 1 upload open, bit 2 card read-only, bit 3 the debug module is loaded (a log sink is set), bit 4 a crash record was found at this boot; the runtime sends 0 and 0 for the two sequence numbers: the log is the debug module's, and its LOG reply has the oldest and newest sequence number; runtime 2 stops after the flags; later runtimes append `u32` the packed runtime version, `u32` the capability bits and, from runtime 0.5.2, `u8 image_id[8]`: the id of the flashed image that patchkit stamps into the runtime (definition: `docs/design/device-bridge.md` 3.3), all zero when the image carries none; then `u32 svc_abi` (the ABI fingerprint of service files, when `caps` bit `SVC_ABI` is set), `u8 fw_id[8]` (the firmware identity that names the port file, when bit `FW_ID` is set) and `u32 card_sectors` (the card's capacity in sectors; 0xFFFFFFFF: the driver is not ready) with `u32 card_state` (0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable, 5 too small). The fields follow each other in this order and the bit-gated ones are present only when their bit is set; a host reads each appended field only when the reply is long enough after the fields before it, so a reply without the card fields has a null capacity and state; after `card_state` come six `u32` of the card write guard (`core/card-guard`, `docs/plans/card-write-guard.md`): `version` (0: the module is not in the image, and the other five words are 0), the number of refused block writes, the number of refused block erases, and the last refused request: its first sector, its length in sectors and `class | kind << 8` (class 0 stock caller, 1 the runtime's raw write; kind 0 write, 1 erase); a host reads them only when the reply is long enough after the card fields) |
 | 0x02 | LIST | `u32 first`, then optionally `prefix NUL` (1 to 159 bytes; runtime 0.3.0, capability bit 10) | `u32 total, u8 n`, then n entries `path NUL, u32 size, hash[32]` from index `first`, as many as fit the reply. Without a prefix: every entry of the table, `first` is a table index. With one: only the entries whose path starts with it (files, and folders with nothing in them), `first` and `total` count those. A folder entry has size 0 and a zero hash (a file of size 0 has the hash of nothing, `43fa243b`, never zero). The 32-byte hash is the file hash slot: the +Drive content hash `| 1` (`dksample::content_hash`, a lookup3 variant over big-endian words) as 4 big-endian bytes, then 28 zero bytes (capability bit 12, FILEHASH; a host that finds the bit missing stops with "Update the firmware: this runtime uses the old store format"). The host pages until it has `total`. A prefix without its NUL: E_MSG. |
 | 0x03 | MODULES (runtime 0.2.0, capability bit 5) | `u8 start` (a module record index) | `u32 arena_free, u32 arena_largest, u32 dsp_free, u32 dsp_largest, u8 total, u8 n`, then `n` records (below). The loaded modules and what they hold; see "MODULES". |
 | 0x04 | CAPACITY (runtime 0.2.2, capability bit 6) | (none) | `u8 version 1, u8 n`, then `n` entries `u8 kind, u32 limit, u32 used, u32 largest`. Per resource of the runtime; see "CAPACITY". |
@@ -74,7 +74,7 @@ SELECT also answers the selection record's own codes (runtime codes -40 to -49):
 | 0x11 | DATA | `u32 offset, bytes` | (none). |
 | 0x12 | END | (none) | (none). Verifies, then commits (below). |
 | 0x13 | DELETE | `path NUL` | (none). Commits a table without the path. It does not touch the selection record: a selected or loaded file that is deleted stays selected and loaded until the next boot, which skips the path with a `MOD_LOAD` error line (`E_NOT_FOUND`) and carries on. |
-| 0x14 | CLEAR | `u32 0x434c5221` ("CLR!") | (none). Commits an empty store. |
+| 0x14 | CLEAR | `u32 0x434c5221` ("CLR!") | (none). Commits a store with only the system package `digikit/system.dksp` (an empty one when the card has none, or when the store is too damaged to read, or when it is so full that no sector is left for the new table: then everything goes, the package too, and the runtime logs one `UPLOAD` error event with first argument `0xb7`; a repack lists the store after CLEAR and sends the package only when it went). Removing the package is an explicit DELETE of that path. |
 | 0x15 | ABORT | (none) | (none). Drops an open upload. |
 | 0x16 | READ (runtime 0.2.4, capability bit 7) | `path NUL, u32 offset, u32 length` | `u32 file size`, then `min(length, 768, size - offset)` bytes of the file from `offset`. Read-only: every state, one card read, not logged as an UPLOAD event. Errors: E_NOFILE (not in the store), E_LENGTH (length 0), E_OFFSET (offset at or past the end of the file), E_PATH, E_MSG. The cap of 768 keeps the reply (status, size, bytes) inside the 880-byte reply body; a host reads a larger file with several requests. A .dkm header is the first 0xa0 bytes (`digikit-dkm.md`). |
 | 0x17 | VERIFY (runtime 0.2.4, capability bit 8) | `path NUL`, optionally `u32 offset, u32 length` (runtime 0.3.0) | `hash[32]` (the file hash slot) of the file, or of that range of it, computed by the device from a fresh read of the card. Read-only, not logged. The device spends about 7 ColdFire instructions a byte on the hash (finding 43), so a host still checks a large file in ranges of a MiB or so (`offset` is a multiple of 512). Errors: E_NOFILE, E_READ, E_PATH, E_MSG, E_OFFSET (not a multiple of 512, or at or past the end), E_LENGTH (0, or past the end). A host compares it with its own hash to know that the bytes on the card are the bytes it sent. |
@@ -85,15 +85,16 @@ SELECT also answers the selection record's own codes (runtime codes -40 to -49):
 | 0x21 | PEEK | `u32 addr, u16 len` | `u32 addr, u16 len`, then `len` bytes of RAM. `len` is 1 to 512 and `[addr, addr + len)` must lie wholly inside one range of `[digikit] peek` in the device file (`devices/*.toml`: the firmware's data and the runtime's own region with the crash-record area); no peripheral registers. |
 | 0x30 | SELECT (runtime 4) | `u8 n` (0 to 8), then `n` store paths, each followed by a NUL | (none). Saves the selection record (what the next boot loads): `boot::selection_set`, the function the menu's APPLY & RESTART calls through `dkrt_selection_set`, so the card range check and the "blank or ours" rule apply and the boot counter and the DEBUG bit carry over. `E_INUSE` on a card that is not ours and not blank. The paths are not looked up in the store (a missing file is reported by the boot as `E_NOT_FOUND`, as for the menu). `n` 0 clears the selection. No effect until the next boot. |
 | 0x31 | RESTART (runtime 4) | (none) | (none). The reply is sent first; the soft reset (`dkrt_restart`, the one APPLY & RESTART runs) follows from the UI task's next passes, once the TX ring has drained (at most 4000 passes). `E_STATE` while an upload is open. When `dkrt_restart` refuses (a card transfer is in flight) the request is dropped and the log gets an UPLOAD error event `{cmd 0x31, status}`; the host sees the runtime still running and asks again. A host that wants the new boot reads LOG: the new boot's log holds no UPLOAD event for cmd 0x31 (the ring starts again), and holds BOOT_START. |
+| 0x0b | RETRY (resident core) | (none) | (none). Clears the boot counter in the selection record, so that the next boot tries the system package again: a core-only boot that crashes caused (`docs/plans/resident-core-and-system-package.md`, section 5) keeps its counter at every boot until the package file `digikit/system.dksp` is written through the store (which clears it too) or RETRY runs. No stored hash and no record format change. `E_INUSE` when the card is not ours and not blank (nothing can be written), `E_STATE` while an upload is open or a store write is in flight. The running boot goes on as it is: RESTART follows. Number 0x0b is the one free number of the 6-bit command space (0x0c to 0x0f stay reserved for test fixtures). |
 
 The device id is the device, not the firmware version: the runtime has no per-port constant (a port is a set of anchors, and a
-constant would be a fourth copy of a fact `devices/ports/` holds). A host that wants the version asks the stock MidiRpc
+constant would be a fourth copy of a fact `ports/` holds). A host that wants the version asks the stock MidiRpc
 SoftwareVersion (the stock route is unchanged). *Changed 2026-10-18 (lane r4); the first draft said "dt2-1.16".*
 
 Behaviour the first draft left open (lane r4, built and tested):
 
 - A card with nothing in the store area is an empty store: INFO, LIST and BEGIN work, and the first END writes both headers. A card that is smaller than the area has no store (`E_NOSTORE` for every command that needs it).
-  `E_NOSTORE` is for a header that is there but unreadable (no usable copy); CLEAR still works then.
+  `E_NOSTORE` is also for a header that is there but unreadable (no usable copy) and for an area that holds other data; CLEAR still works then, and it is refused with a card that is too small.
 - END closes the upload whatever its result (a failed END needs a new BEGIN). BEGIN, DELETE and CLEAR drop an open upload. ABORT with
   none open is ok.
 - The table is streamed through two 8 KiB buffers, so a store holds as many entries as the card has room for (version 4, docs/design/digikit-store.md); a request body is at most 256 bytes (a path of 159 bytes
@@ -140,8 +141,8 @@ kind is appended, never renumbered. `used` and `largest` come from the same tabl
 | 5 | DSP_AREA | DSP run-time area bytes (0 without a DSP loader) | taken; alignment gaps count as free | the largest free range |
 | 6 | MACHINE_ROWS | run-time machine types the registry reserves | in use | 0 |
 | 7 | VOICE_ROWS | DSP voice rows | in use | 0 |
-| 8 | PARAM_ROWS | parameter rows core/dynreg reserves | in use | 0 |
-| 9 | PAGE_ROWS | page rows core/dynreg reserves (0 on the Digitakt II) | in use | 0 |
+| 8 | PARAM_ROWS | parameter rows core/rows reserves | in use | 0 |
+| 9 | PAGE_ROWS | page rows core/rows reserves (0 on the Digitakt II) | in use | 0 |
 | 10 | FX_SLOTS | effects in the chain (`[limits] fx_slots`) | 0 (run-time effects do not exist) | 0 |
 | 11 | MAP_ENTRIES | sticky machine-type map entries (`MAP_N`) | in use | 0 |
 | 12 | STORE | the store area in **KiB** (a store can be 22 GiB; 0 when the card is too small for it) | KiB the headers say are used (header A, the table, the files); a card with no header: 0 | 0 (BEGIN answers E_FULL with the free bytes; a fragmented store can refuse a file smaller than the sum of its gaps) |
@@ -152,6 +153,20 @@ kind is appended, never renumbered. `used` and `largest` come from the same tabl
 
 `Uploader.capacity()` returns `{name: {limit, used, largest}}`; `mise run dk:store -- --emu info` prints one line per kind (and says "not reported" for a runtime without the bit). The Rust client (`packages/dkupload`) has no MODULES
 or CAPACITY request yet; it gets the generated numbers only (P5).
+
+## Workbench settings
+
+Runtime 0.11.5 advertises the `MODULE_UI` capability in INFO. Each enrolled module has a nonzero `ui_instance` in MODULES. Command `0x00` addresses its public settings by `u8 verb, u8 slot, u32 instance`. Numbers are big-endian.
+
+| Verb | Additional request bytes | Reply body on success |
+| --- | --- | --- |
+| 0 Describe | None | The versioned descriptor |
+| 1 Get, 2 Put, 3 Reset | `u32 ticket, u8 field, u32 revision`, with value bytes for Put | Empty when queued |
+| 4 Poll | `u32 ticket` | `u8 1` while pending. When done, `u8 0, i32 status, u32 revision, u8 present`, then the value when present. |
+
+The descriptor starts with `u8 version=1`, a length-prefixed UTF-8 module name and `u8 field count`. Each field has a length-prefixed key and label, `u8 max_bytes, u8 kind, u8 apply`. Apply is 0 for immediate and 1 for next restart. Text is kind 0. File-name is kind 1 followed by a length-prefixed extension and reset label, and its value must name an existing nonempty file in the module's data directory. String lengths are one byte. The descriptor is limited to 512 bytes and a value to 64 bytes.
+
+The MIDI task queues work for the UI task, which uses the enrolled module's settings namespace. A repeated ticket replays its original result while retained. A stale module or an unknown ticket returns `E_NOT_FOUND`. A stale edit returns `E_MODULE_UI_CONFLICT`. When a settings overlay is installed, Get reads the effective value and mutations return `E_MODULE_UI_SCOPE`. Reset removes the setting. The card stores changes through the usual settings flush.
 
 ## MODULES
 
@@ -165,24 +180,37 @@ the DSP loader). A record, big endian:
   0   1  u8 index            module record index
   1  32  name               the module's name field, NUL padded
  33   4  u32 version        the module's packed version (major << 16 | minor << 8 | patch)
- 37   8  contracts          api, machine, fx, service as (major, minor) bytes, as the file declared them (0 = not declared)
+ 37   4  u32 runtime_required the packed runtime version required by the file
+ 41   4  u32 ui_instance     MODULE_UI capability only. Zero means no public settings
  45   4  u32 cf_base        the module's ColdFire block in the arena (image + bss)
  49   4  u32 cf_size
  53   4  u32 dsp_off        its range in the DSP area (byte offset into the area; 0 and 0 without DSP code)
  57   4  u32 dsp_len
- 61   4  u32 rows           the DSP voice rows it owns, as a bit mask
- 65   1  u8 n_types         0 to 8
- 66  nt  type bytes         the machine types it has: its machine rows (the types the boot assigned, in type order), then its voice rows' types not listed yet (a pinned voice type)
- 66+nt 4 u32 faults        the DSP guard's fault count for those types since the boot
- 70+nt 1 u8 flags          bit 0: the guard has switched one of them off
+ 61   1  u8 n_sections      runtime 0.13.0 and later; the fixed part above ends at dsp_len (61 bytes)
+ 62   .  sections           per section: u32 service name hash, u8 n, n words (u32)
 ```
 
-A record is 71 + `n_types` bytes. `faults` and the flag come from the guard words the runtime polls once a second (`DSP_DIAG` words 17 to 23): they name only the type of the *last* fault and of the last type switched off,
-so the count is exact for one faulting type and, when two types fault inside one poll, goes to the last one. `dkupload --port NAME modules` (`mise run dk:store -- --port NAME modules`) prints a header with the free space and one line per module.
+From runtime 0.13.0 the record ends with the sections: what each loaded service holds for the module, by the `Describe` part of its provider row (`runtime/core/abi/src/provider/parts.rs`). The runtime asks every
+row that adopts the part, in table order, with the module record index + 1; a service with no word for the module gives no section, and the runtime reads no meaning into the words (at most 16 words
+a section; a record whose sections do not fit ends the page). The hash is the service name's FNV-1a 32 (`dkneeds::keys::name_hash`). A host reads the sections of the services it knows:
+
+- `machines`, five words: the DSP voice rows the module owns (bit mask); the DSP guard's fault count for its types since the boot; `nt` (bits 0 to 7, at most 8) with bit 8 set when the guard has switched
+  one of them off; the types 0 to 3 and the types 4 to 7, one byte each, type `i` in byte `i % 4` counted from the least significant. The types are the module's machine rows (the types the boot
+  assigned, in type order), then its voice rows' types not listed yet (a pinned voice type). The fault count and the flag come from the guard words the runtime polls once a second (`DSP_DIAG` words 17 to 23): they name only
+  the type of the *last* fault and of the last type switched off, so the count is exact for one faulting type and, when two types fault inside one poll, goes to the last one. A module with no voice row, no type and no fault has no section.
+- `fx`, one word for each effect row of the module that has a page, in row order: the row (bits 0 to 7), then four bits each: the route it runs on, the route the settings give it now, the routes its
+  record allows and its default (1 master, 2 send).
+
+The layout is versioned by INFO's `caps` bit 21 (`MODULE_SECTIONS`): a runtime that has the sections sets it, an older one (0.11.4 and earlier) does not. A host reads the reply as this layout only when the bit is set, and refuses
+a device without it with "Update the firmware: this runtime lists modules in an older layout" (`decodeModulesPage` and `modules_reply.decode_page` take the `caps` word; `DkSession.modules` and `Uploader.modules` read INFO first). The runtime version
+alone is not the gate: the bit is, like the other layout-changing capabilities (`FILEHASH` for the store format, `SVC_ABI`, `FW_ID`).
+
+Runtime 0.11.4 and earlier ended a record with `u32 rows`, `u8 n_types`, the type bytes, `u32 faults` and `u8 flags` instead (71 + `n_types` bytes); the hosts read only the new layout and refuse the old one (`packages/dk-session/src/modules-reply.ts`,
+`tools/device/modules_reply.py`; both test against `tests/fixtures/protocol/modules-reply.json`, which the encoder test of the runtime writes). `dkupload --port NAME modules` (`mise run dk:store -- --port NAME modules`) prints a header with the free space and one line per module.
 
 ## The debug log (LOG and PEEK; finding 46)
 
-The runtime keeps a small RAM ring of 32 boot and error events (`modules/core/runtime/src/rs/src/dlog.rs`) and hands every event to one sink; the module `digikit/debug` (`modules/tools/debug`) keeps a ring of 512 events and answers LOG, PEEK and LOGCFG (the service range `debug`, 0x20 to 0x22). The events are: boot steps, safe mode and why, the card check, each module's
+The runtime keeps a small RAM ring of 32 boot and error events (`runtime/core/src/rs/src/dlog.rs`) and hands every event to one sink; the module `digikit/debug` (`modules/tool/digikit/debug`) keeps a ring of 512 events and answers LOG, PEEK and LOGCFG (the service range `debug`, 0x20 to 0x22). The events are: boot steps, safe mode and why, the card check, each module's
 load result, upload commands, menu actions, a health snapshot every ten seconds, the DSP diagnostics once a second (raw words of `dl_diag`), the DSP
 heartbeat watch, the crash record of the boot before. Without the module only error events and the boot's events are kept (INFO then has no LOG capability); the module's level filter drops the others above its level (LOGCFG). The argument words of each kind are listed in `docs/findings/46-digikit-debug.md`; the host tool is
 `tools/device/dklog.py` (`follow`, `crash`, `peek`). LOG and PEEK follow the framing and the TX guard of every other command: a reply is sent only when the
@@ -239,7 +267,7 @@ anchor on both ports (`dkrt.fw.*`). The runtime's upload buffer is a static 16-b
 
 ## Tests
 
-- CLI transfer acceptance: `modules/core/runtime/tests/transfer-live.device.test.ts` on DT2 1.17 and DN2 1.12, through the real `tools.device.dktransfer` CLI. Install/restart persists the upload and selection, the mirror matches the card's file hash and metadata, delete plus `card.sync` removes it, and the next protocol restart skips the selected missing module with `MOD_LOAD E_NOT_FOUND` and reaches `UI_FIRST`. Run with `mise run test:runtime -- transfer-live` (prerequisites: `tests/regression/README.md`); the gate selects this acceptance on relevant changes. Remaining scenario tests are in `tests/digikit/scenarios`.
+- CLI transfer acceptance: `runtime/core/tests/transfer-live.device.test.ts` on DT2 1.17 and DN2 1.12, through the real `wb transfer` CLI (`mise run transfer`), which installs the services the module needs with it. Install/restart persists the upload and selection, the mirror matches the card's file hash and metadata, delete plus `card.sync` removes it, and the next protocol restart skips the selected missing module with `MOD_LOAD E_NOT_FOUND` and reaches `UI_FIRST`. Run with `mise run test:runtime -- transfer-live` (prerequisites: `tests/regression/README.md`); the gate selects this acceptance on relevant changes. Remaining scenario tests are in `tests/digikit/scenarios`.
 - upload, list, restart, load: equal to a card built with the file in `digikit/` (rows, tables, PCM).
 - replace, delete, CLEAR, E_FULL, E_HASH (a wrong file hash commits nothing), DATA retry and bad offset.
 - power cut during staging, between header B and A, and after A: the next boot reads a valid store (old or new, never mixed).

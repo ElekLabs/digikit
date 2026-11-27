@@ -291,15 +291,7 @@ fn run() -> Result<(), String> {
     let readiness_contract = firmware_profile
         .readiness_contract
         .ok_or("firmware has no readiness contract")?;
-    let task_create = if main
-        .bytes
-        .get((0x4000_12c8 - MAIN_LOAD) as usize..)
-        .is_some_and(|b| b.starts_with(&[0x20, 0x2f, 0x00, 0x0c, 0x72, 0xfc, 0xc2, 0xaf]))
-    {
-        0x4000_12c8
-    } else {
-        return Err("task_create prefix verification failed".into());
-    };
+    let task_create = resolve_task_create(&main.bytes)?;
     let mainloop = unique_signature_data(&main.bytes, MAINLOOP_SIG, Some(15))
         .ok_or("mainloop signature ambiguous")?;
     let panel_diff = unique(
@@ -388,12 +380,8 @@ fn run() -> Result<(), String> {
         &uart_wait_sig,
         &data_mask(&uart_wait_sig, None),
     )?;
-    let uart_init = 0x4000_243e;
-    let uart_prefix = hex("2f02740f41f9ec09404b1210202f000843f9ec07000042b9");
+    let uart_init = resolve_uart_init(&main.bytes)?;
     let uart_at = (uart_init - MAIN_LOAD) as usize;
-    if main.bytes.get(uart_at..uart_at + uart_prefix.len()) != Some(uart_prefix.as_slice()) {
-        return Err("uart8_init prefix verification failed".into());
-    }
     if main
         .bytes
         .get(uart_at + 0x19a..)
@@ -775,6 +763,7 @@ fn run() -> Result<(), String> {
             fs_last_complete,
             frames.latest_for(mainloop_tcb),
             fs_success_result,
+            false,
         );
         if cli.stop_at == "ready" && main_os_running {
             stop = String::from("VERIFIED_READY");
@@ -1072,6 +1061,7 @@ fn run() -> Result<(), String> {
         fs_last_complete,
         main_frame,
         fs_success_result,
+        false,
     );
     let ready = structural_ready && fs_ready;
     let frame_metadata = main_frame.map(|frame| json!({"owner_tcb":frame.owner_tcb,"ptr":frame.ptr,"sha256":frame.hash,"nonzero_bytes":frame.lit_bytes,"icount":frame.icount,"completed":true}));
@@ -1226,7 +1216,8 @@ mod tests {
             1,
             Some(10),
             Some(&frame),
-            Some(true)
+            Some(true),
+            false
         ));
         assert!(!readiness_contract_ready(
             MainPanelFsCheckV1,
@@ -1234,7 +1225,8 @@ mod tests {
             0,
             None,
             Some(&frame),
-            Some(true)
+            Some(true),
+            false
         ));
         assert!(!readiness_contract_ready(
             MainPanelFsCheckV1,
@@ -1242,7 +1234,8 @@ mod tests {
             1,
             Some(21),
             Some(&frame),
-            Some(false)
+            Some(false),
+            false
         ));
         assert!(!readiness_contract_ready(
             MainPanelFsCheckV1,
@@ -1250,7 +1243,8 @@ mod tests {
             1,
             None,
             Some(&frame),
-            None
+            None,
+            false
         ));
         assert!(!readiness_contract_ready(
             MainPanelFsCheckV1,
@@ -1258,7 +1252,8 @@ mod tests {
             1,
             Some(20),
             Some(&frame),
-            Some(true)
+            Some(true),
+            false
         ));
         assert!(readiness_contract_ready(
             MainPanelFsCheckV1,
@@ -1266,7 +1261,8 @@ mod tests {
             1,
             Some(20),
             Some(&frame),
-            Some(true)
+            Some(true),
+            false
         ));
         assert!(readiness_contract_ready(
             MainPanelV1,
@@ -1274,7 +1270,8 @@ mod tests {
             0,
             None,
             None,
-            None
+            None,
+            false
         ));
     }
 
@@ -1428,6 +1425,40 @@ mod tests {
             pending.expected_a7,
         );
         assert!(tracker.latest_for(0x4020_4000).is_some());
+    }
+
+    #[test]
+    fn repeated_panel_entry_publishes_only_the_latest_capture_on_return() {
+        let mut board = Board::new(
+            Card::default(),
+            SemaphoreAddresses::default(),
+            CompletionPolicy::Oracle,
+        );
+        let page = 0x4020_0000;
+        board.map_zeroed_ram_page(page).unwrap();
+        let tcb_global = page;
+        let front_global = page + 4;
+        let frame_ptr = page + 0x100;
+        let sp = page + 0x800;
+        let owner = 0x4020_4000;
+        let return_pc = 0x4000_1000;
+        board.write_guest(tcb_global, 4, owner).unwrap();
+        board.write_guest(front_global, 4, frame_ptr).unwrap();
+        board.write_guest(sp, 4, return_pc).unwrap();
+
+        let mut tracker = FrameTracker::default();
+        for tick in 1..=3 {
+            board.write_guest(frame_ptr, 1, tick).unwrap();
+            tracker
+                .capture(&mut board, tcb_global, front_global, u64::from(tick), sp)
+                .unwrap();
+        }
+
+        tracker.complete_at_return(&mut board, tcb_global, return_pc, sp + 4);
+        let frame = tracker.latest_for(owner).unwrap();
+        assert_eq!(frame.icount, 3);
+        assert_eq!(frame.raw[0], 3);
+        assert!(tracker.pending.is_empty());
     }
 
     #[test]

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'vitest';
+import { registry } from '@digi/devices/node';
 import { memoryBlobStore } from '@digi/workbench-core/blob-store.ts';
 import { ReadyCache, sha256Hex, type ReadyState } from '../src/ready-cache.ts';
 
@@ -13,11 +14,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 /** The DN2 ready state of the ready inputs, when they are there. */
 function readyInputsState(): ReadyState | undefined {
   try {
-    const ready = path.resolve(
-      root,
-      process.env.DIGI_EMU_READY_DIR ??
-        JSON.parse(fs.readFileSync(path.join(root, 'tools/emulator/ready_inputs.json'), 'utf8')).ready_dir,
-    );
+    const ready = path.resolve(root, process.env.DIGI_EMU_READY_DIR ?? registry().get('dn2').acceptance!.readyDir);
     if (!fs.existsSync(path.join(ready, 'digi-audio-m5.snap'))) return undefined;
     const read = (n: string) => new Uint8Array(fs.readFileSync(path.join(ready, n)));
     return {

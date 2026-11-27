@@ -1,0 +1,132 @@
+# filter: the filter type (one byte in the sound): accessor, getter and setter, chooser list, name, response graph, loader bound
+# Names follow <cpu>.<subsystem>.<kind>.<name>; was = former names, for reading older docs, never resolved (docs/design/firmware-decls.md).
+# Facts: docs/findings/148-filter-machines.md. Consumer: core/services/machines (the filter table family, plan E7).
+# The filter knob slots need no site here: FUN(code, machine, filter) is the function of cf.machine.site.param_code.* (DT2 args and exit,
+# DN2 map). Both of its entry sites hold the machine and the filter argument on the stack with d0 and a1 free, so the machines hook
+# extends to the filter branch (DT2 codes 0x23..0x25, DN2 codes 0x42..0x44) and answers a filter type of 16 or more from its own row.
+
+[[fn]]
+name = "cf.filter.fn.accessor"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "89ab5a838f61efc9a9906f0a858837fe", offset = 0x0, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "89ab5a838f61efc9a9906f0a858837fe", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "Filter type to descriptor row (type at 4(sp); d0 and d1 free at the entry): unsigned `type <= 5` gives the row base + 0x2c * type, else the shared fallback row. DT2 FUN_400c89c6 (base 0x4293b858), DN2 FUN_400c2614 (base 0x424339cc). The hook answers 16..31 from the service row."
+
+[[fn]]
+name = "cf.filter.fn.get"
+cpu = "cf"
+sig = "i32 (u32 track_object)"
+rule.dt2 = { kind = "cf_func", hash = "16f610949af3b60dff8fde5f2351de96", offset = 0x0, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "c43705027173a44cb8708e4f1be3e534", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/services/machines", "core/runtime"]
+doc = "Filter type getter (a signed byte of the sound, -1 for no sound): DT2 FUN_400506ac (reads sound+0xa3), DN2 FUN_4004b860 (sound+0xdf). The service calls it to read the stock type of a track for its session store."
+
+[[fn]]
+name = "cf.filter.fn.set"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "43bf975fd863bc739240cb1c2fd045f0", offset = 0x0, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "837886f42e674306fbe958b59b09106f", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "Filter type setter, with no range check: it writes the byte and sends param 0xea (type << 7). DT2 FUN_40051886, DN2 FUN_4004cd7c. The service calls it to write the stock fallback type of a track."
+
+[[fn]]
+name = "cf.filter.fn.set_kit"
+cpu = "cf"
+sig = "i32 (u32 kit, i32 track, i32 ty, i32 flag4, i32 flag5)"
+rule.dt2 = { kind = "cf_func", hash = "ce8cf6e5c09f545e970e24bc1ecd373d", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "352724479de405988b1ec2e6145813b5", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "The KitActive filter-type commit the filter chooser calls, the twin of cf.machine.fn.set_kit: `(KitActive *, track, type, 1, 1)`. It clamps the track to 0..15 and calls cf.filter.fn.set on the track object, then notifies as the machine wrapper does. It has no permit check. DT2 0x4003696e, DN2 0x40031a56. Finding 150."
+
+[[fn]]
+name = "cf.filter.fn.name"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "8c0853eaa8e31ce570f9842483069682", offset = 0x0, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "8c0853eaa8e31ce570f9842483069682", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "Filter name function (type at 4(sp)): `type < 6` returns the row of a table of 12-byte rows (long name, short name, 0), else the string \"ERROR\". DT2 FUN_400da71e (table 0x4020ef30), DN2 FUN_400dc508 (table 0x401f7bbc); one caller, the chooser list."
+
+[[fn]]
+name = "cf.filter.fn.list_vector"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "1b8cb066c2caefda57e7836d91311ecc", offset = 0x0, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "d47df48273bdbbdbde217c6e06a9510d", offset = 0x0, len = 6 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "The chooser's order vector (called from the filter list builder, DT2 FUN_400610e8 and DN2 FUN_4005b458): the first call allocates 0x18 bytes and copies the six static longs {0,1,4,3,5,2}; later calls hand out the same vector. DT2 FUN_40052c98, DN2 FUN_4004dae2."
+
+[[site]]
+name = "cf.filter.site.list_size"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "1b8cb066c2caefda57e7836d91311ecc", offset = 0x2a, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "d47df48273bdbbdbde217c6e06a9510d", offset = 0x2a, len = 4 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "`pea (0x18).w` in the order vector's first-call path: the allocation size of the vector (six longs); the service raises it for the added types."
+
+[[site]]
+name = "cf.filter.site.test_bound"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "1b8cb066c2caefda57e7836d91311ecc", offset = 0xaa, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "d47df48273bdbbdbde217c6e06a9510d", offset = 0xaa, len = 4 }
+mark = "D"
+users = ["test/local-patch"]
+doc = "The immediate of `cmpi.l #0x3fffffff,D1; bls` in the order vector copy (DT2 0x40052d40, DN2 0x4004db8a): the size bound before the allocation, never reached by the six-element vector. A patch site of the test fixture only."
+
+[[site]]
+name = "cf.filter.site.list_end"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "1b8cb066c2caefda57e7836d91311ecc", offset = 0x4a, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "d47df48273bdbbdbde217c6e06a9510d", offset = 0x4a, len = 6 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "`pea END` of the copy range (DT2 0x401f5458, DN2 0x401de168): the end of the static table of six longs the order vector is copied from."
+
+[[site]]
+name = "cf.filter.site.list_begin"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "1b8cb066c2caefda57e7836d91311ecc", offset = 0x54, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "d47df48273bdbbdbde217c6e06a9510d", offset = 0x54, len = 6 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "`pea BEGIN` of the copy range (DT2 0x401f5440, DN2 0x401de150): the static table of six longs {0,1,4,3,5,2}, one per stock filter type in chooser order; the service points it and the end at a longer table with the added types."
+
+[[site]]
+name = "cf.filter.site.graph_switch"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "7294066aa21730a5084989bf53a08779", offset = 0x1e2, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "0105908315ec0274e4c4725d3bb4daa3", offset = 0x1e2, len = 8 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "`moveq #5,D0; cmp.l D4,D0; bcs.w default` in the filter page's graph draw (DT2 FUN_4007439e at 0x40074580, DN2 FUN_4006eabe at 0x4006eca0): d4 is the type from the getter, values 0..5 index a jump table of response curves, others go to the shared tail and draw no curve (the rectangle x 21..71, y 7..23 stays blank). d0 is free."
+
+[[site]]
+name = "cf.filter.site.loader_bound"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "d5cd38f131d3119fd16d700d526b4fb9", offset = 0xd2, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "f766c42c6be0674aadb1177f3f536367", offset = 0xd2, len = 4 }
+mark = "D"
+users = ["core/services/machines"]
+doc = "`move.b #7,D2b` in the sound loader (DT2 FUN_400db3b2 at 0x400db484, DN2 FUN_400dd34e at 0x400dd420): the bound of the next compare, which keeps a stored filter type below 7 and resets any other to 0 (the filter byte is rec[0xd3] on DT2 and rec[0xf5] on DN2; the machine byte uses an earlier bound). The immediate is the low byte of the word at +2."
+
+# A patch site, only for the test fixture `test/local-patch` (the port file of the test image lists it): the low word of the bound of the size compare of the order vector copy,
+# `cmpi.l #0x3fffffff,D1; bls` (DT2 0x40052d40 in FUN_40052c98, DN2 0x4004db8a in FUN_4004dae2). D1 is the element count of the copied vector, always six (the static range is
+# {0,1,4,3,5,2}), so any bound from 6 up takes the same branch: a value other than 0xffff in that word changes the bytes of a code site and nothing the firmware does.
+[[hook]]
+name = "cf.filter.hook.test_bound_patch"
+site = "cf.filter.site.test_bound"
+offset = 2
+cpu = "cf"
+mode = "replace"
+patch = 2
+regs = { in = [], clobbers = [] }
+devices = ["dt2", "dn2"]
+mark = "D"
+users = ["test/local-patch"]
+doc = "Test only: a patch site of two bytes, the low word of the immediate of `cmpi.l #0x3fffffff,D1` in the order vector copy. D1 is always 6 there, so the bound is dead; the fixture patches it and the loader restores it at unload."

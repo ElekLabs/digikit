@@ -45,7 +45,7 @@ from the menu. No hardware flashing until everything works in the emulator.
    guard, an in-use scan of the whole project, ordering under concurrent readers and a soak to be trusted (the risk
    review of 2026-10-17); a restart removes that class. Hot loading is archived (tag `digikit-hot-reload-v1`,
    docs/plans/digikit-hot-reload.md) and may return later, first for code-only modules.
-10. The permanent identity of a run-time machine is its type number (16 to 23, `modules/core/machines/types.toml`):
+10. The permanent identity of a run-time machine is its type number (16 to 23, `modules/core/rows/types.toml`):
     kit tracks and pool sounds store it. Parameter codes may be allocated first-free each boot: sounds and p-locks
     are keyed by sound-array slot (finding 36, question 4).
 11. Getting it onto a device, in order: flash the patched OS once through Elektron's own OS update (SysEx; patchkit
@@ -66,7 +66,7 @@ from the menu. No hardware flashing until everything works in the emulator.
 | Code runs from DDR; the I/D cache is not coherent on hardware; the emulator is coherent and hides a missing flush | [D] | docs/findings/07-emulator.md |
 | The DSP image goes to the SHARC once at boot (`FUN_400ccf74` on DT2 1.16, over DSPI0); no later code path to the DSP is known | [O] | docs/findings/06-sharc-engine-and-startup.md |
 | Free SHARC L2: DT2 from 0x2001ab7c, DN2 from 0x2008823c, to 0x200fe000 | [D] | docs/findings/06-sharc-engine-and-startup.md |
-| Machine tables: `core/machines` copies the stock tables with added rows into `cf.expansion` (RAM); type numbers are permanent; unselected numbers are gap rows | [D] | modules/core/machines/types.toml, docs/findings/02-machines-and-parameters.md |
+| Machine tables: `core/rows` copies the stock tables with added rows into `cf.expansion` (RAM); type numbers are permanent; unselected numbers are gap rows | [D] | modules/core/rows/types.toml, docs/findings/02-machines-and-parameters.md |
 | +Drive format: Elektron's own filesystem (not FAT): MmcFs pools for projects, sounds and kits, plus a path filesystem for samples | [D] | docs/findings/14-plus-drive-format.md |
 | Firmware file functions: path walker `FUN_40159f50`, readdir `FUN_40157072` (`FileSystemDirectory`), inode fetch `FUN_4015b64e`, `File::write` `FUN_4015838e` | [D] | docs/findings/14-plus-drive-format.md |
 | The emulator card is copy-on-write: writes go to an in-memory sector overlay and are lost on exit | [D] | packages/emulator/card/src/lib.rs |
@@ -235,7 +235,7 @@ write-watch 0 events, flush check 0 hits (`tools/coldfire/digikit_menu_proof.py`
 
 ### Phase 5: machines
 
-- [x] ColdFire side, Digitakt II 1.16/1.17: fill reserved machine and param rows at run time (`core/dynreg`, `registry.rs`, `.dkm` `register`
+- [x] ColdFire side, Digitakt II 1.16/1.17: fill reserved machine and param rows at run time (`core/rows`, `registry.rs`, `.dkm` `register`
   records, `patchkit pack --device`; docs/design/digikit-registry.md, finding 30). A data-only clone of SLICE (`test/dyn-xslice`) is in the SRC
   machine list after the load, is put on a track, and is gone after the unload; refusals write nothing; 0 stray writes, 0 flush hits.
 - [x] ColdFire side, Digitone II 1.11/1.12 (finding 33): page rows (`pages`), `own_dsp`, the list getter filter (a hook at the `jsr (A3)` that ends the
@@ -350,7 +350,7 @@ Safety (lane r4):
 - [x] HEALTH shows the module store's used and free space (`DkrtHealth` store fields, read from the headers once and again after an upload; finding 41, last section).
 
 Device data (lane b): every device or board fact the runtime, the core modules, patchkit and port_resolve use comes from
-`devices/*.toml` (or `devices/ports/*.toml`, `modules/core/machines/types.toml`) and is generated where code needs a constant
+`devices/*.toml` (or `devices/ports/*.toml`, `modules/core/rows/types.toml`) and is generated where code needs a constant
 (`patchkit gen`, kept current by `gen --check`); the device list is open. Oracle: patched images are byte-identical before and after.
 - [x] Store geometry, DSP area size, voice rows, run-time type range, device id and name, board addresses, safe-mode key, DSP clock. Where each fact lives and what a new device needs: docs/design/device-data.md. The runtime is one image for all devices, so a shared constant is refused when two devices differ.
 - [x] patchkit's device list, device ids, container facts; port_resolve's firmware, limits and L2 tables. The container seal keys stay in `syx.rs` (key material; the device files are published as they are).

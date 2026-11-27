@@ -1,7 +1,7 @@
 # SHARC assembly style for digikit modules
 
 Status: draft for step 7. Marks: **[D]** read once in the repo, **[O]** proposal or guess. The assembler accepts what
-`modules/machines/pluck/src/dsp/pluck.s` uses (`//` comments, `#include`, `#define`, `.SECTION`, `.VAR`, `.GLOBAL`,
+`modules/machine/digikit/pluck/src/dsp/pluck.s` uses (`//` comments, `#include`, `#define`, `.SECTION`, `.VAR`, `.GLOBAL`,
 `.EXTERN`, `LCNTR = n, DO label UNTIL LCE`). Anything beyond that (for example `#define` as a register alias, `.equ`)
 must be tried once with the assembler before the guide makes it a rule **[O]**. Note from `sdk/dsp/contract/dk_machine.inc`: the
 assembler upper-cases macro text, so write numbers as decimal after `+` (the generator already does this).

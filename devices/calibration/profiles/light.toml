@@ -1,0 +1,12 @@
+schema = "dk.calprofile/1"
+name = "light"
+description = "One track plays a note through the stock filter. No modules: the smallest stock load. Needs RECEIVE NOTES on."
+warmup_s = 2
+capture_s = 5
+repeats = 3
+teardown = { steps = "release-notes", args = { tracks = "1" } }
+
+[[case]]
+id = "stock"
+steps = "hold-note"
+args = { tracks = "1", retrigger_ms = 1000 }

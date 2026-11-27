@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse } from 'smol-toml';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createDependencies } from '../modules.mjs';
 import { manifestClosure } from '../module-manifests.mjs';
@@ -51,7 +52,9 @@ function nx(args: string[]): string {
   return execFileSync('pnpm', ['exec', 'nx', ...args], {
     cwd: root,
     env,
-    timeout: 30_000,
+    // hang guard only: a normal call returns in seconds to tens of seconds, even on a loaded host; this catches
+    // a hung nx and is never a wait
+    timeout: 600_000,
     stdio: 'pipe',
     encoding: 'utf8',
   });
@@ -69,26 +72,48 @@ const selected = (file: string, targets: string) => {
 };
 
 let workspace: ProjectGraph;
+// One cold project-graph build per nx() call (about 3-5 s idle, 10x that on a loaded gate host). The limits
+// here (10 min per nx call, a little more per test) are hang guards only: they catch a hung nx and never act
+// as a wait. A 30 s limit failed five cases on a busy host because it measured host load.
 beforeAll(() => {
   workspace = plan(['graph'], '--file').graph;
-});
+}, 660_000);
 
 // Let Vitest flush worker updates between synchronous Nx subprocesses.
 afterEach(async () => {
   await new Promise<void>((resolve) => setImmediate(resolve));
 });
 
-function imageConsumer(): string {
-  return Object.entries(workspace.nodes).find(
-    ([, node]) => node.data.root.startsWith('modules/machines/') && node.data.targets['test-conformance'],
-  )![0];
+function contentLoads(graph: TaskGraph) {
+  return Object.keys(graph.tasks)
+    .filter((id) => {
+      const { project, target } = graph.tasks[id].target;
+      const tags = workspace.nodes[project].data.tags;
+      return (tags?.includes('type:machine') || tags?.includes('type:fx')) && target.startsWith('test-conformance');
+    })
+    .sort();
 }
 
-function otherImageConsumer(): string {
-  return Object.entries(workspace.nodes).find(
-    ([id, node]) =>
-      id !== imageConsumer() && node.data.root.startsWith('modules/machines/') && node.data.targets['test-conformance'],
-  )![0];
+function dspLoadSubject(kind: 'machine' | 'fx') {
+  for (const id of Object.keys(workspace.nodes).sort()) {
+    const { root: projectRoot, tags, targets } = workspace.nodes[id].data;
+    if (!tags?.includes(`type:${kind}`) || !tags.includes('release-module')) continue;
+    if (!targets.pack || !targets['test-conformance'] || !targets['test-dsp-conformance']) continue;
+    const source = targets['test-dsp']?.inputs?.find(
+      (input): input is string =>
+        typeof input === 'string' && input.startsWith(`{workspaceRoot}/${projectRoot}/`) && input.endsWith('.s'),
+    );
+    if (source) return { id, source: source.slice('{workspaceRoot}/'.length) };
+  }
+  throw new Error(`Expected a shipped ${kind} with a private DSP source and DSP and emulator load targets`);
+}
+
+function expectFixtureLoad(graph: TaskGraph) {
+  const fixture = 'core/runtime-fixture-tests';
+  const halves = Object.keys(workspace.nodes[fixture].data.targets).filter((name) => name.startsWith('test-device--'));
+  expect(halves).toHaveLength(2);
+  for (const half of halves) expect(graph.tasks[`${fixture}:${half}`]).toBeDefined();
+  expect(contentLoads(graph)).toEqual([]);
 }
 
 it('keeps every gated runtime device file in exactly one owner command', () => {
@@ -104,7 +129,10 @@ it('keeps every gated runtime device file in exactly one owner command', () => {
       const targets = Object.entries(owner.targets)
         .filter(
           ([name, target]) =>
-            /^test-device(-full)?(--|$)/.test(name) && !name.endsWith('--dn2') && target.options?.command,
+            /^test-device(-full)?(--|$)/.test(name) &&
+            // one half per file: the DT2 half, or the DN2 half of a file that has no DT2 half
+            !(name.endsWith('--dn2') && owner.targets[name.replace(/--dn2$/, '--dt2')]) &&
+            target.options?.command,
         )
         .map(([, target]) => target);
       const files = targets.flatMap((target) =>
@@ -131,15 +159,15 @@ it('derives content runtime edges from the unique runtime role', () => {
   const fixture = mkdtempSync(join(scratch, 'runtime-role-'));
   const projects = Object.fromEntries(
     [
-      ['renamed/runtime', 'modules/core/renamed', 'runtime'],
-      ['example/content', 'modules/tools/content', undefined],
+      ['renamed/runtime', 'runtime/renamed', 'runtime'],
+      ['example/content', 'relocated/tools/content', undefined],
     ].map(([name, dir, role]) => {
       mkdirSync(join(fixture, dir!), { recursive: true });
       writeFileSync(
         join(fixture, dir!, 'module.toml'),
         `[module]\nid = "${name}"\ntype = "service"\n${role ? `role = "${role}"\n` : ''}`,
       );
-      return [name, { name, root: dir, tags: ['module'] }];
+      return [name, { name, root: dir, tags: role ? ['module'] : ['module', 'release-module'] }];
     }),
   );
   const dependencies = createDependencies({}, { workspaceRoot: fixture, projects });
@@ -147,7 +175,7 @@ it('derives content runtime edges from the unique runtime role', () => {
     'renamed/runtime',
   ]);
   writeFileSync(
-    join(fixture, 'modules/tools/content/module.toml'),
+    join(fixture, 'relocated/tools/content/module.toml'),
     '[module]\nid = "example/content"\nrole = "runtime"\n',
   );
   expect(() => createDependencies({}, { workspaceRoot: fixture, projects })).toThrow(
@@ -174,11 +202,15 @@ it('forms explicit manifest libraries from selected modules and transitive requi
 
 describe('workspace selection', () => {
   it('retains core manifest selection for producers and their image consumers', () => {
-    const graph = selected('modules/core/runtime/module.toml', 'build-objects,test-conformance');
+    const graph = selected('runtime/core/module.toml', 'build-objects,test-device,test-conformance');
     expect(graph.tasks['core/runtime:build-objects']).toBeDefined();
-    expect(graph.tasks[`${imageConsumer()}:test-conformance`]).toBeDefined();
-    expect(graph.tasks[`${otherImageConsumer()}:test-conformance`]).toBeDefined();
-  }, 30_000);
+    const services = Object.entries(workspace.nodes)
+      .filter(([, { data }]) => data.tags?.includes('type:service') && data.targets['test-conformance'])
+      .map(([id]) => id);
+    expect(services).toContain('digikit/debug');
+    for (const service of services) expect(graph.tasks[`${service}:test-conformance`], service).toBeDefined();
+    expectFixtureLoad(graph);
+  }, 660_000);
 
   it('packs affected modules without device tests through the default gate', () => {
     const targets = TIERS.merge.targets.join(',');
@@ -191,29 +223,86 @@ describe('workspace selection', () => {
     const graph = selected(`${node.data.root}/${source}`, targets);
     expect(graph.tasks[`${owner}:pack`]).toBeDefined();
     expect(node.data.targets.pack.cache).toBe(false);
-  }, 30_000);
+  }, 660_000);
 
   it('selects image consumers when ui.c changes', () => {
-    const graph = selected('modules/core/adapters/ui/src/ui.c', 'test-device,test-conformance');
+    const graph = selected('runtime/platform/ui/src/ui.c', 'test-device,test-conformance');
     expect(graph.tasks['core/runtime-tests:test-device']).toBeDefined();
-    expect(graph.tasks[`${imageConsumer()}:test-conformance`]).toBeDefined();
-  }, 30_000);
+    expectFixtureLoad(graph);
+  }, 660_000);
 
   it('selects hermetic Rust tests when the release profile digest recipe changes', () => {
     const graph = selected('tools/nx/cargo-profile-env.mjs', 'rust-tests');
     expect(graph.tasks['dkneeds:rust-tests']).toBeDefined();
     expect(graph.tasks['device-profile:rust-tests']).toBeDefined();
     expect(graph.tasks['patchkit:rust-tests']).toBeUndefined();
-  }, 30_000);
+  }, 660_000);
+
+  it.each(['contract.rs', 'lib.rs'])(
+    'selects Rust tests of Cargo consumers when shared %s changes',
+    (file) => {
+      const support = 'runtime/core/test-support';
+      const cargo = (dir: string) =>
+        parse(readFileSync(join(root, dir, 'Cargo.toml'), 'utf8')) as {
+          package?: { name: string };
+          workspace?: { members: string[] };
+          'dev-dependencies'?: Record<string, string | { path?: string }>;
+        };
+      const usesSupport = (dir: string) =>
+        Object.values(cargo(dir)['dev-dependencies'] ?? {}).some(
+          (dep) => typeof dep === 'object' && dep.path && resolve(root, dir, dep.path) === join(root, support),
+        );
+      const workspaceConsumers = cargo('.')
+        .workspace!.members.filter(usesSupport)
+        .map((dir) => cargo(dir).package!.name);
+      const standaloneConsumers = globSync('services/*/dks/Cargo.toml', { cwd: root })
+        .map(dirname)
+        .filter(usesSupport)
+        .map((dir) => {
+          const { module } = parse(readFileSync(join(root, dir, 'module.toml'), 'utf8')) as { module: { id: string } };
+          return module.id;
+        });
+      const runtime = 'runtime/core';
+      expect(workspaceConsumers).toContain('dkrt-svc-shortcuts');
+      expect(standaloneConsumers).toContain('core/services/machines');
+      expect(usesSupport(`${runtime}/src/rs`)).toBe(true);
+      expect(TIERS.merge.targets).toContain('rust-tests');
+      const graph = selected(`${support}/src/${file}`, 'rust-tests');
+      for (const owner of [...workspaceConsumers, ...standaloneConsumers, 'core/runtime']) {
+        const target = `${owner}:rust-tests`;
+        expect(graph.tasks[target], `${file} selects ${target}`).toBeDefined();
+      }
+      expect(graph.tasks['dkbulk:rust-tests']).toBeUndefined();
+    },
+    660_000,
+  );
+
+  it.each(['machine', 'fx'] as const)(
+    'routes %s DSP edits to its own DSP tests and emulator load',
+    (kind) => {
+      const { id, source } = dspLoadSubject(kind);
+      const graph = selected(source, 'pack,test-dsp,test-dsp-conformance,test-conformance');
+      expect(
+        Object.keys(graph.tasks)
+          .filter((task) => /:test-dsp(-conformance)?$/.test(task))
+          .sort(),
+      ).toEqual([`${id}:test-dsp`, `${id}:test-dsp-conformance`]);
+      expect(graph.tasks[`${id}:pack`]).toBeDefined();
+      expect(contentLoads(graph)).toEqual([`${id}:test-conformance`, `${id}:test-conformance-all`]);
+    },
+    660_000,
+  );
 
   it('keeps shared SDK contract edits on the SDK host, pack, runtime device and conformance selection', () => {
     const graph = selected('sdk/include/dk/core/module.h', 'test-host,pack,test-device,test-conformance');
+    const { id } = dspLoadSubject('machine');
     for (const target of [
       'sdk:test-host',
-      `${imageConsumer()}:pack`,
+      `${id}:pack`,
       'core/runtime-tests:test-device',
-      `${imageConsumer()}:test-conformance`,
+      'digikit/debug:test-conformance',
     ])
       expect(graph.tasks[target], target).toBeDefined();
-  }, 30_000);
+    expectFixtureLoad(graph);
+  }, 660_000);
 });

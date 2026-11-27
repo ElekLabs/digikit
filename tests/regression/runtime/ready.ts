@@ -1,20 +1,25 @@
 import type { Device, Session, SessionOptions } from '@digi/test-support';
 import { describe, expect, test } from 'vitest';
-import { expectRuntimeBoot, withPatchedSession, type PatchedSession } from '../support.ts';
+import { expectRuntimeBoot, withPatchedSession, type TestRuntime } from '../support.ts';
 import { timePhase, timingContext } from '../timing.ts';
 import { liveArtifacts, record } from './artifacts.ts';
-import { FIRMWARE, FULL_TIER, liveOptions, selectDevices, skipEmptyHalf } from './devices.ts';
+import { FIRMWARE, FULL_TIER, selectDevices, skipEmptyHalf } from './devices.ts';
+import { liveOptions } from './live-options.ts';
 import { planSymbol, prepareRuntimePlan, type RuntimePlan } from './runtime-plan.ts';
 import { pollEmulated } from './waits.ts';
 
 /** One test per device, each on its own fresh runtime daemon that has passed `expectRuntimeBoot`. */
 export function runtimeTests(
   name: string,
-  body: (runtime: PatchedSession) => Promise<void>,
+  body: (runtime: TestRuntime) => Promise<void>,
   opts: {
     patchSet?: string;
     dsp?: SessionOptions['dsp'];
     mirror?: boolean;
+    /** Leave the card to the daemon (the stock initialisation of a blank card), instead of the cached card of `liveCard`. */
+    blankCard?: boolean;
+    /** The stable period of the card in DSP blocks (default `LIVE_STABLE_BLOCKS`; 0 is the runtime's 30 s). */
+    stableBlocks?: number;
     devices?: readonly Device[];
     full?: boolean;
     skip?: string;
@@ -43,7 +48,7 @@ export async function expectRuntimeReady(session: Session): Promise<void> {
   await timePhase('ready', () => expectRuntimeUi(session, plan, artifacts), timingContext(session));
 }
 
-/** DkrtBootInfo word offsets, owned by modules/core/runtime/abi.toml (checked in modules/core/runtime/sdk/src/gen_abi.rs). */
+/** DkrtBootInfo word offsets, owned by runtime/core/abi.toml (checked in runtime/core/sdk/src/gen_abi.rs). */
 export const BOOT_FIELDS = {
   magic: 0,
   version: 4,

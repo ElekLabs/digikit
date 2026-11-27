@@ -6,7 +6,7 @@ Status: built, 2026-10-16; DSP loader added 2026-10-17 (finding 32); emulator on
 
 ## What it is
 
-A patchkit module (`modules/core/runtime`, requires `core/expansion`) written in Rust for the ColdFire (rustc_codegen_gcc,
+A patchkit module (`runtime/core`, requires `core/expansion`) written in Rust for the ColdFire (rustc_codegen_gcc,
 finding 26) with two assembly files. Everything is in `cf.expansion` and part of the module's own object, so patchkit places it
 like any static object:
 
@@ -46,7 +46,7 @@ It is not an interrupt, so the loader may block in the card read.
 `dkrt_tick` (a) polls the host mailbox for a command (selection, restart) and (b) calls the `tick` of every loaded module (`entry::tick_all`),
 with the module as the source of what it logs and counting each call in `tick_calls`.
 
-## C ABI (stable names; declared in `modules/core/runtime/sdk/src/lib.rs`, crate `dkrt-sdk`)
+## C ABI (stable names; declared in `runtime/core/sdk/src/lib.rs`, crate `dkrt-sdk`)
 
 All three are for the UI task (or another task context); not from an interrupt; not reentrant. Results are `i32`; no small-struct
 results.
@@ -85,7 +85,7 @@ module in `DKRT_PATHS` (apart from `State`) and returns it in `DkrtModule.path`,
 A module reaches the runtime through named imports: the loader resolves each name of the module's import table to an address of the runtime's `IMPORTS` table, or, for a
 service another module provides (`requires`), to that module's function or to a stub that answers `DK_E_MISSING`. The imports are grouped by service (`runtime`,
 `samples`, `machines`, `fx`, `ui`, `input`, `usb_bulk`, `dsp_link`) and each has a `since` and a `context` (docs/plans/sdk.md section 5.1). Memory is `dk_alloc`/`dk_free` (the
-arena; 16-byte aligned; not zeroed), `dk_files_read` reads a store file (through the staging buffer, so at most 64 KiB), `dk_log` writes 24 bytes of message and one word into a
+arena; 16-byte aligned; not zeroed), `dk_files_read` reads a store file (through the staging buffer, so at most 128 KiB), `dk_log` writes 24 bytes of message and one word into a
 16-entry ring in `DKRT_STATE` (no `core::fmt`). The helpers `memcpy`, `memset`, `memcmp`, `__muldi3`, `__udivdi3`, `__umoddi3` are the runtime's own copies, so a C module need not carry
 them. A Rust module built with the repo's pipeline still links its own copies of the compiler helpers (`compiler_builtins`) into its object **[O]**.
 
@@ -122,13 +122,13 @@ block is merged with its neighbours. 524 288 bytes minus 16 at start. `free` ign
 
 ## Limits (v0)
 
-Module file at most 64 KiB; 8 modules; imports at most 64; no streaming; one task context; no autoload; no safe-mode key.
+Module file at most 128 KiB; 8 modules; imports at most 64; no streaming; one task context; no autoload; no safe-mode key.
 DN2: the flush check sees few CPUSHL on DN2 images (finding 25), so the 0-hit result there is weaker evidence.
 
 ## Registry (machines and parameters)
 
-A `.dkm` with `register` records fills machine and parameter rows that `core/dynreg` reserved at patch time. The runtime links to
-`core/dynreg`'s `dynreg_info` table optionally; `registry.rs` holds the code and its state (`DKRT_REG`). Design, record format, what is derived
+A `.dkm` with `register` records fills machine and parameter rows that `core/rows` reserved at patch time. The runtime links to
+`core/rows`'s `rows_info` table; `registry.rs` holds the code and its state (`DKRT_REG`). Design, record format, what is derived
 state and the write order: `docs/design/digikit-registry.md`.
 
 ## DSP code of a module (state machine)

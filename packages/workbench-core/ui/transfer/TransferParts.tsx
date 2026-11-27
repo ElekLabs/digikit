@@ -1,14 +1,19 @@
 // The parts of the Transfer page that Modules mode and Samples mode share: the two columns with their headers, the list row with its
 // progress bar or verified/failed chip, the breadcrumb, and the two-click Delete button.
-import { For, Show, createEffect, createSignal, type JSX } from 'solid-js';
+import { For, Show, createEffect, createSignal, createUniqueId, onCleanup, onMount, type JSX } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import TargetSelect from './TargetSelect';
 import { useTransferApp } from '../../src/transfer/app-context';
+import type { CancelledRun } from '../../src/transfer/run-transfer';
 import { fmtRate } from '../../src/transfer/rate-core';
 import { createCheckingHint } from '../../src/transfer/checking-hint';
 import type { PaneSelect } from '../../src/transfer/pane-select';
 import { dragKind, selectState, toggleAll } from '../../src/transfer/select-core';
-import { linkTag } from '../../src/transfer/link-core';
-import { deleteLabel, freeLine, writing, type RowTag } from '../../src/transfer/transfer-core';
+import { linkHint, linkTag } from '../../src/transfer/link-core';
+import type { LiveResult } from '../../src/transfer/live-ops';
+import { deleteLabel, freeLine, tickCountText, writing, type RowTag } from '../../src/transfer/transfer-core';
+
+export type { CancelledRun } from '../../src/transfer/run-transfer';
 
 /** What the page gives each mode: the one busy action, and the error line. */
 export interface PageCtx {
@@ -18,11 +23,6 @@ export interface PageCtx {
   setError: (m: string) => void;
   /** Changes when the page reads by itself (the target selector reads the MIDI ports again). */
   reload: () => number;
-}
-
-/** What a job that the user stopped returns (it is not a failure): what it did, as the log says it (`87 of 357 uploaded, 270 not sent`). */
-export interface CancelledRun {
-  cancelled: string;
 }
 
 /** What the page shows beside a file while it is sent: a bar, or a chip; `message` is the tooltip of the chip. */
@@ -51,7 +51,7 @@ export function Chip(props: { status: ChipStatus }): JSX.Element {
         <span class="check idle">waiting</span>
       </Show>
       <Show when={props.status.kind === 'verifying' && !progress()}>
-        <span class="check idle">verifying…</span>
+        <span class="check idle">{props.status.message || 'verifying…'}</span>
       </Show>
       <Show when={props.status.kind === 'ok'}>
         <span class="check ok" title={props.status.message}>
@@ -99,10 +99,24 @@ export function Chip(props: { status: ChipStatus }): JSX.Element {
 /** The small label after a name (`test`, `on device`, `WAV→`). */
 function Tag(props: { tag: RowTag }): JSX.Element {
   return (
-    <span class="rtag" classList={{ [props.tag.tone]: true }} title={props.tag.title}>
+    <span class="rtag" classList={{ [props.tag.tone]: true, wrap: !!props.tag.wrap }} title={props.tag.title}>
       {props.tag.text}
     </span>
   );
+}
+
+/** A one-click button of a row or of a popover line. */
+export interface RowAction {
+  label: string;
+  title: string;
+  disabled?: boolean;
+  onClick: () => void;
+}
+/** A service line of a dependency popover: its text, its Reload (a service on the card) and the result of the last change. */
+export interface DependencyItem {
+  line: string;
+  action?: RowAction;
+  result?: LiveResult;
 }
 
 export interface ListRowProps {
@@ -124,20 +138,30 @@ export interface ListRowProps {
   dropPath?: string;
   /** Small labels after the name; only what says something (a usual state has none). */
   tags?: RowTag[];
+  /** A focusable badge for a module's service dependencies; `items` give the popover one line per service, with an action where it has one. */
+  dependencies?: { text: string; lines: string[]; items?: DependencyItem[] };
+  /** Live actions of the row (Reload, Unload, Load; one click, no confirm) and the last result, shown inline. */
+  live?: { actions: RowAction[]; result?: LiveResult };
   /** The version (modules), a dim column before the size. */
   version?: string;
   /** The size, right-aligned. */
   size?: string;
   status?: ChipStatus;
+  /** The phase of an install step (`service` or `module`), a column before the name. */
+  phase?: string;
   /** A small link-like button after the name ("Source"). */
   action?: { label: string; title: string; onClick: () => void };
+  /** The tree depth (the Files page): a spacer of 14px per level before the tick. */
+  indent?: number;
+  /** A folder of a tree: the open/close button before the name. */
+  twisty?: { open: boolean; onToggle: () => void };
 }
 
 /** The folder of the device that a drag is over (a folder row, or the Up row), or undefined; the row shows it as the drop target. */
 const [dropHover, setDropHover] = createSignal<string>();
 
-/** One row of a list in either column, always one line: tick, name with its tags, version, the bar or chip of a transfer, size. A click selects
- * it (Finder's rules), a double click opens a folder, and the text is not selectable. */
+/** One row of a list in either column, always one line: tick, name with its tags, version, the bar or chip of a transfer, size. A click toggles
+ * it (a checklist), a double click opens a folder, and the text is not selectable. */
 export function ListRow(props: ListRowProps): JSX.Element {
   return (
     <li
@@ -154,6 +178,12 @@ export function ListRow(props: ListRowProps): JSX.Element {
           props.folder.onOpen();
       }}
     >
+      <Show when={props.phase}>
+        <span class="phase">{props.phase}</span>
+      </Show>
+      <Show when={props.indent !== undefined}>
+        <span class="indent" style={{ width: `${(props.indent ?? 0) * 14}px` }} />
+      </Show>
       <Show when={props.check} fallback={<span class="tick" />}>
         {(c) => (
           <input
@@ -166,11 +196,41 @@ export function ListRow(props: ListRowProps): JSX.Element {
         )}
       </Show>
       <span class="name">
+        <Show when={props.indent !== undefined}>
+          <Show when={props.twisty} fallback={<span class="twisty" />}>
+            {(t) => (
+              <button
+                type="button"
+                class="twisty"
+                aria-expanded={t().open}
+                aria-label={t().open ? 'Close folder' : 'Open folder'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  t().onToggle();
+                }}
+              >
+                {t().open ? '▾' : '▸'}
+              </button>
+            )}
+          </Show>
+        </Show>
         <span class="nm" classList={{ dir: !!props.folder }} title={props.title}>
           {props.folder ? `${props.name}/` : props.name}
         </span>
+        <Show when={props.dependencies}>{(badge) => <DependencyBadge {...badge()} />}</Show>
         <For each={props.tags ?? []}>{(t) => <Tag tag={t} />}</For>
       </span>
+      <Show when={props.live?.actions.length}>
+        <span class="live">
+          <For each={props.live?.actions ?? []}>
+            {(a) => (
+              <button type="button" class="rowlink live-act" title={a.title} disabled={a.disabled} onClick={a.onClick}>
+                {a.label}
+              </button>
+            )}
+          </For>
+        </span>
+      </Show>
       <Show when={props.action}>
         {(a) => (
           <button type="button" class="rowlink" title={a().title} onClick={a().onClick}>
@@ -183,7 +243,137 @@ export function ListRow(props: ListRowProps): JSX.Element {
       </Show>
       <Show when={props.status}>{(st) => <Chip status={st()} />}</Show>
       <span class="size">{props.size ?? ''}</span>
+      <Show when={props.live?.result}>{(res) => <LiveResultText result={res()} line />}</Show>
     </li>
+  );
+}
+
+/** The result of the last live change of a row: done, refused with the runtime's reason, or failed (the module is not loaded). */
+export function LiveResultText(props: { result: LiveResult; line?: boolean }): JSX.Element {
+  return (
+    <span
+      class="live-result"
+      classList={{ [props.result.kind]: true, line: !!props.line }}
+      role="status"
+      title={props.result.detail ?? props.result.text}
+    >
+      {props.result.text}
+    </span>
+  );
+}
+
+function DependencyBadge(props: { text: string; lines: string[]; items?: DependencyItem[] }): JSX.Element {
+  const id = `dependency-${createUniqueId()}`;
+  const [hovered, setHovered] = createSignal(false);
+  const [focused, setFocused] = createSignal(false);
+  const [dismissed, setDismissed] = createSignal(false);
+  const [pinned, setPinned] = createSignal(false);
+  const open = () => !dismissed() && (hovered() || focused() || pinned());
+  const interactive = () => !!props.items?.some((i) => i.action || i.result);
+  let leave: number | undefined;
+  // the pointer may cross the gap between the badge and the popover without closing it
+  const hover = (on: boolean) => {
+    window.clearTimeout(leave);
+    if (on || !interactive()) setHovered(on);
+    else leave = window.setTimeout(() => setHovered(false), 200);
+  };
+  onCleanup(() => window.clearTimeout(leave));
+  let badge!: HTMLButtonElement;
+  return (
+    <>
+      <button
+        type="button"
+        class="rtag dep-badge"
+        ref={badge}
+        aria-describedby={id}
+        aria-expanded={interactive() ? open() : undefined}
+        onClick={() => {
+          if (!interactive()) return;
+          setDismissed(false);
+          setPinned(!pinned());
+        }}
+        onMouseEnter={() => {
+          setDismissed(false);
+          hover(true);
+        }}
+        onMouseLeave={() => hover(false)}
+        onFocus={() => {
+          setDismissed(false);
+          setFocused(true);
+        }}
+        onBlur={() => setFocused(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && open()) {
+            setDismissed(true);
+            e.stopPropagation();
+          }
+        }}
+      >
+        {props.text}
+      </button>
+      <span id={id} hidden>
+        {props.lines.join('\n')}
+      </span>
+      <Show when={open()}>
+        <Portal>
+          <DependencyTooltip anchor={badge} lines={props.lines} items={props.items} onHover={hover} />
+        </Portal>
+      </Show>
+    </>
+  );
+}
+
+/** The portal lets the tooltip extend beyond the scrollable pane and truncated row. */
+function DependencyTooltip(props: {
+  anchor: HTMLElement;
+  lines: string[];
+  items?: DependencyItem[];
+  onHover: (on: boolean) => void;
+}): JSX.Element {
+  let tip!: HTMLSpanElement;
+  const place = () => {
+    const anchor = props.anchor.getBoundingClientRect();
+    const { width, height } = tip.getBoundingClientRect();
+    const bottom = anchor.bottom + 6;
+    const y = bottom + height <= window.innerHeight - 8 ? bottom : Math.max(8, anchor.top - height - 6);
+    tip.style.left = `${Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8))}px`;
+    tip.style.top = `${y}px`;
+  };
+  onMount(() => {
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    onCleanup(() => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    });
+  });
+  return (
+    <span
+      class="transfer-dependency-tooltip"
+      classList={{ interactive: !!props.items?.some((i) => i.action || i.result) }}
+      role="tooltip"
+      aria-hidden={props.items?.some((i) => i.action || i.result) ? undefined : 'true'}
+      ref={tip}
+      onMouseEnter={() => props.onHover(true)}
+      onMouseLeave={() => props.onHover(false)}
+    >
+      <For each={props.items ?? props.lines.map((line) => ({ line }))}>
+        {(item: DependencyItem) => (
+          <span class="dep-line">
+            <span class="dep-text">{item.line}</span>
+            <Show when={item.action}>
+              {(a) => (
+                <button type="button" class="dep-act" title={a().title} disabled={a().disabled} onClick={a().onClick}>
+                  {a().label}
+                </button>
+              )}
+            </Show>
+            <Show when={item.result}>{(res) => <LiveResultText result={res()} />}</Show>
+          </span>
+        )}
+      </For>
+    </span>
   );
 }
 
@@ -205,6 +395,19 @@ export function UpRow(props: { disabled: boolean; onUp: () => void; dropPath?: s
         </span>
       </li>
     </ul>
+  );
+}
+
+/** The count after the select-all box: `12 items`, or `3 of 12 selected` with the 3 in the accent colour. */
+function TickCount(props: { ticked: number; total: number }): JSX.Element {
+  const t = () => tickCountText(props.ticked, props.total);
+  return (
+    <span class="selcount">
+      <Show when={t().lead}>
+        <span class="lead">{t().lead}</span>
+      </Show>
+      {t().rest}
+    </span>
   );
 }
 
@@ -234,11 +437,7 @@ export function SelectAll(props: {
         disabled={props.disabled || props.keys.length === 0}
         onChange={() => props.onChange(toggleAll(props.keys, props.ticked))}
       />
-      <Show when={count() > 0}>
-        <span class="selcount" title={`${count()} of ${props.keys.length} ticked`}>
-          {count()} / {props.keys.length}
-        </span>
-      </Show>
+      <TickCount ticked={count()} total={props.keys.length} />
     </>
   );
 }
@@ -389,10 +588,7 @@ export function LocalPane(props: {
       }}
     >
       <div class="colhead">
-        <div class="hl">
-          {props.selectAll}
-          <h3>On your computer</h3>
-        </div>
+        <div class="hl">{props.selectAll}</div>
         <div class="acts">{props.actions}</div>
       </div>
       <div class="listarea">{props.children}</div>
@@ -460,10 +656,7 @@ export function DevicePane(props: {
       }}
     >
       <div class="colhead">
-        <div class="hl">
-          {props.selectAll}
-          <h3>On device</h3>
-        </div>
+        <div class="hl">{props.selectAll}</div>
         <div class="acts">{props.actions}</div>
       </div>
       <Show when={!props.hideTarget}>
@@ -478,6 +671,9 @@ export function DevicePane(props: {
                   <span class="meta">{freeLine(d().free)}</span>
                 </Show>
                 <Show when={activeMode() === 'samples' && linkTag(sampleLink())}>{(t) => <Tag tag={t()} />}</Show>
+                <Show when={activeMode() === 'samples' && linkHint(sampleLink())}>
+                  {(h) => <span class="meta link-hint">{h()}</span>}
+                </Show>
                 <Show when={d().storage}>
                   <span class="meta storage">{d().storage}</span>
                 </Show>

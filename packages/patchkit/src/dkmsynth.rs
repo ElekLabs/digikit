@@ -305,6 +305,7 @@ pub fn synth(spec: &Spec, dev: &str, models: &Models, decl: Option<&Dko>) -> Res
         trace: false,
         stereo: false,
         gate: false,
+        service: None,
     };
     let max = if spec.oversize {
         usize::MAX
@@ -467,8 +468,8 @@ mod tests {
 
     #[test]
     fn an_oversize_file_needs_the_flag_and_bad_specs_are_refused() {
-        let big = "name = \"cap/big\"\npad = 70000\n";
-        let e = synth(&Spec::parse(big).unwrap(), "dt2", &models(), None).unwrap_err();
+        let big = format!("name = \"cap/big\"\npad = {}\n", dkm::max_file() + 4464);
+        let e = synth(&Spec::parse(&big).unwrap(), "dt2", &models(), None).unwrap_err();
         assert!(e.0.contains("runtime stages"), "{}", e.0);
         let f = make(&format!("{big}oversize = true\n"), "dt2");
         assert!(f.len() > dkm::max_file());

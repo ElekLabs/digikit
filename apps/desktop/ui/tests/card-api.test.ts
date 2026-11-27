@@ -16,15 +16,15 @@ const folder = (path: string): CardFolder => ({
 
 test('choosing a folder opens the dialog at the card folder, then sets the choice through the RPC', async () => {
   const host = createFakeHost({
-    'fs.pickFolder': '/Users/em/cards/dt2',
-    'rpc.call': (method: string) => folder(method === 'card.folder_set' ? '/Users/em/cards/dt2' : '/old'),
+    'fs.pickFolder': '/Users/preview/cards/dt2',
+    'rpc.call': (method: string) => folder(method === 'card.folder_set' ? '/Users/preview/cards/dt2' : '/old'),
   });
   const api = cardApi(host);
   const current = folder('/old/plus_drive/dt2');
   const next = await api.choose(current, 'Choose the folder of the DIGITAKT II card');
-  assert.equal(next?.folder, '/Users/em/cards/dt2');
+  assert.equal(next?.folder, '/Users/preview/cards/dt2');
   assert.deepEqual(host.commands(), ['fs.pickFolder', 'rpc.call']);
-  assert.deepEqual(host.argsOf('rpc.call'), [['card.folder_set', { dir: '/Users/em/cards/dt2' }]]);
+  assert.deepEqual(host.argsOf('rpc.call'), [['card.folder_set', { dir: '/Users/preview/cards/dt2' }]]);
 });
 
 test('cancelling the dialog changes nothing', async () => {

@@ -1,22 +1,30 @@
 // The Transfer page's state (Modules mode and the mode), kept for the life of the app: closing the page and opening it again shows the last list at once
 // (it is refreshed behind it), and an install's verify results stay until the next restart. One `TransferState` per app (createTransferApp).
-import { createSignal } from 'solid-js';
+import { batch, createSignal } from 'solid-js';
+import { isDeviceId, runtimeDeviceIds } from '../data/device-profiles';
 import type { JobsApp } from '../jobs/jobs';
 import { addJob, removeJob, updateJob } from '../jobs/jobs-core';
 import { remembered, type KeyValue } from '../storage';
 import type { TransferEnv } from './env';
 import type { LinkState } from './link-core';
+import type { LiveResult } from './live-ops';
+import type { StoreUsage } from '../target-ops/store';
 import { parseMode, type Mode, type Progress, type TransferView, type Verified } from './transfer-core';
 
 export interface DeviceInfo {
   name: string;
-  runtime: string;
+  /** The runtime version; null when the device has no runtime (the stock firmware). */
+  runtime: string | null;
+  /** Samples mode: the device runs the digikit runtime (the actions that need it are offered). */
+  hasRuntime?: boolean;
   free?: number;
   /** Modules mode: the storage line under the device line (storageLine); the free space is in it, not in the device line. */
   storage?: string;
   /** Samples mode only: the backend of the device's samples, and whether it makes folders. */
   samples?: string;
   canMkdir?: boolean;
+  /** Samples mode: when the device uses a changed sample (`restart`: at its next start); `live` or absent: at once. */
+  apply?: 'live' | 'restart';
 }
 
 /** The state of the Transfer page of one app. `jobs` is the app's (the busy action is a job of its store). */
@@ -25,16 +33,35 @@ export function createTransferState({
   storage,
   jobs,
 }: {
-  env: Pick<TransferEnv, 'extras'>;
+  env: Pick<TransferEnv, 'extras' | 'libraryDevices'>;
   storage: KeyValue;
   jobs: JobsApp;
 }) {
   const [lastView, setLastView] = createSignal<TransferView>();
+  /** The store usage read in the Samples mode (the Modules mode has it in its view). */
+  const [sampleUsage, setSampleUsage] = createSignal<StoreUsage | undefined>();
+  // Retain the local scan across disconnects, including when Transfer is unmounted.
+  let libraryView: TransferView | undefined;
+  const rememberLibrary = (view: TransferView) => {
+    libraryView = view;
+  };
+  const forgetDevice = () => {
+    if (lastView() && !browsing()) setTicks(new Set<string>());
+    setLastView(libraryView);
+    setBrowsing(true);
+    setDeviceInfo(undefined);
+    setVerified({});
+    setLiveResults({});
+    setSampleUsage(undefined);
+    setDelTicks(new Set<string>());
+  };
   /** The library modules ticked for install. */
   const [ticks, setTicks] = createSignal<Set<string>>(new Set());
   /** The store paths ticked in the On device pane (for Delete). */
   const [delTicks, setDelTicks] = createSignal<Set<string>>(new Set());
   const [verified, setVerified] = createSignal<Verified>({});
+  /** The last live change (Load, Unload, Reload) per store path, shown on the row until the next change or target. */
+  const [liveResults, setLiveResults] = createSignal<Record<string, LiveResult>>({});
   const [progress, setProgress] = createSignal<Progress>();
   const [showTests, setShowTests] = createSignal(false);
   const [log, setLog] = createSignal<string[]>([]);
@@ -51,8 +78,8 @@ export function createTransferState({
   const [sampleLink, setSampleLink] = createSignal<LinkState>();
 
   /** The device whose library the list shows while no device answers (the site). */
-  const [browseDevice, setBrowseDevice] = remembered<'dt2' | 'dn2'>(storage, 'digikit.transferBrowseDevice', (v) =>
-    v === 'dn2' ? 'dn2' : 'dt2',
+  const [browseDevice, setBrowseDevice] = remembered<string>(storage, 'digikit.transferBrowseDevice', (v) =>
+    v !== null && isDeviceId(v) ? v : ((env.libraryDevices ?? runtimeDeviceIds)[0] ?? ''),
   );
   /** The list shows the library alone, with no device behind it. */
   const [browsing, setBrowsing] = createSignal(false);
@@ -68,6 +95,7 @@ export function createTransferState({
   /** The page's one busy action ('' when none) and its error line. They live here, not in the page: leaving the page unmounts it while a job
    * goes on, and the page that comes back must see the job (the buttons stay off, no second job, no read) and show its error. */
   const [reading, setReading] = createSignal(false);
+  const [readingAfterJob, setReadingAfterJob] = createSignal(false);
   const busy = (): string => jobs.jobs().list.find((j) => j.group === 'target')?.label ?? (reading() ? 'Reading' : '');
   const [error, setError] = createSignal('');
   let readAgain = false;
@@ -104,8 +132,21 @@ export function createTransferState({
   };
   const stopWasAsked = (): boolean => stopAsked;
 
+  /** The write finished. Hold the page's read lock while its inventory refreshes. */
+  function beginReadback(): void {
+    if (jobId === undefined) return;
+    const id = jobId;
+    jobId = undefined;
+    batch(() => {
+      setReading(true);
+      setReadingAfterJob(true);
+      jobs.setJobs((s) => removeJob(s, id));
+    });
+  }
+
   /** End the busy action; true when a read was asked for during it. */
   function endJob(): boolean {
+    setReadingAfterJob(false);
     setReading(false);
     if (jobId !== undefined) {
       const id = jobId;
@@ -123,7 +164,11 @@ export function createTransferState({
   const [noRuntime, setNoRuntime] = createSignal(false);
 
   return {
+    rememberLibrary,
+    forgetDevice,
     lastView,
+    sampleUsage,
+    setSampleUsage,
     setLastView,
     ticks,
     setTicks,
@@ -131,6 +176,8 @@ export function createTransferState({
     setDelTicks,
     verified,
     setVerified,
+    liveResults,
+    setLiveResults,
     progress,
     setProgress,
     showTests,
@@ -161,6 +208,8 @@ export function createTransferState({
     jobProgress,
     askStop,
     stopWasAsked,
+    beginReadback,
+    readingAfterJob,
     endJob,
     halted,
     setHalted,

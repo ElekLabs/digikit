@@ -18,12 +18,29 @@ export interface Converted {
   rpc: Uint8Array;
   info: SampleInfo;
 }
+/** What the device takes of a sample slot (`[storage.slots]` of the device file); `bytesMax` is the most audio bytes. */
+export interface SlotFormat {
+  rate: number;
+  channels: number;
+  bits: number;
+  byteOrder: 'big' | 'little';
+  bytesMax: number;
+}
 
 interface Exports {
   memory: WebAssembly.Memory;
   ds_alloc(n: number): number;
   ds_free(p: number, n: number): void;
   ds_convert(wav: number, len: number): number;
+  ds_slot(
+    wav: number,
+    len: number,
+    name: number,
+    nameLen: number,
+    rate: number,
+    maxBytes: number,
+    bigEndian: number,
+  ): number;
   ds_hash(data: number, len: number): number;
   ds_out_ptr(): number;
   ds_out_len(): number;
@@ -73,6 +90,30 @@ export class Sample {
     };
   }
 
+  /** A WAV (any rate, one or two channels) as the slot image of a device with numbered slots: the 0x40-byte header and mono 16-bit samples at 48 kHz. Throws `DkError` kind `convert` (not a usable WAV, too long for a slot) or `usage` (a format this converter does not make). */
+  slot(wav: Uint8Array, name: string, f: SlotFormat): { image: Uint8Array; name: string; info: SampleInfo } {
+    if (f.channels !== 1 || f.bits !== 16) throw new DkError({ error: 'slot samples are mono 16-bit', kind: 'usage' });
+    const nameBytes = new TextEncoder().encode(name);
+    const rc = this.withBytes(wav, (w) =>
+      this.withBytes(nameBytes, (n) =>
+        this.x.ds_slot(w, wav.length, n, nameBytes.length, f.rate, f.bytesMax, f.byteOrder === 'big' ? 1 : 0),
+      ),
+    );
+    const info = JSON.parse(new TextDecoder().decode(this.copy(this.x.ds_info_ptr(), this.x.ds_info_len())));
+    if (rc !== 0) throw new DkError({ error: `not a usable sample: ${info.error}`, kind: 'convert' });
+    return {
+      image: this.copy(this.x.ds_out_ptr(), this.x.ds_out_len()),
+      name: info.name,
+      info: {
+        srcRate: info.src_rate,
+        channels: info.channels,
+        srcFrames: info.src_frames,
+        frames: info.frames,
+        dataLen: info.data_len,
+      },
+    };
+  }
+
   /** The `hash | 1` the +Drive keeps of a file (record word +0x0c), over all the bytes the file holds. */
   hash(data: Uint8Array): number {
     return this.withBytes(data, (p) => this.x.ds_hash(p, data.length)) >>> 0;
@@ -109,6 +150,16 @@ export interface Prepared {
   info?: SampleInfo;
 }
 
+/**
+ * What a samples backend uses to turn a local file into a `Prepared`. The caller binds it once (the wasm converter); the backend decides which of its
+ * methods to call. `upload` is `prepareUpload` with the converter bound. A later backend adds its own method here.
+ */
+export interface SampleConverter {
+  upload(name: string, bytes: Uint8Array): Prepared;
+  /** The slot image of a device with numbered slots; a file that is not a WAV is refused (nothing else may be written into a slot). */
+  slot(name: string, bytes: Uint8Array, format: SlotFormat): Prepared;
+}
+
 /** What `prepareUpload` will do with a file of `size` bytes, from its first 64 bytes: the page labels the local files with it without reading them in full. */
 export function sourceKind(head: Uint8Array, size: number): Prepared['kind'] {
   return isWav(head) ? 'converted' : nativeHead(head, size) ? 'native' : 'unchanged';
@@ -130,3 +181,17 @@ export function prepareUpload(sample: Sample, name: string, bytes: Uint8Array): 
   }
   return { name, bytes, stored: bytes, kind: 'unchanged' };
 }
+
+/** What a file needs before it goes into a sample slot: a WAV becomes the slot image (the name on the device is the one the header holds); any other file is refused. */
+export function prepareSlot(sample: Sample, name: string, bytes: Uint8Array, format: SlotFormat): Prepared {
+  if (!isWav(bytes))
+    throw new DkError({ error: `${name} is not a WAV: this device takes WAV files only`, kind: 'convert' });
+  const c = sample.slot(bytes, name.replace(/\.wav$/i, ''), format);
+  return { name: c.name, bytes: c.image, stored: c.image, kind: 'converted', info: c.info };
+}
+
+/** The converter of a `Sample` for `openSamples`. */
+export const converterOf = (sample: Sample): SampleConverter => ({
+  upload: (name, bytes) => prepareUpload(sample, name, bytes),
+  slot: (name, bytes, format) => prepareSlot(sample, name, bytes, format),
+});

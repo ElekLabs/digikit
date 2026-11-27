@@ -1,0 +1,16 @@
+{
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "sdk-settings-page-tests",
+  "tags": ["test-only"],
+  "implicitDependencies": ["core/runtime", "core/runtime-storage", "core/ui", "core/digikit-menu", "dkrt-sdk"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["settings-page.device.test.ts"],
+        "firmwareOnly": "the page of a module opens under its SETTINGS... row in the real DIGIKIT menu (the menu object the firmware shows), the stock choice popup returns the picked index to the page, and the saved value is read in init after a restart (the settings record on the card)",
+        "modules": ["test/settings-page"],
+        "plusdrive": true
+      }
+    ]
+  }
+}

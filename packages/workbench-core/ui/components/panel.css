@@ -15,7 +15,6 @@
   display: block;
 }
 .chassis {
-  fill: url(#chassis);
   stroke: #3b3c3f;
   stroke-width: 0.6;
 }
@@ -36,6 +35,16 @@
 }
 .silk.jack {
   font-size: 1.55px;
+}
+.silk .silk-accent {
+  fill: var(--accent);
+}
+.silk-glyph {
+  fill: none;
+  stroke: #e4e5e7;
+  stroke-width: 0.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .silk.sub {
   fill: #8f9196;
@@ -101,6 +110,9 @@
 .knob .knob-sub {
   fill: #8f9196;
   font-size: 1.45px;
+}
+.knob .knob-sub.accent {
+  fill: var(--accent);
 }
 .key {
   color: #d2d4d8;

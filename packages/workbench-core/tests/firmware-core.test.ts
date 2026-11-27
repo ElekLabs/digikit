@@ -10,6 +10,7 @@ import {
   groups,
   imageFileName,
   judge,
+  leavesRuntime,
   matchView,
   modelOfPort,
   progressView,
@@ -191,10 +192,7 @@ test('the image file name tells the device, the OS and the runtime', () => {
 });
 
 test('a refused file gets a lead-in unless patchkit already says which file it was', () => {
-  assert.equal(
-    refusalText('expected F0 at offset 0'),
-    'This is not an Elektron firmware update file: expected F0 at offset 0',
-  );
+  assert.equal(refusalText('expected F0 at offset 0'), 'Patchkit cannot use this file: expected F0 at offset 0');
   assert.equal(
     refusalText('this file is a patched image; give the stock file it was made from (sha256 abc)'),
     'This file is a patched image; give the stock file it was made from (sha256 abc)',
@@ -237,4 +235,18 @@ test('the RPC progress reads in megabytes, and says when the device checks and f
     progressView({ ...s, checking: true, flashing: true }).text,
     'the device checked the image ✓ · flashing, do not unplug',
   );
+});
+
+test('only a patch with the runtime leaves a runtime to bind services to and to install default modules on', () => {
+  assert.equal(leavesRuntime(prepared()), true);
+  // a patch without the runtime has no image id to report (the Syntakt's optional first flash: core/peer-image only)
+  assert.equal(leavesRuntime(prepared({ imageId: null })), false);
+  assert.equal(leavesRuntime(prepared({ restore: true, imageId: null, runtime: null })), false);
+});
+
+test('the page text for an image without a runtime says so', () => {
+  const dev = { kind: 'connected', d: { model: 'dn2', os: '1.12' } } as never;
+  const text = matchView(prepared({ imageId: null, runtime: null }), dev).os;
+  assert.match(text ?? '', /installs no digikit runtime/);
+  assert.match(matchView(prepared(), dev).os ?? '', /with digikit runtime 0\.5\.2\./);
 });

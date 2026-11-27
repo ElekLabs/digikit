@@ -1,6 +1,6 @@
-/* Host harness for modules/core/adapters/sample-pool/src/cf/dn2 (pool.c, xfer.c and send.c, unchanged): the store, the DSP block clock, the
+/* Host harness for runtime/platform/sample-pool/src/cf/dn2 (pool.c, xfer.c and send.c, unchanged): the store, the DSP block clock, the
  * LP0 port, the SampleLoader worker and the runtime's completion call are stand-ins, and a small model of the DSP receiver (spw_dsp_rule)
- * writes the pages it decodes from the port into a DDR array and answers through the real reply hook. modules/core/adapters/sample-pool/tests/test_sample_pool_dn2.py
+ * writes the pages it decodes from the port into a DDR array and answers through the real reply hook. runtime/platform/sample-pool/tests/test_sample_pool_dn2.py
  * runs the scenarios. It tests our logic: the allocator, the page order, the job loop with its resend, error and cancel rules, the raw
  * sender's byte order and bounds, the hand-over between the UI task and the job, and the data that reaches DDR; not the firmware or the DSP
  * code. */
@@ -32,7 +32,17 @@ static int done_n, in_tick, done_outside_tick;
 static uint32_t done_req[64];
 static int32_t done_res[64];
 static uint32_t done_clock;
-void dkrt_pool_done(uint32_t req, int32_t result)
+/* the pointer slots of the image (module.toml [[slot]]), filled as the samples service fills them */
+volatile uintptr_t sp_slot_pool_done;
+volatile uintptr_t sp_slot_pool_lost;
+static void harness_pool_done(uint32_t req, int32_t result);
+static void harness_pool_lost(void);
+__attribute__((constructor)) static void harness_fill_slots(void)
+{
+    sp_slot_pool_done = (uintptr_t)harness_pool_done;
+    sp_slot_pool_lost = (uintptr_t)harness_pool_lost;
+}
+static void harness_pool_done(uint32_t req, int32_t result)
 {
     if (!in_tick)
         done_outside_tick++;
@@ -40,7 +50,7 @@ void dkrt_pool_done(uint32_t req, int32_t result)
     done_req[done_n] = req;
     done_res[done_n++] = result;
 }
-void dkrt_pool_lost(void)
+static void harness_pool_lost(void)
 {
     puts("LOST");
     exit(4);

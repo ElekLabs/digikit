@@ -106,6 +106,32 @@ test('the backend follows the profile value; an unknown value or a missing hash 
   assert.throws(() => openSamples('flash', { session: a.s, hashOf }), /unknown samples backend "flash"/);
 });
 
+test('prepare is the injected converter on both backends and through the bulk wrapper; without it the backend refuses', () => {
+  const seen: string[] = [];
+  const converter = {
+    upload: (name: string, data: Uint8Array): Prepared => {
+      seen.push(name);
+      return { name: `${name}!`, bytes: data, stored: data, kind: 'unchanged' };
+    },
+    slot: (): Prepared => {
+      throw new Error('no slot converter');
+    },
+  };
+  for (const kind of ['stock-rpc', 'digikit']) {
+    for (const bulk of [undefined, {} as never]) {
+      const dev = openSamples(kind, { session: session().s, hashOf, converter, bulk });
+      const p = dev.prepare('a', new Uint8Array(3));
+      assert.equal(p.name, 'a!');
+      assert.equal(dev.sizeOf(prepared('k', 10)), 26);
+    }
+  }
+  assert.equal(seen.length, 4);
+  assert.throws(
+    () => openSamples('digikit', { session: session().s }).prepare('a', new Uint8Array(1)),
+    /without a converter/,
+  );
+});
+
 for (const kind of ['stock-rpc', 'digikit']) {
   test(`${kind}: folder, upload with progress, list, space, verify (ok, other bytes, missing), delete`, async () => {
     const { s } = session();
@@ -128,11 +154,11 @@ for (const kind of ['stock-rpc', 'digikit']) {
     await dev.put('drums', f, (sent, total) => seen.push([sent, total]));
     assert.equal(seen.at(-1)?.[0], seen.at(-1)?.[1]);
     assert.ok(seen.length >= 3, 'several chunks');
-    // the size the device reports: without the trailer on the +Drive, the stored file on the store
+    // both backends list the payload size; the store also lists the size it keeps (payload plus trailer), which is what the file takes of the space
     const listed = await dev.list('drums');
     assert.deepEqual(
       listed.map(({ hash: _hash, ...e }) => e),
-      [{ name: 'kick', kind: 'file', size: kind === 'stock-rpc' ? n : n + 16 }],
+      [{ name: 'kick', kind: 'file', size: n, ...(kind === 'digikit' ? { stored: n + 16 } : {}) }],
     );
     assert.match(listed[0].hash ?? '', /^[0-9a-f]+$/, 'a file of the listing carries the device hash');
     assert.equal(
@@ -154,6 +180,7 @@ for (const kind of ['stock-rpc', 'digikit']) {
     assert.equal(ok.device, ok.host);
     assert.equal(ok.sent, kind === 'stock-rpc' ? n : n + 16);
     assert.equal(ok.mismatchAt, null);
+    assert.equal(ok.size, n, 'verify reports the payload size on both backends');
     const other = { ...prepared('kick', n, 9) };
     const bad = await dev.verify('drums', other);
     assert.deepEqual([bad.ok, bad.device === bad.host, bad.device !== null], [false, false, true]);
@@ -221,7 +248,7 @@ test('digikit without the FOLDERS capability: no mkdir, the host filters a full 
   store.files.set('modules/m.dkm', bytes(5));
   assert.deepEqual(
     (await dev.list('drums')).map(({ hash: _hash, ...e }) => e),
-    [{ name: 'a', kind: 'file', size: 36 }],
+    [{ name: 'a', kind: 'file', size: 20, stored: 36 }],
   );
   assert.ok(store.calls.includes('list') && !store.calls.some((c) => c.startsWith('list samples')));
 });

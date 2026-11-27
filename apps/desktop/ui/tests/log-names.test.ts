@@ -1,4 +1,5 @@
-// Names in the Log pane (apps/desktop/ui/src/log-names.ts, log-names-backend.ts, the names of packages/dk-session/src/runtime-log.ts): a golden
+// Names in the Log pane (the app's log follower and name backends, apps/desktop/ui/src/log-follow.ts and log-names-backend.ts, with the shared
+// log-names resolver from @digi/dk-session/log-names): a golden
 // fault record with a small ship map, a module map and a load table read from a fake guest memory, through the real dkprof.wasm
 // (`dkprof:wasm`, a dependency of this project's test-host). Unresolved addresses stay hex. The emulator and the device origin go through the same
 // code (PEEK of the debug module on the follower's session); they differ in where the ship map comes from.
@@ -14,7 +15,7 @@ import { createLogFollow } from '../src/log-follow.ts';
 import type { LogInput } from '../src/log-core.ts';
 import { createDkProfLoader } from '../src/dkprof-env.ts';
 import { createDeviceNames, createEmulatorNames } from '../src/log-names-backend.ts';
-import { makeResolver, readLoadTable } from '../src/log-names.ts';
+import { makeResolver, readLoadTable } from '@digi/dk-session/log-names';
 import { createFakeHost } from '@digi/workbench-core/host/fake-host.ts';
 
 let prof: DkProf;
@@ -165,12 +166,16 @@ async function follow(
     createLogFollow({
       follow: () => true,
       flashing: () => false,
-      emulator: { running: () => true, session: async () => emulator.session, names: createEmulatorNames(host, prof) },
+      emulator: {
+        running: () => true,
+        session: async () => emulator.session,
+        makeNames: () => createEmulatorNames(host, prof),
+      },
       device: {
         port: () => 'Digitakt',
         session: async () => device.session,
         present: async () => true,
-        names: createDeviceNames(host, prof),
+        makeNames: () => createDeviceNames(host, prof),
       },
       push: (inputs) => entries.push(...inputs),
       now: () => 0,
@@ -225,4 +230,44 @@ test('a device whose image has no kept map, or no debug module, shows hex and sa
   entries = await follow(origin(ring), origin(ring, CAPS & ~(1 << CAP.PEEK)), hostFor([shipRecord]));
   assert.ok(!crashEntry(entries, 'device').text.includes('('));
   assert.match(entries.find((e) => e.text.startsWith('device: names unavailable'))!.text, /needs the debug module/);
+});
+
+test('verified firmware symbols resolve fault PCs without PEEK and are invalidated by source removal', async () => {
+  const hash = 'a'.repeat(64);
+  const knownShip = { ...ship, key: { ...ship.key, image_sha256: hash } };
+  const host = hostFor([{ ...shipRecord, ship: JSON.stringify(knownShip) }]);
+  let revision = 1;
+  const fw = {
+    ...knownShip,
+    kind: 'dev',
+    entries: [{ cpu: 'cf', layer: 'fw', addr: 0x40001000, size: 32, name: 'render_block' }],
+  };
+  const sources = {
+    revision: () => revision,
+    maps: async (requested: string) => (requested === hash && revision === 1 ? [fw] : []),
+    choose: async () => {},
+    remove: async () => {},
+    refresh: async () => {},
+    list: async () => [],
+  };
+  const names = createDeviceNames({ ...host, symbols: sources }, async () => prof);
+  const session = origin([], CAPS & ~(1 << CAP.PEEK)).session;
+  await names.refresh(session);
+  assert.equal(names.resolve()?.('cf', 0x40001004), 'render_block+0x4');
+  assert.equal(names.resolve()?.('cf', BASE + 0x44), null);
+  const failedPeek = {
+    ...session,
+    info: async () => ({ ...(await session.info()), caps: CAPS }),
+    peek: async () => {
+      throw new Error('read failed');
+    },
+  };
+  await names.refresh(failedPeek);
+  assert.equal(names.resolve()?.('cf', 0x40001004), 'render_block+0x4');
+  assert.equal(names.resolve()?.('cf', BASE + 0x44), null);
+  revision++;
+  assert.equal(names.resolve(), undefined);
+  await names.refresh(session);
+  assert.equal(names.inputs(), undefined);
+  assert.equal(names.imageHash?.(), hash);
 });

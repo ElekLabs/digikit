@@ -13,6 +13,12 @@ export interface CheckResult {
   port: string | null;
   modules: CheckModule[];
 }
+/** The bootstrap budget of an image (`verify::Budget`): the in-place margin of MAIN at the device's stage (null: the unpack stays below the stage) and the container bytes left under the limit. */
+export interface BootstrapBudget {
+  margin: number | null;
+  stage: number;
+  container_free: number;
+}
 export interface PatchPlan {
   base: { device: string; version: string; syx_sha256: string };
   modules: string[];
@@ -24,6 +30,7 @@ export interface PatchPlan {
     syx_bytes: number;
     container_bytes: number;
     changed_sections: [number, number, number][];
+    budget?: BootstrapBudget;
   };
 }
 export interface VerifyReport {
@@ -33,6 +40,7 @@ export interface VerifyReport {
   sections: [number, number, number][];
   record: { modules: string[] } | null;
   port: string | null;
+  budget?: BootstrapBudget | null;
   checks: string[];
 }
 export interface PatchResult {
@@ -53,12 +61,14 @@ export interface PreparedFlash {
   /** Every check passed and there is something to send. */
   ok: boolean;
   restore: boolean;
-  /** `dt2` or `dn2`. */
+  /** The device id. */
   device: string;
   /** The OS version of the stock image (`1.17`). */
   os: string;
   shaStock: string;
   shaImage: string;
+  /** SHA-256 of the decoded container, when supplied by native preparation. */
+  containerSha256?: string;
   /** The id the runtime's INFO reports after the flash (16 hex digits); null for a restore. */
   imageId: string | null;
   /** The runtime version the patch carries (`0.5.2`); null for a restore. */
@@ -77,6 +87,7 @@ export interface FlashSummary {
   os: string;
   sha_stock: string;
   sha_image: string;
+  container_sha256?: string;
   image_id: string | null;
   runtime: string | null;
   pace_ms: number;
@@ -92,6 +103,7 @@ export function preparedFromSummary(j: FlashSummary, image: Uint8Array): Prepare
     os: j.os,
     shaStock: j.sha_stock,
     shaImage: j.sha_image,
+    ...(j.container_sha256 === undefined ? {} : { containerSha256: j.container_sha256 }),
     imageId: j.image_id,
     runtime: j.runtime,
     paceMs: j.pace_ms,
@@ -319,7 +331,7 @@ export class PatchKit {
   }
 }
 
-/** The file name of a patched image: `Digitakt_II_OS1.17+core-fx.syx`. */
+/** The file name of a patched image: `<Device_name>_OS<version>+core-fx.syx`. */
 export function patchedFileName(deviceName: string, version: string, ids: string[]): string {
   const base = `${deviceName.replace(/\s+/g, '_')}_OS${version}`;
   return `${base}+${ids.map((id) => id.replace(/\//g, '-')).join('+')}.syx`;

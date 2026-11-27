@@ -27,10 +27,7 @@ here is not evidence of dead code; confirm with tools/coldfire/refscan.py on the
 image before recording "no caller" (see CLAUDE.md's Ghidra section and
 tools/sharc_dev/sharcdb/'s own "empty Ghidra caller list" note).
 
-Decompiled C and disassembly text are NOT copied into the database (60 MB /
-72 MB for the current dt2-1.16-emac dump -- see functions.decomp_path/
-disasm_path, resolved against meta['ghidra_dump_dir'] by tools/coldfire/cf.py's
-Image.decomp()/disasm() instead of duplicating that text here).
+The database also holds the function texts and their full-text indexes.
 """
 
 from __future__ import annotations
@@ -42,6 +39,10 @@ import os
 import sqlite3
 import sys
 import time
+from contextlib import closing
+
+from tools.firmware.artifacts import FirmwareArtifacts, coldfire_database_path
+from tools.firmware.query_db import FUNCTION_NAMES_SQL
 
 DB_VERSION = 2
 DEFAULT_DB_DIR = "out/cfdb"
@@ -229,6 +230,7 @@ def build_database(dump_dir, out_path, name=None, force=False):
         if existing.get("image_sha256") == sha and existing.get("db_version") == str(
             DB_VERSION
         ):
+            build_fts(out_path, dump_dir=dump_dir)
             return {
                 "name": name,
                 "path": out_path,
@@ -390,6 +392,7 @@ def build_database(dump_dir, out_path, name=None, force=False):
                 [(name, *row) for row in vtables],
             )
 
+            _write_search_data(db, name, dump_dir)
             db.commit()
         finally:
             db.close()
@@ -415,8 +418,11 @@ def build_database(dump_dir, out_path, name=None, force=False):
 
 def cmd_build(args):
     name = args.name or os.path.basename(os.path.normpath(args.dump_dir))
-    out = args.out or os.path.join(args.out_dir, name + ".sqlite")
+    out = args.out or coldfire_database_path(name, args.out_dir)
     r = build_database(args.dump_dir, out, name=name, force=args.force)
+    artifacts = FirmwareArtifacts(name, "cf")
+    if str(artifacts.database) == os.path.abspath(out):
+        artifacts.publish_legacy_alias()
     if r["skipped"]:
         print(
             "%-16s SKIPPED (up to date)  %s  %.1fs"
@@ -440,112 +446,135 @@ def cmd_build(args):
     return 0
 
 
-FTS_VERSION = 2
+FTS_VERSION = 3
 
 
 def fts_path(db_path):
-    """The full-text sidecar for a database: <name>.fts.sqlite beside it. It is
-    a separate file so adding or rebuilding it never touches DB_VERSION or the
-    main database (other lanes share out/cfdb)."""
+    """Legacy sidecar path for read compatibility."""
     return db_path[: -len(".sqlite")] + ".fts.sqlite"
 
 
-def build_fts(db_path, force=False):
-    """Build the FTS5 sidecar for one cfdb database and return its path.
-
-    Tables (all FTS5; the rowid is the function entry or string address):
-      fts_names   (name, cf_name, klass)   trigram; function, cf_names and RTTI names
-      fts_strings (text)                   trigram, so substrings match
-      fts_decomp  (body)                   decompiled C, contentless; hits are
-                                           located again by reading the dump
-    Rebuilt when the main database's image sha256 or FTS_VERSION moves on."""
-    out = fts_path(db_path)
-    meta = read_meta(db_path)
-    stamp = "%s/%s/%s" % (meta.get("image_sha256"), meta.get("build_time"), FTS_VERSION)
-    if os.path.exists(out) and not force:
-        try:
-            con = sqlite3.connect(out)
-            row = con.execute("SELECT value FROM fts_meta WHERE key='stamp'").fetchone()
-            con.close()
-            if row and row[0] == stamp:
-                return out
-        except sqlite3.Error:
-            pass
-    tmp = out + ".tmp.%d" % os.getpid()
-    if os.path.exists(tmp):
-        os.remove(tmp)
-    src = sqlite3.connect(db_path)
-    name = meta["image"]
-    dump = meta.get("ghidra_dump_dir")
-    con = sqlite3.connect(tmp)
-    con.executescript(
-        "CREATE TABLE fts_meta (key TEXT PRIMARY KEY, value TEXT);"
-        "CREATE VIRTUAL TABLE fts_names USING fts5(name, cf_name, klass, "
-        "tokenize='trigram');"
-        "CREATE VIRTUAL TABLE fts_strings USING fts5(text, tokenize='trigram');"
+def _write_search_data(db, name, dump_dir):
+    """Populate the text and FTS tables in the caller's transaction."""
+    for table in (
+        "function_text",
+        "fts_meta",
+        "fts_names",
+        "fts_strings",
+        "fts_decomp",
+        "string_rows",
+    ):
+        db.execute(f"DROP TABLE IF EXISTS {table}")
+    for sql in (
+        "CREATE TABLE function_text (image TEXT, path TEXT, body TEXT, PRIMARY KEY (image, path))",
+        "CREATE TABLE fts_meta (key TEXT PRIMARY KEY, value TEXT)",
+        "CREATE VIRTUAL TABLE fts_names USING fts5(name, cf_name, klass, tokenize='trigram')",
+        "CREATE VIRTUAL TABLE fts_strings USING fts5(text, tokenize='trigram')",
         "CREATE VIRTUAL TABLE fts_decomp USING fts5(body, content='', detail=column, "
-        "tokenize=\"unicode61 tokenchars '_'\");"
-    )
-    klass_of: dict[int, str] = {}
-    for target, cls in src.execute(
+        "tokenize=\"unicode61 tokenchars '_'\")",
+        "CREATE TABLE string_rows (id INTEGER PRIMARY KEY, addr INTEGER)",
+        FUNCTION_NAMES_SQL,
+    ):
+        db.execute(sql)
+    names = _image_names(name)
+    classes: dict[int, str] = {}
+    for target, cls in db.execute(
         "SELECT target, class FROM vtables WHERE image=? ORDER BY addr, slot", (name,)
     ):
-        klass_of.setdefault(target, cls)
-    names = _image_names(name)
-    rows = []
-    for entry, fname in src.execute(
-        "SELECT entry, name FROM functions WHERE image=?", (name,)
-    ):
-        rows.append((entry, fname, names.get(entry, ""), klass_of.get(entry, "")))
-    con.executemany(
-        "INSERT INTO fts_names(rowid, name, cf_name, klass) VALUES (?,?,?,?)", rows
+        classes.setdefault(target, cls)
+    functions = db.execute(
+        "SELECT entry, name, decomp_path, disasm_path FROM functions WHERE image=? ORDER BY entry",
+        (name,),
+    ).fetchall()
+    db.execute(
+        "DELETE FROM function_names WHERE image=? AND source='cf_names'", (name,)
     )
-    con.executemany(
+    db.executemany(
+        "INSERT OR REPLACE INTO function_names VALUES (?,?,?,?)",
+        (
+            (name, entry, names[entry], "cf_names")
+            for entry, *_ in functions
+            if entry in names
+        ),
+    )
+    db.executemany(
+        "INSERT INTO fts_names(rowid, name, cf_name, klass) VALUES (?,?,?,?)",
+        (
+            (entry, fname, names.get(entry, ""), classes.get(entry, ""))
+            for entry, fname, _, _ in functions
+        ),
+    )
+    strings = db.execute(
+        "SELECT addr, text FROM strings WHERE image=? ORDER BY rowid", (name,)
+    ).fetchall()
+    db.executemany(
         "INSERT INTO fts_strings(rowid, text) VALUES (?,?)",
-        [
-            (i, t)
-            for i, (_a, t) in enumerate(
-                src.execute("SELECT addr, text FROM strings WHERE image=?", (name,))
-            )
-        ],
+        ((i, t) for i, (_, t) in enumerate(strings)),
     )
-    con.execute("CREATE TABLE string_rows (id INTEGER PRIMARY KEY, addr INTEGER)")
-    con.executemany(
+    db.executemany(
         "INSERT INTO string_rows VALUES (?,?)",
-        [
-            (i, a)
-            for i, (a,) in enumerate(
-                src.execute("SELECT addr FROM strings WHERE image=?", (name,))
-            )
-        ],
+        ((i, addr) for i, (addr, _) in enumerate(strings)),
     )
-    n = 0
-    if dump:
-        batch = []
-        for entry, path in src.execute(
-            "SELECT entry, decomp_path FROM functions WHERE image=? AND decomp_path IS NOT NULL",
-            (name,),
-        ):
-            fp = os.path.join(dump, path)
-            if not os.path.exists(fp):
-                continue
-            with open(fp, errors="replace") as fh:
-                batch.append((entry, fh.read()))
-            n += 1
-            if len(batch) >= 500:
-                con.executemany(
-                    "INSERT INTO fts_decomp(rowid, body) VALUES (?,?)", batch
-                )
-                batch = []
-        if batch:
-            con.executemany("INSERT INTO fts_decomp(rowid, body) VALUES (?,?)", batch)
-    con.execute("INSERT INTO fts_meta VALUES ('stamp', ?)", (stamp,))
-    con.execute("INSERT INTO fts_meta VALUES ('decomp_files', ?)", (str(n),))
-    con.commit()
-    con.close()
-    src.close()
-    os.replace(tmp, out)
-    return out
+
+    def texts():
+        if dump_dir:
+            for entry, _, decomp, disasm in functions:
+                for rel in (decomp, disasm):
+                    if not rel:
+                        continue
+                    try:
+                        with open(os.path.join(dump_dir, rel), errors="replace") as fh:
+                            body = fh.read()
+                    except FileNotFoundError:
+                        continue
+                    yield entry, rel, body, rel == decomp
+
+    n_docs = 0
+    for entry, rel, body, is_decomp in texts():
+        db.execute(
+            "INSERT OR IGNORE INTO function_text VALUES (?,?,?)", (name, rel, body)
+        )
+        if is_decomp:
+            db.execute(
+                "INSERT INTO fts_decomp(rowid, body) VALUES (?,?)", (entry, body)
+            )
+            n_docs += 1
+    db.executemany(
+        "INSERT INTO fts_meta VALUES (?,?)",
+        [("version", str(FTS_VERSION)), ("decomp_files", str(n_docs))],
+    )
+
+
+def build_fts(db_path, force=False, dump_dir=None):
+    """Publish function texts and FTS5 indexes inside an existing ColdFire database."""
+    meta = read_meta(db_path)
+    if not meta.get("image"):
+        raise ValueError(f"{db_path}: missing ColdFire database")
+    dump_dir = dump_dir or meta.get("ghidra_dump_dir")
+    if not dump_dir or not os.path.isdir(dump_dir):
+        candidate = os.path.join("out", "ghidra", meta["image"])
+        manifest = os.path.join(candidate, "manifest.json")
+        if os.path.isfile(manifest):
+            with open(manifest) as fh:
+                info = json.load(fh)
+            if info.get("complete") and info.get("image_sha256") == meta.get(
+                "image_sha256"
+            ):
+                dump_dir = candidate
+    with closing(sqlite3.connect(db_path)) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        if not force and _table_exists(db, "fts_meta"):
+            version = db.execute(
+                "SELECT value FROM fts_meta WHERE key='version'"
+            ).fetchone()
+            if version == (str(FTS_VERSION),):
+                return db_path
+        if not dump_dir or not os.path.isdir(dump_dir):
+            raise ValueError(
+                f"{db_path}: use the original Ghidra dump to embed function text"
+            )
+        _write_search_data(db, meta["image"], dump_dir)
+    return db_path
 
 
 def _image_names(name):
@@ -566,9 +595,12 @@ def _image_names(name):
 
 
 def cmd_fts(args):
-    path = args.db or os.path.join(args.db_dir, args.name + ".sqlite")
+    path = args.db or coldfire_database_path(args.name, args.db_dir)
     t = time.time()
-    out = build_fts(path, force=args.force)
+    try:
+        out = build_fts(path, force=args.force)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     print("%s (%.1f s, %.1f MB)" % (out, time.time() - t, os.path.getsize(out) / 1e6))
     return 0
 
@@ -585,7 +617,7 @@ def main(argv=None):
         "--name", help="image name; default is the dump directory's own name"
     )
     b.add_argument(
-        "--out", help="output .sqlite path (default: --out-dir/<name>.sqlite)"
+        "--out", help="output .sqlite path (defaults to the firmware database)"
     )
     b.add_argument("--out-dir", default=DEFAULT_DB_DIR)
     b.add_argument(
@@ -594,7 +626,9 @@ def main(argv=None):
         help="rebuild even if sha256+DB_VERSION already match",
     )
 
-    f = sub.add_parser("fts", help="build the FTS5 sidecar for a database")
+    f = sub.add_parser(
+        "fts", help="embed function texts and FTS5 indexes in a database"
+    )
     f.add_argument("name", help="e.g. dt2-1.17-emac")
     f.add_argument("--db")
     f.add_argument("--db-dir", default=DEFAULT_DB_DIR)

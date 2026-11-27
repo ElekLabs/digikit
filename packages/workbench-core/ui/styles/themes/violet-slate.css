@@ -1,0 +1,360 @@
+:root[data-theme='linear'] {
+  color-scheme: dark;
+  --ground: #15151a;
+  --panel: #1c1c23;
+  --panel-2: #232429;
+  --panel-3: #2d2e35;
+  --line: #2b2c32;
+  --line-2: #404149;
+  --ink: #f2f2f4;
+  --ink-2: #c2c2ca;
+  --ink-3: #999ba7;
+  --amber: #f3b52c;
+  --amber-hover: #ffc444;
+  --amber-ink: #1d1403;
+  --amber-soft: rgba(243, 181, 44, 0.14);
+  --teal: #6fc7d1;
+  --ok: #74d49d;
+  --ok-soft: rgba(116, 212, 157, 0.12);
+  --warn: #ff9f72;
+  --scrim: rgba(5, 6, 7, 0.74);
+
+  --font-display: var(--font-body);
+  --font-body: system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  --font-pixel: 'Silkscreen', 'JetBrains Mono', monospace;
+
+  --t-xs: 12px;
+  --t-sm: 13.5px;
+  --t-base: 15.5px;
+  --t-md: 18px;
+  --t-lg: 22px;
+  --t-xl: 30px;
+  --t-2xl: 42px;
+  --t-3xl: clamp(38px, 4.3vw, 58px);
+
+  --r-s: 8px;
+  --r-m: 12px;
+  --r-l: 18px;
+  --gutter: clamp(16px, 4vw, 32px);
+
+  /* Aliases for shared site components. */
+  --bg: var(--ground);
+  --surface: var(--panel);
+  --surface-2: var(--panel-2);
+  --text: var(--ink);
+  --muted: var(--ink-2);
+  --border: var(--line-2);
+  --brand: var(--action);
+  --brand-text: var(--action-ink);
+  --ok-bg: var(--ok-soft);
+  --warn-bg: rgba(255, 159, 114, 0.12);
+  --bad: #ff8b82;
+  --bad-bg: rgba(255, 139, 130, 0.12);
+  --info-bg: var(--panel-2);
+  --mono: var(--font-mono);
+  --sans: var(--font-body);
+  --radius: var(--r-s);
+
+  --action: #b2a6ff;
+  --action-hover: #c2bfff;
+  --action-ink: #17142c;
+  --action-soft: rgb(170 166 255 / 14%);
+  --shell-bg: var(--ground);
+  --shell-bar: #121217;
+  --shell-divider: var(--line);
+  --nav-hover: #202126;
+  --nav-selected: #302d41;
+  --nav-radius: 5px;
+  --content-bg: var(--panel);
+  --content-border: var(--line-2);
+  --content-inset: var(--ground);
+  --content-pending: var(--panel-2);
+  --content-track: var(--panel-3);
+  --profile-action-border: var(--action);
+  --stage-center: #17191c;
+  --profile-action-hover: var(--action-hover);
+  --meter-runtime: #7d828b;
+  --plot-outline: #2c3036;
+  --plot-grid: #1e2125;
+  --meter-peak: rgba(229, 115, 107, 0.55);
+  --hover-overlay: rgba(255, 255, 255, 0.05);
+  --alert-text: #ffc1bc;
+  --inset-highlight: rgba(255, 255, 255, 0.06);
+  --tooltip-shadow: rgb(0 0 0 / 40%);
+  --remote-error: #ff8d7a;
+  --control-outline: #33363c;
+  --status-ok-border: #22402f;
+  --status-ok-inset: #0f1d15;
+  --alert-outline: rgba(255, 139, 130, 0.3);
+  --stage-shadow: rgba(0, 0, 0, 0.55);
+  --status-label: #c3c7cd;
+  --control-selected: #2a2d33;
+  --status-caution: #f0b35a;
+  --danger-ink: #1b0c0b;
+  --drawer-surface: #15171a;
+  --dock-handle-active: rgba(243, 181, 44, 0.55);
+  --control-hover-outline: #4a4e56;
+  --popover-border: #3a3e46;
+  --popover-shadow: rgb(0 0 0 / 45%);
+  --log-selection: #2f3a4a;
+  --log-entry-surface: #191b1f;
+  --log-error: #ffa39b;
+  --meter-glow: rgba(243, 181, 44, 0.35);
+  --status-ok-text: #7be3a1;
+  --status-error-text: #ffb4ab;
+  --status-warning-text: #f0c27a;
+  --warning-tint: rgba(243, 181, 44, 0.1);
+  --status-ok-outline: #3f8f62;
+  --status-ok-fill: #0f2418;
+  --status-error-indicator: #e5594d;
+  --status-error-fill: #2a1210;
+  --drop-tint: rgba(243, 181, 44, 0.06);
+  --connection-ring: rgb(134 139 148 / 25%);
+  --selection-muted: rgba(255, 255, 255, 0.08);
+  --status-warning-fill: #2a2010;
+  --floating-shadow: rgba(0, 0, 0, 0.35);
+  --transfer-complete: #35c47a;
+  --destructive-fill: #4a1713;
+  --screen-inset: #08090c;
+  --link-hover: #ffd26e;
+  --site-header-fill: rgba(11, 12, 14, 0.82);
+  --button-hover-border: #464a52;
+  --file-services: #6cb6ff;
+  --file-data: #c792ea;
+  --module-card-top: #16171b;
+  --card-border: rgba(255, 255, 255, 0.03);
+  --card-highlight: rgba(255, 255, 255, 0.04);
+  --module-icon-top: #24272c;
+  --module-icon-outline: #0e0f11;
+  --module-highlight: rgba(243, 181, 44, 0.18);
+  --file-icon-fill: #1f2226;
+  --file-icon-stroke: #3a3d44;
+  --hero-glow: rgba(243, 181, 44, 0.16);
+  --hero-glow-end: rgba(243, 181, 44, 0);
+  --status-ok: var(--ok);
+  --meter-machine: var(--action);
+  --meter-effect: var(--teal);
+  --meter-tool: var(--ok);
+  --meter-other: var(--ink-3);
+  --key-top: #2e3034;
+  --key-bottom: #27292c;
+  --key-shadow: #141517;
+  --key-border: #0f1011;
+  --key-label: #c9cbcf;
+  --key-underline: #a0a2a6;
+  --key-glow: rgba(243, 181, 44, 0.6);
+  --profile-action-ink: var(--action-ink);
+  --trace-left: var(--action);
+  --trace-right: var(--teal);
+  --trace-grid: var(--ink-3);
+  --stage-highlight: rgba(255, 255, 255, 0.025);
+  --web-stage-center: #16181b;
+}
+
+/* Workbench chrome and page treatments for Violet Slate. The device illustration owns its own palette. */
+:root[data-theme='linear'] .console {
+  --chrome-raised: #27262e;
+  --chrome-edge: #37353f;
+  --status-green: #93c9ab;
+  --status-gold: #dac087;
+
+  .titlebar,
+  .sidebar,
+  .statusbar {
+    background: var(--shell-bar);
+    border-color: transparent;
+  }
+  .titlebar .brand,
+  .side-group,
+  .titlebar .target-select .dim,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-body);
+    font-stretch: normal;
+    letter-spacing: -0.015em;
+  }
+  .side-group,
+  .titlebar .target-select .dim {
+    text-transform: none;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-3);
+  }
+  .sidebar .side-group {
+    padding-top: 18px;
+  }
+  .sidebar .side.on {
+    color: #ebe7ff;
+  }
+  .titlebar .brand-mark i:first-child,
+  .conn .dot,
+  .statusbar .dot {
+    box-shadow: none;
+  }
+  .content {
+    margin: 0 6px 0 0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--content-bg);
+  }
+  .statusbar,
+  .file-chip .path,
+  .tag,
+  .side-tab {
+    font-family: var(--font-body);
+  }
+  .status-readings > span,
+  .statusbar > button {
+    border-color: transparent;
+  }
+  .stage {
+    background: var(--ground);
+  }
+  .page-head,
+  .side-head {
+    border-color: var(--line);
+  }
+  .file-chip,
+  .tag.opt,
+  .tag.watch,
+  .tb-group {
+    border-color: transparent;
+  }
+  .file-chip {
+    background: var(--chrome-raised);
+  }
+  .tag.device {
+    color: var(--action);
+    background: var(--action-soft);
+    border-color: transparent;
+  }
+  .tag.opt input {
+    accent-color: var(--action);
+  }
+  .tag.watch:not(.off),
+  .tag.opt .rt.on {
+    color: var(--status-green);
+  }
+  .tag.watch {
+    background: transparent;
+  }
+  .side-col {
+    background: var(--content-bg);
+    border-color: var(--line);
+  }
+  .side-ink {
+    background: var(--action);
+  }
+  .memory-panel .cell.machine {
+    box-shadow: none;
+  }
+  .memory-panel .bar {
+    height: 7px;
+  }
+  .memory-panel .cells {
+    height: 7px;
+  }
+  .memory-panel .mem-bar {
+    gap: 8px;
+  }
+
+  .transfer-page,
+  .firmware-page {
+    --seg-bg: var(--ground);
+    --seg-border: transparent;
+    --seg-on: #38353f;
+  }
+  .transfer-page .head,
+  .firmware-page .head {
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    align-items: center;
+  }
+  .segmented button {
+    height: 23px;
+    font-weight: 500;
+  }
+  .transfer-page :is(.rows li, .tests, .drop, .meta, .dim, .rtag, .conn) {
+    font-family: var(--font-body);
+  }
+  .transfer-page .rows {
+    border: 0;
+  }
+  .transfer-page .rows li:not(.sub) {
+    min-height: 32px;
+    padding-inline: 8px;
+    border-color: color-mix(in srgb, var(--line) 52%, transparent);
+    font-size: 13px;
+  }
+  .transfer-page .rows li:hover:not(.sel, .dropon) {
+    background: var(--panel-2);
+  }
+  .transfer-page .rows :is(.vers, .size) {
+    font-variant-numeric: tabular-nums;
+  }
+  .transfer-page .group h4 {
+    margin: 12px 0 0;
+    padding: 6px 8px;
+    background: var(--chrome-raised);
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .transfer-page .rtag {
+    border-radius: 12px;
+    padding-inline: 7px;
+  }
+  .transfer-page .rtag.ok {
+    color: var(--status-green);
+    background: #24312d;
+  }
+  .transfer-page .rtag.warn {
+    color: var(--status-gold);
+    background: #343027;
+  }
+  .transfer-page .err {
+    background: #32262e;
+    color: #e4bac5;
+  }
+  .firmware-page {
+    --fp-bg: var(--content-bg);
+    --fp-card: var(--panel-2);
+    --fp-inset: var(--ground);
+    --fp-border: var(--chrome-edge);
+    --fp-track: var(--panel-3);
+  }
+  .firmware-page .steps {
+    gap: 0;
+  }
+  .firmware-page .step {
+    padding: 14px;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+  }
+  .firmware-page .step.now {
+    border-radius: 8px;
+    background: var(--fp-card);
+    border: 1px solid var(--fp-border);
+  }
+  .firmware-page .step.now .mark {
+    border-color: transparent;
+    background: var(--action-soft);
+    color: var(--action);
+  }
+  .firmware-page .step.later {
+    opacity: 0.8;
+  }
+  .firmware-page .act.primary {
+    background: var(--action);
+    border-color: transparent;
+    color: var(--action-ink);
+  }
+  .firmware-page .act.primary:hover:not(:disabled) {
+    background: var(--action-hover);
+  }
+}

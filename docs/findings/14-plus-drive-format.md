@@ -281,6 +281,10 @@ offset 6): `count:u16` at 0, 4 reserved bytes, then `count` x 4-byte packed
 content pages. **[D]**, not independently cross-checked against a real
 populated directory (none was available to capture).
 
+### Superblock state and checked words decide the boot-time filesystem check **[D]**
+
+Read statically on DT2 1.17 (`FUN_4015a72c` is the mount, `FUN_4015a876` and `FUN_4015a928` write back). The superblock is sector `0x5D8000` (an eMMC sector number for CMD18/CMD25, so byte offset `0x5D8000 * 512` in the card image, not NOR flash), read to RAM `0x46f4dcb0`. The checksum is at `0x1fc`, the `hashlittle` of bytes `[0, 0x1fc)` with seed `0x31323334`. State is at `+0x04` and checked at `+0x34`. Mount accepts state 3 or 4. `MainScreenView::vfunc_5` runs the check ("VERIFYING FILE SYSTEM...", then "FILE SYSTEM OK") when the drive is mounted and state is 3 or checked is 0 (`FUN_4001058c`). After a good check the firmware writes state 4 and checked 1 and recomputes the checksum. `build_superblock` (`packages/emulator/plusdrive/src/format.rs`) and `tools/firmware/plusdrive.py` wrote checked 0, so every card they built ran the check at its first boot; they now write checked 1.
+
 > **Corrected 2026-09-28 [C][V].** Wrong. All three index pages (`0x10000`,
 > `0x10001`, `0x10002`) hold 8-byte entries from byte 8, `{u32 key, u32
 > page * 0x8000 + offset}`; the readers address them as `(ushort *)p + i*4 +
@@ -1266,7 +1270,7 @@ the DSP.
 
 ### In-process card and ready boot **[D]**
 
-`packages/emulator/control/src/cards.rs` builds the card (no Python); `packages/emulator/coupled/src/cold.rs` is the
+`packages/emulator/control/src/cards.rs` builds the card (no Python); `packages/emulator/sharc-peer/src/cold.rs` is the
 `sharc_live` cold boot (ColdFire plus the DSP from `cold-idle.dsp` on the DSPI2 link, snapshot at
 ready once link port 0 has been quiet for 400 frames, `digi-audio-m5.snap` and `.snap.dsp`). The
 controller's `card.load` runs both on a worker thread while the running guest waits, then

@@ -24,10 +24,10 @@
      It must point at static or module memory, never at the stack.
    - Callbacks run on the UI task. A dialog's callback runs after the dialog has closed.
    - Menus are never freed. Dialogs free themselves after they close.
-   - A content module (a .dkm) has no unload at run time, so no UI object of the module is freed. Every
-     arg, callback and descriptor a module passes must still point at its own memory (static data or
-     code of the module), never at the stack or at a heap block that is freed later. Build a menu when
-     the user opens it (in `menu`, or from a callback), after all modules are loaded.
+   - A menu is never freed and keeps its descriptor, `fill` and `arg`. A module that built a menu with `dk_ui_menu_new` (or whose settings menu the DIGIKIT menu
+     has opened) is therefore not unloaded or reloaded while the device runs: the runtime refuses with DK_E_RELOAD_MENUS until the next restart. A module that builds
+     none can be. Every arg, callback and descriptor a module passes must still point at its own memory (static data or code of the module), never at the stack or at a heap block
+     that is freed later. Build a menu when the user opens it (in `menu`, or from a callback), after all modules are loaded.
 
    A module with settings sets the `menu` field of `dk_module`. The DIGIKIT menu shows SETTINGS... for the loaded module and calls it only when the user
    opens it; it adds the rows of that menu:
@@ -46,9 +46,12 @@
 #define DK_UI_H
 #include <stdint.h>
 #include <dk/gen/imports.h>
+#include <dk/platform/canvas.h>
+#include <dk/gen/keys.h>
 
-/* Bytes of row text, terminator included. Longer text is cut. */
+/* Label limits include the terminator. Plain text rows in a list scroll when selected. */
 #define DK_UI_ROW 24
+#define DK_UI_LIST_TEXT 80
 /* Characters a toast shows. */
 #define DK_UI_TOAST 32
 
@@ -81,9 +84,14 @@ typedef struct dk_ui_menu_desc {
 dk_ui_menu *dk_ui_menu_new(dk_ui *ui, const dk_ui_menu_desc *desc);
 
 /* A choice of `n` items. `done(arg, index)` gets the index; NO closes the dialog without calling `done`. Returns 0 when shown, a negative code when not
-   (out of memory, or another dialog is open). `title` up to 80 characters. Context: ui. Since api 2.11. */
+   (out of memory, or another dialog is open). `title` is cut to DK_UI_ROW - 1 (23) characters and every item to DK_UI_LIST_TEXT - 1 (79); the stock popup shows what fits.
+   A tab in an item starts a second column: "NAME\tREST" is drawn with REST at the same pixel column in every item (core/ui pads the shorter NAMEs). Context: ui. Since api 2.11. */
 int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int32_t n,
                      dk_ui_choice_fn *done, void *arg);
+
+/* Like dk_ui_choice, and the popup opens with item `start` selected; an index outside 0..n-1 selects item 0. Context: ui. Since runtime 0.13.3. */
+int32_t dk_ui_choice_at(dk_ui *ui, const char *title, const char *const *items, int32_t n,
+                        int32_t start, dk_ui_choice_fn *done, void *arg);
 
 /* The other dialogs are in <dk/gen/imports.h>:
      int32_t dk_ui_confirm(ui, title, text, done, arg)   YES or NO; done(arg, yes) gets 1 for YES, 0 for NO. title and text: up to 80 characters each.
@@ -105,5 +113,56 @@ int32_t dk_ui_choice(dk_ui *ui, const char *title, const char *const *items, int
      closes: a running timer costs a call per period.
    - Room for 4 timers in the image, shared by all modules. A longer period than 1,000,000 ms is cut.
    Returns 0 when set or stopped, a negative code when it could not be (fn 0, or the table is full). */
+
+/* ---- Module screens ----
+   `dk_ui_view_open(ui, &desc)` opens a screen the module draws. Context: ui. Returns a handle, or NULL when the desc is wrong or the pool is full (room for
+   DK_UI_VIEWS views in the image, shared by all modules).
+   - DK_UI_VIEW_OVERLAY: the view is drawn over the stock screen, and every key goes on to the stock views (`key` is not called). Without the flag the view
+     covers the screen and gets the keys first: `key` returns 1 when it used the key, and 0 to pass it on to the stock view below.
+   - `draw(arg, canvas)` runs for every frame while the view is open (<dk/platform/canvas.h>).
+   - `closed(arg)` runs once, after the view left the screen: after `dk_ui_view_close`, or when the system closed it. It may open a view again.
+   - `dk_ui_view_close` with the handle closes the view. Closing a handle twice, or after `closed`, does nothing. A view is closed for you when its module unloads
+     (without a `closed` call, as the module is gone), so a module with views stays unloadable.
+   - `desc` is copied. `arg` is kept: static or module memory, never the stack. Callbacks run in the UI task and must be short.
+   `key(arg, key, flags)` gets the logical key (<dk/gen/keys.h>) and the event flags: DK_UI_KEY_DOWN is set for a press and clear for a release; the other bits
+   are reserved. A key the device gives no name is not passed to the view and does not act on the stock screen. */
+#define DK_UI_KEY_DOWN 1u
+enum {
+    DK_UI_VIEW_OVERLAY = 1,
+};
+#define DK_UI_VIEWS 4
+
+typedef struct dk_ui_view_desc {
+    uint32_t flags; /* DK_UI_VIEW_* */
+    void (*draw)(void *arg, const dk_canvas *canvas);
+    int32_t (*key)(void *arg, dk_key key, uint32_t flags); /* full screen only; 1 = used */
+    void (*closed)(void *arg);                             /* 0 or a function */
+    void *arg;
+} dk_ui_view_desc;
+
+dk_ui_view *dk_ui_view_open(dk_ui *ui, const dk_ui_view_desc *desc);
+
+/* ---- A row in SETTINGS ----
+   `dk_ui_settings_row(ui, text, open, arg)`, in `init` only: adds a row `text` (up to DK_UI_ROW - 1 characters) at the end of the SETTINGS list.
+   `open(arg)` runs on YES, in the UI task. Rows are in load order, after the rows of the DIGIKIT menu. Room for DK_UI_SETTINGS_ROWS rows in the image.
+   The row goes away when the module or service unloads. The owner is a module or a service file: its record name keys the row. Returns 0, DK_E_CONTRACT (no `text` or `open`, or a `ui` that is
+   not an owner's handle: the core handle of dk_ui_core_handle has no record, so no row) or DK_E_NOMEM (no room). */
+#define DK_UI_SETTINGS_ROWS 4
+
+/* ---- The stock naming screen ----
+   `dk_ui_text_input(ui, &desc)` opens the firmware's own text entry. `done(arg, text)` runs on YES only, with the text as edited (trailing blanks
+   removed); NO closes the screen and calls nothing. `title` is the prompt, `initial` the text to start from (NULL: empty; longer than `max_len`: cut).
+   `max_len` is 1 to DK_UI_TEXT_INPUT_MAX and must fit the screen. One entry screen at a time. Context: ui.
+   Returns 0 when shown, DK_E_CONTRACT (the desc is wrong) or DK_E_BUSY (a text input is open) or another negative code. */
+#define DK_UI_TEXT_INPUT_MAX 15
+
+typedef struct dk_ui_text_input_desc {
+    const char *title, *initial;
+    uint32_t max_len;
+    void (*done)(void *arg, const char *text);
+    void *arg;
+} dk_ui_text_input_desc;
+
+int32_t dk_ui_text_input(dk_ui *ui, const dk_ui_text_input_desc *desc);
 
 #endif

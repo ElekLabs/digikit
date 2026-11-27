@@ -45,9 +45,9 @@ pub fn device_short(syx: &[u8]) -> Option<&'static str> {
 }
 
 /// The repository root: `configured`, else `$DIGI_REPO_ROOT`, else the nearest directory from the working directory up that
-/// holds `devices/ports`.
+/// holds `ports`.
 pub fn find_root(configured: Option<&Path>) -> Result<PathBuf, String> {
-    let ok = |d: &Path| d.join("devices/ports").is_dir() && d.join("modules").is_dir();
+    let ok = |d: &Path| d.join("ports").is_dir() && d.join("modules").is_dir();
     if let Some(d) = configured {
         return if ok(d) {
             Ok(d.to_path_buf())
@@ -75,7 +75,7 @@ pub fn find_root(configured: Option<&Path>) -> Result<PathBuf, String> {
 
 fn no_root(looked: &str) -> String {
     format!(
-        "runtime: no module library: {looked} has no modules/ and devices/ports/. A build outside the repository cannot \
+        "runtime: no module library: {looked} has no modules/ and ports/. A build outside the repository cannot \
          patch the runtime in yet; start from the checkout or set DIGI_REPO_ROOT"
     )
 }
@@ -105,7 +105,7 @@ pub fn cache_key(
         part(id, m.digest.as_bytes());
     }
     // The device files and the ports lower the modules' typed sections and place them.
-    for dir in [root.join("devices"), root.join("devices/ports")] {
+    for dir in [root.join("devices"), root.join("ports")] {
         let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
             .map_err(|e| format!("runtime: {}: {e}", dir.display()))?
             .filter_map(|e| e.ok().map(|e| e.path()))
@@ -123,6 +123,14 @@ pub fn cache_key(
 fn cache_file(root: &Path, stock_sha256: &str, set: &str, key: &str) -> PathBuf {
     root.join("out/runtime-cache")
         .join(format!("{stock_sha256}-{set}-{key}.syx"))
+}
+
+/// The apply options of an image that only the emulator boots: the record as for every patch, no flash container cap.
+fn emulator_options() -> apply::Options {
+    apply::Options {
+        flash_cap: false,
+        ..Default::default()
+    }
 }
 
 /// Patch `stock` with the device's `set` (or take the cached result). The cache is written whole or not at all.
@@ -164,8 +172,9 @@ pub fn prepare(root: &Path, stock: &[u8], set: &str) -> Result<Outcome, String> 
             .collect();
         return patched(syx, tags, true);
     }
-    let reg = Registry::from_dir(&root.join("devices/ports")).map_err(e)?;
-    let out = apply::apply(stock, &reg, &lib, &modules).map_err(e)?;
+    let reg = Registry::from_dir(&root.join("ports")).map_err(e)?;
+    // the image is booted in the emulator and never flashed: the flash container cap does not apply
+    let out = apply::apply_with(stock, &reg, &lib, &modules, emulator_options()).map_err(e)?;
     write_whole(&file, &out.syx)?;
     patched(out.syx, out.plan.modules, false)
 }
@@ -199,7 +208,7 @@ pub fn reapply(
     let e = |x: patchkit::Error| x.to_string();
     // objects are loaded for the modules of the record only; a content module of it is built when stale
     let lib = Library::scan_repo_for(root, false, Some(ids)).map_err(e)?;
-    let reg = Registry::from_dir(&root.join("devices/ports")).map_err(e)?;
+    let reg = Registry::from_dir(&root.join("ports")).map_err(e)?;
     let requirers = lib
         .modules
         .iter()
@@ -213,7 +222,7 @@ pub fn reapply(
         .map(|m| m.id().to_string())
         .collect();
     Ok(Reapplied {
-        applied: apply::apply(stock, &reg, &lib, ids).map_err(e)?,
+        applied: apply::apply_with(stock, &reg, &lib, ids, emulator_options()).map_err(e)?,
         requirers,
     })
 }
@@ -445,7 +454,7 @@ mod tests {
         // an instruction the ISA excludes is refused with the check's text; the old object stays
         std::fs::write(
             &src,
-            ".SECTION/PM seg_pmco;\n.GLOBAL _f;\n_f:\n    DM(15, I4) = I0;\n    RTS;\n",
+            ".SECTION/PM seg_pmco;\n.GLOBAL _f;\n_f:\n    DM(I4, M5) = L1;\n    RTS;\n",
         )
         .unwrap();
         let err = build_dirs(&root(), &dirs).unwrap_err();
@@ -468,7 +477,7 @@ mod tests {
             return;
         };
         let (lib, modules) = lib_and_modules();
-        let reg = Registry::from_dir(&root().join("devices/ports")).unwrap();
+        let reg = Registry::from_dir(&root().join("ports")).unwrap();
         let image = apply::apply(&stock, &reg, &lib, &modules).unwrap().syx;
         let maps = image_maps(&root(), &stock, &image).unwrap();
         assert!(maps.matches, "the apply of the record gives the image back");
@@ -481,10 +490,12 @@ mod tests {
         );
         // the symbols the loader header asks for are all there, in the runtime's RAM
         assert!(
-            maps.symbols.len() >= 1 && maps.symbols.contains_key("DKRT_STATE"),
+            maps.symbols.contains_key("DKRT_STATE") && maps.symbols.contains_key("DKRT_HOST_DIR"),
             "{:?}",
             maps.symbols
         );
+        // the system package's statics are not in the image: the host finds them through the directory
+        assert!(!maps.symbols.contains_key("DKRT_DSP"), "{:?}", maps.symbols);
         assert!(
             maps.symbols.values().all(|a| *a >= 0x4000_0000),
             "{:?}",
@@ -525,7 +536,9 @@ mod tests {
             std::env::temp_dir().join(format!("digikit-runtime-patch-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        for d in ["modules", "devices", "tests"] {
+        for d in [
+            "modules", "runtime", "services", "ports", "devices", "tests",
+        ] {
             std::os::unix::fs::symlink(root().join(d), dir.join(d)).unwrap();
         }
         let first = match prepare(&dir, &stock, "emulator").unwrap() {
@@ -533,7 +546,18 @@ mod tests {
             Outcome::AlreadyPatched => panic!("stock has no patch record"),
         };
         assert!(!first.cache_hit);
-        assert_eq!(first.modules.len(), 17); // the Digitakt II emulator set: 12 and core/dynfx, core/fx, core/fxpages, core/sample-pool, core/platform (the runtime requires it)
+        // every module of the device's emulator set is applied (requirements come with them)
+        let device = devdata::by_short("dt2").unwrap();
+        for id in device.patch_set("emulator").unwrap() {
+            assert!(
+                first
+                    .modules
+                    .iter()
+                    .any(|m| m.split('@').next() == Some(id.as_str())),
+                "{id} missing from {:?}",
+                first.modules
+            );
+        }
         assert!(first.cache_file.is_file());
         let record = verify::patch_record(&first.syx).unwrap().unwrap();
         assert_eq!(record.base_sha256, first.base_sha256);
@@ -542,6 +566,12 @@ mod tests {
             Outcome::AlreadyPatched => panic!("stock has no patch record"),
         };
         assert!(again.cache_hit);
+        let sorted = |p: &Patched| {
+            let mut m = p.modules.clone();
+            m.sort();
+            m
+        };
+        assert_eq!(sorted(&again), sorted(&first));
         assert_eq!(again.syx, first.syx);
         // The patched image goes on as it is.
         assert!(matches!(

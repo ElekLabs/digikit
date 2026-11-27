@@ -7,6 +7,7 @@ import type { JSX } from 'solid-js';
 import type { BulkOpener } from '@digi/dk-session/bulk-select';
 import type { DkTransport } from '@digi/dk-session';
 import type { WasmSource } from '../wasm-source';
+import type { SystemPackage } from '../runtime/activate-system-package';
 import type { Target } from './target';
 import type { BarInfo } from './transfer-core';
 import type { PageCtx } from '../../ui/transfer/TransferParts';
@@ -17,9 +18,12 @@ export interface LibraryFile {
   size: number;
 }
 
-/** The modules the app can offer for install, per device id (`dt2`, `dn2`). */
+/** The modules the app can offer for install, per device id. */
 export interface TransferLibrary {
-  /** The .dkm files of the device; read again at each call (a rebuild shows up at the next read). */
+  /**
+   * The .dkm files of the device, its .dks service files as built and the .dkport port files of the firmware versions the app knows (the backend splits them by extension: no separate service source);
+   * read again at each call (a rebuild shows up at the next read).
+   */
   scan(device: string): Promise<LibraryFile[]>;
   /** The bytes of one file of `scan`. */
   read(device: string, path: string): Promise<Uint8Array>;
@@ -40,6 +44,8 @@ export interface TransferSource {
 
 /** The `[files]` table of a module.toml: the files the module owns under `data/<module id>/` and how the page shows them. */
 export interface ModuleFilesSpec {
+  /** The module name in its manifest, used for its Workbench page. */
+  name: string;
   /** The title of the files area. */
   label: string;
   /** The extensions of the files, without the dot. */
@@ -56,10 +62,8 @@ export interface TransferTargets {
   inHeader?: boolean;
   /** The names of the MIDI ports that a device can be on. */
   ports(): Promise<string[]>;
-  /** Open the target (a MIDI port is opened here) and give its transport. Called once per use of the target. */
+  /** Open the target (a MIDI port is opened here) and give its transport. The transport owns the link: `recover` and `close` are on it. */
   open(target: Target): Promise<DkTransport>;
-  /** Let go of a MIDI port that is no longer the target. */
-  close?(target: Target): Promise<void>;
   /** The text of a request on the `none` target: why there is no port (the site: no Web MIDI, no permission), and what to do. Asks again when it can. */
   whyNone?(): Promise<string>;
   /** Called before each request of a target; it throws when the target cannot answer now (a paused emulator). */
@@ -88,12 +92,14 @@ export interface SamplesSlot {
   Mode: (props: { ctx: PageCtx }) => JSX.Element;
   /** Read both sides of the mode (throws when either fails). */
   read(): Promise<void>;
+  /** The current read has lost its target binding or started while the target was switching. */
+  readInterrupted(): boolean;
   /** Refresh only local files, without contacting the target. */
   readLocal(): Promise<void>;
-  /** Another target: forget what was read. */
-  reset(): void;
   /** The bar along the bottom for a running or finished upload. */
   bar(busy: string): { info: BarInfo; running: boolean } | undefined;
+  /** The bytes of the picked sample files, for the storage bar's preview (0 when nothing is picked). */
+  pendingBytes?(): number;
   /** One line per file of the last upload run, for the Log. */
   lines?(): string[];
   /** The light poll of the chosen folder: true when its listing changed (and the pane reads again). */
@@ -113,7 +119,7 @@ export interface TransferEnv {
   library: TransferLibrary;
   /** The wasm files of the app (`patchkit.wasm`: its `pk_needs` tells what a .dkm takes of the device). */
   wasm: WasmSource;
-  /** The name of the device with this id (`dt2`: "Digitakt II"). */
+  /** The name of the device with this id (`[device] name`). */
   deviceName(device: string): Promise<string>;
   targets: TransferTargets;
   /** The bulk link, where the app can open one. */
@@ -129,7 +135,9 @@ export interface TransferEnv {
   /** Only the desktop app has these; the pane shows a part only when it is given. */
   extras?: {
     samples?: SamplesSlot;
-    /** A job ended (the Card panel reads the folder now and again after its quiet period). */
+    /** The trusted build artifact for system package recovery. */
+    systemPackage?(): Promise<SystemPackage>;
+    /** A job ended (the Files page and its card-folder strip read the folder now and again after its quiet period). */
     onJobEnd?(): void;
     /** Reload the emulator with the digikit runtime (the desktop): offered next to an "emulator runs without the runtime" error. */
     reloadWithRuntime?: () => void;

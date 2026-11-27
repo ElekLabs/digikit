@@ -15,6 +15,7 @@ import {
 export class JobBusyError extends Error {}
 export interface JobHandle {
   progress(fraction?: number, detail?: string): void;
+  disableCancel?(): void;
 }
 
 export function createJobs() {
@@ -41,6 +42,7 @@ export function createJobs() {
     try {
       return await work({
         progress: (fraction, detail) => setJobs((s) => updateJob(s, id, { progress: fraction, detail })),
+        disableCancel: () => setJobs((s) => updateJob(s, id, { cancel: undefined })),
       });
     } finally {
       setJobs((s) => removeJob(s, id));

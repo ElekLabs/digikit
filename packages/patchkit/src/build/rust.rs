@@ -7,6 +7,7 @@
 //! crate's own global symbols, so only what they reach stays (docs/findings/26-rust-on-coldfire.md).
 
 use super::elf::{self, Proto};
+use super::test_source::TestSources;
 use super::toolchain::{self as tc, Env, TempDir};
 use crate::error::*;
 use serde::Deserialize;
@@ -35,11 +36,25 @@ struct Cargo {
     lib: Option<Lib>,
     profile: Option<Profile>,
     dependencies: Option<BTreeMap<String, toml::Spanned<toml::Value>>>,
+    #[serde(rename = "dev-dependencies")]
+    dev_dependencies: Option<BTreeMap<String, toml::Spanned<toml::Value>>>,
 }
 
 #[derive(Deserialize)]
 struct Package {
     name: String,
+    metadata: Option<PackageMetadata>,
+}
+
+#[derive(Deserialize)]
+struct PackageMetadata {
+    patchkit: Option<PatchkitMetadata>,
+}
+
+#[derive(Deserialize)]
+struct PatchkitMetadata {
+    #[serde(rename = "staged-dir")]
+    staged_dir: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -62,11 +77,22 @@ fn parse_cargo(text: &str, what: &Path) -> Result<Cargo> {
     toml::from_str(text).map_err(|e| err!("{}: {e}", what.display()))
 }
 
-/// The `path` of every path dependency of a manifest, in the order the file lists them.
-fn path_deps(text: &str, what: &Path) -> Result<Vec<String>> {
+/// The `path` of every path dependency of a manifest, in the order the file lists them. `dev`: the `[dev-dependencies]` too. A build needs
+/// their manifests (cargo reads them) but never their code, so the source hash leaves them out (`crate_files`).
+fn path_deps(text: &str, what: &Path, dev: bool) -> Result<Vec<String>> {
     let c = parse_cargo(text, what)?;
     let mut deps: Vec<(usize, String)> = vec![];
-    for (_, d) in c.dependencies.unwrap_or_default() {
+    let dev_deps = if dev {
+        c.dev_dependencies.unwrap_or_default()
+    } else {
+        BTreeMap::new()
+    };
+    for (_, d) in c
+        .dependencies
+        .unwrap_or_default()
+        .into_iter()
+        .chain(dev_deps)
+    {
         if let Some(p) = d.get_ref().get("path").and_then(|p| p.as_str()) {
             deps.push((d.span().start, p.to_string()));
         }
@@ -82,9 +108,14 @@ fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for e in rd.flatten() {
         let p = e.path();
         let Ok(ft) = e.file_type() else { continue };
+        let name = e.file_name().to_string_lossy().into_owned();
         if ft.is_dir() {
-            rs_files(&p, out);
-        } else if p.extension().is_some_and(|x| x == "rs") {
+            if !TestSources::get().is_test_dir(&name) {
+                rs_files(&p, out);
+            }
+        } else if p.extension().is_some_and(|x| x == "rs")
+            && !TestSources::get().is_test_file(&name)
+        {
             out.push(p);
         }
     }
@@ -122,7 +153,7 @@ pub fn crate_files(manifest: &Path) -> Result<Vec<PathBuf>> {
             out.push(d.join(extra));
         }
     }
-    for dep in path_deps(&tc::read_text(manifest)?, manifest)? {
+    for dep in path_deps(&tc::read_text(manifest)?, manifest, false)? {
         let sub = tc::canon(&d.join(&dep).join("Cargo.toml"));
         for p in crate_files(&sub)? {
             if !out.contains(&p) {
@@ -134,7 +165,7 @@ pub fn crate_files(manifest: &Path) -> Result<Vec<PathBuf>> {
 }
 
 /// The crate's sources (relative names and bytes) and the toolchain pins: what a build depends on.
-pub fn source_sha256(manifest: &Path) -> Result<String> {
+pub fn source_sha256(manifest: &Path, cargo_flags: &[String]) -> Result<String> {
     let manifest = tc::canon(manifest);
     let base = manifest.parent().unwrap_or(Path::new("."));
     let mut h = Sha256::new();
@@ -156,6 +187,11 @@ pub fn source_sha256(manifest: &Path) -> Result<String> {
     );
     h.update(tc::RUST_TARGET_JSON);
     h.update(CF_HELPERS.as_bytes());
+    // The features of the build are part of what it makes (none: the hash of a build without flags is the same as before).
+    for f in cargo_flags {
+        h.update(f.as_bytes());
+        h.update([0u8]);
+    }
     Ok(hex(&h.finalize()))
 }
 
@@ -235,7 +271,48 @@ fn replace_path(text: &str, p: &str, rel: &str) -> String {
     out
 }
 
-/// Copy a crate to `dest` and its path dependencies to `deps_dir/<n>-<name>`, rewriting the `path = ".."` of the copies.
+/// `text` without the bare `[workspace]` line of a manifest: a path dependency that is a workspace root of its own (a service file crate, which is also built alone)
+/// would be a second root in the staged tree.
+fn without_workspace_root(text: &str) -> String {
+    let mut out = String::new();
+    for line in text.split_inclusive('\n') {
+        if line.trim() != "[workspace]" {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// Cargo includes the relative dependency path in its crate disambiguator. Keep the staged name stable when a source directory moves.
+fn staged_dir_name(manifest: &Path) -> Result<String> {
+    let package = parse_cargo(&tc::read_text(manifest)?, manifest)?.package;
+    if let Some(name) = package
+        .metadata
+        .and_then(|metadata| metadata.patchkit)
+        .and_then(|patchkit| patchkit.staged_dir)
+    {
+        if name.is_empty()
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+        {
+            return Err(err!(
+                "{}: package.metadata.patchkit.staged-dir must contain only ASCII letters, digits, '-' or '_' and cannot be empty",
+                manifest.display()
+            ));
+        }
+        return Ok(name);
+    }
+    Ok(manifest
+        .parent()
+        .and_then(|p| p.file_name())
+        .unwrap()
+        .to_string_lossy()
+        .into_owned())
+}
+
+/// Copy a crate to `dest` and its path dependencies to `deps_dir/<n>-<name>`, rewriting the `path = ".."` of the copies. A dependency stages without its own
+/// `[workspace]` line.
 fn stage(
     manifest: &Path,
     dest: &Path,
@@ -244,20 +321,18 @@ fn stage(
 ) -> Result<PathBuf> {
     copy_tree(manifest.parent().unwrap(), dest)?;
     let mut text = tc::read_text(&dest.join("Cargo.toml"))?;
-    for dep in path_deps(&text.clone(), manifest)? {
+    for dep in path_deps(&text.clone(), manifest, true)? {
         let sub = tc::canon(&manifest.parent().unwrap().join(&dep).join("Cargo.toml"));
         let sd = match seen.iter().find(|(k, _)| *k == sub) {
             Some((_, sd)) => sd.clone(),
             None => {
-                let name = sub
-                    .parent()
-                    .and_then(|p| p.file_name())
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned();
-                let sd = deps_dir.join(format!("{}-{}", seen.len(), name));
+                let name = staged_dir_name(&sub)?;
+                let sd = deps_dir.join(format!("{}-{name}", seen.len()));
                 seen.push((sub.clone(), sd.clone()));
                 stage(&sub, &sd, deps_dir, seen)?;
+                let dep_manifest = sd.join("Cargo.toml");
+                let t = without_workspace_root(&tc::read_text(&dep_manifest)?);
+                std::fs::write(&dep_manifest, t).map_err(|e| err!("{e}"))?;
                 sd
             }
         };
@@ -280,7 +355,12 @@ pub fn target_dir(env: &Env) -> PathBuf {
 
 /// Build the crate and copy its static library into `out_dir`. A lock on the shared target dir covers the cargo run and the copy, so a
 /// build of the same crate from another worktree cannot replace the library in between.
-fn build_staticlib(env: &Env, manifest: &Path, out_dir: &Path) -> Result<PathBuf> {
+fn build_staticlib(
+    env: &Env,
+    manifest: &Path,
+    cargo_flags: &[String],
+    out_dir: &Path,
+) -> Result<PathBuf> {
     if !env.codegen_gcc_ready() {
         return Err(err!(
             "Rust-for-ColdFire toolchain not installed (uv run python -m tools.patchkit.pk_toolchains codegen-gcc)"
@@ -346,6 +426,7 @@ fn build_staticlib(env: &Env, manifest: &Path, out_dir: &Path) -> Result<PathBuf
         .arg(&tc::pins().rust_nightly)
         .args(["cargo", "rustc", "--release"])
         .args(CARGO_ARGS)
+        .args(cargo_flags)
         .arg("--target")
         .arg(&target)
         .arg("--target-dir")
@@ -465,13 +546,18 @@ fn check_flags(blob: &[u8], what: &str) -> Result<()> {
 }
 
 /// Crate -> one relocatable ELF at `out`. Returns the exported symbols.
-fn build_object(env: &Env, manifest: &Path, out: &Path) -> Result<Vec<String>> {
+fn build_object(
+    env: &Env,
+    manifest: &Path,
+    cargo_flags: &[String],
+    out: &Path,
+) -> Result<Vec<String>> {
     let crate_name = parse_cargo(&tc::read_text(manifest)?, manifest)?
         .package
         .name
         .replace('-', "_");
     let work = TempDir::new("pk-rust-")?;
-    let lib = build_staticlib(env, manifest, work.path())?;
+    let lib = build_staticlib(env, manifest, cargo_flags, work.path())?;
     tc::run(
         &env.m68k("ar")?,
         &["x".to_string(), tc::canon(&lib).display().to_string()],
@@ -489,6 +575,9 @@ fn build_object(env: &Env, manifest: &Path, out: &Path) -> Result<Vec<String>> {
         let blob = tc::read(m)?;
         if elf::is_empty(&blob)? {
             continue; // a crate with only types (dkrt-sdk) compiles to an object with no sections; its flags are 0
+        }
+        if !elf::has_code(&blob)? {
+            continue; // data only (the statics of a service crate whose functions are generic): no code, so no ISA flags to check
         }
         let mname = m.file_name().unwrap().to_string_lossy().into_owned();
         check_flags(&blob, &format!("archive member {mname}"))?;
@@ -583,11 +672,12 @@ fn build_object(env: &Env, manifest: &Path, out: &Path) -> Result<Vec<String>> {
 pub fn object_proto(
     env: &Env,
     manifest: &Path,
+    cargo_flags: &[String],
 ) -> Result<(Proto, String, BTreeMap<String, String>)> {
     let manifest = tc::canon(manifest);
     let tmp = TempDir::new("pk-rust-o-")?;
     let o = tmp.path().join("crate.o");
-    let exports = build_object(env, &manifest, &o)?;
+    let exports = build_object(env, &manifest, cargo_flags, &o)?;
     let proto = elf::proto_from_elf(&tc::read(&o)?)?;
     for r in &proto.relocs {
         if r.rtype != "32" {
@@ -600,12 +690,105 @@ pub fn object_proto(
     }
     let mut toolchain = toolchain_info(env);
     toolchain.insert("exports".into(), exports.join(" "));
-    Ok((proto, source_sha256(&manifest)?, toolchain))
+    Ok((proto, source_sha256(&manifest, cargo_flags)?, toolchain))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_source_hash_ignores_unit_test_files_only() {
+        let work = TempDir::new("pk-hash-").unwrap();
+        let src = work.path().join("src");
+        std::fs::create_dir_all(src.join("a/tests")).unwrap();
+        std::fs::write(work.path().join("Cargo.toml"), "[package]\nname = \"c\"\n").unwrap();
+        for f in [
+            "lib.rs",
+            "a/mod.rs",
+            "a/tests.rs",
+            "a/tests/x.rs",
+            "b_tests.rs",
+            "tests_b.rs",
+            "fake_p.rs",
+        ] {
+            std::fs::write(src.join(f), "// 1\n").unwrap();
+        }
+        let manifest = work.path().join("Cargo.toml");
+        let before = source_sha256(&manifest, &[]).unwrap();
+        for f in [
+            "a/tests.rs",
+            "a/tests/x.rs",
+            "b_tests.rs",
+            "tests_b.rs",
+            "fake_p.rs",
+        ] {
+            std::fs::write(src.join(f), "// 2\n").unwrap();
+        }
+        assert_eq!(source_sha256(&manifest, &[]).unwrap(), before);
+        for f in ["lib.rs", "a/mod.rs"] {
+            std::fs::write(src.join(f), "// 2\n").unwrap();
+            assert_ne!(source_sha256(&manifest, &[]).unwrap(), before, "{f}");
+            std::fs::write(src.join(f), "// 1\n").unwrap();
+        }
+    }
+
+    #[test]
+    fn a_staged_dependency_loses_its_workspace_root() {
+        let text =
+            "[package]\nname = \"a\"\n\n[workspace]\n\n[profile.release]\npanic = \"abort\"\n";
+        assert_eq!(
+            without_workspace_root(text),
+            "[package]\nname = \"a\"\n\n\n[profile.release]\npanic = \"abort\"\n"
+        );
+    }
+
+    #[test]
+    fn staging_keeps_a_dependency_name_after_its_source_directory_moves() {
+        let work = TempDir::new("pk-stage-").unwrap();
+        let src = work.path().join("source");
+        let dep = work.path().join("moved");
+        std::fs::create_dir(&src).unwrap();
+        std::fs::create_dir(&dep).unwrap();
+        let manifest = src.join("Cargo.toml");
+        let dep_manifest = dep.join("Cargo.toml");
+        std::fs::write(
+            &manifest,
+            "[package]\nname = \"root\"\n[dependencies]\ndep = { path = \"../moved\" }\n",
+        )
+        .unwrap();
+        let dep_text = "[package]\nname = \"dep\"\n";
+        std::fs::write(&dep_manifest, dep_text).unwrap();
+        assert_eq!(staged_dir_name(&dep_manifest).unwrap(), "moved");
+        let before = source_sha256(&manifest, &[]).unwrap();
+        std::fs::write(
+            &dep_manifest,
+            format!("{dep_text}[package.metadata.patchkit]\nstaged-dir = \"original\"\n"),
+        )
+        .unwrap();
+        assert_ne!(source_sha256(&manifest, &[]).unwrap(), before);
+
+        let dest = work.path().join("staged");
+        let deps_dir = dest.join(".deps");
+        let staged = stage(&manifest, &dest, &deps_dir, &mut vec![]).unwrap();
+        assert_eq!(
+            path_deps(&tc::read_text(&staged).unwrap(), &staged, false).unwrap(),
+            [".deps/0-original"]
+        );
+        assert!(deps_dir.join("0-original/Cargo.toml").is_file());
+    }
+
+    #[test]
+    fn staging_rejects_a_name_with_a_path_separator() {
+        let work = TempDir::new("pk-stage-").unwrap();
+        let manifest = work.path().join("Cargo.toml");
+        std::fs::write(
+            &manifest,
+            "[package]\nname = \"dep\"\n[package.metadata.patchkit]\nstaged-dir = \"../other\"\n",
+        )
+        .unwrap();
+        assert!(staged_dir_name(&manifest).is_err());
+    }
 
     #[test]
     fn copy_tree_stamps_the_copy_with_the_current_time() {

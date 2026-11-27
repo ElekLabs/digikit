@@ -1,0 +1,195 @@
+[module]
+id = "core/fx"
+version = "0.1.0"
+name = "FX chain"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Effects adapter of the SHARC engine: effects registered by other modules process the master block in a chain, before the USB pack and the DAC converter, or (Digitakt II, route send) run on a send bus of the 16 tracks and add to the FX return bus; an empty chain plays the stock audio"
+ports = ["dt2-1.17", "dn2-1.12"]
+requires = ["core/dsp-link"]
+conflicts = []
+
+# Test status per firmware; patchkit does not read it.
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# One DSP object for both devices: the hook is the first instruction of the post-master function (H1, docs/findings/53), the master block is the
+# literal of the Q31 converter, and the displaced instruction runs in the hook's tail.
+[[object]]
+path = "build/fx-dsp.dko.json"
+sources = ["src/dsp/fx.s"]
+place = "dsp.l2"
+
+[object.externs]
+_fx_back = "hook.dsp.fx.fn.entry.tail"
+
+# The send route (Digitakt II; docs/findings/62-fx-send-route.md): the hook is the first instruction of the master function, before the master reads the track
+# buses' sums and the FX return bus. The object calls the adapter's routines (`_fx_enter`, `_fx_exec`, `_fx_leave`), so the guard exists once.
+[[object]]
+path = "build/fxsend-dsp.dko.json"
+sources = ["src/dsp/fxsend.s"]
+place = "dsp.l2"
+devices = ["dt2"]
+
+[object.externs]
+_fxs_back = "hook.dsp.fx.fn.send.tail"
+
+# The Digitone II's send route (docs/findings/67-fx-routes-dn2.md): the same hook on its master function, the slot mix of fxsend.s (`FXS_SLOTS`).
+[[object]]
+path = "build/fxsend-dn2-dsp.dko.json"
+sources = ["src/dsp/fxsend-dn2.s"]
+place = "dsp.l2"
+devices = ["dn2"]
+
+[object.externs]
+_fxs_back = "hook.dsp.fx.fn.send.tail"
+
+# The slots the two stubs read (sdk/sdk.toml `[dsp.slots]`, words of core/dsp-link's slot block): the effect-registry owner fills them with the pcs of its dispatch code (`[[fill]] space = "dsp"`
+# in the owner's dks/module.toml). Zero takes the stock path.
+[[slot]]
+name = "fx_entry"
+space = "dsp"
+
+[[slot]]
+name = "fx_send"
+space = "dsp"
+
+[[op]]
+op = "hook"
+hook = "dsp.fx.hook.entry"
+to = "_fx_entry"
+
+[[op]]
+op = "hook"
+hook = "dsp.fx.hook.send"
+to = "_fxs_entry"
+devices = ["dt2", "dn2"]
+
+# An effect is a run-time module (builder calls in init, packed as a .dkm). Its row is filled through core/dsp-link by core/dynfx, the only
+# module that adds patch-time rows (df0 to df2, free until a run-time effect takes them). patchkit refuses an `[[entry]] registry = "fx"` of any other module.
+# The chain runs in module order. The scan ends at the zero row patchkit appends (terminator); at most DK_FX_MAX (4) effects
+# (packages/patchkit/tests/sdkgen.rs checks this number against <dk/fx/fx.h>).
+[[registry]]
+name = "fx"
+window = 2
+first = "0"
+max = 4
+limit = "fx_slots"
+region = "dsp.l2"
+terminator = true
+refuse_entries = "an effect is a run-time module (builder calls in init, packed as a .dkm); a row is filled through core/dsp-link by core/dynfx"
+refuse_entries_except = ["core/dynfx"]
+
+# A row is 24 words (the send route's words 18 to 22 are described below the list):
+#   0 pc (0 ends the table, 0xffffffff is a free row that the adapter skips: core/dynfx), 1 desc, 2 state, 3 enabled (1: on), 4 to 11 the
+#   parameter words p0 to p7 (DK_FX_MAX_PARAMS), 12 was (enabled in the last block), 13 mix (float, the dry/wet blend, default 1.0), 14 dis (1: switched off by its faults until the
+#   next start), 15 the block of the fault window's start, 16 faults in the window, 17 faults since the start, 18 route, 19 to 22 the send amounts,
+#   23 spare. The words from 12 on belong to the adapter. The registry's window 2 of core/dsp-link is this table (24 words a row).
+#   Route (word 18): 0 the master chain (the default), 1 a send bus of the 16 tracks (the send hook of the Digitakt II, src/dsp/fxsend.s): the effect's input is
+#   the sum over the tracks of gain * the track's bus, its wet output times MIX (word 13, the return level) is added to the FX return bus. Other values: the row
+#   is run by neither hook. Send amounts (words 19 to 22): one byte for each track, track t in word 19 + t / 4, byte t % 4 (little endian), 0 to 127 (larger values
+#   count as 127); the gain of a track is (byte / 127) squared, ramped over the block. The runtime writes route and amounts like the other words (window 2).
+[[registry.field]]
+name = "pc"
+kind = "u32"
+[[registry.field]]
+name = "desc"
+kind = "u32"
+[[registry.field]]
+name = "state"
+kind = "u32"
+[[registry.field]]
+name = "enabled"
+kind = "u32"
+default = 1
+[[registry.field]]
+name = "p0"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "p1"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "p2"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "p3"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "p4"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "p5"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "p6"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "p7"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "was"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "mix"
+kind = "u32"
+default = 0x3f800000
+[[registry.field]]
+name = "dis"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "wstart"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "wcount"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "nfault"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "route"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "amt0"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "amt1"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "amt2"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "amt3"
+kind = "u32"
+default = 0
+[[registry.field]]
+name = "spare23"
+kind = "u32"
+default = 0
+
+[[claim]]
+resource = "dsp.fx.hook"
+
+[[claim]]
+resource = "dsp.fx.send_hook"
+devices = ["dt2", "dn2"]

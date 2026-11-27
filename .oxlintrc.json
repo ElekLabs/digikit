@@ -63,7 +63,12 @@
       }
     },
     {
-      "files": ["packages/workbench-core/**/*.{ts,tsx}"],
+      "files": [
+        "packages/**/*.{ts,tsx,mjs}",
+        "{modules,runtime,services}/**/*.{ts,tsx,mjs}",
+        "tests/regression/**/*.{ts,tsx,mjs}",
+        "tools/**/*.{ts,mjs}"
+      ],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
@@ -71,7 +76,7 @@
             "patterns": [
               {
                 "group": ["**/apps/**", "@digi/web", "@digi/desktop"],
-                "message": "workbench-core is below the apps: it imports no app."
+                "message": "Code below the apps imports no app (apps/ is the top layer)."
               }
             ]
           }
@@ -103,7 +108,7 @@
           },
           {
             "name": "Worker",
-            "message": "Take a WorkerFactory (packages/workbench-core/src/workers.ts); only apps/web/src/browser-workers.ts calls new Worker."
+            "message": "Take a WorkerFactory (packages/workbench-core/src/workers.ts); only the platform worker factories construct workers."
           }
         ]
       }
@@ -112,10 +117,52 @@
       "files": [
         "packages/workbench-core/src/storage.ts",
         "packages/workbench-core/src/blob-store.ts",
-        "apps/web/src/browser-workers.ts"
+        "apps/web/src/browser-workers.ts",
+        "apps/desktop/ui/src/workers.ts"
       ],
       "rules": {
         "eslint/no-restricted-globals": "off"
+      }
+    },
+    {
+      "files": [
+        "{modules,runtime,services}/**/tests/**/*.ts",
+        "tests/fixtures/**/tests/**/*.ts",
+        "tests/regression/runtime/flows/**/*.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "node:timers",
+                "message": "Wait in emulated time: rt.ui / rt.listen / pollUntil (docs/plans/test-architecture.md T2 step 3)"
+              },
+              {
+                "name": "node:timers/promises",
+                "message": "Wait in emulated time: rt.ui / rt.listen / pollUntil (docs/plans/test-architecture.md T2 step 3)"
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/apps/**", "@digi/web", "@digi/desktop"],
+                "message": "Code below the apps imports no app (apps/ is the top layer)."
+              }
+            ]
+          }
+        ],
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "setTimeout",
+            "message": "Wait in emulated time: rt.ui / rt.listen / pollUntil (docs/plans/test-architecture.md T2 step 3)"
+          },
+          {
+            "name": "setInterval",
+            "message": "Wait in emulated time: rt.ui / rt.listen / pollUntil (docs/plans/test-architecture.md T2 step 3)"
+          }
+        ]
       }
     },
     {

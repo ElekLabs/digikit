@@ -1,15 +1,22 @@
 // The state of the Firmware page for the life of the window, and the actions on it (the page is FirmwarePage.tsx; the rules are in
 // firmware-core.ts, the run in firmware-flow.ts). Signals, so the desktop app keeps a half-finished flash screen while another page is shown.
-import { createSignal } from 'solid-js';
-import { JobBusyError } from '../jobs/jobs';
+import { createSignal, untrack } from 'solid-js';
+import { fmtVersion } from '@digi/dk-session';
+import type { DeviceRecord } from '@digi/devices/vite';
+import { registry } from '../data/device-profiles';
+import { JobBusyError, type JobHandle } from '../jobs/jobs';
+import { identify } from '../patch/identify';
+import { sha256Hex } from '../runtime/local-inputs';
+import { activateSystemPackage } from '../runtime/activate-system-package';
 import type { TransferApp } from '../transfer/app';
 import type { DefaultModulesApp } from './default-modules-state';
 import type { FirmwareEnv } from './env';
 import {
-  DEVICE_NAMES,
   IDLE,
+  deviceNameOf,
   imageFileName,
   isDeviceId,
+  leavesRuntime,
   modelOfPort,
   progressView,
   refusalText,
@@ -53,17 +60,39 @@ export function createFirmwareState({
     setAck(false);
   }
 
-  let file: { name: string; bytes: Uint8Array } | undefined;
+  let file: { name: string; bytes: Uint8Array; record: DeviceRecord | undefined } | undefined;
   let preparing = 0;
+  /** Ticket of the newest file pick: a slow older pick must not overwrite a newer one. */
+  let choosing = 0;
+  /** The device record of the chosen file, from its sha256 against the registry; undefined when no file is chosen or patchkit has to decide. */
+  const [fileDevice, setFileDevice] = createSignal<DeviceRecord | undefined>(undefined);
 
   /** Patch and check the picked file (again for another mode). A newer request makes the older answer unused. */
   async function prepare(): Promise<void> {
     if (!file) return;
     const mine = ++preparing;
-    const { name, bytes } = file;
+    const { name, bytes, record } = file;
+    if (record && !record.patchSets.device && !restore()) {
+      setPrepared({
+        kind: 'error',
+        name,
+        message: `There is no hardware image for the ${record.name} yet: its patched firmware runs only in the emulator. Restore stock still works.`,
+      });
+      return;
+    }
+    if (record && env.offersPatched && !env.offersPatched(record.id) && !restore()) {
+      setPrepared({
+        kind: 'error',
+        name,
+        message: `This site does not offer a patched image for the ${record.name} yet: the hardware route is not proven. Restore stock still works.`,
+      });
+      return;
+    }
     setPrepared({ kind: 'working', name });
     try {
-      const p = await env.prepare(bytes, restore(), defaults.patchSet());
+      // a device without a boot screen patch set gets the plain device set, whatever the stored toggle says
+      const patchSet = record && !record.patchSets['device-introblank'] ? 'device' : defaults.patchSet();
+      const p = await env.prepare(bytes, restore(), patchSet);
       if (mine !== preparing) return;
       setPrepared({ kind: 'ready', name, size: bytes.length, p });
     } catch (e) {
@@ -75,10 +104,12 @@ export function createFirmwareState({
   /** The user picked (or dropped) a file. */
   async function chooseFile(picked: File | undefined): Promise<void> {
     if (!picked || running(run())) return;
+    const mine = ++choosing;
     setRun(IDLE);
     setAck(false);
     if (picked.size > MAX_BYTES) {
       file = undefined;
+      setFileDevice(undefined);
       setPrepared({
         kind: 'error',
         name: picked.name,
@@ -86,7 +117,14 @@ export function createFirmwareState({
       });
       return;
     }
-    file = { name: picked.name, bytes: new Uint8Array(await picked.arrayBuffer()) };
+    const bytes = new Uint8Array(await picked.arrayBuffer());
+    if (mine !== choosing) return;
+    const hash = await sha256Hex(bytes);
+    if (mine !== choosing) return;
+    const id = identify(hash)?.device;
+    const record = id === undefined ? undefined : registry.get(id);
+    file = { name: picked.name, bytes, record };
+    setFileDevice(record);
     await prepare();
   }
 
@@ -109,6 +147,17 @@ export function createFirmwareState({
   async function probeDevice(): Promise<void> {
     if (running(run())) return;
     const t = target();
+    if (t.kind === 'emulator' && env.emulatorFlash) {
+      if (device().kind !== 'connected') setDevice({ kind: 'checking' });
+      try {
+        const result = await env.emulatorFlash.probe(transfer.target.bindSession());
+        if (!running(run()) && target() === t) setDevice(result);
+      } catch (e) {
+        if (!running(run()) && target() === t)
+          setDevice({ kind: 'none', why: e instanceof Error ? e.message : String(e) });
+      }
+      return;
+    }
     if (t.kind !== 'midi') {
       const why =
         t.kind === 'emulator'
@@ -123,7 +172,7 @@ export function createFirmwareState({
     try {
       const a = await asked(() => askDevice());
       if (running(run()) || target().kind !== 'midi') return;
-      const model = isDeviceId(a.model ?? '') ? (a.model as DeviceFacts['model']) : modelOfPort(a.port);
+      const model = isDeviceId(a.model ?? '') ? a.model : modelOfPort(a.port);
       const facts: DeviceFacts = {
         port: a.port,
         model,
@@ -136,7 +185,7 @@ export function createFirmwareState({
         type: 'answered',
         device: {
           id: model ?? '',
-          name: model ? DEVICE_NAMES[model] : 'MIDI device',
+          name: model ? deviceNameOf(model) : 'MIDI device',
           ...(a.os ? { os: a.os } : {}),
           ...(a.runtime ? { runtime: a.runtime } : {}),
         },
@@ -159,33 +208,137 @@ export function createFirmwareState({
   async function startFlash(): Promise<void> {
     const prep = prepared();
     const t = target();
-    if (prep.kind !== 'ready' || t.kind !== 'midi' || running(run())) return;
+    const emulator = t.kind === 'emulator' ? env.emulatorFlash : undefined;
+    if (prep.kind !== 'ready' || (t.kind !== 'midi' && !emulator) || running(run())) return;
     const p = prep.p;
     const log = env.log;
     const what = p.restore ? 'restore' : 'flash';
-    const rpc = route() === 'rpc';
+    const flashRoute = route();
+    const fileChoice = choosing;
+    const rpc = !!emulator || flashRoute === 'rpc';
+    const destination = t.kind === 'midi' ? t.port : 'Emulator';
     let final: FlashState = IDLE;
     try {
-      final = await transfer.jobs.runJob('Flashing firmware', { group: 'target', cancel: cancelFlash }, async (job) => {
+      const work = async (job: JobHandle, targetJob?: JobHandle): Promise<FlashState> => {
         controller = new AbortController();
+        const { signal } = controller;
+        const initialBinding = transfer.target.bindSession();
+        let committed = false;
+        const startedMs = performance.now();
+        if (emulator)
+          setRun({ phase: 'sending', sent: 0, total: p.image.length, startedMs, nowMs: startedMs, unit: 'bytes' });
         log({
           level: 'info',
-          text: `${what} ${p.device} OS ${p.os} to ${t.port}: ${rpc ? `${p.image.length} bytes (MidiRpc)` : `${p.ends.length} messages (OS UPGRADE menu)`}`,
+          text: `${what} ${p.device} OS ${p.os} to ${destination}: ${rpc ? `${p.image.length} bytes (MidiRpc)` : `${p.ends.length} messages (OS UPGRADE menu)`}`,
         });
         setNotice('');
         defaults.resetPostRun();
         const report = (s: FlashState): void => {
+          if (emulator && s.phase === 'rebooting' && !committed) {
+            committed = true;
+            controller = undefined;
+            job.disableCancel?.();
+            targetJob?.disableCancel?.();
+          }
+          if (s.phase === 'done' && (emulator || env.systemPackage) && leavesRuntime(p)) return;
           setRun(s);
           if (s.phase === 'sending') {
             const v = progressView(s);
             job.progress(v.fraction, v.text);
+          } else if (s.phase === 'rebooting' && s.stage === 'asking' && s.setup) {
+            job.progress(s.setup.fraction, s.setup.text);
           } else job.progress(undefined, s.phase === 'rebooting' ? 'restarting' : undefined);
         };
         try {
-          return rpc
-            ? await runRpcFlash(rpcPortOps(), p, controller.signal, report)
-            : await runFlash(portOps(), p, controller.signal, report);
+          const pkg = leavesRuntime(p) ? await env.systemPackage?.() : undefined;
+          initialBinding.check();
+          signal.throwIfAborted();
+          if (prepared() !== prep || route() !== flashRoute || choosing !== fileChoice)
+            throw new Error('The firmware or flash route changed. Review your selection and try again.');
+          if (pkg && fmtVersion(pkg.runtime) !== p.runtime)
+            throw new Error('The Workbench system package version differs from the prepared firmware.');
+          if (emulator) {
+            const result = await emulator.flash(initialBinding, p, signal, report);
+            const flashed = result.state;
+            if (flashed.phase === 'done' && leavesRuntime(p)) {
+              const sinceMs = performance.now();
+              const progress = (fraction: number | undefined, text: string) =>
+                report({
+                  phase: 'rebooting',
+                  rpc: true,
+                  stage: 'asking',
+                  sinceMs,
+                  nowMs: performance.now(),
+                  setup: { fraction, text },
+                });
+              try {
+                initialBinding.check();
+                if (pkg) {
+                  progress(undefined, 'Checking system package');
+                  const changed = await activateSystemPackage(await initialBinding.session(), pkg, {
+                    identity: { device: p.device, imageId: p.imageId },
+                    check: initialBinding.check,
+                    beforeRestart: result.beforePackageRestart,
+                    progress,
+                  });
+                  flashed.lines.push(
+                    changed ? 'System package verified and active.' : 'System package already active.',
+                  );
+                }
+                await finishRuntime(p.device, 'emulator', initialBinding.check, progress);
+              } catch (e) {
+                notePackageFailure(flashed, e instanceof Error ? e.message : String(e));
+              }
+            }
+            setRun(flashed);
+            return flashed;
+          }
+          const ops = rpc ? rpcPortOps() : portOps();
+          let flashed: FlashState;
+          try {
+            flashed =
+              'machine' in ops ? await runRpcFlash(ops, p, signal, report) : await runFlash(ops, p, signal, report);
+          } finally {
+            transfer.target.finishRawTransport();
+          }
+          if (flashed.phase !== 'done' || !pkg) return flashed;
+          let packageReady = false;
+          try {
+            const binding = transfer.target.bindSession();
+            if (binding.target.kind !== 'midi' || binding.target.port !== ops.port)
+              throw new Error('The selected target changed.');
+            const changed = await activateSystemPackage(await binding.session(), pkg, {
+              identity: { device: p.device, imageId: p.imageId },
+              check: binding.check,
+              signal,
+              progress: job.progress,
+            });
+            flashed.lines.push(changed ? 'System package verified and active.' : 'System package already active.');
+            packageReady = true;
+          } catch (e) {
+            const detail = signal.aborted
+              ? 'Setup was stopped. The package may already be on the card.'
+              : e instanceof Error
+                ? e.message
+                : String(e);
+            notePackageFailure(flashed, detail);
+          }
+          setRun(flashed);
+          if (packageReady) await finishRuntime(p.device);
+          return flashed;
         } catch (e) {
+          if (emulator && !committed && signal.aborted) {
+            const stopped: FlashState = {
+              phase: 'stopped',
+              reason: 'cancelled',
+              sent: 0,
+              total: p.image.length,
+              unit: 'bytes',
+              message: 'Cancelled before flashing.',
+            };
+            setRun(stopped);
+            return stopped;
+          }
           const failed: FlashState = {
             phase: 'failed',
             code: 'send',
@@ -193,8 +346,18 @@ export function createFirmwareState({
           };
           setRun(failed);
           return failed;
+        } finally {
+          controller = undefined;
         }
-      });
+      };
+      const label = emulator && p.restore ? 'Restoring stock firmware' : 'Flashing firmware';
+      const lockedTarget = (emulatorJob?: JobHandle) =>
+        transfer.jobs.runJob(label, { group: 'target', cancel: cancelFlash }, (job) =>
+          untrack(() => work(emulatorJob ?? job, emulatorJob && job)),
+        );
+      final = emulator
+        ? await transfer.jobs.runJob(label, { group: 'emulator', cancel: cancelFlash }, lockedTarget)
+        : await lockedTarget();
     } catch (e) {
       if (!(e instanceof JobBusyError)) throw e;
       final = { phase: 'failed', code: 'send', message: 'a transfer is running; wait for it' };
@@ -212,8 +375,35 @@ export function createFirmwareState({
         detail: final.message,
       });
     else if (final.phase === 'failed') log({ level: 'error', text: `${what} failed: ${final.message}` });
-    // the flash is done and the runtime answered: the default modules follow in the same run (the flash stays done when one fails)
-    if (final.phase === 'done' && !p.restore) await defaults.installAfterFlash(p.device);
+    if (!emulator && final.phase === 'done' && leavesRuntime(p) && !env.systemPackage) await finishRuntime(p.device);
+  }
+
+  function notePackageFailure(flashed: Extract<FlashState, { phase: 'done' }>, detail: string): void {
+    const message = `System package setup failed. ${detail} If the target is still core-only, choose Transfer → Modules → Install system package. Otherwise check the device and restart it.`;
+    flashed.lines.push(message);
+    env.log({ level: 'error', text: message });
+  }
+
+  /** Replace the runtime's services and install the selected defaults after the device is ready. */
+  async function finishRuntime(
+    deviceId: string,
+    where: 'device' | 'emulator' = 'device',
+    check?: () => void,
+    progress?: (fraction: number | undefined, text: string) => void,
+  ): Promise<void> {
+    check?.();
+    progress?.(undefined, 'Refreshing services on the emulator card');
+    try {
+      const replaced = await transfer.backend.refreshServices(deviceId, () => {});
+      if (replaced.length) env.log({ level: 'info', text: `services replaced: ${replaced.join(', ')}` });
+    } catch (e) {
+      env.log({
+        level: 'error',
+        text: `Services: ${e instanceof Error ? e.message : String(e)}. The firmware flash is done; Install on the Transfer page replaces them.`,
+      });
+    }
+    check?.();
+    await defaults.installAfterFlash(deviceId, where, ({ done, total, text }) => progress?.(done / total, text));
   }
 
   function cancelFlash(): void {
@@ -254,6 +444,7 @@ export function createFirmwareState({
 
   return {
     prepared,
+    fileDevice,
     setPrepared,
     restore,
     setRestore,

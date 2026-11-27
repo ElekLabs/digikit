@@ -68,13 +68,13 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 
 from tools import python_env  # noqa: E402
-from tools.patchkit import pk_device  # noqa: E402
+from tools.patchkit import pk_device, pk_hostdir  # noqa: E402
 from tools.patchkit import pk_dkrt_boot as B  # noqa: E402
 from tools.patchkit import pk_dkrt_machine as M  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 
 # a module's own scenarios: modules/<group>/<name>/tests/scenarios/*.toml
-MODULE_SCENARIOS = "modules/*/*/tests/scenarios"
+MODULE_SCENARIOS = "modules/*/*/*/tests/scenarios"
 # DIGIKIT_CACHE moves the cache: the cards are sparse files of the card's full size (16.7 GiB for a
 # DN2), and a file system without sparse files (WSL's mount of a Windows drive) writes each one out in full
 CACHE = (
@@ -83,7 +83,7 @@ CACHE = (
     else ROOT / "out" / "cache" / "digikit"
 )
 # every device with a module store and its newest image that has a port (`port = true` in the device file)
-QUICK_IMAGES = {d: pk_device.port_images(d)[-1] for d in pk_device.digikit_devices()}
+QUICK_IMAGES = {d: pk_device.port_images(d)[-1] for d in pk_device.dsp_devices()}
 RT = B.RT
 CACHE_LIMIT = 20 * 2**30  # bytes on disk the card cache may hold
 
@@ -112,9 +112,9 @@ def card_used(card: Path, written: bool) -> None:
 # emulated ms a rig runs after its boot before the scenario looks: the first UI-loop passes (a module's DSP part is waited for by
 # `wait_dsp`); the boot tool's own proof keeps 1500
 SETTLE_MS = int(os.environ.get("DIGIKIT_SETTLE_MS", "300"))
-FIRMWARE_FIRST = (
-    pk_device.working_project_sector()
-)  # the working project; the project slots follow (finding 02, storage records)
+FIRMWARE_FIRST = {
+    d: pk_device.working_project_sector(d) for d in pk_device.dsp_devices()
+}  # per device: the working project; the project slots follow (finding 02, storage records)
 
 
 class Fail(RuntimeError):
@@ -442,7 +442,8 @@ class Ctx:
         outside = sorted(
             x
             for x in writes
-            if not (lo <= x < hi) and (x < FIRMWARE_FIRST or not project_writes_ok)
+            if not (lo <= x < hi)
+            and (x < FIRMWARE_FIRST[self.device] or not project_writes_ok)
         )
         self.check(
             "card writes: the module store range"
@@ -483,13 +484,13 @@ def decode_tables(rig: B.BootRig) -> dict[str, Any]:
     """The machine, parameter and page rows with a name, decoded without pointers or type numbers: parameters are named,
     knobs name their parameter (or keep a stock code), pages name their machine."""
     plan = rig.plan
-    o = "core/machines"
+    o = "core/rows"
     rows, count = M.sym(plan, o, "machines.rows"), M.sym(plan, o, "machines.count")
     first, size = M.sym(plan, o, "machines.first"), M.sym(plan, o, "machines.row_size")
-    pf = M.sym(plan, "core/params", "pf_table")
+    pf = M.sym(plan, "core/rows", "pf_table")
     pfirst, pcount = (
-        M.sym(plan, "core/params", "params.first"),
-        M.sym(plan, "core/params", "params.count"),
+        M.sym(plan, "core/rows", "params.first"),
+        M.sym(plan, "core/rows", "params.count"),
     )
     pnames: dict[int, str] = {}
     params: dict[str, Any] = {}
@@ -738,101 +739,8 @@ def run_dkrun(
     c.check("dkrun: a second run uploads nothing (same sha256)", not out2["uploaded"])
 
 
-def run_transfer(
-    c: Ctx, rig: B.BootRig, D: Any, blobs: dict[str, bytes], files: dict[str, str]
-) -> None:
-    """`tools.device.dktransfer.install` against the emulator on a boot with no module: build only what changed (nothing: the committed
-    objects are current), pack, upload, SELECT, RESTART, wait for MODULES. A second install builds and uploads nothing."""
-    from tools.device import dkrun as R
-    from tools.device import dktransfer as TR
-    from tools.device import dkupload as DK
-    from tools.patchkit import pk_digikit_upload as U
-
-    # out/ is shared by all worktrees and the pack reuse rule compares file times: a file another run packed from other sources would be reused
-    os.environ["DIGI_TRANSFER_DIR"] = str(c.work / "transfer")
-    (module,) = c.table()["modules"]
-    (path,) = blobs
-    steps = {"n": 0}
-
-    def sleep(s: float) -> None:
-        rig.emu.step(int(s * R.EMU_IPS))
-        steps["n"] += int(s * R.EMU_IPS)
-
-    def now() -> float:
-        return steps["n"] / R.EMU_IPS
-
-    up = DK.Uploader(U.transport(rig))
-    rows = TR.repo_rows(up.info()["port"])
-    before = TR.list_view(up, rows)
-    row = next(r for r in before["modules"] if r["id"] == module)
-    c.check(
-        "transfer list: the module is listed, in a group, not on the card, needs no build",
-        row["group"] == "Machines"
-        and row["on_card"] == "no"
-        and not row["loaded"]
-        and row["build"] == "unchanged"
-        and before["card_only"] == [],
-        str(row),
-    )
-    events: list[dict[str, Any]] = []
-    out = TR.install(up, [module], emit=events.append, rows=rows, select=True)
-    c.check(
-        "transfer install (no restart): nothing built (unchanged), uploaded, verified by the device, selected",
-        out["built"] == []
-        and out["uploaded"] == [module]
-        and out["selected"] == [path]
-        and not out["restarted"]
-        and [e["ok"] for e in events if e["event"] == "verify"] == [True],
-        str(events),
-    )
-    c.check(
-        "transfer install (no restart): the module is not loaded yet",
-        module not in [m["name"] for m in up.modules()["modules"]],
-    )
-    res = TR.restart_device(
-        up,
-        [module],
-        emit=events.append,
-        wait_boot=lambda: D._wait_restart(rig),
-        sleep=sleep,
-        now=now,
-        paths=[path],
-    )
-    c.check(
-        "transfer restart: MODULES lists the module after the boot",
-        res["loaded"] == [module] and res["missing"] == [],
-        str(res),
-    )
-    rec = B.current(rig.sel_records())
-    c.check(
-        "transfer install: SELECT wrote the module and nothing else",
-        rec is not None and rec["paths"] == [path],
-        str(rec),
-    )
-    up = DK.Uploader(U.transport(rig))
-    after = TR.list_view(up, rows)
-    row = next(r for r in after["modules"] if r["id"] == module)
-    c.check(
-        "transfer list after the install: on the card, loaded, fits",
-        row["on_card"] == "yes" and row["loaded"] and row["fits"] is True,
-        str(row),
-    )
-
-    plan = TR.plan_install(TR.repo_rows(up.info()["port"], [module]), [module], up.ls())
-    c.check(
-        "transfer install, second time: nothing to build or upload",
-        plan["build"] == [] and plan["upload"] == [] and plan["select"] == [path],
-        str(plan),
-    )
-    hdr = up.header(path)
-    c.check(
-        "READ: the file on the card has the .dkm header the repo packed",
-        hdr == Path(row["dkm"]).read_bytes()[: DK.HEADER_BYTES],
-    )
-
-
 def memory_rows(cap: dict[str, dict[str, int]]) -> list[str]:
-    """The rows the MEMORY page shows for a CAPACITY reply (modules/core/apps/digikit-menu `fill_mem`): label, ten-character bar, percent or used/limit."""
+    """The rows the MEMORY page shows for a CAPACITY reply (runtime/apps/digikit-menu `fill_mem`): label, ten-character bar, percent or used/limit."""
     out = []
     for kind, label, pct in (
         ("DSP_AREA", "DSP   ", True),
@@ -855,7 +763,7 @@ def memory_rows(cap: dict[str, dict[str, int]]) -> list[str]:
 
 
 def check_memory_page(c: Ctx, rig: B.BootRig, plan: Any) -> None:
-    """SETTINGS > DIGIKIT > MEMORY on a boot that loaded a machine: the rows the menu kept in `DK_MEM` equal the rows computed from the
+    """SETTINGS > DIGIKIT > MEMORY on a boot that loaded a machine: the rows the menu kept in `DK_MEM` (the host directory's `MENU_MEM`) equal the rows computed from the
     CAPACITY reply of the same boot (so the DSP percent is the same figure rounded the same way), and MACH and PARAM show the machine (a page row only where the device has page rows: the equality covers it)."""
     from tools.device import dkupload as DK
     from tools.patchkit import pk_digikit_upload as U
@@ -872,7 +780,9 @@ def check_memory_page(c: Ctx, rig: B.BootRig, plan: Any) -> None:
     for _ in range(2):
         tap("DOWN", 200)
     tap("YES", 700)
-    base, n = plan.addr("DK_MEM"), rig.w(plan.addr("DK_MEM_N"))
+    directory = plan.addr("DKRT_HOST_DIR")
+    base = pk_hostdir.read_package_address(rig.w, directory, "MENU_MEM")
+    n = rig.w(pk_hostdir.read_package_address(rig.w, directory, "MENU_MEM_N"))
     got = []
     for i in range(n):
         raw = b"".join(
@@ -904,7 +814,7 @@ def check_memory_page(c: Ctx, rig: B.BootRig, plan: Any) -> None:
 
 
 def run_menu(c: Ctx) -> None:
-    """Boot with an empty selection, install the set over USB (`dk run` or `dktransfer install`, by the table), and after the boot
+    """Boot with an empty selection, install the set over USB (`dk run`), and after the boot
     check the machine in the list, its voice row and an audible note. The set may hold a code-only module next to the machine."""
     from tools.coldfire import digikit_menu_proof as D
 
@@ -915,23 +825,31 @@ def run_menu(c: Ctx) -> None:
     dkrun = bool(
         t.get("dkrun")
     )  # the selection and the restart come from `tools.device.dkrun` (SELECT, RESTART)
-    transfer = bool(t.get("transfer"))  # dktransfer.install does what dkrun does
-    assert dkrun or transfer, "the menu kind needs dkrun or transfer in its table"
+    assert dkrun, "the menu kind needs dkrun in its table"
+    # the services the set needs are files of the card (`services/<name>.dks` as packed, and the port file `ports/<device>-<version>.dkport`), put there as the device tests do
+    from tools.patchkit import pk_services
+
+    for svc in pk_services.card_services(
+        c.device,
+        c.work / "services",
+        files=[c.env.folder / "digikit" / p for p in files.values()],
+    ):
+        to = c.env.folder / "digikit" / svc["store_path"]
+        to.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(svc["file"], to)
     blobs = {}
     for path in files.values():  # the store is filled over USB SysEx, not by the card build: take the packed files out of the folder
         f = c.env.folder / "digikit" / path
         blobs[path] = f.read_bytes()
         f.unlink()
-    menu_img = c.image_for(f"{RT},core/digikit-menu", "menu")
+    menu_img = c.image_for(f"{RT},core/ui", "menu")
     plan = D.Plan(menu_img.plan)
     empty = c.card(None)
     trig = t.get("trig_frame", M.TRIG_FRAME if c.dt2 else M.TRIG_FRAME_DN2)
     with c.rig(menu_img, empty, "menu") as rig:
         b0 = rig.boot_info()
         c.check("the first boot has no module", b0["count"] == 0 and b0["loaded"] == 0)
-        if transfer:
-            run_transfer(c, rig, D, blobs, files)
-        elif dkrun:
+        if dkrun:
             run_dkrun(c, rig, D, blobs, files)
         info = rig.boot_info()
         k = len(rows)

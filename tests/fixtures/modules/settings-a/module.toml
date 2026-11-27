@@ -1,7 +1,7 @@
 [module]
 id = "test/settings-a"
 version = "0.1.0"
-name = "Settings API A"
+name = "Boot settings"
 category = "test"
 type = "raw"
 author = "digikit"

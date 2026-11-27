@@ -26,7 +26,7 @@ only, sections 2, 4, 5, 7 and 8 identical to stock), flashed through SETTINGS > 
 
 ## Rung B: with the DSP link and the voice hook, no modules **[D]**
 
-Image `out/patch/rungB-dt2-1.17.syx` (rung A plus `core/dynreg,core/dyndsp`, which add `core/machines`, `core/params`, `core/dsp-link`,
+Image `out/patch/rungB-dt2-1.17.syx` (rung A plus `core/rows,core/dyndsp`, which add `core/rows`, `core/rows`, `core/dsp-link`,
 `core/dsp-voice`; sha256 `7d2851ee8f7460eb...`; preflight: sections 3 and 7). Em played a project with sample tracks for about a minute and
 previewed a sample; `dklog follow` ran for 172 s.
 

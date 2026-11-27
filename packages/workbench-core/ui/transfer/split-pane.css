@@ -33,17 +33,17 @@
   left: 50%;
   width: 1px;
   margin-left: -0.5px;
-  background: var(--line-2, #34373d);
+  background: var(--line-2);
   transition: background-color 0.12s ease;
 }
 .split-handle:hover::before,
 .split.dragging .split-handle::before {
   width: 2px;
   margin-left: -1px;
-  background: var(--amber, #f3b52c);
+  background: var(--action);
 }
 .split-handle:focus-visible {
-  outline: 2px solid var(--amber, #f3b52c);
+  outline: 2px solid var(--action);
   outline-offset: -2px;
 }
 .split.dragging {

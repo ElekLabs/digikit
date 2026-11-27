@@ -14,6 +14,6 @@ export interface WorkerPort {
 /** `runtime`: the single-worker emulator (runtime/runtime-worker.ts). `dsp` and `cf`: the two halves of the split session (dsp-worker.ts, cf-worker.ts). `patch`: patchkit.wasm off the main thread (patch/patch-worker.ts). */
 export type WorkerKind = 'runtime' | 'dsp' | 'cf' | 'patch';
 
-export interface WorkerFactory {
-  create(kind: WorkerKind): WorkerPort;
+export interface WorkerFactory<Kind extends string = WorkerKind> {
+  create(kind: Kind): WorkerPort;
 }

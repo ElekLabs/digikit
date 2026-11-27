@@ -4,7 +4,7 @@
 //! names an address with the most specific layer that holds it:
 //!
 //! 1. `our`: the runtime, core adapters and loaded `.dkm` modules (modules are link-relative and rebased by the load table),
-//! 2. `anchor`: the firmware anchors of `devices/ports/`,
+//! 2. `anchor`: the firmware anchors of `ports/`,
 //! 3. `fw`: names from the reverse-engineering databases (developer machines only).
 //!
 //! No layer holding the address: the lookup answers nothing and the caller prints the raw address. For a return address the caller asks for
@@ -13,6 +13,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub mod gen_host_dir;
+pub mod host_dir;
 pub mod snapshot;
 
 pub const FORMAT: &str = "dk-addrmap";
@@ -148,7 +150,7 @@ pub struct LoadTable {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Load {
-    /// The name the runtime reports (`test/dyn-params`).
+    /// The name the runtime reports (`test/dyn-dn2`).
     pub id: String,
     pub base: u64,
     #[serde(default)]

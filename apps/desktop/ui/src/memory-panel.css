@@ -12,31 +12,31 @@
 .memory-panel .mem-head .used {
   font-family: var(--font-mono);
   font-size: 11.5px;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .memory-panel .bar {
   display: flex;
   height: 12px;
   overflow: hidden;
   border-radius: 6px;
-  background: var(--panel-3, #23262b);
+  background: var(--panel-3);
 }
 .memory-panel .bar.over {
-  outline: 1px solid var(--bad, #e5736b);
+  outline: 1px solid var(--bad);
 }
 .memory-panel .mem-note {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }
 .memory-panel .mem-note.over {
-  color: var(--bad, #e5736b);
+  color: var(--bad);
 }
 .memory-panel .seg {
   flex: 0 0 auto;
   min-width: 2px;
   height: 100%;
-  border-right: 1px solid var(--panel, #131418);
+  border-right: 1px solid var(--panel);
 }
 .memory-panel .seg:last-child {
   border-right: 0;
@@ -56,10 +56,10 @@
   flex: 1 1 0;
   min-width: 3px;
   border-radius: 2px;
-  background: var(--panel-3, #23262b);
+  background: var(--panel-3);
 }
 .memory-panel .cell.over {
-  outline: 1px solid var(--bad, #e5736b);
+  outline: 1px solid var(--bad);
 }
 /* No runtime: the usual rows, greyed and empty. */
 .memory-panel .skeleton {
@@ -76,25 +76,25 @@
 .memory-panel .seg.machine,
 .memory-panel .cell.machine,
 .memory-panel .swatch.machine {
-  background: var(--amber, #f3b52c);
+  background: var(--meter-machine);
 }
 .memory-panel .cell.machine {
-  box-shadow: 0 0 6px rgba(243, 181, 44, 0.35);
+  box-shadow: 0 0 6px var(--meter-glow);
 }
 .memory-panel .seg.effect,
 .memory-panel .cell.effect,
 .memory-panel .swatch.effect {
-  background: var(--teal, #6fc7d1);
+  background: var(--meter-effect);
 }
 .memory-panel .seg.tool,
 .memory-panel .cell.tool,
 .memory-panel .swatch.tool {
-  background: var(--ok, #74d49d);
+  background: var(--meter-tool);
 }
 .memory-panel .seg.other,
 .memory-panel .cell.other,
 .memory-panel .swatch.other {
-  background: var(--ink-3, #868b94);
+  background: var(--meter-other);
 }
 .memory-panel .legend {
   display: flex;
@@ -103,7 +103,7 @@
   margin: 2px 0 0;
   padding: 0;
   list-style: none;
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
   font-size: 11.5px;
 }
 .memory-panel .legend li {
@@ -125,7 +125,7 @@
   padding: 0;
   list-style: none;
   font-size: 11.5px;
-  color: var(--ink-2, #b3b7be);
+  color: var(--ink-2);
 }
 .memory-panel .mem-mods li {
   display: flex;
@@ -141,5 +141,5 @@
 }
 .memory-panel .mem-mods .amount {
   font-family: var(--font-mono);
-  color: var(--ink-3, #868b94);
+  color: var(--ink-3);
 }

@@ -1,7 +1,8 @@
 """Module roots and module ids: the one place that maps a module id to its directory and a path to its module.
 
-Roots: `modules/`, `tests/fixtures/modules/`, then the os.pathsep-separated `PATCHKIT_MODULES`. A module's id is the
-`id` in its `module.toml`; it need not equal the directory name. Two modules with one id are an error.
+Roots: `modules/`, `runtime/`, `services/`, `tests/fixtures/modules/`, then the os.pathsep-separated `PATCHKIT_MODULES`. A module's id is the
+`id` in its `module.toml`; it need not equal the directory name. Two modules with one id are an error. A `PATCHKIT_MODULES` path inside a repository root is skipped (its modules are
+found through the root).
 """
 
 from __future__ import annotations
@@ -17,15 +18,25 @@ ROOT = Path(__file__).resolve().parents[2]
 # An entry is `out/cache/dko/<module id>/<src12>/<object path>`: ask `object_path`, which asks patchkit for the key of the sources now.
 
 # module roots inside a repository, relative to its root
-REPO_ROOTS = ("modules", "tests/fixtures/modules")
+CORE_ROOTS = ("runtime", "services")
+SHIPPED_ROOTS = ("modules", *CORE_ROOTS)
+REPO_ROOTS = (*SHIPPED_ROOTS, "tests/fixtures/modules")
 
 _cache: dict[tuple[str, ...], dict[str, Path]] = {}
+
+
+def covered(path: Path | str) -> bool:
+    """Whether `path` is a repository module root or inside one: scanning it again would find each of its modules twice."""
+    p = Path(path).resolve()
+    return any(p.is_relative_to((ROOT / r).resolve()) for r in REPO_ROOTS)
 
 
 def roots() -> list[Path]:
     out = [ROOT / r for r in REPO_ROOTS]
     out += [
-        Path(p) for p in os.environ.get("PATCHKIT_MODULES", "").split(os.pathsep) if p
+        Path(p)
+        for p in os.environ.get("PATCHKIT_MODULES", "").split(os.pathsep)
+        if p and not covered(p)
     ]
     return out
 

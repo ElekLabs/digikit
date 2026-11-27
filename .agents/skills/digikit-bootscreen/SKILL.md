@@ -25,7 +25,7 @@ The result is 1 bit per pixel: a pixel is on when its luma is above 128 (thresho
 
 ## Loop
 
-`mise run bootscreen` with no arguments opens a gallery of every example in `modules/tools/bootscreen/examples/` (click a tile to zoom; it updates when files change).
+`mise run bootscreen` with no arguments opens a gallery of every example in `modules/tool/tools/bootscreen/examples/` (click a tile to zoom; it updates when files change).
 
 1. Write the script.
 2. `mise run bootscreen -- sheet x.mjs`. It prints the size against the budget and writes a PNG contact sheet.

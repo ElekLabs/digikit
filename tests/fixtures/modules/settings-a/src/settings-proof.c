@@ -5,6 +5,9 @@
 #include <dk/core/module.h>
 #include <dk/platform/host.h>
 #include <dk/platform/settings.h>
+#ifndef PROOF_VIA_JOB
+#include "workbench_descriptor.h"
+#endif
 #ifndef PROOF_CMD
 #define PROOF_CMD 0x38 /* request; PROOF_CMD + 1 reads the result */
 #endif
@@ -103,6 +106,11 @@ static int32_t init(dk_module_ctx *ctx)
     int32_t r = dk_settings_open(ctx, &settings);
     if (r != DK_OK)
         return r;
+#ifndef PROOF_VIA_JOB
+    r = dk_workbench_register(ctx, dk_workbench_descriptor, sizeof dk_workbench_descriptor);
+    if (r != DK_OK)
+        return r;
+#endif
     init_rc = dk_settings_get(settings, "boot", init_val, VAL);
     return dk_host_register(PROOF_CMD, 2, command);
 }

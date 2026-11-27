@@ -1,7 +1,7 @@
 // One protocol session per target, shared by every page and panel that talks to it (pure; apps/web/tests/session-share.test.ts). Two
 // sessions over the same link are not independent: the emulator's USB capture and a MIDI port give each reply to whichever session polls
 // first, so each would take the other's replies and both would time out. One session per link keeps its requests in one queue, in turn.
-import type { DkSession, DkTransport } from '@digi/dk-session';
+import type { DkSession, DkSessionOptions, DkTransport } from '@digi/dk-session';
 
 /** The key of a target: the emulator, or one MIDI port. */
 export const targetKey = (t: { kind: 'emulator' } | { kind: 'midi'; port: string } | { kind: 'none' }): string =>
@@ -42,19 +42,26 @@ export function createSessions<S extends Cancellable>(make: (key: string) => S):
  */
 export interface SessionHub {
   /** The session of the target, made over `transport` at the first use and the same one for every caller after it. */
-  get(key: string, transport: DkTransport): DkSession;
+  get(key: string, transport: DkTransport, opts?: SessionHubOptions): DkSession;
   drop(key: string): void;
   cancel(key: string): void;
 }
 
-/** A hub that makes each session with `make(transport)` (the apps: `new DkSession(transport, { timeoutMs: 6000 })`). */
-export function createSessionHub(make: (transport: DkTransport) => DkSession): SessionHub {
+/** What the owner of a session asks of it when it is made (the first `get` of a key): `onLink` hears each request's outcome (`DkSessionOptions.onLink`). */
+export interface SessionHubOptions {
+  onLink?: DkSessionOptions['onLink'];
+}
+
+/** A hub that makes each session with `make(transport, opts, key)` (the apps: `new DkSession(transport, { timeoutMs: 6000, ...opts })`). */
+export function createSessionHub(
+  make: (transport: DkTransport, opts: SessionHubOptions, key: string) => DkSession,
+): SessionHub {
   const table = new Map<string, DkSession>();
   return {
-    get(key, transport) {
+    get(key, transport, opts = {}) {
       let s = table.get(key);
       if (!s) {
-        s = make(transport);
+        s = make(transport, opts, key);
         table.set(key, s);
       }
       return s;

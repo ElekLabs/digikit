@@ -3,7 +3,8 @@
    DK_FILES_STORE). For now only the host writes them.
 
    Rules of dk_files_read here: one call at a time, and in `init` only (the read uses the runtime's staging buffer). The buffer you give it is
-   yours: allocate it with dk_alloc and keep it until you no longer need the file. */
+   yours: allocate it with dk_alloc and keep it until you no longer need the file.
+   Errors: E_NOT_FOUND (missing file or a folder), E_SEL_PATH (empty path), E_TOO_BIG (path over 159 bytes, or the file is larger than the buffer). */
 #ifndef DK_DATA_H
 #define DK_DATA_H
 #include <dk/core/module.h>

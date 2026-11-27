@@ -58,12 +58,17 @@ export default function LivePanel(props: LivePanelProps): JSX.Element {
       ? { '--lit': String(light.intensity), '--lit-color': light.color ?? key.led_color ?? defaultLedColor(key.icon) }
       : undefined;
   };
+  const extraColor = (i: number) =>
+    props.panel.leds.extra?.[i - props.panel.leds.x.length * props.panel.leds.y.length]?.color;
   const indicatorLight = (i: number) => {
     const idx = props.panel.leds.idx?.[i];
     if (idx === undefined) return undefined;
     const light = ledLight(leds()[idx] ?? 0);
     return light.on
-      ? { '--lit': String(light.intensity), '--lit-color': light.color ?? props.panel.leds.color ?? WARM_WHITE }
+      ? {
+          '--lit': String(light.intensity),
+          '--lit-color': light.color ?? extraColor(i) ?? props.panel.leds.color ?? WARM_WHITE,
+        }
       : undefined;
   };
   const emit = (code: number, down: boolean) => {

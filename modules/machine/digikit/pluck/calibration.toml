@@ -1,0 +1,7 @@
+# The case of this module in the calibration profile "modules" (devices/calibration/profiles/modules.toml, docs/INSTRUMENTATION.md "Calibration runs").
+schema = "dk.calcase/1"
+id = "pluck"
+module = "digikit/pluck"
+steps = "play-module-machine"
+# a pluck voice sounds for about 2 s and ends by itself, and every key press takes a voice of its own: pressing again every 1.9 s keeps about one voice sounding for the whole window
+args = { machine = "digikit/pluck", retrigger_ms = 1900 }

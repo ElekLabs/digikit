@@ -3,10 +3,16 @@ import path from 'node:path';
 import { repoRoot, type Device } from '@digi/test-support';
 import { parse } from 'smol-toml';
 
-/** The one reader of devices/<profile>.toml and devices/ports/<device>-<firmware>.toml. Only the keys read by the tests are typed. */
+/** The one reader of devices/<profile>.toml and ports/<device>-<firmware>.toml. Only the keys read by the tests are typed. */
 export interface DeviceProfile {
   limits: { fx_slots: number } & Record<string, number>;
   digikit: { id: number; name: string; peek: [number, number][]; dsp_area_bytes: number; sample_path_max: number };
+  /** The kit object and its Sound objects (finding 02, 61): `kit_ptr` holds the pointer to the live kit; track t's Sound object is at kit + `sound_off` + `sound_stride` * t, its parameter array 0x14 into it, `sound_words` halfwords long. `lfo_live`: word 0 of track 1 in the array the LFO tick adds its output to (a row is `sound_words` halfwords); `lfo_phase`: the phase accumulator of LFO 1 of voice slot 0 (finding 149), slot s at `lfo_phase_stride` * s, `lfo_slots` slots; `lfo_frame`: Sound index 25 of voice slot 0 in the DSP transmit frame (the final value of each handler run), slot s at `lfo_frame_stride` * s, `lfo_frame_words` indices from 25. */
+  fx: FxFacts;
+  /** `[ui]`: `brain_ptr`, the Brain pointer global (the port anchor `cf.view.value.brain`). The view stack and boot window facts are read by `@digi/test-support` `bootWindowFacts`. */
+  ui: { brain_ptr: number };
+  /** `[midi]`: `track_channels[n]` is the factory MIDI channel (1-16) of track n+1. */
+  midi?: { track_channels: number[] };
   capabilities: { card: 'path-fs' | 'slots' | 'none' | 'unknown' } & Record<string, string>;
   storage?: { samples?: string };
   card: {
@@ -19,6 +25,38 @@ export interface DeviceProfile {
       settings_sectors?: number;
     };
   };
+}
+
+/** `[fx]`: the kit object and the effect pages (docs/design/digikit-registry.md "Effect pages"). Only the keys the tests read are typed. */
+export interface FxFacts {
+  kit_ptr: number;
+  array_off: number;
+  page_first: number;
+  value_indices: number[];
+  template_percent: number;
+  template_bipolar: number;
+  template_mix: number;
+  store_off: number;
+  store_halfwords: number;
+  mark_index: number;
+  tail_off: number;
+  track_page: number;
+  sound_off: number;
+  sound_stride: number;
+  sound_words: number;
+  send_template: number;
+  send_indices: number[];
+  /** The address of the firmware's second per-code table: a value-class object of 0x44 bytes for each parameter code. */
+  value_classes: number;
+  /** The firmware's kit-library sector ranges (hi exclusive). */
+  kit_areas: [number, number][];
+  lfo_live: number;
+  lfo_phase: number;
+  lfo_phase_stride: number;
+  lfo_slots: number;
+  lfo_frame: number;
+  lfo_frame_stride: number;
+  lfo_frame_words: number;
 }
 
 export interface PortRegion {
@@ -35,12 +73,11 @@ export interface PortFile {
   anchor?: { name: string; addr?: number }[];
 }
 
-const PROFILES: Record<Device, string> = { dt2: 'digitakt-ii', dn2: 'digitone-ii' };
+const PROFILES: Record<Device, string> = { dt2: 'digitakt-ii', dn2: 'digitone-ii', st: 'syntakt' };
 
-const readToml = <T>(...parts: string[]) =>
-  parse(fs.readFileSync(path.join(repoRoot(), 'devices', ...parts), 'utf8')) as T;
+const readToml = <T>(...parts: string[]) => parse(fs.readFileSync(path.join(repoRoot(), ...parts), 'utf8')) as T;
 
-export const deviceProfile = (device: Device) => readToml<DeviceProfile>(`${PROFILES[device]}.toml`);
+export const deviceProfile = (device: Device) => readToml<DeviceProfile>('devices', `${PROFILES[device]}.toml`);
 
 export const portFile = (device: Device, firmware: string) => readToml<PortFile>('ports', `${device}-${firmware}.toml`);
 
@@ -57,6 +94,8 @@ export function cardStore(device: Device) {
     selB: s.end_sector - selection + 1,
     setA,
     setB: setA + settings / 2,
+    /** Sectors of one settings copy. */
+    setCopySectors: settings / 2,
   };
 }
 
@@ -76,13 +115,54 @@ export function expansionRegion(device: Device, firmware: string): [number, numb
   return [region.start, region.end];
 }
 
-/** The address of the DN2 FX send slot bus, from its port anchor. */
-export function slotBusAddress(device: Device, firmware: string): number {
-  const name = 'dsp.fx.value.send.slot_bus';
+/** The address of the port anchor `name` (exactly one must exist). */
+export function portAnchorAddress(device: Device, firmware: string, name: string): number {
   const anchors = (portFile(device, firmware).anchor ?? []).filter((a) => a.name === name);
   if (anchors.length !== 1) throw new Error(`expected exactly one ${name} anchor, found ${anchors.length}`);
   const address = anchors[0]!.addr;
   if (typeof address !== 'number' || !Number.isInteger(address) || address <= 0)
     throw new Error(`${name}: invalid address`);
   return address;
+}
+
+/** The address of the DN2 FX send slot bus, from its port anchor. */
+export const slotBusAddress = (device: Device, firmware: string): number =>
+  portAnchorAddress(device, firmware, 'dsp.fx.value.send.slot_bus');
+
+/** Word of track 1 whose third byte is the machine type; the tracks lie 0x450 apart (finding 02). */
+export const TRACK_OBJ_WORD = 0x4265338c;
+
+/** The firmware's kit-library sector ranges (hi exclusive, `[fx] kit_areas`), which the fixed FX write-safety policies allow; none on a device without `[fx]`. */
+export const kitAreas = (device: Device): [number, number][] => deviceProfile(device).fx?.kit_areas ?? [];
+
+/** The device facts the FX route suites use (sectors, hi exclusive): from the device files and the constants above, one function for every suite that needs them. */
+export interface FxProfile {
+  fx_slots: number;
+  send_slots: number;
+  track_type_word: number;
+  value_classes: number;
+  selection: { copy_a: number; copy_b: number };
+  settings: { copy_a: number; copy_b: number };
+  kit_areas: [number, number][];
+  fx: FxFacts;
+}
+
+export function fxProfile(device: Device): FxProfile {
+  const profile = deviceProfile(device);
+  const store = cardStore(device);
+  return {
+    track_type_word: TRACK_OBJ_WORD,
+    value_classes: profile.fx.value_classes,
+    selection: { copy_a: store.selA, copy_b: store.selB },
+    fx_slots: profile.limits.fx_slots,
+    send_slots: profile.limits.send_slots!,
+    settings: { copy_a: store.setA, copy_b: store.setB },
+    kit_areas: kitAreas(device),
+    fx: profile.fx,
+  };
+}
+
+/** The effect slots of a device (`limits.fx_slots` of its profile). */
+export function slotsFor(device: Device): number {
+  return deviceProfile(device).limits.fx_slots;
 }

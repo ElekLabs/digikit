@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Sample, isNative, prepareUpload } from '@digi/dk-session/dksample';
+import { Sample, isNative, prepareSlot, prepareUpload } from '@digi/dk-session/dksample';
 import { test } from 'vitest';
 import { readBytes } from './support/patchkit-env.ts';
 
@@ -125,4 +125,17 @@ test.skipIf(skip)('prepareUpload: a WAV is converted, a native file and any othe
   assert.deepEqual(n.stored, full);
   assert.deepEqual(same.stored, full);
   assert.equal(p.stored, t);
+});
+
+test.skipIf(skip)('a WAV becomes a slot image: header, mono big-endian samples, refused over the maximum', async () => {
+  const s = await sample();
+  const format = { rate: 48000, channels: 1, bits: 16, byteOrder: 'big' as const, bytesMax: 0x7ffc0 };
+  const p = prepareSlot(s, 'My Kick.wav', wav({ frames: 100 }), format);
+  assert.equal(p.name, 'My Kick');
+  assert.equal(p.bytes.length, 0x40 + 200);
+  assert.equal(Buffer.from(p.bytes.subarray(0, 4)).toString(), 'SAMP');
+  assert.equal(Buffer.from(p.bytes).readUInt32BE(8), 100);
+  assert.throws(() => prepareSlot(s, 'long.wav', wav({ frames: 262113 }), format), /too long for a slot/);
+  assert.throws(() => prepareSlot(s, 'x.bin', Uint8Array.of(1, 2, 3), format), /WAV files only/);
+  assert.doesNotThrow(() => prepareSlot(s, 'st.wav', wav({ ch: 2, frames: 10 }), format));
 });

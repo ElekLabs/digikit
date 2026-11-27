@@ -24,11 +24,13 @@ use std::{
 
 use digi_coupled::{
     AudioOptions, CoupledRuntime as Runtime, STEP_CHUNK,
+    pcm_observer::PcmSource,
     scenario::{self, Action, Scenario},
 };
-use elektron_native_boot::{Snapshot, dsp_patch::DspPatch};
+use elektron_native_boot::Snapshot;
 use emmc_card::{Card, CardIdentity, RandomAccessRead};
 use serde_json::{Value, json};
+use sharc_peer::dsp_patch::DspPatch;
 
 use crate::{
     cardmirror::Mirror,
@@ -45,16 +47,14 @@ use crate::{
 pub const MAX_SYX: usize = 32 * 1024 * 1024;
 /// Guest instructions NO is held when the controller closes the boot modal.
 const NO_HOLD: u64 = 2_000_000;
-/// Guest instructions per emulated second (the ColdFire oracle clock).
-const CF_IPS: f64 = 132_000_000.0;
 /// How far a paced runtime may lag the wall clock before its stretch starts again, in seconds.
 const PACE_SLACK_S: f64 = 0.05;
 
 /// Pacing of a free-running runtime without audio: after `wall_s` seconds of wall clock a runtime that executed `executed` instructions
 /// (`None`: its count went back) is ahead of the clock (`Some(true)`: wait), on time or a little behind (`Some(false)`: step), or
 /// lagging by more than the slack (`None`: start the stretch again).
-fn pace_ahead(wall_s: f64, executed: Option<u64>) -> Option<bool> {
-    let seconds = executed? as f64 / CF_IPS;
+fn pace_ahead(wall_s: f64, executed: Option<u64>, ips: u64) -> Option<bool> {
+    let seconds = executed? as f64 / ips as f64;
     if seconds + PACE_SLACK_S < wall_s {
         None
     } else {
@@ -67,14 +67,8 @@ const BOOT_LIMIT: u64 = 3_000_000_000;
 
 type InitialButtons = Vec<(u8, bool)>;
 
-fn parse_initial_buttons(
-    value: Option<&Value>,
-    start: &str,
-) -> Result<Option<InitialButtons>, RpcError> {
+fn parse_initial_buttons(value: Option<&Value>) -> Result<Option<InitialButtons>, RpcError> {
     let Some(value) = value else { return Ok(None) };
-    if start != "cold" {
-        return Err(RpcError::bad_params("initial_buttons requires start:cold"));
-    }
     let values = value
         .as_array()
         .ok_or_else(|| RpcError::bad_params("initial_buttons must be an array"))?;
@@ -240,7 +234,7 @@ fn apply_overlay_sectors(
 }
 
 /// A digest of an overlay, for the key of a cached cold boot that started from it.
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 fn overlay_digest(sectors: &[emmc_card::CardOverlaySector]) -> Vec<u8> {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
@@ -392,6 +386,8 @@ pub fn load_scenario(spec: &str) -> Result<Scenario, String> {
 
 pub struct Config {
     pub audio: Option<AudioOptions>,
+    /// The desktop analyzer source, when the host supplies one.
+    pub pcm_source: Option<Arc<PcmSource>>,
     /// The ready inputs (DSP image, DSP state, ColdFire snapshot) of other devices than `audio`'s, for a build with
     /// the second generated core: a firmware loaded for one of them boots coupled (audio, DSP, restart) instead of
     /// ColdFire only. Matched by the firmware the inputs were made for (`SOURCE.json`, else `expected_syx`).
@@ -425,6 +421,10 @@ pub struct Config {
     /// The repository root that `firmware.load {runtime: true}` reads the module library and device files from
     /// (default: `$DIGI_REPO_ROOT`, else the working directory's repository; see `runtime_patch::find_root`).
     pub repo_root: Option<PathBuf>,
+    /// The DSP choice the launcher asked for (`--no-dsp`, `--dsp-on`); the loads that do not name one use it (`firmware.load {dsp}`),
+    /// None meaning on. On: coupled DSP audio when its inputs are set, a peer CPU that runs its program. Off: no DSP session, and the
+    /// mailbox responder for a peer CPU. A webview reads it as `status.dsp_flag` and adopts it instead of its own saved choice.
+    pub dsp: Option<bool>,
 }
 
 /// A +Drive folder and what to do with the firmware's changes to its card.
@@ -441,6 +441,7 @@ impl Config {
     pub fn new(audio: Option<AudioOptions>) -> Self {
         Self {
             audio,
+            pcm_source: None,
             audio_alt: Vec::new(),
             scenario: None,
             mode: Mode::Ui,
@@ -453,6 +454,7 @@ impl Config {
             mirror_dir: None,
             device_folders: None,
             repo_root: None,
+            dsp: None,
         }
     }
 }
@@ -519,6 +521,47 @@ fn with_build(mut reply: Value, build: &Option<Value>) -> Value {
 
 /// The modules `dev.reload` swaps without a boot, besides every module that requires `core/ui`.
 const SWAP_DEFAULT: &[&str] = &["core/ui", "core/digikit-menu"];
+
+/// Identity of an image recovered from guest-programmed flash and installed by a soft reset.
+struct FlashBoot {
+    from_epoch: u64,
+    container_sha256: String,
+    syx_sha256: String,
+    runtime_info: Option<Value>,
+}
+
+impl FlashBoot {
+    fn read(
+        flash: &[u8],
+        like: &[u8],
+        from_epoch: u64,
+    ) -> patchkit::error::Result<(Vec<u8>, Self)> {
+        let image = patchkit::flash::image_from_flash(flash, like)?;
+        // This is the container just validated and reconstructed from flash, without the erased tail.
+        let container = patchkit::flash::container_of(&image)?;
+        let boot = Self {
+            from_epoch,
+            container_sha256: firmware::sha256_hex(&container),
+            syx_sha256: firmware::sha256_hex(&image),
+            runtime_info: patch_runtime_info(&image),
+        };
+        Ok((image, boot))
+    }
+
+    fn receipt(&self) -> Value {
+        json!({
+            "from_epoch": self.from_epoch,
+            "container_sha256": self.container_sha256,
+            "syx_sha256": self.syx_sha256,
+        })
+    }
+}
+
+fn patch_runtime_info(image: &[u8]) -> Option<Value> {
+    patchkit::verify::patch_record(image).ok().flatten().map(|record| {
+        json!({"patched": true, "modules": record.modules, "base_sha256": record.base_sha256})
+    })
+}
 
 struct Loaded {
     /// The .syx the DSP audio profile and the device profile belong to, when
@@ -630,6 +673,8 @@ enum JobKind {
 
 struct Job {
     kind: JobKind,
+    /// A ColdFire-only guest flash publishes its receipt when the boot reaches ready.
+    flash_boot: Option<FlashBoot>,
     reply: RpcReply,
     started: Instant,
     wall_limit: Option<f64>,
@@ -699,8 +744,16 @@ struct Actor {
     events: Events,
     on_quit: Option<Box<dyn Fn() + Send>>,
     runtime: Option<Runtime>,
+    pcm_source: Option<Arc<PcmSource>>,
     /// DSP blocks, instructions and idle-skipped instructions the worker had counted when `sharc.profile` started counting.
     sharc_profile_base: (u64, u64, u64),
+    /// `cf.profile` and `sharc.profile` were switched on and not off since: a new runtime (firmware load, restart) starts them again.
+    cf_profile_wanted: bool,
+    sharc_profile_wanted: bool,
+    /// How many times a new runtime re-armed each profile since the last explicit `enable` of that profile: the counters of a
+    /// read restarted that many times, and the reader can tell its recording has a gap.
+    cf_profile_restarts: u64,
+    sharc_profile_restarts: u64,
     /// The session id the webview protocol checks.
     session: u64,
     /// Raised whenever the runtime is replaced, whoever asked.
@@ -753,8 +806,10 @@ struct Actor {
     /// Taken by the first load that mounts a card image.
     startup_card_folder: Option<CardSource>,
     repo_root: Option<PathBuf>,
-    /// What `firmware.load {runtime}` did to the image now running (`status.firmware.runtime`): the patch report, or null.
+    /// The patch report for the image now running (`status.firmware.runtime`), or null.
     runtime_info: Option<Value>,
+    /// The last guest flash that installed the current image. Explicit loads drop the receipt.
+    flash_boot: Option<FlashBoot>,
     /// The ready state `dev.reload` restores before it writes module code (see `rpc_dev_reload`).
     reload: Option<ReloadState>,
     /// The `runtime.maps` answer for the image with this SHA-256 (the apply that makes it takes about a second).
@@ -772,10 +827,16 @@ struct Actor {
     /// `card.reset_overlay` set the saved overlay aside: this session's card writes are not saved or exported at quit. A new
     /// runtime (the reload that follows) clears it.
     overlay_set_aside: bool,
+    /// The DSP choice in force (`Config::dsp`, then the last `firmware.load {dsp}`): false boots ColdFire only, with the responder for a peer CPU.
+    dsp: bool,
+    /// `Config::dsp`, kept for `status.dsp_flag`.
+    dsp_flag: Option<bool>,
     /// Soft resets in a row before the boot got ready (a bound for boot loops).
     boot_resets: u32,
     /// CPU exceptions run the guest's handler (RPC `cpu.exceptions`), for every runtime installed from now on.
     deliver_exceptions: bool,
+    /// The PC probe (RPC `pc.probe.set`), armed in every runtime installed from now on, so it is active from reset.
+    pc_probe: Option<elektron_native_boot::PcProbeSpec>,
     /// The RAM range the model keeps across a soft reset (`keep_ram` of the device profile), as the guest left it, for the cold boot that follows.
     reset_ram: Option<Vec<u8>>,
 }
@@ -795,28 +856,28 @@ fn no_firmware<T>() -> Result<T, RpcError> {
     Err(RpcError::no_firmware())
 }
 
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 fn frames(runtime: &Runtime) -> u64 {
     runtime.frames_sent()
 }
-#[cfg(not(feature = "coupled-audio"))]
+#[cfg(not(feature = "sharc"))]
 fn frames(_runtime: &Runtime) -> u64 {
     0
 }
 
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 fn dsp_halted(runtime: &Runtime) -> Option<String> {
     runtime.dsp_halted()
 }
-#[cfg(not(feature = "coupled-audio"))]
+#[cfg(not(feature = "sharc"))]
 fn dsp_halted(_runtime: &Runtime) -> Option<String> {
     None
 }
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 fn sink_underruns(runtime: &Runtime) -> Option<u64> {
     runtime.sink_underruns()
 }
-#[cfg(not(feature = "coupled-audio"))]
+#[cfg(not(feature = "sharc"))]
 fn sink_underruns(_runtime: &Runtime) -> Option<u64> {
     None
 }
@@ -827,12 +888,17 @@ impl Actor {
             rx,
             audio_default: config.audio.clone(),
             audio_alt: config.audio_alt,
-            audio: config.audio,
+            audio: config.audio.filter(|_| config.dsp != Some(false)),
             run_dir: config.run_dir,
             events: config.events,
             on_quit: config.on_quit,
             runtime: None,
+            pcm_source: config.pcm_source,
             sharc_profile_base: (0, 0, 0),
+            cf_profile_wanted: false,
+            sharc_profile_wanted: false,
+            cf_profile_restarts: 0,
+            sharc_profile_restarts: 0,
             session: 0,
             epoch: 0,
             loaded: None,
@@ -877,6 +943,7 @@ impl Actor {
             startup_card_folder: config.card_folder,
             repo_root: config.repo_root,
             runtime_info: None,
+            flash_boot: None,
             reload: None,
             maps_cache: None,
             quit: false,
@@ -893,7 +960,10 @@ impl Actor {
             overlay_set_aside: false,
             boot_resets: 0,
             deliver_exceptions: false,
+            pc_probe: None,
             reset_ram: None,
+            dsp: config.dsp.unwrap_or(true),
+            dsp_flag: config.dsp,
         }
     }
 
@@ -922,52 +992,69 @@ impl Actor {
     /// guest left it (its writes laid over the image), with coupled DSP audio when available.
     fn soft_reset(&mut self) {
         // The guest rewrote the flash container (the OS upgrade): the bootstrap boots what it wrote, so the emulator does too.
-        let flashed = self.runtime.as_ref().and_then(|r| {
-            (r.flash_writes().programs > 0)
-                .then(|| r.flash_bytes(0x80000, 0x300000).map(<[u8]>::to_vec))
-                .flatten()
-        });
-        if let (Some(flash), Some(loaded)) = (flashed, self.loaded.as_mut()) {
-            match patchkit::flash::image_from_flash(&flash, &loaded.current) {
-                Ok(image) => {
-                    let sha = firmware::sha256_hex(&image);
-                    loaded.current = image;
-                    loaded.current_analysis = None;
-                    self.emit("flash.booted", json!({"sha256": sha}));
+        let installed_flash = self.flash_boot.take();
+        let mut flash_boot = self
+            .job
+            .as_mut()
+            .and_then(|job| job.flash_boot.take())
+            .or(installed_flash);
+        let mut flashed_image = None;
+        if let (Some(runtime), Some(loaded)) = (&self.runtime, &self.loaded) {
+            let writes = runtime.flash_writes();
+            if writes.erases > 0 || writes.programs > 0 {
+                flash_boot = None;
+            }
+            if writes.programs > 0
+                && let Some(flash) = runtime.flash_bytes(0x80000, 0x300000)
+            {
+                match FlashBoot::read(flash, &loaded.current, self.epoch) {
+                    Ok((image, boot)) => {
+                        self.emit("flash.booted", json!({"sha256": boot.syx_sha256}));
+                        flashed_image = Some(image);
+                        flash_boot = Some(boot);
+                    }
+                    Err(e) => self.emit("flash.invalid", json!({"reason": e.to_string()})),
                 }
-                Err(e) => self.emit("flash.invalid", json!({"reason": e.to_string()})),
             }
         }
         // A firmware given on the command line is loaded as stock, without an analysis: make it here.
         let analysed = match self.loaded.as_mut() {
-            Some(loaded) => loaded.find_base().and_then(|()| loaded.ensure_analysis()),
+            Some(loaded) => loaded.find_base().and_then(|()| {
+                if let Some(image) = &flashed_image {
+                    return Analysis::of(image);
+                }
+                loaded.ensure_analysis()?;
+                Ok(loaded
+                    .current_analysis
+                    .clone()
+                    .expect("ensure_analysis made it"))
+            }),
             None => Err("no firmware loaded".into()),
         };
-        if let Err(reason) = analysed {
-            self.reset_overlay = None;
-            self.reset_ram = None;
-            self.emit(
-                "cpu.reset",
-                json!({"restart": "unsupported", "reason": reason}),
-            );
-            self.finish_job(Err(RpcError::new(
-                code::GUEST_FAULT,
-                "boot loop: the restart failed",
-            )));
-            self.mode = Mode::Paused;
-            return;
-        }
+        let new = match analysed {
+            Ok(new) => new,
+            Err(reason) => {
+                self.reset_overlay = None;
+                self.reset_ram = None;
+                self.emit(
+                    "cpu.reset",
+                    json!({"restart": "unsupported", "reason": reason}),
+                );
+                self.finish_job(Err(RpcError::new(
+                    code::GUEST_FAULT,
+                    "boot loop: the restart failed",
+                )));
+                self.mode = Mode::Paused;
+                return;
+            }
+        };
         let loaded = self.loaded.as_ref().expect("checked above");
         let (bytes, card, base_sha, base_bytes) = (
-            loaded.current.clone(),
+            flashed_image.unwrap_or_else(|| loaded.current.clone()),
             loaded.card.clone(),
             loaded.base_sha.clone(),
             loaded.base.clone(),
         );
-        let new = loaded
-            .current_analysis
-            .clone()
-            .expect("ensure_analysis made it");
         self.reset_overlay = self.runtime.as_ref().map(|r| r.card_overlay());
         self.reset_ram = self
             .keep_ram_range()
@@ -991,12 +1078,11 @@ impl Actor {
             reply,
         ) {
             Ok(true) => {
-                // CF boot runs as a controller job and resumes free running. A coupled
-                // worker preserves the caller's mode, including paused RPC boundaries.
-                if matches!(
-                    self.job.as_ref().map(|job| &job.kind),
-                    Some(JobKind::Boot { .. })
-                ) {
+                // A coupled worker preserves the caller's mode. A ColdFire boot job resumes free running.
+                if let Some(job) = &mut self.patch_job {
+                    job.flash_boot = flash_boot;
+                } else if let Some(job) = &mut self.job {
+                    job.flash_boot = flash_boot;
                     self.mode = Mode::Free;
                 }
                 self.emit("cpu.reset", json!({"restart": "cold boot started"}));
@@ -1022,6 +1108,15 @@ impl Actor {
                 self.mode = Mode::Paused;
                 let _ = reply.send(Err(e));
             }
+        }
+    }
+
+    fn install_flash_boot(&mut self, boot: Option<FlashBoot>) {
+        if let (Some(boot), Some(loaded)) = (boot, &self.loaded)
+            && boot.syx_sha256 == firmware::sha256_hex(&loaded.current)
+        {
+            self.runtime_info = boot.runtime_info.clone();
+            self.flash_boot = Some(boot);
         }
     }
 
@@ -1064,8 +1159,8 @@ impl Actor {
             && self.mode == Mode::Free
             && self.job.is_none()
             && self.runtime.as_ref().is_some_and(|r| !r.has_audio());
-        let elapsed = match self.runtime.as_ref() {
-            Some(r) if paced => r.elapsed_instructions(),
+        let (elapsed, ips) = match self.runtime.as_ref() {
+            Some(r) if paced => (r.elapsed_instructions(), r.cf_ips()),
             _ => {
                 self.pace_anchor = None;
                 return false;
@@ -1076,6 +1171,7 @@ impl Actor {
         match pace_ahead(
             now.duration_since(start).as_secs_f64(),
             elapsed.checked_sub(base),
+            ips,
         ) {
             Some(ahead) => ahead,
             // the clock went back (rebased) or the stretch lags: start a new one
@@ -1181,6 +1277,7 @@ impl Actor {
             .map_or(0, Runtime::elapsed_instructions);
         let obs = health::Observation {
             elapsed,
+            instr_per_ms: self.runtime.as_ref().map_or(0, |r| r.cf_ips() / 1000),
             hits: status.mainloop_hits,
             main_ui: status.main_ui_reached,
             cpu_running: status.cpu_state == "running",
@@ -1284,7 +1381,29 @@ impl Actor {
 
     fn install(&mut self, mut runtime: Runtime, error: Option<ReadError>) {
         runtime.set_deliver_exceptions(self.deliver_exceptions);
+        if let Some(spec) = &self.pc_probe {
+            runtime.set_pc_probe(spec);
+        }
+        // DSP off on a device with a second CPU that runs a program: the mailbox responder answers instead (no peer audio, fast UI).
+        if !self.dsp && runtime.has_peer_cpu() {
+            runtime.use_peer_responder();
+        }
+        self.sharc_profile_base = (0, 0, 0);
+        #[cfg(feature = "cf-profile")]
+        if self.cf_profile_wanted {
+            runtime.set_cf_profile(true);
+            self.cf_profile_restarts += 1;
+        }
+        // A runtime without a DSP session answers false: it does not count and does not fail the install.
+        #[cfg(feature = "sharc-profile")]
+        if self.sharc_profile_wanted && runtime.set_sharc_profile(true) {
+            self.sharc_profile_restarts += 1;
+        }
+        if let Some(source) = &self.pcm_source {
+            runtime.observe_pcm_windows(source);
+        }
         self.runtime = Some(runtime);
+        self.flash_boot = None;
         self.overlay_set_aside = false;
         self.read_error = error;
         if std::mem::take(&mut self.want_auto_no) {
@@ -1512,6 +1631,9 @@ impl Actor {
         let Some(image) = image else {
             return false;
         };
+        if let Some(used) = cards::private_card(image) {
+            return used;
+        }
         self.card_folder
             .as_ref()
             .is_some_and(|f| f.sync && f.image == image)
@@ -1523,6 +1645,10 @@ impl Actor {
     fn adopt_card_folder(&mut self, card: Option<&PathBuf>) {
         // A card `default_card` built from the device's folder: that folder is its +Drive folder.
         self.auto_card = None;
+        if card.is_some_and(|image| cards::private_card(image).is_some()) {
+            self.card_folder = None;
+            return;
+        }
         if let Some((image, dir)) = self.next_auto.take()
             && card == Some(&image)
         {
@@ -1665,8 +1791,12 @@ impl Actor {
                 .unwrap_or_else(|| loaded.current.clone()),
             loaded.card.clone(),
         );
+        let image_changed = loaded.current != bytes;
         let synced = self.card_synced(image.as_deref());
         let (runtime, error) = runtime_from(&bytes, image, self.audio.as_ref(), synced)?;
+        if image_changed {
+            self.runtime_info = patch_runtime_info(&bytes);
+        }
         self.session = next_session;
         self.loaded = self.loaded.take().map(|mut l| {
             l.current = bytes;
@@ -1776,6 +1906,10 @@ impl Actor {
         let (Some(runtime), Some(run)) = (self.runtime.as_mut(), self.scenario_run.as_mut()) else {
             return Ok(budget);
         };
+        if run.started.is_none() {
+            // the file's instruction counts are authored at the base rate: scale them to this runtime's
+            run.scenario = run.scenario.clone().at_rate(runtime.cf_ips());
+        }
         let started = *run.started.get_or_insert_with(Instant::now);
         let elapsed = runtime.elapsed_instructions();
         while let Some(event) = run.scenario.events.get(run.next).copied() {
@@ -1919,9 +2053,11 @@ impl Actor {
             JobKind::Boot { cache, limit } => {
                 if runtime.status().ready {
                     self.boot_resets = 0;
+                    // The boot cache is an optimisation. A snapshot does not carry a running second CPU (`save_state`), so a device with
+                    // one boots cold every time; an explicit `state.save` still reports it.
                     let saved = match cache {
-                        Some(path) => save_cache(runtime, path),
-                        None => Ok(None),
+                        Some(path) if runtime.peer_cpu().is_none() => save_cache(runtime, path),
+                        _ => Ok(None),
                     };
                     runtime.rebase_clock();
                     Some(saved.map(|cache| json!({"booted": true, "cache_saved": cache})))
@@ -1959,6 +2095,9 @@ impl Actor {
             error.data = Some(error.data.take().unwrap_or(status));
             error
         });
+        if result.is_ok() {
+            self.install_flash_boot(job.flash_boot);
+        }
         if label == "firmware.load" {
             let ok = result.is_ok();
             self.emit("firmware.loaded", json!({"ok": ok, "seconds": seconds}));
@@ -1995,6 +2134,11 @@ impl Actor {
         }
         let outcome: Result<Option<Value>, RpcError> = match method {
             "status" => self.rpc_status().map(Some),
+            "profile.capabilities" => Ok(Some(json!({
+                "main_pc": cfg!(feature = "cf-profile"),
+                "dsp_pc": cfg!(feature = "sharc-profile"),
+                "dsp_active": self.runtime.as_ref().is_some_and(|r| r.companion_kind().as_str() == "sharc"),
+            }))),
             "run.mode" => self.rpc_run_mode(&p).map(Some),
             "step" => self.rpc_step(&p, &reply),
             "run_until" => self.rpc_run_until(&p, &reply),
@@ -2017,6 +2161,14 @@ impl Actor {
             "guard.report" => self
                 .with_runtime(|r| Ok(serde_json::to_value(r.guard_report()).unwrap_or(Value::Null)))
                 .map(Some),
+            "pc.probe.set" => self.rpc_pc_probe_set(&p).map(Some),
+            "pc.probe.report" => self.with_runtime(|r| Ok(r.pc_probe_report())).map(Some),
+            "pc.probe.clear" => self
+                .with_runtime(|r| {
+                    r.clear_pc_probe();
+                    Ok(json!({"cleared": true}))
+                })
+                .map(Some),
             "guard.clear" => self
                 .with_runtime(|r| {
                     r.clear_guard_hits();
@@ -2028,6 +2180,7 @@ impl Actor {
             "midi.out" | "midi.usb.out" => self.rpc_midi_out(method, &p).map(Some),
             "usb.bulk.in" => self.rpc_bulk_in(&p).map(Some),
             "usb.bulk.out" => self.rpc_bulk_out(&p).map(Some),
+            "usb.ctrl" => self.rpc_usb_ctrl(&p).map(Some),
             "usb.phy" => self.rpc_usb_phy(&p).map(Some),
             "card.export" => self.rpc_card_export(&p).map(Some),
             "watchdog.config" => self.rpc_watchdog(&p).map(Some),
@@ -2040,24 +2193,7 @@ impl Actor {
             "state.save" => self.rpc_state_save(&p).map(Some),
             "state.load" => self.rpc_state_load(&p).map(Some),
             "pcm.tap" => self.rpc_pcm_tap(&p).map(Some),
-            "cf.profile" => self
-                .with_runtime(|r| {
-                    #[cfg(feature = "cf-profile")]
-                    {
-                        let mut v = r.cf_profile();
-                        v["controller_cpu_ns"] = elektron_native_boot::thread_cpu_ns().into();
-                        Ok(v)
-                    }
-                    #[cfg(not(feature = "cf-profile"))]
-                    {
-                        let _ = r;
-                        Err(RpcError::new(
-                            code::METHOD_NOT_FOUND,
-                            "built without cf-profile",
-                        ))
-                    }
-                })
-                .map(Some),
+            "cf.profile" => self.rpc_cf_profile(&p).map(Some),
             "sharc.profile" => self.rpc_sharc_profile(&p).map(Some),
             "dsp.peek" => self.rpc_dsp_peek(&p).map(Some),
             "dsp.peek_word" => self.rpc_dsp_peek_word(&p).map(Some),
@@ -2154,6 +2290,7 @@ impl Actor {
             RpcError::new(code::FIRMWARE_REJECTED, format!("{}: {e}", path.display()))
         })?;
         runtime.resume_watch();
+        self.flash_boot = None;
         self.held_frame = None;
         self.held_leds = None;
         self.epoch += 1;
@@ -2175,6 +2312,7 @@ impl Actor {
         }
         self.job = Some(Job {
             kind,
+            flash_boot: None,
             reply: reply.clone(),
             started: Instant::now(),
             wall_limit,
@@ -2189,6 +2327,7 @@ impl Actor {
             json!({
                 "base_sha256": l.base_sha,
                 "syx_sha256": firmware::sha256_hex(&l.current),
+                "card": l.card,
                 "injected": l.base.as_ref() != Some(&l.current),
                 "runtime": self.runtime_info,
             })
@@ -2197,7 +2336,9 @@ impl Actor {
         let job = if let Some(j) = &self.patch_job {
             // The count restarts at 0 when a soft reset reboots the job, so a client counts any change as progress.
             let (phase, progress) = match j.phase.load(Ordering::Relaxed) {
-                PHASE_DSP => ("starting the DSP", Value::Null),
+                // The phase is only reported with a DSP start; a load without the DSP just boots.
+                PHASE_DSP if self.dsp => ("starting the DSP", Value::Null),
+                PHASE_DSP => ("booting", Value::Null),
                 PHASE_COLDFIRE => (
                     "booting",
                     json!(f64::from_bits(j.fraction.load(Ordering::Relaxed))),
@@ -2223,24 +2364,18 @@ impl Actor {
         };
         let scheduled = self.schedule.len();
         let Some(runtime) = self.runtime.as_mut() else {
-            return Ok(json!({"firmware": null, "job": job}));
+            return Ok(json!({"firmware": null, "job": job, "flash_boot": null}));
         };
         let status = runtime.status();
         let cf = serde_json::to_value(&status).unwrap_or(Value::Null);
         let audio = summarize_audio(runtime);
         let load = poll_load(&mut self.load_meter, &status, &audio);
-        let dsp = if runtime.has_audio() {
-            "sharc"
-        } else if runtime.is_zero() {
-            "zero"
-        } else {
-            "none"
-        };
+        let dsp = runtime.companion_kind().as_str();
         let frame = runtime.current_frame().map(|(revision, _)| revision);
         Ok(json!({
             "controller_cpu_ns": elektron_native_boot::thread_cpu_ns(),
-            "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "job": job,
-            "scheduled_inputs": scheduled, "frame_revision": frame,
+            "firmware": loaded, "cf": cf, "audio": audio, "dsp": dsp, "dsp_enabled": self.dsp, "dsp_flag": self.dsp_flag, "job": job,
+            "scheduled_inputs": scheduled, "frame_revision": frame, "flash_boot": self.flash_boot.as_ref().map(FlashBoot::receipt),
             "heartbeat": {"mainloop_hits": cf["mainloop_hits"], "stalled": self.health.stalled(),
                           "stall_count": self.health.stall_count, "stall_ms": self.health.stall_ms,
                           "underrun_count": self.health.underrun_count,
@@ -2293,7 +2428,7 @@ impl Actor {
     }
 
     /// `runtime.maps {modules_dir?}`: what a host needs to name addresses of the image that runs now: `{image_sha256, matches, ship, symbols}`.
-    /// `ship` is the ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` to their byte
+    /// `ship` is the ship map (docs/ADDRMAP.md) as JSON text; `symbols` maps `DKRT_STATE`, `DKRT_HOST_DIR` and `dyndsp_info` to their byte
     /// addresses, the memory the host reads (`mem.cf.peek`) for the load table. The map is made from the running image's patch record, so
     /// after a `dev.reload` swap the next call answers for the new image. `matches` is false when the image on disk gives other bytes than
     /// the running ones (a hot DSP injection, or an object changed since): the names may be wrong. An image with no patch record is an error.
@@ -2522,6 +2657,15 @@ impl Actor {
     /// The mirror writes to the folder of the loaded device: the user's choice, else `plus_drive/<device>/` (made if missing). A
     /// change of folder starts a new mirror; the caller has flushed the old one to its own folder first.
     fn mirror_select(&mut self) {
+        if self
+            .loaded
+            .as_ref()
+            .and_then(|l| l.card.as_deref())
+            .is_some_and(|image| cards::private_card(image).is_some())
+        {
+            self.mirror = None;
+            return;
+        }
         if !self.mirror_on {
             return;
         }
@@ -2731,6 +2875,11 @@ impl Actor {
             .as_ref()
             .and_then(|l| l.card.clone())
             .ok_or_else(|| RpcError::bad_params("no card is loaded"))?;
+        if cards::private_card(&image).is_some() {
+            return Err(RpcError::bad_params(
+                "use Revert to last save to reset a Workbench session card",
+            ));
+        }
         let overlay = overlay_path(&image);
         let aside = set_aside_overlay(&image)
             .map_err(|e| RpcError::io(format!("could not set {} aside: {e}", overlay.display())))?;
@@ -2748,7 +2897,28 @@ impl Actor {
     /// base image it gives the card the guest sees (`tools/emulator/card_overlay.py`).
     fn rpc_card_overlay(&mut self, p: &Params) -> RpcResult {
         let path = p.str("path")?.to_string();
-        let sectors = self.with_runtime(|r| Ok(r.card_overlay()))?;
+        if let Some(expected) = p.opt_str("card")?
+            && (self.loaded.as_ref().and_then(|l| l.card.as_deref()) != Some(Path::new(expected))
+                || self.reset_pending
+                || self.patch_job.is_some()
+                || self.card_job.is_some()
+                || self.job.is_some())
+        {
+            return Err(RpcError::new(
+                code::STALE_SESSION,
+                "the card is no longer mounted and idle",
+            ));
+        }
+        let require_ready = p.opt_bool("require_ready")?.unwrap_or(false);
+        let (sectors, writes) = self.with_runtime(|r| {
+            if require_ready && !r.status().ready {
+                return Err(RpcError::new(
+                    code::BUSY,
+                    "wait for the emulator to finish booting before saving its card",
+                ));
+            }
+            Ok((r.card_overlay(), r.card_write_count()))
+        })?;
         let mut out = Vec::with_capacity(sectors.len() * (8 + 64 + 512));
         for s in &sectors {
             out.extend_from_slice(&s.sector.to_le_bytes());
@@ -2756,20 +2926,41 @@ impl Actor {
             out.extend_from_slice(&s.data);
         }
         std::fs::write(&path, &out).map_err(|e| RpcError::io(format!("{path}: {e}")))?;
-        Ok(json!({"path": path, "sectors": sectors.len()}))
+        Ok(json!({
+            "path": path, "sectors": sectors.len(), "writes": writes,
+            "base_sha256": self.loaded.as_ref().map(|l| &l.base_sha),
+            "syx_sha256": self.loaded.as_ref().map(|l| firmware::sha256_hex(&l.current)),
+            "dsp_enabled": self.dsp,
+        }))
     }
 
     /// `midi.in {bytes | file, period?}` queues bytes on the MIDI DIN input (UART9), one per `period` instructions
     /// (default 42,240: the 31250 baud wire rate; 0 = as fast as the firmware takes its interrupts).
-    /// `midi.usb.in {bytes | file, chunk?, period?}` hands the bytes to the firmware's USB MIDI receive callback (USB itself is not
+    /// `midi.usb.in {bytes | file, chunk?, period?, epoch?}` hands the bytes to the firmware's USB MIDI receive callback (USB itself is not
     /// modelled; docs/CONTROL.md) in calls of `chunk` bytes (1 to 384, default 64) `period` instructions apart (default 132,000, a
     /// full-speed frame; 16,500 is a high-speed microframe). `bytes` is a hex string (spaces allowed) or an array of numbers.
+    /// When given, `epoch` requires the same idle runtime before any bytes are queued.
     fn rpc_midi_in(&mut self, method: &str, p: &Params) -> RpcResult {
+        let usb = method == "midi.usb.in";
+        if usb && let Some(epoch) = p.opt_u64("epoch")? {
+            if epoch != self.epoch {
+                return Err(RpcError::new(code::STALE_SESSION, "stale emulator epoch"));
+            }
+            if self.reset_pending
+                || self.patch_job.is_some()
+                || self.card_job.is_some()
+                || self.job.is_some()
+            {
+                return Err(RpcError::new(
+                    code::BUSY,
+                    "a job is running; wait for it before sending USB MIDI",
+                ));
+            }
+        }
         let data = bytes_param(p)?;
         let period = p
             .opt_u64("period")?
             .unwrap_or(elektron_native_boot::midi::WIRE_PERIOD);
-        let usb = method == "midi.usb.in";
         let usb_chunk = p.opt_u64("chunk")?.map(|n| n as usize);
         let usb_period = p.opt_u64("period")?;
         let queued = self.with_runtime(|r| {
@@ -2845,6 +3036,37 @@ impl Actor {
         Ok(json!({"bytes": bytes.len(), "hex": hex, "status": status}))
     }
 
+    /// `usb.ctrl {setup, setup_addr, call, send}`: one control request to the firmware's EP0 handling (docs/CONTROL.md). Runs the emulator until the
+    /// setup handler `call` has returned. Result: `sends`, every entry to `send` in order as `{len, bytes}` (hex; empty array if `send` was not entered), and `stalled`.
+    fn rpc_usb_ctrl(&mut self, p: &Params) -> RpcResult {
+        let addr = |key: &str| -> Result<u32, RpcError> {
+            let v = p
+                .opt_u64(key)?
+                .ok_or_else(|| RpcError::bad_params(format!("{key} is required")))?;
+            u32::try_from(v).map_err(|_| RpcError::bad_params(format!("{key} is a 32-bit address")))
+        };
+        let setup = p
+            .opt_str("setup")?
+            .ok_or_else(|| RpcError::bad_params("setup is required"))?;
+        let setup: [u8; 8] = decode_hex(setup)
+            .map_err(RpcError::bad_params)?
+            .try_into()
+            .map_err(|_| RpcError::bad_params("setup is 8 bytes (16 hex digits)"))?;
+        let (setup_addr, call, send) = (addr("setup_addr")?, addr("call")?, addr("send")?);
+        let (sent, stalled) = self.with_runtime(|r| {
+            r.usb_ctrl(setup, setup_addr, call, send)
+                .map_err(RpcError::bad_params)
+        })?;
+        let sends: Vec<_> = sent
+            .iter()
+            .map(|(len, bytes)| {
+                let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+                json!({"len": len, "bytes": hex})
+            })
+            .collect();
+        Ok(json!({"sends": sends, "stalled": stalled}))
+    }
+
     /// `usb.phy {vbus?, run?}`: `vbus` sets VBUS present (OTGSC.BSV, off by default); `run` sets or clears USBCMD.RS as a write (a controller started or stopped by something else). The USB controller's PHY events since the last call, oldest first (`{"w": [reg, value]}` a ULPI viewport write, `{"r": [reg, value]}` a read,
     /// `{"rs": 0 | 1}` a change of USBCMD.RS, `{"rst": 1}` a controller reset), and the PHY register file as hex.
     fn rpc_usb_phy(&mut self, p: &Params) -> RpcResult {
@@ -2884,6 +3106,37 @@ impl Actor {
             Ok(())
         })?;
         Ok(json!({"protect": ranges, "allow_pc": allowed}))
+    }
+
+    /// `pc.probe.set {task_ptr?, keep?, probes: [{pc, label?, words?: [addr], stack?, frame?}]}` or `{file, name?}` (the spec is the
+    /// JSON file, or its member `name`): set the ColdFire PC probe
+    /// (docs/INSTRUMENTATION.md "PC probe"). The spec is kept and armed in every runtime installed later, so a probe set
+    /// before `firmware.load` or `restart` is active from reset; with a runtime loaded it is armed now too, and its hits
+    /// start from zero. Empty `probes` removes it.
+    fn rpc_pc_probe_set(&mut self, p: &Params) -> RpcResult {
+        let from_file = match p.opt_str("file")? {
+            Some(path) => {
+                let text = std::fs::read_to_string(path)
+                    .map_err(|e| RpcError::io(format!("pc.probe.set: {path}: {e}")))?;
+                let mut doc: Value = serde_json::from_str(&text)
+                    .map_err(|e| RpcError::bad_params(format!("pc.probe.set: {path}: {e}")))?;
+                if let Some(name) = p.opt_str("name")? {
+                    doc = doc.get(name).cloned().ok_or_else(|| {
+                        RpcError::bad_params(format!("pc.probe.set: no entry {name} in {path}"))
+                    })?;
+                }
+                Some(doc)
+            }
+            None => None,
+        };
+        let spec = elektron_native_boot::parse_pc_probe_spec(from_file.as_ref().unwrap_or(p.0))
+            .map_err(RpcError::bad_params)?;
+        let count = spec.probes.len();
+        if let Some(r) = self.runtime.as_mut() {
+            r.set_pc_probe(&spec);
+        }
+        self.pc_probe = Some(spec).filter(|s| !s.probes.is_empty());
+        Ok(json!({"probes": count}))
     }
 
     /// `flash.status`: what the guest wrote to the container area of the flash since the boot (the OS upgrade): `{erases, programs, bytes}`.
@@ -3321,7 +3574,7 @@ impl Actor {
     }
 
     fn rpc_pcm_tap(&mut self, p: &Params) -> RpcResult {
-        #[cfg(feature = "coupled-audio")]
+        #[cfg(feature = "sharc")]
         {
             let action = p.opt_str("action")?.unwrap_or("report");
             self.with_runtime(|r| {
@@ -3366,12 +3619,45 @@ impl Actor {
                 }
             })
         }
-        #[cfg(not(feature = "coupled-audio"))]
+        #[cfg(not(feature = "sharc"))]
         {
             let _ = p;
             Err(RpcError::new(
                 code::AUDIO_UNAVAILABLE,
                 "this build has no coupled audio",
+            ))
+        }
+    }
+
+    /// `cf.profile {enable?}`: true starts the ColdFire profile and clears it, false stops and clears, no argument
+    /// reads the counters since the start (like `sharc.profile`).
+    fn rpc_cf_profile(&mut self, p: &Params) -> RpcResult {
+        #[cfg(feature = "cf-profile")]
+        {
+            let enable = p.opt_bool("enable")?;
+            let restarts = self.cf_profile_restarts;
+            // Set before the runtime call: a stop always clears the flag, a start is kept until a runtime arms it.
+            if let Some(on) = enable {
+                self.cf_profile_wanted = on;
+                self.cf_profile_restarts = 0;
+            }
+            self.with_runtime(|r| {
+                if let Some(on) = enable {
+                    r.set_cf_profile(on);
+                    return Ok(json!({"enabled": on}));
+                }
+                let mut v = r.cf_profile();
+                v["controller_cpu_ns"] = elektron_native_boot::thread_cpu_ns().into();
+                v["restarts"] = restarts.into();
+                Ok(v)
+            })
+        }
+        #[cfg(not(feature = "cf-profile"))]
+        {
+            let _ = p;
+            Err(RpcError::new(
+                code::METHOD_NOT_FOUND,
+                "built without cf-profile",
             ))
         }
     }
@@ -3383,6 +3669,11 @@ impl Actor {
         {
             let enable = p.opt_bool("enable")?;
             let started = self.sharc_profile_base;
+            let restarts = self.sharc_profile_restarts;
+            if let Some(on) = enable {
+                self.sharc_profile_wanted = on;
+                self.sharc_profile_restarts = 0;
+            }
             let mut now = None;
             let answer = self.with_runtime(|r| {
                 let unavailable = |m: &str| RpcError::new(code::AUDIO_UNAVAILABLE, m);
@@ -3425,8 +3716,19 @@ impl Actor {
                         .map(|(pc, e)| (pc, e.fast.instructions, e.aot.instructions))
                         .collect(),
                     hist: hist.clone(),
+                    engine: w.tiers.as_ref().map_or_else(Default::default, |t| {
+                        crate::sharc_profile::EngineTiers {
+                            fast: t.fast_insns,
+                            block: t.block_instructions.saturating_sub(t.fast_insns),
+                            interpreted: t.interpreted,
+                            idle_skipped: t.idle_skipped,
+                            traps: t.traps + t.block_traps,
+                        }
+                    }),
                 };
-                Ok(crate::sharc_profile::profile_json(&counts))
+                let mut v = crate::sharc_profile::profile_json(&counts);
+                v["restarts"] = restarts.into();
+                Ok(v)
             })?;
             if let Some(base) = now {
                 self.sharc_profile_base = base;
@@ -3479,7 +3781,7 @@ impl Actor {
     /// Actions apply to the active coupled DSP. Event kind names describe
     /// helper paths, including host peeks; they do not prove guest provenance.
     fn rpc_dsp_ddr_monitor(&mut self, p: &Params) -> RpcResult {
-        use elektron_native_boot::ddr_monitor::{DdrMonitorCommand, DdrMonitorRange};
+        use sharc_peer::ddr_monitor::{DdrMonitorCommand, DdrMonitorRange};
         let command = match p.opt_str("action")?.unwrap_or("status") {
             "status" => DdrMonitorCommand::Status,
             "clear" => DdrMonitorCommand::Clear,
@@ -3558,12 +3860,38 @@ impl Actor {
     ) -> Result<Option<Value>, RpcError> {
         let path = p.str("syx")?;
         let bytes = std::fs::read(path).map_err(|e| RpcError::io(format!("{path}: {e}")))?;
+        if let Some(expected) = p.opt_str("source_sha256")?
+            && firmware::sha256_hex(&bytes) != expected
+        {
+            return Err(RpcError::new(
+                code::FIRMWARE_REJECTED,
+                "the selected firmware differs from the saved session",
+            ));
+        }
         self.firmware_load(p, bytes, reply)
     }
 
     /// `firmware.load`: decide how to get from the running firmware to `bytes`
     /// (see the design's "Firmware injection"), do it, and report.
+    /// Loads firmware. The load reads the DSP choice from `self.dsp`, so a `dsp` parameter is applied first and put back when the
+    /// load fails: a rejected image must not change the choice of the running firmware.
     fn firmware_load(
+        &mut self,
+        p: &Params,
+        bytes: Vec<u8>,
+        reply: &RpcReply,
+    ) -> Result<Option<Value>, RpcError> {
+        let before = self.dsp;
+        let result = self.firmware_load_inner(p, bytes, reply);
+        if result.is_err() {
+            self.dsp = before;
+        } else {
+            self.flash_boot = None;
+        }
+        result
+    }
+
+    fn firmware_load_inner(
         &mut self,
         p: &Params,
         mut bytes: Vec<u8>,
@@ -3588,7 +3916,7 @@ impl Actor {
         if !matches!(start, "auto" | "snapshot" | "cold") {
             return Err(RpcError::bad_params("start is auto, snapshot or cold"));
         }
-        let initial_buttons = parse_initial_buttons(p.get("initial_buttons"), start)?;
+        let initial_buttons = parse_initial_buttons(p.get("initial_buttons"))?;
         let force = p.opt_bool("force")?.unwrap_or(false);
         self.want_auto_no = p.opt_bool("auto_no")?.unwrap_or(false);
         let mut base_param = p.opt_str("base_sha256")?.map(str::to_ascii_lowercase);
@@ -3601,8 +3929,36 @@ impl Actor {
         // `replace`: load as the first firmware (nothing of the running one is reused, and a different device is fine): the webview's
         // Open and Reload. Without it the image is a variant of the running one (injection).
         let replace = p.opt_bool("replace")?.unwrap_or(false);
+        // The image's device decides which of the caller's preferences apply (the UI sends its own unconditionally).
+        let offers = LoadOffers::of(&bytes);
+        let mut dsp_note = None;
+        // `dsp`: the DSP choice of this load and the loads after it (true when the controller started without `--no-dsp`).
+        if let Some(dsp) = p.opt_bool("dsp")? {
+            if !offers.dsp_choice {
+                dsp_note = Some(json!({
+                    "requested": dsp, "in_force": self.dsp, "applied": false,
+                    "reason": "device has no DSP choice",
+                }));
+            } else if dsp != self.dsp && !replace {
+                return Err(RpcError::bad_params(
+                    "dsp changes with replace: true (a load that starts the firmware over)",
+                ));
+            } else {
+                self.dsp = dsp;
+            }
+        }
         let mut stock_base: Option<Vec<u8>> = None;
         let mut runtime_report = None;
+        let runtime_requested = if runtime_requested && !offers.runtime {
+            runtime_report = Some(json!({
+                "patched": false,
+                "skipped": "device has no digikit runtime",
+                "reason": "runtime: skipped (device has no digikit runtime)",
+            }));
+            false
+        } else {
+            runtime_requested
+        };
         if runtime_requested {
             let set = patch_set.unwrap_or("emulator");
             let started = Instant::now();
@@ -3635,6 +3991,13 @@ impl Actor {
             None => None,
         };
         let new = Analysis::of(&bytes).map_err(&rejected)?;
+        if let Some(expected) = p.opt_str("image_sha256")?
+            && new.sha256 != expected
+        {
+            return Err(rejected(
+                "the patched image differs from the saved session".into(),
+            ));
+        }
         if let Some(patch) = &patch
             && let Some(base) = &patch.base_sha256
             && *base != new.sha256
@@ -3652,6 +4015,12 @@ impl Actor {
         });
         if let Some(r) = runtime_report {
             report["runtime"] = r;
+        }
+        if let Some(note) = dsp_note {
+            report["dsp_choice"] = note;
+        }
+        if let Some(error) = offers.registry_error {
+            report["offers_error"] = json!(error);
         }
         // Fields a caller that loads on behalf of another method (`dev.reload`) adds to the report, the cold boot's included.
         if let Some(extra) = p.get("report_extra").and_then(Value::as_object) {
@@ -3680,7 +4049,7 @@ impl Actor {
                     .as_ref()
                     .and_then(|l| l.base_analysis.as_ref())
                     .is_some_and(|a| a.main_sha256() == new.main_sha256());
-            if base == new.sha256 || stock_main || !cfg!(feature = "coupled-audio") {
+            if base == new.sha256 || stock_main || !cfg!(feature = "sharc") {
                 return Err(RpcError::bad_params(
                     "initial_buttons requires a patched coupled cold boot",
                 ));
@@ -3708,7 +4077,11 @@ impl Actor {
         if replace {
             // As `ui_load` always did: forget the running firmware, its card job and its audio setup.
             self.cancel_card();
-            self.audio = self.audio_for_base(base_param.as_deref().unwrap_or(&new.sha256));
+            self.audio = if self.dsp {
+                self.audio_for_base(base_param.as_deref().unwrap_or(&new.sha256))
+            } else {
+                None
+            };
             self.card_last = json!({"state": "idle"});
             self.read_error = None;
             self.runtime = None;
@@ -3743,7 +4116,13 @@ impl Actor {
             let card = card_param
                 .clone()
                 .or_else(|| self.default_card(&bytes, stock_base.as_deref()));
-            if base_sha == new.sha256 {
+            // A generic stock ready snapshot contains its own card overlay
+            // and card-dependent RAM. A private card needs a ready state
+            // built for its own image and checkpoint, even on stock MAIN.
+            let private = card
+                .as_deref()
+                .is_some_and(|image| cards::private_card(image).is_some());
+            if base_sha == new.sha256 && !private {
                 self.load_stock(bytes, card, new, &mut report, start)?
             } else {
                 self.load_patched(
@@ -3766,7 +4145,7 @@ impl Actor {
             let base_sha = loaded.base_sha.clone();
             let changed = running.changed_sections(&new);
             report["sections_changed"] = json!(changed);
-            let main_changed = changed.contains(&firmware::SECTION_MAIN);
+            let main_changed = changed.contains(&new.roles.main);
             report["main_changed"] = main_changed.into();
             if !main_changed && !force {
                 if initial_buttons.is_some() {
@@ -3843,7 +4222,10 @@ impl Actor {
         report: &mut Value,
         start: &str,
     ) -> Result<bool, RpcError> {
-        if start == "cold" {
+        // A firmware with a DSP restores a ready snapshot (it holds the DSP state); one
+        // without a DSP has none and boots cold. The roles come from the registry, or from the stock
+        // base a patch record names, so a patched image answers as its base does.
+        if start == "cold" && new.roles.dsp.is_some() {
             return Err(RpcError::bad_params(
                 "start cold needs a patched MAIN; a stock firmware restores its snapshot",
             ));
@@ -3887,7 +4269,7 @@ impl Actor {
         report: &mut Value,
         start: &str,
     ) -> Result<bool, RpcError> {
-        if start == "cold" {
+        if start == "cold" && new.roles.dsp.is_some() {
             return Err(RpcError::bad_params(
                 "start cold is for a patched MAIN; this MAIN is the base's",
             ));
@@ -3940,7 +4322,8 @@ impl Actor {
     ) -> Result<bool, RpcError> {
         let dsp_changed = running
             .changed_sections(&new)
-            .contains(&firmware::SECTION_DSP);
+            .iter()
+            .any(|id| Some(*id) == new.roles.dsp);
         report["start_used"] = "none".into();
         if dsp_changed {
             let has_audio = self.runtime.as_ref().is_some_and(Runtime::has_audio);
@@ -3966,6 +4349,9 @@ impl Actor {
             report["audio"] = self.runtime.as_ref().is_some_and(Runtime::has_audio).into();
         }
         if let Some(loaded) = self.loaded.as_mut() {
+            if loaded.current != bytes {
+                self.flash_boot = None;
+            }
             loaded.current = bytes;
             loaded.current_analysis = Some(new);
         }
@@ -4228,29 +4614,83 @@ struct PatchJob {
     /// The boot phase: `PHASE_DSP`, `PHASE_COLDFIRE`, or `PHASE_STARTING` before the first callback.
     phase: Arc<AtomicU8>,
     install: PatchInstall,
+    flash_boot: Option<FlashBoot>,
     /// The card writes of a boot that ended in a soft reset (see `digi_coupled::cold::SOFT_RESET`).
     reset_out: Arc<Mutex<Option<Vec<emmc_card::CardOverlaySector>>>>,
     /// The kept RAM range of a boot that ended in a soft reset (see `digi_coupled::cold::KeepRam`).
     keep_out: Arc<Mutex<Option<Vec<u8>>>>,
 }
 
-/// The card file's path, length and mtime, and the SHA-256 of its saved overlay (`overlay.bin`, "-" without one).
-/// `None` when the card file's metadata cannot be read.
+/// The identity of a card for snapshot keys: its content id, its length and the SHA-256 of its saved overlay (`overlay.bin`, "-"
+/// without one). `None` when the card file's metadata cannot be read.
+/// The content id is the text of `card.key` next to the image. The card builder writes it (`tests/regression/runtime/card-cache.ts`):
+/// it is derived from the inputs that make the card, so the same card in two worktrees gives the same key without hashing its bytes.
+/// A card without `card.key` (a desktop card, a custom image) falls back to its path and mtime with a `p:` prefix. Such an entry
+/// never matches in another worktree: it can miss, never restore a wrong state.
 fn card_identity(card: &Path) -> Option<String> {
     use sha2::{Digest, Sha256};
     let meta = std::fs::metadata(card).ok()?;
-    let modified = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_secs());
     let overlay = std::fs::read(overlay_path(card))
         .map_or_else(|_| "-".to_string(), |b| format!("{:x}", Sha256::digest(&b)));
-    Some(format!(
-        "{}:{}:{modified}:{overlay}",
-        card.display(),
-        meta.len()
-    ))
+    let content = match std::fs::read_to_string(card.with_file_name("card.key")) {
+        Ok(id) if !id.trim().is_empty() => format!("k:{}", id.trim()),
+        _ => {
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_secs());
+            format!("p:{}:{modified}", card.display())
+        }
+    };
+    let private = cards::private_card(card).map_or("", |used| {
+        if used {
+            ":session-used"
+        } else {
+            ":session-fresh"
+        }
+    });
+    Some(format!("{content}:{}:{overlay}{private}", meta.len()))
+}
+
+/// A staging dir name inside the snapshot root for the cold boot of `stem`: unique per process and call.
+#[cfg_attr(not(feature = "sharc"), allow(dead_code))]
+fn pair_staging_name(stem: &str) -> String {
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    format!(
+        ".tmp-{stem}-{}-{nanos:x}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+/// Publish the staged ready pair `tmp` as `pair` with one directory rename, so a reader never sees a `.dsp` of one boot with a
+/// `.snap` of another. When `pair` already holds a snapshot, the first writer wins: `tmp` is removed and this gives `Ok(false)`.
+/// A `pair` dir without a snapshot is an incomplete leftover: it is removed and the rename is tried once more.
+/// On an error `tmp` is removed too.
+#[cfg_attr(not(feature = "sharc"), allow(dead_code))]
+fn publish_pair(tmp: &Path, pair: &Path) -> std::io::Result<bool> {
+    let mut retried = false;
+    loop {
+        match std::fs::rename(tmp, pair) {
+            Ok(()) => return Ok(true),
+            Err(_) if pair.join("digi-audio-m5.snap").is_file() => {
+                let _ = std::fs::remove_dir_all(tmp);
+                return Ok(false);
+            }
+            Err(e) if retried => {
+                let _ = std::fs::remove_dir_all(tmp);
+                return Err(e);
+            }
+            Err(_) => {
+                retried = true;
+                let _ = std::fs::remove_dir_all(pair);
+            }
+        }
+    }
 }
 
 /// The file name suffix of a ColdFire-only ready state for `card` (empty without a card): the card file's identity and its saved
@@ -4270,7 +4710,7 @@ fn card_snapshot_key(card: Option<&Path>, relax_fs: bool) -> String {
 /// The file name stem of the ready pair of a (MAIN, DSP inputs, card): the
 /// SHA-256 of the MAIN digest, of the DSP image and selected startup state, and
 /// of the card file's identity and its saved overlay.
-#[cfg(feature = "coupled-audio")]
+#[cfg(feature = "sharc")]
 fn patched_pair_key(
     main_sha: &str,
     image: &Path,
@@ -4317,7 +4757,7 @@ impl Actor {
     /// A patched MAIN with DSP audio. The ColdFire boots from the patched
     /// bytes with its DSP initialized before ColdFire startup. The ready pair
     /// is cached under `<snapshot root>/<MAIN>-<key>/`.
-    #[cfg(feature = "coupled-audio")]
+    #[cfg(feature = "sharc")]
     #[allow(clippy::too_many_arguments)]
     fn load_patched_coupled(
         &mut self,
@@ -4476,7 +4916,20 @@ impl Actor {
                 Err(e) if start != "snapshot" => {
                     // A bad cache: drop it and boot cold.
                     report["cache_note"] = format!("cached pair unusable: {}", e.message).into();
-                    let _ = std::fs::remove_file(&snapshot);
+                    // Rename the pair aside first, then remove it: another lane may have republished
+                    // meanwhile, and a rename never leaves a mixed pair. A missing entry is fine.
+                    let nanos = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_nanos());
+                    let aside = pair.with_file_name(format!(
+                        "{}.bad-{}-{nanos}",
+                        pair.file_name()
+                            .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
+                        std::process::id()
+                    ));
+                    if std::fs::rename(&pair, &aside).is_ok() {
+                        let _ = std::fs::remove_dir_all(&aside);
+                    }
                     return self.load_patched_coupled(
                         bytes,
                         card,
@@ -4498,8 +4951,7 @@ impl Actor {
                 pair.display()
             )));
         }
-        // The pair's presence is its snapshot: drop an old one first.
-        let _ = std::fs::remove_file(&snapshot);
+        // A cold start publishes through staging; an existing pair stays (first writer wins).
         install.report["start_used"] = "cold".into();
         install.report["cache_dir"] = pair.display().to_string().into();
         let cancel = Arc::new(AtomicBool::new(false));
@@ -4516,6 +4968,12 @@ impl Actor {
             card.clone(),
             base_sha.to_string(),
         );
+        // The cold boot writes into a staging dir; one rename publishes the pair (see `publish_pair`).
+        let pair_stem = pair
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        let pair_tmp = self.snapshot_root().join(pair_staging_name(&pair_stem));
+        let (worker_pair, worker_tmp) = (pair.clone(), pair_tmp);
         let synced = self.card_synced(card.as_deref());
         let mut inputs = digi_coupled::cold::ColdInputs {
             initial_buttons: initial_buttons.unwrap_or_default().to_vec(),
@@ -4540,12 +4998,12 @@ impl Actor {
                         let card = card_obj.get_or_insert_with(Card::default);
                         apply_overlay_sectors(card, sectors)?;
                     }
-                    digi_coupled::cold::boot_patched_to_ready(
+                    let booted = digi_coupled::cold::boot_patched_to_ready(
                         &worker_bytes,
                         card_obj,
                         &worker_base,
                         &inputs,
-                        &pair,
+                        &worker_tmp,
                         &worker_cancel,
                         |p| {
                             worker_progress.store(p.icount, Ordering::Relaxed);
@@ -4556,7 +5014,17 @@ impl Actor {
                             };
                             worker_phase.store(phase, Ordering::Relaxed);
                         },
-                    )
+                    );
+                    match booted {
+                        // The boot's own result is reported even when another boot published the same pair first.
+                        Ok(report) => publish_pair(&worker_tmp, &worker_pair)
+                            .map(|_| report)
+                            .map_err(|e| format!("publish {}: {e}", worker_pair.display())),
+                        Err(e) => {
+                            let _ = std::fs::remove_dir_all(&worker_tmp);
+                            Err(e)
+                        }
+                    }
                 });
                 let _ = done_tx.send(result.map(|r| PatchBooted {
                     icount: r.icount,
@@ -4575,13 +5043,14 @@ impl Actor {
             fraction,
             phase,
             install,
+            flash_boot: None,
             reset_out,
             keep_out,
         });
         Ok(CoupledLoad::Started)
     }
 
-    #[cfg(not(feature = "coupled-audio"))]
+    #[cfg(not(feature = "sharc"))]
     #[allow(clippy::too_many_arguments)]
     fn load_patched_coupled(
         &mut self,
@@ -4628,6 +5097,12 @@ impl Actor {
             Some(base) => Some(Analysis::of(base).map_err(&rejected)?),
             None => None,
         };
+        if card
+            .as_deref()
+            .is_some_and(|image| cards::private_card(image).is_some())
+        {
+            self.adopt_card_folder(card.as_ref());
+        }
         self.loaded = Some(Loaded {
             base: base_bytes,
             base_sha,
@@ -4704,7 +5179,10 @@ impl Actor {
                     initial_buttons.as_deref(),
                     &reply,
                 ) {
-                    Ok(CoupledLoad::Started) => return,
+                    Ok(CoupledLoad::Started) => {
+                        self.patch_job.as_mut().expect("started").flash_boot = job.flash_boot;
+                        return;
+                    }
                     _ => {
                         let _ = reply.send(Err(RpcError::new(
                             code::GUEST_FAULT,
@@ -4731,6 +5209,9 @@ impl Actor {
             }
         };
         let installed = result.is_ok();
+        if installed {
+            self.install_flash_boot(job.flash_boot);
+        }
         let cancelled = matches!(&result, Err(e) if e.code == code::CANCELLED);
         self.emit(
             "firmware.loaded",
@@ -4840,7 +5321,7 @@ fn run_card_job(
         return Err("cancelled".into());
     }
     let ready_cached = paths.ready_cached();
-    #[allow(unused_mut)] // assigned only with the coupled-audio feature
+    #[allow(unused_mut)] // assigned only with the sharc feature
     let mut boot_seconds = 0.0;
     let mut ready = None;
     // Zero DSP has no DSP image and no card ready pair: the runtime restores
@@ -4852,7 +5333,7 @@ fn run_card_job(
                 json!({"state": "working", "phase": "restoring", "message": "Restoring the cached ready state", "fraction": 0.95}),
             );
         } else {
-            #[cfg(feature = "coupled-audio")]
+            #[cfg(feature = "sharc")]
             {
                 let image = std::fs::canonicalize(&audio.image)
                     .map_err(|e| format!("DSP image {}: {e}", audio.image.display()))?;
@@ -4896,7 +5377,7 @@ fn run_card_job(
                 )?;
                 boot_seconds = boot_started.elapsed().as_secs_f64();
             }
-            #[cfg(not(feature = "coupled-audio"))]
+            #[cfg(not(feature = "sharc"))]
             {
                 let _ = audio;
                 return Err("this build has no coupled audio to boot the card with".into());
@@ -4961,6 +5442,16 @@ impl Actor {
     }
 
     fn rpc_card_load(&mut self, p: &Params, reply: &RpcReply) -> Result<Option<Value>, RpcError> {
+        if self
+            .loaded
+            .as_ref()
+            .and_then(|l| l.card.as_deref())
+            .is_some_and(|image| cards::private_card(image).is_some())
+        {
+            return Err(RpcError::bad_params(
+                "this session has a private card; close it before loading another card",
+            ));
+        }
         let dir = PathBuf::from(p.str("dir")?);
         let name = p
             .opt_str("name")?
@@ -5159,7 +5650,10 @@ fn save_cache(runtime: &mut Runtime, path: &Path) -> Result<Option<String>, RpcE
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| RpcError::io(format!("{parent:?}: {e}")))?;
     }
-    let partial = path.with_extension("snap.part");
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let partial = path.with_extension(format!("snap.{}.{nanos}.part", std::process::id()));
     std::fs::write(&partial, data).map_err(|e| RpcError::io(format!("{partial:?}: {e}")))?;
     std::fs::rename(&partial, path).map_err(|e| RpcError::io(format!("{path:?}: {e}")))?;
     Ok(Some(path.display().to_string()))
@@ -5202,6 +5696,105 @@ fn summarize_audio(runtime: &mut Runtime) -> Value {
         "source_audio_seconds": report["source_audio_seconds"],
         "dsp_tiers": report["dsp_tiers"], "dsp_core": report["dsp_core"],
     })
+}
+
+/// What the device of a firmware image offers the caller: the preferences of a load (`runtime`, `dsp`) apply only where it does.
+/// An image that cannot be identified offers everything: the load then fails or proceeds on its own checks, as it always did.
+struct LoadOffers {
+    /// `[digikit]` is in the device file: the digikit runtime can be patched in.
+    runtime: bool,
+    /// The device has a DSP (`[capabilities] dsp = "sharc"`) or a peer CPU (`[emulator] peer`): there is something to switch.
+    dsp_choice: bool,
+    /// The device registry did not parse: the offers fall back to everything, and the load report carries this error.
+    registry_error: Option<String>,
+}
+
+impl LoadOffers {
+    fn of(syx: &[u8]) -> Self {
+        let all = Self {
+            runtime: true,
+            dsp_choice: true,
+            registry_error: None,
+        };
+        let Ok(fw) = patchkit::firmware::Firmware::parse(syx) else {
+            return all;
+        };
+        let short = fw.device.short();
+        let Some(id) = patchkit::devdata::identities()
+            .iter()
+            .find(|i| i.short == short)
+        else {
+            return all;
+        };
+        let registry = match plusdrive_format::device_profile::Registry::load() {
+            Ok(registry) => registry,
+            Err(error) => {
+                return Self {
+                    registry_error: Some(format!("device registry: {error}")),
+                    ..all
+                };
+            }
+        };
+        let peer = registry
+            .devices()
+            .iter()
+            .any(|d| d.short == short && d.peer.is_some());
+        Self::from_device(id.runtime_target, &id.capabilities.dsp, peer)
+    }
+
+    fn from_device(runtime_target: bool, dsp: &str, peer: bool) -> Self {
+        Self {
+            runtime: runtime_target,
+            dsp_choice: dsp == "sharc" || peer,
+            registry_error: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod load_offers_tests {
+    use super::*;
+
+    #[test]
+    fn a_device_offers_the_runtime_and_the_dsp_choice_by_its_data() {
+        let full = LoadOffers::from_device(true, "sharc", false);
+        assert!((full.runtime, full.dsp_choice) == (true, true));
+        // a peer CPU is a choice too; without a DSP or a peer there is none, and without [digikit] there is no runtime
+        let peer = LoadOffers::from_device(false, "none", true);
+        assert!((peer.runtime, peer.dsp_choice) == (false, true));
+        let plain = LoadOffers::from_device(false, "none", false);
+        assert!((plain.runtime, plain.dsp_choice) == (false, false));
+    }
+
+    /// Every firmware in `firmware/` is judged by its own device file: the runtime offer follows `[digikit]`, the DSP choice follows
+    /// the DSP or the peer CPU; an image that is no firmware offers everything.
+    #[test]
+    fn real_images_are_judged_by_their_device_file() {
+        let registry = plusdrive_format::device_profile::Registry::load().unwrap();
+        let mut judged = 0;
+        for device in registry.devices() {
+            let id = patchkit::devdata::identities()
+                .iter()
+                .find(|i| i.short == device.short)
+                .unwrap();
+            for file in device.firmwares.iter().filter_map(|f| f.filename.as_ref()) {
+                let Ok(syx) = std::fs::read(format!("../../../firmware/{file}")) else {
+                    continue;
+                };
+                let offers = LoadOffers::of(&syx);
+                assert_eq!(offers.runtime, id.runtime_target, "{file}");
+                assert_eq!(
+                    offers.dsp_choice,
+                    id.capabilities.dsp == "sharc" || device.peer.is_some(),
+                    "{file}"
+                );
+                judged += 1;
+            }
+        }
+        eprintln!("{judged} images judged");
+        let garbage = LoadOffers::of(b"not firmware");
+        assert!(garbage.runtime && garbage.dsp_choice);
+    }
 }
 
 #[cfg(test)]
@@ -5309,7 +5902,114 @@ mod card_key_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[cfg(feature = "coupled-audio")]
+    /// A card file of `len` zero bytes in a new dir under `root`, with `card.key` text `key` when given.
+    fn card_in(root: &std::path::Path, name: &str, key: Option<&str>) -> std::path::PathBuf {
+        let dir = root.join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        let card = dir.join("card.img");
+        std::fs::write(&card, vec![0u8; 512]).unwrap();
+        if let Some(key) = key {
+            std::fs::write(dir.join("card.key"), key).unwrap();
+        }
+        card
+    }
+
+    #[test]
+    fn a_card_with_a_content_id_gives_the_same_key_in_every_worktree() {
+        let root = std::env::temp_dir().join(format!("digi-card-id-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let a = card_in(&root, "lane-a", Some("abc"));
+        let b = card_in(&root, "lane-b", Some("abc\n"));
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&b)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+        let key = |card: &std::path::Path| card_snapshot_key(Some(card), false);
+        assert_eq!(key(&a), key(&b), "same content id, other path and mtime");
+        let other = card_in(&root, "lane-c", Some("abd"));
+        assert_ne!(key(&a), key(&other), "other content id");
+        std::fs::write(overlay_path(&b), b"saved writes").unwrap();
+        assert_ne!(key(&a), key(&b), "other overlay");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_card_without_a_content_id_never_matches_at_another_path() {
+        let root = std::env::temp_dir().join(format!("digi-card-noid-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let a = card_in(&root, "lane-a", None);
+        let b = card_in(&root, "lane-b", None);
+        let key = |card: &std::path::Path| card_snapshot_key(Some(card), false);
+        assert_ne!(key(&a), key(&b));
+        assert_eq!(key(&a), key(&a));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn two_boots_of_one_pair_publish_one_complete_pair() {
+        let root = std::env::temp_dir().join(format!("digi-publish-pair-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let pair = root.join("stem");
+        let staged: Vec<_> = ["one", "two"]
+            .iter()
+            .map(|content| {
+                let tmp = root.join(super::pair_staging_name("stem"));
+                std::fs::create_dir_all(&tmp).unwrap();
+                std::fs::write(tmp.join("digi-audio-m5.snap.dsp"), content).unwrap();
+                std::fs::write(tmp.join("digi-audio-m5.snap"), content).unwrap();
+                tmp
+            })
+            .collect();
+        assert_ne!(staged[0], staged[1]);
+        let wins: Vec<bool> = std::thread::scope(|s| {
+            let handles: Vec<_> = staged
+                .iter()
+                .map(|tmp| {
+                    let pair = &pair;
+                    s.spawn(move || super::publish_pair(tmp, pair).unwrap())
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        assert_eq!(wins.iter().filter(|w| **w).count(), 1, "first writer wins");
+        let snap = std::fs::read(pair.join("digi-audio-m5.snap")).unwrap();
+        assert_eq!(
+            snap,
+            std::fs::read(pair.join("digi-audio-m5.snap.dsp")).unwrap()
+        );
+        let names: Vec<_> = std::fs::read_dir(&root)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["stem"], "no staging dir is left");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_incomplete_pair_dir_is_replaced_by_a_published_one() {
+        let root = std::env::temp_dir().join(format!("digi-publish-stale-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let pair = root.join("stem");
+        std::fs::create_dir_all(&pair).unwrap();
+        std::fs::write(pair.join("digi-audio-m5.snap.dsp"), "old").unwrap();
+        let tmp = root.join(super::pair_staging_name("stem"));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("digi-audio-m5.snap.dsp"), "new").unwrap();
+        std::fs::write(tmp.join("digi-audio-m5.snap"), "new").unwrap();
+        assert!(super::publish_pair(&tmp, &pair).unwrap());
+        assert_eq!(
+            std::fs::read(pair.join("digi-audio-m5.snap")).unwrap(),
+            b"new"
+        );
+        assert!(!tmp.exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[cfg(feature = "sharc")]
     #[test]
     fn the_ready_pair_key_follows_the_saved_overlay() {
         let dir = std::env::temp_dir().join(format!("digi-card-pair-key-{}", std::process::id()));
@@ -5336,20 +6036,21 @@ mod card_key_tests {
 
 #[cfg(test)]
 mod pace_tests {
-    use super::{CF_IPS, pace_ahead};
+    use super::pace_ahead;
 
     #[test]
     fn pacing_waits_when_ahead_steps_when_on_time_and_restarts_when_lagging() {
-        let seconds = |s: f64| Some((s * CF_IPS) as u64);
-        assert_eq!(pace_ahead(1.0, seconds(1.5)), Some(true));
-        assert_eq!(pace_ahead(1.0, seconds(1.0)), Some(false));
-        assert_eq!(pace_ahead(1.0, seconds(0.97)), Some(false));
-        assert_eq!(pace_ahead(1.0, seconds(0.5)), None);
-        assert_eq!(pace_ahead(1.0, None), None);
+        let ips = 189_928_000;
+        let seconds = |s: f64| Some((s * ips as f64) as u64);
+        assert_eq!(pace_ahead(1.0, seconds(1.5), ips), Some(true));
+        assert_eq!(pace_ahead(1.0, seconds(1.0), ips), Some(false));
+        assert_eq!(pace_ahead(1.0, seconds(0.97), ips), Some(false));
+        assert_eq!(pace_ahead(1.0, seconds(0.5), ips), None);
+        assert_eq!(pace_ahead(1.0, None, ips), None);
     }
 }
 
-#[cfg(all(test, feature = "coupled-audio"))]
+#[cfg(all(test, feature = "sharc"))]
 mod tests {
     use super::patched_pair_key;
 
@@ -5439,27 +6140,24 @@ mod initial_button_tests {
     use super::*;
 
     #[test]
-    fn initial_button_params_are_bounded_typed_and_cold_only() {
-        assert_eq!(parse_initial_buttons(None, "auto").unwrap(), None);
+    fn initial_button_params_are_bounded_and_typed() {
+        assert_eq!(parse_initial_buttons(None).unwrap(), None);
         assert_eq!(
-            parse_initial_buttons(Some(&json!([])), "cold").unwrap(),
+            parse_initial_buttons(Some(&json!([]))).unwrap(),
             Some(vec![])
         );
         let input = json!([{"code":21,"down":true},{"code":21,"down":false}]);
         assert_eq!(
-            parse_initial_buttons(Some(&input), "cold").unwrap(),
+            parse_initial_buttons(Some(&input)).unwrap(),
             Some(vec![(21, true), (21, false)])
         );
-        for start in ["auto", "snapshot"] {
-            assert!(parse_initial_buttons(Some(&input), start).is_err());
-        }
         for input in [
             json!({}),
             json!([{"code":256,"down":true}]),
             json!([{"code":21,"down":1}]),
             json!([{"code":21}]),
         ] {
-            assert!(parse_initial_buttons(Some(&input), "cold").is_err());
+            assert!(parse_initial_buttons(Some(&input)).is_err());
         }
         let max = json!(
             (0..32)
@@ -5467,10 +6165,7 @@ mod initial_button_tests {
                 .collect::<Vec<_>>()
         );
         assert_eq!(
-            parse_initial_buttons(Some(&max), "cold")
-                .unwrap()
-                .unwrap()
-                .len(),
+            parse_initial_buttons(Some(&max)).unwrap().unwrap().len(),
             32
         );
         let too_many = json!(
@@ -5478,7 +6173,7 @@ mod initial_button_tests {
                 .map(|i| json!({"code":21,"down":i%2==0}))
                 .collect::<Vec<_>>()
         );
-        assert!(parse_initial_buttons(Some(&too_many), "cold").is_err());
+        assert!(parse_initial_buttons(Some(&too_many)).is_err());
     }
 
     #[test]
@@ -5511,6 +6206,107 @@ mod initial_button_tests {
 #[cfg(test)]
 mod reset_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires DT2 1.17 and DN2 1.12 firmware"]
+    fn guest_flash_receipt_identifies_the_sealed_container_and_its_boot_image() {
+        let firmware_dir = std::env::var_os("DIGI_FIRMWARE_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../firmware"));
+        for filename in ["Digitakt_II_OS1.17.syx", "Digitone_II_OS1.12.syx"] {
+            let stock = std::fs::read(firmware_dir.join(filename)).unwrap();
+            let mut flash = patchkit::flash::container_of(&stock).unwrap();
+            let container_sha256 = firmware::sha256_hex(&flash);
+            flash.extend(std::iter::repeat_n(0xff, 0x10000));
+            let (image, boot) = FlashBoot::read(&flash, &stock, 13).unwrap();
+            assert_eq!(image, stock);
+            assert_eq!(
+                boot.runtime_info, None,
+                "stock restores clear the patch report"
+            );
+            assert_eq!(
+                boot.receipt(),
+                json!({
+                    "from_epoch": 13,
+                    "container_sha256": container_sha256,
+                    "syx_sha256": firmware::sha256_hex(&stock),
+                })
+            );
+            flash[0x400] ^= 1;
+            assert!(FlashBoot::read(&flash, &stock, 14).is_err());
+        }
+    }
+
+    #[test]
+    fn cold_fire_publishes_a_guest_flash_receipt_only_after_a_successful_boot() {
+        let (_commands, rx) = mpsc::channel();
+        let mut controller = Actor::new(rx, Config::new(None));
+        controller.runtime_info = Some(json!({"patched": true}));
+        let (reply, _result) = mpsc::channel();
+        let flashed = b"flashed image";
+        for (image, result, publishes) in [
+            (
+                flashed.as_slice(),
+                Err(RpcError::new(code::GUEST_FAULT, "boot failed")),
+                false,
+            ),
+            (b"replacement image", Ok(json!({"booted": true})), false),
+            (flashed, Ok(json!({"booted": true})), true),
+        ] {
+            controller.loaded = Some(Loaded::stock(image.to_vec(), None));
+            controller
+                .start_job(
+                    JobKind::Boot {
+                        cache: None,
+                        limit: BOOT_LIMIT,
+                    },
+                    &reply,
+                    None,
+                    json!({}),
+                    "firmware.load",
+                )
+                .unwrap();
+            controller.job.as_mut().unwrap().flash_boot = Some(FlashBoot {
+                from_epoch: 7,
+                container_sha256: "a".repeat(64),
+                syx_sha256: firmware::sha256_hex(flashed),
+                runtime_info: None,
+            });
+            assert!(controller.flash_boot.is_none());
+            controller.finish_job(result);
+            assert_eq!(controller.flash_boot.is_some(), publishes);
+            assert_eq!(controller.runtime_info.is_none(), publishes);
+        }
+    }
+
+    #[test]
+    fn usb_midi_with_an_epoch_requires_the_same_idle_runtime() {
+        let (_commands, rx) = mpsc::channel();
+        let mut controller = Actor::new(rx, Config::new(None));
+        controller.epoch = 4;
+        let current = json!({"epoch": 4, "bytes": "f0f7"});
+        let stale = json!({"epoch": 3, "bytes": "f0f7"});
+        let unscoped = json!({"bytes": "f0f7"});
+        let (reply, _result) = mpsc::channel();
+        controller
+            .start_job(JobKind::Steps { end: 1 }, &reply, None, json!({}), "step")
+            .unwrap();
+
+        for (method, params, expected) in [
+            ("midi.usb.in", &stale, code::STALE_SESSION),
+            ("midi.usb.in", &current, code::BUSY),
+            ("midi.usb.in", &unscoped, code::NO_FIRMWARE),
+            ("midi.in", &stale, code::NO_FIRMWARE),
+        ] {
+            let error = controller.rpc_midi_in(method, &Params(params)).unwrap_err();
+            assert_eq!(error.code, expected);
+        }
+        controller.job = None;
+        let error = controller
+            .rpc_midi_in("midi.usb.in", &Params(&current))
+            .unwrap_err();
+        assert_eq!(error.code, code::NO_FIRMWARE);
+    }
 
     #[test]
     fn job_cancel_ends_a_stepping_job_with_cancelled() {
@@ -5770,6 +6566,20 @@ mod mem_write_tests {
 #[cfg(test)]
 mod framebuffer_tests {
     use super::*;
+
+    #[test]
+    fn a_rejected_load_keeps_the_dsp_choice() {
+        let (_commands, rx) = mpsc::channel();
+        let mut actor = Actor::new(rx, Config::new(None));
+        let (reply, _answers) = mpsc::channel();
+        let before = actor.dsp;
+        let params = json!({"replace": true, "dsp": !before});
+        let e = actor
+            .firmware_load(&Params(&params), b"not firmware".to_vec(), &reply)
+            .unwrap_err();
+        assert_eq!(e.code, code::FIRMWARE_REJECTED);
+        assert_eq!(actor.dsp, before);
+    }
 
     #[test]
     fn source_is_validated_before_runtime_access_with_current_as_default() {

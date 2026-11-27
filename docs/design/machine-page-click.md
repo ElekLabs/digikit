@@ -33,7 +33,7 @@ void shot_smp_click(uint32_t track)                       // global, not static
  key event / turn event of the machine page
         |  hook at the entry of the page's vfunc_2 and vfunc_17 (both devices), then the stock handler runs unchanged
         v
- dkrt_page_key / dkrt_page_turn          (modules/core/runtime/src/rs/src/services/machines/pageclick.rs; one test of ARMED when no action exists)
+ dkrt_page_key / dkrt_page_turn          (services/machines/src/slots/, over the wrappers in handlers.rs; one test of ARMED when no action exists)
         |  Detector: press of encoder e -> pending; a turn -> turned; release of e, same view, no turn -> click(e)
         v
  code = view.vtable[47](view, e)         the page's own encoder -> parameter code (what the stock list opener calls)
@@ -62,7 +62,7 @@ void shot_smp_click(uint32_t track)                       // global, not static
 | release (0x10) of 0x29 + e, no chord | click(e) if pending == e, same view, not turned; pending cleared |
 | release of another encoder, or on another view | no click; pending cleared |
 
-Host tests: `modules/core/runtime/src/rs/src/services/machines/pageclick.rs` (`tests`); packer side: `desc.rs`, `register.rs`, `dkm.rs`, `typed.rs` (unit tests) and `packages/dkneeds`.
+Host tests: `services/machines/src/slots/tests.rs`; packer side: `desc.rs`, `register.rs`, `dkm.rs`, `typed.rs` (unit tests) and `packages/dkneeds`.
 
 ## Static answers (what the hooks rely on)
 
@@ -76,7 +76,7 @@ Host tests: `modules/core/runtime/src/rs/src/services/machines/pageclick.rs` (`t
 | entry (8 bytes, displaced by the hook) | `link.w a6,#-0x34; movem.l ...` | `lea (-0x24|-0x30,sp),sp; movem.l ...` |
 | arguments at entry | 4(sp) = view, 8(sp) = event | the same |
 | track getter | `FUN_4004abb8(view[0x1d])` = 0x4004abb8 | `FUN_40046bfe(view[0x1d])` = 0x40046bfe (same body) |
-| anchors | `cf.page.fn.source_key`, `cf.page.fn.source_turn`, `cf.page.fn.view_track`; hooks `cf.page.hook.source_key`, `cf.page.hook.source_turn` (`devices/fw/page.toml`) | |
+| anchors | `cf.page.fn.source_key`, `cf.page.fn.source_turn`, `cf.page.fn.view_track`; hooks `cf.page.hook.source_key`, `cf.page.hook.source_turn` (`ports/fw/page.toml`) | |
 
 - Key event record: key code at +0xc (`FUN_40114984` on DT2, `FUN_401162f8` on DN2), flags at +0x10: 0x01 press (`FUN_401149dc`, `FUN_40116350`), 0x02 chord, 0x08 repeat (`FUN_401149e8`, `FUN_4011635c`), 0x10 release (`FUN_401149ac`). Encoder click keys are codes 0x29 to 0x30 (the DT2 handler computes `code - 0x29` and calls vtable +0xbc with it) **[D]**.
 - Turn event: `FUN_40111a12(ev, -3)` (DT2) and `FUN_40113386(ev, -3)` (DN2) test `event[3] - 1 <= 7`; the encoder is `event[3] - 1` (`FUN_40111a3a`, `FUN_401133ae`) **[D]**.

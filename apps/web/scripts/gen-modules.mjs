@@ -1,5 +1,5 @@
 // Build step of the patch gallery: writes public/modules/bundle.json (what patchkit.wasm reads: ports + modules as
-// texts) from the COMMITTED devices/ports/, modules/ and tests/fixtures/modules/. Never reads out/modules (generated oracles hold firmware
+// texts) from the committed ports and module roots. Never reads out/modules (generated oracles hold firmware
 // words). The bundle equals `tools/patchkit/patchkit.py bundle` (the node test compares them).
 //
 // The objects of content modules (every module but category "core") are build output, not committed: `patchkit build` (the Rust CLI, run through cargo) makes them
@@ -10,16 +10,20 @@
 //
 // The objects of `core/*` modules are committed in the module and are only read here, never rebuilt. The browser never builds: patchkit.wasm packs from the bundle.
 //
-//   node scripts/gen-modules.mjs [--out DIR]
+//   node scripts/gen-modules.mjs [--out DIR] [--workbench-preview [--real-packs]]
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync, statSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname, resolve, sep, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parse } from 'smol-toml';
-import { isShipped, shippedDevices } from '../src/data/shipped.mjs';
+import { isShipped, shippedDevices, SHIPPED_KINDS } from '../src/data/shipped.mjs';
+import { SITE_DEVICES } from '../src/data/site-devices.mjs';
+import { loadDevices } from '@digi/devices/node';
 
 const here = dirname(fileURLToPath(import.meta.url));
+// The devices the site ships modules for: the runtime devices that the site offers (src/data/site-devices.mjs). A module whose targets are all outside the list is not shipped or listed.
+const deviceIds = loadDevices().runtimeIds.filter((d) => SITE_DEVICES.includes(d));
 export const repoRoot = resolve(here, '../../..');
 
 const walk = (dir, name, out = []) => {
@@ -98,20 +102,36 @@ const objectText = (dir, d, o, stored) =>
     'utf8',
   );
 
-/** `{bundle}` from the committed tree under `root` plus the built objects of the content modules. */
-export function buildModuleData(root = repoRoot) {
-  const ports = readdirSync(join(root, 'devices', 'ports'))
-    .filter((f) => f.endsWith('.toml'))
+/** The device ids that a module is for: the prefixes of its `ports` and `[targets]`; empty: every device. */
+const moduleDevices = (d) => [...(d.module.ports ?? []), ...Object.keys(d.targets ?? {})].map((p) => p.split('-')[0]);
+
+/**
+ * `{bundle}` from the committed tree under `root` plus the built objects of the content modules. `offered`: only the ports of these devices go in, and the modules
+ * that are for other devices only (the site passes its list: the browser patches only what the site offers; the device files stay whole, they identify a user's firmware).
+ * Omitted: everything (the Python bundle's content, which a test compares).
+ * @param {string} [root]
+ * @param {readonly string[]} [offered]
+ */
+export function buildModuleData(root = repoRoot, offered = undefined, { firmwareOnly = false } = {}) {
+  const ports = readdirSync(join(root, 'ports'))
+    .filter((f) => f.endsWith('.toml') && (!offered || offered.includes(f.split('-')[0])))
     .sort()
-    .map((f) => readFileSync(join(root, 'devices', 'ports', f), 'utf8'));
+    .map((f) => readFileSync(join(root, 'ports', f), 'utf8'));
   // the module roots in the order of tools/patchkit/modroots.py REPO_ROOTS; the tests use the fixtures
   // The published site leaves out the test fixtures: only the site's tests use them, and some need the Rust toolchain for ColdFire.
-  const roots = process.env.DIGI_SITE_NO_FIXTURES ? ['modules'] : ['modules', join('tests', 'fixtures', 'modules')];
+  const roots = ['modules', 'runtime', 'services'];
+  if (!firmwareOnly && !process.env.DIGI_SITE_NO_FIXTURES) roots.push('tests/fixtures/modules');
   const manifests = roots.flatMap((r) => walk(join(root, r), 'module.toml').sort(byParts));
-  const parsed = manifests.map((file) => {
-    const text = readFileSync(file, 'utf8');
-    return { dir: dirname(file), text, d: parse(text) };
-  });
+  const parsed = manifests
+    .map((file) => {
+      const text = readFileSync(file, 'utf8');
+      return { dir: dirname(file), text, d: parse(text) };
+    })
+    .filter(({ d }) => {
+      if (firmwareOnly && d.module.category !== 'core') return false;
+      const mine = moduleDevices(d);
+      return !offered || mine.length === 0 || mine.some((x) => offered.includes(x));
+    });
   const built = (d) => d.module.category !== 'core' && (d.object ?? []).some((o) => (o.sources ?? []).length > 0);
   const builtDirs = parsed.filter((m) => built(m.d)).map((m) => m.dir);
   buildObjects(builtDirs, root);
@@ -184,29 +204,38 @@ function packAll(root, ids, device, to) {
 }
 
 /** Write the shipped modules under `out`: <dev>/<leaf>.dkm, index.json and src/<id>/**. Returns the index. */
-export function shipModules(out, root = repoRoot) {
+export function shipModules(out, root = repoRoot, extraModules = new Set(), { simulated = false } = {}) {
   const scratch = join(root, 'out', 'cache', 'site-pack');
-  for (const sub of ['dt2', 'dn2', 'src']) rmSync(join(out, sub), { recursive: true, force: true });
+  for (const sub of [...loadDevices().runtimeIds, 'src']) rmSync(join(out, sub), { recursive: true, force: true });
   const modules = [];
-  const manifests = ['machines', 'fx', 'tools'].flatMap((r) =>
-    walk(join(root, 'modules', r), 'module.toml').sort(byParts),
-  );
+  const manifests = SHIPPED_KINDS.flatMap((r) => walk(join(root, 'modules', r), 'module.toml').sort(byParts));
   const shipped = [];
   const idsByDevice = {};
   for (const file of manifests) {
     const dir = dirname(file);
     const d = parse(readFileSync(file, 'utf8'));
-    if (!isShipped(d, relative(root, dir).split(sep).join('/'))) continue;
+    if (!extraModules.has(d.module.id) && !isShipped(d, relative(root, dir).split(sep).join('/'))) continue;
     shipped.push({ dir, d });
-    for (const dev of shippedDevices(d)) (idsByDevice[dev] ??= []).push(d.module.id);
+    for (const dev of shippedDevices(d, deviceIds)) (idsByDevice[dev] ??= []).push(d.module.id);
   }
   const packed = {};
-  for (const [dev, ids] of Object.entries(idsByDevice)) packed[dev] = packAll(root, ids, dev, join(scratch, dev));
+  if (!simulated)
+    for (const [dev, ids] of Object.entries(idsByDevice)) packed[dev] = packAll(root, ids, dev, join(scratch, dev));
   for (const { dir, d } of shipped) {
     const m = d.module;
     const leaf = m.id.split('/').pop();
     const devices = {};
-    for (const dev of shippedDevices(d)) {
+    for (const dev of shippedDevices(d, deviceIds)) {
+      if (simulated) {
+        const group = d.machine?.length ? 'machine' : d.fx?.length ? 'fx' : 'tool';
+        const keys = (d[group] ?? []).map((entry) => entry.id);
+        devices[dev] = {
+          file: `${dev}/${leaf}.dkm`,
+          size: 4096,
+          fixture: { group, keys, uses: d.uses?.[dev] ?? {}, extraServices: d.workbench_preview?.extra_services ?? [] },
+        };
+        continue;
+      }
       const bytes = packed[dev][m.id];
       if (!bytes) continue; // skipped by the packer (patch-only)
       mkdirSync(join(out, dev), { recursive: true });
@@ -214,7 +243,7 @@ export function shipModules(out, root = repoRoot) {
       devices[dev] = { file: `${dev}/${leaf}.dkm`, size: bytes.length, sha256: sha256(bytes) };
     }
     if (!Object.keys(devices).length) continue;
-    const files = sourceFiles(dir);
+    const files = simulated ? [] : sourceFiles(dir);
     for (const f of files) {
       const bytes = readFileSync(join(dir, f));
       if (bytes.length > SOURCE_MAX) throw new Error(`${m.id}/${f} is too large to show (${bytes.length} bytes)`);
@@ -232,7 +261,48 @@ export function shipModules(out, root = repoRoot) {
       source: files,
     });
   }
-  const index = { modules };
+  // the .dks services as built (packed here, no firmware in them) and the port files of the firmware versions the repository has a port for: Transfer uploads a service
+  // as it is, with the port file whose FW item equals the device's fw_id. The build fails when either is missing: a site without them installs no service.
+  const services = {};
+  const serviceManifests = walk(join(root, 'services'), 'module.toml')
+    .sort(byParts)
+    .map((file) => parse(readFileSync(file, 'utf8')))
+    .filter((d) => d.module.role === 'service');
+  for (const dev of deviceIds) {
+    const ids = serviceManifests
+      .filter((d) => Object.keys(d.targets ?? {}).some((t) => t.startsWith(`${dev}-`)))
+      .map((d) => d.module.id);
+    if (!ids.length) continue;
+    const packed = packAll(root, ids, dev, join(scratch, `${dev}-services`));
+    for (const id of ids) {
+      const bytes = packed[id];
+      if (!bytes)
+        throw new Error(`the service ${id} did not pack for ${dev}: the site would ship no ${id.split('/').pop()}.dks`);
+      const name = `${id.split('/').pop()}.dks`;
+      mkdirSync(join(out, dev), { recursive: true });
+      writeFileSync(join(out, dev, name), bytes);
+      (services[dev] ??= []).push({ file: `${dev}/${name}`, size: bytes.length, sha256: sha256(bytes) });
+    }
+  }
+  const ports = {};
+  const portsDir = join(scratch, 'ports');
+  rmSync(portsDir, { recursive: true, force: true });
+  mkdirSync(portsDir, { recursive: true });
+  patchkit(['port', 'build', '--all', '--out', portsDir], { root });
+  for (const name of readdirSync(portsDir)
+    .filter((f) => f.endsWith('.dkport'))
+    .sort()) {
+    const dev = deviceIds.find((d) => name.startsWith(`${d}-`));
+    if (!dev) continue;
+    const bytes = readFileSync(join(portsDir, name));
+    mkdirSync(join(out, dev), { recursive: true });
+    writeFileSync(join(out, dev, name), bytes);
+    (ports[dev] ??= []).push({ file: `${dev}/${name}`, size: bytes.length, sha256: sha256(bytes) });
+  }
+  for (const dev of Object.keys(services))
+    if (!ports[dev]?.length)
+      throw new Error(`no port file was built for ${dev}: the site would ship services that no firmware can use`);
+  const index = { modules, services, ports };
   writeFileSync(join(out, 'index.json'), JSON.stringify(index, null, 1));
   return index;
 }
@@ -255,13 +325,11 @@ const MODULE_FILES_TS = join(
  */
 export function moduleFilesSource(root = repoRoot) {
   const entries = [];
-  const manifests = ['machines', 'fx', 'tools'].flatMap((r) =>
-    walk(join(root, 'modules', r), 'module.toml').sort(byParts),
-  );
+  const manifests = SHIPPED_KINDS.flatMap((r) => walk(join(root, 'modules', r), 'module.toml').sort(byParts));
   for (const file of manifests) {
     const d = parse(readFileSync(file, 'utf8'));
     if (!d.files) continue;
-    const spec = { label: d.files.label, ext: d.files.ext, preview: d.files.preview };
+    const spec = { name: d.module.name, label: d.files.label, ext: d.files.ext, preview: d.files.preview };
     entries.push(`  ${JSON.stringify(d.module.id)}: ${JSON.stringify(spec)},`);
   }
   return [
@@ -289,13 +357,24 @@ if (
   }
   console.log('module-files.generated.ts is current');
 } else if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  writeFileSync(MODULE_FILES_TS, moduleFilesSource());
+  const preview = process.argv.includes('--workbench-preview');
+  if (!preview) writeFileSync(MODULE_FILES_TS, moduleFilesSource());
   const i = process.argv.indexOf('--out');
-  const out = i > 0 ? resolve(process.argv[i + 1]) : join(here, '..', 'public', 'modules');
-  const { bundle } = buildModuleData();
+  const out = preview
+    ? join(repoRoot, 'dist', 'workbench-preview')
+    : i > 0
+      ? resolve(process.argv[i + 1])
+      : join(here, '..', 'public', 'modules');
+  const simulated = preview && !process.argv.includes('--real-packs');
+  const { bundle } = simulated
+    ? buildModuleData(repoRoot, SITE_DEVICES, { firmwareOnly: true })
+    : buildModuleData(repoRoot, SITE_DEVICES);
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'bundle.json'), JSON.stringify(bundle));
-  const index = shipModules(out);
+  const devices = loadDevices();
+  // The desktop installs these after a boot, including tools excluded from the public site.
+  const defaults = preview ? new Set(deviceIds.flatMap((id) => devices.get(id).defaultModules)) : undefined;
+  const index = shipModules(out, repoRoot, defaults, { simulated });
   console.log(`shipped: ${index.modules.map((m) => `${m.id} (${Object.keys(m.devices).join(',')})`).join(', ')}`);
   console.log(
     `modules: ${bundle.modules.length} modules, ${bundle.ports.length} ports, bundle ${statSync(join(out, 'bundle.json')).size} bytes`,

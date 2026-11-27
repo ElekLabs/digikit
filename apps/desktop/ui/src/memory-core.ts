@@ -18,7 +18,7 @@ export type SegmentKind = 'machine' | 'effect' | 'tool' | 'other';
 export interface KnownModule {
   name: string;
   label: string;
-  group: 'Machines' | 'Effects' | 'Tools';
+  group: 'Machines' | 'Effects' | 'Filters' | 'LFO shapes' | 'Tools' | 'Services';
   needs: Needs | null;
 }
 
@@ -73,7 +73,18 @@ export const SPECS: Spec[] = [
   { resource: 'MODULES', label: 'Modules', bytes: false, take: () => 1 },
 ];
 
-const KINDS: Record<KnownModule['group'], SegmentKind> = { Machines: 'machine', Effects: 'effect', Tools: 'tool' };
+const KINDS: Record<KnownModule['group'], SegmentKind> = {
+  Machines: 'machine',
+  Effects: 'effect',
+  Filters: 'tool',
+  'LFO shapes': 'tool',
+  Tools: 'tool',
+  Services: 'tool',
+};
+
+/** Only byte resources name a largest block; a count (rows, slots, modules) has `largest` 0 by contract (abi.toml) and is never split. */
+const isSplit = (bytes: boolean, largest: number, header: number, free: number): boolean =>
+  bytes && largest + header < free;
 
 /** The bars for a device: `caps` is CAPACITY, `loaded` the names MODULES reports (in its order), `library` the local library's modules. */
 export function buildBars(caps: Caps, loaded: string[], library: KnownModule[]): Bar[] {
@@ -103,7 +114,7 @@ export function buildBars(caps: Caps, loaded: string[], library: KnownModule[]):
       segments,
       free,
       largest: Math.max(0, Math.min(c.largest, free)),
-      split: c.largest + (spec.resource === 'ARENA' ? ARENA_HDR : 0) < free,
+      split: isSplit(spec.bytes, c.largest, spec.resource === 'ARENA' ? ARENA_HDR : 0, free),
       over: used > c.limit,
     });
   }
@@ -155,7 +166,7 @@ export function moduleRows(bar: Bar): ModuleRow[] {
 
 /** The free text: the total, and the largest block when memory is split so that it is smaller than the total. */
 export const freeText = (bar: Bar): string =>
-  bar.split
+  bar.bytes && bar.split
     ? `Free: ${amountText(bar, bar.free)}, largest block ${amountText(bar, bar.largest)}`
     : `Free: ${amountText(bar, bar.free)}`;
 
@@ -164,7 +175,11 @@ export const freeTitle = freeText;
 
 /** The line under a bar, if it has something to say: over the limit, or free memory split into smaller blocks. */
 export const noteText = (bar: Bar): string | null =>
-  bar.over ? `Over the limit by ${amountText(bar, bar.used - bar.limit)}` : bar.split ? freeText(bar) : null;
+  bar.over
+    ? `Over the limit by ${amountText(bar, bar.used - bar.limit)}`
+    : bar.bytes && bar.split
+      ? freeText(bar)
+      : null;
 
 /** The width of a part of a bar in percent of its limit, or of `used` when that is above the limit (the segments stay proportional). */
 export const widthPct = (bar: Bar, n: number): number => {

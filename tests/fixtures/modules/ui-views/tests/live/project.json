@@ -1,0 +1,27 @@
+{
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "sdk-ui-views-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": ["core/ui"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "ui-views.device.test.ts"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/ui-views"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ]
+      }
+    ]
+  }
+}

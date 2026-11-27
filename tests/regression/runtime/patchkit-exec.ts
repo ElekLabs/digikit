@@ -38,14 +38,14 @@ const underNx = () =>
 
 /**
  * The one place that spawns patchkit for a test (tools/nx/check-patchkit-spawn.mjs checks it). Under Nx it throws unless the task is
- * marked live: tools/nx/device-tests.mjs sets DIGI_PATCHKIT_LIVE=1 for a task whose key holds the patchkit binary, that is, a full key
- * or an import closure that holds runtime/patchkit.ts. A test with a merge or narrow key that is not live must not run patchkit: its key
+ * marked live: tools/nx/device-tests.mjs sets DIGI_PATCHKIT_LIVE=1 for a task whose key follows patchkit: a full key (the binary)
+ * or an import closure that holds runtime/patchkit.ts (the patchkit key of its device). A test with a merge or narrow key that is not live must not run patchkit: its key
  * would not change with the binary. `DIGI_PK_ROOT` names a module variant. `input` goes to stdin.
  */
 export function patchkit(args: string[], options: Options = {}) {
   if (underNx() && process.env.DIGI_PATCHKIT_LIVE !== '1')
     throw new Error(
-      `patchkit ${args[0]}: this task's cache key does not hold the patchkit binary. Import runtime/patchkit.ts in the test (that marks it live), or read the result from dist/bytes (images.sha256, pack-verdicts.json).`,
+      `patchkit ${args[0]}: this task's cache key does not follow patchkit. Import runtime/patchkit.ts in the test (that marks it live), or read the result from dist/bytes (images-<device>.sha256, daemon-test-<device>.key, pack-verdicts.json; live halves key on patchkit-test-<device>.key).`,
     );
   return run(args, options);
 }

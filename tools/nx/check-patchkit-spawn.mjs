@@ -7,7 +7,7 @@
 //  - no execFile/spawn/exec call whose command mentions patchkit, except a command that is `optInPatchkit()` or a variable assigned
 //    from it in the same file (the opt-in proofs run a prebuilt binary that device-inputs.mjs hashes through DIGI_PATCHKIT_BIN);
 //  - no Python tool that runs the binary or the harness: tools.patchkit.patchkit, pk_harness, pk_dkrt*, pk_emud*, pk_device, pk_mem,
-//    pk_proof* (the pure analyzers pk_digikit_* and hook_ab that analysisJson runs read artifacts only).
+//    pk_proof*.
 import { globSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +16,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const SPAWN_POINT = new Set(['tests/regression/runtime/patchkit-exec.ts', 'tests/regression/runtime/patchkit.ts']);
 const DIRS = [
   'tests/**',
-  'modules/**/tests/**',
+  '{modules,runtime,services}/**/tests/**',
   'packages/test-support/src/**',
   'packages/dk-session/src/**',
   'packages/control-client/src/**',

@@ -114,7 +114,7 @@ not change `CORE_FINGERPRINT`). `uv run python -m tools.sharc_dev.sharc_defuse_g
 Digitone II (`tests/fixtures/`: the DKDS section and the DSP `.dko.json`; no firmware bytes). `tests/synthetic.rs` has nested loops, delay
 slots, calls, an import call, an unknown word and an uncertain decode. `tests/defuse.rs` has 600 golden instructions (encoded, with the
 effects the generator computed from the core; `tests/fixtures/defuse-golden.json`), the loop body of `_pk_render` checked by hand against
-`modules/machines/pluck/src/dsp/pluck.s`, and synthetic text: a multifunction compute, DAG post-modify and pre-modify, a long word load, a
+`modules/machine/digikit/pluck/src/dsp/pluck.s`, and synthetic text: a multifunction compute, DAG post-modify and pre-modify, a long word load, a
 conditional write, an unmodelled compute, a width tie, MODE1 bit operations (set and cleared, toggled twice, saved in a register and
 restored, `PUSH STS` and `POP STS`, changed on one branch only), paths to the return, a local callee, an import call and a DO loop.
 

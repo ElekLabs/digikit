@@ -20,6 +20,8 @@
           "externalDependencies": ["vitest"]
         },
         "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/devices/calibration/**/*",
+        "{workspaceRoot}/modules/*/*/*/calibration.toml",
         "{workspaceRoot}/config/emulator.json"
       ],
       "outputs": [],

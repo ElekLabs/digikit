@@ -107,3 +107,10 @@ export function fxExpectationsWith(
     needs,
   };
 }
+
+/** The hash (`name_hash`, FNV-1a 32) of a service or export name. */
+export function nameHash(name: string): number {
+  let h = 0x811c9dc5;
+  for (const b of Buffer.from(name)) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+  return h;
+}

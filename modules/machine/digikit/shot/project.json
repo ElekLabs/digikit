@@ -1,0 +1,109 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "digikit/shot",
+  "implicitDependencies": ["core/services/machines", "core/services/samples", "core/services/fx", "core/ui", "digikit/remote", "dkrt-svc-machines", "dkrt-svc-samples", "dkrt-svc-fx"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/shot-dt2.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines", "core/services/samples"],
+        "plusdrive": true,
+        "dksampleWasm": true,
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ]
+      },
+      {
+        "files": ["tests/shot-live-dt2.device.test.ts"],
+        "firmwareOnly": "the audio of a held voice across an unload and a load with the sample pool, and the capacity counts of the real image",
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines", "core/services/samples"],
+        "plusdrive": true,
+        "dksampleWasm": true,
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ]
+      },
+      {
+        "files": ["tests/shot-dn2-pool.device.test.ts"],
+        "devices": ["dn2"],
+        "dsp": "sharc",
+        "modules": ["digikit/shot", "digikit/debug", "test/track-select", "core/services/machines", "core/services/samples"],
+        "plusdrive": true,
+        "dksampleWasm": true,
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ]
+      },
+      {
+        "files": ["tests/shot-dn2-link.device.test.ts"],
+        "devices": ["dn2"],
+        "dsp": "sharc",
+        "modules": ["digikit/shot", "digikit/debug", "test/track-select", "test/dyn-fx-gain", "core/services/fx", "core/services/machines", "core/services/samples"],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ],
+        "plusdrive": true,
+        "dksampleWasm": true
+      },
+      {
+        "files": ["tests/shot-dn2-audio.device.test.ts"],
+        "devices": ["dn2"],
+        "dsp": "sharc",
+        "modules": ["digikit/shot", "digikit/debug", "test/track-select", "core/services/machines", "core/services/samples"],
+        "plusdrive": true,
+        "dksampleWasm": true,
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ]
+      },
+      {
+        "files": ["tests/shot-dn2-supersede.device.test.ts"],
+        "devices": ["dn2"],
+        "dsp": "sharc",
+        "modules": ["digikit/shot", "digikit/debug", "digikit/remote", "test/track-select", "core/services/machines", "core/services/samples"],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ],
+        "plusdrive": true,
+        "dksampleWasm": true
+      },
+      {
+        "files": ["tests/shot-picker.device.test.ts"],
+        "devices": ["dt2"],
+        "dsp": "sharc",
+        "modules": ["digikit/shot", "digikit/debug", "test/stock-pool", "test/track-select", "core/services/machines", "core/services/samples"],
+        "plusdrive": true,
+        "dksampleWasm": true,
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ]
+      }
+    ],
+    "mergeTests": ["tests/shot-dt2.device.test.ts", "tests/shot-dn2-audio.device.test.ts"]
+  }
+}

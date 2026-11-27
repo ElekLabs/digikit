@@ -6,7 +6,7 @@ import { BulkFrames, SysExReplyLink, sendWithZlp, type BulkLink } from './bulk.t
 import type { BulkCandidate, BulkOpener } from './bulk-select.ts';
 import type { EmuRpcCall } from './emu-usb-transport.ts';
 
-/** The pointer operand of the firmware's USB mode switch (`cf.usb.data.port_table`, devices/fw/usb.toml): the same address on DT2 1.17 and DN2 1.12. */
+/** The pointer operand of the firmware's USB mode switch (`cf.usb.data.port_table`, ports/fw/usb.toml): the same address on DT2 1.17 and DN2 1.12. */
 const PORT_TABLE_POINTER = 0x40006c38;
 const PORT_ENTRY_BYTES = 0x28;
 /** USB MIDI is port entry 2: +0 is its connect callback. */

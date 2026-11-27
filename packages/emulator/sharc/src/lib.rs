@@ -28,6 +28,7 @@
 
 pub mod canon;
 mod code_diff;
+pub mod core_lib;
 mod cycmix;
 mod diag;
 pub mod fast;
@@ -36,7 +37,7 @@ mod irq_probe;
 mod live_capture;
 mod pc_dump;
 mod reply_watch;
-pub mod sha256;
+pub use sharc_rt::sha256;
 pub mod vectors;
 mod write_watch;
 pub use sharc_stats::{ModelStats, RegionCost, RegionEntryProfile, RegionProfile, TierCounters};
@@ -48,29 +49,40 @@ use std::time::Instant;
 // editing this one does not recompile them); the old paths stay.
 // `rt` is sharc-gen's: sharc-rt's with the two functions that need generated
 // data (bnd::decode_at, bnd::_load_normal_ureg) filled in.
-#[cfg(sharc_gen)]
-pub use sharc_gen::generated;
-pub use sharc_gen::rt;
-pub use sharc_gen::{sym_name, sym_of};
+#[cfg(all(test, sharc_gen))]
+pub(crate) use sharc_gen::generated;
 pub use sharc_rt::{
-    BlockFn, CHAIN_MAX, EXIT_BUDGET, EXIT_CHAIN, EXIT_NEXT, EXIT_TRAP, addressing, decode, mem,
-    no_block,
+    BlockFn, CHAIN_MAX, EXIT_BUDGET, EXIT_CHAIN, EXIT_NEXT, EXIT_TRAP, GenCore, addressing, decode,
+    mem, no_block, rt,
 };
 
-/// `Cfg::refresh` for the image this build was generated with.
+/// The generated core of the tests.
+#[cfg(test)]
+pub(crate) fn default_core() -> &'static GenCore {
+    &sharc_gen::CORE
+}
+
+/// The generated core the C ABI runs engines on: the linked `sharc-gen` core.
+#[cfg(feature = "c-abi")]
+fn c_abi_core() -> &'static GenCore {
+    &sharc_gen::CORE
+}
+
+/// `Cfg::refresh` for the image of a generated core.
 pub trait CfgRefresh {
-    fn refresh(&mut self);
+    fn refresh(&mut self, core: &GenCore);
 }
 
 impl CfgRefresh for rt::Cfg {
-    fn refresh(&mut self) {
+    fn refresh(&mut self, core: &GenCore) {
         // With no generated image there are no blocks whose memory model
         // must match; the fast tier reads plain RAM only, where the model
         // makes no difference.
-        #[cfg(all(sharc_gen, sharc_image))]
-        self.refresh_with(gen_explicit_memory_model());
-        #[cfg(not(all(sharc_gen, sharc_image)))]
-        self.refresh_with(self.explicit_memory_model);
+        if core.has_image {
+            self.refresh_with(core.explicit_memory_model);
+        } else {
+            self.refresh_with(self.explicit_memory_model);
+        }
     }
 }
 
@@ -469,143 +481,21 @@ fn swap16(data: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Name of a trap: the generated site table or the runtime's own codes.
-pub fn trap_name(t: Trap) -> String {
-    if t.0 >= TRAP_RT_BASE {
-        return rt_trap_name(t).to_string();
-    }
-    #[cfg(sharc_gen)]
-    {
-        if let Some(site) = generated::tables::TRAP_SITES.get(t.0 as usize) {
-            return site.to_string();
-        }
-    }
-    format!("trap {}", t.0)
-}
-
-/// Execute one decoded instruction through the generated core, undoing it
-/// if it traps.
-#[inline(never)]
+/// Execute one decoded instruction through the generated core of `s`, undoing
+/// it if it traps.
+#[inline]
 pub fn exec_insn(s: &mut St, insn: Insn) -> R<()> {
-    #[cfg(sharc_gen)]
-    {
-        if s.cfg.core_timer {
-            s.timer_written = false;
-        }
-        s.begin();
-        match generated::core_g::forms::_execute(s, insn) {
-            Ok(()) => {
-                if s.probe.is_some() {
-                    s.probe_note();
-                }
-                s.commit()
-            }
-            Err(t) => {
-                s.rollback();
-                return Err(t);
-            }
-        }
-        if s.cfg.core_timer {
-            // Peripheral time advances after a completed instruction. A
-            // failed timer event rolls back itself, retaining that instruction.
-            s.begin();
-            match generated::core_g::sequencer::_core_timer_tick(s) {
-                Ok(_) => s.commit_host(),
-                Err(t) => {
-                    s.rollback();
-                    return Err(t);
-                }
-            }
-        }
-        Ok(())
-    }
-    #[cfg(not(sharc_gen))]
-    {
-        let _ = (s, insn);
-        Err(TRAP_NO_INSN)
-    }
+    (s.core.exec_insn)(s, insn)
 }
 
-/// The explicit_memory_model setting the image's block code was generated
-/// for (true without an image: the default configuration).
-pub fn gen_explicit_memory_model() -> bool {
-    #[cfg(all(sharc_gen, sharc_image))]
-    {
-        generated::image::GEN_EXPLICIT_MEMORY_MODEL
-    }
-    #[cfg(not(all(sharc_gen, sharc_image)))]
-    {
-        true
-    }
-}
-
-fn image_blocks() -> &'static [(u32, BlockFn)] {
-    #[cfg(all(sharc_gen, sharc_image))]
-    {
-        generated::image::BLOCKS
-    }
-    #[cfg(not(all(sharc_gen, sharc_image)))]
-    {
-        &[]
-    }
-}
-
-/// The name of the DSP image the linked generated core was made for (`dn2-1.11`; `none` without an
-/// image). A binary with two cores picks the one whose name starts with the firmware's device id.
-pub fn gen_image_name() -> &'static str {
-    #[cfg(all(sharc_gen, sharc_image))]
-    {
-        generated::image::IMAGE
-    }
-    #[cfg(not(all(sharc_gen, sharc_image)))]
-    {
-        "none"
-    }
-}
-
-/// The number of AOT blocks in the linked generated core (0: the generic core).
-pub fn aot_block_count() -> usize {
-    image_blocks().len()
-}
-
-fn image_model_safe() -> &'static [u32] {
-    #[cfg(all(sharc_gen, sharc_image))]
-    {
-        generated::image::MODEL_SAFE
-    }
-    #[cfg(not(all(sharc_gen, sharc_image)))]
-    {
-        &[]
-    }
-}
-
-fn image_loop_ends() -> &'static [i64] {
-    #[cfg(all(sharc_gen, sharc_image))]
-    {
-        generated::image::LOOP_ENDS
-    }
-    #[cfg(not(all(sharc_gen, sharc_image)))]
-    {
-        &[]
-    }
-}
-
-fn image_insn_at() -> fn(Int) -> Option<Insn> {
-    #[cfg(all(sharc_gen, sharc_image))]
-    {
+fn image_insn_at(core: &GenCore) -> fn(Int) -> Option<Insn> {
+    if core.has_image {
         // Build host-only decode metadata while constructing the engine.
         // The first interpreter fallback must not parse the entire image
         // and allocate its instruction table on the audio render path.
-        canon::insn_table(generated::image::INSN_BLOB);
-        generated::image::insn_at
+        canon::insn_table(core.insn_blob);
     }
-    #[cfg(not(all(sharc_gen, sharc_image)))]
-    {
-        fn none(_pc: Int) -> Option<Insn> {
-            None
-        }
-        none
-    }
+    core.insn_at
 }
 
 impl Drop for Engine {
@@ -672,10 +562,12 @@ impl Drop for Engine {
 }
 
 impl Engine {
-    pub fn new(mem: mem::Mem) -> Engine {
+    /// An engine on the generated core `core`.
+    pub fn new(mem: mem::Mem, core: &'static GenCore) -> Engine {
         let mut s = St::new(mem);
-        s.insn_at = image_insn_at();
-        s.loop_ends = image_loop_ends();
+        s.core = core;
+        s.insn_at = image_insn_at(core);
+        s.loop_ends = core.loop_ends;
         let mut engine = Engine {
             s,
             halt: None,
@@ -690,8 +582,7 @@ impl Engine {
             stop_align: None,
             software_interrupts: false,
             export_ranges: false,
-            dispatch: Dispatch::new(image_blocks(), image_model_safe())
-                .without(&aot_deny_from_env()),
+            dispatch: Dispatch::new(core.blocks, core.model_safe).without(&aot_deny_from_env()),
             stats: Stats::default(),
             cov: None,
             one_dispatch: false,
@@ -844,15 +735,15 @@ impl Engine {
 
     /// An engine over an image blob (tools/sharc_dev/sharc_transpile_run.py
     /// `pack_image`), memory at the loader image.
-    pub fn from_image(bytes: &[u8]) -> Result<Engine, i32> {
+    pub fn from_image(bytes: &[u8], core: &'static GenCore) -> Result<Engine, i32> {
         let img = canon::parse_image(bytes)?;
-        let mut e = Engine::new(img.mem);
+        let mut e = Engine::new(img.mem, core);
         e.s.named_mmrs = img.named;
         e.s.named_ranges = img.ranges;
         e.s.core_mmr_reset = img.core_reset;
         e.s.set_mmr_windows();
         e.s.mem.reset();
-        if let Some(f) = fast::from_env() {
+        if let Some(f) = fast::from_env(e.s.core) {
             e.set_fast(Some(Box::new(f)));
         }
         Ok(e)
@@ -1104,10 +995,9 @@ impl Engine {
         }
         self.s.status_stack.clear();
         self.s.pending = None;
-        #[cfg(sharc_gen)]
-        if self.s.cfg.stack_model {
-            let _ = generated::core_g::state::_sync_pc_stack(&mut self.s);
-            let _ = generated::core_g::state::_sync_status_stack(&mut self.s);
+        if self.s.core.generated && self.s.cfg.stack_model {
+            let _ = (self.s.core.sync_pc_stack)(&mut self.s);
+            let _ = (self.s.core.sync_status_stack)(&mut self.s);
             self.s.commit_host();
         }
         self.halt = None;
@@ -1278,9 +1168,9 @@ impl Engine {
     /// differing PC are barred (`code_diff`). A range that cannot be narrowed
     /// down (too many differing PCs, or none) bars all its regions.
     fn verify_code(&mut self) -> bool {
-        #[cfg(all(sharc_gen, sharc_image))]
-        {
-            let ranges = generated::image::CODE_RANGES;
+        let core = self.s.core;
+        if core.has_image {
+            let ranges = core.code_ranges;
             self.appended_from = ranges.iter().map(|r| r.0 + r.1).max().unwrap_or(u32::MAX);
             let mut bad = Vec::new();
             for (i, &(start, len, want)) in ranges.iter().enumerate() {
@@ -1307,8 +1197,7 @@ impl Engine {
                 self.code_barred = Some(Vec::new());
                 return true;
             }
-            #[cfg(sharc_region_entries)]
-            {
+            if let Some(region_entries) = core.region_entries {
                 let mut whole = Vec::new();
                 let mut changed = Vec::new();
                 for (i, got) in bad {
@@ -1322,10 +1211,9 @@ impl Engine {
                     let i = ranges.partition_point(|r| r.0 <= pc).checked_sub(1)?;
                     (pc < ranges[i].0 + ranges[i].1).then_some(i)
                 };
-                let barred =
-                    code_diff::barred_entries(generated::image::REGION_ENTRIES, &changed, |pc| {
-                        range_of(pc).is_none_or(|i| whole.contains(&i))
-                    });
+                let barred = code_diff::barred_entries(region_entries, &changed, |pc| {
+                    range_of(pc).is_none_or(|i| whole.contains(&i))
+                });
                 for &pc in &barred {
                     self.s.chain_stop_add(pc);
                 }
@@ -1345,15 +1233,11 @@ impl Engine {
                     );
                 }
                 self.code_barred = Some(barred);
-            }
-            #[cfg(not(sharc_region_entries))]
-            {
+            } else {
                 self.code_barred = None;
             }
             false
-        }
-        #[cfg(not(all(sharc_gen, sharc_image)))]
-        {
+        } else {
             // No generated image: there is no block code to protect.
             true
         }
@@ -1362,28 +1246,27 @@ impl Engine {
     /// The PCs of code range RANGE (hash GOT, which differs from the
     /// generator's) where the loaded instruction is not the generated one;
     /// None when there are too many. Remembered per range and hash.
-    #[cfg(all(sharc_gen, sharc_image, sharc_region_entries))]
     fn range_changes(&mut self, range: usize, got: String) -> Option<Vec<u32>> {
         if let Some((hash, pcs)) = self.code_diffs.get(&range)
             && *hash == got
         {
             return pcs.clone();
         }
-        let (start, len, _) = generated::image::CODE_RANGES[range];
+        let (start, len, _) = self.s.core.code_ranges[range];
         let pcs = self.changed_pcs_in(start, len, code_diff::MAX_CHANGED);
         self.code_diffs.insert(range, (got, pcs.clone()));
         pcs
     }
 
-    #[cfg(all(sharc_gen, sharc_image))]
     fn changed_pcs_in(&mut self, start: u32, len: u32, cap: usize) -> Option<Vec<u32>> {
         let s = &mut self.s;
+        let core = s.core;
         code_diff::changed_pcs(
             start,
             len,
-            |pc| generated::image::insn_at(pc as Int).map(code_diff::InsnKey),
+            |pc| (core.insn_at)(pc as Int).map(code_diff::InsnKey),
             |pc| {
-                rt::bnd::decode_at(s, (), None, pc as Int)
+                rt::bnd::decode_at_with(s, pc as Int, core.sym_of)
                     .ok()
                     .map(code_diff::InsnKey)
             },
@@ -1394,13 +1277,13 @@ impl Engine {
     /// Compare the loaded code of every generated range with the generated
     /// instruction table: (the number of PCs compared, the number that
     /// differ, the first 64 of those). On an unpatched image none differ.
-    #[cfg(all(sharc_gen, sharc_image))]
     pub fn code_parity(&mut self) -> (usize, usize, Vec<u32>) {
+        let core = self.s.core;
         let mut diffs = Vec::new();
         let mut checked = 0;
-        for &(start, len, _) in generated::image::CODE_RANGES {
+        for &(start, len, _) in core.code_ranges {
             checked += (start..start + len)
-                .filter(|&pc| generated::image::insn_at(pc as Int).is_some())
+                .filter(|&pc| (core.insn_at)(pc as Int).is_some())
                 .count();
             diffs.extend(
                 self.changed_pcs_in(start, len, usize::MAX - 1)
@@ -1414,10 +1297,9 @@ impl Engine {
 
     /// Watch the pages that hold generated block code (runtime decoding).
     fn watch_block_code(&mut self) {
-        #[cfg(all(sharc_gen, sharc_image))]
-        {
+        if self.s.core.has_image {
             self.s.mem.unwatch_code();
-            for &(start, len, _) in generated::image::CODE_RANGES {
+            for &(start, len, _) in self.s.core.code_ranges {
                 let (lo, hi) = (start, start + len);
                 self.s
                     .mem
@@ -1737,7 +1619,7 @@ impl Engine {
         self.last_trap = Some(t);
         self.halt = Some(format!(
             "native-trap: {} at {:#x}",
-            trap_name(t),
+            self.s.core.trap_name(t),
             self.s.pc_sw
         ));
     }
@@ -1878,8 +1760,7 @@ impl Engine {
                 || self.s.cfg.peripheral_model
                 || self.irq_probe.is_some()
             {
-                #[cfg(sharc_gen)]
-                {
+                if self.s.core.generated {
                     let allowed = self.irq_probe.as_ref().map_or(0, |p| p.mask as Int)
                         | (if self.software_interrupts {
                             0xf000_0000
@@ -1917,15 +1798,14 @@ impl Engine {
                     let candidate = if quiet {
                         Ok(0)
                     } else {
-                        generated::core_g::sequencer::_interrupt_candidate(&mut self.s, allowed)
+                        (self.s.core.interrupt_candidate)(&mut self.s, allowed)
                     };
                     let result = candidate.and_then(|mask| {
                         if mask == 0 {
                             return Ok(());
                         }
                         self.s.begin();
-                        let result =
-                            generated::core_g::sequencer::_enter_interrupt(&mut self.s, mask);
+                        let result = (self.s.core.enter_interrupt)(&mut self.s, mask);
                         if result.is_ok() {
                             self.s.bank_complete();
                             self.s.bank_complete();
@@ -1942,9 +1822,7 @@ impl Engine {
                         self.trapped(trap);
                         break;
                     }
-                }
-                #[cfg(not(sharc_gen))]
-                {
+                } else {
                     self.trapped(TRAP_NO_INSN);
                     break;
                 }
@@ -2255,7 +2133,8 @@ impl Engine {
             }
             let insn = if self.s.runtime_decode {
                 let pc = self.s.pc_sw;
-                match rt::bnd::decode_at(&mut self.s, (), None, pc) {
+                let sym_of = self.s.core.sym_of;
+                match rt::bnd::decode_at_with(&mut self.s, pc, sym_of) {
                     Ok(insn) => insn,
                     Err(t) => {
                         self.trapped(t);
@@ -2566,7 +2445,8 @@ impl Engine {
 
 /// Allocate a host-transfer buffer, including in WebAssembly where JavaScript
 /// cannot supply an allocation owned by Rust. Release with the same length.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub extern "C" fn sharc_native_alloc(len: usize) -> *mut u8 {
     let bytes = vec![0u8; len].into_boxed_slice();
     Box::into_raw(bytes) as *mut u8
@@ -2574,7 +2454,8 @@ pub extern "C" fn sharc_native_alloc(len: usize) -> *mut u8 {
 
 /// # Safety
 /// PTR and LEN must be an outstanding allocation from sharc_native_alloc.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_free(ptr: *mut u8, len: usize) {
     if !ptr.is_null() {
         // SAFETY: caller supplies the allocation and its original length.
@@ -2585,7 +2466,8 @@ pub unsafe extern "C" fn sharc_native_free(ptr: *mut u8, len: usize) {
 /// # Safety
 /// IMAGE must point to IMAGE_LEN readable bytes (a tools/sharc_dev/sharc_transpile_run.py
 /// `pack_image` blob).
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_create(image: *const u8, image_len: usize) -> *mut Engine {
     let bytes = if image.is_null() {
         &[][..]
@@ -2593,7 +2475,7 @@ pub unsafe extern "C" fn sharc_native_create(image: *const u8, image_len: usize)
         // SAFETY: the caller guarantees IMAGE_LEN readable bytes.
         unsafe { std::slice::from_raw_parts(image, image_len) }
     };
-    match Engine::from_image(bytes) {
+    match Engine::from_image(bytes, c_abi_core()) {
         Ok(e) => Box::into_raw(Box::new(e)),
         Err(_) => std::ptr::null_mut(),
     }
@@ -2601,7 +2483,8 @@ pub unsafe extern "C" fn sharc_native_create(image: *const u8, image_len: usize)
 
 /// # Safety
 /// HANDLE must come from sharc_native_create and not be used afterwards.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_destroy(handle: *mut Engine) {
     if !handle.is_null() {
         // SAFETY: created by Box::into_raw in sharc_native_create.
@@ -2611,7 +2494,8 @@ pub unsafe extern "C" fn sharc_native_destroy(handle: *mut Engine) {
 
 /// # Safety
 /// HANDLE from sharc_native_create; BLOB points to BLOB_LEN bytes.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_import_state(
     handle: *mut Engine,
     blob: *const u8,
@@ -2627,7 +2511,8 @@ pub unsafe extern "C" fn sharc_native_import_state(
 
 /// # Safety
 /// HANDLE from sharc_native_create; OUT points to OUT_CAP writable bytes.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_export_state(
     handle: *mut Engine,
     out: *mut u8,
@@ -2646,7 +2531,8 @@ pub unsafe extern "C" fn sharc_native_export_state(
 
 /// # Safety
 /// HANDLE from sharc_native_create.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_step(handle: *mut Engine, n: u32) -> i32 {
     // SAFETY: caller contract.
     let e = unsafe { &mut *handle };
@@ -2655,7 +2541,8 @@ pub unsafe extern "C" fn sharc_native_step(handle: *mut Engine, n: u32) -> i32 {
 
 /// # Safety
 /// HANDLE from sharc_native_create; OUT points to OUT_CAP writable bytes.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_halt_reason(
     handle: *mut Engine,
     out: *mut u8,
@@ -2682,7 +2569,8 @@ pub unsafe extern "C" fn sharc_native_halt_reason(
 ///
 /// # Safety
 /// HANDLE from sharc_native_create.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_set_option(handle: *mut Engine, key: u32, value: i64) -> i32 {
     // SAFETY: caller contract.
     let e = unsafe { &mut *handle };
@@ -2693,7 +2581,8 @@ pub unsafe extern "C" fn sharc_native_set_option(handle: *mut Engine, key: u32, 
 ///
 /// # Safety
 /// HANDLE from sharc_native_create; the pointers cover their lengths.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_set_provisional(
     handle: *mut Engine,
     name: *const u8,
@@ -2712,12 +2601,12 @@ pub unsafe extern "C" fn sharc_native_set_provisional(
     let (Ok(name), Ok(mode)) = (std::str::from_utf8(name), std::str::from_utf8(mode)) else {
         return -1;
     };
-    let (Some(n), Some(m)) = (sym_of(name), sym_of(mode)) else {
+    let (Some(n), Some(m)) = ((e.s.core.sym_of)(name), (e.s.core.sym_of)(mode)) else {
         return -2;
     };
     e.s.cfg.provisional_interp.retain(|(k, _)| *k != n);
     e.s.cfg.provisional_interp.push((n, m));
-    e.s.cfg.refresh();
+    e.s.cfg.refresh(e.s.core);
     0
 }
 
@@ -2729,7 +2618,8 @@ pub unsafe extern "C" fn sharc_native_set_provisional(
 ///
 /// # Safety
 /// HANDLE from sharc_native_create; BLOB points to BLOB_LEN bytes.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_exec_insn(
     handle: *mut Engine,
     blob: *const u8,
@@ -2737,7 +2627,7 @@ pub unsafe extern "C" fn sharc_native_exec_insn(
 ) -> i32 {
     // SAFETY: caller contract.
     let (e, bytes) = unsafe { (&mut *handle, std::slice::from_raw_parts(blob, blob_len)) };
-    let insn = match canon::parse_insn(bytes) {
+    let insn = match canon::parse_insn(e.s.core, bytes) {
         Ok(i) => i,
         Err(code) => return code,
     };
@@ -2759,7 +2649,8 @@ pub unsafe extern "C" fn sharc_native_exec_insn(
 ///
 /// # Safety
 /// HANDLE from sharc_native_create; OUT points to OUT_CAP u64s.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_stats(
     handle: *mut Engine,
     out: *mut u64,
@@ -2799,7 +2690,8 @@ pub unsafe extern "C" fn sharc_native_stats(
 ///
 /// # Safety
 /// HANDLE from sharc_native_create; OUT points to OUT_CAP writable bytes.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_profile(
     handle: *mut Engine,
     kind: u32,
@@ -2888,7 +2780,8 @@ impl Engine {
 ///
 /// # Safety
 /// HANDLE from sharc_native_create.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_set_reg(
     handle: *mut Engine,
     code: u32,
@@ -2914,7 +2807,8 @@ pub unsafe extern "C" fn sharc_native_set_reg(
 ///
 /// # Safety
 /// HANDLE from sharc_native_create.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_get_reg(handle: *mut Engine, code: u32) -> u64 {
     // SAFETY: caller contract.
     let e = unsafe { &mut *handle };
@@ -2929,7 +2823,8 @@ pub unsafe extern "C" fn sharc_native_get_reg(handle: *mut Engine, code: u32) ->
 ///
 /// # Safety
 /// HANDLE from sharc_native_create, or null.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_get_pc(handle: *mut Engine) -> i64 {
     if handle.is_null() {
         return -1;
@@ -2943,7 +2838,8 @@ pub unsafe extern "C" fn sharc_native_get_pc(handle: *mut Engine) -> i64 {
 ///
 /// # Safety
 /// HANDLE from sharc_native_create; DATA points to LEN bytes.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_poke(
     handle: *mut Engine,
     address: u64,
@@ -2961,7 +2857,8 @@ pub unsafe extern "C" fn sharc_native_poke(
 ///
 /// # Safety
 /// HANDLE from sharc_native_create.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_peek(handle: *mut Engine, address: u64, width: u32) -> i64 {
     // SAFETY: caller contract.
     let e = unsafe { &mut *handle };
@@ -2977,7 +2874,8 @@ pub unsafe extern "C" fn sharc_native_peek(handle: *mut Engine, address: u64, wi
 ///
 /// # Safety
 /// HANDLE from sharc_native_create.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_sec_raise(handle: *mut Engine, sid: u32) -> i32 {
     // SAFETY: caller contract.
     let e = unsafe { &mut *handle };
@@ -2989,7 +2887,8 @@ pub unsafe extern "C" fn sharc_native_sec_raise(handle: *mut Engine, sid: u32) -
 ///
 /// # Safety
 /// HANDLE from sharc_native_create.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_dma_start(handle: *mut Engine, base: u32) -> i64 {
     // SAFETY: caller contract.
     let e = unsafe { &mut *handle };
@@ -3001,7 +2900,8 @@ pub unsafe extern "C" fn sharc_native_dma_start(handle: *mut Engine, base: u32) 
 ///
 /// # Safety
 /// HANDLE from sharc_native_create.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_dma_done(handle: *mut Engine, base: u32, sid: u32) -> i32 {
     // SAFETY: caller contract.
     let e = unsafe { &mut *handle };
@@ -3016,7 +2916,8 @@ pub unsafe extern "C" fn sharc_native_dma_done(handle: *mut Engine, base: u32, s
 /// # Safety
 /// HANDLE from sharc_native_create; FRAME points to LEN readable bytes and
 /// OUT to LEN writable bytes.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_spi2_exchange(
     handle: *mut Engine,
     frame: *const u8,
@@ -3043,7 +2944,8 @@ pub unsafe extern "C" fn sharc_native_spi2_exchange(
 /// # Safety
 /// HANDLE from sharc_native_create; BLOCK points to LEN readable bytes (or is
 /// null with LEN 0) and OUT to OUT_CAP writable bytes.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_sport_block(
     handle: *mut Engine,
     block: *const u8,
@@ -3076,7 +2978,8 @@ pub unsafe extern "C" fn sharc_native_sport_block(
 ///
 /// # Safety
 /// HANDLE from sharc_native_create.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_fresh_call(
     handle: *mut Engine,
     pc: u32,
@@ -3092,9 +2995,10 @@ pub unsafe extern "C" fn sharc_native_fresh_call(
 ///
 /// # Safety
 /// OUT points to OUT_CAP writable bytes.
-#[cfg_attr(not(sharc_second), unsafe(no_mangle))]
+#[cfg(feature = "c-abi")]
+#[cfg_attr(not(test), unsafe(no_mangle))]
 pub unsafe extern "C" fn sharc_native_info(out: *mut u8, out_cap: usize) -> i32 {
-    let info = build_info();
+    let info = build_info(c_abi_core());
     if info.len() > out_cap {
         return -(info.len() as i32);
     }
@@ -3109,28 +3013,12 @@ pub unsafe extern "C" fn sharc_native_info(out: *mut u8, out_cap: usize) -> i32 
 /// SHA-256 and the block count. Loaders compare the first two with the
 /// current sources and refuse a stale library
 /// (tools/sharc_dev/sharc_transpile_run.check_build_info, packages/emulator/live).
-#[allow(unused_assignments)]
-pub fn build_info() -> String {
-    #[allow(unused_mut)]
-    let mut core = "none";
-    #[allow(unused_mut)]
-    let mut generator: u32 = 0;
-    #[allow(unused_mut)]
-    let mut image = "none";
-    #[cfg(sharc_gen)]
-    {
-        core = generated::tables::CORE_SHA256;
-    }
-    #[cfg(all(sharc_gen, sharc_gen_version))]
-    {
-        generator = generated::tables::GENERATOR_VERSION;
-    }
-    #[cfg(all(sharc_gen, sharc_image))]
-    {
-        image = generated::image::IMAGE_SHA256;
-    }
+pub fn build_info(core: &GenCore) -> String {
     format!(
-        "{{\"core_sha256\": \"{core}\", \"generator_version\": {generator}, \"image_sha256\": \"{image}\", \"blocks\": {}}}",
-        image_blocks().len()
+        "{{\"core_sha256\": \"{}\", \"generator_version\": {}, \"image_sha256\": \"{}\", \"blocks\": {}}}",
+        core.core_sha256,
+        core.generator_version,
+        core.image_sha256,
+        core.blocks.len()
     )
 }

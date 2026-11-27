@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""atlas.py: a per-firmware semantic atlas, out/atlas/<image>.sqlite.
+"""atlas.py: a per-firmware semantic atlas stored in cfdb.
 
     uv run python -m tools.coldfire.atlas build dt2-1.17 [dn2-1.12 ...]
     uv run python -m tools.coldfire.fw atlas machine -i dt2-1.17
@@ -48,13 +48,18 @@ import sqlite3
 import sys
 import time
 from collections.abc import Iterable, Sequence
+from contextlib import closing
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, cast
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
-from tools.coldfire import fw  # noqa: E402
+from tools.coldfire import fw, fw_query  # noqa: E402
 from tools.firmware import catalog as shared  # noqa: E402
+from tools.firmware import config, device  # noqa: E402
+from tools.firmware.artifacts import FirmwareArtifacts, database_path  # noqa: E402
 from tools.firmware.catalog import (  # noqa: E402
     STRONG_PAIR,
     catalog_grade,
@@ -388,7 +393,10 @@ def extract_params(section: str) -> list[dict[str, Any]]:
         return []
     with open(section, "rb") as fh:
         data = fh.read()
-    addr, count = paramtable.find_table(data)
+    found = paramtable.locate_table(data)
+    if found is None:
+        return []
+    addr, count = found
     read = machineprofile.image_reader(section)
     rows = []
     for e in paramtable.scan_all(read, addr, count):
@@ -553,9 +561,15 @@ def extract_structs(img: fw.CF) -> list[dict[str, Any]]:
 
 
 def manual_dir(image: str) -> str | None:
-    pat = {"dt": "Digitakt-2-User-Manual*", "dn": "Digitone-2-User-Manual*"}.get(
-        image[:2]
+    dev = next(
+        (
+            d
+            for d in device.load_all(config.DEVICES_DIR)
+            if image.startswith(d.short + "-")
+        ),
+        None,
     )
+    pat = dev.manual if dev else None
     if not pat:
         return None
     hits = sorted(glob.glob(os.path.join(ROOT, "out", "refs", pat)))
@@ -849,8 +863,61 @@ def insert(con: sqlite3.Connection, table: str, rows: list[dict[str, Any]]) -> N
     )
 
 
-def build(image: str, out_dir: str = fw.ATLAS_DIR) -> dict[str, int]:
+ATLAS_TABLES = (
+    "descriptors",
+    "params",
+    "classes",
+    "vfuncs",
+    "ui_strings",
+    "structs",
+    "manual",
+    "glossary",
+)
+
+
+def publish_atlas(image: str, source: str) -> None:
+    """Install the generated atlas in the matching ColdFire database."""
+    name = image + "-emac"
+    path = database_path(image, "cf", fw.CF_DIR)
+    with closing(sqlite3.connect(path, uri=True)) as db, db:
+        db.execute(
+            "ATTACH DATABASE ? AS src", (Path(source).resolve().as_uri() + "?mode=ro",)
+        )
+        db.execute("BEGIN IMMEDIATE")
+        actual = db.execute(
+            "SELECT value FROM main.meta WHERE image=? AND key='image_sha256'", (name,)
+        ).fetchone()
+        expected = db.execute(
+            "SELECT value FROM src.meta WHERE key='image_sha256'"
+        ).fetchone()
+        if not actual or actual != expected:
+            raise ValueError(f"{image}: ColdFire database changed during atlas build")
+        db.execute("DROP VIEW IF EXISTS main.machines")
+        for table in ATLAS_TABLES:
+            db.execute(f"DROP TABLE IF EXISTS main.{table}")
+            ddl = db.execute(
+                "SELECT sql FROM src.sqlite_schema WHERE type='table' AND name=?",
+                (table,),
+            ).fetchone()[0]
+            db.execute(ddl)
+            db.execute(f"INSERT INTO {table} SELECT * FROM src.{table}")
+        for (ddl,) in db.execute(
+            "SELECT sql FROM src.sqlite_schema WHERE sql IS NOT NULL AND type IN ('index','view')"
+        ).fetchall():
+            db.execute(ddl)
+        db.execute("DROP TABLE IF EXISTS atlas_meta")
+        db.execute("CREATE TABLE atlas_meta (key TEXT PRIMARY KEY, value TEXT)")
+        db.execute("INSERT INTO atlas_meta SELECT * FROM src.meta")
+
+
+def build(image: str, out_dir: str | None = None) -> dict[str, int]:
+    """Build the atlas in cfdb, or export a separate SQLite file when requested."""
     image = fw.short_image(image)
+    if out_dir is None:
+        with TemporaryDirectory() as work:
+            counts = build(image, work)
+            publish_atlas(image, os.path.join(work, image + ".sqlite"))
+            return counts
     t0 = time.time()
     img = fw.CF(image)
     section = os.path.join(ROOT, "out", "sections", image, "section_3_MAIN_OS.bin")
@@ -863,7 +930,8 @@ def build(image: str, out_dir: str = fw.ATLAS_DIR) -> dict[str, int]:
     con.executescript(SCHEMA)
     descr = extract_descriptors(img, section)
     insert(con, "descriptors", descr)
-    insert(con, "params", extract_params(section))
+    params = extract_params(section)
+    insert(con, "params", params)
     classes, vfuncs = extract_classes(img)
     insert(con, "classes", classes)
     con.executemany("INSERT INTO vfuncs VALUES (?,?,?,?,?)", vfuncs)
@@ -881,6 +949,7 @@ def build(image: str, out_dir: str = fw.ATLAS_DIR) -> dict[str, int]:
         ("image_sha256", img.meta.get("image_sha256", "")),
         ("built", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
         ("manual", manual_dir(image) or "none"),
+        ("params", "table" if params else "absent (no descriptor table reader)"),
     ):
         con.execute("INSERT INTO meta VALUES (?,?)", (k, v))
     con.commit()
@@ -907,7 +976,9 @@ def build(image: str, out_dir: str = fw.ATLAS_DIR) -> dict[str, int]:
 # --- catalog: candidate functions for anchors -----------------------------------------
 
 # Old firmware per image, for the stability column (same h_strict as the matched old function).
-CATALOG_OLD = {"dt2-1.17": "dt2-1.16", "dn2-1.12": "dn2-1.11"}
+CATALOG_OLD = {
+    name: b.base for name, b in device.boot_images(config.DEVICES_DIR).items() if b.base
+}
 # Score weights (see catalog_score).
 W_GRADE, W_PAIR, W_UI_CALLERS, W_NEAR, W_STRING, W_ROLE, W_ANCHORED = (
     4.0,
@@ -1032,11 +1103,11 @@ class CatImg:
 def _anchor_functions(
     image: str, fn: dict[int, tuple[str, int, int]]
 ) -> dict[int, list[str]]:
-    """Existing ColdFire anchors of devices/ports/<image>.toml by containing function."""
+    """Existing ColdFire anchors of ports/<image>.toml by containing function."""
     import bisect
     import tomllib
 
-    path = os.path.join(ROOT, "devices", "ports", image + ".toml")
+    path = os.path.join(ROOT, "ports", image + ".toml")
     if not os.path.exists(path):
         return {}
     with open(path, "rb") as fh:
@@ -1053,14 +1124,14 @@ def _anchor_functions(
     return out
 
 
-def collect_catalog(image: str) -> CatImg:
+def collect_catalog(image: str, *, peer: bool = False) -> CatImg:
     """Read cfdb and atlas of `image` and tag the candidate functions."""
     import collections
 
     old = CATALOG_OLD.get(image)
     im = image + "-emac"
-    db = fw.open_ro(os.path.join(fw.CF_DIR, im + ".sqlite"))
-    at = fw.open_ro(os.path.join(fw.ATLAS_DIR, image + ".sqlite"))
+    db = fw.open_ro(database_path(image, "cf", fw.CF_DIR))
+    at = None if peer else fw.open_ro(fw_query.atlas_path(image))
     d = CatImg()
     d.fn = {
         e: (n, sz, end)
@@ -1081,8 +1152,12 @@ def collect_catalog(image: str) -> CatImg:
         groups[d.hs[e]].append(e)
     d.groups = dict(groups)
     # stability against the old version
-    old_path = os.path.join(fw.CF_DIR, "%s-emac.sqlite" % old) if old else ""
-    if old and os.path.exists(old_path):
+    old_path = database_path(old, "cf", fw.CF_DIR) if old else ""
+    if (
+        old
+        and os.path.exists(old_path)
+        and db.execute("SELECT 1 FROM sqlite_schema WHERE name='matches'").fetchone()
+    ):
         olddb = fw.open_ro(old_path)
         ohs = dict(
             olddb.execute(
@@ -1095,7 +1170,9 @@ def collect_catalog(image: str) -> CatImg:
         ):
             if dst in d.hs and src in ohs:
                 d.stable[dst] = int(ohs[src] == d.hs[dst])
-    classes = dict(at.execute("SELECT name, role FROM classes").fetchall())
+    classes = (
+        dict(at.execute("SELECT name, role FROM classes")) if at is not None else {}
+    )
     ui_cls = {n for n, r in classes.items() if r in VIEW_ROLES}
     for cls, tgt, owner in db.execute(
         "SELECT class, target, owner FROM vtables WHERE image=?", (im,)
@@ -1147,23 +1224,34 @@ def collect_catalog(image: str) -> CatImg:
         for nm in names:
             prefix = ".".join(nm.split(".")[:2])
             near[prefix] |= {f} | callees[f] | callers[f]
-    d.ui_text = {
-        a: t
-        for a, t in reversed(at.execute("SELECT addr, text FROM ui_strings").fetchall())
-    }
-    for f, a in db.execute("SELECT func, to_addr FROM datarefs WHERE image=?", (im,)):
-        if a in d.ui_text and f in fn:
-            d.strf.setdefault(f, set()).add(a)
     term_funcs: dict[str, set[int]] = collections.defaultdict(set)
-    for term, ref in at.execute("SELECT term, ref FROM glossary WHERE kind='function'"):
-        addr = fw.parse_addr(ref)
-        if addr is not None and addr in fn:
-            term_funcs[term.lower().replace(" ", "_")].add(addr)
+    if at is not None:
+        d.ui_text = {
+            a: t
+            for a, t in reversed(
+                at.execute("SELECT addr, text FROM ui_strings").fetchall()
+            )
+        }
+        for f, a in db.execute(
+            "SELECT func, to_addr FROM datarefs WHERE image=?", (im,)
+        ):
+            if a in d.ui_text and f in fn:
+                d.strf.setdefault(f, set()).add(a)
+        for term, ref in at.execute(
+            "SELECT term, ref FROM glossary WHERE kind='function'"
+        ):
+            addr = fw.parse_addr(ref)
+            if addr is not None and addr in fn:
+                term_funcs[term.lower().replace(" ", "_")].add(addr)
+        at.close()
+    db.close()
 
     def add(tag: str, funcs: Iterable[int]) -> None:
         for f in funcs:
             d.tags.setdefault(f, []).append(tag)
 
+    if peer:
+        add("peer_function", fn)
     add("ui_own_vfunc", ui_own)
     add("ui_vfunc", ui_vf)
     add("ui_helper", [t for t, c in cnt.items() if c >= HELPER_MIN_CALLERS])
@@ -1258,50 +1346,71 @@ def catalog_rows(
     return rows
 
 
-def write_catalog(image: str, rows: list[dict[str, Any]], out_dir: str) -> None:
-    shared.write_catalog(
-        os.path.join(out_dir, image + ".sqlite"),
-        os.path.join(out_dir, image + "-catalog.tsv"),
-        rows,
-        CATALOG_COLUMNS,
-    )
-
-
-def write_catalog_groups(
-    image: str,
-    rows: list[dict[str, Any]],
-    edges: dict[tuple[int, int], int],
-    out_dir: str,
+def catalog(
+    image: str, other_image: str | None = None, out_dir: str | None = None
 ) -> int:
-    """Write table catalog_groups, the groups TSV and the graph JSON; return the group count."""
-    return shared.write_catalog_groups(
-        image,
-        rows,
-        edges,
-        os.path.join(out_dir, image + ".sqlite"),
-        os.path.join(out_dir, image + "-catalog-groups.tsv"),
-        os.path.join(out_dir, image + "-catalog-graph.json"),
-    )
-
-
-def catalog(image: str, other_image: str, out_dir: str = fw.ATLAS_DIR) -> int:
     from tools.coldfire import cfmatch
 
-    names = [fw.short_image(image), fw.short_image(other_image)]
-    for n in names:
-        if not os.path.exists(os.path.join(out_dir, n + ".sqlite")):
+    first = fw.short_image(image)
+    second = fw.short_image(other_image) if other_image else None
+    peer = first.endswith("-peer")
+    if second is not None and peer != second.endswith("-peer"):
+        raise ValueError("catalog pairing requires two main images or two DSP images")
+    for n in (first, second):
+        if n is None or peer:
+            continue
+        path = fw_query.atlas_path(n)
+        if not os.path.isfile(path):
             print("run atlas build %s first" % n)
             return 2
-    mt = cfmatch.load_pair(names[0] + "-emac", names[1] + "-emac")
-    fwd = {s: (t, mt.method[s]) for s, t in mt.m.items()}
-    rev = {t: (s, mt.method[s]) for s, t in mt.m.items()}
-    a, b = collect_catalog(names[0]), collect_catalog(names[1])
-    for n, d, o, pair in ((names[0], a, b, fwd), (names[1], b, a, rev)):
+        with closing(fw.open_ro(path)) as db:
+            if (
+                db.execute(
+                    "SELECT 1 FROM sqlite_schema WHERE name='glossary'"
+                ).fetchone()
+                is None
+            ):
+                print("run atlas build %s first" % n)
+                return 2
+    a = collect_catalog(first, peer=peer)
+    if second is None:
+        jobs: list[
+            tuple[str, str | None, CatImg, CatImg, dict[int, tuple[int, str]]]
+        ] = [(first, None, a, a, {})]
+    else:
+        b = collect_catalog(second, peer=peer)
+        mt = cfmatch.load_pair(first + "-emac", second + "-emac")
+        fwd = {s: (t, mt.method[s]) for s, t in mt.m.items()}
+        rev = {t: (s, mt.method[s]) for s, t in mt.m.items()}
+        jobs = [(first, second, a, b, fwd), (second, first, b, a, rev)]
+    for n, other, d, o, pair in jobs:
         rows = catalog_rows(d, o, pair)
-        write_catalog(n, rows, out_dir)
-        n_groups = write_catalog_groups(
-            n, rows, group_edges([r["addr"] for r in rows], d.callee_n), out_dir
-        )
+        with (
+            closing(sqlite3.connect(database_path(n, "cf", fw.CF_DIR))) as db,
+            db,
+        ):
+            db.execute("BEGIN IMMEDIATE")
+            if other is not None:
+                cfmatch.save_matches(
+                    db,
+                    n + "-emac",
+                    other + "-emac",
+                    (
+                        (target, source, method)
+                        for source, (target, method) in pair.items()
+                    ),
+                )
+            exports = FirmwareArtifacts(n, "cf").catalog_exports(out_dir)
+            exports.catalog.parent.mkdir(parents=True, exist_ok=True)
+            shared.write_catalog(db, str(exports.catalog), rows, CATALOG_COLUMNS)
+            n_groups = shared.write_catalog_groups(
+                n,
+                rows,
+                group_edges([r["addr"] for r in rows], d.callee_n),
+                db,
+                str(exports.groups),
+                str(exports.graph),
+            )
         counts: dict[str, int] = {}
         for r in rows:
             for t in r["tags"].split(","):
@@ -1323,15 +1432,19 @@ def catalog(image: str, other_image: str, out_dir: str = fw.ATLAS_DIR) -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    b = sub.add_parser("build", help="build out/atlas/<image>.sqlite")
+    b = sub.add_parser(
+        "build", help="embed the semantic atlas in the ColdFire database"
+    )
     b.add_argument("images", nargs="+")
-    b.add_argument("--out-dir", default=fw.ATLAS_DIR)
+    b.add_argument("--out-dir", help="export standalone atlas files to a directory")
     c = sub.add_parser(
         "catalog", help="candidate anchor functions of IMAGE, paired with OTHER"
     )
     c.add_argument("image")
-    c.add_argument("other")
-    c.add_argument("--out-dir", default=fw.ATLAS_DIR)
+    c.add_argument("other", nargs="?", help="optional image for pairing")
+    c.add_argument(
+        "--out-dir", help="export with image-prefixed names in this directory"
+    )
     args = ap.parse_args(argv)
     if args.cmd == "catalog":
         return catalog(args.image, args.other, args.out_dir)

@@ -5,10 +5,10 @@
     uv run python -m tools.devtools.emud_key audit --device dt2 --depfile FILE [--target-dir DIR]
 
 `key` prints a sha256 over everything the daemon build reads: the source files (SOURCE_GLOBS, content
-hashes), the build recipe scripts (RECIPE_FILES), every file of the generated core directory (and of
-SHARC_GEN_DIR_2), the PGO profile (content), the Rust toolchain pin, `rustc -vV` and the build flags.
-`test-key` is the key of a device test that does not run patchkit (see TEST_KEY_EXCLUDED); `verify_build daemons` writes it to dist/bytes/daemon-test.key.
-It resolves the generated core and the profile with the same calls as tools/patchkit/pk_emud_pgo.py.
+hashes), the build recipe scripts (RECIPE_FILES), the PGO profile (content), the Rust toolchain pin, `rustc -vV` and the build flags.
+`test-key` is the key of a device test that does not run patchkit (see TEST_KEY_EXCLUDED), without the files of the other devices; `verify_build daemons` writes it to dist/bytes/daemon-test-<device>.key.
+The daemon holds no generated core (it loads the core library of each device, whose key is in the test key), so the
+generated core is not a key input. The profile is resolved with the same calls as tools/patchkit/pk_emud_pgo.py.
 
 `audit` reads the dependency file cargo wrote (`digi-emud.d`) and fails when it lists a file that the key does
 not cover. Files under the cargo target directory (build-script OUT_DIR files, the binary) are build outputs and
@@ -22,18 +22,22 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import fnmatch
 import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import tomllib
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from tools.firmware import device as device_files
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 
-# git pathspecs (glob magic) of the repository files cargo reads for digi-emud with coupled-audio.
+# git pathspecs (glob magic) of the repository files cargo reads for digi-emud with sharc,play.
 SOURCE_GLOBS = (
     "Cargo.toml",
     "Cargo.lock",
@@ -48,15 +52,22 @@ SOURCE_GLOBS = (
     "packages/dksample/**",
     "packages/dkupload/**",
     "packages/patchkit/**",
-    "modules/core/runtime/fit/Cargo.toml",
-    "modules/core/runtime/fit/build.rs",
-    "modules/core/runtime/fit/src/**",
-    "modules/core/runtime/sdk/Cargo.toml",
-    "modules/core/runtime/sdk/build.rs",
-    "modules/core/runtime/sdk/src/**",
+    # patchkit compiles in the test-source patterns (include_str! in src/build/test_source.rs), and this key reads them
+    "config/test-source-patterns.json",
+    "runtime/core/abi/Cargo.toml",
+    "runtime/core/abi/src/**",
+    "runtime/core/fit/Cargo.toml",
+    "runtime/core/fit/build.rs",
+    "runtime/core/fit/src/**",
+    "runtime/core/sdk/Cargo.toml",
+    "runtime/core/sdk/build.rs",
+    "runtime/core/sdk/src/**",
     "devices/**",
-    "tests/scenarios/dn2.json",
+    "ports/*.toml",
+    "ports/fw/**",
+    "tests/scenarios/*.json",
     "sdk/sdk.toml",
+    "runtime/core/abi.toml",
     "tools/patchkit/toolchain/**",
     "tools/sharc_dev/sharc_core/seed_tables.py",
 )
@@ -66,6 +77,7 @@ RECIPE_FILES = (
     "tools/devtools/emud_key.py",
     "tools/devtools/verify_build.py",
     "tools/devtools/stablebin.py",
+    "tools/devtools/store.py",
     "tools/emulator/digi_env.py",
     "tools/emulator/native_pgo.py",
     "tools/emulator/native_target.py",
@@ -74,7 +86,7 @@ RECIPE_FILES = (
 )
 
 MANIFEST = "packages/emulator/control/Cargo.toml"
-FEATURES = "coupled-audio"
+FEATURES = "sharc,play"
 BIN = "digi-emud"
 
 
@@ -120,7 +132,7 @@ def key_of(inputs: EmudInputs) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-# The daemon part of the cache key of a device test that does not run patchkit itself (dist/bytes/daemon-test.key). It follows what
+# The daemon part of the cache key of a device test that does not run patchkit itself (dist/bytes/daemon-test-<device>.key). It follows what
 # the build read, not the source globs: the repository files in the cargo dependency file of the build (`files.txt` of the store
 # entry, written by verify_build from `repo_files_of_depfile`), the registry crates of the daemon's dependency closure (`cargo tree`,
 # not the whole Cargo.lock: an unrelated workspace member changes neither), the generated core, the profile, rustc and the flags. The
@@ -128,6 +140,21 @@ def key_of(inputs: EmudInputs) -> str:
 # daemon reaches only through patchkit (`patchkit_only_dirs`, for example dksharc): their effect is in the image and pack bytes too. A crate
 # the daemon also reaches by another path stays. The store key (`key_of`) is not touched.
 TEST_KEY_EXCLUDED = ("packages/patchkit/", "out/")
+
+# Test sources (config/test-source-patterns.json, the one definition; tools/nx/test-source.mjs documents its readers). The release build
+# lists them in its dependency file (rustc reads a `#[cfg(test)] mod x;` file), but their content is not compiled, so an edit cannot
+# change the binary: they stay out of the test key. The host test of tools/nx/test-source.mjs (`unguardedTestSources`) proves that each
+# one is declared behind cfg(test).
+_PATTERNS = json.loads((ROOT / "config" / "test-source-patterns.json").read_text())
+
+
+def is_test_source(name: str) -> bool:
+    """Whether the repository file NAME is a test source of the rule: a Rust file by name, or any file in a test directory."""
+    parts = name.split("/")
+    return any(d in _PATTERNS["dirs"] for d in parts[:-1]) or (
+        name.endswith(".rs")
+        and any(fnmatch.fnmatchcase(parts[-1], p) for p in _PATTERNS["rust_files"])
+    )
 
 
 def patchkit_only_dirs(root: Path = ROOT) -> tuple[str, ...]:
@@ -239,20 +266,55 @@ def cargo_closure(root: Path = ROOT) -> str:
     return "\n".join(sorted(lines))
 
 
+def non_cell_device_prefixes(
+    root: Path = ROOT, keep: str | None = None
+) -> tuple[str, ...]:
+    """Repository file prefixes of the device files of devices without an acceptance cell (no `[acceptance] ready_dir`): the daemon embeds them
+    (device-profile build.rs) but no test of a device with a cell observes them. With KEEP (a device short id) the prefixes are those of
+    every device except KEEP: a test on KEEP observes no file of another device. Same rule as tools/nx/device-files.mjs."""
+    out: list[str] = []
+    for path in sorted((root / "devices").glob("*.toml")):
+        t = tomllib.loads(path.read_text())
+        short = t.get("device", {}).get("short")
+        if not short:
+            continue
+        if keep is None:
+            if t.get("acceptance", {}).get("ready_dir"):
+                continue
+        elif short == keep:
+            continue
+        stem = path.stem
+        out += [
+            f"devices/{stem}",
+            f"devices/cf-native/{stem}-",
+            f"ports/{t['device']['short']}-",
+        ]
+    return tuple(out)
+
+
 def test_key_of(
     inputs: EmudInputs,
     names: Sequence[str],
     closure: str,
     root: Path = ROOT,
     patchkit_only: Sequence[str] = (),
+    keep: str | None = None,
 ) -> str:
-    """The test key: see the comment above. NAMES are repository files (relative to ROOT)."""
+    """The test key: see the comment above. NAMES are repository files (relative to ROOT). KEEP is the device the key is for: the files
+    of every other device are left out (see `non_cell_device_prefixes`); without it only the devices without a cell are."""
     record = {
         "version": 2,
         "files": sorted(
             (name, sha256_file(root / name))
             for name in names
-            if not name.startswith((*TEST_KEY_EXCLUDED, *patchkit_only))
+            if not name.startswith(
+                (
+                    *TEST_KEY_EXCLUDED,
+                    *patchkit_only,
+                    *non_cell_device_prefixes(root, keep),
+                )
+            )
+            and not is_test_source(name)
         ),
         "closure": closure,
         "gen": {
@@ -333,9 +395,11 @@ def audit(inputs: EmudInputs, depfile_text: str, target_dir: Path) -> list[str]:
     return missing
 
 
-def repo_files(root: Path = ROOT) -> dict[str, Path]:
-    """Files of the repository (tracked, or untracked and not ignored) that match SOURCE_GLOBS and RECIPE_FILES."""
-    specs = [f":(glob){g}" for g in (*SOURCE_GLOBS, *RECIPE_FILES)]
+def repo_files(
+    root: Path = ROOT, globs: Sequence[str] | None = None
+) -> dict[str, Path]:
+    """Files of the repository (tracked, or untracked and not ignored) that match GLOBS (default: SOURCE_GLOBS and RECIPE_FILES)."""
+    specs = [f":(glob){g}" for g in (globs or (*SOURCE_GLOBS, *RECIPE_FILES))]
     done = subprocess.run(
         ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *specs],
         cwd=root, check=True, capture_output=True,
@@ -361,7 +425,9 @@ def inputs(device: str, environ: Mapping[str, str] | None = None) -> EmudInputs:
 
     environ = os.environ if environ is None else environ
     files = repo_files()
-    gen_dirs = {"gen": pk_emud_pgo.generated_core(device)}
+    # The developer guide is also excluded from the Nx daemon and gate inputs.
+    files.pop("packages/emulator/README.md", None)
+    gen = pk_emud_pgo.generated_core(device)  # selects the profile only
     flags = {
         "device": device,
         "manifest": MANIFEST,
@@ -373,14 +439,10 @@ def inputs(device: str, environ: Mapping[str, str] | None = None) -> EmudInputs:
         # digi_env reads only tools.rust from mise.toml; task edits do not affect the build.
         "toolchain": pk_emud_pgo.digi_env.TOOLCHAIN,
     }
-    if gen2 := environ.get("SHARC_GEN_DIR_2"):
-        path = Path(gen2)
-        gen_dirs["gen2"] = path if path.is_absolute() else ROOT / path
-    flags["SHARC_GEN_DIR_2"] = environ.get("SHARC_GEN_DIR_2", "")
     flags["SHARC_REGIONBENCH_SOL"] = environ.get("SHARC_REGIONBENCH_SOL", "")
     if sol := environ.get("SHARC_REGIONBENCH_SOL"):
         files["env:SHARC_REGIONBENCH_SOL"] = Path(sol)
-    profile = native_pgo.current_profile(device, gen_dirs["gen"])
+    profile = native_pgo.current_profile(device, gen)
     profdata = Path(profile) if profile else None
     if profdata:
         flags["rustflags"] = native_pgo.profile_use_flags(
@@ -388,7 +450,7 @@ def inputs(device: str, environ: Mapping[str, str] | None = None) -> EmudInputs:
         )
     else:
         flags["rustflags"] = "plain"
-    return EmudInputs(files, gen_dirs, profdata, rustc_version(), flags)
+    return EmudInputs(files, {}, profdata, rustc_version(), flags)
 
 
 def key(device: str) -> str:
@@ -399,7 +461,11 @@ def test_key(device: str, entry: Path) -> str:
     """The test key of DEVICE from the store ENTRY (its `files.txt`)."""
     names = (entry / "files.txt").read_text().split()
     return test_key_of(
-        inputs(device), names, cargo_closure(), patchkit_only=patchkit_only_dirs()
+        inputs(device),
+        names,
+        cargo_closure(),
+        patchkit_only=patchkit_only_dirs(),
+        keep=device,
     )
 
 
@@ -408,7 +474,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("key", "test-key", "audit"):
         sp = sub.add_parser(name)
-        sp.add_argument("--device", required=True, choices=("dt2", "dn2"))
+        sp.add_argument("--device", required=True, choices=device_files.shorts())
     sub.choices["test-key"].add_argument(
         "--entry",
         type=Path,

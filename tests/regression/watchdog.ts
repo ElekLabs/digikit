@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { isLoading } from '@digi/test-support';
+import { isLoading } from '@digi/dk-session';
 
 /** The status fields the watchdog reads (the daemon's `status` reply has more). */
 interface WatchedStatus {

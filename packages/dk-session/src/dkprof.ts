@@ -14,8 +14,12 @@ interface Exports {
   dp_alloc(n: number): number;
   dp_free(p: number, n: number): void;
   dp_addr_lookup(req: number, len: number): number;
+  dp_addr_prepare(req: number, len: number): number;
+  dp_addr_lookup_prepared(req: number, len: number): number;
   dp_load_table(req: number, len: number): number;
   dp_profile_report(req: number, len: number): number;
+  dp_calibrate_fit(req: number, len: number): number;
+  dp_calibrate_report(req: number, len: number): number;
   dp_module_analyse(dkm: number, dkmLen: number, dko: number, dkoLen: number, text: number): number;
   dp_out_ptr(): number;
   dp_out_len(): number;
@@ -65,14 +69,26 @@ export interface ProfileReportRequest {
   top?: number;
 }
 
+export interface CalibrateRequest {
+  /** Device and model `dk.profile/1` documents (`run.case_id`, `dsp_rows`, `spans`), several captures per case. */
+  device: unknown[];
+  model: unknown[];
+  block_cycles?: number;
+  model_id?: string;
+  /** Names and hashes of the files the profiles came from, kept in the output. */
+  sources?: unknown;
+}
+
 export class DkProf {
   private x: Exports;
-  private constructor(x: Exports) {
-    this.x = x;
+  private module: WebAssembly.Module;
+  private constructor(module: WebAssembly.Module, instance: WebAssembly.Instance) {
+    this.module = module;
+    this.x = instance.exports as unknown as Exports;
   }
   static async create(wasm: BufferSource): Promise<DkProf> {
-    const { instance } = await WebAssembly.instantiate(wasm, {});
-    return new DkProf(instance.exports as unknown as Exports);
+    const { module, instance } = await WebAssembly.instantiate(wasm, {});
+    return new DkProf(module, instance);
   }
 
   private withBytes<T>(b: Uint8Array, f: (p: number) => T): T {
@@ -103,6 +119,15 @@ export class DkProf {
     return this.json((p, n) => this.x.dp_addr_lookup(p, n), req) as LookupAnswer;
   }
 
+  /** Prepare an index once for repeated address lookups. The returned function owns its Wasm instance and its index. */
+  prepareAddrLookup(
+    req: Pick<LookupRequest, 'maps'> & { loads: LoadTableJson },
+  ): (lookup: Pick<LookupRequest, 'addrs' | 'ret'>) => LookupAnswer {
+    const resolver = new DkProf(this.module, new WebAssembly.Instance(this.module));
+    resolver.json((p, n) => resolver.x.dp_addr_prepare(p, n), req);
+    return (lookup) => resolver.json((p, n) => resolver.x.dp_addr_lookup_prepared(p, n), lookup) as LookupAnswer;
+  }
+
   /** The load table of a snapshot of the runtime's tables; without `snapshot` the symbols and byte counts to read (`{ reads }`). */
   loadTable(req: {
     maps: AddrMapJson[];
@@ -114,6 +139,21 @@ export class DkProf {
   /** The named self aggregates of a `dk.profile/1` document (a `Report`, or `{ text }` with `format: 'text'`). */
   profileReport(req: ProfileReportRequest & { format?: 'text' }): Record<string, unknown> {
     return this.json((p, n) => this.x.dp_profile_report(p, n), req) as Record<string, unknown>;
+  }
+
+  /** The fit of device against model profiles: a `dk.calibration/1` document (`dkprof::calibrate`), or `{ text }` with `format: 'text'`. */
+  calibrateFit(req: CalibrateRequest & { format?: 'text' }): Record<string, unknown> {
+    return this.json((p, n) => this.x.dp_calibrate_fit(p, n), req) as Record<string, unknown>;
+  }
+
+  /** The text of a calibration and, with a model `profile`, the estimated device cycles of its DSP rows (`{ text }`); JSON: `{ calibration, estimate }`. */
+  calibrateReport(req: {
+    calibration: unknown;
+    profile?: unknown;
+    estimate_only?: boolean;
+    format?: 'text';
+  }): Record<string, unknown> {
+    return this.json((p, n) => this.x.dp_calibrate_report(p, n), req) as Record<string, unknown>;
   }
 
   /** The static analysis of the DSP section of a `.dkm` with the symbols of its DSP `.dko.json` (`dksharc::Analysis`, or `{ text }`). */

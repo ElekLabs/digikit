@@ -1,0 +1,96 @@
+/* The Files page (FilesPage.tsx): the usage bar, the tree and the info pane. It reuses the Transfer page tokens and row styles. */
+.files-page .facts {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.files-page .body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr minmax(300px, 360px);
+  gap: 16px;
+}
+.files-page .treebox {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 16px;
+}
+.files-page .tree {
+  outline: none;
+}
+.files-page .tree:not(:focus-within) li.sel {
+  background: var(--selection-muted);
+}
+.files-page .info {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 0 16px 16px;
+  border-left: 1px solid var(--line);
+}
+.files-page .info dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+.files-page .info dt {
+  color: var(--ink-3);
+}
+.files-page .info dd {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.files-page .info dd.plain {
+  font-family: inherit;
+}
+.files-page .info .hash {
+  word-break: break-all;
+}
+.files-page .info .acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.files-page .info .hex {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--tp-inset);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+}
+@media (max-width: 900px) {
+  .files-page .body {
+    grid-template-columns: 1fr;
+    grid-auto-rows: min-content;
+    overflow: auto;
+  }
+  .files-page .treebox {
+    overflow: visible;
+  }
+  .files-page .info {
+    padding: 12px 0 16px;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    overflow: visible;
+  }
+}
+
+/* the tree has no tick column: the twisty and the indent start the row */
+.files-page .tree .tick {
+  display: none;
+}

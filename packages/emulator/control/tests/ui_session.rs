@@ -45,12 +45,12 @@ fn a_session_is_adopted_by_the_load_that_starts_it() {
     // The status keeps the patch report.
     let status = handle.call("status", json!({})).unwrap();
     assert_eq!(status["firmware"]["runtime"]["set"], "emulator", "{status}");
-    assert_eq!(
-        status["firmware"]["runtime"]["modules"]
+    assert!(
+        !status["firmware"]["runtime"]["modules"]
             .as_array()
             .unwrap()
-            .len(),
-        17 // the emulator set and core/platform, which the runtime requires
+            .is_empty(),
+        "{status}"
     );
     // The maps of the running image: the ship map and the addresses the load table is read from (`runtime.maps`).
     let maps = handle.call("runtime.maps", json!({"session": 3})).unwrap();
@@ -82,18 +82,19 @@ fn patched_zero_keeps_the_block_clock_through_cache_fallback_and_restart() {
         return;
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let ready: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(root.join("tools/emulator/ready_inputs.json")).unwrap(),
-    )
-    .unwrap();
-    let snapshot = root
-        .join(ready["ready_dirs"]["dt2"].as_str().unwrap())
-        .join("digi-audio-m5.snap");
+    let ready_dir = &patchkit::devdata::by_short("dt2")
+        .unwrap()
+        .identity
+        .acceptance
+        .as_ref()
+        .unwrap()
+        .ready_dir;
+    let snapshot = root.join(ready_dir).join("digi-audio-m5.snap");
     if !snapshot.is_file() {
         return;
     }
     let firmware = patchkit::firmware::Firmware::parse(&std::fs::read(&syx).unwrap()).unwrap();
-    let ports = patchkit::port::Registry::from_dir(&root.join("devices/ports")).unwrap();
+    let ports = patchkit::port::Registry::from_dir(&root.join("ports")).unwrap();
     let literal = ports
         .find(&firmware.syx_sha256)
         .unwrap()

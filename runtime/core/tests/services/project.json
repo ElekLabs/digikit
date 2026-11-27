@@ -1,0 +1,74 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-provider-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": ["core/runtime-package", "dkrt-svc-rt", "dkrt-lifecycle", "dkrt-abi", "sdk"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "providers.device.test.ts"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/svc-test",
+          "test/svc-test-user",
+          "test/local-ping",
+          "test/local-ping-user",
+          "test/local-patch",
+          "test/local-patch-user"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "owner-step.device.test.ts"
+        ],
+        "tags": [
+          "C:loading"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/local-step",
+          "test/local-step-user"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "service-reload.device.test.ts"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/svc-test",
+          "test/svc-test-user"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ],
+        "sources": [
+          "tests/fixtures/modules/svc-test/**/*"
+        ],
+        "plusdrive": true,
+        "firmwareOnly": "the hook site holds a jump to the new copy after a service reload, and the consumer reads the new export with the firmware running; the job's steps and the boot record are host tests"
+      }
+    ]
+  }
+}

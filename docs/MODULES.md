@@ -38,7 +38,7 @@ A service is planned, not built (see section 4). It will be a module with a role
 ## 2. Files of a module
 
 ```text
-modules/machines/analog/
+modules/machine/fadedlimes/analog/
   module.toml          identity, [[machine]] list, [uses.<device>] counts
   src/module.c         the entry point and the builder calls
   src/dsp/analog.s     SHARC code
@@ -96,9 +96,9 @@ Some services are provided by a patched-in module, not by the runtime: `core/ui`
 
 Today the `runtime`, `samples`, `machines` and `fx` imports resolve to code in the runtime image. The runtime's import table holds the imports without `requires`.
 
-### Registry: built (R7) and planned (R9 to R12)
+### Registry: built (R7 to R11, R12-1) and planned (R12)
 
-R7 is built: one generated table of record kinds, resources and in-crate services; `dk_record_add` for generic kinds; the header table with the R12 entries; a boot planner that returns one verdict for each module of the selection before anything loads; declare-check-commit for services ([runtime-and-services.md](plans/runtime-and-services.md) 4.1). What is planned: R9 to R12 move code out of the runtime into services (`.dks` files). The layers, the three interfaces and the rule that services do not call each other are in [ARCHITECTURE.md](ARCHITECTURE.md). The design:
+R7 is built: one generated table of record kinds, resources and services (crates in `services`); `dk_record_add` for generic kinds; the header table with the R12 entries; a boot planner that returns one verdict for each module of the selection before anything loads; declare-check-commit for services ([runtime-and-services.md](plans/runtime-and-services.md) 4.1). What is planned: R12 packages the service crates as `.dks` files. The layers, the three interfaces and the rule that services do not call each other are in [ARCHITECTURE.md](ARCHITECTURE.md). The design:
 
 - A service declares its name, record kinds, resources, exports and hook table. The runtime fills a registry during boot planning, before any module code runs. There is no run-time registration call.
 - A service loads only when a selected module needs it. Load order follows dependencies.
@@ -121,7 +121,7 @@ dk_module_ctx_add_machine / dk_module_ctx_add_fx
 
 Setters refine them: `dk_param_range`, `dk_param_glyph`, `dk_param_latched`, `dk_param_on_click`, `dk_page_canvas`, `dk_page_bind`, `dk_page_bind_local`, `dk_fx_routes`, `dk_fx_mix`. The signatures are in `sdk/sdk.toml`.
 
-The Analog machine (`modules/machines/analog/src/module.c`) is the shortest example: one machine, one page, four parameters.
+The Analog machine (`modules/machine/fadedlimes/analog/src/module.c`) is the shortest example: one machine, one page, four parameters.
 
 ```c
 dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_ANALOG, "Analog", "ANA");
@@ -129,11 +129,11 @@ dk_page *p = dk_machine_add_page(m, "Analog", "ANALOG");
 dk_page_add_param(p, "Detune", "DET", 40);
 ```
 
-The SHOT machine (`modules/machines/shot`) uses most of the surface: a knob page, a canvas page over the stock overlay, a wide canvas page, a click handler and a sample pool.
+The SHOT machine (`modules/machine/digikit/shot`) uses most of the surface: a knob page, a canvas page over the stock overlay, a wide canvas page, a click handler and a sample pool.
 
 ### The calls collect; the commit decides
 
-During `init` the calls only record into one `Collect` block in the arena. They are bounded by `max_records` (32) and by the size `collect_bytes` (6320, checked at compile time against the ColdFire layout).
+During `init` the calls only record. The machine calls (`dk_module_ctx_add_machine`, `dk_machine_add_page`, `dk_page_add_param`, ...) are exports of `machines.dks` and the effect calls (`dk_module_ctx_add_fx`, ...) exports of `fx.dks`: each service keeps its own collection in its state, bounded by `max_records` (32). `dk_record_add` and the service declarations record into one `Collect` block in the arena, bounded by the size `collect_bytes` (1618, checked at compile time against the ColdFire layout).
 
 A call never fails on its own. On overflow, a bad argument, a call outside `init` or a handle that is not ours, it returns a placeholder handle. The first error is kept. The setters ignore a placeholder. The error is reported when `init` returns.
 
@@ -179,7 +179,7 @@ The keys are not in the header file. The packer computes them from the packed na
 
 `name` is the `--name` value of `pack` when given, else the module id. So a normal pack gives the same keys every time, and saved projects stay valid. An alias made with `pack --name` gets keys of its own, so two copies of one module do not share an effect id. Renaming a module id changes the keys and loses the projects that use it.
 
-Why the keys must be known before load: the runtime plans the type numbers of all selected machines at boot, before the first module loads (`assign::plan`). A card-side map of up to 8 entries keeps a number for a machine across boots; a clash gets a fresh number. Effect ids are 16 bits, so a clash is possible (about 1 in 65535 per pair). The loader refuses it with `E_FX_ID_DUP`.
+Why the keys must be known before load: the runtime plans the type numbers of all selected machines at boot, before the first module loads (`assign::plan`). A card-side map of up to 8 entries keeps a number for a machine across boots. A key that two modules (or one module twice) provide is refused by the boot plan with `E_PLAN_KEY`, for every kind. Effect ids are 16 bits, so a clash is possible (about 1 in 65535 per pair); the plan refuses it the same way.
 
 ### DSP names
 
@@ -207,9 +207,9 @@ The header pair at 0x90 and 0x94 is `table_off` and `table_size`. The table is v
 | KEYS | `(kind, n, keys)`: the machine keys, the effect ids, and the keys of `[[record]]` entries (the shape id of an `lfo_shape`) |
 | KINDS, SLOTS, HOOKS, EXPORTS, RESOURCES | what a service module provides (R12; the runtime compares the `dk_service_declare_*` calls of `init` with them) |
 
-A module that needs and keeps nothing has the 8-byte head. The packer always writes a table and at least 0.8.0 as the needed version, so a module of runtime 0.7 (no table, or the old row counts) is refused with `E_CONTRACT`. The header is 160 bytes. `packages/dkneeds/src/keys.rs` owns the layout.
+A module that needs and keeps nothing has the 8-byte head. The packer always writes a table and at least `[runtime] table` (the current MINOR, 0.9.0) as the needed version, so a module of an older MINOR (runtime 0.7: no table, or the old row counts) is refused with `E_CONTRACT`. The header is 160 bytes. `packages/dkneeds/src/keys.rs` owns the layout.
 
-A module that emits records of a generic kind (a kind a service owns that has no builder, such as `lfo_shape`) calls `dk_record_add(ctx, kind, bytes, len)` in `init` and lists each record as `[[record]] kind = "lfo_shape", key = 7` in `module.toml`. The boot planner reads the keys from the table: a kind no service owns, or a key another module of the selection has, is refused before the module loads (`E_PLAN_KIND`, `E_PLAN_KEY`).
+A module that emits records of a generic kind (a kind a service owns that has no builder, such as `lfo_shape`) calls `dk_record_add(ctx, kind, bytes, len)` in `init` and lists each record as `[[record]] kind = "lfo_shape", id = "ramp"` in `module.toml`. The record's key is `hash24(<module id>:<id>) << 8`, like a machine key; `patchkit gen` writes it as `DK_KEY_RAMP` in `build/gen/module_ids.h`, and `init` writes that constant as the first word of the record body. The boot planner reads the keys from the table: a kind no service owns, or a key another module of the selection has, is refused before the module loads (`E_PLAN_KIND`, `E_PLAN_KEY`).
 
 ## 7. The load path and what a refusal guarantees
 
@@ -217,7 +217,7 @@ A module that emits records of a generic kind (a kind a service owns that has no
  card (store)
     |  find, load to the staging buffer              E_NOT_FOUND E_BAD_STORE E_READ E_SHA E_TOO_BIG
     v
- staging buffer (at most 64 KiB; the only place the file is read from)
+ staging buffer (at most 128 KiB; the only place the file is read from)
     |  checks; nothing is written outside the buffer
     |   - magic, header size, file size, sha256       E_FORMAT, E_SHA
     |   - runtime version (header 0x30)               E_CONTRACT
@@ -235,7 +235,7 @@ A module that emits records of a generic kind (a kind a service owns that has no
  init(ctx)      builder calls append to the Collect block; no firmware row is written
     |  non-zero result: E_INIT, or E_IMPORT when an absent provider answered DK_E_MISSING
     v
- commit         check ([uses], keys, duplicate effect id, free rows)  E_DECL_ID, E_DECL_USES, E_DECL_FULL, E_FX_ID_DUP, E_PARAM_FULL ...
+ commit         check ([uses], keys, free rows)  E_DECL_ID, E_DECL_USES, E_DECL_FULL, E_PARAM_FULL ...
                 lower to records, check records, voice ranges and latch mask
                 apply: firmware rows are written here; the record block stays in the arena
     |  any failure: undo (below)
@@ -246,7 +246,7 @@ A module that emits records of a generic kind (a kind a service owns that has no
  fini(ctx)      failure paths and restart only
 ```
 
-All checks run on the staged file before any write. The module set is fixed after the boot hook; a later load returns `E_BOOT_ONLY`. The firmware builds its machine view after the boot hook, so rows written at commit are in place before the firmware reads them.
+All checks run on the staged file before any write. The module set is fixed after the boot hook; a later load returns `E_BOOT_ONLY` (a service that must start at boot also gets it from a live load: restart the device). The firmware builds its machine view after the boot hook, so rows written at commit are in place before the firmware reads them.
 
 Why the DSP check and reserve stay before `init`: they need only the static DSP section and the keys table. They keep pointers into the staged file only until `reserve`. The cheap refusals come first.
 
@@ -254,7 +254,7 @@ Why the DSP check and reserve stay before `init`: they need only the static DSP 
 
 A refused module writes no byte into the firmware tables. The module's rows are written only at commit, and a failure at or after `init` undoes everything that was taken: the boot animation, the module's files, host commands, registry rows (`registry::remove`), the DSP reservation (`dsp::release`) and the arena block.
 
-The caveat: if something cannot be given back (the DSP part is still in use, or files are not retired), the load returns `E_BUSY` and not the original reason. The module memory then stays allocated.
+The caveat: if something cannot be given back (the DSP part is still in use, or files are not retired), the load returns `E_BUSY` and not the original reason. The module memory then stays allocated. A worker job (`dk_job_post`) that is on the worker when a load is refused is such a case: the refusal retires the file's jobs, cancels the running one and answers `E_BUSY`, because freeing the block would free code the worker runs.
 
 ### States, planned
 
@@ -262,12 +262,12 @@ Today the boot loads modules in selection order and a load either returns OK, LO
 
 ## 8. Versions
 
-There is one version: the runtime release (`[runtime] version` in `sdk/sdk.toml`, semantic, now 0.8.0).
+There is one version: the runtime release (`[runtime] version` in `sdk/sdk.toml`, semantic, now 0.9.0).
 
 - While it is 0.x, a minor may break (an import changed or removed, the module file format, the store format, the SysEx protocol). A patch only adds. Stable is 1.0.0.
 - There are no separate numbers for the API, the machine contract, the effect contract or a service.
 - Each import has `since`, the runtime version that added it.
-- The packer writes the newest `since` among the imports a module links into header word 0x30, and at least the version that introduced the header table (`[runtime] table`, 0.8.0). Bit 31 of that word is the trace flag.
+- The packer writes the newest `since` among the imports a module links into header word 0x30, and at least `[runtime] table` (the current MINOR, 0.9.0: the loader takes only the runtime's MAJOR and MINOR). Bit 31 of that word is the trace flag.
 - The loader accepts a module when its major and minor equal the runtime's and its patch is at most the runtime's. Otherwise the load fails with `E_CONTRACT`. The fix is to rebuild the module. A file with the old keys table (runtime 0.7) has no header table and fails with `E_CONTRACT` too.
 - A `.dkmod` (a source package) builds against the SDK of the machine that receives it, so the rule holds after the build.
 
@@ -294,7 +294,7 @@ The module's own semantic version (header word 0x34) covers its saved data. Proj
  firmware         stock Elektron code
 ```
 
-Services (`.dks`, planned) sit between modules and adapters. Module imports do not change when they arrive.
+Services (`.dks` files on the card: `machines`, `fx`, `samples`, `lfo`) sit between modules and adapters. A module reaches a service through its `sdk.toml` imports; the runtime loads the services that the selected modules need.
 
 Who owns what: the SDK has no device code. Adapters and device profiles carry the device and firmware facts. Modules are device-neutral. The builder calls take device facts (knob positions, stock rows, level) from the profile that the runtime reads at commit, so a module does not name a device.
 
@@ -312,6 +312,33 @@ Who owns what: the SDK has no device code. Adapters and device profiles carry th
 | Anchors resolved by hash | survive firmware releases | hard-coded firmware addresses in module source |
 | Compact binary `.dkm` with sha256 | small, fast to check | JSON object files |
 | Services separate from the runtime (planned) | small runtime; a test depends only on the services it loads | one large runtime |
+
+## Install with services from the command line
+
+`wb transfer` (`mise run transfer`) runs the Transfer pane's install and delete through the same TypeScript (`packages/workbench-core/src/modules/dktransfer.ts`), over the NodeHost. It needs `apps/web/public/patchkit.wasm` (`mise run wasm:patchkit`), the packed modules in `out/modules/<device>/` (or `--library DIR`, for example `dist/modules` after `nx run <id>:pack`) and the unbound services in `dist/modules/<device>/` (the task packs them first). For a device it needs the `dkmidi` bridge (`mise run dkmidi:build`); `--emu` drives the running emulator of `--run-dir DIR` (default `out/native/run`, `mise run emu:serve`) instead.
+
+```text
+mise run transfer -- [--port SUB | --emu [--run-dir DIR]] install ID... [--stock STOCK.syx] [--restart] [--library DIR] [--format text]
+mise run transfer -- [--port SUB | --emu [--run-dir DIR]] restart
+mise run transfer -- [--port SUB | --emu [--run-dir DIR]] delete PATH...
+```
+
+`install` resolves the services each module needs (transitively), uploads the port file of the device's firmware (the one whose FW item equals the device's `fw_id`) and the services as built, in dependency order, and then the modules, and skips files whose hash is on the card. The stock firmware is `--stock`, by default the one the tests use for the device (`stockImage` in `packages/test-support/src/firmware-inputs.ts`: DT2 1.17, DN2 1.12 in `$DIGI_FIRMWARE_DIR` or `firmware/`). A module whose service or port file cannot be found is named and skipped; the others install. `--restart` then selects exactly the installed modules, restarts the device, waits for the boot and exits 1 when MODULES does not list one of them (the last event is `{"event":"loaded","loaded":[...],"missing":[...]}`). `delete` takes the services that no remaining module needs along with the deleted modules, and keeps the others. Output: one JSON event per line, or the pane's text with `--format text`.
+
+Output of `mise run transfer -- --emu --run-dir RUN --library dist/modules install test/sine digikit/debug` on DN2 1.12 (progress events left out):
+
+```text
+{"event":"start","device":"dn2","modules":["test/sine","digikit/debug"]}
+{"event":"upload","id":"machines","kind":"service","path":"services/machines.dks","bytes":29718}
+{"event":"verify","id":"machines","kind":"service","path":"services/machines.dks","ok":true}
+{"event":"upload","id":"test/sine","path":"modules/sine.dkm","bytes":1062}
+{"event":"verify","id":"test/sine","path":"modules/sine.dkm","ok":true}
+{"event":"upload","id":"digikit/debug","path":"modules/debug.dkm","bytes":8256}
+{"event":"verify","id":"digikit/debug","path":"modules/debug.dkm","ok":true}
+{"event":"done","restarted":false,"selected":[]}
+```
+
+With `--restart` the events `restart` and `wait` follow, then `loaded`. The device test `transfer-live` runs this on both devices.
 
 ## 11. Where to go next
 

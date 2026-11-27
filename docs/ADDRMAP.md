@@ -9,7 +9,7 @@ A lookup uses the most specific layer that holds the address and falls back to t
 | Layer | `layer` | Holds | Written by | Ships |
 | --- | --- | --- | --- | --- |
 | 1 Our code | `our` | The ColdFire code of the runtime, core adapters and apps in a patched image; loaded `.dkm` modules, rebased to their load address; the DSP code of loaded modules, rebased to the start of their DSP image | `patchkit apply --addrmap`, `patchkit pack --addrmap` | yes |
-| 2 Anchors | `anchor` | Code anchors of `devices/ports/*.toml` that are at most 4096 bytes long. Region anchors (`cf.main`) are left out: they would hide every firmware name | `patchkit apply --addrmap` | yes |
+| 2 Anchors | `anchor` | Code anchors of `ports/*.toml` that are at most 4096 bytes long. Region anchors (`cf.main`) are left out: they would hide every firmware name | `patchkit apply --addrmap` | yes |
 | 3 Firmware names | `fw` | Functions of the firmware databases (cfdb: ColdFire; sharcdb: SHARC) | `tools/coldfire/addrmap_export.py` | no, developer machines only |
 
 Names of Rust symbols are demangled without the hash (`dkrt::card::gate`). A return address is looked up at the address minus 2: a call to a
@@ -59,12 +59,17 @@ where the module's DSP image starts. A module without a DSP part, or a table wri
 Hosts do not decode the table. They read raw memory and `dkaddrmap::snapshot` (one Rust decoder, also built for wasm32) turns it into the table:
 
 - A ship map has `key.loader`: `{"modules": slots, "l2_byte_base": ..., "l2_sw_base": ..., "dsp": true}`. `patchkit apply --addrmap` writes it from the device
-  file (`[limits] modules`) and the L2 constants of `packages/patchkit/src/dsp.rs`; `dsp` says the image has the run-time DSP loader.
-- `patchkit addr --map SHIP --format reads` lists what to read: the plan symbols `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info` with their byte counts.
+  file (`[limits] modules`) and the L2 constants of `packages/patchkit/src/dsp.rs`; `dsp` says the image has the run-time DSP loader (`dyndsp_info`).
+- `patchkit addr --map SHIP --format reads` lists what to read, in order: the plan symbols `DKRT_STATE`, `DKRT_HOST_DIR` and `dyndsp_info` with their byte counts, and `DKRT_DSP` and
+  `DKRT_PROVIDERS`, which belong to the system package (a card file placed at a different address each boot, so they have no symbol in the image). A read with a `host_id` is such a
+  static: its address is the entry of that id in the host directory `DKRT_HOST_DIR` (read first; ids in `runtime/core/abi.toml` `[[host_dir]]`, generated to
+  `packages/dk-session/src/gen_host_dir.ts` and `packages/dkaddrmap/src/gen_host_dir.rs`). The directory is a magic, the count of ids the core knows, a ready word and one 32-bit address per id;
+  the core clears it before it starts the package, fills the ids it owns (the package's block), the package fills its own at its entry, and the core sets the ready word last. A directory that is not ready, or an empty entry, means no package is loaded (a core-only boot, no `digikit/system.dksp`, or the package still starting).
+  `dkaddrmap::host_dir::HostDir` reads it and `Loader::collect` is the whole procedure; `packages/dk-session/src/host-directory.ts` is the TypeScript reader and `tools/patchkit/pk_hostdir.py` the Python one (its ids come from abi.toml).
 - `patchkit addr --map SHIP --snapshot SYMBOL=HEX ... [--format loads]` takes the bytes (hex, one flag per symbol) and decodes them; `--format loads` prints
   the table, any other format names addresses with it.
 
-Layout: `DKRT_STATE` (`State` in `modules/core/runtime/src/rs/src/lib.rs`) has ten header words, then one record of 13 words per slot: used, name[32], version,
+Layout: `DKRT_STATE` (`State` in `runtime/core/src/rs/src/lib.rs`) has ten header words, then one record of 13 words per slot: used, name[32], version,
 base, size, fini. `DKRT_DSP` (`DspState` in `.../dsp.rs`) has 13 words, then `mod_off[slots]` and `mod_len[slots]`. The record index of `DKRT_STATE` is the index in
 `DKRT_DSP`. A module with `mod_len[i] != 0` starts at the L2 byte address `area + mod_off[i]` (`area` is word 3 of `dyndsp_info`); `dsp_base` is
 `l2_sw_base + (that address - l2_byte_base) / 2`. The slot count is read from the length of the `DKRT_STATE` bytes. No firmware or runtime change.
@@ -128,7 +133,7 @@ read; patchkit decodes the bytes:
 ```sh
 dist/patchkit/patchkit --root . apply --firmware firmware/Digitakt_II_OS1.17.syx --set emulator -o out/try/rt.syx --plan out/try/rt.plan.json --addrmap out/try/rt.addrmap.json
 dist/patchkit/patchkit addr --map out/try/rt.addrmap.json --format reads
-# [{"len":456,"symbol":"DKRT_STATE"},{"len":116,"symbol":"DKRT_DSP"},{"len":16,"symbol":"dyndsp_info"}]
+# [{"len":456,"symbol":"DKRT_STATE"},{"len":24,"symbol":"DKRT_HOST_DIR"},{"host_id":0,"len":116,"symbol":"DKRT_DSP"},{"len":16,"symbol":"dyndsp_info"},...]
 dist/patchkit/patchkit addr --map out/try/rt.addrmap.json --snapshot DKRT_STATE=$(printf '00%.0s' $(seq 456)) --format loads
 # {"modules":[]}
 ```
@@ -139,24 +144,77 @@ The second command is an all-zero module table: no module loaded. With real byte
 
 ## Workbench
 
-The desktop Log pane names addresses of the **emulator** and of a **device** (`apps/desktop/ui/src/log-names*.ts`, `dkprof-env.ts`); the shared text builders are in
+The desktop Log pane names addresses of the **emulator** and of a **device** (`packages/dk-session/src/log-names.ts`, `apps/desktop/ui/src/log-names-backend.ts`, `dkprof-env.ts`); the shared text builders are in
 `packages/dk-session/src/runtime-log.ts`. One path serves both origins: the load table is read through the dk-session protocol with PEEK of the debug module
 (`DkSession.peek`; the capability PEEK, so `digikit/debug` must be loaded), on the session the follower already uses, and `dkprof.wasm` decodes it. `mem.cf.peek` is not used.
 Only the source of the ship map differs. **Hardware proof is a later, explicit step**: the device path runs in the emulator over the same code
-(`modules/core/runtime/tests/log-names.device.test.ts`, registered, run in the batched gate), and the host tests use a fake session for both origins.
+(`runtime/core/tests/log-names.device.test.ts`, registered, run in the batched gate), and the host tests use a fake session for both origins.
 
 - Emulator: the controller call `runtime.maps` ([CONTROL.md](CONTROL.md)) returns the ship map of the running image, made from its patch record where `dev.reload` makes its plan, and
-  the addresses of `DKRT_STATE`, `DKRT_DSP` and `dyndsp_info`; it follows a module swap.
+  the addresses of `DKRT_STATE`, `DKRT_HOST_DIR` and `dyndsp_info`; it follows a module swap.
 - Device: `firmware_prepare` keeps the ship map and the same symbol addresses of the image it prepares in `out/addrmap/<device>/<image id>.ship.json` (`library::store_ship`).
   The follower picks the record whose image id equals the id INFO reports. A device whose image was not prepared by this workbench has no names: the Log says why once.
 - Modules: `lib_build` writes `M.addrmap.json` beside each `M.dkm` in `out/modules/<device>/`. The Host command `library.readMaps(device)` returns these and the kept ship
   maps; `host.firmware.dkprofWasm()` gives the wasm.
-- When the maps are read: before the first entry that names an address (a crash, a fault) and again after the module list changed. Without PEEK, without a map for the image or when the
-  maps do not match the running bytes, the pane shows hex and one line `names unavailable: <reason>`.
-- Text: a name is appended as ` (module: function+0xNN)` after the `pc` of a crash and the `at` of a stopped DSP, and a stack word that names code is listed as a return
-  address in the detail of a fault. An address no map holds stays hex. Records of an earlier boot (crash, fault) mark a module name `unverified`: the module sits at the load
-  addresses of the boot that reads the record (above). Whether the DSP's last word of a fault record is a SHARC PC is unverified [O]: it is named only when a module's DSP map holds it.
+- The Log loads names before formatting a crash and refreshes them when module state or registered sources change. It displays a PC or return address alongside its resolved name and offset. Module addresses from an earlier boot carry an `unverified` marker because modules can move. The last word of a DSP fault is a packed breadcrumb and stays hexadecimal.
 - The Memory panel lists, under each bar, what each loaded module takes of the resource (`moduleRows`, from CAPACITY and the module files' needs).
+
+### Firmware symbols in desktop Settings
+
+Open **Settings → Firmware symbols**. Digitakt II OS 1.17 and Digitone II OS 1.12
+have separate profiles. Each uses these files from the checkout that launched
+Workbench when no custom path is set.
+
+| Source | Default under `out/firmware/<release>/` |
+| --- | --- |
+| ColdFire database | `main/firmware.sqlite` |
+| SHARC database | `dsp/firmware.sqlite` |
+| SHARC catalog | `dsp/review.html` with `dsp/review.addrmap.json` beside it |
+
+**Choose…** checks a custom file against the release and remembers the path.
+**Use default** clears that override. **Refresh sources** rereads the files
+after a rebuild or move. Existing matching database registrations carry over.
+Additional developer maps can still be imported with **Add Symbol map…**.
+
+Workbench checks a SQLite database's main or DSP digest against its firmware
+port, and a developer map's stock SysEx hash against the same port. Catalog
+links also require the HTML digest recorded in the sibling review map. A
+catalog's map can supply SHARC names when the database is unavailable.
+Workbench prefers names from a verified database for that CPU.
+
+The Log can name fixed firmware PCs even when the debug module cannot supply a module load table. Profile shows names beside sampled ColdFire and SHARC addresses. When reopening a capture, Profile uses the firmware hash recorded in the capture to find matching registered symbols. Captures without a verified image and addresses outside known ranges keep their numeric addresses.
+
+## Open a profile hotspot
+
+Generate the [SHARC review and its sibling address map](FIRMWARE.md#generate-a-sharc-catalog-from-a-syx).
+Use that map for the offline CLI report:
+
+```sh
+node tools/devtools/wb.mjs --format json profile report CAPTURE.json \
+  --map out/firmware/dt2-1.17/dsp/review.addrmap.json
+```
+
+`hotspots` keeps the sampled PC, owner, function entry, offset, measurement
+unit and, for catalog candidates, the HTML path and fragment. ColdFire
+addresses count bytes and SHARC PCs count short words. Match the map to
+the capture's stock firmware hash. Supply module maps with another `--map`
+and keep the capture's load table and the `.dkm` hashes for those maps. The
+hotspots display unresolved addresses numerically when identity is unavailable.
+The legacy CLI aggregate supports explicitly supplied maps for older captures.
+Workbench recordings and some older CLI captures lack verified pack hashes,
+so their module PCs still appear without a verified hotspot link.
+
+In Workbench, open **Firmware → Catalog** or click **Open catalog** on a release
+in Settings. When you open a saved capture in Profile, click an underlined
+hotspot to inspect its function in the matching catalog. The capture's hash
+selects the release. **Back to profile** returns to the inspector. Use **Open in
+browser** to open the original HTML, which supports local review decisions and
+JSONL import/export. The in-app catalog is read-only. A paired function link
+uses the peer release's configured catalog.
+
+Expand a verified module hotspot to see its loaded address and module-relative
+entry. The CLI can also add module loop
+analysis using `--analyse` as described in [Instrumentation](INSTRUMENTATION.md#profiles).
 
 ## Consumers
 

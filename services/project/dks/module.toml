@@ -1,0 +1,58 @@
+[module]
+id = "core/services/project"
+# the version the file provides (PROVIDES), on the scale of the imports' `since`: dk_project_current and dk_project_status are since 0.11.0 of sdk/sdk.toml
+version = "0.11.0"
+name = "project service"
+category = "core"
+role = "service"
+service = "project"
+callback_order = 600
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "The project service of the runtime as a service file: the digikit data of one Elektron project in a .dkp file of the store (projects/<number>-<name>.dkp), read when a project becomes current and written at the next successful stock save; the runtime's settings overlay makes module settings per project through it, and it takes five hooks on the stock project paths (slot setter, save exit, clear one, clear many, paste)"
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The hooks it takes (ports/fw/project.toml): sites on the stock project paths, listed in the port file. Each is a routine of this file (`src/hooks.s`) that only records into the
+# service's `Pending` and leaves into the stock code through the tail (the displaced instructions, then the end of the site). `init` repeats them with dk_service_declare_hook (`service!`).
+# The paste hook is listed for the devices whose function a rule matches (ports/fw/project.toml).
+[[hook]]
+name = "cf.project.hook.slot_set"
+entry = "project_hook_slot"
+
+[[hook]]
+name = "cf.project.hook.save_exit"
+entry = "project_hook_save"
+
+[[hook]]
+name = "cf.project.hook.clear_one_exit"
+entry = "project_hook_clear_one"
+
+[[hook]]
+name = "cf.project.hook.clear_many_exit"
+entry = "project_hook_clear_many"
+
+[[hook]]
+name = "cf.project.hook.paste_exit"
+entry = "project_hook_paste"
+
+# Rust and assembler (`src/hooks.s`), built with rustc_codegen_gcc for -mcpu=54418 (`patchkit build`). Packed as a .dks (`patchkit pack core/services/project`): the file is `project.dks`.
+[[object]]
+path = "build/project.dko.json"
+sources = ["Cargo.toml"]
+place = "cf.expansion"
+
+# The tails of the hooks of ports/fw/project.toml (`hook.<hook>.tail` is the displaced instructions followed by the end of the site) and the firmware name `cf.project.value.slot_byte`, as aliases `patchkit pack` makes into imports.
+[object.externs]
+project_t_slot = "hook.cf.project.hook.slot_set.tail"
+project_t_save = "hook.cf.project.hook.save_exit.tail"
+project_t_clear_one = "hook.cf.project.hook.clear_one_exit.tail"
+project_t_clear_many = "hook.cf.project.hook.clear_many_exit.tail"
+project_t_paste = "hook.cf.project.hook.paste_exit.tail"
+# The firmware's slot byte (ports/fw/project.toml `cf.project.value.slot_byte`), read once at the start by `firmware_slot` of `src/glue.rs`.
+project_slot_byte = "cf.project.value.slot_byte"

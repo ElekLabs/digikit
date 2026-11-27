@@ -6,21 +6,26 @@
 // the machine runs well. This wrapper takes one of N slots shared by all worktrees of the clone
 // (`<git common dir>/emu-slots/slot-<i>`), runs the command with inherited stdio, releases the slot and
 // exits with the command's status (a signal n becomes 128+n). It waits without a time limit.
-// N is the ceiling of tools/nx/resources.mjs (cores and RAM), and a slot is taken only when the machine has idle
-// cores: one waiter at a time holds the `admit` lock, and decides from the slots in use and the idle cores.
-// The first emulator is always admitted. After an admission the lock is kept for RAMP_MS, so the next decision
-// sees the load of the new emulator. DIGI_EMU_SLOTS=N is a fixed count with no idle check (for an A/B).
+// N is the ceiling of tools/nx/resources.mjs (cores and RAM). A task has cores by DSP mode (DIGI_EMU_DSP, set by the Nx
+// target from the runtimeAcceptance record: zero 1 core, sharc 3, device-tests.mjs taskMode). A slot is taken only when
+// the cores of the running tasks plus this one fit the core budget (the performance cores, DIGI_BUDGET) and the machine has
+// that many idle cores beside the reserve. Waiters are served by priority: the longest expected run first (its last
+// duration, kept clone-wide beside the slots, else coupled before zero-DSP), so long coupled tasks start first and do not end the gate alone.
+// One waiter at a time holds the `admit` lock, and decides. The first emulator is always admitted. After an admission the
+// lock is kept for RAMP_MS, so the next decision sees the load of the new emulator.
+// DIGI_EMU_SLOTS=N is a fixed count with no core, idle or order check (for an A/B).
 //
 // Lock rules are those of tests/regression/runtime/run-claim.ts: the lock file appears with the pid in it
 // (written aside, then linked into place). A dead pid is taken over by renaming the lock away first. An
-// unreadable lock counts as held until it is 10 minutes old. Release removes the lock only if it holds our pid.
+// unreadable lock counts as held until it is 10 minutes old. The admit lock is stale after ADMIT_MAX_MS even with a
+// live pid. Release removes the lock only if it holds our pid.
 import { spawn, spawnSync } from 'node:child_process';
 import { constants } from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { retryDecision } from '../nx/retry.mjs';
-import { ADMIT_IDLE_CORES, RAMP_MS, budget, idleCores, reserve, workCores } from '../nx/resources.mjs';
+import { MODE_CORES, RAMP_MS, budget, idleCores, reserve, workCores } from '../nx/resources.mjs';
 
 const UNREADABLE_LOCK_MS = 10 * 60_000;
 const POLL_MS = 500;
@@ -43,10 +48,24 @@ const lockText = (lock) => {
   }
 };
 
-// Whether the lock names a live process, or is too new to judge. A missing lock is not held.
-const held = (lock) => {
+// The admit lock is held for one decision plus RAMP_MS. Older than this, it is stale even if its pid lives:
+// a holder that never releases it would otherwise block every waiter of the machine.
+export const ADMIT_MAX_MS = 30_000;
+
+const ageMs = (lock) => {
+  try {
+    return Date.now() - fs.statSync(lock).mtimeMs;
+  } catch {
+    return 0;
+  }
+};
+
+// Whether the lock names a live process, or is too new to judge. A missing lock is not held. With `maxAgeMs`,
+// a lock older than that is not held, whatever its pid.
+const held = (lock, maxAgeMs) => {
   const text = lockText(lock);
   if (text === undefined) return false;
+  if (maxAgeMs !== undefined && ageMs(lock) > maxAgeMs) return false;
   const pid = Number.parseInt(text, 10);
   if (Number.isInteger(pid) && pid > 0) return alive(pid);
   try {
@@ -58,7 +77,7 @@ const held = (lock) => {
 
 let staleCount = 0;
 
-export const tryLock = (lock) => {
+export const tryLock = (lock, maxAgeMs) => {
   const tmp = `${lock}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, String(process.pid));
   try {
@@ -69,7 +88,7 @@ export const tryLock = (lock) => {
       } catch (error) {
         if (error.code !== 'EEXIST') throw error;
       }
-      if (held(lock)) return false;
+      if (held(lock, maxAgeMs)) return false;
       const seen = lockText(lock);
       const away = `${lock}.stale-${process.pid}-${++staleCount}`;
       try {
@@ -123,10 +142,89 @@ const slotsInUse = (dir, slots) => {
   return used;
 };
 
-// Take a slot, waiting as long as needed. Returns { lock, admit }: the slot lock and the admit lock, which
+// Cores and priority of the task (env: DIGI_EMU_DSP).
+export const taskCores = (env = process.env) => {
+  const mode = env.DIGI_EMU_DSP || 'zero';
+  if (!(mode in MODE_CORES)) throw new Error(`DIGI_EMU_DSP must be zero or sharc, got ${mode}`);
+  return MODE_CORES[mode];
+};
+
+// Core budget of the machine for emulators: the budget B of tools/nx/resources.mjs (performance cores, or DIGI_BUDGET).
+export const coreCapacity = (env = process.env) => budget(workCores(), env.DIGI_BUDGET).budget;
+
+// Expected run seconds of a task when no earlier run is recorded: a coupled run is the long one.
+const GUESS_SECONDS = { zero: 120, sharc: 600 };
+// A waiter that does not fit may be overtaken by smaller ones at most this many times, so a coupled head is not starved.
+export const MAX_OVERTAKE = 8;
+
+// Seconds of the last passed run of each target, one file per target in `<slot dir>/durations/`: clone-wide, like the slots.
+const durationFile = (dir, target) => path.join(dir, 'durations', target.replace(/[^\w.-]/g, '_'));
+export const lastRunSeconds = (dir, target) => {
+  const seconds = Number(lockText(durationFile(dir, target)));
+  return seconds > 0 ? seconds : undefined;
+};
+export const recordRunSeconds = (dir, target, seconds) => {
+  try {
+    const file = durationFile(dir, target);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(`${file}.${process.pid}.tmp`, String(seconds));
+    fs.renameSync(`${file}.${process.pid}.tmp`, file);
+  } catch {
+    /* an order hint is advice and never fails a task */
+  }
+};
+
+const sumCores = (dir, slots) => {
+  let cores = 0;
+  for (let i = 0; i < slots; i++) {
+    const text = lockText(path.join(dir, `slot-${i}`));
+    if (text === undefined || !held(path.join(dir, `slot-${i}`))) continue;
+    cores += Number(lockText(path.join(dir, `cores-${Number.parseInt(text, 10)}`))) || MODE_CORES.zero;
+  }
+  return cores;
+};
+
+// The live waiter that goes first: the highest priority, then the oldest. Dead waiters are removed.
+let tickets = 0;
+const firstWaiter = (dir) => {
+  let best;
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.startsWith('wait-') || name.endsWith('.tmp')) continue;
+    const pid = Number.parseInt(name.slice(5), 10);
+    if (!alive(pid)) {
+      fs.rmSync(path.join(dir, name), { force: true });
+      continue;
+    }
+    let ticket;
+    try {
+      ticket = JSON.parse(lockText(path.join(dir, name)));
+    } catch {
+      continue;
+    }
+    if (!best || ticket.priority > best.priority || (ticket.priority === best.priority && ticket.at < best.at))
+      best = { ...ticket, pid, name };
+  }
+  return best;
+};
+
+// Take a slot, waiting as long as needed. `task`: { cores, priority, capacity }, the cores of this task, its order
+// among the waiters and the core budget; without `live` (a fixed slot count) none of them counts. Returns { lock, admit }: the slot lock and the admit lock, which
 // the caller releases at exit (it also expires by itself after the ramp interval).
-export const acquire = async (dir, slots, live = true, log = (line) => console.error(line)) => {
+export const acquire = async (
+  dir,
+  slots,
+  live = true,
+  log = (line) => console.error(line),
+  task = { cores: MODE_CORES.zero, priority: 0, capacity: Infinity },
+) => {
   fs.mkdirSync(dir, { recursive: true });
+  const ticketName = `wait-${process.pid}.${++tickets}`;
+  const ticket = path.join(dir, ticketName);
+  if (live)
+    fs.writeFileSync(
+      ticket,
+      JSON.stringify({ priority: task.priority, at: Date.now(), cores: task.cores, overtaken: 0 }),
+    );
   const startedAt = Date.now();
   const admit = path.join(dir, 'admit');
   let told = false;
@@ -138,7 +236,7 @@ export const acquire = async (dir, slots, live = true, log = (line) => console.e
     await sleep(POLL_MS);
   };
   for (;;) {
-    if (!tryLock(admit)) {
+    if (!tryLock(admit, ADMIT_MAX_MS)) {
       await wait(slotsInUse(dir, slots));
       continue;
     }
@@ -149,10 +247,28 @@ export const acquire = async (dir, slots, live = true, log = (line) => console.e
       await wait(used);
       continue;
     }
+    // The head waiter (the longest expected run) goes first. One that does not fit by cores yet may be overtaken by a
+    // waiter that does, MAX_OVERTAKE times in all; then nothing overtakes and the running tasks drain until the head fits.
+    let overtaking;
+    const head = live ? firstWaiter(dir) : undefined;
+    if (head && head.name !== ticketName) {
+      const blocked = sumCores(dir, slots) + head.cores > task.capacity && head.overtaken < MAX_OVERTAKE;
+      if (!blocked) {
+        release(admit);
+        await wait(used);
+        continue;
+      }
+      overtaking = head;
+    }
     // With no emulator running, work never starves: admit at once.
     if (live && used > 0) {
-      idle = await idleCores();
-      if (idle < ADMIT_IDLE_CORES + reserve()) {
+      if (sumCores(dir, slots) + task.cores > task.capacity) {
+        release(admit);
+        await wait(used);
+        continue;
+      }
+      idle = await (task.idleCores ?? idleCores)();
+      if (idle < (task.reserve ?? reserve()) + task.cores) {
         release(admit);
         await wait(used);
         continue;
@@ -162,6 +278,19 @@ export const acquire = async (dir, slots, live = true, log = (line) => console.e
       const lock = path.join(dir, `slot-${i}`);
       if (!tryLock(lock)) continue;
       const idleText = idle === undefined ? '' : `, idle ${idle.toFixed(1)} cores`;
+      if (overtaking) {
+        const file = path.join(dir, overtaking.name);
+        try {
+          const { priority, at, cores, overtaken } = overtaking;
+          fs.writeFileSync(file, JSON.stringify({ priority, at, cores, overtaken: overtaken + 1 }));
+        } catch {
+          /* the head is gone */
+        }
+      }
+      if (live) {
+        fs.writeFileSync(path.join(dir, `cores-${process.pid}`), String(task.cores));
+        fs.rmSync(ticket, { force: true });
+      }
       const waited = (Date.now() - startedAt) / 1000;
       log(`emulator slot taken (${used + 1} of ${slots}${idleText}), emulator slot waited ${Math.round(waited)} s`);
       // Keep the admit lock for the ramp interval; the exit handler releases it earlier if the command ends first.
@@ -176,6 +305,17 @@ export const acquire = async (dir, slots, live = true, log = (line) => console.e
 
 export const release = (lock) => {
   if (lockText(lock) === String(process.pid)) fs.rmSync(lock, { force: true });
+};
+
+// The files of this process beside the slot: its core count and its place in the queue.
+const releaseOwn = (dir) => {
+  try {
+    for (const name of fs.readdirSync(dir))
+      if (name === `cores-${process.pid}` || name.startsWith(`wait-${process.pid}.`))
+        fs.rmSync(path.join(dir, name), { force: true });
+  } catch {
+    /* no slot directory yet */
+  }
 };
 
 // One whole line per event in one append: safe with concurrent writers (JSON lines; tools/nx/gate-history.mjs converts).
@@ -224,7 +364,18 @@ const main = async () => {
   process.on('SIGTERM', () => forward('SIGTERM'));
   process.on('SIGINT', () => forward('SIGINT'));
   const enteredAt = Date.now();
-  const { lock, admit } = await acquire(slotDir(), slotCount(), liveCheck());
+  const target = process.env.NX_TASK_TARGET_PROJECT
+    ? `${process.env.NX_TASK_TARGET_PROJECT}:${process.env.NX_TASK_TARGET_TARGET}`
+    : cmd.join(' ').slice(0, 80);
+  const cores = taskCores();
+  const dir = slotDir();
+  const task = {
+    cores,
+    capacity: coreCapacity(),
+    priority: lastRunSeconds(dir, target) ?? GUESS_SECONDS[cores > MODE_CORES.zero ? 'sharc' : 'zero'],
+  };
+  process.on('exit', () => releaseOwn(dir));
+  const { lock, admit } = await acquire(dir, slotCount(), liveCheck(), undefined, task);
   const takenAt = Date.now();
   traceEvent('wait', enteredAt, takenAt);
   process.on('exit', () => {
@@ -232,9 +383,6 @@ const main = async () => {
     release(admit);
   });
   if (signalled) process.exit(128 + constants.signals[signalled]);
-  const target = process.env.NX_TASK_TARGET_PROJECT
-    ? `${process.env.NX_TASK_TARGET_PROJECT}:${process.env.NX_TASK_TARGET_TARGET}`
-    : cmd.join(' ').slice(0, 80);
   // The command runs with piped output (forwarded as it comes); the tail of it decides whether a failure is a
   // load symptom that earns one rerun (tools/nx/retry.mjs).
   const attempt = (n) => {
@@ -266,6 +414,7 @@ const main = async () => {
         recordRetry({ target, attempt: n, passed });
       }
       traceEvent('run', takenAt, Date.now());
+      if (status === 0 && liveCheck()) recordRunSeconds(dir, target, (Date.now() - takenAt) / 1000);
       process.exit(status);
     });
   };

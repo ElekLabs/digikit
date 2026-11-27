@@ -4,6 +4,8 @@ Roadmap item T1 in [sdk-runtime-roadmap.md](sdk-runtime-roadmap.md). Related: [t
 
 Layers and fakes now exist (runtime layers in [ARCHITECTURE.md](../ARCHITECTURE.md); `FakeCore` and `FakeService` from R2c; `FakePlatform` from R3). Test selection can follow them.
 
+Principle: every item leaves its test area in pyramid shape. Host tests per layer run behind fakes, the SHARC-only rig covers DSP, and device tests exist only at real boundaries. Each PR is proven with a representative device subset (one test per touched service plus smoke), and the full tier per batch is the complete proof. After R12 each service's device tests key on its `.dks` file's bytes plus the core; the tests stay in the repo with their service.
+
 ## Goal
 
 - A change runs only the tests that its code can affect.
@@ -30,6 +32,7 @@ Layers and fakes now exist (runtime layers in [ARCHITECTURE.md](../ARCHITECTURE.
 | --- | --- | --- | --- |
 | Host unit tests per layer | Logic of one layer (packing, manifests, routing, tables) against fakes | Rust and TS, no emulator | Every change that reaches the layer |
 | Contract tests per interface | Same suite on the fake and the real implementation | Fake: host. Real: emulator, once per device | Fake: with the layer. Real: when the interface or its implementation changes |
+| Assembly tests | The seams between separately built real artifacts: the packed fixtures, the service files, the port files, the runtime object and the info table of the image, through the plan, role checks and installs of the boot | Rust on the host (`FakePlatform`), no emulator, no ColdFire code | Before every device test: `test-device` depends on `core/runtime:test-assembly` |
 | Device smoke per service | Boot, load, play, edit for one service. Checks the firmware handles it (menus, parameters, save and load, upload, memory audit) | ColdFire emulator; DSP only when the test needs audio | When the service or a layer below it changes |
 | Module DSP tests | Is the machine or FX right, and does it sound right? Pitch, decay, RMS, DC, parameter response, pinned PCM hash | The module routine alone, through its contract, on the native SHARC engine | When the module or its DSP code changes |
 | Coupled device tests | Does it sound right inside the device (stock filter, envelope, FX, master, hook glue)? One per module type per device | Both CPUs | When the module, the hook glue or a layer below changes |
@@ -55,7 +58,7 @@ Everything moves down a level where it can.
 | 2 | desktop-only TS | `apps/desktop/ui/src/CardPanel.tsx` | 6 tasks: lint, fmt-check, typecheck, test-host, check:ui, build:ui | 0 | about 1 min | none | same |
 | 3 | web-only TS | `apps/web/src/components/CoupledAudio.tsx` | 5 tasks: lint, fmt-check, check, test-host, test-wasm | 0 | about 4 min | none (the wasm tests import the web sources) | same |
 | 4 | core runtime Rust | `modules/core/runtime/src/rs/src/collect.rs` | 94 tasks: runtime and gate-rust-modules rust-tests, rust-fmt, 4 pack, 15 build-objects, objects-check, python-checks and python-tests, smoke, fast-roots | 44 (22 files x dn2/dt2: core/runtime-tests and the other runtime test projects) | about 13 min (199 task-min; smoke bound) | python-checks and python-tests (`modules/**/*`) cannot see a Rust runtime change | runtime change: representative set from T1e (one cell and one quick scenario per module type per device); about 10 device tasks |
-| 5 | service file | `modules/core/runtime/src/rs/src/services/fx/fxsend.rs` | identical to class 4 (94 tasks) | 44 | about 13 min | the whole `modules/core/runtime/**/*` input of every runtime-acceptance project (core-change policy, test-speed item 5): a service edit selects the tests of every service | that service's tagged device tests plus a smoke set (T1e): `fx-*` files only, about 8 device tasks |
+| 5 | service file | `modules/core/services/fx/src/fxsend.rs` | identical to class 4 (94 tasks) | 44 | about 13 min | the whole `modules/core/runtime/**/*` input of every runtime-acceptance project (core-change policy, test-speed item 5): a service edit selects the tests of every service | that service's tagged device tests plus a smoke set (T1e): `fx-*` files only, about 8 device tasks |
 | 6 | SDK header | `sdk/include/dk/core/mem.h` | 91 tasks: 48 pack, 3 pack-aliases, 23 build-objects, objects-check, smoke, rust-tests, test-host, python-checks and python-tests | 4 (`fx-send` of core/fx, digikit/remote) | about 14 min (38 task-min; smoke bound) | `sdk/include/**/*` selects every pack and object build, whether or not the module includes the header | rebuild the modules that include the header (compiler depfiles); device tasks of those modules only. After 2026-11-15: 19 tasks, 2 packs (include scan, test-speed 24) |
 | 7 | module C source | `modules/machines/pluck/src/module.c` | 8 tasks: pack, test-device, gate-rust-modules rust-tests, python-checks, python-tests, fmt-check | 2 | about 5 min | rust-tests (`modules/**/src/**/*`), python-checks and python-tests (`modules/**/*`) | pack plus that module's device tests |
 | 8 | module DSP asm | `modules/machines/pluck/src/dsp/pluck.s` | 7 tasks: as class 7 without fmt-check | 2 | about 5 min | same as class 7 | same |
@@ -87,6 +90,9 @@ Reading the table:
 - First cases: load SDK-built FX and machine fixtures through the runtime's descriptor parsers on the host and check sizes and offsets against the generated SDK constants; one Storage contract suite run against FakeStorage on the host and the real adapter once on the device.
 - Proof: both implementations run the suite.
 - Depends on: R2c (`CoreApi`, `Service`), R3 (`Platform`).
+- [x] Parts 1 and 2, descriptor contract: the layout numbers of the `.dkm` and its DSP section are `[format]` of `sdk/sdk.toml`, generated into `dkneeds` with the `[fx]` and `[machine]` descriptor offsets; the runtime, the packer and `dksharc` read them (no second copy). `core/runtime:rust-tests` packs `test/dyn-fx-gain` and `test/sine` (`dependsOn`) and runs the runtime's DSP section check (`dsp::check`, with the fx, machines and samples checks) on both devices: it accepts them, what it reads back (parameter count, state bytes, route flags, voice entries, machine key, rows) equals the module's declaration, and broken variants (section magic, descriptor magic, record against descriptor, short descriptor, bad voice entry, other device) are refused with `E_DSP_FORMAT` or `E_DSP_DEVICE`.
+
+- [x] Part 3, Storage contract: one case table (`modules/core/runtime/tests/storage/contract.toml`, 57 host cases, 11 on the device). `FakeStorage` answers every row on the host (`fake_storage.rs`); the real adapter answers the `device = "list"` rows on each device (`storage.device.test.ts`). The interface C of a service file is checked with both sides linked on the host (`svc_contract_tests.rs`). Open: a host suite of the `Service` trait with a fake and a real service.
 
 ### T1d Device-test audit
 
@@ -97,22 +103,36 @@ Reading the table:
 
 ### T1e Service-scoped selection
 
-- Scope: map changed functions (patchkit `objdiff`) or changed files to a layer or service. Run that service's tagged device tests plus a fixed smoke set. Smoke cells and quick scenarios are filtered to the cells that contain a changed module. A `core/*` or runtime change runs a representative set (one cell and one quick scenario per module type per device).
-- Proof: measure against T1a before it becomes the default.
+- Scope: a change selects the device tests of the service or layer that owns the changed bytes, plus a fixed smoke set.
+- Tags: a `tags` field on each `metadata.runtimeAcceptance` record (next to files, modules, sources), read by `records()` (module-manifests.mjs) and passed to `deviceInputs` (device-test-keys.mjs). The vocabulary is closed: `S:<service>` (machines, fx, samples, lfo); `C:<area>` (state, boot, loading, dsp, storage, transport, diagnostics, tick); `A:<core module id>` (the module must exist); `C:layout` for address-dependent tests (addrmap, log-names, memaudit, crash and fault tests); `M:<module id>` for the tool modules debug, remote and probe. A record may have several tags. The Nx plugin throws for an untagged device test file or an unknown tag, as `checkMergeTests` does. Step 1 commits the T1d audit tags.
+- Keys on built bytes, with no git-diff pre-selector (it would bypass the cache). A new producer `patchkit:runtime-owners` runs `patchkit owners` over `modules/core/runtime/build/runtime.dko.json`. It reuses the position-free item signature of `objdiff` and maps each item to a tag through `owners.toml` (crate or module prefix to tag, for example dkrt_svc_fx to S:fx, dkrt::services::machines to S:machines, dkrt::store, files and card to C:storage). Output: `dist/bytes/owners/<tag>.sha256`. `objdiff --owners` explains why a test reran. An unmapped prefix fails objects-check, so `owners.toml` stays current.
+- Shared set, part of every runtime-tagged key (a shared change still selects everything): lib, state, api, core_api, entry, platform, mailbox, handlers, gen_services, imports; dkrt_abi, dkfw, core::; unattributed data; tramp and device objects. The dkrt-sdk store, settings and capacity code stays shared until the proof shows zero misses.
+- The narrow key of a tagged test holds the owner files of its tags plus `shared.sha256`, not the whole runtime production. `A:` tags read per-module object hashes. `C:layout` reads the whole runtime object.
+- Smoke set: the files in `mergeTests` (their keys hold `images.sha256` and rerun on any core byte change): tb303, fx-send, samples-live (DT2), samples-store-live (DN2), upload-depth, safe-mode, menu, shot.
+- Affected selection per project is unchanged. Only narrow keys change, so tasks whose owners did not change replay from the remote cache. The merge key and the `-all` twins keep full inputs: `test:full` is unchanged. The same PR fixes the key description in [TESTING.md](../TESTING.md).
+- Proof: replay the last 20 merges on main (T1a method: device tasks whose hash changed, old plugin against new; task-minutes and estimated wall time per merge). A miss is a test that failed in a `test:full` batch whose new key did not change, or a seeded break (one per tag) that does not turn its tagged tests red. Bar: zero misses outside the smoke set.
+- Phase 2, after the proof: split `smoke` (one task of about 13 minutes, keyed on the whole runtime and patchkit) into per-cell targets keyed on each cell's modules plus the runtime shared hash, with one representative cell per module type on the whole runtime. Do the same per scenario for tier-quick.
+- Steps: 1 tags and plugin check (host tests on fixture project.json files); 2 `owners.toml`, `patchkit owners`, `objdiff --owners` (Rust units on small .dko fixtures: inlined callee, generic, closure, string change, unmapped path); 3 producer and narrow keys (status below); 4 cut `mergeTests` to the smoke set (waits with step 3); 5 the proof; 6 phase 2.
+- Payoff: T1a classes 4 and 5 go from 44 device tasks (199 task-minutes) to about 12-18. Wall time stays about 13 minutes until phase 2 splits smoke, then about 5 minutes. Effort: about 1 agent-day for steps 1-4, about 1 more for phase 2. Confidence: medium-high that byte-owner keys are safe, medium on the payoff (inlining can spread a change across owners). Risks: a tag too narrow (a storage test broken by a transport change is a miss by design; smoke and `test:full` catch it); DSP data in the runtime may attribute to shared.
+- After R12: services are `.dks` files, so a test that loads a service keys on that file's bytes; the `S:` tags and their `owners.toml` lines are removed as each service becomes a `.dks`: R12-5 (fx), R12-6 (machines), and samples and lfo when they become `.dks`. `C:` tags stay for the core, which remains one object; `C:layout` stays.
+- Step 3 status: the producer (`patchkit:runtime-owners`) and the `owners.toml` fix are in; the `mergeTests` cut to the smoke set is in (shot stands for `shot-dt2` and `shot-dn2-audio`); the key change is not. Built and measured: owner keys reduce reruns only slightly while the runtime is one object (one fx function 38 -> 34 files, one storage function 38 -> 31, one shared item 38 -> 77 because adapter tests would key on shared code), since shared code is 54% of the object and the 8 C:layout tests rerun on every runtime change. Decision: the key change waits; re-measure after R12, when services are `.dks` files. Adapter tests keep today's behaviour (they do not rerun on runtime changes; the full tier per batch covers them). The reference branch is `test/t1e-step3-keys`.
 - Depends on: T1c, T1d.
 
 ### T1f SDK-surface fixtures and coverage
 
-- Scope: fixtures cover every `sdk.toml` import and builder call. Measure it: imports linked per fixture against `sdk.toml`, and ColdFire PC coverage with `cf.profile`.
+- Scope: fixtures cover every `sdk.toml` import and builder call. Measure it: imports linked per packed module against `sdk.toml` (`patchkit imports`, `patchkit coverage`; [TESTING.md](../TESTING.md#sdk-surface-coverage)). ColdFire PC coverage with `cf.profile` is dropped.
 - A conforming module then needs the static checks (packer, `module:check`, needs and fit) plus one load-and-smoke test. Module-specific emulator tests remain for DSP behaviour.
 - Proof: the coverage numbers.
 - Depends on: nothing (own lane).
+- [x] Command, report and fixture gaps: 96 of 116 imports covered before, 106 covered and 10 allowed (removed or not packable yet) after; `test/entry-demo` calls the rest. Nx target `patchkit:sdk-coverage`.
 
 ### T1g SHARC-only rig
 
 - Scope: module DSP and PCM tests run on a SHARC-only rig. The rig is a native call harness for module routines: load the module objects, set registers, call `note_on` and `render` for N blocks, return output, cycle counts and recorded stores. Its request format is language neutral (Python now, TypeScript later). A Vitest kit over it checks machines (`render`, `note_on`, `desc`) and FX (`dk_fx_process`) against sound checks that a module declares in its `tests/*.toml`. The Python conformance suite and pluck sweeps are retired when the kit checks the same pins.
 - Proof: the same PCM results as the full-device tests, in less time.
 - Depends on: nothing (own lane).
+- [x] Slice: `packages/sharc-rig` (JSON call harness on the generated native core, stores of watched pcs); same output words, instruction counts and foreign-store texts as the Python rigs on machines and an FX. Kit phases 1 to 3 (conformance on the rig, the `patchkit uses` writer) are done; the rest (sound checks, adapter rigs, retirement) is in [t1g-sharc-rig-kit.md](t1g-sharc-rig-kit.md).
+- [x] Phase 5 slice 1 (PR 522): 209 adapter tests run on the rig with identical values; their Python versions are retired (PR 525). Remaining phase 5 work: feature B/C/D (stock DSP image, `dn2_stereo_rig` port, S/ASTAT registers) for about 60 more tests.
 
 ### T1h Workbench and web composability
 
@@ -125,6 +145,197 @@ Reading the table:
 - [x] Step 4, `WorkerFactory` and `WasmSource`: `browserWorkers()` and `createFakeWorkers()` replace the five `new Worker` calls (runtime, split session, patch worker); `WasmSource` (`fetchWasmSource`, `hostWasmSource`, `memoryWasmSource`) and the `PatchKitLike` and `NeedsLike` stubs replace the loading of `patchkit.wasm` and the core; `nativeRuntime` moved to the desktop as `createNativeRuntime(host)` over `Host.emu` (ten more typed commands, no dynamic `@tauri-apps/api/core` import), `browserRuntime(onUpdate, { workers, wasm })`. New Vitest files: browser-runtime, web-firmware-env, native-runtime. [DEVELOPMENT.md](../DEVELOPMENT.md) "WorkerFactory, WasmSource and the two runtimes".
 - [x] Step 5, the `node --test` files ported to Vitest: one runner in `apps/web`. The fake devices (`FakeDevice`, `FakeDrive`, `FakeUpgrade`) and the shared helpers are TypeScript in `apps/web/tests/support/`; tests that need no wasm and no command line run in `test-host` (`audio-health`, `icons`, `ready-cache`, `gallery`, `rpcfiles`, `samples`, `dktransfer` with a fit stand-in); the others are `*.wasm.test.ts` in `test-wasm` (`dkneeds`, `fit`, `firmware-kit`, `dksample`, `dkupload`, `patchkit`, `gallery`, `dktransfer`, 120 s per test); the Samples-mode logic test moved to `apps/desktop/ui/tests/samples-core.test.ts`. `node --test` is gone from the `test-wasm` script.
 - [x] Step 6, `packages/workbench-core` and the NodeHost: the code that the site and the desktop app share (`transfer/`, `firmware/`, `jobs/`, `modules/`, `patch/`, `runtime/`, `host/`, `storage`, `blob-store`, `workers`, `wasm-source`; Solid pages and styles in `ui/`) moved out of `apps/web/src`; both apps import `@digi/workbench-core`, the `@web` alias is gone, and oxlint fails an import between the apps (or from workbench-core into an app). `createNodeHost` (`src/node/node-host.ts`) is the `Host` for command lines; `wb ports` and the samples backend choice in `wb` run through it, with the same output. An edit in workbench-core selects 11 tasks: its own `test-host` and `typecheck`, the web `check`, `test-host`, `test-wasm` and `build`, the desktop `test-host`, `typecheck`, `check:ui` and `build:ui`, lint and format; no cargo, wasm build or device target. [DEVELOPMENT.md](../DEVELOPMENT.md) "workbench-core, the two apps and the command line".
+
+### T2 Test pyramid by layer
+
+Runs alongside R12.
+
+**Rule: real modules model the fixtures.** A real module needs no device test of its own when all of these hold: its imports and descriptor features are covered by the fixture contract suite (patchkit coverage plus descriptor coverage, to add); it passes `test-dsp-conformance`; its `tests/rig` sound checks pass; the device conformance load passes. A missing feature goes into a fixture, not into a device test.
+
+**Target layout per layer.**
+
+| Layer | Fixtures | Suite |
+| --- | --- | --- |
+| fx | `test/dyn-fx-gain` | one contract suite per adapter per device |
+| machines | `test/sine`, `test/dyn-dn2`, with dynreg and equiv | machine fixture suite per device |
+| services | `svc-echo`, `svc-test`, `lfo-shape` | one suite per service per device, keyed on the `.dks` bytes and the ABI fingerprint after R12-4 |
+| tools | demo fixtures | one load suite per device |
+| L1 adapters | fixtures | one suite per device |
+| transport and storage | fakes | host tests; few device tests at the real boundary |
+
+**Step 1, selection (done, PR 550).** Test-only Rust files are out of the gate and daemon inputs, so host-test-only PRs pay no device gate. `mergeTests` is cut from 14 to a smoke set of 8 files. `mise run test:subset -- <tags>` runs chosen tags. Phantom device halves are gone. Emulator-slot admit expiry is added.
+
+**Step 2, four test-only lanes.**
+
+1. FX contract suite; freqshift drops its adapter legs (about 40 min per full tier). Written, not yet run: `core/dynfx` `fx-contract` (replaces `fx-chain` and `fx-reuse`), `core/fxpages` `fx-bipolar` on the new fixture `test/dyn-fx-gain-bipolar` (replaces the adapter legs of freqshift), and the `FX_SERVICE_IN_IMAGE` switch for the R12-5 case without an fx service. Old files go after the new ones pass on both devices and a review signs the ledger [ledgers/t2-fx-contract.md](ledgers/t2-fx-contract.md).
+2. Machine equiv moves to rig sound checks (about 7 min). The rig references are new pins, reviewed once. Then the analog, bd, pd and pluck PCM pins go. The dynreg DN2 pin stays.
+3. usb-fast mode matrix cut (about 5 min). The upload case stays on DN2 only.
+4. Card-safety, settings and safe-mode duplicates move to host tests (about 2 min).
+
+**Decisions.** freqshift drops its adapter legs now. The file is deleted after descriptor coverage and R12-5. The R12-5 and R12-6 device proofs are fixture suites. `mergeTests` is the smoke set now. Service tests key on `.dks` bytes plus the ABI fingerprint. One bounded zero-DSP FX load run is made when the machine is free.
+
+**Guard rails.**
+
+- A test is deleted only when its replacement is green.
+- An assertion ledger maps each old assertion to its new one.
+- An independent review signs off each deletion.
+- PCM pins change only with Em's approval.
+
+**Measured note.** Owner keys for the single runtime object gave 38 to 34 files only. Re-measure after R12-6.
+
+**Payoff.** Full tier about 2.4 h to about 1.5 h. R12 PR gate about 60 to about 25 min. Host-test-only PRs: 0 device tasks.
+
+**Step 3, one API for waits, inputs and runtime events.**
+
+Goal: every device-test wait and input goes through one API with one contract: an action plus a completion condition. A slow or flaky wait is then found in one place, a new event wait is added in one place, and every wait reports what it waited on.
+
+**Today.**
+
+- Five tap helpers with different holds, settles and clocks: `waits.ts tap` (1200 ms), `fx-session.ts tap` (300 ms, stepped), `panel.ts` (80 ms, free run), `debug-kit.ts` local tap (1200), `memaudit-kit.ts press`, `remoteTap`; local copies in fault-trace, input-adapter, remote-input; `Session.press` (stock only).
+- `openDigikitMenu` (about 21 s emulated of fixed settles) plus inline copies in debug-module, fx-routes-ui, upload, project-kit, fx-kit-persist, fx-track-route-lock, roundtrip.
+- Three log cursors with different rules: `Events` (test-support), `waitForBoot`/`restarted()` (dk-session, reads the whole log each 500 ms round), `LogFollower` (desktop; misses a restart when the new log is at least as long as the old position).
+- Two clock modes: free run (poll `status.elapsed`) and stepped (`advance` = `client.step`, fx-session fixtures).
+- Wall-clock deciders in about 10 places.
+
+**Layer 1, `@digi/dk-session` (device-agnostic: tests, workbench, desktop, CLI).** New `src/runtime-events.ts`:
+
+```ts
+/** Time for waits. `now` in ms; `pause` lets time pass and throws when it cannot (a stuck emulator). */
+export interface Clock { now(): Promise<number>; pause(ms: number): Promise<void>; }
+export const wallClock: Clock;
+
+/** What a wait reports (the harness turns it into a timing record). */
+export interface WaitRecord { kind: 'event' | 'state' | 'time'; what: string; clockMs: number; wallMs: number; ok: boolean; }
+
+/** One cursor over LOG pages. Rules: a new boot when the anchor event is gone or differs, a BOOT_START follows it, or newest
+ *  drops below the cursor; a gap (oldest > cursor) is reported as `lost`. */
+export class LogCursor {
+  constructor(src: Pick<DkSession, 'logPage'>);
+  fromNewest(): Promise<void>; fromBoot(): void;
+  read(): Promise<{ events: DkLogEvent[]; newBoot: boolean; lost: number }>;
+  readonly boots: number;
+}
+
+export class RuntimeEvents {
+  constructor(dk: DkSession, clock: Clock, opts?: { pollMs?: number; onWait?: (r: WaitRecord) => void; debugModules?: string[] });
+  listen(opts?: { fromBoot?: boolean }): Promise<void>;          // sets LOGCFG levels as Events does today
+  /** Next event of `kind` (a LOG_KINDS name) matching `match`; a gap throws; fails after `withinMs` of clock time. */
+  until(kind: LogKindName, match?: (e: RuntimeEvent) => boolean, opts?: { withinMs?: number }): Promise<RuntimeEvent>;
+  // typed waits over existing kinds (fields by name via runtimeEvent/fieldsOf):
+  untilBoot(); untilUiFirst(opts?: { loaded?: number }); untilModLoad(name: string); untilModDsp(index: number);
+  untilSafe(); untilSettingsWrite(); untilInputTaken(control: number, delta?: number);
+  untilFwReady();   // FW_READY (kind 47); proof with gate BC
+}
+```
+
+- `waitForBoot` keeps its signature (dktransfer uses it) and runs on `LogCursor`: no full-log read per round. The refused-restart check of `restarted()` stays.
+- `LogFollower` (desktop) moves to `LogCursor` in phase 4. Its "N events lost" note comes from `lost`.
+
+**FW_READY.** The runtime logs one record (`FW_READY`, kind 47, info level, kept in the small ring) on the first pass of the firmware UI loop after a boot (`safe_mode::ui_pass`, next to `UI_FIRST`; the UI loop starts only after the boot intro), when the stock MidiRpc service answers. `untilFwReady()` waits for it, and `installModules` with the debug module in the list ends its boot wait on it. Its proof rides with gate BC. Cause found 2026-11-16: the first stock file RPC after a module install was lost because the firmware was still on its boot intro. Until FW_READY exists, the dk-session probe after `restart()` (`waitRpcService`) stays as the fallback; `untilFwReady()` then replaces it.
+
+**Layer 2, `@digi/test-support` (emulator-specific; no dk-session import).** New `src/emulated-clock.ts`: `freeClock(session)` (`now` = `status.elapsed`/132000; `pause` = real delay, throws when the clock and restart progress stand still for `hangMs`) and `steppedClock(session)` (`pause(ms)` = `client.step(ms*MS)` with progress). Both implement the `Clock` shape structurally. Moves here: `emulatedWatch`, `withEmulatedProbe`, `pollEmulated` (as `pollUntil(clock, read, done, opts)`), `restartProgress` use.
+
+New `src/input.ts`:
+
+```ts
+export interface Input {
+  button(key: Key, down: boolean): Promise<void>;
+  tap(key: Key, holdMs: number): Promise<void>;     // returns after release
+  turn(encoder: Key, detents: number): Promise<void>;
+}
+export function panelInput(session): Input;          // daemon inputButton/inputTap/inputTurn (release_at)
+export function probeInput(dk): Input;               // request 0x38 (input-adapter's probe source)
+export function remoteInput(dk): Input;              // digikit/remote, also on hardware
+```
+
+`panel.ts burst`/`turnTo` (scheduled input) become `panelInput` extras.
+
+**Layer 3, harness (`tests/regression/runtime`).** `RuntimeCase` gains `clock`, `events`, `ui`, `install`:
+
+```ts
+interface RuntimeCase extends PatchedSession {
+  epoch: number;
+  clock: Clock;                    // free, or stepped for fx-session fixtures
+  events: RuntimeEvents;           // lazy; clear error when digikit/debug is not loaded
+  ui: Ui;                          // panelInput by default
+  install(...ids: string[]): Promise<void>;   // with debug: waits on untilUiFirst after the new boot
+}
+```
+
+New `ui.ts`:
+
+```ts
+type Until =
+  | { event: LogKindName; match?: (e: RuntimeEvent) => boolean; withinMs?: number }
+  | { state: () => Promise<T>; done: (v: T) => boolean; withinMs?: number }
+  | { drained: true }                      // cf.input_pending == 0 && scheduled_inputs == 0
+  | { ms: number; why: string };           // explicit fixed wait, counted
+class Ui {
+  constructor(input: Input, clock: Clock, events: () => RuntimeEvents, record: (r: WaitRecord) => void);
+  tap(key: Key, opts: { until: Until; holdMs?: number; held?: Key }): Promise<void>;
+  turn(encoder: Key, detents: number, opts: { until: Until }): Promise<void>;
+  with(input: Input): Ui;                  // the same UI over remote or probe input
+}
+```
+
+`until` is required: no default settle. Every wait writes a `runtime-phase` record with its kind, emulated ms and wall ms, and the session context gains `dsp` (sharc or zero). That is the instrumentation step: no separate timing work.
+
+New `flows/`: `flows/menu.ts` (`openDigikitMenu(rt)`, `openAbout(rt)`, `openRuntimeAbout(rt)`, safe-mode menu), later `flows/fx.ts`, `flows/project.ts`. Flows take `rt` and use only `rt.ui` and `rt.events`. Each step ends on a state read (`DK_ABOUT_N`, `DK_LOAD_N`, `DK_PANEL_N`, `DK_ROUTE_N`, ...) or `drained`. A time wait needs a reason.
+
+Deleted at the end: `waits.ts tap`, `fx-session.ts tap/advance` (stepped clock), `panel.ts` (Ui), `debug-kit` local tap, `memaudit-kit press`, `remoteTap`, the local copies, `test-support/events.ts` (`Events`), `runtime/events.ts` (`listenEvents`). `waits.ts` keeps thin re-exports only while callers move.
+
+**Real devices (later, not built now).** `DkSession` plus this API is the entry point for device tests on the emulator and, later, on real hardware. Keep that possible:
+
+- Device-agnostic parts live in dk-session: `LogCursor`, `RuntimeEvents`, `Clock`, `wallClock`. They never read daemon status.
+- Emulator-only parts live in test-support: `freeClock`, `steppedClock`, `panelInput`. A hardware run would build `rt` with `wallClock` and `remoteInput` (digikit/remote works on hardware) instead. The same flows and `until` conditions apply.
+- `Until` conditions use events and protocol state reads (`dk.*`), so they hold on hardware. A `state` read through daemon `memPeek` is emulator-only. Flows prefer a protocol read (debug module PEEK) where one exists.
+- Timing records keep `clockMs` (emulated or wall) separate from `wallMs`, so emulator and hardware runs compare.
+
+**Lint.** None during the migration. The final step adds one oxlint rule with no exemptions: no `setTimeout`, `setInterval` or `node:timers` imports in `modules/**/tests/**`, `tests/fixtures/**/tests/**` and `tests/regression/runtime/flows/**`. A file that still violates it then is migrated, not exempted.
+
+**Phases and file owners** (one lane, disjoint files, coders edit, one runner checks).
+
+| Phase | Stream | Owns | Gate |
+|---|---|---|---|
+| 0 | C: wall-clock fixes with today's `pollEmulated` | shot-dn2-supersede, shot-dn2-pool (lease phase), shot-dt2, samples-store-live, patched-dsp-startup, dsp-cache-registers, dsp-ddr-monitor, remote.ts `expectRemoteEnabled`, runtime-menu.ts deadlines, install.ts:51; dk-session host tests rpc-emulated-wait, emu-usb-transport | host tests + device subset of those files |
+| 1 | A: dk-session | runtime-events.ts (new), dkupload-core.ts waitForBoot, wait-for-boot.test.ts, runtime-events.test.ts | dk-session host tests, workbench-core host tests |
+| 1 | B: test-support | emulated-clock.ts, input.ts (new) + host tests | test-support host tests |
+| 2 | core (serial) | support.ts, ui.ts (new), install.ts, waits.ts, flows/menu.ts | device subset: gate-smoke, gate-pins, one test per fixture kind |
+| 3 | Menu | runtime-menu.ts, debug-kit.ts, memaudit-kit.ts, needs, fits, menu, debug-module, input-adapter, fault-trace | subset of those files |
+| 3 | FX | fx-session.ts, fx-live.ts, fx-*-ui.ts, project-kit.ts, fxpages + fx-routes + roundtrip + upload tests | subset |
+| 3 | Shot/remote/other | panel.ts callers (shot x4, tb303, native-page, stock-*), remote.ts, remote-input, ui-demo | subset |
+| 4 | Desktop | log-follow-core.ts + tests (parallel with 3) | desktop test-host, check:ui, one log-pane screenshot |
+| end | | delete old helpers and `Events`; add the oxlint rule | `mise run test:full` in the batch lane |
+
+**Follow-up: rename device tests to emulator tests.** `*.device.test.ts` and `test-device*` targets run on the emulator, not on hardware. A separate codemod PR after this step renames them to `*.emu.test.ts` and `test-emu*` (with `runtimeAcceptance`/`mergeTests` metadata, `tools/nx/device-inputs.mjs`, gate tooling, AGENTS.md and TESTING.md). "Hardware test" stays free for real devices.
+
+**Payoff and confidence.**
+
+- Correctness: removes wall-clock deciders and the boot-intro race path. High confidence.
+- Speed: menu flows and fixed settles. The new wait records measure the real gain per file. Expected low single-digit percent of device wall. The large levers (cold reloads about 42%, install restarts about 17%) are separate work.
+- Estimate: phase 0 2 h; phase 1 half a day in parallel; phase 2 half a day; phase 3 one day in parallel; phase 4 2 h.
+
+**Step 4, assembly tests (host).**
+
+Why: in one night every device round failed on wiring, and each cost an emulator window. The planner needed a service without loading its provider (`E_PLAN_KIND`), capacity limits came only from a service that was not loaded yet (`E_PLAN_FIT`), the committed service objects carried an old ABI fingerprint (`E_SVC_ABI` for every file), and the harness lacked a service file. The unit tests passed because their fakes encoded the old assumptions (a service table with a machines row).
+
+Three layers, each owns one thing:
+
+| Layer | Owns | Size |
+| --- | --- | --- |
+| Unit tests per component | Logic and edge cases of the component, against fakes | Many; unchanged |
+| Assembly tests | The seams between separately built real artifacts: per seam one case that fits and one typical refusal. No repeat of unit edge cases | Few; seconds |
+| Device tests | What only firmware or hardware shows (fixture suites) | As before |
+
+An assembly case that starts to test logic belongs in a unit test. An assertion sits at the lowest layer that can see it.
+
+What exists: `modules/core/runtime/src/rs/src/loader/tests/assembly_tests.rs`, run by the Nx target `core/runtime:test-assembly` (cached; its inputs are the runtime sources and exactly the files it reads). It reads the real outputs: `dist/modules/<device>/*.dkm|dks` (sine, dyn-dn2, dyn-fx-gain, lfo-shape, svc-test, svc-test-user and the services fx, machines, lfo), `dist/svc-bound/<device>/` for the services with hooks, `runtime.dko.json` (the ABI immediate of `abi_ok`) and `dist/bytes/images/<device>/set-<set>.info` (the info table of the patched image, written by `patchkit:device-images` from the plan of `patchkit apply`). It builds a `FakePlatform` card and runs the boot code: provider search, `plan_with` (needs, kind owners, capacity from the `cap_<kind>` entries), the role checks of a provider (ABI word, stock bytes of every hook site), the installs over `FakePlatform` and the load of a module without a DSP section. The cases per device are: each fixture loads with its provider; all services of the card load together on both images; a capacity limit under the uses refuses with the resource; a missing provider refuses with its hash; a changed ABI word is `E_SVC_ABI` and a site that is not stock is `E_HOOK_STOCK`, both before anything is written; the committed service objects and packed files carry the ABI word of the runtime object. A device without its firmware image is skipped.
+
+Not covered on the host: ColdFire code (the `init` of a service replays what its header table declares) and the DSP part of a module.
+
+The rule: every `test-device` and conformance target `dependsOn` `core/runtime:test-assembly`, so no device run starts while it fails.
+
+Also: `patchkit build` rebuilds a service object when a boundary file of `dkrt-abi` (`SVC_ABI_FILES`) changes, because the source hash covers the sources of path dependencies; `packages/patchkit/tests/build.rs` keeps that true.
 
 ## Order
 

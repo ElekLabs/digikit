@@ -6,7 +6,10 @@
     uv run python -m tools.patchkit.pk_emud_pgo bench [--device dt2] [--pairs 3] [--seconds 12]
 
 The device's PGO profile (`tools/emulator/native_pgo.py train [--device dt2]`, out/native/pgo/<device>) is applied to the
-windowless daemon the proofs drive. It builds into its own target dir (`<gen key>/pgo-emud-<device>` under
+windowless daemon the proofs drive. The daemon holds no generated core: it loads the core library of its device from the store, and
+`verify_build daemons` gives it the library built with the same profile (store key with the profile content; the profile
+was trained with the instrumented library, see native_pgo), so the DSP hot loop is profile-guided too. `bench` compares a
+plain daemon on the plain library with a PGO daemon on the PGO library. It builds into its own target dir (`nogen/pgo-emud-<device>` under
 tools/emulator/native_target.py, never the launcher's `pgo-use`) and holds benchlock shared like every build. A profile that is
 a little stale is fine (LLVM drops the data of functions whose code changed; see native_pgo.is_emulation_package).
 The harness (tools/patchkit/pk_harness.py `daemon_binary`) uses this binary when it exists; DIGI_PK_PGO=0 turns that off.
@@ -35,8 +38,10 @@ from tools.emulator import (  # noqa: E402
     native_pgo,  # noqa: E402
     native_target,  # noqa: E402
 )
+from tools.firmware import device as device_files  # noqa: E402
+from tools.patchkit import pk_device  # noqa: E402
 
-FIRMWARE = {"dt2": "1.17", "dn2": "1.12"}  # the harness' default firmware per device
+FIRMWARE = pk_device.acceptance_firmware()  # the harness' default firmware per device
 
 
 def generated_core(device: str) -> Path:
@@ -44,11 +49,14 @@ def generated_core(device: str) -> Path:
     from tools.patchkit import pk_harness as H
 
     syx, ready = H.firmware_inputs(H.Cell(device, FIRMWARE[device]))
-    return digi_env.generated_dir(image=ready / "digi-audio-dn2-image.bin")
+    return digi_env.generated_dir(
+        image=ready / "digi-audio-dn2-image.bin", device=device
+    )
 
 
 def target_dir(device: str) -> Path:
-    return Path(native_target.target_dir(generated_core(device), f"pgo-emud-{device}"))
+    # a host links no generated core: the no-core target dir, one variant per device
+    return Path(native_target.target_dir("", f"pgo-emud-{device}"))
 
 
 def binary_path(device: str) -> Path:
@@ -63,7 +71,7 @@ def build(device: str) -> Path:
             f"no PGO profile for {device}: `uv run python -m tools.emulator.native_pgo train --device {device}`"
         )
     digi_env.check_generated(gen)
-    env = native_pgo.base_env(gen)
+    env = native_pgo.base_env()
     env["RUSTFLAGS"] = native_pgo.profile_use_flags(profile)
     env["RUSTDOC"] = str(Path(env["RUSTC"]).with_name("rustdoc"))
     command = [
@@ -71,7 +79,7 @@ def build(device: str) -> Path:
         "cargo", "build", "--release", "--locked",
         "--manifest-path", "packages/emulator/control/Cargo.toml",
         "--bin", "digi-emud",
-        "--features", "coupled-audio",
+        "--features", "sharc,play",
         "--target", digi_env.TRIPLE,
         "--target-dir", str(target_dir(device)),
     ]  # fmt: skip
@@ -94,13 +102,15 @@ def plain_binary(device: str) -> Path:
     return H.daemon_binary(device, syx, pgo=False)
 
 
-def workload(binary: Path, device: str, seconds: float) -> float:
+def workload(binary: Path, device: str, seconds: float, library: str = "") -> float:
     """Wall seconds of: spawn, restart, hold TRIG 1, SECONDS of emulated time (one process, exclusive benchlock held
-    by the caller)."""
+    by the caller). LIBRARY is the core library the daemon loads (`DIGI_SHARC_CORE_LIB_<DEV>`)."""
     from tools.patchkit import pk_harness as H
 
     cell = H.Cell(device, FIRMWARE[device])
     os.environ[f"DIGI_EMUD_{device.upper()}"] = str(binary)
+    if library:
+        os.environ[f"DIGI_SHARC_CORE_LIB_{device.upper()}"] = library
     s = H.Session(cell, H.Goldens(), log=None, run_name=f"pgo-bench-{device}")
     with s:
         s.open()
@@ -118,13 +128,25 @@ def bench(device: str, pairs: int, seconds: float) -> int:
     if not pgo.is_file():
         raise SystemExit(f"{pgo} is missing: build it first")
     plain = plain_binary(device)
+    from tools.devtools import core_store
+
+    var = f"DIGI_SHARC_CORE_LIB_{device.upper()}"
+    profiles = native_pgo.fresh_profiles([device])
+    libraries = {
+        plain: core_store.library_env([device], environ={})[var],
+        pgo: core_store.library_env([device], environ={}, profiles=profiles)[var],
+    }
+    print(
+        f"plain daemon: plain library; pgo daemon: {'pgo' if profiles else 'plain'} library",
+        flush=True,
+    )
     rows: list[tuple[float, float]] = []
     with benchlock.hold("exclusive", f"pk_emud_pgo bench {device}"):
         for i in range(pairs):
             order = (
                 (plain, pgo) if i % 2 == 0 else (pgo, plain)
             )  # alternate: drift hits both
-            got = {b: workload(b, device, seconds) for b in order}
+            got = {b: workload(b, device, seconds, libraries[b]) for b in order}
             rows.append((got[plain], got[pgo]))
             print(
                 f"pair {i + 1}: plain {rows[-1][0]:.2f} s, pgo {rows[-1][1]:.2f} s",
@@ -140,7 +162,7 @@ def bench(device: str, pairs: int, seconds: float) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("cmd", choices=("build", "path", "bench"))
-    ap.add_argument("--device", default="dt2", choices=("dt2", "dn2"))
+    ap.add_argument("--device", default="dt2", choices=device_files.shorts())
     ap.add_argument("--pairs", type=int, default=3)
     ap.add_argument("--seconds", type=float, default=12.0)
     a = ap.parse_args()

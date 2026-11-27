@@ -1,7 +1,7 @@
 // test/dsp-facts: an effect of the FX contract (<dk/fx/fx.h>) that measures the SHARC+ core it runs on and reports through the module step word.
 //
 // The audio passes unchanged (the block is copied). Each block the routine stores ONE 32-bit word in `DM(_dk_step)`, diagnostic word 25 of the DSP reply
-// (`core/dsp-link`), which the ColdFire collector keeps (modules/tools/probe). The words form frames exactly as in test/sharc-probe: a header (0xB0, payload
+// (`core/dsp-link`), which the ColdFire collector keeps (modules/tool/digikit/probe). The words form frames exactly as in test/sharc-probe: a header (0xB0, payload
 // word count 12, frame number), 12 payload words (4 records of 3 words) and a checksum; a frame is built in one block and its 14 words go out one per block.
 //
 // The records, and what each item measures, are defined in tools/device/dkprobe_facts.py. That file also writes `facts_seq.inc`: the table constants and one

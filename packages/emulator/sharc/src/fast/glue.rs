@@ -331,14 +331,16 @@ pub fn apply_flag(v: V, kind: FlagKind, src: [u32; 2]) -> V {
 
 /// The interpreter's `_advance` for the region's last instruction (loop
 /// bookkeeping and the PC), counted as one completed instruction.
-#[cfg(sharc_gen)]
 fn advance_last(s: &mut St, len_bytes: u8) -> R<()> {
+    if !s.core.generated {
+        return Err(TRAP_NO_INSN);
+    }
     let insn = Insn {
         length_bytes: Some(len_bytes as Int),
         ..INSN_NONE
     };
     s.begin();
-    match crate::generated::core_g::sequencer::_advance(s, insn) {
+    match (s.core.advance)(s, insn) {
         Ok(()) => {
             s.commit();
             Ok(())
@@ -348,11 +350,6 @@ fn advance_last(s: &mut St, len_bytes: u8) -> R<()> {
             Err(t)
         }
     }
-}
-
-#[cfg(not(sharc_gen))]
-fn advance_last(_s: &mut St, _len_bytes: u8) -> R<()> {
-    Err(TRAP_NO_INSN)
 }
 
 /// Ranges where a normal-word access is a plain byte address scaled by 4:
@@ -940,9 +937,11 @@ pub fn run(
     // lowering's range analysis. Guarded read windows are resolved here and
     // each dynamic address is checked before its load and instruction commit.
     // The kernel was lowered for this engine state layout.
-    let cap = super::dump::before(&r.kernel, ctx.ptr(), std::ptr::from_mut(s).cast());
+    // The dump hooks read the same context buffer and `St`, which stay live
+    // for the call.
+    let cap = unsafe { super::dump::before(&r.kernel, ctx.ptr(), std::ptr::from_mut(s).cast()) };
     let code = unsafe { kernel.run(ctx.ptr(), std::ptr::from_mut(s).cast()) };
-    super::dump::after(cap, code, ctx.ptr(), std::ptr::from_mut(s).cast());
+    unsafe { super::dump::after(cap, code, ctx.ptr(), std::ptr::from_mut(s).cast()) };
     let done = ctx.get32(CTX_DONE) as u64;
     let kk = if code == 0 {
         k
@@ -1138,10 +1137,8 @@ fn pc_stack_items(s: &St) -> &[Int] {
     }
 }
 
-#[cfg(sharc_gen)]
 mod sites {
     use super::*;
-    use crate::generated::core_g::{sequencer, state};
 
     const STKYX: usize = 120;
     const LCNTR: usize = 104;
@@ -1172,13 +1169,13 @@ mod sites {
     fn pop_loop(s: &mut St, start: u32) -> R<()> {
         s.loops.n -= 1;
         if s.cfg.stack_model {
-            state::_pop_loop_resource(s)?;
+            (s.core.pop_loop_resource)(s)?;
         }
-        let depth = state::_pc_stack_depth(s)?;
-        if depth == 0 || (state::_pc_stack_top(s)? & 0xff_ffff) != start as Int {
+        let depth = (s.core.pc_stack_depth)(s)?;
+        if depth == 0 || ((s.core.pc_stack_top)(s)? & 0xff_ffff) != start as Int {
             return Err(TRAP_INDEX);
         }
-        sequencer::_pop_pc_stack(s)?;
+        (s.core.pop_pc_stack)(s)?;
         if !s.cfg.stack_model {
             let top = s.loops.items().last().map(|l| l.remaining);
             let v = match top {
@@ -1206,14 +1203,14 @@ mod sites {
             m: c.m | BIT26,
         };
         if s.cfg.stack_model {
-            state::_push_loop_resource(s)?;
+            (s.core.push_loop_resource)(s)?;
             let slot = (
-                state::_packed_counter_laddr(s, l.end as Int)?,
+                (s.core.packed_counter_laddr)(s, l.end as Int)?,
                 V::c(rem as Int),
             );
             let at = (s.loop_depth - 1) as usize;
             s.loop_slots.a[at] = slot;
-            state::_sync_empty_loop_registers(s)?;
+            (s.core.sync_empty_loop_registers)(s)?;
         }
         s.loops.push_raw(Loop {
             start_sw: l.start as i64,
@@ -1221,7 +1218,7 @@ mod sites {
             remaining: rem as i64,
             mode: l.mode,
         })?;
-        state::_push_pc_stack(s, l.start as Int)
+        (s.core.push_pc_stack)(s, l.start as Int)
     }
 
     /// The bookkeeping of a taken call or return at the exit (the generic
@@ -1241,7 +1238,7 @@ mod sites {
         match fx {
             Fx::None => {}
             Fx::CallPush(ret) | Fx::CallDone(ret) => {
-                state::_push_pc_stack(s, 0x0100_0000 | ret as Int)?;
+                (s.core.push_pc_stack)(s, 0x0100_0000 | ret as Int)?;
                 if matches!(fx, Fx::CallDone(_)) {
                     s.call_stack.push_raw(ret as Int)?;
                     s.at_loaded_entry = true;
@@ -1252,7 +1249,7 @@ mod sites {
                     Some(&t) => t & 0xff_ffff,
                     None => return Err(TRAP_INDEX),
                 };
-                sequencer::_pop_pc_stack(s)?;
+                (s.core.pop_pc_stack)(s)?;
                 match s.call_stack.items().last() {
                     Some(&c) if c & 0xff_ffff == target => s.call_stack.n -= 1,
                     _ => s.call_stack.clear(),
@@ -1321,16 +1318,16 @@ mod sites {
                 let at = reserved + d;
                 if li != 0 && at >= depth && at < s.loop_slots.items().len() {
                     let l = &meta.loops[li - 1];
-                    let laddr = state::_packed_counter_laddr(s, l.end as Int)?;
+                    let laddr = (s.core.packed_counter_laddr)(s, l.end as Int)?;
                     s.loop_slots.a[at] = (laddr, V::c(1));
                 }
             }
             // `_execute` starts every instruction with this: LADDR and
             // CURLCNTR follow the top loop slot.
-            state::_sync_empty_loop_registers(s)?;
+            (s.core.sync_empty_loop_registers)(s)?;
         }
         if did || any_inregion {
-            state::_sync_pc_stack(s)?;
+            (s.core.sync_pc_stack)(s)?;
         }
         if ctx.get32(CTX_LCNTR + 4) != 0 {
             s.r[LCNTR] = V::c(ctx.get32(CTX_LCNTR) as Int);
@@ -1504,13 +1501,15 @@ fn shape(why: &str) -> Decline {
 
 /// Run a CFG region's kernel (see `cfg`). As `run`: `Ok(code)` after at least
 /// one instruction completed, `Err` with the state untouched.
-#[cfg(sharc_gen)]
 pub fn run_cfg(
     s: &mut St,
     r: &Region,
     kernel: &dyn CompiledKernel,
     ctx: &mut Ctx,
 ) -> Result<u32, Decline> {
+    if !s.core.generated {
+        return Err(Decline::Shape);
+    }
     let meta = r.cfg.as_ref().expect("a cfg region");
     if s.pending.is_some() || s.pc_sw != r.entry_pc as Int {
         return Err(shape("pending transfer or pc"));
@@ -1701,9 +1700,11 @@ pub fn run_cfg(
     // analysis. Guarded read windows are resolved here and each dynamic
     // address is checked before its load and instruction commit. The kernel
     // was lowered for this engine state layout.
-    let cap = super::dump::before(&r.kernel, ctx.ptr(), std::ptr::from_mut(s).cast());
+    // The dump hooks read the same context buffer and `St`, which stay live
+    // for the call.
+    let cap = unsafe { super::dump::before(&r.kernel, ctx.ptr(), std::ptr::from_mut(s).cast()) };
     let code = unsafe { kernel.run(ctx.ptr(), std::ptr::from_mut(s).cast()) };
-    super::dump::after(cap, code, ctx.ptr(), std::ptr::from_mut(s).cast());
+    unsafe { super::dump::after(cap, code, ctx.ptr(), std::ptr::from_mut(s).cast()) };
     if code == RUN_ENTRY_FAILED {
         // The kernel's own entry checks failed before it did anything.
         return Err(Decline::Req);
@@ -1841,14 +1842,4 @@ pub fn run_cfg(
         }
     }
     Ok(crate::EXIT_NEXT)
-}
-
-#[cfg(not(sharc_gen))]
-pub fn run_cfg(
-    _s: &mut St,
-    _r: &Region,
-    _kernel: &dyn CompiledKernel,
-    _ctx: &mut Ctx,
-) -> Result<u32, Decline> {
-    Err(Decline::Shape)
 }

@@ -2,12 +2,13 @@
   "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
   "name": "native-page-proof-tests",
   "tags": ["test-only"],
-  "implicitDependencies": ["core/runtime", "core/machines"],
+  "implicitDependencies": ["core/ui", "core/rows", "dkrt-svc-rows", "core/services/machines", "dkrt-svc-machines"],
   "metadata": {
     "runtimeAcceptance": [
       {
         "files": ["native-page.device.test.ts"],
-        "modules": ["test/native-page"],
+        "dsp": "sharc",
+        "modules": ["test/native-page", "core/services/machines"],
         "plusdrive": true
       }
     ]

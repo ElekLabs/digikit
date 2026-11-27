@@ -1,6 +1,6 @@
 # 67. FX routing on the Digitone II (FX routing step 6, Digitone II 1.12, 2026-10-25)
 
-Steps 1 to 5 (findings 62 to 66) gave the Digitakt II the send route of `core/fx`, the settings store, the send page of the FX key, the manifest's routes with DIGIKIT > FX ROUTES and `digikit/freqshift` as a send effect. This finding records what the
+Steps 1 to 5 (findings 62 to 66) gave the Digitakt II the send route of `core/fx`, the settings store, the send page of the FX key, the manifest's routes with the route page (now SETTINGS > FX ROUTING) and `digikit/freqshift` as a send effect. This finding records what the
 Digitone II needed: the DSP send mix over its voice slots, the `core/fxpages` hooks and the Sound array index for the send knob, and the proofs. Marks: **[D]** measured or read once by the author (no second agent has checked the image bytes yet, so nothing here is
 **[V]**), **[O]** open. Pieces: `modules/core/adapters/fx/src/dsp/fxsend-dn2.s` (with `fxsend-a.inc`, `fxsend-slots.inc`, `fxsend-b.inc`; the Digitakt II object is `fxsend.s` with `fxsend-tracks.inc` over the same two parts), `modules/core/adapters/fx/module.toml`, `modules/core/adapters/fxpages/src/cf/fxpages-dn2.s`,
 `devices/digitone-ii.toml` (`[fx]`, `[limits] send_slots = 1`), `devices/ports/dn2-1.11.toml` and `dn2-1.12.toml`, the scenarios `fx-send-dn2`, `fx-route-dn2`, `fx-routes-dn2`, `fx-freqshift-dn2` and the tool `tools/patchkit/pk_idx65_poke.py`. The runtime needed no change except the device facts: it
@@ -42,7 +42,7 @@ What is still open **[O]**: the compared halfword at `0x1c31bf` was not named (a
 
 ## The page hooks and the Sound index **[D]**
 
-`core/fxpages` has an object per device from the same source (`fxpages-dn2.s` is `fxpages-dt2.s` with the Digitone II's page numbers and addresses); `fxpages_info` is version 2 on both (the send words from byte 156).
+`core/fxpages` has an object per device from the same source (`fxpages-dn2.s` is `fxpages-dt2.s` with the Digitone II's page numbers and addresses); `fxpages_info` is version 4 on both (the send words from byte 156; no firmware address in it).
 
 | What | DN2 1.12 | Anchor |
 | --- | --- | --- |
@@ -72,7 +72,7 @@ in `devices/digitone-ii.toml` (`send_slots = 2`, `send_indices = [100, 65]`) aft
   gives count cell 2, CAPACITY `SEND_SLOTS` limit 1 used 1, the FX key `FX (1/2)` and `FX (2/2)` (`GAN` knob), the title `GAN Send=40` while the knob turns, only the halfword at `Sound + 0x14 + 200` moves (no other word of the 0x48b-byte Sound object), the DSP row amount byte 40 for track 1, track 2 has its own amount (100), the settings record on the
   card holds 40 and 100 and the route (about 2 s after the last change), Save Kit, Load Kit and another pattern's kit give the amounts back with the DSP row never holding a 0 amount word, three effects on send: the first has the one slot, the other two stay on the master (`limit-page2`: one knob), the knob rows have the Delay class (not lockable), no MIDI CC while the knob turns, a project saved with an amount has
   the same kit and sound bytes as one without. Screenshots: `out/runs/lanes/fxr-shots/step6-dn2-*.png`.
-- **`fx-routes-dn2`** (PASS, 65 s, 47 checks; `pk_digikit_fxroutes.py`): the manifest defaults, `MASTER ONLY`, `SEND ONLY`, the fallback of stored routes the effect does not allow, APPLY & RESTART in both directions, and the `full` boot written for the device's limit (two effects, `GSN  SEND` and `GSN  MASTER`: YES on the second says `NO SEND SLOT` and changes nothing; the pending routes
+- **`fx-routes-dn2`** (PASS, 65 s, 47 checks; `pk_digikit_fxroutes.py`): the manifest defaults, `MASTER ONLY`, `SEND ONLY`, the fallback of stored routes the effect does not allow, the route change in both directions (this run used the old route panel; the FX ROUTING popups apply a pick by reloading the module, without a restart), and the `full` boot written for the device's limit (two effects, `GSN  SEND` and `GSN  MASTER`: YES on the second says `NO SEND SLOT` and changes nothing; the routes
   count, so moving the first to the master lets the second take the slot). Screenshots `step6-dn2-routes-*.png`. The FX view's order (DEL, REV, CHO, send effects, master effects) is built by the runtime (`fxpage::relist`), so no hook was needed on the Digitone II.
 - **`fx-freqshift-dn2`** (PASS, 136 s): the master proof with the stored `master` as on the Digitakt II, the send proof (return = amount^2 x MIX x the shifted track, equal to the float model within 0.5 %, MIX at half halves the added part, an amount on silent track 2 leaves the PCM dry bit for bit), and `image_send` is the device's limit (1) instead of 0.
 - Not run in this step (the coordinator's gate): `fx-pages-dn2` and `fx-persist-dn2` (the new keylist and sound hooks are on the Digitone II image now; with no send effect the count cell is 0 and the hooks pass the stock list).

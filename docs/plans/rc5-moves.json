@@ -1,0 +1,14 @@
+{
+  "image-modules/adapters/card-guard": "runtime/platform/card-guard",
+  "image-modules/adapters/peer-image": "runtime/platform/peer-image",
+  "image-modules/adapters/plusdrive-write": "runtime/platform/plusdrive-write",
+  "image-modules/adapters/sdhc-large": "runtime/platform/sdhc-large",
+  "image-modules/adapters/usb-bulk-audio": "runtime/platform/usb-bulk-audio",
+  "image-modules/adapters/usb-bulk": "runtime/platform/usb-bulk",
+  "image-modules/fixes/introblank": "runtime/platform/introblank",
+  "image-modules/points/sample-pool": "runtime/platform/sample-pool",
+  "runtime/core/include/dkrt_pool.h": "runtime/platform/sample-pool/src/dkrt_pool.h",
+  "image-modules/points/dsp-voice": "runtime/platform/dsp-voice",
+  "image-modules/points/fx": "runtime/platform/fx",
+  "image-modules/points/dynfx": "runtime/platform/dynfx"
+}

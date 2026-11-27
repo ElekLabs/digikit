@@ -33,6 +33,7 @@ _here = os.path.dirname(os.path.abspath(__file__))
 import networkx as nx  # noqa: E402
 
 from tools.coldfire import cfdb  # noqa: E402
+from tools.firmware.artifacts import coldfire_database_path  # noqa: E402
 
 try:
     from tools.coldfire import cf_names
@@ -66,7 +67,7 @@ def load(name, ghidra_dir=None, db_dir=DB_DIR, force=False):
     is gone but an up-to-date database is already on disk, that's fine --
     only a build or rebuild requires the dump."""
     dump_dir = ghidra_dir or os.path.join(GHIDRA_DIR, name)
-    out_path = os.path.join(db_dir, name + ".sqlite")
+    out_path = coldfire_database_path(name, db_dir)
 
     stale = force or not os.path.exists(out_path)
     if not stale:
@@ -158,37 +159,33 @@ class Image:
         d["cf_name"] = cf_name
         return d
 
-    def decomp(self, addr_or_name):
-        """The decompiled C for one function, read live from the Ghidra dump
-        directory (meta['ghidra_dump_dir']) -- never copied into the
-        database itself (see tools/coldfire/cfdb.py's module docstring). None if the
-        function is unknown or has no decomp file."""
-        f = self.func(addr_or_name)
-        if f is None or not f["decomp_path"]:
+    def _function_text(self, addr_or_name, column):
+        func = self.func(addr_or_name)
+        rel = func[column] if func else None
+        if not rel:
             return None
+        if cfdb._table_exists(self.db, "function_text"):
+            row = self.db.execute(
+                "SELECT body FROM function_text WHERE image=? AND path=?",
+                (self.name, rel),
+            ).fetchone()
+            return row[0] if row else None
         dump_dir = self.meta.get("ghidra_dump_dir")
         if not dump_dir:
             return None
-        path = os.path.join(dump_dir, f["decomp_path"])
-        if not os.path.exists(path):
+        try:
+            with open(os.path.join(dump_dir, rel), errors="replace") as fh:
+                return fh.read()
+        except FileNotFoundError:
             return None
-        with open(path) as fh:
-            return fh.read()
+
+    def decomp(self, addr_or_name):
+        """Decompiled C of a function when available."""
+        return self._function_text(addr_or_name, "decomp_path")
 
     def disasm(self, addr_or_name):
-        """The disassembly listing text for one function, same caveats as
-        decomp()."""
-        f = self.func(addr_or_name)
-        if f is None or not f["disasm_path"]:
-            return None
-        dump_dir = self.meta.get("ghidra_dump_dir")
-        if not dump_dir:
-            return None
-        path = os.path.join(dump_dir, f["disasm_path"])
-        if not os.path.exists(path):
-            return None
-        with open(path) as fh:
-            return fh.read()
+        """The disassembly listing of a function when available."""
+        return self._function_text(addr_or_name, "disasm_path")
 
     # --- call graph -----------------------------------------------------------
 
