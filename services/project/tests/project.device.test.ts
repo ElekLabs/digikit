@@ -1,4 +1,9 @@
 import { expect, test } from 'vitest';
+import { createModuleClient, type ModuleFileClient, type ServiceClient } from '@digi/module-ui';
+import { createDeviceModuleChannel } from '../../../packages/workbench-core/src/module-ui/device-module-channel.ts';
+import { deviceQueryChannel } from '../../../packages/workbench-core/src/module-ui/device-queries.ts';
+import { deviceSettingsChannel } from '../../../packages/workbench-core/src/module-ui/device-settings.ts';
+import { ProjectUser } from '../../../tests/fixtures/modules/project-user/workbench/gen/project_user_pb.js';
 import { pollUntil } from '@digi/test-support';
 import { currentRecord } from '@digi/regression/runtime/card-record.ts';
 import { CARD_SYMBOLS } from '@digi/regression/runtime/card-symbols.ts';
@@ -37,6 +42,12 @@ import type { TestRuntime } from '@digi/regression/test-runtime.ts';
  * screen; `from` is the current project's slot, where the lists open.
  */
 
+type ProjectUserClient = ServiceClient<typeof ProjectUser>;
+const unused = async (): Promise<never> => {
+  throw new Error('this test uses no module files');
+};
+const noFiles: ModuleFileClient = { list: unused, read: unused, send: unused, remove: unused };
+
 const USER = 'test/project-user';
 const SINE = 'test/sine';
 const DEBUG = 'digikit/debug';
@@ -50,16 +61,6 @@ const VALUE_B = 0xb2;
 /** The service commands of the fixture: put the body under the key, and read what the module's `init` read (see project-user.c). */
 const CMD_PUT = 0x38;
 const CMD_READ = 0x39;
-/** Browse commands of the fixture: queue `dk_project_list` and `dk_project_get` for a slot (UI task), then read their results (see project-user.c). */
-const CMD_BROWSE = 0x3a;
-const CMD_BROWSED = 0x3b;
-const E_AGAIN = -72;
-const ENTRY_BYTES = 19;
-const ENTRIES_MAX = 8;
-const FLAG_DATA = 2;
-const FLAG_DATA_UNKNOWN = 4;
-const SUMMARY_MODULES_AT = 32;
-const MODULE_BYTES = 40;
 /** The stable period of the card's selection record (DSP blocks): short, so a restart ends it within the test. */
 const STABLE_BLOCKS = 300;
 /** Emulated-time bound of a wait on the store or on a module's reload. */
@@ -269,36 +270,44 @@ cardRigs(
         expect(slotFile(afterClear, SLOT_COPY), 'E: slot 3 has no file after the clear').toBeUndefined();
 
         await rt.session.expectNoFault('after case E');
-        // G: the exports a browsing module calls (dk_project_list, dk_project_get) show the saved projects: slot 1 is listed with its name and its file, and its summary names the fixture
-        await run.usb(rt, (dk) => dk.request(CMD_BROWSE, word32(SLOT_FIRST)));
-        const browsed = await pollUntil(
+        // G: the exports a browsing module calls (dk_project_list, dk_project_get) show the saved projects: the fixture's queries list slot 1 with its name and its file, and its summary names the fixture
+        const ask = <T>(call: (service: ProjectUserClient) => Promise<T>): Promise<T> =>
+          run.usb(rt, async (dk) => {
+            const mod = (await dk.modules()).find((m) => m.name === USER);
+            const channel = createDeviceModuleChannel({
+              settings: deviceSettingsChannel(USER),
+              queries: deviceQueryChannel(async () => dk.moduleQueries(mod!.index, mod!.uiInstance!, () => true)),
+              files: noFiles,
+            });
+            return call(createModuleClient(channel).service(ProjectUser));
+          });
+        const listed = await pollUntil(
           rt.clock,
           async () => {
-            const r = await run.usb(rt, (dk) => dk.request(CMD_BROWSED));
-            if (r.status !== 0) return null;
-            const b = Buffer.from(r.body);
-            const flags = b[8 + 1]!;
-            return b.readInt32BE(4) === E_AGAIN || flags & FLAG_DATA_UNKNOWN ? null : b;
+            const r = await ask((q) => q.list({ firstSlot: 0 }));
+            return r.ok ? r.value : null;
           },
-          (b) => b !== null,
-          { withinMs: WITHIN_MS, message: 'G: the list knows the files and the summary of slot 1 is read' },
+          (l) => l !== null && l.items.find((i) => i.slot === SLOT_FIRST)?.dataUnknown === false,
+          { withinMs: WITHIN_MS, message: 'G: the list knows the files' },
         );
-        const g = browsed!;
-        const listed = g.subarray(8, 8 + ENTRY_BYTES * ENTRIES_MAX);
-        const entry = Array.from({ length: Math.min(g.readInt32BE(0), ENTRIES_MAX) }, (_, i) => listed.subarray(i * ENTRY_BYTES, (i + 1) * ENTRY_BYTES)).find(
-          (e) => e[0] === SLOT_FIRST,
-        );
+        const entry = listed!.items.find((i) => i.slot === SLOT_FIRST);
         expect(entry, 'G: slot 1 is in the list').toBeDefined();
-        expect(entry![1]! & FLAG_DATA, 'G: slot 1 has data').toBe(FLAG_DATA);
-        expect(entry!.subarray(3, 3 + entry![2]!).toString('latin1'), 'G: the listed name is the project name').toBe(name.slice(0, 16));
-        expect(g.readInt32BE(4), 'G: the summary of slot 1 is found').toBe(0);
-        const sum = g.subarray(8 + ENTRY_BYTES * ENTRIES_MAX);
-        const count = sum[28]!;
-        const ids = Array.from({ length: count }, (_, i) => {
-          const m = sum.subarray(SUMMARY_MODULES_AT + i * MODULE_BYTES, SUMMARY_MODULES_AT + (i + 1) * MODULE_BYTES);
-          return m.subarray(1, 1 + m[0]!).toString('latin1');
-        });
-        expect(ids, 'G: the module list of slot 1 holds the fixture').toContain(USER);
+        expect(entry!.hasData, 'G: slot 1 has data').toBe(true);
+        expect(entry!.name, 'G: the listed name is the project name').toBe(name.slice(0, 16));
+        const got = await pollUntil(
+          rt.clock,
+          async () => {
+            const r = await ask((q) => q.get({ slot: SLOT_FIRST }));
+            return r.ok ? r.value : null;
+          },
+          (v) => v !== null && !v.loading,
+          { withinMs: WITHIN_MS, message: 'G: the summary of slot 1 is read' },
+        );
+        expect(got!.found, 'G: the summary of slot 1 is found').toBe(true);
+        expect(
+          got!.modules.map((m) => m.id),
+          'G: the module list of slot 1 holds the fixture',
+        ).toContain(USER);
 
         await rt.session.expectNoFault('the project service flows');
       },

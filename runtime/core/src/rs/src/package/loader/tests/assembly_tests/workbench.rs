@@ -250,10 +250,8 @@ fn the_packed_settings_fixture_registers_its_query_table_in_init() {
     }
 }
 
-// V1, name "Project manager", no settings.
-const MANAGER_DESCRIPTOR: &[u8] = b"\x01\x0fProject manager\x00";
-
-const PROJECT_MANAGER: Fixture = Fixture { leaf: "project-manager", nx: "digikit/project-manager" };
+// V1, name "Project service user" (test/project-user), no settings.
+const USER_DESCRIPTOR: &[u8] = b"\x01\x14Project service user\x00";
 
 /// What Workbench discovery reads: the MODULES record carries a UI instance, DESCRIBE of that instance returns the descriptor, and the query table is registered.
 unsafe fn assert_discoverable(dev: Dev, leaf: &str, descriptor: &[u8], queries: usize) {
@@ -275,22 +273,22 @@ unsafe fn assert_discoverable(dev: Dev, leaf: &str, descriptor: &[u8], queries: 
 }
 
 #[test]
-fn the_packed_project_manager_registers_a_descriptor_without_settings_and_two_queries() {
+fn the_packed_project_user_registers_a_descriptor_without_settings_and_two_queries() {
     let _g = clean();
     for dev in DEVICES.iter().filter(|d| d.has_firmware()) {
         let image = Image::read(*dev, "emulator");
-        let file = packed(*dev, PROJECT_MANAGER.leaf, "dkm", PROJECT_MANAGER.nx);
-        let offset = descriptor_offset(&file, MANAGER_DESCRIPTOR);
-        let Builder::Queries { count, methods } = packed_queries(*dev, &file, PROJECT_MANAGER.leaf) else { unreachable!() };
+        let file = packed(*dev, PROJECT_USER.leaf, "dkm", PROJECT_USER.nx);
+        let offset = descriptor_offset(&file, USER_DESCRIPTOR);
+        let Builder::Queries { count, methods } = packed_queries(*dev, &file, PROJECT_USER.leaf) else { unreachable!() };
         assert_eq!((count, methods[0], methods[1]), (2, 1, 2), "{}: List and Get", dev.name);
         unsafe {
-            let (mut l, plan) = planned(*dev, &image, &[], &[&PROJECT_MANAGER], &SERVICES);
+            let (mut l, plan) = planned(*dev, &image, &[], &[&PROJECT_USER], &SERVICES);
             // init's own calls are the ones listed here: the host runs no module code. The load fails when the runtime refuses either registration.
-            l.m.init_calls = std::vec![Builder::Workbench { offset, len: MANAGER_DESCRIPTOR.len() }, Builder::Queries { count, methods }];
-            let run = boot_run(&mut l, &plan, &[&PROJECT_MANAGER], false);
+            l.m.init_calls = std::vec![Builder::Workbench { offset, len: USER_DESCRIPTOR.len() }, Builder::Queries { count, methods }];
+            let run = boot_run(&mut l, &plan, &[&PROJECT_USER], false);
             // `verdict` reads Accepted for a load that failed in `init`: the refusal is the check
             assert!(run.refusal(0).is_none(), "{}: {:?}", dev.name, run.refusal(0));
-            assert_discoverable(*dev, PROJECT_MANAGER.leaf, MANAGER_DESCRIPTOR, 2);
+            assert_discoverable(*dev, PROJECT_USER.leaf, USER_DESCRIPTOR, 2);
             // the boot run has no unload: give the registry back so the next device registers again
             crate::package::module_ui::withdraw(0);
         }
