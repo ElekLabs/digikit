@@ -14,7 +14,7 @@
         "{projectRoot}/tsconfig.json",
         "jsToolchain",
         "{workspaceRoot}/vitest.host.config.ts",
-        "{workspaceRoot}/vitest.host.projects.json",
+        "{workspaceRoot}/vitest.host/workbench-core.json",
         "{workspaceRoot}/tsconfig*.json",
         {
           "externalDependencies": ["vitest"]

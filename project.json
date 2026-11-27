@@ -46,7 +46,8 @@
         "{workspaceRoot}/**/*.vue",
         "{workspaceRoot}/**/*.svelte",
         "{workspaceRoot}/.oxlintrc.json",
-        "jsToolchain"
+        "jsToolchain",
+        "jsLintTooling"
       ],
       "options": {
         "command": "pnpm lint",
@@ -81,7 +82,8 @@
         "{workspaceRoot}/.prettierrc.json",
         "{workspaceRoot}/.prettierignore",
         "{workspaceRoot}/.oxlintrc.json",
-        "jsToolchain"
+        "jsToolchain",
+        "jsLintTooling"
       ],
       "options": {
         "command": "pnpm fmt:check",

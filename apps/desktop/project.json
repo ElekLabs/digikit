@@ -12,6 +12,16 @@
           "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
         },
         "jsToolchain",
+        {
+          "externalDependencies": [
+            "vite-plugin-solid",
+            "pixi.js",
+            "fft.js",
+            "@tauri-apps/api",
+            "@fontsource-variable/archivo",
+            "@fontsource/jetbrains-mono"
+          ]
+        },
         "{workspaceRoot}/modules/*/*/*/module.toml",
         "{workspaceRoot}/modules/*/*/*/workbench.toml",
         "{workspaceRoot}/config/emulator.json",
@@ -62,6 +72,16 @@
           "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
         },
         "jsToolchain",
+        {
+          "externalDependencies": [
+            "vite-plugin-solid",
+            "pixi.js",
+            "fft.js",
+            "@tauri-apps/api",
+            "@fontsource-variable/archivo",
+            "@fontsource/jetbrains-mono"
+          ]
+        },
         "{workspaceRoot}/modules/*/*/*/module.toml",
         "{workspaceRoot}/modules/*/*/*/workbench.toml",
         "{workspaceRoot}/config/emulator.json",
@@ -85,8 +105,18 @@
         "{projectRoot}/package.json",
         "{projectRoot}/ui/tsconfig.json",
         "jsToolchain",
+        {
+          "externalDependencies": [
+            "vite-plugin-solid",
+            "pixi.js",
+            "fft.js",
+            "@tauri-apps/api",
+            "@fontsource-variable/archivo",
+            "@fontsource/jetbrains-mono"
+          ]
+        },
         "{workspaceRoot}/vitest.host.config.ts",
-        "{workspaceRoot}/vitest.host.projects.json",
+        "{workspaceRoot}/vitest.host/desktop-host.json",
         "{workspaceRoot}/tsconfig*.json",
         {
           "externalDependencies": ["vitest"]
@@ -128,7 +158,17 @@
           "input": "production",
           "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
         },
-        "jsToolchain"
+        "jsToolchain",
+        {
+          "externalDependencies": [
+            "vite-plugin-solid",
+            "pixi.js",
+            "fft.js",
+            "@tauri-apps/api",
+            "@fontsource-variable/archivo",
+            "@fontsource/jetbrains-mono"
+          ]
+        }
       ]
     }
   }
