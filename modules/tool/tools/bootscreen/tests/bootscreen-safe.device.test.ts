@@ -37,6 +37,28 @@ cardRigs(
   },
 );
 
+// The plain runtime image has no intro adapter: REC held still gives safe mode by key with no module loaded, and the stock intro runs.
+cardRigs(
+  'boot screen with REC held, plain runtime',
+  {
+    dsp: 'sharc',
+    relaxFs: true,
+    roots: RT,
+    symbols: CARD_SYMBOLS,
+    startEmpty: true,
+    initialButtons: [{ code: button('RECORD'), down: true }],
+    initial: () => ({ modules: [], selection: [] }),
+  },
+  (h) => {
+    test('REC held from cold with a valid file on the plain runtime: safe mode by key, the module is not loaded, the stock intro runs', async () => {
+      await h.boot(await h.card(spec(h, { name: 'test.dkbs', file: valid })));
+      const info = await h.ready(true);
+      expect(info).toMatchObject({ safe: 1, reason: SAFE_KEY, loaded: 0 });
+      expect((await intro(h)).equals(lastFrame), 'not the module frame').toBe(false);
+    });
+  },
+);
+
 // Why a halted boot is safe to repeat: the boot counter is raised and written before any module code runs (`dkrt_boot` in boot.rs: the `update` call after the
 // safe-mode checks, before `loader::EARLY = true` and the first load). A halted boot is not read back (the harness has no halted state to read). The chain
 // below proves that the write survives: boots 1 and 2 reset from the intro callback and boot 3 is safe mode by counter, from one card state carried through
