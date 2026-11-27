@@ -3,6 +3,7 @@
 // (src/target-ops/ops.ts); nothing is written. The tree rows are the Transfer page's ListRow.
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import CopyErrorButton from '../components/CopyErrorButton';
+import UsageBar, { type UsagePart } from '../components/UsageBar';
 import { useTransferApp } from '../../src/transfer/app-context';
 import { targetLabel } from '../../src/transfer/target';
 import { failureLine } from '../../src/transfer/wait-core';
@@ -21,6 +22,7 @@ import {
   visibleRows,
   type DkmHeader,
   type LibraryMark,
+  type StoreUsage,
   type TreeNode,
 } from '../../src/target-ops/store';
 import { ListRow } from '../transfer/TransferParts';
@@ -330,7 +332,25 @@ export default function FilesPage(props: FilesPageProps): JSX.Element {
     if (!u) return 0;
     return u.total ?? u.used.reduce((a, x) => a + x.bytes, 0) + u.free;
   };
-  const pct = (bytes: number): string => `${usageBase() > 0 ? (100 * bytes) / usageBase() : 0}%`;
+  const usageParts = (u: StoreUsage): UsagePart[] => [
+    ...u.used.map((x) => ({
+      key: x.key,
+      bytes: x.bytes,
+      title: `${x.label} ${formatBytes(x.bytes)}, ${plural(x.files, 'file')}`,
+      legend: `${x.label} ${formatBytes(x.bytes)} · ${plural(x.files, 'file')}`,
+    })),
+    ...((u.overhead ?? 0) > 0
+      ? [
+          {
+            key: 'overhead',
+            bytes: u.overhead ?? 0,
+            title: `Overhead ${formatBytes(u.overhead ?? 0)}`,
+            legend: `Overhead ${formatBytes(u.overhead ?? 0)}`,
+          },
+        ]
+      : []),
+    { key: 'free', bytes: u.free, title: `Free ${formatBytes(u.free)}`, legend: `Free ${formatBytes(u.free)}` },
+  ];
   const usageText = (): string => {
     const u = snap()?.usage;
     if (!u) return '';
@@ -575,54 +595,12 @@ export default function FilesPage(props: FilesPageProps): JSX.Element {
       </Show>
       <Show when={snap()?.usage}>
         {(u) => (
-          <div class="usagebox">
-            <div class="usage" role="img" aria-label={usageText()}>
-              <For each={u().used}>
-                {(x) => (
-                  <span
-                    class={`seg seg-${x.key}`}
-                    style={{ 'flex-basis': pct(x.bytes) }}
-                    title={`${x.label} ${formatBytes(x.bytes)}, ${plural(x.files, 'file')}`}
-                  />
-                )}
-              </For>
-              <Show when={(u().overhead ?? 0) > 0}>
-                <span
-                  class="seg seg-overhead"
-                  style={{ 'flex-basis': pct(u().overhead ?? 0) }}
-                  title={`Overhead ${formatBytes(u().overhead ?? 0)}`}
-                />
-              </Show>
-              <span
-                class="seg seg-free"
-                style={{ 'flex-basis': pct(u().free) }}
-                title={`Free ${formatBytes(u().free)}`}
-              />
-            </div>
-            <ul class="legend">
-              <For each={u().used}>
-                {(x) => (
-                  <li>
-                    <i class={`sw seg-${x.key}`} />
-                    {x.label} {formatBytes(x.bytes)} · {plural(x.files, 'file')}
-                  </li>
-                )}
-              </For>
-              <Show when={(u().overhead ?? 0) > 0}>
-                <li>
-                  <i class="sw seg-overhead" />
-                  Overhead {formatBytes(u().overhead ?? 0)}
-                </li>
-              </Show>
-              <li>
-                <i class="sw seg-free" />
-                Free {formatBytes(u().free)}
-              </li>
-              <Show when={u().total !== null}>
-                <li>Total {formatBytes(u().total ?? 0)}</li>
-              </Show>
-            </ul>
-          </div>
+          <UsageBar
+            parts={usageParts(u())}
+            base={usageBase()}
+            label={usageText()}
+            notes={u().total !== null ? [`Total ${formatBytes(u().total ?? 0)}`] : []}
+          />
         )}
       </Show>
       <div class="body">

@@ -331,7 +331,8 @@ test.each([false, true])(
     aListing.resolve([entry('from-a')]);
     await old;
     await bFinished.promise;
-    assert.deepEqual(reads, ['midi:A', 'midi:B']);
+    // A is listed once; B once for the folder and once more for the storage bar (a store without folders lists everything for both)
+    assert.deepEqual(reads, ['midi:A', 'midi:B', 'midi:B']);
     assert.deepEqual(
       samples.destination.entries()?.map((row) => row.name),
       ['from-b'],
@@ -553,6 +554,7 @@ test('a failed port change keeps the open folder and lets it delete its selected
     ['nested'],
   );
   await samples.removeSelected();
-  assert.deepEqual(calls, ['list midi:A', `delete midi:A ${path}`, 'list midi:A']);
+  // every read lists the folder and then the store for the storage bar
+  assert.deepEqual(calls, ['list midi:A', 'list midi:A', `delete midi:A ${path}`, 'list midi:A', 'list midi:A']);
   assert.deepEqual(samples.destination.entries(), []);
 });

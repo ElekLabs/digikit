@@ -1,0 +1,5 @@
+{
+  "name": "test-support",
+  "dir": "packages/test-support",
+  "include": "tests/*.test.ts"
+}

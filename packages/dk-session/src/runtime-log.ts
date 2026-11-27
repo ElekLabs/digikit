@@ -4,6 +4,7 @@
 import { GUARD_KINDS, LOAD_STATUS, LOG_FLAGS, LOG_KIND, LOG_KINDS, LOG_LEVELS } from './gen_proto.ts';
 import type { DkLogEvent } from './dkupload-core.ts';
 import { faultRows, type Fault } from './fault.ts';
+import { lifecycleFields } from './lifecycle-event.ts';
 
 /** LOG time is in audio blocks of the device. */
 export const BLOCKS_PER_SECOND = 1500;
@@ -170,6 +171,9 @@ export function fieldsOf(kindId: number, a: number[]): Record<string, FieldValue
       }
       f.name = asciiOf(a[2]!, a[3]!, a[4]!);
       if (name === 'MOD_LOAD') f.result = signed(a[1]!);
+      break;
+    case 'LIFECYCLE':
+      f = lifecycleFields(a);
       break;
     case 'SETUP_DONE':
       f.status = signed(a[4]!);

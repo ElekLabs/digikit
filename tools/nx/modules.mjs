@@ -72,7 +72,10 @@ export const createNodesV2 = [
       .sort();
     const coreBuilds = new Set(
       [...byId]
-        .filter(([, { manifest, objects }]) => manifest.category === 'core' && objects.some((o) => o.sources?.length))
+        .filter(
+          ([, { manifest, objects, doc }]) =>
+            manifest.category === 'core' && [...objects, doc.package_part].some((o) => o?.sources?.length),
+        )
         .map(([id]) => id),
     );
     // Patch image composition follows module.requires, not acceptance-fixture graph edges.
@@ -124,6 +127,8 @@ export const createNodesV2 = [
         tags: ['module', `type:${m.type}`],
       };
       if (!isFixture(m) && m.category !== 'core') project.tags.push('release-module');
+      // every core module with a built object: the objects tools/nx/device-bytes.mjs hashes (tracked-objects.mjs, category core)
+      if (coreBuilds.has(m.id)) project.tags.push('core-objects');
       if (coreBuilds.has(m.id) && imageModules.has(m.id)) project.tags.push('acceptance-image');
       const tests = globSync('tests/**/*.test.ts', { cwd: join(ctx.workspaceRoot, root) }).filter(
         (t) =>
@@ -155,7 +160,7 @@ export const createNodesV2 = [
         targets['test-host'] = {
           executor: 'nx:run-commands',
           cache: false,
-          inputs: ['hostTests'],
+          inputs: ['hostTests', '{workspaceRoot}/vitest.host/module-tests.json'],
           outputs: [],
           options: {
             command: `pnpm exec vitest run --config vitest.host.config.ts --project module-tests ${root}/`,
@@ -194,7 +199,10 @@ export const createNodesV2 = [
             ? {
                 executor: 'nx:noop',
                 cache: false,
-                inputs: packSourceInputs(ctx.workspaceRoot, byId, manifestClosure(byId, [m.id]), { privateOnly: true }),
+                inputs: [
+                  ...packSourceInputs(ctx.workspaceRoot, byId, manifestClosure(byId, [m.id]), { privateOnly: true }),
+                  { externalDependencies: [] }, // runs nothing: no npm package is an input
+                ],
                 dependsOn: [{ target: 'test-conformance-all', params: 'forward' }],
               }
             : conformanceTarget(ctx.workspaceRoot, root, m, f, importInputs);

@@ -1,0 +1,5 @@
+{
+  "name": "sharc-rig-kit",
+  "dir": "packages/sharc-rig-kit",
+  "include": "tests/*.test.ts"
+}

@@ -315,3 +315,109 @@ fn a_kinds_array_that_leaves_the_package_or_overflows_is_refused() {
     odd.records.nkinds = 1;
     assert_eq!(resolve_in(odd, widen(odd)), Some(E_FORMAT));
 }
+
+/// The state functions of a hand-built table: the instance's first byte is the exported byte, and an import records what it was given.
+static IMPORTED: AtomicU32 = AtomicU32::new(0);
+unsafe extern "C" fn state_export_max(_: *mut c_void, _: *const c_void) -> u32 {
+    4
+}
+unsafe extern "C" fn state_export(i: *mut c_void, _: *const c_void, out: *mut u8, cap: u32) -> u32 {
+    *out = *(i as *mut u8);
+    cap + 10
+}
+unsafe extern "C" fn state_import(
+    _: *mut c_void,
+    _: *const c_void,
+    from: *const u8,
+    len: u32,
+    has: bool,
+) -> i32 {
+    // 0x100 marks "None", else the first byte and the length
+    let v = if has {
+        (*from as u32) | len << 16
+    } else {
+        0x100
+    };
+    IMPORTED.store(v, Ordering::SeqCst);
+    0
+}
+
+fn state(version: u16, accepts_from: u16) -> &'static StateV1 {
+    Box::leak(Box::new(StateV1 {
+        version,
+        accepts_from,
+        export_max: state_export_max,
+        export: state_export,
+        import: state_import,
+    }))
+}
+
+fn with_state(version: u16, accepts_from: u16) -> ProviderHandle {
+    resolve(
+        row(std::vec![
+            part(PART_LIFECYCLE, 1, lifecycle()),
+            part(PART_STATE, 1, state(version, accepts_from)),
+        ]),
+        instance(9),
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_service_without_the_state_part_exports_nothing_and_takes_anything() {
+    let h = resolve(
+        row(std::vec![part(PART_LIFECYCLE, 1, lifecycle())]),
+        instance(0),
+    )
+    .unwrap();
+    let core = core::ptr::null();
+    assert_eq!(h.state_versions(), None);
+    assert!(!h.state_accepts(1));
+    unsafe {
+        assert_eq!(h.state_export_max(core), 0);
+        assert_eq!(h.state_export(core, &mut [0u8; 4]), 0);
+        assert_eq!(h.state_import(core, Some((1, &[1]))), OK);
+    }
+}
+
+#[test]
+fn old_bytes_reach_import_only_inside_the_accepted_version_range() {
+    // this copy writes version 3 and takes 2 to 3
+    let h = with_state(3, 2);
+    let core = core::ptr::null();
+    assert_eq!(h.state_versions(), Some((3, 2)));
+    for (old, taken) in [(1, false), (2, true), (3, true), (4, false)] {
+        assert_eq!(h.state_accepts(old), taken, "old version {old}");
+        unsafe { h.state_import(core, Some((old, &[7, 8]))) };
+        let want = if taken { 7 | 2 << 16 } else { 0x100 };
+        assert_eq!(IMPORTED.load(Ordering::SeqCst), want, "old version {old}");
+    }
+    // no bytes at all: the service decides with None
+    unsafe { h.state_import(core, None) };
+    assert_eq!(IMPORTED.load(Ordering::SeqCst), 0x100);
+}
+
+#[test]
+fn export_is_clamped_to_the_buffer_the_runtime_gave() {
+    let h = with_state(1, 1);
+    let mut out = [0u8; 4];
+    unsafe {
+        assert_eq!(h.state_export_max(core::ptr::null()), 4);
+        // the table's function claims cap + 10; the handle returns what fits
+        assert_eq!(h.state_export(core::ptr::null(), &mut out), 4);
+    }
+    assert_eq!(out[0], 9);
+}
+
+#[test]
+fn a_state_part_version_newer_than_the_core_knows_is_refused_with_the_abi_status() {
+    let r = row(std::vec![
+        part(PART_LIFECYCLE, 1, lifecycle()),
+        PartRef::new(
+            PART_STATE,
+            STATE_NEWEST + 1,
+            state(1, 1) as *const _ as *const ()
+        ),
+    ]);
+    assert_eq!(resolve(r, instance(0)).err(), Some(E_SVC_ABI));
+}

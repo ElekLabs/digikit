@@ -555,3 +555,77 @@ fn describe_answers_while_the_owner_is_busy_and_while_there_is_none() {
     let mut one = [0u32; 1];
     assert_eq!(unsafe { handle.describe(core, 1, &mut one) }, 1);
 }
+
+/// A provider file that adopts the State part: the `service!` arm builds the table and the handle carries bytes into the owner behind its guard.
+mod stateful {
+    use dkrt_abi::provider::{Provider, State, Status};
+
+    pub struct S {
+        pub n: u8,
+    }
+    impl Provider<crate::ImportCore> for S {
+        fn start_in(
+            _: &crate::ImportCore,
+            slot: &mut core::mem::MaybeUninit<S>,
+        ) -> Result<(), Status> {
+            slot.write(S { n: 1 });
+            Ok(())
+        }
+    }
+    impl State<crate::ImportCore> for S {
+        const VERSION: u16 = 2;
+        const ACCEPTS_FROM: u16 = 1;
+        fn export_max(&self, _: &crate::ImportCore) -> usize {
+            1
+        }
+        fn export(&mut self, _: &crate::ImportCore, out: &mut [u8]) -> usize {
+            out[0] = self.n;
+            1
+        }
+        fn import(&mut self, _: &crate::ImportCore, from: Option<&[u8]>) -> Result<(), Status> {
+            self.n = from.map_or(0, |b| b[0]);
+            Ok(())
+        }
+    }
+    crate::service!(
+        S,
+        "stateful",
+        &[],
+        parts = [State],
+        hooks = [],
+        fills = [],
+        exports = []
+    );
+    pub unsafe fn start() {
+        assert_eq!(dk_svc_init(0x1234 as *mut u8), 0);
+    }
+    pub fn row() -> &'static dkrt_abi::provider::ProviderRow {
+        &DK_SVC_ROW
+    }
+}
+
+#[test]
+fn the_state_part_exports_and_imports_through_the_owner() {
+    use dkrt_abi::provider::ProviderHandle;
+    let handle = unsafe {
+        ProviderHandle::resolve(stateful::row(), whole(), 0x1234 as *mut core::ffi::c_void)
+    }
+    .unwrap();
+    assert_eq!(handle.state_versions(), Some((2, 1)));
+    let core = &ImportCore as *const ImportCore as *const core::ffi::c_void;
+    // no owner yet: nothing to export, and an import is refused as busy
+    assert_eq!(unsafe { handle.state_export_max(core) }, 0);
+    assert_eq!(unsafe { handle.state_import(core, None) }, dkrt_sdk::E_BUSY);
+    unsafe { stateful::start() };
+    let mut out = [0u8; 1];
+    assert_eq!(unsafe { handle.state_export_max(core) }, 1);
+    assert_eq!(unsafe { handle.state_export(core, &mut out) }, 1);
+    assert_eq!(out, [1]);
+    assert_eq!(unsafe { handle.state_import(core, Some((1, &[9]))) }, 0);
+    unsafe { handle.state_export(core, &mut out) };
+    assert_eq!(out, [9]);
+    // a version the service does not take: it decides with None
+    unsafe { handle.state_import(core, Some((3, &[5]))) };
+    unsafe { handle.state_export(core, &mut out) };
+    assert_eq!(out, [0]);
+}

@@ -28,6 +28,8 @@ use std::path::{Path, PathBuf};
 use std::string::String;
 use std::vec::Vec;
 
+mod lfo_closure_reload;
+mod lifecycle_events;
 mod settings_page;
 mod workbench;
 
@@ -786,7 +788,7 @@ pub(super) unsafe fn boot_run(l: &mut Boot, plan: &Plan, modules: &[&Fixture], p
     let mut s = Box::new(Session::new(l as *mut _, at));
     s.begin_boot(&capacity(&l.p), modules.len());
     let manifest = RtManifest::of(&mut *s, modules.len());
-    let (placer, linker, installers, host) = s.seams();
+    let (placer, linker, installers, host) = crate::package::lifecycle::traced_seams(&mut *s);
     let mut pm = Manager::new(manifest, placer, linker, installers, host).unwrap();
     let mut roots: Vec<PackageId> = (0..modules.len()).map(|k| PackageId(k as u8)).collect();
     if pin_services {

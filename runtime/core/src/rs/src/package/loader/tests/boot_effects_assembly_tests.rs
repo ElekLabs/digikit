@@ -41,6 +41,10 @@ static EVENTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 unsafe extern "C" fn sink(e: *const crate::dlog::Ev) {
     let e = *e;
+    // the lifecycle events trace the steps (`reload/tests/trace.rs`, `assembly_tests/lifecycle_events.rs`); the snapshot holds what the boot did to the world
+    if e.kind == dkrt_sdk::logk::LIFECYCLE {
+        return;
+    }
     // the time is the host's block counter and the sequence number the ring's: neither belongs to the runtime's behaviour
     EVENTS
         .lock()

@@ -67,6 +67,8 @@ pub mod logk {
     pub const PROJECT_MODULE: u16 = 63;
     pub const VIEW_CHANGED: u16 = 64;
     pub const VALUE_CHANGED: u16 = 65;
+    pub const LIFECYCLE: u16 = 66;
+    pub const STATE_CARRIED: u16 = 67;
     pub const MENU_SELECT: u32 = 1;
     pub const MENU_RESTART: u32 = 2;
     pub const MENU_DEBUG: u32 = 3;

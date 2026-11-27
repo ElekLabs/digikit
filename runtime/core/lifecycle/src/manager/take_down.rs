@@ -93,7 +93,7 @@ where
             .pending_take_down
             .expect("run_pending_take_down needs a pending take-down");
         while let Some(&p) = work.todo.as_slice().first() {
-            let done = self.take_down_package(p);
+            let done = self.take_down_package(p, work.op == Op::Reload);
             self.pending_take_down = Some(work);
             done?;
             work.todo.remove(p);
@@ -126,8 +126,12 @@ where
     }
 
     /// Takes one package down from the state it reached: detach from the services it is attached to, release its claims and pools, restore its entries,
-    /// stop, unbind, free. A restore that does not finish leaves the package in `RestorePending` (still counted live); a retry starts at the restore.
-    pub(super) fn take_down_package(&mut self, p: PackageId) -> Result<(), LifecycleError> {
+    /// export its state (a reload), stop, unbind, free. A restore that does not finish leaves the package in `RestorePending` (still counted live); a retry starts at the restore.
+    pub(super) fn take_down_package(
+        &mut self,
+        p: PackageId,
+        reload: bool,
+    ) -> Result<(), LifecycleError> {
         let Some(state) = self.progress.state(p) else {
             self.live.remove(p);
             return Ok(());
@@ -152,6 +156,10 @@ where
                     error => LifecycleError::RestoreFailed { package: p, error },
                 });
             }
+        }
+        if reload && state >= State::Started {
+            // final: the entries are back and nothing enters the service any more; a retry of a busy restore gets here once
+            self.host.export_state(p);
         }
         if state >= State::Started {
             self.host.stop(p);

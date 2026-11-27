@@ -133,8 +133,7 @@
         { "env": "SHARC_FAST_AUTO" },
         { "env": "SHARC_GEN_DIR" },
         { "env": "DIGI_PK_PGO" },
-        { "env": "UPDATE_GOLDENS" }
-      ],
+        { "env": "UPDATE_GOLDENS" }, { "externalDependencies": [] }],
       "options": {
         "command": "node tools/devtools/emu-slot.mjs -- node tools/nx/daemon-env.mjs -- uv run python -m tools.patchkit.pk_harness run --jobs ${DIGI_JOBS:-4}",
         "cwd": "."

@@ -3,8 +3,10 @@
 //! services number the keys again before the first consumer starts (`ProviderHost::services_up`), and nothing here has a rollback: a failure after the take-down leaves the
 //! closure down (the job reports it as torn).
 use super::codes::code_of;
+use super::service_copy::ServiceCopy;
 use super::rt::Rt;
 use crate::package::admission::Admission;
+use crate::package::loader::records::is_service_rec;
 use crate::package::loader::{records, Images, PhaseKind, Registry, TABLE_MAX};
 use dkrt_abi::package::PackageId;
 use dkrt_abi::package_platform::PackagePlatform;
@@ -38,9 +40,13 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
 
     /// Was a menu object built for a module of the closure of record `rec` (it points into the module's code)?
     pub unsafe fn closure_menu_built(&self, rec: usize) -> bool {
+        // once the reload has its room the closure may be down: the menus are not asked again
+        if self.reload.is_called() {
+            return false;
+        }
         let mut members = [0usize; REC_MAX];
         let n = self.closure(rec, &mut members);
-        members[..n].iter().any(|&r| r < MAX_MODULES && crate::package::resident::state::menus_held(r))
+        members[..n].iter().any(|&r| !is_service_rec(r) && crate::package::resident::state::menus_held(r))
     }
 
     /// The refusals of a reload of service record `rec` that the system facts do not hold: the menu of a consumer, a DSP part in the closure (`E_BOOT_ONLY`: the closure reload has
@@ -94,8 +100,9 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
     /// A reload of service record `rec` cannot go on: every member gets its tick back (`Loader::reload_abort`). False when the reload went on (a member is down, or a restore of the
     /// closure waits: it is left to `dsp_step`).
     pub unsafe fn closure_abort(&mut self, rec: usize) -> bool {
-        if self.reload_torn || self.reloading {
-            self.reloading = false;
+        if self.reload.is_torn() || self.reload.is_waiting() {
+            let l = self.loader();
+            self.reload.stop_waiting(&mut self.session.carried, l);
             return false;
         }
         let mut members = [0usize; REC_MAX];
@@ -103,23 +110,25 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         for &r in &members[..n] {
             self.loader().reload_abort(r);
         }
+        let l = self.loader();
+        self.reload.reset(&mut self.session.carried, l);
         true
     }
 
     /// Has the reload of a service taken a member down (the live job reports it as torn)? Meaningful after `reload_closure` answered anything but `OK`.
     pub fn reload_torn(&self) -> bool {
-        self.reload_torn
+        self.reload.is_torn()
     }
 
     /// A new reload starts: what an earlier one left is forgotten.
     pub fn reload_reset(&mut self) {
-        self.reloading = false;
-        self.reload_torn = false;
+        let l = unsafe { self.loader() };
+        unsafe { self.reload.reset(&mut self.session.carried, l) };
     }
 
     /// Reload service record `rec` from the file at `path` with its consumers (`Loader::provider_prepare`, then `PackageManager::reload`), called once per UI pass by the live job.
     /// `OK`; `E_BUSY` while a restore waits for a task to park (nothing is lost, the job asks again and the same call finishes it); or the refusal in the loader's codes. A refusal
-    /// before the take-down leaves everything as it was (`reload_torn` false); after it the closure is down.
+    /// before the take-down leaves everything as it was (`reload_torn()` false); after it the closure is down.
     pub unsafe fn reload_closure(&mut self, rec: usize, path: *const u8) -> i32 {
         let mut caps = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
         let mut members = [0usize; REC_MAX];
@@ -135,7 +144,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         let Some(m) = self.mgr() else {
             return E_NOT_FOUND;
         };
-        if self.reloading {
+        if self.reload.is_waiting() {
             if m.restore_pending().is_some() {
                 let out = m.retry_pending();
                 return self.reload_end(out, rec, &[]);
@@ -146,7 +155,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
             }
             return self.reload_end(Ok(Report::default()), rec, &[]);
         }
-        if rec < MAX_MODULES || !m.live().contains(id) {
+        if !is_service_rec(rec) || !m.live().contains(id) {
             return E_NOT_FOUND;
         }
         let mut members = [0usize; REC_MAX];
@@ -166,9 +175,22 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         if r != OK {
             return r;
         }
+        // the state the old copies hand over gets its room before anything is taken down: a full arena is a refusal, as it is for any other check
+        let carry = self.session.carried.reserve(members, ServiceCopy::of, l);
+        if carry != OK {
+            l.provider_table_restore(rec, &old[..old_len]);
+            return carry;
+        }
+        self.reload.call();
+        let mut live = [DkrtCap { kind: 0, limit: 0, used: 0, largest: 0 }; CAP_MAX];
+        let k = caps.len().min(CAP_MAX);
+        live[..k].copy_from_slice(&caps[..k]);
+        // the blocks stay taken until the new copies are up: they are not part of what the reload gives back
+        hold_in(&mut live[..k], self.session.carried.held_bytes());
+        let caps = &live[..k];
         for &r in members {
             // a consumer comes back from the file it came from; the path pointer a live load gave is the job's buffer, which holds this job's path now
-            if r < MAX_MODULES {
+            if !is_service_rec(r) {
                 self.session.modules[r] = records::path(r).as_ptr();
             }
             self.session.outcome[r] = super::session::Outcome::NONE;
@@ -191,7 +213,7 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         let down = members.iter().any(|&r| !m.live().contains(PackageId(r as u8))) || m.restore_pending().is_some();
         if out.is_ok() && !down && self.closure_retained(rec) {
             // up again, but an old copy's memory is not back yet: the job asks again
-            self.reloading = true;
+            self.reload.wait_retained(&mut self.session.carried, l);
             return E_BUSY;
         }
         if down || out.is_ok() {
@@ -234,28 +256,38 @@ impl<P: PackagePlatform, M: Images, R: Registry> Rt<P, M, R> {
         };
         match out {
             Ok(_) => {
-                self.reloading = false;
+                let l = self.loader();
+                self.reload.done(&mut self.session.carried, l);
                 // every module that is back hears it (a module of the closure has no DSP part: the job refused one)
                 let mut now = [0usize; REC_MAX];
                 let n = self.closure(root, &mut now);
                 for &r in &now[..n] {
-                    if r < MAX_MODULES {
+                    if !is_service_rec(r) {
                         crate::package::handlers::services().on_loaded(r);
                     }
                 }
                 OK
             }
             Err(e) => {
-                self.reloading = m.restore_pending().is_some();
-                if !members.is_empty() {
-                    self.reload_torn = self.reloading || members.iter().any(|&r| !m.live().contains(PackageId(r as u8)));
-                }
+                let down = (!members.is_empty()).then(|| members.iter().any(|&r| !m.live().contains(PackageId(r as u8))));
+                let l = self.loader();
+                self.reload.failed(m.restore_pending().is_some(), down, &mut self.session.carried, l);
                 let code = code_of(&e);
-                if self.reload_torn && !self.reloading {
+                if self.reload.is_torn() && !self.reload.is_waiting() {
                     self.report_closure_down(members, code);
                 }
                 code
             }
+        }
+    }
+}
+
+/// `caps` with `held` more arena bytes in use (the state blocks of a reload): the arena's `used` and its largest free block.
+fn hold_in(caps: &mut [DkrtCap], held: u32) {
+    for c in caps.iter_mut() {
+        if c.kind == dkrt_sdk::proto::CAPK_ARENA as u32 {
+            c.used = c.used.saturating_add(held);
+            c.largest = c.largest.saturating_sub(held);
         }
     }
 }

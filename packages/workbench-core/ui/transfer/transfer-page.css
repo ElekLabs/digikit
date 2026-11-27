@@ -268,6 +268,13 @@
   color: var(--ink-3);
   background: var(--panel-2);
 }
+/* the capacity hint: wraps in the row, never cut */
+.transfer-page .rtag.wrap {
+  flex: 0 1 auto;
+  white-space: normal;
+  line-height: 13px;
+  padding: 2px 6px;
+}
 .transfer-page .rtag.ok {
   color: var(--status-ok-text);
   background: var(--status-ok-fill);
@@ -304,8 +311,88 @@
   overflow-wrap: anywhere;
   pointer-events: none;
 }
+/* a popover with a Reload per service takes the pointer, so its buttons can be clicked */
+.transfer-dependency-tooltip.interactive {
+  pointer-events: auto;
+}
+.transfer-dependency-tooltip .dep-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.transfer-dependency-tooltip .dep-act {
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.transfer-dependency-tooltip .dep-act:hover:not(:disabled) {
+  color: var(--action);
+}
+.transfer-dependency-tooltip .live-result {
+  font-size: 11px;
+}
+/* the live actions of a device row and what the last one did */
+.transfer-page .live {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: 2px;
+  min-width: 0;
+}
+.transfer-page .live-act:disabled {
+  color: var(--ink-3);
+  cursor: default;
+  text-decoration: none;
+}
+.live-result {
+  color: var(--status-ok-text);
+  white-space: normal;
+  max-width: 28ch;
+}
+/* on a row the result is a line of its own under the name, so a long reason never squeezes the name */
+.transfer-page .rows li:has(> .live-result.line) {
+  flex-wrap: wrap;
+}
+.live-result.line {
+  flex: 1 0 100%;
+  max-width: none;
+  padding: 2px 0 4px 26px;
+  white-space: normal;
+}
+.live-result.refused {
+  color: var(--status-caution);
+}
+.live-result.failed {
+  color: var(--status-error-text, var(--status-caution));
+}
+.transfer-dependency-tooltip .live-result {
+  max-width: 48ch;
+  white-space: normal;
+}
+/* the port file line above the device list is quiet when the file matches the firmware */
+.transfer-page .unused-services.port-line.ok {
+  color: var(--ink-3);
+}
+/* the warning above the device list: service files no module needs */
+.transfer-page .unused-services {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--status-caution);
+}
 .transfer-page .rtag.dim {
   color: var(--ink-3);
+}
+.transfer-page .rows .nm {
+  min-width: 7ch;
 }
 /* the "does not fit" bar: pinned to the bottom of the list, over the rows, one line */
 .transfer-page .fitbar {
@@ -613,6 +700,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .transfer-page .rows .rtag.wrap {
+    max-width: 16ch;
+    overflow: visible;
+  }
   .transfer-page .rows .nm {
     min-width: 7ch;
   }
@@ -739,4 +830,22 @@
 }
 .transfer-page .module-preview .err {
   margin: 0;
+}
+/* the storage bar above the two lists */
+.transfer-page .storage-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+.transfer-page .storage-bar .legend {
+  display: none;
+}
+.transfer-page .storage-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.transfer-page .storage-bar.over .storage-text {
+  color: var(--status-caution);
 }

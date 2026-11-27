@@ -5212,77 +5212,77 @@
   },
   {
    "addend": 36,
-   "offset": 52,
+   "offset": 64,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": ".sec..data.DKRT_BOOT",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 192,
+   "offset": 204,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": ".sec..text._RNvNtCskEQhmZu1bvr_4dkrt8platform9fw_blocks",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 212,
+   "offset": 224,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": "dkrt_irq_mask",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 222,
+   "offset": 234,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": ".sec..bss._RNvNtCskEQhmZu1bvr_4dkrt4dlog4SINK",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 232,
+   "offset": 244,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": ".sec..bss._RNvNtCskEQhmZu1bvr_4dkrt4dlog4CHAN",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 254,
+   "offset": 266,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": "dkrt_irq_restore",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 398,
+   "offset": 410,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": ".sec..bss.DKRT_LOG_COUNT",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 422,
+   "offset": 434,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": ".sec..bss.DKRT_LOG",
    "type": "cf.32"
   },
   {
    "addend": 12,
-   "offset": 458,
+   "offset": 470,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": ".sec..bss.DKRT_LOG",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 480,
+   "offset": 492,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": ".sec..bss.DKRT_LOG_COUNT",
    "type": "cf.32"
   },
   {
    "addend": 0,
-   "offset": 498,
+   "offset": 510,
    "section": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
    "symbol": ".sec..bss._RNvNtCskEQhmZu1bvr_4dkrt4dlog4CHAN",
    "type": "cf.32"
@@ -29679,10 +29679,10 @@
   },
   {
    "align": 2,
-   "hex": "4e56ffac2f032f02342e000e2002e0884a00660a71b900000000e1888480203900000000080200046600008a0802000066404ab900000000677a73ee000a7620b681677073ee000a762fb6816766761fb68165000198322e000ac2832041223c4015817e2608e6a97601c6811d43ffb3603473ee000a7617b6816700017073ee000a7618b681670001647619b6816700015c322e000a760ab7814a4156c1260144831d43ffb34a8066104a2effb367000140600676011d43ffb341eefffa4eb9000000004a6efffa6746262efffc2d43ffb44eb9000000002d40ffac2279000000004a8966302279000000004a8966604a2effb3660000962f2effac4eb900000000588f242effa4262effa84e5e4e7542aeffb460bc42aeffba262effb42d43ffbe362e000a3d43ffc23d42ffc4206e00102d58ffc62d58ffca2d58ffce2d58ffd22d50ffd6486effba4e91588f609642aeffda262effb42d43ffde362e000a3d43ffe23d42ffe4206e00102d58ffe62d58ffea2d58ffee2d58fff22d50fff6486effda4e91588f6000ff6641f9000000002210224152892d49ffb0701fc280eb89200106800000000020404290262effb421430004362e000a314300083142000a226e00102041d1fc0000000020d920d920d920d92091204020aeffb043f90000000022aeffb06000ff0e4a80660a4ab9000000006700ff0c42031d43ffb36000feb8",
+   "hex": "4e56ffac2f032f02342e000e2002e0884a00660a71b900000000e1888480203900000000080200046600009608020000664c73ee000a7642b681670001bc4ab900000000677a73ee000a7620b681677073ee000a762fb6816766761fb68165000198322e000ac2832041223c4015817e2608e6a97601c6811d43ffb3603473ee000a7617b6816700017073ee000a7618b681670001647619b6816700015c322e000a760ab7814a4156c1260144831d43ffb34a8066104a2effb367000140600676011d43ffb341eefffa4eb9000000004a6efffa6746262efffc2d43ffb44eb9000000002d40ffac2279000000004a8966302279000000004a8966604a2effb3660000962f2effac4eb900000000588f242effa4262effa84e5e4e7542aeffb460bc42aeffba262effb42d43ffbe362e000a3d43ffc23d42ffc4206e00102d58ffc62d58ffca2d58ffce2d58ffd22d50ffd6486effba4e91588f609642aeffda262effb42d43ffde362e000a3d43ffe23d42ffe4206e00102d58ffe62d58ffea2d58ffee2d58fff22d50fff6486effda4e91588f6000ff6641f9000000002210224152892d49ffb0701fc280eb89200106800000000020404290262effb421430004362e000a314300083142000a226e00102041d1fc0000000020d920d920d920d92091204020aeffb043f90000000022aeffb06000ff0e4a80660a4ab9000000006700ff0c42031d43ffb36000feb8",
    "kind": "text",
    "name": ".text._RNvNtCskEQhmZu1bvr_4dkrt4dlog2ev",
-   "size": 516
+   "size": 528
   },
   {
    "align": 2,
@@ -33892,7 +33892,7 @@
    "size": 24
   }
  ],
- "source_sha256": "024faad60e76eaa53f39f861bb9efd8a0f07de52e6e8611df7c52fcbe431fc37",
+ "source_sha256": "655c2ea839f34dd0e5f66c162d78c3c0f4e82b16bd1647e500d88258a145cc3b",
  "symbols": [
   {
    "global": false,
@@ -39903,8 +39903,8 @@
  ],
  "toolchain": {
   "exports": "DKRT_ARENA DKRT_AUX_TASK DKRT_BOOT DKRT_CARD DKRT_CRASH DKRT_DSP_STOPPED DKRT_HEALTH DKRT_HOST_DIR DKRT_IO_TASK DKRT_LOG DKRT_LOG_COUNT DKRT_MAILBOX DKRT_MENUS DKRT_MENU_OBJS DKRT_MODULE_RUNTIME DKRT_PATHS DKRT_PD_CUT DKRT_PKG DKRT_POLLS DKRT_POLL_OWNER DKRT_SAVE_MODE DKRT_SDK_BUF DKRT_SECBUF DKRT_SESSION_IDLE DKRT_SET DKRT_SETTINGS DKRT_SETTINGS_HDR DKRT_STABLE_BLOCKS DKRT_STAGE DKRT_STATE DKRT_STORE_CAP DKRT_STORE_FP DKRT_STORE_PEEK DKRT_UI_START DKRT_UNLOAD_OBSERVERS DKRT_UPLOAD_BUF DKRT_UPLOAD_COUNT DKRT_UPLOAD_CUT DKRT_UPLOAD_DROPPED DKRT_UPLOAD_FLIP DKRT_UPLOAD_LAST DKRT_UPLOAD_TEAR DKRT_UPLOAD_WRITES dk_debug_log_sink_set dk_log_event dk_sink_set dk_span_sink_set dkrt_aux_run dkrt_aux_wait dkrt_blocks dkrt_boot dkrt_boot_info dkrt_boot_name dkrt_capacity dkrt_ctx_owner dkrt_diag dkrt_exc dkrt_fit dkrt_fx dkrt_health dkrt_io_wake dkrt_job_cancel dkrt_job_post dkrt_live dkrt_live_state dkrt_load dkrt_menu_built dkrt_menu_release dkrt_midi_rx dkrt_module dkrt_module_header dkrt_phase dkrt_poll_add dkrt_poll_remove dkrt_record_name dkrt_restart dkrt_scan dkrt_scan_reads dkrt_selection_get dkrt_selection_set dkrt_service_query dkrt_settings_flush dkrt_settings_put dkrt_speed_flags dkrt_status dkrt_store_lease dkrt_store_read dkrt_store_stat dkrt_store_unlease dkrt_tick dkrt_ui_settings_rows dkrt_unload_observer_add dkrt_unload_observer_remove",
-  "instructions_redecoded": "38171",
-  "isa_check": "290f712e96f6582bc2d5fe552f05eefe64517454ce8feb290b2fd2cbf620f949",
+  "instructions_redecoded": "38175",
+  "isa_check": "f6b35cdd674bae0a955b767c30720bba80f0e24ece6ca042321761c250b25ca8",
   "libgccjit_gcc": "37ea7cd851f04ee6a313c5067c9fde9328f876aa",
   "rustc": "rustc 1.101.0-nightly (6f5da406b 2026-10-10)",
   "rustc_codegen_gcc": "a7d8a5227b520187e3d93c1f7fc01dd1ba8659cf",
