@@ -83,9 +83,9 @@ _Static_assert(offsetof(dk_project_summary, modules) == 32, "dk_project_summary.
 /* One saved setting of a module in a project (dk_project_settings). */
 typedef struct dk_project_setting {
     uint8_t key_len;
-    uint8_t head_len;  /* the value bytes in `head`: the value's length, at most 64 */
+    uint8_t head_len;   /* the value bytes in `head`: the value's length, at most 64 */
     uint16_t value_len; /* the full length of the value */
-    uint8_t key[47];   /* the key as the module wrote it, without its `<author>/<name>/` prefix */
+    uint8_t key[47];    /* the key as the module wrote it, without its `<author>/<name>/` prefix */
     uint8_t head[DK_PROJECT_VALUE_HEAD];
     uint8_t pad;
 } dk_project_setting;

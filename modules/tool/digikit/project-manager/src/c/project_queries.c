@@ -59,15 +59,16 @@ int32_t project_manager_get(dk_module_ctx *ctx, const project_manager_GetRequest
     return 0;
 }
 
-int32_t project_manager_get_settings(dk_module_ctx *ctx, const project_manager_GetSettingsRequest *request,
+int32_t project_manager_get_settings(dk_module_ctx *ctx,
+                                     const project_manager_GetSettingsRequest *request,
                                      project_manager_GetSettingsReply *reply)
 {
     (void)ctx;
     dk_project_setting settings[SETTINGS_PAGE];
     uint32_t next = 0;
-    int32_t r = dk_project_settings(request->slot, (const uint8_t *)request->module,
-                                    request->module_len, request->version, request->cursor,
-                                    settings, SETTINGS_PAGE, &next);
+    int32_t r =
+        dk_project_settings(request->slot, (const uint8_t *)request->module, request->module_len,
+                            request->version, request->cursor, settings, SETTINGS_PAGE, &next);
     int32_t outcome =
         project_query_settings_outcome(r, &reply->loading, &reply->changed, &reply->found);
     if (outcome != 0 || !reply->found)

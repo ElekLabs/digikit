@@ -181,7 +181,102 @@ export declare type GetReply = Message<"project_user.GetReply"> & {
 export declare const GetReplySchema: GenMessage<GetReply>;
 
 /**
- * What the project service's exports return (dk_project_list, dk_project_get), as a module sees them. The device holds at most 128 projects (slots 0 to 127).
+ * @generated from message project_user.GetSettingsRequest
+ */
+export declare type GetSettingsRequest = Message<"project_user.GetSettingsRequest"> & {
+  /**
+   * @generated from field: uint32 slot = 1;
+   */
+  slot: number;
+
+  /**
+   * @generated from field: string module = 2;
+   */
+  module: string;
+
+  /**
+   * @generated from field: uint32 version = 3;
+   */
+  version: number;
+
+  /**
+   * @generated from field: uint32 cursor = 4;
+   */
+  cursor: number;
+};
+
+/**
+ * Describes the message project_user.GetSettingsRequest.
+ * Use `create(GetSettingsRequestSchema)` to create a new message.
+ */
+export declare const GetSettingsRequestSchema: GenMessage<GetSettingsRequest>;
+
+/**
+ * @generated from message project_user.Setting
+ */
+export declare type Setting = Message<"project_user.Setting"> & {
+  /**
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * The first 64 bytes of the value; value_length is its full length.
+   *
+   * @generated from field: bytes value = 2;
+   */
+  value: Uint8Array;
+
+  /**
+   * @generated from field: uint32 value_length = 3;
+   */
+  valueLength: number;
+};
+
+/**
+ * Describes the message project_user.Setting.
+ * Use `create(SettingSchema)` to create a new message.
+ */
+export declare const SettingSchema: GenMessage<Setting>;
+
+/**
+ * @generated from message project_user.GetSettingsReply
+ */
+export declare type GetSettingsReply = Message<"project_user.GetSettingsReply"> & {
+  /**
+   * @generated from field: bool loading = 1;
+   */
+  loading: boolean;
+
+  /**
+   * @generated from field: bool changed = 2;
+   */
+  changed: boolean;
+
+  /**
+   * @generated from field: bool found = 3;
+   */
+  found: boolean;
+
+  /**
+   * @generated from field: repeated project_user.Setting entries = 4;
+   */
+  entries: Setting[];
+
+  /**
+   * @generated from field: uint32 next = 5;
+   */
+  next: number;
+};
+
+/**
+ * Describes the message project_user.GetSettingsReply.
+ * Use `create(GetSettingsReplySchema)` to create a new message.
+ */
+export declare const GetSettingsReplySchema: GenMessage<GetSettingsReply>;
+
+/**
+ * What the project service's exports return (dk_project_list, dk_project_get, dk_project_settings), as a module sees them. The device holds at most 128 projects (slots 0 to 127).
  *
  * @generated from service project_user.ProjectUser
  */
@@ -205,6 +300,17 @@ export declare const ProjectUser: GenService<{
     methodKind: "unary";
     input: typeof GetRequestSchema;
     output: typeof GetReplySchema;
+  },
+  /**
+   * The settings a project saved for one module, 4 at most. version is the counter of Get's reply: changed is true when the project has changed since. loading is true while
+   * the device reads the project's file: ask again. next is the cursor for the next page, 0 for none.
+   *
+   * @generated from rpc project_user.ProjectUser.GetSettings
+   */
+  getSettings: {
+    methodKind: "unary";
+    input: typeof GetSettingsRequestSchema;
+    output: typeof GetSettingsReplySchema;
   },
 }>;
 

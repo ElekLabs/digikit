@@ -130,7 +130,8 @@ static void query_settings_outcome(void)
     uint8_t loading = 9, changed = 9, found = 9;
     assert(project_query_settings_outcome(3, &loading, &changed, &found) == 0);
     assert(loading == 0 && changed == 0 && found == 1);
-    assert(project_query_settings_outcome(0, &loading, &changed, &found) == 0); /* an empty page is found */
+    assert(project_query_settings_outcome(0, &loading, &changed, &found) ==
+           0); /* an empty page is found */
     assert(loading == 0 && changed == 0 && found == 1);
     assert(project_query_settings_outcome(DK_E_AGAIN, &loading, &changed, &found) == 0);
     assert(loading == 1 && changed == 0 && found == 0);
@@ -149,7 +150,8 @@ static void query_value(void)
     for (unsigned i = 0; i < sizeof head; i++)
         head[i] = (uint8_t)(i + 1);
     memset(out, 0xee, sizeof out);
-    assert(project_query_value(out, sizeof out, head, 3) == 3); /* bytes as they are, zero included */
+    assert(project_query_value(out, sizeof out, head, 3) ==
+           3); /* bytes as they are, zero included */
     assert(out[0] == 1 && out[2] == 3 && out[3] == 0xee);
     head[1] = 0;
     assert(project_query_value(out, sizeof out, head, 3) == 3 && out[1] == 0);

@@ -145,13 +145,13 @@ Data path (built): page -> `client.service(ProjectManager)` -> `workbench/projec
 
 A module with a page and no settings registers a zero-settings descriptor, its Workbench registration; Project Manager does, and the `test/project-user` fixture covers that contract.
 
-Next (agreed, follow-up PR): saved settings per module. Click a module row to expand its saved settings.
-- Path: page -> `getSettings({ slot, module, version, cursor })` -> Project Manager handler (maps structs to protobuf only) -> new project service export `dk_project_settings(slot, module_id, version, cursor, out, max)`, which owns the `.dkp` reading and paging. Runtime and transport unchanged.
-- The request names the module by id and the project's write counter (`version`); a mismatch answers "project changed" and the page reloads the project.
-- Each entry: key, full value length, the first 64 bytes of the value; a few entries per reply and a cursor.
-- The open project answers from memory; another project re-reads its `.dkp` per page (`DK_E_AGAIN` until read), no extra RAM.
-- The page shows a value as text when printable, else hex, with its size. Typed values need each module's schema and are later.
-- Tests: service units (paging, version mismatch, truncation, open vs other project), handler mapping units, page units (expand, paging, loading, text/hex); `test/project-user` gets the same query and its device case checks one saved setting.
+Saved settings per module (built): click a module row on the details pane to expand its saved settings under it.
+- Path: page -> `getSettings({ slot, module, version, cursor })` -> Project Manager handler (maps structs to protobuf only, `project_query.c`) -> project service export `dk_project_settings(slot, module_id, id_len, version, cursor, out, max, next)`, which owns the `.dkp` reading and paging. Runtime and transport unchanged. The export is `since` 0.13.5 like `dk_project_get`.
+- The request names the module by id and the project's write counter (`version`, the `counter` of `Get`). A different counter answers `DK_E_CHANGED`; the reply has `changed` and the page reads the project again. `DK_E_AGAIN` is `loading`, `DK_E_NOT_FOUND` is `found = false` (no file, or the module is not in the project's module list).
+- Each entry (`dk_project_setting`, 116 bytes): the key without the module's prefix, the full value length, the first 64 value bytes; 4 entries per reply and a cursor (the entry index; `next` is 0 after the last entry).
+- The open project answers from its live image. Another project keeps one page of up to 4 entries next to its summary: a call reads the `.dkp` (`DK_E_AGAIN` until read), a call for another module or cursor reads it again. The page is the only extra RAM (4 x 116 bytes).
+- The page shows a value as text when every shown byte is printable ASCII, else as hex, and "N bytes" when the value is longer than shown. A module with 0 settings is not asked for. Typed values need each module's schema and are later.
+- Tests: service units (`services/project/tests/service/settings.rs`: paging, version mismatch, truncation, open vs other project, not found), handler mapping units (`tests/logic-driver.c`), page units (`tests/project-manager.page.test.ts`: expand, paging, loading, text/hex, changed, failures; `tests/project-text.test.ts`); `test/project-user` has the same `GetSettings` query and device case G checks the value it saved.
 
 - Loading and renaming come later through the same path; the service owns their consistency (slot reuse, stamps, concurrent changes).
 

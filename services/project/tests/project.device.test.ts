@@ -308,6 +308,21 @@ cardRigs(
           got!.modules.map((m) => m.id),
           'G: the module list of slot 1 holds the fixture',
         ).toContain(USER);
+        // the settings of the fixture in slot 1: the value it saved under "seen" (VALUE_A, a 32-bit word), read from the file of the slot
+        const saved = await pollUntil(
+          rt.clock,
+          async () => {
+            const r = await ask((q) => q.getSettings({ slot: SLOT_FIRST, module: USER, version: got!.counter, cursor: 0 }));
+            return r.ok ? r.value : null;
+          },
+          (v) => v !== null && !v.loading,
+          { withinMs: WITHIN_MS, message: 'G: the settings of the fixture in slot 1 are read' },
+        );
+        expect(saved!.found, 'G: slot 1 holds settings of the fixture').toBe(true);
+        const seen = saved!.entries.find((e) => e.key === 'seen');
+        expect(seen, `G: the fixture's saved "seen" is listed (keys ${saved!.entries.map((e) => e.key).join()})`).toBeDefined();
+        expect([...seen!.value], 'G: its value is the one saved in case A').toEqual([...word32(VALUE_A)]);
+        expect(seen!.valueLength, 'G: its full length').toBe(4);
 
         await rt.session.expectNoFault('the project service flows');
       },

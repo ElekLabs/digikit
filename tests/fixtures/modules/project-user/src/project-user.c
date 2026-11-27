@@ -4,8 +4,9 @@
  * API is not for the MIDI task, where service commands run), then logs `project-put` with the status. PROJECT_CMD + 1 answers: the result of the get in `init` (i32: the value's length or a
  * status), the number of puts that ran (u32), the result of the last put (i32) and the first 16 bytes of the value `init` read. With the service loaded the value is per project (the runtime's overlay), without it the module's settings are what
  * they always were.
- * Browse: the Workbench queries of workbench/project_user.proto, List(first_slot) and Get(slot), call `dk_project_list` and `dk_project_get` in the UI task and
- * return what the exports gave (Get answers loading while the device reads the project's file; `next` of List is always 0).
+ * Browse: the Workbench queries of workbench/project_user.proto, List(first_slot), Get(slot) and GetSettings(slot, module, version, cursor), call `dk_project_list`, `dk_project_get`
+ * and `dk_project_settings` in the UI task and return what the exports gave (Get and GetSettings answer loading while the device reads the project's file; `next` of List is
+ * always 0).
  */
 #include <dk/core/bytes.h>
 #include <dk/core/log.h>
@@ -93,6 +94,42 @@ int32_t project_user_get(dk_module_ctx *ctx, const project_user_GetRequest *requ
         out->loaded = summary.modules[i].state == DK_PROJECT_MODULE_LOADED;
     }
     reply->modules_count = count;
+    return 0;
+}
+
+int32_t project_user_get_settings(dk_module_ctx *ctx,
+                                  const project_user_GetSettingsRequest *request,
+                                  project_user_GetSettingsReply *reply)
+{
+    (void)ctx;
+    dk_project_setting settings[4];
+    uint32_t next = 0;
+    int32_t r =
+        dk_project_settings(request->slot, (const uint8_t *)request->module, request->module_len,
+                            request->version, request->cursor, settings, 4, &next);
+    if (r == DK_E_AGAIN) {
+        reply->loading = 1;
+        return 0;
+    }
+    if (r == DK_E_CHANGED) {
+        reply->changed = 1;
+        return 0;
+    }
+    if (r == DK_E_NOT_FOUND)
+        return 0;
+    if (r < 0)
+        return r;
+    reply->found = 1;
+    for (int32_t i = 0; i < r; i++) {
+        project_user_Setting *out = &reply->entries[i];
+        out->key_len = text(out->key, sizeof out->key, settings[i].key, settings[i].key_len);
+        for (uint32_t b = 0; b < settings[i].head_len; b++)
+            out->value[b] = settings[i].head[b];
+        out->value_len = settings[i].head_len;
+        out->value_length = settings[i].value_len;
+    }
+    reply->entries_count = (uint32_t)r;
+    reply->next = next;
     return 0;
 }
 

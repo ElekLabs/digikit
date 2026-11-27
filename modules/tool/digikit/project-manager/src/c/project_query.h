@@ -27,7 +27,8 @@ uint32_t project_query_next(uint32_t count, uint32_t max, uint32_t last_slot);
  * is returned for the handler to refuse. */
 int32_t project_query_get_outcome(int32_t result, uint8_t *loading, uint8_t *found);
 
-#define PROJECT_QUERY_VALUE_MAX 64 /* the `max_len` of a value field: the service gives at most this many value bytes */
+#define PROJECT_QUERY_VALUE_MAX                                                                    \
+    64 /* the `max_len` of a value field: the service gives at most this many value bytes */
 
 /* The outcome of dk_project_settings `result` for the reply: a count (0 or more) sets `found`; DK_E_AGAIN sets `loading`; DK_E_CHANGED sets `changed`; DK_E_NOT_FOUND
  * leaves all three clear. Each returns 0; any other code is returned for the handler to refuse. */
