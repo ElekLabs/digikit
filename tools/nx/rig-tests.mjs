@@ -34,7 +34,7 @@ const conformance = ({ root = '', file, inputs, reports, fixed = false, suiteAda
     inputs: [
       'jsToolchain',
       '{workspaceRoot}/vitest.host.config.ts',
-      '{workspaceRoot}/vitest.host.projects.json',
+      '{workspaceRoot}/vitest.host/sharc-rig-conformance.json',
       '{workspaceRoot}/tsconfig*.json',
       `{workspaceRoot}/${RIG_KIT_ROOT}/package.json`,
       'dspTestTooling',
@@ -172,7 +172,7 @@ export const rigTarget = (root, moduleInputs) => ({
     'dspTestTooling',
     '{workspaceRoot}/packages/sharc-rig-kit/package.json',
     '{workspaceRoot}/vitest.host.config.ts',
-    '{workspaceRoot}/vitest.host.projects.json',
+    '{workspaceRoot}/vitest.host/module-rig.json',
     ...machineAdapters,
     ...fxAdapters,
     ...(root === STEREO_PROOF_ROOT ? ['{workspaceRoot}/tests/fixtures/dsp/stereo-*shadow-replay.s'] : []),

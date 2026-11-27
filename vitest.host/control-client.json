@@ -1,0 +1,5 @@
+{
+  "name": "control-client",
+  "dir": "packages/control-client",
+  "include": "tests/*.test.ts"
+}

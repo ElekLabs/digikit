@@ -1,0 +1,8 @@
+{
+  "name": "desktop-host",
+  "dir": "apps/desktop",
+  "include": "ui/tests/*.test.ts",
+  "conditions": [
+    "browser"
+  ]
+}
