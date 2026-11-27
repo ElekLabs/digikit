@@ -10,7 +10,7 @@ Status: runtime 0.11.4 has public `text` and `file-name` settings, used by Boot 
 Module page (Solid, modules/<kind>/<author>/<name>/workbench/)
   | imports only @digi/module-ui, service host packages and solid-js
   v
-@digi/module-ui    ModuleClient: typed settings, scoped files, operations (phase 3)
+@digi/module-ui    ModuleClient: typed settings, scoped files, operations (phase 2)
   |                memory client for preview and tests
   v
 workbench-core     page registry, generic form, sidebar discovery (desktop and site)
@@ -22,7 +22,7 @@ firmware           module -> service -> runtime
 
 - `@digi/module-ui` is the TypeScript contract of a module page, as the C SDK is the contract of module code. A page cannot reach Tauri, dk-session or workbench-core internals. oxlint enforces the import rule.
 - `ModuleClient` is message-based: every call is async and takes and returns plain data (structured-clone types). The same page then runs compiled into the app or inside a sandboxed iframe (section "Distribution").
-- A service may ship a host package beside its crate (`services/<name>/host/`) with the codec of its persistent files. A page reads those files with the owner's codec. The owner arbitrates every write.
+- A page reaches device data only through its module: settings, the module's own files and the module's operations. A service's files and formats stay private to the service; the module asks the service through its SDK exports.
 
 ## Discovery
 
@@ -130,8 +130,8 @@ Uploading an animation leaves the saved choice alone. Save selects a file presen
 `modules/tool/digikit/project-manager` is a content module of kind `tool`, like track-manager.
 
 - Device side: a SETTINGS row PROJECT with the current project's number, name and status. It calls `dk_project_current` and `dk_project_status`. These imports make the project service a hard need, so Transfer uploads the service with the module and the boot plan loads it.
-- Services load only as needs of loaded modules. Per-project settings therefore work while Project Manager, or another module that imports a project call, is loaded. Confirm this on the boot plan in phase 2.
-- Workbench page: a list of projects by number and name. Selecting one shows its `.dkp` header (slot, name, save stamp, write counter), its module list with each module's state on the card (present, missing, hash differs), and its saved settings per module. The page is read-only: no delete, rename or load.
+- Services load only as hard needs of selected modules (`runtime/core/src/rs/src/package/loader/plan.rs` `find_providers`; the system package holds only the runtime and the DIGIKIT menu; Transfer's `serviceRefs` offers a service only for a module that needs it). On a user card the project service runs only while Project Manager, or another module that imports a project call, is loaded. Installing Project Manager turns on per-project settings for every module.
+- Workbench page: a list of all project slots by number and name, with a mark on the current project and on slots that carry digikit data. Selecting one shows its saved state (slot, name, save stamp, write counter), its module list with each module's state on the card (present, missing, hash differs), and the number of saved settings per module. The page is read-only: no delete, rename or load.
 
 ```text
 Modules > Project Manager
@@ -143,11 +143,13 @@ Modules > Project Manager
 +----------------------+ +--------------------------------------+
 ```
 
-Phase 2 data path: the page lists `projects/*.dkp` through a files client scoped to the project service's folder and decodes the files with `services/project/host/dkp.ts`. That codec shares test vectors with the Rust codec (`runtime/core/vectors/`). This needs no firmware protocol change and also works on an exported card image. Today a module's files client covers only its own data directory; read access to a service's folder is new. The page receives it from the service host package, so the module manifest names no store path. Limits: it lists only projects that carry digikit data (a `.dkp` exists only then) and shows no current-project mark.
+Data path: page -> `ModuleClient` operation -> module handler -> project service export -> runtime. The `.dkp` format stays private to the service.
 
-Phase 3 data path: a module operation `list(cursor)` calls a new service export `dk_project_list`. It returns every slot with name, stamp and whether a `.dkp` exists, and marks the current project. Loading and renaming come later through the same path; the service owns their consistency (slot reuse, stamps, concurrent changes).
+- `list(cursor)`: the module calls a new service export over the service's slot scan. A page holds up to 16 summaries (slot, name, flags: current, has digikit data) and a continuation cursor.
+- `get(slot)`: the module calls a new service export that returns a bounded summary of one project: header fields, the module list with each module's state on the card, and the number of settings keys per module. It fits one reply; a longer module list pages by cursor.
+- Loading and renaming come later through the same path; the service owns their consistency (slot reuse, stamps, concurrent changes).
 
-## Operations (phase 3)
+## Operations (phase 2)
 
 A loaded module can expose named, typed operations beside its settings. The module owns the definitions, the C handlers and its page. Workbench supplies a client bound to the selected target and instance. The runtime supplies one dispatcher and one codec on the ColdFire. Modules supply operation metadata and handlers.
 
@@ -176,14 +178,20 @@ A loaded module can expose named, typed operations beside its settings. The modu
 | Runtime units | Each type's write check (range, step, choice index, length); revision conflict; version 2 parse. |
 | `@digi/module-ui` units | Typed client: value scaling, client-side checks, empty versus unset. |
 | Workbench units | A loaded sample gets one page, a card-only sample none, a missing page leaves the generic form, a late result cannot reach another target, Transfer Open navigates. |
-| Service host codec | `.dkp` decode against the shared vectors; refusal of bad CRC, version and bounds. |
+| Project service units | List and get summaries from the slot scan and the bound image: paging, current mark, a slot without digikit data, a module list longer than one reply. |
 | Assembly | The packed version 2 settings fixture registers on both device profiles. |
 | Device | One round trip per new behaviour only firmware shows: a typed put and get on DN2 and DT2. Project Manager: the SETTINGS row and the service loaded as its need. |
+
+## Working rules
+
+- Test pyramid: unit tests with fakes, stubs and memory clients for logic; assembly tests for seams between built artifacts; device tests only for what firmware shows. Each assertion sits at the lowest layer that can see it.
+- Structure: one concept per file, named after its noun; methods are verbs; state is private and changes through the owner's methods; lifecycle (open, reload, release) belongs to one owner. Each rule lives once (DRY); shared vectors tie the Rust, C and TypeScript copies of a wire format together.
+- Every step: one worker with a self-contained brief and the first-pass checklist, then an independent review, then one fix round.
 
 ## Phases
 
 1. Typed settings and page plumbing (about 1-1.5 days): new types in patchkit, runtime and TS; generated C and TS; `@digi/module-ui` with the memory client; generated page registry; Transfer Open; settings-a migrated; descriptor TOML reader deleted; cost table measured.
-2. Project Manager, read-only (about 1 day): module with the SETTINGS row; `services/project/host` codec and vectors; scoped files client; the page.
-3. Operations and the full project list (about 2-3 days, medium confidence): envelope and dispatch on the UI task, generated codec, `dk_project_list`, paging.
+2. Operations (about 2-3 days, medium confidence): envelope and dispatch on the UI task, generated codec and handler signatures, typed `ops` in `ModuleClient`, memory client handlers, one operation on the settings-a fixture.
+3. Project Manager, read-only (about 1-1.5 days): module with the SETTINGS row; service exports for list and get; `list` and `get` operations; the page.
 
 Later: `.dkmod` import in Workbench with the iframe sandbox; a generic device-side settings page under DIGIKIT driven by the same descriptor.
