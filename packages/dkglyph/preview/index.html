@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Glyph preview</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 12px;
+        overflow-x: hidden;
+        background: #101116;
+        color: #d8dbe6;
+        font:
+          14px system-ui,
+          sans-serif;
+      }
+      main {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      main > section {
+        flex: 1;
+        min-width: 0;
+        max-height: 100vh;
+        overflow-y: auto;
+      }
+      #detail {
+        flex: none;
+        width: 460px;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
+        padding-right: 8px;
+      }
+      #detail canvas {
+        max-width: 100%;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0 0 8px;
+      }
+      h2 {
+        font-size: 13px;
+        margin: 14px 0 6px;
+        color: #9aa0b0;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      canvas {
+        image-rendering: pixelated;
+        background: #08090c;
+        border: 1px solid #2a2c36;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .cell {
+        display: grid;
+        gap: 4px;
+        justify-items: center;
+        padding: 6px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 11px;
+        color: #9aa0b0;
+      }
+      .cell.selected {
+        border-color: #6fa8ff;
+      }
+      button {
+        background: #23252f;
+        color: inherit;
+        border: 1px solid #3a3d4a;
+        padding: 3px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button.on {
+        border-color: #6fa8ff;
+      }
+      input[type='range'] {
+        width: 100%;
+      }
+      .strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .msg {
+        padding: 6px 8px;
+        border-radius: 4px;
+        margin: 4px 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .msg.error {
+        background: #5a1d24;
+        color: #ffd6da;
+      }
+      .msg.warning {
+        background: #4a3d12;
+        color: #ffe9a8;
+      }
+      #errors:empty {
+        display: none;
+      }
+      .muted {
+        color: #9aa0b0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">Glyphs</h1>
+    <div id="errors"></div>
+    <main>
+      <section>
+        <div class="toolbar" id="toolbar"></div>
+        <div id="overview"></div>
+      </section>
+      <aside id="detail"></aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

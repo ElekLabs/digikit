@@ -18,9 +18,10 @@ from pathlib import Path
 
 from tools.control.digi_client import Emu
 from tools.firmware import config
+from tools.patchkit import pk_device
 from tools.patchkit import pk_harness as H
 
-DEVICES = {"dt2": "1.17", "dn2": "1.12"}
+DEVICES = pk_device.acceptance_firmware()
 
 
 def main() -> int:

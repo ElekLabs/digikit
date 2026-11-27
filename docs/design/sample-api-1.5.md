@@ -42,7 +42,7 @@ i32 sample_pool_info(u32 h, u32 index, dk_sample_info *out); /* frames, rate, ch
 
 Calls are legal from init and service/UI callbacks. `index >= 16` returns `E_CONTRACT`.
 
-**Pool model.** The module owns 16 entries; the entry index is the record index the DSP reads. `sample_pool_add` returns the first UNUSED index. A file whose stored path is already in the pool returns its index and loads nothing (an entry with a sticky error is selected again); a full pool returns `E_POOL`. Indexes are stable: `sample_pool_clear` leaves a hole, no other entry moves, and the next add takes the lowest hole. A sound or a p-lock that saved an index keeps its meaning. There is no select by index in the module API (the runtime uses one for the project reload). An entry that is not READY is silent. The pool list is kept per project (section 3). Dedup of the backing by file identity (section 2.1) is separate from the path rule of the add: two entries cannot hold the same path, but the backing still shares a block when two pools or two projects select the same file.
+**Pool model.** The module owns 16 entries; the entry index is the record index the DSP reads. `sample_pool_add` returns the first UNUSED index. A file whose stored path is already in the pool returns its index and loads nothing (an entry with a sticky error is selected again); a full pool returns `E_POOL`. Indexes are stable: `sample_pool_clear` leaves a hole, no other entry moves, and the next add takes the lowest hole. A sound or a p-lock that saved an index keeps its meaning. There is no select by index in the module API. An entry that is not READY is silent. The runtime keeps no pool list across loads: the module keeps its own in its settings (section 3). Dedup of the backing by file identity (section 2.1) is separate from the path rule of the add: two entries cannot hold the same path, but the backing still shares a block when two pools or two projects select the same file.
 
 What the DSP reads at note_on: the machine picks the entry. SHOT takes it from its SMP parameter word (`word >> 8`, 0 to 15), not from `in->track`: `dk_sample_pool_entry[index]`. Using the existing bank macros in one masked scope: CHECK_ADMISSION, then LATCH_EPOCH, then copy `base_l`, `base_r`, `frames`, `channels`, `rate`, `token` into the voice state (7 words, add to `state_bytes`). Denied: `note_on` returns 0 and render returns `DK_DONE` at once (silent).
 
@@ -62,7 +62,6 @@ Rule (ARCHITECTURE.md): anything that depends on device or firmware version sits
 - Load state machine per pool entry: UNUSED / QUEUED / LOADING / READY / ERROR (section 3). Completion matching on (client, index, request token); counter exhaustion fails, never wraps.
 - Stop-old-notes: on a new load into an entry or on `clear`, CLOSE the entry's generation, wait for the DSP drain ack (never spin in an interrupt), only then call the backing. Other entries are not touched.
 - Publish: write `dk_sample_pool_entry`, `ready` last, after load, identity check and ACK.
-- Project change and per-project selection store (section 3). Project identity comes from the project adapter (2.4).
 
 ### 2.2 Backing plug-in point (`dkrt_pool.h`, version 1)
 
@@ -89,7 +88,6 @@ void dkpool_tick(void);                        /* optional: once per UI-loop pas
 /* adapter -> runtime, only from dkpool_tick */
 void dkrt_pool_done(uint32_t req, int32_t result);  /* 0, E_POOL, E_READ or E_FORMAT */
 void dkrt_pool_lost(void);                     /* "backing lost": all handles are invalid (reset) */
-void dkrt_project_changed(uint32_t slot);      /* from the project adapter (2.4) */
 ```
 
 Codes (`sdk/sdk.toml` `[load.status]`): `E_NOT_FOUND` -1, `E_READ` -3, `E_FORMAT` -5, `E_LOST` -15, `E_POOL` -16, `E_CHANGED` -17 (raised by the runtime when the file differs from the selection snapshot; the adapter never returns it), `E_CONTRACT` -48. The base address form is the NW32 alias of the DDR byte address, `0x10000000 + (phys - 0x80000000) / 4` (finding 99); the PCM16 kernels read it as a normal-word DM address.
@@ -115,7 +113,7 @@ Anchors live in a new firmware anchor file `samples.toml` next to `devices/fw/st
 
 ### 2.4 Project identity
 
-Key = (device, slot, project name). The current project slot byte is an anchor: DT2 `0x4099d5c5` with setter `0x400c11ca`; DN2 `0x405ce899` with setter `0x400bb7fa`. Put them in `devices/fw/project.toml` and let a project adapter hook the setter and call the runtime (`dkrt_project_changed(slot)`); the runtime never reads the byte. The project-name accessor is still open.
+The pool runtime has no project identity. The `project` service owns it ([digikit-project](../plans/digikit-project.md), finding 110); the pool list of a module is part of its settings (section 3).
 
 ### 2.5 Content modules
 
@@ -134,8 +132,8 @@ READY --backing lost (dkrt_pool_lost / dkpool_check)--> LOADING (reload) --> REA
 ERROR --select--> QUEUED
 ```
 
-Project change: the runtime keeps the pool list of each project in memory, keyed by project (identity from 2.4); the persistence in the digikit store is still a TODO. The list is index-stable and sparse: an entry is a path or a hole. On change: select each entry of the new project's list at its index, then clear the entries it does not use (close, drain, unref). A hole stays a hole, so an SMP value saved in a project still points at the same file. Missing file = ERROR NOT_FOUND on that entry only; no retry. Pool entries of files used by both projects survive through dedup when select runs before unbind frees (do selects first, then drop old refs).
-Backing loss: see 2.2 and 2.3. A stock project change on DT2 usually also resets the pool, so the project-change path and the reset path meet: reset detection then finds our selections already re-driven by the store and does not double-load (load request is idempotent per file identity).
+Project change: the runtime keeps no pool list per project. A module that keeps its list in its settings (the sample picker does, `dk_settings_put` under the keys `pool.0` to `pool.15`: the path of the entry, removed when the entry is cleared) gets the values of the current project from the settings overlay while the `project` service is loaded. A project change reloads each module whose settings differ (the E5 live job), and its `init` reads the keys: it sets each stored entry at its index, then clears the entries without a key (close, drain, unref). A hole stays a hole, so an SMP value saved in a project still points at the same file. Missing file = ERROR NOT_FOUND on that entry only; no retry. A live reload tears the module's pool down before `init`, so on a project change the samples are loaded again from the card; dedup only shares a backing between two entries that are loaded at the same time. Module code and runtime know nothing of each other here: the runtime reloads, the module restores.
+Backing loss: see 2.2 and 2.3. A stock project change on DT2 usually also resets the pool, so the project-change path and the reset path meet: the reload of the module sets its entries first, and the reset then reloads the entries from the paths they are bound to (`Core::lost`); a load request is idempotent per file identity, so nothing loads twice.
 Module unload: unbind all, drain, free; teardown waits for terminal completion of any transfer.
 
 ## 4. Versioning
@@ -165,7 +163,7 @@ Resolved by the split and the emulator results (dropped): where the DT2 slot map
 11. New: is `dkpool_load` async (queued job on DT2) or does the runtime own the wait? Recommend async with a completion call, so the runtime state machine is the only waiter.
 12. New: who raises "backing lost" on DT2, a tick in the adapter or the runtime polling `dkpool_check`? Recommend both: the adapter tick for latency (reset is about 1.5 s late), runtime check before each publish as the safety net.
 13. New: DN2 reserved range size. Recommend 256 MiB in the profile now, raise after the extended canary soak; the soak result goes in `docs/findings/`.
-14. New: project-name accessor (2.4). Recommend static search for the stock name getter first; fall back to hashing the project's first serialized block only if none exists.
+14. New: project-name accessor (2.4): settled by the `project` service (finding 110); the pool does not use it.
 
 ## 6. API 1.6: additions for the picker and the DN2 pool (built)
 
@@ -177,7 +175,7 @@ Api minor 5 -> 6 (`api = [1, 6]`). One Api entry, one UI call and three runtime 
 int32_t sample_pool_path(uint32_t handle, uint32_t index, uint8_t *buf, uint32_t cap);
 ```
 
-Copies the NUL-terminated, root-relative path of the entry into `buf` and returns its length without the NUL. It works in every state except UNUSED (`E_NOT_FOUND`), so an entry with a sticky error still names its file, and after a project change it names the file the runtime re-selected. `length + 1 > cap` gives `E_SEL_PATH` (-40, `DK_SAMPLE_E_SEL_PATH`) and leaves `buf` alone. `index >= 16` gives `E_CONTRACT`. The form is the one a `DK_FILES_SAMPLES` listing row has, so `sample_pool_add(path)` accepts it back.
+Copies the NUL-terminated, root-relative path of the entry into `buf` and returns its length without the NUL. It works in every state except UNUSED (`E_NOT_FOUND`), so an entry with a sticky error still names its file, and after a project change it names the file the module set again. `length + 1 > cap` gives `E_SEL_PATH` (-40, `DK_SAMPLE_E_SEL_PATH`) and leaves `buf` alone. `index >= 16` gives `E_CONTRACT`. The form is the one a `DK_FILES_SAMPLES` listing row has, so `sample_pool_add(path)` accepts it back.
 
 ### 6.2 Path form of `sample_pool_add` (G5)
 

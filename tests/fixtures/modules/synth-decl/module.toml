@@ -1,0 +1,22 @@
+[module]
+id = "test/synth-decl"
+version = "0.1.0"
+name = "Synth declaration"
+category = "test"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Test fixture: the code of the synthetic capacity modules; init makes the builder calls its own table `synth_decl` asks for (packages/patchkit/src/dkmsynth.rs writes the table)."
+dynamic = true
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# Not loaded by itself: `patchkit synth-dkm` takes this object, replaces the `.data` section that holds `synth_decl` and packs the result.
+[[object]]
+path = "build/synth-decl-cf.dko.json"
+sources = ["src/module.c"]
+place = "cf.expansion"

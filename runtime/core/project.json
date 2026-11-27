@@ -1,0 +1,127 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime",
+  "implicitDependencies": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw", "core/services/project"],
+  "metadata": {
+    "runtimeAcceptance": [{ "modules": ["test/svc-test", "test/svc-test-user", "test/project-user", "core/services/project"] }]
+  },
+  "targets": {
+    "rust-tests": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "inputs": [
+        "{workspaceRoot}/runtime/core/src/rs/**/*",
+        {
+          "input": "production",
+          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-lifecycle", "dkrt-svc-rt", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"]
+        },
+        "{workspaceRoot}/.cargo/**/*",
+        "{workspaceRoot}/rust-toolchain*",
+        "{workspaceRoot}/mise.toml",
+        "{workspaceRoot}/tools/nx/rust-env.mjs",
+        "{workspaceRoot}/services/{fx,machines,lfo,samples,shortcuts,project}/dks/{Cargo.toml,src/**/*}",
+        "{workspaceRoot}/tests/fixtures/modules/{local-ping,local-step}/{Cargo.toml,src/**/*}",
+        "{workspaceRoot}/runtime/core/tests/platform/contract.toml",
+        "{workspaceRoot}/runtime/core/tests/storage/contract.toml",
+        "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/module.toml",
+        "{workspaceRoot}/tests/fixtures/modules/{dyn-fx-gain,sine,svc-test,svc-test-user}/src/**/*",
+        { "dependentTasksOutputFiles": "dist/modules/*/{dyn-fx-gain,sine,svc-test,svc-test-user}.*", "transitive": false }
+      ],
+      "dependsOn": ["test/dyn-fx-gain:pack", "test/sine:pack", "test/svc-test:pack", "test/svc-test-user:pack"],
+      "outputs": [],
+      "options": {
+        "command": "node tools/nx/rust-env.mjs --variant host-dkrt -- cargo test --manifest-path runtime/core/src/rs/Cargo.toml --lib --offline --locked -- --skip assembly_tests",
+        "cwd": "."
+      }
+    },
+    "package": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "description": "The system package artifact: dist/syspkg/runtime/system.dksp, the card file digikit/system.dksp (`patchkit syspkg build` of the committed [system_package] object build/package.dko.json and the DIGIKIT menu's [package_part] object: header, image, bss size, relocations). A stale object is the failure of patchkit:objects-check.",
+      "inputs": [
+        { "dependentTasksOutputFiles": "runtime/core/build/package.dko.json", "transitive": false },
+        "{workspaceRoot}/runtime/apps/digikit-menu/build/digikit-menu.dko.json",
+        { "dependentTasksOutputFiles": "dist/patchkit/patchkit" }
+      ],
+      "dependsOn": ["patchkit:cli", "build-objects"],
+      "outputs": ["{workspaceRoot}/dist/syspkg/runtime"],
+      "options": {
+        "command": "dist/patchkit/patchkit --root . syspkg build runtime/core/build/package.dko.json --part runtime/apps/digikit-menu/build/digikit-menu.dko.json --out dist/syspkg/runtime/system.dksp",
+        "cwd": "."
+      }
+    },
+    "test-assembly": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "description": "Host assembly tests: the seams between the real packed outputs (fixtures, service files, bound files, the runtime object, the info table of the image) through the package graph and admission, the role checks and the installs of the boot over FakePlatform. Every test-device target depends on it.",
+      "inputs": [
+        "{workspaceRoot}/runtime/core/src/rs/**/*",
+        {
+          "input": "production",
+          "projects": ["dkrt-sdk", "dkrt-abi", "dkrt-fit", "dkrt-link", "dkrt-lifecycle", "dkrt-svc-rt", "dkrt-test-support", "dkrt-svc-fx", "dkrt-svc-rows", "dkrt-svc-bitmap", "dkrt-svc-machines", "dkrt-svc-lfo", "dkrt-svc-shortcuts", "dkrt-svc-samples", "dkrt-svc-project", "dkneeds", "dkfw"]
+        },
+        "{workspaceRoot}/.cargo/**/*",
+        "{workspaceRoot}/rust-toolchain*",
+        "{workspaceRoot}/mise.toml",
+        "{workspaceRoot}/tools/nx/rust-env.mjs",
+        "{workspaceRoot}/runtime/core/build/runtime.dko.json",
+        "{workspaceRoot}/services/fx/dks/build/fx.dko.json",
+        "{workspaceRoot}/services/machines/dks/build/machines.dko.json",
+        "{workspaceRoot}/services/lfo/dks/build/lfo.dko.json",
+        "{workspaceRoot}/services/shortcuts/dks/build/shortcuts.dko.json",
+        "{workspaceRoot}/services/samples/dks/build/samples.dko.json",
+        "{workspaceRoot}/services/{fx,machines,lfo,samples,shortcuts,project}/dks/{Cargo.toml,src/**/*}",
+        "{workspaceRoot}/tests/fixtures/modules/{local-ping,local-step}/{Cargo.toml,src/**/*}",
+        "{workspaceRoot}/services/project/dks/build/project.dko.json",
+        "{workspaceRoot}/tools/nx/device-images.mjs",
+        "{workspaceRoot}/runtime/core/src/rs/src/package/loader/tests/snapshots/*.txt",
+        { "dependentTasksOutputFiles": "dist/modules/*/*", "transitive": false },
+        { "dependentTasksOutputFiles": "dist/syspkg/*/*", "transitive": false },
+        { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
+        { "dependentTasksOutputFiles": "dist/bytes/images/*/*.info", "transitive": false },
+        "{workspaceRoot}/firmware/Digitakt_II_OS1.17.syx",
+        "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx"
+      ],
+      "dependsOn": [
+        "test/sine:pack",
+        "test/dyn-dn2:pack",
+        "test/dyn-fx-gain:pack",
+        "test/entry-demo:pack",
+        "test/lfo-shape:pack",
+        "test/lfo-shape-b:pack",
+        "test/shortcut-demo:pack",
+        "test/svc-test-user:pack",
+        "test/svc-test:pack",
+        "test/syspkg:pack",
+        "core/runtime:package",
+        "test/local-ping:pack",
+        "test/local-ping-user:pack",
+        "test/local-ping-user-b:pack",
+        "test/local-ping-old-user:pack",
+        "test/local-step:pack",
+        "test/local-step-user:pack",
+        "test/local-patch:pack",
+        "test/local-patch-user:pack",
+        "test/project-user:pack",
+        "test/settings-a:pack",
+        "core/services/fx:pack",
+        "core/services/machines:pack",
+        "core/services/lfo:pack",
+        "core/services/shortcuts:pack",
+        "core/services/samples:pack",
+        "core/services/project:pack",
+        "test/track-select:pack",
+        "test/settings-page:pack",
+        "digikit/debug:pack",
+        "patchkit:ports-test",
+        "patchkit:cli",
+        "patchkit:device-images"
+      ],
+      "outputs": [],
+      "options": {
+        "command": "node tools/nx/rust-env.mjs --variant host-dkrt -- cargo test --manifest-path runtime/core/src/rs/Cargo.toml --lib --offline --locked assembly_tests",
+        "cwd": "."
+      }
+    }
+  }
+}

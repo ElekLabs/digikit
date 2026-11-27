@@ -1,9 +1,15 @@
-/* The machine declaration of test/dyn-guard-nan: one machine `guardnan` with one parameter and a page of one knob
-   (a machine without a page has nothing to show). patchkit pack reads these records; the device never sees them.
-   The render is the same body on both devices. */
-#include <dk/machine/machine.h>
+/* The machine of test/dyn-guard-nan, declared by builder calls in init: one machine `guardnan` with one parameter and a page of one
+   knob (a machine without a page has nothing to show). The render is the same body on both devices. The DSP symbols are _gn_render,
+   _gn_note_on and _gn_desc (`dsp = "gn"` in module.toml). */
+#include <dk/core/module.h>
+#include "module_ids.h"
 
-DK_MACHINE(guardnan, .name = "NaN fixture", .short_name = "NAN", .render = "_gn_render",
-           .note_on = "_gn_note_on", .desc = "_gn_desc");
-DK_PARAM(guardnan, 0, nan_a, "Nan alpha", "ALPH", 0, 127, 32);
-DK_PAGE(guardnan, "NAN", "NaN fixture", DK_KNOB(0));
+static int32_t init(dk_module_ctx *ctx)
+{
+    dk_machine *m = dk_module_ctx_add_machine(ctx, DK_MACHINE_ID_GUARDNAN, "NaN fixture", "NAN");
+    dk_page *p = dk_machine_add_page(m, "NaN fixture", "NAN");
+    dk_page_add_param(p, "Nan alpha", "ALPH", 32);
+    return DK_OK;
+}
+
+const dk_module_def dk_module = {.init = init};

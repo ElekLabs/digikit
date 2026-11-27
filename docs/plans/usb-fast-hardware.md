@@ -50,7 +50,7 @@ before it runs; results go to findings 42 and 43.
 
 ### Build and flash (the device restarts)
 
-1. Patch set: `device` (or `device-introblank`); both carry `core/usb-bulk` (and `core/plusdrive-write` on DT2). The runs below used a `device-usb` set, since merged into `device`.
+1. Patch set: `device` (or `device-introblank`); both carry `core/usb-bulk` and `core/usb-bulk-audio` (and `core/plusdrive-write` on DT2). The runs below used a `device-usb` set, since merged into `device`.
    `mise run patch -- --firmware firmware/<stock>.syx --set device -o out/patch/<dev>-usb.syx`.
 2. `mise run patch:preflight -- out/patch/<dev>-usb.syx` must pass.
 3. Flash from the workbench Firmware page (one click). The device restarts.
@@ -200,12 +200,11 @@ Device-only storage ceilings (usb-fast storage bench, UF_BENCH build, 8 MiB):
 
 ### Next
 
-1. Pre-PR work in progress: take-over finished in usb-fast, single re-enumeration, restart-counter anchor, wb/desktop wiring; stability
-   fixes; knobs behind flags; fast-close run-time fallback; cleanup; findings and AGENTS.md.
+1. Pre-PR work in progress: stability fixes; knobs behind flags; fast-close run-time fallback; cleanup; findings and AGENTS.md.
 2. DN2 device-side readback replacing the SysEx verify (expected 8 MB 2.9 -> ~2.3 s).
 3. DT2 batched hash-table rebuild (c1; expected small files ~2x).
 4. Overlap the copy with card writes (about -0.45 s per 8 MB).
-5. Take-over hardware test in USB AUDIO/MIDI mode.
+5. Hardware test of the bulk OUT endpoint in USB AUDIO/MIDI mode (DN2).
 6. Full tier (`mise run test:full`) and the PR.
 
 ### Speed: where the time goes (code reading, to measure)
@@ -219,9 +218,8 @@ Device-only storage ceilings (usb-fast storage bench, UF_BENCH build, 8 MiB):
 - Planned: measure each stage on hardware (device timing events, host phase times, discard and write-only ceilings), then fix by measured gain.
   The emulator is not a speed reference (it predicted DN2 5.6 and DT2 2.1 MB/s).
 
-### v2: Fast USB in USB AUDIO/MIDI mode (plan: [usb-fast-takeover.md](usb-fast-takeover.md))
+### v2: Fast USB in USB AUDIO/MIDI mode (plan: [usb-fast-audio-bulk.md](usb-fast-audio-bulk.md))
 
-The workbench takes the device over by SysEx: a RAM-only switch to the USB MIDI configuration with the bulk interface, through the
-firmware's own USB-mode switch (FUN_40006c16), released by SysEx, on unplug and on reboot. USB audio drops while the workbench holds the
-device. The stored USB CONFIG setting is never written (verify statically). Reuses the v1 protocol, adapter, module and host unchanged. The controller has 4 device endpoints (EP0-EP3, RM DCCPARAMS DEN = 4) and
-USB AUDIO/MIDI uses EP2 IN and EP3, so a bulk pair beside live USB audio is not possible; the take-over is the route.
+The controller has 4 device endpoints (EP0-EP3, RM DCCPARAMS DEN = 4) and USB AUDIO/MIDI uses EP2 IN and EP3, so a bulk pair beside live
+USB audio is not possible. A single bulk OUT endpoint on EP2 (interface 5) fits, with replies over SysEx. A RAM-only switch to the USB MIDI
+configuration (a take-over) was built first and deleted: it was not reliable on hardware (finding 123).

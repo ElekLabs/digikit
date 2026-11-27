@@ -44,6 +44,7 @@ Never patch the bootstrap or updater sections. See
 | --- | --- |
 | `tools/coldfire/ghidradump.py` | Export an analysed Ghidra program into grep-friendly disassembly/decompilation plus SQLite indexes. |
 | `tools/coldfire/ghidraq.py` | Run read-only PyGhidra queries for functions, callers, references, strings, ranges, decompilation, and bounded HighFunction dataflow. Queries can be chained with `--then` so one JVM answers several questions. |
+| `tools/coldfire/liveness.py` | Register liveness of stock ColdFire code after a patch site, found from the image bytes (SLEIGH decode): which registers a stub may overwrite, the code to the first call, registers a function writes. |
 | `tools/coldfire/refscan.py` | Exhaustively scan a raw ColdFire image for direct references into an address range. Use this to check Ghidra's incomplete reference tables. |
 | `tools/coldfire/codeseeds.py` | Recover likely function entries from vectors, calls, and code pointers. |
 | `tools/coldfire/ghidraapply.py` | Apply code seeds or RTTI discoveries to a Ghidra project. |
@@ -140,9 +141,9 @@ each has a module docstring with its full command line.
 
 | Tool | Purpose |
 | --- | --- |
-| `tools/emulator/native_emu.py` | `mise run workbench` (`-- --build-only` builds only), `emu:serve`: build the desktop emulator once and run it (`--plus-drive DIR` or `--samples DIR`; default `plus_drive/<device>/`, `--dsp-patch FILE`, `--cf-only`, `--daemon`). |
+| `tools/emulator/native_emu.py` | `mise run workbench` (`-- --build-only` builds only), `emu:serve`: build the desktop emulator once and run it (`--plus-drive DIR` or `--samples DIR`; default `plus_drive/<device>/`, `--dsp-patch FILE`, `--cf-only`, `--no-dsp`, `--daemon`). |
 | `tools/emulator/native_target.py` | Pick the cargo target dir for a generated core (`prod`, `nogen`, `generic`, `g-<hash>`). |
-| `tools/emulator/native_pgo.py` | Profile-guided optimisation of the desktop build (`mise run perf:pgo`; `bench-bins`). |
+| `tools/emulator/native_pgo.py` | Profile-guided optimisation of the desktop build (`mise run perf:pgo`; `bench-bins`). In a linked worktree `train` writes `by-key/<key>.json` only and prints a final `WARNING ... NOT current` line with the `train [--device D] --set-current` command; the launcher build reads `manifest.json` and builds without PGO until it is current. `mise run perf:pgo` trains dn2, dt2 and `both` (in that order; `both` restores their libraries) and passes `--set-current-at-main`, which sets it current only when HEAD equals origin/main's commit. `train` skips a device whose profile for the current key exists (`--force` trains again), restores the instrumented core libraries from the shared store `<git common dir>/sharc-core-pgo-instrument`, and records `phase_seconds` in the manifest. |
 | `tools/nx/wasm.mjs` | `mise run web:wasm`: build the browser cores. |
 | `tools/nx/nx.mjs` | `pnpm nx:pilot`: the one Nx launcher. Computes the CPU budget, takes the shared benchlock for task runs. |
 | `tools/nx/gate.mjs` | `mise run test`, `test:plan`, `test:changed`, `test:full`: target lists are `TIERS`. |
@@ -186,7 +187,10 @@ Run output goes to `out/runs/<scenario-or-kind>/<stamp>/` ([INSTRUMENTATION.md](
 | `tools/patchkit/machinepatch.py` / `tools/patchkit/machinebuild.py` | Plan and build the static MAIN OS patches for an eighth machine. |
 | `tools/coldfire/isacheck.py` | Refuse any instruction a ColdFire V4e (ISA_A/B/C + EMAC) does not have, in a `.dko.json`, an ELF object or an archive; `--committed` scans every committed (core) module object and `--cached` the built objects in `out/cache/dko` (finding 35). It is a front end of `patchkit dko isa-check FILE...`: the check (the ISA allow-list) exists once, in `packages/patchkit/src/build/cf.rs`, and the module build runs it in process. |
 | `tools/patchkit/pk_cdemo.py` | `proof`: boot with `test/c-demo` (64-bit divide, remainder, multiply, shifts through the ColdFire libgcc helpers) selected in a card's selection record and compare its results with Python (finding 35). |
-| `tools/device/dksettings.py` | The settings record on the host (`python -m tools.device.dksettings FILE [--json]`): decode, encode, which copy is in use, the keys by owner printed as what they hold; the same rules as `dkrt_sdk::settings` and `patchkit store dump`, kept equal by `modules/core/runtime/vectors/settings-vectors.json` (finding 63). |
+| `tools/device/dksettings.py` | The settings record on the host (`python -m tools.device.dksettings FILE [--json]`): decode, encode, which copy is in use, the keys by owner printed as what they hold; the same rules as `dkrt_sdk::settings` and `patchkit store dump`, kept equal by `runtime/core/vectors/settings-vectors.json` (finding 63). |
+| `patchkit objdiff OLD NEW` (`packages/patchkit/src/objdiff.rs`) | Do two ColdFire `.dko.json` objects hold the same code up to names, order and addresses? Proof for moves of Rust items: matches functions and data by demangled name without module path, compares code with relocations by normalized target plus addend, flags any change of an exact-name (C, `#[no_mangle]`) symbol. Exit 1 with the differences otherwise. Usage: [PATCHING.md](PATCHING.md#compare-two-objects-after-a-move). |
+| `patchkit dkm-identity BEFORE_DIR AFTER_DIR` (`packages/patchkit/src/dkm_identity.rs`) | Proof that a change of the `.dkm` header moved no code: for each file name in both directories, the image, relocations, imports, DSP section, bss size, alignment and entry offsets must be byte-identical (only the header table, the offsets it moves, the size, the hash and the needed version may differ); a file in one directory only or a difference exits 1. Make the two sets with `patchkit pack-all --device dt2\|dn2 --out DIR MODULE...` before and after the change. R7 used it: 52 DT2 and 50 DN2 files, identical. |
+| `patchkit dkm-info FILE.dkm` / `patchkit pack` / `patchkit needs` (`packages/patchkit/src/main.rs`, `dkm.rs`) | Pack writes the header table of the `.dkm` (needs of the linked imports, uses, keys; layout in [MODULES.md](MODULES.md#header-table)); `dkm-info` prints the table (entries, uses, needs by service hash and version, key groups); `needs` reads the uses from it. A file of the 0.7 format (no table) is refused with `E_CONTRACT` by the runtime and with an error here. |
 | `patchkit build` (`packages/patchkit/src/build/`; `mise run module:build`) | Module sources to objects (`build/*.dko.json` of a `core/*` module, committed; `out/cache/dko/<module id>/<path>` for every other module, build output): ColdFire C, assembly and Rust crates in the binary (gcc, as, ld, objcopy, cargo as child processes; the ISA check through the `coldfire` crate), SHARC+ with the Selache assembler as a library (`build/sharc_obj.rs`: the encoding-bug guards, the fix-ups, and a re-decode of every instruction with the `sharc-rt` decoder; the same code is in `patchkit.wasm`, entry `pk_sharc_object`). `[MODULE...]` is a folder or a module id, none builds all. Skips an object whose `source_sha256` is current; `--check`, `--force`, `--define NAME --out DIR` (DSP build options), `--status` (JSON, builds nothing). Library entries `patchkit::build::build_module` and, for the module library, `patchkit::build::load_object` (`Library::scan_repo` builds a stale content object on demand; `patchkit pack MODULE` builds and packs in one step). Also `patchkit dko isa-check FILE...` (ColdFire ISA check of a `.dko.json`, ELF object or archive). Also `patchkit dko show FILE [--relocs]` (a readable summary of an object), `dko isa-digest FILE` `cf-link SRC.. --base HEX` (link C routines against firmware addresses for unit tests; `tools/patchkit/patchkit.py cf_link`) and `sharc text|asm|link|object|cond|inc|shift-check` (the SHARC+ build for the Python test rigs, which place an object themselves and run it on the core; `tools/patchkit/pk_sharc.py`). |
 | `patchkit store dump` (`packages/patchkit/src/storedump.rs`) | Digikit's own data on a card image (the emulator's card files, a `card.overlay` laid over one with `--overlay`, or a raw dump with `--base-sector`): the store header and files, the selection record, the settings record with both copies and every entry decoded; `--json`; `--record FILE` for one settings record saved with `dkupload settings -o FILE` (docs/design/digikit-store.md, "Reading our data locally"). |
 | `tools/device/dkupload.py` | Module upload over USB SysEx (`info`, `ls`, `put FILE [PATH]`, `rm`, `clear`, `settings [-o FILE]` reads the settings record; two requests in flight; the emulator through `midi.usb.in/out`, or a real device with python-rtmidi, never run against hardware by the lane that wrote it); the framing of `docs/design/digikit-upload.md` (finding 43). |
@@ -195,7 +199,7 @@ Run output goes to `out/runs/<scenario-or-kind>/<stamp>/` ([INSTRUMENTATION.md](
 | `tools/patchkit/pk_digikit_upload.py` | The `upload` kind of the digikit scenarios: ops, power cuts (the runtime's `DKRT_UPLOAD_CUT` knob), stock MidiRpc unchanged, an upload during playback, the +Drive round trip (finding 43). |
 | `tools/patchkit/pk_digikit_prof.py` | Per-phase wall-time profile of a digikit boot scenario (exclusive phases, named steps, the emulator's emulated seconds per wall second); `DIGIKIT_PROFILE=1` on `pk_digikit_scen run` prints the same table (finding 39). |
 | `tools/patchkit/pk_dkrt.py` | The digikit runtime in the emulator (`proof`): patch `core/runtime`, pack `test/dyn-demo` and two broken variants into a card store, boot with a selection record (three bad files, the good module, a duplicate), read the boot report, the counter, `E_BOOT_ONLY` after the boot, write-watch and flush check (finding 29, converted for boot-time loading). Also the shared helpers (`Tools`, `patch`, `pack`, `build_card`, `write_selection`, `run_script`). Runs `packages/emulator/boot/examples/cf_script.rs`. |
-| `tools/patchkit/port_resolve.py` | Resolves the rules declared in `devices/fw/` into `devices/ports/` (`mise run patch:port`); `rule-sharc` prints a SHARC rule for an address ([design](design/firmware-decls.md)). |
+| `tools/patchkit/port_resolve.py` | Resolves the rules declared in `ports/fw/` into `ports/` (`mise run patch:port`); `rule-sharc` prints a SHARC rule for an address ([design](design/firmware-decls.md)). |
 | `tools/sharc_dev/framelink.py` | Describe the ColdFire-to-SHARC frame layout for known images. |
 | `tools/sharc_dev/dspmap.py` | Find ColdFire instructions that reference frame-link tables. |
 
@@ -483,34 +487,50 @@ stores the stack pointer's circular MODIFY was blocking for target
 needs an offset at or beyond one buffer length, or an unrecognised symbol
 name, which the fix deliberately does not claim bounded (see the proof).
 
-## Agent query CLI and the atlas
+## Firmware query CLI and the atlas
 
-`tools/coldfire/fw.py` is the first stop for firmware questions (the `firmware-query` skill says the same). One process,
-compact text, a 60-line cap with a "... N more" tail, ColdFire and SHARC from one image name
-(`-i dt2-1.17`, or `FW_IMAGE`). It uses only the standard library; the call graph is cached in `out/cache/fw/`
-(keyed by the database hash).
+`tools/coldfire/fw.py` is the entry point for firmware questions. Set the image with
+`-i` or `FW_IMAGE`. A short-word PC or a `dsp.*` declaration name routes the query to
+SHARC. Use `--cpu sharc` for DSP text searches and raw SQL. A batch can mix both CPUs.
+`--device NAME --firmware VERSION` also selects a release. Use `--core main`
+or `--core dsp` to select a program. Syntakt uses separate ColdFire databases
+for these roles. See [Syntakt main OS and DSP](DEVELOPMENT.md#syntakt-main-os-and-dsp).
+Text output defaults to 60 lines. The call graph is cached in `out/cache/fw/`.
 
-| Command | Answers |
-| --- | --- |
-| `fn X`, `decomp X`, `disasm X` | Summary (size, callers, callees, strings, a few decompiled lines), full C, listing. X is an address, a Ghidra name or a `cf_names` name. |
-| `callers X`, `callees X`, `xref ADDR`, `path A B` | Call sites, callees, every reference to an address (data, code, vtable slots), shortest call path. |
-| `str TEXT`, `class NAME` | Strings and the functions using them; an RTTI class with bases, derived classes and vtable. |
-| `port X --from dt2-1.16 --to dt2-1.17` | The same function on another version (`cfmatch` matches in the database). |
-| `search TERM` | FTS5 over function and class names, strings, decompiled C and the atlas. |
-| `atlas TERM` | Machines, parameters, classes, UI strings, structs and manual pages for a manual term. |
-| `sql "SELECT ..."` | Read-only SQL on the same database. |
-| `batch FILE\|-` | One command per line, one `## command` result block each, one process. |
+| Command | ColdFire | SHARC |
+| --- | --- | --- |
+| `fn`, `disasm` | Function summary and Ghidra listing | Function summary and annotated DSP listing |
+| `dossier X --other IMAGE` | Signature, anchors, call setup, decompilation and paired function | Anchors, roots, callers, memory references, loops, listing and paired function |
+| `callers`, `callees`, `xref`, `path` | Call graph, code and data references, vtable slots | Call graph, code references, resolved and inferred memory references, literals |
+| `search TERM --in SOURCES` | `names,strings,decomp,atlas,catalog` | `names,notes,atlas,disasm,strings,catalog`. Defaults to names, notes and atlas |
+| `atlas TERM`, `catalog` | Firmware glossary and anchor candidates | Search recovered functions and declarations, or list anchor candidates |
+| `port X --from IMAGE --to IMAGE` | Recorded cross-image matches | Declared counterparts and function hash matches |
+| `str TERM` | Strings and their recorded users | Candidate printable runs from loaded sections |
+| `decomp`, `class` | Decompiled C and RTTI | Use `disasm` for listings and `atlas` for inferred DSP roles |
+| `cost`, `stores` | | Static instruction cost and call-reachable store operands |
+| `sql`, `batch` | Read-only SQL and mixed query batches | Read-only SQL and mixed query batches |
 
-Full-text indexes are sidecars, `out/cfdb/<image>-emac.fts.sqlite` (`tools/coldfire/cfdb.py fts IMAGE`, 2 s, built on
-first use): trigram tables for names and strings, a token index for decompiled C. SHARC `search` uses LIKE over
-function names, labels and notes (there is no SHARC decompilation).
+Build a SHARC review directly from a stock firmware file or prepare both
+CPU databases through the [firmware guide](FIRMWARE.md#generate-a-sharc-catalog-from-a-syx).
 
-`tools/coldfire/atlas.py build IMAGE...` writes `out/atlas/<image>.sqlite` from the rules in the repository: the
-machine/page descriptor table (found by its 44-byte stride, any version), the parameter table
-(`paramtable.py`), RTTI classes and vtable slots, UI strings grouped by the view class that uses them, storage
-structs, manual pages (`out/refs/`, Digitakt II 1.03A and Digitone II 1.12 text via `tools/devtools/refstext.py`) and a
-glossary of manual terms (`TERMS` in the file). Every row has `provenance` and `confidence`. The data is derived
-from firmware and stays uncommitted. Add a term by adding a `TERMS` entry; rebuild takes about 12 s per image.
+- The ColdFire `firmware.sqlite` holds the Ghidra facts, decompiled C and
+  disassembly in `function_text`, full-text indexes, glossary, and catalog.
+  `tools/coldfire/cfdb.py fts IMAGE-emac` embeds texts and search tables in
+  an existing cfdb from its matching dump.
+- `out/firmware/<image>/dsp/firmware.sqlite` holds the decoded DSP, printable runs,
+  `function_index` for the full inventory, `function_anchors` and
+  `function_notes` for annotations, and `catalog` and `catalog_groups`
+  for anchor candidates. `fw.py sql --cpu sharc` opens these tables
+  directly. Some printable runs come from coincidental instruction bytes.
+
+Each catalog generator publishes to its core's database and writes TSV and graph
+files in that core's `exports/` folder. Use `fw review` for a browsable HTML catalog. Workbench loads function names from either database
+through [Firmware symbols](ADDRMAP.md#firmware-symbols-in-desktop-settings).
+
+The ColdFire atlas contains machine/page descriptors, parameters, RTTI classes
+and vtable slots, UI strings, storage structs, and snippets from any matching
+manual text available under `out/refs/`. Every glossary row carries provenance
+and confidence. Add new terms in `tools/coldfire/atlas.py`.
 
 Measured (Apple M-series): `fw.py fn` 0.05 s, `path` 0.10 s with a cold graph cache and 0.06 s warm, a
 12-query `batch` 0.27 s.

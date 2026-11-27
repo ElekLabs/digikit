@@ -1,0 +1,54 @@
+[module]
+id = "core/peer-image"
+version = "0.1.0"
+name = "Peer image"
+category = "core"
+role = "adapter"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Unpacks the second ColdFire CPU's program in MAIN before it is streamed, so that the Syntakt image can store it packed and stay under the OS upgrade size limit"
+requires = []
+conflicts = []
+ports = ["st-1.42"]
+
+[targets]
+"st-1.42" = "experimental"
+
+# The Syntakt's MAIN reads the second CPU's program (container section 7, 383,760 bytes) from the NOR flash into a transmit buffer and streams the buffer
+# byte for byte. Elektron stores the section raw; the patched image is 32 KB over the 2 MiB stage of the OS upgrade with it raw and about 85 KB under it
+# with it packed. A hook gives the peer thread a wrapper in place of the NOR read: for section 7 it reads the packed stream into the tail of the transmit
+# buffer, unpacks it forward with the firmware's own depacker, and checks the length and the SHA-256 of the result against the stock section. A failed
+# check takes the thread's own path for a missing section: status 1, nothing streamed (docs/findings/151-syntakt-section7-pack.md).
+#
+# [[repack]] makes patchkit store section 7 packed (the device file allows it: [container] repack) and check the result: the decoded section must be
+# the one with this `len` and `sha256`, and the in-place unpack (stream staged to end at `stage_end`, output from `dest`) must keep a margin above 0.
+# `dest` and `stage_end` are the thread's own buffer: payload start 0x4f84f2c6 and buffer end 0x4f84f2c1 + 0x60000 (uncached alias).
+[[repack]]
+role = "cf2"
+dest = 0x4f84f2c6
+stage_end = 0x4f8af2c1
+len = 383760
+sha256 = "daf6451cf9587c0b628e901b7bb6b25f4e2633d448c534c0c181dd35ec783bc2"
+
+# The [[repack]] above as C macros for src/cf/peer.c (REPACK_CF2_*): one source for the layout, the length and the hash.
+[[gen]]
+kind = "c-repack"
+path = "build/gen/repack.h"
+
+[[object]]
+path = "build/peer.dko.json"
+sources = ["src/cf/peer.c", "src/cf/hook.s"]
+place = "cf.expansion"
+
+[object.externs]
+peer_ret = "hook.cf.peer.site.nor_read_lea.return"
+peer_status_fail = "cf.peer.site.status_fail"
+
+[[op]]
+op = "hook"
+hook = "cf.peer.hook.nor_read_lea"
+to = "peer_hook"
+
+[[claim]]
+resource = "cf.peer.site.nor_read_lea"

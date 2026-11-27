@@ -7,7 +7,7 @@
           "knobs": [
             null,
             {
-              "param": "nan_a",
+              "param": "nan_alpha",
               "slot": 26
             }
           ],
@@ -30,7 +30,7 @@
               "stock": 202
             },
             {
-              "param": "nan_a",
+              "param": "nan_alpha",
               "slot": 1
             },
             null,
@@ -62,7 +62,7 @@
     "dn2": [
       {
         "default": 8192,
-        "id": "nan_a",
+        "id": "nan_alpha",
         "max": 32512,
         "min": 0,
         "name": "Nan alpha",
@@ -74,7 +74,7 @@
     "dt2": [
       {
         "default": 8192,
-        "id": "nan_a",
+        "id": "nan_alpha",
         "max": 32512,
         "min": 0,
         "name": "Nan alpha",

@@ -17,6 +17,9 @@ cranelift-jit = "0.136"
 cranelift-module = "0.136"
 cranelift-native = "0.136"
 
+[dev-dependencies]
+sharc-gen = { path = "../sharc-gen" }
+
 [lib]
 name = "sharc_fast_cl"
 crate-type = ["rlib", "cdylib"]

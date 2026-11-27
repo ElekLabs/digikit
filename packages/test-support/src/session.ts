@@ -1,3 +1,4 @@
+import { oledPng } from './oled-png.ts';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,6 +18,7 @@ import {
   type StatusResult,
 } from '@digi/control-client';
 import {
+  coreLibEnv,
   coupledEnv,
   repoRoot,
   resolveInputs,
@@ -24,8 +26,19 @@ import {
   validatePreparedRuntimeImage,
   type Device,
   type PreparedRuntimeImage,
-} from './inputs.ts';
+} from './firmware-inputs.ts';
+import { bootWindowFacts } from './boot-window.ts';
 import { button, encoder } from './keys.ts';
+
+/** Does a runtime session settle the boot window itself? Only a device with boot window facts, when `autoNo` is not false, and never a paused baseline (it keeps the daemon's press of NO). */
+function settlesBootWindow(options: Pick<SessionOptions, 'device' | 'runtime' | 'autoNo'>, paused = false): boolean {
+  return (
+    options.runtime !== undefined &&
+    !paused &&
+    (options.autoNo ?? true) &&
+    bootWindowFacts(options.device) !== undefined
+  );
+}
 
 /** Content-named card images that the device tests share between runs (tests/regression/runtime/card-cache.ts; `DIGI_CARD_CACHE` moves it for host tests). A baseline card may live here. */
 export const cardCacheRoot = (): string =>
@@ -58,16 +71,21 @@ function needsDsp(what: string, dsp: DspMode): Error {
   return new Error(`${what} needs the DSP, but this session runs with dsp:'${dsp}'; pass dsp:'sharc' to this test`);
 }
 
-/** A client whose DSP-only RPCs throw when the session runs without a DSP. */
-function guardDspClient(client: Client, dsp: DspMode): Client {
-  if (dsp === 'sharc') return client;
+/**
+ * A client whose DSP-only RPCs throw when the session runs without a DSP, and which tells `onTapStart` when a
+ * `pcm.tap start` succeeded (the one place that knows whether a case ran a PCM tap).
+ */
+function guardDspClient(client: Client, dsp: DspMode, onTapStart: () => void): Client {
   return new Proxy(client, {
     get(target, prop) {
       const value = Reflect.get(target, prop, target);
       if (prop !== 'call') return typeof value === 'function' ? value.bind(target) : value;
-      return (method: string, ...rest: unknown[]) => {
-        if (DSP_ONLY_RPC.test(method)) return Promise.reject(needsDsp(method, dsp));
-        return (target.call as (...a: unknown[]) => unknown)(method, ...rest);
+      return async (method: string, ...rest: unknown[]) => {
+        if (dsp !== 'sharc' && DSP_ONLY_RPC.test(method)) throw needsDsp(method, dsp);
+        const result = await (target.call as (...a: unknown[]) => Promise<unknown>)(method, ...rest);
+        const params = rest[0] as { action?: string } | undefined;
+        if (method === 'pcm.tap' && params?.action === 'start') onTapStart();
+        return result;
       };
     },
   }) as Client;
@@ -84,6 +102,8 @@ export interface SessionOptions {
   dsp?: DspMode;
   /** Card sample directory for `card.load` (DT2). */
   card?: string;
+  /** Builds a card image that `firmware.load` mounts as it is (instead of `card.load` of `card`). */
+  cardImage?: () => Promise<string>;
   /** Run directory; default a fresh temporary directory. */
   runDir?: string;
   /** Shared store of booted-state snapshots (`DIGI_SNAPSHOT_DIR`); default `<runDir>/patched`, private to the run dir. */
@@ -97,7 +117,11 @@ export interface SessionOptions {
   onSession?: (session: Session) => void;
   /** Additional daemon environment, prepared before spawn. */
   env?: Record<string, string> | ((runDir: string) => Promise<Record<string, string>>);
-  /** Press NO automatically when ready; defaults to true. */
+  /**
+   * Answer the boot window (a ConfirmWindow that ends the boot on a device that has one: docs/TESTING.md "The boot window"); defaults to true. A runtime session of a device that has
+   * boot window facts settles the window itself (`settleBootWindow` reads the firmware's view stack and presses NO) and does not ask the daemon for `auto_no`. Every other session (a stock
+   * one, a device without the facts, a paused runtime baseline whose steps a test counts from the ready point) keeps the daemon's press of NO at ready. False: nothing answers it.
+   */
   autoNo?: boolean;
   /** Runtime boot uses firmware.load's existing patch/cache path, then runs freely. Stock defaults stay stepped. */
   runtime?: { patchSet?: string; reuse?: boolean };
@@ -113,7 +137,7 @@ export interface RuntimeBaseline {
   /** Every caller must explicitly choose its scenario's guard policy, including an unguarded one. */
   guard: GuardSetParams;
   deliverExceptions?: boolean;
-  /** Real logical panel transitions before cold execution; explicitly supplied (even empty) selects start:cold. */
+  /** Real logical panel transitions before the first guest instruction. They are part of the ready-pair key: a hit restores a boot of the same presses, a miss boots cold and publishes. */
   initialButtons?: readonly InitialButton[];
   /** Use the MainPanel contract with DIGI_COLD_RELAX_FS: missing filesystem verification is accepted, explicit failure is rejected. Stock verification/loading may continue. */
   relaxedReady?: boolean;
@@ -127,20 +151,78 @@ export interface RuntimeBaseline {
  */
 export const PRE_SOCKET_HANG_MS = 300_000;
 
+/** Thrown when `withinRuntimeDeadline` gives up on an operation. */
+export class RuntimeDeadlineError extends Error {
+  constructor() {
+    super('runtime lifecycle deadline exceeded');
+    this.name = 'RuntimeDeadlineError';
+  }
+}
+
+/**
+ * Whether a deadline has passed, given the error its operation ended with. A timer can fire up to 1 ms before `Date.now()`
+ * reaches the deadline it was set from (monotonic clock against wall clock), so a wall-clock comparison alone can call a
+ * deadline that did fire "not expired". A deadline error or a timed-out `expect.poll` is itself the proof.
+ */
+export function deadlineExpired(deadline: number, error?: unknown): boolean {
+  if (Date.now() >= deadline) return true;
+  if (error instanceof RuntimeDeadlineError) return true;
+  const cause = error instanceof Error ? error.cause : undefined;
+  return cause instanceof Error && cause.message === 'Matcher did not succeed in time.';
+}
+
 /** Bound awaited control RPCs to one absolute lifecycle deadline, including a peer that never answers. */
 export async function withinRuntimeDeadline<T>(deadline: number, operation: () => Promise<T>): Promise<T> {
   const remaining = deadline - Date.now();
-  if (remaining <= 0) throw new Error('runtime lifecycle deadline exceeded');
+  if (remaining <= 0) throw new RuntimeDeadlineError();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       operation(),
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error('runtime lifecycle deadline exceeded')), remaining);
+        timer = setTimeout(() => reject(new RuntimeDeadlineError()), remaining);
       }),
     ]);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * Wall seconds one slice of emulated time may take before it counts as a hang. A loaded host (many emulators at once) runs several times
+ * slower than a quiet one, so a fixed bound on a whole step fails a healthy run; a slice that makes no progress for this long does not.
+ * DIGI_PROGRESS_HANG_S overrides it.
+ */
+export const PROGRESS_HANG_S = Number(process.env.DIGI_PROGRESS_HANG_S ?? 30);
+
+/** One slice: 0.5 emulated seconds (66 M ColdFire instructions, 750 DSP frames). The whole wait is capped at slices times PROGRESS_HANG_S. */
+const SLICE_INSNS = MS * 500;
+const SLICE_FRAMES = 750;
+
+type StepClient = Pick<Session['client'], 'step' | 'runUntil'>;
+
+/** Step `instructions` in slices; each slice is bounded by PROGRESS_HANG_S of wall time, so the total scales with the emulated time asked for. */
+export async function stepWithProgress(client: StepClient, instructions: number): Promise<void> {
+  for (let left = Math.floor(instructions); left > 0;) {
+    const n = Math.min(left, SLICE_INSNS);
+    await withinRuntimeDeadline(Date.now() + PROGRESS_HANG_S * 1000, () =>
+      client.step(n, { timeout_wall_s: PROGRESS_HANG_S }),
+    );
+    left -= n;
+  }
+}
+
+/** Run to the absolute DSP frame `target` in slices, each bounded like `stepWithProgress`. `now` reads the current DSP frame. */
+export async function runUntilFramesWithProgress(
+  client: StepClient,
+  now: () => Promise<number>,
+  target: number,
+): Promise<void> {
+  for (let at = await now(); at < target; at = await now()) {
+    const next = Math.min(target, at + SLICE_FRAMES);
+    await withinRuntimeDeadline(Date.now() + PROGRESS_HANG_S * 1000, () =>
+      client.runUntil({ frames: next, timeout_wall_s: PROGRESS_HANG_S }),
+    );
   }
 }
 
@@ -155,6 +237,7 @@ export class Session {
   #card: string | undefined;
   #preparedImage: PreparedRuntimeImage | undefined;
   #guarded: Client | undefined;
+  #pcmTapStarted = false;
   #closing: Promise<void> | undefined;
   #reloading = false;
   #preserveDiagnostics = false;
@@ -172,7 +255,14 @@ export class Session {
   }
 
   get client(): Client {
-    return (this.#guarded ??= guardDspClient(this.#daemon.client, this.dsp));
+    return (this.#guarded ??= guardDspClient(this.#daemon.client, this.dsp, () => {
+      this.#pcmTapStarted = true;
+    }));
+  }
+
+  /** True when a `pcm.tap start` succeeded since the last runtime baseline reload (a reload resets the tap). */
+  get pcmTapStarted(): boolean {
+    return this.#pcmTapStarted;
   }
 
   /** Throws unless the session has a DSP: for helpers that capture or read audio, PCM, spectra or DSP state. */
@@ -216,6 +306,7 @@ export class Session {
     if (options.startEmpty && (options.dsp !== 'sharc' || !options.runtime?.reuse))
       throw new Error('empty startup requires a reusable coupled session');
     if (options.runtime?.reuse && options.mirror) throw new Error('reusable runtime sessions cannot mirror cards');
+    if (options.card && options.cardImage) throw new Error('`card` and `cardImage` both name the card: set one');
     const inp = resolveInputs(options.device, options.firmware);
     if (options.runtime) validateRuntimeInputs(inp);
     const volume = options.runDir && fs.existsSync(options.runDir) ? options.runDir : os.tmpdir();
@@ -263,7 +354,8 @@ export class Session {
           : prepareEnv;
       controller?.signal.throwIfAborted();
       const env = {
-        ...(options.dsp === 'sharc' ? coupledEnv(inp.syx) : {}),
+        ...(options.dsp === 'sharc' ? coupledEnv(inp.syx, options.device) : {}),
+        ...(options.dsp === 'sharc' ? coreLibEnv(options.device) : {}),
         ...(options.snapshotDir ? { DIGI_SNAPSHOT_DIR: options.snapshotDir } : {}),
         ...extraEnv,
       };
@@ -296,7 +388,8 @@ export class Session {
         return session;
       }
       let card: string | undefined;
-      if (options.card) card = (await checked(c.cardLoad(options.card))).card;
+      if (options.cardImage) card = await checked(options.cardImage());
+      else if (options.card) card = (await checked(c.cardLoad(options.card))).card;
       session.#card = card;
       session.#load = await checked(
         c.firmwareLoad({
@@ -304,13 +397,17 @@ export class Session {
           start: options.runtime ? 'auto' : 'snapshot',
           ...(options.runtime ? { runtime: true, patch_set: options.runtime.patchSet } : {}),
           force: true,
-          auto_no: options.autoNo ?? true,
+          // a runtime session of a device with boot window facts settles the window itself, below
+          auto_no: settlesBootWindow(options) ? false : (options.autoNo ?? true),
           ...(card ? { card } : {}),
         }),
       );
       session.#touchCacheHit(session.#load);
       await checked(c.watchdogConfig(options.stallMs ?? 1000));
-      if (options.runtime) await checked(c.call('run.mode', { mode: 'free' }));
+      if (options.runtime) {
+        await checked(c.call('run.mode', { mode: 'free' }));
+        if (settlesBootWindow(options)) await checked(session.settleBootWindow());
+      }
       return session;
     })();
     try {
@@ -351,6 +448,7 @@ export class Session {
     if (!this.options.runtime?.reuse) throw new Error('runtime baseline reload requires runtime.reuse');
     if (this.#closing || this.#reloading) throw new Error('runtime session is closed or already reloading');
     this.#reloading = true;
+    this.#pcmTapStarted = false;
     const reloadStart = performance.now();
     let loadMs = 0;
     let phase = 'validate.card';
@@ -386,7 +484,7 @@ export class Session {
       // The card's own `overlay.bin` (its test writes) is part of the baseline: the daemon applies it on load.
       if (!fs.statSync(image).isFile()) throw new Error('runtime baseline must be a card image file');
       if (!baseline.guard) throw new Error('runtime baseline requires an explicit scenario guard policy');
-      // The visible job can finish; a hidden patch job may still reject load as BUSY, which discards this daemon.
+      // The visible job can finish; a job (a cold boot included) that still runs would reject load as BUSY, which discards this daemon.
       let before = (lastStatus = await checked('status.before-load', () => this.client.status()));
       statusPhase = 'before-load';
       while (before.job) {
@@ -429,9 +527,10 @@ export class Session {
           // force still reconstructs the firmware and opens the explicit pristine card.
           replace: !prepared,
           force: true,
-          start: baseline.initialButtons === undefined ? 'auto' : 'cold',
+          start: 'auto',
           initial_buttons: baseline.initialButtons,
-          auto_no: this.options.autoNo ?? true,
+          // a paused baseline keeps the daemon's press of NO at ready: settling would step the emulator that a test counts from the ready point
+          auto_no: settlesBootWindow(this.options, baseline.paused) ? false : (this.options.autoNo ?? true),
         }),
       ));
       loadMs = performance.now() - loadStart;
@@ -469,6 +568,7 @@ export class Session {
           );
         }
       }
+      if (settlesBootWindow(this.options, baseline.paused)) await checked('boot.window', () => this.settleBootWindow());
       phase = 'commit.baseline';
       this.#load = load;
       this.#card = image;
@@ -507,6 +607,18 @@ export class Session {
     } finally {
       this.#reloading = false;
     }
+  }
+
+  /**
+   * Answer the boot window of the firmware that has reached its main screen (see `settleBootWindow`); does nothing on a device that has none. It steps a paused daemon
+   * and waits on a running one, so a caller that must keep the emulator where it is does not call it.
+   */
+  async settleBootWindow(): Promise<void> {
+    const facts = bootWindowFacts(this.options.device);
+    if (!facts) return;
+    // loaded here, not at the top: the clock and the panel import this file (a cycle at load time would reach `MS` too early)
+    const { settleEmulatorBootWindow } = await import('./boot-window-emulator.ts');
+    await settleEmulatorBootWindow(this, facts);
   }
 
   /** Back to the ready state of the running firmware, modal closed; clears collected events. */
@@ -563,6 +675,12 @@ export class Session {
   /** Hex SHA-256 of the 1024 decoded OLED bytes. */
   frameHash(): Promise<string> {
     return this.client.frameHash();
+  }
+  /** The current OLED as a grayscale PNG (4x scale). */
+  async framePng(): Promise<Buffer> {
+    const r = await this.client.framebufferGet();
+    if (!r.data_b64) throw new Error('framebuffer.get returned no data');
+    return oledPng(Buffer.from(r.data_b64, 'base64'));
   }
   leds(): Promise<LedsResult> {
     return this.client.ledsGet();

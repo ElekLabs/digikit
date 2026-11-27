@@ -1,16 +1,21 @@
 // The inside of the Log drawer: the header (Source, Errors only, Follow, the debug module state, Level, Save, Copy, Clear, Close) and the list. The dock around it (its height and
-// its handle) is in Console.tsx, and the preview puts it in a dock of its own. The rules are in log-core.ts, the runtime logs in log-follow.ts.
-import { invoke } from '@tauri-apps/api/core';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { copyText, filterEntries, formatTime, saveName, saveText, sourceMenu, type Origin } from './log-core';
+// its handle) is in WorkbenchDrawer.tsx, and the preview puts it in a dock of its own. The rules are in log-core.ts, the runtime logs in log-follow.ts.
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { copyText, filterEntries, formatTime, sourceMenu, type Origin } from './log-core';
+import { saveLog as saveLogEntries } from './log-save';
+import type { Host } from '@digi/workbench-core/host/host.ts';
+import { cardLogView } from './log-cardlog-core';
 import { levelOrigin, levelsOff } from './log-level-core';
 import LogLevelMenu from './LogLevelMenu';
 import type { LogFollow } from './log-follow';
 import type { OriginStatus } from './log-follow-core';
-import { clearLog, followOn, logOpen, logState, setFollowOn, setLogOpen } from './log-state';
+import type { LogReader } from './log-state';
 
 export interface LogPanelProps {
+  host: Host;
   follow: LogFollow;
+  log: LogReader;
+  close(): void;
   /** Something is there to follow: the emulator runs, the MIDI port was chosen. */
   emulatorRunning(): boolean;
   devicePort(): string | undefined;
@@ -23,6 +28,7 @@ const followable = (running: boolean, status: OriginStatus) =>
   running && status !== 'no-runtime' && status !== 'absent';
 
 export default function LogPanel(props: LogPanelProps) {
+  const { entries, followOn, setFollowOn, clear } = untrack(() => props.log);
   const [logSource, setLogSource] = createSignal('all');
   const [errorsOnly, setErrorsOnly] = createSignal(false);
   const [expanded, setExpanded] = createSignal<ReadonlySet<number>>(new Set<number>());
@@ -32,9 +38,7 @@ export default function LogPanel(props: LogPanelProps) {
   const timers: number[] = [];
   onCleanup(() => timers.forEach((t) => window.clearTimeout(t)));
 
-  const visibleLog = createMemo(() =>
-    filterEntries(logState().entries, { source: logSource(), errorsOnly: errorsOnly() }),
-  );
+  const visibleLog = createMemo(() => filterEntries(entries(), { source: logSource(), errorsOnly: errorsOnly() }));
   const live = (origin: Origin) =>
     origin === 'emulator'
       ? followable(props.emulatorRunning(), props.follow.status().emulator)
@@ -43,13 +47,13 @@ export default function LogPanel(props: LogPanelProps) {
     sourceMenu({
       emulator: {
         live: live('emulator'),
-        logged: logState().entries.some((e) => e.source === 'emulator' && e.rt),
+        logged: entries().some((e) => e.source === 'emulator' && e.rt),
         modules: props.follow.modules().emulator,
       },
       device: {
         port: props.devicePort(),
         live: live('device'),
-        logged: logState().entries.some((e) => e.source === 'device'),
+        logged: entries().some((e) => e.source === 'device'),
         modules: props.follow.modules().device,
       },
     }),
@@ -70,6 +74,20 @@ export default function LogPanel(props: LogPanelProps) {
       live: origin ? live(origin) : false,
       supported: origin ? props.follow.logcfg()[origin] : undefined,
     });
+  };
+  // the Card log button acts on the same origin as the Level menu; its state is read with the follower's rounds
+  const card = () => {
+    const origin = levelTarget();
+    return cardLogView(origin ? props.follow.cardlog()[origin] : undefined, levelOff());
+  };
+  const toggleCard = async () => {
+    const origin = levelTarget();
+    if (!origin || card().disabled) return;
+    try {
+      await props.follow.setCardLog(origin, !card().pressed);
+    } catch {
+      flash('Card log failed', 3000);
+    }
   };
   // the debug module (digikit/debug) is the log: loaded while the origin follows, not loaded when its runtime has no LOG capability
   const debugState = (): boolean | undefined => {
@@ -114,10 +132,7 @@ export default function LogPanel(props: LogPanelProps) {
   };
   const saveLog = async () => {
     try {
-      const bytes = new TextEncoder().encode(saveText(visibleLog(), Date.now()));
-      const where = await invoke<string | null>('log_save', bytes, {
-        headers: { 'x-name': encodeURIComponent(saveName(Date.now())) },
-      });
+      const where = await saveLogEntries(props.host.fs, visibleLog(), Date.now());
       if (where) flash('Saved', 2500);
     } catch {
       flash('Save failed', 3000);
@@ -127,10 +142,9 @@ export default function LogPanel(props: LogPanelProps) {
   // newest at the bottom: follow it while the list is at the bottom
   createEffect(() => {
     visibleLog();
-    if (logOpen())
-      queueMicrotask(() => {
-        if (logList && stickToEnd) logList.scrollTop = logList.scrollHeight;
-      });
+    queueMicrotask(() => {
+      if (logList && stickToEnd) logList.scrollTop = logList.scrollHeight;
+    });
   });
 
   return (
@@ -138,9 +152,9 @@ export default function LogPanel(props: LogPanelProps) {
       <header>
         <strong>Log</strong>
         <span class="count">
-          {visibleLog().length === logState().entries.length
-            ? `${logState().entries.length} entries`
-            : `${visibleLog().length} of ${logState().entries.length}`}
+          {visibleLog().length === entries().length
+            ? `${entries().length} entries`
+            : `${visibleLog().length} of ${entries().length}`}
         </span>
         <span class="sp" />
         <select aria-label="Source" value={logSource()} onChange={(e) => setLogSource(e.currentTarget.value)}>
@@ -198,6 +212,20 @@ export default function LogPanel(props: LogPanelProps) {
           {debugState() === false ? 'Debug module: not loaded' : debugState() ? 'Debug module: loaded' : 'Debug module'}{' '}
           <i class="debug-dot" aria-hidden="true" />
         </span>
+        <button
+          type="button"
+          class="tb small"
+          classList={{ on: card().pressed, 'card-warn': card().warn }}
+          aria-pressed={card().pressed}
+          disabled={card().disabled}
+          title={card().title}
+          onClick={() => void toggleCard()}
+        >
+          {card().label}
+          <Show when={card().dot}>
+            <i class="follow-dot" aria-hidden="true" />
+          </Show>
+        </button>
         <LogLevelMenu follow={props.follow} origin={levelTarget} off={levelOff} />
         <button
           type="button"
@@ -220,9 +248,9 @@ export default function LogPanel(props: LogPanelProps) {
         <button
           type="button"
           class="tb small"
-          disabled={logState().entries.length === 0}
+          disabled={entries().length === 0}
           onClick={() => {
-            clearLog();
+            clear();
             setExpanded(new Set<number>());
           }}
         >
@@ -232,7 +260,7 @@ export default function LogPanel(props: LogPanelProps) {
           type="button"
           class="tb small"
           title={`Close the Log (${props.toggleKey})`}
-          onClick={() => setLogOpen(false)}
+          onClick={() => props.close()}
         >
           Close
         </button>
@@ -252,9 +280,7 @@ export default function LogPanel(props: LogPanelProps) {
           each={visibleLog()}
           fallback={
             <Show when={!noDebugOrigin()}>
-              <li class="empty">
-                {logState().entries.length ? 'No entry matches the filter.' : 'Nothing logged yet.'}
-              </li>
+              <li class="empty">{entries().length ? 'No entry matches the filter.' : 'Nothing logged yet.'}</li>
             </Show>
           }
         >

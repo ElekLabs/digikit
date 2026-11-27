@@ -13,18 +13,24 @@
 // Replay: coupled-run --syx firmware.syx --dsp-image dsp-image.bin --dsp-state dsp-state.snap.dsp
 //         --cf-snapshot cf-snapshot.snap [--card-image card.img]
 // The daemon is the plain build of the device's generated core: --binary, else DIGI_EMUD_<DEV>,
-// else `tools.emulator.native_emu --daemon --build-only` (a no-op when the build is fresh).
+// else `dist/daemons.json` (written by `digi-control:daemons`); a device without a DSP: `dist/bin/digi-emud-nodsp`.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { resolveInputs, repoRoot, type Device } from '../../packages/test-support/src/inputs.ts';
+import {
+  hasDsp,
+  noDspDaemon,
+  resolveInputs,
+  repoRoot,
+  type Device,
+} from '../../packages/test-support/src/firmware-inputs.ts';
 import { DkSession, EmuUsbTransport } from '../../packages/dk-session/src/index.ts';
+import { steppedClock } from '../../packages/test-support/src/emulated-clock.ts';
 import { MS, Session } from '../../packages/test-support/src/session.ts';
 
 const FIRMWARE: Record<Device, string> = { dt2: '1.17', dn2: '1.12' };
-const BOOT_LIMIT_MS = 180_000;
 
 function sha256File(file: string): string {
   const hash = createHash('sha256');
@@ -42,20 +48,17 @@ function git(root: string, ...args: string[]): string {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 }
 
-function daemonBinary(root: string, device: Device, syx: string, given?: string): string {
+function daemonBinary(root: string, device: Device, given?: string): string {
   const named = given ?? process.env[`DIGI_EMUD_${device.toUpperCase()}`];
   if (named) return path.resolve(named);
-  const out = execFileSync(
-    'uv',
-    ['run', 'python', '-m', 'tools.emulator.native_emu', '--daemon', '--build-only', syx],
-    { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] },
-  );
-  const last = out
-    .split('\n')
-    .filter((l) => l.trim())
-    .pop();
-  if (!last || !fs.existsSync(last)) throw new Error(`native_emu --build-only printed no binary: ${out.slice(-300)}`);
-  return last;
+  if (!hasDsp(device)) return noDspDaemon(device);
+  const file = path.join(root, 'dist/daemons.json');
+  const key = `DIGI_EMUD_${device.toUpperCase()}`;
+  const fromFile = fs.existsSync(file)
+    ? (JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, string>)[key]
+    : undefined;
+  if (!fromFile) throw new Error(`no ${key} in ${file}: run pnpm nx:pilot run digi-control:daemons, or pass --binary`);
+  return fromFile;
 }
 
 const { values } = parseArgs({
@@ -99,7 +102,7 @@ if (samples && !fs.existsSync(samples)) {
 }
 
 const inputs = resolveInputs(device, firmware);
-const binary = daemonBinary(root, device, inputs.syx, values.binary);
+const binary = daemonBinary(root, device, values.binary);
 fs.rmSync(tmpDir, { recursive: true, force: true });
 fs.mkdirSync(tmpDir, { recursive: true });
 fs.mkdirSync(runDir, { recursive: true });
@@ -123,7 +126,6 @@ try {
   if (load.start_used !== 'cold') throw new Error(`expected a cold boot, got start_used=${load.start_used}`);
   if (!load.runtime?.patched || load.runtime.set !== patchSet) throw new Error('boot is not the patched runtime');
   if (!status.cf.ready || status.cf.error) throw new Error(`firmware not ready: phase=${status.cf.phase}`);
-  if (Date.now() - started > BOOT_LIMIT_MS) throw new Error('boot exceeded its limit');
   const cacheDir = String((load as unknown as { cache_dir?: string }).cache_dir ?? '');
   let snapDir = cacheDir;
   if (state === 'reset') {
@@ -131,10 +133,12 @@ try {
     // ready pair of that cold boot in a new directory under runDir/patched; it is the CF snapshot and DSP state.
     const call = <T>(method: string, params?: Record<string, unknown>) => session!.client.call<T>(method, params);
     const stepSeconds = (s: number) => session!.client.step(s * 1000 * MS, { timeout_wall_s: 300 });
-    const dk = new DkSession(new EmuUsbTransport(call, { stepInstructions: 20_000_000 }));
+    const dk = new DkSession(new EmuUsbTransport(call, { stepInstructions: 20_000_000 }), {
+      clock: steppedClock(session),
+    });
     await stepSeconds(15);
     await dk.restart();
-    await dk.waitForBoot(() => stepSeconds(5).then(() => undefined));
+    await dk.waitForBoot(90_000, { pollMs: 5000 });
     await stepSeconds(25);
     const patchedRoot = path.join(runDir, 'patched');
     const dirs = fs

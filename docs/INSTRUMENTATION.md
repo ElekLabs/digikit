@@ -3,6 +3,14 @@
 Diagnostics are off by default and cost nothing when off. Tuning switches
 (which tier runs what) are separate and listed at the end.
 
+## Workbench utilization history
+
+Open **Performance** in the desktop status bar to see the last minute of ColdFire and DSP utilization for the selected Target. The emulator reports estimated chip load, sampled by Workbench approximately once per second. On hardware, the firmware emits HEALTH roughly every ten seconds. Workbench checks for a new reading on its existing five-second poll. The horizontal axis is local observation time. A spike between observations can be missed.
+
+Move the pointer across the graph to inspect CF and DSP utilization at that time. Between samples the tooltip shows linearly interpolated values. Gaps remain empty. History accumulates while other panes are open. Switching targets starts a new history. Gaps indicate unavailable readings, and a processor without a reported value has no trace. The audio Analyzer and Performance drawer can be opened independently of USB audio capture.
+
+Choose **Performance → Spans** and **Start recording** to see which instrumented ColdFire owners ran during a utilization spike. The drawer and the Profile tab share the same recording, including Start and Stop. Each marked interval compares two consecutive counter readings. Hover over an interval or choose it from the list to rank modules, runtime phases and polls by their share of elapsed target ticks and see their call counts. The DSP line shows whole-processor utilization. A gap in observations or a change in owner identity starts a new interval baseline. The view covers the last minute of local observation time.
+
 ## Where output goes
 
 Every run tool writes one directory per run:
@@ -124,6 +132,7 @@ Two instruments for the native ColdFire core, off by default. They extend the wr
 | `DIGI_WRITE_WATCH_OUT=PATH` | JSONL log; default `$DIGI_DIAG_DIR/writewatch.jsonl`, else stderr. The summary goes to `PATH` with the extension `summary.json`. |
 | `DIGI_WRITE_WATCH_LIMIT=N` | log at most N events (default 100000); the counts go on. |
 | `DIGI_READ_WATCH=LO-HI[,..]` | the read-watch: report every CPU load from these ranges (same syntax and alias folding as `DIGI_WRITE_WATCH`), and count per byte the loads that read it and the first 8 PCs. It starts with `DIGI_WRITE_WATCH_AFTER` and logs to the same file. The summary adds `read_events`, `loads_checked` (every load the watch was offered) and `reads` (per byte: `addr`, `loads`, `pcs`). Each load then takes one more branch, as each store does. |
+| `DIGI_CARD_TRACE=1` | log one `card` event per card command: CMD8, CMD18 and CMD25 at the eDMA59 service (`arg` = sector, `bytes` = transfer) and CMD12 and CMD23 from the eSDHC command decode (`bytes` 0). It counts as an instrument on its own (no range needed), starts with `DIGI_WRITE_WATCH_AFTER`, and logs to the same file and under the same `DIGI_WRITE_WATCH_LIMIT`. Off: no buffer, no cost. |
 
 Events (JSONL), `ic` = guest instruction count:
 
@@ -131,6 +140,7 @@ Events (JSONL), `ic` = guest instruction count:
 {"t":"w","ic":19811920,"pc":"0x400004d2","addr":"0x44e4a5b8","size":4,"value":"0x0"}   CPU store
 {"t":"r","ic":..,"pc":"0x..","addr":"0x..","size":2}                                    CPU load (read-watch)
 {"t":"dma","ic":..,"src":"esdhc-dma59","addr":"0x..","size":512}                       DMA into RAM
+{"t":"card","ic":..,"cmd":25,"arg":1234,"bytes":65536}                                  card command (DIGI_CARD_TRACE)
 {"t":"flush","ic":..,"fetch_pc":"0x..","line":"0x..","writer":{"pc":"0x.."},"write_ic":..,"dcache_pending":true,"mask":"0x000f"}
 ```
 
@@ -191,8 +201,98 @@ stack base and size) from the calls of the firmware's one task-create function a
 the queue pop that the runtime hooks); it reads the Ghidra dump of the image. `uv run python -m tools.coldfire.digikit_menu_proof run
 --image IMAGE --quick --stack` measures the UI stack during the DIGIKIT proof scripts and prints the high-water outside requests and
 inside LOAD/UNLOAD requests; `--stack-stock` does it for the stock SETTINGS and project scripts. `uv run python -m
-tools.coldfire.frame_depth modules/core/runtime/build/runtime.dko.json dkrt_load` adds the other side: the static worst-case depth of a
+tools.coldfire.frame_depth runtime/core/build/runtime.dko.json dkrt_load` adds the other side: the static worst-case depth of a
 module's functions from their frame sizes and calls (findings 34).
+
+## PC probe (ColdFire)
+
+The PC probe records what the guest does at chosen PCs. It is off by default and costs nothing then: the bus takes no extra
+path, and the probe adds only its own PCs to the observed set (`boot/src/pcprobe.rs`, `Emulator::set_pc_probe`). It changes no
+guest state. A probe made for a task switch or a hook site settles questions that static reach cannot, such as whether an
+interrupt can enter the code of a patched site (R12 design, `docs/plans/runtime-and-services.md` section 13.2).
+
+For each hit of a probed PC, before its instruction runs, the probe counts the hit per (task, IPL) and, for the first `keep`
+hits (default 8), records: the instruction count (`icount`), SR and its IPL, SP, the task word, `words` (guest longs at given
+addresses; null when unmapped) and `stack` (longs from SP: at a function's first instruction, the return address and the
+arguments). "Task" is the long at the address `task_ptr`, the current-task pointer, which the caller gives (DT2 1.17
+`0x47db3f64`, DN2 1.12 `0x4664bcdc`; anchor `cf.rtos.value.current_tcb`). With `frame: true` the probe also decodes the exception
+frame at SP and counts per (vector, stacked IPL). That is meaningful only at the first instruction of exception code: the long at
+SP holds the vector in `(long >> 18) & 0xff` and the stacked SR in the low 16 bits. Spec:
+
+```json
+{"task_ptr": "0x47db3f64", "keep": 8,
+ "probes": [{"pc": "0x40000410", "label": "task_switch", "words": ["0x47db3f64"], "stack": 2, "frame": true}]}
+```
+
+Addresses are integers or `"0x..."` strings. `stack` is at most 64. A spec with no probes removes the probe.
+
+Report (`pc_probe`; the `pc.probe.report` answer):
+
+```json
+{"task_ptr": "0x47db3f64", "keep": 8, "probes": [{
+  "pc": "0x40000410", "label": "task_switch", "count": 1234,
+  "by_task_ipl": [{"task": "0x47dc1000", "ipl": 0, "count": 600}],
+  "by_frame": [{"vector": 32, "stacked_ipl": 0, "count": 600}],
+  "hits": [{"n": 1, "icount": 851000000, "sr": "0x2000", "ipl": 0, "sp": "0x47dc0ff8", "task": "0x47dc1000",
+            "words": [], "stack": ["0x40362000", "0x00002000"],
+            "frame": {"long": "0x40802000", "vector": 32, "stacked_sr": "0x2000", "stacked_ipl": 0}}]}]}
+```
+
+(`by_frame` and `frame` are there only with `frame: true`; the numbers above show the shape, not a measurement.)
+
+Two ways to run it:
+
+- `coupled-run --pc-probe FILE[:NAME]` (FILE is a spec, or an object of specs with NAME picking one). With `--cold-base` and
+  `--dsp zero` the probe is armed before the cold boot, so it is active from reset and keeps counting through the scenarios.
+  Every other start arms it at the ready point. The report has `pc_probe`.
+- The control daemon: RPC `pc.probe.set {...spec}` or `{file, name?}`, `pc.probe.report`, `pc.probe.clear` (hits only)
+  ([CONTROL.md](CONTROL.md)); the TypeScript client has `pcProbeSet`, `pcProbeReport` and `pcProbeClear`. The spec is kept
+  and armed in every runtime installed later. A runtime that a cold boot worker builds and snapshots (a patched load, a
+  snapshot restore) never sees it: use `coupled-run` for a probe from reset.
+
+### R12 checks 1 and 2
+
+The inputs are `tools/emulator/pc_probe_r12.json` (four specs: `dt2-check1`, `dn2-check1`, `dt2-check2`, `dn2-check2`; the PCs
+are the hook sites of `ports/dt2-1.17.toml` and `dn2-1.12.toml`, listed in each spec's `note`) and
+`tests/scenarios/r12-probe.json` (`r12-check1-*` and `r12-check2-*`). Build `coupled-run` once for each device, then run the
+four commands from the repository root. The stock images are `firmware/Digitakt_II_OS1.17.syx` and
+`firmware/Digitone_II_OS1.12.syx`; `--cold-base` takes the image's own SHA-256.
+
+```text
+DT2=$(uv run python -m tools.emulator.coupled build --device dt2 | tail -1)
+DN2=$(uv run python -m tools.emulator.coupled build --device dn2 | tail -1)
+D=firmware/Digitakt_II_OS1.17.syx; N=firmware/Digitone_II_OS1.12.syx
+SC="--scenarios tests/scenarios/r12-probe.json"; PP=tools/emulator/pc_probe_r12.json
+
+# check 1: stacked IPL of every task switch
+$DT2 --syx $D --dsp zero --cold-base $(shasum -a 256 $D | cut -d' ' -f1) $SC --scenario r12-check1-dt2 \
+     --pc-probe $PP:dt2-check1 --out out/runs/r12-probe/dt2-check1.json
+$DN2 --syx $N --dsp zero --cold-base $(shasum -a 256 $N | cut -d' ' -f1) $SC --scenario r12-check1-dn2 \
+     --pc-probe $PP:dn2-check1 --out out/runs/r12-probe/dn2-check1.json
+
+# check 2: first fire of the vtable-only hooks, value_class, main-OS entry, UI sites, param_code callers
+$DT2 --syx $D --dsp zero --cold-base $(shasum -a 256 $D | cut -d' ' -f1) $SC --scenario r12-check2-dt2 \
+     --pc-probe $PP:dt2-check2 --out out/runs/r12-probe/dt2-check2.json
+$DN2 --syx $N --dsp zero --cold-base $(shasum -a 256 $N | cut -d' ' -f1) $SC --scenario r12-check2-dn2 \
+     --pc-probe $PP:dn2-check2 --out out/runs/r12-probe/dn2-check2.json
+```
+
+Each run boots the stock image from reset with SSI paced (about 850 million instructions to ready), then plays its scenario.
+Estimate, not measured: a zero-DSP run is about 2.2 times real time, so a run takes 1 to 2 minutes (the boot about 15 s, check 1
+about 15 s of play, check 2 about 14 s of play, 30 to 40 s wall), and the build of `coupled-run` comes first when it is not built. A probe on a PC
+that is hit about 1,500 times per second (check 1) costs one observed-PC call per hit and keeps the fast paths. Read the result in `pc_probe` of each report:
+
+- Check 1: `probes[0].by_frame` is the histogram by (vector, stacked IPL). Controls: `count` above 0, and vector 191 present.
+  A row with `stacked_ipl` of 2 or more means a task switch can enter from an interrupt handler (design outcome in section
+  13.2). No such row: the stub is load-test-jump and the unload rule holds.
+- Check 2: per probe, `hits[].icount` against the `main_os_task` probe's first `icount` (before or after main-OS entry), and
+  `by_task_ipl` for the task and IPL of each hit. `param_code.entry` has the return address in `hits[].stack[0]` of each of the
+  first 8 callers.
+
+Scenario limits against the design text: the scenarios drive the panel and MIDI DIN. USB MIDI and a card load after ready are
+not scenario events, so check 1 has the MIDI DIN note and the card of the boot only (add `--card-image FILE` for a card).
+Check 2 uses FUNC+SRC for the machine list and FUNC+FX for the FX view (the FX key alone does not open it on DN2); on a device where that is not the list, the SRC page and the hooks of the list
+still fire from the page, and the report shows which probes had no hit.
 
 ## Instruction spans (ColdFire)
 
@@ -463,6 +563,29 @@ Stock DN2 1.12, `trig1-tap-release` from the ready snapshot, `--dsp sharc`, `--s
 So a test can check that a build survives a lost note-off. It drops the frame with the note-off, and checks that no
 voice sounds at the end.
 
+## Sink channels of the runtime (a sink owner)
+
+The runtime has two numbered sink channels, `DK_SINK_LOG` (0) and `DK_SINK_SPAN` (1) (`<dk/core/sink.h>`). A module or service becomes the owner of
+a channel by calling `dk_sink_set(channel, sink)` (an import, runtime 0.7.1). The runtime names no owner and no producer kind.
+
+- `log`: the sink gets `void sink(const dk_log_ev *e)` for every event the runtime logs, before any filter. The old `dk_debug_log_sink_set` still works and
+  is independent; the debug module may move to this channel later (it is not changed now).
+- `span`: the sink gets `void sink(const dk_span *s)`, a record `{owner, cycles}`. The runtime emits it from its ColdFire call sites (module ticks, service phases, polls), and the debug module owns the channel
+  (clock: the stock DTIM0 counter). The host reads the debug module's span table with the debug commands PROFILE_STATE (0x1e) and PROFILE_READ (0x1f), next to
+  LOG, PEEK and LOGCFG.
+- A sink runs in the producer's task with interrupts masked: short, no waiting, no logging, no imports.
+- One owner per channel. `dk_sink_set` returns 0, `DK_E_BUSY` (another module owns it, nothing changes), `DK_E_RANGE` (no such channel) or `DK_E_CONTEXT`
+  (called outside module code). Setting 0 clears the channel (only its owner may).
+- The runtime clears a channel after its owner's `fini` (and after a failed `init`), so an unload leaves no pointer into freed code. A module that
+  sets a sink in `init` may still clear it in `fini` itself.
+- Cost with no sink: a producer tests one word per channel and calls nothing.
+
+## `MACHINE_TYPE_EVICTED` of the machines service (E5d)
+
+Error event, arguments hash, type, why. The sticky map's own eviction logs it with why 0. The machines service logs it, once for each number until the number is parked again,
+when a number held for an absent module has no voice row and keeps the gap row (the stock sound) instead of MISSING: why 1 a real load took the placeholder row, 2 no voice row is
+free, 3 the DSP did not take the write in 3 passes in a row, 4 the DSP loader stayed busy for 1800 UI passes in a row.
+
 ## Cost when off
 
 - Interpreter loop: `cov`, `hist`, `wwatch` and `pcdump` are tested through one
@@ -483,7 +606,7 @@ voice sounds at the end.
 
 ## MIDI input and output, panel scripts, safety runs (ColdFire, native)
 
-Finding 25. `regions_probe` (`packages/emulator/boot/examples/regions_probe.rs`, built by
+Finding 25. `regions_probe` (`packages/emulator/sharc-peer/examples/regions_probe.rs`, built by
 `tools/coldfire/regions.py probe_binary`) takes, besides the options of `regions.py confirm`:
 
 | option | effect |
@@ -504,13 +627,284 @@ pattern in the region and the card overlay check, and judges it; `suite IMAGE` r
 Frame SHA-256 goldens: `tests/golden/arena_safety_frames.json` (`suite --update-goldens` rewrites them after a firmware or
 script change; check the frames by eye first).
 
+## Names for addresses
+
+Profiles, crash records and PC dumps name their addresses through the address map ([ADDRMAP.md](ADDRMAP.md)): `tools/devtools/addrnames.py` for tools, `patchkit addr` for everything else. `wb profile report` prints a `cf.profile` recording by function ([Profiles](#profiles)), `tools/devtools/pcdump_names.py` adds a `func` column to `pcdump.csv`, `fastcov` and `snapread` use the same lookup.
+
+## Profiles
+
+A profile is one JSON file, schema `dk.profile/1` (design: [profiling.md](plans/profiling.md) section 9; model: `packages/dkprof/src/profile.rs`). JSON is the artifact; the text of a report is a view of it.
+
+- `run`: id, target (`dt2`, `dn2`), firmware, runtime and module hashes, source revision, binary hash, `case_id` and `input_sha256` (the calibration case and the hash of what it played; both optional), and the load table of the run (where each module sat).
+- `clock`: what the counts measure (`emu.cf.insn`), their unit and how they were sampled.
+- `raw`: counters `{cpu, addr, count, series}`. `series` is `pc` or a producer's own (`idle_pc`, `exit_pc`). Raw counters are kept as taken.
+- `metrics` and `overhead`: `{name, value, unit}`, or `{name, unit, na_reason}` for what a target cannot provide. N/A is never a zero.
+- `markers` (`{name, at}`) and `loss` (what the producer could not keep).
+
+`wb profile report FILE` names the raw counters through address maps and adds up self counts per function and per owner (a module id, `runtime`, `firmware`, `unnamed`) for each series and CPU.
+Callers are not credited with their callees. `--map F` (several times) and `--image X.syx` give the maps, `--loads F` a load table (the one in `run.loads` is used too), `--top N` the
+length of the function lists (default 30), `--format json` prints the report as JSON. From a synthetic file (the pluck module, loaded at `0x47e10000`, DSP image at `0xb81000`):
+
+```sh
+node tools/devtools/wb.mjs profile report out/try/synthetic.profile.json --map out/try/pluck.addrmap.json --top 5
+# run synthetic-1 target dn2 clock emu.cf.insn (insn)
+# metrics:
+#   path.run_fast.instructions         812345 insn
+#   host.cpu                           N/A (the device has no host CPU)
+# pc cf by function (top 5; 3 rows, total 175):
+#              160  91.4%  init
+#               15   8.6%  0x40000000
+# pc cf by owner:
+#              160  91.4%  digikit/pluck
+#               15   8.6%  unnamed
+# pc sharc by function (top 5; 2 rows, total 400):
+#              400 100.0%  _pk_render
+# pc sharc by owner:
+#              400 100.0%  digikit/pluck
+```
+
+For a saved capture set, pass the same file you open in Workbench. The JSON report has a `captures`
+array with one report per run. Add `--run-id ID` to get one report with the usual output shape.
+Select one run before supplying a load-table, analysis or calibration override.
+The report includes saved span totals and retained and dropped trace counts where recorded.
+It does not join spans and hotspot samples from different runs.
+
+```sh
+node tools/devtools/wb.mjs --format json profile report FILE.captures.json
+node tools/devtools/wb.mjs --format json profile report FILE.captures.json --run-id ID
+```
+
+`wb profile record --seconds N --out FILE [--image X.syx] [--run-dir DIR]` starts `cf.profile {enable: true}` on the running emulator (the daemon needs the `cf-profile` feature, below; the launcher builds every workbench daemon with it), waits N seconds
+and writes the counters as a profile; with `--image` it also reads the load table of the running image. `--since-boot` skips the start and the wait and reads the counters since an earlier `cf.profile {enable: true}` (read a paused emulator to get a stable state). A real run, 4 s of a DT2 1.17 image with the runtime (no modules loaded; the dev map adds firmware names):
+
+```sh
+cargo build --release -p digi-control --bin digi-emud --features cf-profile   # a daemon with the profile (mise run wb and the launcher do this already)
+target/release/digi-emud out/try/rt.syx --free     # from the repository root: its socket is out/native/run/current.json
+node tools/devtools/wb.mjs profile record --seconds 4 --image out/try/rt.syx --out out/try/real.profile.json
+# out/try/real.profile.json: 371 counters over 4 s
+```
+
+`wb profile spans [--start|--stop|--reset] [--out FILE]` reads the runtime span counters of a device (or an emulator with a MIDI port) over the dk-session link: the flag sets the counting first (`--start` resets the counters, then starts), then it reads the spans (modules, the phases `early`, `late`, `last`, and polls) and prints one row each. With `--out` it writes a `dk.profile/1` with `spans` (`owner`, `kind`, `name`, `calls`, `sum_ticks`, `max_ticks`) `span_clock_hz` and `span_elapsed_ticks` (the ticks the counters were gathered over: `sum_ticks / span_elapsed_ticks` is the share of the CPU). `raw` stays empty because spans do not sample PCs. It takes `--port` and `--bin` like the other device commands. The numbers below are an example:
+
+```sh
+node tools/devtools/wb.mjs profile spans --start                    # start counting
+node tools/devtools/wb.mjs profile spans --out out/try/spans.profile.json
+# running, 132000000 Hz
+# name         calls  total ms  mean us  max us
+# early        812    41.200    50.7     91.0
+# digikit/pluck 812   120.500   148.4    210.0
+# out/try/spans.profile.json: 2 spans
+```
+
+### Calibration (`wb profile calibrate`)
+
+Calibration fits the factor between what a device measured and what the model (the emulator) counted ([profiling.md](plans/profiling.md) 13.2). It needs no device: the inputs are profiles
+already captured, a device one and an emulator one per case, each with `run.case_id` and `run.input_sha256` and the DSP stats rows (`dsp_rows`, `dsp`) and/or `spans`. The fit runs in Rust
+(`packages/dkprof/src/calibrate.rs`, through `dkprof.wasm`), so `wb`, the workbench and patchkit use one code.
+
+```sh
+mise run wasm:dkprof                    # once: apps/web/public/dkprof.wasm
+node tools/devtools/wb.mjs profile calibrate fit --device dev-shot.json --device dev-pluck.json --model emu-shot.json --model emu-pluck.json \
+  --block-cycles 666784 --model-id <daemon sha256 or core fingerprint> --out cal.json
+# # dk.calibration/1 device dn2 firmware ff model ? block 666784 cycles
+# dsp: factor fit 2.0000 budget 2.0000 (device cycles per model instruction)
+#   error (worst-case pairs): n 2 mean +0.00% worst under 0.00% leave-one-out worst 0.00% (budget 0.00%)
+#   steady means: n 1 mean +0.00% worst under 0.00%
+#   spread 0.0%
+#   stock: avg 394000 max 394000 over 1 cases (the budget uses max)
+# cal.json: 3 DSP pairs, 0 ColdFire pairs, 0 refused
+node tools/devtools/wb.mjs profile calibrate report cal.json [--model-profile emu-shot.json]   # the same text; with a model profile also its estimated cycles
+node tools/devtools/wb.mjs profile report emu-shot.json --calibration cal.json                  # the report, then estimated device cycles per DSP row
+```
+
+Pairing. Several captures of one case (`--device` and `--model` repeat) are merged: counters add up, largest values stay largest. A device and a model case must agree on target, firmware, the module
+hash lists and the input hash; a row (DSP) must have equal calls per block, a span owner equal calls. A case or row that does not pair is not fitted and is listed under `refused` with its reason
+(`unpaired`, `key mismatch`, `call-count mismatch`); a file with no pair at all is an error.
+
+Fit. DSP: one factor per device, `cycles ~ f * instructions`, from the worst-case statistics (largest call, largest block). `fit` minimises the squared relative error, `budget` is the worst observed
+ratio, so it never underpredicts a measured pair. Steady means are paired apart (`steady`) and do not enter the fit. `error`: `n`, `mean` of `(f*insn - cyc)/cyc`, `worst_under` (the fit factor), `loo_worst`
+(each row of each case predicted by a fit without it) and `loo_budget_under` (the same with the others' budget factor); both are null, and the text says `n/a (one group)`, with fewer than two (case, row) groups. `spread` is the worst ratio over the best, minus one; above 10% the report warns
+that one factor is too coarse. `stock`: only from module-free cases, device runs with a `dsp` header and no row with calls (no machine or effect playing); each gives its header's largest stock block delta directly, nothing is subtracted. `avg` and `max` run over those cases (the budget uses `max`). Without such a case `stock` is null and the file warns `no module-free case: budget keeps the configured stock_busy`. A module-free case has no `run.module_sha256`, a `dsp` header and no row with calls (a case with modules loaded but no rows does not count), needs no model profile, and feeds the stock only after its key checks pass. A firmware hash on only one side of a pair is refused (`firmware missing on one side`); a span clock of 0 and a span kind that changes between captures are refused too.
+ColdFire: the same over span owners, in time (ticks over `span_clock_hz`, in microseconds), without `stock`. An emulator-against-emulator run gives exactly 1.000 and warns that it is no
+device calibration (`key.device_unit` is `insn`).
+
+`dk.calibration/1` (JSON): `key` {`device`, `firmware_sha256`, `block_cycles`, `model`, `device_unit`}, `sources` (file name and sha256 of every profile), `dsp` and `cf` each {`factor` {`fit`, `budget`},
+`error`, `steady`, `spread`, `stock` (dsp only), `pairs` [{`case`, `id`, `stat`, `model`, `device`, `ratio`, `error`}]}, `refused` [{`section`, `case`, `id`, `reason`}] and `warnings`.
+`patchkit budget` does not read this file yet.
+
+`cf.profile` keeps the 400 heaviest rows of its tables, which the artifact records under `loss`.
+
+### Calibration runs (`wb profile calibrate run`)
+
+A calibration run plays a fixed setup on a target and captures the DSP stats window and the runtime spans, so a device and the emulator can be paired case by case (plan: [profiling.md](plans/profiling.md) 13.2). The code is shared: formats, resolver and runner are in `packages/workbench-core/src/calibration/` (no connection, no module-level state), the pieces they play on are given by the caller (`wb`: `tools/devtools/wb_calibrate.mjs`; the Profile pane later). The files are in `devices/calibration/`.
+
+```sh
+node tools/devtools/wb.mjs --emu profile calibrate run --profile light            # the running emulator (mise run emu:serve)
+node tools/devtools/wb.mjs --emu profile calibrate run --profile modules --case pluck --case freqshift --trace --out out/runs/calibration/modules
+node tools/devtools/wb.mjs --port Digitakt profile calibrate run --profile heavy --out out/runs/calibration/dt2-heavy
+```
+
+`--profile` is a file or a name in `devices/calibration/profiles/` (a name wins over a folder of the same name: `modules` is the profile, not `modules/`). Use `--case ID` more than once to replay a subset in profile order. Module cases are those of the modules whose `module.toml` lists a port of the target's device (tb303 is Digitakt II only). Captures go to `--out` (default `out/runs/calibration/<time>-<profile>-<target>/`) as `<case>-<n>.profile.json` with a `run.json` that lists them; the summary prints one line per capture. Each capture is written as it finishes and `run.json` is updated every time, so a failed run keeps what finished (and `run.json` carries the error). Every capture has `run.firmware_sha256`, the INFO stock hash prefix used to pair old and new captures. When the prefix uniquely matches the device registry, `run.stock_firmware_sha256` also holds the full hash for hotspot lookup; a target that reports none is refused unless `--allow-unidentified-firmware` is given. The exit status is 1 when a case was skipped (the target lacks something it needs; the line says what) or the run failed.
+
+For an effect case, `setup` checks the running route and row reported by the
+runtime's MODULES reply before the capture window. It accepts `route = "default"`, `"master"`, or
+`"send"`. Configure the route in **FX ROUTING** before capturing. Set the
+module's own send amount when the workload needs wet audio on the send
+route. The stock delay send controls the stock delay. The capture records the
+resolved workload and the dispatch rows in `run.workload` and `run.dispatch`.
+It keeps an effect measurement only when its exact DSP row counted calls
+and its route still matches.
+
+Use `--trace` or select **Include ColdFire trace** in the Workbench
+Calibration tab to keep a bounded event trace with calibration captures.
+The retained trace and its markers share the runtime span clock. The marker
+at zero is the counter reset. **Workload end** is sampled after the requested
+stimulus window, and **Capture stop** includes the wait for the final DSP sweep.
+The aggregate counters remain available when the event buffer fills.
+
+
+Preparation on the device: INPUT FROM is USB or MIDI+USB and RECEIVE NOTES and RECEIVE CC/NRPN are on (SETTINGS > MIDI CONFIG > PORT CONFIG), and the tracks have their factory MIDI channels (CHANNELS; the `[midi]` table of the device file, section 8.4 of the manual: DT2 tracks 1 to 8 on 1 to 8, DN2 tracks 1 to 16 on 1 to 16). Nothing reports these settings to the host, so the runner cannot check them; a note that makes no sound is how a wrong one shows. The project must have its factory filter (Multi-Mode); the filter type cannot be set over MIDI. The device needs the debug module (spans, DSP stats) and, for `key` and `turn` steps, the remote module.
+
+**Step files** (`devices/calibration/steps/NAME.toml`, `schema = "dk.steps/1"`): `name`, `description`, `[args]` (defaults) and an ordered list of `[[step]]`, each with an `action` and named fields. A string `{arg}` is replaced by the caller's value (the file's default, then the `args` of the reference); a field that is only `{arg}` keeps its number type. Tracks are `3`, `1-16`, `1,3,5-8` or `all` (every track the device lists a channel for: DT2 8, DN2 16); the channel comes from `[midi] track_channels` of the device file. Actions:
+
+| Action | Fields |
+|---|---|
+| `midi.note`, `midi.note_off` | `track`, `key` (0 to 127), `velocity` (1 to 127, default 100); `midi.note` also `retrigger_ms` (default 0, off): the runner presses the key again every that many ms of every wait of a capture (the warm-up, the window, and the `wait ms` steps inside a marked window), for a voice that ends by itself; the time the press takes on the clock (the drain wait) is taken off the next period, so the period is `retrigger_ms`; a row with fewer calls than half the blocks is logged |
+| `midi.cc` | `track`, `param` (a name of `[midi.params]`) or `cc`, `value` (0 to 127) |
+| `midi.nrpn` | `track`, `param` or `nrpn = [msb, lsb]`, `value` (0 to 127, mapped onto the whole 14-bit range: 0 is 0, 127 is 16383) or `value14` (0 to 16383) |
+| `midi.start`, `midi.stop` | none |
+| `key`, `turn` | `key` (name or code), `hold_ms`; `encoder`, `by` (remote module) |
+| `setup` | one of `machine = TYPE or module id`, `filter = TYPE`, `effect = module id`. Machine and filter take `track`. Effects take optional `route`. The runner calls the rig's setter (`trackSetup` of dk-session: the SETUP command of the debug module, awaited on its SETUP_DONE event; `track` is 1 to 16). A machine given as a module id is the first machine type the runtime reports for that module (`MODULES`), read when the step plays; `module#n` is its n-th (counted from 1, in the order of the module's `[[machine]]` entries). An effect step checks the running route and dispatch row through MODULES. A rig without the debug log skips the case. The request is repeated while the module answers E_STATE (its track watch has no baseline yet, about 2 s after a boot) |
+| `wait` | one of `ms` (emulated time on the emulator, wall time on a device), `event = KIND` with optional `match = { field = value }` and `within_ms` (the runtime log, `RuntimeEvents.until`), `drained = true` (a target that tells) |
+| `shot` | `name` (a target with a screenshot; `wb` has none yet: the case is skipped) |
+| `capture` | `mark = "start"` or `"stop"`: the steps between them are the measured window of each repeat, in place of `capture_s` |
+
+`[midi.params]` of `devices/digitakt-ii.toml` and `devices/digitone-ii.toml` names `track_mute`, `track_level`, `filter_attack`, `filter_decay`, `filter_sustain`, `filter_release`, `filter_freq`, `filter_reso`, `filter_env_depth`, `filter_base`, `filter_width`, `amp_release`, `send_delay`, `send_reverb`, `send_chorus` with their CC and NRPN (manual appendix B and C). An inline step list in the `dk:dev --keys` syntax (`tap:KEY,wait:MS,turn:ENC:BY,shot:NAME`, `*N`, `#`) is accepted as `inline = "..."` in a profile and gives the same steps (`parseInlineSteps`; the Python parser of `dk:dev` is unchanged and stays the one `dk:dev` uses; `wait:KIND` waits for a log event). After a MIDI step the runner waits until the target has taken it (on the emulator the controller's input queue is empty; on a device the write to the bridge has been flushed, and a dead bridge or write error fails the step). A MIDI step goes out through `MidiOut` (`packages/dk-session/src/midi-out.ts`); on a device `wb` starts the `dkmidi` bridge with `--raw`, which also passes channel messages and start/stop (without it the bridge drops them), whole messages only.
+
+**Profiles** (`devices/calibration/profiles/NAME.toml`, `schema = "dk.calprofile/1"`): `name`, `description`, `warmup_s`, `capture_s`, `repeats`, `modules` (module ids the profile may load; installed once) and `discover = "modules"` (the module cases come from the `calibration.toml` of each module, `schema = "dk.calcase/1"`: `id`, `module`, `steps`/`args` or `inline`; they follow the profile's own cases, sorted by id, and add their module to `modules`; the repository keeps no module id outside the module's directory), `setup`, `teardown` and `module_teardown` (a step reference played after `teardown` in each discovered module case, also after a failure; `modules` uses `reset-machine`, which sets the stock machine, type 0, on the case's own track; if that is refused the run stops before the next case unloads the module) (a step reference: `{ steps = "NAME", args = {...} }` or `{ inline = "..." }`) and `[[case]]` with `id`, `steps`/`args` (or `inline`), `modules` and an optional `teardown` (a step reference played after the profile's `teardown`) (the content modules loaded for that case and nothing else; default none). A case that cannot run (the target lacks something it needs) is decided before anything is installed or loaded: its modules are not installed and nothing is selected for it. A module case whose capture has no DSP row with calls fails as a case: the capture is not written, `run.json` lists the case with `failed` and the reason, and the run goes on with the next case (the exit code is 1 as for a skipped case). A discovered module case calibrates the first machine of its module; a profile's own case names another with `machine = "module#n"` (`kernels`). A profile must have the case `stock`, which loads no modules (the fit takes the stock load only from a case with a `dsp` header and no `dsp_rows` with calls: the module-free rule of `calibrate.rs`). Shipped: `kernels` (stock, then one case per machine of the test module `test/cal-kernels`, a module-free case between two (the restart ends the never-ending voice) (`tests/fixtures/modules/cal-kernels`): five synthetic SHARC+ kernels, alu, dm, mem, branch and mix, each running a fixed number of instructions per render call (20,050, 19,959, 19,244, 20,046 and 19,956; the instruction mix of each is in `src/dsp/cal_kernels.s`, the counts are pinned by `tests/kernels.rig.test.ts`), so factors can be fitted per kind of instruction, with real modules as validation; pack it for the device and put it in the library first: `module:pack -- test/cal-kernels --device dn2 -o DIR/dn2/test/cal-kernels.dkm`, then `--library DIR`), `light` (one track, held note, default Multi-Mode filter), `heavy` (every audio track holds a note, amp release 127, delay, reverb and chorus sends 100) and `modules` (stock, then the case each calibration module ships in its directory: tb303, pluck, analog, shot, bd and the freqshift effect; the machine cases put the module's machine on track 1 with `setup` and put a stock machine back; the freqshift effect case is skipped: SETUP sets no effects).
+
+**Known start.** A run starts from a known state and restores nothing at its end. Before the first case it sets every track the profile uses (SETUP machine and filter tracks, and the tracks of its MIDI steps) to the stock machine, type 0, which is valid in every boot, whatever the project had there (a run-time machine whose module is not loaded in the new boot would be refused when put back); every case teardown (`reset-machine`) sets type 0 too, so a track never keeps the type of an unloaded module. The Profile pane says so before Run ("Calibration uses track 1 and leaves it on the stock machine"). If a track cannot be put on the stock machine the run refuses up front with a hint, before anything is installed or loaded. The other starting states are normalised the same way: counters left running are stopped before the run counts; a module selection or modules left loaded are replaced by exactly the case's modules plus the debug module (a case whose modules are already the loaded ones does not restart, the tracks are still reset); a case whose steps need the debug log is skipped with its reason when the log cannot be read (the debug module is not selected). A project's LFOs, p-locks and sound settings on the used tracks are not touched: run on a scratch project.
+
+**Flow.** All steps are resolved for the device first (a wrong name, a track without a channel, a value out of range fails before anything is played). Then, per case: make the loaded content modules exactly the case's (a restart through `restartDevice`, only when they differ, after the runtime has called the running boot stable (its `STABLE` event, or an event `stable_blocks` of the boot record past the boot's start when the ring dropped it, waited for 1.5 times that long plus 5 s: the runtime counts boots that were not stable and a second one in a row starts in safe mode with nothing loaded; if the boot is not seen stable the run stops with that message), with the debug module kept in the selection (the run waits on its log), and then until the runtime's own `MOD_LOAD` (and `MOD_DSP` for a DSP part) events of every module of the selection have come (`RuntimeEvents.untilModulesActive`, no list poll; a refusal is `ModuleLoadRefused`: when the case declares `needs = ["core/sample-pool"]` in its `calibration.toml` and the `MOD_NEEDS` of the refusal names that core module, the case is skipped with the reason that the image lacks it); the stock case therefore runs with none loaded, which the runner checks against `MODULES` and refuses otherwise, and refuses a stock capture that counted module rows); play `setup`, the case steps (those before `capture start`) once; per repeat: start the counters (spans reset and started, DSP stats cleared and started), warm up `warmup_s`, clear (a new generation), play the window or wait `capture_s`, then wait for the `DSP_SWEEP` event of the clear generation (the runtime logs it when the mirror publishes a complete sweep, about every 50 blocks; no polling, a wall-clock guard only), stop the counters (also after a failure), then read the spans and the newest complete DSP sweep, so both describe one frozen window; then the rest of the steps and `teardown` (also after a failure). Each capture is a `dk.profile/1` with `run.case_id`, `run.input_sha256` (SHA-256 of the profile timing, the resolved operations with channels and numbers, and the case modules), `run.module_sha256` (the SHA-256 of each loaded `.dkm` file), `spans` and `span_clock_hz`, and, when the target has PROFILE_DSP, `dsp` (`unit` `insn` on the emulator, `cycles` on a device; `blocks`, `max_stock_block_delta`, `overruns`) and `dsp_rows` (`row`, `kind`, `calls`, `sum_cycles`, `max_call`, `max_block`; rows with no calls and no maximum left out). A debug module without PROFILE_DSP (an older one) gives spans only and the run says so. The profiles `light` and `heavy` play stock engines only, so their captures have no DSP rows with calls: `calibrate fit` pairs their ColdFire spans (an emulator against itself gives exactly 1.000) and finds no DSP pair until the module cases run. `DSP_SWEEP` exists only while the counters run (it is logged once per sweep, 30 a second, while counting): counters left on by a run that could not stop them would fill the log and make `RuntimeEvents` report lost events for every reader, so the runner and the stats source stop any counters left on before they count, and refuse to run a profile with module cases on a target without PROFILE_DSP (only an unknown-command answer, `E_PROTO`, means that; any other error stops the run). The device is named from the runtime's INFO (`port`), which the debug module's host needs anyway.
+
+**DSP block costs.** In the desktop workbench, select **Include DSP block costs** in the Performance drawer's capture controls, open **Performance → DSP blocks**, start a recording, play the pattern, then stop. While the pane is open it updates once per second from the latest complete sweep. Stop freezes the final reading. The chart ranks active machine and effect dispatch slots by estimated mean cost per audio block and shows the largest measured block for each. Calls and worst-call cost help distinguish a frequently called module from an expensive single call. Hardware reports cycles and the emulator reports instructions. The checkbox defaults to off and stays fixed during a recording. On Digitone II, the diagnostics stream uses an effect-bus audio slot while recording. The device sends each sweep in pages, so the row total and block count can differ by roughly 50 blocks or more, especially affecting short recordings. The block count and overruns cover the newest complete DSP stats sweep of the recording. A stock-only pattern can produce block counts with no active module rows. Profile export includes the same sweep in `dsp` and `dsp_rows`.
+
+**ColdFire trace capture.** Select **Start recording** in the Performance drawer. The **Profile** tab has a shortcut to those controls. Stop the recording and open **Performance → Timeline** to inspect one lane per ColdFire owner, hover for event timing, and zoom around the pointer to separate short calls. The event and drop counts describe the retained portion of the recording. Choose **Save capture…** in Performance after stopping. With runtime 0.11.3 and a trace-capable debug module, the file includes a `trace` object. Each event has a numeric owner matching the span table, a decimal-string `startTicks` relative to capture start, and a numeric `durationTicks`. Divide ticks by `trace.hz` for seconds. The device retains up to 256 events and counts omitted events in `trace.dropped`. The aggregate counters continue through Stop, including after the event buffer fills. Earlier debug modules and runtimes support the interval view and aggregate exports. In **Performance → Timeline**, choose
+**Open capture…** to inspect a `dk.profile/1` or a saved
+`dk.calcaptures/1` run, even with no active target. When a file contains several
+runs, use the **Capture** selector. Profile, Spans, DSP blocks and Timeline share it.
+**Spans** shows calls, total and max time, and CPU share for the whole saved window.
+Current captures do not include interval history, so the rolling interval plot is live only.
+Available hotspots open in Profile. DSP blocks uses the saved units and names
+the module and route when the dispatch matches the row. Block costs without DSP
+PC samples cannot name individual routines.
+
+Click a workload marker to zoom around it. **Fit events** focuses the retained
+events and **Fit** shows the full trace window. A partial trace has omitted
+events. Empty time after the last retained call does not establish idle time.
+Use **Show current target** to return to the live target.
+
+**Profile pane (desktop workbench).** The Profile tab of the right-hand column (Emulator page and Remote page; `apps/desktop/ui/src/profile/ProfilePanel.tsx`) shows the same span counters live. The Performance recorder starts the spans (`PROFILE_STATE`) and emulator ColdFire counters when supported. On an emulator built with SHARC profiling support, select **Include DSP hotspots** before Start to collect DSP instruction counts. The DSP block option depends on the debug runtime and is separate from PC sampling. Both options start off. Syntakt's main CPU spans do not require profiling its audio peer. Stop freezes the collected measurements. While the tab is shown and the target records, the pane reads once per second (`profileAll`, one read at a time). Shares are `sum_ticks / elapsed`: `PROFILE_STATE` reports the elapsed ticks of the span clock (a u64 after the row count; the module adds the 32-bit counter difference at every UI pass and every `PROFILE_STATE`, so one read per wrap period, about 32.5 s at 132 MHz, keeps it exact). The graph keeps the last 60 readings, coloured by the owner type (machine, effect, tool, runtime). A maximum of at least 100 µs and more than 4 times the mean shows red. The DSP section on the emulator lists the modules' instructions per DSP block against the device headroom (`DSP_COST` of CAPACITY), from `sharc.profile` named with the maps of the running image; on a device it shows the whole-block load of the newest HEALTH event. **Save capture…** writes the available measurements to one `dk.profile/1` with the same builder as `wb profile` (`packages/workbench-core/src/profile/profile-artifact.ts`). The Profile table can show the saved run's span shares as one more column. Phase names come from `[spans]` of `sdk/sdk.toml`. The poll set changes at run time (`dkrt_poll_add`), so the runtime records the owner of each slot (the module record whose code holds the function, or the firmware image) and `PROFILE_STATE` reports it with the function address (`dk_debug_poll`); a row reads `<module> poll` or `runtime poll`, with `: <function>` when the address maps name the function (the Log pane's maps), and `poll N` only when the debug module is too old to say. Without the debug module the pane offers to add it (Transfer upload, one restart). `node tools/devtools/ui_shots.mjs profile-emulator profile-device profile-nodebug` draws the three states over the preview (`preview/profile-backend.mock.ts`; the first two take a minute for the 60 s graph).
+
+**DSP profile (`--cpu sharc`).** A daemon built with `--features sharc-profile` (it implies `sharc` and `play`: a DSP core and its audio output) answers `sharc.profile` ([CONTROL.md](CONTROL.md)).
+`wb profile record --cpu sharc --seconds N --out FILE [--image X.syx] [--run-dir DIR]` starts the counting, waits N seconds (a live emulator) and writes the counts as a profile
+(`clock.unit` `insn`, metrics `sharc.blocks`, `sharc.insn.*`, `sharc.coverage`); `--since-boot` skips the start and the wait and reads the counts since an earlier
+`sharc.profile {enable: true}` (a paused emulator). `wb profile report FILE --map SHIP.addrmap.json --map MODULE.addrmap.json --loads LOADS.json` names the DSP functions of a module and, with
+`--analyse ID=MODULE.dkm:DSP.dko.json`, adds the counts inside each DO loop of its DSP code (`dksharc`): a counter belongs to the innermost loop that holds it, so a loop's row
+does not include the loops inside it. With the `sharc.blocks` metric every row also shows instructions per DSP block. A fast-tier or block-tier dispatch is credited whole to its
+entry PC, so a count says which region the instructions belong to, not which instruction in it.
+For a fixed module workload, the [SDK worked example](../sdk/dsp/README.md#profile-a-module-and-compare-two-builds)
+uses `rig_profile.ts` for machines and effects. Open its `profile.json` in Workbench **Performance → Open capture…**
+or pass it to `wb profile report`. Rig profiles carry the symbol placement and, when available, DO-loop analysis
+from the producing build. Workbench uses the same report code for the function and loop counts. Running-target
+exports keep raw PCs and include the firmware identity and a stable module load table when those were
+available. Use the matching firmware and module maps to name a running-target capture at the CLI.
+
+A real run (DN2 1.12 with digikit/pluck, 5487 DSP blocks, one note from the module; the daemon with `sharc-profile`, the report with the ship map and the module's map from `patchkit pack --addrmap`): the whole DSP
+takes 332,039 instructions per block (the stock firmware, near the 334,529 of `stock_busy`), the module 247.4 per block; its `_pk_render` loop (32 passes) takes 200.7 per block, its `_pk_coef` 33.5.
+The map holds assembler labels as functions (`_pk_run` inside the render routine), so the function rows follow the map and the loop rows follow `dksharc`.
+The SHARC-only rig is a second producer of `dk.profile/1` (`tools/devtools/rig_profile.ts`: one conformance case, exact instructions per pc, no emulator; [TESTING.md](TESTING.md), "SHARC-only rig").
+`wb addrmap lookup` and `wb module analyse` ([ADDRMAP.md](ADDRMAP.md#usage), [dksharc](../packages/dksharc/README.md#usage)) use the same `dkprof.wasm`.
+
+The workbench runs the same code from the Calibration tab of the right-hand column (`CalibrationPanel.tsx`, `CalibrationSection.tsx`; the run state is owned by the panel, so switching tabs never aborts a run): choose a profile, press Run on the pane's target (the emulator or a device), and Stop ends the run at its next wait after the teardown of the case in progress has played; the captures made are kept. The table shows per case and DSP row the worst block and worst call of the emulator (instructions) and of the device (cycles), and after a fit the factor and the error of each pair. **Save run…** writes the captures of this target as one `dk.calcaptures/1` file (`{ "schema": "dk.calcaptures/1", "profile": NAME, "side": "emu"|"dev", "captures": [dk.profile/1, ...] }`). **Load file…** reads such a file, or the `<case>-<n>.profile.json` files of `wb profile calibrate run` (all of one side), as the run of that side. **Fit with…** loads a file as the missing side and fits it with the run of the other side (`dkprof` `calibrateFit`; plain **Fit** when both sides are there); the section shows fit, budget, worst under, n, leave-one-out (`n/a` with one row), refusals and warnings. **Save calibration…** writes the `dk.calibration/1` file. Cases that press keys, or need SETUP without the debug log, are skipped with their reason, as on the command line. **Active calibration** (top of the tab): **Load…** reads a `dk.calibration/1` file for the target's device (a file of another device, with no DSP fit, or with `device_unit` `insn` is refused with the reason); it is kept per device in the app's KeyValue until **Clear**. While one is active the Profile tab's DSP section (emulator target) adds a header line (`calibrated: DN2 1.12, fit 1.31 ±1.3 %`) and the columns `est. cyc/blk` (instructions times the budget factor) and `% block` (against `key.block_cycles`, `–` when the file has none); rules in `workbench-core/src/profile/calibration-active.ts`. A device target measures cycles itself and gets no estimate. Preview: `mise run wb:preview` with `node tools/devtools/ui_shots.mjs profile-calibration-fit profile-calibration-run profile-calibration-active profile-calibration-estimate` (made-up numbers).
+
+## Render and compare audio from the CLI
+
+Build the two rig tools after repository setup and the local generated core are ready.
+
+```sh
+pnpm nx:pilot run patchkit:cli
+pnpm nx:pilot run sharc-rig:build
+```
+
+Render a named conformance case on the same adapter and target you want to measure again later.
+For effects this is the stereo rig master insert, not a device send. A machine render records
+the mono voice output. Neither requires MIDI or a running Workbench.
+
+```sh
+mise run wb:cli -- module render digikit/freqshift --device dt2 \
+  --case params/all-mid/noise --out out/runs/shift-baseline
+```
+
+The default `--emit wav,json` writes `audio.wav` (original float32 PCM) and `render.json`
+(workload and build hashes, settings, rate, frames, audio measurements, and rig instructions per block).
+Use `--emit wav` or `--emit json` to keep one. `--format json` selects the terminal response, not the files.
+Keep the WAV next to its manifest if you move them. JSON-only files keep the evidence but not the samples.
+
+Render the candidate with the same device and case to a different folder. If the candidate is in another worktree,
+run that worktree's command or pass its source tree through `DIGI_RIG_ROOT` with `DIGI_SHARC_RIG` and `DIGI_PATCHKIT` pointing at the chosen binaries.
+
+```sh
+mise run wb:cli -- audio compare out/runs/shift-baseline/render.json \
+  out/runs/shift-candidate/render.json --out out/runs/shift-compare --format json
+```
+
+The comparison writes `comparison.json` and a waveform, difference and band-spectrum plot per channel
+when both have PCM at the same sample rate, channel count and duration. It checks the WAV hashes and flags
+differences in recorded workload or device. It never aligns, resamples or level-matches samples for you.
+It also accepts bare mono or stereo PCM or float32 WAVs, with no claim that their workloads match.
+With JSON-only input it compares the saved levels and fingerprints without making sample-level claims.
+Band spectra describe the first analysis window. The report gives its frame count, and level
+measurements cover the render beyond that window.
+The plots and fingerprints summarize evidence. They do not establish that one version sounds better.
+
+### Listen to a send return
+
+The rig can generate two repeatable scenes for an effect. `send/percussion` sends a syncopated hat and
+`send/texture` sends a held stab. Both use the same dry kick and bass, at 132 BPM.
+Run the same scene twice at the same settings, with just the send amount changed.
+
+```sh
+device=dt2
+base=out/runs/shift-send
+mise run wb:cli -- module render digikit/freqshift --device "$device" \
+  --case send/percussion --params-f32 20 --send-amount 0 --profile-block 375 --out "$base/dry"
+mise run wb:cli -- module render digikit/freqshift --device "$device" \
+  --case send/percussion --params-f32 20 --send-amount 96 --profile-block 375 --out "$base/current"
+mise run wb:cli -- audio compare "$base/dry/render.json" "$base/current/render.json" --out "$base/comparison"
+profile_file=$(jq -r '.profile.file' "$base/current/render.json")
+mise run wb:cli -- profile report "$base/current/$profile_file"
+```
+
+`--params-f32` takes the effect's DSP parameter values in their declared units, not MIDI knob positions.
+`--repeat N` repeats the exact source stems 1–8 times in one take without resetting the effect.
+For example, add `--repeat 3` to a `send/texture` render to get about 22 seconds for slow modulation.
+`--profile-block` selects one zero-based block from the actual take. The render manifest names
+the matching profile next to the audio. Its counters cover that block only. The manifest records worst block
+cost for the whole take and a hash of the generated source audio. A dry/current comparison should
+report matching input and different settings. The rig runs the target's send hook, then adds its
+return to the dry master at unity. Send amount zero gives a dry audio reference with the effect
+row still installed. Its cost is not the cost of unloading the effect. These are rig instruction
+counts and modeled audio, not a capture from a physical device or a full firmware mix.
+
 ## Cargo features
 
 | crate | feature | effect |
 |---|---|---|
 | `packages/emulator/sharc` (`coupled`: same names) | `fast-dump` | `SHARC_FAST_DUMP` capture hooks |
-| | `region-profile` | per-entry wall time (`perf.py --regions`; needs `DIGI_COUPLED_FEATURES=coupled-audio,region-profile`) |
-| `packages/emulator/boot` | `cf-profile` | host-time and PC profile of ColdFire |
+| | `region-profile` | per-entry wall time (`perf.py --regions`; needs `DIGI_COUPLED_FEATURES=sharc,play,region-profile`) |
+| `packages/emulator/boot` | `cf-profile` | host-time and PC profile of ColdFire; compiled in, it records only after `cf.profile {enable: true}` (one branch per `run_fast` and `step_chunk` call while off) |
+| `packages/emulator/control` | `sharc-profile` | `sharc.profile`: DSP instruction counts per PC (turns on the engine's `region-profile`) |
 | | `diagnostic-profile`, `-events` | boot event records and profile |
 | `packages/emulator/periph` | `trace` (default) | DT2MMIO trace reader and `mmio-replay`; no runtime hook. Every product crate (`boot`, `card`, `host`, `machine`) takes periph with `default-features = false`, so a product build does not compile it. Turning the default off changes only a direct `cargo build -p periph`. Left as is. |
 
@@ -522,8 +916,8 @@ Read at start-up; defaults are what `tools/emulator/emulator_config.py` and the 
 | variable | effect |
 |---|---|
 | `SHARC_AOT=0`, `SHARC_AOT_DENY` | generated block tier off / blocks denied |
-| `SHARC_FAST_REGIONS`, `SHARC_BLOCKTRANS` | fast region entries, block-translator roots (`@FILE` allowed) |
-| `SHARC_FAST_FALLBACK_REGIONS` | fast roots eligible only when code verification bars their generated entry; DT2 1.17 defaults to `0x1c2607`; an explicit empty value disables the default (`_2` selects the second core) |
+| `SHARC_FAST_REGIONS`, `SHARC_BLOCKTRANS` | fast region entries, block-translator roots (`@FILE` allowed). A loaded DT2 core reads `SHARC_FAST_REGIONS_2` and `SHARC_BLOCKTRANS_2` instead (`GenCore::env_suffix`; `digi_env.slot_env` renames them) |
+| `SHARC_FAST_FALLBACK_REGIONS` | fast roots eligible only when code verification bars their generated entry; DT2 1.17 defaults to `0x1c2607`; an explicit empty value disables the default (a DT2 core reads `SHARC_FAST_FALLBACK_REGIONS_2`) |
 | `SHARC_FAST_AUTO=a,b`, `SHARC_FAST_FOLLOW`, `SHARC_FAST_ONLY` | run-time region selection, extra entries, restrict to listed. `mise run wb` defaults `SHARC_FAST_AUTO` to `4,2,0`; an explicit value wins, and an empty value or `0` turns auto-arming off; Nx tests and `emu:serve` do not get this default |
 | `SHARC_FAST_GEN` | generated lowering; default on; `0` = hand lowering only |
 | `SHARC_FAST_HELPER` | generated helper calls |
@@ -633,3 +1027,98 @@ Results are in `out/runs/devprobe/<time>/`: `capture.wav`, `events.json`, `hits.
 - The remote presses keys only. It does not restart the device.
 - On hardware the panel scan may override remote keys (finding 58). The first run shows it.
 - `--analyse WAV` analyses any WAV, for example an emulator capture, to compare device and emulator.
+
+### Replay the DT2 stock Delay reference
+
+Use this case to compare stock Delay on DT2 1.17 in a running emulator
+and on a physical DT2. It plays the same short 1 kHz sample once with
+no send and once with Delay send 111. The [typed case](../packages/workbench-core/src/reference/dt2-stock-delay.ts)
+uses the existing `DkSession` remote input and wait helpers on both targets.
+The emulator records its internal master PCM. Hardware uses Workbench's
+native CPAL input code in a capture-only bridge, without opening a playback
+device or loading Python. The bridge captures the first stereo pair at
+48 kHz without resampling, and rejects reported overruns/underruns or a
+capture length that indicates loss.
+
+```sh
+mise run wb:cli -- audio reference prepare --out out/runs/delay-probe
+```
+
+That offline command only writes `01-delay-probe.wav` and checks its exact
+SHA-256. To prepare a project, use the separate command for your target.
+
+```sh
+mise run wb:cli -- audio reference prepare-project --emu --out out/runs/delay-session
+mise run wb:cli -- audio reference prepare-project --port "Digitakt II" \
+  --scratch-project "Delay probe" --out out/runs/delay-prep-device
+```
+
+The emulator command builds a new private card seeded with the probe and
+the debug and remote modules. Open `out/runs/delay-session/session.json` in
+Workbench and choose **Start emulator**. The session pins the registered
+stock firmware, found under `DIGI_FIRMWARE_DIR` or `firmware/`. Pass
+`--firmware FILE` to select another copy of the same release.
+
+The hardware command verifies the firmware over MIDI, then uploads the
+probe to a dedicated +Drive folder and verifies the device's content hash.
+A repeat reuses a matching upload and refuses to replace a different file.
+It never loads, saves, or edits the project. `--out` is optional on hardware.
+With it, both targets write `preparation.json`. Use `--format json` for
+machine-readable stdout. Both report `panel-setup-required` and list the
+remaining settings. To check the live state without sending any panel
+input, use the matching runtime 0.13.2 and debug module:
+
+```sh
+mise run wb:cli -- audio reference inspect --emu --run-dir out/native/run --format json
+mise run wb:cli -- audio reference inspect --port "Digitakt II" --format json
+```
+
+The command reads Track 1's sample slot, the loaded sample's native content
+hash and stored size, and stock Delay TIME and feedback in raw firmware units.
+It compares the loaded key to the test WAV converted by `dksample`. The
+capture refuses a wrong or empty slot, or Delay TIME outside `0x0240–0x0340`,
+before sending panel input or opening a recorder. A successful capture keeps
+the observed values, expected sample key and TIME range in
+`validation.observed_before_capture`. The TIME range is a setup check, not a
+tempo readback or a conversion to milliseconds. The WAV remains the check of
+actual echo spacing and decay.
+
+- Boot DT2 1.17 with the digikit debug and remote modules active. Do not load
+  content modules. On hardware use USB AUDIO/MIDI, USB OUT = MAIN and
+  `mise run wb:cli -- audio reference inputs` to find the exact input ID
+  or unique name. On macOS, enable Microphone access for the app launching
+  the CLI. USB inputs can enumerate and return all-zero PCM when that app
+  has no audio-input permission.
+- On hardware, import the staged probe into the scratch project's sample
+  pool and assign it to Track 1 in One Shot. On the emulator, verify Track 1
+  plays the seeded probe. The recorder does not construct a card, transfer
+  a sample, switch projects or save a project.
+- With transport stopped, play the sample from the beginning at original
+  pitch, with the filter open and no modulation. Set all Track 1 sends
+  to zero. Set Track 1 to MIDI channel 1 and allow USB MIDI CC/NRPN input.
+- Use 120 BPM and set stock Delay TIME near a 1/32 note (about 63 ms),
+  FDBK 32 and VOL 110, with ping-pong off and Delay-to-Reverb at zero.
+  Start from the default Delay filters. Use the audio check below to
+  confirm the effective timing and decay instead of relying on knob rounding.
+
+```sh
+mise run wb:cli -- audio reference run --emu --run-dir out/native/run \
+  --scratch-project "Delay probe" --out out/runs/delay-emu
+mise run wb:cli -- audio reference run --port "Digitakt II" --audio-input INPUT_ID \
+  --scratch-project "Delay probe" --out out/runs/delay-device
+mise run wb:cli -- audio reference compare \
+  out/runs/delay-emu/reference.json out/runs/delay-device/reference.json --format json
+```
+
+Use a fresh output directory for each run. The result is `dry.wav`,
+`delay.wav` and `reference.json` (`dk.audio-reference/1`). The case only
+changes Track 1's Delay send and sets it back to zero on exit. The project
+name is an operator declaration. The loaded sample assignment is checked
+against the expected native key, and the firmware identity is checked against
+the target's reported hash. Older reports can still be compared, but may lack
+the sample key evidence. The recording must show a clean
+dry probe and five wet repeats with 58–68 ms spacing and 4.5–7.5 dB loss per
+repeat. Compare two passing reports with matching firmware and fixture
+identity. The pair must agree within 2 ms and 1 dB per repeat. This compares
+the Delay shape, not bit-exact PCM or hardware performance. Timing comes
+from sample positions, not emulator wall time.

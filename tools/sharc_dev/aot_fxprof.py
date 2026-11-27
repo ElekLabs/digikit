@@ -31,6 +31,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 from tools.emulator import coupled  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 from tools.sharc_dev import sharc_dn2_aot  # noqa: E402
 
 INTERP_ENV = {
@@ -85,7 +86,8 @@ def main(argv: list[str] | None = None) -> int:
         "(PREFIX.e<pid>-<n>[.entries|.trans], docs/INSTRUMENTATION.md)",
     )
     p.add_argument("--out", type=pathlib.Path, required=True)
-    p.add_argument("--device", default="dn2", choices=["dn2", "dt2"])
+    dsp_devices = device_files.dsp_shorts()
+    p.add_argument("--device", default=dsp_devices[0], choices=dsp_devices)
     p.add_argument(
         "--interp-cycle",
         action="store_true",

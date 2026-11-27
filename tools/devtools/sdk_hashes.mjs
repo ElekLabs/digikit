@@ -41,7 +41,7 @@ const runAsync = (args) =>
     ),
   );
 
-// modules that pack to a .dkm: not core, not a framework, dynamic, raw or service (as tools/device/dktransfer.py candidates)
+// modules that pack to a .dkm: not core, not a framework, dynamic, raw or service (as the Transfer pane's library)
 const modules = globSync('{modules,tests/fixtures/modules}/**/module.toml', { cwd: root })
   .sort()
   .map((f) => ({ f, m: parse(readFileSync(join(root, f), 'utf8')).module }))
@@ -61,7 +61,8 @@ const lap = (what) => console.error(`${((Date.now() - t0) / 1000).toFixed(1)} s 
 
 // 1. objects
 const buildArgs = force ? ['--force'] : [];
-for (const tree of ['modules/core', 'modules', 'tests/fixtures/modules']) {
+const coreRoots = ['runtime', 'services'];
+for (const tree of [...coreRoots, 'modules', 'tests/fixtures/modules']) {
   try {
     run(['build', ...buildArgs, '--tree', tree]);
   } catch (e) {
@@ -78,13 +79,15 @@ const result = {
   image: {},
 };
 mkdirSync(work, { recursive: true });
-const jobs = modules.flatMap(({ m }) => devicesOf(m).map((d) => ({ id: m.id, d })));
+const jobs = modules.flatMap(({ m }) =>
+  devicesOf(m).map((d) => ({ id: m.id, d, ext: m.role === 'service' ? 'dks' : 'dkm' })),
+);
 let next = 0;
 await Promise.all(
   Array.from({ length: JOBS }, async () => {
     while (next < jobs.length) {
-      const { id, d } = jobs[next++];
-      const out = join(work, `${d}-${id.replaceAll('/', '__')}.dkm`);
+      const { id, d, ext } = jobs[next++];
+      const out = join(work, `${d}-${id.replaceAll('/', '__')}.${ext}`);
       const err = await runAsync(['pack', id, '--device', d, '-o', out]);
       if (err && !NOPACK_OK.has(id)) failures.push(`pack ${id} --device ${d} failed: ${err}`);
       result.dkm[`${d} ${id}`] = err ? 'nopack' : sha(readFileSync(out));
@@ -94,7 +97,10 @@ await Promise.all(
 lap(`pack ${jobs.length} jobs`);
 
 // 3. core objects
-for (const f of globSync('modules/core/**/build/*.dko.json', { cwd: root }).sort()) {
+for (const f of globSync(
+  coreRoots.map((tree) => `${tree}/**/build/*.dko.json`),
+  { cwd: root },
+).sort()) {
   const o = JSON.parse(readFileSync(join(root, f), 'utf8'));
   delete o.source_sha256;
   result.core[f] = sha(JSON.stringify(o));
@@ -130,6 +136,13 @@ if (mode === 'record') {
   console.log(`recorded ${file} at ${result.head.slice(0, 8)}: ${count(result)}`);
 } else {
   const base = JSON.parse(readFileSync(file, 'utf8'));
+  const moves = Object.entries(JSON.parse(readFileSync(join(root, 'docs/plans/e8-moves.json'), 'utf8')));
+  base.core = Object.fromEntries(
+    Object.entries(base.core).map(([key, hash]) => {
+      const move = key.startsWith('modules/core/') && moves.find(([from]) => key.startsWith(`${from}/`));
+      return [move ? move[1] + key.slice(move[0].length) : key, hash];
+    }),
+  );
   let diffs = 0;
   for (const kind of ['dkm', 'core', 'image']) {
     for (const key of new Set([...Object.keys(base[kind]), ...Object.keys(result[kind])])) {

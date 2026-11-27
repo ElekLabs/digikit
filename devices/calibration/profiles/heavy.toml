@@ -1,0 +1,12 @@
+schema = "dk.calprofile/1"
+name = "heavy"
+description = "Every audio track plays a note with a long release and the delay, reverb and chorus sends open. No modules: the largest stock load. Needs RECEIVE NOTES and RECEIVE CC/NRPN on."
+warmup_s = 2
+capture_s = 5
+repeats = 3
+teardown = { steps = "release-notes" }
+
+[[case]]
+id = "stock"
+steps = "heavy-hold"
+args = { retrigger_ms = 1000 }

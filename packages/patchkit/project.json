@@ -6,9 +6,12 @@
       "cache": false,
       "inputs": [
         "default",
-        "{workspaceRoot}/modules/**/module.toml",
+        "{workspaceRoot}/{modules,runtime,services}/**/module.toml",
         "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
-        { "dependentTasksOutputFiles": "**/*", "transitive": true }
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
       ],
       "dependsOn": ["cli"],
       "outputs": [],
@@ -20,21 +23,22 @@
     "objects-check": {
       "executor": "nx:run-commands",
       "cache": false,
-      "description": "Fails when a committed core object (modules/core/**/build/*.dko.json) is older than its sources. Content-module objects are not read.",
+      "description": "Fails when a committed core object (under the runtime/ tree, platform modules included, or services/) is older than its sources. Content-module objects are not read.",
       "inputs": [
-        "{workspaceRoot}/modules/core/**/src/**/*",
-        "{workspaceRoot}/modules/core/**/module.toml",
-        "{workspaceRoot}/modules/core/**/build/*.dko.json",
-        "{workspaceRoot}/modules/core/runtime/sdk/**/*",
-        "{workspaceRoot}/modules/core/runtime/fit/**/*",
-        "{workspaceRoot}/modules/core/fw/rs/**/*",
+        "{workspaceRoot}/{runtime,services}/**/src/**/*",
+        "{workspaceRoot}/{runtime,services}/**/module.toml",
+        "{workspaceRoot}/{runtime,services}/**/build/*.dko.json",
+        "{workspaceRoot}/runtime/core/sdk/**/*",
+        "{workspaceRoot}/runtime/core/fit/**/*",
+        "{workspaceRoot}/ports/bindings/rs/**/*",
         "{workspaceRoot}/packages/dkneeds/**/*",
         "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/config/test-source-patterns.json",
         "{workspaceRoot}/sdk/sdk.toml",
         "{workspaceRoot}/sdk/include/**/*",
         "{workspaceRoot}/sdk/dsp/contract/**/*",
         "{workspaceRoot}/sdk/dsp/**/*",
-        "{workspaceRoot}/modules/core/runtime/vectors/**/*",
+        "{workspaceRoot}/runtime/core/vectors/**/*",
         "{workspaceRoot}/tools/patchkit/toolchain/**/*",
         "{workspaceRoot}/tools/patchkit/pk_toolchains.py",
         "{workspaceRoot}/Cargo.toml",
@@ -42,12 +46,117 @@
         "{workspaceRoot}/.cargo/**/*",
         "{workspaceRoot}/rust-toolchain*",
         "{workspaceRoot}/mise.toml",
-        { "dependentTasksOutputFiles": "**/*", "transitive": true }
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
       ],
       "dependsOn": ["cli"],
       "outputs": [],
       "options": {
-        "command": "dist/patchkit/patchkit --root . build --check --tree modules/core || { echo 'A committed core object is stale: run dist/patchkit/patchkit --root . build modules/core (or nx run <core module>:build-objects) and commit the result.' >&2; exit 1; }",
+        "command": "for dir in runtime services; do dist/patchkit/patchkit --root . build --check --tree \"$dir\" || { echo \"A committed object under $dir is stale: run dist/patchkit/patchkit --root . build --tree $dir and commit the result.\" >&2; exit 1; }; done",
+        "cwd": "."
+      }
+    },
+    "ports": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "description": "The port file (role 2, docs/plans/port-file.md) of every committed port: dist/ports/<device>-<version>.dkport, from ports and ports/fw only (no firmware).",
+      "inputs": [
+        "{workspaceRoot}/ports/*.toml",
+        "{workspaceRoot}/ports/fw/**/*.toml",
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
+      ],
+      "dependsOn": ["cli"],
+      "outputs": ["{workspaceRoot}/dist/ports"],
+      "options": {
+        "command": "rm -rf dist/ports && dist/patchkit/patchkit --root . port build --all --out dist/ports",
+        "cwd": "."
+      }
+    },
+    "ports-test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "description": "The port file of the test image: dist/ports-test/<device>-<version>.dkport, as `ports` plus the hooks of the test fixture service (test/svc-test), whose site is a site that image modules patch. Only the test fixtures and the device tests of providers use it; a production port file lists none of them.",
+      "inputs": [
+        "{workspaceRoot}/ports/*.toml",
+        "{workspaceRoot}/ports/fw/**/*.toml",
+        {
+          "dependentTasksOutputFiles": "**/*",
+          "transitive": true
+        }
+      ],
+      "dependsOn": ["cli"],
+      "outputs": ["{workspaceRoot}/dist/ports-test"],
+      "options": {
+        "command": "rm -rf dist/ports-test && dist/patchkit/patchkit --root . port build --all --with-test-hooks --out dist/ports-test",
+        "cwd": "."
+      }
+    },
+    "sdk-coverage": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "description": "Fails when an [[import]] of sdk/sdk.toml is linked by no packed module and is not in sdk/coverage-allow.toml. Runs after every pack target; not cached (the packs are).",
+      "inputs": [
+        "{workspaceRoot}/sdk/sdk.toml",
+        "{workspaceRoot}/sdk/coverage-allow.toml",
+        {
+          "dependentTasksOutputFiles": "**/*.dkm",
+          "transitive": true
+        },
+        {
+          "dependentTasksOutputFiles": "**/*.dks",
+          "transitive": true
+        }
+      ],
+      "dependsOn": [
+        "cli",
+        {
+          "target": "pack",
+          "projects": ["tag:module"]
+        }
+      ],
+      "outputs": [],
+      "options": {
+        "command": "dist/patchkit/patchkit --root . coverage --sdk sdk/sdk.toml --allow sdk/coverage-allow.toml dist/modules/*/*.dkm dist/modules/*/*.dks",
+        "cwd": "."
+      }
+    },
+    "wasm": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "description": "Builds patchkit.wasm, dkupload.wasm and dksample.wasm into apps/web/public/. Its inputs are the Rust crates of patchkit (default, ^production) and the build files; no TypeScript. The cargo wasm build recompiles on every call, so Nx replays it when the inputs are unchanged.",
+      "inputs": [
+        "default",
+        "^production",
+        "jsToolchain",
+        "{workspaceRoot}/tools/nx/wasm.mjs",
+        "{workspaceRoot}/tools/nx/rust-env.mjs",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/.cargo/**/*",
+        "{workspaceRoot}/rust-toolchain*",
+        "{workspaceRoot}/sdk/sdk.toml",
+        "{workspaceRoot}/runtime/core/vectors/**/*",
+        "{workspaceRoot}/devices/*.toml",
+        "{workspaceRoot}/tools/patchkit/toolchain/**/*",
+        {
+          "runtime": "rustc -vV"
+        },
+        {
+          "runtime": "command -v wasm-opt >/dev/null && wasm-opt --version || echo no-wasm-opt"
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/apps/web/public/patchkit.wasm",
+        "{workspaceRoot}/apps/web/public/dkupload.wasm",
+        "{workspaceRoot}/apps/web/public/dksample.wasm"
+      ],
+      "options": {
+        "command": "node tools/nx/wasm.mjs --patchkit-only",
         "cwd": "."
       }
     }

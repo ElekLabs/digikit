@@ -9,9 +9,168 @@ include path: the files of the concept folders (`osc/`, `filter/`, `dynamics/`, 
 Two forms:
 
 - Step macros (the `.inc` files in the concept folders, table under Macros): one sample of a kernel, for a module's own block loop.
-- Block routines (`contract/call.inc`, `filter/biquad.inc`): whole-block routines on the stock C convention.
+- Block routines (`contract/call.inc`, `filter/biquad.inc`, `filter/svf.inc`, `filter/rbank.inc`): whole-block routines on the stock C convention.
 
 Style: [docs/sharc/style.md](../../docs/sharc/style.md), in particular section 5a (rules from the manuals).
+
+New module? Start with the [DSP development loop](../../docs/MODULE-AUTHORING.md#dsp-development-loop)
+for scaffolding, rig tests, opt-in tracing and checking a saved capture.
+
+## Profile a module and compare two builds
+
+Start with a case that plays a known signal on the SHARC rig. Use ordinary function labels and keep the
+hardware loop's end label on its last instruction. The profiler counts the PCs and the symbol map
+and static loop analysis do the attribution. A module author does not need to add a timer or a profiling
+call to `note_on`, `render`, `process` or helpers.
+
+| What to measure | How to turn it on | What runs in a normal module build |
+| --- | --- | --- |
+| Dispatch cost per call and block | Workbench **Include DSP block costs** or `wb profile calibrate run` | The runtime measures calls at the adapter. When idle the adapter checks whether recording is enabled, with no extra instructions inside the module. |
+| SHARC hotspots per function and hardware loop | `rig_profile.ts` on an isolated case, or `wb profile record --cpu sharc` on a profiler-enabled emulator | The host counts instructions externally. No trace build or author-inserted probes are needed. |
+| A log or fault breadcrumb inside a module | Add `DK_TRACE_LOG` or `DK_STEP`, then pack with `--trace` | The markers compile out of the ordinary pack. `--trace` builds a separate pack and adds its own instructions. |
+
+The [trace API](../README.md#tracing) explains how to place a mark and choose its scratch register.
+The [instrumentation guide](../../docs/INSTRUMENTATION.md#profiles) covers Workbench recording and the CLI.
+Use the same instrumentation settings on both sides of a comparison. Measured instruction counts, static
+instruction bounds and board cycle measurements answer different questions.
+
+### Worked example: PLUCK
+
+**Instruction bound.** PLUCK's `_pk_render` has a 32-trip hardware loop ending at `_pk_loop`. Its
+baseline body has 23 instructions and executes 736 instructions per rendered block. Combining the
+peak update and the output store in the last instruction makes the body 22 instructions and the bound
+704. The store reads the already-computed sample in R8, and the ALU updates F13, so the float operation
+order and stored sample are the same. This bound covers the loop body. The note-on, coefficients,
+rest of the render routine and adapter have separate costs.
+
+From the repository root after setup, build the profiler inputs if they are missing:
+
+```sh
+pnpm nx:pilot run patchkit:cli
+pnpm nx:pilot run sharc-rig:build       # uses the shared core from mise run gen:core
+mise run wasm:dkprof
+```
+
+Run the named reference and sound checks first. The DT2 float32 model case plays note 60 against
+`ref/model-default.f32` with absolute tolerance `2e-5`. The two-note pins cover DT2 and DN2. The
+checks also cover a new note, quiet termination, pitch and state independence.
+
+```sh
+pnpm nx:pilot run digikit/pluck:test-dsp
+```
+
+For an A/B without editing the source checkout, make an ignored copy of the tracked source. Use a new
+output directory if the comparison has already been run. In the copy's
+`modules/machine/digikit/pluck/src/dsp/pluck.s`, combine the last two instructions of `_pk_loop` as
+shown. You can also point `DIGI_RIG_ROOT` at an existing checkout of build B.
+
+```sh
+comparison="$PWD/out/runs/dsp-workflow/phase4/pluck"
+variant="$comparison/B-source"
+mkdir -p "$variant/out"
+git archive HEAD | tar -x -C "$variant"
+ln -s "$PWD/out/tools" "$variant/out/tools"
+```
+
+```diff
+-        F13 = MAX(F13, F0);
+-_pk_loop: DM(I0, M6) = R8;
++_pk_loop: F13 = MAX(F13, F0), DM(I0, M6) = R8;
+```
+
+Profile the same two zero-based steady blocks on each target. Blocks 2 and 3 are after the trigger
+and note-on on both adapters. Keep the target, note, parameter words, block selection and rig binary
+matched for each A/B.
+
+```sh
+export DIGI_SHARC_RIG="$PWD/dist/bin/sharc-rig"
+export DIGI_PATCHKIT="$PWD/dist/patchkit/patchkit"
+for device in dt2 dn2; do
+  node tools/devtools/rig_profile.ts digikit/pluck --device "$device" \
+    --case limits/all-default/note60 --blocks 2,3 --out "$comparison/A/$device"
+  DIGI_RIG_ROOT="$variant" node tools/devtools/rig_profile.ts digikit/pluck --device "$device" \
+    --case limits/all-default/note60 --blocks 2,3 --out "$comparison/B/$device"
+done
+```
+
+The report names `_pk_run` as the hottest function label and the 32-trip loop in `_pk_render`
+as the biggest module loop. These are self counts of the modeled SHARC, per block.
+
+| Scope | DT2 A → B | DN2 A → B |
+| --- | ---: | ---: |
+| 32-trip string loop | 736 → 704 | 736 → 704 |
+| PLUCK code | 905 → 873 | 905 → 873 |
+| Full rig call, including adapter | 1,939 → 1,907 | 2,105 → 2,073 |
+
+Compare the two-note renders on each target with the existing rig report. The script below uses the
+same reporter as `DIGI_RIG_REPORT=1` and compares the float32 WAV files. Both builds matched their
+device's original audio pin and their samples were byte-identical on the rig. This experiment
+measured no board cycles. For a board timing claim, pair the same workload on hardware and follow
+the [calibration workflow](../../docs/INSTRUMENTATION.md#calibration-runs-wb-profile-calibrate-run).
+
+```sh
+for source in "$PWD" "$variant"; do
+  DIGI_RIG_ROOT="$source" node --input-type=module <<'JS'
+import { resolve } from 'node:path';
+import { reportRigFile } from './packages/sharc-rig-kit/src/soundcheck.ts';
+
+const file = resolve(process.env.DIGI_RIG_ROOT, 'modules/machine/digikit/pluck/tests/rig/equiv-note.toml');
+const results = await reportRigFile('digikit/pluck', file);
+console.log(results.join('\n'));
+if (results.length !== 2 || results.some((result) => !result.includes(': pin matches'))) process.exitCode = 1;
+JS
+done
+for device in dt2 dn2; do
+  key="digikit-pluck.$device.note-60-at-the-default-parameters-is-pinned-$device"
+  cmp "out/rig/$key/out.wav" "$variant/out/rig/$key/out.wav"
+done
+```
+
+Use **Performance → Open capture…** with either `profile.json`. Workbench shows its functions, loops
+and PCs in Profile, even with the emulator stopped. Use the same file at the CLI with `node tools/devtools/wb.mjs --format json profile report FILE`.
+Rig exports carry their own symbol placement and loop analysis when `dkprof.wasm` was available.
+For the original running-target captures, use **Performance → DSP blocks → Open capture…** to
+see each dispatch estimate and worst block. Switch to **Timeline** for the same capture's ColdFire
+events, if present.
+
+To repeat with an effect, use its named rig case. This example drives the master test chain with a
+fixed noise input and the middle knob value. To measure the effect on its actual send route, replay
+its calibration case on the emulator or a connected device.
+
+```sh
+node tools/devtools/rig_profile.ts digikit/freqshift --device dt2 \
+  --case params/all-mid/noise --blocks 2,3 --out out/runs/dsp-workflow/phase4/freqshift/dt2
+```
+
+### Render and compare audio from the CLI
+
+Use the [Workbench CLI audio workflow](../../docs/INSTRUMENTATION.md#render-and-compare-audio-from-the-cli)
+to save a named rig case as WAV and JSON and compare it with a later build.
+
+### What to check on each target
+
+Use the [generated register contract](REGISTERS.md) on both devices. Keep an explicit numerical
+reference, state layout and initialization rules, buffer sizes and aliasing rules, and register
+clobbers with any shared kernel. Extract a kernel once more than one caller needs that contract.
+
+| Contract point | Digitakt II 1.17 | Digitone II 1.12 |
+| --- | --- | --- |
+| DSP area shared by modules | 512 KiB | 320 KiB |
+| Machine gate | The declared gate drops on release. | Gate stays high. The first trigger block stages the note and the next block calls `note_on`. |
+| Stereo machine output | The adapter routes R through the odd stock voice of the pair. | The adapter uses a per-slot R buffer and runs the stock stages on R. Above eight stereo slots in a block, excess slots play mono. |
+| Sample backing | The runtime uses stock sample slots. | The runtime uses reserved DDR. |
+
+Check those behaviours through the [machine contract](../../docs/MODULE-AUTHORING.md#71-machine-voice-dkgenmachineh),
+[sample API](../../docs/design/sample-api-1.5.md) and device profiles for
+[DT2](../../devices/digitakt-ii.toml) and [DN2](../../devices/digitone-ii.toml). Include note-on, tail or
+release, and stereo or sample boundaries where the module uses them.
+
+## Build rules for DSP sources
+
+- **Data sections are 32-bit words.** `.SECTION/DM name;` is assembled as `.SECTION/DM/BW name;`. The assembler (the Selache fork) lays out a plain `/DM` section in 40-bit words (five bytes for each `.VAR`, symbols counted in words). A module stores 32-bit words in memory order: four little-endian bytes for each `.VAR`, symbols counted in bytes. `/BW` gives this layout. Write `.SECTION/DM name;` as before; `patchkit` makes the change (`byte_addressed_data` in `packages/patchkit/src/build/sharc_obj.rs`). A section that already names `BW` or `DOUBLE32` is not changed.
+- **DO loops have no fast-loop bit.** The assembler can set the F1-active bit of a `DO` opcode by itself; `patchkit` turns this off. Write `(F)` on a `DO` that needs the bit.
+- **Names must be defined or declared.** A word that is not an instruction, register or label of the source is taken as an external symbol. The object build fails for a relocation against a name that is neither defined in the source nor declared with `.EXTERN` (for example a register that SHARC+ does not have). The error gives the line.
+- **`Rn = Fm` is not a plain transfer.** Write `Rn = PASS Fm` (the ALU PASS, which sets the ASTAT flags) or use R registers (`Rn = Rm` is a Ureg transfer and leaves ASTAT alone).
 
 ## Register rule for macros
 
@@ -43,6 +202,9 @@ Rules that apply to the loop around a macro (style.md 5a):
 | `util/ramp.inc` | `DK_RAMP_STEP(CUR, STEP)` | 1 | cur = cur + step |
 | `filter/onepole.inc` | `DK_ONEPOLE_STEP(OUT, IN1, COEF, TMP)` | 3 | y = y + a (x - y) |
 | `dynamics/sat.inc` | `DK_SAT_STEP(OUT, IN1, ONE, HALF, K15, TMP)` | 5 | cubic soft clip, \|y\| <= 1 |
+| `util/exp2.inc` | `DK_EXP2(OUT, IN1, NI, T, CR, CF)` | 20 | 2^x, degree-5 polynomial and SCALB, relative error 2.3e-7 over \|x\| <= 30; constants are inline immediates |
+| `util/tan.inc` | `DK_TAN(OUT, FN, A, B, D, CR, CF)` | 33 | tan(pi x) for x = f / fs in [0, 0.45], half-angle polynomial and DK_RECIP, relative error 1.2e-6 |
+| `filter/svf.inc` | `DK_SVF_COEFS(KA1, E1, A2D, KA2, A3D, G, K, KS, T1, T2, CR, CF)` | 20 per band, per block | the coefficient record of one TPT state-variable band from g = tan(pi f / fs), k = 1 / Q and ks = k times the output gain |
 | `util/recip.inc` | `DK_RECIP(OUT, IN1, TWO, TMP)` | 7 | 1 / x, 2 Newton steps |
 | `util/recip.inc` | `DK_DIV(QUO, NUM, DEN, TWO, TMP, TMP2)` | 8 | n / d |
 | `util/recip.inc` | `DK_RSQRT(OUT, IN1, HALF, K15, TMP, TMP2)` | 16 | 1 / sqrt(x), 3 Newton steps |
@@ -75,8 +237,9 @@ and `selcc`-compiled C call it the same way. `contract/call.inc` has the macros 
 
 - Arguments R4, R8, R12; no result. Normal-word DM addresses (a C caller passes them as `int`; selcc's byte-address pointers do
   not match). The caller sets up M5 = 0, M6 = 1, M7 = -1, M14 = 1 as the module contract already guarantees.
-- A caller assumes R0, R1, R2, R4, R8, R12, I4, I12, MR and ASTAT are clobbered. R3, R5-R7, R9-R11, R13-R15, I0-I3, I5, M1-M3
-  and B3 are kept. I6 and I7 are restored by the routine's `RFRAME`.
+- The register classes of a module are in [REGISTERS.md](REGISTERS.md). A caller of a block routine assumes R0, R1, R2, R4, R8,
+  R12, I4, I12, MR and ASTAT are clobbered. R3, R5-R7, R9-R11, R13-R15, I0-I3, I5, M1-M3 and B3 are kept. I6 and I7 are
+  restored by the routine's `RFRAME`.
 - Stack: `DK_CALL(fn, return_label)` (`CJUMP` plus two pushes) builds the frame, `DK_ENTER(N)` reserves N save slots at `[I6 - 2]` downward, and
   `DK_LEAVE` returns and runs `RFRAME`.
 - Every call supplies a continuation label unique within the assembled object, including repeated calls to the same routine.
@@ -88,18 +251,19 @@ and `selcc`-compiled C call it the same way. `contract/call.inc` has the macros 
 `DK_CALL` uses the CJUMP ABI; the machine adapter enters a module with JUMP and a different return contract.
 A module calling a block routine must preserve its adapter-return registers I12/I13 and restore its exact entry I7.
 Entry I7 is an exclusive stack boundary: reserve space below it before constructing the CJUMP frame, so no store
-overwrites the adapter's context. The [sample-proof fixture](../../tests/fixtures/modules/sample-proof/README.md)
-contains a tested bridge for both adapters; this fixture does not define a general module-call API.
+overwrites the adapter's context. This does not define a general module-call API.
 
 | File | Routine | Instructions per sample | Per call (32 samples, with `DK_CALL`) | Notes |
 | --- | --- | --- | --- | --- |
 | `filter/biquad.inc` | `_dk_biquad` | 5 | 203 | transposed direct form II; R12 = 7 words b0, b1, b2, a1, a2, s1, s2; in place allowed; reads only the input block |
+| `filter/svf.inc` | `_dk_svf_bp` | 6 in the band loop (6 multiplies, 6 adds) | 252 | one TPT state-variable band, bandpass with unity peak gain, added into the output block; R4 = band record of 8 words (ic1, ic2, ka1, e1, a2d, ka2, a3d), R8 = args (input block, output block), R12 unused; the band loop `_dk_svf_band` is shared with `_dk_rbank` |
+| `filter/rbank.inc` | `_dk_rbank` | 8 bands | 2,489 steady, 2,582 first block | resonator bank: 8 bandpass bands summed; R4 = state block of 104 words (zero it, or set word 0 to 0, to restart), R8 = args (input block, output block; must not overlap), R12 = 3 knob words FREQ, SPRD, Q (`DK_P_PERCENT`); FREQ 20 Hz .. 5 kHz, SPRD 0 .. 2 octaves, Q 0.7 .. 50; knobs smoothed with a 2 ms one-pole per block; output scaled by 1 / S (overlap sum at the middle band), peak gain about 1; a band above 0.45 fs is clamped to it; needs exp2.inc, tan.inc, recip.inc and svf.inc included first; tests `sdk/tests/dsp/rbank.rig.test.ts` |
 | `delay/delay.inc` | `_dk_delay` | 4 | 175 | linearly interpolated delay, hardware circular ring; R12 = 4 words ring base, ring length L (>= 34), write offset w, delay d (float, 1 <= d <= L - 2); in place allowed; L1 and L2 are 0 on return |
 | `filter/halfband.inc` | `_dk_halfband_down` | 20 per output (2 inputs) | 701 | 2x decimator, 23-tap half-band (Kaiser window), 64 inputs to 32 outputs; R12 = 2 words history ring base (32 words), offset (unchanged by a call); coefficient table 2 c_j in DM (`.SECTION/DM`); L1 is 0 on return |
 | `dynamics/gain_ramp.inc` | `_dk_gain_ramp_stereo` | 7 | ceiling 254 including three argument loads | in-place gain ramp on two 32-float buffers; R12 = pair [start, step]; writes the reached gain back to pair[0] |
 | `sample/float.inc` | `_dk_sample_linear` | path-dependent | ceiling 1,380 including three argument loads | bounded mono float32 view; split cursor, clamped linear interpolation, zero tail and completion |
 | `sample/pcm16.inc` | `_dk_sample_pcm16_linear` | path-dependent | ceiling 2,148 including three argument loads | packed signed PCM16 view; same cursor, interpolation and completion |
-| `sample/pcm16_stereo.inc` | `_dk_sample_pcm16_stereo_linear` | path-dependent | ceiling 4,396 including three argument loads | two packed PCM16 planes, one shared cursor, separate 32-float outputs |
+| `sample/pcm16_stereo.inc` | `_dk_sample_pcm16_stereo_linear` | path-dependent | 1,625 in range, worst measured 5,152, bound 5,428 including three argument loads | two packed PCM16 planes, one shared cursor, separate 32-float outputs; one pass for both planes, hardware loop, block cut at the end or wrap frame |
 
 For the older block kernels, consult their headers and `tests/patchkit/test_dsp_kernels.py` for the distinction
 between static instruction counts and measured counts. The sample reader's measured evidence is described below.
@@ -148,20 +312,27 @@ odd boundaries, extreme rates, repeated calls, preserved registers and stack
 boundaries, guarded source reads and completion immediately after output 31.
 The ceiling above counts instructions, not hardware cycles.
 
-`sample/pcm16_stereo.inc`, included after the mono reader, composes that reader
-for two channel planes. R4 points to `[left_source, right_source]`, R8 to
+`sample/pcm16_stereo.inc` is a stand-alone kernel (it needs only `dsp/contract/call.inc`) for
+two channel planes. R4 points to `[left_source, right_source]`, R8 to
 `[left_output, right_output]`, and R12 to the same six-word cursor. Each output
-contains 32 floats. Both channels start from the same cursor; the public cursor
-advances once. Source pointers may be equal for mono-to-stereo playback. Output
-buffers must be separate; all other source, output, descriptor, cursor and stack
+contains 32 floats. Both channels share the cursor, which advances once. The result is bit-identical to running the mono reader once per
+channel. Source pointers may be equal for mono-to-stereo playback: that case reads one plane and writes both outputs.
+Output buffers must be separate; all other source, output, descriptor, cursor and stack
 ranges must be disjoint and the sources/descriptors immutable during the call.
-The wrapper uses ten local stack words; with its nested mono call, the deepest
-write is word slot 25 below entry I6 and the deepest stack pointer is slot 26. The adapters give a
-byte-alias I6 (a word is 4 bytes) and the wrapper finds its cursor copy at I6 − 44 bytes; a normal-word
-I6 is not supported (finding 111). The calling convention
-and mono reader's numerical bounds still apply. This is a correctness baseline,
-not a measured optimization or a stereo machine-output ABI. Assembled coverage is
-in `tests/patchkit/test_dsp_sample_stereo_kernels.py`; actual memory ownership and
+It computes the index, the neighbor index and the fraction once per frame for both planes and runs the
+frames in a hardware loop without range checks. A bisection over the constant block rate finds the frame where the cursor
+leaves `[start, end)`; the loop renders up to that frame, then the end rule (voice done, rest of the block zero) or the loop
+rule (wrap once by the region length, see `sample/pcm16.inc`) runs and the next segment starts. The forward neighbor at end-1 is a conditional move, not a branch.
+Each sample is one sign-extending short-word load (`SWSE`, byte address space, modifier M4 scaled by 2): once per block the
+normal-word plane bases become byte addresses (a plane whose first frame is in the NW32 DDR alias `0x10000000` to `0x17ffffff` is read at `4 * word + 0x40000000`,
+any other plane at `4 * word`, which holds for the L2 window and the L1 normal-word windows (`0x00090000` to `0x000e7fff`, data sheet tables 2 and 3), so DDR, L1 and L2 planes all work; the window at `0x04000000` is not mapped). The float arithmetic uses the multifunction
+forms, and the stores and the M4 moves ride in compute instructions. A frame costs 19 instructions (14 mono-to-stereo, one plane read; 47 and 32 before
+`SWSE`), a block that stays inside the region 747 (586) including the call, each crossing about 130 more.
+M4 is clobbered (a caller-saved register of `call.inc`).
+The routine writes 20 save slots (word slots 2 to 21 below entry I6, no nested call). The adapters give a
+byte-alias I6 (a word is 4 bytes); a normal-word I6 is not supported (finding 111). The calling convention
+and the mono reader's numerical bounds still apply. This is not a stereo machine-output ABI. Assembled coverage is
+in `tests/patchkit/test_dsp_sample_stereo_kernels.py` (including the loop option and blocks that cross several times); actual memory ownership and
 stereo routing through each device's stock processing remain adapter obligations.
 
 ## Block gain ramp and stock level

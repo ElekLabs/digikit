@@ -5,7 +5,7 @@
 //     node packages/dkbs/cli/bootscreen.mjs pack SRC [-o OUT.dkbs]   default out/bootscreens/<name>.dkbs
 //     node packages/dkbs/cli/bootscreen.mjs sheet SRC [-o OUT.png]   contact sheet of up to 24 ticks, drawn from the decoded .dkbs bytes
 //     node packages/dkbs/cli/bootscreen.mjs dev SRC                  pack, then a Vite preview that reloads when SRC changes
-//     node packages/dkbs/cli/bootscreen.mjs [gallery] [--no-open]   gallery of modules/tools/bootscreen/examples/*.mjs in a browser (the default command)
+//     node packages/dkbs/cli/bootscreen.mjs [gallery] [--no-open]   gallery of modules/tool/tools/bootscreen/examples/*.mjs in a browser (the default command)
 //     node packages/dkbs/cli/bootscreen.mjs put SRC [--port SUB] [--bin PATH]   pack, then upload to data/tools/bootscreen/<name>.dkbs on the device
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, statSync, writeFileSync } from 'node:fs';
@@ -171,7 +171,7 @@ async function dev(src) {
   server.printUrls();
 }
 
-const examplesDir = path.join(root, 'modules/tools/bootscreen/examples');
+const examplesDir = path.join(root, 'modules/tool/tools/bootscreen/examples');
 const CONCURRENCY = 4;
 
 /** Pack SRC in a short-lived child process. A fresh process re-imports every helper the script uses, so no change in the examples folder is served stale. */
@@ -370,7 +370,7 @@ function put(r) {
   const file = path.resolve(outDefault(src, '.dkbs'));
   write(file, r.bytes);
   const fileName = `${name(src)}.dkbs`;
-  // the module's chooser lists names shorter than 48 characters (modules/tools/bootscreen/src/module.c)
+  // the module's chooser lists names shorter than 48 characters (modules/tool/tools/bootscreen/src/module.c)
   if (fileName.length >= 48) {
     console.error(
       `${fileName} is ${fileName.length} characters; the file name must be shorter than 48. Rename the source.`,

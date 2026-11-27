@@ -1,0 +1,397 @@
+# Syntakt. Identity level (docs/design/device-data.md "Device levels") plus what the emulator needs: a panel and the free-running timers.
+# Hardware: [patch_sets] `device` is the full set, as on the other devices (the workbench Firmware page flashes it); `device-peer` is an optional first
+# flash with core/peer-image alone. No [acceptance] yet.
+# Plan: docs/plans/syntakt.md; findings 70 and 136.
+#
+# The CPUs are ColdFire only. Sections 1 (FPGA bitstream), 6 and 7 (the peer CPU) are never written, and the FPGA is never modelled
+# (docs/findings/70-syntakt-1-42.md "Scope").
+
+[device]
+name = "Syntakt"
+short = "st"
+# The device byte of the firmware SysEx framing (docs/findings/01). The OS stream byte is 0x11.
+syx_id = 0x16
+# Glob of the user manual's extracted pages under out/refs/ (tools/coldfire/atlas.py); optional.
+manual = "Syntakt-User-Manual*"
+
+[[firmware]]
+version = "1.42"
+sha256 = "ded3c59fdb909eb9e2c3307b30a486452c8fa6947b12c14e0ce35a187b7f37c1"
+filename = "Syntakt_OS1.42.syx"
+# Section 5 (meta) of the container.
+build_stamp = "260930 11:17:25"
+main_sha256 = "1a9723b19fb54d0566c1f690379d2e6dfe43227f77e170ad731dd029430eb3e7"
+boot_contract = "main-os-oracle-v1"
+symbol_profile = "elektron-rtos-v1"
+# MAIN has no filesystem worker (finding 70).
+readiness_contract = "main-panel-v1"
+softfloat_abi = false
+# Has a port lockfile (ports/): tools/patchkit/port_resolve.py resolves every firmware with `port = true`.
+port = true
+# Regions of the port that the analysis (tools/coldfire/regions.py) cannot find on this image, kept by hand from static evidence **[D]**
+# (docs/findings/70-syntakt-1-42.md "Regions"). cf_flash_cave: the zero run (2256 bytes) that ends at the reset clear start 0x4033a000, after
+# the 136-entry init table; the analysis rejects it only because that table's end is a pointer target. cf_expansion: above the peer
+# image buffer end 0x478af2cb (+64 KiB) and 64 KiB below the 4 MiB ring 0x47c00000..0x48000000 that MAIN clears at boot (FUN_400966e0,
+# through the uncached alias 0x4fc00000) and writes every frame (docs/findings/138-syntakt-runtime-facts.md).
+cf_flash_cave = [0x40339730, 0x4033a000]
+cf_expansion = [0x478c0000, 0x47bf0000]
+
+# No SHARC and no seal (finding 70 "Container": no HMAC trailer). Section 7 is the peer CPU's ColdFire program (finding 136).
+[capabilities]
+dsp = "none"
+seal = "none"
+sample_pool = "none"
+card = "slots"
+
+# Container section roles. Section 1 holds the FPGA bitstream, 6 and 7 the peer CPU: none of them is ever written.
+# repack: section 7 is stored raw (383,760 bytes) and the image is 32 KB over the container limit without a change. A module that unpacks it in MAIN
+# before the peer thread streams it (core/peer-image, `[[repack]]` of its module.toml) may store it packed (264,194 bytes). Its decoded bytes stay stock.
+[container]
+main = 3
+cf2 = 7
+fpga = 1
+readonly = [1, 2, 4, 6, 7, 8]
+repack = ["cf2"]
+
+# Where the Transfer page puts content (docs/plans/storage.md). `modules` is the digikit store (emulator proof only). `samples = "stock-slots"`: the
+# firmware keeps samples in numbered slots that only its MidiRpc Data API writes (finding 142); `[storage.slots]` says how.
+[storage]
+samples = "stock-slots"
+modules = "digikit"
+
+# path: the Data API route of the slots (`/samples/N`, N = 1..count). count: slots. bytes_max: the most AUDIO bytes of one sample (the slot holds a 0x40-byte
+# header, then the audio: 0x7ffc0 + 0x40 = 0x80000). rate, channels, bits: the one format the firmware plays (48 kHz mono 16 bit). byte_order: the byte order of
+# the 16-bit words (big-endian signed: MAIN copies the slot unchanged and the peer loads each word with mvs.w, finding 142 section 1). apply: "restart" = the device reads the slots only at start.
+[storage.slots]
+path = "/samples"
+count = 64
+bytes_max = 0x7ffc0
+rate = 48000
+channels = 1
+bits = 16
+byte_order = "big"
+apply = "restart"
+
+# What patchkit needs of this device (the DT2 and DN2 files explain each key; tools/patchkit/port_resolve.py copies the limits into
+# ports/st-1.42.toml). There are no dsp_* keys: the device has no DSP (`[capabilities] dsp = "none"`).
+[patch]
+# The container (the OS image in the NOR flash) is at most 0x1FFE00 bytes: the OS-upgrade receiver stages it in RAM at 0x403d10d0, 2 MiB, 101 bytes per
+# message and no size check (finding 146 section 4), so 20763 messages of 101 bytes = 2,097,063 bytes fit the stage, rounded down to a 0x200 page: 0x1FFE00. The stock container is
+# 2,029,486 bytes; the emulator dry run 2,000,880 (finding 137). Written from 0x80000, so it also stays below the calibration record at 0x300000.
+container_max = 0x1FFE00
+# The MAIN OS image (decoded) is staged at the load address and may not reach the next 4 MiB boundary: 0x40400000 - 0x40000400. Same
+# value as on the other two devices; the stock MAIN is 3,442,576 bytes **[O]** (the staging area of this OS is not read).
+main_staged_max = 0x3ffc00
+# The OS UPGRADE stream id byte of the framing messages (finding 70: the OS stream byte is 0x11). The receiver of this OS is not read **[O]**.
+stream_id = 0x11
+# Where the MAIN OS image is loaded (the built-in anchor `cf.main`; the section's destination word, finding 70).
+main_dest = 0x40000400
+# Where the bootstrap stages the packed MAIN OS (section 3): 0x40200000, not the 0x40400000 of the other devices (the stage constant is at 0x800005b2, 0x800005d2,
+# 0x80000622, 0x8000155c and 0x8000157e of section 2, finding 152 **[V]**). The bootstrap unpacks in place with no bounds check, so patchkit refuses an image whose
+# in-place margin at this stage is below main_margin_min (bytes of unread stream kept ahead of the output, default 8192).
+# Where the bootstrap (section 2) is loaded: tools that run its own depacker (tools/firmware/aplib_check.py) need it.
+boot_load = 0x800003ec
+main_stage = 0x40200000
+
+# Address windows that only the firmware and core/* drive: the packer refuses a content module that holds a 32-bit address in one of them
+# (docs/design/module-sdk.md "Modules never touch hardware"; packages/patchkit/src/protect.rs). Each window is [lo, hi), hi exclusive.
+# Evidence: docs/findings/141-syntakt-analog-and-nor-paths.md **[D]**: FlexBus CS0 at 0x10000000 (128 KiB, the peer link), FlexBus CS1 at 0
+# (128 KiB, PCB revision; a window at 0 is checked against absolute-symbol relocations only, not against literals), the FlexBus registers,
+# the SPI NOR flash controller (DSPI 0xFC05C000), DSPI 0xFC03C000 (frame bus and FPGA load), DSPI2 0xEC038000 (peer image stream) and the GPIO block 0xEC094000-0xEC0940FF.
+[protect]
+windows = [
+  [0x00000000, 0x00020000],
+  [0x10000000, 0x10020000],
+  [0xFC008000, 0xFC009000],
+  [0xFC05C000, 0xFC05D000],
+  [0xFC03C000, 0xFC03D000],
+  [0xEC038000, 0xEC039000],
+  [0xEC094000, 0xEC094100],
+# Firmware code that drives the NOR flash (finding 146 section 4 [V], st-1.42 cfdb): a content module that holds the address of one of these
+# routines could erase or program the OS, the calibration record (0x300000), the serial record or the bootstrap. Windows are [lo, hi) of whole functions.
+# Window 1: the DSPI NOR driver from its init (FUN_401163f4) to the sector-size getter (FUN_40117bd6, end 0x40117be8): register and transfer
+# primitives, the read FUN_40116d7a, page program FUN_40116ea2, erases FUN_4011719a/FUN_4011721c/FUN_401172be, JEDEC id FUN_40117360, the write-protect
+# commands, the wrappers FUN_40117a72 (program) and FUN_40117aee/FUN_40117b58 (erase). 0x40116a0a-0x40116d7a is driver code that the database has no function for.
+  [0x401163F4, 0x40117BE8],
+# Window 2: the chip select of the bus the NOR shares (FUN_40114288 and FUN_40114358, end 0x40114368).
+  [0x40114288, 0x40114368],
+# Window 3: the calibration record writer FUN_4006eb7e and its three menu actions (0x4006eb7e to the end of FUN_4006ec6e at 0x4006ecb8):
+# erases a 0x40000 block at 0x300000 or 0x340000 and writes 0x22d40 bytes.
+  [0x4006EB7E, 0x4006ECB8],
+# Window 4: the OS writer FUN_4011aad4 (0x4011aad4-0x4011ac1c): erases from 0x80000 for the image's length word and programs the stage.
+  [0x4011AAD4, 0x4011AC1C],
+# Window 5: the record writers FUN_4007fcfc, FUN_4007fdd8, FUN_4007feb4, FUN_4007ff90 (0x380000 tagged record) and FUN_4008006c (serial number at 0x3c0000/0x380000),
+# 0x4007fcfc-0x40080180.
+  [0x4007FCFC, 0x40080180],
+# Window 6: FUN_400bd608 (0x400bd608-0x400bd74e): copies the COKi arena to the card, then erases its NOR copy at 0x400000, 0x800000 or 0xc00000.
+  [0x400BD608, 0x400BD74E],
+# Window 7: FUN_40080646 (0x40080646-0x400819f6, the self-test/updater screen): loops that program NOR from 0x40000 (bootstrap) and 0x80000.
+  [0x40080646, 0x400819F6],
+]
+
+# Board and CPU facts the digikit runtime uses (docs/design/device-data.md; findings 137 and 138 give the evidence, all **[D]** static). The runtime reads
+# them from its device object `dkrt_dev`. There is no DSP, so no dsp_* facts and no run-time machines (no `[digikit] dsp_*`). The module store
+# is the Digitone II's (`[card.store]` below; finding 138 "Storage").
+[board]
+# The console UART (UART8, the same init function as on the Digitone II and Digitakt II): drained before MAIN's soft reset (finding 138).
+console_uart_base = 0xEC070000
+# DDR: 128 MiB cached at 0x40000000, the uncached alias 0x08000000 above it. The soft reset clears the first word through the alias.
+ddr_cached_base = 0x40000000
+ddr_bytes = 0x08000000
+ddr_uncached_alias = 0x48000000
+# The eSDHC controller of the eMMC (the same driver as the other devices; MAIN reaches registers by offset, so the base itself is not a literal).
+esdhc_base = 0xFC0CC000
+
+# The digikit runtime's view of this device (`id`: what a .dkm file and the INFO reply call it; unique among the device files).
+[digikit]
+id = 3
+name = "st"
+# The key held at power-on for safe mode. The runtime asks the firmware's `key_down(k)` with a FIRMWARE key index, not a panel code. On the
+# Syntakt the two differ (finding 138 "Safe key"): trig 16 (panel code 16) is key index 39 (trigs 1..16 are 24..39). Unproven at power-on **[O]**.
+safe_key = 39
+# Run-time modules (ids) that the workbench installs after a flash, as on the DT2 and DN2.
+default_modules = ["digikit/debug", "digikit/remote"]
+# The longest sample path a module may open through the runtime, in bytes, relative to the samples root: a digikit store path (the store path limit 159 less
+# the 8 bytes of the `samples/` prefix, as on the DN2). The firmware's own samples are the slots of [storage.slots], not store paths (finding 142).
+sample_path_max = 151
+# RAM that neither MAIN nor the boot code touches, above cf.expansion (the first 4 KiB). The 4 MiB below 0x48000000 is a ring that MAIN clears
+# at boot, so the DT2 place (0x47fe0000) is not free here (finding 138 "RAM map"). A canary run is open **[O]**.
+keep_base = 0x47bf0000
+keep_bytes = 0x1000
+# RAM the PEEK command may read: image, data, bss and heap up to the first DMA arena, then the runtime's region with the keep area.
+peek = [[0x40000000, 0x45570000], [0x478c0000, 0x47bf1000]]
+# The profiling clock: DTIM2 DTCN2 (not DTIM0 as on the DT2 and DN2), started by the boot loader; MAIN only reads it (6 reads, no write to
+# 0xfc078000..0xfc07800f) and stamps it per audio frame itself (0x400a2058, 0x40101d30). Bus clock 132 MHz with prescale 1 assumed **[D]**.
+span_clock = 0xfc07800c
+span_clock_hz = 132000000
+
+# The runtime's static arrays have the sizes of core/runtime/abi.toml (`arena_bytes`, `stage_bytes`); the run-time machine type count is 0 without a DSP.
+[limits]
+modules = 8
+machine_rows = 0
+arena_bytes = 524288
+stage_bytes = 131072
+fx_slots = 0
+send_slots = 0
+send_rows = 0
+param_rows = 0
+page_rows = 0
+
+# core/card-guard is in both sets that hold the runtime: [card.guard] turns the guard on for this device (patchkit refuses a set with the runtime and without it).
+# Module sets patched in by name (the Digitone II file explains them; docs/PATCHING.md "Flashing a Syntakt").
+#   `device`: the runtime and every core module that has a Syntakt port (the same modules as `emulator`), with core/peer-image: it stores the peer
+#     CPU's section 7 packed and unpacks it in MAIN (without it the image is 32 KB over the container limit). The workbench Firmware page flashes this set.
+#   `device-peer`: core/peer-image alone (core/expansion comes with it), no runtime: an optional first flash that proves the packed section 7 on its
+#     own, with `patchkit flash STOCK.syx --port NAME --set device-peer`.
+# `emulator`: what the emulator patches in itself. The DSP, run-time machine and effect modules have no Syntakt port (no DSP). There is no
+# `device-introblank`: the boot screen module has no Syntakt port.
+[patch_sets]
+device = ["core/runtime", "core/card-guard", "core/ui", "core/health", "core/input", "core/peer-image"]
+device-peer = ["core/peer-image"]
+emulator = ["core/runtime", "core/card-guard", "core/ui", "core/health", "core/input", "core/peer-image"]
+
+# Where the card keeps things (finding 138 "Storage"; sectors are 512 bytes). Read by packages/emulator/device-profile and used by the +Drive builder,
+# reader and exporter (packages/emulator/plusdrive). The MmcFs of OS 1.42 has no kit pool and no kit bitmap, and no path filesystem.
+[card]
+header_sector = 0x0
+total_sectors = 0x2e1a000   # the card the emulator emulates (the pSLC 32 GB part, finding 14); it holds the store below. A unit's real capacity is read at run time from the driver (finding 154)
+table_sector = 0x800        # the write-protect bitmaps of projects and sounds, 272 bytes
+
+# Projects: FUN_40110746, sector = (slot + 0x40) * 0x2000, 4 MiB per slot.
+[card.pools.projects]
+base_sector = 0x80000
+stride_sectors = 0x2000
+slots = 128
+slot_bytes = 0x400000
+bitmap_offset = 0
+bitmap_bytes = 16
+
+# Sound presets, 1 KiB, 2048 slots: FUN_40110c3a, sector = (slot + 0x800) * 2 (as the Digitone II).
+[card.pools.sounds]
+base_sector = 0x1000
+stride_sectors = 2
+slots = 2048
+slot_bytes = 0x400
+bitmap_offset = 16
+bitmap_bytes = 256
+
+# The working project (slot 0x80 of FUN_40110746), rewritten at every start. The two COKi copies of the persistent arena at 0x7a000 and 0x7c000 are
+# the firmware's own and are not listed: the builder would seed them with the other devices' boot record.
+[[card.regions]]
+role = "working-project"
+sector = 0x7e000
+sectors = 0x2000
+
+# Module store (docs/design/digikit-store.md): a fixed 512 MiB area, 1 GiB .. 1.5 GiB (finding 154). Stock MAIN 1.42 touches only sectors below 0x180000 (the last
+# is 0x17ffff, the end of the project pool); the area starts 0x80000 sectors (256 MiB) above that. It ends 0xa4000 sectors below the smallest capacity the firmware's
+# card table lists (0x3a4000), so every accepted part holds it. The area is fixed and not computed from the capacity: the tail records (header B, settings, selection)
+# are relative to its end, so a card whose capacity changes must not move them. The runtime reads the capacity from the firmware's driver and refuses the store
+# (CARD_TOO_SMALL, no card access) when the card does not reach the end of the area. The stock Data API overrun (finding 145) is not excluded by this placement.
+[card.store]
+first_sector = 0x200000
+end_sector = 0x300000
+selection_sectors = 2      # the last two sectors: the digikit selection record
+settings_sectors = 32      # the 32 sectors before them: the settings record, copy A then copy B of 16 sectors
+header_b_sector = 0x2fffdd  # store header copy B: the sector before the settings record (end - 35, as on the other devices)
+
+# The eMMC write guard (core/card-guard, docs/plans/card-write-guard.md): hooks in the firmware's eMMC block write and erase refuse a request outside the rows of its
+# writer class. `enabled` is the switch: while it is true, every patch set that holds core/runtime must hold core/card-guard (patchkit refuses a set without it).
+# stock: every caller but the runtime's raw card write. MmcFs refuses a sector at or above 0x180000 (the end of the project pool, `[card.pools.projects]`), and every stock
+# range lies below it (FORMAT ends at 0x17ffff), so the stock row is that tight window; the 256 MiB up to the store are a guard band that no stock writer may touch.
+# runtime: the digikit runtime's raw card write; the store only.
+[card.guard]
+enabled = true
+[[card.guard.row]]
+who = "stock"
+first = 0x0
+end = 0x180000
+[[card.guard.row]]
+who = "runtime"
+first = 0x200000
+end = 0x300000
+
+# Board facts that only the emulator uses. free_running_dtcn: the DMA timer counter channels (DTCN0..3) that the firmware reads as
+# free-running counters at the bus clock without ever starting the timer (finding 70: MAIN busy-waits on DTCN2).
+[emulator]
+free_running_dtcn = [2]
+# board_revision: MAIN reads a PCB revision byte from FlexBus CS1 at address 0 (code at 0x4000aec0 and 0x4008248c: letter = bits 0-4, number - 1 =
+# bits 5-7; the boot task shows TOO OLD HARDWARE FOR THIS OS below letter D and a WILL NOT BE COMPATIBLE screen for 0x23, 0x43 and 0x82). 0x04 is
+# the smallest value that passes both checks and enables the newer-board path of 0x4008248c; it is an emulator choice, not read from a unit.
+board_revision = 0x04
+# calibration_record: MAIN checks the analog calibration record in the SPI NOR at 0x300000 and shows "RUN WARM-UP CALIBRATION" when it is
+# invalid (finding 70). "synthetic": the emulated NOR holds a record built from the format alone (valid, tables zero), never data from a unit.
+calibration_record = "synthetic"
+# peer: the second CPU (finding 136). "coldfire": its program (section 7) runs on a second ColdFire core with its own memory map; the mailbox
+# model only streams the image and stands in for the stage-1 loader (finding 136 "Peer CPU model"). "mailbox-responder": no peer code; hello,
+# 0xA5A5, IRQ4 and the DSPI2 image stream answer MAIN's handshake (finding 70 "Mailbox responder"), the fallback.
+peer = "coldfire"
+# instructions_per_second: the core clock 264 MHz over the busy CPI of MAIN, 1.39 (devices/cycle-factors.json). The other devices run the
+# base rate of one instruction per 132 MHz bus tick (CPI 2.0), which is too slow for the Syntakt's MAIN: its frame needs about 117,000
+# instructions in 1/1500 s (finding 136). `DIGI_CF_IPS` overrides it.
+instructions_per_second = 189_928_000
+# led_protocol: the panel UART carries packed 2-bit LED states and palette records, not `b9 idx val` (finding 70 "Panel sweep").
+led_protocol = "packed-states"
+# peer_audio: MAIN mixes the peer's digital voices itself (finding 136 "Audio"). The eDMA channel 54 TCD names the converter ring (0x80000000,
+# 64 frames of 8 words), its half-way interrupt is the 1500 Hz audio frame, and the engine tick fills the second half: left in word 5, right in
+# word 3, each a 24-bit signed sample in a 32-bit word.
+# sample_rate and frame_samples: the converter runs at 48 kHz from its own clock (SSI1 is a slave) and the half-ring is 32 samples, so a frame
+# is 1500 Hz of emulated time whatever the instruction rate.
+[emulator.peer_audio]
+dma_channel = 54
+slots = [5, 3]
+bits = 24
+sample_rate = 48000
+frame_samples = 32
+
+# The input backend core/input uses (the panel MCU's UART packets decoded by the firmware's own key and encoder decoders; anchors by hash in the
+# port file). The key code layout is [panel] below.
+[input]
+backend = "panel-uart"
+
+# Logical key names: name = the key's id in the firmware's key events (the id at +0xc of the event), from the decoder table at 0x401d7a48 (word per wire position
+# channel * 8 + bit; finding 138 "Safe key", finding 153): YES = channel 4 bit 6 = 12, NO = channel 3 bit 3 = 13, RIGHT = channel 3 bit 6 = 17 **[V]**; LEVEL_PUSH = 48
+# (channel 6 bit 0), a second YES key: the compact view's key handler (CompactVerticalMenuView, 0x400f5c82) treats ids 0xc and 0x30 alike **[D]**. Only the four names core/ui needs.
+# These are not the wire codes that `dk_input_key` injects.
+[input.keys]
+YES = 12
+NO = 13
+RIGHT = 17
+LEVEL_PUSH = 48
+
+# The bits of the flags word (+0x10) of a key event, by meaning (Digitakt II finding 71, finding 155). Same handler on this device: the accessors 0x400f97e4 (`and #1`, ids 15, 16
+# and 17: bit 0 is the press bit) and 0x400f97b4 (`lsr #4; and #1`, ids 12 and 0x30: bit 4 is the release bit) **[D]**; that NO (13) acts on bit 4 too is **[O]**.
+# `func` and `repeat` are the Digitakt II's bits, not read on this device.
+[input.key_flags]
+press = 0
+func = 1
+repeat = 3
+release = 4
+
+# Panel, measured on the emulated OS 1.42 (finding 70 "Panel sweep"). The wire carries (channel, bit); code = channel * 8 + bit + 1 for the six
+# linear channels, as on the other devices. Unlike them, the firmware's decoder table (0x401d7a48, 32 bytes per channel) is not the identity:
+# the code is a wire position, not the firmware's control number. Channel 6 has one key, LEVEL push, at bit 0.
+[panel]
+linear_channels = 6
+button_channels = 7
+encoders = 9
+
+[panel.exceptions]
+49 = [6, 0]
+
+# Codes 1-16 are the trig keys (1-12 also select the track); 21 is wired to nothing.
+[[panel.group]]
+name = "trigs"
+kind = "button"
+codes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+layout = "grid"
+columns = 8
+
+[[panel.group]]
+name = "modifiers"
+kind = "button"
+codes = [17, 18]
+layout = "row"
+
+[[panel.group]]
+name = "pages"
+kind = "button"
+codes = [19, 20, 22, 23, 24]
+layout = "row"
+
+[[panel.group]]
+name = "modes"
+kind = "button"
+codes = [35, 25, 26, 27]
+layout = "row"
+
+[[panel.group]]
+name = "transport"
+kind = "button"
+codes = [36, 37, 38]
+layout = "row"
+
+[[panel.group]]
+name = "confirm"
+kind = "button"
+codes = [39, 28]
+layout = "row"
+
+[[panel.group]]
+name = "arrows"
+kind = "button"
+codes = [40, 29, 30, 31]
+layout = "dpad"
+
+[[panel.group]]
+name = "select"
+kind = "button"
+codes = [32, 34, 33]
+layout = "row"
+
+# Encoder push keys: A, B, C, D, E, F, G, H are 45, 44, 47, 46, 43, 42, 41, 48; LEVEL is 49.
+[[panel.group]]
+name = "encoder_push"
+kind = "button"
+codes = [45, 44, 47, 46, 43, 42, 41, 48]
+layout = "grid"
+columns = 4
+
+[[panel.group]]
+name = "level_push"
+kind = "button"
+codes = [49]
+layout = "single"
+
+# Encoder rotation is a separate code space: 1-8 are A-H, 9 is LEVEL.
+[[panel.group]]
+name = "encoders"
+kind = "encoder"
+codes = [1, 2, 3, 4, 5, 6, 7, 8]
+layout = "grid"
+columns = 4
+
+[[panel.group]]
+name = "level"
+kind = "encoder"
+codes = [9]
+layout = "single"

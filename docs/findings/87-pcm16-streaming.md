@@ -14,7 +14,7 @@ in this arena. The 4 KiB DT2 reads and chunked DN2 store snapshot still copy int
 a caller-owned whole-file destination; chunked I/O alone does not remove this
 capacity constraint.
 
-**[D]** `modules/core/runtime/sdk/src/sample_stream.rs` now exports allocation-free
+**[D]** `modules/core/runtime/sdk/src/sample_stream.rs` (deleted in R2a: nothing used it) exported allocation-free
 `NativePcm16Stream`. `push(input, output)` reports actual bytes consumed/written,
 handles arbitrary input fragmentation and output backpressure, and writes only
 complete four-byte words. Big-endian native PCM16 frames become little-endian

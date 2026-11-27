@@ -1,0 +1,25 @@
+{
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "name": "digiemu-desktop",
+  "targets": {
+    "rust-tests": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "parallelism": false,
+      "description": "Tests of the desktop app crate. Its inputs are the crate and its Rust dependencies (default, ^production), not the app's TypeScript; tauri embeds ui/dist at compile time, so the UI build runs first.",
+      "dependsOn": [{ "projects": ["@digi/desktop"], "target": "build:ui" }],
+      "inputs": [
+        "default",
+        "^production",
+        "{workspaceRoot}/Cargo.toml",
+        "{workspaceRoot}/Cargo.lock",
+        "{workspaceRoot}/rust-toolchain*",
+        "{workspaceRoot}/tools/nx/rust-env.mjs"
+      ],
+      "options": {
+        "command": "node tools/nx/rust-env.mjs --gen -- cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --target-dir .nx/target/check-desktop-clean",
+        "cwd": "."
+      }
+    }
+  }
+}

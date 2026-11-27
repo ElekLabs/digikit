@@ -1,0 +1,113 @@
+use super::*;
+use dkrt_sdk::{HOST_CORE_OWNED, HOST_DIR_READY_MAGIC, HOST_PACKAGE_OWNED, HOST_REMOVED_OWNED};
+
+#[test]
+fn an_empty_directory_has_no_address_and_a_set_entry_is_found_by_its_id() {
+    let mut d = HostDir::empty();
+    for id in 0..HOST_COUNT as u32 {
+        assert_eq!(d.get(id), None, "id {id} is empty");
+    }
+    assert!(d.set(dkrt_sdk::HOST_PROVIDERS, 0x4012_3456));
+    assert_eq!(d.get(dkrt_sdk::HOST_PROVIDERS), Some(0x4012_3456));
+    assert_eq!(d.get(dkrt_sdk::HOST_DSP), None, "another id stays empty");
+    d.clear();
+    assert_eq!(
+        d.get(dkrt_sdk::HOST_PROVIDERS),
+        None,
+        "clear empties every entry"
+    );
+}
+
+#[test]
+fn an_id_past_the_count_is_refused_by_set_and_unknown_to_get() {
+    let mut d = HostDir::empty();
+    assert!(!d.set(HOST_COUNT as u32, 4));
+    assert_eq!(d.get(HOST_COUNT as u32), None);
+    assert_eq!(d.get(u32::MAX), None);
+}
+
+#[test]
+fn the_layout_is_the_header_and_one_word_per_id() {
+    // the tools read the directory as raw words: magic, count, then the addresses
+    let mut d = HostDir::empty();
+    d.set(dkrt_sdk::HOST_TABLE_BAD, 0xdead_beef);
+    let words: &[u32] =
+        unsafe { core::slice::from_raw_parts(&d as *const HostDir as *const u32, 3 + HOST_COUNT) };
+    assert_eq!(words[0], HOST_DIR_MAGIC);
+    assert_eq!(words[1], HOST_COUNT as u32);
+    assert_eq!(words[2], 0, "not ready until complete");
+    assert_eq!(words[3 + dkrt_sdk::HOST_TABLE_BAD as usize], 0xdead_beef);
+    assert_eq!(core::mem::size_of::<HostDir>(), 4 * (3 + HOST_COUNT));
+    d.complete();
+    let words: &[u32] =
+        unsafe { core::slice::from_raw_parts(&d as *const HostDir as *const u32, 3) };
+    assert_eq!(words[2], HOST_DIR_READY_MAGIC);
+}
+
+#[test]
+fn the_directory_is_ready_only_after_complete_and_clear_takes_that_back() {
+    let mut d = HostDir::empty();
+    assert!(!d.is_ready());
+    d.set(dkrt_sdk::HOST_DSP, 0x4000_0100);
+    assert!(!d.is_ready(), "entries alone do not make it ready");
+    d.complete();
+    assert!(d.is_ready());
+    d.clear();
+    assert!(!d.is_ready());
+}
+
+/// Every id has one owner, and the two generated lists partition the ids: an id appended to `[[host_dir]]` with an owner is found in exactly one list.
+#[test]
+fn every_id_has_exactly_one_owner() {
+    for id in 0..HOST_COUNT as u32 {
+        let removed = HOST_REMOVED_OWNED.contains(&id);
+        assert!(
+            (package_owned(id) as u8 + core_owned(id) as u8 + removed as u8) == 1,
+            "id {id} has one owner (or is removed)"
+        );
+    }
+    assert_eq!(
+        HOST_PACKAGE_OWNED.len() + HOST_CORE_OWNED.len() + HOST_REMOVED_OWNED.len(),
+        HOST_COUNT
+    );
+    assert!(!package_owned(HOST_COUNT as u32) && !core_owned(HOST_COUNT as u32));
+}
+
+/// Host directory ids are append-only: a tool that reads an older image resolves an id to the static it had then. These are the ids of origin/main's `abi.toml` that are still live;
+/// the removed ones stay reserved (`owner = "removed"`, the ids below that are missing here). A renumbering fails this test.
+#[test]
+fn the_ids_of_the_entries_are_their_numbers_on_main() {
+    use dkrt_sdk::*;
+    let pinned: [(u32, u32); 25] = [
+        (0, HOST_DSP),
+        (1, HOST_PROVIDERS),
+        (2, HOST_TICKS),
+        (3, HOST_TABLE_BAD),
+        (4, HOST_PACKAGE_LO),
+        (5, HOST_PACKAGE_HI),
+        (6, HOST_MENU_LOAD),
+        (7, HOST_MENU_LOAD_N),
+        (8, HOST_MENU_POPUP),
+        (9, HOST_MENU_POPUP_TEXT),
+        (10, HOST_MENU_POPUPS),
+        (11, HOST_MENU_ABOUT),
+        (12, HOST_MENU_ABOUT_N),
+        (13, HOST_MENU_PANEL),
+        (14, HOST_MENU_PANEL_N),
+        (15, HOST_MENU_MEM),
+        (16, HOST_MENU_MEM_N),
+        (17, HOST_MENU_TICK),
+        (21, HOST_MENU_APPLIES),
+        (24, HOST_MENU_LOADED),
+        (25, HOST_MENU_LINES),
+        (26, HOST_MENU_REDRAWS),
+        (27, HOST_MENU_POLLS),
+        (28, HOST_MENU_HEALTH),
+        (29, HOST_MENU_HEALTH_MENU),
+    ];
+    for (id, now) in pinned {
+        assert_eq!(now, id, "host directory id {id} moved");
+    }
+    assert_eq!(HOST_REMOVED_OWNED, [18, 19, 20, 22, 23]);
+    assert!(HOST_COUNT >= 30, "ids are never deleted");
+}

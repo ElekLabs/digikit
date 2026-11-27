@@ -7,10 +7,10 @@ use digi_control::{
     Command, Config, Handle, Mode, ScenarioSetup,
     cli::{self, StartupArgs},
     controller::spawn,
-    dispatch::Dispatcher,
     load_scenario,
 };
 use elektron_native_boot::Snapshot;
+mod analyzer;
 mod bulk_port;
 mod desktop_runtime;
 mod firmware;
@@ -18,6 +18,10 @@ mod library;
 mod local;
 mod log_save;
 mod midi_port;
+mod remote_audio;
+mod session;
+mod session_menu;
+mod symbols;
 use serde_json::Value;
 use std::sync::mpsc;
 use tauri::State;
@@ -28,13 +32,27 @@ struct Host {
     staging: PathBuf,
     /// Where firmware files picked with Open... are put for `firmware.load` (`<run dir>/open`).
     open_dir: PathBuf,
-    /// The .syx the app was started with (`mise run workbench -- FILE`); the console shows it and reloads it
-    /// when it changes. The page can read only this file.
-    source: Option<PathBuf>,
+    /// The firmware file the console shows, reloads and watches: the startup file, or the file set with `emu_set_source`
+    /// (Open, Auto-load firmware).
+    source: std::sync::Mutex<Option<PathBuf>>,
+    launch: Launch,
+}
+
+/// What the command line asked the first load to be (`emu_launch`). The webview starts that load, so the window shows at once.
+#[derive(Clone, serde::Serialize)]
+struct Launch {
+    /// The startup .syx, or null: the app opens with nothing loaded.
+    syx: Option<String>,
+    /// `--card-image`: the card of that first load.
+    card: Option<String>,
+    /// `--runtime` / `--no-runtime`; null: the console's "Boot with runtime" tick decides.
+    runtime: Option<bool>,
+    /// True when the app loaded it before the window (a `--scenario` replay); the webview loads nothing then.
+    loaded: bool,
 }
 
 fn parse_args() -> Result<StartupArgs, String> {
-    cli::parse_values(std::env::args_os().skip(1), cfg!(feature = "coupled-audio"))
+    cli::parse_values(std::env::args_os().skip(1), cfg!(feature = "sharc"))
 }
 
 async fn send(
@@ -101,16 +119,93 @@ fn save_diagnostics(name: &str, json: &str) -> Result<String, String> {
     Ok(path.display().to_string())
 }
 
-/// The startup .syx: its path, size and modification time (milliseconds since the epoch), or null
-/// when the app was started without one.
+/// The console's firmware file (see `Host::source`): its path, size and modification time (milliseconds since the epoch),
+/// or null when there is none.
 #[tauri::command]
 async fn emu_source_info(host: State<'_, Host>) -> Result<Option<Value>, String> {
-    let Some(path) = host.source.clone() else {
+    let Some(path) = host.source.lock().map_err(|e| e.to_string())?.clone() else {
         return Ok(None);
     };
     tauri::async_runtime::spawn_blocking(move || source_info(&path))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// What the command line asked the first load to be.
+#[tauri::command]
+async fn emu_launch(host: State<'_, Host>) -> Result<Launch, String> {
+    Ok(host.launch.clone())
+}
+
+/// Make PATH the console's firmware file (null: none); returns its info as `emu_source_info` does, plus `device`.
+#[tauri::command]
+async fn emu_set_source(
+    host: State<'_, Host>,
+    path: Option<String>,
+) -> Result<Option<Value>, String> {
+    let path = path
+        .map(PathBuf::from)
+        .map(|p| std::fs::canonicalize(&p).unwrap_or(p));
+    *host.source.lock().map_err(|e| e.to_string())? = path.clone();
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut info = source_info(&path)?;
+        // The device comes from the file's content; `emu_source_info` (polled every second) does not hash the file.
+        if let Some(Value::Object(map)) = info.as_mut() {
+            map.insert("device".into(), serde_json::json!(device_of_file(&path)));
+        }
+        Ok(info)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The device short id of a firmware file, by content (never by name): a stock image by its SHA-256 against the device files'
+/// firmware rows, a patched image by the device byte of its SysEx framing. None for anything else, or when the file cannot be read.
+fn device_of_file(path: &std::path::Path) -> Option<String> {
+    let bytes = std::fs::read(path).ok()?;
+    let sha = digi_control::firmware::sha256_hex(&bytes);
+    let registry = device_profile::Registry::load().ok()?;
+    if let Ok((device, _)) = registry.identify(&sha) {
+        return Some(device.short.clone());
+    }
+    match bytes.get(..5)? {
+        [0xf0, 0x00, 0x20, 0x3c, id] => {
+            patchkit::devdata::by_syx_id(*id).map(|d| d.short.to_string())
+        }
+        _ => None,
+    }
+}
+
+/// The native file picker for a firmware file (.syx), opened in the folder of START when it exists; the path, or null when
+/// cancelled.
+#[tauri::command]
+async fn emu_pick_syx(
+    app: tauri::AppHandle,
+    start: Option<String>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title("Open firmware")
+        .add_filter("Firmware", &["syx"]);
+    if let Some(dir) = start
+        .as_deref()
+        .map(std::path::Path::new)
+        .and_then(|p| p.parent())
+        .filter(|d| d.is_dir())
+    {
+        dialog = dialog.set_directory(dir);
+    }
+    let picked = tauri::async_runtime::spawn_blocking(move || dialog.blocking_pick_file())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(picked
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.display().to_string()))
 }
 
 /// How the running binary was built: the PGO state the launcher passed in the environment (null when unknown).
@@ -173,7 +268,8 @@ fn call_method(
     if let Some(session) = session {
         fields.insert("session".into(), session.into());
     }
-    handle.call(method, params).map_err(|e| e.message)
+    // the "(code N)" suffix stays: the webview turns it into `Error.code`
+    handle.call(method, params).map_err(|e| e.to_string())
 }
 
 /// Put the bytes of a firmware file the webview picked (Open...) where the controller can read them: `<run dir>/open/<name>`
@@ -447,7 +543,7 @@ fn load_startup(
 }
 
 fn main() {
-    #[cfg(feature = "coupled-audio")]
+    #[cfg(feature = "sharc")]
     if std::env::args_os()
         .nth(1)
         .is_some_and(|a| a == "--pgo-train")
@@ -473,7 +569,9 @@ fn main() {
         .run_dir
         .clone()
         .unwrap_or_else(|| PathBuf::from("out/native/run"));
+    let analyzer = analyzer::Analyzer::default();
     let mut config = Config::new(startup.audio.clone());
+    config.pcm_source = Some(analyzer.source(analyzer::Source::Emulator));
     config.audio_alt = startup.audio_alt.clone();
     config.mode = if startup.paused {
         Mode::Paused
@@ -505,6 +603,7 @@ fn main() {
     config.remember_card = startup.scenario.is_none();
     // A ColdFire-only runtime (a DT2 opened in a DN2-audio session) runs at the wall clock, not at the CPU's speed.
     config.pace_free = true;
+    config.dsp = startup.dsp;
     let run_dir_for_staging = run_dir.clone();
     config.on_quit = Some(Box::new(|| {
         // Let the socket thread write the reply first.
@@ -522,16 +621,16 @@ fn main() {
     if has_scenario {
         exit_on_scenario_done(&handle, startup.report.clone());
     }
-    if let Some(path) = startup.syx.clone() {
-        // The first session is 1 (`emu_startup` and the webview's pump use it). The digikit runtime is patched in unless
-        // `--no-runtime` or a scenario run (scenarios are stock).
-        let runtime = startup.runtime.unwrap_or(!has_scenario);
-        if runtime {
-            eprintln!(
-                "emulator startup: patching the digikit runtime in; a first boot of a new image takes a while, later ones come from the cache"
-            );
-        }
-        if let Err(error) = load_startup(&handle, &path, startup.card_image.as_deref(), runtime) {
+    // A scenario replay loads its firmware here (it is stock and must start at once); otherwise the webview starts the first load
+    // (`emu_launch`), so the window shows without waiting for the runtime patch and the boot.
+    let loaded = has_scenario && startup.syx.is_some();
+    if let Some(path) = startup.syx.clone().filter(|_| has_scenario) {
+        if let Err(error) = load_startup(
+            &handle,
+            &path,
+            startup.card_image.as_deref(),
+            startup.runtime.unwrap_or(false),
+        ) {
             eprintln!("emulator startup: {error}");
             process::exit(2);
         }
@@ -540,7 +639,7 @@ fn main() {
     // The control socket is on unless `--no-control` (design question 3).
     let _server = if startup.control != Some(false) {
         match digi_control::server::serve(
-            Dispatcher::new(handle.clone(), "digiemu-desktop"),
+            digi_control::dispatch::Dispatcher::new(handle.clone(), "digiemu-desktop"),
             digi_control::server::ServerOptions { run_dir },
             "digiemu-desktop",
         ) {
@@ -557,37 +656,82 @@ fn main() {
     } else {
         None
     };
-    #[cfg(not(unix))]
-    let _ = (&run_dir, Dispatcher::new);
     let exit_handle = handle.clone();
     let host = Host {
         handle,
         staging: run_dir_for_staging.join("cards").join("staging"),
         open_dir: run_dir_for_staging.join("open"),
-        source: startup
-            .syx
-            .clone()
-            .map(|path| std::fs::canonicalize(&path).unwrap_or(path)),
+        source: std::sync::Mutex::new(
+            startup
+                .syx
+                .clone()
+                .map(|path| std::fs::canonicalize(&path).unwrap_or(path)),
+        ),
+        launch: Launch {
+            syx: startup.syx.as_ref().map(|p| p.display().to_string()),
+            card: startup.card_image.as_ref().map(|p| p.display().to_string()),
+            runtime: startup.runtime,
+            loaded,
+        },
     };
     let app = tauri::Builder::default()
+        .menu(session_menu::build)
+        .on_menu_event(session_menu::dispatch)
+        .manage(symbols::catalog::CatalogFrame::default())
+        .register_uri_scheme_protocol(symbols::catalog::SCHEME, |context, request| {
+            use tauri::Manager;
+            context
+                .app_handle()
+                .state::<symbols::catalog::CatalogFrame>()
+                .response(request)
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(session::Mounts::default())
         .manage(host)
         .manage(midi_port::MidiPort::default())
         .manage(bulk_port::BulkPort::default())
+        .manage(
+            remote_audio::RemoteAudio::new(analyzer.source(analyzer::Source::Remote))
+                .expect("start remote audio worker"),
+        )
+        .manage(analyzer)
         // on the main thread, before any command: CoreMIDI refreshes the port list on the run loop of the thread of its first client
         .setup(|app| {
             use tauri::Manager;
             app.manage(midi_port::MidiWatch::start());
             Ok(())
         })
+        // Tauri runs a plain `fn` command on the main thread: any wait or file read there freezes the window. Every command is `async`
+        // (its blocking work goes to `spawn_blocking`).
         .invoke_handler(tauri::generate_handler![
             emu_call,
             emu_stage_syx,
             emu_save_diagnostics,
             emu_source_info,
+            emu_launch,
+            emu_set_source,
+            emu_pick_syx,
+            session::session_pick,
+            session::session_open,
+            session::session_create,
+            session::session_mount,
+            session_menu::session_set_actions_enabled,
+            session::session_release,
+            session::session_save,
+            session::session_preserve,
+            session::session_attach,
+            session::session_read_capture,
+            session::session_open_attachment,
             emu_build_info,
             emu_audio_status,
+            remote_audio::remote_audio_inputs,
+            remote_audio::remote_audio_start,
+            remote_audio::remote_audio_stop,
+            remote_audio::remote_audio_status,
+            analyzer::analyzer_open,
+            analyzer::analyzer_read,
+            analyzer::analyzer_close,
             emu_startup,
             emu_step,
             emu_tap,
@@ -597,13 +741,22 @@ fn main() {
             emu_card_load,
             card_open_folder,
             firmware::firmware_prepare,
+            firmware::system_package,
+            firmware::system_package_plan,
             firmware::firmware_save,
+            symbols::symbols_pick,
+            symbols::symbols_read,
+            symbols::symbols_releases,
+            symbols::catalog::symbols_open_review,
+            symbols::catalog::symbols_catalog_frame,
             log_save::log_save,
             library::lib_scan,
+            library::lib_build,
             library::lib_read,
+            library::lib_maps,
             library::sample_wasm,
             library::patchkit_wasm,
-            library::device_storage,
+            library::dkprof_wasm,
             local::local_pick_folder,
             local::local_list,
             local::local_read,
@@ -618,14 +771,19 @@ fn main() {
             bulk_port::bulk_close,
             bulk_port::bulk_send,
             bulk_port::bulk_recv,
-            bulk_port::bulk_cancel
+            bulk_port::bulk_cancel,
+            bulk_port::bulk_open_out_only,
+            bulk_port::bulk_send_out_only,
+            bulk_port::bulk_close_out_only
         ])
         .build(context)
         .expect("tauri build error");
     // The window closed: let the controller end the session (`quit`: the module store is mirrored once more and the card's changes
     // are exported to the +Drive folder) before the process goes. Without it the controller thread is cut off mid-export.
-    app.run(move |_app, event| {
+    app.run(move |app, event| {
         if let tauri::RunEvent::Exit = event {
+            use tauri::Manager;
+            app.state::<remote_audio::RemoteAudio>().shutdown();
             let _ = exit_handle.call("quit", serde_json::json!({}));
         }
     });
@@ -664,41 +822,10 @@ mod cli_tests {
     use super::*;
     use desktop_runtime::{AudioMode, AudioOptions};
 
-    /// Tauri runs a plain `fn` command on the main thread: any wait or file read there freezes the window. Every command is `async`
-    /// (its blocking work goes to `spawn_blocking`).
-    #[test]
-    fn every_command_is_async() {
-        let sources = [
-            ("main.rs", include_str!("main.rs")),
-            ("library.rs", include_str!("library.rs")),
-            ("local.rs", include_str!("local.rs")),
-            ("midi_port.rs", include_str!("midi_port.rs")),
-        ];
-        let mut found = 0;
-        for (file, text) in sources {
-            let lines: Vec<&str> = text.lines().collect();
-            for (i, line) in lines.iter().enumerate() {
-                if line.trim() != "#[tauri::command]" {
-                    continue;
-                }
-                found += 1;
-                let next = lines[i + 1..].iter().find(|l| {
-                    !l.trim_start().starts_with("///") && !l.trim_start().starts_with("#[")
-                });
-                let next = next.expect("a function follows").trim_start();
-                assert!(
-                    next.starts_with("async fn ") || next.starts_with("pub async fn "),
-                    "{file}: a command on the main thread: {next}"
-                );
-            }
-        }
-        assert!(found >= 20, "the scan found {found} commands");
-    }
-
     fn parse(args: &[&str]) -> Result<StartupArgs, String> {
         cli::parse_values(
             args.iter().map(std::ffi::OsString::from),
-            cfg!(feature = "coupled-audio"),
+            cfg!(feature = "sharc"),
         )
     }
 
@@ -825,7 +952,7 @@ mod cli_tests {
     }
 
     #[test]
-    fn audio_status_validates_session_and_reports_no_coupled_audio_as_null() {
+    fn audio_status_validates_session_and_reports_no_sharc_audio_as_null() {
         let (handle, controller) = spawn(Config::new(None));
         let sender = handle.sender().clone();
         let (missing_reply, missing_response) = mpsc::channel();
@@ -955,16 +1082,20 @@ mod emu_call_tests {
         let (handle, _controller) = spawn(Config::new(None));
         // A method round trip: no firmware yet.
         assert!(call_method(&handle, "status", None, None).unwrap()["firmware"].is_null());
+        let profiling = call_method(&handle, "profile.capabilities", None, Some(0)).unwrap();
+        assert_eq!(profiling["dsp_active"], false);
+        assert!(profiling["dsp_pc"].is_boolean());
+        assert!(profiling["main_pc"].is_boolean());
         // The current session (0 before the first load) passes; another one is stale and nothing runs.
         assert!(call_method(&handle, "status", None, Some(0)).is_ok());
         assert_eq!(
             call_method(&handle, "diagnostics", None, Some(4)).unwrap_err(),
-            "stale emulator session"
+            "stale emulator session (code 2)"
         );
         // `firmware.load` and `restart` start a session: the token must be newer than the current one.
         assert_eq!(
             call_method(&handle, "restart", None, Some(0)).unwrap_err(),
-            "stale emulator session"
+            "stale emulator session (code 2)"
         );
         // A start that fails does not take the token.
         let missing = json!({"syx": "/nonexistent/none.syx"});

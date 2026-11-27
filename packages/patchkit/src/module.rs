@@ -8,21 +8,32 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, Deserialize)]
 pub struct Manifest {
     #[serde(skip)]
-    pub sample_bank: Option<crate::typed::SampleBankDef>,
-    #[serde(skip)]
     pub sample_tracks: Option<crate::typed::SampleTracksDef>,
     pub module: ModuleInfo,
     #[serde(default)]
     pub targets: BTreeMap<String, String>,
     #[serde(default)]
     pub object: Vec<ObjectRef>,
+    /// The external object paired with the resident runtime, when the manifest declares one.
+    pub system_package: Option<SystemPackageRef>,
     /// Resolution rules for `tools/patchkit/port_resolve.py`; patchkit does not read them.
     #[serde(default)]
     pub anchor_rule: Vec<toml::Value>,
     #[serde(default)]
     pub op: Vec<Op>,
+    /// `[[slot]]`: pointer slots (a zero data word each) that `op = "stub"` sites load. Each is an entry of the image's one table `dkrt_info_table` (name hash and
+    /// the address of its word; `prim::build_info_table`).
+    #[serde(default)]
+    pub slot: Vec<SlotDef>,
+    /// `[[info]]`: data tables of this module that a service reads through `dkc_info`. Each is an entry of `dkrt_info_table`, with the address of `symbol`.
+    #[serde(default)]
+    pub info: Vec<InfoDef>,
     #[serde(default)]
     pub claim: Vec<Claim>,
+    /// `[[repack]]`: container sections of a read-only role that this module unpacks before they are used, so that patchkit may store them packed
+    /// (`[container] repack` of the device file allows it per device).
+    #[serde(default)]
+    pub repack: Vec<RepackDef>,
     /// P1: sections copied from the user's image (and extended) at apply time.
     #[serde(default)]
     pub section: Vec<SectionDef>,
@@ -44,11 +55,44 @@ pub struct Manifest {
     pub native_page: Vec<crate::typed::NativePageDef>,
     #[serde(skip)]
     pub voice: Vec<crate::typed::VoiceDef>,
-    /// Removed forms (`[[fx]]`, `[[machine]]`, `[[param]]`, `[[page]]`, `[[voice]]`): kept only to refuse them with a clear error.
-    #[serde(default)]
-    fx: Option<toml::Value>,
+    /// `[[machine]] id = "..."`: the machines the module declares in init (`dk_module_ctx_add_machine`); the id is all the manifest says of one. Their keys go in the
+    /// `.dkm` keys table (`dkneeds::keys`).
     #[serde(default, rename = "machine")]
-    machine_old: Option<toml::Value>,
+    pub machines: Vec<IdRef>,
+    /// `[[fx]] id = "..."`: the same for effects (`dk_module_ctx_add_fx`).
+    #[serde(default, rename = "fx")]
+    pub fxs: Vec<IdRef>,
+    /// `[[record]] kind = "lfo_shape", id = "ramp"`: a record of a generic kind (`[records.kinds]` `generic = true`) that `init` emits with `dk_record_add`. Its key is
+    /// `hash24(<module id>:<id>) << 8`, like a machine key; `patchkit gen` writes it as `DK_KEY_<ID>` in `build/gen/module_ids.h` and `init` writes that constant as the
+    /// first word of the record's body. The keys go in the KEYS entry of the header table, where the boot planner checks that the kind has an owner and that no other module has the key.
+    #[serde(default, rename = "record")]
+    pub records: Vec<RecordKey>,
+    /// A service outside sdk/sdk.toml declares its exported functions as `[[export]]`. Any service can declare a resident query. Their hashes and entry offsets go in `EXPORTS`.
+    #[serde(default, rename = "export")]
+    pub exports: Vec<ExportDef>,
+    /// A consumer declares the provider and minimum version of each locally defined service API it links.
+    #[serde(default, rename = "service_import")]
+    pub service_imports: Vec<ServiceImport>,
+    /// `[[hook]] name = "cf.menu.hook.settings_list.tail"`, `entry = "my_handler"`: the hook sites a service module takes and the global function of the object
+    /// that handles each. Their name hashes and entry offsets go in the `HOOKS` entry of the header table; the port file gives each a trampoline.
+    #[serde(default, rename = "hook")]
+    pub hooks: Vec<ServiceHook>,
+    /// `[[patch]] name = "cf.machine.patch.list_alloc"`: a patch site of the port file (plain bytes of 1, 2 or 4, as a table pointer or a bound) that a service module writes
+    /// at load with a value its `start` computes (`patches = [..]` of `service!`) and restores at unload. The name hash goes in a `HOOKS` item with the patch entry.
+    #[serde(default, rename = "patch")]
+    pub patches: Vec<ServicePatch>,
+    /// `[[fill]] slot = "frametype"`, `entry = "mf_frametype"`: a pointer slot of an image adapter (`[[slot]]` of its module.toml) that a service module fills with the address
+    /// of a global function of the object when it is loaded (the loader finds the slot word by the hash of the name in the image's info table).
+    #[serde(default, rename = "fill")]
+    pub fills: Vec<ServiceFill>,
+    /// `[[service.resource]]` and `[[service.record]]`: the capacities and record kinds a service declares. Parsed and validated, not packed yet (RC3).
+    #[serde(default)]
+    pub service: crate::service_decl::ServiceDecl,
+    /// `[uses.dt2]`, `[uses.dn2]`: registry rows the module takes on each device (the keys table's three counts). Per device because the runtime
+    /// builds different rows per device (DT2 has no page rows).
+    #[serde(default)]
+    pub uses: UsesByDevice,
+    /// Removed forms (`[[param]]`, `[[page]]`, `[[voice]]`): kept only to refuse them with a clear error.
     #[serde(default, rename = "param")]
     param_old: Option<toml::Value>,
     #[serde(default, rename = "page")]
@@ -61,9 +105,6 @@ pub struct Manifest {
     /// Set by `typed::lower`.
     #[serde(skip)]
     pub lowered: bool,
-    /// Set by `Library::lower`: the state block of each patched-in contract voice, by machine id.
-    #[serde(skip)]
-    pub voice_state: BTreeMap<String, crate::typed::VoiceState>,
 }
 
 impl Manifest {
@@ -75,31 +116,537 @@ impl Manifest {
                 self.module.id
             ));
         }
-        if self.fx.is_some() {
-            return Err(err!(
-                "[[fx]] is no longer read: declare effects with DK_FX in C (sdk/include/dk/fx/fx.h)"
-            ));
+        self.provided_service()?;
+        if !self.service.is_empty() {
+            if self.module.role != Some(ModuleRole::Service) {
+                return Err(err!(
+                    "{}: [[service.resource]] and [[service.record]] belong to a module with `role = \"service\"`",
+                    self.module.id
+                ));
+            }
+            self.service
+                .validate(&self.module.id, &crate::devdata::has_profile_key)?;
+        }
+        for r in &self.repack {
+            let who = &self.module.id;
+            if r.role.is_empty() || r.role.len() > 255 {
+                return Err(err!("{who}: [[repack]] role must be 1 to 255 bytes"));
+            }
+            if r.sha256.len() != 64 || !r.sha256.bytes().all(|c| c.is_ascii_hexdigit()) {
+                return Err(err!("{who}: [[repack]] sha256 must be 64 hex digits"));
+            }
+            if [r.dest, r.stage_end, r.len]
+                .iter()
+                .any(|n| *n > u32::MAX as u64)
+            {
+                return Err(err!(
+                    "{who}: [[repack]] dest, stage_end and len must fit 32 bits (the patch record stores them as words)"
+                ));
+            }
+            if r.stage_end < r.dest {
+                return Err(err!("{who}: [[repack]] stage_end is below dest"));
+            }
+        }
+        for (table, ids) in [("machine", &self.machines), ("fx", &self.fxs)] {
+            let mut seen = std::collections::BTreeSet::new();
+            for r in ids {
+                let ok = !r.id.is_empty()
+                    && r.id.bytes().all(|c| {
+                        c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-' || c == b'_'
+                    });
+                if !ok {
+                    return Err(err!(
+                        "[[{table}]] id {:?}: use lowercase ascii letters, digits, `-` and `_`",
+                        r.id
+                    ));
+                }
+                if !seen.insert(r.id.as_str()) {
+                    return Err(err!("[[{table}]] id {:?} is declared twice", r.id));
+                }
+                if let Some(d) = &r.dsp {
+                    let ok = !d.is_empty()
+                        && d.bytes()
+                            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_');
+                    if !ok {
+                        return Err(err!(
+                            "[[{table}]] id {:?}: dsp {d:?}: use lowercase ascii letters, digits and `_`",
+                            r.id
+                        ));
+                    }
+                }
+            }
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for r in &self.records {
+            let ok = !r.id.is_empty()
+                && r.id.bytes().all(|c| {
+                    c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-' || c == b'_'
+                });
+            if !ok {
+                return Err(err!(
+                    "[[record]] id {:?}: use lowercase ascii letters, digits, `-` and `_`",
+                    r.id
+                ));
+            }
+            // the generated constants `DK_KEY_<ID>` of the records are one list
+            if !seen.insert(r.id.as_str()) {
+                return Err(err!("[[record]] id {:?} is declared twice", r.id));
+            }
         }
         for (name, old) in [
-            ("machine", &self.machine_old),
             ("param", &self.param_old),
             ("page", &self.page_old),
             ("voice", &self.voice_old),
         ] {
             if old.is_some() {
                 return Err(err!(
-                    "[[{name}]] is no longer read: declare machines with DK_MACHINE in C (sdk/include/dk/machine/machine.h)"
+                    "[[{name}]] is no longer read: declare machines and effects with `dk_module_ctx_add_machine` / `dk_module_ctx_add_fx` in init and list their ids as [[machine]] / [[fx]] in module.toml"
                 ));
             }
         }
         Ok(())
     }
+
+    /// Turn each reservation (`[[entry]] ... count = EXPR`) into its entries: `<id>0 ..= <id>(n-1)` for each device the entry names, in
+    /// place, with n from the device file's `[limits]`. The count is device data; the manifest holds one line for a block of rows.
+    fn expand_reservations(&mut self) -> Result<()> {
+        struct Limits<'a>(&'a crate::devdata::DeviceInfo);
+        impl crate::expr::Env for Limits<'_> {
+            fn symbol(&self, name: &str) -> Option<i64> {
+                self.0.limit_of(name).map(|v| v as i64)
+            }
+            fn field(&self, _: &str) -> Option<i64> {
+                None
+            }
+            fn image(&self, _: &str, _: i64, _: u8) -> Result<i64> {
+                Err(err!("a reservation count reads device limits only"))
+            }
+        }
+        if self.entry.iter().all(|e| e.count.is_none()) {
+            return Ok(());
+        }
+        let who = self.module.id.clone();
+        let mut out = Vec::with_capacity(self.entry.len());
+        for e in std::mem::take(&mut self.entry) {
+            let Some(count) = &e.count else {
+                out.push(e);
+                continue;
+            };
+            if e.devices.is_empty() {
+                return Err(err!(
+                    "{who}: reservation {}.{} names no devices (its count is a device limit)",
+                    e.registry,
+                    e.id
+                ));
+            }
+            for dev in &e.devices {
+                let info = crate::devdata::by_short(dev).ok_or_else(|| {
+                    err!(
+                        "{who}: reservation {}.{}: unknown device {dev}",
+                        e.registry,
+                        e.id
+                    )
+                })?;
+                let n = crate::expr::eval_str(&count.text(), &Limits(info)).map_err(|x| {
+                    err!("{who}: reservation {}.{} on {dev}: {x}", e.registry, e.id)
+                })?;
+                if n < 0 {
+                    return Err(err!(
+                        "{who}: reservation {}.{} on {dev}: count {n} is negative",
+                        e.registry,
+                        e.id
+                    ));
+                }
+                for k in 0..n {
+                    out.push(EntryDef {
+                        registry: e.registry.clone(),
+                        id: format!("{}{k}", e.id),
+                        devices: vec![dev.clone()],
+                        count: None,
+                        fields: e.fields.clone(),
+                    });
+                }
+            }
+        }
+        self.entry = out;
+        Ok(())
+    }
+
+    /// What a `role = "service"` module provides (`None` for any other role). SDK services keep their generated exports.
+    pub fn provided_service(&self) -> Result<Option<crate::dkm::Provided>> {
+        let id = &self.module.id;
+        if self.module.role != Some(ModuleRole::Service) {
+            if self.module.service.is_some()
+                || self.module.callback_order.is_some()
+                || !self.exports.is_empty()
+                || !self.hooks.is_empty()
+                || !self.patches.is_empty()
+                || !self.fills.is_empty()
+            {
+                return Err(err!(
+                    "{id}: `service` or `callback_order` in [module], [[export]], [[hook]], [[patch]] and [[fill]] belong to a module with `role = \"service\"`"
+                ));
+            }
+            return Ok(None);
+        }
+        let Some(service) = &self.module.service else {
+            return Err(err!(
+                "{id}: a module with `role = \"service\"` needs `service = \"NAME\"` in [module]"
+            ));
+        };
+        let sdk_service = crate::sdkgen::provider_services().contains(service);
+        if !sdk_service && !local_service_name(service) {
+            return Err(err!(
+                "{id}: service {service:?} must be an unreserved service name"
+            ));
+        }
+        // The runtime's find and Transfer name a provider by its file stem: `services/<service>.dks`, and the stem is the id's leaf.
+        let leaf = id.rsplit('/').next().unwrap_or(id);
+        if leaf.len() > 50 {
+            return Err(err!(
+                "{id}: the id's last part is {} bytes: a service file name is at most 50 (`services/<name>.dks` and its NUL must fit the 64 bytes of a selection path)",
+                leaf.len()
+            ));
+        }
+        if leaf != service {
+            return Err(err!(
+                "{id}: the id's last part {leaf:?} must equal the provided service {service:?} (the file is `{service}.dks`: the runtime finds a provider by its file name)"
+            ));
+        }
+        let query_name = dkrt_sdk::RESIDENT_QUERY_ENTRY;
+        let query_count = self.exports.iter().filter(|e| e.name == query_name).count();
+        if query_count > 1 {
+            return Err(err!("{id}: the service declares {query_name} twice"));
+        }
+        let mut exports = if sdk_service {
+            if let Some(e) = self.exports.iter().find(|e| e.name != query_name) {
+                return Err(err!(
+                    "{id}: [[export]] {:?} is not read: the exports of a service file are the `provided = true` imports of its service in sdk/sdk.toml",
+                    e.name
+                ));
+            }
+            crate::sdkgen::provided_exports(service)
+        } else {
+            if self.exports.is_empty() {
+                return Err(err!(
+                    "{id}: a service outside sdk/sdk.toml needs at least one [[export]]"
+                ));
+            }
+            let mut local = vec![];
+            for e in self.exports.iter().filter(|e| e.name != query_name) {
+                validate_local_import(id, &e.name)?;
+                local.push(e.name.clone());
+            }
+            local
+        };
+        if query_count != 0 {
+            exports.push(query_name.into());
+        }
+        let mut hooks: Vec<(String, String, Vec<String>)> = vec![];
+        for h in &self.hooks {
+            if h.name.is_empty() || h.entry.is_empty() {
+                return Err(err!(
+                    "{id}: [[hook]] needs a `name` and an `entry`, both not empty"
+                ));
+            }
+            // one name may be declared once for each of disjoint devices (an entry without `devices` is for every device)
+            if hooks.iter().any(|(n, _, d)| {
+                *n == h.name
+                    && (d.is_empty()
+                        || h.devices.is_empty()
+                        || d.iter().any(|x| h.devices.contains(x)))
+            }) {
+                return Err(err!(
+                    "{id}: [[hook]] {:?} is declared twice for a common device (one name has one entry for each device, `devices` apart)",
+                    h.name
+                ));
+            }
+            for d in &h.devices {
+                if crate::devdata::by_short(d).is_none() {
+                    return Err(err!(
+                        "{id}: [[hook]] {:?}: device {d:?} is not one of {}",
+                        h.name,
+                        crate::devdata::short_list()
+                    ));
+                }
+            }
+            hooks.push((h.name.clone(), h.entry.clone(), h.devices.clone()));
+        }
+        let mut patches: Vec<(String, Vec<String>)> = vec![];
+        for h in &self.patches {
+            if h.name.is_empty() {
+                return Err(err!("{id}: [[patch]] needs a `name`, not empty"));
+            }
+            if patches.iter().any(|(n, d)| {
+                *n == h.name
+                    && (d.is_empty()
+                        || h.devices.is_empty()
+                        || d.iter().any(|x| h.devices.contains(x)))
+            }) {
+                return Err(err!(
+                    "{id}: [[patch]] {:?} is declared twice for a common device",
+                    h.name
+                ));
+            }
+            if hooks.iter().any(|(n, _, _)| *n == h.name) {
+                return Err(err!(
+                    "{id}: [[patch]] {:?} is also a [[hook]] (a name is one or the other)",
+                    h.name
+                ));
+            }
+            for d in &h.devices {
+                if crate::devdata::by_short(d).is_none() {
+                    return Err(err!(
+                        "{id}: [[patch]] {:?}: device {d:?} is not one of {}",
+                        h.name,
+                        crate::devdata::short_list()
+                    ));
+                }
+            }
+            patches.push((h.name.clone(), h.devices.clone()));
+        }
+        // per device, the file's patches stay within what the loader keeps from `init` to the install
+        for dev in std::iter::once(None)
+            .chain(crate::devdata::all().iter().map(|d| Some(d.short.as_str())))
+        {
+            let n = patches
+                .iter()
+                .filter(|(_, d)| d.is_empty() || dev.is_some_and(|x| d.iter().any(|y| y == x)))
+                .count();
+            if n > dkneeds::SERVICE_PATCHES_MAX as usize {
+                return Err(err!(
+                    "{id}: {n} [[patch]] entries, over the {} a service file may take",
+                    dkneeds::SERVICE_PATCHES_MAX
+                ));
+            }
+        }
+        let mut fills: Vec<(String, String, Vec<String>)> = vec![];
+        let mut dsp_fills: Vec<crate::dkm::DspFill> = vec![];
+        for f in &self.fills {
+            if f.slot.is_empty() || f.entry.is_empty() {
+                return Err(err!(
+                    "{id}: [[fill]] needs a `slot` and an `entry`, both not empty"
+                ));
+            }
+            if fills.iter().any(|(n, _, _)| *n == f.slot) {
+                return Err(err!("{id}: [[fill]] {:?} is declared twice", f.slot));
+            }
+            for d in &f.devices {
+                if crate::devdata::by_short(d).is_none() {
+                    return Err(err!(
+                        "{id}: [[fill]] {:?}: device {d:?} is not one of {}",
+                        f.slot,
+                        crate::devdata::short_list()
+                    ));
+                }
+            }
+            match f.space.as_deref() {
+                None | Some("cf") => {
+                    fills.push((f.slot.clone(), f.entry.clone(), f.devices.clone()))
+                }
+                Some("dsp") => {
+                    let names = crate::sdkgen::dsp_slot_names();
+                    if !names.contains(&f.slot) {
+                        return Err(err!(
+                            "{id}: [[fill]] {:?} has space \"dsp\", but `[dsp.slots]` of sdk/sdk.toml has no such slot ({})",
+                            f.slot,
+                            names.join(", ")
+                        ));
+                    }
+                    dsp_fills.push(crate::dkm::DspFill {
+                        slot: f.slot.clone(),
+                        entry: f.entry.clone(),
+                        devices: f.devices.clone(),
+                        offset: None,
+                    });
+                }
+                Some(s) => {
+                    return Err(err!(
+                        "{id}: [[fill]] {:?}: space {s:?} is not \"cf\" or \"dsp\"",
+                        f.slot
+                    ));
+                }
+            }
+        }
+        if fills.len() + dsp_fills.len() > dkneeds::SLOTS_MAX as usize {
+            return Err(err!(
+                "{id}: {} [[fill]] entries, over the {} a service file fills",
+                fills.len() + dsp_fills.len(),
+                dkneeds::SLOTS_MAX
+            ));
+        }
+        Ok(Some(crate::dkm::Provided {
+            service: service.clone(),
+            callback_order: self.module.callback_order,
+            exports,
+            hooks,
+            patches,
+            fills,
+            dsp_fills,
+        }))
+    }
 }
 
-/// One generated file of device data: `kind` is `rust` (constants every device agrees on, one file), `gas-shared` (the same as `.equ` lines), `gas` (a ColdFire assembler
+/// The module's provided service for `pack` (see [`Manifest::provided_service`]).
+pub fn service_of(m: &Module) -> Result<Option<crate::dkm::Provided>> {
+    m.manifest.provided_service()
+}
+
+/// An entry of `[[export]]`: the name of an exported function.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ExportDef {
+    pub name: String,
+}
+
+/// The API of a service outside the SDK, declared in a consumer's manifest.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceImport {
+    pub service: String,
+    pub min_version: String,
+    pub names: Vec<String>,
+}
+
+pub(crate) fn local_service_name(service: &str) -> bool {
+    !service.is_empty()
+        && service.len() <= 50
+        && service
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+        && !crate::sdkgen::reserved_service(service)
+}
+
+pub(crate) fn validate_local_import(id: &str, name: &str) -> Result<()> {
+    if name.len() >= crate::dkm::IMPORT_LEN
+        || !name
+            .as_bytes()
+            .first()
+            .is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
+        || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        || crate::sdkgen::reserved_service_import(name)
+    {
+        return Err(err!(
+            "{id}: service API symbol {name:?} must be an unreserved C identifier of at most {} bytes",
+            crate::dkm::IMPORT_LEN - 1
+        ));
+    }
+    Ok(())
+}
+
+/// An entry of `[[fill]]` of a service: the pointer slot of an image adapter and the global function of the object whose address the installer writes in it.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceFill {
+    pub slot: String,
+    /// A global function of the ColdFire object, or with `space = "dsp"` a global text symbol of the DSP object.
+    pub entry: String,
+    /// `"cf"` (default), or `"dsp"` for a slot declared with `space = "dsp"`: the entry is then a pc in the file's DSP section.
+    #[serde(default)]
+    pub space: Option<String>,
+    /// The devices the fill is for (`dt2`, `dn2`); empty: every device. Needed when the slot is limited to some devices (`devices` of its `[[slot]]`).
+    #[serde(default)]
+    pub devices: Vec<String>,
+}
+
+/// An entry of `[[hook]]` of a service: the hook of the port files (`ports/`) and the global function of the object that handles it.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceHook {
+    pub name: String,
+    pub entry: String,
+    /// The devices the hook is for (`dt2`, `dn2`); empty: every device that declares it. `service!` lists the hooks of each device the same way
+    /// (`hooks_dt2`, `hooks_dn2`, `hooks`), and `patchkit service-check` compares the two per device.
+    #[serde(default)]
+    pub devices: Vec<String>,
+}
+
+/// An entry of `[[patch]]` of a service: the patch site of the port files (`ports/`); the bytes are the service's own, given in `init`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ServicePatch {
+    pub name: String,
+    /// The devices the patch is for (short names of `devices/*.toml`); empty: every device that declares it. `service!` lists the patches of each device the same way.
+    #[serde(default)]
+    pub devices: Vec<String>,
+}
+
+/// An entry of `[[record]]`: the kind by its lower-case name (`dkneeds::KIND_NAMES`) and the local id of one record of it (the key derives from the module id and this id).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecordKey {
+    pub kind: String,
+    pub id: String,
+}
+
+/// An entry of `[[machine]]` or `[[fx]]`: the id and an optional DSP symbol prefix (any other key is refused).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct IdRef {
+    pub id: String,
+    /// The prefix of the DSP entry symbols (`_<prefix>_render`, ...) when it is not the id: for DSP code that exists already. It never changes the id,
+    /// which the keys hash and `module_ids.h` names its constant from.
+    #[serde(default)]
+    pub dsp: Option<String>,
+}
+
+impl IdRef {
+    /// The prefix of this entry's DSP symbols and where it came from: `dsp` of module.toml, else the id with `-` as `_`.
+    pub fn dsp_prefix(&self) -> (String, &'static str) {
+        match &self.dsp {
+            Some(p) => (p.clone(), "`dsp` of its [[machine]]/[[fx]] in module.toml"),
+            None => (self.id.replace('-', "_"), "its id"),
+        }
+    }
+}
+
+/// `[uses.<device>]`: one table per device (short names as in `devices/*.toml`); a module has only the tables of the devices it builds for.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct UsesByDevice {
+    #[serde(default)]
+    pub dt2: Option<Uses>,
+    #[serde(default)]
+    pub dn2: Option<Uses>,
+}
+
+impl UsesByDevice {
+    /// The counts for DEVICE (`dt2`, `dn2`); all 0 when the module has no table for it.
+    pub fn for_device(&self, device: &str) -> Uses {
+        match device {
+            "dt2" => self.dt2,
+            "dn2" => self.dn2,
+            _ => None,
+        }
+        .unwrap_or_default()
+    }
+}
+
+/// One device's registry rows a module takes, all default 0.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Uses {
+    #[serde(default)]
+    pub machine_rows: u16,
+    #[serde(default)]
+    pub param_rows: u16,
+    #[serde(default)]
+    pub page_rows: u16,
+    /// Payload bytes of the record block `init` commits (the `module_commit` event's `records_size`): the keys table's `record_bytes`.
+    #[serde(default)]
+    pub record_bytes: u16,
+    /// DSP instructions per block of one voice of the module's machines, the worst steady block `module:check` measured (the keys table's `DSP_COST_VOICE`).
+    #[serde(default)]
+    pub dsp_cost_voice: u32,
+    /// DSP instructions per block of the module's effects, summed (the keys table's `DSP_COST_FX`).
+    #[serde(default)]
+    pub dsp_cost_fx: u32,
+}
+
+/// One generated file of device data: `kind` is `gas-dkdv` (the runtime's device object `dkrt_dev`, one file per device) or `gas-dkdv-offsets` (its field offsets, one file), `gas` (a ColdFire assembler
 /// include, `.equ` lines, one file per device), `sharc` (a SHARC+ include, `#define` lines, one file per device) `sharc-adapter` (the `ADM_*` defines of `[adapter.machine]`, one file per device), `gas-sample-pool` or `sharc-sample-pool` (the `SP_*` numbers of `[adapter.sample_pool]` for ColdFire and SHARC+ assembly, one file per device). `path` is relative
 /// to the module; `{dev}` stands for the device's short name in a per-device path. `uses` lists the constant names the module reads; a trailing `*` matches a numbered
-/// family (`FX_VALUE_*`). It is required for `rust`, `gas-shared`, `gas` and `sharc`, and refused for the other kinds.
+/// family (`FX_VALUE_*`). It is required for `gas` and `sharc`, and refused for the other kinds.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GenDef {
@@ -199,6 +746,10 @@ pub struct RegistryDef {
     pub region: String,
     #[serde(default)]
     pub devices: Vec<String>,
+    /// The window of `core/dsp-link` this registry fills: patchkit then also defines `window<N>.rows` and `window<N>.count` (the symbols of `<name>.rows` and `<name>.count`), so
+    /// the link names its windows and not the registries that fill them. Two registries cannot take one window.
+    #[serde(default)]
+    pub window: Option<u32>,
     /// One all-zero row behind the entries (not counted in `<reg>.count`): a table a routine scans until a zero row.
     #[serde(default)]
     pub terminator: bool,
@@ -213,6 +764,12 @@ pub struct RegistryDef {
     /// Field values of a gap row (the registry's field defaults fill the rest).
     #[serde(default)]
     pub gap: Option<BTreeMap<String, toml::Value>>,
+    /// The registry takes no entry from a patched-in module: its rows are made at run time. The text says why and is part of the error that a module with an entry gets.
+    #[serde(default)]
+    pub refuse_entries: Option<String>,
+    /// Modules that may still add entries to a registry with `refuse_entries` (`core/rows` reserves the rows that run-time machines fill).
+    #[serde(default)]
+    pub refuse_entries_except: Vec<String>,
 }
 
 /// The parsed `index_table` of a registry: device -> numbers.
@@ -229,9 +786,12 @@ pub struct DevAlloc {
     pub last: i64,
     #[serde(default)]
     pub alloc: BTreeMap<String, i64>,
-    /// First number of the range reserved for run-time modules (`core/dynreg` reserves `dynamic_first ..= last`).
+    /// First number of the range reserved for run-time modules (`core/rows` reserves `dynamic_first ..= last`).
     #[serde(default)]
     pub dynamic_first: Option<i64>,
+    /// How many stock machine types the firmware has (types `0 .. stock_types`; the numbers up to `dynamic_first` that are not stock are built-in or gap rows).
+    #[serde(default)]
+    pub stock_types: Option<i64>,
 }
 
 impl AllocTable {
@@ -268,11 +828,11 @@ impl DevAlloc {
         let Some(first) = self.dynamic_first else {
             return Ok(());
         };
-        // the range belongs to the run-time modules; `core/dynreg` reserves its rows there
+        // the range belongs to the run-time modules; `core/rows` reserves its rows there
         if let Some((k, v)) = self
             .alloc
             .iter()
-            .find(|(k, v)| **v >= first && !k.starts_with("core/dynreg:"))
+            .find(|(k, v)| **v >= first && !k.starts_with("core/rows:"))
         {
             return Err(err!(
                 "allocation table [{dev}]: {k} = {v} lies in the run-time range {first}.."
@@ -301,6 +861,10 @@ pub struct EntryDef {
     pub id: String,
     #[serde(default)]
     pub devices: Vec<String>,
+    /// A reservation: the entry stands for `<id>0 ..= <id>(n-1)` on each of its `devices`, n being this expression over the device file's
+    /// `[limits]` (`8 * fx_slots`). Expanded when the manifest loads (`Manifest::expand_reservations`); no entry keeps it afterwards.
+    #[serde(default)]
+    pub count: Option<ExprSrc>,
     #[serde(flatten)]
     pub fields: BTreeMap<String, toml::Value>,
 }
@@ -324,6 +888,8 @@ pub enum ModuleRole {
     Installer,
     Adapter,
     App,
+    /// A service provider (a `.dks`; any category): needs `service` in [module].
+    Service,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -336,6 +902,12 @@ pub struct ModuleInfo {
     /// The layer of a `core` module (required for `category = "core"`, see `ModuleRole`)
     #[serde(default)]
     pub role: Option<ModuleRole>,
+    /// With `role = "service"`: the service the module provides.
+    #[serde(default)]
+    pub service: Option<String>,
+    /// With `role = "service"`: the order its row joins the runtime's callback table.
+    #[serde(default)]
+    pub callback_order: Option<u32>,
     /// What the module is; `framework` is internal (core modules)
     #[serde(rename = "type")]
     pub kind: ModuleKind,
@@ -349,15 +921,58 @@ pub struct ModuleInfo {
     /// Restrict to these ports (`dt2-1.17`); empty = any firmware whose anchors resolve.
     #[serde(default)]
     pub ports: Vec<String>,
+    /// Names of anchors and hooks that the module can do without. A firmware whose port lacks one still takes the module: the
+    /// object's link to the anchor is 0, a hook op of that name is skipped (and the tail symbols of its site, `hook.<site>.tail`, are 0),
+    /// and the plan lists `<owner>:<name>` under `disabled`. The module's code checks the link for 0 before it uses it.
+    #[serde(default)]
+    pub optional_anchors: Vec<String>,
     /// A module that is loaded at run time (`patchkit pack`, a `.dkm`), never patched into an image. Its typed sections
     /// are not lowered into registry rows; the packer lowers them into the `.dkm` `register` records.
     #[serde(default)]
     pub dynamic: bool,
-    /// Names of Api entries (`[api]` of sdk/sdk.toml) that the module calls and the packer cannot see in the file. `pack` declares the
-    /// newest `since` of them as the Api minor, so a runtime without the entry refuses the module at load, and a runtime that has it
-    /// accepts it. Calls a module makes only after it checked `api->size` need no entry here.
+    /// Tables of the device file that the module reads, as dotted paths (`input.keys`). Every device whose patch sets include the module must have them
+    /// (`devgen::check_device_tables` for `patchkit gen`, `devgen::check_module_tables` for the generator of the module, `build` and `pack`); the module's `[[gen]]` constants come from them.
     #[serde(default)]
-    pub uses_api: Vec<String>,
+    pub needs_device: Vec<String>,
+    /// Device switches that make this module part of a patch set: `{ switch = "card.guard.enabled", with = "core/runtime" }` says that on a device whose file has that
+    /// boolean true, every module set that holds `with` must hold this module, and that a set that holds this module on a device where the boolean is not true is refused
+    /// (`devgen::check_needed_when`, run by `patchkit gen` on the named patch sets and by `apply` on the resolved set).
+    #[serde(default)]
+    pub needed_when: Vec<NeededWhen>,
+}
+
+/// One entry of `[module] needed_when`.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NeededWhen {
+    /// A boolean of a nested table of the device file, by dotted path.
+    pub switch: String,
+    /// The module whose presence makes this module required while the switch is on.
+    pub with: String,
+}
+
+impl ModuleInfo {
+    /// A module the run-time loader takes as a `.dkm`: not `core`, not a framework, and dynamic, raw or a service
+    /// (the rule of the workbench library and of `apps/web/src/data/shipped.mjs`).
+    pub fn is_runtime(&self) -> bool {
+        self.category != "core"
+            && !matches!(self.kind, ModuleKind::Framework)
+            && (self.dynamic || matches!(self.kind, ModuleKind::Raw | ModuleKind::Service))
+    }
+
+    /// Whether the module builds for the device `short` (`dt2`): no `ports`, or a port of that device.
+    pub fn builds_for(&self, short: &str) -> bool {
+        self.ports.is_empty()
+            || self
+                .ports
+                .iter()
+                .any(|p| p.split('-').next() == Some(short))
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct SystemPackageRef {
+    pub path: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -378,7 +993,7 @@ pub struct ObjectRef {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Op {
-    /// `write` or `hook`
+    /// `write`, `hook` or `stub`
     pub op: String,
     #[serde(default)]
     pub anchor: String,
@@ -416,6 +1031,55 @@ pub struct Op {
     pub expect_sha256: Option<String>,
     #[serde(default)]
     pub reloc: Vec<OpReloc>,
+    /// stub: the declared slot the stub loads (a `[[slot]]` of the module)
+    #[serde(default)]
+    pub slot: Option<String>,
+    /// stub: the register the stub overwrites (`d0`..`d7`, `a0`..`a6`); it must be one the hook's contract lets the hook clobber
+    #[serde(default)]
+    pub scratch: Option<String>,
+    /// stub: expression of a hand-written stock path; the stub jumps there instead of running the re-encoded displaced instructions
+    #[serde(default)]
+    pub tail: Option<String>,
+    /// stub: `taken` or `fallthrough`: the site ends in a conditional branch, and the stub looks at its slot only when that branch would be taken (`taken`) or would not be
+    /// (`fallthrough`). The displaced instructions before the branch run first, then the stock branch decides, so the other outcome runs the stock path without a slot test.
+    #[serde(default)]
+    pub when: Option<String>,
+}
+
+/// `[[info]] name = "rows_info", symbol = "rows_info", devices = ["dt2"]`: an entry of the image's info table: the hash of `name` and the address that the
+/// expression `symbol` evaluates to (a global symbol of the module's objects). `name` is what a service passes to `dkc_info` (as its name hash); it shares one
+/// namespace with the `[[slot]]` names of all image adapters, and `patchkit apply` refuses two entries with one hash.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InfoDef {
+    pub name: String,
+    /// Expression of the address; default: the symbol named `name`.
+    #[serde(default)]
+    pub symbol: Option<String>,
+    #[serde(default)]
+    pub devices: Vec<String>,
+}
+
+/// `[[slot]] name = "frame_type", devices = ["dn2"]`: one 4-byte pointer slot in the module's data region, zero at build.
+#[derive(Clone, Debug, Deserialize)]
+pub struct SlotDef {
+    pub name: String,
+    #[serde(default)]
+    pub devices: Vec<String>,
+    /// region of the slot words (default `cf.expansion`); a CF slot only
+    #[serde(default)]
+    pub place: Option<String>,
+    /// `"cf"` (default): a pointer word in the module's data that a ColdFire `op = "stub"` loads. `"dsp"`: the slot of a SHARC hook stub: `name` is an entry of `[dsp.slots]` of
+    /// `sdk/sdk.toml` (a word of core/dsp-link's slot block, which the module's DSP stub reads); the module reserves no word, the info table gets the entry with the slot's index.
+    #[serde(default)]
+    pub space: Option<String>,
+}
+
+impl SlotDef {
+    /// The slot is a word of core/dsp-link's slot block (`space = "dsp"`).
+    pub fn is_dsp(&self) -> bool {
+        self.space.as_deref() == Some("dsp")
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -426,6 +1090,23 @@ pub struct OpReloc {
     pub symbol: String,
     #[serde(default)]
     pub addend: i64,
+}
+
+/// `[[repack]] role = "cf2", dest = 0x.., stage_end = 0x.., len = N, sha256 = "..."`: the module unpacks the section of `role` in place. The packed stream is read so that it ends at
+/// `stage_end` and is unpacked from `dest` upward; patchkit refuses the build when the unpacked output would reach stream bytes that are not read yet
+/// (`aplib::inplace_margin` is not above 0). The module's code uses the same two addresses.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepackDef {
+    pub role: String,
+    pub dest: u64,
+    pub stage_end: u64,
+    /// The length and SHA-256 (hex) of the section's decoded stock bytes, which the module checks after it unpacks them; patchkit refuses a stock
+    /// section that differs, because the module would refuse it at every boot.
+    pub len: u64,
+    pub sha256: String,
+    #[serde(default)]
+    pub devices: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -445,95 +1126,6 @@ pub struct Module {
     pub digest: String,
     /// The directory of the manifest (empty for a module built from parts)
     pub dir: std::path::PathBuf,
-}
-
-/// A patched-in contract voice (`[[voice]]` with `desc`) needs memory for the state of its voices, which a `.dkm` gets from the runtime at load
-/// (`dkmdsp.rs`). Here the module's DSP object gets a bss section `dk.state.<machine>` of `voices` x `stride` bytes and the global symbol
-/// `_dkstate_<machine>`, which the voice row names as its state base; the patch linker places it with the rest of the object. `desc` is read
-/// from the object's data (`dk_machine_desc`, little endian: voices at word 3, state_bytes at 4, state_clear_bytes at 5).
-fn reserve_voice_state(m: &mut Module) -> Result<()> {
-    let voices: Vec<(String, String)> = m
-        .manifest
-        .voice
-        .iter()
-        .map(|v| (v.machine.clone(), v.desc.clone()))
-        .collect();
-    for (machine, desc) in voices {
-        if m.manifest.voice_state.contains_key(&machine) {
-            continue;
-        }
-        let found = m.objects.iter().position(|o| {
-            o.arch == "sharc"
-                && o.symbols
-                    .iter()
-                    .any(|s| s.name == desc && s.section.is_some())
-        });
-        let Some(oi) = found else {
-            return Err(err!(
-                "voice {machine}: desc {desc} is not defined by a DSP object of the module"
-            ));
-        };
-        let o = &mut m.objects[oi];
-        let sym = o.symbols.iter().find(|s| s.name == desc).unwrap().clone();
-        let sec = o
-            .sections
-            .iter()
-            .find(|x| Some(&x.name) == sym.section.as_ref())
-            .unwrap();
-        if sec.kind != "data" {
-            return Err(err!("voice {machine}: desc {desc} is not initialised data"));
-        }
-        let bytes = unhex(&sec.hex)?;
-        let at = sym.value as usize;
-        let words = bytes
-            .get(at..at + crate::dkmdsp::DESC_WORDS * 4)
-            .ok_or_else(|| {
-                err!(
-                    "voice {machine}: desc {desc} is shorter than {} bytes",
-                    crate::dkmdsp::DESC_WORDS * 4
-                )
-            })?;
-        let w = |i: usize| u32::from_le_bytes(words[i * 4..i * 4 + 4].try_into().unwrap());
-        if w(0) != crate::dkmdsp::DESC_MAGIC
-            || w(1) & !crate::dkmdsp::DESC_STEREO != crate::dkmdsp::DESC_CONTRACT
-        {
-            return Err(err!(
-                "voice {machine}: desc {desc} is no dk_machine_desc of contract {}",
-                crate::dkmdsp::DESC_CONTRACT
-            ));
-        }
-        let (voices_n, state, clear) = (w(3), w(4), w(5));
-        if clear > state || voices_n == 0 {
-            return Err(err!(
-                "voice {machine}: desc {desc}: {voices_n} voices, state {state} bytes, clear {clear}"
-            ));
-        }
-        let stride = state.div_ceil(8) * 8;
-        let name = format!("dk.state.{machine}");
-        let symbol = format!("_dkstate_{machine}");
-        o.sections.push(crate::dko::DkoSection {
-            name: name.clone(),
-            kind: "bss".into(),
-            align: 8,
-            size: voices_n * stride,
-            hex: String::new(),
-        });
-        o.symbols.push(crate::dko::DkoSymbol {
-            name: symbol.clone(),
-            section: Some(name),
-            value: 0,
-            global: true,
-        });
-        m.manifest.voice_state.insert(
-            machine,
-            crate::typed::VoiceState {
-                symbol,
-                stride,
-                clear,
-            },
-        );
-    }
-    Ok(())
 }
 
 impl Module {
@@ -561,6 +1153,7 @@ impl Module {
     ) -> Result<Module> {
         let mut manifest: Manifest = toml::from_str(manifest_text)?;
         manifest.validate_header()?;
+        manifest.expand_reservations()?;
         let mut objects = vec![];
         let mut all = manifest_text.to_string();
         for o in &manifest.object {
@@ -571,41 +1164,6 @@ impl Module {
             };
             all.push_str(&t);
             objects.push(Dko::parse(&t).map_err(|e| err!("{}: {e}", o.path))?);
-        }
-        // the descriptor records of the objects fill the typed sections; a module loaded without all its objects has none
-        if objects.len() == manifest.object.len() {
-            let d = crate::desc::read_objects(&objects)
-                .map_err(|e| err!("{}: {e}", manifest.module.id))?;
-            manifest.machine = d.machines;
-            manifest.param = d.params;
-            manifest.page = d.pages;
-            manifest.native_page = d.native_pages;
-            manifest.voice = d.voices;
-            manifest.sample_bank = d.sample_bank;
-            manifest.sample_tracks = d.sample_tracks;
-            // a patched-in module keeps the records out of the image: the objects lose their descriptor sections
-            if !manifest.module.dynamic {
-                // an object that held only records is removed with its manifest entry (the two lists stay aligned)
-                let section = crate::sdkgen::desc_spec().section;
-                let mut kept = vec![];
-                let mut kept_refs = vec![];
-                for (o, r) in objects.drain(..).zip(manifest.object.drain(..)) {
-                    if o.sections.iter().any(|s| s.name == section) {
-                        match crate::desc::strip(&o) {
-                            Some(s) => {
-                                kept.push(s);
-                                kept_refs.push(r);
-                            }
-                            None => {}
-                        }
-                    } else {
-                        kept.push(o);
-                        kept_refs.push(r);
-                    }
-                }
-                objects = kept;
-                manifest.object = kept_refs;
-            }
         }
         let mut alloc = BTreeMap::new();
         for r in &manifest.registry {
@@ -648,17 +1206,17 @@ impl Library {
         self.modules.iter().find(|m| m.id() == id)
     }
 
-    /// Lower the typed sections of every module with the device models (`crate::typed`). A patched-in module with contract voices first gets
-    /// the state blocks of its voices (`reserve_voice_state`).
+    /// The system package object that accompanies this selection's resident runtime.
+    pub fn system_package_object(&self, ids: &[String]) -> Option<std::path::PathBuf> {
+        let id = ids.iter().find(|id| *id == "core/runtime")?;
+        let runtime = self.get(id)?;
+        let package = runtime.manifest.system_package.as_ref()?;
+        Some(runtime.dir.join(&package.path))
+    }
+
+    /// Lower the typed sections of every module with the device models (`crate::typed`).
     pub fn lower(&mut self, models: &crate::typed::Models) -> Result<()> {
         for m in &mut self.modules {
-            // a module loaded without its objects (`from_parts_lenient`) has no descriptors to read
-            if !m.manifest.module.dynamic
-                && !m.manifest.lowered
-                && m.objects.len() == m.manifest.object.len()
-            {
-                reserve_voice_state(m).map_err(|e| err!("{}: {e}", m.manifest.module.id))?;
-            }
             crate::typed::lower(&mut m.manifest, models)
                 .map_err(|e| err!("{}: {e}", m.manifest.module.id))?;
         }
@@ -722,6 +1280,112 @@ pub struct Build<'a> {
     pub only: Option<&'a [String]>,
     /// Build defines (`DK_TRACE`) for the objects built on demand; they are part of the cache key (`crate::build::toolchain::Env::defines`).
     pub defines: &'a [String],
+}
+
+/// The roots of the image modules and service files, whose objects are committed.
+pub const CORE_MODULE_ROOTS: &[&str] = &["runtime", "services"];
+
+/// The module library's committed roots, in the same order as tools/patchkit/modroots.py.
+pub const REPO_MODULE_ROOTS: &[&str] =
+    &["modules", "runtime", "services", "tests/fixtures/modules"];
+
+/// Where a module library comes from, besides the repository's module roots and PATCHKIT_MODULES.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Default, Clone)]
+pub struct LibrarySource {
+    /// `--manifest PATH` values: extra module manifests.
+    pub manifests: Vec<std::path::PathBuf>,
+    /// `--modules-dir DIR`: extra module roots.
+    pub modules_dirs: Vec<std::path::PathBuf>,
+    /// `--trace`: builds with DK_TRACE defined.
+    pub trace: bool,
+}
+
+/// The committed module roots of the repository, then the extra roots of `src.modules_dirs` and the PATCHKIT_MODULES
+/// environment variable (a path list), in that order. Generated modules (derived from a firmware) live there. Content modules get their
+/// objects from the cache `out/cache/dko`; a stale object is built.
+/// With `lenient`, a module whose object files are missing still loads (for `gen`); with `only`, the objects of these
+/// content modules only are loaded or built (`pack` and `apply`: the others load without objects).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn library_with(
+    root: &std::path::Path,
+    src: &LibrarySource,
+    lenient: bool,
+    only: Option<&[String]>,
+) -> Result<Library> {
+    // `--trace` builds the modules with DK_TRACE defined (C: -DDK_TRACE; SHARC+: `#ifdef DK_TRACE`)
+    let defines: Vec<String> = if src.trace {
+        vec!["DK_TRACE".into()]
+    } else {
+        vec![]
+    };
+    let mut lib = Library::scan_repo_defined(root, lenient, only, &defines)?;
+    let mut extra: Vec<std::path::PathBuf> = src.modules_dirs.clone();
+    if let Some(v) = std::env::var_os("PATCHKIT_MODULES") {
+        extra.extend(std::env::split_paths(&v));
+    }
+    let build = Build {
+        root,
+        only,
+        defines: &defines,
+    };
+    // an extra root inside a repository root is scanned with that root: scanning it again would find each of its modules twice
+    let repo_roots: Vec<_> = REPO_MODULE_ROOTS
+        .iter()
+        .filter_map(|r| root.join(r).canonicalize().ok())
+        .collect();
+    for d in extra {
+        let inside_repo = d
+            .canonicalize()
+            .is_ok_and(|c| repo_roots.iter().any(|r| c.starts_with(r)));
+        if d.is_dir() && !inside_repo {
+            lib.extend_unique(Library::scan_in(Some(build), &d, lenient)?.modules)?;
+        }
+    }
+    lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
+    Ok(lib)
+}
+
+/// Explicit manifests replace all discovery roots, including PATCHKIT_MODULES. They must include
+/// the selected IDs, their requires closure and any allocation providers used by generation.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn selected_library(
+    root: &std::path::Path,
+    src: &LibrarySource,
+    lenient: bool,
+    only: &[String],
+    selected: &[String],
+) -> Result<Library> {
+    if src.manifests.is_empty() {
+        return library_with(root, src, lenient, Some(only));
+    }
+    let defines = if src.trace {
+        vec!["DK_TRACE".to_string()]
+    } else {
+        vec![]
+    };
+    let mut lib = Library::from_manifests(
+        Build {
+            root,
+            only: Some(only),
+            defines: &defines,
+        },
+        &src.manifests,
+        lenient,
+        selected,
+    )?;
+    lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
+    if lenient && lib.get("core/rows").is_none() {
+        for id in selected {
+            let m = lib.get(id).unwrap();
+            if !m.manifest.gens.is_empty() || !m.manifest.machine.is_empty() {
+                return Err(Error(format!(
+                    "{id}: generation requires --manifest for core/rows (machine allocations)"
+                )));
+            }
+        }
+    }
+    Ok(lib)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -838,8 +1502,9 @@ impl Library {
             Ok(())
         }
         let mut paths = vec![];
-        walk(&root.join("modules"), &mut paths)?;
-        walk(&root.join("tests/fixtures/modules"), &mut paths)?;
+        for dir in REPO_MODULE_ROOTS {
+            walk(&root.join(dir), &mut paths)?;
+        }
         let headers = Self::read_headers(&paths)?;
         for m in &headers.modules {
             m.manifest
@@ -863,7 +1528,7 @@ impl Library {
         // Validate the complete explicit selection before any objects are read or built.
         let headers = Self::read_headers(paths)?;
         headers.with_requires(selected)?;
-        // Support manifests (for example core/machines allocations) are explicit inputs too;
+        // Support manifests (for example core/rows allocations) are explicit inputs too;
         // validate their requirements rather than silently accepting a partial library.
         let ids: Vec<_> = headers.modules.iter().map(|m| m.id().to_string()).collect();
         headers.with_requires(&ids)?;
@@ -897,7 +1562,7 @@ impl Library {
         Ok(())
     }
 
-    /// The default module roots of a repository: `modules/` and `tests/fixtures/modules/`, lowered with `devices/`. Content modules whose
+    /// The committed module roots of a repository, lowered with `devices/`. Content modules whose
     /// object is stale in the cache are built (it needs the toolchain: `uv run python -m tools.patchkit.pk_toolchains m68k`).
     pub fn scan_repo(root: &std::path::Path) -> Result<Library> {
         Self::scan_repo_with(root, false)
@@ -914,10 +1579,7 @@ impl Library {
         root: &std::path::Path,
         only: Option<&[String]>,
     ) -> Option<Library> {
-        if crate::build::toolchain::Env::new(root).m68k("gcc").is_err() {
-            eprintln!(
-                "SKIP: the m68k-elf toolchain is not installed, so the content modules cannot be built (uv run python -m tools.patchkit.pk_toolchains m68k)"
-            );
+        if !crate::build::toolchain::Env::new(root).m68k_or_skip() {
             return None;
         }
         Some(Self::scan_repo_for(root, false, only).unwrap_or_else(|e| panic!("{e}")))
@@ -951,16 +1613,9 @@ impl Library {
             defines,
         };
         let mut lib = Library::default();
-        lib.extend_unique(Self::read_root(
-            &root.join("modules"),
-            lenient,
-            Some((&env, b)),
-        )?)?;
-        lib.extend_unique(Self::read_root(
-            &root.join("tests/fixtures/modules"),
-            lenient,
-            Some((&env, b)),
-        )?)?;
+        for dir in REPO_MODULE_ROOTS {
+            lib.extend_unique(Self::read_root(&root.join(dir), lenient, Some((&env, b)))?)?;
+        }
         lib.lower(&crate::typed::Models::from_dir(&root.join("devices"))?)?;
         Ok(lib)
     }
@@ -1002,7 +1657,11 @@ mod cache_generation_tests {
         let core: Vec<_> = legacy
             .modules
             .iter()
-            .filter(|m| m.dir.starts_with(root.join("modules/core")))
+            .filter(|m| {
+                CORE_MODULE_ROOTS
+                    .iter()
+                    .any(|r| m.dir.starts_with(root.join(r)))
+            })
             .collect();
         assert!(!core.is_empty());
         let paths: Vec<_> = core.iter().map(|m| m.dir.join("module.toml")).collect();
@@ -1055,110 +1714,310 @@ mod cache_generation_tests {
             started.elapsed()
         );
     }
+}
+
+#[cfg(test)]
+mod manifest_tests {
+    use super::*;
+
+    const HEAD: &str = "[module]\nid = \"test/m\"\nversion = \"0.1.0\"\nname = \"M\"\ncategory = \"test\"\ntype = \"machine\"\nauthor = \"digikit\"\nstatus = \"experimental\"\nsummary = \"s\"\n";
+
+    fn load(extra: &str) -> Result<Manifest> {
+        let m: Manifest = toml::from_str(&format!("{HEAD}{extra}"))?;
+        m.validate_header()?;
+        Ok(m)
+    }
+
+    const SERVICE_HEAD: &str = "role = \"service\"\nservice = \"ledger\"\n";
+
+    fn load_service(extra: &str) -> Result<Manifest> {
+        let head = HEAD.replace("test/m", "test/ledger").replace(
+            "type = \"machine\"",
+            &format!("type = \"raw\"\n{SERVICE_HEAD}"),
+        );
+        let m: Manifest =
+            toml::from_str(&format!("{head}[[export]]\nname = \"ledger_op\"\n{extra}"))?;
+        m.validate_header()?;
+        Ok(m)
+    }
 
     #[test]
-    fn generation_reads_cached_declarations_without_building_and_tolerates_missing_cache() {
-        let root = std::env::temp_dir().join(format!("digikit-cached-gen-{}", std::process::id()));
-        let dir = root.join("modules").join("new-machine");
-        let cache = root.join("out/cache/dko/test/new-machine/k/build/module.dko.json");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-        // No sources or toolchains exist here: either a freshness check or a
-        // build would fail. Generation must use the existing cache only.
-        std::fs::write(
-            dir.join("module.toml"),
-            r#"
-[module]
-id = "test/new-machine"
-version = "0.1.0"
-name = "New machine"
-category = "test"
-type = "machine"
-author = "digikit"
-status = "experimental"
-summary = "Cached generation fixture."
-dynamic = true
-[[object]]
-path = "build/module.dko.json"
-sources = ["missing.c"]
-place = "cf.expansion"
-"#,
+    fn a_service_declares_resources_and_records_that_are_checked() {
+        let m = load_service(
+            "[[service.resource]]\nname = \"slots\"\nlimit = \"profile:fx_slots\"\n[[service.record]]\nname = \"row\"\nkind = 1\nlen = 8\n",
         )
         .unwrap();
-        let spec = crate::sdkgen::desc_spec();
-        let rec = spec
-            .records
-            .iter()
-            .find(|r| r.name == "dk_desc_machine")
-            .unwrap();
-        let mut bytes = vec![0u8; rec.size];
-        for (field, word) in [("kind", rec.kind.unwrap()), ("size", rec.size as u32)] {
-            let at = rec.field(field).unwrap().off;
-            bytes[at..at + 4].copy_from_slice(&word.to_be_bytes());
-        }
-        for (field, value) in [
-            ("id", "new"),
-            ("name", "New machine"),
-            ("short_name", "NEW"),
-            ("render", "_render"),
-            ("note_on", "_note_on"),
-            ("desc", "_desc"),
-        ] {
-            let at = rec.field(field).unwrap().off;
-            bytes[at..at + value.len()].copy_from_slice(value.as_bytes());
-        }
-        let object = serde_json::json!({
-            "format": crate::dko::FORMAT, "arch": "cf", "source_sha256": "stale",
-            "sections": [{ "name": spec.section, "kind": "data", "align": 4,
-                "size": bytes.len(), "hex": hex(&bytes) }], "symbols": [], "relocs": []
-        })
+        assert_eq!((m.service.resource.len(), m.service.record.len()), (1, 1));
+        let e = load_service(
+            "[[service.resource]]\nname = \"slots\"\nlimit = \"profile:no_such_key\"\n",
+        )
+        .unwrap_err()
         .to_string();
-        std::fs::write(&cache, &object).unwrap();
-        let env = crate::build::toolchain::Env::new(&root);
-        let build = Build {
-            root: &root,
-            only: Some(&[]),
-            defines: &[],
-        };
-        let models = crate::typed::Models::from_texts([
-            include_str!("../../../devices/digitakt-ii.toml"),
-            include_str!("../../../devices/digitone-ii.toml"),
-        ])
-        .unwrap();
-        let load = || Library {
-            modules: Library::read_root(&root.join("modules"), true, Some((&env, build))).unwrap(),
-        };
-        let lib = load();
-        let files = crate::modgen::generate(&lib, &models, "test/new-machine").unwrap();
-        assert_eq!(files[0].0, "build/gen/gallery.json");
-        let gallery: serde_json::Value = serde_json::from_str(&files[0].1).unwrap();
-        assert_eq!(gallery["machines"][0]["id"], "new");
-        assert_eq!(gallery["machines"][0]["name"], "New machine");
-        let mut explicit = Library::from_manifests(
-            build,
-            &[dir.join("module.toml")],
-            true,
-            &["test/new-machine".into()],
-        )
-        .unwrap();
-        explicit.lower(&models).unwrap();
-        assert_eq!(
-            crate::modgen::generate(&lib, &models, "test/new-machine").unwrap(),
-            crate::modgen::generate(&explicit, &models, "test/new-machine").unwrap(),
-        );
-        assert_eq!(std::fs::read_to_string(&cache).unwrap(), object);
-        // Excluded modules in a pack still omit objects even if cache exists.
-        let excluded =
-            Library::read_root(&root.join("modules"), false, Some((&env, build))).unwrap();
-        assert!(excluded[0].objects.is_empty());
-        std::fs::remove_file(&cache).unwrap();
-        let lib = load();
         assert!(
-            crate::modgen::generate(&lib, &models, "test/new-machine")
-                .unwrap()
-                .is_empty()
+            e.contains("test/ledger") && e.contains("no_such_key"),
+            "{e}"
         );
-        assert!(!cache.exists());
-        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn only_a_service_declares_resources_and_records() {
+        let e = load("[[service.record]]\nname = \"row\"\nkind = 1\nlen = 8\n")
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("role = \"service\""), "{e}");
+    }
+
+    #[test]
+    fn machine_fx_and_uses_are_read() {
+        let m = load("[[machine]]\nid = \"analog\"\n[[machine]]\nid = \"b-2_x\"\n[[fx]]\nid = \"fshift\"\n[uses.dt2]\nmachine_rows = 2\npage_rows = 3\nrecord_bytes = 700\ndsp_cost_voice = 6239\ndsp_cost_fx = 4200\n[uses.dn2]\nmachine_rows = 2\npage_rows = 4\n").unwrap();
+        let ids = |v: &[IdRef]| v.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&m.machines), ["analog", "b-2_x"]);
+        assert_eq!(ids(&m.fxs), ["fshift"]);
+        assert_eq!(
+            m.uses.for_device("dt2"),
+            Uses {
+                machine_rows: 2,
+                param_rows: 0,
+                page_rows: 3,
+                record_bytes: 700,
+                dsp_cost_voice: 6239,
+                dsp_cost_fx: 4200
+            }
+        );
+        assert_eq!(m.uses.for_device("dn2").page_rows, 4);
+        let m = load("[uses.dn2]\nparam_rows = 1\n").unwrap();
+        assert_eq!(m.uses.dt2, None);
+        assert_eq!(m.uses.for_device("dt2"), Uses::default());
+    }
+
+    #[test]
+    fn a_dsp_prefix_is_optional_and_checked() {
+        let m = load("[[machine]]\nid = \"sine\"\ndsp = \"sn\"\n[[fx]]\nid = \"a-b\"\n").unwrap();
+        assert_eq!(m.machines[0].dsp_prefix().0, "sn");
+        assert_eq!(m.fxs[0].dsp_prefix().0, "a_b");
+        for bad in ["Sn", "s-n", "", "s n"] {
+            let e = load(&format!("[[machine]]\nid = \"a\"\ndsp = \"{bad}\"\n")).unwrap_err();
+            assert!(e.to_string().contains("dsp"), "{bad}: {e}");
+        }
+    }
+
+    #[test]
+    fn no_tables_parse_as_before() {
+        let m = load("").unwrap();
+        assert!(m.machines.is_empty() && m.fxs.is_empty());
+        assert_eq!(m.uses, UsesByDevice::default());
+    }
+
+    #[test]
+    fn duplicate_and_bad_ids_are_refused() {
+        let e = load("[[fx]]\nid = \"a\"\n[[fx]]\nid = \"a\"\n").unwrap_err();
+        assert!(e.to_string().contains("twice"), "{e}");
+        let e = load("[[machine]]\nid = \"Analog\"\n").unwrap_err();
+        assert!(e.to_string().contains("lowercase"), "{e}");
+    }
+
+    #[test]
+    fn other_keys_are_refused() {
+        let e = load("[[machine]]\nid = \"a\"\nname = \"A\"\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        let e = load("[uses.dn2]\nvoices = 1\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        // one table for all devices, and a device that does not exist
+        let e = load("[uses]\nmachine_rows = 1\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        let e = load("[uses.dt3]\nmachine_rows = 1\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+    }
+
+    #[test]
+    fn one_hook_name_is_declared_once_for_each_of_disjoint_devices() {
+        let shorts: Vec<String> = crate::devdata::all()
+            .iter()
+            .filter(|d| d.digikit_id.is_some())
+            .map(|d| d.short.clone())
+            .collect();
+        assert!(shorts.len() >= 2, "two runtime devices");
+        let hook = |entry: &str, devices: &[&str]| {
+            let list: Vec<String> = devices.iter().map(|d| format!("{d:?}")).collect();
+            let on = if devices.is_empty() {
+                String::new()
+            } else {
+                format!("devices = [{}]\n", list.join(", "))
+            };
+            format!("[[hook]]\nname = \"cf.a.hook.x\"\nentry = \"{entry}\"\n{on}")
+        };
+        let (a, b) = (shorts[0].as_str(), shorts[1].as_str());
+        // disjoint device sets: accepted
+        let ok = format!("{}{}", hook("e1", &[a]), hook("e2", &[b]));
+        assert!(load_service(&ok).is_ok());
+        // the same device twice, an entry for every device with one for a device (either order), or every device twice: refused
+        for (what, extra) in [
+            (
+                "same device",
+                format!("{}{}", hook("e1", &[a]), hook("e2", &[a])),
+            ),
+            (
+                "a shared device",
+                format!("{}{}", hook("e1", &[a, b]), hook("e2", &[b])),
+            ),
+            (
+                "all then one",
+                format!("{}{}", hook("e1", &[]), hook("e2", &[b])),
+            ),
+            (
+                "one then all",
+                format!("{}{}", hook("e1", &[a]), hook("e2", &[])),
+            ),
+            (
+                "all twice",
+                format!("{}{}", hook("e1", &[]), hook("e2", &[])),
+            ),
+        ] {
+            let e = load_service(&extra).unwrap_err();
+            assert!(
+                e.to_string().contains("declared twice for a common device"),
+                "{what}: {e}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_service_patch_is_a_name_and_devices_and_a_name_is_a_hook_or_a_patch_never_both() {
+        let hook = "[[hook]]\nname = \"cf.a.hook.x\"\nentry = \"e\"\n";
+        let patch = |n: &str| format!("[[patch]]\nname = \"{n}\"\n");
+        // a patch has a name and, as a hook, devices; nothing else
+        assert!(load_service(&patch("cf.a.hook.p")).is_ok());
+        let e = load_service("[[patch]]\nname = \"cf.a.hook.p\"\nentry = \"f\"\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        let e = load_service(&patch("")).unwrap_err();
+        assert!(e.to_string().contains("needs a `name`"), "{e}");
+        // the same name twice for every device, or as a hook and a patch
+        let e =
+            load_service(&format!("{}{}", patch("cf.a.hook.p"), patch("cf.a.hook.p"))).unwrap_err();
+        assert!(
+            e.to_string().contains("declared twice for a common device"),
+            "{e}"
+        );
+        let e = load_service(&format!("{hook}{}", patch("cf.a.hook.x"))).unwrap_err();
+        assert!(e.to_string().contains("also a [[hook]]"), "{e}");
+        // a module that is no service has none
+        let e = load(&patch("cf.a.hook.p")).unwrap_err();
+        assert!(e.to_string().contains("[[patch]]"), "{e}");
+        // the loader keeps a bounded number from `init` to the install
+        let many: String = (0..=dkneeds::SERVICE_PATCHES_MAX)
+            .map(|i| patch(&format!("cf.a.hook.p{i}")))
+            .collect();
+        let e = load_service(&many).unwrap_err();
+        assert!(e.to_string().contains("a service file may take"), "{e}");
+        let ok: String = (0..dkneeds::SERVICE_PATCHES_MAX)
+            .map(|i| patch(&format!("cf.a.hook.p{i}")))
+            .collect();
+        assert!(load_service(&ok).is_ok());
+    }
+
+    #[test]
+    fn a_record_has_a_local_id_and_no_key_field() {
+        let e = load("[[record]]\nkind = \"lfo_shape\"\nkey = 7\n").unwrap_err();
+        assert!(e.to_string().contains("unknown field"), "{e}");
+        let e = load("[[record]]\nkind = \"lfo_shape\"\nid = \"Ramp\"\n").unwrap_err();
+        assert!(e.to_string().contains("lowercase"), "{e}");
+        let e = load("[[record]]\nkind = \"lfo_shape\"\nid = \"a\"\n[[record]]\nkind = \"lfo_shape\"\nid = \"a\"\n").unwrap_err();
+        assert!(e.to_string().contains("declared twice"), "{e}");
+        assert!(load("[[record]]\nkind = \"lfo_shape\"\nid = \"ramp-up\"\n").is_ok());
+    }
+
+    fn reserved(extra: &str) -> Result<Vec<EntryDef>> {
+        let mut m = load(extra)?;
+        m.expand_reservations()?;
+        Ok(m.entry)
+    }
+
+    /// Short names of the devices whose file reserves `limit` rows.
+    fn devices_with(limit: &str, at_least: u64) -> Vec<&'static str> {
+        crate::devdata::all()
+            .iter()
+            .filter(|d| d.limit_of(limit).is_some_and(|v| v >= at_least))
+            .map(|d| d.short.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn a_reservation_is_one_entry_for_each_row_of_the_device_limit() {
+        let devs = devices_with("fx_slots", 1);
+        assert!(devs.len() >= 2);
+        let list = devs
+            .iter()
+            .map(|d| format!("\"{d}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let rows = reserved(&format!(
+            "[[entry]]\nregistry = \"params\"\nid = \"fp\"\ncount = \"8 * fx_slots\"\ntemplate = 117\ndevices = [{list}]\n\
+             [[entry]]\nregistry = \"params\"\nid = \"keep\"\ntemplate = 1\n"
+        ))
+        .unwrap();
+        for dev in devs {
+            let mine: Vec<_> = rows
+                .iter()
+                .filter(|e| e.id.starts_with("fp"))
+                .filter(|e| e.devices == [dev])
+                .collect();
+            let n = 8 * crate::devdata::by_short(dev)
+                .unwrap()
+                .limit_of("fx_slots")
+                .unwrap() as usize;
+            assert_eq!(mine.len(), n, "{dev}");
+            // numbered in order, the other fields of the line on every row, no count left
+            assert!(
+                mine.iter()
+                    .enumerate()
+                    .all(|(k, e)| e.id == format!("fp{k}")
+                        && e.count.is_none()
+                        && e.fields["template"].as_integer() == Some(117))
+            );
+        }
+        // an entry without a count passes through, in place
+        assert_eq!(rows.last().unwrap().id, "keep");
+        // a limit of 0 reserves nothing (a device without the feature)
+        let none = crate::devdata::all()
+            .iter()
+            .find(|d| d.limit_of("send_rows") == Some(0))
+            .expect("a device without send rows")
+            .short
+            .clone();
+        assert!(reserved(&format!("[[entry]]\nregistry = \"params\"\nid = \"fs\"\ncount = \"send_rows\"\ndevices = [\"{none}\"]\n")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_reservation_needs_devices_known_limits_and_a_count_of_zero_or_more() {
+        let dev = devices_with("fx_slots", 1)[0];
+        let line = |count: &str, devices: &str| {
+            reserved(&format!(
+                "[[entry]]\nregistry = \"params\"\nid = \"fp\"\ncount = \"{count}\"\n{devices}"
+            ))
+            .unwrap_err()
+            .to_string()
+        };
+        assert!(line("fx_slots", "").contains("names no devices"));
+        let on = format!("devices = [\"{dev}\"]\n");
+        assert!(line("no_such_limit", &on).contains("unknown symbol no_such_limit"));
+        assert!(line("fx_slots", "devices = [\"zz9\"]\n").contains("unknown device zz9"));
+        assert!(line("fx_slots - 9", &on).contains("negative"));
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod runtime_version_tests {
+    /// The runtime has one version: the manifest of `core/runtime` says the SDK runtime version that INFO reports (`sdk/sdk.toml` [runtime]), so
+    /// the patch line (`core/runtime@x`), the flash question and the check after the restart name the same number.
+    #[test]
+    fn the_runtime_manifest_version_is_the_sdk_runtime_version() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime/core/module.toml");
+        let manifest: toml::Table = std::fs::read_to_string(path).unwrap().parse().unwrap();
+        let version = manifest["module"]["version"].as_str().unwrap();
+        assert_eq!(
+            version,
+            crate::dkm::fmt_runtime(crate::dkm::runtime_version())
+        );
     }
 }

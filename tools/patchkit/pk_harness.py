@@ -30,13 +30,16 @@ Step format (TOML `[[segment.step]]` / `[[step]]`, exactly one action key each; 
                                    moves a value by about nothing)
     wait_ms = 300                  run that many emulated milliseconds
     expect_frame = "name"          hash of the OLED frame against the golden (PNG to out/); `differs_from = "other"`
+                                   `within_ms = 3000` polls emulated time until the firmware shows the golden (a bound against a hang,
+                                   not a wait: the boot's project load and the save end by themselves)
     expect_pcm_db = {min = -60, max = -3}   peak 100 ms-window RMS (dBFS) since the last input started
     expect_no_fault = true         assert the health now (it is also asserted after every input)
     expect_mem = {addr = 0x4265338c, mask = 0xff00, eq = 0x0700}   a ColdFire word (mem.cf.peek) under a mask;
-                                   `symbol = "STORE", module = "core/digikit-menu"` instead of `addr`: a symbol of the
+                                   `symbol = "NAME", module = "MODULE-ID"` instead of `addr`: a symbol of the
                                    image's plan (the module's static; `module` is optional)
-    expect_text = {rows = "DK_ABOUT", count = "DK_ABOUT_N", stride = 24, has = ["RUNTIME {runtime}"]}
-                                   the text rows a module keeps in RAM (NUL-terminated, STRIDE bytes each, COUNT rows) must
+    expect_text = {rows = "MENU_ABOUT", count = "MENU_ABOUT_N", stride = 24, has = ["RUNTIME {runtime}"]}
+                                   the text rows a module or the system package keeps in RAM (ROWS and COUNT: a patch-plan symbol or a host-directory id,
+                                   NUL-terminated, STRIDE bytes each, COUNT rows) must
                                    have every `has` string as a row; `{runtime}` is the runtime version of sdk/sdk.toml
     expect_dsp = {addr = 0x255970, hex = "07"}                     DSP memory bytes (dsp.peek) from addr
     stress = {seed = 1, actions = 40}       seeded random inputs, health after each
@@ -76,7 +79,7 @@ from tools import python_env  # noqa: E402
 from tools.control.digi_client import Emu, EmuError  # noqa: E402
 from tools.emulator import card_check  # noqa: E402
 from tools.firmware import config  # noqa: E402
-from tools.patchkit import modroots, pk_dsp_budget  # noqa: E402
+from tools.patchkit import modroots, pk_device, pk_dsp_budget, pk_hostdir  # noqa: E402
 
 MS = 132_000  # ColdFire instructions per emulated millisecond (the oracle clock)
 OUT = ROOT / "out" / "runs" / "patchkit"
@@ -129,20 +132,12 @@ def default_jobs(n: int) -> int:
     return max(1, min(n, max(int(free // 2), floor), MAX_JOBS))
 
 
-# firmware: (device, version) -> base .syx and the ready directory (override: DIGI_PK_READY_<DEV>_<VER>)
+# firmware: (device, version) -> base .syx and the ready directory (override: DIGI_PK_READY_<DEV>_<VER>); the firmwares that
+# have a port in devices/*.toml. DT2 1.17 and DN2 1.12 use `[acceptance] ready_dir` of their device files (written by
+# `mise run emu:ready`); DN2 1.11 is a patch port with its own dir.
 FIRMWARE: dict[tuple[str, str], dict[str, str]] = {
-    ("dt2", "1.17"): {
-        "syx": "Digitakt_II_OS1.17.syx",
-        "ready": "out/ready-pk-dt2-117",
-    },
-    ("dn2", "1.11"): {
-        "syx": "Digitone_II_OS1.11.syx",
-        "ready": "out/ready-dn2-111",
-    },
-    ("dn2", "1.12"): {
-        "syx": "Digitone_II_OS1.12.syx",
-        "ready": "out/ready-fix-dn2-112",
-    },
+    (short, version): {"syx": syx, "ready": pk_device.ready_dir(short, version)}
+    for (short, version), syx in pk_device.port_firmware().items()
 }
 
 BUTTONS: dict[str, int] = {
@@ -496,6 +491,47 @@ def link_shared(run_dir: Path, cache_dir: Path) -> None:
         link.symlink_to(shared.resolve())
 
 
+SYSTEM_PACKAGE_FILE = ROOT / "dist" / "syspkg" / "runtime" / "system.dksp"
+SYSTEM_PACKAGE_STORE_PATH = "digikit/system.dksp"
+
+
+def install_system_package(folder: Path) -> None:
+    """Put the system package on the card folder, where the TS card builder puts it
+    (tests/regression/runtime/system-package.ts): `digikit/` of the card holds the store, and stage 1 reads the
+    store path `digikit/system.dksp`. Without it every cell boots core-only. Built by `core/runtime:package`."""
+    if not SYSTEM_PACKAGE_FILE.exists():
+        raise HarnessError(
+            f"missing {SYSTEM_PACKAGE_FILE}: run nx run core/runtime:package"
+        )
+    to = folder / "digikit" / SYSTEM_PACKAGE_STORE_PATH
+    to.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(SYSTEM_PACKAGE_FILE, to)
+
+
+PLUSDRIVE = ROOT / "dist" / "plusdrive" / "plusdrive"
+
+
+def build_package_card(folder: Path, device: str) -> str:
+    """The card image of FOLDER (`plusdrive build`, no project seeded: the same call as the TS card builder's), next to it."""
+    if not PLUSDRIVE.exists():
+        raise HarnessError(f"missing {PLUSDRIVE}: run nx run plusdrive-format:cli")
+    key = hashlib.sha256(
+        (folder / "digikit" / SYSTEM_PACKAGE_STORE_PATH).read_bytes()
+    ).hexdigest()[:12]
+    image = (
+        folder.parent / f"{folder.name}-{key}.img"
+    )  # content-keyed: one build per package, callers hold the card lock
+    if image.exists():
+        return str(image)
+    r = subprocess.run(
+        [PLUSDRIVE, "build", folder, "-o", image, "--device", device, "--no-project"],
+        cwd=ROOT, capture_output=True, text=True, timeout=120,
+    )  # fmt: skip
+    if r.returncode:
+        raise HarnessError(f"plusdrive build: {r.stderr}{r.stdout}")
+    return str(image)
+
+
 def canonical_card(cache_dir: Path, card: str) -> str:
     """The card path the pair key hashes is the card file's path: give every daemon the same path (a symlink in
     CACHE_DIR to the first daemon's image; the card is read-only, the guest's writes live in an overlay)."""
@@ -623,8 +659,8 @@ def explain_mismatch(
 
 
 def plan_symbol(plan: dict[str, Any], name: str, module: str | None = None) -> int:
-    """The address of a module symbol in the symbols of a patch plan: the exact name (`DK_ABOUT`) or, for a Rust static, the end of
-    its mangled name (`..._15pk_digikit_menu5STORE`). MODULE (`core/digikit-menu`) limits the search to that module's symbols."""
+    """The address of a module symbol in the symbols of a patch plan: the exact name or, for a Rust static, the end of
+    its mangled name (`..._15pk_digikit_menu5STORE`). MODULE (a module id) limits the search to that module's symbols."""
     found = {
         v
         for k, v in plan["symbols"].items()
@@ -801,11 +837,21 @@ class Session:
         emu.subscribe()
         if self.card_override:
             self.card = self.card_override
-        elif cell.device == "dt2":
-            samples = OUT / "samples"
-            card_check.make_samples(samples)
+        else:
+            # every cell has a card: the sample card of a device that has one (the daemon seeds a project into it), else a
+            # card of the package alone, built by the plusdrive CLI like the TS card builder does
+            sample = (
+                pk_device.load(cell.device).get("acceptance", {}).get("sample_card")
+            )
+            folder = OUT / ("samples" if sample else f"card-package-{cell.device}")
+            if sample:
+                card_check.make_samples(folder)
+            install_system_package(folder)
             with boot_lock(self.cache_dir, Path(f"card-{self.cell.device}")):
-                self.card = emu.call("card.load", dir=str(samples))["card"]
+                if sample:
+                    self.card = emu.call("card.load", dir=str(folder))["card"]
+                else:
+                    self.card = build_package_card(folder, cell.device)
             if self.cache_dir is not None:
                 self.card = canonical_card(self.cache_dir, self.card)
         self.timings["spawn_s"] = time.monotonic() - started
@@ -1047,9 +1093,28 @@ class Session:
         _, raw = self.emu.frame()
         return hashlib.sha256(raw).hexdigest(), raw
 
-    def expect_frame(self, name: str, differs_from: str | None = None) -> None:
+    FRAME_POLL_MS = 50
+
+    def frame_when_reached(self, key: str, within_ms: float) -> tuple[str, bytes]:
+        """The frame once the firmware shows the golden of KEY, polled in emulated time every FRAME_POLL_MS for at most
+        WITHIN_MS (a guard against a hang, not a delay: the poll ends when the firmware has got there). Without a golden to
+        wait for (`--update`, or none recorded) it runs the whole bound and takes the last frame."""
+        want = None if self.update else self.goldens.get(key)
         digest, raw = self.frame()
+        waited = 0.0
+        while digest != want and waited < within_ms:
+            self.run_ms(self.FRAME_POLL_MS)
+            self.health(f"wait for {key}")
+            waited += self.FRAME_POLL_MS
+            digest, raw = self.frame()
+        self.timings["frame_wait_ms"] = self.timings.get("frame_wait_ms", 0.0) + waited
+        return digest, raw
+
+    def expect_frame(
+        self, name: str, differs_from: str | None = None, within_ms: float = 0
+    ) -> None:
         key = f"{self.cell.golden_prefix}/{self.segment}/{name}"
+        digest, raw = self.frame_when_reached(key, within_ms)
         png_dir = OUT / "frames" / self.cell.slug
         png_dir.mkdir(parents=True, exist_ok=True)
         from tools.control.digi_client import oled_png
@@ -1121,11 +1186,22 @@ class Session:
             raise HarnessError(f"symbol {name}: the image has no plan")
         return plan_symbol(json.loads(plan.read_text()), name, module)
 
+    def static(self, name: str) -> int:
+        """The address of a static a host reads: a host-directory id (`MENU_ABOUT`: a static of the system package, found through
+        the resident `DKRT_HOST_DIR`, runtime/core/abi.toml) or else a symbol of the patch plan."""
+        if name not in pk_hostdir.ids():
+            return self.symbol(name)
+        emu = self.emu
+        assert emu is not None
+        return pk_hostdir.read_package_address(
+            lambda a: emu.peek32(a) or 0, self.symbol("DKRT_HOST_DIR"), name
+        )
+
     def expect_text(self, want: dict[str, Any]) -> None:
         emu = self.emu
         assert emu is not None
-        base = self.symbol(want["rows"])
-        count = emu.peek32(self.symbol(want["count"])) or 0
+        base = self.static(want["rows"])
+        count = emu.peek32(self.static(want["count"])) or 0
         rows = text_rows(
             lambda a: emu.peek32(a) or 0, base, count, int(want.get("stride", 24))
         )
@@ -1204,7 +1280,11 @@ class Session:
                 self.run_ms(step["wait_ms"])
                 self.health(f"wait {step['wait_ms']} ms")
             elif "expect_frame" in step:
-                self.expect_frame(step["expect_frame"], step.get("differs_from"))
+                self.expect_frame(
+                    step["expect_frame"],
+                    step.get("differs_from"),
+                    step.get("within_ms", 0),
+                )
             elif "expect_pcm_db" in step:
                 want = step["expect_pcm_db"]
                 self.expect_pcm_db(want.get("min"), want.get("max"))
@@ -1294,7 +1374,7 @@ def module_tests(
         for f in sorted((modroots.module_dir(mod) / "tests").glob("*.toml")):
             data = tomllib.loads(f.read_text())
             t = data.get("test", {})
-            if device not in t.get("devices", ["dt2", "dn2"]):
+            if device not in t.get("devices", list(pk_device.acceptance_firmware())):
                 continue
             if quick_only and not t.get("quick", True):
                 continue

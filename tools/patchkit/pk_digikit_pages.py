@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Parameter pages of a machine chosen on track 1: the OLED frames of the patched-in machine against the run-time one (finding 50).
+"""Parameter pages of a run-time machine chosen on track 1: its OLED frames (finding 50).
 
-Run by `tools/patchkit/pk_digikit_scen.py` as the `pages` kind. Both boots choose the machine in the SRC list, then press SRC again
-(the page key) and turn encoders; the frames go to out/runs/lanes/srcpage-pages/ (never committed; DIGIKIT_PAGES_OUT). Kept checks:
-the run-time machine's frames equal the patched-in twin's (the same machine, the same data; only the type number differs and it is
-not drawn); an added machine has ONE SRC page: no page dots, the page key leaves the frame unchanged, the encoders still work; the
+Run by `tools/patchkit/pk_digikit_scen.py` as the `pages` kind. The boot chooses the machine in the SRC list, then presses SRC again
+(the page key) and turns encoders; the frames go to out/runs/lanes/srcpage-pages/ (never committed; DIGIKIT_PAGES_OUT). Kept checks:
+an added machine has ONE SRC page: no page dots, the page key leaves the frame unchanged, the encoders still work; the
 stock sample machines keep two pages (dots, sample view on one of them), also after an added machine was on the track.
 """
 
@@ -83,10 +82,9 @@ def run_pages(c: Any) -> None:
     shots = out_dir()
     mods = [c.pack(m, f"m{i}.dkm") for i, m in enumerate(t["modules"])]
     run_img = c.image_for(RT, "run")
-    ref_img = c.image_for(RT + "," + t["twin"], "ref")
     empty = c.card(None)
     card = c.card(mods)
-    frames: dict[str, dict[str, bytes]] = {"ref": {}, "run": {}}
+    frames: dict[str, dict[str, bytes]] = {"run": {}}
 
     def sequence(rig: Any, who: str, want: int) -> None:
         def snap(name: str) -> None:
@@ -114,11 +112,6 @@ def run_pages(c: Any) -> None:
             rig.s.run_ms(2500)
             snap(f"p{page}-idle")
         rig.s.run_ms(300)
-
-    def ref_boot() -> None:
-        with c.rig(ref_img, empty, "ref") as rig:
-            sequence(rig, "ref", t["static_type"])
-            c.done(rig)
 
     def run_boot() -> None:
         with c.rig(run_img, card, "run") as rig:
@@ -164,13 +157,7 @@ def run_pages(c: Any) -> None:
                         stock[typ] = png
             c.done(rig)
 
-    c.parallel(ref_boot, run_boot, stock_boot)
-    for name, png in frames["run"].items():
-        c.check(
-            f"frame {name}: the run-time machine draws what the patched-in twin draws",
-            png == frames["ref"].get(name),
-            f"{len(png)} / {len(frames['ref'].get(name, b''))} bytes",
-        )
+    c.parallel(run_boot, stock_boot)
     shown = {n: sample_view(png) for n, png in frames["run"].items()}
     c.check(
         "an added machine never draws the sample view (finding 50)",
@@ -178,7 +165,7 @@ def run_pages(c: Any) -> None:
         str([n for n, v in shown.items() if v]),
     )
     # one SRC page for an added machine: no dots on any frame, the page key changes nothing, the encoders work
-    for who in ("ref", "run"):
+    for who in ("run",):
         f = frames[who]
         dotted = [n for n, png in f.items() if page_dots(png)]
         c.check(

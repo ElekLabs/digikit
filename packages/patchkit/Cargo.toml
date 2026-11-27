@@ -21,6 +21,8 @@ path = "src/main.rs"
 [dependencies]
 dt2-firmware-loader = { path = "../emulator/loader" }
 coldfire = { path = "../emulator/coldfire" }
+dkaddrmap = { path = "../dkaddrmap" }
+dksharc = { path = "../dksharc" }
 dkneeds = { path = "../dkneeds" }
 dkupload = { path = "../dkupload" }
 serde = { version = "1", features = ["derive"] }
@@ -31,22 +33,41 @@ toml = "0.9.12"
 object = { version = "0.37", default-features = false, features = ["read_core", "elf"] }
 # `patchkit build` for SHARC+: the public Selache assembler as a library, at the commit tools/patchkit/pk_toolchains.py pins
 # (SELACHE_REV; a test keeps the two equal). Pure Rust, std only: builds for wasm32.
-selas = { git = "https://github.com/ElekLabs/selache", rev = "02d6d785b8e3a125ab237a00bb89503aff835f5d" }
-selelf = { git = "https://github.com/ElekLabs/selache", rev = "02d6d785b8e3a125ab237a00bb89503aff835f5d" }
-selinstr = { git = "https://github.com/ElekLabs/selache", rev = "02d6d785b8e3a125ab237a00bb89503aff835f5d" }
+selas = { git = "https://github.com/ElekLabs/selache", rev = "967c1d1e4d02e41f483181964f0ba333558a1fa7" }
+selelf = { git = "https://github.com/ElekLabs/selache", rev = "967c1d1e4d02e41f483181964f0ba333558a1fa7" }
+selinstr = { git = "https://github.com/ElekLabs/selache", rev = "967c1d1e4d02e41f483181964f0ba333558a1fa7" }
 # The instruction decoder of the SHARC+ runtime (public ISA table): the re-decode of every assembled instruction. No dependencies.
 sharc-rt = { path = "../emulator/sharc-rt" }
 regex-lite = "0.1"
+# Readable names of Rust symbols in the address map (no_std features: builds for wasm32).
+proc-macro2 = { version = "1", default-features = false } # tokenize Rust for service-check
+rustc-demangle = "0.1"
 # The settings record's decoder (the code the runtime uses); no_std, builds for every target.
-dkrt-sdk = { path = "../../modules/core/runtime/sdk" }
+dkrt-sdk = { path = "../../runtime/core/sdk" }
 # The fit rule (the code the DIGIKIT menu runs); no_std, builds for every target.
-dkrt-fit = { path = "../../modules/core/runtime/fit" }
+dkrt-fit = { path = "../../runtime/core/fit" }
 
 # `patchkit store dump` reads card images, `patchkit flash` sends to a MIDI port: the binary only (not wasm32).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 midir = "0.11"
+tempfile = "3"
 plusdrive-format = { path = "../emulator/plusdrive" }
 emmc-card = { path = "../emulator/card" }
+# `patchkit budget` reads the rule of dkprof; dkprof has its own wasm, so patchkit.wasm leaves it out and stays small.
+dkprof = { path = "../dkprof" }
+# Native system package validation uses the resident ABI of this build.
+dkrt-abi = { path = "../../runtime/core/abi" }
+# `patchkit records --check` runs the inherent `validate` of the service that owns each record kind (src/record_rules.rs): no core, no host fake.
+# They are optional (feature `record-rules`): a library user (digi-control, the app) does not build them.
+dkrt-svc-lfo = { path = "../../services/lfo", optional = true }
+dkrt-svc-shortcuts = { path = "../../services/shortcuts", optional = true }
+dkrt-svc-fx = { path = "../../services/fx", optional = true }
+dkrt-svc-machines = { path = "../../services/machines", optional = true }
+
+[features]
+# `patchkit records --check`: the validators of the services. Enabled for the patchkit binary build and the patchkit tests (tools/nx/cargo.mjs), not for
+# library users (the daemons), so the services' sources are no build input of a daemon. Not for wasm32.
+record-rules = ["dep:dkrt-svc-lfo", "dep:dkrt-svc-shortcuts", "dep:dkrt-svc-fx", "dep:dkrt-svc-machines"]
 
 [dev-dependencies]
 machine = { path = "../emulator/machine" }

@@ -48,7 +48,7 @@ for the boot counter. ABOUT shows `SAFE: DSP STOPPED` and `FAULT: DSP STOP` or `
 events and `dk/fault` from the card.
 
 Effects that fault without stopping the DSP give `FX_FAULT` and `FX_DISABLED` events tagged with the module's source. The source is now set for slot 0 and for registered
-service commands too (before: only `init` and `fini`). Callbacks that `core/ui` and `core/params` make into modules from C code are not tagged **[O]**.
+service commands too (before: only `init` and `fini`). Callbacks that `core/ui` and `core/rows` make into modules from C code are not tagged **[O]**.
 
 ## 4. DSP cost
 

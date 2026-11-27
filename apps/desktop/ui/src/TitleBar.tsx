@@ -1,22 +1,22 @@
 // The title bar of the workbench, over every page: the name, then the one target selector the pages share (target.ts). Transfer, Remote, Firmware
 // and the Memory panel all talk to the target picked here, so it sits above them rather than in each page (env.ts `targets.inHeader`).
 import { onCleanup, onMount, Show, type JSX } from 'solid-js';
-import ConnectionBadge from '@web/transfer/ConnectionBadge';
-import TargetSelect, { rescanTargets } from '@web/transfer/TargetSelect';
-import { canAutoRefresh, focusReadDue } from '@web/transfer/refresh-core';
-import { target } from '@web/transfer/target';
-import { writing } from '@web/transfer/transfer-core';
-import { busy } from '@web/transfer/transfer-state';
-import { running } from '@web/firmware/firmware-core';
-import { run } from '@web/firmware/firmware-state';
+import ConnectionBadge from '@digi/workbench-core/ui/transfer/ConnectionBadge.tsx';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
+import TargetSelect from '@digi/workbench-core/ui/transfer/TargetSelect.tsx';
+import { canAutoRefresh, focusReadDue } from '@digi/workbench-core/transfer/refresh-core.ts';
 
 // the title bar reads the ports by itself on every page, slower than the Transfer page's poll
 const RESCAN_MS = 10_000;
 
 export default function TitleBar(props: { onError?: (message: string) => void }): JSX.Element {
-  const locked = () => writing(busy()) || running(run());
+  const app = useTransferApp();
+  const { target, rescanTargets } = app.target;
+  const transferBusy = app.state.busy;
+  const jobBusy = app.jobs.busy;
+  const locked = () => jobBusy('target') || app.target.switching();
   let lastFocus: number | undefined;
-  const free = () => canAutoRefresh(document.visibilityState === 'visible', busy()) && !running(run());
+  const free = () => canAutoRefresh(document.visibilityState === 'visible', transferBusy()) && !jobBusy('target');
   const back = () => {
     const now = Date.now();
     if (!free() || !focusReadDue(lastFocus, now)) return;

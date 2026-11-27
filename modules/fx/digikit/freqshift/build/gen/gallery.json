@@ -1,0 +1,58 @@
+{
+  "effects": [
+    {
+      "id": "fshift",
+      "knobs": [
+        {
+          "default": 0,
+          "display": 1,
+          "max": 63,
+          "min": -64,
+          "name": "Freq Shift",
+          "short": "SHIFT"
+        },
+        {
+          "default": 0,
+          "display": 0,
+          "max": 8,
+          "min": 0,
+          "name": "Stereo Spread",
+          "short": "SPREAD"
+        },
+        {
+          "default": 0,
+          "display": 0,
+          "max": 4,
+          "min": 0,
+          "name": "Drift Depth",
+          "short": "DRIFT"
+        },
+        {
+          "default": 0.0625,
+          "display": 0,
+          "max": 0.125,
+          "min": 0.03125,
+          "name": "Drift Rate",
+          "short": "RATE"
+        },
+        {
+          "default": 0,
+          "display": 0,
+          "max": 0.800000011920929,
+          "min": 0,
+          "name": "Feedback",
+          "short": "FDBK"
+        }
+      ],
+      "mix": 127,
+      "tab": "FSH",
+      "title": "Freq Shifter"
+    }
+  ],
+  "machines": [],
+  "module": "digikit/freqshift",
+  "params": {
+    "dn2": [],
+    "dt2": []
+  }
+}

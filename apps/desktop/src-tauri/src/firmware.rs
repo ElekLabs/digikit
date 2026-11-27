@@ -1,6 +1,8 @@
 //! The Firmware page's two native parts: `patchkit::flash` in process (the page cannot patch and check a firmware image itself here, the
 //! browser build does it in patchkit.wasm) and the system's save dialog for the image. The MIDI side is `midi_port.rs`; the page paces the
-//! messages with the Rust sender through patchkit.wasm, like the site.
+//! messages with the Rust sender through patchkit.wasm, like the site. `prepare` also keeps the ship map and the load-table symbol addresses of the
+//! image (`library::store_ship`), so the Log pane can name addresses of a device that runs it.
+use patchkit::syspkg::{self, InstallAction, InstallRefusal};
 use std::path::Path;
 
 /// The answer of `firmware_prepare`: the length of the summary JSON as 4 bytes big endian, the JSON (`Prepared::summary_json`), the image.
@@ -15,7 +17,26 @@ pub fn pack(summary: &str, image: &[u8]) -> Vec<u8> {
 /// Patch and check `stock` (or, with `restore`, check the stock file itself) with the checkout's modules, ports and device files.
 pub fn prepare(root: &Path, stock: &[u8], restore: bool, set: &str) -> Result<Vec<u8>, String> {
     let p = patchkit::flash::prepare_in_repo(root, stock, restore, set).map_err(|e| e.0)?;
-    Ok(pack(&p.summary_json().to_string(), &p.image))
+    // the names of the image's addresses (the Log pane of a device that runs it): a failure to keep them must not stop the flash
+    if let (Some(map), Some(id)) = (&p.ship_map, p.image_id_hex())
+        && let Err(e) = crate::library::store_ship(
+            root,
+            &p.device,
+            &crate::library::ShipRecord {
+                image_id: id,
+                ship: map.json.clone(),
+                symbols: map.symbols.clone(),
+            },
+        )
+    {
+        eprintln!("firmware_prepare: the address map was not kept: {e}");
+    }
+    let mut summary = p.summary_json();
+    if p.ok() {
+        let container = patchkit::flash::container_of(&p.image).map_err(|e| e.0)?;
+        summary["container_sha256"] = patchkit::error::sha256_hex(&container).into();
+    }
+    Ok(pack(&summary.to_string(), &p.image))
 }
 
 pub(crate) fn body(request: &tauri::ipc::Request<'_>) -> Result<Vec<u8>, String> {
@@ -47,6 +68,38 @@ pub async fn firmware_prepare(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The checkout's built system package, prefixed by its packed runtime version (big endian).
+#[tauri::command]
+pub async fn system_package() -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let root = digi_control::runtime_patch::find_root(None)?;
+        let package = syspkg::build_from_repo(&root).map_err(|e| {
+            format!("Could not build the system package ({e}). Rebuild Workbench inputs.")
+        })?;
+        let mut response = Vec::with_capacity(4 + package.bytes().len());
+        response.extend_from_slice(&package.metadata().runtime_version().to_be_bytes());
+        response.extend_from_slice(package.bytes());
+        Ok(tauri::ipc::Response::new(response))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The package actions for the observed target and card state.
+#[tauri::command]
+pub fn system_package_plan(
+    repair: bool,
+    module_support: bool,
+    verified_package_on_card: bool,
+) -> Result<&'static [InstallAction], String> {
+    syspkg::install_plan(repair, module_support, verified_package_on_card).map_err(|refusal| match refusal {
+        InstallRefusal::AlreadyHealthy => refusal.to_string(),
+        InstallRefusal::RecoveryRequired => {
+            "The verified system package needs a retry. Choose Transfer → Modules → Install system package.".into()
+        }
+    })
 }
 
 /// The save dialog for the image in the raw body; `x-name` (percent-encoded) is the suggested file name. The path written, or `None` when the
@@ -111,6 +164,40 @@ mod tests {
         assert_eq!(&out[..4], &11u32.to_be_bytes());
         assert_eq!(&out[4..15], b"{\"ok\":true}");
         assert_eq!(&out[15..], &[1, 2, 3]);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_prepared_image_keeps_its_ship_map_for_the_log_pane() {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let Ok(stock) = std::fs::read(repo.join("firmware/Digitone_II_OS1.12.syx")) else {
+            eprintln!("skipped: firmware/Digitone_II_OS1.12.syx is absent");
+            return;
+        };
+        // a scratch root with the repository's modules and devices linked in, so the maps land in a temp directory
+        let dir = std::env::temp_dir().join(format!("digikit-prepare-maps-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for d in [
+            "modules", "runtime", "services", "ports", "devices", "tests",
+        ] {
+            std::os::unix::fs::symlink(repo.join(d), dir.join(d)).unwrap();
+        }
+        prepare(&dir, &stock, false, "device").unwrap();
+        let maps = crate::library::read_maps(&dir, "dn2").unwrap();
+        assert_eq!(maps.ships.len(), 1);
+        let ship = &maps.ships[0];
+        assert_eq!(ship.image_id.len(), 16);
+        assert!(
+            ship.symbols.contains_key("DKRT_STATE"),
+            "{:?}",
+            ship.symbols
+        );
+        assert!(
+            ship.ship.contains("\"kind\":\"ship\"") || ship.ship.contains("\"kind\": \"ship\"")
+        );
+        // the image the device runs reports this id in INFO: the page picks the record by it
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

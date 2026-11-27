@@ -231,6 +231,16 @@ pub fn source_digest(
     include_dirs: &[PathBuf],
     sdk: bool,
 ) -> Result<String> {
+    source_digest_with_workbench(env, sources, include_dirs, sdk, None)
+}
+
+pub(super) fn source_digest_with_workbench(
+    env: &Env,
+    sources: &[PathBuf],
+    include_dirs: &[PathBuf],
+    sdk: bool,
+    header: Option<&super::workbench::Header>,
+) -> Result<String> {
     let mut h = Sha256::new();
     for p in sources {
         h.update(tc::read(p)?);
@@ -243,6 +253,10 @@ pub fn source_digest(
         let mut v: Vec<PathBuf> = seen.into_iter().collect();
         v.sort_by_key(|p| rel(env, p));
         for d in v {
+            if header.is_some_and(|header| d.starts_with(header.dir())) {
+                // The generated header is hashed below without its temporary path.
+                continue;
+            }
             h.update(rel(env, &d).as_bytes());
             h.update([0u8]);
             h.update(tc::read(&d)?);
@@ -260,6 +274,10 @@ pub fn source_digest(
             h.update(b"\0-D");
             h.update(d.as_bytes());
         }
+    }
+    if let Some(header) = header {
+        h.update(b"\0workbench");
+        h.update(header.digest());
     }
     Ok(hex(&h.finalize()))
 }
@@ -627,8 +645,18 @@ pub fn cf_object(
     include_dirs: &[PathBuf],
     sdk: bool,
 ) -> Result<Dko> {
+    cf_object_with_workbench(env, sources, include_dirs, sdk, None)
+}
+
+pub(super) fn cf_object_with_workbench(
+    env: &Env,
+    sources: &[PathBuf],
+    include_dirs: &[PathBuf],
+    sdk: bool,
+    header: Option<&super::workbench::Header>,
+) -> Result<Dko> {
     let proto = proto_of_sources(env, sources, include_dirs, sdk)?;
-    let source_sha256 = source_digest(env, sources, include_dirs, sdk)?;
+    let source_sha256 = source_digest_with_workbench(env, sources, include_dirs, sdk, header)?;
     let toolchain: BTreeMap<String, String> = env.toolchain_version()?.into_iter().collect();
     dko_from_proto(&proto, source_sha256, toolchain)
 }

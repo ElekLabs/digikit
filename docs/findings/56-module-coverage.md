@@ -37,7 +37,7 @@ Codes per device cell:
 | machine with DSP | Gq, Gr, H | Gq, Gr | digikit/pluck: equiv-dyn-pluck, pages-dyn-pluck, menu-dkrun-pluck; machine conformance; device: finding 47 rung C4, rt020, rt021 |
 | machine, data only | Gf | Gq | test/dyn-xslice (equiv-dyn-xslice, DT2); test/dyn-dn2 and test/sine (equiv-dn2-set, DN2) |
 | fx (run-time) | N | N | P3d-1b; `[contract] fx` is [0, 0] |
-| fx (patched in, through core/fx) | Gs, Gr, P | Gr, P | test/fx-gain: smoke cell DT2 only, tests/modules/test_fx_conformance.py, pk_proof_fx |
+| fx (patched in, through core/fx) | Gs, Gr, P | Gr, P | test/fx-gain: smoke cell DT2 only, packages/sharc-rig-kit/conformance/fx.test.ts, pk_proof_fx |
 | raw ColdFire code (asm) | Gq, Gf | Gq, Gf | test/dyn-demo (memaudit-dt2/dn2, equiv-dyn-demo), test/dyn-fault, test/dyn-crash |
 | raw ColdFire code (C) | Gq, Gf | Gq, Gf | test/c-demo (memaudit, equiv-c-demo) |
 | raw ColdFire code (Rust) | Gf | Gf | upload-rust; test/rust-demo is patched in (smoke cell DT2 only) |
@@ -95,7 +95,7 @@ What stops a module from writing outside its own memory, and what checks it.
 | machine (DSP) | DSP range from `alloc_range` (first fit, no overlap with other ranges), per-voice state inside the range, voice row from a free list (modules/core/runtime/src/rs/src/dsp.rs) | ranges and row owners cross-checked (modules/core/runtime/src/rs/src/table.rs) | P4a write-set check in the rig (out block, own state, stack, own data); the guard checks only the output; P4c canary on the device is planned |
 | machine (ColdFire tables) | arena block (modules/core/runtime/src/rs/src/arena.rs: first fit, 16-byte aligned, coalescing) | arena bounds per module (table.rs) | P4b memory audit while the UI is driven |
 | fx (run-time) | N | N | the FX rig has a write-set check (`FxRig.foreign_stores`), used for patched-in effects |
-| raw ColdFire code | arena block | arena bounds, relocations and imports checked (modules/core/runtime/src/rs/src/loader.rs) | P4b memory audit; not seen: DMA, host writes, runtime-API stores |
+| raw ColdFire code | arena block | arena bounds, relocations and imports checked (modules/core/runtime/src/rs/src/loader/mod.rs) | P4b memory audit; not seen: DMA, host writes, runtime-API stores |
 
 Gap closed **[C]** by finding 57: `memaudit-*-full` runs the audit with every limit used and three modules refused, and `isolation-*` checks that a reference sound keeps its PCM, ranges and DSP bytes behind the full set.
 The write-set check (P4a) still looks at one module at a time.
@@ -106,10 +106,10 @@ The write-set check (P4a) still looks at one module at a time.
 | --- | --- | --- | --- | --- | --- |
 | modules loaded | 8 | 8 | device profile `[limits] modules` (at most `[limits.max]` of sdk.toml = `SEL_MAX`) | SELECT of a ninth path `E_SEL_COUNT`; `E_TABLE_FULL` is unreachable while `modules` is `SEL_MAX` | capacity-* (Gq) |
 | ColdFire arena | 512 KiB | 512 KiB | `[limits] arena_bytes` | `E_NOMEM`; a bss above the arena is `E_FORMAT` | capacity-*, memaudit-*-full |
-| upload stage buffer | 64 KiB | 64 KiB | `[limits] stage_bytes` | `E_TOO_BIG` (a file of the exact size loads) | capacity-* |
+| upload stage buffer | 128 KiB | 128 KiB | `[limits] stage_bytes` | `E_TOO_BIG` (a file of the exact size loads) | capacity-* |
 | machine types and DSP voice rows | 8 (types 0x10-0x17) | 8 | `[limits] machine_rows`, tied to types.toml by a gen check | a hashed machine `E_TYPE_RANGE`; a pinned voice `E_DSP_ROWS` (rows) or `E_DSP_TYPE` (type) | capacity-*, isolation-* |
-| parameter rows | 16 | 16 | `[limits] param_rows` (tied to the core/dynreg manifest by a cargo test) | `E_PARAM_FULL` | capacity-* |
-| page rows | 0 | 8 | `[limits] page_rows` (tied to the core/dynreg manifest) | `E_PAGE_FULL` (DN2) | capacity-dn2 |
+| parameter rows | 16 | 16 | `[limits] param_rows` (tied to the core/rows manifest by a cargo test) | `E_PARAM_FULL` | capacity-* |
+| page rows | 0 | 8 | `[limits] page_rows` (tied to the core/rows manifest) | `E_PAGE_FULL` (DN2) | capacity-dn2 |
 | sticky id map entries | 8 | 8 | `MAP_N` in the runtime SDK (`[limits.max] map_entries`, a cargo test ties them) | eviction (`MACHINE_TYPE_EVICTED`) | sticky-types |
 | DSP run-time area | 512 KiB | 320 KiB | device profile `[digikit] dsp_area_bytes` | `E_DSP_NOSPACE`; granules of 64 bytes, the first range starts at offset 4, 60 bytes unusable | capacity-*, memaudit-*-full |
 | effects in the chain | 4 | 4 | `[limits] fx_slots` (at most `DK_FX_MAX`) | patched in: build time (`apply` refuses more than `fx_slots`) | prims test |

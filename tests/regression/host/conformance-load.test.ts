@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 function manifest(name: string, body = 'type = "machine"\ndynamic = true', directory = name): string {
-  const file = path.join(root, 'modules', 'machines', directory, 'module.toml');
+  const file = path.join(root, 'modules', 'machine', 'test', directory, 'module.toml');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `[module]\nid = "test/${name}"\n${body}\n`);
   return file;

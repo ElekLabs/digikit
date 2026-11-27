@@ -1,0 +1,68 @@
+# input: key and encoder decoding
+# Names follow <cpu>.<subsystem>.<kind>.<name>; was = former names, for reading older docs, never resolved (docs/design/firmware-decls.md).
+
+[[fn]]
+name = "cf.input.fn.enc_decoder"
+was = ["input.fw.enc_decoder"]
+cpu = "cf"
+rule = { kind = "cf_func", hash = "173900efe85a324d026b5b84e6c72999", offset = 0x0, len = 2 }
+mark = "D"
+users = ["core/input"]
+doc = "The encoder decoder `void f(u32 encoder0, int delta)`: it adds the delta to the encoder's pending count; a periodic tick flushes it, clamped to +-30 every 4 ticks. DT2 1.17 0x4011e598, DN2 1.12 0x4011ff0c."
+
+# The button decoder `void f(u32 channel, u32 new_mask)`: it compares the channel's new mask with the previous one (a byte per channel in RAM), updates
+# the previous one and queues the events (key down and up, chords, repeat). DT2 1.17 0x4011e318, DN2 1.12 0x4011fc8c: the same code, cfdb h_strict hash
+# identical and unique on both images. The first `lea` of its body loads the address of the previous masks: its literal is at +0x10.
+[[fn]]
+name = "cf.input.fn.key_decoder"
+was = ["input.fw.key_decoder"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "157be8bc0a941e9aa4c960f56894c227", offset = 0x0, len = 2 }
+rule.dn2 = { kind = "cf_func", hash = "157be8bc0a941e9aa4c960f56894c227", offset = 0x0, len = 2 }
+rule.st = { kind = "cf_func", hash = "63fa77e17e14c6d4872873d9e0120029", offset = 0x0, len = 2, mark = "D" }
+mark = "D"
+users = ["core/input"]
+doc = "The button decoder `void f(u32 channel, u32 new_mask)`: compares the channel's new mask with the previous one, updates it and queues the events (key down and up, chords, repeat)."
+
+[[fn]]
+name = "cf.input.fn.key_down"
+cpu = "cf"
+sig = "u32 (u32 key)"
+rule = { kind = "cf_func", hash = "1ffd7e389bfa418309caabcfbe980b9f", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime", "core/services/machines", "core/ui"]
+doc = "Key state by logical key index: 1 while the key is held, else 0. The stock parameter page tests 0x10, 0x11 and 0x16 (turn modes that change what a parameter write does). DT2 0x4011e150, DN2 0x4011fac4."
+
+[[site]]
+name = "cf.input.site.key_decoder.prev_mask_lit"
+was = ["cf.input.site.key_mask_lit", "input.fw.key_mask_lit"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "157be8bc0a941e9aa4c960f56894c227", offset = 0x10, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "157be8bc0a941e9aa4c960f56894c227", offset = 0x10, len = 4 }
+rule.st = { kind = "cf_func", hash = "63fa77e17e14c6d4872873d9e0120029", offset = 0x10, len = 4, mark = "D" }
+mark = "D"
+users = ["core/input"]
+doc = "The 4-byte literal at +0x10 of the button decoder (its first `lea`): the address of the previous masks, one byte per channel. core/input reads the old mask there."
+
+# The key walker (docs/findings/ key event path, DT2 1.17 / DN2 1.12): every key event of the panel passes this function once, in the UI task, before any view sees it.
+[[site]]
+name = "cf.input.site.key_event_walk"
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "e741aa3500a20d22aa97ee402dcf9e43", offset = 0x0, len = 8 }
+rule.dn2 = { kind = "cf_func", hash = "e741aa3500a20d22aa97ee402dcf9e43", offset = 0x0, len = 8 }
+mark = "V"
+users = ["core/services/shortcuts"]
+doc = "Entry of `bool f(ViewController *vc, KeyEvent *ev)`, the walker every key event passes: it runs the release callbacks of the key code, then offers the event to the views top down. DT2 0x4011c79c, DN2 0x4011e110. `lea (-0x60,SP),SP; movem.l {D2-D7 A2-A6},(SP)` (8 bytes, no PC-relative form). 4(SP) = vc, 8(SP) = KeyEvent (+0xc code, +0x10 flags, bit 0 set on a press)."
+
+[[hook]]
+name = "cf.input.hook.key_event"
+site = "cf.input.site.key_event_walk"
+cpu = "cf"
+mode = "replace"
+tail = true
+regs = { in = [], clobbers = ["ccr"] }   # strict liveness (tools.coldfire.liveness, dt2-1.17, dn2-1.12, dn2-1.11) after the displaced instructions: the flags are dead, d0, d1, a0 and a1 are live
+devices = ["dt2", "dn2"]
+mark = "D"
+context = "ui"
+users = ["core/services/shortcuts"]
+doc = "The routine decides. Consume: `moveq #1,%d0; rts` (the event reaches no view and no release callback; the runner's idle reset and the Brain+0x94 listeners already ran). Pass: the displaced `lea; movem` and a jump to the end of the site (the tail). Strict liveness at the tail: only the flags (N, Z, V, C) are dead; D0, D1, A0 and A1 are live (the stock code calls a function that may read them), so a routine saves them; D2 and A2 are saved by the displaced `movem` itself."

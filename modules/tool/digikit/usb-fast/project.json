@@ -1,0 +1,20 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "digikit/usb-fast",
+  "implicitDependencies": ["core/runtime", "core/usb-bulk", "core/usb-bulk-audio", "core/plusdrive-write"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/usb-fast.device.test.ts"],
+        "modules": ["digikit/usb-fast"],
+        "plusdrive": true,
+        "sources": [
+          "runtime/platform/usb-bulk/src/**/*",
+          "runtime/platform/usb-bulk/build/usb-bulk.dko.json",
+          "runtime/platform/usb-bulk-audio/src/**/*",
+          "runtime/platform/usb-bulk-audio/build/usb-bulk-audio.dko.json"
+        ]
+      }
+    ]
+  }
+}

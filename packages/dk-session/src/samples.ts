@@ -1,25 +1,47 @@
 // Samples on a device, one API over two backends (docs/plans/storage.md). The device profile's `[storage] samples` names the backend:
 //   "stock-rpc"  the device's own MidiRpc file commands, the +Drive its sample browser lists (rpcfiles.ts; the Digitakt II)
 //   "digikit"    the `samples/` folder of the digikit store, the runtime's SysEx commands (`DkSession`; the Digitone II)
-// Both take the file `prepareUpload` (dksample.ts) makes, the same native sample file, so a sampling engine reads one format. The result of a verify has one
+//   "stock-slots"  the firmware's numbered sample slots, written through its MidiRpc Data API (slot-samples.ts)
+// The first two take the file `prepareUpload` (dksample.ts) makes, the same native sample file, so a sampling engine reads one format. The result of a verify has one
 // shape on both: what the device keeps against what the host sent. Written without TS-only runtime syntax so node can import it.
 import type { BulkSession } from './bulk.ts';
 import { BulkDeviceError } from './bulk.ts';
 import { DkError, concat, fileHash, fileHashHex, hasCap, storeSpace } from './dkupload-core.ts';
 import type { DkEntry, DkInfoFull, DkSession } from './dkupload-core.ts';
-import type { Prepared } from './dksample.ts';
+import type { Prepared, SampleConverter, SlotFormat } from './dksample.ts';
 import { RpcFiles, TRAILER, verifyWritten } from './rpcfiles.ts';
 import type { RpcPort } from './rpcfiles.ts';
+import { SlotSamples } from './slot-samples.ts';
 
-export type SamplesKind = 'stock-rpc' | 'digikit';
+export type SamplesKind = 'stock-rpc' | 'digikit' | 'stock-slots';
 
-/** A file or a folder of the listing; `size` is what the device reports. `hash` is the device's content hash of a file as the backend lists it
- * (opaque: only `sameOnDevice` of the same backend reads it); absent for a folder. */
+/** The converter a backend uses when it was opened without one: `prepare` refuses. */
+const noConverter: SampleConverter = {
+  upload() {
+    throw new DkError({
+      error: 'this samples backend was opened without a converter (SamplesOptions.converter)',
+      kind: 'usage',
+    });
+  },
+  slot() {
+    throw new DkError({
+      error: 'this samples backend was opened without a converter (SamplesOptions.converter)',
+      kind: 'usage',
+    });
+  },
+};
+
+/** A file or a folder of the listing; `size` is the payload size on both backends (without the firmware's 16-byte trailer). `stored` is the size the
+ * digikit store keeps (payload plus trailer, what the file takes of the free space); absent on the +Drive. `hash` is the device's content hash of a file
+ * as the backend lists it (opaque: only `sameOnDevice` of the same backend reads it); absent for a folder. */
 export interface SampleEntry {
   name: string;
   kind: 'file' | 'folder';
   size: number;
+  stored?: number;
   hash?: string;
+  /** The slot number (1-based) on a device with numbered slots; absent elsewhere. */
+  slot?: number;
 }
 export interface SampleSpace {
   free: number;
@@ -57,6 +79,10 @@ export interface RemoveTreeResult {
 
 export interface SamplesBackend {
   readonly kind: SamplesKind;
+  /** What this backend sends for a local file: the file as the device takes it. A WAV is converted; the result carries the name on the device. */
+  prepare(name: string, bytes: Uint8Array): Prepared;
+  /** The size of a prepared file as the upload run shows it before the send (the `prepared` event); each backend says what it counts. */
+  sizeOf(file: Prepared): number;
   /** The files and folders directly in `folder` ('' is the top). */
   list(folder?: string): Promise<SampleEntry[]>;
   space(): Promise<SampleSpace>;
@@ -81,11 +107,22 @@ export interface SamplesBackend {
     file: Prepared,
     onProgress?: (sent: number, total: number) => void,
     opts?: PutOptions,
-  ): Promise<void>;
+  ): Promise<PutResult | void>;
+  /**
+   * Name the files that `put` with `opts.defer` left pending on the device (one table commit); returns the files still pending (the device keeps back a
+   * file whose replaced file is being read). Only the bulk backend has it; after the bulk link failed it does nothing and returns 0 (the caller checks
+   * `bulkState`).
+   */
+  commit?(signal?: AbortSignal): Promise<number>;
   /** 'bulk' while file bytes go over the USB bulk link, 'fallback' after it failed (SysEx or MidiRpc for the rest of the run); absent without a bulk link. */
   readonly bulkState?: 'bulk' | 'fallback';
   /** Compare the stored file with `file` (a device that does not have it, or has other bytes, reports `ok` false). */
   verify(folder: string, file: Prepared): Promise<SampleVerified>;
+  /**
+   * Whether the device checks a file itself when a bulk transfer ends (the END hash comes from a readback of the written file), so that a `verify`
+   * after a bulk `put` adds nothing. `info` is the runtime's INFO (null when unknown); the +Drive answers true, the store only with the READBACK capability.
+   */
+  checksAtBulkEnd(info: DkInfoFull | null): boolean;
   remove(folder: string, name: string): Promise<void>;
   /** Whether `rename` works (the digikit store needs the runtime's RENAME capability). */
   canRename(): Promise<boolean>;
@@ -93,11 +130,20 @@ export interface SamplesBackend {
   rename(folder: string, name: string, toFolder: string, toName: string): Promise<void>;
 }
 
+/** What a `put` with `defer` returns when the device keeps files pending: the files still pending after this one (0: everything sent so far is committed). */
+export interface PutResult {
+  pending: number;
+}
+
 export interface PutOptions {
   signal?: AbortSignal;
+  /** Ask the device to keep the file pending (the batch commit); the result says how many are pending. A backend or a device without it ignores this and `put` returns nothing: the file is committed. */
+  defer?: boolean;
   exists?: boolean;
   /** The caller made the folder already (the bulk `put` on the +Drive skips its `mkdir`). */
   folderReady?: boolean;
+  /** Put into this slot (1-based), replacing what it holds. Without it a slot backend uses the lowest free slot and never overwrites. Ignored by the other backends. */
+  slot?: number;
 }
 
 /** What the digikit backend needs of the store session (`DkSession`). */
@@ -106,11 +152,21 @@ export type StorePort = Pick<
   'info' | 'list' | 'mkdir' | 'rename' | 'put' | 'delete' | 'verify' | 'capacity'
 >;
 
+/** `[storage.slots]` of the device file (`SlotStorage` of `@digi/devices` has these fields; the registry object is passed as it is). */
+export interface SlotsOptions extends SlotFormat {
+  path: string;
+  count: number;
+}
+
 export interface SamplesOptions {
   /** The transport of the commands: one `DkSession` serves both backends. */
   session: StorePort & RpcPort;
   /** The +Drive content hash (`Sample.hash`); needed by "stock-rpc". */
   hashOf?: (data: Uint8Array) => number;
+  /** The converter of a local file (`prepareUpload` of dksample.ts with the wasm bound); needed only to call `prepare` of the backend. */
+  converter?: SampleConverter;
+  /** The slot layout of the device; needed by "stock-slots". */
+  slots?: SlotsOptions;
   /** The USB bulk link, when the device offers its interface (usb-fast): file bytes go over it, everything else stays on `session`. */
   bulk?: BulkSession;
   /** Where the backend reports what it did on its own (a bulk failure that fell back to SysEx). */
@@ -121,21 +177,36 @@ export interface SamplesOptions {
 
 /** The backend for the profile's `[storage] samples` value. */
 export function openSamples(kind: string, o: SamplesOptions): SamplesBackend {
+  if (kind === 'stock-slots') {
+    if (!o.slots)
+      throw new DkError({ error: 'stock-slots samples need the slot layout (SamplesOptions.slots)', kind: 'usage' });
+    // no bulk link: its samples root is the digikit store, and the firmware plays the slots only
+    return new SlotSamples(o.session, o.slots, o.converter ?? noConverter);
+  }
   let base: SamplesBackend;
   let expectedOf: (file: Prepared) => number;
   if (kind === 'stock-rpc') {
     const hashOf = o.hashOf;
     if (!hashOf) throw new DkError({ error: 'stock-rpc samples need the content hash (dksample)', kind: 'usage' });
-    base = new RpcSamples(new RpcFiles(o.session), hashOf);
+    base = new RpcSamples(new RpcFiles(o.session), hashOf, o.converter ?? noConverter);
     // the +Drive hashes the file with its 16-byte trailer, which the device adds
     expectedOf = (f) => hashOf(concat(f.bytes, TRAILER)) >>> 0;
   } else if (kind === 'digikit') {
-    base = new StoreSamples(o.session);
+    base = new StoreSamples(o.session, o.converter ?? noConverter);
     expectedOf = (f) => new DataView(fileHash(f.stored).buffer, 0, 4).getUint32(0);
-  } else throw new DkError({ error: `unknown samples backend "${kind}" (stock-rpc or digikit)`, kind: 'usage' });
+  } else
+    throw new DkError({
+      error: `unknown samples backend "${kind}" (stock-rpc, digikit or stock-slots)`,
+      kind: 'usage',
+    });
   return o.bulk
     ? new BulkSamples(base, o.bulk, kind === 'digikit', expectedOf, o.note ?? (() => {}), o.onFallback)
     : base;
+}
+
+/** Whether the backend of `kind` can send file bytes over the USB bulk link (the callers skip choosing a link when not). */
+export function samplesUseBulk(kind: string): boolean {
+  return kind !== 'stock-slots';
 }
 
 const clean = (folder: string) => folder.replace(/^\/+|\/+$/g, '');
@@ -165,9 +236,17 @@ class RpcSamples implements SamplesBackend {
   readonly kind = 'stock-rpc' as const;
   private files: RpcFiles;
   private hashOf: (data: Uint8Array) => number;
-  constructor(files: RpcFiles, hashOf: (data: Uint8Array) => number) {
+  private converter: SampleConverter;
+  constructor(files: RpcFiles, hashOf: (data: Uint8Array) => number, converter: SampleConverter) {
     this.files = files;
     this.hashOf = hashOf;
+    this.converter = converter;
+  }
+  prepare(name: string, bytes: Uint8Array) {
+    return this.converter.upload(name, bytes);
+  }
+  sizeOf(file: Prepared) {
+    return file.stored.length;
   }
   async list(folder = '') {
     const rows = await this.files.readDir(`/${clean(folder)}`);
@@ -247,6 +326,10 @@ class RpcSamples implements SamplesBackend {
           : 'device content hash differs',
     };
   }
+  checksAtBulkEnd() {
+    // the firmware's END hash of the +Drive comes from a readback of the written file (verifyWritten compares the same hash)
+    return true;
+  }
   async remove(folder: string, name: string) {
     return this.files.remove(join(folder, name));
   }
@@ -271,8 +354,16 @@ class StoreSamples implements SamplesBackend {
   readonly kind = 'digikit' as const;
   private s: StorePort;
   private caps?: Promise<DkInfoFull>;
-  constructor(session: StorePort) {
+  private converter: SampleConverter;
+  constructor(session: StorePort, converter: SampleConverter) {
     this.s = session;
+    this.converter = converter;
+  }
+  prepare(name: string, bytes: Uint8Array) {
+    return this.converter.upload(name, bytes);
+  }
+  sizeOf(file: Prepared) {
+    return file.stored.length;
   }
   private info() {
     return (this.caps ??= this.s.info());
@@ -298,13 +389,21 @@ class StoreSamples implements SamplesBackend {
       const slash = rest.indexOf('/');
       if (slash >= 0) out.set(rest.slice(0, slash), { name: rest.slice(0, slash), kind: 'folder', size: 0 });
       else if (isFolderEntry(e)) out.set(rest, { name: rest, kind: 'folder', size: 0 });
-      else out.set(rest, { name: rest, kind: 'file', size: e.size, hash: e.hash });
+      else
+        out.set(rest, {
+          name: rest,
+          kind: 'file',
+          size: Math.max(0, e.size - TRAILER.length),
+          stored: e.size,
+          hash: e.hash,
+        });
     }
     return [...out.values()];
   }
   sameOnDevice(file: Prepared, listing: readonly SampleEntry[]) {
     const e = listing.find((x) => x.name === file.name && x.kind === 'file');
-    return !!e && e.size === file.stored.length && e.hash === fileHashHex(file.stored);
+    // `size` of the listing is the payload; the stored size is what the file we send holds
+    return !!e && e.stored === file.stored.length && e.hash === fileHashHex(file.stored);
   }
   async space() {
     return storeSpace(this.s);
@@ -378,12 +477,12 @@ class StoreSamples implements SamplesBackend {
         break;
       }
     }
-    const ok = mismatchAt === null && entry.size === want.length;
+    const ok = mismatchAt === null && entry.size === want.length; // the store's own size: payload plus trailer
     return {
       ...base,
       ok,
       device,
-      size: entry.size,
+      size: Math.max(0, entry.size - TRAILER.length),
       mismatchAt,
       message: ok
         ? 'device hash matches'
@@ -391,6 +490,9 @@ class StoreSamples implements SamplesBackend {
           ? 'the device file has another size'
           : 'device hash differs',
     };
+  }
+  checksAtBulkEnd(info: DkInfoFull | null) {
+    return info !== null && hasCap(info, 'READBACK');
   }
   async remove(folder: string, name: string) {
     return this.s.delete(this.path(join(folder, name)));
@@ -405,21 +507,18 @@ class StoreSamples implements SamplesBackend {
 }
 
 /**
- * Does `samples put` skip its SysEx VERIFY after a successful bulk END? Only for `auto` and a put that went over the bulk link, on a device that
- * checked the file itself at close: the Digitakt II +Drive (the firmware's END hash comes from a readback) or a runtime whose INFO caps include
- * READBACK (the Digitone II store). `always` never skips, `never` always does; an unidentified device is verified.
+ * Does `samples put` skip its SysEx VERIFY after a successful bulk END? Only for `auto` and a put that went over the bulk link (`backend.bulkState`
+ * is 'bulk'), on a backend whose device checked the file itself at close (`checksAtBulkEnd`). `always` never skips, `never` always does; an
+ * unidentified device (`info` null) is verified where the backend needs INFO.
  */
 export function skipVerifyAfterBulk(
   mode: 'auto' | 'always' | 'never',
-  link: 'bulk' | 'sysex',
-  kind: SamplesKind,
+  backend: Pick<SamplesBackend, 'bulkState' | 'checksAtBulkEnd'>,
   info: DkInfoFull | null,
-  isDt2: boolean,
 ): boolean {
   if (mode === 'never') return true;
-  if (mode === 'always' || link !== 'bulk') return false;
-  if (kind === 'stock-rpc') return isDt2;
-  return info !== null && hasCap(info, 'READBACK');
+  if (mode === 'always' || backend.bulkState !== 'bulk') return false;
+  return backend.checksAtBulkEnd(info);
 }
 
 // ---- file bytes over the USB bulk link ----------------------------------------------------------------------------------------------
@@ -460,6 +559,12 @@ class BulkSamples implements SamplesBackend {
   get bulkState() {
     return this.failed ? ('fallback' as const) : ('bulk' as const);
   }
+  prepare(name: string, bytes: Uint8Array) {
+    return this.base.prepare(name, bytes);
+  }
+  sizeOf(file: Prepared) {
+    return this.base.sizeOf(file);
+  }
   list(folder?: string) {
     return this.base.list(folder);
   }
@@ -490,11 +595,23 @@ class BulkSamples implements SamplesBackend {
   verify(folder: string, file: Prepared) {
     return this.base.verify(folder, file);
   }
+  checksAtBulkEnd(info: DkInfoFull | null) {
+    return this.base.checksAtBulkEnd(info);
+  }
   remove(folder: string, name: string) {
     return this.base.remove(folder, name);
   }
-  async put(folder: string, file: Prepared, onProgress?: (sent: number, total: number) => void, opts: PutOptions = {}) {
-    if (this.failed) return this.base.put(folder, file, onProgress, opts);
+  async commit(signal?: AbortSignal) {
+    if (this.failed) return 0;
+    return this.bulk.commit(signal);
+  }
+  async put(
+    folder: string,
+    file: Prepared,
+    onProgress?: (sent: number, total: number) => void,
+    opts: PutOptions = {},
+  ): Promise<PutResult | void> {
+    if (this.failed) return this.base.put(folder, file, onProgress, { ...opts, defer: false });
     const path = join(folder, file.name);
     // the +Drive needs the folder; the store's folders follow from the paths
     if (!this.store && clean(folder) && !opts.folderReady) await this.base.mkdir(folder);
@@ -504,12 +621,14 @@ class BulkSamples implements SamplesBackend {
     const replace =
       opts.exists ?? (await this.base.list(folder)).some((e) => e.name === file.name && e.kind === 'file');
     try {
-      await this.bulk.put(BULK_ROOT_SAMPLES, path, bytes, {
-        expected: this.expectedOf(file),
-        onProgress,
-        replace,
-        signal: opts.signal,
-      });
+      const o = { expected: this.expectedOf(file), onProgress, replace, signal: opts.signal };
+      if (opts.defer) {
+        const r = await this.bulk.put(BULK_ROOT_SAMPLES, path, bytes, { ...o, defer: true });
+        // an old device (a 4-byte END) committed at END: no result, the caller treats the file as done
+        return r.pending === undefined ? undefined : { pending: r.pending };
+      }
+      await this.bulk.put(BULK_ROOT_SAMPLES, path, bytes, o);
+      return undefined;
     } catch (e) {
       // the device answered (E_FULL, E_EXISTS, E_HASH ...) or the user cancelled: those are the result. Anything else is the link: SysEx for the rest of the run
       if (e instanceof BulkDeviceError || (e as { kind?: string } | null)?.kind === 'cancelled' || opts.signal?.aborted)
@@ -520,7 +639,7 @@ class BulkSamples implements SamplesBackend {
       this.note(
         `USB bulk link failed (${reason}); the rest of this run goes over ${this.base.kind === 'digikit' ? 'SysEx' : 'MidiRpc'}`,
       );
-      return this.base.put(folder, file, onProgress, opts);
+      return this.base.put(folder, file, onProgress, { ...opts, defer: false });
     }
   }
 }

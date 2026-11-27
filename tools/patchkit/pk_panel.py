@@ -16,12 +16,15 @@ import tomllib
 from pathlib import Path
 
 from tools import python_env
-from tools.patchkit import patchkit, pk_dkrt
+from tools.firmware import device as device_files
 from tools.patchkit import pk_devreload as dev
+from tools.patchkit import pk_dkrt
 
+# preview: (patch set, module store, screenshot name, DOWN presses from the top of SETTINGS to its row). The DIGIKIT row (the system package's) is the ninth; the demo row of a
+# content module comes after it.
 PREVIEWS = {
-    "menu": ("emulator", "digikit-menu"),
-    "ui-demo": ("test/ui-demo", "ui-demo"),
+    "menu": ("emulator", [], "digikit-menu", 8),
+    "ui-demo": ("emulator", ["test/ui-demo*"], "ui-demo", 9),
 }
 
 
@@ -134,23 +137,7 @@ def stop_exact(run_dir: Path) -> None:
         time.sleep(0.05)
 
 
-def machine_has_samples(mid: str) -> bool:
-    """Read sample declarations from the compiled DK_* records, not the manifest."""
-    result = patchkit.run(["desc", mid], capture=True)
-    if result.returncode:
-        raise dev.H.HarnessError(
-            f"{mid}: cannot read module declarations:\n{result.stderr}"
-        )
-    try:
-        records = json.loads(result.stdout)
-        return any(
-            records.get(key) is not None for key in ("sample_bank", "sample_tracks")
-        )
-    except (ValueError, AttributeError) as e:
-        raise dev.H.HarnessError(f"{mid}: invalid module declarations: {e}") from e
-
-
-def module_preview(name: str, device: str, stop: bool, full_dsp: bool = False) -> int:
+def module_preview(name: str, device: str, stop: bool) -> int:
     mid = (
         resolve_module_id(name, allow_missing=True)
         if stop
@@ -163,25 +150,7 @@ def module_preview(name: str, device: str, stop: bool, full_dsp: bool = False) -
         return 0
     manifest = tomllib.loads((dev.modroots.module_dir(mid) / "module.toml").read_text())
     kind = manifest["module"]["type"]
-    sample_machine = not full_dsp and kind == "machine" and machine_has_samples(mid)
-    full_dsp = full_dsp or sample_machine
-    ui_preview = not full_dsp and kind == "machine"
-    if not full_dsp and kind == "fx":
-        raise dev.H.HarnessError(f"{mid}: effect preview requires DSP; use --dsp")
-    dsp = (
-        dev.store_ui_preview_mode("emulator", device, store)
-        if ui_preview
-        else dev.target_dsp_mode("emulator", device, store)
-    )
-    if not full_dsp and dsp != "zero":
-        raise dev.H.HarnessError(f"{mid}: module requires DSP; use --dsp")
-    if not full_dsp:
-        print(
-            "UI preview: zero DSP, no audio. Use --dsp for the full module.",
-            flush=True,
-        )
-    elif sample_machine:
-        print("Sample machine preview: full module with DSP.", flush=True)
+    dsp = dev.target_dsp_mode("emulator", device, store)
     if kind == "machine":
         # The preview card selects only this module. Its first machine follows
         # the current port's stock rows; use native selection/editing, not a menu overlay.
@@ -217,7 +186,6 @@ def module_preview(name: str, device: str, stop: bool, full_dsp: bool = False) -
             "--reuse",
             "--keys",
             keys,
-            *(["--store-ui-preview"] if ui_preview else []),
         ]
     )
     if result:
@@ -272,29 +240,23 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("preview", choices=[*PREVIEWS, "module"])
     parser.add_argument("module", nargs="?")
-    parser.add_argument("--device", choices=["dn2", "dt2"], default="dn2")
+    parser.add_argument("--device", choices=device_files.shorts(), default="dn2")
     parser.add_argument("--stop", action="store_true")
-    parser.add_argument(
-        "--dsp", action="store_true", help="pack the full module and enable its DSP"
-    )
     args = parser.parse_args(argv)
-    if args.preview != "module" and (
-        args.module or args.stop or args.dsp or args.device != "dn2"
-    ):
-        parser.error(
-            "module, --device, --dsp and --stop are only supported by dk:module"
-        )
+    if args.preview != "module" and (args.module or args.stop or args.device != "dn2"):
+        parser.error("module, --device and --stop are only supported by dk:module")
     if args.preview == "module" and not args.module:
         parser.error("dk:module requires a module id or leaf alias")
     try:
         if args.preview == "module":
-            return module_preview(args.module, args.device, args.stop, args.dsp)
-        target, shot = PREVIEWS[args.preview]
-        keys = f"tap:NO,tap:SETTINGS,wait:400,tap:DOWN*8,tap:YES,wait:600,shot:{shot}"
-        result = navigate([target, "--device", "dn2", "--keys", keys])
+            return module_preview(args.module, args.device, args.stop)
+        target, store, shot, downs = PREVIEWS[args.preview]
+        keys = f"tap:NO,tap:SETTINGS,wait:400,tap:DOWN*{downs},tap:YES,wait:600,shot:{shot}"
+        stored = ["--store", ",".join(store)] if store else []
+        result = navigate([target, "--device", "dn2", *stored, "--keys", keys])
         if result:
             return result
-        socket_path = panel_socket(target)
+        socket_path = panel_socket(target, store=store)
         print(
             "Opening the live faceplate; Ctrl-C stops the browser server and keeps the emulator.",
             flush=True,

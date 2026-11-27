@@ -49,7 +49,7 @@ and `core/sample-pool` reach `main` with that branch. Paths without a directory 
   never reads a type.
 - The `.dkm` header has no type or category field.
 - The Transfer tab groups by the contract bytes: Machines if the machine contract is set, Effects if fx, else Tools
-  (`apps/web/src/modules/dktransfer.ts:77` `groupOf`, `tools/device/dktransfer.py:88` `group_of`). **A `raw` machine would show under
+  (`apps/web/src/modules/dktransfer.ts:77` `groupOf`, `tools/device/dkmodule.py` `group_of`). **A `raw` machine would show under
   Tools.** This is the defect that the category field fixes.
 - The module gallery shows the manifest category (`apps/web/src/data/modules.ts:26` and `:87`, `apps/web/src/components/ModuleCard.tsx`).
 - `module:new` picks the folder from the type (`tools/patchkit/pk_new.py:28`, `KIND_DIRS`).
@@ -60,14 +60,14 @@ and `core/sample-pool` reach `main` with that branch. Paths without a directory 
 
 - Every adapter is its own patch-time module under `modules/core/adapters/`. patchkit writes its hooks into the OS image and places its
   objects in `cf.expansion` (ColdFire) or `dsp.l2` (SHARC). None is a `.dkm`.
-- `[patch_sets]` of the device files put the same eight roots into every image: `core/dynreg`, `dyndsp`, `dynfx`, `fxpages`, `ui`,
+- `[patch_sets]` of the device files put the same eight roots into every image: `core/rows`, `dyndsp`, `dynfx`, `fxpages`, `ui`,
   `digikit-menu`, `health`, `input`. `requires` adds the rest (`runtime`, `expansion`, `machines`, `params`, `dsp-link`, `dsp-voice`,
   `fx`). DT2 `device` and `emulator` include `core/sample-pool`; the `sample-tracks` set has the same roots.
 - Adapter code is small: from about 30 B of data (`dynfx`) to about 6 KB of text (`ui`).
 - The runtime calls adapters through optional symbols (`modules/core/runtime/module.toml:30`: `dynreg_info`, `dl_send`, `dyndsp_info`,
   `dynfx_info`, `fxpages_info`, `dkpool_*`, `health_*`, `input_*`, `dk_ui_*`). Each resolves to 0 when its adapter is not in the image.
-- Most adapters list `requires = ["core/runtime"]`, but **only `core/sample-pool` imports runtime symbols** (`dkrt_pool_done`,
-  `dkrt_pool_lost`). The others import only firmware anchors and other adapters' symbols (checked in every `build/*.dko.json` of
+- Most adapters list `requires = ["core/runtime"]`, but **only `core/sample-pool` imports runtime symbols** (the slots `pool_done`,
+  `pool_lost`, which `samples.dks` fills). The others import only firmware anchors and other adapters' symbols (checked in every `build/*.dko.json` of
   `modules/core/adapters/`). So `requires` mixes "useful only with the runtime" with "calls the runtime".
 
 ### 3.3 Hooks today
@@ -118,7 +118,7 @@ From `modules/core/runtime/build/runtime.dko.json`:
 | `store.rs` | core + capability | Reader for the loader (`find`, `open`, `load_to_stage`, `layout`); `read_file`, `list`; the store figures for HEALTH (`note_commit`, `figures_stale`). |
 | `sha256.rs` | core (library) | Pure SHA-256. |
 | `assign.rs` | capability (rows) | Run-time machine type numbers; the sticky map in the selection record. |
-| `registry.rs` | capability (rows) | `register` records: PARAM, PAGE, MACHINE, EFFECT; writes parameter, page and machine rows; calls `fxpage::apply`/`remove`. Adapter `core/dynreg`. |
+| `registry.rs` | capability (rows) | `register` records: PARAM, PAGE, MACHINE, EFFECT; writes parameter, page and machine rows; calls `fxpage::apply`/`remove`. Adapter `core/rows`. |
 | `dsp.rs` | core + capability | DSP section check (versions 1-5), range reserve, relocation, the SEND and ROWS phases (core); voice rows, effect rows, bank and track records (capabilities). Optional `dl_*`, `dyndsp_info`, `dynfx_info`. |
 | `fxpage.rs` | capability (fx) | FX pages: effect records, page rows, kit load and save. Adapter `core/fxpages`. |
 | `fxsend.rs` | capability (fx) | FX routes and per-track send amounts; uses `settings`. |
@@ -177,7 +177,7 @@ SELECT writes the selection record and loads nothing; RESTART applies it at the 
   optional exports of `core/input` and `core/ui`, and the `Api` table. There is no import by firmware anchor or address.
 - SHARC link surface: names in the `dyndsp_info` export table only (`dsp.rs:600-611`); an unknown name is `E_DSP_IMPORT`.
 - **Not prevented:** a literal address cast in C or a literal address in assembly. The fixture `stock-pool` calls firmware functions at
-  fixed addresses (`stock_pool.c:38-47`); `dyn-fault` writes 0xEC090000. layercheck sees only undefined symbols, and a cast creates none.
+  fixed addresses (`stock_pool.c:38-47`); `dyn-crash` (mode 4, SOFTRST in init) writes 0xEC090000. layercheck sees only undefined symbols, and a cast creates none.
   Stray stores are found only at test time: `module:audit` (ColdFire) and the write-set checks of the conformance suites (SHARC,
   `tests/support/machine_rig.py`, `tests/support/fx_rig.py`).
 - Checks per type today: machine and fx run their conformance suites; service and raw get only the objects-against-sources check
@@ -200,8 +200,8 @@ SELECT writes the selection record and loads nothing; RESTART applies it at the 
 - The settings record is digikit's one key-value store (`docs/design/digikit-store.md`, "Keys by owner"). Keys now: `fx/route/<module
   id>`, `fx/send/<module id>`, `dk/fault` (the crash handler's fault record, `crash.rs:545-548`). Keys `<module id>/...` are reserved for
   the module itself, through the settings API of API 1.9 (`settings_client`, `settings_get`, `settings_put`, `settings_remove`, `<dk/settings.h>`). A module
-  can also export a settings menu (`dkm_menu`, `docs/plans/sdk-api.md`).
-- The runtime has a semantic version (`sdk/sdk.toml` `version`, now 0.5.4; `docs/design/module-sdk.md` D9). While it is 0.x, MINOR may
+  can also export a settings menu (`dkm_menu`, `docs/plans/sdk-api.md`). A sampler module keeps its pool list in its settings (`pool.0` to `pool.15`, written by the sample picker); the runtime keeps no pool list of its own, and while the `project` service is loaded the settings are per project (`docs/plans/digikit-project.md`).
+- The runtime has a semantic version (`sdk/sdk.toml` `version`, now 0.11.0; `docs/design/module-sdk.md` D9). While it is 0.x, MINOR may
   break. Adapters carry the version of the runtime image they are built into.
 - Each contract has [major, minor] (`sdk/sdk.toml` `[contract]`, api is 1.5). It decides compatibility (D3).
 - A module's manifest `version` (major.minor.patch) is its own; the runtime does not read it.
@@ -257,7 +257,7 @@ Rules:
 3. A capability uses the core only through the core API, and another capability only through that capability's declared API, never its
    state.
 4. An adapter uses firmware bindings and other adapters' headers. It calls the runtime only through declared callbacks (today
-   `dkrt_pool_done`, `dkrt_pool_lost`, `dkrt_project_changed`, all of `core/sample-pool`).
+   the pointer slots `pool_done` and `pool_lost` of `core/sample-pool`, filled by `samples.dks`).
 5. An app (`modules/core/apps/*`) has no `[[op]]` and no `[[claim]]`; an adapter calls it through an optional `dk_app_*` symbol.
 6. `requires` is a code dependency; `[patch_sets]` compose an image.
 7. A device value comes from TOML through `patchkit gen`. A source never includes a device-named file (`device-dt2.inc`).
@@ -351,14 +351,14 @@ A `raw` machine adds one line: `contract = "raw"`.
 ### 6.4 Files that change in step 1
 
 - patchkit: `packages/patchkit/src/module.rs` (the enum and the field), `packages/patchkit/src/dkm.rs` (the header, the contract check).
-- Python tools: `tools/patchkit/pk_new.py` (folder from the category), `tools/patchkit/pk_package.py`, `tools/device/dktransfer.py`
-  (`candidates`, `group_of`), `tools/devtools/verify_route.py`, `tools/devtools/layercheck.py`.
+- Python tools: `tools/patchkit/pk_new.py` (folder from the category), `tools/patchkit/pk_package.py`, `tools/device/dkmodule.py`
+  (`group_of`), `tools/devtools/verify_route.py`, `tools/devtools/layercheck.py`.
 - Web and desktop: `apps/web/src/modules/dktransfer.ts` (`groupOf`), `apps/web/src/transfer/transfer-core.ts`,
   `apps/web/src/data/modules.ts`, `apps/web/src/data/shipped.mjs`, `apps/web/src/components/ModuleCard.tsx`,
   `apps/desktop/ui/src/memory-backend.ts` and its preview fixtures.
 - Templates: `sdk/templates/*/module.toml`.
 - Manifests: the 9 content modules, every fixture in `tests/fixtures/modules/`, the 21 `core/*` modules (`type` removed).
-- Tests that pin the strings: `tests/patchkit/test_pk_new.py`, `tests/patchkit/test_pk_package.py`, `tests/devtools/test_layercheck.py`,
+- Tests that pin the strings: `tests/patchkit/test_pk_new.py`, `tests/patchkit/test_pk_package.py`,
   `tests/devtools/test_verify.py`, `tests/conformance/load.ts`.
 - Docs: `docs/MODULE-AUTHORING.md`, `docs/design/digikit-dkm.md`, `docs/design/module-sdk.md` (D2, D10).
 
@@ -606,7 +606,7 @@ adapters/<name>/src/cf/dt2/…, dn2/…           per-device code only where the
 adapters/<name>/build/<name>-{dev}.dko.json   one object per device
 ```
 
-Gen kinds today are `gas`, `gas-shared`, `sharc`, `sharc-adapter`, `gas-sample-pool`, `rust` and `c-shared`
+Gen kinds today are `gas`, `gas-shared`, `sharc`, `sharc-adapter`, `gas-sample-pool`, `rust`, `rust-profiles` and `c-shared`
 (`packages/patchkit/src/devgen.rs`). `rust` and `gas-shared` are one file for all devices; a constant that differs between devices is an
 error there (`docs/design/device-data.md`).
 
@@ -716,6 +716,7 @@ None of them changes D1 to D24. They decide how much of the adapter layer can lo
     SDK documents this rule.
   - The runtime never interprets a module's values. Unloaded modules keep their entries (`settings.rs`).
   - Values saved with the project (parameters) are the firmware's and are not part of this.
+  - SDK contract note: the meaning of the pool line changed. `dk/sample/pool.h` no longer promises a pool "kept per project" by the runtime; the sample picker (shared source, `dk_sample_picker_init` takes the settings handle as a fourth argument) keeps the list in the module's settings. This breaks no import and no `.dkm` field, so it rides in the 0.11.0 minor; a module that compiles the picker source passes the handle (SDK 0.x: a MINOR may break such source).
   - The module settings API (`settings_client`, `settings_get`, `settings_put`, `settings_remove` within the module's prefix, API 1.9) and the settings menu (`dkm_menu`) exist.
 
 ## 13. Enforcement

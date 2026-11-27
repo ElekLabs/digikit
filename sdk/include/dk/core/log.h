@@ -1,4 +1,4 @@
-/* <dk/core/log.h>: the runtime's log (dk_log, dk_log_event). Hand-written. Include <dk/core/module.h> first.
+/* <dk/core/log.h>: the runtime's log (dk_log, dk_log_event). Hand-written.
 
    dk_log(level, "message", value) appends a message (NUL-terminated, 24 bytes kept) and one word to the runtime's log ring and, when the debug module is
    loaded, to its log with the module as the source. It is callable from any task (not from an interrupt). The levels are the log's own: an error

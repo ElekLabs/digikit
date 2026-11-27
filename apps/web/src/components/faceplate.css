@@ -61,7 +61,7 @@ main.emulator {
   border-color: var(--line-2);
   transform: translateY(-3px);
   box-shadow:
-    0 22px 44px rgba(0, 0, 0, 0.4),
+    0 22px 44px var(--tooltip-shadow),
     0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 .devcard-art {
@@ -147,7 +147,7 @@ main.emulator {
 .emu-drop {
   border: 1.5px dashed var(--line-2);
   border-radius: var(--r-l);
-  background: radial-gradient(600px 160px at 50% 0, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)), var(--panel);
+  background: radial-gradient(600px 160px at 50% 0, var(--stage-highlight), transparent), var(--panel);
   padding: 52px 28px;
   display: flex;
   flex-direction: column;
@@ -158,10 +158,10 @@ main.emulator {
 }
 .emu-drop:hover,
 .emu-drop.dragging {
-  border-color: color-mix(in srgb, var(--amber) 55%, transparent);
+  border-color: color-mix(in srgb, var(--action) 55%, transparent);
 }
 .emu-drop.dragging {
-  background: var(--amber-soft);
+  background: var(--action-soft);
 }
 .emu-drop strong {
   font-family: var(--font-display);
@@ -240,9 +240,9 @@ main.emulator {
   white-space: nowrap;
 }
 .emu-error {
-  color: #ffc1bc;
+  color: var(--alert-text);
   background: var(--bad-bg);
-  border: 1px solid rgba(255, 139, 130, 0.3);
+  border: 1px solid var(--alert-outline);
   border-radius: var(--r-s);
   padding: 10px 14px;
   font-size: 14px;
@@ -255,7 +255,7 @@ main.emulator {
   padding: clamp(0.7rem, 3vw, 2rem);
   overflow: auto;
   container-type: size;
-  background: radial-gradient(60% 60% at 50% 45%, #16181b, rgba(11, 12, 14, 0));
+  background: radial-gradient(60% 60% at 50% 45%, var(--web-stage-center), transparent);
 }
 .panel-wrap[hidden] {
   display: none;

@@ -50,10 +50,14 @@ pub fn explain(base: &[u8], out: &Applied) -> Result<String> {
     let plan: &Plan = &out.plan;
     let b = Firmware::parse(base)?;
     let p = Firmware::parse(&out.syx)?;
-    let (bm, pm) = (b.section(3).unwrap(), p.section(3).unwrap());
-    let (bs, ps) = (b.section(7).unwrap(), p.section(7).unwrap());
-    let base_stream = crate::dsp::Stream::parse(bs.data.clone())?;
-    let out_stream = crate::dsp::Stream::parse(ps.data.clone())?;
+    let (bm, pm) = (b.main().unwrap(), p.main().unwrap());
+    // a device without a DSP has no boot stream; its plan has no SHARC site to list
+    let stream = |f: &Firmware| -> Result<Option<crate::dsp::Stream>> {
+        f.dsp()
+            .map(|d| crate::dsp::Stream::parse(d.data.clone()))
+            .transpose()
+    };
+    let (base_stream, out_stream) = (stream(&b)?, stream(&p)?);
     let mut s = String::new();
     let _ = writeln!(
         s,
@@ -101,11 +105,13 @@ pub fn explain(base: &[u8], out: &Applied) -> Result<String> {
             }
         } else {
             let was = base_stream
-                .read(w.addr as u32, w.len as usize)
+                .as_ref()
+                .and_then(|s| s.read(w.addr as u32, w.len as usize))
                 .map(|v| hex(&v))
                 .unwrap_or_default();
             let now = out_stream
-                .read(w.addr as u32, w.len as usize)
+                .as_ref()
+                .and_then(|s| s.read(w.addr as u32, w.len as usize))
                 .map(|v| hex(&v))
                 .unwrap_or_default();
             let _ = writeln!(s, "    before {} (stream bytes)  {was}", sharc_pc(w.addr));

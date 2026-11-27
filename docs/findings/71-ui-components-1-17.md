@@ -366,6 +366,19 @@ Typeinfo 0x4021d570, vtable 0x4021d5a4, ctor 0x40117ac2 (DN2 0x40119436)
 - Strings are libstdc++ COW `std::string`, passed by pointer. Builder
   0x401e7e7a(char*). Ctors copy with 0x401e7570 **[D]**.
 
+- The view stack on 1.17 (DT2) **[D]**: the Brain pointer is the global 0x44f37098, the one that the Brain getter 0x40198c24 tests with `tst.l`
+  (anchor `cf.view.value.brain`). The view manager is Brain + 0x40; its views are a `std::list` with the sentinel node at manager + 0x14 (+0 next,
+  +4 prev). A node holds the `View *` at +8 and the shared_ptr control block at +0xc. The key dispatcher starts at the last node, the top view. A
+  View stores the vtable symbol + 8 at +0: ConfirmWindow 0x4021cd50 (result at +0x4c: 0 unanswered, 1 YES, 2 NO; title data pointer at +0x50, text
+  at +0x54), ProgressWindow 0x4021d980 (ctor 0x401196c4, a `make_shared` object of 0x88 bytes; base OverlayWindow). `MainScreenView::vfunc_5`
+  (0x40064644) calls FUN_400110de, which pushes a ProgressWindow titled "VERIFYING FILE SYSTEM..." and queues the filesystem check job. The job's
+  completion callback 0x40011670 is the only code that builds the ConfirmWindow titled "FILE SYSTEM OK"; it then calls 0x400105aa, which sets the state word
+  (RAM 0x46f4dcb4) to 4 and the checked word (0x46f4dce4) to 1. FUN_400110de runs only when 0x4001058c is true: the filesystem is mounted (flag 0x44f2bd68
+  nonzero) and the state word is 3 or the checked word is 0 (0x4015a834 and 0x4015a8e6 read them under the lock 0x46f4deb0; a call with the argument 0, as
+  vfunc_5 makes it). The words are a copy of the superblock at flash 0x5d8000 (magic 0x656b4653, finding 14), so a boot whose copy has state 4 and checked 1 runs no check and
+  shows no window. The device file `devices/digitakt-ii.toml`
+  holds these values in `[ui]` and `[ui.boot_window]`; the Digitone II has no such window (finding 03 "Modal windows take every key").
+
 ### Class table
 
 | Class | Size | Vtable | Ctor DT2 / DN2 | Ctor args | Push |
@@ -560,7 +573,7 @@ selection bar; the glyph 0x1b.
 ## 9. core/ui on the device (first run)
 
 Written while building `modules/core/adapters/ui` and checked in the emulator on DT2 1.17 and DN2 1.12 with `test/ui-demo`
-(`tools/patchkit/pk_uidemo.py`). Marks: **[D]** seen in the emulator or read once; none is **[V]**.
+(then an image module, driven by a Python tool that has since been removed). Marks: **[D]** seen in the emulator or read once; none is **[V]**.
 
 - **View vtable, not the Menu vtable [C].** The key and paint of a Menu view are reached from the View manager through the View
   sub-object's vtable (at +0x38). Its entries are thunks (`moveq #-0x38,d0; add.l d0,4(sp); bra <function>`) that branch to the
@@ -591,3 +604,4 @@ Written while building `modules/core/adapters/ui` and checked in the emulator on
 - **Toast [D].** A toast is drawn by the main screen: with a menu open it is not visible. It shows on the main screen after the menus
   closed.
 - **Compact paint [D].** The title is drawn with `draw_fmt(canvas, font, 0x40, 0x41 - [view+0x84], 2, title)`; `[view+0x84]` is 7.
+- **MultiChoice paint reads `selected` only for the highlight [D].** The paint (DT2 0x4011693c, DN2 0x401182b0) compares each item index with `[+0x9c]` to draw the highlight box; item positions come from the item and title vectors, `vertical` (+0xac) and the layout fields (+0xa0, +0xb0, +0xb4), so a start index stored before the first paint (`dk_ui_choice_at`) moves no scroll offset.

@@ -1,0 +1,80 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-lfo-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": ["core/services/lfo", "core/runtime-storage", "core/runtime-package", "dkrt-svc-lfo"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "lfo.device.test.ts"
+        ],
+        "modules": [
+          "digikit/debug",
+          "test/lfo-shape",
+          "core/services/lfo"
+        ],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          }
+        ],
+        "firmwareOnly": "hooks install into the real image and a shape fixture loads and unloads with the firmware running; refusals and stock-byte restore are assembly tests"
+      },
+      {
+        "files": [
+          "lfo-shape-output.device.test.ts"
+        ],
+        "modules": [
+          "test/lfo-shape",
+          "core/services/lfo"
+        ],
+        "plusdrive": true,
+        "firmwareOnly": "the LFO output through the vector 191 tick with stock waves and a shape table; the shape numbering and routing decision are unit tests (services/lfo route.rs)"
+      },
+      {
+        "files": [
+          "lfo-shape-project.device.test.ts"
+        ],
+        "modules": [
+          "test/lfo-shape",
+          "test/lfo-shape-b",
+          "core/services/lfo"
+        ],
+        "sources": [
+          "runtime/core/tests/lfo/goldens.json"
+        ],
+        "plusdrive": true,
+        "firmwareOnly": "stock readers clamp a stored shape number (ERR, RAND) and the tick plays the fallback with the firmware; the routing decision is a unit test (services/lfo route.rs)"
+      },
+      {
+        "files": [
+          "lfo-shape-panel.device.test.ts"
+        ],
+        "modules": [
+          "test/lfo-shape",
+          "test/lfo-shape-b",
+          "core/services/lfo"
+        ],
+        "sources": [
+          "runtime/core/tests/lfo/goldens.json"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "lfo-reload.device.test.ts"
+        ],
+        "modules": [
+          "test/lfo-shape",
+          "core/services/lfo"
+        ],
+        "plusdrive": true,
+        "firmwareOnly": "the LFO output through the vector 191 tick keeps running after the refused reload of the service (nothing is taken down); the refusal itself is a host test"
+      }
+    ]
+  }
+}

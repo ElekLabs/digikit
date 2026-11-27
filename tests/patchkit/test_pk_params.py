@@ -1,4 +1,4 @@
-"""core/params port rules: the Python scan that records the sites agrees with the recorded ports, and its pieces."""
+"""core/rows port rules: the Python scan that records the sites agrees with the recorded ports, and its pieces."""
 
 import os
 import tomllib
@@ -27,7 +27,7 @@ def test_rules_are_declared_for_the_three_anchors():
     declarations = {
         entry["name"]: entry
         for entries in tomllib.loads(
-            (REPO_ROOT / "devices/fw/param.toml").read_text()
+            (REPO_ROOT / "ports/fw/param.toml").read_text()
         ).values()
         for entry in entries
     }
@@ -36,7 +36,7 @@ def test_rules_are_declared_for_the_three_anchors():
         for r in pr.fw_rules(REPO_ROOT)
         if r["name"].startswith("cf.param.")
         and r["_source"] == "fw/param"
-        and "core/params" in declarations[r["name"]].get("users", [])
+        and "core/rows" in declarations[r["name"]].get("users", [])
     ]
     for device in ("dt2", "dn2"):
         rules = {r["name"]: r for r in params_rules if device in r["devices"]}
@@ -64,7 +64,7 @@ def test_rules_are_declared_for_the_three_anchors():
 @pytest.mark.parametrize("version", ["1.17"])
 def test_the_scan_reproduces_the_recorded_port(version):
     syx = os.path.join(ROOT, f"Digitakt_II_OS{version}.syx")
-    port = os.path.join(ROOT, "devices", "ports", f"dt2-{version}.toml")
+    port = os.path.join(ROOT, "ports", f"dt2-{version}.toml")
     if not (os.path.exists(syx) and os.path.exists(port)):
         pytest.skip("needs the stock image and its port")
     with open(port, "rb") as f:

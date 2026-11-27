@@ -507,3 +507,39 @@ fn the_file_hash_slot_is_the_odd_content_hash_then_28_zeros() {
     assert_eq!(&slot[..4], &[0x43, 0xfa, 0x24, 0x3b]);
     assert!(slot[4..].iter().all(|&b| b == 0));
 }
+
+/// CLEAR keeps the system package of a store with room, and drops it from a full one: a repack sends the package only when it went.
+#[test]
+fn repack_sends_the_system_package_only_when_clear_dropped_it() {
+    let pkg = "digikit/system.dksp";
+    let a = data(3_000, 1);
+    let p = data(5_000, 2);
+    for dropped in [false, true] {
+        let mut s = session(100_000);
+        put(&mut s, "modules/a.dkm", a.clone()).unwrap();
+        put(&mut s, pkg, p.clone()).unwrap();
+        s.transport.dev.clear_drops_package = dropped;
+        s.transport.dev.log.clear();
+        let mut progress_files = Vec::new();
+        s.repack(
+            vec![("modules/a.dkm".into(), a.clone()), (pkg.into(), p.clone())],
+            &mut |i, _| {
+                progress_files.push(i);
+                true
+            },
+        )
+        .unwrap();
+        let names: Vec<_> = s.list().unwrap().into_iter().map(|e| e.path).collect();
+        assert_eq!(
+            names,
+            ["digikit/system.dksp", "modules/a.dkm"],
+            "dropped {dropped}"
+        );
+        let begins = s.transport.dev.log.iter().filter(|&&c| c == 0x10).count();
+        assert_eq!(
+            begins,
+            if dropped { 2 } else { 1 },
+            "dropped {dropped}: files sent"
+        );
+    }
+}

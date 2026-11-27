@@ -15,7 +15,7 @@ channels) from the same DSP block, 0 samples differ from the note's onset on. Pr
 
 | Step (DT2 1.17) | Result |
 | --- | --- |
-| two images with the same ColdFire modules (`core/runtime`, `core/dynreg`, `core/dyndsp` and what they require): reference with `digikit/pluck` patched in, run-time image without | same hooks in every block interrupt, so the note-on lands in the same block |
+| two images with the same ColdFire modules (`core/runtime`, `core/rows`, `core/dyndsp` and what they require): reference with `digikit/pluck` patched in, run-time image without | same hooks in every block interrupt, so the note-on lands in the same block |
 | `dkrt_load("modules/pluck-d.dkm")` while the firmware runs | answers `LOADING` (1); the final result is 0 after 285 DSP blocks (190 ms), most of it UI-loop passes (about 7 passes at roughly 37 Hz) |
 | the machine row (type 18) while the DSP code is on its way | not listed (sampled every 2 ms of the load); listed after |
 | DSP area (`_dl_area`, 512 KiB) after the load | the 3 532 bytes at the placement are the image relocated by a second implementation (`pk_dkrt_machine.relocate`), 0 bytes differ; the 256 KiB `.PKBSS` delay-line buffer is reserved behind it, not sent |
@@ -83,7 +83,7 @@ always does here), which is why a pluck note costs wall time.
 **[D]** The ColdFire registry of DN2 run-time machines (pages, `own_dsp`) is lane B's, so only the DSP half is proven: `test/dyn-sine-dn2` (the DSP
 source of `test/dn2-sine`, no machine record, a `[[dsp_voice]] type = 18` entry) is packed with `patchkit pack --device dn2`, loaded
 at run time through the mailbox and rendered, with the DSP's frame copy forced to the machine type (`DSP_FRAME_POKE=0x94=0x12`; the
-reference is `test/dn2-sine` patched in with `0x94=0x7`; both images have `core/runtime`, `core/dyndsp`, `core/machines`). DN2 1.12 and 1.11:
+reference is `test/dn2-sine` patched in with `0x94=0x7`; both images have `core/runtime`, `core/dyndsp`, `core/rows`). DN2 1.12 and 1.11:
 
 | Step | Result |
 | --- | --- |
@@ -99,7 +99,7 @@ finding 31 measured. `pluck_dn2` itself (262 144 bytes of delay lines) fits the 
 
 ## Open **[O]**
 
-- **Selector word of a run-time type.** Not done. The DSP's type to selector table is `mf_selector` of `core/machines` (`dsp.l2`, one word per type
+- **Selector word of a run-time type.** Not done. The DSP's type to selector table is `mf_selector` of `core/rows` (`dsp.l2`, one word per type
   0..23 on the Digitakt II, copied from the stock table and extended with the clone's word). A third window of `core/dsp-link` onto `mf_selector`
   (24 words, DT2 only), a `selector` field in the DSP section's voice record, one more one-word transfer before the type word, and the reverse on
   unload would let a run-time SLICE clone play as SLICE (the open point of finding 30); a PCM comparison against the patched-in `test/xslice`

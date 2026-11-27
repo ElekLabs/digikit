@@ -2,7 +2,7 @@
 """ColdFire ISA check: refuse any instruction a MCF54418 (V4e: ISA_A/B/C + EMAC, no FPU) does not have.
 
     uv run python -m tools.coldfire.isacheck FILE...          # .dko.json (arch cf), ELF .o, or .a archive
-    uv run python -m tools.coldfire.isacheck --committed      # every committed object (core modules: modules/core/**/build/*.dko.json)
+    uv run python -m tools.coldfire.isacheck --committed      # every committed object (under runtime/ and services/)
     uv run python -m tools.coldfire.isacheck --cached         # every built object in the cache out/cache/dko
 
 This is a front end of `patchkit dko isa-check` (packages/patchkit/src/build/cf.rs `check_isa`), the one copy of the check. Every
@@ -47,7 +47,11 @@ def check_file(path: Path) -> int:
 
 def committed_objects(root: Path = ROOT) -> list[Path]:
     """The committed objects: those of the core modules (content-module objects are build output, see `cached_objects`)."""
-    return sorted((root / "modules/core").glob("**/build/*.dko.json"))
+    from tools.patchkit.modroots import CORE_ROOTS
+
+    return sorted(
+        obj for tree in CORE_ROOTS for obj in (root / tree).glob("**/build/*.dko.json")
+    )
 
 
 def cached_objects(root: Path = ROOT) -> list[Path]:

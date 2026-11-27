@@ -123,7 +123,7 @@ Scenario `rung-c` (`tests/digikit/scenarios/rung-c.toml`, `tools/patchkit/pk_dig
 sample filesystem (three WAV files) and a blank store, driven the way Em drives the device; `dkupload` and `dklog` run as command lines with `--emu --run-dir`
 where Em types `--port Digitakt`.
 
-- Image `out/patch/rungC-dt2-1.17.syx` (`core/runtime,core/digikit-menu,core/health,core/dynreg,core/dyndsp`): 1,885,088 bytes, sha256 `fb6caf044c633db18c803b0797731fcfec78a73e9b2e30a717e45c1ecd779cbf`;
+- Image `out/patch/rungC-dt2-1.17.syx` (`core/runtime,core/digikit-menu,core/health,core/rows,core/dyndsp`): 1,885,088 bytes, sha256 `fb6caf044c633db18c803b0797731fcfec78a73e9b2e30a717e45c1ecd779cbf`;
   `mise run preflight` ends with `PREFLIGHT OK` (sections 3 and 7 differ from stock, 2, 4, 5 and 8 identical, checksum and HMAC hold, port limits). Module
   `out/patch/dyn-pluck-dt2.dkm`: 4,484 bytes, sha256 `e66c4660c028fda721e680f3b1aa0c3106133647f9016aa0531773c1d6e64b41`.
 - First boot: no module, no safe mode, `CARD_CHECK state=blank`. `dkupload info`, `put` (`4484 bytes ... sha256 checked on the device`), `ls`. The upload wrote

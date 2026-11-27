@@ -21,7 +21,7 @@ from tools.patchkit import (  # noqa: E402
     pk_toolchains,
 )
 
-RUNTIME = ROOT / "modules/core/runtime"
+RUNTIME = ROOT / "runtime/core"
 IMAGES = {
     "dt2-1.17": "Digitakt_II_OS1.17.syx",
     "dn2-1.12": "Digitone_II_OS1.12.syx",
@@ -31,7 +31,7 @@ IMAGES = {
 def test_the_record_layout_is_the_documented_one():
     rec = pk_dkrt_boot.make_record(["modules/a.dkm", "modules/b.dkm"], seq=7, counter=1)
     assert len(rec) == 512 and rec[:4] == b"DKSL"
-    # the same bytes as the Rust test of dkrt_sdk::sel (modules/core/runtime/sdk/src/lib.rs)
+    # the same bytes as the Rust test of dkrt_sdk::sel (runtime/core/sdk/src/lib.rs)
     assert rec[508:] == bytes.fromhex("ce5a5f11")
     assert hashlib.sha256(rec).hexdigest().startswith("f274068ed39da26c")
     back = pk_dkrt_boot.parse_record(rec)
@@ -71,7 +71,7 @@ def test_the_sdk_record_code_passes_its_own_tests(tmp_path):
     )
     assert r.returncode == 0, r.stderr
     r = subprocess.run([str(exe)], capture_output=True, text=True)
-    # the record, the version 3 store and the settings record (the shared vectors included: the test reads modules/core/runtime/vectors/settings-vectors.json)
+    # the record, the version 3 store and the settings record (the shared vectors included: the test reads runtime/core/vectors/settings-vectors.json)
     m = re.search(r"test result: ok\. (\d+) passed; 0 failed", r.stdout)
     assert r.returncode == 0 and m and int(m.group(1)) > 0, r.stdout
 
@@ -102,9 +102,7 @@ def test_the_boot_anchors_sit_on_the_prologue_of_the_main_os_task_and_the_block_
         pytest.skip(f"{IMAGES[image]} missing")
     anchors = {
         a["name"]: a
-        for a in tomllib.loads((ROOT / "devices/ports" / f"{image}.toml").read_text())[
-            "anchor"
-        ]
+        for a in tomllib.loads((ROOT / "ports" / f"{image}.toml").read_text())["anchor"]
     }
     main = port_resolve.sections_of(syx)[3]
     base = 0x40000400
@@ -136,9 +134,7 @@ def test_the_upload_hook_sits_on_the_router_call_of_the_midi_task_and_the_send_f
         pytest.skip(f"{IMAGES[image]} missing")
     anchors = {
         a["name"]: a
-        for a in tomllib.loads((ROOT / "devices/ports" / f"{image}.toml").read_text())[
-            "anchor"
-        ]
+        for a in tomllib.loads((ROOT / "ports" / f"{image}.toml").read_text())["anchor"]
     }
     main = port_resolve.sections_of(syx)[3]
     base = 0x40000400
@@ -165,9 +161,7 @@ def test_the_clock_and_tx_literals_sit_in_the_instructions_that_read_the_words(i
         pytest.skip(f"{IMAGES[image]} missing")
     anchors = {
         a["name"]: a
-        for a in tomllib.loads((ROOT / "devices/ports" / f"{image}.toml").read_text())[
-            "anchor"
-        ]
+        for a in tomllib.loads((ROOT / "ports" / f"{image}.toml").read_text())["anchor"]
     }
     main = port_resolve.sections_of(syx)[3]
     base = 0x40000400
@@ -201,22 +195,20 @@ def test_committed_runtime_objects_are_current():
     if not pk_toolchains.codegen_gcc_ready():
         pytest.skip("Rust-for-ColdFire toolchain not installed")
     front_end.build_module(RUNTIME, check=True)
-    front_end.build_module(ROOT / "tests/fixtures/modules/dyn-fault", check=True)
-    front_end.build_module(ROOT / "tests/fixtures/modules/dyn-fault-late", check=True)
+    front_end.build_module(ROOT / "tests/fixtures/modules/dyn-crash", check=True)
 
 
 def test_the_fault_module_packs_for_both_devices(tmp_path):
     tools = pk_dkrt.Tools()
     for dev in ("dt2", "dn2"):
-        for module in ("test/dyn-fault", "test/dyn-fault-late"):
-            out = tmp_path / f"{dev}.dkm"
-            tools.patchkit_run("pack", module, "--device", dev, "-o", out)
-            assert module in tools.patchkit_run("dkm-info", out)
+        out = tmp_path / f"{dev}.dkm"
+        tools.patchkit_run("pack", "test/dyn-crash", "--device", dev, "-o", out)
+        assert "test/dyn-crash" in tools.patchkit_run("dkm-info", out)
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("image", ["dt2-1.17", "dn2-1.12"])
-def test_boot_load_restart_cut_and_safe_mode(image, tmp_path):
+def test_boot_load_restart_and_cut(image, tmp_path):
     if not config.stock(IMAGES[image]).exists():
         pytest.skip(f"{IMAGES[image]} missing")
     proof = pk_dkrt_boot.Proof(image, True, tmp_path, set())

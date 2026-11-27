@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Static worst-case stack depth of the functions in a patchkit object (`build/*.dko.json`).
 
-    uv run python -m tools.coldfire.frame_depth modules/core/runtime/build/runtime.dko.json dkrt_load dkrt_unload ...
+    uv run python -m tools.coldfire.frame_depth runtime/core/build/runtime.dko.json dkrt_load dkrt_unload ...
 
 Each `.text.*` section is one function. A linear scan of its code follows the stack pointer through `lea -N(a7),a7`,
 `link`, `pea`, `move.l x,-(a7)`, `movem.l ..,-(a7)`, `subq/addq/subi/addi/suba/adda #N,a7` and the matching releases; at
@@ -29,6 +29,12 @@ def _num(t: str) -> int:
     t = t.lstrip("-").lstrip("$")
     v = int(t, 16) if re.fullmatch(r"[0-9a-f]+", t) else int(t, 0)
     return -v if neg else v
+
+
+def _sext(v: int, bits: int) -> int:
+    """The disassembler prints an immediate or a displacement as unsigned hex: read it as a signed `bits` wide value."""
+    v &= (1 << bits) - 1
+    return v - (1 << bits) if v >> (bits - 1) else v
 
 
 def _regs_count(regs: str) -> int:
@@ -69,11 +75,13 @@ def scan(sec: dict, relocs: list[dict]) -> Fn:
         ):
             sp += _num(g.group(1))
         elif m in ("addq", "addi", "adda") and (
-            g := re.fullmatch(r"#(\$?[0-9a-f]+),a7", o)
+            g := re.fullmatch(r"#(-?\$?[0-9a-f]+),a7", o)
         ):
-            sp -= _num(g.group(1))
+            # `adda.l #-N,a7` allocates (a 32-bit immediate, printed unsigned), `addq` releases
+            sp -= _sext(_num(g.group(1)), 32 if mn.endswith(".l") else 16)
         elif m == "link" and (g := re.fullmatch(r"a\d,#(-?\$?[0-9a-f]+)", o)):
-            sp += 4 - _num(g.group(1))
+            # `link.w` has a signed 16 bit displacement, `link.l` a 32 bit one
+            sp += 4 - _sext(_num(g.group(1)), 32 if mn.endswith(".l") else 16)
         elif m == "unlk":
             sp = max(0, sp - 4)
         elif m == "pea" or (m == "move" and o.endswith(",-(a7)")):

@@ -55,7 +55,7 @@ def test_no_plan_shows_the_free_regions():
 
 
 def test_runtime_bytes_sums_built_sections_per_device(tmp_path):
-    base = tmp_path / "modules" / "core" / "runtime"
+    base = tmp_path / "runtime" / "core"
     (base / "build").mkdir(parents=True)
 
     def dko(arch, *sizes):

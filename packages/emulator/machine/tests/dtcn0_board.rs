@@ -14,7 +14,7 @@ fn board() -> Board {
         TimerPolicy::Oracle,
         vec![3, 2, 0],
         vec![3, 1],
-        periph::clock::cf_ips() as f64,
+        periph::clock::BASE_IPS as f64,
     ));
     b
 }
@@ -25,7 +25,7 @@ fn dtcn0_counts_the_bus_clock_from_the_instruction_count() {
     b.enable_dtcn0();
     b.set_clock(0);
     assert_eq!(b.read32(DTCN0), Ok(0));
-    let ips = periph::clock::cf_ips();
+    let ips = periph::clock::BASE_IPS;
     b.set_clock(ips / 1000); // 1 ms of emulated time
     assert_eq!(b.read32(DTCN0), Ok(132_000));
     b.set_clock(ips * 40); // past 2^32 ticks: the counter wraps
@@ -38,6 +38,15 @@ fn dtcn0_counts_the_bus_clock_from_the_instruction_count() {
 #[test]
 fn without_the_model_dtcn0_is_a_plain_register() {
     let mut b = board();
-    b.set_clock(periph::clock::cf_ips());
+    b.set_clock(periph::clock::BASE_IPS);
+    assert_eq!(b.read32(DTCN0), Ok(0));
+}
+
+#[test]
+fn enabled_channels_count_the_bus_clock_and_others_stay_plain() {
+    let mut b = board();
+    b.enable_dtcn_channels(0b0100); // DTCN2 only
+    b.set_clock(periph::clock::BASE_IPS / 1000);
+    assert_eq!(b.read32(0xfc07_800c), Ok(132_000));
     assert_eq!(b.read32(DTCN0), Ok(0));
 }

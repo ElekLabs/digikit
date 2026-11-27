@@ -3,15 +3,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { bytesOfHex, concat, be32, fileHash, hexOf, type DkEntry, type DkSession } from '@digi/dk-session';
-import { repoRoot, resolveInputs, type Device, type Session } from '@digi/test-support';
+import { repoRoot, resolveInputs, stepWithProgress, type Device, type Session } from '@digi/test-support';
 import { parse } from 'smol-toml';
 import { describe, expect, test } from 'vitest';
 import { CMD as GCMD } from '../../../packages/dk-session/src/gen_proto.ts';
-import { listing, plusdriveBinary, storeList, type Files, type Listing } from './card-kit.ts';
+import { listing, plusdriveBinary, storeList, type Files, type Listing } from './card-store.ts';
 import { cardRig, type CardRig } from './card-rig.ts';
-import { bounded, rpc } from './fx-live.ts';
+import { rpc } from './guest-access.ts';
 import { FIRMWARE, FULL_TIER, selectDevices, skipEmptyHalf } from './devices.ts';
 import { overlayRecords } from './write-safety.ts';
+import { SYSTEM_PACKAGE_STORE_PATH } from './system-package.ts';
 
 /**
  * Helpers of the module-upload device tests (tools/patchkit/pk_digikit_upload.py): the upload protocol bodies, the device's LIST against the card as the
@@ -37,6 +38,31 @@ export function runtimeVersion(): number {
   };
   const [major, minor, patch] = toml.runtime.version.split('.').map(Number);
   return (major! << 16) | (minor! << 8) | patch!;
+}
+
+/** The packed runtime version a `since` string ("0.7.0") of sdk/sdk.toml stands for. */
+const packVersion = (v: string): number => {
+  const [major, minor, patch] = v.split('.').map(Number);
+  return (major! << 16) | (minor! << 8) | patch!;
+};
+
+/** The newest `since` among the imports of sdk/sdk.toml that the `.dkm` `file` links, and at least `[runtime] table`, packed: the runtime version the packer writes into its header (0x30). */
+export function linkedRuntimeNeed(file: Buffer): number {
+  const toml = parse(fs.readFileSync(path.join(repoRoot(), 'sdk/sdk.toml'), 'utf8')) as {
+    import: { name: string; since?: string }[];
+    runtime: { table: string };
+  };
+  const since = new Map(toml.import.map((i) => [i.name, i.since ? packVersion(i.since) : 0]));
+  const off = file.readUInt32BE(0x78);
+  const n = file.readUInt32BE(0x7c);
+  // at least the version that introduced the header table (`[runtime] table`): a module of an older format needs another minor
+  let need = packVersion(toml.runtime.table);
+  for (let i = 0; i < n; i++) {
+    const rec = file.subarray(off + i * 32, off + i * 32 + 32);
+    const name = rec.toString('latin1', 0, rec.indexOf(0));
+    need = Math.max(need, since.get(name) ?? 0);
+  }
+  return need;
 }
 
 // ---- files, the device's LIST and the card ------------------------------------------------------------------------------------------
@@ -82,7 +108,7 @@ const walk = (dir: string, base = dir): Files =>
 /** Hand one message to the emulated USB input (high-speed delivery) and run 16 M ColdFire instructions (Python: 40 steps of 400,000). */
 export async function usbSend(session: Session, msg: Uint8Array): Promise<void> {
   await rpc(session, 'midi.usb.in', { bytes: hexOf(msg), chunk: 384, period: 16_500 });
-  await bounded(() => session.client.step(16_000_000, { timeout_wall_s: 120 }));
+  await stepWithProgress(session.client, 16_000_000);
 }
 /** Everything the firmware sent since the last take. */
 export async function usbTake(session: Session): Promise<Uint8Array> {
@@ -148,8 +174,10 @@ export function uploadTests(
 
 // ---- the +Drive round trip ----------------------------------------------------------------------------------------------------------
 
-/** `plusdrive export` of the card with the guest's writes writes the store's files to `digikit/` of a folder; `plusdrive build` of that folder gives a card whose store holds the same files. */
-export async function roundtrip(rig: CardRig, files: Files): Promise<void> {
+/** `plusdrive export` of the card with the guest's writes writes the store's changed files to `digikit/` of a folder; `plusdrive build` of that folder gives a card whose store holds the same files. */
+export async function roundtrip(rig: CardRig, all: Files): Promise<void> {
+  // the export writes the files the guest changed: the system package of the seeded card stays where it is
+  const files = Object.fromEntries(Object.entries(all).filter(([p]) => p !== SYSTEM_PACKAGE_STORE_PATH));
   const overlay = path.join(rig.artifacts, 'roundtrip.overlay.bin');
   await rpc(rig.session, 'card.overlay', { path: overlay });
   const top = path.join(rig.artifacts, 'roundtrip');

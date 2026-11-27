@@ -1,0 +1,60 @@
+.span-breakdown {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  background: var(--panel-2);
+}
+
+.span-breakdown-scroll {
+  min-height: 0;
+  overflow: auto;
+  border-radius: inherit;
+}
+
+.span-breakdown-scroll:focus-visible {
+  outline: 1px solid var(--amber);
+  outline-offset: -1px;
+}
+
+.span-breakdown-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.span-breakdown-table th,
+.span-breakdown-table td {
+  padding: 4px 6px;
+}
+
+.span-breakdown-table thead th {
+  position: sticky;
+  top: 0;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.span-breakdown-table tbody th {
+  overflow-wrap: anywhere;
+  font-weight: 400;
+}
+
+.span-breakdown-number {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.span-breakdown-status {
+  margin: 0;
+  padding: 6px;
+  color: var(--ink-2);
+  line-height: 1.4;
+}

@@ -18,11 +18,13 @@ export const BULK_CMD = {
   END: 0x04,
   ABORT: 0x05,
   VERIFY: 0x06,
+  COMMIT: 0x07,
 } as const;
 
 /** Bits of the `flags` word of a request header. */
 export const BULK_FLAG = {
   REPLACE: 0x0001,
+  DEFER: 0x0002,
 } as const;
 
 /** Reply statuses: the upload protocol's (`[protocol.status]`) and the load results (`[load.status]`, `L_` prefix). */
@@ -49,6 +51,8 @@ export const BULK_STATUS = {
   E_SET_OFF: -70,
   E_FILE_IN_USE: -71,
   E_AGAIN: -72,
+  E_MODULE_UI_CONFLICT: -88,
+  E_MODULE_UI_SCOPE: -89,
   L_E_NOT_FOUND: -1,
   L_E_BAD_STORE: -2,
   L_E_READ: -3,
@@ -59,7 +63,6 @@ export const BULK_STATUS = {
   L_E_NOMEM: -8,
   L_E_INIT: -9,
   L_E_LOADED: -10,
-  L_E_SLOT: -11,
   L_E_BUSY: -12,
   L_E_TOO_BIG: -13,
   L_E_TABLE_FULL: -14,
@@ -75,6 +78,9 @@ export const BULK_STATUS = {
   L_E_PARAM_FULL: -24,
   L_E_PAGE_FULL: -25,
   L_E_TYPE_IN_USE: -26,
+  L_E_DECL_ID: -27,
+  L_E_DECL_USES: -28,
+  L_E_FX_ID_DUP: -29,
   L_E_NO_DSP: -30,
   L_E_DSP_FORMAT: -31,
   L_E_DSP_IMPORT: -32,
@@ -94,4 +100,17 @@ export const BULK_STATUS = {
   L_E_CONTRACT: -48,
   L_E_TABLE: -49,
   L_E_MISSING: -73,
+  L_E_DECL_FULL: -74,
+  L_E_PLAN_KIND: -75,
+  L_E_PLAN_OWNER: -76,
+  L_E_PLAN_KEY: -77,
+  L_E_PLAN_FIT: -78,
+  L_E_DECL_KIND: -79,
+  L_E_SVC_ABI: -81,
+  L_E_HOOK_STOCK: -82,
+  L_E_RELOAD_PLAYING: -83,
+  L_E_RELOAD_MENUS: -84,
+  L_E_RELOAD_ROUTED: -85,
+  L_E_RELOAD_KEYS: -86,
+  L_E_RELOAD_RETAINED: -87,
 } as const;

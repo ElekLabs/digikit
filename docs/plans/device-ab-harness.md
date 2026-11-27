@@ -18,7 +18,7 @@ Every device action goes through one CLI, `wb` (`tools/devtools/wb.mjs`), which 
 ## Pieces
 
 1. `wb` commands (all through dk-session + dkmidi):
-   - `wb screen [--out PNG] [--watch]`: the workbench's screenshot code (`DkSession.screen`, `decodeScreen` in `packages/dk-session/src/dkupload-core.ts`). Measure the round trip first; the Remote page waits a fixed 400 ms (`SCREEN_MS` in `apps/desktop/ui/src/RemotePage.tsx`), so its frame rate is about 2 fps.
+   - `wb screen [--out PNG] [--watch]`: the workbench's screenshot code (`DkSession.screen`, `decodeScreen` in `packages/dk-session/src/dkupload-core.ts`). Measure the round trip first; the Remote page waits a fixed 400 ms (`SCREEN_MS` in `apps/desktop/ui/src/remote/RemotePage.tsx`), so its frame rate is about 2 fps.
    - `wb key LABEL [--hold MS]`, `wb turn ENC DELTA`: `remoteKey` / `remoteTurn`, labels from the faceplate data the Remote page uses.
    - `wb param get|set TRACK WORD`: a read-back of machine parameters through the runtime's `param_get`/`param_set` (new SysEx service command; the runtime already has the calls).
    - `wb samples ls|put` (exists), `wb flash`, `wb transfer`, `wb log`.

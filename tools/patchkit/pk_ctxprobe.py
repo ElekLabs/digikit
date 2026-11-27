@@ -24,6 +24,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 
 from tools import python_env  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 from tools.patchkit import pk_dsplink as D  # noqa: E402
 
 NAMES = (
@@ -204,7 +205,7 @@ def probe(a: argparse.Namespace) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    ap.add_argument("--device", default="dt2", choices=["dt2", "dn2"])
+    ap.add_argument("--device", default="dt2", choices=device_files.shorts())
     ap.add_argument("--fw")
     ap.add_argument("--modules", default="core/dsp-voice")
     ap.add_argument("--blocks", type=int, default=600)

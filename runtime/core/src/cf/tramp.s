@@ -1,0 +1,86 @@
+/* core/runtime: cache maintenance, interrupt mask, soft reset (docs/design/digikit-runtime.md).
+ *
+ * The hooks of the UI loop, the main-OS task entry and the MIDI receive, and the exception hook, are in core/platform (R3b).
+ *
+ * Board facts (which UART is the console, where DDR is) are read from the device object `dkrt_dev` (struct DkrtDevice of abi.toml;
+ * field offsets in build/gen/dkdv-offsets.inc); the register offsets of the MCF5441x itself are named here.
+ */
+    .include "dkdv-offsets.inc"
+    .equ MCF5441X_UART_USR_OFF, 4       /* UART status register, offset from the UART base; bit 3 is TXEMP (transmitter empty) */
+    .equ MCF5441X_RCM_RCR, 0xEC090000   /* reset controller: reset control register; 0x80 = software reset */
+
+    .text
+    .even
+/* void dkrt_flush(u32 start, u32 len): CPUSHL BC for every 16-byte line of [start, start+len): write back dirty data
+ * lines and invalidate the line in the data and instruction caches. Needed after code or data that will be fetched as
+ * instructions has been written through the data cache (finding 07: the cache is not coherent on hardware). */
+    .globl dkrt_flush
+dkrt_flush:
+    move.l  4(%sp),%a0
+    move.l  8(%sp),%d1
+    move.l  %a0,%d0
+    and.l   #15,%d0
+    add.l   %d0,%d1             /* include the bytes before the first line start */
+    move.l  %a0,%d0
+    and.l   #-16,%d0
+    move.l  %d0,%a0
+    add.l   #15,%d1
+    lsr.l   #4,%d1              /* number of lines */
+    beq.s   2f
+1:  cpushl  %bc,(%a0)
+    lea     16(%a0),%a0
+    subq.l  #1,%d1
+    bne.s   1b
+2:  rts
+
+/* u32 dkrt_irq_mask(void): status register to 0x2700, returns the old one. void dkrt_irq_restore(u32 sr). */
+    .globl dkrt_irq_mask
+dkrt_irq_mask:
+    clr.l   %d0
+    move.w  %sr,%d0
+    move.w  #0x2700,%sr
+    rts
+    .globl dkrt_irq_restore
+dkrt_irq_restore:
+    move.l  4(%sp),%d0
+    move.w  %d0,%sr
+    rts
+
+/* void dkrt_soft_reset(void): the firmware's own sequence (finding 36, section 3), interrupts already masked: wait (bounded) for
+ * the console UART transmitter to empty (USR bit 3), clear the first word of DDR through the uncached alias (a stale magic
+ * there would start the next boot in console mode), 25 nops, then 0x80 into RCM.RCR. Does not return. */
+    .globl dkrt_soft_reset
+dkrt_soft_reset:
+    move.w  #0x2700,%sr
+    lea     dkrt_dev,%a0
+    movea.l DKDV_CONSOLE_UART_BASE(%a0),%a1
+    move.l  #200000,%d1
+1:  move.b  MCF5441X_UART_USR_OFF(%a1),%d0
+    btst    #3,%d0
+    bne.s   2f
+    subq.l  #1,%d1
+    bne.s   1b
+2:  movea.l DKDV_DDR_UNCACHED_ALIAS(%a0),%a1
+    clr.l   (%a1)
+    .rept 25
+    nop
+    .endr
+    moveq   #-128,%d0
+    move.b  %d0,MCF5441X_RCM_RCR
+3:  bra.s   3b
+
+/* i32 dkrt_raw_block_write(u32 sector, u32 bytes, const u8 *buf): the runtime's one raw card write (`Platform::block_write_raw`, behind the range and ownership
+ * checks of card.rs). It calls the firmware's block write with the arguments pushed again, and the return address of that call is the global label
+ * `dkrt_raw_write_ret`: core/card-guard tells this write from every stock caller by that address (a caller cannot forge it; a flag would be open while
+ * a stock task runs). The runtime has no other call of the firmware's block write. At the entry 0(SP) = return address, 4 sector, 8 bytes, 12 buf; each
+ * `move.l 12(%sp),-(%sp)` reads its source before the push, so 12(%sp) is right for all three. D0 is the firmware's result. */
+    .globl dkrt_raw_block_write
+dkrt_raw_block_write:
+    move.l  12(%sp),-(%sp)      /* buf */
+    move.l  12(%sp),-(%sp)      /* bytes */
+    move.l  12(%sp),-(%sp)      /* sector */
+    jsr     dkrt_fw_block_write
+    .globl dkrt_raw_write_ret
+dkrt_raw_write_ret:
+    lea     12(%sp),%sp
+    rts

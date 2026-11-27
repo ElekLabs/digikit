@@ -3,7 +3,8 @@ import { repoRoot, type Device } from '@digi/test-support';
 import { test } from 'vitest';
 import { expectRuntimeBoot, startPatchedSession } from '@digi/regression/support.ts';
 import { timePhase, timingContext } from '@digi/regression/timing.ts';
-import { FIRMWARE, liveOptions, selectDevices } from '@digi/regression/runtime/devices.ts';
+import { FIRMWARE, selectDevices } from '@digi/regression/runtime/devices.ts';
+import { liveOptions } from '@digi/regression/runtime/live-options.ts';
 import { moduleArtifact } from '@digi/regression/runtime/install.ts';
 
 import { loadRuntimeModules, scanRuntimeModules as scanManifests, supportsDevice, type RuntimeModule } from './manifests.ts';

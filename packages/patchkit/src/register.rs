@@ -1,6 +1,6 @@
 //! The `register` section of a `.dkm`: typed machine and parameter records for the digikit runtime's registry
 //! (docs/design/digikit-registry.md). The packer lowers a dynamic module's typed sections (`typed.rs`) for one device into
-//! these records; the runtime (`modules/core/runtime/src/rs/src/registry.rs`) validates them before it writes any row.
+//! these records; the runtime (`runtime/core/src/rs/src/package/registry.rs`) validates them before it writes any row.
 //!
 //! All integers are big endian. Layout:
 //!
@@ -30,21 +30,19 @@ use crate::typed::{DevResolved, Knob};
 pub const MAGIC: u32 = 0x444b_5247; // "DKRG"
 pub const VERSION: u32 = 1;
 pub const HEADER: usize = 16;
-pub const KIND_PARAM: u32 = 1;
-pub const KIND_MACHINE: u32 = 2;
-pub const KIND_PAGE: u32 = 3;
-pub const LEN_PARAM: usize = 0x50;
-pub const LEN_MACHINE: usize = 0x6c;
-pub const LEN_PAGE: usize = 0x60;
-pub const KIND_EFFECT: u32 = 4;
-pub const LEN_EFFECT: usize = 0x1a4;
-/// kind 5 ACTION (0x10): u32 param, offset. The click callback of the file's PARAM record `param`: `offset` is its image offset (the runtime adds the load address).
-pub const KIND_ACTION: u32 = 5;
-pub const LEN_ACTION: usize = 0x10;
-pub const KIND_NATIVE_PAGE: u32 = 6;
-pub const LEN_NATIVE_PAGE: usize = 0x90;
-pub const KIND_NATIVE_PAGE_V2: u32 = 7;
-pub const LEN_NATIVE_PAGE_V2: usize = 0x98;
+/// The record kinds and their lengths come from `[records.kinds]` of sdk/sdk.toml (`dkneeds`, written by `patchkit gen`).
+pub use dkneeds::{
+    KIND_ACTION, KIND_EFFECT, KIND_MACHINE, KIND_NATIVE_PAGE, KIND_NATIVE_PAGE_V2, KIND_PAGE,
+    KIND_PARAM,
+};
+pub const LEN_PARAM: usize = dkneeds::LEN_PARAM as usize;
+pub const LEN_MACHINE: usize = dkneeds::LEN_MACHINE as usize;
+pub const LEN_PAGE: usize = dkneeds::LEN_PAGE as usize;
+pub const LEN_EFFECT: usize = dkneeds::LEN_EFFECT as usize;
+/// kind ACTION: u32 param, offset. The click callback of the file's PARAM record `param`: `offset` is its image offset (the runtime adds the load address).
+pub const LEN_ACTION: usize = dkneeds::LEN_ACTION as usize;
+pub const LEN_NATIVE_PAGE: usize = dkneeds::LEN_NATIVE_PAGE as usize;
+pub const LEN_NATIVE_PAGE_V2: usize = dkneeds::LEN_NATIVE_PAGE_V2 as usize;
 /// Knobs of an effect page (the 8th word of its parameters is MIX), the text fields, and the MIX default's range (the knob's raw 0 .. 127).
 pub const EFFECT_KNOBS: usize = 7;
 pub const EFFECT_TAB: usize = 8;
@@ -91,6 +89,12 @@ pub fn machine_key(module: &str, machine: &str) -> u32 {
     machine_hash(module, machine) << 8
 }
 
+/// The key of a record of a generic kind (an LFO shape): the same derivation as a machine key, from `<module id>:<record id>` (`[[record]] id` of `module.toml`).
+/// `patchkit gen` writes it as `DK_KEY_<ID>` and the packer puts it in the keys table.
+pub fn record_key(module: &str, record: &str) -> u32 {
+    machine_key(module, record)
+}
+
 /// A type field as `dkm-info` prints it: a machine key as `h<hash>` (six hex digits), a plain type number (hash 0) as decimal.
 pub fn fmt_type(t: u32) -> String {
     match t >> 8 {
@@ -102,7 +106,7 @@ pub fn fmt_type(t: u32) -> String {
 /// The id digikit gives a device (`[digikit] id` of the device file).
 pub fn device_id(dev: &str) -> Result<u32> {
     crate::devdata::by_short(dev)
-        .map(|d| d.digikit_id)
+        .and_then(|d| d.digikit_id)
         .ok_or_else(|| err!("no run-time registry for device {dev:?}"))
 }
 
@@ -264,7 +268,7 @@ pub fn effect_page(module: &str, fx: usize, d: &crate::typed::FxDef) -> Result<O
 }
 
 /// The routes of effect `d` as (mask of `dkmdsp::ROUTE_*`, default route). `route` is `"master"` (the default when left out) or `"send"`. `routes` lists the routes the user may
-/// choose in DIGIKIT > FX ROUTES; left out it is `["master"]`, and `["send", "master"]` when `route = "send"` (so a send effect falls back to the master when the send slots
+/// choose in SETTINGS > FX ROUTING; left out it is `["master"]`, and `["send", "master"]` when `route = "send"` (so a send effect falls back to the master when the send slots
 /// are taken, and a master effect is a master effect). A send-only effect says `routes = ["send"]`. Refused: a name that is not `master` or `send`, an empty `routes`, a route twice,
 /// and a `route` that `routes` does not list.
 pub fn fx_routes(module: &str, d: &crate::typed::FxDef) -> Result<(u32, u32)> {
@@ -303,10 +307,10 @@ pub fn fx_routes(module: &str, d: &crate::typed::FxDef) -> Result<(u32, u32)> {
             d.route.as_deref().unwrap_or("master")
         ));
     }
-    // the send knob and the FX ROUTES row are labelled with the page's tab: an effect without a page is an insert
+    // the send knob and the FX ROUTING row are labelled with the page's tab: an effect without a page is an insert
     if d.tab.is_none() && routes != ROUTE_MASTER {
         return Err(err!(
-            "{who}: a send route needs a `tab` (the label of the effect's page, which also labels its send knob and its FX ROUTES row)"
+            "{who}: a send route needs a `tab` (the label of the effect's page, which also labels its send knob and its FX ROUTING row)"
         ));
     }
     Ok((routes, route))
@@ -929,6 +933,10 @@ impl Register {
                         knobs,
                     })
                 }
+                // a record of a generic kind (an LFO shape): another service owns it and `patchkit records --check` judges it; no field of the register is read from it
+                _ if dkneeds::KINDS
+                    .iter()
+                    .any(|k| k.0 == kind && k.1 as usize == len) => {}
                 _ => return Err(err!("register section: record kind {kind} length {len}")),
             }
             at += len;

@@ -1,45 +1,75 @@
-// The Remote page and the Emulator page's faceplate in the preview (`?page=remote`, `?page=emulator`): the device screen is a test
-// pattern, so a screenshot shows where and how large the 128 x 64 image is drawn. The Remote page is the app's own code; only the
-// DkSession methods that ask the device are replaced.
-import { DkSession } from '@digi/dk-session';
-import { queryFrame } from './frame-from-png';
+// Per-target card sessions and faceplate controls for the browser Workbench.
+import { LOG_KIND } from '@digi/dk-session/gen_proto';
+import { createSessionHub } from '@digi/workbench-core/transfer/session-core.ts';
+import { deviceOfPort, deviceProfiles } from '@digi/workbench-core/data/device-profiles.ts';
+import { previewEmulatorDevice } from './card-mock';
+import { DkError, DkSession, RPC_SOFTWARE_VERSION, RPC_PING } from '@digi/dk-session';
+import type { createPreviewStores } from './module-store';
+import { sim } from './sim';
+import { createPreviewScreen } from './preview-screen';
 
-/** A recognisable 128 x 64 frame in the firmware's screen layout (`screenPixel`): a frame, corner marks, a diagonal, and a bar of steps. */
-export function testPattern(): Uint8Array {
-  const buf = new Uint8Array(1024);
-  const set = (x: number, y: number) => {
-    if (x < 0 || x > 127 || y < 0 || y > 63) return;
-    buf[7 - (y >> 3) + 8 * x] |= 1 << (y & 7);
-  };
-  for (let x = 0; x < 128; x++) {
-    set(x, 0);
-    set(x, 63);
-  }
-  for (let y = 0; y < 64; y++) {
-    set(0, y);
-    set(127, y);
-  }
-  for (let i = 0; i < 64; i++) set(i * 2, i); // diagonal corner to corner
-  for (let i = 0; i < 64; i++) set(127 - i * 2, i);
-  for (let k = 0; k < 8; k++)
-    for (let y = 56 - k * 2; y < 60; y++) for (let x = 8 + k * 4; x < 11 + k * 4; x++) set(x, y);
-  // a letter F in the upper left (5 x 7 at 3x), so a mirror or a rotation is visible
-  for (let y = 0; y < 21; y++) set(8, 8 + y);
-  for (let x = 0; x < 12; x++) {
-    set(8 + x, 8);
-    set(8 + x, 18);
-  }
-  return buf;
-}
-
-export function installRemoteMock(): void {
-  const proto = DkSession.prototype as unknown as Record<string, unknown>;
-  const fallback = testPattern();
-  const loaded = queryFrame();
-  proto.screen = async () => ((await loaded) ?? fallback).slice();
-  proto.info = async () => ({ port: 'dn2-1.12' });
-  proto.remoteState = async () => ({ enabled: true, format: 1, turnLimit: 10 });
-  proto.remoteKey = async () => {};
-  proto.remoteTurn = async () => {};
-  proto.remoteRelease = async () => {};
+export function previewSessions(stores: ReturnType<typeof createPreviewStores>, emulatorReady: () => boolean) {
+  const { storeSession } = stores;
+  const screens = new Map<string, ReturnType<typeof createPreviewScreen>>();
+  const query = new URLSearchParams(location.search);
+  const unidentified = query.has('unidentified');
+  const history = query.has('history');
+  const began = Date.now();
+  return createSessionHub((transport, opts, key) => {
+    const session = new DkSession(transport, { timeoutMs: 6000, ...opts });
+    const profile = deviceProfiles[deviceOfPort(key) ?? previewEmulatorDevice(query)];
+    const screen = screens.get(key) ?? createPreviewScreen(profile.short);
+    screens.set(key, screen);
+    const midi = key.startsWith('midi:');
+    const version = profile.firmware.at(-1)?.version ?? '';
+    const store = storeSession(session, profile, key, unidentified || (!midi && query.has('stock')));
+    const wireInfo = session.info.bind(session);
+    const wireRpc = session.rpc.bind(session);
+    return Object.assign(session, {
+      ...store,
+      async info(quick: Parameters<DkSession['info']>[0]) {
+        if (!midi && !emulatorReady()) throw new DkError({ error: 'No runtime is running.', kind: 'timeout' });
+        if (!midi || unidentified || sim.dev === 'noreply' || sim.dev === 'error') return store.info(quick);
+        const { runtime, runtime_version, port, image_id } = await wireInfo(quick);
+        const card = await store.info(quick);
+        return { ...card, runtime, runtime_version, port, image_id };
+      },
+      async rpc(...args: Parameters<DkSession['rpc']>) {
+        const [type] = args;
+        if (sim.dev === 'noreply') throw new DkError({ error: 'No reply from the device.', kind: 'timeout' });
+        if (type === RPC_PING || type === RPC_SOFTWARE_VERSION) {
+          if (unidentified || query.has('runtimeOnly')) throw new Error('Unknown MIDI endpoint');
+          if (!midi)
+            return type === RPC_PING
+              ? Uint8Array.of(0, ...new TextEncoder().encode(profile.name), 0)
+              : new TextEncoder().encode(version);
+        }
+        return wireRpc(...args);
+      },
+      screen: () => screen.read(),
+      logPage: async () => {
+        const tick = history ? Math.floor((Date.now() - began) / 5000) : 0;
+        const seq = 1 + tick;
+        const cpu = [213, 350, 290, 180][tick % 4]!;
+        const dsp = [345, 730, 510, 290][tick % 4]!;
+        return [
+          seq,
+          seq,
+          [
+            {
+              seq,
+              time: seq * 15000,
+              kind: LOG_KIND.HEALTH,
+              flags: 0,
+              args: [(6 << 16) | cpu, dsp, Math.max(dsp, 420), 0, 0],
+            },
+          ],
+        ];
+      },
+      remoteState: async () => ({ enabled: true, format: 1, turnLimit: 10 }),
+      remoteKey: async (code: number, down: boolean) => screen.key(code, down),
+      remoteTurn: async (encoder: number, delta: number) => screen.turn(encoder, delta),
+      remoteRelease: async () => screen.release(),
+    });
+  });
 }

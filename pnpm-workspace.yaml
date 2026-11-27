@@ -2,6 +2,7 @@ packages:
   - apps/*
   - packages/*
   - tests/regression
+  - tests/fixtures/modules/*/workbench
 allowBuilds:
   esbuild: true
   nx: false

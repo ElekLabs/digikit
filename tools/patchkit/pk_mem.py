@@ -6,7 +6,7 @@ The fit is the patchkit placement's own: the modules are applied to the stock `.
 allocation per region) and refused when they do not fit (exit 1, the placement's message). The numbers come from the
 plan it writes (`regions`: bytes used and capacity per region, `writes`: every placed object, table and hook tail), so
 no placement is reimplemented here. Modules pulled in by `requires` are listed too. Without modules the table shows
-the free regions of the port (devices/ports/<device>-<firmware>.toml) and needs no firmware.
+the free regions of the port (ports/<device>-<firmware>.toml) and needs no firmware.
 
 Used bytes of a region are the placement's: the listed modules' bytes plus alignment padding and zero-initialised
 data (`other`). Nothing here is written under out/ except the plan of the applied image (a scratch directory).
@@ -23,16 +23,20 @@ from pathlib import Path
 from typing import Any
 
 from tools.firmware import config
+from tools.firmware import device as device_files
+from tools.patchkit import pk_device
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
-DEFAULT_FIRMWARE = {"dt2": "1.17", "dn2": "1.12"}
+DEFAULT_FIRMWARE = (
+    pk_device.acceptance_firmware()
+)  # the harness' default firmware per device
 
 
 def port_regions(device: str, firmware: str) -> dict[str, dict[str, Any]]:
     """name -> {cpu, start, end, size} of the port's regions; size is net of the excluded ranges."""
-    path = ROOT / "devices" / "ports" / f"{device}-{firmware}.toml"
+    path = ROOT / "ports" / f"{device}-{firmware}.toml"
     return regions_of(tomllib.loads(path.read_text()))
 
 
@@ -103,7 +107,7 @@ def table(report: dict[str, Any]) -> str:
 def runtime_bytes(device: str, root: Path = ROOT) -> dict[str, int] | None:
     """Bytes of core/runtime for DEVICE from its built objects: code and data (bss is not counted) of the ColdFire objects
     (`cf`) and of the DSP objects (`dsp`). The objects are the ones its module.toml lists for the device. None: not built."""
-    base = root / "modules" / "core" / "runtime"
+    base = root / "runtime" / "core"
     man = tomllib.loads((base / "module.toml").read_text())
     out = {"cf": 0, "dsp": 0}
     for o in man.get("object", []):
@@ -154,10 +158,8 @@ def apply_plan(device: str, firmware: str, modules: list[str]) -> dict[str, Any]
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument(
-        "modules", nargs="*", help="ids under modules/, e.g. test/patched-pluck"
-    )
-    ap.add_argument("--device", default="dt2", choices=("dt2", "dn2"))
+    ap.add_argument("modules", nargs="*", help="ids under modules/, e.g. core/rows")
+    ap.add_argument("--device", default="dt2", choices=device_files.dsp_shorts())
     ap.add_argument("--firmware", help="default: 1.17 (dt2), 1.12 (dn2)")
     ap.add_argument("--json", action="store_true", help="JSON only")
     a = ap.parse_args(argv)

@@ -3,7 +3,7 @@
 //! ports and modules, and a comma-separated module list, and reads the results back by pointer and length.
 //!
 //! Bundle: `{"ports": ["<port toml>", ...], "modules": [{"manifest": "<module.toml>", "files": {"build/x.dko.json": "<json>"}}]}`.
-//! (`tools/patchkit/patchkit.py bundle` and the gallery's build step, `apps/web/scripts/gen-modules.mjs`, make it from `devices/ports/` and `modules/`.)
+//! (`tools/patchkit/patchkit.py bundle` and the gallery's build step, `apps/web/scripts/gen-modules.mjs`, make it from `ports/` and the committed module roots.)
 
 use crate::apply;
 use crate::error::{Error, Result, sha256_hex};
@@ -77,7 +77,7 @@ pub fn apply_bundle(fw: &[u8], bundle: &[u8], ids: &str) -> Result<(Vec<u8>, Str
 pub fn inspect_bundle(fw: &[u8], bundle: &[u8]) -> Result<String> {
     let (reg, _) = load(bundle)?;
     let f = crate::firmware::Firmware::parse(fw)?;
-    let rep = crate::verify::verify(fw, Some(&reg), None)?;
+    let rep = crate::verify::inspect(fw, Some(&reg))?;
     Ok(serde_json::json!({
         "device": f.device.short(),
         "sha256": f.syx_sha256,
@@ -268,6 +268,22 @@ pub unsafe extern "C" fn pk_check(
 pub unsafe extern "C" fn pk_needs(dkm: *const u8, dkm_len: usize) -> i32 {
     let dkm = unsafe { slice(dkm, dkm_len) };
     set(crate::dkm::needs_json(dkm).map(|j| (vec![], j.to_string())))
+}
+
+/// The key rules of a `.dkm` (`keys_check_json` in dkm.rs): JSON `{repeat, shared, missing}` in `pk_plan_*`, or the reason in `pk_err_*` (1). `other_len` 0 means no other file
+/// (`shared` and `missing` are null).
+///
+/// # Safety
+/// The ranges must be readable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pk_keys_check(
+    new: *const u8,
+    new_len: usize,
+    other: *const u8,
+    other_len: usize,
+) -> i32 {
+    let (new, other) = unsafe { (slice(new, new_len), slice(other, other_len)) };
+    set(crate::dkm::keys_check_json(new, other).map(|j| (vec![], j.to_string())))
 }
 
 /// The fit rule (`dkrt-fit`, the code the DIGIKIT menu runs; packages/patchkit/src/fit.rs): JSON `{caps, needs, empty?}` in; `{each, set, line}` in

@@ -1,8 +1,10 @@
 """Score and path helpers of tools/sharc_dev/sharc_catalog.py, on synthetic inputs."""
 
+import sqlite3
 import unittest
 
 from tools.sharc_dev import sharc_catalog as sc
+from tools.sharc_dev.sharc_cost import cost_evidence, fn_cost
 
 
 class DspScoreTest(unittest.TestCase):
@@ -44,6 +46,26 @@ class RoleTest(unittest.TestCase):
         self.assertEqual(sc.dsp_role("", False, False, True, False), "frame")
         self.assertEqual(sc.dsp_role("", False, False, False, False), "other")
         self.assertEqual(sc.dsp_role("", True, True, False, True), "voice")
+
+
+def test_recursive_cost_exposes_unresolved_callee_edges() -> None:
+    db = sqlite3.connect(":memory:")
+    db.executescript("""
+        CREATE TABLE insn (image, function_sw, aligned, sw, form, fields, width);
+        CREATE TABLE mem_access (image, sw, direction, space);
+        CREATE TABLE edges (image, from_function, from_sw, to_sw, kind, to_function, cond);
+        INSERT INTO insn VALUES ('fixture', 16, 1, 16, 'none', '{}', 6);
+        INSERT INTO insn VALUES ('fixture', 32, 1, 32, 'none', '{}', 6);
+        INSERT INTO edges VALUES ('fixture', 16, 16, 32, 'call', 32, NULL);
+        INSERT INTO edges VALUES ('fixture', 32, 32, NULL, 'indirect', NULL, NULL);
+    """)
+    try:
+        evidence = cost_evidence(fn_cost(db, "fixture", 16), follow_calls=True)
+        assert evidence["self"] == "1" and evidence["total"] == "2"
+        assert evidence["unknown_calls"] == 0
+        assert "0x20: 1 unresolved calls or jumps excluded" in evidence["notes"]
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":

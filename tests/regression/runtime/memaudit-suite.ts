@@ -5,11 +5,11 @@ import type { DkModule } from '@digi/dk-session';
 import type { Device } from '@digi/test-support';
 import { afterAll, describe, expect, test } from 'vitest';
 import { record } from './artifacts.ts';
-import { bootInfo } from './card-kit.ts';
+import { bootInfo } from './guest-mailbox.ts';
 import { CARD_SYMBOLS, cardRig, RT, type CardRig, type CardSpec } from './card-rig.ts';
 import { pausedProtocol } from './debug-kit.ts';
 import { FIRMWARE, FULL_TIER, selectDevices, skipEmptyHalf } from './devices.ts';
-import { advance } from './fx-live.ts';
+import { SETTLE } from './panel-waits.ts';
 import {
   arenaBounds,
   bytesChanged,
@@ -19,18 +19,31 @@ import {
   guardPlan,
   loadWatchEnv,
   moduleBlocks,
+  packageBlock,
+  providerBlocks,
   type GuardPlan,
 } from './memaudit-kit.ts';
 import { needsOf } from './dkm.ts';
 import { dynType, type PanelMachine } from './project-kit.ts';
 import { dmaHoles } from './write-safety.ts';
-import { DSP_GRANULE, fullSet, geometryOf, LOADED, packSynth, usageOf, type Want } from './synth.ts';
+import {
+  ARENA_HDR,
+  COLLECT_BLOCK,
+  DSP_GRANULE,
+  fullSetOnBoot,
+  geometryOf,
+  LOADED,
+  packSynth,
+  usageOf,
+  type SynthSpec,
+  type Want,
+} from './synth.ts';
 
 /**
  * The ColdFire memory audit as a device test (port of the `memaudit` part of pk_digikit_memaudit.py; protected ranges and allowed writers: memaudit-kit.ts).
  * Per device and module set, two daemons: the first loads the set on a ColdFire-only rig, arms the write guard after the boot and drives the UI
  * (DIGIKIT menu, MODULES, machine on a track, p-lock, project save, edit, save, load); the second boots the same card cold with the write watch on the
- * same ranges from the first cache enable, so the load of the modules and their `dkm_init` are audited too.
+ * same ranges from the first cache enable, so the load of the modules and their `init` are audited too.
  */
 
 export interface AuditMachine {
@@ -90,16 +103,17 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
       `${device.toUpperCase()} ${FIRMWARE[device]}: memaudit ${spec.title}`,
       () => {
         let guard: GuardPlan | undefined;
-        let blocks: DkModule[] = [];
+        let blocks: Pick<DkModule, 'name' | 'cf_base' | 'cf_size'>[] = [];
         let cardSpec: CardSpec | undefined;
         const synthDir = spec.full ? fs.mkdtempSync(path.join(os.tmpdir(), 'digi-memaudit-synth-')) : '';
         afterAll(() => {
           if (synthDir) fs.rmSync(synthDir, { recursive: true, force: true });
         });
         const base = {
-          roots: [...RT, 'core/digikit-menu'],
-          symbols: [...CARD_SYMBOLS, 'DKRT_ASSIGN', 'DKRT_ARENA', '_dl_area'],
-          dsp: 'zero' as const,
+          roots: [...RT, 'core/ui'],
+          symbols: [...CARD_SYMBOLS, 'DKRT_ARENA', 'DKRT_HOST_DIR', '_dl_area'],
+          // a run-time machine needs machines.dks, a service with a DSP part: only a coupled session installs it (service-files.ts)
+          dsp: spec.machines?.length ? ('sharc' as const) : ('zero' as const),
         };
         // a negative control's guard hit is a fault event of the session: the case end must not fail on it (the test judges the faults itself)
         const common = { ...base, project: true, uploads: true, relaxFs: true, faults: spec.stray !== undefined };
@@ -116,7 +130,7 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
           });
 
           test('the set loads; while the UI is driven no store lands outside the module blocks and the patch code', async (ctx) => {
-            const mods = [];
+            const mods: { name: string; file: string }[] = [];
             for (const id of spec.modules) {
               const m = o.artifact ? await o.artifact(h, id) : h.mod(id);
               if ('skip' in m) return ctx.skip(m.skip);
@@ -127,14 +141,29 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
             if (spec.full) {
               // the second daemon builds the same card: the files must outlive the first daemon's artifact directory
               const g = geometryOf(device, h.plan);
-              const fill = fullSet(g, (await needsOf(mods.map((m) => m.file))).map(usageOf));
-              for (const [i, f] of fill.entries()) {
-                mods.push({
-                  name: `modules/full${i}.dkm`,
-                  file: await packSynth(device, f.spec, synthDir, `${i}.dkm`),
-                });
-                wants.push(f.want);
-                if (f.want === LOADED) loaded.push(f.spec.name);
+              const packFill = async (set: { spec: SynthSpec; want: Want }[], tag: string) => {
+                const out = [];
+                for (const [i, f] of set.entries())
+                  out.push({
+                    name: `modules/full${i}.dkm`,
+                    file: await packSynth(device, f.spec, synthDir, `${tag}${i}.dkm`),
+                  });
+                return out;
+              };
+              // F is sized by a boot of the set before it, so that the providers its modules need are loaded
+              const fill = await fullSetOnBoot(
+                g,
+                (await needsOf(mods.map((m) => m.file))).map(usageOf),
+                async (before) => {
+                  const probe = { modules: [...mods, ...(await packFill(before, 'probe'))] };
+                  const rt = await h.load('audit-probe', { ...probe, selection: probe.modules.map((m) => m.name) });
+                  return (await pausedProtocol(rt, async (dk) => (await dk.capacity()).ARENA!)).largest;
+                },
+              );
+              for (const [i, m] of (await packFill(fill, 'full')).entries()) {
+                mods.push(m);
+                wants.push(fill[i]!.want);
+                if (fill[i]!.want === LOADED) loaded.push(fill[i]!.spec.name);
               }
             }
             cardSpec = { modules: mods, selection: mods.map((m) => m.name) };
@@ -153,7 +182,6 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
               modules: await dk.modules(),
               cap: await dk.capacity(),
             }));
-            blocks = modules;
             const arena = await arenaBounds(session, h.plan);
             expect(modules.map((m) => m.name).sort(), 'MODULES lists the loaded modules').toEqual([...loaded].sort());
             for (const m of modules)
@@ -162,13 +190,20 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
                 `${m.name}: the block lies inside the arena ${arena.map((a) => a.toString(16))}`,
               ).toBe(true);
 
-            if (spec.full)
+            if (spec.full) {
               expect(
-                [cap.ARENA!.limit - cap.ARENA!.used, cap.ARENA!.largest, cap.DSP_AREA!.largest < DSP_GRANULE],
-                'the full set uses the arena to its last byte and the DSP area to its last whole granule',
-              ).toEqual([0, 0, true]);
+                cap.ARENA!.largest,
+                'the full set uses the arena but the block that every load needs (the holes the declaring modules leave before their record blocks are smaller or equal)',
+              ).toBe(COLLECT_BLOCK - ARENA_HDR);
+              expect(cap.DSP_AREA!.largest, 'the DSP area is used to its last whole granule').toBeLessThan(DSP_GRANULE);
+            }
 
-            const plan = guardPlan(device, FIRMWARE[device], h.plan, modules, arena);
+            // the files of the services are blocks of the arena as well: their code and statics are not strays
+            const pkg = await packageBlock(session, h.plan);
+            blocks = [...modules, ...(await providerBlocks(session, h.plan)), pkg];
+            const plan = guardPlan(device, FIRMWARE[device], h.plan, blocks, arena, [
+              { owner: pkg.name, lo: pkg.cf_base, hi: pkg.cf_base + pkg.cf_size },
+            ]);
             guard = plan;
             record(h.artifacts, 'memaudit-plan', {
               protect: plan.protect.map((r) => [r.label, r.lo, r.hi]),
@@ -190,8 +225,8 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
               allow_pc: plan.code.map(({ lo, hi }) => ({ lo, hi })),
             });
             try {
-              await driveAuditUi(session, machines, spec.sweep, !spec.stray);
-              const { total, hits } = await guardHits(session, modules, plan.code);
+              await driveAuditUi(runtime, machines, spec.sweep, !spec.stray);
+              const { total, hits } = await guardHits(session, blocks, plan.code);
               const after = await moduleBlocks(session, modules);
               const changed = Object.fromEntries(
                 modules.map((m) => [m.name, bytesChanged(before.get(m.name)!, after.get(m.name)!)]),
@@ -233,7 +268,7 @@ export function defineMemaudit(set: (device: Device) => AuditSet | undefined, o:
           test('a cold boot of the same card with the write watch on: the load and init of the modules store nothing outside their blocks', async (ctx) => {
             if (!cardSpec || !guard) return ctx.skip('the drive test did not get as far as arming the guard');
             const runtime = await h.load('load-pass', cardSpec);
-            await advance(runtime.session, 300);
+            await runtime.ui.wait({ ms: 300, why: SETTLE });
             const stores = loggedStores(h.artifacts);
             expect(
               stores.map((s) => `pc 0x${s.pc.toString(16)} addr 0x${s.addr.toString(16)} size ${s.size}`),

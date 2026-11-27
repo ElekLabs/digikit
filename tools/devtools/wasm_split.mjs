@@ -2,7 +2,7 @@
 // The two-worker browser session under Node (V8), on the DN2 ready inputs:
 // the ColdFire core instance runs in this thread, the DSP core instance in a
 // worker_threads worker, and DSPI2 frames cross a SharedArrayBuffer
-// (apps/web/src/sab-link.ts, split-session.ts: the same code the browser
+// (packages/workbench-core/src/sab-link.ts, split-session.ts: the same code the browser
 // workers run). Prints the CPU split and the PCM hash, which must equal
 // tools/devtools/wasm_parity.mjs's for the same scenario length (`idle`).
 //
@@ -15,10 +15,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
+import { readyDirs } from '../nx/ready-dirs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
-const web = path.join(root, 'apps/web/src');
+const web = path.join(root, 'packages/workbench-core/src');
 const { createDspSide, createCfSide } = {
   ...(await import(path.join(web, 'split-session.ts'))),
 };
@@ -55,11 +56,7 @@ if (!isMainThread) {
 const args = {};
 for (let i = 2; i < process.argv.length; i += 2) args[process.argv[i].slice(2)] = process.argv[i + 1];
 const env = process.env;
-const ready = path.resolve(
-  root,
-  env.DIGI_EMU_READY_DIR ??
-    JSON.parse(fs.readFileSync(path.join(root, 'tools/emulator/ready_inputs.json'), 'utf8')).ready_dir,
-);
+const ready = path.resolve(root, env.DIGI_EMU_READY_DIR ?? readyDirs.dn2);
 const read = (p) => new Uint8Array(fs.readFileSync(p));
 const wasm = read(args.core);
 const syx = read(args.syx ?? env.DIGI_EMU_SYX ?? path.join(root, 'firmware', 'Digitone_II_OS1.11.syx'));

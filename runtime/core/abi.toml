@@ -1,0 +1,1137 @@
+# The C ABI of the digikit runtime (core/runtime): the exports that the DIGIKIT menu, core/ui and other callers link against, with the structs and
+# constants they pass. `patchkit gen` writes from it:
+#   runtime/core/include/dkrt.h             the C header (structs with size and offset checks, constants, prototypes)
+#   runtime/core/sdk/src/gen_abi.rs         the same for Rust (`dkrt-sdk`), and one function type per export (`sig`)
+#   runtime/core/src/rs/src/gen_abi_check.rs  the runtime's functions checked against those types: a changed signature fails the build
+#   packages/dk-session/src/gen_host_dir.ts, packages/dkaddrmap/src/gen_host_dir.rs  the host directory ids for the TypeScript and Rust tools
+# The result codes (`E_*`) and the CAPACITY kinds (`CAPK_*`) are in sdk/sdk.toml ([load.status], [capacity.kinds]) and `SEL_MAX` is
+# [limits.max] modules there; the C header repeats them with the prefix DKRT_.
+#
+# A struct field is "<type> <name>[N][M] // doc"; <type> is u8, u16, u32, i32 or an earlier struct, N is a number, a `usize` const of this file or SEL_MAX.
+# Every field lies at a multiple of its alignment and every struct has a size that is a multiple of 4 (no padding), so the layout is the
+# same for ColdFire gcc (which aligns a u32 to 2) and for a host. A struct only grows at its end.
+# A function is "<ret> <name>(<type> <name>, ...)"; <type> is a scalar, `usize`, a struct, `const` and `*`. `at` is the Rust module
+# of the runtime crate that defines it (empty: the crate root).
+
+[[const]]
+name = "OK"
+type = "i32"
+value = 0
+doc = "Result of a call that worked. The error codes are negative (`E_*` of sdk/sdk.toml [load.status])."
+
+[[const]]
+name = "PHASE_INIT"
+type = "u32"
+value = 1
+doc = "dkrt_phase: module code runs in its `init`."
+
+[[const]]
+name = "LOADING"
+type = "i32"
+value = 1
+doc = "The boot-time load of a module with DSP code answers LOADING: its ColdFire part is live, the DSP part follows over the first UI-loop passes. The final result is in DkrtBootInfo.results. A module whose DSP part is still going has state MOD_LOADING in dkrt_module."
+
+[[const]]
+name = "STATE_IDLE"
+type = "u32"
+value = 0
+doc = "DkrtStatus.state: nothing is being sent."
+
+[[const]]
+name = "STATE_LOADING"
+type = "u32"
+value = 1
+doc = "DkrtStatus.state: a module's DSP code is being sent."
+
+[[const]]
+name = "STATE_UNLOADING"
+type = "u32"
+value = 2
+doc = "Archived with hot reload; never reported now."
+
+[[const]]
+name = "MOD_LOADED"
+type = "u32"
+value = 0
+doc = "DkrtModule.state: the module is live."
+
+[[const]]
+name = "MOD_LOADING"
+type = "u32"
+value = 1
+doc = "DkrtModule.state: its DSP part is still being sent."
+
+[[const]]
+name = "LIVE_LOAD"
+type = "u32"
+value = 1
+doc = "dkrt_live op: load the content module of a store file that is not loaded."
+
+[[const]]
+name = "LIVE_UNLOAD"
+type = "u32"
+value = 2
+doc = "dkrt_live op: unload the loaded content module that came from a store path."
+
+[[const]]
+name = "LIVE_RELOAD"
+type = "u32"
+value = 3
+doc = "dkrt_live op: replace the loaded content module that came from a store path by the file now at that path."
+
+[[const]]
+name = "CAP_MAX"
+type = "usize"
+value = 20
+doc = "Room for the entries a caller of dkrt_capacity gives (the runtime has 16 kinds; new kinds are appended)."
+
+[[const]]
+name = "ARENA_BYTES"
+type = "usize"
+value = 524288
+doc = "The module arena: a static array of the runtime's bss. Every device has the same one (the device files' [limits] arena_bytes must equal it)."
+
+[[const]]
+name = "PACKAGE_BYTES"
+type = "usize"
+value = 327680
+doc = "The system package block: a static array of the runtime's bss, outside the module arena. Stage 1 places the package in it (a body whose placed size is larger is refused, by patchkit at build and by stage 1 at load)."
+
+[[const]]
+name = "STAGE_BYTES"
+type = "usize"
+value = 131072
+doc = "The staging buffer of a .dkm file and of the store directory: a static array of the runtime's bss ([limits.max] stage_bytes of sdk/sdk.toml)."
+
+[[const]]
+name = "MACHINE_ROWS"
+type = "usize"
+value = 8
+doc = "Machine and voice rows the runtime's tables have: the most run-time machine types a device can have (DkrtDevice.dyn_types; the runtime checks it at start)."
+
+[[const]]
+name = "DEV_KEYS"
+type = "usize"
+value = 64
+doc = "The logical keys of a device: DkrtDevice.key_codes has this many entries, indexed by the key's number (dk_key of sdk/include/dk/gen/keys.h; entry 0 is DK_KEY_NONE). `patchkit gen` refuses more key names."
+
+[[const]]
+name = "DEV_MAGIC"
+type = "u32"
+value = 0x444b4456
+doc = "DkrtDevice.magic: DKDV."
+
+[[const]]
+name = "DEV_VERSION"
+type = "u32"
+value = 1
+doc = "DkrtDevice.version."
+
+[[const]]
+name = "DEV_HAS_DSP"
+type = "u32"
+value = 1
+doc = "DkrtDevice.caps: the device has the DSP (a SHARC+ that the digikit link drives). Clear: no DSP area, no machine rows, no DSP figures."
+
+[[const]]
+name = "DEV_HAS_STORE"
+type = "u32"
+value = 2
+doc = "DkrtDevice.caps: the device file has a module store ([card.store]). Clear: every store call answers not found and the card is never written."
+
+[[const]]
+name = "DEV_HAS_SDHC"
+type = "u32"
+value = 4
+doc = "DkrtDevice.caps: the card is on an eSDHC controller whose present-state register the runtime may read (DkrtDevice.esdhc_base). Clear: the card is never busy."
+
+[[const]]
+name = "DEV_HAS_SAFE_KEY"
+type = "u32"
+value = 8
+doc = "DkrtDevice.caps: DkrtDevice.safe_key is the firmware key index held at power-on for safe mode. Clear: no key starts safe mode."
+
+[[const]]
+name = "HEALTH_MAGIC"
+type = "u32"
+value = 0x484c5448
+doc = "DkrtHealth.magic, \"HLTH\"."
+
+[[const]]
+name = "HEALTH_MODULE"
+type = "u32"
+value = 1
+doc = "DkrtHealth.flags: the image has core/health."
+
+[[const]]
+name = "HEALTH_CPU"
+type = "u32"
+value = 2
+doc = "DkrtHealth.flags: the CPU load is valid (a second window closed)."
+
+[[const]]
+name = "HEALTH_DSP"
+type = "u32"
+value = 4
+doc = "DkrtHealth.flags: the DSP figures are valid (a window with counts)."
+
+[[const]]
+name = "HEALTH_HEAP"
+type = "u32"
+value = 8
+doc = "DkrtHealth.flags: the heap figures are valid."
+
+[[const]]
+name = "HEALTH_HEAP_CUT"
+type = "u32"
+value = 16
+doc = "DkrtHealth.flags: the heap walk stopped at its bound (the free figure is a lower bound)."
+
+[[const]]
+name = "HEALTH_HEAP_BAD"
+type = "u32"
+value = 32
+doc = "DkrtHealth.flags: the free lists looked corrupt (the walk stopped)."
+
+[[const]]
+name = "HEALTH_STORE"
+type = "u32"
+value = 64
+doc = "DkrtHealth.flags: the store figures are valid (a store header was read; a card without a store has none)."
+
+[[const]]
+name = "HEALTH_NO_DSP"
+type = "u32"
+value = 128
+doc = "DkrtHealth.flags: the device has no DSP (DEV_HAS_DSP clear): the DSP figures and the DSP area are 0 and dsp_period is 0."
+
+[[const]]
+name = "SEL_PATH"
+type = "usize"
+value = 56
+doc = "Bytes of one path of the selection, with the NUL: a store path has at most SEL_PATH - 1 characters."
+
+[[const]]
+name = "NEEDS_LEN"
+type = "usize"
+value = 12
+doc = "Bytes of DkrtBootInfo.needs per selected module: the name of the missing module, 12 characters at most, NUL padded (with 12 there is no NUL)."
+
+[[const]]
+name = "SAFE_NONE"
+type = "u32"
+value = 0
+doc = "DkrtBootInfo.reason: this boot is not in safe mode."
+
+[[const]]
+name = "SAFE_COUNTER"
+type = "u32"
+value = 1
+doc = "DkrtBootInfo.reason: two boots in a row did not reach the UI loop."
+
+[[const]]
+name = "SAFE_KEY"
+type = "u32"
+value = 2
+doc = "DkrtBootInfo.reason: the safe-mode key was held at power-on."
+
+[[const]]
+name = "SAFE_FLAG"
+type = "u32"
+value = 3
+doc = "DkrtBootInfo.reason: the selection record asked for it (DkrtSelection.flags bit 0)."
+
+[[const]]
+name = "SAFE_DSP"
+type = "u32"
+value = 4
+doc = "DkrtBootInfo.reason: the boot before left a hang record because the DSP stopped (the watch found its heartbeat frozen)."
+
+[[const]]
+name = "SAFE_PANIC"
+type = "u32"
+value = 5
+doc = "DkrtBootInfo.reason: the boot before left a panic record (the runtime's Rust code panicked)."
+
+[[const]]
+name = "SAFE_READ"
+type = "u32"
+value = 6
+doc = "DkrtBootInfo.reason: no selection copy is valid and a copy could not be read; no modules load and the selection is not written during this boot."
+
+[[const]]
+name = "SAFE_CORE_ONLY"
+type = "u32"
+value = 7
+doc = "DkrtBootInfo.reason: the resident core runs alone (no system package, no modules, no DIGIKIT menu); DkrtBootInfo.core_cause says why. The resident store and the upload commands still answer."
+
+[[const]]
+name = "CORE_NONE"
+type = "u32"
+value = 0
+doc = "DkrtBootInfo.core_cause: this boot is not core-only."
+
+[[const]]
+name = "CORE_CRASHES"
+type = "u32"
+value = 1
+doc = "DkrtBootInfo.core_cause: the boot counter reached its second threshold (boots kept crashing, in safe mode too); writing the package or a RETRY command clears it."
+
+[[const]]
+name = "CORE_MISSING"
+type = "u32"
+value = 2
+doc = "DkrtBootInfo.core_cause: the card has no digikit/system.dksp."
+
+[[const]]
+name = "CORE_INCOMPATIBLE"
+type = "u32"
+value = 3
+doc = "DkrtBootInfo.core_cause: the package file is of another format, or asks for a resident table this core does not have, or the core refused its table."
+
+[[const]]
+name = "CORE_DAMAGED"
+type = "u32"
+value = 4
+doc = "DkrtBootInfo.core_cause: the package file is not whole (too short, another size than its header says, a body that does not match its hash, a relocation outside the image, or no room for it in the arena)."
+
+[[const]]
+name = "CORE_UNREADABLE"
+type = "u32"
+value = 5
+doc = "DkrtBootInfo.core_cause: the card could not be read for the package; the next boot asks again."
+
+[[const]]
+name = "FAULT_ROWS"
+type = "usize"
+value = 4
+doc = "Rows of DkrtDiag.fault_text."
+
+[[const]]
+name = "SAFE_AFTER"
+type = "u32"
+value = 2
+doc = "Boots in a row that did not stay up for STABLE_BLOCKS after which the next one is safe mode."
+
+[[const]]
+name = "CORE_ONLY_AFTER"
+type = "u32"
+value = 4
+doc = "Boots in a row that did not stay up for STABLE_BLOCKS after which the next one runs the resident core only (no system package): the crashes went on in safe mode, so the package or the core is the likely cause."
+
+[[const]]
+name = "STABLE_BLOCKS"
+type = "u32"
+value = 45000
+doc = "The stable period: DSP blocks (1500 per second) of UI loop after which the boot counter is cleared (30 seconds)."
+
+[[const]]
+name = "CARD_UNKNOWN"
+type = "u32"
+value = 0
+doc = "DkrtDiag.card_state: not checked."
+
+[[const]]
+name = "CARD_OURS"
+type = "u32"
+value = 1
+doc = "DkrtDiag.card_state: a valid store header, or a valid selection copy: the area is ours."
+
+[[const]]
+name = "CARD_BLANK"
+type = "u32"
+value = 2
+doc = "DkrtDiag.card_state: no structure of ours, and every sector of the range reads all 0x00 or all 0xFF: the first write may claim it."
+
+[[const]]
+name = "CARD_FOREIGN"
+type = "u32"
+value = 3
+doc = "DkrtDiag.card_state: something else is there: the runtime never writes the card."
+
+[[const]]
+name = "CARD_UNREADABLE"
+type = "u32"
+value = 4
+doc = "DkrtDiag.card_state: a read of the area failed: the runtime cannot tell, so it never writes the card."
+
+[[const]]
+name = "CARD_TOO_SMALL"
+type = "u32"
+value = 5
+doc = "DkrtDiag.card_state: the card is smaller than the store area (the capacity the firmware's driver reports is below the end of the area): there is no store."
+
+[[const]]
+name = "HOST_DIR_MAGIC"
+type = "u32"
+value = 0x44484b44
+doc = "HostDir.magic, \"DKHD\" (the host directory `DKRT_HOST_DIR`)."
+
+[[const]]
+name = "HOST_DIR_READY_MAGIC"
+type = "u32"
+value = 0x52454459
+doc = "HostDir.ready once the package has attached and every entry is filled (\"REDY\"), written last by the core; 0 before (cleared, or the package still starting)."
+
+[[const]]
+name = "DIAG_MAGIC"
+type = "u32"
+value = 0x44494147
+doc = "DkrtDiag.magic, \"DIAG\"."
+
+[[const]]
+name = "STORE_LEASES"
+type = "usize"
+value = 24
+doc = "Store leases (dkrt_store_lease) that can be live at once, RAM only: a reboot clears them. The sample pool takes one per request and one per peak-window step (one at a time); its request count plus a reserve of 8 must fit (checked at compile time in the adapter)."
+
+[[const]]
+name = "SCAN_MAX"
+type = "usize"
+value = 32
+doc = "Entries of a dkrt_scan and rows of a dkrt_fit."
+
+[[const]]
+name = "SCAN_COMPAT"
+type = "u32"
+value = 1
+doc = "DkrtScan.flags: the file's header does not refuse this runtime or device (a file that is not a .dkm or cannot be read passes: the runtime names the reason at boot)."
+
+[[const]]
+name = "SCAN_NEEDS"
+type = "u32"
+value = 2
+doc = "DkrtScan.flags: the need_* fields are valid (a readable .dkm of this format)."
+
+[[const]]
+name = "SCAN_LOADED"
+type = "u32"
+value = 4
+doc = "DkrtScan.flags: the runtime has the file loaded in this boot."
+
+[[const]]
+name = "SCAN_LOADING"
+type = "u32"
+value = 8
+doc = "DkrtScan.flags: with SCAN_LOADED, its DSP part is still being sent."
+
+[[const]]
+name = "SCAN_TRACE"
+type = "u32"
+value = 16
+doc = "DkrtScan.flags: the file was packed with `patchkit pack --trace` (bit 31 of the header word at 0x30). The loader does not look at it."
+
+[[const]]
+name = "FIT_LINE"
+type = "usize"
+value = 24
+doc = "Bytes of DkrtFitOut.line, with the NUL."
+
+[[const]]
+name = "FIT_REASON"
+type = "usize"
+value = 40
+doc = "Bytes of DkrtFitRow.reason, with the NUL."
+
+[[const]]
+name = "FIT_BRIEF"
+type = "usize"
+value = 32
+doc = "Bytes of DkrtFitRow.brief, with the NUL."
+
+[[const]]
+name = "FIT_MEM"
+type = "usize"
+value = 8
+doc = "Bytes of DkrtFitRow.mem, with the NUL."
+
+# ---- structs ---------------------------------------------------------------------------------------------------------------
+
+[[struct]]
+name = "DkrtStatus"
+doc = "dkrt_status result. The caller owns the memory; the layout only grows at the end."
+fields = [
+    "u32 magic // 'DKRT'",
+    "u32 runtime // RUNTIME_VERSION, major << 16 | minor << 8 | patch",
+    "u32 device // the digikit device id",
+    "u32 arena_base // the module arena",
+    "u32 arena_size",
+    "u32 arena_free",
+    "u32 arena_largest",
+    "u32 modules // modules loaded",
+    "u32 ticks // UI-loop passes seen",
+    "i32 last_result // result of the last load",
+    "u32 loads",
+    "u32 tick_calls // calls of module ticks",
+    "u32 state // STATE_IDLE or STATE_LOADING (a module's DSP code is being sent)",
+    "u32 dsp_size // bytes of the DSP area (0: the image has none)",
+    "u32 dsp_free // bytes of it free",
+    "u32 dsp_largest // the largest free range",
+]
+
+[[struct]]
+name = "DkrtCap"
+doc = "One entry of dkrt_capacity (the CAPACITY command's entries; kind is a CAPK_* number). largest is 0 where a largest piece has no meaning. The layout only grows at the end."
+derive = ["Clone", "Copy"]
+fields = [
+    "u32 kind // CAPK_*",
+    "u32 limit",
+    "u32 used",
+    "u32 largest",
+]
+
+[[struct]]
+name = "DkrtDevice"
+doc = "The per-device data object `dkrt_dev` (the device files' facts, written by `patchkit gen` as the `gas-dkdv` kind of core/runtime's module.toml and placed in cf.expansion with the runtime). The runtime and the services read their facts from it; nothing in them names a device. The layout only grows at the end."
+fields = [
+    "u32 magic // DEV_MAGIC",
+    "u32 version // DEV_VERSION",
+    "u32 size // the bytes of this struct",
+    "u32 caps // DEV_HAS_* bits",
+    "u32 console_uart_base // [board] console_uart_base: the UART of the console (drained before a soft reset)",
+    "u32 ddr_uncached_alias // [board] ddr_uncached_alias: the uncached view of DDR (the soft reset clears its first word through it)",
+    "u32 ddr_cached_base // [board] ddr_cached_base",
+    "u32 ddr_bytes // [board] ddr_bytes",
+    "u32 esdhc_base // [board] esdhc_base (0 without DEV_HAS_SDHC)",
+    "u32 safe_key // [digikit] safe_key: a firmware key index (0 without DEV_HAS_SAFE_KEY)",
+    "u32 keep_base // [digikit] keep_base: RAM a soft reset is assumed to keep (the crash record)",
+    "u32 keep_bytes // [digikit] keep_bytes",
+    "u32 dsp_block_cycles // [board] dsp_clock_hz / dsp_blocks_per_second, rounded (0 without DEV_HAS_DSP)",
+    "u32 dyn_type_first // core/rows types.toml dynamic_first",
+    "u32 dyn_types // run-time machine types (0 without DEV_HAS_DSP)",
+    "u32 tracks // [digikit] tracks: the tracks of the device (0: not given)",
+    "u32 key_codes[DEV_KEYS] // [input.keys]: the id of each logical key in the firmware's key events, indexed by the key's number (0: the device has no such key)",
+    "u32 key_flag_press // [input.key_flags] press: the bit of the key event's flags word set on a press",
+    "u32 key_flag_func // [input.key_flags] func: the bit set while FUNC is held",
+    "u32 key_flag_repeat // [input.key_flags] repeat: the bit of a repeating key",
+    "u32 key_flag_release // [input.key_flags] release: the bit set on a release",
+]
+
+[[struct]]
+name = "DkrtHealth"
+doc = "dkrt_health result (finding 41). Image code only: core/digikit-menu and the runtime call dkrt_health; it is not in the content-module SDK (sdk/), so the layout may grow at the end without a contract change. Keep it that way. The caller owns the memory; the layout only grows at the end. A figure is valid when its flag is set; the others are 0. Loads are in tenths of a percent (0 to 1000)."
+fields = [
+    "u32 magic // HEALTH_MAGIC",
+    "u32 version // 5",
+    "u32 flags // HEALTH_*",
+    "u32 blocks // DSP blocks seen since boot (1500 per second)",
+    "u32 windows // windows (one second each) closed",
+    "u32 cpu_x10 // CPU load of the last window, tenths of a percent, relative to the quietest window since boot (HEALTH_CPU)",
+    "u32 idle_win // the idle-loop iterations in the last window",
+    "u32 idle_ref // the best window so far (100 % idle)",
+    "u32 dsp_avg // DSP block handler, cycles per block, average of the last window (the DSP's own EMUCLK difference)",
+    "u32 dsp_max // maximum of the last window",
+    "u32 dsp_period // the cycles a block has (DSP_BLOCK_CYCLES)",
+    "u32 dsp_avg_x10 // dsp_avg as tenths of a percent of dsp_period, an assumed 1 GHz block (finding 100) (HEALTH_DSP)",
+    "u32 dsp_max_x10 // dsp_max as tenths of a percent of dsp_period",
+    "u32 heap_total // the firmware heap (HEALTH_HEAP): bytes in all",
+    "u32 heap_free",
+    "u32 heap_largest // the largest free block",
+    "u32 heap_allocs // live allocations",
+    "u32 heap_free_blocks // free blocks walked",
+    "u32 arena_total // the runtime's module arena: bytes in all",
+    "u32 arena_free",
+    "u32 arena_largest",
+    "u32 dsp_area_total // the DSP area (0: the image has none): bytes in all",
+    "u32 dsp_area_free",
+    "u32 dsp_area_largest",
+    "u32 store_total // the module store (HEALTH_STORE), in KiB: the store may use in all (header, tables and files)",
+    "u32 store_used // KiB the current header says are used",
+    "u32 store_free // KiB a new file may still take in all (the room for the table's next entry kept back; not one contiguous piece)",
+    "u32 card_sectors // the card's capacity in 512-byte sectors as the firmware's eMMC driver reports it; 0xFFFFFFFF while the driver is not ready",
+    "u32 card_state // the card check's state (DKRT_CARD.state): 0 unknown, 1 ours, 2 blank, 3 foreign, 4 unreadable, 5 too small",
+    "u32 guard_refused_writes // eMMC block writes that core/card-guard refused since boot (0 without the module)",
+    "u32 guard_refused_erases // eMMC block erases that core/card-guard refused since boot (0 without the module)",
+]
+
+[[struct]]
+name = "DkrtStoreEntry"
+doc = "A store file as the runtime lists it: its path (at most 63 bytes, NUL-terminated), the first sector (relative to the store) and the size in bytes."
+fields = [
+    "u8 path[64]",
+    "u32 first",
+    "u32 size",
+]
+
+[[struct]]
+name = "DkrtStoreFile"
+doc = "A store file as dkrt_store_stat found it, for an adapter that streams it (dkrt_store_read): the first sector (relative to the store), the size in bytes and the file hash slot of the table entry (the content hash, 4 bytes big-endian, then 28 zeros). The file's sectors are contiguous: sector n of the file is store sector first + n."
+fields = [
+    "u32 first",
+    "u32 size",
+    "u8 sha[32]",
+]
+
+[[struct]]
+name = "DkrtLive"
+doc = "dkrt_live_state result: the live job (a load, an unload or a reload; the runtime has one). The same words as the RELOAD_STATE command."
+fields = [
+    "u32 phase // 0 no job yet, 1 queued or running, 2 finished",
+    "i32 result // 0, or the refusal or failure (E_* of sdk/sdk.toml); valid when phase is 2",
+    "u32 step // 0 idle, 1 check, 2 quiesce, 3 unload, 4 load, 5 DSP part, 6 done",
+    "u32 unloaded // 1: the module was torn down, so it is not loaded unless the job was a load or reload that ended with result 0",
+    "u32 op // LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD of the last job (0: none yet)",
+    "u32 serial // counts the jobs queued (the first is 1, 0: none yet): the job these words describe",
+    "u32 done_serial // the serial of the last job that finished (0: none), so a caller whose job ended and another started still finds its end",
+    "i32 done_result // the result of that job",
+]
+
+[[struct]]
+name = "DkrtModule"
+doc = "dkrt_module result: one loaded module."
+fields = [
+    "u8 name[32]",
+    "u32 version",
+    "u32 base",
+    "u32 size",
+    "u8 path[64] // store path the module was loaded from (NUL-terminated, at most 63 bytes kept), for example modules/dyn-demo.dkm",
+    "u32 state // MOD_LOADED or MOD_LOADING",
+    "u32 dsp_size // bytes of the module's range in the DSP area (0: none)",
+    "u32 menu // address of the module's settings entry point (0: none): menu(dk_module_ctx *ctx, dk_ui_menu *menu)",
+    "u32 ctx // the module's dk_module_ctx, the first argument of its init, fini, tick and menu",
+]
+
+[[struct]]
+name = "DkrtFx"
+doc = "dkrt_fx result: one effect with a page (FX routing, finding 62 to 65). Routes are bit masks: 1 master, 2 send."
+fields = [
+    "u32 row // the effect's row in the chain",
+    "u32 allowed // the routes the effect's record allows (routes of the manifest)",
+    "u32 dflt // its default route (route)",
+    "u32 running // the route it runs on in this boot",
+    "u32 saved // the route the settings give it now (the stored one when allowed, else the default): differs from running after a change before the restart",
+    "u8 tab[8] // the tab label of its page (NUL-terminated, up to 3 characters)",
+    "u8 id[32] // the id of its module (NUL-terminated): the settings key is fx/route/<id>",
+]
+
+[[struct]]
+name = "DkrtSelection"
+doc = "The selection (what the next boot loads), the layout the menu passes to dkrt_selection_set and gets from dkrt_selection_get. Paths are store paths (modules/dyn-pluck.dkm), NUL terminated, at most SEL_PATH - 1 characters."
+fields = [
+    "u32 count // number of paths in use, 0 to SEL_MAX",
+    "u32 flags // bit 0: start in safe mode once (the boot that honours it clears the bit)",
+    "u8 paths[SEL_MAX][SEL_PATH]",
+]
+
+[[struct]]
+name = "DkrtBootInfo"
+doc = "dkrt_boot_info result: this boot."
+fields = [
+    "u32 magic // 'DKBT'",
+    "u32 version",
+    "u32 safe // 1 when this boot loaded nothing because of safe mode",
+    "u32 reason // SAFE_* why",
+    "u32 counter // the boot counter as the record held it at the start of this boot (before the runtime raised it)",
+    "u32 seq // sequence number of the record in use (0: no valid record)",
+    "u32 copy // which copy held it (0 = A, 1 = B)",
+    "u32 count // modules selected",
+    "u32 loaded // how many of them loaded without an error",
+    "u32 ui_reached // 1 once the UI loop has run (the boot counter is back to 0)",
+    "i32 results[SEL_MAX] // OK, a negative code, or LOADING (the CF part is live, the DSP part is still going) per selected module, in selection order",
+    "u32 core_cause // CORE_* why the resident core runs alone (reason is SAFE_CORE_ONLY); CORE_NONE (0) otherwise. This was a reserved word (the boot never waited for DSP code), so a reader of the older layout sees 0 in a normal boot",
+    "u32 stable // 1 once the boot counter is back to 0: after STABLE_BLOCKS DSP blocks of UI loop in a normal boot, at the first UI-loop pass in a safe boot",
+    "u8 needs[SEL_MAX][NEEDS_LEN] // per selected module with result E_IMPORT: the first module its imports need that is not in the image, without the `core/` prefix (usb-bulk); empty otherwise",
+    "u8 states[SEL_MAX] // per selected module: its STATE_* ([load.state] of sdk/sdk.toml); a selection index at or above count is STATE_SELECTED",
+    "u32 detail[SEL_MAX][2] // per selected module with state STATE_REFUSED: what the plan refused on (E_PLAN_KIND the kind; E_MISSING the name hash of the service whose provider is missing or did not load; E_PLAN_OWNER the kind, slot or hook site; E_PLAN_KEY the kind and the key; E_PLAN_FIT the CAPK_* kind); zeros otherwise",
+    "u32 unloads // modules taken down since the boot (a failed load, a failed DSP part, a reload); a list of modules that a host read before is out of date when it changes",
+    "u32 reloads // reloads that finished since the boot; the machine list is rebuilt after each, so a list that a host or a menu read before is out of date when it changes",
+]
+
+[[struct]]
+name = "DkrtDiag"
+doc = "dkrt_diag result (finding 46): what the debug log and the card check found. The caller owns the memory; the layout only grows at the end."
+fields = [
+    "u32 magic // DIAG_MAGIC",
+    "u32 version",
+    "u32 card_state // CARD_*",
+    "u32 card_first_nonblank // the first sector (relative to the store) that was not blank (0xffffffff: none)",
+    "u32 card_hash // a crc32 of it",
+    "u32 card_refused // card writes refused (range or read-only)",
+    "u32 card_read_errors // reads that failed in the check",
+    "u32 debug_on // 1 while a debug module (the log sink) is loaded",
+    "u32 log_oldest // 0 (the log ring is the debug module's; its LOG command has the range)",
+    "u32 log_newest // 0",
+    "u32 dsp_diag_ok // 1 when dl_diag is in the image and answered",
+    "u32 dsp_stopped // 1 when the heartbeat watch decided the DSP stopped",
+    "u32 dsp_heartbeat // the last heartbeat word",
+    "u32 crash_found // a crash record from the boot before was found at this boot: 1",
+    "u32 crash_pc // its program counter",
+    "u32 crash_vec // its vector",
+    "u32 ram_kept // 1 when the keep-probe word of the boot before was still in RAM at this boot (RAM survived the reset that led here)",
+    "u32 dsp_crumb // the DSP's last breadcrumb when the watch decided it stopped (0 before): stage | voice << 8 | machine type << 16 (finding 48)",
+    "u32 fault_rows // rows of fault_text that are filled: the last fault kept in the settings key dk/fault (0: none)",
+    "u8 fault_text[FAULT_ROWS][24] // the ABOUT rows of that fault, upper case, at most 18 characters (the ABOUT page width on DT2) and a NUL",
+]
+
+[[struct]]
+name = "DkrtModuleHeader"
+doc = "dkrt_module_header result: what the DIGIKIT menu shows of a .dkm header. The layout only grows at the end."
+fields = [
+    "u32 version // the module's version, major << 16 | minor << 8 | patch",
+]
+
+[[struct]]
+name = "DkrtScan"
+doc = "One .dkm file of the store as dkrt_scan found it: where it is, what its header says and the needs inferred from its contents (dkneeds). The need_* fields are valid when SCAN_NEEDS is set."
+derive = ["Clone", "Copy"]
+fields = [
+    "u8 path[64] // store path, NUL-terminated, for example modules/dyn-demo.dkm",
+    "u32 first // first sector (relative to the store)",
+    "u32 size // bytes",
+    "u32 flags // SCAN_*",
+    "u32 need_file_size // the file's size: it must fit the staging buffer",
+    "u32 need_arena // the arena block of image and bss",
+    "u32 need_arena_xfer // the arena block of the relocated DSP image, held while it is sent (0: no DSP section)",
+    "u32 need_dsp_area // DSP area bytes: image, bss and voice states (0: no DSP section)",
+    "u32 need_dsp_align",
+    "u32 need_machine_rows",
+    "u32 need_voice_rows",
+    "u32 need_param_rows",
+    "u32 need_page_rows",
+    "u32 need_fx_slots",
+    "u32 need_dsp_cost_voice // the module's DSP cost of one voice, instructions per block (header table, USES; 0: none)",
+    "u32 need_dsp_cost_fx // the module's DSP cost of its effects, instructions per block (0: none)",
+]
+
+[[struct]]
+name = "DkrtFitRow"
+doc = "The fit verdict of one DkrtScan entry. wont is 1 when the module does not fit next to the ticked ones; then short_* is the first short resource (a CAPK_* kind, what the module needs and what is free) and the texts say it. mem is the memory the module takes (arena and DSP area) as text."
+derive = ["Clone", "Copy"]
+fields = [
+    "u32 wont",
+    "u32 short_kind",
+    "u32 short_need",
+    "u32 short_free",
+    "u8 reason[FIT_REASON] // upper case, for a popup: DSP 400K > 254K FREE",
+    "u8 brief[FIT_BRIEF] // for a list row: DSP 400K>254K",
+    "u8 mem[FIT_MEM] // <1K, 259K, 1.2M; empty without SCAN_NEEDS",
+]
+
+[[struct]]
+name = "DkrtFitOut"
+doc = "dkrt_fit result: one row per entry and the load line of the ticked set."
+fields = [
+    "u32 count // rows written",
+    "u8 line[FIT_LINE] // DSP 52% CPU 1%; empty when nothing is ticked",
+    "DkrtFitRow rows[SCAN_MAX]",
+]
+
+# ---- host directory ---------------------------------------------------------------------------------------------------------
+#
+# The statics of the system package that host tools (the harness, the daemon, `patchkit addr`) read by address. The package is a card file placed at a different address
+# each boot, so it has no symbol in the image: the resident core owns one table of addresses, `DKRT_HOST_DIR` (`HostDir` of `dkrt_abi`): a magic, the count of ids this core
+# knows, and one 32-bit address per id. Stage 1 clears it before it starts the package; the package fills each entry of its statics at its entry (the `host_dir` group of the resident
+# table; the core fills the two that give the package's block, before it starts the package); a core-only boot leaves it empty. A tool reads the one resident symbol and follows the address of the id it needs: an empty entry means no package is loaded.
+# `owner` says who fills the entry: `package` (its own static, through the resident table at its entry) or `core` (what the core knows, before it starts the package); the core refuses a package write to a core id.
+# The directory also has a `ready` word the core sets last, after the package attached: a tool that reads a directory that is not ready finds no package.
+# Ids are append-only: a new one goes at the end and its meaning never changes. Resident statics are not listed: they stay plain symbols.
+
+[[host_dir]]
+name = "DSP"
+owner = "package"
+doc = "DKRT_DSP: the DSP loader's placement table (module ranges in the DSP area)."
+
+[[host_dir]]
+name = "PROVIDERS"
+owner = "package"
+doc = "DKRT_PROVIDERS: the records of the loaded service files (the layout of the module records of DKRT_STATE, without its header)."
+
+[[host_dir]]
+name = "TICKS"
+owner = "package"
+doc = "DKRT_TICKS: the tick counter of each module record."
+
+[[host_dir]]
+name = "TABLE_BAD"
+owner = "package"
+doc = "DKRT_TABLE_BAD: the byte that says the firmware's tables changed under the runtime (0: intact; the top byte of its word)."
+
+# The next two are filled by the resident core, not by the package: it knows the block it placed the package in, and a tool that audits memory needs the extent.
+
+[[host_dir]]
+name = "PACKAGE_LO"
+owner = "core"
+doc = "The first byte of the arena block the core placed the package in (its image, relocation table and bss)."
+
+[[host_dir]]
+name = "PACKAGE_HI"
+owner = "core"
+doc = "One past the last byte of that block."
+
+# ---- exports ---------------------------------------------------------------------------------------------------------------
+
+[[fn]]
+name = "dkrt_status"
+sig = "void dkrt_status(DkrtStatus *out)"
+doc = "Fill out: the runtime's own state."
+at = "report"
+
+[[fn]]
+name = "dkrt_load"
+sig = "i32 dkrt_load(const u8 *path)"
+doc = "Load the module at store path (NUL-terminated). Only at boot: after it, E_BOOT_ONLY."
+at = "api"
+
+[[fn]]
+name = "dkrt_live"
+sig = "i32 dkrt_live(u32 op, const u8 *path)"
+doc = "Queue a live job: op is LIVE_LOAD, LIVE_UNLOAD or LIVE_RELOAD, path the store path (NUL-terminated, at most 63 bytes; the file of a load or a reload is on the card already). The job runs from the UI loop, one step a pass; dkrt_live_state says where it is. OK (queued), E_BUSY (a job is queued or running), E_MSG (no path, one that does not fit, or an unknown op), E_RELOAD_RETAINED, E_FORMAT (the path is the file of a service), E_NOT_FOUND (unload and reload: no loaded content module came from that path), E_LOADED (load: a module of that path is loaded)."
+at = "menu_exports"
+
+[[fn]]
+name = "dkrt_live_state"
+sig = "void dkrt_live_state(DkrtLive *out)"
+doc = "Fill out: the phase, result and step of the live job and whether the module was torn down."
+at = "menu_exports"
+
+[[fn]]
+name = "dkrt_module"
+sig = "i32 dkrt_module(u32 index, DkrtModule *out)"
+doc = "The index-th loaded module (in load-slot order); OK, or E_NOT_FOUND past the end."
+at = "api"
+
+[[fn]]
+name = "dkrt_fx"
+sig = "i32 dkrt_fx(u32 index, DkrtFx *out)"
+doc = "Removed: the effects of a module are the fx service's words in the MODULES reply (its Describe part). The slot stays (the table is append-only) and answers E_NOT_FOUND."
+at = "api"
+
+[[fn]]
+name = "dkrt_service_query"
+sig = "i32 dkrt_service_query(u32 provider, u32 minimum, u32 op, const u8 *request, u32 request_size, u8 *reply, u32 reply_size)"
+doc = "Resident query v1. UI task only, synchronous. Use the provider's typed wrapper. E_MISSING means the provider or facet is absent, E_CONTRACT an incompatible provider or invalid call, E_CONTEXT outside the UI task, E_BUSY for a nested call."
+
+[[fn]]
+name = "dkrt_health"
+sig = "void dkrt_health(DkrtHealth *out)"
+doc = "CPU load, the DSP's block time, the heap, the arena and the DSP area (finding 41). The heap walk is bounded: ask twice a second at most."
+at = "health"
+
+[[fn]]
+name = "dkrt_capacity"
+sig = "u32 dkrt_capacity(DkrtCap *out, u32 max)"
+doc = "The CAPACITY command's entries (limit, used, largest per resource); how many were written, at most max."
+at = "menu_exports"
+
+[[fn]]
+name = "dkrt_blocks"
+sig = "u32 dkrt_blocks()"
+doc = "DSP blocks since boot (a 1500 Hz clock); 0 without core/health."
+at = "health"
+
+[[fn]]
+name = "dkrt_diag"
+sig = "void dkrt_diag(DkrtDiag *out)"
+doc = "The card check, the debug log, the DSP watch and the crash record (finding 46)."
+at = "report"
+
+[[fn]]
+name = "dkrt_poll_add"
+sig = "i32 dkrt_poll_add(usize f)"
+doc = "Add a function that the UI loop calls once per pass, in the UI task (room for 4: the DIGIKIT menu's HEALTH page and core/ui's dk_ui_tick). Adding a function that is in the table is OK. E_NOMEM when the table is full. core/ui uses it for dk_ui_tick."
+at = "api"
+
+[[fn]]
+name = "dkrt_poll_remove"
+sig = "void dkrt_poll_remove(usize f)"
+doc = "Remove a function added with dkrt_poll_add; no effect when it is not in the table."
+at = "api"
+
+[[fn]]
+name = "dkrt_unload_observer_add"
+sig = "i32 dkrt_unload_observer_add(usize f)"
+doc = "Add a function `void f(u32 owner)` that the runtime calls, in the UI task, for each content module or service file that is unloaded: after the module's `fini` and the removal of its polls, ticks and commands, before its code and memory are freed. `owner` is what `dkrt_ctx_owner` gave for the module's context. The observer ends what it holds for that owner; the module's code and memory are still there during the call, so it may read what the module gave it, but must never call into it. Room for 4 observers; adding one that is in the table is OK; E_NOMEM when it is full; E_CONTRACT for 0."
+at = "api"
+
+[[fn]]
+name = "dkrt_unload_observer_remove"
+sig = "void dkrt_unload_observer_remove(usize f)"
+doc = "Remove a function added with dkrt_unload_observer_add; no effect when it is not in the table."
+at = "api"
+
+[[fn]]
+name = "dkrt_phase"
+sig = "u32 dkrt_phase()"
+doc = "What the running module code is: 0 none (the call is not from a module), PHASE_INIT (1) its `init`, 2 its `tick`, 3 its `fini`, 4 a callback (a host command handler, a job or I/O step, an intro frame, a menu action). An adapter uses it to refuse a call that is allowed only in `init`. UI task."
+at = "api"
+
+[[fn]]
+name = "dkrt_ctx_owner"
+sig = "i32 dkrt_ctx_owner(usize ctx)"
+doc = "The owner id of a module context (`dk_module_ctx *`): the record index of a content module or of a service file, the same number the unload observers get. A negative code (E_CONTRACT) for a pointer that is not the live context of a loaded module or service file."
+at = "api"
+
+[[fn]]
+name = "dkrt_menu_built"
+sig = "void dkrt_menu_built(usize code, usize data)"
+doc = "A menu object was built for a module (core/ui calls it from dk_ui_menu_new with the descriptor's fill function and the descriptor): the module record whose loaded range holds `code`, else `data`, owns one more menu, and a menu keeps pointers into the module's code and data, so the runtime refuses to unload or reload that module (E_RELOAD_MENUS) until the next boot. Neither address in a module (the firmware image, and the DIGIKIT menu, whose own menus count against no content module): no effect."
+at = "api"
+
+[[fn]]
+name = "dkrt_menu_release"
+sig = "void dkrt_menu_release(usize code, usize data)"
+doc = "Undo one dkrt_menu_built for the same addresses: the module record whose loaded range holds `code`, else `data`, owns one menu less (it stops at 0; a load into the record starts it at 0). The DIGIKIT menu holds a module while the module's SETTINGS page is open (dkrt_menu_built with the module's `menu` function: the page's rows point into the module's code) and releases it when the page is left, so a module is not unloaded or reloaded while its page is open."
+at = "api"
+
+[[fn]]
+name = "dkrt_store_stat"
+sig = "i32 dkrt_store_stat(const u8 *path, DkrtStoreFile *out)"
+doc = "Look a store file up by path (NUL-terminated) and fill out: OK, E_NOT_FOUND (no store, no such file, a folder), or a card error. It reads the store headers and scans the table through the runtime's staging buffer, so call it only at the start of a load, not while a staged module read is in progress. A file of size 0 is found."
+at = "store"
+
+[[fn]]
+name = "dkrt_store_lease"
+sig = "i32 dkrt_store_lease(const u8 *path, DkrtStoreFile *out)"
+doc = "dkrt_store_stat that also leases the file's sectors for the caller until dkrt_store_unlease: the lease is taken in the same store-lock hold that finds the file, so out is the committed file. While the lease lives, an upload (SysEx or SDK) that would replace or delete the file, or CLEAR the store, is refused with E_FILE_IN_USE, and no new file is given its sectors. Returns the lease id (> 0), E_NOT_FOUND (no store, no such file, a folder), E_NOMEM (the table is full: fail the load, do not wait) or E_BUSY (the store stayed in use for about 3 s). Any task may call it (it does not use the staging buffer). Release the lease when the load ends, whatever its result."
+at = "store"
+
+[[fn]]
+name = "dkrt_store_unlease"
+sig = "void dkrt_store_unlease(i32 id)"
+doc = "End a lease of dkrt_store_lease. Any task, never waits; an id that is not live is ignored."
+at = "store"
+
+[[fn]]
+name = "dkrt_store_read"
+sig = "i32 dkrt_store_read(const DkrtStoreFile *f, u32 sector, u32 count, u8 *dst)"
+doc = "Read count sectors of the file f, starting at its sector `sector`, into dst (512 bytes per sector). dst must be 16-byte aligned (E_CONTRACT otherwise). count is 1 to 128 and the range lies inside the file, rounded up to whole sectors (E_RANGE otherwise). No sha check, no staging buffer: the caller owns dst. OK or E_READ."
+at = "store"
+
+[[fn]]
+name = "dkrt_io_wake"
+sig = "void dkrt_io_wake(i32 id)"
+doc = "Wake the I/O job `id` (api->io_wake for an adapter): the job's next step runs, or, when it has not yet reached its DK_IO_WAIT, that wait does not sleep. Unknown ids are ignored. Safe in an interrupt handler. core/usb-bulk calls it when a receive buffer is full."
+at = "io"
+
+[[fn]]
+name = "dkrt_module_header"
+sig = "i32 dkrt_module_header(u32 first, DkrtModuleHeader *out)"
+doc = "The header fields of the .dkm that starts at store sector first (DkrtScan.first) into out: OK, E_FORMAT when the file is not a .dkm, or E_READ / E_NOT_FOUND when its first sector cannot be read. The runtime does the card read itself."
+at = "api"
+
+[[fn]]
+name = "dkrt_selection_get"
+sig = "i32 dkrt_selection_get(DkrtSelection *out)"
+doc = "The saved selection (what the next boot loads): count store paths. OK, or E_READ without touching out when no copy is valid and a copy had a read error."
+at = "api"
+
+[[fn]]
+name = "dkrt_selection_set"
+sig = "i32 dkrt_selection_set(const DkrtSelection *sel)"
+doc = "Save a selection (two copies in the card's store range); OK, an E_SEL_* code, or E_READ without writes when no copy is valid and a copy had a read error. No effect until the next boot."
+at = "api"
+
+[[fn]]
+name = "dkrt_boot_info"
+sig = "void dkrt_boot_info(DkrtBootInfo *out)"
+doc = "This boot: safe mode and why, the modules selected and each one's result."
+at = "api"
+
+[[fn]]
+name = "dkrt_boot_name"
+sig = "i32 dkrt_boot_name(u32 index, u8 *out)"
+doc = "The file name of the module that holds selection index `index` of this boot (the part of its store path after the last `/`, NUL padded, at most 27 bytes; `out` has 28): the same names as the LOADS command. A live load keeps the index of its file or takes a free one, so this is the current name of the index, not the saved selection's. OK, or E_NOT_FOUND for an index at or past the selection size (the runtime's SEL_MAX)."
+at = "api"
+
+[[fn]]
+name = "dkrt_restart"
+sig = "i32 dkrt_restart()"
+doc = "Write pending settings, then soft reset. Returns only when it refuses (E_CARD_BUSY, ...)."
+at = "api"
+
+[[fn]]
+name = "dkrt_settings_put"
+sig = "i32 dkrt_settings_put(const u8 *key, const u8 *value, u32 len)"
+doc = "digikit's settings (finding 63): set key (NUL-terminated) to len bytes; written to the card 2 s later, or at once by the flush. OK or an E_SET_* code."
+at = "settings"
+
+[[fn]]
+name = "dkrt_settings_flush"
+sig = "i32 dkrt_settings_flush()"
+doc = "Write the settings record now."
+at = "settings"
+
+[[fn]]
+name = "dkrt_scan"
+sig = "i32 dkrt_scan(DkrtScan *out, u32 max)"
+doc = "The .dkm files of the store under modules/ in path order, at most max (up to SCAN_MAX) into out: the count, or a negative code (E_NOT_FOUND: no store, E_READ: the card). Per file: whether its header is accepted by this runtime and device (SCAN_COMPAT), the needs inferred from its contents (SCAN_NEEDS) and whether it is loaded (SCAN_LOADED, SCAN_LOADING). It reads the header words and the sectors the needs take, one sector at a time; the number of sector reads for the needs is dkrt_scan_reads."
+at = "menu_exports"
+
+[[fn]]
+name = "dkrt_scan_reads"
+sig = "u32 dkrt_scan_reads()"
+doc = "The sector reads the last dkrt_scan made to read the needs (the cost of opening a list of modules)."
+at = "menu_exports"
+
+[[fn]]
+name = "dkrt_fit"
+sig = "i32 dkrt_fit(const DkrtScan *entries, u32 n, const u8 *ticked, DkrtFitOut *out)"
+doc = "Which modules fit. The ticked set loads at the next boot into an empty runtime: start from the limits (nothing used) and take in the ticked entries (ticked[i] != 0) in list order; a ticked one that does not fit is flagged and not taken. Then each unticked entry is checked against what the ticked ones leave. An entry without SCAN_COMPAT or without SCAN_NEEDS has no verdict (wont 0). n is at most SCAN_MAX. OK."
+at = "menu_exports"
+
+
+[[fn]]
+name = "dkrt_job_post"
+sig = "i32 dkrt_job_post(usize step, usize done, u8 *ctx)"
+doc = "Adapter to runtime: queue a job on the background worker (owner 0). step is the address of i32 step(u8 *ctx), run in the worker task: it returns 1 to be called again, 0 when finished, or a negative error. done is the address of void done(u8 *ctx, i32 status) (or 0), called once in the UI task with the final status, or -80 after a cancel. Returns a job id > 0, E_BUSY when the queue is full or E_CONTRACT for a null step."
+at = "worker"
+
+[[fn]]
+name = "dkrt_job_cancel"
+sig = "i32 dkrt_job_cancel(u32 id)"
+doc = "Adapter to runtime: cancel the job id of dkrt_job_post. A queued job gets done with -80 at the next tick; a running one stops after its current step. OK or E_NOT_FOUND."
+at = "worker"
+
+[[fn]]
+name = "dkrt_speed_flags"
+sig = "u32 dkrt_speed_flags()"
+doc = "Adapter to runtime: the run-time switches of the speed levers, one word (bit 0 hash once, bit 2 read-back hash overlap; both set at boot; bits 1 and 3 of the usb-fast switch mask live in the usb-bulk and sdhc-large adapters). A module sets bits through the SDK speed_flags."
+at = "speed"
+
+[[fn]]
+name = "dkrt_aux_run"
+sig = "i32 dkrt_aux_run(usize f, u8 *ctx)"
+doc = "Adapter to runtime: run void f(u8 *ctx) (the address) on the runtime's helper task (priority 3, 4 KiB stack, no firmware calls, no waiting) while the caller does something that blocks. One run at a time: collect it with dkrt_aux_wait. Returns 0, E_BUSY (a run is not collected; the caller does the work itself) or E_NOT_FOUND (no task)."
+at = "aux"
+
+[[fn]]
+name = "dkrt_aux_wait"
+sig = "i32 dkrt_aux_wait()"
+doc = "Adapter to runtime: wait until the run started by dkrt_aux_run has finished. Returns 0, or E_STATE when none was started."
+at = "aux"
+
+# ---- RC2s-3: the DIGIKIT menu in the system package (own section) ----
+
+[[fn]]
+name = "dkrt_ui_settings_rows"
+sig = "void dkrt_ui_settings_rows(u8 *settings_menu)"
+doc = "Called by core/ui at the end of the SETTINGS rebuild (the `ui.settings_rows` hook of the system package): the package adds its rows to the stock menu `settings_menu` (the menu object the rebuild's hook gets) with dk_ui_stock_row. With no package, a package built before the hook, or a null hook entry, it does nothing: the stock menu stays as it is."
+at = "menu_exports"
+
+# The DIGIKIT menu is C code in the package; the statics its tests read are package-owned ids of the host directory (appended; the C names are the `DK_*` globals of menu.c).
+
+[[host_dir]]
+name = "MENU_LOAD"
+owner = "package"
+doc = "DK_LOAD of the DIGIKIT menu: the MODULES page's rows as text (40 rows of 24 bytes)."
+
+[[host_dir]]
+name = "MENU_LOAD_N"
+owner = "package"
+doc = "DK_LOAD_N of the DIGIKIT menu: the number of rows in MENU_LOAD."
+
+[[host_dir]]
+name = "MENU_POPUP"
+owner = "package"
+doc = "DK_POPUP of the DIGIKIT menu: the title of the last dialog the menu opened."
+
+[[host_dir]]
+name = "MENU_POPUP_TEXT"
+owner = "package"
+doc = "DK_POPUP_TEXT of the DIGIKIT menu: the text of the last dialog the menu opened."
+
+[[host_dir]]
+name = "MENU_POPUPS"
+owner = "package"
+doc = "DK_POPUPS of the DIGIKIT menu: how many dialogs the menu opened."
+
+[[host_dir]]
+name = "MENU_ABOUT"
+owner = "package"
+doc = "DK_ABOUT of the DIGIKIT menu: the ABOUT page's rows as text (24 rows of 24 bytes)."
+
+[[host_dir]]
+name = "MENU_ABOUT_N"
+owner = "package"
+doc = "DK_ABOUT_N of the DIGIKIT menu: the number of rows in MENU_ABOUT."
+
+[[host_dir]]
+name = "MENU_PANEL"
+owner = "package"
+doc = "DK_PANEL of the DIGIKIT menu: the rows of the last side panel as text (4 rows of 24 bytes)."
+
+[[host_dir]]
+name = "MENU_PANEL_N"
+owner = "package"
+doc = "DK_PANEL_N of the DIGIKIT menu: the number of rows in MENU_PANEL."
+
+[[host_dir]]
+name = "MENU_MEM"
+owner = "package"
+doc = "DK_MEM of the DIGIKIT menu: the MEMORY page's rows as text (8 rows of 24 bytes)."
+
+[[host_dir]]
+name = "MENU_MEM_N"
+owner = "package"
+doc = "DK_MEM_N of the DIGIKIT menu: the number of rows in MENU_MEM."
+
+[[host_dir]]
+name = "MENU_TICK"
+owner = "package"
+doc = "TICK of the DIGIKIT menu: the pending selection of the MODULES page: 1 for each ticked row."
+
+[[host_dir]]
+name = "REMOVED_18"
+owner = "removed"
+doc = "Removed in E1 (it was DK_FXR_PEND of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
+
+[[host_dir]]
+name = "REMOVED_19"
+owner = "removed"
+doc = "Removed in E1 (it was DK_FXR_SET of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
+
+[[host_dir]]
+name = "REMOVED_20"
+owner = "removed"
+doc = "Removed in E1 (it was DK_FXR_FLUSH of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
+
+[[host_dir]]
+name = "MENU_APPLIES"
+owner = "package"
+doc = "DK_APPLIES of the DIGIKIT menu: how many times an APPLY ran."
+
+[[host_dir]]
+name = "REMOVED_22"
+owner = "removed"
+doc = "Removed in E1 (it was DK_ROUTE_N of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
+
+[[host_dir]]
+name = "REMOVED_23"
+owner = "removed"
+doc = "Removed in E1 (it was DK_ROUTE_ITEM of the DIGIKIT menu): the id stays reserved, because ids are append-only; it resolves to nothing."
+
+[[host_dir]]
+name = "MENU_LOADED"
+owner = "package"
+doc = "LOADED of the DIGIKIT menu: 1 for each MODULES row whose file the runtime has loaded in this boot, 2 while its DSP part still loads."
+
+[[host_dir]]
+name = "MENU_LINES"
+owner = "package"
+doc = "DK_LINES of the DIGIKIT menu: the HEALTH page's rows as text (12 rows of 24 bytes)."
+
+[[host_dir]]
+name = "MENU_REDRAWS"
+owner = "package"
+doc = "DK_REDRAWS of the DIGIKIT menu: how many times the HEALTH page redrew."
+
+[[host_dir]]
+name = "MENU_POLLS"
+owner = "package"
+doc = "DK_POLLS of the DIGIKIT menu: how many times the HEALTH page polled the runtime."
+
+[[host_dir]]
+name = "MENU_HEALTH"
+owner = "package"
+doc = "DK_HEALTH of the DIGIKIT menu: the last DkrtHealth the HEALTH page read."
+
+[[host_dir]]
+name = "MENU_HEALTH_MENU"
+owner = "package"
+doc = "DK_HEALTH_MENU of the DIGIKIT menu: the HEALTH page's menu object (the firmware's view is the pointer at +4)."
+
+[[fn]]
+name = "dkrt_record_name"
+sig = "i32 dkrt_record_name(u32 owner, u8 *out)"
+doc = "Called by core/ui: the name of the loaded record `owner` (the number `dkrt_ctx_owner` gave: a content module or a service file) into `out`, 32 bytes, NUL padded, as the file's header has it. core/ui keys the SETTINGS rows of an owner by it. OK, or E_NOT_FOUND for a record that is not loaded, with no package, or with a package built before the entry."
+at = "menu_exports"

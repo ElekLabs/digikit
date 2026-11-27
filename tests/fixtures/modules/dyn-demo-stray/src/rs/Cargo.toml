@@ -7,9 +7,6 @@ publish = false
 [lib]
 crate-type = ["staticlib"]
 
-[dependencies]
-dkrt-sdk = { path = "../../../../../../modules/core/runtime/sdk" }
-
 # This crate sits inside the repository's cargo workspace but is built on its own (`patchkit build`).
 [workspace]
 

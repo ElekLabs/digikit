@@ -1,6 +1,15 @@
-/* The effect page of test/dyn-fx-hang: one effect `hang` with one knob (unused by the routine). Starts as a send. patchkit pack reads these records; the device never sees them. */
-#include <dk/fx/fx.h>
+/* The effect of test/dyn-fx-hang: one effect `hang` with one knob (unused by the routine), declared with builder calls in init. Starts as a send. */
+#include <dk/core/module.h>
+#include <dk/gen/page_consts.h>
+#include "module_ids.h"
 
-DK_FX(hang, .process = "_hf_process", .desc = "_hf_desc", .mix = 127, .route = DK_ROUTE_SEND);
-DK_FX_PARAM(hang, 0, "Gain", "GAIN", DK_PERCENT, 0, 1.27, 0.5);
-DK_PAGE(hang, "HNG", "Test FX Hang", DK_KNOB_AT(0, 0));
+static int32_t init(dk_module_ctx *ctx)
+{
+    dk_fx *fx = dk_module_ctx_add_fx(ctx, DK_FX_ID_HANG, "Test FX Hang", "HNG");
+    dk_fx_routes(fx, DK_ROUTE_SEND | DK_ROUTE_MASTER, DK_ROUTE_SEND);
+    dk_page *p = dk_fx_add_page(fx, "Test FX Hang", "HNG");
+    dk_page_add_fx_param(p, "Gain", "GAIN", DK_PERCENT, 0.0f, 1.27f, 0.5f);
+    return DK_OK;
+}
+
+const dk_module_def dk_module = {.init = init};

@@ -1,0 +1,25 @@
+[module]
+id = "core/digikit-menu"
+version = "0.1.0"
+name = "DIGIKIT menu"
+category = "core"
+role = "app"
+type = "framework"
+author = "digikit"
+status = "experimental"
+summary = "Part of the system package: adds SETTINGS > DIGIKIT: ABOUT, HEALTH, MEMORY and MODULES (the .dkm files of the +Drive module store, with check marks, a side panel and APPLY & RESTART)"
+requires = ["core/runtime", "core/ui"]
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+# The menu is written in C on <dk/platform/ui.h> (core/ui draws it with the firmware's own views). It is part of the system package, not of the image: `patchkit syspkg build --part` links
+# this object into runtime/core's package object (docs/plans/resident-core-and-system-package.md). Its calls of the runtime (dkrt_scan, dkrt_fit, dkrt_selection_get and _set,
+# dkrt_restart, dkrt_boot_info, dkrt_status, dkrt_module, dkrt_fx, ...) and of core/ui (dk_ui_core_handle, dk_ui_stock_row, dk_ui_menu_*) are symbols that the package defines
+# (`package/menu_link.rs` of core/runtime): the ones of the resident core go through the `exports` group of the resident table. It patches no firmware: core/ui owns the hook at the end of the
+# SETTINGS item list rebuild and asks the package for its rows through the `ui.settings_rows` hook, which is this object's `dk_app_settings_rows` (it adds the DIGIKIT row after SYSTEM, dk_ui_stock_row).
+[package_part]
+path = "build/digikit-menu.dko.json"
+sources = ["src/menu.c"]

@@ -6,7 +6,7 @@
 
 `make MODULE NAME[,NAME] LABEL` builds the module's objects with the options (`patchkit build --define`; the committed
 objects stay as they are) into out/variants/LABEL/ and prints that directory: a root whose `devices/` and `firmware/` are the
-repository's and whose `modules/` is the repository's with MODULE replaced by the variant. `patchkit`, the proof rigs
+repository's and whose module roots have MODULE replaced by the variant. `patchkit`, the proof rigs
 (`pk_dkrt.Tools`) and `mise run patch|preflight|pack` use it when the environment variable DIGI_PK_ROOT names it. The directory is
 under out/ and never committed. The module source is one file: the option selects between alternatives in it, there is no copy.
 """
@@ -38,7 +38,7 @@ def make(module: str, defines: list[str], label: str) -> Path:
     if base.exists():
         shutil.rmtree(base)
     (base / "modules").mkdir(parents=True)
-    for top in ("devices", "firmware", "out", "sdk"):
+    for top in ("devices", "firmware", "out", "ports", "sdk"):
         (base / top).symlink_to(ROOT / top)
     # module directories (same place as in the repository): every one linked, the variant's a real directory
     # (its sources linked, its objects built)

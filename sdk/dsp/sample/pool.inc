@@ -1,4 +1,4 @@
-// Per-track admission and epoch operations for the track sample family (<dk/sample/pool.h>, API 1.5).
+// Per-track admission and epoch operations for the track sample family (<dk/sample/pool.h>).
 // The same sequences as sample/bank.inc, with the words of one track addressed through two caller I registers instead of
 // fixed symbols (one set of macros serves all 16 tracks):
 //   REC = the track's dk_sample_pool_entry record, normal-word address: word 0 ready (the OPEN and READY word of the bank macros), word 1 token.

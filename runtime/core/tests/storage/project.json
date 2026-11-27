@@ -1,0 +1,59 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-storage-tests",
+  "tags": [
+    "test-only"
+  ],
+  "implicitDependencies": [
+    "core/runtime-storage",
+    "core/card-guard",
+    "dkrt-sdk"
+  ],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": [
+          "storage.device.test.ts"
+        ],
+        "modules": [
+          "test/files-proof"
+        ],
+        "sources": [
+          "runtime/core/tests/storage/contract.toml"
+        ]
+      },
+      {
+        "files": [
+          "card-safety.device.test.ts"
+        ],
+        "firmwareOnly": "core-only boot cause, boot counter record, USB store replies and log events of the booted image on cards the emulated driver reports (blank, foreign, torn, small)",
+        "devices": [
+          "dt2"
+        ],
+        "modules": [
+          "test/c-demo"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "store-format.device.test.ts"
+        ],
+        "firmwareOnly": "host hash against the runtime's on uploaded files, the booted image refusing to load a module whose card bytes changed, and a version 3 card booting, taking the first upload and loading its kept selection after a restart",
+        "modules": [
+          "test/c-demo"
+        ],
+        "plusdrive": true
+      },
+      {
+        "files": [
+          "card-guard.device.test.ts"
+        ],
+        "devices": [
+          "st"
+        ],
+        "modules": []
+      }
+    ]
+  }
+}

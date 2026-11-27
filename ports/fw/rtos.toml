@@ -1,0 +1,272 @@
+# rtos: tasks, queues, mutexes, idle, interrupts, the reset and boot path
+# Names follow <cpu>.<subsystem>.<kind>.<name>; was = former names, for reading older docs, never resolved (docs/design/firmware-decls.md).
+
+[[fn]]
+name = "cf.rtos.fn.create_main"
+was = ["health.fw.create_main"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_ptr", hash = "fc798b27d0ff965379f46717b367f05b", offset = 0x484, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "ca0006cf073207083d26359db1321886", offset = 0x454, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "3cb033ce6a96bf96ee98446f468ba993", offset = 0x320, len = 4, mark = "D" }
+mark = "D"
+users = ["core/health"]
+doc = "The function that creates the main-OS task, the target of the boot thread's last `jsr`; core/health calls it from its idle hook before it starts counting."
+
+[[fn]]
+name = "cf.rtos.fn.sleep_us"
+cpu = "cf"
+sig = "void (u32 us)"
+rule = { kind = "cf_func", hash = "113f4261cb994d31a918bb90032ffe45", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/sample-pool", "core/runtime"]
+doc = "Stock short sleep (DT2 1.17 0x40136544, DN2 1.12 0x4013492c, DN2 1.11 0x4013464c; DT2 stock name dtim1_sleep_100us): locks its own mutex, loads timer DTIM1 (prescaler 0x84, about 1 MHz) with `us` and blocks the task on a semaphore until the timer interrupt. Task context only. The LP0 sender waits 100 after each page with it; the runtime's I/O task uses it for delays (the kernel has no timed pend)."
+
+[[fn]]
+name = "cf.rtos.fn.queue_pop"
+was = ["dkrt.fw.queue_pop"]
+cpu = "cf"
+rule = { kind = "cf_func", hash = "5545f84fcc633b347034f629aa4858b9", offset = 0x0, len = 2 }
+mark = "D"
+users = ["core/platform"]
+doc = "The stock queue pop (blocking pend on the queue, returns the next item), the function the hook call goes to."
+
+[[fn]]
+name = "cf.rtos.fn.task_create"
+cpu = "cf"
+sig = "i32 (u32 tcb, u32 entry, u32 prio, u32 stack, u32 size)"
+rule = { kind = "cf_func", hash = "b9945d9e9b7cd85bd846fae0b02433c2", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Kernel task init (0x400012c8 on DT2 1.17, DN2 1.12 and DN2 1.11; the kernel is byte-identical): fills the caller's TCB (at least 0x54 bytes) for priority `prio` (0 to 15, higher wins; above 15 overwrites the current-TCB pointer) and builds the first RTE frame at the top of the caller's stack (entry gets no argument and must never return). Writes only the TCB and the stack; returns 1. The task runs after cf.rtos.fn.task_start. Stock creates tasks this way from the boot thread and, after the scheduler runs, from the main-OS task (the progress screen)."
+
+[[fn]]
+name = "cf.rtos.fn.task_start"
+cpu = "cf"
+sig = "void (u32 tcb)"
+rule = { kind = "cf_func", hash = "8a64289f96ca37db27637e3e85329c19", ordinal = 0, offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Kernel task start (0x40001314 on all three images): links the TCB into its priority's ready ring under SR 0x2700; does not reschedule. The hash is shared by three identical wrappers (0x40001314, 0x4000132c, 0x4000155c), hence the ordinal."
+
+[[fn]]
+name = "cf.rtos.fn.sem_init"
+cpu = "cf"
+sig = "void (u32 *sem, u32 count)"
+rule = { kind = "cf_func", hash = "12e0c05f98237db73e5d4777b09af2e2", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Semaphore init (0x40001398 on all three images). A semaphore is 8 bytes: +0 count or flag, +4 the one waiting TCB (one waiter only). No static initialiser."
+
+[[fn]]
+name = "cf.rtos.fn.sem_pend"
+cpu = "cf"
+sig = "void (u32 *sem)"
+rule = { kind = "cf_func", hash = "1eb93b50f94f227f9607b2230c76cd99", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Binary semaphore pend (0x4000141a on all three images): if the flag is set it clears it and returns, else the task blocks (trap #0). No timeout; task context only."
+
+[[fn]]
+name = "cf.rtos.fn.sem_post"
+cpu = "cf"
+sig = "void (u32 *sem)"
+rule = { kind = "cf_func", hash = "8a64289f96ca37db27637e3e85329c19", ordinal = 2, offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "Binary semaphore post (0x4000155c on all three images): masks SR, sets the flag, readies the waiter and forces the reschedule interrupt. ISR-safe (the DTIM1 interrupt posts the sleep semaphore this way). Posts coalesce: the waiter must drain its work after each wake. Shares its hash with cf.rtos.fn.task_start (ordinal 2)."
+
+[[fn]]
+name = "cf.rtos.fn.reset.init_calls"
+was = ["cf.reset.init_calls", "cf.rtos.fn.reset_init_calls"]
+cpu = "cf"
+rule = { kind = "cf_reset_init_calls" }
+mark = "D"
+users = ["core/expansion"]
+doc = "The reset code's two consecutive calls `jsr copy; jsr clear` (the .data copy and bss clear helpers, 8 bytes); core/expansion rewrites them to `jsr pk_loader.l; nop`."
+
+# The firmware's default exception handler (the code every vector points at until a specific handler is installed; DT2 1.16 0x40001252, not a
+# function of its own): `move #0x2700,sr; move.l sp,<save>; lea -16(sp),sp; movem.l d0-d1/a0-a1,(sp); movea.l <hook word>,a0; tst.l a0; beq +10;
+# move.l <save>,-(sp); jsr (a0); ...; rte`. The anchor is the 4-byte literal of `movea.l (<hook word>).l,a0` (finding 37: the word holds the function
+# that prints EXCEPTION and halts); core/platform points the word at the runtime's hook, which records the fault and soft-resets (finding 46). The
+# words are the code with the two address operands (they differ per firmware) and the `jsr`'s displaced bytes left open.
+[[site]]
+name = "cf.rtos.site.exc_hook_lit"
+was = ["dkrt.fw.exc_hook_lit"]
+bind = "static"
+cpu = "cf"
+rule = { kind = "cf_words", as = "code", words = [0x270023cf, "*", 0x4feffff0, 0x48d70303, "*", "*", 0x670a2f39, "*", 0x4e90588f, 0x4cd70303, 0x4fef0010], offset = 0x12, len = 4 }
+mark = "D"
+users = ["core/platform"]
+doc = "The firmware's default exception handler (the code every vector points at until a specific handler is installed; DT2 1.16 0x40001252, not a function of its own): `move #0x2700,sr; move.l sp,<save>; lea -16(sp),sp; movem.l d0-d1/a0-a1,(sp); movea.l <hook word>,a0; tst.l a0; beq +10; move.l <save>,-(sp); jsr (a0); ...; rte`."
+
+# The boot thread: DT2 FUN_400cc864 (1.16; 1.17 0x400cc9c8), DN2 FUN_400cec98 (1.11; 1.12 0x400cedfc), the same code in both versions.
+[[site]]
+name = "cf.rtos.site.idle"
+was = ["health.hook.idle"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "fc798b27d0ff965379f46717b367f05b", offset = 0x482, len = 6 }
+rule.dn2 = { kind = "cf_func", hash = "ca0006cf073207083d26359db1321886", offset = 0x452, len = 6 }
+rule.st = { kind = "cf_func", hash = "3cb033ce6a96bf96ee98446f468ba993", offset = 0x31e, len = 6, mark = "D" }
+mark = "D"
+users = ["core/health"]
+doc = "The boot thread's last call, a 6-byte `jsr <create the main-OS task>`, after which the thread idles; core/health replaces it."
+
+[[site]]
+name = "cf.rtos.site.main_os_task"
+was = ["cf.rtos.site.boot", "dkrt.hook.boot"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_words", as = "code", words = ["*", 0xff5848d7, 0x3cfc49f9, "*", "*", "*", "*", 0x4e944e93, 0x2d40ff80, 0x4eb9400d], offset = 0x2, len = 8 }
+rule.dn2 = { kind = "cf_words", as = "code", words = [0x4e56ff58, 0x48d73cfc, 0x45f94018, "*", "*", 0x4e924e93, 0x2d40ff80, 0x4eb9400d], offset = 0x0, len = 8 }
+rule.st = { kind = "cf_func", hash = "79e8b624e678d28f4d2a312510ee44f1", offset = 0x0, len = 8, mark = "D" }
+mark = "D"
+users = ["core/platform"]
+doc = "The entry of the main-OS task (`link a6,#-0xa8; movem.l ...; ...; jsr (a4); jsr (a3); move.l d0,-0x80(a6); jsr <next singleton>`), found by the words of its first 28 bytes: Digitakt II (the entry is 2 mod 4: the first word of the row is half of the previous function) and Digitone II (4-aligned)."
+
+[[value]]
+name = "cf.rtos.value.current_tcb"
+cpu = "cf"
+rule = { kind = "cf_literal", hash = "1eb93b50f94f227f9607b2230c76cd99", offset = 0x14, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "The kernel's current-TCB pointer variable (DT2 1.17 0x47db3f64, DN2 1.12 0x4664bcdc: the literal that cf.rtos.fn.sem_pend loads first; it stores the value as the semaphore's waiting task). Read the word at this address to learn which task runs now; the kernel is byte-identical on all three images."
+
+# The task facts of the installer (runtime/core/src/rs/src/package/loader/install.rs): a hook site that firmware code of a task below the UI task's priority can be inside
+# is written or restored only while every such task waits at its top-level wait object (u0-entry-contexts.md section 3). A task is parked iff the waiter word of that wait
+# object holds its own TCB: the kernel's pend stores the current TCB there before it blocks (the pend functions 0x400013a6 counting and 0x4000141a binary, the same on both images: `move.l A0,(0x4,A1)` with A0 the current TCB)
+# and the post clears the word, so a woken or running task reads "not parked". Two tasks reach a `task` hook: the BgWorker (project load, save, clear, paste) and the
+# console task (`#PLAY_PATTERN`). `port_file = true` lists the names in the port file, where the loader reads them; `codegen = false`: no binding, the runtime reads them from the port file. [D]: read from the images by one agent.
+[[value]]
+name = "cf.rtos.value.bgworker.tcb"
+cpu = "cf"
+rule = { kind = "cf_literal", hash = "f032bf16fa7967b8f4f75e47dc3055ae", offset = 0x1a, len = 4 }
+devices = ["dt2", "dn2"]
+port_file = true
+codegen = false
+mark = "D"
+users = ["core/runtime"]
+doc = "The static TCB of the BgWorker task (priority 2), the literal `pea (tcb).l` that BgWorker::ctor passes to the task constructor (DT2 1.17 0x43172de4, DN2 1.12 0x42c6a1d0; the function is 0x400f0d7c and 0x400f2758)."
+
+[[value]]
+name = "cf.rtos.value.bgworker.cell"
+cpu = "cf"
+rule = { kind = "cf_literal", hash = "3ad9ebe9ba92b0f367fe6fb5c4846806", ordinal = 0, offset = 0xa, len = 4 }
+devices = ["dt2", "dn2"]
+port_file = true
+codegen = false
+mark = "D"
+users = ["core/runtime"]
+doc = "The cell that holds the BgWorker singleton (DT2 1.17 0x44f37090, DN2 1.12 0x44648930; the `tst.l` of the task entry, which creates the object when the cell is 0 and then runs the job loop on the object). The job loop pends on the semaphore at object + 0x14, so its waiter word is at *cell + 0x18: it is an indirection, the cell is 0 until the object exists."
+
+[[value]]
+name = "cf.rtos.value.console.tcb"
+cpu = "cf"
+rule.dt2 = { kind = "cf_literal", hash = "9d6efd6eebbf956849b58bc3cd1cd556", offset = 0x2c, len = 4 }
+rule.dn2 = { kind = "cf_literal", hash = "0cfa77e0415e93225c42eafae994ed9f", offset = 0x2c, len = 4 }
+devices = ["dt2", "dn2"]
+port_file = true
+codegen = false
+mark = "D"
+users = ["core/runtime"]
+doc = "The static TCB of the serial console command task (priority 2), the literal that its creation function passes to cf.rtos.fn.task_create (DT2 1.17 0x4039be58, DN2 1.12 0x40386e48; the function is 0x400cc79e and 0x400cebd2)."
+
+[[value]]
+name = "cf.rtos.value.console.queue"
+cpu = "cf"
+rule.dt2 = { kind = "cf_literal", hash = "9d6efd6eebbf956849b58bc3cd1cd556", offset = 0xe, len = 4 }
+rule.dn2 = { kind = "cf_literal", hash = "0cfa77e0415e93225c42eafae994ed9f", offset = 0xe, len = 4 }
+devices = ["dt2", "dn2"]
+port_file = true
+codegen = false
+mark = "D"
+users = ["core/runtime"]
+doc = "The queue the console task pops its command lines from (DT2 1.17 0x403a0eac, DN2 1.12 0x4038be9c; the literal of the queue init in its creation function). The pop pends on the queue's semaphore at queue + 8, so the waiter word is at queue + 0xc (the queue layout is the kernel's, the same on both images)."
+
+[[value]]
+name = "cf.rtos.value.reset.clear_helper"
+was = ["cf.reset.clear_helper", "cf.rtos.value.reset_clear_helper"]
+cpu = "cf"
+rule = { kind = "cf_reset_helper", which = "clear" }
+mark = "D"
+users = ["core/expansion"]
+doc = "Address of the reset code's bss clear helper, the second call of cf.rtos.fn.reset.init_calls; the expansion loader calls it after it copies its segments."
+
+[[value]]
+name = "cf.rtos.value.reset.copy_helper"
+was = ["cf.reset.copy_helper", "cf.rtos.value.reset_copy_helper"]
+cpu = "cf"
+rule = { kind = "cf_reset_helper", which = "copy" }
+mark = "D"
+users = ["core/expansion"]
+doc = "Address of the reset code's .data copy helper, the first call of cf.rtos.fn.reset.init_calls; the expansion loader calls it after it copies its segments."
+
+[[hook]]
+name = "cf.rtos.hook.main_os_task"
+site = "cf.rtos.site.main_os_task"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = ["ccr"] }
+handler = { sig = "void ()", args = [] }
+mark = "D"
+users = ["core/platform"]
+doc = "Entry of the main-OS task, before the task builds its singletons; the hook point for boot-time module loading."
+
+[[hook]]
+name = "cf.rtos.hook.idle"
+site = "cf.rtos.site.idle"
+cpu = "cf"
+mode = "replace"
+regs = { in = [], clobbers = [] }   # never continues into firmware code
+devices = ["dt2", "dn2", "st"]
+mark = "D"
+users = ["core/health"]
+doc = "The boot thread's last call (create the main-OS task), after which the thread idles; the hook makes that call itself and then counts idle iterations forever."
+
+[[value]]
+name = "cf.rtos.value.intro_entry"
+cpu = "cf"
+rule = { kind = "cf_literal", hash = "573ca1fa13c8386bc529bf48d5cd1fb4", offset = 0x74, len = 4 }
+mark = "D"
+users = ["core/runtime"]
+doc = "The intro's current-entry pointer: {callback, frame count} in the scene table, NULL when no intro runs (DT2 0x43153a00, DN2 0x42c4cacc)."
+
+# The intro's setup function (DT2 1.17 0x400d1832, DN2 1.12 0x400d3d0a; the same code in DN2 1.11): `lea -0x1c,sp; clr.l d1; move.l d2,-(sp);
+# move.l (0x24,sp),d0; movea.l d0,a0; ...`. Its one argument is the scene table (`{callback, count}` entries, a 0 terminator): it stores the pointer as the
+# current entry and counts the entries. The intro task calls it with one of five tables.
+[[site]]
+name = "cf.rtos.site.intro_setup.table_arg"
+cpu = "cf"
+rule = { kind = "cf_func", hash = "76bd72a01dc0ff453c176fae55a6031e", offset = 0x8, len = 6 }
+mark = "D"
+users = ["core/introblank"]
+doc = "The load of the scene table argument in the intro setup function (`move.l (0x24,sp),d0; movea.l d0,a0`, 6 bytes); the hook may change the argument on the stack."
+
+[[hook]]
+name = "cf.rtos.hook.intro_setup.table_arg"
+site = "cf.rtos.site.intro_setup.table_arg"
+cpu = "cf"
+mode = "before"
+regs = { in = [], clobbers = ["d0", "a0", "ccr"] }   # the argument is at (0x24,sp); the displaced `move.l (0x24,sp),d0; movea.l d0,a0` load d0 and a0 next
+devices = ["dt2", "dn2", "st"]
+mark = "D"
+users = ["core/introblank"]
+doc = "The intro setup function, before it reads its scene table argument from (0x24,sp); a hook that writes another table pointer there changes the whole intro."
+
+[[fn]]
+name = "cf.rtos.fn.mutex_lock"
+cpu = "cf"
+sig = "void (u32 *mutex)"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "c02de192e5cfdc542a335acc2d314923", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/plusdrive-write"]
+doc = "Lock a recursive owner-aware mutex (FUN_400015a0 on DT2 1.17): a task that holds it takes it again without blocking. Task context only."
+
+[[fn]]
+name = "cf.rtos.fn.mutex_unlock"
+cpu = "cf"
+sig = "void (u32 *mutex)"
+devices = ["dt2"]
+rule = { kind = "cf_func", hash = "ff7148e8cfd55a92f20fca9420bea643", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/plusdrive-write"]
+doc = "Unlock a mutex of mutex_lock (FUN_400016d2 on DT2 1.17). Task context only."

@@ -2,7 +2,7 @@
 
 Every block below is copied from a source that passes its tests. Change constants and state words only; do not write new
 assembly when a recipe fits. Contract, registers and entry: docs/MODULE-AUTHORING.md, section 7.1. Lines are `file:line`.
-P = `modules/machines/pluck/src/dsp/pluck.s` (conformance, `test_pluck*.py`, ran on the device). D = `3b385ad6:modules/fx/master-drive/src/dsp/master_drive.s` (deleted; the quoted code stays, the D line numbers refer to the file on main at 3b385ad6).
+P = `modules/machine/digikit/pluck/src/dsp/pluck.s` (conformance, `test_pluck*.py`, ran on the device). D = `3b385ad6:modules/fx/master-drive/src/dsp/master_drive.s` (deleted; the quoted code stays, the D line numbers refer to the file on main at 3b385ad6).
 Cost numbers are the ones the sources state or a count of instruction lines in the quoted loop. No other numbers are measured.
 `#include "dk_machine.inc"` gives `DK_OK`, `DK_DONE`, `DK_BLOCK` (32), `DK_IN_W_PITCH`, `DK_IN_W_VELOCITY`, `DK_IN_W_OUT`, `DK_MAGIC`, `DK_MACHINE_V1`.
 
@@ -40,7 +40,7 @@ Output block pointer (P:307-309):
 ```
 Note-on: `I3 = R4; CALL _pk_coef; R0 = 1; DM(5, I3) = R0;` (P:178-181) computes the coefficients once and marks them fresh. `render` (P:296-303) reads word 5: if set, it clears it and skips `_pk_coef`; if not, it calls `_pk_coef` every block (parameters can move).
 Returns: `JUMP (M13, I13);` after `R0 = DK_OK;` or `R0 = DK_DONE;`. A routine that calls (`CALL _dv_exp2`) ends its helper with `RTS;` (P:175).
-Do not touch I6-I12, I14, I15, M0, M5-M15, L registers. M5 = 0, M6 = 1, M7 = -1 are the post-modifiers used below.
+Register classes: sdk/dsp/REGISTERS.md. M5 = 0, M6 = 1, M7 = -1 are the post-modifiers used below.
 
 ## 3. Block loop: DK_BLOCK samples, in to out (P:331-332, 355-358)
 
@@ -52,7 +52,7 @@ _pk_loop: DM(I0, M6) = R8;
     DM(0, I3) = R15;
 ```
 The last instruction of the loop carries the label and stores the sample to `out` (I0, post-increment M6 = 1). Save state words after the loop.
-Cost of pluck's loop body: 23 instruction lines per sample (counted in P:333-355). Declared budget: `max_cycles_block` 2200, `max_cycles_note_on` 9000 (P:391-392).
+Cost of pluck's loop body: 23 instruction lines per sample (counted in P:333-355).
 Adapt: an effect reads its input with `R0 = DM(I4, M5);` and writes back with `DM(I4, M6) = R0;` (D:102, 115).
 
 ## 4. Pitch to frequency and period with `_dv_exp2` (P:53-73)
@@ -242,12 +242,10 @@ Then P:290-292 sets word 1 to `0x4b50` (the source does not explain it) and retu
 .VAR _pk_desc3 = PK_VOICES;
 .VAR _pk_desc4 = PK_STATE;
 .VAR _pk_desc5 = PK_STATE;
-.VAR _pk_desc6 = 2200;
-.VAR _pk_desc7 = 9000;
-.VAR _pk_desc8 = 2;
-.VAR _pk_desc9 = 0;
+.VAR _pk_desc6 = 2;
+.VAR _pk_desc7 = 0;
 ```
-Order: magic, contract, params, voices, state bytes, clear bytes, max cycles block, max cycles note-on, call depth (2 here: `_pk_coef` calls `_dv_exp2`), stack bytes.
+Order: magic, contract, params, voices, state bytes, clear bytes, call depth (2 here: `_pk_coef` calls `_dv_exp2`), stack bytes. The cost of a block is not declared: `module:check` measures it.
 Here the clear bytes equal the state bytes, so the line starts silent. Code sections use `.SECTION/PM seg_pmco;`.
 
 ## 12. Per-sample linear ramp across a block (D:66-115)

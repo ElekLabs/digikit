@@ -10,7 +10,7 @@
   2. runs the patched firmware with no transfer: the PCM must equal the reference (the module is invisible when idle);
   3. for each size: starts a transfer of known bytes into the DSP's reserved area (a host poke of the request fields,
      which is what `dl_send` stores; `dl_send`/`dl_poll` themselves are unit-tested on the ColdFire core in
-     modules/core/adapters/dsp-link/tests/test_dsplink.py), waits for DONE, reads the DSP's L2 back (`dsp.peek`) and compares byte for byte,
+     runtime/platform/dsp-link/tests/test_dsplink.py), waits for DONE, reads the DSP's L2 back (`dsp.peek`) and compares byte for byte,
      counts DSP blocks for the throughput, and compares the PCM of the whole note with the reference;
   4. a destination outside the area (forged request) must stop with status 3 and leave the area untouched;
   5. a lost chunk (the sender's position is pushed ahead) must be recovered by going back.
@@ -37,11 +37,12 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 
 from tools import python_env  # noqa: E402
+from tools.firmware import device as device_files  # noqa: E402
 from tools.patchkit import hook_ab, pk_device  # noqa: E402
 from tools.patchkit import pk_harness as H  # noqa: E402
 
 FW = {"dt2": "1.17", "dn2": "1.12"}
-# DlLink field offsets (modules/core/adapters/dsp-link/src/cf/dsp-link.c, struct DlLink)
+# DlLink field offsets (runtime/platform/dsp-link/src/cf/dsp-link.c, struct DlLink)
 L_STATE, L_ERR, L_BUF, L_DST, L_NWORDS, L_XID, L_CAP, L_NCHUNKS = (
     0,
     4,
@@ -66,7 +67,7 @@ L_WIN = 64
 DL_IDLE, DL_BUSY, DL_DONE, DL_ERROR, DL_START = 0, 1, 2, 3, 4
 AREA_WORDS = {
     d: pk_device.load(d)["digikit"]["dsp_area_bytes"] // 4
-    for d in pk_device.digikit_devices()
+    for d in pk_device.dsp_devices()
 }  # DL_AREA_WORDS
 FRAME = 88_000  # ColdFire instructions per DSP block (132 M / 1500)
 TRIG1 = 25
@@ -108,9 +109,7 @@ def patch(device: str, fw: str) -> tuple[Path, dict[str, Any]]:
 def plan_anchors(device: str, fw: str) -> list[dict[str, Any]]:
     import tomllib
 
-    return tomllib.loads(
-        (ROOT / "devices" / "ports" / f"{device}-{fw}.toml").read_text()
-    )["anchor"]
+    return tomllib.loads((ROOT / "ports" / f"{device}-{fw}.toml").read_text())["anchor"]
 
 
 def sym(plan: dict[str, Any], name: str) -> int:
@@ -224,7 +223,7 @@ def peek_link(emu: Any, link: int) -> dict[str, int]:
 
 
 def start_request(emu: Any, link: int, buf: int, dst_off: int, nwords: int) -> None:
-    """What dl_send stores (modules/core/adapters/dsp-link/src/cf/dsp-link.c), written from the host; the state last."""
+    """What dl_send stores (runtime/platform/dsp-link/src/cf/dsp-link.c), written from the host; the state last."""
     emu.poke32(link + L_ERR, 0)
     emu.poke32(link + L_WIN, 0)
     emu.poke32(link + L_BUF, buf)
@@ -482,7 +481,7 @@ def main(argv: list[str]) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("proof", "frame"):
         p = sub.add_parser(name)
-        p.add_argument("--device", choices=["dt2", "dn2"], default="dt2")
+        p.add_argument("--device", choices=device_files.shorts(), default="dt2")
         p.add_argument("--fw")
         if name == "proof":
             p.add_argument("--sizes", default="4096,65536")

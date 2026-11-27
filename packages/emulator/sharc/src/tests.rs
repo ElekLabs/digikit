@@ -3,7 +3,21 @@
 use crate::CfgRefresh;
 use crate::canon;
 use crate::mem::Mem;
-use crate::rt::bnd;
+/// `rt::bnd` with the two functions that need the core's tables, on the core of the state.
+mod bnd {
+    pub use crate::rt::bnd::*;
+    use crate::rt::{Insn, Int, R, St, Sym, V, VI};
+
+    pub fn decode_at(s: &mut St, _data: (), _base_sw: Option<Int>, pc_sw: Int) -> R<Insn> {
+        let sym_of = s.core.sym_of;
+        decode_at_with(s, pc_sw, sym_of)
+    }
+
+    pub fn _load_normal_ureg(s: &mut St, space: Sym, address: VI, code: Int) -> R<Option<V>> {
+        let write_ureg = s.core.write_ureg;
+        _load_normal_ureg_with(s, space, address, code, write_ureg)
+    }
+}
 use crate::rt::*;
 
 #[test]
@@ -59,13 +73,14 @@ fn state() -> Box<St> {
     mem.load(0x0003_0000, &[9, 9, 9, 9]);
     mem.reset();
     let mut s = St::new(mem);
+    s.core = crate::default_core();
     s.sync_snapshot();
     s
 }
 
 #[test]
 fn software_interrupt_probe_respects_masks_and_nesting() {
-    let mut engine = crate::Engine::new(Mem::new());
+    let mut engine = crate::Engine::new(Mem::new(), crate::default_core());
     engine.s.r[114] = V::c((1 << 12) | (1 << 11));
     engine.s.r[122] = V::c((1 << 31) | (1 << 28));
     engine.s.r[123] = V::c(0xf000_0000);
@@ -85,7 +100,7 @@ fn software_interrupt_probe_respects_masks_and_nesting() {
 
 #[test]
 fn software_interrupt_probe_stops_before_an_instruction_and_defers_delay_slots() {
-    let mut engine = crate::Engine::new(Mem::new());
+    let mut engine = crate::Engine::new(Mem::new(), crate::default_core());
     engine.s.r[114] = V::c(1 << 12);
     engine.s.r[122] = V::c(1 << 31);
     engine.s.r[123] = V::c(1 << 31);
@@ -112,7 +127,7 @@ fn software_interrupt_probe_stops_before_an_instruction_and_defers_delay_slots()
 fn alternate_banks_apply_after_one_completed_following_instruction() {
     let mut s = state();
     s.cfg.bank_model = true;
-    s.cfg.refresh();
+    s.cfg.refresh(s.core);
     s.r[0] = V::c(1);
     s.r[16] = V::c(16);
     s.r[80] = V::c(80);
@@ -136,7 +151,7 @@ fn alternate_banks_apply_after_one_completed_following_instruction() {
 fn trapped_mode1_bank_request_rolls_back() {
     let mut s = state();
     s.cfg.bank_model = true;
-    s.cfg.refresh();
+    s.cfg.refresh(s.core);
     s.bank_requested_mask = -1;
     s.begin();
     bnd::_bank_request(&mut s, V::c(1 << 10)).unwrap();
@@ -149,7 +164,7 @@ fn trapped_mode1_bank_request_rolls_back() {
 fn canonical_v2_preserves_bank_state() {
     let mut source = state();
     source.cfg.bank_model = true;
-    source.cfg.refresh();
+    source.cfg.refresh(source.core);
     source.bank_active_mask = 1 << 10;
     source.bank_pending_mask = 1 << 4;
     source.bank_requested_mask = 1 << 3;
@@ -168,7 +183,7 @@ fn canonical_v2_preserves_bank_state() {
 fn physical_stack_wire_state_and_pointer_requests_survive_rollback() {
     let mut source = state();
     source.cfg.stack_model = true;
-    source.cfg.refresh();
+    source.cfg.refresh(source.core);
     source.pc_stack.push_raw(0x0100_0123).unwrap();
     source.pc_stack.push_raw(0x0100_0456).unwrap();
     source.pc_stack_pending = 1;
@@ -193,7 +208,7 @@ fn physical_stack_wire_state_and_pointer_requests_survive_rollback() {
 
 #[test]
 fn diagnostic_pc_breakpoint_stops_before_clock_or_instruction_effects() {
-    let mut engine = crate::Engine::new(Mem::new());
+    let mut engine = crate::Engine::new(Mem::new(), crate::default_core());
     assert_eq!(engine.set_option(8, -2), -1);
     assert_eq!(engine.set_option(8, 0x0100_0000), -1);
     assert_eq!(engine.set_option(8, 0), 0);
@@ -214,7 +229,7 @@ fn direct_short_word(mem: &Mem, pc_sw: u32) -> Option<u16> {
 
 #[test]
 fn diagnostic_clock_has_an_explicit_continuation_base() {
-    let mut e = crate::Engine::new(Mem::new());
+    let mut e = crate::Engine::new(Mem::new(), crate::default_core());
     assert_eq!(e.set_option(6, -1), -1);
     assert_eq!(e.set_option(6, 0x1_0000_0002), 0);
     assert_eq!(e.set_option(5, 1), 0);
@@ -232,13 +247,16 @@ fn runtime_decode_cache_is_owned_and_invalidated_per_engine() {
     let mut mem = Mem::new();
     mem.load(0, &[0, 0, 1, 0]);
     mem.reset();
-    let mut e = crate::Engine::new(mem);
+    let mut e = crate::Engine::new(mem, crate::default_core());
     e.enable_runtime_decode(direct_short_word);
     let decoded = crate::decode::decode_at(|pc| direct_short_word(&e.s.mem, pc), 0);
     assert_eq!(decoded.type_name, "21p_undoc16");
-    assert_eq!(crate::sym_of(decoded.type_name), Some(S_21P_UNDOC16));
-    assert!(crate::sym_of("operand").is_some());
-    assert!(crate::sym_of("operand[6:0]").is_some());
+    assert_eq!(
+        (crate::default_core().sym_of)(decoded.type_name),
+        Some(S_21P_UNDOC16)
+    );
+    assert!((crate::default_core().sym_of)("operand").is_some());
+    assert!((crate::default_core().sym_of)("operand[6:0]").is_some());
     let first = bnd::decode_at(&mut e.s, (), None, 0).unwrap();
     assert_eq!(first.type_name, S_21P_UNDOC16);
     assert_eq!(e.s.decode_cache.len(), 1);
@@ -262,6 +280,7 @@ fn normal_word_aliases_preserve_access_context_and_rollback() {
     mem.load(0x10000000, &[0xef, 0xbe, 0xad, 0xde]);
     mem.reset();
     let mut s = St::new(mem);
+    s.core = crate::default_core();
     assert_eq!(
         bnd::_dm_read(&s, VI::I(0x10000000), 4, false, true).unwrap(),
         Some(V::c(0x44332211))
@@ -301,7 +320,7 @@ fn runtime_ffi_selection_and_loaded_execution_aliases() {
     assert_eq!(mem.read_sw(0xb80000), Some(0x2211));
     assert_eq!(mem.read_sw(0x1c0000), Some(0));
     assert_eq!(mem.read_sw(1 << 24), None);
-    let mut e = crate::Engine::new(mem);
+    let mut e = crate::Engine::new(mem, crate::default_core());
     // The configuration used by the C interface selects the concrete reader.
     assert_eq!(e.set_option(4, 1), 0);
     let first = bnd::decode_at(&mut e.s, (), None, 0x1c0000).unwrap();
@@ -595,7 +614,7 @@ fn canonical_state_round_trip() {
 
 #[test]
 fn engine_without_code_traps() {
-    let mut e = crate::Engine::new(Mem::new());
+    let mut e = crate::Engine::new(Mem::new(), crate::default_core());
     assert_eq!(e.step(1), 0);
     assert!(e.halt.as_deref().unwrap().starts_with("native-trap:"));
 }
@@ -644,8 +663,9 @@ fn block_register_file_rules() {
 #[test]
 fn block_unknown_load_matches_interpreter_value() {
     let mut s = St::new(Mem::new());
+    s.core = crate::default_core();
     s.cfg.explicit_memory_model = false;
-    s.cfg.refresh();
+    s.cfg.refresh(s.core);
     let mut rf = Rf::default();
     rf.r[4] = V::c(123);
     assert_eq!(
@@ -693,7 +713,7 @@ fn peripheral_model_acknowledges_and_ends_sec_sources() {
     let mut s = state();
     s.set_mmr_windows();
     s.cfg.peripheral_model = true;
-    s.cfg.refresh();
+    s.cfg.refresh(s.core);
     s.mmr_put(periph::SEC_GCTL, V::c(1));
     s.mmr_put(periph::SEC_CCTL, V::c(1));
     s.mmr_put(periph::SEC_SCTL + 8 * 70, V::c(5));
@@ -719,7 +739,7 @@ fn peripheral_model_acknowledges_and_ends_sec_sources() {
     assert_eq!(s.mmr_get(status), Some(V::c(0)));
     // With the model off the same write is a plain register store.
     s.cfg.peripheral_model = false;
-    s.cfg.refresh();
+    s.cfg.refresh(s.core);
     s.begin();
     s.named_mmrs = vec![periph::SEC_END];
     s.set_mmr_windows();
@@ -742,9 +762,9 @@ fn sport_engine() -> crate::Engine {
     let mut mem = Mem::new();
     mem.load(RAM, &image);
     mem.reset();
-    let mut e = crate::Engine::new(mem);
+    let mut e = crate::Engine::new(mem, crate::default_core());
     e.s.cfg.peripheral_model = true;
-    e.s.cfg.refresh();
+    e.s.cfg.refresh(e.s.core);
     e.s.mmr_put(periph::SEC_GCTL, V::c(1));
     e.s.mmr_put(periph::SEC_CCTL, V::c(1));
     e.s.mmr_put(periph::SEC_SCTL + 8 * 191, V::c(5));
@@ -785,6 +805,25 @@ fn sport_block_returns_the_tx_unit_and_raises_the_group_source() {
     assert_eq!(e.s.mem.read_le(0x2810_0200, 4), 0x0302_0100);
 }
 
+/// `PX = DM(I0, M0)` (Type 3a, normal word) at PC 0. `_load_normal_ureg`
+/// gives no value for a PX load (the halves go to PX1 and PX2), so the
+/// generated core must not unwrap it.
+#[cfg(sharc_gen)]
+#[test]
+fn type3a_load_into_px_runs() {
+    let mut mem = Mem::new();
+    mem.load(0, &[0x3e, 0x50, 0x80, 0x35, 0, 0]);
+    mem.load(0x0003_0000, &[1, 2, 3, 4, 5, 6, 7, 8]);
+    mem.reset();
+    let mut e = crate::Engine::new(mem, crate::default_core());
+    e.enable_runtime_decode(direct_short_word);
+    e.s.r[114] = V::c(0); // MODE1
+    e.s.r[16] = V::c(0x0003_0000); // I0
+    e.s.r[32] = V::c(0); // M0
+    assert_eq!(e.step(1), 1, "{:?}", e.halt);
+    assert_eq!(e.s.icount, 1);
+}
+
 /// `JUMP 0` at PC 0 (Type8a, non-delayed, relative 0): a one-instruction
 /// loop that is a fixed point apart from the clocks.
 #[cfg(sharc_gen)]
@@ -792,10 +831,10 @@ fn spin_engine(skip: bool, period: i64) -> crate::Engine {
     let mut mem = Mem::new();
     mem.load(0, &[0x3e, 0x07, 0, 0, 0, 0]);
     mem.reset();
-    let mut e = crate::Engine::new(mem);
+    let mut e = crate::Engine::new(mem, crate::default_core());
     e.enable_runtime_decode(direct_short_word);
     // Block code is only used under the memory model it was generated for.
-    let gen_model = i64::from(crate::gen_explicit_memory_model());
+    let gen_model = i64::from(crate::default_core().explicit_memory_model);
     for (k, v) in [(5, 1), (6, 12345), (10, gen_model), (21, 1)] {
         assert_eq!(e.set_option(k, v), 0);
     }
@@ -982,6 +1021,7 @@ fn interrupt_precheck_matches_full_candidate() {
     let (mut quiet, mut loud) = (0, 0);
     for case in 0..5000 {
         let mut s = St::new(Mem::new());
+        s.core = crate::default_core();
         let allowed = random_irq_state(&mut x, &mut s);
         if xorshift(&mut x) & 3 == 0 {
             s.pending = Some(Pending::default());
@@ -1005,7 +1045,7 @@ fn interrupt_precheck_matches_full_candidate() {
 #[test]
 fn quiet_implies_no_latent_interrupt() {
     let mut x = 0x2545_f491_4f6c_dd1du64;
-    let mut e = crate::Engine::new(Mem::new());
+    let mut e = crate::Engine::new(Mem::new(), crate::default_core());
     e.software_interrupts = true;
     e.s.cfg.core_timer = true;
     e.s.cfg.peripheral_model = true;
@@ -1084,7 +1124,7 @@ fn peripheral_stores_that_act_leave_block_code() {
     }
     let mut s = state();
     s.cfg.peripheral_model = true;
-    s.cfg.refresh();
+    s.cfg.refresh(s.core);
     s.named_mmrs = vec![periph::SEC_END, 0x3100_0000];
     s.set_mmr_windows();
     s.in_block = true;
@@ -1185,6 +1225,7 @@ fn bank_codes_are_the_selected_register_groups() {
 #[test]
 fn chain_stop_set_holds_what_was_added() {
     let mut s = St::new(Mem::new());
+    s.core = crate::default_core();
     assert!(!s.chain_stops_at(0xb8276c));
     let pcs: Vec<u32> = (0..500).map(|i| 0x1c0000 + i * 7).collect();
     for &pc in &pcs {
@@ -1210,10 +1251,10 @@ fn patch_engine(fast: bool, models: bool) -> crate::Engine {
     mem.load(SPIN_ALIAS, &spin);
     mem.load(SPIN_ALIAS + 6, &spin);
     mem.reset();
-    let mut e = crate::Engine::new(mem);
+    let mut e = crate::Engine::new(mem, crate::default_core());
     assert_eq!(e.set_option(4, 1), 0);
     if models {
-        let gen_model = i64::from(crate::gen_explicit_memory_model());
+        let gen_model = i64::from(crate::default_core().explicit_memory_model);
         for (k, v) in [(5, 1), (6, 12345), (10, gen_model), (21, 1)] {
             assert_eq!(e.set_option(k, v), 0);
         }
@@ -1333,7 +1374,7 @@ fn dyn_window_engine(fast: bool, i1: u32, r2: u32, dirty: &[(u32, u32)]) -> crat
             mem.write_byte(a, (a as u8) ^ 0x5a);
         }
     }
-    let mut e = crate::Engine::new(mem);
+    let mut e = crate::Engine::new(mem, crate::default_core());
     assert_eq!(e.set_option(4, 1), 0);
     e.s.r[114] = V::c(0); // MODE1
     e.s.r[122] = V::c(0); // IRPTL
@@ -1475,7 +1516,7 @@ fn callret_engine(fast: bool, start: u32, ret: u32, entries: &[u32]) -> crate::E
     let mut mem = Mem::new();
     mem.load(SPIN_ALIAS, &callret_program());
     mem.reset();
-    let mut e = crate::Engine::new(mem);
+    let mut e = crate::Engine::new(mem, crate::default_core());
     assert_eq!(e.set_option(4, 1), 0);
     e.s.cfg.stack_model = true;
     e.s.r[114] = V::c(0); // MODE1
@@ -1673,7 +1714,7 @@ fn lp_engine(
     let mut mem = Mem::new();
     mem.load(SPIN_ALIAS, &lp_bytes(code));
     mem.reset();
-    let mut e = crate::Engine::new(mem);
+    let mut e = crate::Engine::new(mem, crate::default_core());
     assert_eq!(e.set_option(4, 1), 0);
     e.s.r[114] = V::c(0); // MODE1
     e.s.r[122] = V::c(0); // IRPTL
@@ -2369,9 +2410,18 @@ fn fast_mode1_write_that_enables_interrupts_matches_the_interpreter() {
         };
         let setup = move |e: &mut crate::Engine| {
             assert_eq!(e.set_option(9, 1), 0);
+            // The fast tier runs only when the memory model matches the generated core's.
+            assert_eq!(
+                e.set_option(10, crate::default_core().explicit_memory_model as i64),
+                0
+            );
             e.s.cfg.stack_model = true;
             e.s.cfg.bank_model = true;
-            e.s.cfg.refresh();
+            e.s.cfg.refresh(e.s.core);
+            // Interrupt entry reads SYSCTL for the vector table location; a named MMR
+            // keeps the value under either memory model.
+            e.s.named_mmrs = vec![0x30024];
+            e.s.set_mmr_windows();
             e.s.mmr_put(0x30024, V::c(4));
             // The vector of the latched source (SFT0, level 28): a spin. The
             // vector table holds one 48-bit instruction per 6 bytes.
@@ -2388,7 +2438,7 @@ fn fast_mode1_write_that_enables_interrupts_matches_the_interpreter() {
         // Regions at every instruction, and one only at the write.
         let all: Vec<u32> = (0..5).map(lp_pc).collect();
         lp_compare(&format!("mode1 enable {name}"), &code, &all, 12, &setup);
-        let ran = lp_compare(
+        lp_compare(
             &format!("mode1 enable {name}, at the write"),
             &code,
             &[0],
@@ -2396,10 +2446,21 @@ fn fast_mode1_write_that_enables_interrupts_matches_the_interpreter() {
             &setup,
         );
         // The enabling write is never lowered (the generated core of a
-        // firmware image may run its own blocks at these PCs instead).
-        if name != "unchanged" {
-            assert_eq!(ran, 0, "{name}: the fast tier ran the enabling write");
-        }
+        // firmware image may run its own blocks at these PCs instead): the
+        // region at the write is refused, and the interpreter runs the write.
+        // The fast tier can still run the instructions after the write, in a
+        // region that it chases at the next PC. So the test counts the
+        // refusals, not the instructions that the fast tier ran.
+        let mut f = lp_engine(&code, &[0], true, &setup);
+        assert_eq!(f.step(12), 12);
+        let st = f.fast.as_ref().unwrap().fast_stats().unwrap();
+        assert!(
+            st.built + st.refused > 0,
+            "{name}: the fast tier did not run: {:?}",
+            st.reasons
+        );
+        let refused = u64::from(name != "unchanged");
+        assert_eq!(st.refused, refused, "{name}: {:?}", st.reasons);
     }
 }
 
@@ -2628,7 +2689,7 @@ fn fallback_probe_block(s: &mut St) -> u32 {
 }
 
 fn fallback_probe_engine(code_ok: bool, barred: Option<Vec<u32>>) -> crate::Engine {
-    let mut e = crate::Engine::new(Mem::new());
+    let mut e = crate::Engine::new(Mem::new(), crate::default_core());
     e.s.pc_sw = 0;
     e.s.r[0] = V::c(0);
     e.s.r[1] = V::c(0);
@@ -2750,6 +2811,7 @@ fn fallback_registration_preserves_healthy_chain_stops() {
         .with_clusters(&[2])
         .with_fallback(&[1, 2, 3, 3]);
     let mut s = St::new(Mem::new());
+    s.core = crate::default_core();
     assert!(f.sync_chain_stops(&mut s));
     assert!(s.chain_stops_at(1));
     assert!(s.chain_stops_at(2));
@@ -2805,6 +2867,7 @@ fn fallback_registration_preserves_auto_only_chaining() {
             .with_auto(2, 0, false);
         assert!(!f.caps_chain());
         let mut s = St::new(Mem::new());
+        s.core = crate::default_core();
         assert!(f.sync_chain_stops(&mut s));
         assert!(!s.chain_stops_at(3));
         f.note(1);
@@ -2905,7 +2968,7 @@ fn profile_writer_emits_one_file_set_only_when_maps_are_on() {
         v.sort();
         v
     };
-    let mut engine = crate::Engine::new(Mem::new());
+    let mut engine = crate::Engine::new(Mem::new(), crate::default_core());
     engine.write_profile(&dir.join("p"));
     assert!(names(&dir).is_empty());
     engine.set_option(26, 1);
@@ -2922,6 +2985,7 @@ fn ddr_monitor_captures_cpu_attempts_before_synthesis_and_journal() {
     use crate::mem::DdrAccessKind;
     let a = 0x8001_0000;
     let mut s = St::new(Mem::new());
+    s.core = crate::default_core();
     s.cfg.explicit_memory_model = true;
     s.mem.set_ddr_monitor(Some((a, a + 4))).unwrap();
     assert_eq!(
@@ -2965,6 +3029,7 @@ fn ddr_monitor_known_attempts_survive_symbolic_value_and_model_declines() {
     use crate::mem::DdrAccessKind;
     let a = 0x8001_0000;
     let mut s = St::new(Mem::new());
+    s.core = crate::default_core();
     s.mem.set_ddr_monitor(Some((a, a + 4))).unwrap();
     assert!(!bnd::_dm_write(&mut s, VI::I(a as Int), 4, V::UNK, false).unwrap());
     assert_eq!(
@@ -2991,7 +3056,7 @@ fn ddr_monitor_known_attempts_survive_symbolic_value_and_model_declines() {
 
 #[test]
 fn ddr_monitor_disables_idle_skip_and_discards_transition_evidence() {
-    let mut e = crate::Engine::new(Mem::new());
+    let mut e = crate::Engine::new(Mem::new(), crate::default_core());
     e.s.pc_sw = 100;
     e.idle_visit(100, 1000);
     assert!(e.idle_snap.is_some());

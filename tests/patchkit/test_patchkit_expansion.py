@@ -44,11 +44,11 @@ def patchkit(*args):
 
 
 def test_loader_copies_segments_and_zeroes_bss():
-    """Run modules/core/expansion's loader on the core with stub helpers, over a region filled with 0xA5."""
+    """Run runtime/platform/expansion's loader on the core with stub helpers, over a region filled with 0xA5."""
     base, segs, h1, h2 = REGION, REGION + 0x1000, REGION + 0x2000, REGION + 0x2002
     d1, d2 = REGION + 0x4000, REGION + 0x5000
     linked = front_end.cf_link(
-        [ROOT / "modules/core/expansion/src/cf/loader.s"],
+        [ROOT / "runtime/platform/expansion/src/cf/loader.s"],
         base,
         {"pk_segs": segs, "pk_copy_helper": h1, "pk_clear_helper": h2},
     )
@@ -125,8 +125,8 @@ def test_patched_image_boots_and_the_module_runs_in_place(fw, base_sha, tmp_path
 
 @pytest.mark.parametrize("fw", ["Digitakt_II_OS1.17.syx"])
 def test_machines_shims_live_in_the_expansion_region_not_the_cave(fw, tmp_path):
-    """The native core executes from DDR (finding 07): core/machines keeps its code in cf.expansion and the flash cave holds
-    the expansion loader only (56 bytes), however many machines are added."""
+    """The native core executes from DDR (finding 07): core/rows keeps its code in cf.expansion and the flash cave holds
+    the expansion loader only (56 bytes), with the machines framework alone."""
     firmware = config.stock(fw)
     if not firmware.exists():
         pytest.skip(f"{fw} missing")
@@ -136,7 +136,7 @@ def test_machines_shims_live_in_the_expansion_region_not_the_cave(fw, tmp_path):
         "--firmware",
         firmware,
         "--modules",
-        "core/machines,test/machine-clone",
+        "core/rows",
         "-o",
         tmp_path / "out.syx",
         "--plan",

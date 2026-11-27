@@ -2,15 +2,16 @@
  * __umoddi3, __moddi3, __muldi3, __ashldi3, __lshrdi3, __ashrdi3); the build links them from the -mcpu=54418 libgcc.
  *
  * The inputs sit in `c_demo_in` (initialised data, read through volatile) so the compiler cannot fold anything; the
- * results are stored as big-endian word pairs (high, low) in `c_demo_out`, which `dkm_init` logs the address of. */
+ * results are stored as big-endian word pairs (high, low) in `c_demo_out`, which `init` logs the address of. */
 
-#include <dk/core/api.h>
+#include <dk/core/log.h>
+#include <dk/core/module.h>
 
 typedef uint32_t u32;
 typedef unsigned long long u64;
 typedef long long s64;
 
-/* [0] udivisor / dividend pair, see dkm_init */
+/* [0] udivisor / dividend pair, see init */
 volatile u64 c_demo_in[4] = {
     0xFEDCBA9876543210ULL, /* a */
     0x0000000123456789ULL, /* b */
@@ -28,7 +29,7 @@ static void put(int i, u64 v)
     c_demo_out[3 + 2 * i] = (u32)v;
 }
 
-int32_t dkm_init(const dk_api *api)
+static int32_t init(dk_module_ctx *ctx)
 {
     u64 a = c_demo_in[0], b = c_demo_in[1];
     s64 c = (s64)c_demo_in[2], d = (s64)c_demo_in[3];
@@ -44,6 +45,9 @@ int32_t dkm_init(const dk_api *api)
     put(7, (u64)(c >> n2));     /* __ashrdi3 */
     put(8, (u64)(c * d));       /* __muldi3, signed */
     c_demo_out[0] = 0x43444D4F; /* "CDMO" */
-    api->log((const uint8_t *)"c-demo results", (u32)c_demo_out);
-    return 0;
+    (void)ctx;
+    dk_log(DK_LOG_INFO, "c-demo results", (u32)c_demo_out);
+    return DK_OK;
 }
+
+const dk_module_def dk_module = {.init = init};

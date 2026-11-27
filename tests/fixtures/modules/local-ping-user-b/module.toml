@@ -1,0 +1,25 @@
+[module]
+id = "test/local-ping-user-b"
+version = "0.1.0"
+name = "Local ping client B"
+category = "test"
+type = "raw"
+author = "digikit"
+status = "experimental"
+summary = "Fixture: a second consumer of the local-ping service (shared service, orphan unload)"
+requires = []
+conflicts = []
+
+[targets]
+"dt2-1.17" = "experimental"
+"dn2-1.12" = "experimental"
+
+[[service_import]]
+service = "local-ping"
+min_version = "1.2.0"
+names = ["local_ping_value"]
+
+[[object]]
+path = "build/local-ping-user-b.dko.json"
+sources = ["src/user-b.c"]
+place = "cf.expansion"

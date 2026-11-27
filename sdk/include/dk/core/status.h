@@ -9,19 +9,18 @@
 #define DK_E_SHA (-4) /* store file hash or .dkm sha256 does not match */
 #define DK_E_FORMAT (-5) /* bad magic, version, bounds or alignment of the .dkm */
 #define DK_E_RUNTIME (-6) /* the module needs a newer runtime */
-#define DK_E_IMPORT (-7) /* an import name is not in the runtime's table */
+#define DK_E_IMPORT (-7) /* an import is unknown, or a provider the module needs is absent */
 #define DK_E_NOMEM (-8) /* arena full */
 #define DK_E_INIT (-9) /* init returned non-zero */
 #define DK_E_LOADED (-10) /* a module of that name is loaded */
-#define DK_E_SLOT (-11) /* a slot it binds is taken */
 #define DK_E_BUSY (-12) /* a task is still inside the module, or the store is in use (try again) */
 #define DK_E_TOO_BIG (-13) /* larger than the staging buffer */
 #define DK_E_TABLE_FULL (-14) /* no free module record */
 #define DK_E_LOST (-15) /* the sample backing was lost and the reload failed */
 #define DK_E_POOL (-16) /* the sample pool is full */
 #define DK_E_CHANGED (-17) /* the sample file differs from the selection snapshot */
-#define DK_E_EXISTS (-18) /* the file exists already (file_create does not overwrite) */
-#define DK_E_CONTEXT (-19) /* the call is not allowed in this context (file_* run in an I/O step) */
+#define DK_E_EXISTS (-18) /* the file exists already (dk_files_create does not overwrite) */
+#define DK_E_CONTEXT (-19) /* the call is not allowed in this context (dk_files_* writes run in an I/O step) */
 #define DK_E_NO_REGISTRY (-20) /* register records, but the image has no registry */
 #define DK_E_REG_DEVICE (-21) /* the records are for another device */
 #define DK_E_TYPE_RANGE (-22) /* machine type outside the range, or bad clone_of */
@@ -29,6 +28,9 @@
 #define DK_E_PARAM_FULL (-24) /* no free reserved parameter row */
 #define DK_E_PAGE_FULL (-25) /* no free reserved page row (Digitone II) */
 #define DK_E_TYPE_IN_USE (-26) /* reserved (hot reload is archived); never returned */
+#define DK_E_DECL_ID (-27) /* a builder call names a machine or effect id that the keys table of the header lacks */
+#define DK_E_DECL_USES (-28) /* init declared more machine, param or page rows than the [uses] counts of the header say */
+#define DK_E_FX_ID_DUP (-29) /* reserved (the planner refuses a repeated effect id with E_PLAN_KEY); never returned */
 #define DK_E_NO_DSP (-30) /* DSP code in the file, no DSP loader in the image */
 #define DK_E_DSP_FORMAT (-31) /* the DSP section is malformed */
 #define DK_E_DSP_IMPORT (-32) /* a DSP symbol is not exported by the image */
@@ -42,12 +44,25 @@
 #define DK_E_SEL_WRITE (-42) /* the firmware's block write failed */
 #define DK_E_CARD_BUSY (-43) /* a card transfer is in flight */
 #define DK_E_SAFE_MODE (-44) /* this boot is in safe mode: no module was loaded */
-#define DK_E_BOOT_ONLY (-45) /* the module set is fixed after the boot hook */
+#define DK_E_BOOT_ONLY (-45) /* the module set is fixed after the boot hook: a service that must start at boot cannot load now, restart the device to load it (a reload of a loaded module is the only later load) */
 #define DK_E_RANGE (-46) /* a card write outside the store range */
 #define DK_E_CARD_RO (-47) /* the card's store area is not ours and not blank */
-#define DK_E_CONTRACT (-48) /* the module was built for another SDK contract */
+#define DK_E_CONTRACT (-48) /* the module needs another runtime version than this one (another major or minor, or a higher patch) */
 #define DK_E_TABLE (-49) /* the runtime's tables failed their check */
 #define DK_E_MISSING (-73) /* the service is not in the image (the module that provides it is not loaded) */
+#define DK_E_DECL_FULL (-74) /* init made more builder calls than the record limit allows */
+#define DK_E_PLAN_KIND (-75) /* the boot plan refused the module: a record kind of its header table has no owning service */
+#define DK_E_PLAN_OWNER (-76) /* the boot plan refused the module: another module owns the kind, slot or hook site it takes */
+#define DK_E_PLAN_KEY (-77) /* the boot plan refused the module: another module of the selection has the same key for a kind */
+#define DK_E_PLAN_FIT (-78) /* the boot plan refused the module: its uses do not fit what the earlier modules of the selection left */
+#define DK_E_DECL_KIND (-79) /* a service declared a record kind that the header table does not carry, or with another length */
+#define DK_E_SVC_ABI (-81) /* a service file was built for another runtime ABI (its header word H_SVC_ABI differs from the runtime's fingerprint) */
+#define DK_E_HOOK_STOCK (-82) /* a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init */
+#define DK_E_RELOAD_PLAYING (-83) /* reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read) */
+#define DK_E_RELOAD_MENUS (-84) /* reload refused: the module built menus of its own */
+#define DK_E_RELOAD_ROUTED (-85) /* reload refused: a service cannot give back the module's state now */
+#define DK_E_RELOAD_KEYS (-86) /* reload refused: the new file lacks a key of the file it replaces */
+#define DK_E_RELOAD_RETAINED (-87) /* reload refused: the DSP loader holds a module it could not release; restart the device */
 
 /* Replies of the upload commands ([protocol.status]). */
 #define DK_E_MSG (-50) /* body too short or malformed */
@@ -61,7 +76,7 @@
 #define DK_E_READ_PROTO (-58) /* the firmware's block read failed */
 #define DK_E_NOFILE (-59) /* that path is not in the store */
 #define DK_E_PROTO (-60) /* unknown protocol version, command or option */
-#define DK_E_NOSTORE (-61) /* the store header is unreadable (CLEAR still works) */
+#define DK_E_NOSTORE (-61) /* the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then) */
 #define DK_E_INUSE (-62) /* the card's store area is not ours and not blank */
 #define DK_E_PEEK (-63) /* PEEK range not allowed, or length 0 or over 512 */
 #define DK_E_CMD_RANGE (-64) /* command range not reserved, taken, or empty */
@@ -72,5 +87,7 @@
 #define DK_E_SET_OFF (-70) /* settings store off: an older store reaches its area, or no store */
 #define DK_E_FILE_IN_USE (-71) /* a sample is still loading from that file: wait and try again */
 #define DK_E_AGAIN (-72) /* usb_bulk_send: the engine refused and nothing is in flight; wait for the wake, retry */
+#define DK_E_MODULE_UI_CONFLICT (-88) /* the module setting revision changed */
+#define DK_E_MODULE_UI_SCOPE (-89) /* project settings are active; change this setting on the device */
 
 #endif /* DK_CORE_STATUS_H */

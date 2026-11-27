@@ -1,80 +1,9 @@
-import fs from 'node:fs';
 import { patchkit } from './patchkit.ts';
+import { fxExpectationsWith, GAIN_PAGE_DEFAULTS, type FxExpectations, type ModuleRange } from './dkm-parse.ts';
 
-/** Offline oracles over a .dkm. The needs and the fit rule are the Rust ones (`patchkit needs|fit`); the DSP relocation is a second implementation. */
-const L2_BYTE_BASE = 0x2000_0000;
-const L2_SW_BASE = 0x00b8_0000;
+export * from './dkm-parse.ts';
 
-export interface FxExpectations {
-  image_hex: string;
-  row: number[];
-  needs: Record<string, number>;
-}
-
-export interface ModuleRange {
-  dsp_off: number;
-  dsp_len: number;
-}
-
-interface FxRecord {
-  process: number;
-  desc: number;
-  defaults: number[];
-}
-
-/** The DSP section of a .dkm (docs/design/digikit-dkm.md); only what the effect oracle reads. */
-export function parseDspSection(dkm: Buffer) {
-  const start = dkm.readUInt32BE(0x98);
-  const s = dkm.subarray(start, start + dkm.readUInt32BE(0x9c));
-  if (s.readUInt32BE(0) !== 0x444b4453) throw new Error('no DSP section');
-  const imageOff = s.readUInt32BE(0x18);
-  const relocOff = s.readUInt32BE(0x1c);
-  const relocs = Array.from({ length: s.readUInt32BE(0x20) }, (_, i) => {
-    const word = s.readUInt32BE(relocOff + 8 * i + 4);
-    return { offset: s.readUInt32BE(relocOff + 8 * i), kind: word >>> 28, cls: (word >>> 24) & 15 };
-  });
-  // Version 4 has effect records of 64 bytes: process, desc, state_bytes, n_params, flags, p0 .. p7.
-  const fxs: FxRecord[] = [];
-  if (s.readUInt32BE(4) === 4) {
-    for (let i = 0; i < s.readUInt32BE(0x38); i++) {
-      const at = s.readUInt32BE(0x34) + 64 * i;
-      fxs.push({
-        process: s.readUInt32BE(at),
-        desc: s.readUInt32BE(at + 4),
-        defaults: Array.from({ length: 8 }, (_, k) => s.readUInt32BE(at + 20 + 4 * k)),
-      });
-    }
-  }
-  return {
-    image: Buffer.from(s.subarray(imageOff, imageOff + s.readUInt32BE(0x0c))),
-    bss: s.readUInt32BE(0x10),
-    nimports: s.readUInt32BE(0x28),
-    relocs,
-    fxs,
-  };
-}
-
-/** The image placed at BASE; DSP imports are not supported (the oracle refuses a module that has them). */
-export function relocate(sec: ReturnType<typeof parseDspSection>, base: number): Buffer {
-  const m = Buffer.from(sec.image);
-  const byteShift = base - L2_BYTE_BASE;
-  const pcShift = Math.floor(byteShift / 2);
-  for (const { offset: o, kind, cls } of sec.relocs) {
-    if (cls > 1) throw new Error('DSP imports are not supported');
-    const add = cls === 0 ? pcShift : byteShift;
-    if (kind === 0) {
-      const v = ((m[o + 2]! << 16) | m.readUInt16LE(o + 4)) + add;
-      if (v >= 1 << 24) throw new Error('relocated address leaves 24 bits');
-      m[o + 2] = (v >> 16) & 0xff;
-      m.writeUInt16LE(v & 0xffff, o + 4);
-    } else {
-      const v = (m.readUInt16LE(o + 2) * 0x10000 + m.readUInt16LE(o + 4) + add) >>> 0;
-      m.writeUInt16LE(v >>> 16, o + 2);
-      m.writeUInt16LE(v & 0xffff, o + 4);
-    }
-  }
-  return m;
-}
+/** Offline oracles over a .dkm. The needs and the fit rule are the Rust ones (`patchkit needs|fit`). */
 
 /** What a load of each file takes, from `patchkit needs --json`; throws for a file the loader would refuse. */
 export async function needsOf(files: string[]): Promise<Record<string, number>[]> {
@@ -89,30 +18,42 @@ export async function needsOf(files: string[]): Promise<Record<string, number>[]
   });
 }
 
+/** `record_bytes` of a .dkm: the RES_RECORD_BYTES item (resource 4) of the USES entry (tag 2) in its tagged keys table (packages/dkneeds/src/keys.rs); 0 when absent. */
+export function recordBytesOf(bytes: Buffer): number {
+  const RES_RECORD_BYTES = 4;
+  const TAG_USES = 2;
+  const keysOff = bytes.readUInt32BE(0x90);
+  const keysSize = bytes.readUInt32BE(0x94);
+  if (keysSize === 0) return 0;
+  const entries = bytes.readUInt16BE(keysOff + 6);
+  let at = keysOff + 8;
+  for (let i = 0; i < entries; i++) {
+    const tag = bytes.readUInt16BE(at);
+    const count = bytes.readUInt16BE(at + 2);
+    const len = bytes.readUInt32BE(at + 4);
+    if (tag === TAG_USES) {
+      for (let k = 0; k < count; k++)
+        if (bytes.readUInt32BE(at + 8 + 8 * k) === RES_RECORD_BYTES) return bytes.readUInt32BE(at + 12 + 8 * k);
+      return 0;
+    }
+    at += 8 + len;
+  }
+  return 0;
+}
+
 /** The fit rule (`patchkit fit --json -`) for NEEDS against CAPS; EMPTY makes CAPS the capacity of a runtime that loaded nothing. */
 export async function fit(caps: unknown, needs: Record<string, number>[], empty = false) {
   const { stdout } = await patchkit(['fit', '--json', '-'], { input: JSON.stringify({ caps, needs, empty }) });
   return JSON.parse(stdout);
 }
 
-/** Relocation and row oracle of a one-effect module placed at BASE. */
-export async function fxExpectations(file: string, base: number): Promise<FxExpectations> {
-  const sec = parseDspSection(fs.readFileSync(file));
-  if (sec.fxs.length !== 1 || sec.nimports)
-    throw new Error('FX oracle requires exactly one effect without DSP imports');
-  const effect = sec.fxs[0]!;
-  const stateAt = (sec.image.length + sec.bss + 7) & ~7;
-  return {
-    image_hex: relocate(sec, base).toString('hex'),
-    row: [
-      L2_SW_BASE + Math.floor((base + effect.process - L2_BYTE_BASE) / 2),
-      base + effect.desc,
-      base + stateAt,
-      1,
-      ...effect.defaults,
-    ],
-    needs: (await needsOf([file]))[0]!,
-  };
+/** Relocation and row oracle of a one-effect module placed at BASE; the needs come from `patchkit needs` at run time. */
+export async function fxExpectations(
+  file: string,
+  base: number,
+  pageDefaults = GAIN_PAGE_DEFAULTS,
+): Promise<FxExpectations> {
+  return fxExpectationsWith(file, base, (await needsOf([file]))[0]!, pageDefaults);
 }
 
 /** The DSP ranges of the modules are pairwise disjoint. */

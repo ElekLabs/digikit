@@ -11,11 +11,12 @@ from tools.sharc_dev import sharcinv
 # Names tools/sharc_dev (the parent of this package), as before the split.
 _here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-DB_VERSION = 16
+DB_VERSION = 17
 
 # Bump DB_VERSION whenever the schema or the semantics of an existing column
-# change, so build_database()'s skip-rebuild check (sha256 + DB_VERSION) does
+# change, so build_database()'s skip-rebuild check does
 # the right thing on the next run.
+# v17 indexes printable runs from the loader blob and records build inputs.
 # v16 also resolves a 2b/2c collision whose short reading is clean once its
 # own successors are width-resolved (sharc_disasm._resolved_reach_clean).
 # v15 also retries unresolved 2b/2c collisions through a bounded later
@@ -354,6 +355,12 @@ CREATE TABLE functions (
 CREATE TABLE edges (
     image TEXT, from_sw INTEGER, to_sw INTEGER, kind TEXT, delayed INTEGER, cond INTEGER,
     from_function INTEGER, to_function INTEGER, note TEXT);
+
+-- Printable runs in loaded bytes. Some may be coincidental instruction bytes.
+CREATE TABLE strings (
+    image TEXT, byte_addr INTEGER, sw_start INTEGER, sw_end INTEGER, block INTEGER, text TEXT,
+    PRIMARY KEY (image, byte_addr)
+);
 
 CREATE TABLE literals (
     image TEXT, sw INTEGER, value INTEGER, form TEXT, dest_reg TEXT,

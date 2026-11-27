@@ -1,19 +1,17 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
+import { LOAD_STATE } from '@digi/dk-session/gen_proto';
 import { cardStore } from '../runtime/device-data.ts';
-import {
-  buildCard,
-  currentRecord,
-  decodeRecord,
-  encodeRecord,
-  plusdriveBinary,
-  readSectors,
-  recordsIn,
-} from '../runtime/card-kit.ts';
-import { cardAfter, encodeOverlay } from '../runtime/write-safety.ts';
+import { bootInfoFinal } from '../runtime/guest-mailbox.ts';
+import { buildCard, plusdriveBinary } from '../runtime/card-store.ts';
+import { currentRecord, decodeRecord, encodeRecord, readSectors, recordsIn } from '../runtime/card-record.ts';
+import { SYSTEM_PACKAGE_STORE_PATH, systemPackageFile } from '../runtime/system-package.ts';
+import { cardAfter, encodeOverlay, linkCard } from '../runtime/write-safety.ts';
 
+const device = 'dn2';
 const directories: string[] = [];
 const tmp = () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'digi-card-kit-'));
@@ -53,7 +51,6 @@ describe('selection record', () => {
 });
 
 describe('card sectors', () => {
-  const device = 'dn2';
   const { selA, selB } = cardStore(device);
 
   test('buildCard over a base places the copies, a torn copy and foreign sectors; the overlay wins over the image', async () => {
@@ -114,4 +111,89 @@ describe('card sectors', () => {
       expect(copies[1]).toEqual(copies[0]);
     },
   );
+});
+
+describe('card content id of a linked card', () => {
+  const base = (key?: string) => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'card.img'), 'image');
+    if (key) fs.writeFileSync(path.join(dir, 'card.key'), key);
+    return path.join(dir, 'card.img');
+  };
+  const keyOf = (card: string) => fs.readFileSync(path.join(path.dirname(card), 'card.key'), 'utf8');
+
+  test('the same base and writes give the same id in another directory', () => {
+    const baseCard = base('base-key');
+    const a = linkCard(baseCard, path.join(tmp(), 'one'), Buffer.from('writes'));
+    const b = linkCard(baseCard, path.join(tmp(), 'two'), Buffer.from('writes'));
+    expect(keyOf(a)).toBe(keyOf(b));
+  });
+
+  test('other writes or another base give another id, never the id of the base', () => {
+    const baseCard = base('base-key');
+    const a = linkCard(baseCard, path.join(tmp(), 'one'), Buffer.from('writes'));
+    const b = linkCard(baseCard, path.join(tmp(), 'two'), Buffer.from('other writes'));
+    const c = linkCard(base('another-key'), path.join(tmp(), 'three'), Buffer.from('writes'));
+    expect(new Set([keyOf(a), keyOf(b), keyOf(c), 'base-key']).size).toBe(4);
+  });
+
+  test('a base without an id gives a card without one, and an old id in the directory goes', () => {
+    const dir = path.join(tmp(), 'card');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'card.key'), 'stale');
+    const card = linkCard(base(), dir, Buffer.from('writes'));
+    expect(fs.existsSync(path.join(path.dirname(card), 'card.key'))).toBe(false);
+  });
+});
+
+describe('system package on the card', () => {
+  const ready = fs.existsSync(plusdriveBinary()) && fs.existsSync(systemPackageFile());
+  /** The store paths of a card as `plusdrive store ls` lists them, with the package. */
+  const storePaths = (card: string) =>
+    execFileSync(plusdriveBinary(), ['store', 'ls', card, '--device', device], { encoding: 'utf8' })
+      .trim()
+      .split('\n')
+      .slice(1)
+      .map((line) => line.split('\t')[0]);
+
+  test.skipIf(!ready)(
+    'a built card holds the package at its store path, with modules or from a folder, and not when left off',
+    async () => {
+      const dir = tmp();
+      const file = path.join(dir, 'a.dkm');
+      fs.writeFileSync(file, Buffer.alloc(64));
+      const withModule = await buildCard(device, { dir, name: 'm', modules: [{ name: 'modules/a.dkm', file }] });
+      expect(storePaths(withModule)).toEqual(expect.arrayContaining(['modules/a.dkm', SYSTEM_PACKAGE_STORE_PATH]));
+
+      const folder = path.join(dir, 'folder');
+      fs.mkdirSync(folder);
+      fs.writeFileSync(path.join(folder, 'note.txt'), 'x');
+      const fromFolder = await buildCard(device, { dir, name: 'f', folder });
+      expect(storePaths(fromFolder)).toContain(SYSTEM_PACKAGE_STORE_PATH);
+      expect(fs.readdirSync(folder), "the caller's folder is left as it was").toEqual(['note.txt']);
+
+      const without = await buildCard(device, { dir, name: 'n', systemPackage: false });
+      expect(() => storePaths(without), 'no file, so no store at all').toThrow('no module store');
+    },
+  );
+});
+
+describe('boot info final', () => {
+  const code = (name: string) => LOAD_STATE.find(([, n]) => n === name)![0];
+  const info = (loaded: number, ...names: string[]) => ({ loaded, states: names.map(code) });
+
+  test('every module has a final state and loaded counts the active ones', () => {
+    expect(bootInfoFinal(info(2, 'ACTIVE', 'ACTIVE'))).toBe(true);
+    expect(bootInfoFinal(info(1, 'ACTIVE', 'REFUSED'))).toBe(true);
+    expect(bootInfoFinal(info(0, 'SKIPPED', 'SKIPPED'))).toBe(true);
+  });
+
+  test('a state already set with loaded not yet raised is not final', () => {
+    expect(bootInfoFinal(info(1, 'ACTIVE', 'ACTIVE'))).toBe(false);
+  });
+
+  test('a module still loading is not final', () => {
+    expect(bootInfoFinal(info(1, 'ACTIVE', 'DSP_LOADING'))).toBe(false);
+    expect(bootInfoFinal(info(0, 'SELECTED', 'SELECTED'))).toBe(false);
+  });
 });

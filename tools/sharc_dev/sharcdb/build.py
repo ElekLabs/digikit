@@ -8,8 +8,9 @@ import hashlib
 import json
 import os
 import time
+from pathlib import Path
 
-from tools.sharc_dev import sharcflow, sharcfn, sharcimm, sharcinv
+from tools.sharc_dev import sharcflow, sharcfn, sharcimm, sharcinv, sharcstrings
 
 from .analysis import analyze_image
 from .cfg import _after_sw, _build_blocks_and_succ, _overwritten_bytes, _slots
@@ -23,7 +24,50 @@ from .regdefs import register_effects
 from .schema import DB_VERSION, KNOWN_CODE_BLOCKS, git_commit, open_db, read_meta
 
 
-def _fill_database(db, name, sha, blob_path, code_blocks, min_depth, ctx):
+def build_input_sha256():
+    """Hash the analysis source and instruction tables that populate this DB."""
+    root = Path(__file__).resolve().parents[1]
+    files = [
+        *root.glob("sharcdb/*.py"),
+        *root.glob("sharcfn/*.py"),
+        *root.glob("sharc_core/*.py"),
+        *root.glob("sharcspec/*.json"),
+        *(
+            root / name
+            for name in (
+                "sharc_disasm.py",
+                "sharc_isa.py",
+                "sharc_trace.py",
+                "sharc_visa_tables.py",
+                "sharcflow.py",
+                "sharcimm.py",
+                "sharcinv.py",
+                "sharcldr.py",
+                "sharcstrings.py",
+            )
+        ),
+    ]
+    digest = hashlib.sha256()
+    for path in sorted(files):
+        digest.update(str(path.relative_to(root)).encode())
+        digest.update(b"\0")
+        digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()
+
+
+def build_matches(meta, name, blob_sha, code_blocks, min_depth, input_sha):
+    return (
+        meta.get("image") == name
+        and meta.get("cpu") == "sharc"
+        and meta.get("image_sha256") == blob_sha
+        and meta.get("db_version") == str(DB_VERSION)
+        and meta.get("blocks") == json.dumps(list(code_blocks))
+        and meta.get("min_depth") == str(min_depth)
+        and meta.get("build_input_sha256") == input_sha
+    )
+
+
+def _fill_database(db, name, sha, blob_path, code_blocks, min_depth, input_sha, ctx):
     mem = ctx["mem"]
     functions = ctx["functions"]
     analyzed = ctx["analyzed"]
@@ -38,6 +82,7 @@ def _fill_database(db, name, sha, blob_path, code_blocks, min_depth, ctx):
         (name, "cpu", "sharc"),
         (name, "blob_path", os.path.abspath(blob_path)),
         (name, "min_depth", str(min_depth)),
+        (name, "build_input_sha256", input_sha),
         (name, "blocks", json.dumps(list(code_blocks))),
     ]
     db.executemany("INSERT INTO meta VALUES (?,?,?)", meta_rows)
@@ -68,6 +113,20 @@ def _fill_database(db, name, sha, blob_path, code_blocks, min_depth, ctx):
             )
         )
     db.executemany("INSERT INTO blocks VALUES (?,?,?,?,?,?,?)", block_rows)
+    db.executemany(
+        "INSERT OR IGNORE INTO strings VALUES (?,?,?,?,?,?)",
+        (
+            (
+                name,
+                r["loaded_byte_address"],
+                r["short_word_start"],
+                r["short_word_end"],
+                r["block_index"],
+                r["text"],
+            )
+            for r in sharcstrings.map_strings(ctx["data"], ctx["blocks"])
+        ),
+    )
 
     entry_to_fn = {}
     func_rows = []
@@ -464,8 +523,7 @@ def _fill_database(db, name, sha, blob_path, code_blocks, min_depth, ctx):
 def build_database(
     blob_path, out_path, name=None, min_depth=8, blocks=None, force=False
 ):
-    """Build (or skip, if the sha256 and DB_VERSION already match) one
-    image's database at out_path. Returns a stats dict."""
+    """Build one image database, skipping when its inputs and options match."""
     t0 = time.time()
     sha = sharcfn.sha256_of(blob_path)
     if name is None:
@@ -479,11 +537,10 @@ def build_database(
             "sharcdb: no known code-block list for image sha256 %s (%s); pass --blocks to override"
             % (sha, blob_path)
         )
+    input_sha = build_input_sha256()
     if not force and os.path.exists(out_path):
         existing = read_meta(out_path)
-        if existing.get("image_sha256") == sha and existing.get("db_version") == str(
-            DB_VERSION
-        ):
+        if build_matches(existing, name, sha, code_blocks, min_depth, input_sha):
             return {
                 "name": name,
                 "path": out_path,
@@ -510,7 +567,7 @@ def build_database(
         db = open_db(tmp_path)
         try:
             counts = _fill_database(
-                db, name, sha, blob_path, code_blocks, min_depth, ctx
+                db, name, sha, blob_path, code_blocks, min_depth, input_sha, ctx
             )
             counts["analyze"] = analyze_image(
                 db, name, mem=ctx["mem"], blocks=ctx["blocks"]

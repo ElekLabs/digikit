@@ -1375,6 +1375,17 @@ pub fn _dm_read_full(
             crate::mem::DdrAccessKind::CpuRead,
         );
     }
+    if let Some(log) = &s.read_log
+        && matches!(width, 1 | 2 | 4)
+        && (0..=u32::MAX as Int).contains(&concrete)
+    {
+        // As a store is recorded: the address the core keeps the byte at (the loader alias for L2).
+        let at = _canonical_dm_address(s, concrete, width, true)
+            .ok()
+            .flatten()
+            .unwrap_or(concrete);
+        log.borrow_mut().push((at as u32, width as u8));
+    }
     if !s.cfg.has_concrete || !matches!(width, 1 | 2 | 4 | 8) {
         return Ok(None);
     }

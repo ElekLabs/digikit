@@ -57,7 +57,7 @@ Backlog for patchkit itself (the rest lives in the plans named above):
   failure it prints UPGRADE ABORTED and writes nothing [V]. That the menu comes up with a broken MAIN OS is [O].
 - The bootstrap's receive and flash-write path has no size limit. NOR flash is 16 MiB; the container is written at
   flash offset 0x80000 and record sectors (tagged fields, serial number) start at 0x380000, so the container must
-  stay at or under 0x300000 bytes (finding 01, spike 0.2). DDR is 128 MiB [C] (finding 08, spike 0.3).
+  stay at or under 0x1FFE00 bytes (finding 146). DDR is 128 MiB [C] (finding 08, spike 0.3).
 - ColdFire space today: `flash_cave` only (DT2 1.16 2,108 B, DN2 1.11 2,136 B). `cave_b` is cleared at reset.
   `tools/cavefind.py` is lost (only its .pyc remains).
 - SHARC space: L2 past the loader looks free (about 900 KB DT2, 490 KB DN2), weak evidence. `dsp_patch.py` can only
@@ -261,7 +261,7 @@ Spec (decided 2026-10-13):
   `tools/patchkit/port_resolve.py` (rules -> port lockfile). `tools/patchkit/patchkit.py` wraps the Rust CLI for mise.
 - **Codec.** Untouched sections keep their stored bytes verbatim; changed sections are packed with an aPLib packer
   ported from `tools/firmware/aplibpack.py` that produces the **same bytes** as the Python packer (test on all 16 stock
-  sections). Hard limits from the port (`container_max` 0x300000, section 7 stored <= 0x100000 and depacked <=
+  sections). Hard limits from the port (`container_max` 0x1FFE00 for images built for flashing only, not for emulator images; section 7 stored <= 0x100000 and depacked <=
   0xfffff, MAIN staged image <= 0x3ffc00); sections 2, 4, 8 can never change. Every output is re-decoded and
   checked (checksum, HMAC, packet checksums, limits, record).
 - **Port lockfile** `devices/ports/<short>-<version>.toml`:
@@ -399,9 +399,9 @@ Details: finding 17 ("Health events, heartbeat and the watchdog") and `tools/pat
 
 Details, evidence and the DSP binding contract: `docs/findings/02-machines-and-parameters.md` ("core.machines").
 Built: `a1cf1df^:native/patchkit/src/machines.rs` (the generator, removed in a1cf1df; 4 unit tests, `a1cf1df^:native/patchkit/tests/machines.rs` with 6 integration tests on the
-real ports and images), `[[machine]]` in the manifest, `modules/core/machines` (24 ColdFire anchor rules of the new kind
+real ports and images), `[[machine]]` in the manifest, `modules/core/rows` (24 ColdFire anchor rules of the new kind
 `cf_func`, one DSP rule), `tests/fixtures/modules/xslice`, `tests/fixtures/modules/machine-clone`, `c4d86e4e:tools/patchkit/pk_machine_rules.py`,
-`tools/patchkit/pk_proof_machines.py`, `tools/emulator/card_overlay.py` and the daemon method `card.overlay`; harness steps `expect_mem`
+`tools/emulator/card_overlay.py` and the daemon method `card.overlay`; harness steps `expect_mem`
 and `expect_dsp`; two new matrix cells.
 
 - DT2 1.17 and 1.16 (same proof, same results): XSLICE is selectable (type 7), its SRC page shows the CFADE knob, the type reaches the DSP (TX frame word,
@@ -454,7 +454,7 @@ the same, but DN2's machines are FM engines, so new DN2 machines need the DSP vo
 ### Phase 3 results (wave 6, 2026-10-14, lane `b`): core.params and PLUCK end to end
 
 Built: `a1cf1df^:native/patchkit/src/params.rs` (3 unit tests, `a1cf1df^:native/patchkit/tests/params.rs` 5 integration tests), `[[param]]` and `fields` that
-name parameters in the manifest, `modules/core/params`, three port rule kinds in `tools/patchkit/port_resolve.py` (`cf_params_t1`,
+name parameters in the manifest, `modules/core/rows`, three port rule kinds in `tools/patchkit/port_resolve.py` (`cf_params_t1`,
 `cf_params_sites`: count and hash of 111 sites, plus a `cf_func` for the second table), `modules/machines/pluck` (machine,
 four parameters, the DSP row now registers `machines.pluck.type`), `tools/patchkit/pk_proof_pluck.py`, harness helpers
 (`Session.mirror`, `tx_word`, `turn_burst`, `turn_to`), two matrix cells.
@@ -479,11 +479,11 @@ Emulator only; nothing flashed; one agent.
 
 - **core.machines on DN2 1.12** (took about a day, not the assessed 3 to 4): `a1cf1df^:native/patchkit/src/machines/dn2.rs` is the
   Digitone part of the generator (the Digitakt-only parts are skipped on `dn2`; the Digitakt output is byte-identical to
-  before for `core/machines` + `test/xslice` + `test/machine-clone` on 1.16 and 1.17); 31 DN2 anchors by function hash
+  before for `core/rows` + `test/xslice` + `test/machine-clone` on 1.16 and 1.17); 31 DN2 anchors by function hash
   (`c4d86e4e:tools/patchkit/pk_machine_rules_dn2.py`, 1.11 and 1.12 resolve). The parameter-page layer needs no table growth for a clone: three
   per-type table functions get the type mapped to `clone_of` on entry, and the type reader (41 callers) returns the clone's
-  original except for the identity code. `test/dn2-clone` (type 5) passes `tools/patchkit/pk_proof_machines_dn2.py` (select, pages,
-  PCM bit-identical to FM TONE, parameters, save/load, load on stock, control, sequencer) and the harness smoke tour.
+  original except for the identity code. `test/dn2-clone` (type 5) passes the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`) and the harness smoke tour (select, pages,
+  PCM bit-identical to FM TONE, parameters, save/load, load on stock, control, sequencer).
   Manifest additions: `own_dsp` (the DSP is told the machine's own type), `devices` on `[[machine]]`; a `register` row may
   name `machines.<id>.type`.
 - **DN2 voice hook**: the Digitone II engine is a stage pipeline over 16 voice slots with a 32-float 48 kHz buffer per slot;
@@ -496,7 +496,7 @@ Emulator only; nothing flashed; one agent.
 - **PLUCK on DN2: not built** (**[C]** built later the same day, see "DN2 pages and PLUCK"). Needs the slot to track map and the parameter words (DECAY, PICK, BRIGHT, COLOR would use
   FM TONE's knobs through the clone's pages, labelled as FM TONE's), a note-on edge (a change of the slot's pitch or
   velocity word works for 16 notes, then fails for a repeated note), `pluck.s` rewritten for a 32-float buffer without
-  a voice record, and per-device `requires` in the manifest (core/machines only on the Digitone). Estimate 1 to 2 days,
+  a voice record, and per-device `requires` in the manifest (core/rows only on the Digitone). Estimate 1 to 2 days,
   confidence about 50 % for a string that retriggers reliably; payoff: the same module on a second device.
 - Open: hardware; own parameter pages for a DN2 machine (**[C]** built, see "DN2 pages and PLUCK"); DN2 1.11 not run.
 
@@ -509,7 +509,7 @@ was touched; new: `tools/coldfire/dn2_probe.py`, `tools/coldfire/dn2_pages.py`, 
 - **Own SYN pages for a DN2 machine** need no new builder hook: constant data plus shims at three existing sites. T1 has
   321 rows and the Digitakt's `cf_params_t1` / `cf_params_sites` rules resolve unchanged (56 refs + 55 bounds, 1.11 and
   1.12); the slot table (5 x 40, `0x42c65d18`) and the page table (`0x42433ad4`, rows `{count, begin}`, pages of 0x2c bytes
-  with nine parameter codes) are read by only three functions, which `core/machines` already shims for the clone map
+  with nine parameter codes) are read by only three functions, which `core/rows` already shims for the clone map
   (`cf.machines.typemap.0..2`). The page and draw callers (about 17 reader call sites) must see the own type; the generic
   eight-knob page is the draw function's default for any type but 0..3. Estimate 1 to 2 days, confidence 70 %.
 - **Voice slot to track:** slots are voices (16-voice polyphony, round robin); the map is the ColdFire table
@@ -528,8 +528,8 @@ was touched; new: `tools/coldfire/dn2_probe.py`, `tools/coldfire/dn2_pages.py`, 
 Details and evidence: findings 02 ("DN2 own parameter pages: built", "PLUCK on Digitone II") and 06 ("DN2 voice routine: PLUCK").
 Emulator only; nothing flashed; one agent; no change in `packages/patchkit` (no primitive was missing).
 
-- **Own pages**: `core/machines` gets a registry `pages` (a row is a page descriptor plus its machine and the sound slots of
-  its knobs) and the DN2 hooks `typemap.0/1/2` answer page count, descriptor and slot to code from it; `core/params` now has
+- **Own pages**: `core/rows` gets a registry `pages` (a row is a page descriptor plus its machine and the sound slots of
+  its knobs) and the DN2 hooks `typemap.0/1/2` answer page count, descriptor and slot to code from it; `core/rows` now has
   the Digitone II side (the same table copy, 56 references and 55 bounds, T2 shim). A machine with page rows is its own type for
   every caller of the type reader (the research's list of about 17 sites was incomplete: the defaults on selection call the reader
   too). `test/dn2-pages` + `tools/patchkit/pk_proof_pages_dn2.py` (quick about 1 min, full about 6 min): own names and titles on screen, the
@@ -546,7 +546,7 @@ Emulator only; nothing flashed; one agent; no change in `packages/patchkit` (no 
 
 ### Phase 3b: frameworks as modules (refactor, decided 2026-10-14)
 
-Problem: `core/machines` and `core/params` were built as Rust generators inside patchkit (`machines.rs`,
+Problem: `core/rows` and `core/rows` were built as Rust generators inside patchkit (`machines.rs`,
 `machines/dn2.rs`, `params.rs`: about 2,070 of 6,520 lines). They emit ColdFire words by hand, copy firmware
 tables and unroll code per added type. That breaks the layer rule ("patchkit is generic; frameworks are modules")
 and means every framework change is a Rust and wasm rebuild. Fix: give patchkit the generic primitives the
@@ -583,9 +583,9 @@ Primitives (patchkit, Rust, wasm parity; every one usable by any module):
 - **P6 Sites as anchors.** Run-time scans in patchkit (e.g. `params::scan` for bound immediates) become anchor
   rules resolved by `port_resolve` into the lockfile (`cf.params.bound.0..N`); patchkit only reads lockfiles.
 
-Frameworks after the refactor: `modules/core/machines/` (DT2 and DN2 asm: list/rank/group/dispatch/name/permit/
+Frameworks after the refactor: `modules/core/rows/` (DT2 and DN2 asm: list/rank/group/dispatch/name/permit/
 pertype/clone/typearg/persist hooks that look up `machines.rows` at run time for `type >= machines.first`, plus a
-P1 copy of the DSP selector table with appended words), `modules/core/params/` (P1 copies of the two parameter
+P1 copy of the DSP selector table with appended words), `modules/core/rows/` (P1 copies of the two parameter
 tables with appended rows, bound writes via P3, reader hooks), `modules/core/dsp-voice/` (registry `voices`).
 Content modules use `[[entry]]` only.
 
@@ -593,7 +593,7 @@ Content modules use `[[entry]]` only.
       generator path keeps working until 3b.3.
 - [x] 3b.2 Frameworks rewritten as modules against this spec; routines unit-tested on the ColdFire call harness with
       hand-built tables (lane b), then content modules migrated to `[[entry]]`. Done 2026-10-14 (lane `b`); results below.
-- [x] 3b.3 Integration: every proof passes on the module version (pk_proof_machines DT2 1.16/1.17, pk_proof_pluck
+- [x] 3b.3 Integration: every proof passes on the module version (the `core/services/machines:bind` target and the machine fixture suite (`core/runtime-fixture-tests`) on DT2, pk_proof_pluck
       DT2 1.16/1.17, DN2 machine and voice proofs, smoke matrix, wasm = CLI); then delete `machines.rs`,
       `machines/dn2.rs`, `params.rs` and the old manifest keys. Done 2026-10-14 (lane b `a1cf1df`, merged): all seven
       proofs PASS, the smoke matrix passes 13 of 13 cells (DT2 1.17 and 1.16, DN2 1.12), verify passes. patchkit
@@ -601,8 +601,8 @@ Content modules use `[[entry]]` only.
 
 ### Phase 3b.2 results (2026-10-14, lane `b`)
 
-Written: `modules/core/machines/` (`src/cf/dt2/machines.s`, `src/cf/dn2/machines.s`, manifest with registry `machines`, six
-`[[section]]` copies of stock tables, hook and bound-write ops), `modules/core/params/` (`src/cf/dt2/params.s`, registry
+Written: `modules/core/rows/` (`src/cf/dt2/machines.s`, `src/cf/dn2/machines.s`, manifest with registry `machines`, six
+`[[section]]` copies of stock tables, hook and bound-write ops), `modules/core/rows/` (`src/cf/dt2/params.s`, registry
 `params`, `pf_table` section, glob writes for the 56 references and 54 bounds), `modules/core/dsp-voice/` (registry
 `voices`, hook op, `_dv_table = voices.rows`); content modules (xslice, machine-clone, pluck, dn2-clone, sine-voice,
 dn2-sine) on `[[entry]]`. New anchors in `tools/patchkit/port_resolve.py`: rule kind `cf_ptr` (a table behind an address literal),
@@ -616,10 +616,10 @@ apply, every proof (3b.3).
 
 ### Stable machine type numbers and CLI requires (2026-10-14, lane `b`)
 
-Problem: `core/machines` numbered machines `first + k` in module order, and a project stores only the number (findings 02,
+Problem: `core/rows` numbered machines `first + k` in module order, and a project stores only the number (findings 02,
 "Persistence"): the same project could load as another machine after the module set changed. Built:
 
-- **Permanent numbers.** `modules/core/machines/types.toml` per device (`"<module id>:<entry id>" = n`, `last`). Generic
+- **Permanent numbers.** `modules/core/rows/types.toml` per device (`"<module id>:<entry id>" = n`, `last`). Generic
   registry keys in patchkit: `index_table = "types.toml"` and `[registry.gap]`; the registry then spans `first ..= highest
   selected number`, numbers nobody selected are gap rows (clone of type 0, `position = 0xffffffff`, hidden by the list builder
   and the rank pairs; a stored type that names one plays as type 0). New symbols `<reg>.entries`; plan.json lists `gaps`.
@@ -651,7 +651,7 @@ errors, multi-site writes, registry rows/symbols/strings, canonical order, entry
 hook on ColdFire and SHARC, non-boundary, re-encoded PC-relative instructions, device filters, explain, plan.json),
 `tests/patchkit/test_pk_prims.py` and `tests/fixtures/modules/registry-demo` (DT2 1.17, 1.16 anchor resolves too): boots to ready on the
 ColdFire core, the hooked stock setter `Kit::vfunc_12` is called three times and behaves as stock while the hook counts,
-the registry rows and the copied section read back, and `apps/web/tests/patchkit.test.mjs` (wasm = CLI, plan.json
+the registry rows and the copied section read back, and `apps/web/tests/patchkit.wasm.test.ts` (wasm = CLI, plan.json
 included). The old `[[machine]]`/`[[param]]`/`[[table]]`/`register` path is untouched; its tests still pass.
 
 Manifest syntax (all expressions are strings or integers; symbols are `[A-Za-z_.][A-Za-z0-9_.]*`):
@@ -702,7 +702,7 @@ Deviations and readings of the spec (simplest consistent choice):
   `<name>.0 .. <name>.N-1` (DT2 1.17: 56 references as 4-byte data anchors, 54 bounds as 7-byte code anchors, the
   numbers of the old scan). A `write` with `anchors = "PREFIX.*"` visits each in numeric order, `this` names the
   current one. `params::scan` and the `cf.params.sites` anchor stay until 3b.3 deletes the old path; lane b adds the
-  two rules to `modules/core/params` and drops the old one then.
+  two rules to `modules/core/rows` and drops the old one then.
 - **Plan:** new keys `registries`, `sections`, `hooks` (absent when empty, so old plans are byte-identical);
   registry/section/hook symbols appear in `symbols` as `module@version:name`.
 - `patchkit.wasm` grew from 638 KB to 1.05 MB (the ColdFire decoder tables now link in); still under the 2 MB check.
@@ -766,7 +766,7 @@ sources under out/broken/, never committed):
 
 | tool, broken input | result | the failing checks |
 |---|---|---|
-| machines dt2, core/machines persistence immediate left at the stock value | FAIL, 43 s | project reload brings type 7 back: 0 |
+| machines dt2, core/rows persistence immediate left at the stock value | FAIL, 43 s | project reload brings type 7 back: 0 |
 | pluck dt2, the same break | FAIL, 81 s | project reload brings type 7 back: 0 after 6.25 s |
 | pluck dt2, digikit/pluck lists DECAY and PICK in each other's descriptor fields | FAIL, 82 s | descriptor names, engine defaults (slot 26 and 27 exchanged), TX frame, and dq1/dq2 cannot set DECAY (encoder 2 moves the PICK slot) |
 
@@ -856,11 +856,11 @@ browser DSP audio (separate sharc-jit plan) when chosen.
 - ColdFire code outside the MAIN image runs in the native runtime (DDR and SRAM, decode cache evicted by CPU stores and
   by DMA ranges; fused loops, HLE and watch bits stay MAIN-only). Unit test with run-time-written and self-modified code;
   paired A/B on the DN2 image: ColdFire thread CPU 0.5221 vs 0.5204 s per audio second, PCM identical. Finding 07.
-- `core/machines` shims moved to `cf.expansion`: the cave holds the 56-byte loader only (was 372 to 452 B). The XSLICE
+- `core/rows` shims moved to `cf.expansion`: the cave holds the 56-byte loader only (was 372 to 452 B). The XSLICE
   and XClone goldens on 1.17 and 1.16 are unchanged. One pre-existing failure of the proof (XClone MOD destination
   frames), finding 02.
 - `underrun` event and `status.heartbeat.underrun_count` (finding 17).
-- DT2 1.16 in the matrix (stock, `digikit/master-gain` + `test/cf-demo`, `digikit/master-drive`, `core/machines` + `test/xslice`),
+- DT2 1.16 in the matrix (stock, `digikit/master-gain` + `test/cf-demo`, `digikit/master-drive`, `core/rows` + `test/xslice`),
   fresh ready inputs (`tools/emulator/ready.py dt2 --syx Digitakt_II_OS1.16.syx --out out/ready-pk-dt2-116 --force`), goldens
   recorded: 4 of 4 PASS (29 to 36 checks, 45 to 98 s per cell). This closes the pre-flash item 11 for the emulator side.
 
@@ -913,7 +913,7 @@ best mitigation available. Ranked by what a failure costs.
 | 8 | Float behaviour on silicon against the core: denormal flush, saturation mode, reciprocal seed (RECIPS, RSQRTS) in module code | Seven DN2 PCM pins and 61 oracles exact against the core; module code unit-run and PCM-proved in the emulator only | Prefer plain add, multiply and compare in module code; check a module's output against its emulator render by ear and by the harness PCM test before trusting a new operation |
 | 9 | Interrupts, DMA and ColdFire timing under real load (the DSPI frame cadence, SSI underruns, hot sample loading): the emulator is deterministic | Coupled runs and 35 s tours pass; 40-input stress in the harness | Hardware soak after the first success |
 | 10 | The MAIN OS image validator (`0x400d9e4c`) and the real flash writer were not run; flash cap 3 MiB and the HMAC trailer are checked by the emulated bootstrap | 0.2 [V] for the bootstrap; patched containers rebuild stock byte for byte | The harmless image first; the updater's own checks reject a bad container before it writes (the bootstrap runs from section 2, which patchkit never touches) |
-| 11 | Firmware version: the device runs 1.16; most proofs ran on 1.17 (and DN2 1.12). 1.16 has the same DSP section; its MAIN differs, `digikit/master-drive` now passes the 1.16 smoke cell, and 36 of 135 DT2 FX oracles differ on 1.17 | Port files for 1.16 exist; 1.16 PLAY in patterns 3 and 4 passes | Done in the emulator for `digikit/master-gain`, `digikit/master-drive`, `core/machines` + `test/xslice` on 1.16 (matrix cells, "Fidelity follow-ups"); flash the 1.16 port |
+| 11 | Firmware version: the device runs 1.16; most proofs ran on 1.17 (and DN2 1.12). 1.16 has the same DSP section; its MAIN differs, `digikit/master-drive` now passes the 1.16 smoke cell, and 36 of 135 DT2 FX oracles differ on 1.17 | Port files for 1.16 exist; 1.16 PLAY in patterns 3 and 4 passes | Done in the emulator for `digikit/master-gain`, `digikit/master-drive`, `core/rows` + `test/xslice` on 1.16 (matrix cells, "Fidelity follow-ups"); flash the 1.16 port |
 | 12 | DN2 patches cannot be tested on hardware at all (no device on the desk) | Emulator only | Say so on the gallery page: DN2 modules are emulator-tested only |
 | 13 | Saved projects and kits made on patched firmware read back on stock firmware (Phase 3 not done) | Not tested | Do not save over a stock project while testing; back up the card |
 | 14 | Analog level: a drive or gain module can raise the output above the converter's range | Q31 clip in the emulator, neutral default is bit-exact | Start at the neutral setting with the monitor volume low |

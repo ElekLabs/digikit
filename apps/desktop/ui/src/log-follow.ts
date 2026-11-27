@@ -1,19 +1,22 @@
 // Follows the runtime log of the emulator and of the device on the MIDI port chosen last, and puts what it finds in the workbench log.
 // One poll loop per origin, once a second while the drawer is open, every 5 s for the device while it is closed, none while the window is hidden (log-follow-core.ts has the rules). Both read through the shared sessions of
-// apps/web/src/transfer/target.ts, so their requests take their turn with the Transfer pane's.
+// packages/workbench-core/src/transfer/target.ts, so their requests take their turn with the Transfer pane's.
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { readFault, type DkSession, type LogConfig } from '@digi/dk-session';
+import { readFault, type CardLogState, type DkSession, type LogConfig } from '@digi/dk-session';
 import type { LogInput, Origin } from './log-core.ts';
 import { changeLevel, configOf, readLevels, type LevelChange, type LevelView } from './log-level-core.ts';
 import { LogFollower, POLL_MS, pace, type FollowSession, type OriginStatus } from './log-follow-core.ts';
-import { logInputs } from './log-state.ts';
+import type { LogNames } from '@digi/dk-session/log-names';
 
 /** The protocol session as the follower uses it. */
 export const followSession = (dk: DkSession): FollowSession => ({
   info: (quick) => dk.info(quick),
+  peek: (addr, len) => dk.peek(addr, len),
   logPage: (from, quick) => dk.logPage(from, quick),
   logConfig: (quick) => dk.logConfig(quick),
   setLogConfig: (level, modules, quick) => dk.setLogConfig(level, modules, quick),
+  cardLog: (quick) => dk.cardLog(quick),
+  setCardLog: (on, quick) => dk.setCardLog(on, quick),
   modules: () => dk.modules(),
   fault: () => readFault(dk),
 });
@@ -23,9 +26,14 @@ export interface FollowEnv {
   follow(): boolean;
   /** A firmware flash is running: the Firmware page has the MIDI port. */
   flashing(): boolean;
-  emulator: { running(): boolean; session(): Promise<FollowSession> };
-  device: { port(): string | undefined; session(): Promise<FollowSession>; present(): Promise<boolean> };
-  push?(inputs: LogInput[]): void;
+  emulator: { running(): boolean; session(): Promise<FollowSession>; makeNames?(): LogNames };
+  device: {
+    port(): string | undefined;
+    session(): Promise<FollowSession>;
+    present(): Promise<boolean>;
+    makeNames?(): LogNames;
+  };
+  push(inputs: LogInput[]): void;
   /** The window is on screen (default: yes). A hidden window asks nothing of the device. */
   shown?(): boolean;
   /** The Log drawer is open (default: yes). A closed drawer reads the device less often. */
@@ -46,6 +54,10 @@ export interface LogFollow {
   levels(origin: Origin): Promise<LevelView | null>;
   /** Set one level, then read LOGCFG again; the new state. The levels are in the runtime's RAM and start again at its next boot. */
   setLevel(origin: Origin, change: LevelChange): Promise<LevelView>;
+  /** The card log state each origin last reported (the follower reads it with every round); null: no card log, undefined: not read yet. */
+  cardlog(): Record<Origin, CardLogState | null | undefined>;
+  /** Switch the card log of the origin on or off; the new state. Throws when it does not answer. */
+  setCardLog(origin: Origin, on: boolean): Promise<CardLogState>;
 }
 
 /** Start following. Call it where an owner exists (a component): the loops end with it. */
@@ -60,10 +72,13 @@ export function createLogFollow(env: FollowEnv): LogFollow {
     emulator: undefined,
     device: undefined,
   });
+  const [cardlog, setCardlog] = createSignal<Record<Origin, CardLogState | null | undefined>>({
+    emulator: undefined,
+    device: undefined,
+  });
   const setCfg = (origin: Origin, cfg: LogConfig) => setConfig((all) => ({ ...all, [origin]: cfg }));
   const now = env.now ?? Date.now;
   const sleep = env.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const push = env.push ?? logInputs;
   const set = (origin: Origin, s: OriginStatus) =>
     setStatus((all) => (all[origin] === s ? all : { ...all, [origin]: s }));
   // a follower keeps where it was when Follow is turned off and on again: the log is not read twice
@@ -90,13 +105,15 @@ export function createLogFollow(env: FollowEnv): LogFollow {
           origin,
           session: source.session,
           present: 'present' in source ? source.present : undefined,
+          names: source.makeNames?.(),
           now,
           out: {
-            push,
+            push: env.push,
             status: (s) => set(origin, s),
             modules: (names) => setModules((all) => ({ ...all, [origin]: names })),
             config: (cfg) => setCfg(origin, cfg),
             logcfg: (on) => setLogcfg((all) => ({ ...all, [origin]: on })),
+            cardlog: (state) => setCardlog((all) => ({ ...all, [origin]: state })),
           },
         });
         followers.set(`${origin}:${k}`, follower);
@@ -141,7 +158,15 @@ export function createLogFollow(env: FollowEnv): LogFollow {
     return view;
   };
 
+  const setCardLog = async (origin: Origin, on: boolean) => {
+    const s = await sourceOf(origin);
+    if (!s.setCardLog) throw new Error('This target has no card log.');
+    const state = await s.setCardLog(on);
+    setCardlog((all) => ({ ...all, [origin]: state }));
+    return state;
+  };
+
   follow('emulator', () => (env.emulator.running() ? 'emulator' : undefined), env.emulator);
   follow('device', env.device.port, env.device);
-  return { status, modules, config, logcfg, levels, setLevel };
+  return { status, modules, config, logcfg, levels, setLevel, cardlog, setCardLog };
 }

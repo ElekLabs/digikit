@@ -13,22 +13,64 @@ export const DSP_HEADER = 64;
 export const MAX_RECORDS = 32;
 export const MAX_RELOCS = 4096;
 export const MAX_IMPORTS = 32;
-export const MAX_CF_IMPORTS = 64;
+export const MAX_CF_IMPORTS = 128;
 export const MAX_STATE_VOICES = 64;
 export const MAX_STATE_BYTES = 16777216;
 export const GRANULE = 64;
 export const DSP_SLACK = 8;
 export const ARENA_HDR = 16;
-export const SLOTS = 8;
+export const COLLECT_BYTES = 1618;
+export const TABLE_MAGIC = 1145787458;
+export const TABLE_VERSION = 3;
+export const PROVIDER_MAX = 8;
+export const INSTALL_SITES = 48;
+export const INSTALL_PATCHES = 16;
+export const SERVICE_PATCHES_MAX = 8;
+export const SLOTS_MAX = 16;
+export const INFO_MAX = 64;
+export const DSP_SLOT_WORDS = 16;
 export const MAX_VOICES = 8;
 export const MAX_FX = 4;
+export const H_ROLE = 56;
+
+/** The services the runtime image provides itself: the names of `[handle] services` that no `.dks` provider supplies (a `[[service]]` without `rust` and with no static row). A module's NEEDS may name them; every other name needs a `.dks`. */
+export const RUNTIME_SERVICE_NAMES = ['runtime', 'ui', 'input', 'usb_bulk', 'dsp_link', 'sdhc_large'];
+
+/** The record kinds of a `.dkm` (`[records.kinds]`). */
+export const RECORD_KIND = {
+  PARAM: 1,
+  MACHINE: 2,
+  PAGE: 3,
+  EFFECT: 4,
+  ACTION: 5,
+  NATIVE_PAGE: 6,
+  NATIVE_PAGE_V2: 7,
+  LFO_SHAPE: 8,
+  SHORTCUT: 9,
+} as const;
+
+/** The resources of a module's `uses` (`[records.resources]`). */
+export const RESOURCE = {
+  MACHINE_ROWS: 1,
+  PARAM_ROWS: 2,
+  PAGE_ROWS: 3,
+  RECORD_BYTES: 4,
+  DSP_COST_VOICE: 5,
+  DSP_COST_FX: 6,
+} as const;
 
 export const CMD = {
+  MODULE_UI: 0x00,
   INFO: 0x01,
   LIST: 0x02,
   MODULES: 0x03,
   CAPACITY: 0x04,
   LOADS: 0x05,
+  RELOAD: 0x06,
+  RELOAD_STATE: 0x07,
+  LOAD: 0x08,
+  UNLOAD: 0x09,
+  RETRY: 0x0b,
   BEGIN: 0x10,
   DATA: 0x11,
   END: 0x12,
@@ -47,8 +89,10 @@ export const CMD = {
 
 /** The commands of run-time service modules (`[protocol.service]`). */
 export const SERVICE_CMD = {
-  USB_FAST_TAKEOVER: 0x1e,
-  USB_FAST_RELEASE: 0x1f,
+  SETUP: 0x0a,
+  PROFILE_DSP: 0x1b,
+  PROFILE_STATE: 0x1e,
+  PROFILE_READ: 0x1f,
   LOG: 0x20,
   PEEK: 0x21,
   LOGCFG: 0x22,
@@ -72,7 +116,11 @@ export const STATUS: [number, string, string][] = [
   [-58, 'E_READ', "the firmware's block read failed"],
   [-59, 'E_NOFILE', 'that path is not in the store'],
   [-60, 'E_PROTO', 'unknown protocol version, command or option'],
-  [-61, 'E_NOSTORE', 'the store header is unreadable (CLEAR still works)'],
+  [
+    -61,
+    'E_NOSTORE',
+    'the device has no usable store: the card is too small for it (every store command, CLEAR too, is refused), or the store header is unreadable or the area holds other data (CLEAR still works then)',
+  ],
   [-62, 'E_INUSE', "the card's store area is not ours and not blank"],
   [-63, 'E_PEEK', 'PEEK range not allowed, or length 0 or over 512'],
   [-64, 'E_CMD_RANGE', 'command range not reserved, taken, or empty'],
@@ -83,6 +131,8 @@ export const STATUS: [number, string, string][] = [
   [-70, 'E_SET_OFF', 'settings store off: an older store reaches its area, or no store'],
   [-71, 'E_FILE_IN_USE', 'a sample is still loading from that file: wait and try again'],
   [-72, 'E_AGAIN', 'usb_bulk_send: the engine refused and nothing is in flight; wait for the wake, retry'],
+  [-88, 'E_MODULE_UI_CONFLICT', 'the module setting revision changed'],
+  [-89, 'E_MODULE_UI_SCOPE', 'project settings are active; change this setting on the device'],
 ];
 
 /** [code, name, text] */
@@ -93,19 +143,18 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-4, 'E_SHA', 'store file hash or .dkm sha256 does not match'],
   [-5, 'E_FORMAT', 'bad magic, version, bounds or alignment of the .dkm'],
   [-6, 'E_RUNTIME', 'the module needs a newer runtime'],
-  [-7, 'E_IMPORT', "an import name is not in the runtime's table"],
+  [-7, 'E_IMPORT', 'an import is unknown, or a provider the module needs is absent'],
   [-8, 'E_NOMEM', 'arena full'],
   [-9, 'E_INIT', 'init returned non-zero'],
   [-10, 'E_LOADED', 'a module of that name is loaded'],
-  [-11, 'E_SLOT', 'a slot it binds is taken'],
   [-12, 'E_BUSY', 'a task is still inside the module, or the store is in use (try again)'],
   [-13, 'E_TOO_BIG', 'larger than the staging buffer'],
   [-14, 'E_TABLE_FULL', 'no free module record'],
   [-15, 'E_LOST', 'the sample backing was lost and the reload failed'],
   [-16, 'E_POOL', 'the sample pool is full'],
   [-17, 'E_CHANGED', 'the sample file differs from the selection snapshot'],
-  [-18, 'E_EXISTS', 'the file exists already (file_create does not overwrite)'],
-  [-19, 'E_CONTEXT', 'the call is not allowed in this context (file_* run in an I/O step)'],
+  [-18, 'E_EXISTS', 'the file exists already (dk_files_create does not overwrite)'],
+  [-19, 'E_CONTEXT', 'the call is not allowed in this context (dk_files_* writes run in an I/O step)'],
   [-20, 'E_NO_REGISTRY', 'register records, but the image has no registry'],
   [-21, 'E_REG_DEVICE', 'the records are for another device'],
   [-22, 'E_TYPE_RANGE', 'machine type outside the range, or bad clone_of'],
@@ -113,6 +162,9 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-24, 'E_PARAM_FULL', 'no free reserved parameter row'],
   [-25, 'E_PAGE_FULL', 'no free reserved page row (Digitone II)'],
   [-26, 'E_TYPE_IN_USE', 'reserved (hot reload is archived); never returned'],
+  [-27, 'E_DECL_ID', 'a builder call names a machine or effect id that the keys table of the header lacks'],
+  [-28, 'E_DECL_USES', 'init declared more machine, param or page rows than the [uses] counts of the header say'],
+  [-29, 'E_FX_ID_DUP', 'reserved (the planner refuses a repeated effect id with E_PLAN_KEY); never returned'],
   [-30, 'E_NO_DSP', 'DSP code in the file, no DSP loader in the image'],
   [-31, 'E_DSP_FORMAT', 'the DSP section is malformed'],
   [-32, 'E_DSP_IMPORT', 'a DSP symbol is not exported by the image'],
@@ -126,12 +178,62 @@ export const LOAD_STATUS: [number, string, string][] = [
   [-42, 'E_SEL_WRITE', "the firmware's block write failed"],
   [-43, 'E_CARD_BUSY', 'a card transfer is in flight'],
   [-44, 'E_SAFE_MODE', 'this boot is in safe mode: no module was loaded'],
-  [-45, 'E_BOOT_ONLY', 'the module set is fixed after the boot hook'],
+  [
+    -45,
+    'E_BOOT_ONLY',
+    'the module set is fixed after the boot hook: a service that must start at boot cannot load now, restart the device to load it (a reload of a loaded module is the only later load)',
+  ],
   [-46, 'E_RANGE', 'a card write outside the store range'],
   [-47, 'E_CARD_RO', "the card's store area is not ours and not blank"],
-  [-48, 'E_CONTRACT', 'the module was built for another SDK contract'],
+  [
+    -48,
+    'E_CONTRACT',
+    'the module needs another runtime version than this one (another major or minor, or a higher patch)',
+  ],
   [-49, 'E_TABLE', "the runtime's tables failed their check"],
   [-73, 'E_MISSING', 'the service is not in the image (the module that provides it is not loaded)'],
+  [-74, 'E_DECL_FULL', 'init made more builder calls than the record limit allows'],
+  [-75, 'E_PLAN_KIND', 'the boot plan refused the module: a record kind of its header table has no owning service'],
+  [-76, 'E_PLAN_OWNER', 'the boot plan refused the module: another module owns the kind, slot or hook site it takes'],
+  [-77, 'E_PLAN_KEY', 'the boot plan refused the module: another module of the selection has the same key for a kind'],
+  [
+    -78,
+    'E_PLAN_FIT',
+    'the boot plan refused the module: its uses do not fit what the earlier modules of the selection left',
+  ],
+  [-79, 'E_DECL_KIND', 'a service declared a record kind that the header table does not carry, or with another length'],
+  [
+    -81,
+    'E_SVC_ABI',
+    "a service file was built for another runtime ABI (its header word H_SVC_ABI differs from the runtime's fingerprint)",
+  ],
+  [
+    -82,
+    'E_HOOK_STOCK',
+    'a hook site of a service does not hold the stock bytes the bind recorded (another firmware, or a patched site): the service is refused before its init',
+  ],
+  [
+    -83,
+    'E_RELOAD_PLAYING',
+    "reload refused: the sequencer plays or is paused (or the firmware's transport state cannot be read)",
+  ],
+  [-84, 'E_RELOAD_MENUS', 'reload refused: the module built menus of its own'],
+  [-85, 'E_RELOAD_ROUTED', "reload refused: a service cannot give back the module's state now"],
+  [-86, 'E_RELOAD_KEYS', 'reload refused: the new file lacks a key of the file it replaces'],
+  [-87, 'E_RELOAD_RETAINED', 'reload refused: the DSP loader holds a module it could not release; restart the device'],
+];
+
+/** The state of a module of the boot selection (LOADS v2): [code, name, text] */
+export const LOAD_STATE: [number, string, string][] = [
+  [0, 'SELECTED', 'in the selection, not planned yet'],
+  [1, 'PLANNED', 'the boot plan accepted it; it has not started'],
+  [2, 'REFUSED', 'the boot plan refused it before any of its code ran; the result code says why'],
+  [3, 'INIT', 'its code is loading and `init` is running'],
+  [4, 'DSP_LOADING', 'its ColdFire part is live and its DSP part is still going'],
+  [5, 'ACTIVE', 'loaded; its DSP part, if any, is in place'],
+  [6, 'FAILED', 'loading failed after the plan accepted it; the result code says why'],
+  [7, 'SKIPPED', 'not loaded on purpose: this boot is in safe mode'],
+  [8, 'UNLOADED', 'taken down at run time by an unload (it can be loaded again)'],
 ];
 
 export const CAP = {
@@ -151,20 +253,29 @@ export const CAP = {
   RENAME: 13,
   READBACK: 14,
   LOADS: 15,
+  SVC_ABI: 16,
+  RELOAD: 17,
+  FW_ID: 18,
+  LIVE: 19,
+  MODULE_UI: 20,
+  MODULE_SECTIONS: 21,
 } as const;
 
 /** The command numbers a module may register: [first, last]. */
 export const RANGES = {
   debug: [0x20, 0x22],
+  debug_profile: [0x1e, 0x1f],
+  debug_profile_dsp: [0x1b, 0x1b],
+  debug_setup: [0x0a, 0x0a],
   entry_demo_test: [0x1c, 0x1d],
   file_write_test: [0x24, 0x27],
   file_write_test_b: [0x28, 0x2b],
   probe: [0x32, 0x35],
   remote: [0x38, 0x3d],
   remote_state: [0x3e, 0x3f],
+  ui_views_test: [0x0f, 0x0f],
   usb_echo_test: [0x2c, 0x2f],
   usb_fast: [0x36, 0x37],
-  usb_fast_takeover: [0x1e, 0x1f],
 } as const;
 
 export const CAPACITY_KINDS = {
@@ -182,7 +293,27 @@ export const CAPACITY_KINDS = {
   STORE: 12,
   SETTINGS: 13,
   SEND_SLOTS: 14,
+  DSP_COST: 15,
+  DSP_VOICES: 16,
+  PACKAGE: 17,
 } as const;
+
+/** What a person calls a capacity kind a fit looks at, by kind number. */
+export const CAPACITY_LABELS: Record<number, string> = {
+  1: 'module records',
+  2: 'selection paths',
+  3: 'CPU memory',
+  4: 'file',
+  5: 'DSP memory',
+  6: 'machine rows',
+  7: 'voice rows',
+  8: 'parameter rows',
+  9: 'page rows',
+  10: 'effect slots',
+  15: 'DSP load',
+  16: 'DSP voices',
+  17: 'system package',
+};
 
 /** The `kind` of a LOG event. */
 export const LOG_KIND = {
@@ -229,12 +360,32 @@ export const LOG_KIND = {
   INPUT_TAKEN: 41,
   PARAM_CHANGE: 42,
   MOD_NEEDS: 43,
+  MODULE_COMMIT: 44,
+  MODULE_LATCH: 45,
+  DSP_LINK: 46,
+  FW_READY: 47,
+  DSP_SWEEP: 48,
+  SETUP_DONE: 49,
+  SHORTCUT_CLASH: 52,
+  SHORTCUT_INACTIVE: 53,
+  VIEW_OPENED: 54,
+  VIEW_CLOSED: 55,
+  TEXT_INPUT_OPENED: 56,
+  TEXT_INPUT_DONE: 57,
+  CARD_GUARD_REFUSED: 58,
+  PROJECT_LOADED: 59,
+  PROJECT_SAVED: 60,
+  PROJECT_IGNORED: 61,
+  PROJECT_DEFERRED: 62,
+  PROJECT_MODULE: 63,
+  VIEW_CHANGED: 64,
+  VALUE_CHANGED: 65,
 } as const;
 
 /** The kind of a LOG event by id: its name and the names of its five arguments ("-": not used). */
 export const LOG_KINDS: Record<number, [string, [string, string, string, string, string]]> = {
   1: ['BOOT_START', ['runtime', 'device', 'stable_blocks', 'record_seq', 'boot_counter']],
-  2: ['CARD_CHECK', ['state', 'first_nonblank', 'hash', 'read_errors', '-']],
+  2: ['CARD_CHECK', ['state', 'first_nonblank', 'hash', 'read_errors', 'sectors']],
   3: ['SAFE', ['reason', 'boot_counter', 'record_seq', '-', '-']],
   4: ['BOOT_RECORD', ['seq', 'copy', 'boot_counter', 'selected', 'flags']],
   5: ['MOD_LOAD', ['index', 'result', 'name0', 'name1', 'name2']],
@@ -253,8 +404,8 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   18: ['RAM_KEEP', ['kept', 'generation', '-', '-', '-']],
   19: ['CRASH_DETAIL', ['-', '-', '-', '-', '-']],
   20: ['DSP_ABSENT', ['-', '-', '-', '-', '-']],
-  21: ['MOD_LIST', ['index', 'slots', 'name0', 'name1', 'name2']],
-  22: ['CRASH_MOD', ['module', 'entered_stable', 'name0', 'name1', 'name2']],
+  21: ['MOD_LIST', ['index', 'tick', 'name0', 'name1', 'name2']],
+  22: ['CRASH_MOD', ['module', 'phase_stable', 'name0', 'name1', 'name2']],
   23: ['CRASH_REG', ['first', 'r0', 'r1', 'r2', 'r3']],
   24: ['CRASH_STACK', ['first', 'w0', 'w1', 'w2', 'w3']],
   25: ['CRASH_TAIL', ['a', 'b', 'c', 'd', 'e']],
@@ -276,6 +427,26 @@ export const LOG_KINDS: Record<number, [string, [string, string, string, string,
   41: ['INPUT_TAKEN', ['what', 'control', 'delta', '-', '-']],
   42: ['PARAM_CHANGE', ['track', 'index', 'old', 'new', '-']],
   43: ['MOD_NEEDS', ['index', 'name0', 'name1', 'name2', '-']],
+  44: ['MODULE_COMMIT', ['index', 'rows', 'records_addr', 'records_size', 'name_hash']],
+  45: ['MODULE_LATCH', ['index', 'machine', 'latched', '-', '-']],
+  46: ['DSP_LINK', ['what', 'a', 'b', 'c', 'd']],
+  47: ['FW_READY', ['blocks', '-', '-', '-', '-']],
+  48: ['DSP_SWEEP', ['sweep', 'generation', 'blocks', '-', '-']],
+  49: ['SETUP_DONE', ['op', 'track', 'type', 'seq', 'status']],
+  52: ['SHORTCUT_CLASH', ['module', 'owner', 'key0', 'key1', '-']],
+  53: ['SHORTCUT_INACTIVE', ['module', 'key0', 'key1', '-', '-']],
+  54: ['VIEW_OPENED', ['owner', 'flags', 'slot', '-', '-']],
+  55: ['VIEW_CLOSED', ['owner', 'slot', '-', '-', '-']],
+  56: ['TEXT_INPUT_OPENED', ['owner', 'max_len', '-', '-', '-']],
+  57: ['TEXT_INPUT_DONE', ['owner', '-', '-', '-', '-']],
+  58: ['CARD_GUARD_REFUSED', ['sector', 'sectors', 'class_kind', 'refused_writes', 'refused_erases']],
+  59: ['PROJECT_LOADED', ['slot', 'bytes', 'modules', 'counter', '-']],
+  60: ['PROJECT_SAVED', ['slot', 'bytes', 'counter', 'result', '-']],
+  61: ['PROJECT_IGNORED', ['slot', 'reason', 'status', '-', '-']],
+  62: ['PROJECT_DEFERRED', ['slot', 'status', 'seconds', '-', '-']],
+  63: ['PROJECT_MODULE', ['slot', 'what', 'status', 'index', 'id_hash']],
+  64: ['VIEW_CHANGED', ['old_view', 'view', 'old_class', 'class', 'generation']],
+  65: ['VALUE_CHANGED', ['scope', 'key', 'old', 'new', 'generation']],
 };
 
 /** `MACHINE_FAULT` argument 1, low byte: what the DSP guard found. */
@@ -284,9 +455,10 @@ export const GUARD_KINDS: Record<number, string> = {
   2: 'overlevel',
 };
 
-/** The `flags` word of a LOG event: the error bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */
+/** The `flags` word of a LOG event: the error bit, the keep bit, and the level and the source (module record index + 1, 0 = the runtime) as shift and mask. */
 export const LOG_FLAGS = {
   ERROR: 1,
+  KEEP: 16,
   LEVEL_SHIFT: 1,
   LEVEL_MASK: 7,
   SOURCE_SHIFT: 8,
@@ -295,3 +467,9 @@ export const LOG_FLAGS = {
 
 /** The level names, by number. */
 export const LOG_LEVELS = ['error', 'warn', 'info', 'debug', 'trace'] as const;
+
+/** The service tick phases of the profiling spans (owner `0x100 | p`), by number. */
+export const SPAN_PHASES = ['early', 'late', 'last'] as const;
+
+/** The poll slots of the profiling spans (owner `0x200 | i`). */
+export const SPAN_POLLS = 4;

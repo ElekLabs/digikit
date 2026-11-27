@@ -11,21 +11,31 @@ import {
   moduleOf,
   runtimeEvent,
   sameFault,
+  type CardLogState,
   type DkLogEvent,
   type Fault,
   type LogConfig,
+  LogCursor,
 } from '@digi/dk-session';
 import { CAP, LOG_KIND, LOG_LEVELS } from '@digi/dk-session/gen_proto';
 import type { LogInput, Origin } from './log-core.ts';
+import type { LogNames } from '@digi/dk-session/log-names';
 import { hasLogcfg } from './log-level-core.ts';
 
 /** What the follower needs of a protocol session (a `DkSession` with `followSession`, or a fake). */
 export interface FollowSession {
-  info(quick?: boolean): Promise<{ caps: number | null }>;
+  /** INFO: the capabilities, and the port name and image id the names need. */
+  info(quick?: boolean): Promise<{ caps: number | null; image_id?: string | null; port?: string }>;
+  /** PEEK of the debug module (`DkSession.peek`): the load table for the names. */
+  peek?(addr: number, len: number): Promise<Uint8Array>;
   logPage(from: number, quick?: boolean): Promise<[number, number, DkLogEvent[]]>;
   logConfig(quick?: boolean): Promise<LogConfig>;
   /** LOGCFG set (the Level menu of the Log drawer). */
   setLogConfig(level: number, modules: number[], quick?: boolean): Promise<LogConfig>;
+  /** LOGCFG op 2: the card log state, or null when the debug module has no card log. */
+  cardLog?(quick?: boolean): Promise<CardLogState | null>;
+  /** LOGCFG op 3 (the Card log button of the Log drawer). */
+  setCardLog?(on: boolean, quick?: boolean): Promise<CardLogState>;
   /** The loaded modules; `index` is the module record index. */
   modules(): Promise<{ index: number; name: string }[]>;
   /** The fault record the runtime keeps on the card (`dk/fault`), or null. */
@@ -54,6 +64,8 @@ export interface FollowOut {
   config?(config: LogConfig): void;
   /** Whether the origin's INFO has the LOGCFG capability (the Level menu works on it). */
   logcfg?(supported: boolean): void;
+  /** The card log state read with every round; null when the debug module has no card log. */
+  cardlog?(state: CardLogState | null): void;
 }
 
 export interface FollowOptions {
@@ -63,6 +75,8 @@ export interface FollowOptions {
   present?(): Promise<boolean>;
   now(): number;
   out: FollowOut;
+  /** Names for the addresses of crashes and faults, read through PEEK of the debug module: the same path for the emulator and a device. */
+  names?: LogNames;
 }
 
 /** No answer for this long: the device may be frozen. */
@@ -89,6 +103,9 @@ export function pace(
 /** The events of the current boot that are kept for the detail of a fault. */
 const KEEP = 1100;
 
+/** The events whose text has an address to name. */
+const NAMED_KINDS: ReadonlySet<number> = new Set([LOG_KIND.CRASH_FOUND, LOG_KIND.FAULT_FOUND]);
+
 const isCancelled = (e: unknown): boolean => (e as { kind?: string } | null)?.kind === 'cancelled';
 const hasLog = (caps: number | null): boolean => caps !== null && ((caps >>> CAP.LOG) & 1) === 1;
 /** A runtime answers (INFO carries capabilities, so it is a digikit runtime of this protocol), whether or not the debug module is loaded. */
@@ -97,7 +114,8 @@ const hasRuntime = (caps: number | null): boolean => caps !== null && ((caps >>>
 export class LogFollower {
   /** Whether the follower waits for a firmware flash to end. */
   paused = false;
-  private next = 0;
+  private page: FollowSession | null = null;
+  private cursor = new LogCursor({ logPage: (from) => this.page!.logPage(from, true) });
   private seenNewest = 0;
   private names = new Map<number, string>();
   private boot: DkLogEvent[] = [];
@@ -108,11 +126,16 @@ export class LogFollower {
   private faultDue = false;
   private configDue = false;
   private modulesDue = false;
+  /** The debug module has no card log (or no LOGCFG): not asked again until the next start. */
+  private noCardLog = false;
   private lastConfig = '';
   private lastFault: Fault | null = null;
   /** The runtime answers but has no debug module: only the fault record is read. */
   private noDebug = false;
   private listed = '';
+  /** The maps and the load table are read again before the next entry that names an address: at the start, and when the module list changes. */
+  private namesDue = true;
+  private lastNamesNote = '';
 
   constructor(private o: FollowOptions) {
     this.lastAnswer = o.now();
@@ -142,6 +165,7 @@ export class LogFollower {
   /** The flash is over: the device restarts, so its first answers may take a while. */
   resume(): void {
     this.paused = false;
+    this.namesDue = true;
     this.started = false;
     this.lastAnswer = this.o.now();
   }
@@ -175,6 +199,8 @@ export class LogFollower {
     }
     this.configDue = true;
     this.modulesDue = true;
+    this.noCardLog = !hasLogcfg(info.caps);
+    if (this.noCardLog) this.o.out.cardlog?.(null);
     return true;
   }
 
@@ -191,6 +217,7 @@ export class LogFollower {
     if (isCancelled(e)) return POLL_MS;
     if (this.o.present && !(await this.o.present().catch(() => true))) {
       this.started = false;
+      this.namesDue = true;
       this.lastAnswer = this.o.now();
       this.o.out.status('absent');
       return FROZEN_MS;
@@ -205,34 +232,37 @@ export class LogFollower {
 
   /** Read what the origin has from `next` on; the rules of `Follower.poll`. */
   private async poll(s: FollowSession): Promise<void> {
+    this.page = s;
+    // The cursor anchors on the last event it returned: it finds a restart (also when the new log is as long as the old position) and a gap.
+    const { events, newBoot, lost } = await this.cursor.read();
     const rows: LogInput[] = [];
-    try {
-      for (;;) {
-        const [oldest, newest, events] = await s.logPage(this.next, true);
-        if (newest && newest < this.seenNewest) {
-          this.o.out.push(rows.splice(0));
-          this.say(`the ${this.o.origin} restarted: the log starts again (was at ${this.seenNewest}, now ${newest})`);
-          this.next = 0;
-          this.seenNewest = 0;
-          this.boot = [];
-          this.faultDue = this.configDue = this.modulesDue = true;
-          continue;
-        }
-        if (events.length === 0) break;
-        if (events[0]!.seq > this.next && this.next)
-          rows.push(this.note(`${events[0]!.seq - this.next} events lost (the ring held from ${oldest})`));
-        for (const ev of events) this.take(ev, rows);
-        this.next = events[events.length - 1]!.seq + 1;
-        this.seenNewest = Math.max(this.seenNewest, newest);
-        if (this.next > newest) break;
-      }
-    } finally {
-      // rows read before an error are still shown, and not read again
-      if (rows.length) this.o.out.push(rows.splice(0));
+    if (newBoot) {
+      const now = events.at(-1)?.seq ?? 0;
+      this.say(`the ${this.o.origin} restarted: the log starts again (was at ${this.seenNewest}, now ${now})`);
+      this.seenNewest = 0;
+      this.boot = [];
+      this.faultDue = this.configDue = this.modulesDue = this.namesDue = true;
+    }
+    if (events.length > 0) {
+      if (events.some((e) => NAMED_KINDS.has(e.kind))) await this.refreshNames(s);
+      if (lost > 0) rows.push(this.note(`${lost} events lost (the ring held from ${events[0]!.seq})`));
+      for (const ev of events) this.take(ev, rows);
+      this.seenNewest = Math.max(this.seenNewest, events[events.length - 1]!.seq);
+      this.o.out.push(rows);
     }
     if (this.modulesDue) await this.readModules(s);
     if (this.configDue) await this.readConfig(s);
     if (this.faultDue) await this.readFault(s);
+    if (!this.noCardLog) await this.readCardLog(s);
+  }
+
+  /** With every round: the write count and the age of the last write change while the log runs. */
+  private async readCardLog(s: FollowSession): Promise<void> {
+    if (!s.cardLog) return;
+    const state = await this.aux(() => s.cardLog!(true));
+    if (state === undefined) return;
+    this.noCardLog = state === null;
+    this.o.out.cardlog?.(state);
   }
 
   private note(text: string): LogInput {
@@ -251,10 +281,32 @@ export class LogFollower {
     rows.push({
       source: this.o.origin,
       level: d.error ? 'error' : 'info',
-      text: eventText(d, this.names),
+      text: eventText(d, this.names, this.o.names?.resolve()),
       detail: eventDetail(d),
-      rt: { origin: this.o.origin, module: moduleOf(d.source, this.names), event: d, line: eventLine(d, this.names) },
+      rt: {
+        origin: this.o.origin,
+        module: moduleOf(d.source, this.names),
+        event: d,
+        line: eventLine(d, this.names, this.o.names?.resolve()),
+      },
     });
+  }
+
+  /** Read the maps and the load table when they are due. The read is made for a crash or a fault only: it asks the controller to patch the image once. */
+  private async refreshNames(s: FollowSession): Promise<void> {
+    const names = this.o.names;
+    if (!names || (!this.namesDue && !names.needsRefresh?.())) return;
+    this.namesDue = false;
+    let why: string | undefined;
+    try {
+      await names.refresh(s);
+      why = names.unavailable();
+    } catch (e) {
+      if (isCancelled(e)) throw e;
+      why = `the load table could not be read (${e instanceof Error ? e.message : String(e)})`;
+    }
+    if (why && why !== this.lastNamesNote) this.say(`${this.o.origin}: names unavailable: ${why}`);
+    this.lastNamesNote = why ?? '';
   }
 
   /** Keep the call from stopping the round: a runtime without the command is a runtime without it. */
@@ -274,6 +326,8 @@ export class LogFollower {
     const names = [...this.names].sort(([a], [b]) => a - b).map(([, name]) => name);
     if (names.join('\n') === this.listed) return;
     this.listed = names.join('\n');
+    this.namesDue = true; // the modules sit at other addresses now
+    this.noCardLog = false; // a debug module loaded later may have the card log
     this.o.out.modules(names);
   }
 
@@ -293,6 +347,7 @@ export class LogFollower {
     const f = await this.aux(() => s.fault());
     if (!f || sameFault(f, this.lastFault)) return;
     this.lastFault = f;
-    this.say(`fault: ${faultSummary(f)}`, 'error', faultDetail(f, this.boot, this.names));
+    await this.refreshNames(s);
+    this.say(`fault: ${faultSummary(f)}`, 'error', faultDetail(f, this.boot, this.names, this.o.names?.resolve()));
   }
 }

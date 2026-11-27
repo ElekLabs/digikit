@@ -1,0 +1,131 @@
+{
+ "about": "Test vectors of the project file .dkp (docs/design/digikit-project.md section 4): dkrt_svc_project::dkp reads this file. valid: a file as hex bytes with its header fields, its entries [owner, key, value hex] in order and its module list [id, hash]; the decoder must read them and the encoder (reset, set_modules, put in order, seal with the counter) must give the same bytes unless `reencode` is false (a tag the encoder never writes). invalid: a file that the checker refuses with `why` (format, device, version). The device id is the fake 0x1234.",
+ "device": 4660,
+ "area_bytes": 16384,
+ "valid": [
+  {
+   "name": "empty",
+   "hex": "444b504a000112340c074d5920534f4e4700000000000000000012345678000000010000002a62444c64",
+   "device": 4660,
+   "slot": 12,
+   "counter": 1,
+   "stamp": 305419896,
+   "used": 42,
+   "entries": [],
+   "modules": [],
+   "reencode": true
+  },
+  {
+   "name": "one_owner",
+   "hex": "444b504a000112340c074d5920534f4e4700000000000000000012345678000000010000004d76cbc9e80200200a746573742f6f776e65720f746573742f6f776e65722f706f6f6c0003010203",
+   "device": 4660,
+   "slot": 12,
+   "counter": 1,
+   "stamp": 305419896,
+   "used": 77,
+   "entries": [
+    [
+     "test/owner",
+     "test/owner/pool",
+     "010203"
+    ]
+   ],
+   "modules": [],
+   "reencode": true
+  },
+  {
+   "name": "modules_two_owners_and_an_unknown_tag",
+   "hex": "444b504a00011234000000000000000000000000000000000000000000000000000700000098c162e91001001e0a746573742f6d6f642d61deadbeef0a746573742f6d6f642d620000000102002f0a746573742f6f776e65720f746573742f6f776e65722f706f6f6c00036162630c746573742f6f776e65722f78000009000666757475726502000f03612f6205612f622f6b0003000000",
+   "device": 4660,
+   "slot": 0,
+   "counter": 7,
+   "stamp": 0,
+   "used": 152,
+   "entries": [
+    [
+     "test/owner",
+     "test/owner/pool",
+     "616263"
+    ],
+    [
+     "test/owner",
+     "test/owner/x",
+     ""
+    ],
+    [
+     "a/b",
+     "a/b/k",
+     "000000"
+    ]
+   ],
+   "modules": [
+    [
+     "test/mod-a",
+     3735928559
+    ],
+    [
+     "test/mod-b",
+     1
+    ]
+   ],
+   "reencode": false
+  }
+ ],
+ "invalid": [
+  {
+   "name": "crc",
+   "why": "format",
+   "hex": "444b504a000112340c074d5920534f4e4700000000000000000012345678000000010000004d165308370200200a746573742f6f776e65720f746573742f6f776e65722f706f6f6c0003616262"
+  },
+  {
+   "name": "magic",
+   "why": "format",
+   "hex": "444b5058000112340c074d5920534f4e4700000000000000000012345678000000010000002a69f321fe"
+  },
+  {
+   "name": "device",
+   "why": "device",
+   "hex": "444b504a000177770c074d5920534f4e4700000000000000000012345678000000010000002ab1f33423"
+  },
+  {
+   "name": "version",
+   "why": "version",
+   "hex": "444b504a000212340c074d5920534f4e4700000000000000000012345678000000010000002a3953fd71"
+  },
+  {
+   "name": "used_beyond_bytes",
+   "why": "format",
+   "hex": "444b504a000112340c074d5920534f4e470000000000000000001234567800000001000000b1165308370200200a746573742f6f776e65720f746573742f6f776e65722f706f6f6c0003616263"
+  },
+  {
+   "name": "used_below_header",
+   "why": "format",
+   "hex": "444b504a000112340c074d5920534f4e47000000000000000000123456780000000100000014165308370200200a746573742f6f776e65720f746573742f6f776e65722f706f6f6c0003616263"
+  },
+  {
+   "name": "section_overrun",
+   "why": "format",
+   "hex": "444b504a000112340c074d5920534f4e4700000000000000000012345678000000010000004d709bb65102ff000a746573742f6f776e65720f746573742f6f776e65722f706f6f6c0003616263"
+  },
+  {
+   "name": "key_without_owner_prefix",
+   "why": "format",
+   "hex": "444b504a000112340c074d5920534f4e47000000000000000000123456780000000100000045f4f3f3140200180a746573742f6f776e6572096f746865722f6b6579000176"
+  },
+  {
+   "name": "owner_twice",
+   "why": "format",
+   "hex": "444b504a000112340c074d5920534f4e4700000000000000000012345678000000010000004a0814311402000d03612f6205612f622f6b00013102000d03612f6205612f622f6a000132"
+  },
+  {
+   "name": "key_twice",
+   "why": "format",
+   "hex": "444b504a000112340c074d5920534f4e47000000000000000000123456780000000100000043d7405d3202001603612f6205612f622f6b00013105612f622f6b000132"
+  },
+  {
+   "name": "name_too_long",
+   "why": "format",
+   "hex": "444b504a000112340c114d5920534f4e4700000000000000000012345678000000010000002a75ed11f8"
+  }
+ ]
+}

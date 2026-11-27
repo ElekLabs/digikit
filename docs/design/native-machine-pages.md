@@ -10,8 +10,8 @@ page count, descriptors and parameter slots unless they explicitly opt in.
 bindings. `DK_PAGE_PARAM(word, position)` reuses a declared word of that owner;
 `DK_PAGE_LOCAL(id, position)` declares UI-only state. Positions are encoders A–H,
 numbered 0–7. The neutral `test/native-page` fixture binds START at A, ZOOM at C,
-and END at H. Its ordinary declarative page is retained. The separate
-`test/native-pages` fixture proves replacement pages and action routing.
+and END at H. Its ordinary declarative page is retained. No fixture proves replacement
+pages and action routing yet.
 
 The runtime validates the version, owner, binding positions, existing PARAM
 references and callback offsets before publishing the page. It resolves PARAM
@@ -19,7 +19,7 @@ references to the same native parameter codes used by the ordinary page. The
 adapter copies titles and bindings into its private registry, and removal clears
 callbacks before the runtime releases module code. No stock object grows.
 
-The draw callback receives `const dk_page_frame_v1 *`: a track, current PARAM
+The draw callback receives `const dk_page_frame *`: a track, current PARAM
 values indexed by encoder position, and a bounded canvas. Its appended
 `word_count`/`word_values[8]` snapshot reads this machine's existing parameters in
 declaration order independently of encoder bindings. The runtime copies only
@@ -33,7 +33,7 @@ and height. Text and rectangles clip to that canvas; content must not retain the
 context or its function pointers outside the draw callback. Firmware Bitmap/font
 representation and screen origin remain private to the adapter.
 
-The event callback receives `const dk_page_event_v1 *` for LOCAL turns only,
+The event callback receives `const dk_page_event *` for LOCAL turns only,
 including track, local control ID, signed detents and the native coarse flag.
 Content owns local state and its per-track policy. The adapter invalidates the
 view after a LOCAL event. LOCAL and unbound turns return consumed; PARAM turns

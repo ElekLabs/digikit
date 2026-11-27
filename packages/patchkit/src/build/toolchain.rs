@@ -112,6 +112,23 @@ impl Env {
         }
     }
 
+    /// For tests that need the m68k toolchain: true when it is installed. When it is missing this prints `SKIP` and returns
+    /// false, except with `DIGI_REQUIRE_TOOLCHAINS=1` (the Nx gate), where it panics.
+    pub fn m68k_or_skip(&self) -> bool {
+        if self.m68k("gcc").is_ok() {
+            return true;
+        }
+        let install = "uv run python -m tools.patchkit.pk_toolchains m68k";
+        if std::env::var("DIGI_REQUIRE_TOOLCHAINS").as_deref() == Ok("1") {
+            panic!(
+                "the m68k toolchain is missing at {}: run {install}",
+                self.m68k_prefix().display()
+            );
+        }
+        eprintln!("SKIP: the m68k-elf toolchain is not installed ({install})");
+        false
+    }
+
     pub fn libgcc_cf(&self) -> Option<PathBuf> {
         let p = self.m68k_prefix().join("lib").join(LIBGCC_CF_NAME);
         p.exists().then_some(p)

@@ -6,7 +6,7 @@ category = "test"
 type = "raw"
 author = "digikit"
 status = "experimental"
-summary = "Public read-only listing boundary fixture; deferred notifications, no slot0."
+summary = "Public read-only listing boundary fixture; deferred notifications, no tick."
 requires = []
 conflicts = []
 

@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-entry-tests",
+  "tags": ["test-only"],
+  "implicitDependencies": ["core/runtime-package", "dkrt-abi", "sdk"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["entry.device.test.ts"],
+        "firmwareOnly": "the UI loop calls tick and a settings write queued by a command runs in tick; the image has no usb-bulk module",
+        "modules": ["test/entry-demo"]
+      }
+    ]
+  }
+}

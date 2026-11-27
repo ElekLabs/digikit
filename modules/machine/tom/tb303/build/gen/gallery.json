@@ -1,0 +1,117 @@
+{
+  "machines": [
+    {
+      "devices": {
+        "dt2": {
+          "clone_of": 0,
+          "knobs": [
+            {
+              "slot": 0,
+              "stock": 202
+            },
+            {
+              "param": "wave",
+              "slot": 1
+            },
+            {
+              "param": "accent",
+              "slot": 2
+            },
+            null,
+            {
+              "param": "cutoff",
+              "slot": 4
+            },
+            {
+              "param": "resonance",
+              "slot": 5
+            },
+            {
+              "param": "env_mod",
+              "slot": 6
+            },
+            {
+              "param": "decay",
+              "slot": 7
+            }
+          ],
+          "level": 10,
+          "name": "TB303",
+          "own_dsp": false,
+          "page": null,
+          "position": null,
+          "short": "303",
+          "type": null
+        }
+      },
+      "id": "tb303",
+      "name": "TB303",
+      "short": "303"
+    }
+  ],
+  "module": "tom/tb303",
+  "params": {
+    "dt2": [
+      {
+        "default": 0,
+        "id": "wave",
+        "max": 256,
+        "min": 0,
+        "name": "Wave",
+        "short": "WAVE",
+        "slot": 1,
+        "template": 204
+      },
+      {
+        "default": 32512,
+        "id": "accent",
+        "max": 32512,
+        "min": 0,
+        "name": "Accent",
+        "short": "ACC",
+        "slot": 2,
+        "template": 204
+      },
+      {
+        "default": 16384,
+        "id": "cutoff",
+        "max": 32512,
+        "min": 0,
+        "name": "Cutoff",
+        "short": "CUT",
+        "slot": 4,
+        "template": 204
+      },
+      {
+        "default": 16384,
+        "id": "resonance",
+        "max": 32512,
+        "min": 0,
+        "name": "Resonance",
+        "short": "RES",
+        "slot": 5,
+        "template": 204
+      },
+      {
+        "default": 16384,
+        "id": "env_mod",
+        "max": 32512,
+        "min": 0,
+        "name": "Env Mod",
+        "short": "ENV",
+        "slot": 6,
+        "template": 204
+      },
+      {
+        "default": 16384,
+        "id": "decay",
+        "max": 32512,
+        "min": 0,
+        "name": "Decay",
+        "short": "DEC",
+        "slot": 7,
+        "template": 204
+      }
+    ]
+  }
+}

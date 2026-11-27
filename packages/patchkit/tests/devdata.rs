@@ -51,27 +51,51 @@ fn the_runtime_constants_are_the_device_files_numbers() {
     let facts = Facts::from_dir(&root().join("devices")).unwrap();
     let files = devgen::generate(&lib, &facts, "core/runtime").unwrap();
     let get = |p: &str| &files.iter().find(|f| f.0 == p).unwrap().1;
-    let rs = get("sdk/src/device.rs");
-    // the numbers of devices/*.toml [board] that both devices share (the store is per device: below)
+    // the device object `dkrt_dev` of each device: the numbers of devices/*.toml [board] and [digikit], in the order of struct DkrtDevice
+    let objects: Vec<Vec<String>> = files
+        .iter()
+        .filter(|f| f.0.starts_with("build/gen/dkdv-d"))
+        .map(|f| {
+            f.1.lines()
+                .filter_map(|l| l.trim().strip_prefix(".long "))
+                .map(|l| l.split_whitespace().next().unwrap().to_string())
+                .collect()
+        })
+        .collect();
+    let common = [
+        "0x444b4456", // magic
+        "0x1",        // version
+        "0x150", // size: the header words, the facts, `tracks`, the 64 key codes and the four key flag bits
+        "0xf",   // caps: DSP, store, eSDHC, safe key
+        "0xec070000", // console UART
+        "0x48000000", // uncached alias
+        "0x40000000", // cached base
+        "0x8000000", // DDR bytes
+        "0xfc0cc000", // eSDHC
+        "0x13",  // safe key
+        "0x47fe0000", // keep base
+        "0x1000", // keep bytes
+        "0xa2c2b", // DSP cycles in a block
+        "0x10",  // first run-time machine type
+        "0x8",   // run-time machine types
+        "0x10",  // tracks
+    ];
+    // both devices have the same numbers today (the key codes after them differ: `the_key_map_...`)
+    assert_eq!(objects.len(), 2);
     assert!(
-        !rs.contains("STORE_FIRST"),
-        "the store area differs per device"
+        objects
+            .iter()
+            .all(|o| o.len() == 0x150 / 4 && o[..common.len()] == common),
+        "{objects:?}"
     );
+    let offsets = get("build/gen/dkdv-offsets.inc");
     for want in [
-        "DYN_TYPE_FIRST: u32 = 0x10;",
-        "DYN_TYPE_LAST: u32 = 0x17;",
-        "SAFE_KEY_CODE: u32 = 0x13;",
-        "DSP_BLOCK_CYCLES: u32 = 0xa2c2b;",
-        "KEEP_BASE: u32 = 0x47fe0000;",
-        "KEEP_BYTES: u32 = 0x1000;",
+        ".equ DKDV_CAPS, 12",
+        ".equ DKDV_DDR_UNCACHED_ALIAS, 20",
+        ".equ DKDV_DYN_TYPES, 56",
     ] {
-        assert!(rs.contains(want), "{want}");
+        assert!(offsets.contains(want), "{want}");
     }
-    // the effect slots differ per device (the Digitakt II reserves 3 run-time effect rows, core/dynfx): not in the shared file
-    assert!(
-        !rs.contains("LIMIT_FX_SLOTS"),
-        "the effect slots differ per device"
-    );
     let dn2 = get("build/gen/device-dn2.inc");
     assert!(dn2.contains(".equ DEVICE_ID, 0x2 "), "{dn2}");
     // the effect slots and the DSP area are read by other modules: their generated files hold them
@@ -113,6 +137,35 @@ fn the_runtime_constants_are_the_device_files_numbers() {
         dt2.contains(".equ PEEK_LO_1, 0x47e8b000 ") && dt2.contains(".equ PEEK_HI_1, 0x47fe1000 "),
         "{dt2}"
     );
+    // the profiling clock: DTIM0 DTCN0 at 132 MHz on both devices
+    for inc in [dn2, dt2] {
+        assert!(inc.contains(".equ SPAN_CLOCK, 0xfc07000c "), "{inc}");
+        assert!(inc.contains(".equ SPAN_CLOCK_HZ, 0x7de2900 "), "{inc}");
+    }
+}
+
+#[test]
+fn a_device_without_a_span_clock_gets_zero() {
+    let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
+        .unwrap();
+    let text = std::fs::read_to_string(root().join("devices/digitone-ii.toml")).unwrap();
+    let text: String = text
+        .lines()
+        .filter(|l| !l.starts_with("span_clock"))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let facts = Facts::from_texts([text.as_str()]).unwrap();
+    let files = devgen::generate(&lib, &facts, "core/runtime").unwrap();
+    let inc = &files
+        .iter()
+        .find(|f| f.0 == "build/gen/device-dn2.inc")
+        .unwrap()
+        .1;
+    assert!(inc.contains(".equ SPAN_CLOCK, 0x0 "), "{inc}");
+    assert!(inc.contains(".equ SPAN_CLOCK_HZ, 0x0 "), "{inc}");
 }
 
 /// What `devgen::generate` makes of `module` when its `[[gen]]` entries are replaced by one entry.
@@ -139,36 +192,21 @@ fn generate_with(
 fn a_uses_list_names_constants_the_module_reads() {
     let gas = "build/gen/x-{dev}.inc";
     // a name that is no constant
-    if let Some(r) = generate_with("core/fxpages", "gas", gas, &["NO_SUCH_*", "FX_KIT_PTR"]) {
+    if let Some(r) = generate_with("core/rows", "gas", gas, &["NO_SUCH_*", "DEVICE_ID"]) {
         assert!(r.unwrap_err().0.contains("NO_SUCH_*"));
     }
-    // a per-device name in a shared-only kind
-    for kind in ["rust", "gas-shared"] {
-        if let Some(r) = generate_with("core/runtime", kind, "build/gen/x", &["PEEK_N"]) {
-            let e = r.unwrap_err().0;
-            assert!(
-                e.contains("per-device") && e.contains("PEEK_N"),
-                "{kind}: {e}"
-            );
-        }
-    }
     // a constant that the sources of the module never use
-    if let Some(r) = generate_with(
-        "core/fxpages",
-        "gas",
-        gas,
-        &["FX_KIT_PTR", "PANEL_ENCODERS"],
-    ) {
+    if let Some(r) = generate_with("core/rows", "gas", gas, &["DEVICE_ID", "PANEL_ENCODERS"]) {
         let e = r.unwrap_err().0;
         assert!(
-            e.contains("PANEL_ENCODERS") && !e.contains("FX_KIT_PTR,"),
+            e.contains("PANEL_ENCODERS") && !e.contains("DEVICE_ID,"),
             "{e}"
         );
         // the message names only the unreferenced constants, so the used one is absent at any position
-        assert!(!e.contains("FX_KIT_PTR"), "{e}");
+        assert!(!e.contains("DEVICE_ID"), "{e}");
     }
     // an empty list on a kind that needs one
-    if let Some(r) = generate_with("core/fxpages", "gas", gas, &[]) {
+    if let Some(r) = generate_with("core/rows", "gas", gas, &[]) {
         let e = r.unwrap_err().0;
         assert!(e.contains("needs `uses`"), "{e}");
     }
@@ -183,15 +221,15 @@ fn a_uses_list_names_constants_the_module_reads() {
         assert!(e.contains("takes no `uses`"), "{e}");
     }
     // a trailing `*` takes the whole family and nothing else
-    if let Some(r) = generate_with("core/fxpages", "gas", gas, &["FX_VALUE_*"]) {
+    if let Some(r) = generate_with("core/rows", "gas", gas, &["ROWS_B1_*"]) {
         for (_, text) in r.unwrap() {
             let names: Vec<&str> = text
                 .lines()
                 .filter_map(|l| l.trim().strip_prefix(".equ "))
                 .map(|l| l.split(',').next().unwrap())
                 .collect();
-            assert_eq!(names.len(), 32, "{text}");
-            assert!(names.iter().all(|n| n.starts_with("FX_VALUE_")), "{text}");
+            assert_eq!(names.len(), 3, "{text}");
+            assert!(names.iter().all(|n| n.starts_with("ROWS_B1_")), "{text}");
         }
     }
 }
@@ -227,7 +265,7 @@ fn peek_and_keep_ranges_are_checked() {
 }
 
 #[test]
-fn a_fact_that_devices_disagree_on_is_refused_for_the_shared_runtime() {
+fn a_fact_that_devices_disagree_on_becomes_data_of_the_device_object() {
     let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
@@ -235,26 +273,27 @@ fn a_fact_that_devices_disagree_on_is_refused_for_the_shared_runtime() {
         .unwrap();
     let dt2 = std::fs::read_to_string(root().join("devices/digitakt-ii.toml")).unwrap();
     let dn2 = std::fs::read_to_string(root().join("devices/digitone-ii.toml")).unwrap();
-    // move the Digitone's safe key (a fact the shared runtime image has once)
+    // move the Digitone's safe key: the runtime is one image, so the device object carries the difference and `gen` accepts it
     let moved = dn2.replace("safe_key = 19", "safe_key = 20");
     assert_ne!(moved, dn2);
     let facts = Facts::from_texts([dt2.as_str(), moved.as_str()]).unwrap();
-    let e = devgen::generate(&lib, &facts, "core/runtime")
-        .unwrap_err()
-        .0;
-    assert!(
-        e.contains("SAFE_KEY_CODE") && e.contains("one image for all devices"),
-        "{e}"
-    );
-    // per-device files (the device objects) are still fine for numbers that differ
-    let ok = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
-    assert!(devgen::generate(&lib, &ok, "core/dsp-link").is_ok());
+    let files = devgen::generate(&lib, &facts, "core/runtime").unwrap();
+    let mut keys: Vec<String> = files
+        .iter()
+        .filter(|f| f.0.starts_with("build/gen/dkdv-d"))
+        .map(|f| {
+            let l = f.1.lines().find(|l| l.contains("safe_key:")).unwrap();
+            l.trim().split_whitespace().nth(1).unwrap().to_string()
+        })
+        .collect();
+    keys.sort();
+    assert_eq!(keys, ["0x13", "0x14"]);
 }
 
 #[test]
 fn the_code_knows_the_devices_of_the_device_files() {
     // every port names a device the code knows, and the limits a port records are the device's `[patch]` limits
-    let reg = Registry::from_dir(&root().join("devices/ports")).unwrap();
+    let reg = Registry::from_dir(&root().join("ports")).unwrap();
     assert!(!reg.ports.is_empty());
     for p in &reg.ports {
         let d = devdata::by_short(&p.port.device).unwrap_or_else(|| panic!("{}", p.id()));
@@ -268,7 +307,7 @@ fn the_code_knows_the_devices_of_the_device_files() {
     for (i, a) in all.iter().enumerate() {
         for b in &all[i + 1..] {
             assert_ne!((a.syx_id, a.digikit_id), (b.syx_id, b.digikit_id));
-            assert_ne!(a.digikit_id, b.digikit_id);
+            assert!(a.digikit_id.is_none() || a.digikit_id != b.digikit_id);
         }
     }
 }
@@ -311,6 +350,22 @@ fn a_limit_above_the_contract_maximum_is_refused() {
     // a value below the maximum is a device choice and is accepted
     let less = dt2.replace("fx_slots = 3", "fx_slots = 2");
     Facts::from_texts([less.as_str(), dn2.as_str()]).unwrap();
+}
+
+#[test]
+fn a_send_page_cell_needs_a_parameter_row() {
+    let (first, second) = device_texts();
+    // fewer reserved rows than send slots: a cell would have no row
+    let bad = first.replace("send_rows = 2", "send_rows = 1");
+    assert_ne!(bad, first);
+    let e = Facts::from_texts([bad.as_str(), second.as_str()])
+        .unwrap_err()
+        .0;
+    assert!(e.contains("send_rows") && e.contains("send_slots"), "{e}");
+    // as many rows as slots is a device choice (the second device has one slot: one row is enough)
+    let one = second.replace("send_rows = 2", "send_rows = 1");
+    assert_ne!(one, second);
+    Facts::from_texts([first.as_str(), one.as_str()]).unwrap();
 }
 
 #[test]
@@ -369,30 +424,15 @@ fn the_free_effect_rows_are_the_devices_fx_slots() {
 
 #[test]
 fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
-    // core/fxpages reserves 7 knobs and MIX for each effect slot; the device file's [fx] has a value index for each of them (docs/design/digikit-registry.md "Effect pages")
+    // the effect pages take 7 knobs and MIX for each effect slot; the device file's [fx] has a value index for each of them (docs/design/digikit-registry.md "Effect pages")
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    let m = lib.get("core/fxpages").unwrap();
-    let rows = m
-        .manifest
-        .entry
-        .iter()
-        .filter(|e| e.registry == "params" && e.id.starts_with("fp"))
-        .count() as u64;
-    // and one more row for each send cell of the send page (`[limits] send_slots`, finding 64)
-    let send_rows = m
-        .manifest
-        .entry
-        .iter()
-        .filter(|e| e.registry == "params" && e.id.starts_with("fs"))
-        .count() as u64;
+    let m = lib.get("core/services/fx").unwrap();
+    // the rows themselves are core/rows' (the count of each block against the device file: tests/rows.rs)
     assert!(
-        m.manifest
-            .module
-            .ports
-            .iter()
-            .all(|p| p.starts_with("dt2-") || p.starts_with("dn2-"))
+        m.manifest.entry.iter().all(|e| e.registry != "params"),
+        "the fx service reserves no parameter rows"
     );
     // (device file, the number of stock pages: the firmware's page accessor has that many rows, the effect pages follow them, the array's halfwords: 71 / 101)
     for (file, first, array_hw) in [("digitakt-ii", 33, 71), ("digitone-ii", 37, 101)] {
@@ -401,18 +441,19 @@ fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
         )
         .unwrap();
         let slots = t["limits"]["fx_slots"].as_integer().unwrap() as u64;
-        assert_eq!(rows, 8 * slots, "{file}");
+        let rows = 8 * slots;
+        let send_rows = t["limits"]["send_rows"].as_integer().unwrap() as u64;
         let idx = t["fx"]["value_indices"].as_array().unwrap();
         assert!(
             idx.len() as u64 >= rows,
             "{file}: a value index for each parameter row"
         );
         assert_eq!(t["fx"]["page_first"].as_integer(), Some(first), "{file}");
-        // the send page (finding 64): a device that has one lists the Sound indices of its cells and a Sound layout that ends before the Fx array; its cells are parameter rows of core/fxpages
+        // the send page (finding 64): a device that has one lists the Sound indices of its cells and a Sound layout that ends before the Fx array; its cells are parameter rows of core/rows
         if let Some(track_page) = t["fx"].get("track_page").and_then(|v| v.as_integer()) {
             let send = t["limits"]["send_slots"].as_integer().unwrap() as u64;
             let n = t["fx"]["send_indices"].as_array().unwrap().len() as u64;
-            // the rows are shared by both devices (as many as the device with the most send cells); a device uses n of them
+            // the device reserves send_rows rows (both devices the same number); it uses n of them
             assert!(
                 track_page > 0 && send <= n && n <= send_rows,
                 "{file}: {send} {n} {send_rows}"
@@ -447,6 +488,103 @@ fn the_effect_page_rows_are_eight_parameter_rows_for_each_fx_slot() {
     }
 }
 
+/// The device facts the fx service binds its table from (`services/fx/src/fxpage/tables.rs`) are the device files' `[fx]` and `[limits]`, read here from the TOML and not from the
+/// generator's own constants: one entry for each device that has effect pages, in the order of the file.
+#[test]
+fn the_fx_service_tables_are_the_device_files_fx_facts() {
+    let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
+        .unwrap();
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    let files = devgen::generate(&lib, &facts, "core/services/fx").unwrap();
+    let text = &files
+        .iter()
+        .find(|f| f.0.ends_with("fxpage/tables.rs"))
+        .expect("the fx service generates its device facts")
+        .1;
+    let mut n = 0;
+    for file in ["digitakt-ii", "digitone-ii"] {
+        let t: toml::Value = toml::from_str(
+            &std::fs::read_to_string(root().join(format!("devices/{file}.toml"))).unwrap(),
+        )
+        .unwrap();
+        let int = |tab: &str, key: &str| t[tab][key].as_integer().unwrap();
+        let id = int("digikit", "id");
+        // the entry of this device
+        let at = text
+            .find(&format!("device: {id},"))
+            .unwrap_or_else(|| panic!("{file}: no entry\n{text}"));
+        let entry = &text[at..at + text[at..].find("},").unwrap()];
+        let field = |name: &str| -> String {
+            entry
+                .lines()
+                .find_map(|l| l.trim().strip_prefix(&format!("{name}: ")))
+                .unwrap_or_else(|| panic!("{file}: no {name}\n{entry}"))
+                .trim_end_matches(',')
+                .to_string()
+        };
+        let hex = |v: i64| format!("{v:#x}");
+        let idx: Vec<i64> = t["fx"]["value_indices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_integer().unwrap())
+            .collect();
+        assert_eq!(
+            field("page_first"),
+            int("fx", "page_first").to_string(),
+            "{file}"
+        );
+        assert_eq!(
+            field("slots"),
+            int("limits", "fx_slots").to_string(),
+            "{file}"
+        );
+        assert_eq!(field("array_off"), hex(int("fx", "array_off")), "{file}");
+        assert_eq!(field("values_n"), idx.len().to_string(), "{file}");
+        assert_eq!(field("kit_ptr"), hex(int("fx", "kit_ptr")), "{file}");
+        assert_eq!(
+            field("track_page"),
+            int("fx", "track_page").to_string(),
+            "{file}"
+        );
+        assert_eq!(
+            field("send_template"),
+            hex(int("fx", "send_template")),
+            "{file}"
+        );
+        assert_eq!(
+            field("sound_stride"),
+            hex(int("fx", "sound_stride")),
+            "{file}"
+        );
+        assert_eq!(field("store_off"), hex(int("fx", "store_off")), "{file}");
+        let sends = t["fx"]["send_indices"].as_array().unwrap();
+        assert_eq!(
+            field("send_cells"),
+            int("limits", "send_slots").to_string(),
+            "{file}"
+        );
+        assert!(
+            field("send_index").starts_with(&format!("[{}", sends[0].as_integer().unwrap())),
+            "{file}"
+        );
+        // the value indices, padded with 0 to 32 entries
+        let want: Vec<String> = (0..32)
+            .map(|i| idx.get(i).copied().unwrap_or(0).to_string())
+            .collect();
+        assert_eq!(
+            field("value_indices"),
+            format!("[{}]", want.join(", ")),
+            "{file}"
+        );
+        n += 1;
+    }
+    assert_eq!(n, text.matches("DeviceFacts {").count(), "{text}");
+}
+
 #[test]
 fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
     let Some(mut lib) = Library::scan_repo_or_skip(&root()) else {
@@ -454,7 +592,7 @@ fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
     };
     lib.lower(&Models::from_dir(&root().join("devices")).unwrap())
         .unwrap();
-    let dynreg = lib.get("core/dynreg").unwrap();
+    let dynreg = lib.get("core/rows").unwrap();
     let count = |registry: &str, dev: &str| {
         dynreg
             .manifest
@@ -490,19 +628,14 @@ fn the_reserved_parameter_and_page_rows_are_the_profile_limits() {
             "{dev} voice rows of core/dyndsp"
         );
         assert_eq!(
-            count("params", dev),
-            l["param_rows"].as_integer().unwrap() as u64,
-            "{dev} parameter rows of core/dynreg"
-        );
-        assert_eq!(
             count("pages", dev),
             l["page_rows"].as_integer().unwrap() as u64,
-            "{dev} page rows of core/dynreg"
+            "{dev} page rows of core/rows"
         );
         assert_eq!(
             count("machines", dev),
             l["machine_rows"].as_integer().unwrap() as u64,
-            "{dev} machine rows of core/dynreg"
+            "{dev} machine rows of core/rows"
         );
     }
 }
@@ -527,25 +660,63 @@ fn the_link_width_is_a_shared_c_header_from_the_contract_maximum() {
 }
 
 /// The modules of the rt021 flash images (`out/patch/rt021-dt2-1.17.plan.json`, `modules`), by id.
-const RT021_MODULES: [&str; 10] = [
-    "core/digikit-menu",
+const RT021_MODULES: [&str; 7] = [
     "core/dsp-link",
     "core/dsp-voice",
     "core/dyndsp",
-    "core/dynreg",
+    "core/rows",
     "core/expansion",
     "core/health",
-    "core/machines",
-    "core/params",
     "core/runtime",
 ];
+
+#[test]
+fn a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    // the runtime, what it stands on, core/ui (the DIGIKIT menu is the system package's, not an image module), the panel modules and the peer image (the second CPU's section stored packed); no DSP, machine or effect module
+    for dev in devdata::all()
+        .iter()
+        .filter(|d| !d.patch_sets.is_empty() && d.identity.capabilities.dsp == "none")
+    {
+        for (set, roots) in &dev.patch_sets {
+            let (mut all, _) = lib.with_requires(roots).unwrap();
+            all.sort();
+            // a Syntakt's optional first flash (`device-peer`) is the peer image alone: no runtime, menu or panel module
+            if set == "device-peer" {
+                assert_eq!(all, ["core/peer-image"], "{} set {set}", dev.short);
+                continue;
+            }
+            let mut want = vec![
+                "core/expansion",
+                "core/health",
+                "core/input",
+                "core/peer-image",
+                "core/platform",
+                "core/runtime",
+                "core/ui",
+            ];
+            // a device that turns the eMMC write guard on holds core/card-guard in every set with the runtime
+            if dev.switches.get("card.guard.enabled") == Some(&true) {
+                want.insert(0, "core/card-guard");
+            }
+            assert_eq!(all, want, "{} set {set}", dev.short);
+        }
+    }
+}
 
 #[test]
 fn the_patch_sets_are_the_rt021_flash_modules() {
     let Some(lib) = Library::scan_repo_or_skip(&root()) else {
         return;
     };
-    for dev in devdata::all() {
+    // the sets of a device with a DSP are the DSP machine and effect modules below; a device without one (the runtime, menu and panel modules) is
+    // checked by `a_device_without_a_dsp_patches_the_runtime_menu_and_panel_modules_only`
+    for dev in devdata::all()
+        .iter()
+        .filter(|d| !d.patch_sets.is_empty() && d.identity.capabilities.dsp == "sharc")
+    {
         // both sets are the flash modules and core/input
         for (set, extra) in [
             ("device", vec!["core/input"]),
@@ -558,19 +729,26 @@ fn the_patch_sets_are_the_rt021_flash_modules() {
             want.extend(extra);
             // run-time effects (core/dynfx and the chain it reserves rows in): both devices have them in both sets (the Digitone II's emulator set since the engine bars only the
             // changed blocks: the hook costs x1.01 DSP CPU there, finding 55)
-            want.extend(["core/dynfx", "core/fx", "core/fxpages"]);
-            // the DIGIKIT menu is written on <dk/platform/ui.h>: core/digikit-menu requires core/ui
+            want.extend(["core/dynfx", "core/fx"]);
+            // core/runtime requires the platform adapter (its hooks and the exception hook install)
+            want.push("core/platform");
+            // the SETTINGS hook of the menu, the controls and the views of modules (the DIGIKIT menu in the system package is drawn by it)
             want.push("core/ui");
             // the sample pool: both Digitakt II sets have it; the Digitone II flashes without it until the SPI wire-size decision
             if dev.short == "dt2" || set == "emulator" {
                 want.push("core/sample-pool");
             }
-            // the flashed set carries the fast-transfer adapters, inert until usb-fast asks: USB bulk on both devices, +Drive writes on the Digitakt II
+            // the flashed sets carry the fast-transfer adapters, inert until usb-fast asks: USB bulk on both devices, +Drive writes on the Digitakt II;
+            // core/sdhc-large (large card commands for registered buffers) is in every flashed set
             if set == "device" {
                 want.push("core/usb-bulk");
+                want.push("core/usb-bulk-audio");
                 if dev.short == "dt2" {
                     want.push("core/plusdrive-write");
                 }
+            }
+            if set.starts_with("device") {
+                want.push("core/sdhc-large");
             }
             want.sort();
             assert_eq!(all, want, "{} set {set}", dev.short);
@@ -665,35 +843,6 @@ fn an_unknown_backend_or_a_bad_panel_exception_is_refused() {
     }
 }
 
-/// `patchkit gen` loads a content module's objects for its gallery.json: a run-time module declares its machines in its objects, so a
-/// library without them generates nothing and `gen --check` could not see a stale file (test/dyn-params is a fixture with a gallery).
-#[test]
-fn a_content_modules_gallery_needs_its_objects() {
-    let id = vec!["test/dyn-params".to_string()];
-    let models = Models::from_dir(&root().join("devices")).unwrap();
-    // the fixture root read without a build: its objects are files of the module folder, which has none (the object cache is not read)
-    let light = Library::scan_in(None, &root().join("tests/fixtures/modules"), true).unwrap();
-    assert!(
-        modgen::generate_many(&light, &models, &id)
-            .unwrap()
-            .is_empty(),
-        "without objects the module has no typed sections"
-    );
-    let Some(full) = Library::scan_repo_for_or_skip(&root(), Some(&id)) else {
-        return;
-    };
-    let files = modgen::generate_many(&full, &models, &id).unwrap();
-    assert_eq!(files.len(), 1);
-    let (path, text) = &files[0];
-    assert!(path.ends_with("build/gen/gallery.json"));
-    assert_eq!(
-        &std::fs::read_to_string(path).unwrap(),
-        text,
-        "{} is stale",
-        path.display()
-    );
-}
-
 #[test]
 fn the_sample_pool_facts_are_checked() {
     let (dt2, dn2) = device_texts();
@@ -743,4 +892,467 @@ fn the_sample_pool_facts_are_checked() {
         let e = Facts::from_texts([a.as_str(), b.as_str()]).unwrap_err().0;
         assert!(e.contains("sample_pool"), "{what}: {e}");
     }
+}
+
+#[test]
+fn only_runtime_targets_enter_the_shared_constants() {
+    // an identity-only file (no [digikit]) is skipped; a [digikit] without its board tables is an error
+    let ident = "[device]\nname = \"X\"\nshort = \"x\"\n";
+    assert!(Facts::from_texts([ident]).is_ok());
+    let half = "[device]\nname = \"X\"\nshort = \"x\"\n[digikit]\nid = 9\nname = \"x\"\n";
+    assert!(Facts::from_texts([half]).is_err());
+}
+
+/// The words of a device's `dkrt_dev` as generated for `core/runtime`.
+fn device_object(facts: &Facts, dev: &str) -> Vec<u64> {
+    let lib = Library::scan_repo_or_skip(&root()).expect("the repository's modules");
+    let files = devgen::generate(&lib, facts, "core/runtime").unwrap();
+    let text = &files
+        .iter()
+        .find(|f| f.0 == format!("build/gen/dkdv-{dev}.inc"))
+        .unwrap()
+        .1;
+    text.lines()
+        .filter_map(|l| l.trim().strip_prefix(".long "))
+        .map(|l| {
+            let w = l.split_whitespace().next().unwrap();
+            u64::from_str_radix(w.trim_start_matches("0x"), 16).unwrap()
+        })
+        .collect()
+}
+
+#[test]
+fn the_logical_keys_are_numbered_with_the_trig_keys_in_a_row() {
+    let (dt2, dn2) = device_texts();
+    let facts = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
+    let names = facts.key_names().unwrap();
+    let number = |n: &str| names.iter().position(|x| x == n).unwrap() + 1;
+    for n in 1..=16 {
+        assert_eq!(number(&format!("TRIG{n}")), number("TRIG1") + n - 1);
+    }
+    let h = devgen::keys_h(&facts).unwrap();
+    assert!(h.contains("#define DK_KEY_NONE 0\n"), "{h}");
+    assert!(
+        h.contains(&format!("#define DK_KEY_TRK {}\n", number("TRK"))),
+        "{h}"
+    );
+    assert!(
+        h.contains("#define DK_KEY_TRIG(n) ((dk_key)(DK_KEY_TRIG1 + (n) - 1))"),
+        "{h}"
+    );
+    assert!(
+        h.contains(&format!("#define DK_KEY_COUNT {} ", names.len())),
+        "{h}"
+    );
+}
+
+#[test]
+fn the_key_map_gives_each_device_its_codes_and_a_missing_key_is_zero() {
+    let (dt2, dn2) = device_texts();
+    let facts = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
+    let names = facts.key_names().unwrap();
+    let number = |n: &str| names.iter().position(|x| x == n).unwrap() + 1;
+    // the words of the object: 15 fields, `tracks`, then the key codes indexed by the key's number, then the four key flag bits
+    let (tracks, keys) = (15, 16);
+    let (d, n) = (device_object(&facts, "dt2"), device_object(&facts, "dn2"));
+    let key = |o: &[u64], name: &str| o[keys + number(name)];
+    for o in [&d, &n] {
+        assert_eq!(o[tracks], 16);
+        assert_eq!(o[keys], 0, "entry 0 is DK_KEY_NONE");
+        assert_eq!(key(o, "TRK"), 16);
+        assert_eq!(key(o, "YES"), 10);
+        assert_eq!(key(o, "TRIG10"), 34);
+        assert_eq!(key(o, "ENC3"), 43);
+    }
+    // code 2 is one logical key on both devices (the DN2 panel prints SYN)
+    assert_eq!((key(&d, "SRC"), key(&n, "SRC")), (2, 2));
+}
+
+#[test]
+fn the_profile_has_the_same_key_codes_as_the_device_object() {
+    let (dt2, dn2) = device_texts();
+    let facts = Facts::from_texts([dt2.as_str(), dn2.as_str()]).unwrap();
+    let lib = Library::scan_repo_or_skip(&root()).expect("the repository's modules");
+    let files = devgen::generate(&lib, &facts, "core/runtime").unwrap();
+    let profiles = &files
+        .iter()
+        .find(|f| f.0.ends_with("profiles.rs"))
+        .unwrap()
+        .1;
+    for dev in ["dt2", "dn2"] {
+        let obj = device_object(&facts, dev);
+        let from = profiles
+            .find(&format!("pub const {}:", dev.to_uppercase()))
+            .unwrap();
+        let rest = &profiles[from..];
+        let list = rest
+            .split("key_codes: [")
+            .nth(1)
+            .unwrap()
+            .split(']')
+            .next()
+            .unwrap();
+        let codes: Vec<u64> = list
+            .split(',')
+            .filter_map(|c| c.trim().parse().ok())
+            .collect();
+        assert_eq!(codes.len(), 64, "{dev}");
+        assert_eq!(codes[..], obj[obj.len() - 68..obj.len() - 4], "{dev}");
+        let bits: Vec<u64> = rest
+            .split("key_flags: KeyFlagBits {")
+            .nth(1)
+            .unwrap()
+            .split('}')
+            .next()
+            .unwrap()
+            .split(',')
+            .filter_map(|f| f.split(':').nth(1)?.trim().parse().ok())
+            .collect();
+        assert_eq!(bits[..], obj[obj.len() - 4..], "{dev}: the key flag bits");
+    }
+}
+
+#[test]
+fn a_key_table_with_a_clash_or_a_bad_name_is_refused() {
+    let (dt2, dn2) = device_texts();
+    for (what, from, to, want) in [
+        ("clash", "TRK = 16", "TRK = 17", "same code"),
+        ("lower case", "TRK = 16", "trk = 16", "capital letters"),
+        ("zero", "TRK = 16", "TRK = 0", "1 to 255"),
+        ("too big", "TRK = 16", "TRK = 256", "1 to 255"),
+    ] {
+        let bad = dt2.replace(from, to);
+        assert_ne!(bad, dt2, "{what}: the text did not change");
+        let e = Facts::from_texts([bad.as_str(), dn2.as_str()])
+            .unwrap_err()
+            .0;
+        assert!(e.contains(want), "{what}: {e}");
+    }
+    // a name that is not in `[keys] order` of sdk/sdk.toml
+    let bad = dt2.replace("TRK = 16", "TRK = 16\nNOT_A_KEY = 100");
+    let e = Facts::from_texts([bad.as_str(), dn2.as_str()])
+        .unwrap()
+        .key_names()
+        .unwrap_err()
+        .0;
+    assert!(e.contains("NOT_A_KEY") && e.contains("[keys] order"), "{e}");
+}
+
+#[test]
+fn the_logical_key_numbers_are_the_order_of_the_sdk_list_and_do_not_depend_on_the_device_files() {
+    let (dt2, dn2) = device_texts();
+    let all = Facts::from_texts([dt2.as_str(), dn2.as_str()])
+        .unwrap()
+        .key_names()
+        .unwrap();
+    let one = Facts::from_texts([dn2.as_str()])
+        .unwrap()
+        .key_names()
+        .unwrap();
+    assert_eq!(all, one);
+    assert_eq!(all.first().map(String::as_str), Some("PAGE_TRIG"));
+    assert_eq!(
+        all.iter().position(|n| n == "TRK"),
+        Some(15),
+        "the number of a name is fixed by the list (append only)"
+    );
+}
+
+#[test]
+fn a_module_that_needs_device_tables_gets_a_device_that_has_them() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    // every device of the repository has the tables of the modules in its patch sets
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
+    // core/ui declares `input.keys`: a device file without it is refused, naming the table, the set and the module
+    let dt2 = std::fs::read_to_string(root().join("devices/digitakt-ii.toml")).unwrap();
+    let start = dt2
+        .find("[input.keys]")
+        .expect("the device file has the table");
+    let end = dt2[start..].find("\n\n").map_or(dt2.len(), |n| start + n);
+    let without = format!("{}{}", &dt2[..start], &dt2[end..]);
+    let facts = Facts::from_texts([without.as_str()]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("needs [input.keys]") && e.contains("core/ui"),
+        "{e}"
+    );
+    // the generator of the module alone refuses the same device, and a patch set that names a module the library lacks is an error
+    let e = devgen::generate(&lib, &facts, "core/ui").unwrap_err().0;
+    assert!(e.contains("needs [input.keys]"), "{e}");
+    let bare = r#"[device]
+short = "xx"
+name = "Bare"
+[patch_sets]
+device = ["core/ui"]
+"#;
+    let facts = Facts::from_texts([bare]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("xx: patch set device includes core/ui"),
+        "a device file without [digikit] is checked too: {e}"
+    );
+    let ghost = bare.replace("core/ui", "core/no-such-module");
+    let facts = Facts::from_texts([ghost.as_str()]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(e.contains("core/no-such-module"), "{e}");
+}
+
+/// The ui constants of a device, generated for `core/ui`.
+fn ui_constants(lib: &Library, facts: &Facts, file: &str) -> String {
+    devgen::generate(lib, facts, "core/ui")
+        .unwrap()
+        .into_iter()
+        .find(|(p, _)| p.ends_with(file))
+        .unwrap_or_else(|| panic!("{file}"))
+        .1
+}
+
+/// core/ui's four keys come from `[input.keys]` by name: YES, LEVEL_PUSH (the second YES), NO and RIGHT, each device with its own ids.
+#[test]
+fn the_ui_keys_are_resolved_by_name_from_the_input_keys() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    for (file, yes, yes2, no, right) in [
+        ("ui-dt2.inc", "0xa", "0x31", "0xc", "0xf"),
+        ("ui-dn2.inc", "0xa", "0x31", "0xc", "0xf"),
+        // the Syntakt's key indices are not the panel codes (finding 153)
+        ("ui-st.inc", "0xc", "0x30", "0xd", "0x11"),
+    ] {
+        let inc = ui_constants(&lib, &facts, file);
+        for (name, value) in [
+            ("UI_KEY_YES", yes),
+            ("UI_KEY_YES2", yes2),
+            ("UI_KEY_NO", no),
+            ("UI_KEY_RIGHT", right),
+        ] {
+            assert!(
+                inc.contains(&format!(".equ {name}, {value} ")),
+                "{file}: {name}\n{inc}"
+            );
+        }
+    }
+}
+
+/// A device that names keys but lacks one of core/ui's four is refused at generate, naming the key.
+#[test]
+fn a_device_without_one_of_the_ui_keys_is_refused() {
+    let st = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
+    for name in ["YES", "NO", "RIGHT", "LEVEL_PUSH"] {
+        let line = st
+            .lines()
+            .find(|l| l.starts_with(&format!("{name} = ")))
+            .unwrap();
+        let bad = st.replace(&format!("{line}\n"), "");
+        assert_ne!(bad, st);
+        let e = Facts::from_texts([bad.as_str()])
+            .err()
+            .unwrap_or_else(|| panic!("{name}: refused"))
+            .0;
+        assert!(
+            e.contains(&format!("has no {name}")) && e.contains("core/ui"),
+            "{name}: {e}"
+        );
+    }
+}
+
+/// `[input.key_flags]` names the bits of a key event's flags word by meaning: it is generated for core/ui and the device object, range checked, distinct and required.
+#[test]
+fn the_key_flag_table_is_generated_and_checked() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let st = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
+    let facts = Facts::from_texts([st.as_str()]).unwrap();
+    // core/ui reads the press and release bits; the device object has all four (after the key codes)
+    let inc = ui_constants(&lib, &facts, "ui-st.inc");
+    for (name, value) in [("KEY_FLAG_PRESS", "0x0"), ("KEY_FLAG_RELEASE", "0x4")] {
+        assert!(
+            inc.contains(&format!(".equ {name}, {value} ")),
+            "{name}\n{inc}"
+        );
+    }
+    let object = device_object(&facts, "st");
+    assert_eq!(
+        object[object.len() - 4..],
+        [0, 1, 3, 4],
+        "press, func, repeat, release"
+    );
+    let bad = st.replace("release = 4", "release = 32");
+    let e = Facts::from_texts([bad.as_str()])
+        .err()
+        .expect("32 is refused")
+        .0;
+    assert!(e.contains("release = 32"), "{e}");
+    let bad = st.replace("release = 4", "release = 3");
+    let e = Facts::from_texts([bad.as_str()]).err().expect("a clash").0;
+    assert!(e.contains("release and repeat are both bit 3"), "{e}");
+    let start = st.find("[input.key_flags]").unwrap();
+    let end = st[start..].find("\n\n").map_or(st.len(), |n| start + n);
+    let without = format!("{}{}", &st[..start], &st[end..]);
+    let e = Facts::from_texts([without.as_str()])
+        .err()
+        .expect("required")
+        .0;
+    assert!(e.contains("[input.key_flags]"), "{e}");
+}
+
+#[test]
+fn a_module_is_checked_against_its_own_tables_in_any_library() {
+    // `pack --manifest` loads a library without the core modules: the patch sets of the repository's devices cannot resolve in it
+    let manifest = root().join("tests/fixtures/modules/c-demo/module.toml");
+    let defines: Vec<String> = vec![];
+    let only = vec!["test/c-demo".to_string()];
+    let build = patchkit::module::Build {
+        root: &root(),
+        only: Some(&only),
+        defines: &defines,
+    };
+    let lib =
+        Library::from_manifests(build, &[manifest], true, &only).expect("the fixture library");
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    let need = vec!["input.keys".to_string()];
+    // the repository's devices have the table, whatever the library can resolve
+    devgen::check_module_tables(&lib, &facts, "test/c-demo", &need).unwrap();
+    assert!(
+        devgen::check_device_tables(&lib, &facts).is_err(),
+        "the whole-library check reports the unresolved roots"
+    );
+    // a device without the table that lists the module as a root of a set that cannot resolve here is refused ...
+    let bare = r#"[device]
+short = "xx"
+[patch_sets]
+device = ["core/ui", "test/c-demo"]
+"#;
+    let facts = Facts::from_texts([bare]).unwrap();
+    let e = devgen::check_module_tables(&lib, &facts, "test/c-demo", &need)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("xx: patch set device includes test/c-demo") && e.contains("input.keys"),
+        "{e}"
+    );
+    // ... a module that needs nothing is not stopped by it, and a set that cannot resolve and does not list the module is skipped
+    devgen::check_module_tables(&lib, &facts, "test/c-demo", &[]).unwrap();
+    let other = bare.replace(", \"test/c-demo\"", "");
+    let facts = Facts::from_texts([other.as_str()]).unwrap();
+    devgen::check_module_tables(&lib, &facts, "test/c-demo", &need).unwrap();
+}
+
+/// The Syntakt file with `from` replaced by `to` (the test text must differ from the file).
+fn syntakt_with(from: &str, to: &str) -> String {
+    let st = std::fs::read_to_string(root().join("devices/syntakt.toml")).unwrap();
+    assert!(st.contains(from), "the Syntakt file has {from:?}");
+    st.replace(from, to)
+}
+
+#[test]
+fn a_device_that_turns_the_card_guard_on_needs_it_in_every_set_with_the_runtime() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    // the repository's own sets are consistent (also checked by `patchkit gen`)
+    let facts = Facts::from_dir(&root().join("devices")).unwrap();
+    patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
+    // the `device` and `emulator` sets with the runtime and without core/card-guard are refused, naming both modules and the switch
+    for set in ["device", "emulator"] {
+        let line = std::fs::read_to_string(root().join("devices/syntakt.toml"))
+            .unwrap()
+            .lines()
+            .find(|l| l.starts_with(&format!("{set} = [")))
+            .unwrap()
+            .to_string();
+        let without = syntakt_with(&line, &line.replace("\"core/card-guard\", ", ""));
+        let facts = Facts::from_texts([without.as_str()]).unwrap();
+        let e = patchkit::devgen::check_device_tables(&lib, &facts)
+            .unwrap_err()
+            .0;
+        assert!(
+            e.contains(&format!(
+                "st: patch set {set} includes core/runtime but not core/card-guard"
+            )) && e.contains("card.guard.enabled"),
+            "{set}: {e}"
+        );
+    }
+    // a set without the runtime (device-peer) needs no guard
+    let facts = Facts::from_texts([syntakt_with(
+        "device-peer = [\"core/peer-image\"]",
+        "device-peer = [\"core/peer-image\"]",
+    )
+    .as_str()])
+    .unwrap();
+    patchkit::devgen::check_device_tables(&lib, &facts).unwrap();
+}
+
+#[test]
+fn the_card_guard_module_is_refused_where_the_switch_is_off() {
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let off = syntakt_with(
+        "[card.guard]\nenabled = true",
+        "[card.guard]\nenabled = false",
+    );
+    let facts = Facts::from_texts([off.as_str()]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains(
+            "includes core/card-guard, but the device file does not turn [card.guard.enabled] on"
+        ),
+        "{e}"
+    );
+    // a device file without the table is refused by `needs_device` first
+    let st = syntakt_with("\n[card.guard]\n", "\n[card.guard]\n");
+    let (head, rest) = st.split_once("\n[card.guard]\n").unwrap();
+    let tail = rest
+        .split_once("# Board facts that only the emulator uses")
+        .unwrap()
+        .1;
+    let none = format!("{head}\n# Board facts that only the emulator uses{tail}");
+    let facts = Facts::from_texts([none.as_str()]).unwrap();
+    let e = patchkit::devgen::check_device_tables(&lib, &facts)
+        .unwrap_err()
+        .0;
+    assert!(e.contains("needs [card.guard]"), "{e}");
+}
+
+#[test]
+fn the_resolved_selection_of_apply_is_checked_the_same_way() {
+    use std::collections::BTreeMap;
+    let Some(lib) = Library::scan_repo_or_skip(&root()) else {
+        return;
+    };
+    let on: BTreeMap<String, bool> = [("card.guard.enabled".to_string(), true)].into();
+    let off: BTreeMap<String, bool> = BTreeMap::new();
+    let ids = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let check = |sw: &BTreeMap<String, bool>, v: &[&str]| {
+        patchkit::devgen::check_needed_when(&lib, "st", sw, &ids(v), "the module selection")
+    };
+    check(&on, &["core/runtime", "core/card-guard"]).unwrap();
+    check(&on, &["core/peer-image"]).unwrap();
+    check(&off, &["core/runtime"]).unwrap();
+    let e = check(&on, &["core/runtime", "core/ui"]).unwrap_err().0;
+    assert!(
+        e.contains("st: the module selection includes core/runtime but not core/card-guard"),
+        "{e}"
+    );
+    let e = check(&off, &["core/runtime", "core/card-guard"])
+        .unwrap_err()
+        .0;
+    assert!(
+        e.contains("includes core/card-guard, but the device file does not turn"),
+        "{e}"
+    );
 }

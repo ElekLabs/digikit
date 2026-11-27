@@ -1,0 +1,96 @@
+# string: std::string, std::function and shared_ptr helpers
+# Names follow <cpu>.<subsystem>.<kind>.<name>; was = former names, for reading older docs, never resolved (docs/design/firmware-decls.md).
+
+[[fn]]
+name = "cf.string.fn.shared_ptr.make"
+was = ["cf.menu.fn.make_sp", "cf.string.fn.make_sp"]
+cpu = "cf"
+rule.dt2 = { kind = "cf_func", hash = "e427a70e2c95815987c648e84eba4737", offset = 0x0, len = 4 }
+rule.dn2 = { kind = "cf_func", hash = "e427a70e2c95815987c648e84eba4737", offset = 0x0, len = 4 }
+rule.st = { kind = "cf_func", hash = "0ca97fb9199a43bcfb8784b79cd5d24a", offset = 0x0, len = 4, mark = "D" }
+mark = "D"
+users = ["core/digikit-menu"]
+doc = "The firmware's `shared_ptr<View>` constructor: `out` in a0, (parent, view) on the stack. core/digikit-menu calls it through its dk_make_sp shim."
+
+[[fn]]
+name = "cf.string.fn.shared_ptr.move"
+was = ["cf.menu.fn.sp_move", "cf.string.fn.sp_move"]
+cpu = "cf"
+sig = "void (shared_ptr *dst, shared_ptr *src)"
+rule = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x40, len = 4 }
+mark = "D"
+devices = ["dt2", "dn2"]
+users = ["core/digikit-menu"]
+doc = "Moves a `shared_ptr` from `src` to `dst`. core/digikit-menu uses it when it pushes a popup view."
+
+[[fn]]
+name = "cf.string.fn.shared_ptr.release"
+was = ["cf.menu.fn.sp_release", "cf.string.fn.sp_release"]
+cpu = "cf"
+sig = "void (u32 *ctl)"
+rule.dt2 = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x58, len = 4 }
+rule.dn2 = { kind = "cf_ptr", hash = "ec84bde0abe50c47c39ea02790968411", offset = 0x58, len = 4 }
+rule.st = { kind = "cf_ptr", hash = "6160202d919e6585ec40c9aed1372118", offset = 0x80, len = 4, mark = "D" }
+mark = "D"
+users = ["core/digikit-menu"]
+doc = "Releases a `shared_ptr` count holder given its control-block word. core/digikit-menu calls it on its temporaries after it pushes a view."
+
+[[fn]]
+name = "cf.string.fn.std_function.dtor"
+cpu = "cf"
+sig = "void (std_function *f)"
+rule = { kind = "cf_func", hash = "efe55a2f3d70528bc8f21ca8a6c96c4a", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/ui"]
+doc = "Destroys a `std::function`: runs the manager with op 3 (destroy) when the manager is not 0. Called on the temporaries after a constructor has cloned them (2280 call sites)."
+
+[[fn]]
+name = "cf.string.fn.std_string.ctor"
+was = ["cf.menu.fn.str_ctor", "cf.string.fn.ctor"]
+cpu = "cf"
+sig = "void (u32 *s, const char *cstr, const u8 *alloc)"
+rule = { kind = "cf_func", hash = "0b0f2cd7a2d5144343e1fd5ad21658be", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/digikit-menu"]
+doc = "Constructs a `std::string` from a C string. core/digikit-menu builds the view title with it."
+
+[[fn]]
+name = "cf.string.fn.std_string.copy"
+cpu = "cf"
+sig = "void (u32 *dst, const u32 *src)"
+rule = { kind = "cf_func", hash = "3321bcddaccf5a02042b542fe85bba51", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/ui"]
+doc = "Copy-constructs a COW `std::string` in `dst` (one pointer) from `src`: shares the buffer and counts a reference. Window constructors use it for their title and items."
+
+[[fn]]
+name = "cf.string.fn.std_string.dtor"
+was = ["cf.menu.fn.str_dtor", "cf.string.fn.dtor"]
+cpu = "cf"
+sig = "void (u32 *s)"
+rule = { kind = "cf_func", hash = "f1d2e07e127babad6c183b5ca51041d1", offset = 0x0, len = 4 }
+mark = "D"
+users = ["core/digikit-menu"]
+doc = "Destroys a `std::string`. core/digikit-menu calls it after the view constructor has copied the title."
+
+[[struct]]
+name = "cf.string.struct.shared_ptr"
+size = 0x8
+fields = [
+  { name = "ptr", off = 0x0, type = "ptr" },
+  { name = "ctl", off = 0x4, type = "ptr" },
+]
+mark = "D"
+users = ["core/digikit-menu"]
+doc = "`std::shared_ptr<View>`: pointer and control block (core/digikit-menu `SharedPtr`; finding 71 section 2, the view stack nodes)."
+
+[[struct]]
+name = "cf.string.struct.std_function"
+size = 0x10
+fields = [
+  { name = "manager", off = 0x8, type = "ptr" },
+  { name = "invoker", off = 0xc, type = "ptr" },
+]
+mark = "D"
+users = ["core/digikit-menu", "core/ui"]
+doc = "libstdc++ `std::function<void()>`: 8 bytes of functor storage (left as padding), manager at +8 (0 = empty), invoker at +0xc (finding 71 section 5, \"std::function is 16 bytes\")."

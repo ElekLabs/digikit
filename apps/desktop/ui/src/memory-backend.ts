@@ -3,10 +3,10 @@
 // started. The preview replaces this module (preview/memory-backend.mock.ts).
 import { DkError, hasCap, type DkSession } from '@digi/dk-session';
 import { buildBars, type Bar, type KnownModule } from './memory-core';
-import { loadLibrary } from '@web/transfer/transfer-backend';
+import type { LibraryModule } from '@digi/workbench-core/modules/dktransfer.ts';
 
 export interface MemoryReading {
-  /** The device the session talks to: the INFO port name (`dt2-1.17`). */
+  /** The device the session talks to: the INFO port name (`<id>-<version>`). */
   port: string;
   bars: Bar[];
   /** How many modules the runtime has loaded. */
@@ -14,7 +14,10 @@ export interface MemoryReading {
 }
 
 /** Read the device: CAPACITY, MODULES, and the library for what each loaded module takes. A library that cannot be read leaves every module "other". */
-export async function readMemory(s: DkSession): Promise<MemoryReading> {
+export async function readMemory(
+  s: DkSession,
+  loadLibrary: (device: string) => Promise<LibraryModule[]>,
+): Promise<MemoryReading> {
   const info = await s.info();
   if (!hasCap(info, 'CAPACITY'))
     throw new DkError({

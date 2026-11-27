@@ -1,27 +1,26 @@
 // The Memory panel: what the resources a device limits are used for. A tab of the right-hand column (SidePanels.tsx) of the Emulator page, beside
 // Card and Metrics, and of the Remote page, alone; in the Card panel's look (card-panel.css). One bar per resource the device limits
-// (memory-core.ts); each bar is split into one segment per loaded module, coloured by the module's type, then free space (a count with few slots,
+// (memory-core.ts); under each bar a table lists what each module takes of it; each bar is split into one segment per loaded module, coloured by the module's type, then free space (a count with few slots,
 // such as Machines, is one cell per slot instead); hover a
 // segment for the module and its amount.
 // The panel reads CAPACITY, MODULES and the local library (memory-backend.ts) over the session it is given, which is the target's one session
-// (target.ts): when its tab is shown, when a Transfer job ended or the emulator restarted (the same signal the Card panel reads), when
+// (target.ts): when its tab is shown, when a Transfer job ended or the emulator restarted (the same signal the Files page reads), when
 // the window gets the focus, and with its Refresh button. One read at a time (read-gate-core.ts); a read that fails is tried again a few
 // times with a growing gap (a device that is still booting after a restart). A panel whose tab is not shown reads nothing. Nothing pending or
 // ticked is shown.
+import type { TargetBinding } from '@digi/workbench-core/transfer/target.ts';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type JSX } from 'solid-js';
-import { panels } from '@web/data/faceplates';
-import { isCancelled, isNoRuntime } from '@web/modules/backend';
-import type { DkSession } from '@digi/dk-session';
+import { panels } from '@digi/workbench-core/data/faceplates.ts';
+import { isCancelled, isNoRuntime } from '@digi/workbench-core/modules/backend.ts';
 import { cardRefresh } from './card-state';
-import { deviceOfPort } from './remote-core';
-import { freeTitle, noteText, segmentTitle, slotCells, usedText, widthPct } from './memory-core';
+import { deviceOfInfoPort } from '@digi/workbench-core/data/device-profiles.ts';
+import { freeTitle, moduleRows, noteText, segmentTitle, slotCells, usedText, widthPct } from './memory-core';
 import { readMemory, type MemoryReading } from './memory-backend';
 import { createReadGate } from './read-gate-core';
-import { focusReadDue } from '@web/transfer/refresh-core';
-import { asked, noteReply } from '@web/transfer/connection-state';
-import { checkRuntime, emulatorRuntime, sameTarget, target } from '@web/transfer/target';
-import { failureLine } from '@web/transfer/wait-core';
-import { reloadWithRuntime } from './emulator-actions';
+import { focusReadDue } from '@digi/workbench-core/transfer/refresh-core.ts';
+import { useTransferApp } from '@digi/workbench-core/transfer/app-context.ts';
+import { targetLabel } from '@digi/workbench-core/transfer/target.ts';
+import { failureLine } from '@digi/workbench-core/transfer/wait-core.ts';
 import './card-panel.css';
 import './memory-panel.css';
 
@@ -35,43 +34,34 @@ const LEGEND = [
 // The rows of a reading (memory-core.ts), shown greyed and empty while the emulator has no runtime.
 const SKELETON_ROWS = ['DSP memory', 'CPU memory', 'Machines', 'Parameters', 'Pages', 'Modules'];
 
-/**
- * `session`: the device to read (the emulator, or the selected target). `track`: read again when this changes (the selected target).
- * `where`: its name for an error line ("No reply from Emulator").
- */
 export default function MemoryPanel(props: {
   visible: boolean;
-  session: () => Promise<DkSession>;
-  where: () => string;
-  track?: () => unknown;
+  source: TargetBinding;
   /** Set when the panel is a tab of the column (SidePanels.tsx): the tabpanel's id and the id of its tab. */
   tabpanel?: { id: string; labelledBy: string };
 }): JSX.Element {
+  const app = useTransferApp();
+  const { noteReply } = app.connection;
+  const { checkRuntime, emulatorRuntime, target } = app.target;
   const [reading, setReading] = createSignal<MemoryReading>();
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [noRuntime, setNoRuntime] = createSignal(false);
 
-  // the Emulator page passes the emulator's session; the Remote page passes the selected target's
-  const readsEmulator = () => props.where() === 'the emulator';
-  // The Emulator page's panel reads the emulator whatever the target is; only a read of the selected target may move the connection indicator.
-  const readsTarget = () => !readsEmulator() || target().kind === 'emulator';
-  const emulatorRead = () => readsEmulator() || target().kind === 'emulator';
+  const emulatorRead = () => props.source.target.kind === 'emulator';
   const gate = createReadGate({
     run: async (current) => {
       setBusy(true);
-      const t0 = target();
+
       try {
-        const check = () => checkRuntime(readsEmulator() ? { kind: 'emulator' } : target());
-        if (readsTarget()) await asked(async () => check());
-        else check();
-        const s = await props.session();
-        const r = readsTarget() ? await asked(() => readMemory(s)) : await readMemory(s);
+        checkRuntime(props.source.target);
+        const s = await props.source.session();
+        const r = await readMemory(s, app.loadLibrary);
         if (current()) {
           setReading(r);
           setError('');
           setNoRuntime(false);
-          if (readsTarget()) void noteReply(s, () => sameTarget(t0, target()));
+          void noteReply(s, () => props.source.target === target());
         }
         return true;
       } catch (e) {
@@ -80,11 +70,11 @@ export default function MemoryPanel(props: {
         if (isCancelled(e)) return true;
         // nothing changes until the emulator boots again: no retry
         if (isNoRuntime(e)) {
-          setError(failureLine(e, props.where()));
+          setError(failureLine(e, targetLabel(props.source.target)));
           setNoRuntime(true);
           return true;
         }
-        setError(failureLine(e, props.where()));
+        setError(failureLine(e, targetLabel(props.source.target)));
         return false;
       } finally {
         setBusy(false);
@@ -97,8 +87,8 @@ export default function MemoryPanel(props: {
   // read when the panel is shown and opened, when the target changed, when a Transfer job ended or the emulator restarted
   createEffect(() => {
     cardRefresh();
-    props.track?.();
-    emulatorRuntime();
+
+    if (props.source.target.kind === 'emulator') emulatorRuntime();
     if (active()) untrack(() => gate.request());
     else untrack(() => gate.stop());
   });
@@ -121,7 +111,7 @@ export default function MemoryPanel(props: {
   });
 
   const device = () => {
-    const d = deviceOfPort(reading()?.port ?? '');
+    const d = deviceOfInfoPort(reading()?.port ?? '');
     return d ? panels[d].name : '';
   };
 
@@ -183,6 +173,17 @@ export default function MemoryPanel(props: {
                         </div>
                       )}
                     </Show>
+                    <ul class="mem-mods" aria-label={`${bar.label} by module`}>
+                      <For each={moduleRows(bar)}>
+                        {(m) => (
+                          <li>
+                            <span class={`swatch ${m.kind}`} />
+                            <span class="name">{m.label}</span>
+                            <span class="amount">{m.text}</span>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
                     <Show when={noteText(bar)}>
                       {(note) => (
                         <span class="mem-note" classList={{ over: bar.over }}>
@@ -233,7 +234,7 @@ export default function MemoryPanel(props: {
         </Show>
         <Show when={noRuntime() && emulatorRead()}>
           <div class="acts">
-            <button type="button" class="act small" onClick={() => reloadWithRuntime()}>
+            <button type="button" class="act small" onClick={() => app.env.extras?.reloadWithRuntime?.()}>
               Reload with runtime
             </button>
           </div>

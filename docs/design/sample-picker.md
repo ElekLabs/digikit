@@ -1,7 +1,7 @@
 # On-device sample picker: the SMP pool list
 
 Status: slice 2 accepted by Em on 2026-11-01; reshaped on 2026-11-02 for the sample pool (the machine owns 16 entries, the parameter SMP names the entry of a note, a click on SMP opens this list) and for the UI rules of 2026-11-02 (docs/design/ui-rules.md): the list is the chooser's slot-list mode filled with the pool: YES on a slot opens the browser for that slot, YES on a file loads it into that slot, sets SMP and closes the whole flow, errors show on the page. Built statically, not run in the emulator yet.
-Sources: sdk/include/dk/{ui,files,sample_track,sample_picker,chooser,params}.h, docs/design/sample-api-1.5.md, docs/MODULE-AUTHORING.md, modules/core/runtime/src/rs/src/tracks.rs, finding 71.
+Sources: sdk/include/dk/{ui,files,sample_track,sample_picker,chooser,params}.h, docs/design/sample-api-1.5.md, docs/MODULE-AUTHORING.md, services/samples/src/tracks.rs, finding 71.
 
 ## 0. Facts that shape the design
 
@@ -97,7 +97,7 @@ E_CHANGED fix: YES on the slot and the same file again (the load selects it agai
 
 ### 2.5 CLEAR
 
-One press, no confirm: `sample_pool_clear`. The row goes to `-`. A note with SMP on that entry is silent from then on (the SMP value is not changed). Elektron project files are not touched (keep-stock rule): the pool list lives in the digikit runtime, per project.
+One press, no confirm: `sample_pool_clear`. The row goes to `-`. A note with SMP on that entry is silent from then on (the SMP value is not changed). Elektron project files are not touched (keep-stock rule): the pool list lives in the module's settings (keys `pool.0` to `pool.15`, one path each; the picker puts a key when a file is loaded and removes it at CLEAR), per project while the `project` service is loaded, and `init` reads it again.
 
 ### 2.6 Screen 4: INFO (DK_UI_TEXT_PAGE, title `INFO`)
 
@@ -141,12 +141,12 @@ Files:
 - `sdk/include/dk/sample/picker.h`: `dk_sample_picker_init`, `dk_sample_picker_open_pool(current, pick, ctx)`, `dk_sample_picker_fini`.
 - `sdk/src/sample/picker.c`: the pool's descriptor for the chooser, CLEAR and INFO, the entry INFO page.
 - `sdk/include/dk/chooser/logic.h` and `sdk/src/chooser/logic.c`: pure functions, no API calls: sort order, leaf-name truncation, path join/parent, size/length text, error text for a code, `dk_sample_pool_row_text`.
-- `modules/machines/shot/src/module.c`: lists the three sources, calls `dk_sample_picker_init` in `dkm_init`, exports `shot_smp_click` (`DK_PARAM_ACTION`) and sets SMP in `smp_pick`.
+- `modules/machine/digikit/shot/src/module.c`: lists the three sources, calls `dk_sample_picker_init` in `dkm_init`, exports `shot_smp_click` (`DK_PARAM_ACTION`) and sets SMP in `smp_pick`.
 
 Limits: statics about 8 KB (128 rows x 56 bytes, path buffers 256 bytes x 2). Menus are never freed: each is built once (pool list, browser, INFO page) and kept. All ctx and descriptors in module memory. Rows 23 characters. One browser instance (not re-entrant): a second open reuses it.
 
 Tests:
-1. Host tests, `modules/core/adapters/ui/host/tests/picker.rs` (`cargo test -p dkui-host`): the chooser and picker sources compiled against a fake `dk_api` (a listing provider and a 16-slot pool whose `sample_pool_set` replaces a slot) and the fake core/ui: list rows per state, the marker and the cursor on the current slot, YES on an empty or filled slot opens the browser, a file to fill and done in one press, NO one level, an error that closes the flow and shows its text, CLEAR and the hole, INFO, sort order, the 128-row cap, long names, paths at the 255-byte limit, the timer; a toy chooser tests the component without the pool. The runtime side of `param_get` and `param_set` is in `modules/core/runtime/src/rs/src/paramapi.rs` (`tests`).
+1. Host tests, `runtime/platform/ui/host/tests/picker.rs` (`cargo test -p dkui-host`): the chooser and picker sources compiled against a fake `dk_api` (a listing provider and a 16-slot pool whose `sample_pool_set` replaces a slot) and the fake core/ui: list rows per state, the marker and the cursor on the current slot, YES on an empty or filled slot opens the browser, a file to fill and done in one press, NO one level, an error that closes the flow and shows its text, CLEAR and the hole, INFO, sort order, the 128-row cap, long names, paths at the 255-byte limit, the timer; a toy chooser tests the component without the pool. The runtime side of `param_get` and `param_set` is in `services/machines/src/slots/tests.rs`.
 2. `dk:dev` screenshot sheet on DN2 (not run yet): `mise run dk:dev -- digikit/shot --device dn2 --store 'digikit/shot*' --keys '...,shot:pool,...'`. Look at every PNG before handoff.
 3. One device test of the click path (SMP click, YES on a slot, a file loads into that slot and sets SMP, the note plays it) comes with the emulator proof; shot-dt2 and shot-dn2 cover the pool API and the SMP value on the device without the click.
 4. Gate: `mise run module:check digikit/shot`, `mise run test:host`.
@@ -154,7 +154,7 @@ Tests:
 ## 5. Decisions
 
 1. The picker is shared source compiled into each sampler; a stand-alone module later needs a find call. (Em, 2026-11-01.)
-2. The list shows all 16 indexes, so the row number is the SMP value. Names on the knob come later (a formatter field in core/params).
+2. The list shows all 16 indexes, so the row number is the SMP value. Names on the knob come later (a formatter field in core/rows).
 3. YES on a slot opens the browser for that slot (empty or filled). YES on a file loads it into that slot, sets SMP to the slot and closes the whole flow in one press. Turning SMP chooses between the loaded slots. There is no "+ ADD" row. (Em, 2026-11-02, ui-rules.md.)
 4. No header preview in v1 (size only). 128 rows per folder, the picker sorts.
 5. Refusals: no dialog (Em, 2026-11-01, one-button flows); the flow closes and the page shows the error text as a toast.

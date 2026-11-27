@@ -1,4 +1,4 @@
-import { BulkFrames, type BulkLink } from './bulk.ts';
+import { BulkFrames, SysExReplyLink, type BulkLink } from './bulk.ts';
 
 /**
  * A bulk link over a byte stream, such as the stdin and stdout of the `dkbulk open` bridge (packages/dkbulk). The host supplies the two ends as plain
@@ -13,13 +13,27 @@ export class ProcessBulkLink implements BulkLink {
   private ready: Uint8Array[] = [];
   private waiter: (() => void) | null = null;
   private failure: Error | null = null;
+  private outOnly: SysExReplyLink | null = null;
+  /**
+   * `poll` selects the OUT-only mode (`dkbulk open --out-only`, USB AUDIO/MIDI): the stream carries no replies (`subscribe` is not used), `send` writes to the
+   * stream and `recv` takes the replies from `poll` (`DkSession.usbFastReplies`), see `SysExReplyLink`.
+   */
   constructor(
     write: (bytes: Uint8Array) => void,
     subscribe: (onData: (chunk: Uint8Array) => void) => void,
     end: () => void = () => {},
+    poll?: () => Promise<Uint8Array>,
   ) {
     this.write = write;
     this.end = end;
+    if (poll) {
+      this.outOnly = new SysExReplyLink(
+        async (frame) => write(frame),
+        poll,
+        () => end(),
+      );
+      return;
+    }
     subscribe((chunk) => {
       try {
         this.ready.push(...this.frames.feed(chunk));
@@ -32,11 +46,13 @@ export class ProcessBulkLink implements BulkLink {
   }
 
   async send(frame: Uint8Array): Promise<void> {
+    if (this.outOnly) return this.outOnly.send(frame);
     if (this.failure) throw this.failure;
     this.write(frame);
   }
 
   recv(timeoutMs: number, signal?: AbortSignal): Promise<Uint8Array | null> {
+    if (this.outOnly) return this.outOnly.recv(timeoutMs, signal);
     const queued = this.ready.shift();
     if (queued) return Promise.resolve(queued);
     if (this.failure) return Promise.reject(this.failure);
@@ -61,6 +77,7 @@ export class ProcessBulkLink implements BulkLink {
   }
 
   close(): void {
-    this.end();
+    if (this.outOnly) void this.outOnly.close();
+    else this.end();
   }
 }

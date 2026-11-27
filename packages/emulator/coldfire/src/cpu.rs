@@ -8,6 +8,8 @@
 use crate::decode::{Ea, Insn, Operand, Size, TRAP_FPU, TRAP_PRIVILEGED, decode};
 use crate::decode_gen::Form;
 
+pub mod native;
+
 /// A bus access that failed (unmapped, or refused by a peripheral model).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BusError {
@@ -187,6 +189,11 @@ impl DecodePage {
 #[derive(Clone, Debug)]
 struct DecodeCache {
     pages: Box<[Option<(u32, DecodePage)>]>,
+    /// The code range native kernels were verified against (`native`): `[guard_lo, guard_hi)`. A write that overlaps it sets
+    /// `guard_hit`, which makes the kernels verify their bytes again before they run.
+    guard_lo: u32,
+    guard_hi: u32,
+    guard_hit: bool,
 }
 
 /// The cache is not machine state: two cores that run the same code are equal whichever instructions each has decoded so far (a write that
@@ -201,11 +208,22 @@ impl Default for DecodeCache {
     fn default() -> Self {
         Self {
             pages: (0..DC_CACHE_PAGES).map(|_| None).collect(),
+            guard_lo: 0,
+            guard_hi: 0,
+            guard_hit: false,
         }
     }
 }
 
 impl DecodeCache {
+    /// Note a write of `len` bytes at `addr` against the guarded range.
+    #[inline(always)]
+    fn guard(&mut self, addr: u32, len: u32) {
+        if addr < self.guard_hi && u64::from(addr) + u64::from(len) > u64::from(self.guard_lo) {
+            self.guard_hit = true;
+        }
+    }
+
     #[inline]
     fn page_index(page: u32) -> usize {
         ((page >> DC_PAGE_BITS) as usize) & (DC_CACHE_PAGES - 1)
@@ -279,6 +297,7 @@ impl DecodeCache {
     /// `addr` overlaps (see `first_start`); the page stays.
     #[inline]
     fn invalidate(&mut self, addr: u32, len: u32) {
+        self.guard(addr, len);
         if !self.page_cached(addr, len) {
             return;
         }
@@ -303,6 +322,7 @@ impl DecodeCache {
     #[inline]
     fn invalidate_page(&mut self, page: u32) {
         let page = page & !DC_PAGE_MASK;
+        self.guard(page, DC_PAGE_SIZE);
         let i = Self::page_index(page);
         if matches!(&self.pages[i], Some((tag, _)) if *tag == page) {
             self.pages[i] = None;
@@ -397,6 +417,8 @@ pub struct Cpu {
     /// `pending_nzv` together always mean the same machine state a fully
     /// eager `Cpu` would be in -- `sr` alone just may not show it yet.
     pending_nzv: PendingNzv,
+    /// Native kernels for hot functions (`native`); empty unless installed.
+    native: native::NativeState,
 }
 
 /// A fault raised while executing: the vector and the PC to stack
@@ -480,6 +502,7 @@ impl Cpu {
             last_unimplemented: None,
             decode_cache: DecodeCache::default(),
             pending_nzv: PendingNzv::None,
+            native: native::NativeState::default(),
         }
     }
 
@@ -607,7 +630,13 @@ impl Cpu {
         // A near-full or wrapping 32-bit range touches every decode page.
         // Avoid narrowing usize to u32 or walking a million pages.
         if len >= u32::MAX as usize {
-            self.decode_cache = DecodeCache::default();
+            let fresh = DecodeCache {
+                guard_lo: self.decode_cache.guard_lo,
+                guard_hi: self.decode_cache.guard_hi,
+                guard_hit: true,
+                ..DecodeCache::default()
+            };
+            self.decode_cache = fresh;
             return;
         }
         let first = (addr & !DC_PAGE_MASK).wrapping_sub(DC_PAGE_SIZE);
@@ -1201,6 +1230,31 @@ impl Cpu {
         } else {
             v
         }
+    }
+
+    /// MOVE to ACCn: the value, its extension per the MACSR mode, PAVn cleared and MACSR N/Z from the value.
+    #[inline]
+    pub(crate) fn move_to_acc(&mut self, a: usize, v: u32) {
+        self.emac.acc[a] = v;
+        let su = self.emac.macsr & 0x40 != 0;
+        let fi = self.emac.macsr & 0x20 != 0;
+        let ext = if fi {
+            (if v & 0x8000_0000 != 0 { 0xff00 } else { 0 }) as u16
+        } else if su {
+            0
+        } else {
+            (if v & 0x8000_0000 != 0 { 0xffff } else { 0 }) as u16
+        };
+        self.set_ext16(a, ext);
+        self.set_pav(a, false);
+        let mut m = self.emac.macsr & !0x0e;
+        if v == 0 {
+            m |= 0x04;
+        }
+        if v & 0x8000_0000 != 0 {
+            m |= 0x08;
+        }
+        self.emac.macsr = m;
     }
 
     /// The 48-bit "complete accumulator" (RM p.150-151): the concatenation
@@ -2603,27 +2657,7 @@ impl Cpu {
                 let Operand::Acc(a) = ops[1] else {
                     unreachable!()
                 };
-                let a = a as usize;
-                self.emac.acc[a] = v;
-                let su = self.emac.macsr & 0x40 != 0;
-                let fi = self.emac.macsr & 0x20 != 0;
-                let ext = if fi {
-                    (if v & 0x8000_0000 != 0 { 0xff00 } else { 0 }) as u16
-                } else if su {
-                    0
-                } else {
-                    (if v & 0x8000_0000 != 0 { 0xffff } else { 0 }) as u16
-                };
-                self.set_ext16(a, ext);
-                self.set_pav(a, false);
-                let mut m = self.emac.macsr & !0x0e;
-                if v == 0 {
-                    m |= 0x04;
-                }
-                if v & 0x8000_0000 != 0 {
-                    m |= 0x08;
-                }
-                self.emac.macsr = m;
+                self.move_to_acc(a as usize, v);
             }
             Form::MoveFromAcc => {
                 let Operand::Acc(a) = ops[0] else {

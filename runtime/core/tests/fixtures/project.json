@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "core/runtime-fixture-tests",
+  "tags": ["test-only"],
+  "implicitDependencies": ["core/runtime-package", "dkrt-link", "dkrt-abi", "core/dsp-link", "core/dyndsp", "sdk"],
+  "metadata": {
+    "mergeTests": ["module-load.device.test.ts"],
+    "runtimeAcceptance": [
+      {
+        "files": ["module-load.device.test.ts"],
+        "firmwareOnly": "representative SDK artifacts through the real loader on the firmware: module bytes on the card after the reboot, DSP loader completion on the SHARC, voice row and machine type, guard counters, the firmware UI reached with no failure event",
+        "dsp": "sharc",
+        "modules": ["digikit/debug", "test/sine", "test/dyn-dn2", "test/dyn-fx-gain", "core/services/machines", "core/services/fx"],
+        "incidental": [
+          {
+            "module": "digikit/debug",
+            "reason": "loaded for its debug service (log and panel hooks the test uses); its own behaviour is not asserted here"
+          },
+          {
+            "module": "core/services/machines",
+            "reason": "loaded as the machine host the fixtures need; the machines service is not exercised here"
+          },
+          {
+            "module": "core/services/fx",
+            "reason": "loaded as the effects host the fixtures need; the fx service is not exercised here"
+          }
+        ]
+      }
+    ]
+  }
+}

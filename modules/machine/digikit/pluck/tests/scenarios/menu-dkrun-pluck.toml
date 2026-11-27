@@ -1,0 +1,16 @@
+# `dk run` (tools/device/dkrun.py, runtime 4): a boot with no module selected; dkrun uploads digikit/pluck over USB SysEx, SELECTs it
+# (the selection record, written by the menu's own code), RESTARTs, and the next boot loads it (MOD_LOAD result 1, MOD_DSP result 0). The
+# machine is then in the list, has its voice row and plays. A second dkrun finds the same sha256 and uploads nothing.
+[scenario]
+name = "menu-dkrun-pluck"
+kind = "menu"
+devices = ["dt2"]
+tier = "quick"
+
+[menu]
+modules = ["digikit/pluck"]
+play_module = "digikit/pluck"
+play_machine = "pluck"
+hint = 7
+voices = 1
+dkrun = true

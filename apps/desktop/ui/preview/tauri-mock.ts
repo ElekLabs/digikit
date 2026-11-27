@@ -1,18 +1,80 @@
-// A stand-in for `@tauri-apps/api/core` in the preview: just enough for the target selector and a real `DkSession` over the emulator's
-// USB capture (a device that never answers: the "no reply" state). Everything else the pages ask of Tauri is answered by the two backend mocks.
-import { cardCall, pickFolder } from './card-mock';
+// The native command boundary of the browser preview. Desktop components call the same TauriHost as in the app.
+import { previewHome } from './preview-home';
+import { previewEmulator } from './emulator-mock';
+import { cardCall, pickFolder, reloadCard } from './card-mock';
+import type { RuntimeSnapshot } from '@digi/workbench-core/runtime/runtime.ts';
+import dkprofUrl from '../../../web/public/dkprof.wasm?url';
+import sampleUrl from '../../../web/public/dksample.wasm?url';
 import * as firmware from './firmware-mock';
 import { sim } from './sim';
+import { previewSymbolImage } from './symbols-mock';
+
+const query = new URLSearchParams(location.search);
+export const emulator = previewEmulator(query);
+export const isTauri = (): boolean => true;
+
+const remotePort = 'Elektron Digitone II';
+const symbols = isTauri() && new URLSearchParams(location.search).has('symbols');
+const symbolsSnapshot: RuntimeSnapshot = {
+  polled: true,
+  status: {
+    device: previewSymbolImage.device,
+    version: previewSymbolImage.firmware,
+    icount: 0,
+    pc: 0,
+    ready: true,
+    phase: 'ready',
+    error: null,
+    frame_revision: 0,
+    frame_source: null,
+    main_ui_reached: true,
+    filesystem_verified: true,
+    input_ready: true,
+    input_pending: 0,
+    input_irqs: 0,
+  },
+};
 
 export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: Record<string, string> }): Promise<T> {
   switch (cmd) {
+    case 'emu_launch':
+      return (symbols ? { loaded: true } : emulator.launch) as T;
+    case 'emu_startup':
+      return (symbols ? symbolsSnapshot : await emulator.startup()) as T;
+    case 'emu_step':
+      return (symbols ? symbolsSnapshot : await emulator.snapshot(false)) as T;
+    case 'emu_tap':
+      emulator.screen.key(args.code, true);
+      emulator.screen.key(args.code, false);
+      return (symbols ? symbolsSnapshot : await emulator.snapshot()) as T;
+    case 'emu_audio_status':
+      return null as T;
+    case 'emu_stop':
+      return undefined as T;
+    case 'emu_pick_syx':
+      return emulator.source.path as T;
+    case 'emu_set_source':
+      return emulator.source as T;
+    case 'emu_source_info':
+      return (emulator.isLoaded() ? emulator.source : null) as T;
+    case 'emu_build_info':
+      return {} as T;
     case 'local_pick_folder':
       return (await pickFolder()) as T;
     case 'card_open_folder':
       return undefined as T;
+    case 'remote_audio_inputs':
+      return [{ id: 'audio-input', name: remotePort }] as T;
+    case 'remote_audio_start':
+      return 'Preview headphones' as T;
+    case 'remote_audio_status':
+      return null as T;
+    case 'remote_audio_stop':
+      return undefined as T;
     case 'midi_ports':
-      return (firmware.page ? firmware.ports() : ['Elektron Digitakt II', 'IAC Driver Bus 1']) as T;
+      return firmware.midi.ports() as T;
     case 'midi_open':
+      firmware.midi.open(String(args?.name));
       return undefined as T;
     case 'midi_close':
       firmware.midi.close();
@@ -25,6 +87,12 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
       return undefined as T;
     case 'midi_recv':
       return (await firmware.midi.recv(Number(args?.timeoutMs))) as T;
+    case 'bulk_list':
+      return [] as T;
+    case 'dkprof_wasm':
+      return (await (await fetch(dkprofUrl)).arrayBuffer()) as T;
+    case 'sample_wasm':
+      return (await (await fetch(sampleUrl)).arrayBuffer()) as T;
     case 'patchkit_wasm':
       return (await firmware.patchkitWasm()) as T;
     case 'firmware_prepare':
@@ -46,11 +114,34 @@ export async function invoke<T>(cmd: string, args?: any, _options?: { headers?: 
         name,
         text: new TextDecoder().decode(args as Uint8Array),
       });
-      return `/Users/em/Downloads/${name}` as T;
+      return `${previewHome}/Downloads/${name}` as T;
     }
     case 'emu_call': {
       const method = String(args?.method);
-      if (method === 'status') return { mode: sim.paused ? 'paused' : 'running' } as T;
+      if (symbols && method === 'runtime.maps') {
+        const { device, firmware, sha256 } = previewSymbolImage;
+        return {
+          image_sha256: sha256,
+          matches: true,
+          ship: JSON.stringify({
+            format: 'dk-addrmap',
+            version: 1,
+            kind: 'ship',
+            key: { device, firmware, image_sha256: sha256 },
+            entries: [],
+          }),
+          symbols: {},
+        } as T;
+      }
+      if (method === 'input.button') return emulator.screen.key(args.params.code, args.params.down) as T;
+      if (method === 'input.turn') return emulator.screen.turn(args.params.encoder, args.params.detents) as T;
+      if (method === 'firmware.load') return (await emulator.load(!!args.params.runtime, !!args.params.dsp)) as T;
+      if (method === 'restart') return (await reloadCard()) as T;
+      if (method === 'status')
+        return {
+          mode: sim.paused ? 'paused' : 'running',
+          ...emulator.status(),
+        } as T;
       if (method.startsWith('card.'))
         return (await cardCall(method, (args?.params as Record<string, unknown>) ?? {})) as T;
       return {} as T; // midi.usb.in / midi.usb.out: nothing is ever answered

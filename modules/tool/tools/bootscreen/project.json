@@ -1,0 +1,20 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "name": "tools/bootscreen",
+  "implicitDependencies": ["core/introblank"],
+  "metadata": {
+    "runtimeAcceptance": [
+      {
+        "files": ["tests/bootscreen.device.test.ts"],
+        "modules": ["test/dyn-crash", "test/intro-ticks"],
+        "plusdrive": true
+      },
+      {
+        "files": ["tests/bootscreen-safe.device.test.ts", "tests/bootscreen-fault.device.test.ts"],
+        "dsp": "sharc",
+        "modules": ["test/dyn-crash", "test/intro-ticks"],
+        "plusdrive": true
+      }
+    ]
+  }
+}

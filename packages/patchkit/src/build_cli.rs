@@ -37,6 +37,28 @@ fn positional(rest: &[String], valued: &[&str]) -> Vec<String> {
     v
 }
 
+/// (the name the caller used, the module directory) of the modules `build` was asked for: the positional ones, else every module (of `--tree`).
+fn named_dirs(root: &Path, rest: &[String]) -> Result<Vec<(String, PathBuf)>> {
+    let valued = ["--define", "--out", "--tree"];
+    let args = positional(rest, &valued);
+    let tree = flag(rest, "--tree").map(PathBuf::from);
+    Ok(if args.is_empty() {
+        build::all_modules(root, tree.as_deref())
+            .into_iter()
+            .map(|d| (d.display().to_string(), d))
+            .collect()
+    } else {
+        args.iter()
+            .map(|a| Ok((a.clone(), build::resolve_module(root, a)?)))
+            .collect::<Result<_>>()?
+    })
+}
+
+/// The directories of the modules that `build` with these arguments builds.
+pub fn module_dirs(root: &Path, rest: &[String]) -> Result<Vec<PathBuf>> {
+    Ok(named_dirs(root, rest)?.into_iter().map(|d| d.1).collect())
+}
+
 pub fn build(root: &Path, rest: &[String]) -> Result<()> {
     const KNOWN: [&str; 9] = [
         "--check", "--force", "--define", "--out", "--status", "--paths", "--tree", "--all", "--",
@@ -47,21 +69,8 @@ pub fn build(root: &Path, rest: &[String]) -> Result<()> {
     {
         return Err(Error(format!("build: unknown option {f}")));
     }
-    let valued = ["--define", "--out", "--tree"];
-    let args = positional(rest, &valued);
     let has = |f: &str| rest.iter().any(|a| a == f);
-    let tree = flag(rest, "--tree").map(PathBuf::from);
-    // (the name the caller used, the module directory)
-    let dirs: Vec<(String, PathBuf)> = if args.is_empty() {
-        build::all_modules(root, tree.as_deref())
-            .into_iter()
-            .map(|d| (d.display().to_string(), d))
-            .collect()
-    } else {
-        args.iter()
-            .map(|a| Ok((a.clone(), build::resolve_module(root, a)?)))
-            .collect::<Result<_>>()?
-    };
+    let dirs = named_dirs(root, rest)?;
     if has("--status") {
         let mut m = serde_json::Map::new();
         for (name, d) in &dirs {
