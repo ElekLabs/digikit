@@ -499,7 +499,15 @@ fn valid_name(n: &str) -> bool {
 /// Pack a ColdFire object. The entry points are the fields of its `dk_module` constant. Every undefined symbol is an import resolved by the
 /// runtime's table at load time; only 32-bit absolute relocations may name one.
 pub fn pack(obj: &Dko, o: &Options) -> Result<Vec<u8>> {
-    pack_inner(Some(obj), false, &[], &[], o, max_file(), &Declared::default())
+    pack_inner(
+        Some(obj),
+        false,
+        &[],
+        &[],
+        o,
+        max_file(),
+        &Declared::default(),
+    )
 }
 
 /// The image of a data-only module: `init` is `moveq #0,d0; rts`. The `register` records do the work.
@@ -541,7 +549,15 @@ pub fn pack_full_max(
     o: &Options,
     max_file: usize,
 ) -> Result<Vec<u8>> {
-    pack_inner(obj, obj.is_none(), keys, dsp, o, max_file, &Declared::default())
+    pack_inner(
+        obj,
+        obj.is_none(),
+        keys,
+        dsp,
+        o,
+        max_file,
+        &Declared::default(),
+    )
 }
 
 /// Pack an object (or none), the keys table and a DSP section (see [`crate::dkmdsp`]; empty: none). The table at the header's 0x90 pair is the
@@ -648,7 +664,15 @@ pub fn pack_data_only_max(
     o: &Options,
     max_file: usize,
 ) -> Result<Vec<u8>> {
-    pack_inner(Some(obj), true, keys, dsp, o, max_file, &Declared::default())
+    pack_inner(
+        Some(obj),
+        true,
+        keys,
+        dsp,
+        o,
+        max_file,
+        &Declared::default(),
+    )
 }
 
 fn pack_inner(
