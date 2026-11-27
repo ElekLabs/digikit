@@ -1278,6 +1278,9 @@ dependencies = [
 [[package]]
 name = "dkrt-sdk"
 version = "0.1.0"
+dependencies = [
+ "dkneeds",
+]
 
 [[package]]
 name = "dkrt-svc-bitmap"

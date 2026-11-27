@@ -49,6 +49,10 @@ pub mod sample;
 pub mod sample_job;
 pub mod sample_tracks;
 
+mod info_name;
+/// VoiceHost v1: the table of a platform host that plays a machine voice (`sdk/include/dk/host/voice_host.h`).
+pub mod voice_host;
+
 pub mod files;
 /// Internal fixed-memory listing work/notification lifecycle model.
 pub mod files_job;

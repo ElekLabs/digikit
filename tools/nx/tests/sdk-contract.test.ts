@@ -22,6 +22,10 @@ function runHostC(source: string, ...extra: string[]) {
   }
 }
 
+it('lays out the VoiceHost v1 table as its header states', () => {
+  runHostC('sdk/tests/host/voice_host.c');
+}, 40_000);
+
 it('draws the page widgets inside their bounds', () => {
   runHostC('sdk/tests/page/widgets.c');
 }, 40_000);
