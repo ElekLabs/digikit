@@ -19,7 +19,7 @@
     "runtime/core/{test-support,vectors}/**",
     "runtime/core/src/rs/src/{fake_boot_env,fake_platform,fake_storage,host_io,test_lock,gen_abi_check}.rs",
     "runtime/core/src/rs/src/fake_platform/**",
-    "runtime/core/abi/src/{fw,fw_id,keys,plan,profiles,regcheck,sha256,version}.rs",
+    "runtime/core/abi/src/{fw,fw_id,keys,plan,regcheck,sha256,version}.rs",
     "runtime/core/sdk/src/{command,result_text,sel,sticky}.rs"
   ],
   "areas": {
@@ -178,7 +178,7 @@
         "runtime/core/src/rs/src/{platform,level}/**",
         "runtime/core/src/rs/src/resident/{platform,io,arena,intro,dlog,fault,selection}.rs",
         "runtime/core/src/rs/src/package/resident/{platform,io,arena,intro,dlog,fault,selection}.rs",
-        "runtime/core/abi/src/{dev_addr,mem,platform,package_platform}.rs",
+        "runtime/core/abi/src/{dev_addr,mem,platform,package_platform,profiles}.rs",
         "runtime/core/abi.toml",
         "runtime/core/build/device-*.dko.json",
         "runtime/core/build/gen/*.inc",
