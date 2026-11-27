@@ -3,7 +3,10 @@
 //! ends it in `fini`. The hooks and exports of the file reach it through the cell; nothing else holds the state.
 //!
 //! The crate stays neutral: the SDK calls are behind [`Host`], which the file implements (`dks/src/glue/host.rs`) and a host test implements over fakes.
-use crate::engine::{Env, HookRecord, ProjectService, StoreJob, CARRY_MAX, CARRY_VERSION};
+use crate::engine::{
+    Env, HookRecord, ProjectEntry, ProjectService, ProjectSummary, StoreJob, CARRY_MAX,
+    CARRY_VERSION,
+};
 use core::mem::MaybeUninit;
 use dkrt_abi::core_api::CoreApi;
 use dkrt_abi::provider::{Provider, State, Status};
@@ -81,6 +84,16 @@ impl<H: Host> Project<H> {
     /// `dk_project_status`.
     pub fn status(&self) -> u32 {
         self.engine.status()
+    }
+
+    /// `dk_project_list`: the entries written to `out`.
+    pub fn list(&self, first: u32, out: &mut [ProjectEntry]) -> usize {
+        self.engine.list(&self.host, first, out)
+    }
+
+    /// `dk_project_get`: `OK`, `E_AGAIN` while the read runs, `E_NOT_FOUND`.
+    pub fn summary(&mut self, slot: u32, out: &mut ProjectSummary) -> i32 {
+        self.engine.get(&self.host, slot, out)
     }
 }
 

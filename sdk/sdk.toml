@@ -9,7 +9,7 @@ table = "0.13.0"    # the least version a packed `.dkm` needs: `patchkit pack` w
 service_registration = "0.12.1" # minimum runtime for callback ordering and service-local APIs
 resident_query = "0.12.2" # minimum runtime for the optional resident query facet
 workbench_typed = "0.13.4" # minimum runtime for a version 2 Workbench settings descriptor (integer, boolean and choice settings)
-version = "0.13.4"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
+version = "0.13.5"  # 0.x (stable is 1.0.0): a MINOR may break (an import changed or removed, the module file format, the store format, the SysEx protocol); a PATCH only adds
 # The one-version rule (docs/plans/sdk.md section 5.1): every `[[import]]` has `since`, the runtime version that added it (a string "0.7.0"; S3 is breaking, so every import has 0.7.0).
 # `patchkit pack` writes the newest `since` among the imports a module links into the `.dkm` header (word 0x30, the runtime version the module needs; bit 31 is the trace flag,
 # 0 when the module links no service import). The runtime loads a module only when that version has the runtime's MAJOR and MINOR and a PATCH at most the runtime's; otherwise
@@ -729,6 +729,26 @@ since = "0.11.0"
 context = "ui"
 sig = "u32 ()"
 doc = "The state of the project service as bits: bit 0 a `.dkp` file is loaded for the current project, bit 1 the data has changes the file does not hold (written at the next successful stock save), bit 2 a write was deferred after 30 s of a busy store, bit 3 a file of the slot was not used (a stamp, device, version or crc mismatch)."
+
+[[import]]
+name = "dk_project_list"
+service = "project"
+provided = true
+wrapper = "glue"
+since = "0.13.5"
+context = "ui"
+sig = "i32 (u32 first_slot, void *out, u32 max)"
+doc = "The firmware's projects from slot `first_slot` upward into `out`, an array of `max` `dk_project_entry` (19 bytes: slot, flags, name length, 16 name bytes; <dk/platform/project.h>): the number written, at most `max`, empty slots skipped; call again with the last slot + 1 for the next page (the last slot is 127). The flags are DK_PROJECT_CURRENT, DK_PROJECT_DATA (a `.dkp` file of the slot is in the store) and DK_PROJECT_DATA_UNKNOWN (the first listing of the store folder has not ended: bit 1 is not known yet). No card access."
+
+[[import]]
+name = "dk_project_get"
+service = "project"
+provided = true
+wrapper = "glue"
+since = "0.13.5"
+context = "ui"
+sig = "i32 (u32 slot, void *out)"
+doc = "The summary of project `slot` into `out`, a `dk_project_summary` (name, save stamp, write counter, the module list with each module's id, store hash, number of settings entries and state; <dk/platform/project.h>). The current project is answered at once (0). For another slot the first call queues a read of its `.dkp` and returns DK_E_AGAIN, as does every call until the read ended; then 0, or DK_E_NOT_FOUND when the slot has no usable file or the firmware lists none. The service keeps one summary: a call for another slot replaces it, and a change of the slot's file drops it. A module's state is DK_PROJECT_MODULE_LOADED or DK_PROJECT_MODULE_UNKNOWN (the card is not looked at). DK_E_RANGE for a null `out`."
 
 [[import]]
 name = "dk_param_get"

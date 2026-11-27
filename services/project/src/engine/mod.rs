@@ -11,6 +11,7 @@
 //! - [`StoreJob`] (`job.rs`): the cell of the posted I/O job, outside the service: its phase word hands the job's data (the [`StoreWriter`] steps, the [`FileBuffer`]) between the
 //!   UI task and the I/O task. The tick gets it as an argument.
 //! - [`BusyClock`] (`clock.rs`): the retry, deferral and deferred state of a busy store.
+//! - `browse.rs`: the list of projects and the summary of one project for the Project Manager ([`DataIndex`], [`PeekCache`]).
 //! - [`ModuleRestore`] (`restore.rs`): after a project's data is installed, the live load of the modules of its module list that are on the card and not loaded.
 //!
 //! Everything that reaches the outside goes through [`Env`] (the store listing and reads, the firmware's project list, the log, the clock) and [`Files`] (the store writes), so the
@@ -18,6 +19,7 @@
 //!
 //! Slots: 0 to 127 are projects; the live mirror 0x80 and -1 mean "no current project". The file of a slot is `projects/<number>-<name>.dkp`, the number being slot + 1 ([`crate::name`]).
 mod bound;
+mod browse;
 mod buffer;
 mod carry;
 mod clock;
@@ -34,6 +36,10 @@ mod writer;
 pub use bound::{
     Applied, BoundProject, BoundView, Effect, Slot, SourceFile, LIVE_MIRROR, LOAD_RETRY_MS,
 };
+pub use browse::{
+    DataIndex, PeekAnswer, PeekCache, ProjectEntry, ProjectModule, ProjectSummary, ENTRY_CURRENT,
+    ENTRY_DATA, ENTRY_UNKNOWN, MODULE_LOADED, MODULE_UNKNOWN,
+};
 pub use buffer::FileBuffer;
 pub use carry::{EXPORT_MAX as CARRY_MAX, VERSION as CARRY_VERSION};
 pub use clock::{is_busy, BusyClock, BusyVerdict, DEFER_MS, RETRY_MS};
@@ -41,7 +47,7 @@ pub use env::{stable_record, Env, Files, ListPoll, ListRow, SlotRecord};
 pub use job::StoreJob;
 pub use pending::{HookRecord, HookRecords, Pending};
 pub use plan::Plan;
-pub use queue::{Work, WorkQueue, REC_WAIT_MS};
+pub use queue::{Work, WorkQueue, INDEX_RETRY_MS, REC_WAIT_MS};
 pub use restore::{
     Event, LiveJob, LoadedModule, ModuleId, ModulePath, ModuleRestore, ModuleSet, ModuleWarning,
     CARD_TRIES_MAX, CARD_WAIT_MS, ID_MAX, MODULES_MAX, MODULE_PATH_MAX, PLAY_WAIT_MS,
@@ -81,6 +87,8 @@ pub struct ProjectService {
     run: TaskRun,
     clock: BusyClock,
     restore: ModuleRestore,
+    index: DataIndex,
+    peek: PeekCache,
 }
 
 impl ProjectService {
@@ -93,6 +101,8 @@ impl ProjectService {
             run: TaskRun::new(),
             clock: BusyClock::new(),
             restore: ModuleRestore::new(),
+            index: DataIndex::new(),
+            peek: PeekCache::new(),
         }
     }
 
@@ -227,6 +237,13 @@ impl ProjectService {
             self.scan_refused(env, status, job);
             return;
         }
+        if self.scan.scan_for() == ScanFor::Index {
+            // the whole folder was listed: the slots that have a file, nothing to read
+            self.index.replace(self.scan.found());
+            self.clock.answered();
+            self.stage = Stage::Idle;
+            return;
+        }
         let result = match self.scan.finish(env, job.lend()) {
             Ok(result) => result,
             Err(status) => {
@@ -235,7 +252,17 @@ impl ProjectService {
             }
         };
         self.clock.answered();
+        if result.scan_for() == ScanFor::Peek {
+            // a read for the Project Manager: no plan, no task
+            let kept = self.peek.finish(env, job.lend(), &result);
+            self.stage = Stage::Idle;
+            if let Err(status) = kept {
+                self.scan_refused(env, status, job);
+            }
+            return;
+        }
         self.run.begin();
+        let slot = result.slot();
         if result.scan_for() == ScanFor::Save && result.record().is_some() {
             self.bound.record_modules(env);
         }
@@ -252,6 +279,8 @@ impl ProjectService {
                 return;
             }
             if applied == Applied::Vanished {
+                self.index.set(slot, false);
+                self.peek.forget(slot);
                 return;
             }
         }
@@ -264,8 +293,15 @@ impl ProjectService {
     /// again) and warns, except for a slot that failed before: that refusal is not logged or warned again (it is a quiet retry or the same answer).
     fn scan_refused<E: Env + ?Sized>(&mut self, env: &mut E, status: i32, job: &StoreJob) {
         self.stage = Stage::Idle;
+        if self.scan.scan_for() == ScanFor::Index {
+            // the listing for the data bit is no project's work: no log, no toast, no share of the busy clock; it is asked again later
+            self.queue.index_refused(env.now_ms());
+            return;
+        }
         let slot = self.scan.slot();
         let load = self.scan.scan_for() == ScanFor::Load;
+        // a read for the Project Manager is no project's failure: no log of its own, no toast
+        let browse = self.scan.scan_for() == ScanFor::Peek;
         let repeat = load && self.bound.failed_load() == Some(slot);
         if is_busy(status) {
             let BusyVerdict::GiveUp { waited, first } = self.clock.note_busy(env.now_ms()) else {
@@ -278,13 +314,16 @@ impl ProjectService {
                     [slot, status as u32, waited / 1000, 0, 0],
                 );
             }
-        } else if !repeat {
+        } else if !repeat && !browse {
             env.log(
                 logk::PROJECT_IGNORED,
                 [slot, Ignore::Store as u32, status as u32, 0, 0],
             );
         }
         self.clock.answered();
+        if self.scan.scan_for() == ScanFor::Peek {
+            self.peek.give_up();
+        }
         if load {
             let now = env.now_ms();
             self.bound.fail_load(env, job.lend(), slot, now);
@@ -303,6 +342,10 @@ impl ProjectService {
             if self.run.finished() {
                 self.clock.answered();
                 self.run.log_end(env);
+                if let Some((slot, has)) = self.run.data_after() {
+                    self.index.set(slot, has);
+                    self.peek.forget(slot);
+                }
                 self.stage = Stage::Idle;
                 return;
             }

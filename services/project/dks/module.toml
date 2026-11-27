@@ -1,7 +1,7 @@
 [module]
 id = "core/services/project"
-# the version the file provides (PROVIDES), on the scale of the imports' `since`: dk_project_current and dk_project_status are since 0.11.0 of sdk/sdk.toml
-version = "0.11.0"
+# the version the file provides (PROVIDES), on the scale of the imports' `since`: dk_project_current and dk_project_status are since 0.11.0 of sdk/sdk.toml, dk_project_list and dk_project_get since 0.13.5
+version = "0.13.5"
 name = "project service"
 category = "core"
 role = "service"

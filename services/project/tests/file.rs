@@ -46,6 +46,12 @@ fn without_an_owner_the_entries_answer_the_neutral_way() {
             file::glue::dk_project_current(core::ptr::null_mut(), core::ptr::null_mut()),
             dkrt_sdk::E_NOT_FOUND
         );
+        let mut out = [0u8; 400];
+        assert_eq!(file::glue::dk_project_list(0, out.as_mut_ptr(), 4), 0);
+        assert_eq!(
+            file::glue::dk_project_get(3, out.as_mut_ptr()),
+            dkrt_sdk::E_NOT_FOUND
+        );
         assert_eq!(
             (file::glue::SCOPE.get)(b"m".as_ptr(), 1, b"k".as_ptr(), 1, core::ptr::null_mut(), 0),
             E_SET_NOKEY

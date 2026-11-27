@@ -322,6 +322,12 @@ int32_t dk_project_current(uint32_t *slot, uint8_t *name);
 /* The state of the project service as bits: bit 0 a `.dkp` file is loaded for the current project, bit 1 the data has changes the file does not hold (written at the next successful stock save), bit 2 a write was deferred after 30 s of a busy store, bit 3 a file of the slot was not used (a stamp, device, version or crc mismatch). Context: ui. Since runtime 0.11.0. */
 uint32_t dk_project_status(void);
 
+/* The firmware's projects from slot `first_slot` upward into `out`, an array of `max` `dk_project_entry` (19 bytes: slot, flags, name length, 16 name bytes; <dk/platform/project.h>): the number written, at most `max`, empty slots skipped; call again with the last slot + 1 for the next page (the last slot is 127). The flags are DK_PROJECT_CURRENT, DK_PROJECT_DATA (a `.dkp` file of the slot is in the store) and DK_PROJECT_DATA_UNKNOWN (the first listing of the store folder has not ended: bit 1 is not known yet). No card access. Context: ui. Since runtime 0.13.5. */
+int32_t dk_project_list(uint32_t first_slot, void *out, uint32_t max);
+
+/* The summary of project `slot` into `out`, a `dk_project_summary` (name, save stamp, write counter, the module list with each module's id, store hash, number of settings entries and state; <dk/platform/project.h>). The current project is answered at once (0). For another slot the first call queues a read of its `.dkp` and returns DK_E_AGAIN, as does every call until the read ended; then 0, or DK_E_NOT_FOUND when the slot has no usable file or the firmware lists none. The service keeps one summary: a call for another slot replaces it, and a change of the slot's file drops it. A module's state is DK_PROJECT_MODULE_LOADED or DK_PROJECT_MODULE_UNKNOWN (the card is not looked at). DK_E_RANGE for a null `out`. Context: ui. Since runtime 0.13.5. */
+int32_t dk_project_get(uint32_t slot, void *out);
+
 /* ---- service ui ---- */
 
 /* A YES/NO dialog: `done(arg, yes)` runs after it closed. 0 when shown, a negative code when not (another dialog is open, out of memory). Context: ui. Since runtime 0.7.0. Needs core/ui: without it the import binds to a stub that returns -1. */
