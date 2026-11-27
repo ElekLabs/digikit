@@ -443,7 +443,7 @@
   "runtime/core/tests/modules-capacity.device.test.ts": 3,
   "runtime/core/tests/project.json": 2,
   "runtime/core/tests/reload-fx.device.test.ts": 6,
-  "runtime/core/tests/reload.device.test.ts": 17,
+  "runtime/core/tests/reload.device.test.ts": 26,
   "runtime/core/tests/storage/card-guard.device.test.ts": 5,
   "runtime/core/tests/storage/card-safety.device.test.ts": 2,
   "runtime/core/tests/storage/contract.toml": 8,
