@@ -88,8 +88,7 @@
         { "env": "SHARC_FAST_FALLBACK_REGIONS_2" },
         { "env": "SHARC_FAST_AUTO" },
         { "env": "SHARC_GEN_DIR" },
-        { "env": "UPDATE_GOLDENS" }
-      ],
+        { "env": "UPDATE_GOLDENS" }, { "externalDependencies": [] }],
       "options": { "command": "node tools/devtools/emu-slot.mjs -- uv run python -m tools.emulator.dt2_sample_check", "cwd": "." }
     }
   }

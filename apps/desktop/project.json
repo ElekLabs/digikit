@@ -2,6 +2,20 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "name": "@digi/desktop",
   "implicitDependencies": ["@digi/workbench-core", "@digi/dk-session", "digiemu-desktop", "dkui-host", "dkprof"],
+  "namedInputs": {
+    "desktopPackages": [
+      {
+        "externalDependencies": [
+          "vite-plugin-solid",
+          "pixi.js",
+          "fft.js",
+          "@tauri-apps/api",
+          "@fontsource-variable/archivo",
+          "@fontsource/jetbrains-mono"
+        ]
+      }
+    ]
+  },
   "targets": {
     "build:ui": {
       "cache": true,
@@ -12,16 +26,7 @@
           "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
         },
         "jsToolchain",
-        {
-          "externalDependencies": [
-            "vite-plugin-solid",
-            "pixi.js",
-            "fft.js",
-            "@tauri-apps/api",
-            "@fontsource-variable/archivo",
-            "@fontsource/jetbrains-mono"
-          ]
-        },
+        "desktopPackages",
         "{workspaceRoot}/modules/*/*/*/module.toml",
         "{workspaceRoot}/modules/*/*/*/workbench.toml",
         "{workspaceRoot}/config/emulator.json",
@@ -72,16 +77,7 @@
           "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
         },
         "jsToolchain",
-        {
-          "externalDependencies": [
-            "vite-plugin-solid",
-            "pixi.js",
-            "fft.js",
-            "@tauri-apps/api",
-            "@fontsource-variable/archivo",
-            "@fontsource/jetbrains-mono"
-          ]
-        },
+        "desktopPackages",
         "{workspaceRoot}/modules/*/*/*/module.toml",
         "{workspaceRoot}/modules/*/*/*/workbench.toml",
         "{workspaceRoot}/config/emulator.json",
@@ -105,16 +101,7 @@
         "{projectRoot}/package.json",
         "{projectRoot}/ui/tsconfig.json",
         "jsToolchain",
-        {
-          "externalDependencies": [
-            "vite-plugin-solid",
-            "pixi.js",
-            "fft.js",
-            "@tauri-apps/api",
-            "@fontsource-variable/archivo",
-            "@fontsource/jetbrains-mono"
-          ]
-        },
+        "desktopPackages",
         "{workspaceRoot}/vitest.host.config.ts",
         "{workspaceRoot}/vitest.host/desktop-host.json",
         "{workspaceRoot}/tsconfig*.json",
@@ -159,16 +146,7 @@
           "projects": ["@digi/workbench-core", "@digi/dk-session", "@digi/dkbs", "control-client"]
         },
         "jsToolchain",
-        {
-          "externalDependencies": [
-            "vite-plugin-solid",
-            "pixi.js",
-            "fft.js",
-            "@tauri-apps/api",
-            "@fontsource-variable/archivo",
-            "@fontsource/jetbrains-mono"
-          ]
-        }
+        "desktopPackages"
       ]
     }
   }

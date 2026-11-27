@@ -49,7 +49,8 @@
         {
           "dependentTasksOutputFiles": "**/*",
           "transitive": true
-        }
+        },
+        { "externalDependencies": [] }
       ],
       "dependsOn": ["cli"],
       "outputs": [],
@@ -68,7 +69,8 @@
         {
           "dependentTasksOutputFiles": "**/*",
           "transitive": true
-        }
+        },
+        { "externalDependencies": [] }
       ],
       "dependsOn": ["cli"],
       "outputs": ["{workspaceRoot}/dist/ports"],
@@ -87,7 +89,8 @@
         {
           "dependentTasksOutputFiles": "**/*",
           "transitive": true
-        }
+        },
+        { "externalDependencies": [] }
       ],
       "dependsOn": ["cli"],
       "outputs": ["{workspaceRoot}/dist/ports-test"],
@@ -110,7 +113,8 @@
         {
           "dependentTasksOutputFiles": "**/*.dks",
           "transitive": true
-        }
+        },
+        { "externalDependencies": [] }
       ],
       "dependsOn": [
         "cli",
@@ -148,7 +152,8 @@
         },
         {
           "runtime": "command -v wasm-opt >/dev/null && wasm-opt --version || echo no-wasm-opt"
-        }
+        },
+        { "externalDependencies": [] }
       ],
       "outputs": [
         "{workspaceRoot}/apps/web/public/patchkit.wasm",

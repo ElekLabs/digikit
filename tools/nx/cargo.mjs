@@ -38,13 +38,17 @@ const CLI = {
 };
 // The build of a CLI compiles the normal and build dependencies of its crates, never their dev-dependencies (test-support crates):
 // `^default` would add those, so the inputs name the closure of the other two kinds.
+// Cargo runs no npm package: without an `externalDependencies` entry Nx hashes every external dependency, and any npm bump re-keys the target.
+const NO_NPM = { externalDependencies: [] };
 const BUILT_KINDS = ['dependencies', 'build-dependencies'];
-const builtInputs = (workspaceRoot, crateRoot, inputs) =>
-  inputs?.map((i) =>
+const builtInputs = (workspaceRoot, crateRoot, inputs) => [
+  ...(inputs ?? ['default', '^default']).map((i) =>
     i === '^default'
       ? { input: 'default', projects: pathDepNames(workspaceRoot, crateRoot, new Set(), BUILT_KINDS) }
       : i,
-  );
+  ),
+  NO_NPM,
+];
 const cliTarget = ({ build, bin, dir, key, inputs }) => ({
   executor: 'nx:run-commands',
   cache: false,
@@ -255,7 +259,7 @@ const GATE = {
       parallelism: true,
       description:
         'Builds digi-emud without a SHARC core (the daemon of the devices with `[capabilities] dsp = "none"`, which boot cold) into dist/bin/digi-emud-nodsp: the binary the daemons target builds for them.',
-      inputs: ['default', '^default', ...DAEMON_NODSP_EXTRA],
+      inputs: ['default', '^default', NO_NPM, ...DAEMON_NODSP_EXTRA],
       // the binary and its hash: the key of the device tests of the no-DSP halves (device-test-keys.mjs, instead of daemon-test-<device>.key)
       outputs: ['{workspaceRoot}/dist/bin/digi-emud-nodsp', '{workspaceRoot}/dist/bytes/daemon-nodsp.sha256'],
       options: {
@@ -409,7 +413,7 @@ export const standaloneRustTests = (workspaceRoot, root) => {
 };
 
 const rustInputs = (workspaceRoot) => {
-  const inputs = ['default', '^production', '{workspaceRoot}/Cargo.toml', '{workspaceRoot}/Cargo.lock'];
+  const inputs = ['default', '^production', '{workspaceRoot}/Cargo.toml', '{workspaceRoot}/Cargo.lock', NO_NPM];
   if (existsSync(join(workspaceRoot, 'rust-toolchain.toml'))) inputs.push('{workspaceRoot}/rust-toolchain.toml');
   return inputs;
 };
@@ -425,6 +429,7 @@ export const createNodesV2 = [
         '^production',
         '{workspaceRoot}/Cargo.toml',
         '{workspaceRoot}/Cargo.lock',
+        NO_NPM,
         ...(existsSync(join(ctx.workspaceRoot, 'rust-toolchain.toml')) ? ['{workspaceRoot}/rust-toolchain.toml'] : []),
         { runtime: `rustup run ${rust} rustc -vV` },
         { runtime: 'node tools/nx/cargo-profile-env.mjs' },

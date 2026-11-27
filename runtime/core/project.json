@@ -41,8 +41,7 @@
       "inputs": [
         { "dependentTasksOutputFiles": "runtime/core/build/package.dko.json", "transitive": false },
         "{workspaceRoot}/runtime/apps/digikit-menu/build/digikit-menu.dko.json",
-        { "dependentTasksOutputFiles": "dist/patchkit/patchkit" }
-      ],
+        { "dependentTasksOutputFiles": "dist/patchkit/patchkit" }, { "externalDependencies": [] }],
       "dependsOn": ["patchkit:cli", "build-objects"],
       "outputs": ["{workspaceRoot}/dist/syspkg/runtime"],
       "options": {
@@ -80,8 +79,7 @@
         { "dependentTasksOutputFiles": "dist/ports-test/*", "transitive": false },
         { "dependentTasksOutputFiles": "dist/bytes/images/*/*.info", "transitive": false },
         "{workspaceRoot}/firmware/Digitakt_II_OS1.17.syx",
-        "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx"
-      ],
+        "{workspaceRoot}/firmware/Digitone_II_OS1.12.syx", { "externalDependencies": [] }],
       "dependsOn": [
         "test/sine:pack",
         "test/dyn-dn2:pack",

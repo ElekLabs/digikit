@@ -19,8 +19,7 @@
       "inputs": [
         "{workspaceRoot}/**/*.rs",
         "{workspaceRoot}/config/test-source-patterns.json",
-        "{workspaceRoot}/tools/nx/test-source.mjs"
-      ],
+        "{workspaceRoot}/tools/nx/test-source.mjs", { "externalDependencies": [] }],
       "outputs": [],
       "options": {
         "command": "node tools/nx/test-source.mjs --check",
@@ -28,8 +27,29 @@
       },
       "description": "Every Rust file that matches config/test-source-patterns.json is declared behind #[cfg(test)]: the daemon, patchkit and device-test keys leave such files out by name."
     },
+    "vitest-host": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/vitest.host/*.json",
+        "{workspaceRoot}/**/project.json",
+        "{workspaceRoot}/**/package.json",
+        "{workspaceRoot}/nx.json",
+        "{workspaceRoot}/tools/nx/*.mjs",
+        "{workspaceRoot}/{modules,runtime,services}/**/module.toml",
+        "{workspaceRoot}/tests/fixtures/modules/**/module.toml",
+        "{workspaceRoot}/**/Cargo.toml",
+        { "externalDependencies": [] }
+      ],
+      "outputs": [],
+      "options": {
+        "command": "node tools/nx/check-vitest-host.mjs",
+        "cwd": "."
+      },
+      "description": "Every target that runs a Vitest project of vitest.host/ names that project's file in its inputs, and every file has a target (reads the resolved project graph, so generated targets count)."
+    },
     "lint": {
-      "dependsOn": ["device-literals", "test-source"],
+      "dependsOn": ["device-literals", "test-source", "vitest-host"],
       "executor": "nx:run-commands",
       "cache": true,
       "outputs": [],

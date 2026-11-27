@@ -1264,7 +1264,11 @@ smol-toml, `@napi-rs/canvas` and solid-js. It holds no lockfile and no root `pac
 lockfile entry and those of its dependencies, so a version change of one of these packages re-keys every target that uses
 the input, and a lockfile change that only adds or edits workspace importers (a new package, another project's dependency)
 re-keys none. Targets with `^production` also hash the npm packages of their project and its dependencies through the project
-graph; an app target without `^` (desktop, web `test-host`) lists the app's own packages itself. `jsLintTooling` (`package.json` for the
+graph (checked with `show target inputs @digi/web:test-wasm --json` and `@digi/web:check`: `@astrojs/check`, `astro`,
+`@astrojs/solid-js`, `solid-js` are in the `external` list); an app target without `^` lists the app's own packages itself (web
+`test-host` names `astro` and `@astrojs/solid-js`; desktop names them once as the project's named input `desktopPackages`).
+A cached target that runs no npm package (Cargo, patchkit, gate scripts) sets `{ "externalDependencies": [] }`: without any
+`externalDependencies` entry Nx hashes every external dependency, and any npm bump re-keys it. `jsLintTooling` (`package.json` for the
 `lint` and `fmt:check` scripts, oxlint, prettier and their plugins) is an input of the `lint` and `fmt-check` targets only. A
 package that a target executes and that is in none of these lists must be added to the target's inputs as
 `{ "externalDependencies": [...] }`; `pnpm nx:pilot show target inputs PROJECT:TARGET --json` lists the `external` packages that a target hashes.
@@ -1272,6 +1276,9 @@ package that a target executes and that is in none of these lists must be added 
 Each Vitest project is one file, `vitest.host/NAME.json`, which `vitest.host.config.ts` reads. A project's Nx target lists its own
 file as an input (`hostTests` does not hold them), so adding a project or editing an entry re-keys only that project's tests;
 `vitest.host.config.ts` is an input of all host tests. To add a project, add its file and name it in the target's inputs: no shared file changes.
+`node tools/nx/check-vitest-host.mjs` (the Nx target `workspace:vitest-host`, a dependency of `lint`) reads the resolved project graph,
+so targets that `tools/nx/*.mjs` generate count too, and fails when a target that runs `--project NAME` lacks
+`{workspaceRoot}/vitest.host/NAME.json`, lists another project's file, or when a file has no target.
 
 ### What a device test's cache key contains
 
