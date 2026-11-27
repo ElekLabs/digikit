@@ -368,14 +368,14 @@ pub(crate) unsafe fn command(seq: u32, _buf: *mut u8, body: *const u8, len: usiz
 
 unsafe fn read_setting(job: &Job) -> Outcome {
     let mut outcome = Outcome {
-        revision: job.revision,
+        revision: job.revision(),
         ..Outcome::EMPTY
     };
     let n = settings::module_get(
-        job.rec as u32 + 1,
-        job.key.as_ptr(),
+        job.rec() as u32 + 1,
+        job.key(),
         outcome.value.as_mut_ptr(),
-        job.max as u32,
+        job.max() as u32,
     );
     if n == E_SET_NOKEY {
         return outcome;
@@ -418,7 +418,7 @@ pub(crate) unsafe fn tick() {
     let Some(job) = job else {
         return;
     };
-    let rec = job.rec;
+    let rec = job.rec();
     let outcome = apply(job);
     locked(|registry| registry.modules[rec].complete(outcome));
 }
@@ -450,7 +450,7 @@ unsafe fn check_file(rec: usize, leaf: &[u8]) -> Result<(), i32> {
 }
 
 unsafe fn apply(mut job: Job) -> Outcome {
-    let (rec, request) = (job.rec, job.request);
+    let (rec, request) = (job.rec(), job.request());
     let mut before = read_setting(&job);
     if request.verb == GET {
         return before;
@@ -459,7 +459,7 @@ unsafe fn apply(mut job: Job) -> Outcome {
         before.result = E_MODULE_UI_SCOPE;
         return before;
     }
-    if request.revision != job.revision {
+    if request.revision != job.revision() {
         before.result = E_MODULE_UI_CONFLICT;
         return before;
     }
@@ -468,7 +468,7 @@ unsafe fn apply(mut job: Job) -> Outcome {
     }
     let client = rec as u32 + 1;
     let result = if request.verb == PUT {
-        if job.kind == Kind::FileName {
+        if job.kind() == Kind::FileName {
             if let Err(status) = check_file(rec, request.value()) {
                 before.result = status;
                 return before;
@@ -479,7 +479,7 @@ unsafe fn apply(mut job: Job) -> Outcome {
         }
         entry::module_put(
             client,
-            job.key.as_ptr(),
+            job.key(),
             request.value.as_ptr(),
             request.len as u32,
         )
@@ -487,13 +487,13 @@ unsafe fn apply(mut job: Job) -> Outcome {
         if !before.present && before.result == OK {
             return before;
         }
-        entry::module_remove(client, job.key.as_ptr())
+        entry::module_remove(client, job.key())
     };
     if result != OK {
         before.result = result;
         return before;
     }
-    job.revision = locked(|registry| registry.modules[rec].revision(request.index));
+    job.refresh_revision();
     read_setting(&job)
 }
 

@@ -164,6 +164,9 @@ fn hit<'a>(ws: impl IntoIterator<Item = &'a Window<'a>>, v: u64) -> Option<&'a W
     ws.into_iter().find(|w| w.lo <= v && v < w.hi)
 }
 
+/// The section of the generated `dk_workbench_descriptor` array (`workbench_descriptor.h`, one section per data object).
+const WORKBENCH_DESCRIPTOR_SECTION: &str = ".rodata.dk_workbench_descriptor";
+
 /// Refuse `obj` (module `id`) if it holds an address of a protected window.
 pub fn check(id: &str, obj: &Dko, ws: &[Window<'_>]) -> Result<()> {
     if obj.arch != "cf" || ws.is_empty() {
@@ -211,6 +214,11 @@ pub fn check(id: &str, obj: &Dko, ws: &[Window<'_>]) -> Result<()> {
             refuse(format!("section {} at offset {off:#x}", s.name), v, w)
         };
         if s.kind != "text" {
+            // The Workbench descriptor is a byte string (lengths, bounds, labels) that no code takes as an address: its words are
+            // not data words, and a bound such as 0x10000000 would read as the flash window.
+            if s.name == WORKBENCH_DESCRIPTOR_SECTION {
+                continue;
+            }
             for off in (0..b.len().saturating_sub(3)).step_by(4) {
                 let v = word(&b, off);
                 if let Some(w) = hit(high.iter().copied(), v) {
@@ -298,6 +306,27 @@ mod tests {
             addend: 0xFC05_C010,
         });
         assert!(check("x/m", &o, &ws()).is_err());
+    }
+
+    #[test]
+    fn the_workbench_descriptor_bytes_are_not_data_words_but_other_data_is() {
+        let bytes = [0x10, 0, 0, 0x04, 0, 0, 0, 0];
+        let window = vec![Window {
+            device: "dev",
+            lo: 0x1000_0000,
+            hi: 0x1002_0000,
+        }];
+        let mut o = obj(&[0x4e, 0x75]);
+        o.sections.push(DkoSection {
+            name: ".rodata.dk_workbench_descriptor".into(),
+            kind: "data".into(),
+            align: 1,
+            size: 8,
+            hex: hex(&bytes),
+        });
+        check("x/m", &o, &window).unwrap();
+        o.sections[1].name = ".rodata.table".into();
+        assert!(check("x/m", &o, &window).is_err());
     }
 
     #[test]

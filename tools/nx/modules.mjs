@@ -4,7 +4,7 @@
 // metadata.runtimeAcceptance), test-host, test-device and test-conformance (vitest directly, after the packs).
 // This file wires the plugin. Build and pack targets are in module-build.mjs, device-test cache keys in
 // device-test-keys.mjs, and the shape of device, conformance and test-only targets in device-tests.mjs.
-import { globSync, readFileSync } from 'node:fs';
+import { existsSync, globSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   read,
@@ -16,7 +16,7 @@ import {
   isFixture,
   subjectsOf,
 } from './module-manifests.mjs';
-import { buildObjectsTarget, packTarget, packAliasesTarget } from './module-build.mjs';
+import { buildObjectsTarget, packTarget, packAliasesTarget, workbenchTsCheckTarget } from './module-build.mjs';
 import { packSourceInputs } from './pack-inputs.mjs';
 import {
   deviceTargets,
@@ -149,6 +149,11 @@ export const createNodesV2 = [
           coreManifests,
         );
       if (devices.length && packable.has(m.id)) targets.pack = packTarget(ctx.workspaceRoot, byId, m, devices);
+      // The merge gate's static checks run `lint`: it carries the generated-file check of a module with a Workbench declaration.
+      if (existsSync(join(ctx.workspaceRoot, root, 'workbench.toml'))) {
+        targets['workbench-ts-check'] = workbenchTsCheckTarget(root);
+        targets.lint = { executor: 'nx:noop', cache: false, dependsOn: ['workbench-ts-check'] };
+      }
       const aliasesTarget = packAliasesTarget(ctx.workspaceRoot, byId, recs);
       if (aliasesTarget) targets['pack-aliases'] = aliasesTarget;
       if (shipped && hostTests.length)

@@ -7,14 +7,14 @@ use super::Request;
 use dkrt_sdk::settings::KEY_MAX;
 
 pub(super) struct Job {
-    pub(super) rec: usize,
-    pub(super) request: Request,
-    pub(super) key: [u8; KEY_MAX + 1],
-    pub(super) max: u8,
-    pub(super) kind: Kind,
+    rec: usize,
+    request: Request,
+    key: [u8; KEY_MAX + 1],
+    max: u8,
+    kind: Kind,
     body: [u8; ACCEPT_BODY_MAX],
     body_len: u8,
-    pub(super) revision: u32,
+    revision: u32,
 }
 
 impl Job {
@@ -43,7 +43,38 @@ impl Job {
         }
     }
 
-    pub(super) fn body(&self) -> &[u8] {
+    pub(super) fn rec(&self) -> usize {
+        self.rec
+    }
+
+    pub(super) fn request(&self) -> Request {
+        self.request
+    }
+
+    pub(super) fn key(&self) -> *const u8 {
+        self.key.as_ptr()
+    }
+
+    pub(super) fn max(&self) -> u8 {
+        self.max
+    }
+
+    pub(super) fn kind(&self) -> Kind {
+        self.kind
+    }
+
+    /// The revision of the field when the job was made or last refreshed.
+    pub(super) fn revision(&self) -> u32 {
+        self.revision
+    }
+
+    /// Re-read the field's revision from the registry, after this job changed the setting.
+    pub(super) unsafe fn refresh_revision(&mut self) {
+        let (rec, index) = (self.rec, self.request.index);
+        self.revision = super::locked(|registry| registry.modules[rec].revision(index));
+    }
+
+    fn body(&self) -> &[u8] {
         &self.body[..self.body_len as usize]
     }
 
