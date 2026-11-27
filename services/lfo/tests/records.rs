@@ -496,8 +496,15 @@ fn the_name_formatters_get_the_name_of_a_loaded_shape_and_stock_behaviour_otherw
     // the three-character formatter of the Digitone II: the first three characters, then the NUL
     let (n, buf) = name(7 << 8, 3);
     assert_eq!((n, &buf[..5]), (3, &b"RAM\0\xaa"[..]));
-    // a number that no module keeps (8 is assigned, not loaded), stock numbers, numbers above the range and negative values: no name, nothing written
-    for value in [8 << 8, 6 << 8, 15 << 8, 127 << 8, -1, i32::MIN, 0] {
+    // an empty number inside the range (8) prints dashes, never "ERR"
+    let (n, buf) = name(8 << 8, 4);
+    assert_eq!(
+        (n, &buf[..6]),
+        (4, &b"----\0\xaa"[..]),
+        "empty wave above the highest"
+    );
+    // stock numbers, numbers above the range and negative values: no name, nothing written
+    for value in [6 << 8, 15 << 8, 127 << 8, -1, i32::MIN, 0] {
         let (n, buf) = name(value, 4);
         assert_eq!((n, buf), (0, [0xaa; 8]), "value {value:#x}");
     }
@@ -513,8 +520,8 @@ fn the_name_formatters_get_the_name_of_a_loaded_shape_and_stock_behaviour_otherw
         (3, &b"---\0\xaa"[..]),
         "a gap on the short formatter"
     );
-    // above the highest loaded number and below the range: stock "ERR" (no name)
-    assert_eq!(name(9 << 8, 4).0, 0);
+    // above the highest loaded number: dashes too; below the range: no name
+    assert_eq!(name(9 << 8, 4).0, 4);
     assert_eq!(name(6 << 8, 4).0, 0);
     detach(&mut lfo, &core, 2);
     assert_eq!(

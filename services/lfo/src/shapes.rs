@@ -76,8 +76,8 @@ pub fn highest() -> u32 {
 
 /// Writes the name of the shape that the WAVE parameter value `value` (`wave << 8`; the stock formatter ignores the low byte) names, `width` characters at most (a name stops at
 /// its first NUL), then a NUL, and returns the number of characters. A wave number that no module keeps but that is at or below [`highest`] (a gap the sticky allocator can
-/// leave) gets `width` dashes ("----", "---" on the three-character formatter): the LFO plays the sine for it, so the page says the number is empty. 0 when the number is above
-/// the highest loaded one: nothing is written and the stock formatter prints its "ERR". `out` has room for `width + 1` bytes.
+/// leave, or one above the highest loaded one) gets `width` dashes ("----", "---" on the three-character formatter): the LFO plays the sine for it, so the page says the number is
+/// empty. 0 when no shape is loaded at all or the number is outside the range: nothing is written and the stock formatter runs. `out` has room for `width + 1` bytes.
 ///
 /// # Safety
 /// `out` is valid for `width + 1` bytes.
@@ -86,7 +86,7 @@ pub unsafe fn name_into(value: i32, out: *mut u8, width: usize) -> usize {
     let name = match name_of(wave) {
         Some(n) => n,
         None => {
-            if wave < RANGE.lo || wave > highest() {
+            if wave < RANGE.lo || wave > RANGE.hi || highest() == 0 {
                 return 0;
             }
             [b'-'; NAME_LEN]
