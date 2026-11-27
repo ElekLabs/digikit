@@ -330,28 +330,27 @@ fn newer_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
     &ROW
 }
 
-/// The row of the provider fixture whose state part accepts only layouts newer than its own (an empty range): a thin variant, as the file's table cannot differ on the host
-/// (the row is the test binary's). The parts are the fixture's own tables.
+/// The row of the provider fixture whose state part accepts only layouts newer than its own (an empty range): the fixture's own row with only the State entry replaced, as the file's
+/// table cannot differ on the host (the row is the test binary's).
 fn state_beyond_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
-    use dkrt_abi::provider::{LifecycleV1, PartRef, ProviderRow, QueryV1, StateV1, TickV1};
-    use dkrt_abi::provider::{LIFECYCLE_NEWEST, PART_LIFECYCLE, PART_QUERY, PART_STATE, PART_TICK, QUERY_NEWEST, STATE_NEWEST, TICK_NEWEST};
     use crate::package::core_api::RealCore;
+    use dkrt_abi::provider::{check, PartLookup, PartRef, ProviderRow, StateV1, PART_STATE, STATE_NEWEST};
     use dkrt_fixture_local_ping::LocalPing;
-    static LIFE: LifecycleV1 = LifecycleV1::of::<LocalPing, RealCore>();
-    static TICK: TickV1 = TickV1::of::<LocalPing, RealCore>();
-    static QUERY: QueryV1 = QueryV1::of::<LocalPing>();
-    static STATE: StateV1 = {
+    let own = dkrt_fixture_local_ping::dk_svc_row();
+    // SAFETY: the row and its tables are statics of the fixture
+    let checked = unsafe { check(own, 0..usize::MAX) }.expect("the fixture's row");
+    let mut parts: Vec<PartRef> = (1..PART_STATE)
+        .filter_map(|tag| match checked.part(tag, u16::MAX) {
+            PartLookup::Found { table, version } => Some(PartRef::new(tag, version, table)),
+            _ => None,
+        })
+        .collect();
+    let state: &'static StateV1 = Box::leak(Box::new({
         let own = StateV1::of::<LocalPing, RealCore>();
         StateV1 { accepts_from: own.version + 1, ..own }
-    };
-    static PARTS: [PartRef; 4] = [
-        PartRef::new(PART_LIFECYCLE, LIFECYCLE_NEWEST, &LIFE as *const _ as *const ()),
-        PartRef::new(PART_TICK, TICK_NEWEST, &TICK as *const _ as *const ()),
-        PartRef::new(PART_QUERY, QUERY_NEWEST, &QUERY as *const _ as *const ()),
-        PartRef::new(PART_STATE, STATE_NEWEST, &STATE as *const _ as *const ()),
-    ];
-    static ROW: ProviderRow = ProviderRow::new(dkrt_abi::provider::name_hash("local-ping"), &PARTS);
-    &ROW
+    }));
+    parts.push(PartRef::new(PART_STATE, STATE_NEWEST, state as *const _ as *const ()));
+    Box::leak(Box::new(ProviderRow::new(own.name(), Box::leak(parts.into_boxed_slice()))))
 }
 
 fn other_name_ping_row() -> &'static dkrt_abi::provider::ProviderRow {
