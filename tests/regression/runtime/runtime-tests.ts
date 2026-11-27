@@ -39,3 +39,34 @@ export function runtimeTests(
     );
   }
 }
+
+/**
+ * One fresh runtime daemon per device shared by several tests of one file, for facts that each need only the booted firmware and one setup (`setup` runs once, before the
+ * first test). The tests run in order; each leaves the firmware as it found it. Use it instead of one `runtimeTests` call per fact when the facts share an install: a boot costs more
+ * than a step.
+ */
+export function runtimeSuite(
+  name: string,
+  opts: Parameters<typeof runtimeTests>[2] & { setup?: (runtime: TestRuntime) => Promise<void> },
+  define: (runtime: () => Promise<TestRuntime>, device: Device) => void,
+): void {
+  const selected = selectDevices(opts.devices);
+  skipEmptyHalf(selected, name);
+  for (const device of selected) {
+    describe.skipIf((opts.full === true && !FULL_TIER) || opts.skip !== undefined)(
+      `${device.toUpperCase()} ${FIRMWARE[device]}`,
+      () => {
+        const handle = withPatchedSession({ ...liveOptions(device, opts), dsp: opts.dsp }, name);
+        let ready: Promise<TestRuntime> | undefined;
+        // `expectRuntimeBoot` (an `expect.poll`) cannot run in `beforeAll`: the first test that asks for the runtime boots it
+        const runtime = () =>
+          (ready ??= (async () => {
+            await expectRuntimeBoot(handle.runtime);
+            await opts.setup?.(handle.runtime);
+            return handle.runtime;
+          })());
+        define(runtime, device);
+      },
+    );
+  }
+}
