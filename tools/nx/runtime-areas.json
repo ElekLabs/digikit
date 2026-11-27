@@ -1,0 +1,318 @@
+{
+  "_doc": "Runtime source areas of the merge gate (tools/nx/runtime-areas.mjs, docs/TESTING.md 'Runtime areas'). Every file under 'scope' (minus 'exclude') is classified here: in one or more areas (firmware-facing: their device tests run) or in 'hostProven' (host-only files: vectors, fakes, test support, docs; proven by unit and assembly tests, no device test beyond the smoke set). A file in neither fails the check (`node tools/nx/runtime-areas.mjs --check`, the runtime-areas host test and the gate): there is no full-suite fallback; the full suite runs at milestone merges. 'tests' entries are 'project:file' or 'project:*'; '@all' is every test of every other area (area 'image'). Full-tier tests (no gate leaf target) are not mapped; the full suite runs them. A file that matches several areas selects all of them (union). An area match wins over 'hostProven' (so host-only files must not match an area glob). Unit-test sources ('testSources') are host-proven before the areas are read. 'exclude' keeps owner-based selection (device test projects, build output).",
+  "scope": [
+    "runtime/core/**"
+  ],
+  "exclude": [
+    "runtime/core/tests/**",
+    "runtime/core/target/**"
+  ],
+  "testSources": [
+    "**/tests.rs",
+    "**/tests/**",
+    "**/*_tests.rs"
+  ],
+  "hostProven": [
+    "**/*.md",
+    "**/project.json",
+    "runtime/core/owners.toml",
+    "runtime/core/{test-support,vectors}/**",
+    "runtime/core/src/rs/src/{fake_boot_env,fake_platform,fake_storage,host_io,test_lock,gen_abi_check}.rs",
+    "runtime/core/src/rs/src/fake_platform/**",
+    "runtime/core/abi/src/{fw,fw_id,keys,plan,regcheck,sha256,version}.rs",
+    "runtime/core/sdk/src/{command,result_text,sel,sticky}.rs"
+  ],
+  "areas": {
+    "live-reload": {
+      "globs": [
+        "runtime/core/src/rs/src/package/loader/{install,park,live,unload,quiesce,op_clock,provider_reload}.rs",
+        "runtime/core/src/rs/src/package/loader/install/**",
+        "runtime/core/src/rs/src/package/lifecycle/**",
+        "runtime/core/src/rs/src/package/reload/**",
+        "runtime/core/lifecycle/src/live.rs",
+        "runtime/core/lifecycle/src/manager/reload.rs",
+        "runtime/core/build/package.dko.json"
+      ],
+      "tests": [
+        "core/runtime-tests:*",
+        "core/runtime-provider-tests:service-reload.device.test.ts",
+        "core/runtime-provider-tests:owner-step.device.test.ts",
+        "core/runtime-lfo-tests:lfo-reload.device.test.ts",
+        "core/services/project-tests:project-reload.device.test.ts"
+      ]
+    },
+    "module-load": {
+      "globs": [
+        "runtime/core/src/rs/src/package/loader/**",
+        "runtime/core/src/rs/src/package/{admission,capacity,collect,files,image,imports,invariants,link,registry,scan,fake_checked_images}.rs",
+        "runtime/core/src/rs/src/package/collect/**",
+        "runtime/core/link/**",
+        "runtime/core/fit/**",
+        "runtime/core/abi/src/{module,image,link,package,registry}.rs",
+        "runtime/core/sdk/src/capacity.rs",
+        "runtime/core/build/package.dko.json"
+      ],
+      "tests": [
+        "core/runtime-capacity-tests:*",
+        "core/runtime-fixture-tests:*",
+        "core/runtime-refusal-tests:*",
+        "core/runtime-entry-tests:*"
+      ]
+    },
+    "dsp": {
+      "globs": [
+        "runtime/core/src/rs/src/package/dsp/**",
+        "runtime/core/src/rs/src/package/dsp_stats.rs",
+        "runtime/core/abi/src/dsp.rs",
+        "runtime/core/abi/src/provider/tables/dsp.rs",
+        "runtime/core/build/package.dko.json"
+      ],
+      "tests": [
+        "core/runtime-fixture-tests:*",
+        "core/runtime-machines-tests:*",
+        "core/services/fx-tests:fx-routing.device.test.ts",
+        "core/services/fx-tests:fx-send.device.test.ts",
+        "core/runtime-tests:reload-fx.device.test.ts",
+        "core/runtime-lfo-tests:*"
+      ]
+    },
+    "services": {
+      "globs": [
+        "runtime/core/src/rs/src/package/{handlers,provider_rows,fixture_provider,core_api,entry,commands,live_cmds,module_cmds,hooks,svc_imports,gen_services,settings_overlay,settings_reload,host_dir}.rs",
+        "runtime/core/src/rs/src/package/{handlers,provider_rows,host_dir}/**",
+        "runtime/core/src/rs/src/{hooks,host_dir}.rs",
+        "runtime/core/src/rs/src/{hooks,host_dir}/**",
+        "runtime/core/svc-rt/**",
+        "runtime/core/abi/src/provider.rs",
+        "runtime/core/abi/src/provider/**",
+        "runtime/core/abi/src/{service,service_table,core_api,core_imports,command,gen_svc_abi,shared,host_dir}.rs",
+        "runtime/core/abi/src/host_dir/**",
+        "runtime/core/abi/src/service_table/**",
+        "runtime/core/abi/src/resident/host_dir.rs",
+        "runtime/core/build/package.dko.json"
+      ],
+      "tests": [
+        "core/runtime-provider-tests:*",
+        "core/runtime-service-tests:*",
+        "core/runtime-entry-tests:*",
+        "core/runtime-lfo-tests:*",
+        "core/services/project-tests:project.device.test.ts",
+        "core/services/fx-tests:*",
+        "core/runtime-machines-tests:*",
+        "core/services/shortcuts-tests:*"
+      ]
+    },
+    "ui-menu": {
+      "globs": [
+        "runtime/core/src/rs/src/package/{menu,menu_link,module_ui}.rs",
+        "runtime/core/src/rs/src/package/module_ui/**",
+        "runtime/core/src/rs/src/menu_exports.rs",
+        "runtime/core/build/package.dko.json"
+      ],
+      "tests": [
+        "core/digikit-menu:*",
+        "core/digikit-menu-zero-tests:*",
+        "sdk-settings-page-tests:*",
+        "core/runtime-tests:reload-menus.device.test.ts"
+      ]
+    },
+    "boot": {
+      "globs": [
+        "runtime/core/src/rs/src/{boot,boot_env,stage1,safe_mode,safe_screen,intro,health,dlog,fault,tick,report,selection}.rs",
+        "runtime/core/src/rs/src/{boot_env,stage1,safe_mode,tick}/**",
+        "runtime/core/src/rs/src/package/{boot_idx,boot_steps}.rs",
+        "runtime/core/lifecycle/**",
+        "runtime/core/src/cf/*/device.s",
+        "runtime/core/src/cf/tramp.s",
+        "runtime/core/build/tramp.dko.json",
+        "runtime/core/abi/src/{boot_path,log}.rs",
+        "runtime/core/abi/src/boot_path/**",
+        "runtime/core/sdk/src/fault.rs"
+      ],
+      "tests": [
+        "core/runtime-boot-tests:*",
+        "core/runtime-diag-tests:*",
+        "core/runtime-platform-tests:*"
+      ]
+    },
+    "store": {
+      "globs": [
+        "runtime/core/src/rs/src/storage/**",
+        "runtime/core/src/rs/src/{store_cmds,settings,sdk_files}.rs",
+        "runtime/core/src/rs/src/resident/{card,store,store_writer,sdk_files,settings}.rs",
+        "runtime/core/src/rs/src/package/resident/{card,store,store_writer,sdk_files,settings}.rs",
+        "runtime/core/src/cf/*/storage.s",
+        "runtime/core/abi/src/{storage,store_path}.rs",
+        "runtime/core/abi/src/store_path/**",
+        "runtime/core/sdk/src/{store,files,files_job,sample,sample_job,sample_tracks,settings,syspkg}.rs",
+        "runtime/core/sdk/src/{store,sample_tracks,settings,syspkg}/**",
+        "runtime/core/include/dkrt_pdw.h"
+      ],
+      "tests": [
+        "core/runtime-storage-tests:*",
+        "core/runtime-file-write-tests:*",
+        "core/runtime-settings-tests:*",
+        "core/services/project-tests:project.device.test.ts",
+        "core/services/samples-tests:*",
+        "core/plusdrive-write:*"
+      ]
+    },
+    "usb": {
+      "globs": [
+        "runtime/core/src/rs/src/{transport,worker,admin_cmds}.rs",
+        "runtime/core/src/rs/src/resident/{transport,worker}.rs",
+        "runtime/core/src/rs/src/package/resident/{transport,worker}.rs",
+        "runtime/core/include/dkrt_sdhc.h"
+      ],
+      "tests": [
+        "core/runtime-transfer-tests:*",
+        "core/runtime-file-write-tests:*",
+        "core/usb-bulk:*",
+        "core/usb-bulk-audio:*",
+        "core/sdhc-large:*"
+      ]
+    },
+    "platform-seam": {
+      "globs": [
+        "runtime/core/src/rs/src/{platform,dev,io,mailbox,arena,aux_task,level,speed,watch}.rs",
+        "runtime/core/src/rs/src/{platform,level}/**",
+        "runtime/core/src/rs/src/resident/{platform,io,arena,intro,dlog,fault,selection}.rs",
+        "runtime/core/src/rs/src/package/resident/{platform,io,arena,intro,dlog,fault,selection}.rs",
+        "runtime/core/abi/src/{dev_addr,mem,platform,package_platform,profiles}.rs",
+        "runtime/core/abi.toml",
+        "runtime/core/build/device-*.dko.json",
+        "runtime/core/build/gen/*.inc",
+        "runtime/core/sdk/src/mailbox.rs"
+      ],
+      "tests": [
+        "core/runtime-platform-tests:*",
+        "core/runtime-boot-tests:*",
+        "core/runtime-diag-tests:*"
+      ]
+    },
+    "resident": {
+      "globs": [
+        "runtime/core/src/rs/src/{api,state,stock_kit,lib,resident,resident_query,hash32}.rs",
+        "runtime/core/src/rs/src/resident/**",
+        "runtime/core/src/rs/src/package/{mod,resident}.rs",
+        "runtime/core/src/rs/src/package/resident/**",
+        "runtime/core/abi/src/{lib,handoff,hooks,state,runtime_state}.rs",
+        "runtime/core/abi/src/handoff/**",
+        "runtime/core/abi/src/resident.rs",
+        "runtime/core/abi/src/resident/**",
+        "runtime/core/build/runtime.dko.json",
+        "runtime/core/include/dkrt.h",
+        "runtime/core/sdk/src/{gen_abi,gen_sdk,lib,table_version}.rs",
+        "runtime/core/sdk/src/table_version/**"
+      ],
+      "tests": [
+        "core/runtime-boot-tests:*",
+        "core/runtime-platform-tests:*",
+        "core/runtime-entry-tests:*",
+        "core/runtime-diag-tests:*"
+      ]
+    },
+    "platform-dynfx": {
+      "globs": [
+        "runtime/platform/dynfx/**"
+      ],
+      "tests": [
+        "core/dynfx:*",
+        "core/services/fx-tests:*"
+      ]
+    },
+    "platform-fx": {
+      "globs": [
+        "runtime/platform/fx/**"
+      ],
+      "tests": [
+        "core/fx:*"
+      ]
+    },
+    "platform-input": {
+      "globs": [
+        "runtime/platform/input/**"
+      ],
+      "tests": [
+        "core/input:*"
+      ]
+    },
+    "platform-introblank": {
+      "globs": [
+        "runtime/platform/introblank/**"
+      ],
+      "tests": [
+        "core/introblank:*"
+      ]
+    },
+    "platform-plusdrive-write": {
+      "globs": [
+        "runtime/platform/plusdrive-write/**"
+      ],
+      "tests": [
+        "core/plusdrive-write:*"
+      ]
+    },
+    "platform-sdhc-large": {
+      "globs": [
+        "runtime/platform/sdhc-large/**"
+      ],
+      "tests": [
+        "core/sdhc-large:*"
+      ]
+    },
+    "platform-usb-bulk": {
+      "globs": [
+        "runtime/platform/usb-bulk/**"
+      ],
+      "tests": [
+        "core/usb-bulk:*",
+        "core/usb-bulk-audio:*",
+        "core/sdhc-large:*"
+      ]
+    },
+    "platform-usb-bulk-audio": {
+      "globs": [
+        "runtime/platform/usb-bulk-audio/**"
+      ],
+      "tests": [
+        "core/usb-bulk-audio:*"
+      ]
+    },
+    "platform-platform": {
+      "globs": [
+        "runtime/platform/platform/**"
+      ],
+      "tests": [
+        "core/runtime-platform-tests:*"
+      ]
+    },
+    "platform-rows": {
+      "globs": [
+        "runtime/platform/rows/**"
+      ],
+      "tests": [
+        "core/runtime-machines-tests:*"
+      ]
+    },
+    "platform-dsp-voice": {
+      "globs": [
+        "runtime/platform/dsp-voice/**"
+      ],
+      "tests": [
+        "core/runtime-machines-tests:*",
+        "core/runtime-fixture-tests:*"
+      ]
+    },
+    "image": {
+      "globs": [
+        "runtime/core/{abi,fit,lifecycle,link,sdk,svc-rt}/Cargo.toml",
+        "runtime/core/src/rs/Cargo.*",
+        "runtime/core/module.toml"
+      ],
+      "tests": [
+        "@all"
+      ]
+    }
+  }
+}
