@@ -14,6 +14,12 @@
 #ifndef DK_WIRE_FN
 #define DK_WIRE_FN static inline
 #endif
+/* The decoders branch on the field number; a jump table puts data words in the code, which the ColdFire ISA check refuses. */
+#if defined(__GNUC__) && !defined(__clang__)
+#define DK_WIRE_NO_TABLES __attribute__((optimize("no-jump-tables")))
+#else
+#define DK_WIRE_NO_TABLES
+#endif
 
 typedef struct {
     const uint8_t *p;

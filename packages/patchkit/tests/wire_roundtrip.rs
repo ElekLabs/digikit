@@ -2,7 +2,9 @@
 //! protobuf-es; the C codec generated from `tests/fixtures/wire/project_manager.proto`, compiled for the host, decodes each and encodes
 //! it again, and must give protobuf-es's bytes. Refused inputs must be refused.
 
+use patchkit::build::toolchain::{CFLAGS, Env};
 use patchkit::build::wire::{CCodec, Schema};
+use patchkit::build::{cf, elf};
 use serde_json::Value;
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -86,4 +88,46 @@ fn the_c_codec_decodes_and_encodes_the_bytes_of_protobuf_es() {
         cases.len(),
         failures.join("\n")
     );
+}
+
+#[test]
+fn the_generated_code_compiles_for_the_coldfire_and_passes_its_isa_check() {
+    let env = Env::new(&root());
+    if !env.m68k_or_skip() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    harness(dir.path());
+    // every function external (no inlining away), as the module build's flags compile it; a jump table would be data words in the
+    // code, which `check_text` refuses
+    std::fs::write(
+        dir.path().join("all.c"),
+        "#include <stdint.h>\n#include \"pm.h\"\n",
+    )
+    .unwrap();
+    let object = dir.path().join("all.o");
+    let build = Command::new(env.m68k("gcc").unwrap())
+        .args(CFLAGS)
+        .arg("-DDK_WIRE_FN=")
+        .arg("-I")
+        .arg(dir.path())
+        .arg("-I")
+        .arg(root().join("sdk/include"))
+        .arg("-c")
+        .arg(dir.path().join("all.c"))
+        .arg("-o")
+        .arg(&object)
+        .output()
+        .unwrap();
+    assert!(
+        build.status.success(),
+        "{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    let text = elf::text_sections(&std::fs::read(&object).unwrap()).unwrap();
+    assert!(
+        text.iter()
+            .any(|(name, _)| name.contains("pm_Coverage_decode"))
+    );
+    cf::check_text(&text, "wire: ").unwrap();
 }

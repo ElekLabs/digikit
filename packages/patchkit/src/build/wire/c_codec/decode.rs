@@ -27,13 +27,30 @@ impl CCodec<'_> {
             self.init_field(&mut body, f);
         }
         let mut cases = String::new();
-        for f in &fields {
-            self.read_field(&mut cases, f);
+        for (k, f) in fields.iter().enumerate() {
+            let mut branch = String::new();
+            self.read_field(&mut branch, f);
+            // an if chain, not a switch: the compiler makes a jump table of a switch, and a table inside the code is no valid
+            // ColdFire instruction for the ISA check
+            let mut lines = branch.lines();
+            let head = lines.next().unwrap_or_default();
+            let num = head
+                .trim()
+                .trim_start_matches("case ")
+                .trim_end_matches(':');
+            let opening = if k == 0 { "if" } else { "} else if" };
+            writeln!(cases, "        {opening} (f == {num}) {{").unwrap();
+            for line in lines.filter(|l| l.trim() != "break;") {
+                writeln!(cases, "{line}").unwrap();
+            }
+        }
+        if !fields.is_empty() {
+            cases.push_str("        } else {\n            dk_wire_skip(&r, t);\n        }\n");
         }
         let o = &mut self.out;
         writeln!(
             o,
-            "DK_WIRE_FN int32_t {ty}_decode(const uint8_t *buf, uint32_t n, {ty} *out)\n{{"
+            "DK_WIRE_NO_TABLES DK_WIRE_FN int32_t {ty}_decode(const uint8_t *buf, uint32_t n, {ty} *out)\n{{"
         )
         .unwrap();
         writeln!(o, "    dk_wire_reader r;\n    uint32_t f, t;").unwrap();
@@ -42,9 +59,16 @@ impl CCodec<'_> {
         }
         writeln!(o, "    dk_wire_reader_init(&r, buf, n);").unwrap();
         o.push_str(&body);
-        writeln!(o, "    while (r.p != r.end) {{\n        f = dk_wire_get_key(&r, &t);\n        if (r.err || f == 0)\n            return -1;\n        switch (f) {{").unwrap();
+        writeln!(o, "    while (r.p != r.end) {{\n        f = dk_wire_get_key(&r, &t);\n        if (r.err || f == 0)\n            return -1;").unwrap();
+        if fields.is_empty() {
+            writeln!(o, "        dk_wire_skip(&r, t);").unwrap();
+        }
         o.push_str(&cases);
-        writeln!(o, "        default:\n            dk_wire_skip(&r, t);\n        }}\n        if (r.err)\n            return -1;\n    }}\n    return 0;\n}}\n").unwrap();
+        writeln!(
+            o,
+            "        if (r.err)\n            return -1;\n    }}\n    return 0;\n}}\n"
+        )
+        .unwrap();
     }
 
     fn init_field(&self, o: &mut String, f: &Field) {
