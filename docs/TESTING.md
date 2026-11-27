@@ -217,8 +217,6 @@ The target (`tools/gate/device-smoke/project.json`) only depends on the existing
 ```text
 $ mise run test:subset -- core/runtime-lfo-tests --why   # gate-smoke and gate-pins are listed only when affected selects them
 test:subset: core/runtime-lfo-tests
-  core/runtime-lfo-tests lfo.device.test.ts: test-device--lfo--dt2 test-device--lfo--dn2
-    why: core/runtime-lfo-tests
   core/runtime-lfo-tests lfo-shape-output.device.test.ts: test-device--lfo-shape-output--dt2 test-device--lfo-shape-output--dn2
     why: core/runtime-lfo-tests
   gate-smoke: smoke
