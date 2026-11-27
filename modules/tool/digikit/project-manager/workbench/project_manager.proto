@@ -10,6 +10,10 @@ service ProjectManager {
   rpc List(ListRequest) returns (ListReply);
   // The summary of one project. loading is true while the device reads the project's file: ask again.
   rpc Get(GetRequest) returns (GetReply);
+  // The settings a project saved for one module, 4 at most per reply. version is the counter of the project's Get reply: changed is true when the project has changed since
+  // (ask Get again). loading is true while the device reads the project's file: ask again. found is false when the project or the module is not there. next is the cursor for
+  // the next page, 0 when there are no more.
+  rpc GetSettings(GetSettingsRequest) returns (GetSettingsReply);
 }
 
 message ListRequest {
@@ -50,4 +54,26 @@ message GetReply {
   uint32 stamp = 5;
   uint32 counter = 6;
   repeated Module modules = 7 [(dk.max_count) = 8];
+}
+
+message GetSettingsRequest {
+  uint32 slot = 1;
+  string module = 2 [(dk.max_len) = 31];
+  uint32 version = 3;
+  uint32 cursor = 4;
+}
+
+message Setting {
+  string key = 1 [(dk.max_len) = 47];
+  // The first 64 bytes of the value; value_length is its full length.
+  bytes value = 2 [(dk.max_len) = 64];
+  uint32 value_length = 3;
+}
+
+message GetSettingsReply {
+  bool loading = 1;
+  bool changed = 2;
+  bool found = 3;
+  repeated Setting entries = 4 [(dk.max_count) = 4];
+  uint32 next = 5;
 }
