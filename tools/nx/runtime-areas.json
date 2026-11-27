@@ -1,0 +1,235 @@
+{
+  "_doc": "Runtime source areas of the merge gate (tools/nx/runtime-areas.mjs, docs/TESTING.md 'Runtime areas'). Every file under 'scope' (minus 'exclude') is classified here: in an area (firmware-facing: its device tests run) or in 'hostProven' (proven by unit and assembly tests with the real fixtures: no device test beyond the smoke set). A file in neither fails the check (`node tools/nx/runtime-areas.mjs --check`, the runtime-areas host test and the gate): there is no full-suite fallback; the full suite runs at milestone merges. 'tests' entries are 'project:file' or 'project:*'. Unit-test sources ('testSources') are host-proven before the areas are read. The first area whose 'globs' match wins. 'exclude' keeps owner-based selection (device test projects, build output).",
+  "scope": [
+    "runtime/core/**"
+  ],
+  "exclude": [
+    "runtime/core/tests/**",
+    "runtime/core/target/**"
+  ],
+  "testSources": [
+    "**/tests.rs",
+    "**/tests/**",
+    "**/*_tests.rs"
+  ],
+  "hostProven": [
+    "**/*.md",
+    "**/project.json",
+    "runtime/core/owners.toml",
+    "runtime/core/{abi,sdk,test-support,vectors,include,build}/**",
+    "runtime/core/{abi.toml,module.toml}",
+    "runtime/core/src/rs/Cargo.*",
+    "runtime/core/src/rs/src/{fake_boot_env,fake_platform,fake_storage,host_io,test_lock,gen_abi_check}.rs",
+    "runtime/core/src/rs/src/fake_platform/**"
+  ],
+  "areas": {
+    "live-reload": {
+      "globs": [
+        "runtime/core/src/rs/src/package/loader/{install,park,live,unload,quiesce,op_clock,provider_reload}.rs",
+        "runtime/core/src/rs/src/package/loader/install/**",
+        "runtime/core/src/rs/src/package/lifecycle/**",
+        "runtime/core/src/rs/src/package/reload/**"
+      ],
+      "tests": [
+        "core/runtime-tests:*",
+        "core/runtime-provider-tests:service-reload.device.test.ts",
+        "core/runtime-provider-tests:owner-step.device.test.ts",
+        "core/runtime-lfo-tests:lfo-reload.device.test.ts",
+        "core/services/project-tests:project-reload.device.test.ts"
+      ]
+    },
+    "module-load": {
+      "globs": [
+        "runtime/core/src/rs/src/package/loader/**",
+        "runtime/core/src/rs/src/package/{admission,capacity,collect,files,image,imports,invariants,link,registry,scan,fake_checked_images}.rs",
+        "runtime/core/src/rs/src/package/collect/**",
+        "runtime/core/link/**",
+        "runtime/core/fit/**"
+      ],
+      "tests": [
+        "core/runtime-capacity-tests:*",
+        "core/runtime-inferred-needs-tests:*",
+        "core/runtime-fixture-tests:*",
+        "core/runtime-refusal-tests:*",
+        "core/runtime-entry-tests:*"
+      ]
+    },
+    "dsp": {
+      "globs": [
+        "runtime/core/src/rs/src/package/dsp/**",
+        "runtime/core/src/rs/src/package/dsp_stats.rs"
+      ],
+      "tests": [
+        "core/runtime-fixture-tests:*",
+        "core/runtime-machines-tests:*",
+        "core/services/fx-tests:fx-routing.device.test.ts",
+        "core/services/fx-tests:fx-send.device.test.ts"
+      ]
+    },
+    "services": {
+      "globs": [
+        "runtime/core/src/rs/src/package/{handlers,provider_rows,fixture_provider,core_api,entry,commands,live_cmds,module_cmds,hooks,svc_imports,gen_services,settings_overlay,settings_reload,host_dir}.rs",
+        "runtime/core/src/rs/src/package/{handlers,provider_rows,host_dir}/**",
+        "runtime/core/src/rs/src/{hooks,host_dir}.rs",
+        "runtime/core/src/rs/src/{hooks,host_dir}/**",
+        "runtime/core/svc-rt/**"
+      ],
+      "tests": [
+        "core/runtime-provider-tests:*",
+        "core/runtime-service-tests:*",
+        "core/runtime-entry-tests:*",
+        "core/runtime-lfo-tests:*",
+        "core/services/project-tests:project.device.test.ts",
+        "core/services/fx-tests:*"
+      ]
+    },
+    "ui-menu": {
+      "globs": [
+        "runtime/core/src/rs/src/package/{menu,menu_link,module_ui}.rs",
+        "runtime/core/src/rs/src/package/module_ui/**",
+        "runtime/core/src/rs/src/menu_exports.rs"
+      ],
+      "tests": [
+        "core/digikit-menu:*",
+        "core/digikit-menu-zero-tests:*",
+        "sdk-settings-page-tests:*"
+      ]
+    },
+    "boot": {
+      "globs": [
+        "runtime/core/src/rs/src/{boot,boot_env,stage1,safe_mode,safe_screen,intro,health,dlog,fault,tick,report,selection}.rs",
+        "runtime/core/src/rs/src/{boot_env,stage1,safe_mode,tick}/**",
+        "runtime/core/src/rs/src/package/{boot_idx,boot_steps}.rs",
+        "runtime/core/lifecycle/**",
+        "runtime/core/src/cf/{dn2,dt2,st}/device.s",
+        "runtime/core/src/cf/tramp.s"
+      ],
+      "tests": [
+        "core/runtime-boot-tests:*",
+        "core/runtime-diag-tests:*",
+        "core/runtime-platform-tests:*"
+      ]
+    },
+    "store": {
+      "globs": [
+        "runtime/core/src/rs/src/storage/**",
+        "runtime/core/src/rs/src/{store_cmds,settings,sdk_files}.rs",
+        "runtime/core/src/rs/src/resident/{card,store,store_writer,sdk_files,settings}.rs",
+        "runtime/core/src/rs/src/package/resident/{card,store,store_writer,sdk_files,settings}.rs",
+        "runtime/core/src/cf/{dn2,dt2}/storage.s"
+      ],
+      "tests": [
+        "core/runtime-storage-tests:*",
+        "core/runtime-file-write-tests:*",
+        "core/runtime-settings-tests:*",
+        "core/services/project-tests:project.device.test.ts",
+        "core/services/samples-tests:*"
+      ]
+    },
+    "usb": {
+      "globs": [
+        "runtime/core/src/rs/src/{transport,worker,admin_cmds}.rs",
+        "runtime/core/src/rs/src/resident/{transport,worker}.rs",
+        "runtime/core/src/rs/src/package/resident/{transport,worker}.rs"
+      ],
+      "tests": [
+        "core/runtime-transfer-tests:*",
+        "core/runtime-file-write-tests:*"
+      ]
+    },
+    "platform-seam": {
+      "globs": [
+        "runtime/core/src/rs/src/{platform,dev,io,mailbox,arena,aux_task,level,speed,watch}.rs",
+        "runtime/core/src/rs/src/{platform,level}/**",
+        "runtime/core/src/rs/src/resident/{platform,io,arena,intro,dlog,fault,selection}.rs",
+        "runtime/core/src/rs/src/package/resident/{platform,io,arena,intro,dlog,fault,selection}.rs"
+      ],
+      "tests": [
+        "core/runtime-platform-tests:*",
+        "core/runtime-boot-tests:*",
+        "core/runtime-diag-tests:*"
+      ]
+    },
+    "resident": {
+      "globs": [
+        "runtime/core/src/rs/src/{api,state,stock_kit,lib,resident,resident_query,hash32}.rs",
+        "runtime/core/src/rs/src/resident/**",
+        "runtime/core/src/rs/src/package/{mod,resident}.rs",
+        "runtime/core/src/rs/src/package/resident/**"
+      ],
+      "tests": [
+        "core/runtime-boot-tests:*",
+        "core/runtime-platform-tests:*",
+        "core/runtime-entry-tests:*",
+        "core/runtime-diag-tests:*"
+      ]
+    },
+    "platform-dynfx": {
+      "globs": [
+        "runtime/platform/dynfx/**"
+      ],
+      "tests": [
+        "core/dynfx:*",
+        "core/services/fx-tests:*"
+      ]
+    },
+    "platform-fx": {
+      "globs": [
+        "runtime/platform/fx/**"
+      ],
+      "tests": [
+        "core/fx:*"
+      ]
+    },
+    "platform-input": {
+      "globs": [
+        "runtime/platform/input/**"
+      ],
+      "tests": [
+        "core/input:*"
+      ]
+    },
+    "platform-introblank": {
+      "globs": [
+        "runtime/platform/introblank/**"
+      ],
+      "tests": [
+        "core/introblank:*"
+      ]
+    },
+    "platform-plusdrive-write": {
+      "globs": [
+        "runtime/platform/plusdrive-write/**"
+      ],
+      "tests": [
+        "core/plusdrive-write:*"
+      ]
+    },
+    "platform-sdhc-large": {
+      "globs": [
+        "runtime/platform/sdhc-large/**"
+      ],
+      "tests": [
+        "core/sdhc-large:*"
+      ]
+    },
+    "platform-usb-bulk": {
+      "globs": [
+        "runtime/platform/usb-bulk/**"
+      ],
+      "tests": [
+        "core/usb-bulk:*",
+        "core/usb-bulk-audio:*",
+        "core/sdhc-large:*"
+      ]
+    },
+    "platform-usb-bulk-audio": {
+      "globs": [
+        "runtime/platform/usb-bulk-audio/**"
+      ],
+      "tests": [
+        "core/usb-bulk-audio:*"
+      ]
+    }
+  }
+}

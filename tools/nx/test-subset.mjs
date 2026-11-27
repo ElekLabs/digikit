@@ -6,8 +6,9 @@
 // `--why` adds a line to each selected file: the names that selected it, and the changed files that selected it with `--base`.
 // `--base REF` (and `--gate`) adds the tests the changed files select by ownership (tools/nx/device-owners.mjs, docs/TESTING.md
 // "Device test selection"): the owned tests of the touched projects, the tests that name them, the tests that load a changed fixture
-// and the tests that import a changed file, plus the fixed smoke set gate-device-smoke when `affected` selects a device test. A changed
-// path no project owns, or that no test names, selects nothing and is printed. What `affected` selects and the gate skips is listed.
+// and the tests that import a changed file, plus the fixed smoke set gate-device-smoke when `affected` selects a device test. Runtime
+// source files are decided by area first (tools/nx/runtime-areas.json, docs/TESTING.md "Runtime areas"): the mapped tests of the area, or none for a host-proven
+// file (a file in neither fails the gate). A changed path no project owns, or that no test names, selects nothing and is printed. What `affected` selects and the gate skips is listed.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -15,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { budget, startAtOnce, workCores } from './resources.mjs';
 import { closureFiles, testImportInputs } from './ts-imports.mjs';
 import { gateContext } from './gate-context.mjs';
+import { areaSelection } from './runtime-areas.mjs';
 import { DEVICES, leavesOf, ownedConformance, ownershipSelection } from './device-owners.mjs';
 
 export { DEVICES };
@@ -225,8 +227,16 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     const changed = changedFiles(root, base);
     const importInputs = testImportInputs(root);
     const ctx = gateContext(root, base);
+    // Runtime source files are decided by their area (runtime-areas.json); the rest by ownership.
+    const area = areaSelection(projects, changed);
+    if (area.unclassified.length) {
+      console.error(
+        `test:subset: runtime file(s) in no area and not host-proven: ${area.unclassified.slice(0, 10).join(' ')}; add them to tools/nx/runtime-areas.json`,
+      );
+      process.exit(2);
+    }
     const owned = ownershipSelection(projects, {
-      changed,
+      changed: changed.filter((f) => !area.governed.has(f)),
       closureOf: (projectRoot, file) => closureFiles(importInputs, `${projectRoot}/${file}`),
       portUsers: ctx.portUsers,
       deviceOf: ctx.deviceOf,
@@ -236,10 +246,11 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     const seen = new Set();
     selection = {
       ...owned,
-      tests: [...owned.tests, ...named.tests].filter(
+      tests: [...area.tests, ...owned.tests, ...named.tests].filter(
         (t) => !seen.has(`${t.project}:${t.file}`) && seen.add(`${t.project}:${t.file}`),
       ),
       unknown: named.unknown,
+      areaNotes: area.notes,
       deviceFiles: owned.devices,
       changed,
     };
@@ -285,6 +296,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     ).values(),
   ];
   console.log(`test:subset: ${[...names, ...(base ? [`--base ${base}`] : [])].join(' ')}`);
+  for (const note of selection.areaNotes ?? []) console.log(`  ${note}`);
   for (const { file, project } of mapped.slice(0, 20)) console.log(`  owner ${project} <- ${file}`);
   if (mapped.length > 20) console.log(`  owner: ${mapped.length - 20} more changed files`);
   for (const { file, why } of (selection.unowned ?? []).slice(0, 20))
