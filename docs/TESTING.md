@@ -105,7 +105,7 @@ A `runtimeAcceptance` record of a device test of the runtime loading and lifecyc
 | Command | What runs |
 | --- | --- |
 | `mise run test:changed` | `nx affected` against `DIGI_GATE_BASE` (default `main`) over the targets `lint`, `fmt-check`, `typecheck`, `test-host`, `python-checks` and `objects-check` (about 25 s uncached; `patchkit` is affected by edits of its own files, of core module sources, manifests or toolchain inputs, so a stale committed `.dko.json` fails here). Does not run Rust, module builds or devices. |
-| `pnpm test:host` | The Vitest projects of `vitest.host/*.json` except `web-wasm` (the Nx `test-host` set): control-client, test-support, dk-session, web-transfer, desktop-host, regression-host, module-tests, nx-host, dkbs. One worker by default; `-- --maxWorkers N` changes it. |
+| `pnpm test:host` | The Vitest projects of `vitest.host/*.json` except `web-wasm` (the Nx `test-host` set): control-client, test-support, dk-session, web-transfer, desktop-host, regression-host, module-tests, nx-host, dkbs, module-ui. One worker by default; `-- --maxWorkers N` changes it. |
 | `pnpm verify:host` | oxlint, Prettier check, host Vitest, typecheck of control-client, dk-session, test-support, regression and desktop. Stops at the first failure. |
 | `pnpm --filter @digi/web test-wasm` | The Vitest project `web-wasm` (`tests/*.wasm.test.ts`, 120 s limit per test). Needs `public/*.wasm` (`@digi/web:test-wasm` builds it). Cases that need firmware skip when absent. |
 | `mise run lint:py` | `ruff check` and `ruff format --check` over the pyproject include list. |
