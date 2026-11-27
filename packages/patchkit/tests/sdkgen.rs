@@ -110,9 +110,22 @@ fn imports_of_other_modules_get_stubs_from_absent() {
         "(\"dk_ui_menu_new\", addresses[0] as usize, absent::dk_ui_menu_new as usize, \"core/ui\"),"
     ));
     // core/input has a stub too; the row names the module the boot report asks for
-    assert!(rs.contains(
-        "(\"dk_input_key\", addresses[23] as usize, absent::dk_input_key as usize, \"core/input\"),"
-    ));
+    // the row's index follows the table order, so the test finds it by name
+    let row = rs
+        .lines()
+        .find(|l| l.contains("(\"dk_input_key\", addresses["))
+        .expect("dk_input_key row");
+    let index = row
+        .split("addresses[")
+        .nth(1)
+        .unwrap()
+        .split(']')
+        .next()
+        .unwrap();
+    assert!(index.parse::<usize>().is_ok());
+    assert!(row.contains(&format!(
+        "addresses[{index}] as usize, absent::dk_input_key as usize, \"core/input\"),"
+    )));
     // the runtime's own table is the imports without `requires`
     assert!(rs.contains("pub const BUILTIN_NAMES"));
     assert!(!rs.contains("\"remote_enabled\""));
